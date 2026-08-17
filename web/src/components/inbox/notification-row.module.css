@@ -10,7 +10,7 @@
 }
 
 .snoozeOption:hover::before {
-  background: lch(20.82% 1.3 272);
+  background: var(--theme-surface-active);
 }
 
 .snoozeOption:disabled {
