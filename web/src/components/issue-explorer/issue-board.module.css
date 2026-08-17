@@ -6,7 +6,7 @@
   padding:8px 0 0 4px;
   overflow:auto;
   scrollbar-color:#ffffff1f transparent;
-  background:lch(5.52% .4 272);
+  background:var(--bg-panel);
 }
 .column{
   width:348px;
@@ -20,17 +20,17 @@
   align-items:center;
   gap:8px;
   padding:0 18px;
-  color:lch(61.803% 1.2 272);
+  color:var(--issue-muted);
 }
 .columnHeader strong{
-  color:lch(100% 0 272);
+  color:var(--bright);
   font-size:13px;
   font-weight:500;
 }
 .count,.headerButton{
   border:0;
   background:transparent;
-  color:lch(61.803% 1.2 272);
+  color:var(--issue-muted);
 }
 .count{
   height:24px;
@@ -48,7 +48,7 @@
   cursor:pointer;
 }
 .count+.headerButton{margin-left:auto}
-.headerButton:hover{background:lch(16.706% .979 272);color:white}
+.headerButton:hover{background:var(--bg-active);color:white}
 .cards{
   min-height:60px;
   padding:1px 12px 0;
@@ -63,9 +63,9 @@
   padding:8px 8px 13.5px;
   border:0;
   border-radius:8px;
-  background:lch(9.232% .85 272);
+  background:var(--theme-surface-1);
   box-shadow:inset 0 0 0 .5px lch(18.48% 1.48 272),0 1px 2px #0003;
-  color:lch(100% 0 272);
+  color:var(--bright);
   cursor:grab;
   outline:0;
 }
@@ -87,7 +87,7 @@
   display:flex;
   align-items:flex-start;
   padding:0 0 0 4px;
-  color:lch(63.304% 1.425 272);
+  color:var(--theme-text-secondary);
   font-size:12px;
   font-weight:450;
   line-height:14.5px;
@@ -116,9 +116,9 @@
   display:grid;
   place-items:center;
   padding:0;
-  border:1px solid lch(36.975% 1.2 272);
+  border:1px solid var(--issue-dim);
   border-radius:3px;
-  background:lch(9.232% .85 272);
+  background:var(--theme-surface-1);
   color:white;
   opacity:0;
 }
@@ -129,7 +129,7 @@
   min-width:0;
   display:-webkit-box;
   overflow:hidden;
-  color:lch(100% 0 272);
+  color:var(--bright);
   font-size:13px;
   font-weight:500;
   line-height:16px;
@@ -153,17 +153,17 @@
   gap:6px;
   padding:0 8px;
   overflow:hidden;
-  border:.5px solid lch(20.032% 1.93 272);
+  border:.5px solid var(--theme-border);
   border-radius:48px;
-  background:lch(9.232% .85 272);
-  color:lch(63.304% 1.425 272);
+  background:var(--theme-surface-1);
+  color:var(--theme-text-secondary);
   font-size:12px;
   font-weight:450;
   line-height:normal;
   white-space:nowrap;
 }
 .badge>span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis}
-.iconBadge{width:24px;padding:0 4.5px;justify-content:center;color:lch(61.803% 1.2 272)}
+.iconBadge{width:24px;padding:0 4.5px;justify-content:center;color:var(--issue-muted)}
 .projectBadge{max-width:230px}
 .labelDot{
   width:9px;
@@ -214,7 +214,7 @@
 .created{
   display:block;
   margin:10px 1px 0;
-  color:lch(63.304% 1.425 272);
+  color:var(--theme-text-secondary);
   font-size:12px;
   font-weight:450;
   line-height:14.5px;
