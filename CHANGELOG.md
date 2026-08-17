@@ -14,6 +14,7 @@ after the first tagged release.
 
 ### Added
 
+- Linear-style Releases, Asks, team archive, and audit log workspace surfaces.
 - Professional open source project documentation and community health files.
 - Apache License 2.0 licensing and attribution notice.
 - Continuous integration for the React and Go applications.
