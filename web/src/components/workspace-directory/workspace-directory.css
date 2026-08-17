@@ -352,21 +352,23 @@
   font-size: 7px;
 }
 .workspace-directory-filter-menu__checkbox {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   display: grid;
-  flex: 0 0 15px !important;
+  flex: 0 0 14px !important;
   place-items: center;
-  border: 0.5px solid #515157;
-  border-radius: 4px;
+  border: 1px solid #858689;
+  border-radius: 3px;
 }
 .workspace-directory-filter-menu__checkbox:has(svg) {
   border-color: #5e6ad2;
   background: #5e6ad2;
 }
 .workspace-directory-filter-menu__checkbox svg {
-  width: 11px;
+  width: 12px;
+  height: 12px;
   color: white;
+  stroke-width: 3px;
 }
 .workspace-directory-filter-menu__choice small {
   margin-left: auto;
