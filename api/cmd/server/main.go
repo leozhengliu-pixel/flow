@@ -2950,6 +2950,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		if value == nil {
 			return nil, fmt.Errorf("%w: unknown state", errInvalid)
 		}
+		changes["stateBefore"] = issue.State.Name
 		changes["state"] = value.Name
 		issue.State = *value
 		if value.Type == "started" && issue.Assignee == nil && data.UserSettings[data.Viewer.ID].AssignStarted {
