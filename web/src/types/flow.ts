@@ -25,14 +25,14 @@ export interface LabelGroup { id: UUID; name: string; color: string; scope?: str
 export interface ProjectSummary { id: UUID; name: string; icon?: string; color: string }
 export interface DocumentContent { id: UUID; content: string; contentState: string; contentData: Record<string, unknown>; updatedAt: string }
 export interface DocumentRevision { id: UUID; documentId: UUID; title: string; content: string; contentState?: string; contentData?: Record<string, unknown>; author: User; createdAt: string }
-export interface FlowDocument { id: UUID; slugId: string; title: string; icon?: string; content: string; contentState?: string; contentData?: Record<string, unknown>; creator: User; projectIds: UUID[]; teamIds: UUID[]; subscriberIds: UUID[]; favorite: boolean; archivedAt?: string; createdAt: string; updatedAt: string; revisions: DocumentRevision[] }
+export interface FlowDocument { id: UUID; slugId: string; title: string; icon?: string; content: string; contentState?: string; contentData?: Record<string, unknown>; creator: User; projectIds: UUID[]; teamIds: UUID[]; issueId?: UUID; subscriberIds: UUID[]; favorite: boolean; archivedAt?: string; createdAt: string; updatedAt: string; revisions: DocumentRevision[] }
 export interface DocumentTemplate { id: UUID; teamId: UUID; name: string; description?: string; title?: string; icon?: string; content?: string; contentState?: string; contentData?: Record<string,unknown>; creator: User; createdAt: string; updatedAt: string }
 export interface Issue {
   id: UUID; version: number; identifier: string; number: number; title: string; description: string; descriptionState?: string; documentContent?: DocumentContent
   priority: number; priorityLabel: string; sortOrder: number; estimate?: number; dueDate?: string
   createdAt: string; updatedAt: string; completedAt?: string; canceledAt?: string; archivedAt?: string
   team: Team; state: WorkflowState; assignee?: User; creator: User; labels: IssueLabel[]
-  project?: ProjectSummary; cycleId?: UUID; parentId?: UUID; subscriberIds: UUID[]; reactions: Record<string, UUID[]>; subIssueIds: UUID[]
+  project?: ProjectSummary; cycleId?: UUID; parentId?: UUID; recurrence?: 'daily'|'weekly'|'monthly'; nextOccurrenceAt?: string; subscriberIds: UUID[]; reactions: Record<string, UUID[]>; subIssueIds: UUID[]
   relations: IssueRelation[]; attachments: Attachment[]
 }
 export type CycleStatus = 'upcoming'|'current'|'completed'
@@ -143,6 +143,7 @@ export interface IssueUpdateInput {
   expectedVersion?: number
   title?: string; description?: string; descriptionState?: string; descriptionData?: Record<string, unknown>; contentState?: string; stateId?: string; priority?: number; assigneeId?: string
   projectId?: string; cycleId?: string; dueDate?: string; labelIds?: string[]; subscriberIds?: string[]; archived?: boolean
+  recurrence?: ''|'daily'|'weekly'|'monthly'; nextOccurrenceAt?: string
   parentId?: string; sortOrder?: number
 }
 

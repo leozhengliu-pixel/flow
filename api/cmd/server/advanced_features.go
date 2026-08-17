@@ -27,6 +27,7 @@ type documentInput struct {
 	ContentData   map[string]any `json:"contentData,omitempty"`
 	ProjectIDs    *[]string      `json:"projectIds,omitempty"`
 	TeamIDs       *[]string      `json:"teamIds,omitempty"`
+	IssueID       *string        `json:"issueId,omitempty"`
 	SubscriberIDs *[]string      `json:"subscriberIds,omitempty"`
 	Favorite      *bool          `json:"favorite,omitempty"`
 	Archived      *bool          `json:"archived,omitempty"`
@@ -230,7 +231,14 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 		if !validateResourceIDs(data, "project", projects) || !validateResourceIDs(data, "team", teams) {
 			return "", errInvalid
 		}
-		created = domain.Document{ID: fmt.Sprintf("document_%d", now.UnixNano()), SlugID: slug(title) + "-" + strconv.FormatInt(now.UnixNano()%0xffffff, 16), Title: title, Creator: data.Viewer, ProjectIDs: projects, TeamIDs: teams, SubscriberIDs: []string{data.Viewer.ID}, ContentData: map[string]any{"type": "doc", "content": []any{}}, CreatedAt: now, UpdatedAt: now, Revisions: []domain.DocumentRevision{}}
+		issueID := ""
+		if input.IssueID != nil {
+			issueID = strings.TrimSpace(*input.IssueID)
+			if issueID != "" && !validateResourceIDs(data, "issue", []string{issueID}) {
+				return "", errInvalid
+			}
+		}
+		created = domain.Document{ID: fmt.Sprintf("document_%d", now.UnixNano()), SlugID: slug(title) + "-" + strconv.FormatInt(now.UnixNano()%0xffffff, 16), Title: title, Creator: data.Viewer, ProjectIDs: projects, TeamIDs: teams, IssueID: issueID, SubscriberIDs: []string{data.Viewer.ID}, ContentData: map[string]any{"type": "doc", "content": []any{}}, CreatedAt: now, UpdatedAt: now, Revisions: []domain.DocumentRevision{}}
 		if template != nil {
 			created.Icon, created.Content, created.ContentState = template.Icon, template.Content, template.ContentState
 			if template.ContentData != nil {
@@ -307,6 +315,13 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 				return errInvalid
 			}
 			document.TeamIDs = values
+		}
+		if input.IssueID != nil {
+			value := strings.TrimSpace(*input.IssueID)
+			if value != "" && !validateResourceIDs(data, "issue", []string{value}) {
+				return errInvalid
+			}
+			document.IssueID = value
 		}
 		if input.SubscriberIDs != nil {
 			if !validateResourceIDs(data, "user", *input.SubscriberIDs) {

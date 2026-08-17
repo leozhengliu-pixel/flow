@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"mime/multipart"
@@ -146,6 +147,120 @@ func TestIssueLifecycle(t *testing.T) {
 		t.Fatalf("events missing aggregate: %#v", events)
 	}
 	requestJSON[any](t, handler, http.MethodDelete, "/api/issues/"+created.ID, nil, http.StatusNoContent)
+}
+
+func TestIssueOptionsPersistence(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	issue := bootstrap.Issues[0]
+	previousDescription, previousState := issue.Description, issue.DescriptionState
+
+	nextOccurrence := time.Now().UTC().Add(7 * 24 * time.Hour).Truncate(time.Second)
+	updated := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{
+		"description": "Description with history", "descriptionState": `{"type":"doc","content":[]}`,
+		"descriptionData": map[string]any{"type": "doc", "content": []any{}}, "contentState": "HISTORY_STATE",
+		"recurrence": "weekly", "nextOccurrenceAt": nextOccurrence.Format(time.RFC3339),
+	}, http.StatusOK)
+	if updated.Recurrence != "weekly" || updated.NextOccurrenceAt == nil || !updated.NextOccurrenceAt.Equal(nextOccurrence) {
+		t.Fatalf("recurrence was not returned: %#v", updated)
+	}
+
+	link := requestJSON[domain.Attachment](t, handler, http.MethodPost, "/api/issues/"+issue.ID+"/links", map[string]any{
+		"url": "https://linear.app/docs", "title": "Linear docs",
+	}, http.StatusCreated)
+	if link.ContentType != "text/uri-list" || link.Title != "Linear docs" || link.URL != "https://linear.app/docs" {
+		t.Fatalf("issue link = %#v", link)
+	}
+
+	remindAt := time.Now().UTC().Add(2 * time.Hour).Truncate(time.Second)
+	reminder := requestJSON[domain.Notification](t, handler, http.MethodPost, "/api/issues/"+issue.ID+"/reminders", map[string]any{
+		"remindAt": remindAt.Format(time.RFC3339),
+	}, http.StatusCreated)
+	if reminder.IssueID != issue.ID || reminder.Category != "reminders" || reminder.SnoozedUntil == nil || !reminder.SnoozedUntil.Equal(remindAt) {
+		t.Fatalf("issue reminder = %#v", reminder)
+	}
+
+	loop := requestJSON[domain.Ask](t, handler, http.MethodPost, "/api/issues/"+issue.ID+"/loop-runs", map[string]any{
+		"prompt": "Check the acceptance criteria",
+	}, http.StatusCreated)
+	if loop.IssueID != issue.ID || loop.Source != "loop" || loop.Status != "approved" || loop.Body != "Check the acceptance criteria" {
+		t.Fatalf("issue loop run = %#v", loop)
+	}
+
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	persisted := findIssue(t, bootstrap.Issues, issue.ID)
+	if persisted.Recurrence != "weekly" || persisted.NextOccurrenceAt == nil || !persisted.NextOccurrenceAt.Equal(nextOccurrence) || !slices.ContainsFunc(persisted.Attachments, func(item domain.Attachment) bool { return item.ID == link.ID }) {
+		t.Fatalf("issue menu changes did not survive bootstrap: %#v", persisted)
+	}
+	if !slices.ContainsFunc(bootstrap.Activities[issue.ID], func(item domain.ActivityEvent) bool {
+		return item.Metadata["descriptionBefore"] == previousDescription && item.Metadata["descriptionStateBefore"] == previousState
+	}) {
+		t.Fatalf("description history did not retain the previous version: %#v", bootstrap.Activities[issue.ID])
+	}
+	if !slices.ContainsFunc(bootstrap.Notifications, func(item domain.Notification) bool { return item.ID == reminder.ID }) {
+		t.Fatal("issue reminder did not survive bootstrap")
+	}
+	if !slices.ContainsFunc(bootstrap.Asks, func(item domain.Ask) bool { return item.ID == loop.ID }) {
+		t.Fatal("loop run did not survive bootstrap")
+	}
+	restored := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{
+		"description": previousDescription, "descriptionState": previousState,
+	}, http.StatusOK)
+	if restored.Description != previousDescription || restored.DocumentContent == nil || restored.DocumentContent.Content != previousDescription || restored.DocumentContent.ContentData != nil {
+		t.Fatalf("description restore left stale structured content: %#v", restored.DocumentContent)
+	}
+	requestJSON[any](t, handler, http.MethodDelete, "/api/issues/"+issue.ID+"/attachments/"+link.ID, nil, http.StatusNoContent)
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if slices.ContainsFunc(findIssue(t, bootstrap.Issues, issue.ID).Attachments, func(item domain.Attachment) bool { return item.ID == link.ID }) {
+		t.Fatal("URL attachment was not deleted")
+	}
+
+	now := time.Now().UTC()
+	err = repository.MutateWorkspace(context.Background(), bootstrap.Workspace.URLKey, "test.issue_delete_dependencies", issue.ID, nil, func(data *domain.Bootstrap) error {
+		data.NotificationDeliveries = append(data.NotificationDeliveries, domain.NotificationDelivery{ID: "delivery-delete-test", NotificationID: reminder.ID, RecipientID: data.Viewer.ID, Channel: "desktop", Status: "pending", CreatedAt: now, UpdatedAt: now})
+		data.Favorites = append(data.Favorites, domain.Favorite{ID: "favorite-delete-test", UserID: data.Viewer.ID, ResourceType: "issue", ResourceID: issue.ID, CreatedAt: now})
+		data.Subscriptions = append(data.Subscriptions, domain.Subscription{ID: "subscription-delete-test", UserID: data.Viewer.ID, ResourceType: "issue", ResourceID: issue.ID, CreatedAt: now})
+		data.Drafts = append(data.Drafts, domain.Draft{ID: "draft-delete-test", UserID: data.Viewer.ID, Type: "issue", ResourceID: issue.ID, CreatedAt: now, UpdatedAt: now})
+		data.IssueSLAs = append(data.IssueSLAs, domain.IssueSLA{ID: "issue-sla-delete-test", IssueID: issue.ID, RuleID: "rule-delete-test", StartedAt: now, DueAt: now.Add(time.Hour), Status: "active"})
+		data.SLAEvents = append(data.SLAEvents, domain.SLAEvent{ID: "sla-event-delete-test", IssueID: issue.ID, SLAID: "issue-sla-delete-test", Type: "started", CreatedAt: now})
+		data.Releases = append(data.Releases, domain.Release{ID: "release-delete-test", Name: "Delete test", IssueIDs: []string{issue.ID}, CreatedAt: now, UpdatedAt: now})
+		data.ProjectTemplates = append(data.ProjectTemplates, domain.ProjectTemplate{ID: "project-template-delete-test", Name: "Delete test", IssueIDs: []string{issue.ID}, CreatedAt: now, UpdatedAt: now})
+		data.CustomerRequests = append(data.CustomerRequests, domain.CustomerRequest{ID: "customer-request-delete-test", IssueID: issue.ID, CreatedAt: now, UpdatedAt: now})
+		data.Documents = append(data.Documents, domain.Document{ID: "document-delete-test", IssueID: issue.ID, CreatedAt: now, UpdatedAt: now})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	requestJSON[any](t, handler, http.MethodDelete, "/api/issues/"+issue.ID, nil, http.StatusNoContent)
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if slices.ContainsFunc(bootstrap.Notifications, func(item domain.Notification) bool { return item.IssueID == issue.ID }) ||
+		slices.ContainsFunc(bootstrap.NotificationDeliveries, func(item domain.NotificationDelivery) bool { return item.NotificationID == reminder.ID }) ||
+		slices.ContainsFunc(bootstrap.Asks, func(item domain.Ask) bool { return item.IssueID == issue.ID }) ||
+		slices.ContainsFunc(bootstrap.IssueSLAs, func(item domain.IssueSLA) bool { return item.IssueID == issue.ID }) ||
+		slices.ContainsFunc(bootstrap.SLAEvents, func(item domain.SLAEvent) bool { return item.IssueID == issue.ID }) ||
+		slices.ContainsFunc(bootstrap.Drafts, func(item domain.Draft) bool { return item.Type == "issue" && item.ResourceID == issue.ID }) ||
+		slices.ContainsFunc(bootstrap.Favorites, func(item domain.Favorite) bool { return item.ResourceType == "issue" && item.ResourceID == issue.ID }) ||
+		slices.ContainsFunc(bootstrap.Subscriptions, func(item domain.Subscription) bool {
+			return item.ResourceType == "issue" && item.ResourceID == issue.ID
+		}) {
+		t.Fatal("deleting an issue left issue-owned records behind")
+	}
+	if slices.ContainsFunc(bootstrap.Releases, func(item domain.Release) bool { return slices.Contains(item.IssueIDs, issue.ID) }) ||
+		slices.ContainsFunc(bootstrap.ProjectTemplates, func(item domain.ProjectTemplate) bool { return slices.Contains(item.IssueIDs, issue.ID) }) {
+		t.Fatal("deleting an issue left collection references behind")
+	}
+	if !slices.ContainsFunc(bootstrap.CustomerRequests, func(item domain.CustomerRequest) bool {
+		return item.ID == "customer-request-delete-test" && item.IssueID == ""
+	}) ||
+		!slices.ContainsFunc(bootstrap.Documents, func(item domain.Document) bool { return item.ID == "document-delete-test" && item.IssueID == "" }) {
+		t.Fatal("deleting an issue did not preserve and unlink related content")
+	}
 }
 
 func TestSearchHistoryRecentResourcesAndVersionConflicts(t *testing.T) {
