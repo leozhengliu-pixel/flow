@@ -161,6 +161,22 @@ func (s *SQLiteStore) AuthenticateSession(ctx context.Context, token string) (do
 	return user, nil
 }
 
+func (s *SQLiteStore) EnforceSessionDuration(ctx context.Context, token string, days int) bool {
+	if token == "" || days < 1 {
+		return false
+	}
+	var createdRaw string
+	if err := s.db.QueryRowContext(ctx, `SELECT created_at FROM auth_sessions WHERE token_hash=?`, tokenHash(token)).Scan(&createdRaw); err != nil {
+		return false
+	}
+	created, err := time.Parse(time.RFC3339Nano, createdRaw)
+	if err != nil || time.Now().UTC().After(created.Add(time.Duration(days)*24*time.Hour)) {
+		_, _ = s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE token_hash=?`, tokenHash(token))
+		return false
+	}
+	return true
+}
+
 func (s *SQLiteStore) Session(ctx context.Context, token string) (domain.AuthSession, error) {
 	user, err := s.AuthenticateSession(ctx, token)
 	if err != nil {
@@ -174,6 +190,63 @@ func (s *SQLiteStore) Session(ctx context.Context, token string) (domain.AuthSes
 
 func (s *SQLiteStore) Logout(ctx context.Context, token string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE token_hash=?`, tokenHash(token))
+	return err
+}
+
+func (s *SQLiteStore) UpdateProfile(ctx context.Context, userID, displayName, username, avatarURL string) (domain.User, error) {
+	displayName, username = strings.TrimSpace(displayName), strings.TrimSpace(username)
+	if displayName == "" || username == "" {
+		return domain.User{}, errors.New("name and username are required")
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := s.db.ExecContext(ctx, `UPDATE auth_users SET name=?,display_name=?,avatar_url=?,updated_at=? WHERE id=?`, username, displayName, strings.TrimSpace(avatarURL), now, userID); err != nil {
+		return domain.User{}, err
+	}
+	return s.authUserByID(ctx, userID)
+}
+
+func (s *SQLiteStore) ChangePassword(ctx context.Context, userID, currentPassword, nextPassword string) error {
+	if len(nextPassword) < 8 {
+		return errors.New("password must be at least 8 characters")
+	}
+	var hash string
+	if err := s.db.QueryRowContext(ctx, `SELECT password_hash FROM auth_users WHERE id=?`, userID).Scan(&hash); err != nil {
+		return err
+	}
+	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(currentPassword)) != nil {
+		return ErrAuthInvalid
+	}
+	nextHash, err := bcrypt.GenerateFromPassword([]byte(nextPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET password_hash=?,updated_at=? WHERE id=?`, string(nextHash), time.Now().UTC().Format(time.RFC3339Nano), userID)
+	return err
+}
+
+func (s *SQLiteStore) ListSessions(ctx context.Context, userID, currentToken string) ([]domain.AccountSession, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT token_hash,expires_at,created_at,last_seen_at FROM auth_sessions WHERE user_id=? AND expires_at>? ORDER BY last_seen_at DESC`, userID, time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []domain.AccountSession{}
+	currentHash := tokenHash(currentToken)
+	for rows.Next() {
+		var hash, expiresRaw, createdRaw, seenRaw string
+		if err := rows.Scan(&hash, &expiresRaw, &createdRaw, &seenRaw); err != nil {
+			return nil, err
+		}
+		expires, _ := time.Parse(time.RFC3339Nano, expiresRaw)
+		created, _ := time.Parse(time.RFC3339Nano, createdRaw)
+		seen, _ := time.Parse(time.RFC3339Nano, seenRaw)
+		result = append(result, domain.AccountSession{ID: hash[:min(12, len(hash))], Current: hash == currentHash, ExpiresAt: expires, CreatedAt: created, LastSeenAt: seen})
+	}
+	return result, rows.Err()
+}
+
+func (s *SQLiteStore) RevokeOtherSessions(ctx context.Context, userID, currentToken string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE user_id=? AND token_hash<>?`, userID, tokenHash(currentToken))
 	return err
 }
 
@@ -349,7 +422,7 @@ func (s *SQLiteStore) BootstrapForUser(ctx context.Context, workspaceKey, userID
 			delete(data.CycleSettings, teamID)
 		}
 	}
-	data.IssueTemplates = slices.DeleteFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool { return !allowed[item.TeamID] })
+	data.IssueTemplates = slices.DeleteFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool { return item.TeamID != "" && !allowed[item.TeamID] })
 	data.ProjectTemplates = slices.DeleteFunc(data.ProjectTemplates, func(item domain.ProjectTemplate) bool {
 		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, func(teamID string) bool { return allowed[teamID] })
 	})
@@ -359,6 +432,11 @@ func (s *SQLiteStore) BootstrapForUser(ctx context.Context, workspaceKey, userID
 		data.NotificationPreferences = map[string]domain.NotificationPreferences{userID: preferences}
 	} else {
 		data.NotificationPreferences = map[string]domain.NotificationPreferences{}
+	}
+	if settings, ok := data.UserSettings[userID]; ok {
+		data.UserSettings = map[string]domain.UserSettings{userID: settings}
+	} else {
+		data.UserSettings = map[string]domain.UserSettings{}
 	}
 	data.Drafts = slices.DeleteFunc(data.Drafts, func(item domain.Draft) bool { return item.UserID != userID })
 	data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool { return item.UserID != userID })

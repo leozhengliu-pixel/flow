@@ -466,6 +466,45 @@ func normalize(data *domain.Bootstrap) {
 	if data.Settings == nil {
 		data.Settings = map[string]any{}
 	}
+	if data.UserSettings == nil {
+		data.UserSettings = map[string]domain.UserSettings{}
+	}
+	for _, user := range data.Users {
+		if _, ok := data.UserSettings[user.ID]; !ok {
+			data.UserSettings[user.ID] = defaultUserSettings(user.ID)
+		}
+	}
+	if data.WorkspaceSettings.SessionDurationDays == 0 {
+		data.WorkspaceSettings = defaultWorkspaceSettings(data)
+	}
+	if data.WorkspaceSettings.AllowedDomains == nil {
+		data.WorkspaceSettings.AllowedDomains = []string{}
+	}
+	if data.LabelGroups == nil {
+		data.LabelGroups = []domain.LabelGroup{}
+	}
+	if data.APIKeys == nil {
+		data.APIKeys = []domain.APIKey{}
+	}
+	if data.OAuthApplications == nil {
+		data.OAuthApplications = []domain.OAuthApplication{}
+	}
+	if data.IntegrationConnections == nil {
+		data.IntegrationConnections = []domain.IntegrationConnection{}
+	}
+	for index := range data.Labels {
+		if data.Labels[index].ResourceType == "" {
+			data.Labels[index].ResourceType = "issue"
+		}
+	}
+	for index := range data.IssueTemplates {
+		if data.IssueTemplates[index].Scope == "" {
+			data.IssueTemplates[index].Scope = "team"
+		}
+		if data.IssueTemplates[index].TemplateType == "" {
+			data.IssueTemplates[index].TemplateType = "standard"
+		}
+	}
 	if data.Members == nil {
 		data.Members = []domain.WorkspaceMember{}
 	}
@@ -489,6 +528,9 @@ func normalize(data *domain.Bootstrap) {
 	}
 	if data.ProjectTemplates == nil {
 		data.ProjectTemplates = []domain.ProjectTemplate{}
+	}
+	if data.DocumentTemplates == nil {
+		data.DocumentTemplates = []domain.DocumentTemplate{}
 	}
 	if data.Documents == nil {
 		data.Documents = []domain.Document{}
@@ -548,6 +590,11 @@ func normalize(data *domain.Bootstrap) {
 	}
 	if len(data.ProjectStatuses) == 0 {
 		data.ProjectStatuses = canonicalProjectStatuses()
+	}
+	for index := range data.ProjectStatuses {
+		if data.ProjectStatuses[index].Position == 0 && index > 0 {
+			data.ProjectStatuses[index].Position = float64(index)
+		}
 	}
 	if data.SavedViews == nil {
 		data.SavedViews = []domain.SavedView{}
@@ -656,6 +703,14 @@ func normalize(data *domain.Bootstrap) {
 			data.Issues[i].Attachments = []domain.Attachment{}
 		}
 	}
+}
+
+func defaultUserSettings(userID string) domain.UserSettings {
+	return domain.UserSettings{UserID: userID, Language: "en-US", HomeView: "Flow Agent (default)", DisplayNames: "Full name", FirstDay: "Monday", Emoticons: true, SendComments: "Enter", FontSize: "Default", InterfaceTheme: "System preference", LightTheme: "Light", DarkTheme: "Dark", ReviewAutoAssign: true, BranchFormat: "{identifier}-{title}", AgentEnabled: true, UpdatedAt: time.Now().UTC()}
+}
+
+func defaultWorkspaceSettings(data *domain.Bootstrap) domain.WorkspaceSettings {
+	return domain.WorkspaceSettings{FiscalMonth: "January", GuestsAllowed: true, SessionDurationDays: 30, InvitePermission: "admins", TeamCreatePermission: "members", LabelPermission: "members", TemplatePermission: "members", APIKeyPermission: "members", FeatureFlags: map[string]bool{"ai": true, "initiatives": true, "documents": true, "customer-requests": true, "releases": true, "pulse": true, "asks": true, "emojis": true}, BillingEmail: data.Viewer.Email, Plan: "free", UpdatedAt: time.Now().UTC()}
 }
 
 func defaultStateID(data *domain.Bootstrap, teamID string) string {

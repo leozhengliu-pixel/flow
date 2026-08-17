@@ -111,6 +111,36 @@ func TestDocumentHistoryProjectAssociationAndTrashRestore(t *testing.T) {
 	}
 }
 
+func TestDocumentTemplateCRUDAndApplication(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	team := bootstrap.Teams[0]
+	template := requestJSON[domain.DocumentTemplate](t, handler, http.MethodPost, "/api/document-templates", map[string]any{
+		"teamId": team.ID, "name": "Decision record", "title": "Architecture decision", "content": "Context\n\nDecision",
+	}, http.StatusCreated)
+	if template.ID == "" || template.TeamID != team.ID {
+		t.Fatalf("document template was not created: %#v", template)
+	}
+	document := requestJSON[domain.Document](t, handler, http.MethodPost, "/api/documents", map[string]any{"templateId": template.ID}, http.StatusCreated)
+	if document.Title != "Architecture decision" || document.Content != "Context\n\nDecision" || !slices.Contains(document.TeamIDs, team.ID) {
+		t.Fatalf("document did not apply template defaults: %#v", document)
+	}
+	template = requestJSON[domain.DocumentTemplate](t, handler, http.MethodPatch, "/api/document-templates/"+template.ID, map[string]any{"name": "Updated decision record"}, http.StatusOK)
+	if template.Name != "Updated decision record" {
+		t.Fatalf("document template was not updated: %#v", template)
+	}
+	requestJSON[any](t, handler, http.MethodDelete, "/api/document-templates/"+template.ID, nil, http.StatusNoContent)
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if slices.ContainsFunc(bootstrap.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.ID == template.ID }) {
+		t.Fatal("document template was not deleted")
+	}
+}
+
 func TestTemplatesAskApprovalSLAAndUnifiedUserState(t *testing.T) {
 	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
