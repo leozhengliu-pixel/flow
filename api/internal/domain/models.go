@@ -165,6 +165,7 @@ type Document struct {
 	Creator       User               `json:"creator"`
 	ProjectIDs    []string           `json:"projectIds"`
 	TeamIDs       []string           `json:"teamIds"`
+	IssueID       string             `json:"issueId,omitempty"`
 	SubscriberIDs []string           `json:"subscriberIds"`
 	Favorite      bool               `json:"favorite"`
 	ArchivedAt    *time.Time         `json:"archivedAt,omitempty"`
@@ -227,6 +228,8 @@ type Issue struct {
 	Project          *ProjectSummary     `json:"project,omitempty"`
 	CycleID          *string             `json:"cycleId,omitempty"`
 	ParentID         *string             `json:"parentId,omitempty"`
+	Recurrence       string              `json:"recurrence,omitempty"`
+	NextOccurrenceAt *time.Time          `json:"nextOccurrenceAt,omitempty"`
 	SubscriberIDs    []string            `json:"subscriberIds"`
 	Reactions        map[string][]string `json:"reactions"`
 	SubIssueIDs      []string            `json:"subIssueIds"`
@@ -1001,6 +1004,21 @@ type IssueUpdateInput struct {
 	Archived         *bool          `json:"archived,omitempty"`
 	ParentID         *string        `json:"parentId,omitempty"`
 	SortOrder        *float64       `json:"sortOrder,omitempty"`
+	Recurrence       *string        `json:"recurrence,omitempty"`
+	NextOccurrenceAt *string        `json:"nextOccurrenceAt,omitempty"`
+}
+
+type IssueLinkInput struct {
+	URL   string `json:"url"`
+	Title string `json:"title,omitempty"`
+}
+
+type IssueReminderInput struct {
+	RemindAt string `json:"remindAt"`
+}
+
+type IssueLoopRunInput struct {
+	Prompt string `json:"prompt,omitempty"`
 }
 
 type CycleMutationInput struct {
