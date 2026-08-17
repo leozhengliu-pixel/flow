@@ -7,7 +7,7 @@
 .workspace-search-mobile-menu{display:none}
 .workspace-search-toolbar{height:44px;flex:0 0 44px;display:flex;align-items:center;justify-content:space-between;padding:0 10px 0 8px}
 .workspace-search-toolbar nav{display:flex;align-items:center;gap:7px}
-.workspace-search-toolbar nav button{height:28px;padding:0 12px;border:0;border-radius:999px;background:#ffffff06;color:var(--muted);font-size:12px}
+.workspace-search-toolbar nav button{height:28px;padding:0 12px;border:0;border-radius:999px;background:var(--theme-soft-overlay);color:var(--muted);font-size:12px}
 .workspace-search-toolbar nav button:hover{background:#ffffff0c;color:var(--text)}
 .workspace-search-toolbar nav button.active{background:#ffffff12;color:var(--bright)}
 .workspace-search-tools{display:flex;gap:5px}
@@ -33,6 +33,6 @@
 .workspace-search-results time{color:var(--faint);font-size:11px;text-align:right}
 .workspace-search-state{height:220px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--faint)}
 .workspace-search-state strong{color:var(--muted);font-size:13px;font-weight:500}.workspace-search-state span{font-size:12px}.workspace-search-state button{height:28px;padding:0 10px;border:.5px solid var(--border-strong);border-radius:5px;background:var(--bg-subtle);color:var(--text)}
-.workspace-search-loading{display:grid;gap:8px;padding-top:12px}.workspace-search-loading span{width:min(720px,90%);height:36px;border-radius:5px;background:#ffffff05;animation:workspace-search-pulse 1.3s ease-in-out infinite}.workspace-search-loading span:nth-child(2n){width:min(610px,80%)}
+.workspace-search-loading{display:grid;gap:8px;padding-top:12px}.workspace-search-loading span{width:min(720px,90%);height:36px;border-radius:5px;background:var(--theme-soft-overlay);animation:workspace-search-pulse 1.3s ease-in-out infinite}.workspace-search-loading span:nth-child(2n){width:min(610px,80%)}
 @keyframes workspace-search-pulse{50%{opacity:.4}}
 @media(max-width:800px){.workspace-search-page{margin:0;height:100%;border-radius:0}.workspace-search-mobile-menu{display:grid}.workspace-search-toolbar{overflow-x:auto}.workspace-search-toolbar nav{min-width:max-content}.workspace-search-content{padding-inline:10px}}

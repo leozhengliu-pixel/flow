@@ -72,7 +72,7 @@
     margin: 1px 0;
     padding: 0 9px;
     border: 0.5px solid var(--border);
-    background: #ffffff03;
+    background: var(--theme-soft-overlay);
   }
 
   .flow-inbox-detail__body--full-bleed .issue-mobile-properties .issue-label-chips {

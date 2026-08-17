@@ -6,13 +6,13 @@
   display: flex;
   flex-direction: column;
   gap: 9px;
-  border-bottom: 1px solid var(--color-border-subtle, #e5e5e5);
+  border-bottom: 1px solid var(--color-border-subtle, var(--theme-text-primary));
 }
 .advanced-settings-editor input,
 .advanced-settings-editor textarea,
 .advanced-settings-editor select,
 .advanced-import-mapping select {
-  border: 1px solid var(--color-border-subtle, #dcdcdc);
+  border: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   border-radius: 5px;
   background: var(--color-bg-primary, #fff);
   color: inherit;
@@ -31,7 +31,7 @@
 }
 .advanced-settings-editor footer button {
   height: 29px;
-  border: 1px solid var(--color-border-subtle, #ddd);
+  border: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   border-radius: 5px;
   background: transparent;
   padding: 0 10px;
@@ -68,7 +68,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  border-bottom: 1px solid var(--color-border-subtle, #e7e7e7);
+  border-bottom: 1px solid var(--color-border-subtle, var(--theme-text-primary));
 }
 .advanced-settings-item:last-child,
 .advanced-job:last-child {
@@ -120,7 +120,7 @@
   opacity: 1;
 }
 .advanced-settings-item > button:hover {
-  background: var(--color-bg-hover, #f0f0f0);
+  background: var(--color-bg-hover, var(--theme-text-primary));
   color: #cc4848;
 }
 .advanced-settings-empty {
@@ -142,7 +142,7 @@
 }
 .advanced-import-mapping {
   padding: 14px;
-  border-top: 1px solid var(--color-border-subtle, #e5e5e5);
+  border-top: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
