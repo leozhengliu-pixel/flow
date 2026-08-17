@@ -40,6 +40,7 @@ export function Sidebar({ account, data, page, open = false, onOpenChange, onSea
   const [dismissedTry, setDismissedTry] = useState<string[]>(readDismissedTry)
   const [navOverflowing, setNavOverflowing] = useState(false)
   const navRef = useRef<HTMLElement>(null)
+  const featureEnabled = (feature: string) => data.workspaceSettings.featureFlags[feature] !== false
 
   useEffect(() => persistPreference('flow.sidebar.preferences', preferences), [preferences])
   useEffect(() => persistPreference('flow.sidebar.order', sidebarOrder), [sidebarOrder])
@@ -59,7 +60,9 @@ export function Sidebar({ account, data, page, open = false, onOpenChange, onSea
 
   const activeWorkspaceEntry: SidebarEntry | undefined = page === 'members' ? 'members' : page === 'customers' || page === 'customer-detail' ? 'customers' : page === 'teams' || page === 'new-team' ? 'teams' : undefined
   const show = (entry: SidebarEntry) => preferences[entry] === 'always' || entry === activeWorkspaceEntry
-  const hiddenWorkspaceEntries = sidebarOrder.workspace.filter(entry => !show(entry) && (data.viewerRole !== 'guest' || !['initiatives','views','customers'].includes(entry)))
+  const available = (entry: SidebarEntry) => (entry !== 'initiatives' || featureEnabled('initiatives'))
+    && (entry !== 'customers' || featureEnabled('customer-requests'))
+  const hiddenWorkspaceEntries = sidebarOrder.workspace.filter(entry => available(entry) && !show(entry) && (data.viewerRole !== 'guest' || !['initiatives','views','customers'].includes(entry)))
   const inboxUnread = data.notifications.filter(item => item.recipientId === data.viewer.id && !item.readAt && !item.archivedAt && !item.deletedAt && (!item.snoozedUntil || new Date(item.snoozedUntil) <= new Date())).length
   const dismissTry = (id: string) => setDismissedTry(current => [...new Set([...current, id])])
   const reorderSidebar = (group: SidebarGroup, active: SidebarEntry, target: SidebarEntry) => {
@@ -69,17 +72,17 @@ export function Sidebar({ account, data, page, open = false, onOpenChange, onSea
   const personalNavigation: Record<SidebarEntry, ReactNode> = {
     inbox: <Nav badge={inboxUnread} icon={<FlowIcon name="Inbox"/>} label="Inbox" to={inboxPath(workspaceSlug)} onClick={close}/>,
     myIssues: <Nav active={page === 'issue-detail'} icon={<FlowIcon name="MyIssues"/>} label="My issues" to={myIssuesPath(workspaceSlug, 'activity')} onClick={close}/>,
-    pulse: <Nav icon={<PulseIcon/>} label="Pulse" to={pulsePath(workspaceSlug)} onClick={close}/>,
+    pulse: featureEnabled('pulse') ? <Nav icon={<PulseIcon/>} label="Pulse" to={pulsePath(workspaceSlug)} onClick={close}/> : null,
     drafts: <Nav badge={data.drafts.length} active={page === 'drafts'} icon={<DraftIcon/>} label="Drafts" to={draftsPath(workspaceSlug)} onClick={close}/>,
-    agent: <Nav icon={<AgentIcon/>} label="Agent" onClick={() => toast.info('Agent requires the Flow AI integration.')}/>,
+    agent: featureEnabled('ai') ? <Nav icon={<AgentIcon/>} label="Agent" onClick={() => toast.info('Agent requires the Flow AI integration.')}/> : null,
     initiatives: null, projects: null, views: null, members: null, customers: null, teams: null,
   }
   const workspaceNavigation: Record<SidebarEntry, ReactNode> = {
-    initiatives: data.viewerRole === 'guest' ? null : <Nav active={page === 'initiative-detail'} icon={<FlowIcon name="Initiative"/>} label="Initiatives" to={initiativesPath(workspaceSlug)} onClick={close}/>,
+    initiatives: data.viewerRole === 'guest' || !featureEnabled('initiatives') ? null : <Nav active={page === 'initiative-detail'} icon={<FlowIcon name="Initiative"/>} label="Initiatives" to={initiativesPath(workspaceSlug)} onClick={close}/>,
     projects: <Nav active={page === 'project-detail'} icon={<FlowIcon name="Project"/>} label="Projects" to={projectsPath(workspaceSlug)} onClick={close}/>,
     views: data.viewerRole === 'guest' ? null : <Nav icon={<FlowIcon name="CustomView"/>} label="Views" to={workspaceViewsPath(workspaceSlug)} onClick={close}/>,
     members: <Nav active={page === 'members'} icon={<MembersIcon/>} label="Members" to={membersPath(workspaceSlug)} onClick={close}/>,
-    customers: data.viewerRole === 'guest' ? null : <Nav active={page === 'customers'} icon={<CustomersIcon/>} label="Customers" to={customersPath(workspaceSlug)} onClick={close}/>,
+    customers: data.viewerRole === 'guest' || !featureEnabled('customer-requests') ? null : <Nav active={page === 'customers'} icon={<CustomersIcon/>} label="Customers" to={customersPath(workspaceSlug)} onClick={close}/>,
     teams: <Nav active={page === 'teams'} icon={<FlowIcon name="Team"/>} label="Teams" to={teamsPath(workspaceSlug)} onClick={close}/>,
     inbox: null, myIssues: null, pulse: null, drafts: null, agent: null,
   }
@@ -100,7 +103,7 @@ export function Sidebar({ account, data, page, open = false, onOpenChange, onSea
 
         <Section label="Workspace" storageKey="workspace">
           {sidebarOrder.workspace.map(entry => show(entry) ? <span className="sidebar-ordered-entry" key={entry}>{workspaceNavigation[entry]}</span> : null)}
-          <MoreMenu entries={hiddenWorkspaceEntries} onCustomize={() => setCustomizeOpen(true)} workspaceSlug={workspaceSlug}/>
+          <MoreMenu entries={hiddenWorkspaceEntries} onCustomize={() => setCustomizeOpen(true)} workspaceSlug={workspaceSlug} releases={featureEnabled('releases')} asks={featureEnabled('asks')}/>
         </Section>
 
         <Section label="Library" storageKey="library">
@@ -172,7 +175,7 @@ function TeamNavigation({ team, workspaceSlug, page, cyclesEnabled, onNavigate }
   </div>
 }
 
-function MoreMenu({ entries, onCustomize, workspaceSlug }: { entries: SidebarEntry[]; onCustomize: () => void; workspaceSlug: string }) {
+function MoreMenu({ entries, onCustomize, workspaceSlug, releases, asks }: { entries: SidebarEntry[]; onCustomize: () => void; workspaceSlug: string; releases: boolean; asks: boolean }) {
   const items: Partial<Record<SidebarEntry, { label: string; icon: ReactElement; onSelect?: () => void; to?: string }>> = {
     initiatives: { label: 'Initiatives', icon: <FlowIcon name="Initiative"/>, to: initiativesPath(workspaceSlug) },
     projects: { label: 'Projects', icon: <FlowIcon name="Project"/>, to: projectsPath(workspaceSlug) },
@@ -190,8 +193,8 @@ function MoreMenu({ entries, onCustomize, workspaceSlug }: { entries: SidebarEnt
         if (item.to) return <DropdownMenu.Item key={entry} asChild><NavLink to={item.to}>{item.icon}<span>{item.label}</span></NavLink></DropdownMenu.Item>
         return <DropdownMenu.Item key={entry} onSelect={item.onSelect}>{item.icon}<span>{item.label}</span></DropdownMenu.Item>
       })}
-      <DropdownMenu.Item asChild><NavLink to={releasesPath(workspaceSlug)}><Rocket/><span>Releases</span></NavLink></DropdownMenu.Item>
-      <DropdownMenu.Item asChild><NavLink to={asksPath(workspaceSlug)}><MessageCircleQuestion/><span>Asks</span></NavLink></DropdownMenu.Item>
+      {releases&&<DropdownMenu.Item asChild><NavLink to={releasesPath(workspaceSlug)}><Rocket/><span>Releases</span></NavLink></DropdownMenu.Item>}
+      {asks&&<DropdownMenu.Item asChild><NavLink to={asksPath(workspaceSlug)}><MessageCircleQuestion/><span>Asks</span></NavLink></DropdownMenu.Item>}
       <DropdownMenu.Item asChild><NavLink to={workspaceLibraryPath(workspaceSlug,'deleted')}><Trash2/><span>Recently deleted</span></NavLink></DropdownMenu.Item>
       <DropdownMenu.Item asChild><NavLink to={workspaceLibraryPath(workspaceSlug,'audit-log')}><FileClock/><span>Audit log</span></NavLink></DropdownMenu.Item>
       <DropdownMenu.Separator/>

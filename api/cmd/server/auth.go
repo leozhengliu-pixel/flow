@@ -84,6 +84,7 @@ func authClientAddress(r *http.Request) string {
 }
 
 type authUserContextKey struct{}
+type apiKeyContextKey struct{}
 
 func (s *server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -91,18 +92,24 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		cookie, err := r.Cookie(sessionCookieName)
-		if err != nil || cookie.Value == "" {
-			writeError(w, http.StatusUnauthorized, "Sign in required")
-			return
-		}
-		user, err := s.store.AuthenticateSession(r.Context(), cookie.Value)
-		if err != nil {
-			clearSessionCookie(w, r)
-			writeError(w, http.StatusUnauthorized, "Your session has expired")
-			return
+		user, apiKey := s.authenticateAPIKey(r)
+		if apiKey == nil {
+			cookie, err := r.Cookie(sessionCookieName)
+			if err != nil || cookie.Value == "" {
+				writeError(w, http.StatusUnauthorized, "Sign in required")
+				return
+			}
+			user, err = s.store.AuthenticateSession(r.Context(), cookie.Value)
+			if err != nil {
+				clearSessionCookie(w, r)
+				writeError(w, http.StatusUnauthorized, "Your session has expired")
+				return
+			}
 		}
 		ctx := context.WithValue(r.Context(), authUserContextKey{}, user)
+		if apiKey != nil {
+			ctx = context.WithValue(ctx, apiKeyContextKey{}, *apiKey)
+		}
 		ctx = store.ContextWithActor(ctx, user)
 		ctx = store.ContextWithRealtimeClient(ctx, r.Header.Get("X-Client-ID"))
 		r = r.WithContext(ctx)
@@ -113,8 +120,42 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 	})
 }
 
+func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKey) {
+	header := strings.TrimSpace(r.Header.Get("Authorization"))
+	if !strings.HasPrefix(strings.ToLower(header), "bearer ") {
+		return domain.User{}, nil
+	}
+	secret := strings.TrimSpace(header[len("Bearer "):])
+	data, ok := s.store.BootstrapFor(workspaceKey(r))
+	if !ok {
+		return domain.User{}, nil
+	}
+	hash := secretHash(secret)
+	for _, key := range data.APIKeys {
+		if key.SecretHash != hash || key.RevokedAt != nil {
+			continue
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && !slices.Contains(key.Scopes, "write") {
+			return domain.User{}, nil
+		}
+		for _, user := range data.Users {
+			if user.ID == key.CreatorID {
+				now := time.Now().UTC()
+				_ = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "api_key.used", key.ID, nil, func(next *domain.Bootstrap) error {
+					if index := slices.IndexFunc(next.APIKeys, func(item domain.APIKey) bool { return item.ID == key.ID }); index >= 0 {
+						next.APIKeys[index].LastUsedAt = &now
+					}
+					return nil
+				})
+				return user, &key
+			}
+		}
+	}
+	return domain.User{}, nil
+}
+
 func publicAuthPath(path string) bool {
-	return path == "/api/health" || path == "/api/auth/register" || path == "/api/auth/verify-email" || path == "/api/auth/resend-verification" || path == "/api/auth/login" || path == "/api/auth/logout" || path == "/api/auth/session" || path == "/api/auth/forgot-password" || path == "/api/auth/reset-password" || strings.HasPrefix(path, "/api/invitations/preview/")
+	return path == "/api/health" || path == "/api/oauth/token" || path == "/api/auth/register" || path == "/api/auth/verify-email" || path == "/api/auth/resend-verification" || path == "/api/auth/login" || path == "/api/auth/logout" || path == "/api/auth/session" || path == "/api/auth/forgot-password" || path == "/api/auth/reset-password" || strings.HasPrefix(path, "/api/invitations/preview/")
 }
 
 func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Request, user domain.User) bool {
@@ -132,6 +173,18 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return false
+	}
+	if _, apiAuthenticated := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); !apiAuthenticated {
+		cookie, err := r.Cookie(sessionCookieName)
+		durationDays := data.WorkspaceSettings.SessionDurationDays
+		if durationDays < 1 {
+			durationDays = 30
+		}
+		if err != nil || !s.store.EnforceSessionDuration(r.Context(), cookie.Value, durationDays) {
+			clearSessionCookie(w, r)
+			writeError(w, http.StatusUnauthorized, "Your workspace session has expired")
+			return false
+		}
 	}
 	role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, user.ID)
 	if err != nil || status != "active" {
@@ -154,6 +207,14 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusForbidden, "Guests cannot access this workspace resource")
 		return false
 	}
+	if permission := permissionForRequest(r); permission != "" && !workspacePermissionAllows(data.WorkspaceSettings, permission, role) {
+		writeError(w, http.StatusForbidden, "Your workspace role cannot perform this action")
+		return false
+	}
+	if feature := featureForPath(r.URL.Path); feature != "" && data.WorkspaceSettings.FeatureFlags != nil && !data.WorkspaceSettings.FeatureFlags[feature] {
+		writeError(w, http.StatusForbidden, "This workspace feature is disabled")
+		return false
+	}
 	if !s.resourceAllowed(r, key, user.ID) {
 		writeError(w, http.StatusForbidden, "This resource is outside your teams")
 		return false
@@ -161,21 +222,74 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	return true
 }
 
+func featureForPath(path string) string {
+	for prefix, feature := range map[string]string{"/api/documents": "documents", "/api/customers": "customer-requests", "/api/customer-requests": "customer-requests", "/api/releases": "releases", "/api/asks": "asks", "/api/initiatives": "initiatives"} {
+		if strings.HasPrefix(path, prefix) {
+			return feature
+		}
+	}
+	return ""
+}
+
 func adminOnlyRequest(r *http.Request) bool {
 	path := r.URL.Path
-	if strings.Contains(path, "/invitations") || strings.Contains(path, "/members/") && !strings.Contains(path, "/teams/") || path == "/api/events" {
+	if strings.Contains(path, "/members/") && !strings.Contains(path, "/teams/") || path == "/api/events" {
 		return true
 	}
 	if strings.HasPrefix(path, "/api/workspace/") {
 		return true
 	}
+	if strings.HasPrefix(path, "/api/oauth-applications") || strings.HasPrefix(path, "/api/project-statuses") {
+		return true
+	}
 	if strings.HasPrefix(path, "/api/workspaces/") && (r.Method == http.MethodPatch || r.Method == http.MethodDelete) && !strings.Contains(path, "/teams/") {
 		return true
 	}
-	if strings.HasPrefix(path, "/api/workspaces/") && strings.HasSuffix(path, "/teams") && r.Method == http.MethodPost {
+	return false
+}
+
+func permissionForRequest(r *http.Request) string {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead {
+		return ""
+	}
+	path := r.URL.Path
+	switch {
+	case strings.Contains(path, "/invitations"):
+		return "invite"
+	case strings.HasPrefix(path, "/api/workspaces/") && strings.HasSuffix(path, "/teams") && r.Method == http.MethodPost:
+		return "team"
+	case strings.HasPrefix(path, "/api/labels"), strings.HasPrefix(path, "/api/label-groups"), strings.Contains(path, "/labels/") || strings.HasSuffix(path, "/labels"):
+		return "label"
+	case strings.HasPrefix(path, "/api/issue-templates"), strings.HasPrefix(path, "/api/project-templates"), strings.HasPrefix(path, "/api/document-templates"), strings.Contains(path, "/templates/") || strings.HasSuffix(path, "/templates"):
+		return "template"
+	case strings.HasPrefix(path, "/api/api-keys"):
+		return "apiKey"
+	default:
+		return ""
+	}
+}
+
+func workspacePermissionAllows(settings domain.WorkspaceSettings, permission, role string) bool {
+	if role == "admin" {
 		return true
 	}
-	return false
+	if role == "guest" {
+		return false
+	}
+	value := "admins"
+	switch permission {
+	case "invite":
+		value = settings.InvitePermission
+	case "team":
+		value = settings.TeamCreatePermission
+	case "label":
+		value = settings.LabelPermission
+	case "template":
+		value = settings.TemplatePermission
+	case "apiKey":
+		value = settings.APIKeyPermission
+	}
+	return value == "members" || value == "everyone"
 }
 
 func teamManagementRequest(r *http.Request) bool {
@@ -205,13 +319,18 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	teamAllowed := func(teamID string) bool {
+		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && len(key.TeamIDs) > 0 && !slices.Contains(key.TeamIDs, teamID) {
+			return false
+		}
 		return slices.ContainsFunc(data.Teams, func(item domain.Team) bool { return item.ID == teamID })
 	}
 	issueAllowed := func(issueID string) bool {
-		return slices.ContainsFunc(data.Issues, func(item domain.Issue) bool { return item.ID == issueID })
+		return slices.ContainsFunc(data.Issues, func(item domain.Issue) bool { return item.ID == issueID && teamAllowed(item.Team.ID) })
 	}
 	projectAllowed := func(projectID string) bool {
-		return slices.ContainsFunc(data.Projects, func(item domain.Project) bool { return item.ID == projectID })
+		return slices.ContainsFunc(data.Projects, func(item domain.Project) bool {
+			return item.ID == projectID && (len(item.TeamIDs) == 0 || slices.ContainsFunc(item.TeamIDs, teamAllowed))
+		})
 	}
 	mutationAllowed := func(input domain.IssueUpdateInput) bool {
 		if input.ProjectID != nil && *input.ProjectID != "" && !projectAllowed(*input.ProjectID) {
@@ -510,8 +629,20 @@ func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 	if input.Role == "" {
 		input.Role = "member"
 	}
+	if input.Role == "guest" && !data.WorkspaceSettings.GuestsAllowed {
+		writeError(w, http.StatusForbidden, "Guest accounts are disabled for this workspace")
+		return
+	}
 	result := make([]domain.Invitation, 0, len(input.Emails))
 	for _, email := range input.Emails {
+		email = strings.ToLower(strings.TrimSpace(email))
+		if len(data.WorkspaceSettings.AllowedDomains) > 0 {
+			parts := strings.Split(email, "@")
+			if len(parts) != 2 || !slices.Contains(data.WorkspaceSettings.AllowedDomains, parts[1]) {
+				writeError(w, http.StatusForbidden, "Email domain is not approved for this workspace")
+				return
+			}
+		}
 		item, err := s.store.Invite(r.Context(), data.Workspace.ID, authUser(r).ID, email, input.Role, input.TeamIDs)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())

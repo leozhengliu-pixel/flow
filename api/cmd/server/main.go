@@ -76,6 +76,12 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/invitations/preview/{token}", s.invitationPreview)
 	mux.HandleFunc("GET /api/account/bootstrap", s.accountBootstrap)
 	mux.HandleFunc("PUT /api/account/last-workspace", s.setLastWorkspace)
+	mux.HandleFunc("GET /api/account/settings", s.getUserSettings)
+	mux.HandleFunc("PATCH /api/account/settings", s.updateUserSettings)
+	mux.HandleFunc("PATCH /api/account/profile", s.updateAccountProfile)
+	mux.HandleFunc("GET /api/account/sessions", s.listAccountSessions)
+	mux.HandleFunc("DELETE /api/account/sessions/others", s.revokeOtherSessions)
+	mux.HandleFunc("POST /api/account/change-password", s.changeAccountPassword)
 	mux.HandleFunc("GET /api/realtime/events", s.realtimeEvents)
 	mux.HandleFunc("POST /api/realtime/presence", s.updatePresence)
 	mux.HandleFunc("GET /api/search", s.searchWorkspace)
@@ -117,6 +123,38 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/project-templates", s.createProjectTemplate)
 	mux.HandleFunc("PATCH /api/project-templates/{id}", s.updateProjectTemplate)
 	mux.HandleFunc("DELETE /api/project-templates/{id}", s.deleteProjectTemplate)
+	mux.HandleFunc("GET /api/issue-templates", s.listWorkspaceIssueTemplates)
+	mux.HandleFunc("POST /api/issue-templates", s.createWorkspaceIssueTemplate)
+	mux.HandleFunc("PATCH /api/issue-templates/{id}", s.updateWorkspaceIssueTemplate)
+	mux.HandleFunc("DELETE /api/issue-templates/{id}", s.deleteWorkspaceIssueTemplate)
+	mux.HandleFunc("POST /api/document-templates", s.createDocumentTemplate)
+	mux.HandleFunc("PATCH /api/document-templates/{id}", s.updateDocumentTemplate)
+	mux.HandleFunc("DELETE /api/document-templates/{id}", s.deleteDocumentTemplate)
+	mux.HandleFunc("GET /api/labels", s.listWorkspaceLabels)
+	mux.HandleFunc("POST /api/labels", s.createWorkspaceLabel)
+	mux.HandleFunc("PATCH /api/labels/{id}", s.updateWorkspaceLabel)
+	mux.HandleFunc("DELETE /api/labels/{id}", s.deleteWorkspaceLabel)
+	mux.HandleFunc("POST /api/label-groups", s.createLabelGroup)
+	mux.HandleFunc("PATCH /api/label-groups/{id}", s.updateLabelGroup)
+	mux.HandleFunc("DELETE /api/label-groups/{id}", s.deleteLabelGroup)
+	mux.HandleFunc("POST /api/project-statuses", s.createProjectStatus)
+	mux.HandleFunc("PATCH /api/project-statuses/{id}", s.updateProjectStatus)
+	mux.HandleFunc("DELETE /api/project-statuses/{id}", s.deleteProjectStatus)
+	mux.HandleFunc("POST /api/project-statuses/reorder", s.reorderProjectStatuses)
+	mux.HandleFunc("GET /api/workspace/preferences", s.getWorkspacePreferences)
+	mux.HandleFunc("PATCH /api/workspace/preferences", s.updateWorkspacePreferences)
+	mux.HandleFunc("GET /api/api-keys", s.listAPIKeys)
+	mux.HandleFunc("POST /api/api-keys", s.createAPIKey)
+	mux.HandleFunc("DELETE /api/api-keys/{id}", s.revokeAPIKey)
+	mux.HandleFunc("GET /api/oauth-applications", s.listOAuthApplications)
+	mux.HandleFunc("POST /api/oauth-applications", s.createOAuthApplication)
+	mux.HandleFunc("PATCH /api/oauth-applications/{id}", s.updateOAuthApplication)
+	mux.HandleFunc("DELETE /api/oauth-applications/{id}", s.deleteOAuthApplication)
+	mux.HandleFunc("POST /api/oauth/token", s.exchangeOAuthToken)
+	mux.HandleFunc("GET /api/integrations", s.listIntegrations)
+	mux.HandleFunc("PUT /api/integrations/{provider}", s.connectIntegration)
+	mux.HandleFunc("DELETE /api/integrations/{provider}", s.disconnectIntegration)
+	mux.HandleFunc("GET /api/usage", s.getWorkspaceUsage)
 	mux.HandleFunc("POST /api/sla-rules", s.createSLARule)
 	mux.HandleFunc("PATCH /api/sla-rules/{id}", s.updateSLARule)
 	mux.HandleFunc("DELETE /api/sla-rules/{id}", s.deleteSLARule)
@@ -238,6 +276,8 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "workspace not found")
 			return
 		}
+		filterBootstrapForAPIKey(&data, r)
+		sanitizeBootstrap(&data)
 		writeJSON(w, http.StatusOK, data)
 		return
 	}
@@ -246,7 +286,62 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
+	sanitizeBootstrap(&data)
 	writeJSON(w, http.StatusOK, data)
+}
+
+func sanitizeBootstrap(data *domain.Bootstrap) {
+	for index := range data.APIKeys {
+		data.APIKeys[index].SecretHash = ""
+	}
+	for index := range data.OAuthApplications {
+		data.OAuthApplications[index].ClientSecret = ""
+	}
+}
+
+func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
+	key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
+	if !ok || len(key.TeamIDs) == 0 {
+		return
+	}
+	allowed := func(id string) bool { return slices.Contains(key.TeamIDs, id) }
+	data.Teams = slices.DeleteFunc(data.Teams, func(item domain.Team) bool { return !allowed(item.ID) })
+	data.States = slices.DeleteFunc(data.States, func(item domain.WorkflowState) bool { return item.TeamID != "" && !allowed(item.TeamID) })
+	data.Labels = slices.DeleteFunc(data.Labels, func(item domain.IssueLabel) bool { return item.Scope != "" && !allowed(item.Scope) })
+	data.Issues = slices.DeleteFunc(data.Issues, func(item domain.Issue) bool { return !allowed(item.Team.ID) })
+	visibleIssue := func(id string) bool {
+		return slices.ContainsFunc(data.Issues, func(item domain.Issue) bool { return item.ID == id })
+	}
+	data.Cycles = slices.DeleteFunc(data.Cycles, func(item domain.Cycle) bool { return !allowed(item.TeamID) })
+	data.Projects = slices.DeleteFunc(data.Projects, func(item domain.Project) bool { return !slices.ContainsFunc(item.TeamIDs, allowed) })
+	visibleProject := func(id string) bool {
+		return slices.ContainsFunc(data.Projects, func(item domain.Project) bool { return item.ID == id })
+	}
+	data.IssueTemplates = slices.DeleteFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool { return item.TeamID != "" && !allowed(item.TeamID) })
+	data.ProjectTemplates = slices.DeleteFunc(data.ProjectTemplates, func(item domain.ProjectTemplate) bool {
+		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, allowed)
+	})
+	data.DocumentTemplates = slices.DeleteFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return !allowed(item.TeamID) })
+	data.Documents = slices.DeleteFunc(data.Documents, func(item domain.Document) bool { return !slices.ContainsFunc(item.TeamIDs, allowed) })
+	data.TeamMembers = slices.DeleteFunc(data.TeamMembers, func(item domain.TeamMember) bool { return !allowed(item.TeamID) })
+	for id := range data.TeamSettings {
+		if !allowed(id) {
+			delete(data.TeamSettings, id)
+		}
+	}
+	for id := range data.CycleSettings {
+		if !allowed(id) {
+			delete(data.CycleSettings, id)
+		}
+	}
+	data.CustomerRequests = slices.DeleteFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool {
+		return item.IssueID != "" && !visibleIssue(item.IssueID) || item.ProjectID != "" && !visibleProject(item.ProjectID)
+	})
+	data.Releases = slices.DeleteFunc(data.Releases, func(item domain.Release) bool {
+		return !slices.ContainsFunc(item.ProjectIDs, visibleProject) && !slices.ContainsFunc(item.IssueIDs, visibleIssue)
+	})
+	data.Asks = slices.DeleteFunc(data.Asks, func(item domain.Ask) bool { return item.TeamID != "" && !allowed(item.TeamID) })
+	data.Initiatives = slices.DeleteFunc(data.Initiatives, func(item domain.Initiative) bool { return !slices.ContainsFunc(item.ProjectIDs, visibleProject) })
 }
 
 func (s *server) updateWorkspaceSettings(w http.ResponseWriter, r *http.Request) {
@@ -1114,7 +1209,10 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 			}
 			defaultState = stateForTeam(data, team.ID, states[0].ID)
 		}
-		created = domain.Issue{ID: fmt.Sprintf("issue_%d", number), Version: 1, Identifier: fmt.Sprintf("%s-%d", team.Key, number), Number: number, Title: strings.TrimSpace(input.Title), Description: strings.TrimSpace(input.Description), Priority: settings.DefaultPriority, PriorityLabel: priorityLabel(settings.DefaultPriority), SortOrder: float64(number), CreatedAt: now, UpdatedAt: now, Team: team, State: *defaultState, Assignee: &data.Viewer, Creator: data.Viewer, Labels: []domain.IssueLabel{}, ParentID: input.ParentID, SubscriberIDs: []string{data.Viewer.ID}, Reactions: map[string][]string{}, SubIssueIDs: []string{}, Relations: []domain.IssueRelation{}, Attachments: []domain.Attachment{}}
+		created = domain.Issue{ID: fmt.Sprintf("issue_%d", number), Version: 1, Identifier: fmt.Sprintf("%s-%d", team.Key, number), Number: number, Title: strings.TrimSpace(input.Title), Description: strings.TrimSpace(input.Description), Priority: settings.DefaultPriority, PriorityLabel: priorityLabel(settings.DefaultPriority), SortOrder: float64(number), CreatedAt: now, UpdatedAt: now, Team: team, State: *defaultState, Creator: data.Viewer, Labels: []domain.IssueLabel{}, ParentID: input.ParentID, SubscriberIDs: []string{data.Viewer.ID}, Reactions: map[string][]string{}, SubIssueIDs: []string{}, Relations: []domain.IssueRelation{}, Attachments: []domain.Attachment{}}
+		if preferences := data.UserSettings[data.Viewer.ID]; preferences.AutoAssign && input.AssigneeID == nil {
+			input.AssigneeID = &data.Viewer.ID
+		}
 		createUpdate := domain.IssueUpdateInput{DescriptionState: input.DescriptionState, DescriptionData: input.DescriptionData, ContentState: input.ContentState, StateID: input.StateID, Priority: input.Priority, AssigneeID: input.AssigneeID, ProjectID: input.ProjectID, CycleID: input.CycleID, DueDate: input.DueDate}
 		if len(input.LabelIDs) > 0 {
 			createUpdate.LabelIDs = &input.LabelIDs
@@ -1190,6 +1288,18 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 			if input.LabelIDs == nil {
 				input.LabelIDs = slices.Clone(template.LabelIDs)
 			}
+			if input.LeadID == nil && template.LeadID != "" {
+				input.LeadID = &template.LeadID
+			}
+			if len(input.MemberIDs) == 0 {
+				input.MemberIDs = slices.Clone(template.MemberIDs)
+			}
+			if len(input.DependencyIDs) == 0 {
+				input.DependencyIDs = slices.Clone(template.DependencyIDs)
+			}
+			if len(input.Initiatives) == 0 {
+				input.Initiatives = slices.Clone(template.InitiativeIDs)
+			}
 		}
 		if input.Name == nil || strings.TrimSpace(*input.Name) == "" {
 			return "", errInvalid
@@ -1206,6 +1316,15 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 			return "", err
 		}
 		data.Projects = append([]domain.Project{created}, data.Projects...)
+		if input.TemplateID != "" {
+			if index := slices.IndexFunc(data.ProjectTemplates, func(template domain.ProjectTemplate) bool { return template.ID == input.TemplateID }); index >= 0 {
+				for issueIndex := range data.Issues {
+					if slices.Contains(data.ProjectTemplates[index].IssueIDs, data.Issues[issueIndex].ID) {
+						data.Issues[issueIndex].Project = &domain.ProjectSummary{ID: created.ID, Name: created.Name, Icon: created.Icon, Color: created.Color}
+					}
+				}
+			}
+		}
 		return created.ID, nil
 	})
 	respondMutation(w, err, http.StatusCreated, created)
@@ -2685,6 +2804,10 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		}
 		changes["state"] = value.Name
 		issue.State = *value
+		if value.Type == "started" && issue.Assignee == nil && data.UserSettings[data.Viewer.ID].AssignStarted {
+			issue.Assignee = &data.Viewer
+			changes["assignee"] = data.Viewer.ID
+		}
 	}
 	if input.Priority != nil {
 		issue.Priority = *input.Priority
