@@ -77,11 +77,18 @@ func TestDocumentHistoryProjectAssociationAndTrashRestore(t *testing.T) {
 	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
 	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	project := bootstrap.Projects[0]
+	issue := bootstrap.Issues[0]
 
 	document := requestJSON[domain.Document](t, handler, http.MethodPost, "/api/documents", map[string]any{
-		"title": "Advanced document", "content": "First version", "projectIds": []string{project.ID},
+		"title": "Advanced document", "content": "First version", "projectIds": []string{project.ID}, "issueId": issue.ID,
 	}, http.StatusCreated)
+	if document.IssueID != issue.ID {
+		t.Fatalf("document issue association = %q, want %q", document.IssueID, issue.ID)
+	}
 	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if !slices.ContainsFunc(bootstrap.Documents, func(item domain.Document) bool { return item.ID == document.ID && item.IssueID == issue.ID }) {
+		t.Fatal("document issue association did not survive bootstrap")
+	}
 	if !projectHasResource(bootstrap.Projects, project.ID, document.ID) {
 		t.Fatal("creating an associated document did not add the project resource")
 	}

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CircleHelp } from "lucide-react";
 import {
+  addFavorite,
   batchUpdateIssues,
   completeCycle as completeCycleRequest,
   createComment,
   createCustomer,
+  createCustomerRequest,
   createDocument,
   createInitiative,
   createInitiativeComment,
@@ -12,6 +14,9 @@ import {
   createInitiativeUpdate,
   createInitiativeUpdateComment,
   createIssue,
+  createIssueLink,
+  createIssueLoopRun,
+  createIssueReminder,
   createProject,
   createProjectComment,
   createProjectMilestone,
@@ -22,6 +27,7 @@ import {
   createSavedView,
   createTeam,
   createWorkspace,
+  createWorkspaceIssueTemplate,
   deleteAttachment,
   deleteComment,
   deleteCustomer,
@@ -43,6 +49,7 @@ import {
   fetchBootstrap,
   logoutAccount,
   recordRecentResource,
+  removeFavorite,
   setProjectDisplayDefault,
   setLastWorkspace,
   startCycle as startCycleRequest,
@@ -64,6 +71,7 @@ import {
   updateProjectMilestone,
   updateProjectResource,
   updateProjectUpdate,
+  updateRelease,
   updateSavedView,
   updateTeam,
   updateWorkspace,
@@ -100,6 +108,7 @@ import type {
 } from "@/types/flow";
 import { Sidebar, type PageId } from "@/components/layout/sidebar";
 import { DetailPane } from "@/components/detail/detail-pane";
+import type { IssueOptionsActions, IssueConversionKind, RelatedIssueCreationKind } from "@/components/issue/issue-options-menu";
 import { CommandMenu } from "@/components/command/command-menu";
 import { ErrorState, SkeletonRows } from "@/components/state/state-view";
 import { BulkActionBar } from "@/components/issue/bulk-action-bar";
@@ -520,6 +529,7 @@ function App() {
   const updateSelected = async (input: IssueUpdateInput) => {
     if (!selectedIssue) return;
     await updateIssueById(selectedIssue, input);
+    if (input.description !== undefined) await refreshActivity();
   };
   const removeSelected = async () => {
     if (!data || !selectedIssue) return;
@@ -677,6 +687,162 @@ function App() {
       throw error;
     }
   };
+  const addSelectedIssueLink = async (input: { url: string; title?: string }) => {
+    if (!selectedIssue) return;
+    const attachment = await run(
+      () => createIssueLink(selectedIssue.id, input),
+      "Could not add link",
+    );
+    replaceIssue({
+      ...selectedIssue,
+      attachments: [...selectedIssue.attachments, attachment],
+    });
+  };
+  const addSelectedCustomerRequest = async (input: { customerId?: string; customerName?: string; body: string }) => {
+    if (!selectedIssue) return;
+    let customer = data?.customers.find(item => item.id === input.customerId);
+    if (!customer && input.customerName) {
+      customer = await run(
+        () => createCustomer({ name: input.customerName! }),
+        "Could not create customer",
+      );
+    }
+    if (!customer) throw new Error("Select or create a customer");
+    const request = await run(
+      () => createCustomerRequest({ customerId: customer.id, body: input.body, source: "manual", issueId: selectedIssue.id }),
+      "Could not add customer request",
+    );
+    setData(current => current ? {
+      ...current,
+      customers: current.customers.some(item => item.id === customer!.id) ? current.customers : [customer!, ...current.customers],
+      customerRequests: [request, ...current.customerRequests],
+    } : current);
+  };
+  const addSelectedDocument = async () => {
+    if (!data || !selectedIssue) return;
+    const document = await run(
+      () => createDocument({ title: "New document", teamIds: [selectedIssue.team.id], issueId: selectedIssue.id }),
+      "Could not create document",
+    );
+    setData(current => current ? { ...current, documents: [document, ...current.documents] } : current);
+    navigateTo(documentPath(data.workspace.urlKey, document));
+  };
+  const toggleSelectedRelease = async (releaseId: string) => {
+    if (!selectedIssue) return;
+    const release = data?.releases.find(item => item.id === releaseId);
+    if (!release) throw new Error("Release not found");
+    const issueIds = release.issueIds.includes(selectedIssue.id)
+      ? release.issueIds.filter(id => id !== selectedIssue.id)
+      : [...release.issueIds, selectedIssue.id];
+    const updated = await run(
+      () => updateRelease(release.id, { issueIds }),
+      "Could not update release",
+    );
+    setData(current => current ? { ...current, releases: current.releases.map(item => item.id === updated.id ? updated : item) } : current);
+  };
+  const createSelectedRelated = async (kind: RelatedIssueCreationKind, title: string) => {
+    if (!selectedIssue) return;
+    const related = await run(
+      () => createIssue({
+        title,
+        description: "",
+        teamId: selectedIssue.team.id,
+        parentId: kind === "sub-issue" ? selectedIssue.id : undefined,
+        stateId: selectedIssue.state.id,
+        priority: selectedIssue.priority,
+        assigneeId: selectedIssue.assignee?.id,
+        projectId: selectedIssue.project?.id,
+        labelIds: selectedIssue.labels.map(label => label.id),
+      }),
+      "Could not create related issue",
+    );
+    if (kind === "parent") {
+      await updateIssueById(selectedIssue, { parentId: related.id });
+    } else if (kind !== "sub-issue") {
+      const relationType: IssueRelationType = kind === "blocked" ? "blocks" : kind === "blocking" ? "blocked_by" : "related";
+      await run(() => createRelation(selectedIssue.id, relationType, related.id), "Could not relate issue");
+    }
+    await refreshActivity();
+  };
+  const convertSelectedIssue = async (kind: IssueConversionKind) => {
+    if (!data || !selectedIssue) return;
+    if (kind === "template") {
+      const template = await run(
+        () => createWorkspaceIssueTemplate({
+          name: selectedIssue.title,
+          description: `Created from ${selectedIssue.identifier}`,
+          body: selectedIssue.description,
+          teamId: selectedIssue.team.id,
+          stateId: selectedIssue.state.id,
+          priority: selectedIssue.priority,
+          assigneeId: selectedIssue.assignee?.id,
+          projectId: selectedIssue.project?.id,
+          labelIds: selectedIssue.labels.map(label => label.id),
+        }),
+        "Could not create issue template",
+      );
+      setData(current => current ? { ...current, issueTemplates: [template, ...current.issueTemplates] } : current);
+      return;
+    }
+    const project = await run(
+      () => createProject({
+        name: selectedIssue.title,
+        summary: selectedIssue.description,
+        description: selectedIssue.description,
+        priority: selectedIssue.priority,
+        leadId: selectedIssue.assignee?.id,
+        teamIds: [selectedIssue.team.id],
+        labelIds: selectedIssue.labels.map(label => label.id),
+      }),
+      "Could not convert issue to project",
+    );
+    await run(() => deleteIssue(selectedIssue.id), "Project was created, but the original issue could not be removed");
+    setData(current => current ? {
+      ...current,
+      projects: [project, ...current.projects],
+      issues: current.issues.filter(item => item.id !== selectedIssue.id),
+    } : current);
+    navigateTo(projectPath(data.workspace.urlKey, project), { replace: true });
+  };
+  const toggleSelectedFavorite = async () => {
+    if (!data || !selectedIssue) return;
+    const favorite = data.favorites.find(item => item.resourceType === "issue" && item.resourceId === selectedIssue.id);
+    if (favorite) {
+      await run(() => removeFavorite("issue", selectedIssue.id), "Could not remove favorite");
+      setData(current => current ? { ...current, favorites: current.favorites.filter(item => item.id !== favorite.id) } : current);
+    } else {
+      const created = await run(() => addFavorite("issue", selectedIssue.id), "Could not add favorite");
+      setData(current => current ? { ...current, favorites: [created, ...current.favorites] } : current);
+    }
+  };
+  const remindSelectedIssue = async (remindAt: string) => {
+    if (!selectedIssue) return;
+    await run(() => createIssueReminder(selectedIssue.id, remindAt), "Could not set reminder");
+    await refreshActivity();
+  };
+  const runSelectedIssueLoop = async (prompt: string) => {
+    if (!selectedIssue) return;
+    await run(() => createIssueLoopRun(selectedIssue.id, prompt), "Could not run loop");
+    await refreshActivity();
+  };
+  const restoreSelectedDescription = async (description: string, descriptionState?: string) => {
+    if (!selectedIssue) return;
+    await updateIssueById(selectedIssue, { description, descriptionState });
+    await refreshActivity();
+  };
+  const selectedIssueOptionsActions: IssueOptionsActions | undefined = selectedIssue ? {
+    addLink: addSelectedIssueLink,
+    addCustomerRequest: addSelectedCustomerRequest,
+    addDocument: addSelectedDocument,
+    toggleRelease: toggleSelectedRelease,
+    createRelated: createSelectedRelated,
+    convert: convertSelectedIssue,
+    setRecurring: recurrence => updateIssueById(selectedIssue, { recurrence, nextOccurrenceAt: nextOccurrence(recurrence).toISOString() }).then(() => undefined),
+    toggleFavorite: toggleSelectedFavorite,
+    remind: remindSelectedIssue,
+    runLoop: runSelectedIssueLoop,
+    restoreDescription: restoreSelectedDescription,
+  } : undefined;
   const updateInboxIssue = async (issue: Issue, input: IssueUpdateInput) => {
     await updateIssueById(issue, input);
     await refreshActivity();
@@ -2528,8 +2694,9 @@ function App() {
           document={selectedDocument}
           onReload={async () => setData(await fetchBootstrap(data.workspace.urlKey))}
           onBack={() => {
+            const issue = data.issues.find(item => item.id === selectedDocument.issueId);
             const project = data.projects.find(item => selectedDocument.projectIds.includes(item.id));
-            navigateTo(project ? projectPath(data.workspace.urlKey, project) : projectsPath(data.workspace.urlKey));
+            navigateTo(issue ? issuePath(data.workspace.urlKey, issue) : project ? projectPath(data.workspace.urlKey, project) : projectsPath(data.workspace.urlKey));
           }}
         />
       )}
@@ -3326,6 +3493,7 @@ function App() {
             issue={selectedIssue}
             data={data}
             full
+            issueOptionsActions={selectedIssueOptionsActions}
             presence={realtime.presence.filter(item => item.issueId === selectedIssue.id && item.clientId !== realtime.clientId)}
             onClose={() =>
               navigateTo(issueReturnPath(location.state, data.workspace.urlKey))
@@ -3575,6 +3743,8 @@ function applyOptimisticIssue(issue: Issue, input: IssueUpdateInput, data: Boots
   if (input.labelIds !== undefined) next.labels = data?.labels.filter(item => input.labelIds?.includes(item.id)) ?? next.labels;
   if (input.subscriberIds !== undefined) next.subscriberIds = input.subscriberIds;
   if (input.parentId !== undefined) next.parentId = input.parentId || undefined;
+  if (input.recurrence !== undefined) next.recurrence = input.recurrence || undefined;
+  if (input.nextOccurrenceAt !== undefined) next.nextOccurrenceAt = input.nextOccurrenceAt || undefined;
   if (input.sortOrder !== undefined) next.sortOrder = input.sortOrder;
   if (input.archived !== undefined) next.archivedAt = input.archived ? new Date().toISOString() : undefined;
   if (input.descriptionData !== undefined) {
@@ -3587,6 +3757,14 @@ function applyOptimisticIssue(issue: Issue, input: IssueUpdateInput, data: Boots
     };
   }
   return next;
+}
+
+function nextOccurrence(recurrence: "daily" | "weekly" | "monthly") {
+  const date = new Date();
+  if (recurrence === "daily") date.setDate(date.getDate() + 1);
+  if (recurrence === "weekly") date.setDate(date.getDate() + 7);
+  if (recurrence === "monthly") date.setMonth(date.getMonth() + 1);
+  return date;
 }
 
 export default App;

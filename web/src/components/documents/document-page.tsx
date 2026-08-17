@@ -27,13 +27,14 @@ export function DocumentPage({ data, document, onReload, onBack }: { data: Boots
   useEffect(()=>()=>window.clearTimeout(pending.current),[])
   const schedule=(input: Parameters<typeof updateDocument>[1])=>{window.clearTimeout(pending.current);setSaveState('saving');pending.current=window.setTimeout(()=>{void updateDocument(document.id,input).then(async()=>{await onReload();setSaveState('saved');window.setTimeout(()=>setSaveState('idle'),900)}).catch(()=>setSaveState('error'))},600)}
   const project=data.projects.find(item=>document.projectIds.includes(item.id))
+  const issue=data.issues.find(item=>item.id===document.issueId)
   const selectedRevision=document.revisions.find(item=>item.id===selectedRevisionId)
   const openHistory=async()=>{await onReload();setSelectedRevisionId(document.revisions[0]?.id??'');setHistoryOpen(true)}
   const restoreRevision=async()=>{if(!selectedRevision)return;const restored=await restoreDocumentRevision(document.id,selectedRevision.id);setTitle(restored.title);setBody({value:restored.content,state:restored.contentData?JSON.stringify(restored.contentData):restored.contentState});setEditorVersion(value=>value+1);setHistoryOpen(false);await onReload()}
   const toggleProject=async(id:string)=>{const next=document.projectIds.includes(id)?document.projectIds.filter(value=>value!==id):[...document.projectIds,id];await updateDocument(document.id,{projectIds:next});await onReload()}
   return <main className="main-panel document-page">
     <header className="document-header">
-      <button className="document-breadcrumb" onClick={onBack}>{project?.name??'Documents'}</button><span>›</span><strong>{document.title}</strong>
+      <button className="document-breadcrumb" onClick={onBack}>{issue?.identifier??project?.name??'Documents'}</button><span>›</span><strong>{document.title}</strong>
       <div className="document-header-actions">
         {saveState!=='idle'&&<span className={`document-save-state ${saveState}`}>{saveState==='saving'?'Saving…':saveState==='saved'?<><Check size={12}/>Saved</>:'Could not save'}</span>}
         <button aria-label={favorite?'Remove from favorites':'Add to favorites'} onClick={()=>void (favorite?removeFavorite('document',document.id):addFavorite('document',document.id)).then(onReload)}><Star size={15} fill={favorite?'currentColor':'none'}/></button>
