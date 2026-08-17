@@ -2,6 +2,13 @@
   "name": "flow-web",
   "private": true,
   "version": "0.0.0",
+  "description": "Flow web application",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leozhengliu-pixel/flow.git",
+    "directory": "web"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
