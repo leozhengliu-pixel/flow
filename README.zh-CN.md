@@ -30,8 +30,10 @@ Flow 将任务、项目、周期、计划、文档、客户请求与工作区管
 ### 环境要求
 
 - Go `1.26.3`，或 [`api/go.mod`](api/go.mod) 中声明的版本
-- Node.js `20.19+` 或 `22.12+`
-- npm `10+`
+- Node.js `24.19+` LTS（生产基线声明在 [`.nvmrc`](.nvmrc)）
+- npm `10.9.2`
+
+CI 还会在 Node.js 26 上执行完整的 Web 验证，作为前向兼容检查。在新版本进入 LTS 并经过明确升级前，Node.js 24 仍是受支持的生产基线。
 
 ### 启动 API
 
@@ -94,6 +96,8 @@ npm run build
 cd ../api
 go test ./...
 ```
+
+默认 Web Job 使用 Node.js 24 LTS；独立且必须通过的兼容性 Job 会在 Node.js 26 上重复安装、lint 与构建。
 
 ## 参与项目
 

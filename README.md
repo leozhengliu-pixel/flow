@@ -70,8 +70,12 @@ updates and real-time invalidation to keep active sessions synchronized.
 ### Prerequisites
 
 - Go `1.26.3` or the version declared in [`api/go.mod`](api/go.mod)
-- Node.js `20.19+` or `22.12+`
-- npm `10+`
+- Node.js `24.19+` LTS (the production baseline declared in [`.nvmrc`](.nvmrc))
+- npm `10.9.2`
+
+CI also runs the complete web validation suite on Node.js 26 as a forward-
+compatibility check. Node.js 24 remains the supported production baseline until
+the newer release line reaches LTS and is promoted deliberately.
 
 ### 1. Clone the repository
 
@@ -164,6 +168,9 @@ npm run build
 cd ../api
 go test ./...
 ```
+
+The default Web job runs on Node.js 24 LTS. A separate required compatibility
+job repeats install, lint, and build on Node.js 26.
 
 ## Documentation
 
