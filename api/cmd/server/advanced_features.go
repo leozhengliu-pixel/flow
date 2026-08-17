@@ -19,6 +19,7 @@ import (
 )
 
 type documentInput struct {
+	TemplateID    *string        `json:"templateId,omitempty"`
 	Title         *string        `json:"title,omitempty"`
 	Icon          *string        `json:"icon,omitempty"`
 	Content       *string        `json:"content,omitempty"`
@@ -62,15 +63,21 @@ type askInput struct {
 }
 
 type projectTemplateInput struct {
-	Name        *string   `json:"name,omitempty"`
-	Description *string   `json:"description,omitempty"`
-	Summary     *string   `json:"summary,omitempty"`
-	Icon        *string   `json:"icon,omitempty"`
-	Color       *string   `json:"color,omitempty"`
-	StatusID    *string   `json:"statusId,omitempty"`
-	Priority    *int      `json:"priority,omitempty"`
-	TeamIDs     *[]string `json:"teamIds,omitempty"`
-	LabelIDs    *[]string `json:"labelIds,omitempty"`
+	Name          *string   `json:"name,omitempty"`
+	Description   *string   `json:"description,omitempty"`
+	Summary       *string   `json:"summary,omitempty"`
+	Icon          *string   `json:"icon,omitempty"`
+	Color         *string   `json:"color,omitempty"`
+	StatusID      *string   `json:"statusId,omitempty"`
+	Priority      *int      `json:"priority,omitempty"`
+	TeamIDs       *[]string `json:"teamIds,omitempty"`
+	LabelIDs      *[]string `json:"labelIds,omitempty"`
+	LeadID        *string   `json:"leadId,omitempty"`
+	MemberIDs     *[]string `json:"memberIds,omitempty"`
+	DependencyIDs *[]string `json:"dependencyIds,omitempty"`
+	InitiativeIDs *[]string `json:"initiativeIds,omitempty"`
+	IssueIDs      *[]string `json:"issueIds,omitempty"`
+	Visibility    *string   `json:"visibility,omitempty"`
 }
 
 type slaRuleInput struct {
@@ -196,10 +203,24 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "document.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
 		title := "New document"
+		var template *domain.DocumentTemplate
+		if input.TemplateID != nil && *input.TemplateID != "" {
+			index := slices.IndexFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.ID == *input.TemplateID })
+			if index < 0 {
+				return "", errInvalid
+			}
+			template = &data.DocumentTemplates[index]
+			if template.Title != "" {
+				title = template.Title
+			}
+		}
 		if input.Title != nil && strings.TrimSpace(*input.Title) != "" {
 			title = strings.TrimSpace(*input.Title)
 		}
 		projects, teams := []string{}, []string{}
+		if template != nil && template.TeamID != "" {
+			teams = []string{template.TeamID}
+		}
 		if input.ProjectIDs != nil {
 			projects = normalizedStrings(*input.ProjectIDs)
 		}
@@ -210,6 +231,12 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 			return "", errInvalid
 		}
 		created = domain.Document{ID: fmt.Sprintf("document_%d", now.UnixNano()), SlugID: slug(title) + "-" + strconv.FormatInt(now.UnixNano()%0xffffff, 16), Title: title, Creator: data.Viewer, ProjectIDs: projects, TeamIDs: teams, SubscriberIDs: []string{data.Viewer.ID}, ContentData: map[string]any{"type": "doc", "content": []any{}}, CreatedAt: now, UpdatedAt: now, Revisions: []domain.DocumentRevision{}}
+		if template != nil {
+			created.Icon, created.Content, created.ContentState = template.Icon, template.Content, template.ContentState
+			if template.ContentData != nil {
+				created.ContentData = template.ContentData
+			}
+		}
 		if input.Icon != nil {
 			created.Icon = *input.Icon
 		}
@@ -887,6 +914,46 @@ func applyProjectTemplateInput(data *domain.Bootstrap, template *domain.ProjectT
 			return errInvalid
 		}
 		template.LabelIDs = values
+	}
+	if input.LeadID != nil {
+		if *input.LeadID != "" && userByID(data, *input.LeadID) == nil {
+			return errInvalid
+		}
+		template.LeadID = *input.LeadID
+	}
+	if input.MemberIDs != nil {
+		values := normalizedStrings(*input.MemberIDs)
+		if !validateResourceIDs(data, "user", values) {
+			return errInvalid
+		}
+		template.MemberIDs = values
+	}
+	if input.DependencyIDs != nil {
+		values := normalizedStrings(*input.DependencyIDs)
+		if !validateResourceIDs(data, "project", values) {
+			return errInvalid
+		}
+		template.DependencyIDs = values
+	}
+	if input.InitiativeIDs != nil {
+		values := normalizedStrings(*input.InitiativeIDs)
+		if !validateResourceIDs(data, "initiative", values) {
+			return errInvalid
+		}
+		template.InitiativeIDs = values
+	}
+	if input.IssueIDs != nil {
+		values := normalizedStrings(*input.IssueIDs)
+		if !validateResourceIDs(data, "issue", values) {
+			return errInvalid
+		}
+		template.IssueIDs = values
+	}
+	if input.Visibility != nil {
+		if !slices.Contains([]string{"workspace", "teams"}, *input.Visibility) {
+			return errInvalid
+		}
+		template.Visibility = *input.Visibility
 	}
 	return nil
 }
