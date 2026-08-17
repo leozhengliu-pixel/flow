@@ -68,12 +68,12 @@ export function updateCustomerRequest(id: string, input: Partial<Pick<CustomerRe
 export function deleteCustomerRequest(id: string): Promise<void> { return request(`/api/customer-requests/${id}`, { method: 'DELETE' }) }
 export function uploadCustomerRequestAttachment(id: string, file: File): Promise<Attachment> { const body = new FormData(); body.append('file', file); return request(`/api/customer-requests/${id}/attachments`, { method: 'POST', body }) }
 export function deleteCustomerRequestAttachment(id: string, attachmentId: string): Promise<void> { return request(`/api/customer-requests/${id}/attachments/${attachmentId}`, { method: 'DELETE' }) }
-export function createDocument(input: Partial<Pick<FlowDocument,'title'|'icon'|'content'|'contentState'|'contentData'|'projectIds'|'teamIds'|'subscriberIds'|'favorite'>> & {templateId?:string}): Promise<FlowDocument> { return request('/api/documents', jsonRequest('POST', input)) }
+export function createDocument(input: Partial<Pick<FlowDocument,'title'|'icon'|'content'|'contentState'|'contentData'|'projectIds'|'teamIds'|'issueId'|'subscriberIds'|'favorite'>> & {templateId?:string}): Promise<FlowDocument> { return request('/api/documents', jsonRequest('POST', input)) }
 type DocumentTemplateMutation = Partial<Pick<DocumentTemplate,'teamId'|'name'|'description'|'title'|'icon'|'content'|'contentState'|'contentData'>>
 export function createDocumentTemplate(input: DocumentTemplateMutation & {teamId:string;name:string}):Promise<DocumentTemplate>{return request('/api/document-templates',jsonRequest('POST',input))}
 export function updateDocumentTemplate(id:string,input:DocumentTemplateMutation):Promise<DocumentTemplate>{return request(`/api/document-templates/${id}`,jsonRequest('PATCH',input))}
 export function deleteDocumentTemplate(id:string):Promise<void>{return request(`/api/document-templates/${id}`,{method:'DELETE'})}
-export function updateDocument(id: string, input: Partial<Pick<FlowDocument,'title'|'icon'|'content'|'contentState'|'contentData'|'projectIds'|'teamIds'|'subscriberIds'|'favorite'>> & { archived?: boolean }): Promise<FlowDocument> { return request(`/api/documents/${id}`, jsonRequest('PATCH', input)) }
+export function updateDocument(id: string, input: Partial<Pick<FlowDocument,'title'|'icon'|'content'|'contentState'|'contentData'|'projectIds'|'teamIds'|'issueId'|'subscriberIds'|'favorite'>> & { archived?: boolean }): Promise<FlowDocument> { return request(`/api/documents/${id}`, jsonRequest('PATCH', input)) }
 export function deleteDocument(id: string): Promise<void> { return request(`/api/documents/${id}`, { method: 'DELETE' }) }
 export function restoreDocumentRevision(id: string, revisionId: string): Promise<FlowDocument> { return request(`/api/documents/${id}/restore/${revisionId}`, { method: 'POST' }) }
 export function createRelease(input: { name: string } & Partial<Omit<Release,'id'|'creator'|'createdAt'|'updatedAt'>>): Promise<Release> { return request('/api/releases', jsonRequest('POST', input)) }
@@ -166,6 +166,9 @@ export function updateCycleSettings(teamId: string, input: CycleSettingsMutation
 
 export function deleteIssue(issueId: string): Promise<void> { return request(`/api/issues/${issueId}`, { method: 'DELETE' }) }
 export function toggleIssueReaction(issueId: string, emoji: string): Promise<Issue> { return request(`/api/issues/${issueId}/reactions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emoji }) }) }
+export function createIssueLink(issueId: string, input: { url: string; title?: string }): Promise<Attachment> { return request(`/api/issues/${issueId}/links`, jsonRequest('POST', input)) }
+export function createIssueReminder(issueId: string, remindAt: string): Promise<Notification> { return request(`/api/issues/${issueId}/reminders`, jsonRequest('POST', { remindAt })) }
+export function createIssueLoopRun(issueId: string, prompt?: string): Promise<Ask> { return request(`/api/issues/${issueId}/loop-runs`, jsonRequest('POST', { prompt })) }
 
 export function batchUpdateIssues(issueIds: string[], update: IssueUpdateInput): Promise<Issue[]> {
   return request('/api/issues/batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ issueIds, update }) })
