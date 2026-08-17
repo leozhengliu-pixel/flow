@@ -1,0 +1,179 @@
+import type { Cycle, Initiative, Issue, Project } from '@/types/flow'
+
+export type MyIssuesRouteView = 'assigned' | 'created' | 'subscribed' | 'activity'
+export type ProjectRouteTab = 'overview' | 'activity' | 'issues' | 'new'
+export type TeamIssuesRouteView = 'active' | 'backlog' | 'all'
+export type ViewsResource = 'issues' | 'projects'
+export type InitiativesRouteView = 'active' | 'planned' | 'all'
+export type InitiativeRouteTab = 'overview' | 'activity' | 'projects' | 'new' | 'view'
+export type CyclesRouteView = 'all' | 'current' | 'upcoming'
+export type PulseRouteView = 'following' | 'popular' | 'all'
+export type SettingsPageId =
+  | 'preferences' | 'profile' | 'notifications' | 'code-and-reviews' | 'account-security' | 'connections' | 'agents'
+  | 'issue-labels' | 'issue-templates' | 'sla'
+  | 'project-labels' | 'project-templates' | 'project-statuses' | 'project-updates'
+  | 'ai' | 'initiatives' | 'documents' | 'customer-requests' | 'releases' | 'pulse' | 'asks' | 'emojis' | 'integrations'
+  | 'workspace' | 'teams' | 'members' | 'security' | 'api' | 'applications' | 'billing' | 'usage' | 'import-export' | 'team'
+export type TeamSettingsSection = 'general'|'members'|'labels'|'templates'|'statuses'|'cycles'
+
+export type AppRoute =
+  | { kind: 'root' }
+  | { kind: 'workspace-onboarding' }
+  | { kind: 'workspace-root'; workspaceSlug: string }
+  | { kind: 'inbox'; workspaceSlug: string }
+  | { kind: 'search'; workspaceSlug: string }
+  | { kind: 'pulse'; workspaceSlug: string; view: PulseRouteView }
+  | { kind: 'my-issues'; workspaceSlug: string; view: MyIssuesRouteView }
+  | { kind: 'workspace-issues'; workspaceSlug: string; view: TeamIssuesRouteView }
+  | { kind: 'team-issues'; workspaceSlug: string; teamKey: string; view: TeamIssuesRouteView }
+  | { kind: 'team-cycles'; workspaceSlug: string; teamKey: string; view: CyclesRouteView }
+  | { kind: 'cycle'; workspaceSlug: string; teamKey: string; cycleId: string }
+  | { kind: 'workspace-saved-view'; workspaceSlug: string; viewId: string }
+  | { kind: 'team-saved-view'; workspaceSlug: string; teamKey: string; viewId: string }
+  | { kind: 'workspace-views'; workspaceSlug: string; resource: ViewsResource }
+  | { kind: 'workspace-views-new'; workspaceSlug: string; resource: ViewsResource }
+  | { kind: 'workspace-members'; workspaceSlug: string }
+  | { kind: 'workspace-customers'; workspaceSlug: string }
+  | { kind: 'customer'; workspaceSlug: string; customerSlugId: string }
+  | { kind: 'document'; workspaceSlug: string; documentSlugId: string }
+  | { kind: 'drafts'; workspaceSlug: string }
+  | { kind: 'releases'; workspaceSlug: string }
+  | { kind: 'asks'; workspaceSlug: string }
+  | { kind: 'workspace-library'; workspaceSlug: string; view: 'favorites'|'recent'|'audit-log'|'deleted' }
+  | { kind: 'workspace-teams'; workspaceSlug: string }
+  | { kind: 'new-team'; workspaceSlug: string }
+  | { kind: 'settings'; workspaceSlug: string; page: SettingsPageId; teamKey?: string; teamSection?: TeamSettingsSection }
+  | { kind: 'team-views'; workspaceSlug: string; teamKey: string; resource: ViewsResource }
+  | { kind: 'team-views-new'; workspaceSlug: string; teamKey: string; resource: ViewsResource }
+  | { kind: 'projects'; workspaceSlug: string }
+	| { kind: 'initiatives'; workspaceSlug: string; view: InitiativesRouteView }
+	| { kind: 'initiative'; workspaceSlug: string; initiativeSlugId: string; tab: InitiativeRouteTab; viewId?: string }
+  | { kind: 'team-projects'; workspaceSlug: string; teamKey: string }
+  | { kind: 'projects-new-view'; workspaceSlug: string }
+  | { kind: 'projects-saved-view'; workspaceSlug: string; viewId: string }
+  | { kind: 'team-projects-new-view'; workspaceSlug: string; teamKey: string }
+  | { kind: 'team-projects-saved-view'; workspaceSlug: string; teamKey: string; viewId: string }
+  | { kind: 'project'; workspaceSlug: string; projectSlugId: string; tab: ProjectRouteTab }
+  | { kind: 'issue'; workspaceSlug: string; identifier: string; titleSlug?: string }
+  | { kind: 'not-found'; workspaceSlug?: string }
+
+const MY_ISSUES_VIEWS = new Set<MyIssuesRouteView>(['assigned', 'created', 'subscribed', 'activity'])
+const PROJECT_TABS = new Set<ProjectRouteTab>(['overview', 'activity', 'issues'])
+const TEAM_ISSUES_VIEWS = new Set<TeamIssuesRouteView>(['active', 'backlog', 'all'])
+const VIEWS_RESOURCES = new Set<ViewsResource>(['issues', 'projects'])
+const INITIATIVE_TABS = new Set<InitiativeRouteTab>(['overview', 'activity', 'projects'])
+
+export function parseAppRoute(pathname: string): AppRoute {
+  const segments = pathname.split('/').filter(Boolean).map(segment => decodeURIComponent(segment))
+  if (!segments.length) return { kind: 'root' }
+  if (segments.length === 1 && segments[0] === 'join') return { kind: 'workspace-onboarding' }
+  const [workspaceSlug, section, third, fourth, fifth, sixth] = segments
+  if (!section) return { kind: 'workspace-root', workspaceSlug }
+  if (section === 'inbox' && segments.length === 2) return { kind: 'inbox', workspaceSlug }
+  if (section === 'search' && segments.length === 2) return { kind: 'search', workspaceSlug }
+  if (section === 'pulse' && !third) return { kind: 'pulse', workspaceSlug, view: 'following' }
+  if (section === 'pulse' && (third === 'following' || third === 'popular' || third === 'all') && segments.length === 3) return { kind: 'pulse', workspaceSlug, view: third }
+  if (section === 'my-issues' && !third) return { kind: 'my-issues', workspaceSlug, view: 'assigned' }
+  if (section === 'my-issues' && MY_ISSUES_VIEWS.has(third as MyIssuesRouteView) && segments.length === 3) return { kind: 'my-issues', workspaceSlug, view: third as MyIssuesRouteView }
+  if (section === 'issues' && !third) return { kind: 'workspace-issues', workspaceSlug, view: 'all' }
+  if (section === 'issues' && TEAM_ISSUES_VIEWS.has(third as TeamIssuesRouteView) && segments.length === 3) return { kind: 'workspace-issues', workspaceSlug, view: third as TeamIssuesRouteView }
+  if (section === 'members' && segments.length === 2) return { kind: 'workspace-members', workspaceSlug }
+  if (section === 'customers' && segments.length === 2) return { kind: 'workspace-customers', workspaceSlug }
+  if (section === 'customer' && third && segments.length === 3) return { kind: 'customer', workspaceSlug, customerSlugId: third }
+  if (section === 'document' && third && segments.length === 3) return { kind: 'document', workspaceSlug, documentSlugId: third }
+  if (section === 'drafts' && segments.length === 2) return { kind: 'drafts', workspaceSlug }
+  if (section === 'releases' && segments.length === 2) return { kind: 'releases', workspaceSlug }
+  if (section === 'asks' && segments.length === 2) return { kind: 'asks', workspaceSlug }
+  if ((section === 'favorites' || section === 'recent' || section === 'audit-log' || section === 'deleted') && segments.length === 2) return { kind: 'workspace-library', workspaceSlug, view: section }
+  if (section === 'teams' && segments.length === 2) return { kind: 'workspace-teams', workspaceSlug }
+  if (section === 'settings' && third === 'new-team' && segments.length === 3) return { kind: 'new-team', workspaceSlug }
+  if (section === 'settings' && third === 'account' && fourth === 'security' && segments.length === 4) return { kind: 'settings', workspaceSlug, page: 'account-security' }
+  if (section === 'settings' && third === 'account' && fourth && ACCOUNT_SETTINGS.has(fourth as SettingsPageId) && segments.length === 4) return { kind: 'settings', workspaceSlug, page: fourth as SettingsPageId }
+  if (section === 'settings' && third === 'teams' && fourth && (!fifth || TEAM_SETTINGS_SECTIONS.has(fifth as TeamSettingsSection)) && segments.length <= 5) return { kind: 'settings', workspaceSlug, page: 'team', teamKey: fourth, teamSection: (fifth as TeamSettingsSection) || 'general' }
+  if (section === 'settings' && third && SETTINGS_PAGES.has(third as SettingsPageId) && segments.length === 3) return { kind: 'settings', workspaceSlug, page: third as SettingsPageId }
+  if (section === 'views' && VIEWS_RESOURCES.has(third as ViewsResource) && fourth === 'new' && segments.length === 4) return { kind: 'workspace-views-new', workspaceSlug, resource: third as ViewsResource }
+  if (section === 'views' && VIEWS_RESOURCES.has(third as ViewsResource) && segments.length === 3) return { kind: 'workspace-views', workspaceSlug, resource: third as ViewsResource }
+  if (section === 'view' && third && segments.length === 3) return { kind: 'workspace-saved-view', workspaceSlug, viewId: third }
+  if (section === 'team' && third && fourth === 'views' && VIEWS_RESOURCES.has(fifth as ViewsResource) && sixth === 'new' && segments.length === 6) return { kind: 'team-views-new', workspaceSlug, teamKey: third, resource: fifth as ViewsResource }
+  if (section === 'team' && third && fourth === 'views' && VIEWS_RESOURCES.has(fifth as ViewsResource) && segments.length === 5) return { kind: 'team-views', workspaceSlug, teamKey: third, resource: fifth as ViewsResource }
+  if (section === 'team' && third && fourth === 'view' && fifth && segments.length === 5) return { kind: 'team-saved-view', workspaceSlug, teamKey: third, viewId: fifth }
+  if (section === 'team' && third && fourth === 'cycles' && (!fifth || fifth === 'all') && segments.length <= 5) return { kind: 'team-cycles', workspaceSlug, teamKey: third, view: 'all' }
+  if (section === 'team' && third && fourth === 'cycles' && (fifth === 'current' || fifth === 'upcoming') && segments.length === 5) return { kind: 'team-cycles', workspaceSlug, teamKey: third, view: fifth }
+  if (section === 'team' && third && fourth === 'cycle' && fifth && segments.length === 5) return { kind: 'cycle', workspaceSlug, teamKey: third, cycleId: fifth }
+  if (section === 'team' && third && fourth === 'overview' && segments.length === 4) return { kind: 'team-issues', workspaceSlug, teamKey: third, view: 'all' }
+  if (section === 'team' && third && !fourth) return { kind: 'team-issues', workspaceSlug, teamKey: third, view: 'all' }
+  if (section === 'team' && third && TEAM_ISSUES_VIEWS.has(fourth as TeamIssuesRouteView) && segments.length === 4) return { kind: 'team-issues', workspaceSlug, teamKey: third, view: fourth as TeamIssuesRouteView }
+  if (section === 'team' && third && fourth === 'projects' && fifth === 'view' && sixth === 'new' && segments.length === 6) return { kind: 'team-projects-new-view', workspaceSlug, teamKey: third }
+  if (section === 'team' && third && fourth === 'projects' && fifth === 'view' && sixth && segments.length === 6) return { kind: 'team-projects-saved-view', workspaceSlug, teamKey: third, viewId: sixth }
+  if (section === 'team' && third && fourth === 'projects' && (!fifth || fifth === 'all') && segments.length <= 5) return { kind: 'team-projects', workspaceSlug, teamKey: third }
+  if (section === 'initiatives' && !third) return { kind: 'initiatives', workspaceSlug, view: 'all' }
+  if (section === 'initiatives' && (third === 'active' || third === 'planned') && segments.length === 3) return { kind: 'initiatives', workspaceSlug, view: third }
+	if (section === 'initiative' && third && !fourth) return { kind: 'initiative', workspaceSlug, initiativeSlugId: third, tab: 'overview' }
+	if (section === 'initiative' && third && fourth === 'updates') return { kind: 'initiative', workspaceSlug, initiativeSlugId: third, tab: 'activity' }
+	if (section === 'initiative' && third && fourth === 'view' && fifth === 'new' && segments.length === 5) return { kind: 'initiative', workspaceSlug, initiativeSlugId: third, tab: 'new' }
+	if (section === 'initiative' && third && fourth === 'view' && fifth && segments.length === 5) return { kind: 'initiative', workspaceSlug, initiativeSlugId: third, tab: 'view', viewId: fifth }
+	if (section === 'initiative' && third && INITIATIVE_TABS.has(fourth as InitiativeRouteTab) && segments.length === 4) return { kind: 'initiative', workspaceSlug, initiativeSlugId: third, tab: fourth as InitiativeRouteTab }
+  if (section === 'projects' && third === 'view' && fourth === 'new' && segments.length === 4) return { kind: 'projects-new-view', workspaceSlug }
+  if (section === 'projects' && third === 'view' && fourth && segments.length === 4) return { kind: 'projects-saved-view', workspaceSlug, viewId: fourth }
+  if (section === 'projects' && (!third || third === 'all') && segments.length <= 3) return { kind: 'projects', workspaceSlug }
+  if (section === 'project' && third && !fourth) return { kind: 'project', workspaceSlug, projectSlugId: third, tab: 'overview' }
+  if (section === 'project' && third && fourth === 'updates' && segments.length === 4) return { kind: 'project', workspaceSlug, projectSlugId: third, tab: 'activity' }
+  if (section === 'project' && third && fourth === 'view' && fifth === 'new' && segments.length === 5) return { kind: 'project', workspaceSlug, projectSlugId: third, tab: 'new' }
+  if (section === 'project' && third && PROJECT_TABS.has(fourth as ProjectRouteTab) && segments.length === 4) return { kind: 'project', workspaceSlug, projectSlugId: third, tab: fourth as ProjectRouteTab }
+  if (section === 'issue' && third && segments.length <= 4) return { kind: 'issue', workspaceSlug, identifier: third.toUpperCase(), titleSlug: fourth }
+  return { kind: 'not-found', workspaceSlug }
+}
+
+export function workspaceRootPath(workspaceSlug: string) { return `/${encode(workspaceSlug)}` }
+export function workspaceOnboardingPath() { return '/join' }
+export function inboxPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/inbox` }
+export function searchPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/search` }
+export function pulsePath(workspaceSlug: string, view: PulseRouteView = 'following') { return `${workspaceRootPath(workspaceSlug)}/pulse/${view}` }
+export function myIssuesPath(workspaceSlug: string, view: MyIssuesRouteView = 'assigned') { return `${workspaceRootPath(workspaceSlug)}/my-issues/${view}` }
+export function workspaceIssuesPath(workspaceSlug: string, view: TeamIssuesRouteView = 'all') { return `${workspaceRootPath(workspaceSlug)}/issues/${view}` }
+export function membersPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/members` }
+export function customersPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/customers` }
+export function customerPath(workspaceSlug: string, customer: { id: string; name: string }) { return `${workspaceRootPath(workspaceSlug)}/customer/${slug(customer.name)}-${customer.id.slice(-12)}` }
+export function documentPath(workspaceSlug: string, document: { slugId: string }) { return `${workspaceRootPath(workspaceSlug)}/document/${encode(document.slugId)}` }
+export function draftsPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/drafts` }
+export function releasesPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/releases` }
+export function asksPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/asks` }
+export function workspaceLibraryPath(workspaceSlug: string, view: 'favorites'|'recent'|'audit-log'|'deleted') { return `${workspaceRootPath(workspaceSlug)}/${view}` }
+export function teamsPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/teams` }
+export function newTeamPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/settings/new-team` }
+const ACCOUNT_SETTINGS = new Set<SettingsPageId>(['preferences','profile','notifications','code-and-reviews','account-security','connections','agents'])
+const SETTINGS_PAGES = new Set<SettingsPageId>(['issue-labels','issue-templates','sla','project-labels','project-templates','project-statuses','project-updates','ai','initiatives','documents','customer-requests','releases','pulse','asks','emojis','integrations','workspace','teams','members','security','api','applications','billing','usage','import-export'])
+const TEAM_SETTINGS_SECTIONS = new Set<TeamSettingsSection>(['general','members','labels','templates','statuses','cycles'])
+export function settingsPath(workspaceSlug: string, page: SettingsPageId, teamKey?: string, teamSection?: TeamSettingsSection) {
+  const root = `${workspaceRootPath(workspaceSlug)}/settings`
+  if (page === 'team' && teamKey) return `${root}/teams/${encode(teamKey)}${teamSection && teamSection !== 'general' ? `/${teamSection}` : ''}`
+  if (page === 'account-security') return `${root}/account/security`
+  return ACCOUNT_SETTINGS.has(page) ? `${root}/account/${page}` : `${root}/${page}`
+}
+export function workspaceSavedViewPath(workspaceSlug: string, viewId: string) { return `${workspaceRootPath(workspaceSlug)}/view/${encode(viewId)}` }
+export function teamIssuesPath(workspaceSlug: string, teamKey: string, view: TeamIssuesRouteView = 'all') { return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/${view}` }
+export function teamHomePath(workspaceSlug: string, teamKey: string) { return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/overview` }
+export function teamCyclesPath(workspaceSlug: string, teamKey: string, view: CyclesRouteView = 'all') { return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/cycles${view === 'all' ? '' : `/${view}`}` }
+export function cyclePath(workspaceSlug: string, teamKey: string, cycle: Pick<Cycle, 'id'>) { return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/cycle/${encode(cycle.id)}` }
+export function teamSavedViewPath(workspaceSlug: string, teamKey: string, viewId: string) { return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/view/${encode(viewId)}` }
+export function workspaceViewsPath(workspaceSlug: string, resource: ViewsResource = 'issues') { return `${workspaceRootPath(workspaceSlug)}/views/${resource}` }
+export function workspaceViewsNewPath(workspaceSlug: string, resource: ViewsResource = 'issues') { return `${workspaceViewsPath(workspaceSlug, resource)}/new` }
+export function teamViewsPath(workspaceSlug: string, teamKey: string, resource: ViewsResource = 'issues') { return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/views/${resource}` }
+export function teamViewsNewPath(workspaceSlug: string, teamKey: string, resource: ViewsResource = 'issues') { return `${teamViewsPath(workspaceSlug, teamKey, resource)}/new` }
+export function projectsPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/projects/all` }
+export function initiativesPath(workspaceSlug: string, view: InitiativesRouteView = 'active') { return `${workspaceRootPath(workspaceSlug)}/initiatives${view === 'all' ? '' : `/${view}`}` }
+export function initiativePath(workspaceSlug: string, initiative: Pick<Initiative, 'slugId'>, tab: InitiativeRouteTab = 'overview', viewId?: string) { return `${workspaceRootPath(workspaceSlug)}/initiative/${encode(initiative.slugId)}/${tab === 'new' ? 'view/new' : tab === 'view' && viewId ? `view/${encode(viewId)}` : tab}` }
+export function teamProjectsPath(workspaceSlug: string, teamKey: string) { return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/projects/all` }
+export function projectsNewViewPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/projects/view/new` }
+export function projectsSavedViewPath(workspaceSlug: string, viewId: string) { return `${workspaceRootPath(workspaceSlug)}/projects/view/${encode(viewId)}` }
+export function teamProjectsNewViewPath(workspaceSlug: string, teamKey: string) { return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/projects/view/new` }
+export function teamProjectsSavedViewPath(workspaceSlug: string, teamKey: string, viewId: string) { return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/projects/view/${encode(viewId)}` }
+export function issuePath(workspaceSlug: string, issue: Pick<Issue, 'identifier' | 'title'>) { return `${workspaceRootPath(workspaceSlug)}/issue/${encode(issue.identifier)}/${encode(slug(issue.title))}` }
+export function projectPath(workspaceSlug: string, project: Pick<Project, 'slugId'>, tab: ProjectRouteTab = 'overview') { return `${workspaceRootPath(workspaceSlug)}/project/${encode(project.slugId)}/${tab === 'new' ? 'view/new' : tab}` }
+
+export function routeBelongsToWorkspace(route: AppRoute, workspaceSlug: string) { return route.kind === 'root' || route.kind === 'workspace-onboarding' || route.workspaceSlug === workspaceSlug }
+
+function encode(value: string) { return encodeURIComponent(value) }
+function slug(value: string) {
+  return value.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'issue'
+}

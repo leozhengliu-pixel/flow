@@ -1,0 +1,310 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"flow/api/internal/domain"
+	"flow/api/internal/store"
+)
+
+func TestProjectUpdateReminderLifecycle(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	project := bootstrap.Projects[0]
+	requestJSON[map[string]any](t, handler, http.MethodPut, "/api/project-update-settings", map[string]any{"cadenceDays": 1}, http.StatusOK)
+	if err := repository.MutateWorkspace(context.Background(), bootstrap.Workspace.URLKey, "test.project_aged", project.ID, nil, func(data *domain.Bootstrap) error {
+		for index := range data.Projects {
+			if data.Projects[index].ID == project.ID {
+				data.Projects[index].CreatedAt = time.Now().UTC().Add(-72 * time.Hour)
+				data.Projects[index].Health = "onTrack"
+			}
+		}
+		delete(data.ProjectUpdates, project.ID)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	reminders := slices.DeleteFunc(append([]domain.Notification{}, bootstrap.Notifications...), func(item domain.Notification) bool {
+		return item.ProjectID != project.ID || item.Type != "projectUpdateReminder"
+	})
+	if len(reminders) == 0 || reminders[0].Category != "reminders" || reminders[0].ArchivedAt != nil {
+		t.Fatalf("missing project update reminder was not generated: %#v", reminders)
+	}
+	reminderCount := len(reminders)
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if count := len(slices.DeleteFunc(append([]domain.Notification{}, bootstrap.Notifications...), func(item domain.Notification) bool {
+		return item.ProjectID != project.ID || item.Type != "projectUpdateReminder"
+	})); count != reminderCount {
+		t.Fatalf("project update reminder was duplicated: %d", count)
+	}
+	requestJSON[domain.ProjectUpdate](t, handler, http.MethodPost, "/api/projects/"+project.ID+"/updates", map[string]any{"body": "Update posted after reminder"}, http.StatusCreated)
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	reminderIndex := slices.IndexFunc(bootstrap.Notifications, func(item domain.Notification) bool {
+		return item.ProjectID == project.ID && item.Type == "projectUpdateReminder"
+	})
+	projectIndex := slices.IndexFunc(bootstrap.Projects, func(item domain.Project) bool { return item.ID == project.ID })
+	if reminderIndex < 0 || projectIndex < 0 {
+		t.Fatalf("posting a project update lost its records: reminder=%d project=%d", reminderIndex, projectIndex)
+	}
+	if bootstrap.Notifications[reminderIndex].ArchivedAt == nil || bootstrap.Projects[projectIndex].Health != "onTrack" {
+		t.Fatalf("posting a project update did not resolve its reminder: notification=%#v project=%#v", bootstrap.Notifications[reminderIndex], bootstrap.Projects[projectIndex])
+	}
+}
+
+func TestDocumentHistoryProjectAssociationAndTrashRestore(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	project := bootstrap.Projects[0]
+
+	document := requestJSON[domain.Document](t, handler, http.MethodPost, "/api/documents", map[string]any{
+		"title": "Advanced document", "content": "First version", "projectIds": []string{project.ID},
+	}, http.StatusCreated)
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if !projectHasResource(bootstrap.Projects, project.ID, document.ID) {
+		t.Fatal("creating an associated document did not add the project resource")
+	}
+
+	document = requestJSON[domain.Document](t, handler, http.MethodPatch, "/api/documents/"+document.ID, map[string]any{
+		"title": "Renamed document", "content": "Second version", "projectIds": []string{},
+	}, http.StatusOK)
+	if len(document.Revisions) != 1 || document.Revisions[0].Content != "First version" {
+		t.Fatalf("document revision was not recorded: %#v", document.Revisions)
+	}
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if projectHasResource(bootstrap.Projects, project.ID, document.ID) {
+		t.Fatal("removing a project association left a stale project resource")
+	}
+
+	document = requestJSON[domain.Document](t, handler, http.MethodPatch, "/api/documents/"+document.ID, map[string]any{"projectIds": []string{project.ID}}, http.StatusOK)
+	requestJSON[any](t, handler, http.MethodDelete, "/api/documents/"+document.ID, nil, http.StatusNoContent)
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	trashIndex := slices.IndexFunc(bootstrap.Trash, func(item domain.TrashEntry) bool { return item.ResourceID == document.ID })
+	if trashIndex < 0 {
+		t.Fatal("deleted document was not retained in recently deleted")
+	}
+	requestJSON[domain.Document](t, handler, http.MethodPost, "/api/trash/"+bootstrap.Trash[trashIndex].ID+"/restore", nil, http.StatusOK)
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if !slices.ContainsFunc(bootstrap.Documents, func(item domain.Document) bool { return item.ID == document.ID }) || !projectHasResource(bootstrap.Projects, project.ID, document.ID) {
+		t.Fatal("restoring a document did not restore the document and project resource")
+	}
+}
+
+func TestTemplatesAskApprovalSLAAndUnifiedUserState(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	team, project, label := bootstrap.Teams[0], bootstrap.Projects[0], bootstrap.Labels[0]
+	states := statesForTeam(&bootstrap, team.ID)
+	if len(states) == 0 {
+		t.Fatal("seed team has no workflow states")
+	}
+	state := states[0]
+
+	projectTemplate := requestJSON[domain.ProjectTemplate](t, handler, http.MethodPost, "/api/project-templates", map[string]any{
+		"name": "Launch template", "summary": "Template summary", "description": "Template body", "statusId": bootstrap.ProjectStatuses[0].ID,
+		"priority": 2, "teamIds": []string{team.ID}, "labelIds": []string{label.ID}, "color": "#d15f5f", "icon": "◇",
+	}, http.StatusCreated)
+	createdProject := requestJSON[domain.Project](t, handler, http.MethodPost, "/api/projects", map[string]any{"templateId": projectTemplate.ID}, http.StatusCreated)
+	if createdProject.Name != projectTemplate.Name || createdProject.Summary != projectTemplate.Summary || createdProject.Priority != 2 || !slices.Contains(createdProject.LabelIDs, label.ID) {
+		t.Fatalf("project template was not applied: %#v", createdProject)
+	}
+
+	issueTemplate := requestJSON[domain.IssueTemplate](t, handler, http.MethodPost, "/api/teams/"+team.ID+"/templates", map[string]any{
+		"name": "Approved request", "body": "Template issue body", "stateId": state.ID, "priority": 2, "projectId": project.ID, "labelIds": []string{label.ID},
+	}, http.StatusCreated)
+	ask := requestJSON[domain.Ask](t, handler, http.MethodPost, "/api/asks", map[string]any{
+		"title": "Customer ask", "teamId": team.ID, "templateId": issueTemplate.ID,
+	}, http.StatusCreated)
+	ask = requestJSON[domain.Ask](t, handler, http.MethodPost, "/api/asks/"+ask.ID+"/decision", map[string]any{"decision": "approved", "note": "Ready"}, http.StatusOK)
+	if ask.IssueID == "" || ask.Status != "approved" || len(ask.Approvals) != 1 {
+		t.Fatalf("ask approval did not create an issue: %#v", ask)
+	}
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	approvedIssue := findIssue(t, bootstrap.Issues, ask.IssueID)
+	if approvedIssue.Description != issueTemplate.Body || approvedIssue.Project == nil || approvedIssue.Project.ID != project.ID || !slices.ContainsFunc(approvedIssue.Labels, func(item domain.IssueLabel) bool { return item.ID == label.ID }) {
+		t.Fatalf("approved ask did not apply its issue template: %#v", approvedIssue)
+	}
+
+	rule := requestJSON[domain.SLARule](t, handler, http.MethodPost, "/api/sla-rules", map[string]any{
+		"name": "Priority response", "teamIds": []string{team.ID}, "filters": map[string]any{"priority": "2"}, "targetMinutes": 60, "pauseStatuses": []string{state.ID},
+	}, http.StatusCreated)
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	issueSLAIndex := slices.IndexFunc(bootstrap.IssueSLAs, func(item domain.IssueSLA) bool { return item.IssueID == ask.IssueID && item.RuleID == rule.ID })
+	if issueSLAIndex < 0 || bootstrap.IssueSLAs[issueSLAIndex].Status != "paused" {
+		t.Fatalf("matching SLA did not start paused for a pause status: %#v", bootstrap.IssueSLAs)
+	}
+
+	draft := requestJSON[domain.Draft](t, handler, http.MethodPost, "/api/drafts", map[string]any{"type": "issue", "title": "Cross-device draft", "body": "Draft body"}, http.StatusCreated)
+	draft = requestJSON[domain.Draft](t, handler, http.MethodPatch, "/api/drafts/"+draft.ID, map[string]any{"body": "Updated draft body"}, http.StatusOK)
+	if draft.Body != "Updated draft body" {
+		t.Fatal("draft update did not persist")
+	}
+	favoriteA := requestJSON[domain.Favorite](t, handler, http.MethodPut, "/api/favorites/project/"+project.ID, nil, http.StatusOK)
+	favoriteB := requestJSON[domain.Favorite](t, handler, http.MethodPut, "/api/favorites/project/"+project.ID, nil, http.StatusOK)
+	if favoriteA.ID != favoriteB.ID {
+		t.Fatal("favorite endpoint created duplicates")
+	}
+	subscriptionA := requestJSON[domain.Subscription](t, handler, http.MethodPut, "/api/subscriptions/project/"+project.ID, nil, http.StatusOK)
+	subscriptionB := requestJSON[domain.Subscription](t, handler, http.MethodPut, "/api/subscriptions/project/"+project.ID, nil, http.StatusOK)
+	if subscriptionA.ID != subscriptionB.ID {
+		t.Fatal("subscription endpoint created duplicates")
+	}
+	customer := requestJSON[domain.Customer](t, handler, http.MethodPost, "/api/customers", map[string]any{"name": "Attachment customer"}, http.StatusCreated)
+	request := requestJSON[domain.CustomerRequest](t, handler, http.MethodPost, "/api/customer-requests", map[string]any{"customerId": customer.ID, "body": "Attachment request"}, http.StatusCreated)
+	attachment := uploadCustomerRequestAttachmentForTest(t, handler, request.ID, "evidence.txt", "customer evidence")
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	requestIndex := slices.IndexFunc(bootstrap.CustomerRequests, func(item domain.CustomerRequest) bool { return item.ID == request.ID })
+	if requestIndex < 0 || len(bootstrap.CustomerRequests[requestIndex].Attachments) != 1 || bootstrap.CustomerRequests[requestIndex].Attachments[0].ID != attachment.ID {
+		t.Fatalf("customer request attachment was not persisted: %#v", bootstrap.CustomerRequests)
+	}
+	requestJSON[any](t, handler, http.MethodDelete, "/api/customer-requests/"+request.ID+"/attachments/"+attachment.ID, nil, http.StatusNoContent)
+}
+
+func TestImportMappingAndBackgroundExport(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	team, project, label, user := bootstrap.Teams[0], bootstrap.Projects[0], bootstrap.Labels[0], bootstrap.Users[0]
+	state := statesForTeam(&bootstrap, team.ID)[0]
+	csvBody := "Title,Description,Priority,Status,Assignee,Labels,Project,Due Date\nImported workflow,Imported body,High," + state.Name + "," + user.Email + "," + label.Name + "," + project.Name + ",2026-09-30\n"
+	job := previewImportRequest(t, handler, "issues.csv", csvBody)
+	job = requestJSON[domain.ImportJob](t, handler, http.MethodPost, "/api/imports/"+job.ID+"/commit", map[string]any{
+		"teamId":  team.ID,
+		"mapping": map[string]string{"title": "Title", "description": "Description", "priority": "Priority", "status": "Status", "assignee": "Assignee", "labels": "Labels", "project": "Project", "dueDate": "Due Date"},
+	}, http.StatusOK)
+	if job.Status != "completed" || job.Imported != 1 || len(job.Errors) != 0 {
+		t.Fatalf("import did not complete: %#v", job)
+	}
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	importedIndex := slices.IndexFunc(bootstrap.Issues, func(item domain.Issue) bool { return item.Title == "Imported workflow" })
+	if importedIndex < 0 {
+		t.Fatal("imported issue was not persisted")
+	}
+	imported := bootstrap.Issues[importedIndex]
+	if imported.Priority != 2 || imported.State.ID != state.ID || imported.Assignee == nil || imported.Assignee.ID != user.ID || imported.Project == nil || imported.Project.ID != project.ID || len(imported.Labels) != 1 || imported.DueDate == nil || *imported.DueDate != "2026-09-30" {
+		t.Fatalf("mapped import fields were not applied: %#v", imported)
+	}
+	invalidJob := previewImportRequest(t, handler, "invalid.csv", "Title,Priority,Status,Assignee,Labels,Project,Due Date\nNeeds review,Maximum,Unknown state,nobody@example.com,Unknown label,Unknown project,09/30/2026\n")
+	invalidJob = requestJSON[domain.ImportJob](t, handler, http.MethodPost, "/api/imports/"+invalidJob.ID+"/commit", map[string]any{
+		"teamId":  team.ID,
+		"mapping": map[string]string{"title": "Title", "priority": "Priority", "status": "Status", "assignee": "Assignee", "labels": "Labels", "project": "Project", "dueDate": "Due Date"},
+	}, http.StatusOK)
+	if invalidJob.Imported != 1 || len(invalidJob.Errors) != 6 {
+		t.Fatalf("unmatched import values were not reported: %#v", invalidJob)
+	}
+
+	export := requestJSON[domain.ExportJob](t, handler, http.MethodPost, "/api/exports", map[string]any{"format": "json"}, http.StatusAccepted)
+	deadline := time.Now().Add(2 * time.Second)
+	for export.Status != "completed" && time.Now().Before(deadline) {
+		time.Sleep(25 * time.Millisecond)
+		bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+		index := slices.IndexFunc(bootstrap.ExportJobs, func(item domain.ExportJob) bool { return item.ID == export.ID })
+		if index >= 0 {
+			export = bootstrap.ExportJobs[index]
+		}
+	}
+	if export.Status != "completed" || export.Filename == "" {
+		t.Fatalf("background export did not complete: %#v", export)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/exports/"+export.ID+"/download", nil)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Header().Get("Content-Disposition"), export.Filename) {
+		t.Fatalf("export download failed: status=%d headers=%v body=%s", recorder.Code, recorder.Header(), recorder.Body.String())
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil || len(payload["issues"]) == 0 || len(payload["documents"]) == 0 {
+		t.Fatalf("export package is incomplete: keys=%v error=%v", payload, err)
+	}
+}
+
+func previewImportRequest(t *testing.T, handler http.Handler, filename, content string) domain.ImportJob {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write([]byte(content)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/imports/preview", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("preview import status %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var job domain.ImportJob
+	if err := json.Unmarshal(recorder.Body.Bytes(), &job); err != nil {
+		t.Fatal(err)
+	}
+	return job
+}
+
+func uploadCustomerRequestAttachmentForTest(t *testing.T, handler http.Handler, requestID, filename, content string) domain.Attachment {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write([]byte(content)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/customer-requests/"+requestID+"/attachments", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("customer request attachment status %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var attachment domain.Attachment
+	if err := json.Unmarshal(recorder.Body.Bytes(), &attachment); err != nil {
+		t.Fatal(err)
+	}
+	return attachment
+}
+
+func projectHasResource(projects []domain.Project, projectID, resourceID string) bool {
+	index := slices.IndexFunc(projects, func(item domain.Project) bool { return item.ID == projectID })
+	return index >= 0 && slices.ContainsFunc(projects[index].Resources, func(item domain.ProjectResource) bool { return item.ID == resourceID })
+}

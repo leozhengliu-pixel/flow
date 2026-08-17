@@ -1,0 +1,28 @@
+.command,.datePicker{z-index:160;background:#202022;border:.5px solid #3b3b3e;box-shadow:0 3px 8px rgb(0 0 0/.2),0 1px 2px rgb(0 0 0/.2);color:#e9e9eb;font-family:"Inter Variable","SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:0}
+.command{width:252px;border-radius:10px;overflow:hidden}
+.commandHeader{height:42px;display:flex;align-items:center;padding:0 12px;border-bottom:.5px solid #353538;gap:8px}
+.commandHeader input{min-width:0;flex:1;height:36px;padding:0;border:0;outline:0;background:transparent;color:#e9e9eb;font-size:13px;letter-spacing:0}
+.commandHeader input::placeholder{color:#8b8b90}
+.sequence{display:flex;align-items:center;gap:4px;color:#77777c;white-space:nowrap;font-size:10px}
+.sequence kbd{min-width:16px;height:17px;display:grid;place-items:center;padding:0 3px;border:.5px solid #343437;border-radius:4px;font:inherit;color:#8a8a90}
+.commandList{max-height:322px;overflow:auto;padding:5px}
+.commandList>div>button,.commandList>button{width:100%;height:32px;display:flex;align-items:center;gap:8px;padding:0 8px;border:0;border-radius:5px;background:transparent;color:#e7e7e9;font-size:13px;text-align:left;outline:0}
+.commandList button:hover,.commandList button.active{background:#303033}
+.commandList button[aria-selected=true]{background:#353538}
+.commandList button[aria-selected=true]:hover,.commandList button[aria-selected=true].active{background:#3b3b3e}
+.optionIcon,.statusIcon{width:15px;height:15px;flex:0 0 15px;color:#9b9ba1}
+.avatar{width:16px;height:16px;flex:0 0 16px;display:grid;place-items:center;border-radius:50%;object-fit:cover;color:white;font-size:8px;line-height:16px}
+.optionLabel{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.optionEnd{display:flex;align-items:center;gap:8px;color:#77777c;font-size:11px}.optionEnd svg{color:#f1f1f2}
+.groupLabel{height:26px;display:flex;align-items:center;padding:5px 8px 0;color:#75757a;font-size:11px}
+.empty{padding:14px;color:#77777c;text-align:center;font-size:12px}
+.datePicker{width:304px;height:330px;display:flex;flex-direction:column;border-radius:8px;overflow:hidden}
+.dateLabel{display:flex;flex-direction:column;gap:4px;padding:12px 16px 8px;color:#9b9ba1;font-size:11px}
+.dateLabel input{box-sizing:border-box;width:100%;height:32px;padding:0 10px;border:1px solid #5e6ad2;border-radius:6px;outline:1px solid rgb(94 106 210/.22);background:#1b1b1d;color:#e9e9eb;font-size:12px;letter-spacing:0}
+.dateModes{height:45px;display:flex;align-items:center;gap:4px;padding:0 16px;border-bottom:.5px solid #353538}
+.dateModes button{height:28px;padding:0 9px;border:0;border-radius:9999px;background:#29292c;color:#aaaab0;font-size:11px;white-space:nowrap}
+.dateModes button[aria-selected=true]{background:#47474b;color:#fff}
+.dayPanel{padding:6px 12px 10px}.dayPanel header{height:30px;display:flex;align-items:center;justify-content:space-between;padding:0 3px}.dayPanel header strong{font-size:12px;font-weight:500}.dayPanel header span{display:flex;gap:2px}.dayPanel header button{width:24px;height:24px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:transparent;color:#8e8e93}.dayPanel header button:hover{background:#303033;color:#fff}
+.weekdays,.days{display:grid;grid-template-columns:repeat(7,1fr)}.weekdays span{height:22px;display:grid;place-items:center;color:#68686d;font-size:10px}.days button{height:27px;padding:0;border:0;border-radius:5px;background:transparent;color:#c9c9cc;font-size:11px}.days button:hover:not(:disabled){background:#303033}.days button[data-outside=true]{color:#5f5f64}.days button:disabled{color:#45454a}.days button.selectedDate,.periodGrid button.selectedDate{background:#5e6ad2;color:#fff}
+.periodScroller{flex:1;overflow:auto;padding:0 16px 12px;scrollbar-width:none}.periodScroller::-webkit-scrollbar{display:none}.periodScroller section{padding:6px 0}.periodScroller h3{height:26px;margin:0;display:flex;align-items:center;color:#8d8d92;font-size:11px;font-weight:500}.periodGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.periodGrid[data-mode=quarter]{grid-template-columns:repeat(2,1fr)}.periodGrid[data-mode=half-year]{grid-template-columns:repeat(2,1fr)}.periodGrid[data-mode=year]{grid-template-columns:1fr}.periodGrid button{height:27px;border:.5px solid #343437;border-radius:9999px;background:transparent;color:#d4d4d6;font-size:11px}.periodGrid button:hover:not(:disabled){background:#303033}.periodGrid button:disabled{color:#515156}
+.removeDate{height:32px;display:flex;align-items:center;gap:7px;flex:none;padding:0 14px;border:0;border-top:.5px solid #353538;background:#202022;color:#c8c8cb;font-size:11px;text-align:left}.removeDate:hover{background:#29292c}.removeDate span{margin-left:auto;color:#6f6f74}

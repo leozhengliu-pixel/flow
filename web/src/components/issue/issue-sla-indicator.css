@@ -1,0 +1,8 @@
+.issue-sla{height:24px;max-width:100%;display:inline-flex;align-items:center;gap:5px;padding:0 7px;border:.5px solid var(--border);border-radius:9999px;background:var(--bg-subtle);color:var(--muted);font-size:11px;white-space:nowrap}
+.issue-sla svg{flex:none}
+.issue-sla strong{font-weight:500;color:var(--text)}
+.issue-sla__rule{max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.issue-sla[data-status=paused]{color:#d1a343}
+.issue-sla[data-status=breached]{border-color:#6c2f32;background:#3a1f21;color:#ee7777}
+.issue-sla[data-status=breached] strong{color:#ff9b9b}
+.issue-sla[data-status=completed]{color:#5ca675}
