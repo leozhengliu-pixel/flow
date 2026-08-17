@@ -134,6 +134,7 @@ export function translateToChinese(source: string): string {
     [/^Actions for (.+)$/, name => `${name} 的操作`],
     [/^Saved by (.+)$/, name => `由 ${name} 保存`],
     [/^Created by (.+)$/, name => `由 ${name} 创建`],
+    [/^(.+) · deleted by (.+)$/, (resource, name) => `${translateNoun(resource)} · 删除者 ${name}`],
     [/^Edited (.+)$/, value => `编辑于 ${value}`],
     [/^(.+) ago$/, value => `${translateEnglishDuration(value)}前`],
     [/^(.+) (restored release|deleted release|completed export|queued export|updated project update settings|approved ask|created ask|created sla rule|created release|created customer request|revision restored document|updated document|created document|created project template)$/, (actor, action) => `${actor} ${translateAuditAction(action)}`],
