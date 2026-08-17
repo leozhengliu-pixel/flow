@@ -1,69 +1,195 @@
+<div align="center">
+
 # Flow
 
-Flow 是面向团队的项目规划与协作应用，覆盖工作区、团队、任务、项目、视图、通知、文档、客户请求和管理设置。
+**A self-hosted workspace for planning, issue tracking, and team collaboration.**
 
-Flow 的产品交互设计借鉴 Linear。
+[![CI](https://github.com/leozhengliu-pixel/flow/actions/workflows/ci.yml/badge.svg)](https://github.com/leozhengliu-pixel/flow/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![React](https://img.shields.io/badge/React-19-149eca.svg)](web/package.json)
+[![Go](https://img.shields.io/badge/Go-1.26-00add8.svg)](api/go.mod)
 
-## 技术栈
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-- Web：React、TypeScript、Vite、shadcn/ui
-- API：Go
-- 数据库：SQLite
-- 实时协作：SSE、Yjs
-- 编辑器：Tiptap、ProseMirror
-- 国际化：简体中文、英文
+</div>
 
-## 本地开发
+Flow brings issues, projects, cycles, initiatives, documents, customer requests,
+and workspace administration into one focused application. It ships as a React
+web client backed by a Go API and SQLite, with no external database required for
+local development.
 
-启动 API：
+> [!IMPORTANT]
+> Flow is under active development. Review the security settings and replace all
+> development credentials before exposing an instance to the internet.
+
+## Highlights
+
+- **Issue workflow**: create, edit, archive, relate, subscribe, comment, attach files, and update in bulk.
+- **Planning**: projects, project updates, milestones, initiatives, cycles, saved views, and team workflows.
+- **Collaboration**: activity timelines, notifications, presence, full-text search, drafts, and rich-text documents.
+- **Workspace administration**: account lifecycle, invitations, roles, teams, labels, templates, imports, and exports.
+- **Customer context**: customers, requests, releases, asks, subscriptions, and SLA rules.
+- **Internationalization**: English and Simplified Chinese interfaces with a persistent language preference.
+
+## Architecture
+
+```text
+Browser
+  |
+  | HTTP + Server-Sent Events
+  v
+React 19 / TypeScript / Vite
+  |
+  | /api proxy in development
+  v
+Go HTTP API
+  |-- SQLite persistence
+  |-- Local attachment storage
+  `-- SMTP delivery (optional)
+```
+
+The API keeps workspace and team authorization at the request boundary. State
+changes are persisted with domain events, while the web client uses optimistic
+updates and real-time invalidation to keep active sessions synchronized.
+
+## Repository Layout
+
+```text
+.
+|-- api/                 Go API, domain model, SQLite store, and tests
+|-- docs/                Product, routing, and module documentation
+|-- web/                 React application and design system
+|-- .github/             CI, dependency updates, and contribution templates
+|-- CONTRIBUTING.md      Development and pull request workflow
+|-- SECURITY.md          Vulnerability reporting policy
+`-- LICENSE              Apache License 2.0
+```
+
+## Quick Start
+
+### Prerequisites
+
+- Go `1.26.3` or the version declared in [`api/go.mod`](api/go.mod)
+- Node.js `20.19+` or `22.12+`
+- npm `10+`
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/leozhengliu-pixel/flow.git
+cd flow
+```
+
+### 2. Start the API
 
 ```bash
 cd api
 go run ./cmd/server
 ```
 
-默认数据库位于 `api/data/flow.db`，附件保存在 `api/data/uploads/`。可使用 `FLOW_DB_PATH` 和 `FLOW_UPLOAD_PATH` 修改路径。
+The API listens on `http://127.0.0.1:8080`. Its health endpoint is
+`http://127.0.0.1:8080/api/health`.
 
-本地种子管理员为 `leo.zheng.liu@example.com`，密码为 `flow-demo`。可使用 `FLOW_SEED_PASSWORD` 修改种子密码。
+### 3. Start the web client
 
-启动 Web：
+In a second terminal:
 
 ```bash
 cd web
-npm install
+npm ci
 npm run dev
 ```
 
-Web 默认运行在 `http://127.0.0.1:5173/`，API 健康检查地址为 `http://127.0.0.1:8080/api/health`。
+Open `http://127.0.0.1:5173`.
 
-## 邮件与生产配置
+### Development account
+
+The local seed account is intended only for development:
+
+```text
+Email:    leo.zheng.liu@example.com
+Password: flow-demo
+```
+
+Set `FLOW_SEED_PASSWORD` before the first API start to use a different seed
+password. Never deploy with the default credential.
+
+## Configuration
+
+Flow reads configuration from environment variables passed to the API process.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FLOW_DB_PATH` | `data/flow.db` | SQLite database path, relative to `api/` when started there. |
+| `FLOW_UPLOAD_PATH` | `data/uploads` | Local attachment storage directory. |
+| `FLOW_SEED_PASSWORD` | `flow-demo` | Initial local administrator password. |
+| `FLOW_APP_URL` | unset | Public web origin used in account emails. |
+| `FLOW_SMTP_HOST` | unset | SMTP server hostname. |
+| `FLOW_SMTP_PORT` | `587` | SMTP server port. |
+| `FLOW_SMTP_USERNAME` | unset | SMTP authentication username. |
+| `FLOW_SMTP_PASSWORD` | unset | SMTP authentication password. |
+| `FLOW_SMTP_FROM` | unset | Sender address for account emails. |
+| `FLOW_COOKIE_SECURE` | `false` | Force secure authentication cookies. Set to `true` in production. |
+| `FLOW_DEV_AUTH_TOKENS` | `true` | Include account action tokens in development responses. Disable in production. |
+| `FLOW_TRUST_PROXY_HEADERS` | `false` | Trust forwarded client information from a controlled reverse proxy. |
+
+Example production-oriented environment:
 
 ```bash
 export FLOW_APP_URL=https://flow.example
+export FLOW_DB_PATH=/var/lib/flow/flow.db
+export FLOW_UPLOAD_PATH=/var/lib/flow/uploads
 export FLOW_SMTP_HOST=smtp.example.com
 export FLOW_SMTP_PORT=587
 export FLOW_SMTP_USERNAME=apikey
-export FLOW_SMTP_PASSWORD=secret
+export FLOW_SMTP_PASSWORD=change-me
 export FLOW_SMTP_FROM=notifications@flow.example
 export FLOW_COOKIE_SECURE=true
 export FLOW_DEV_AUTH_TOKENS=false
-export FLOW_TRUST_PROXY_HEADERS=true
 ```
 
-仅当 API 位于可信代理之后，且代理会覆盖 `X-Forwarded-For` 时，才启用 `FLOW_TRUST_PROXY_HEADERS`。
+Enable `FLOW_TRUST_PROXY_HEADERS` only when a trusted proxy overwrites incoming
+forwarded headers.
 
-## 验证
+## Quality Checks
+
+Run the same checks used by CI before opening a pull request:
 
 ```bash
-cd web && npm run lint && npm run build
-cd ../api && go test ./...
+cd web
+npm ci
+npm run lint
+npm run build
+
+cd ../api
+go test ./...
 ```
 
-## 文档
+## Documentation
 
-- [产品模块](docs/product-modules.md)
-- [交付路线图](docs/delivery-roadmap.md)
-- [领域模型](docs/domain-model.md)
-- [任务页模块](docs/issue-page-modules.md)
-- [项目页模块](docs/projects-page-modules.md)
-- [工作区模块](docs/workspace-modules.md)
+- [Product modules](docs/product-modules.md)
+- [Delivery roadmap](docs/delivery-roadmap.md)
+- [Domain model](docs/domain-model.md)
+- [Routing system](docs/routing-system.md)
+- [Issue modules](docs/issue-page-modules.md)
+- [Project modules](docs/projects-page-modules.md)
+- [Workspace modules](docs/workspace-modules.md)
+
+## Community
+
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing a change.
+- Follow the [Code of Conduct](CODE_OF_CONDUCT.md) in all project spaces.
+- Use [GitHub Issues](https://github.com/leozhengliu-pixel/flow/issues) for reproducible bugs and focused feature proposals.
+- Report vulnerabilities through the process in [SECURITY.md](SECURITY.md), not through a public issue.
+- See [SUPPORT.md](SUPPORT.md) for usage questions and troubleshooting.
+
+Project decisions and maintainer responsibilities are documented in
+[GOVERNANCE.md](GOVERNANCE.md). User-visible changes are recorded in
+[CHANGELOG.md](CHANGELOG.md).
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for
+attribution information.
+
+Flow takes product interaction inspiration from Linear and is an independent, unaffiliated project.
