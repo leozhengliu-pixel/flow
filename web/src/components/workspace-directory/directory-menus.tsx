@@ -199,7 +199,9 @@ function FilterGroup({
                       {selected.has(choice.id) && <Check />}
                     </span>
                     {choice.icon}
-                    <span>{choice.label}</span>
+                    <span className="workspace-directory-filter-menu__choice-label">
+                      {choice.label}
+                    </span>
                     {choice.meta && <small>{choice.meta}</small>}
                   </DropdownMenu.CheckboxItem>
                 ))}

@@ -334,17 +334,21 @@
 }
 .workspace-directory-filter-menu__item > span,
 .workspace-directory-filter-menu__advanced > span,
-.workspace-directory-filter-menu__choice > span:nth-last-child(2) {
+.workspace-directory-filter-menu__choice-label {
+  min-width: 0;
   flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .workspace-directory-filter-menu__item > svg:last-child {
   width: 11px;
   color: #77777c;
 }
 .workspace-directory-filter-menu__choice .workspace-directory-avatar {
-  width: 19px;
-  height: 19px;
-  flex-basis: 19px;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
   font-size: 7px;
 }
 .workspace-directory-filter-menu__checkbox {
@@ -1626,6 +1630,15 @@
 }
 
 @media (max-width: 800px) {
+  .workspace-directory-filter-submenu {
+    translate: max(
+        0px,
+        calc(
+          100% - var(--radix-dropdown-menu-content-available-width) + 8px
+        )
+      )
+      0;
+  }
   .workspace-directory__mobile {
     width: 28px;
     height: 28px;
