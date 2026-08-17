@@ -64,6 +64,14 @@ func TestIssueLifecycle(t *testing.T) {
 			t.Fatalf("persisted status = %q, want %q", got, stateID)
 		}
 	}
+	bootstrapAfterStateChanges := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if !slices.ContainsFunc(bootstrapAfterStateChanges.Activities[created.ID], func(item domain.ActivityEvent) bool {
+		return item.Metadata["state"] == "Canceled" && item.Metadata["stateBefore"] == "Todo"
+	}) || !slices.ContainsFunc(bootstrapAfterStateChanges.Activities[created.ID], func(item domain.ActivityEvent) bool {
+		return item.Metadata["state"] == "Duplicate" && item.Metadata["stateBefore"] == "Canceled"
+	}) {
+		t.Fatalf("state history did not retain previous states: %#v", bootstrapAfterStateChanges.Activities[created.ID])
+	}
 
 	updated := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+created.ID, map[string]any{
 		"title": "Autosaved title", "description": "Autosaved description", "subscriberIds": []string{"usr_zheng", "usr_jiaozongben"},
