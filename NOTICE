@@ -1,0 +1,5 @@
+Flow
+Copyright 2026 leozhengliu-pixel and Flow contributors
+
+This product includes third-party software distributed under its own licenses.
+See the dependency manifests in api/go.mod and web/package.json for details.

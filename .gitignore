@@ -1,6 +1,14 @@
 .DS_Store
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+.coverage/
+coverage/
 .playwright-cli/
 output/
 api/data/
+api/flow
 web/node_modules/
 web/dist/
