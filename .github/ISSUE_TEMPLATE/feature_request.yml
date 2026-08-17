@@ -1,0 +1,55 @@
+name: Feature request
+description: Propose a focused improvement to Flow.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the user problem before proposing an interface or implementation.
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: Who is affected, what are they trying to accomplish, and what prevents them today?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe observable success without prescribing unnecessary implementation details.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: Optional interface, API, or workflow ideas.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Explain workarounds or other approaches you evaluated.
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - Issues and views
+        - Projects, initiatives, or cycles
+        - Documents or customers
+        - Search, notifications, or realtime
+        - Authentication or workspace administration
+        - Developer experience or operations
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I searched existing issues and did not find an equivalent proposal.
+          required: true
+        - label: I described a user problem rather than only a preferred implementation.
+          required: true
