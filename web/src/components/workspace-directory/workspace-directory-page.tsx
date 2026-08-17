@@ -829,6 +829,7 @@ function TeamsDirectory({
       id: "created",
       label: "Created date",
       icon: <DirectoryCreatedDateIcon />,
+      selectionMode: "single",
       choices: [
         { id: "1", label: "1 day ago" },
         { id: "3", label: "3 days ago" },
