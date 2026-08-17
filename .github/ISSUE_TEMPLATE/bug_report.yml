@@ -1,0 +1,80 @@
+name: Bug report
+description: Report a reproducible problem in Flow.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve Flow. Search existing issues first and do not include secrets or private user data.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Provide the release version or full commit SHA where the problem occurs.
+      placeholder: 62816d8b6c35938cadb33ca210baca1387210d45
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Web interface
+        - API
+        - Authentication and permissions
+        - Realtime and notifications
+        - Persistence and migrations
+        - Import or export
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem
+      description: Describe what happened and why it is a problem.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest reliable sequence that reproduces the issue.
+      placeholder: |
+        1. Start Flow with ...
+        2. Open ...
+        3. Select ...
+        4. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, browser, Node.js version, Go version, and deployment topology as relevant.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Remove credentials, tokens, email addresses, and private workspace data before attaching evidence.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: I reproduced this on the latest supported commit.
+          required: true
+        - label: This report does not contain a security vulnerability or sensitive data.
+          required: true
