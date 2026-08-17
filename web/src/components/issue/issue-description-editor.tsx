@@ -10,6 +10,7 @@ import { getSlashCommandState, SlashCommandExtension, type SlashCommandState } f
 import { SlashCommandMenu, type EditorCommand } from './editor/slash-command-menu'
 import { filterEditorCommands } from './editor/editor-commands'
 import { SelectionToolbar } from './editor/selection-toolbar'
+import { useI18n } from '@/i18n/i18n'
 
 interface DescriptionEditorProps {
   value: string
@@ -24,6 +25,8 @@ interface DescriptionEditorProps {
 const closedSlash: SlashCommandState = { active: false, query: '', range: null }
 
 export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmit, editorRef, className }: DescriptionEditorProps) {
+  const { t } = useI18n()
+  const descriptionLabel = t('Issue description')
   const initial = useMemo(() => parseDescriptionContent(value, state), []) // eslint-disable-line react-hooks/exhaustive-deps
   const rootRef = useRef<HTMLDivElement>(null)
   const commandsRef = useRef<EditorCommand[]>([])
@@ -49,7 +52,7 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
     editorProps: {
       attributes: {
         class: 'flow-prosemirror description-editor',
-        'aria-label': 'Issue description',
+        'aria-label': descriptionLabel,
         'aria-multiline': 'true',
         'aria-readonly': 'false',
         spellcheck: 'true',
@@ -130,6 +133,10 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
     editorRef?.(editor)
     return () => editorRef?.(null)
   }, [editor, editorRef])
+  useEffect(() => {
+    if (!editor) return
+    editor.view.dom.setAttribute('aria-label', descriptionLabel)
+  }, [descriptionLabel, editor])
   useEffect(() => {
     selectedRef.current = 0
     setSelectedIndex(0)

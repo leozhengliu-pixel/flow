@@ -2,6 +2,7 @@ import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import Placeholder from '@tiptap/extension-placeholder'
 import StarterKit from '@tiptap/starter-kit'
 import { useEffect, useRef } from 'react'
+import { useI18n } from '@/i18n/i18n'
 
 interface IssueTitleEditorProps {
   value: string
@@ -15,6 +16,8 @@ interface IssueTitleEditorProps {
 }
 
 export function IssueTitleEditor({ value, onChange, onBlur, onEnter, onSubmit, autoFocus = false, className, editorRef }: IssueTitleEditorProps) {
+  const { t } = useI18n()
+  const titleLabel = t('Issue title')
   const enterRef = useRef(onEnter)
   const submitRef = useRef(onSubmit)
   enterRef.current = onEnter
@@ -31,13 +34,13 @@ export function IssueTitleEditor({ value, onChange, onBlur, onEnter, onSubmit, a
         horizontalRule: false,
         orderedList: false,
       }),
-      Placeholder.configure({ placeholder: 'Issue title' }),
+      Placeholder.configure({ placeholder: titleLabel }),
     ],
     content: titleDocument(value),
     editorProps: {
       attributes: {
         class: 'flow-prosemirror title-editor',
-        'aria-label': 'Issue title',
+        'aria-label': titleLabel,
       },
       handleKeyDown: (view, event) => {
         if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
@@ -71,6 +74,11 @@ export function IssueTitleEditor({ value, onChange, onBlur, onEnter, onSubmit, a
     const frame = requestAnimationFrame(() => editor.commands.focus('end'))
     return () => cancelAnimationFrame(frame)
   }, [autoFocus, editor])
+  useEffect(() => {
+    if (!editor) return
+    editor.view.dom.setAttribute('aria-label', titleLabel)
+    if (editor.isEmpty) editor.view.dom.setAttribute('data-placeholder', titleLabel)
+  }, [editor, titleLabel])
   useEffect(() => {
     editorRef?.(editor)
     return () => editorRef?.(null)
