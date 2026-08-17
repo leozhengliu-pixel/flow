@@ -58,26 +58,33 @@ export function AuthPage({ session, onAuthenticated, onInvitationAccepted }: Pro
     finally { setPending(false) }
   }
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const submittedName = String(form.get('name') ?? name).trim()
+    const submittedEmail = String(form.get('email') ?? email).trim()
+    const submittedPassword = String(form.get('password') ?? password)
+    setName(submittedName)
+    setEmail(submittedEmail)
+    setPassword(submittedPassword)
     if (mode === 'login') void run(async () => {
-      const authenticated = await loginAccount(email, password)
+      const authenticated = await loginAccount(submittedEmail, submittedPassword)
       await onAuthenticated(authenticated, returnTo)
     })
     if (mode === 'signup') void run(async () => {
-      const result = await registerAccount({ name, email, password })
-      const next = new URLSearchParams({ email, ...(returnTo ? { returnTo } : {}) })
+      const result = await registerAccount({ name: submittedName, email: submittedEmail, password: submittedPassword })
+      const next = new URLSearchParams({ email: submittedEmail, ...(returnTo ? { returnTo } : {}) })
       if (result.verificationToken) next.set('token', result.verificationToken)
       navigate(`/verify-email?${next}`)
     })
     if (mode === 'forgot-password') void run(async () => {
-      const result = await forgotPassword(email)
+      const result = await forgotPassword(submittedEmail)
       setMessage('Check your email for a password reset link.')
       setDevToken(result.resetToken ?? '')
     })
     if (mode === 'reset-password') void run(async () => {
       const token = params.get('token') ?? ''
-      await resetPassword(token, password)
+      await resetPassword(token, submittedPassword)
       setMessage('Your password has been updated.')
     })
   }
@@ -124,9 +131,9 @@ export function AuthPage({ session, onAuthenticated, onInvitationAccepted }: Pro
     {!isReset && !isForgot && <button className="auth-google" type="button" onClick={() => setError('Google sign-in is not configured for this workspace.')}><span>G</span>Continue with Google</button>}
     {!isReset && !isForgot && <div className="auth-divider"><span>or</span></div>}
     <form onSubmit={submit}>
-      {isSignup && <label>Full name<input autoFocus autoComplete="name" value={name} onChange={event => setName(event.target.value)} placeholder="Your name" required/></label>}
-      {!isReset && <label>Email address<input autoFocus={!isSignup} type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="name@company.com" required/></label>}
-      {!isForgot && <label>Password<div className="auth-password"><input autoFocus={isReset} type={showPassword ? 'text' : 'password'} autoComplete={isSignup ? 'new-password' : 'current-password'} value={password} onChange={event => setPassword(event.target.value)} placeholder={isSignup || isReset ? 'At least 8 characters' : 'Enter your password'} minLength={8} required/><button type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff/> : <Eye/>}</button></div></label>}
+      {isSignup && <label>Full name<input name="name" autoFocus autoComplete="name" value={name} onChange={event => setName(event.target.value)} placeholder="Your name" required/></label>}
+      {!isReset && <label>Email address<input name="email" autoFocus={!isSignup} type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="name@company.com" required/></label>}
+      {!isForgot && <label>Password<div className="auth-password"><input name="password" autoFocus={isReset} type={showPassword ? 'text' : 'password'} autoComplete={isSignup ? 'new-password' : 'current-password'} value={password} onChange={event => setPassword(event.target.value)} placeholder={isSignup || isReset ? 'At least 8 characters' : 'Enter your password'} minLength={8} required/><button type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff/> : <Eye/>}</button></div></label>}
       {!isSignup && !isForgot && !isReset && <button type="button" className="auth-forgot" onClick={() => navigate(`/forgot-password?email=${encodeURIComponent(email)}`)}>Forgot password?</button>}
       <button className="auth-primary" disabled={pending}>{pending ? <LoaderCircle className="auth-spinner"/> : isSignup ? 'Create account' : isForgot ? 'Send reset link' : isReset ? 'Update password' : 'Continue'}</button>
     </form>
