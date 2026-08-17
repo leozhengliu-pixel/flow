@@ -21,6 +21,7 @@ export interface DirectoryFilterGroup {
   label: string;
   icon: ReactNode;
   choices?: DirectoryFilterChoice[];
+  selectionMode?: "multiple" | "single";
   separatorBefore?: boolean;
 }
 
@@ -185,26 +186,40 @@ function FilterGroup({
                 />
               </label>
               <div className="workspace-directory-filter-menu__items">
-                {choices.map((choice) => (
-                  <DropdownMenu.CheckboxItem
-                    checked={selected.has(choice.id)}
-                    className="workspace-directory-filter-menu__choice"
-                    key={choice.id}
-                    onCheckedChange={(checked) =>
-                      onChoice(group.id, choice.id, checked === true)
-                    }
-                    onSelect={(event) => event.preventDefault()}
-                  >
-                    <span className="workspace-directory-filter-menu__checkbox">
-                      {selected.has(choice.id) && <Check />}
-                    </span>
-                    {choice.icon}
-                    <span className="workspace-directory-filter-menu__choice-label">
-                      {choice.label}
-                    </span>
-                    {choice.meta && <small>{choice.meta}</small>}
-                  </DropdownMenu.CheckboxItem>
-                ))}
+                {choices.map((choice) =>
+                  group.selectionMode === "single" ? (
+                    <DropdownMenu.Item
+                      className="workspace-directory-filter-menu__choice"
+                      key={choice.id}
+                      onSelect={() => onChoice(group.id, choice.id, true)}
+                    >
+                      {choice.icon}
+                      <span className="workspace-directory-filter-menu__choice-label">
+                        {choice.label}
+                      </span>
+                      {choice.meta && <small>{choice.meta}</small>}
+                    </DropdownMenu.Item>
+                  ) : (
+                    <DropdownMenu.CheckboxItem
+                      checked={selected.has(choice.id)}
+                      className="workspace-directory-filter-menu__choice"
+                      key={choice.id}
+                      onCheckedChange={(checked) =>
+                        onChoice(group.id, choice.id, checked === true)
+                      }
+                      onSelect={(event) => event.preventDefault()}
+                    >
+                      <span className="workspace-directory-filter-menu__checkbox">
+                        {selected.has(choice.id) && <Check />}
+                      </span>
+                      {choice.icon}
+                      <span className="workspace-directory-filter-menu__choice-label">
+                        {choice.label}
+                      </span>
+                      {choice.meta && <small>{choice.meta}</small>}
+                    </DropdownMenu.CheckboxItem>
+                  ),
+                )}
               </div>
             </DropdownMenu.SubContent>
           </DropdownMenu.Portal>
