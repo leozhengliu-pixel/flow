@@ -1,4 +1,5 @@
 import * as Popover from '@radix-ui/react-popover'
+import * as Tooltip from '@radix-ui/react-tooltip'
 import { Check, Layers3, Plus } from 'lucide-react'
 import { useId, useState, type ReactNode } from 'react'
 import { LabelIcon, NoAssigneeIcon, ProjectIcon, PriorityIcon } from '@/components/issue/issue-icons'
@@ -19,7 +20,7 @@ export interface PropertyOption {
 
 export type PropertyMenuKind = 'standard' | 'labels' | 'project'
 
-export function PropertyMenu({ label, value, icon, options, onChange, multiple = false, selectedId, selectedIds = [], compact = false, searchPlaceholder, searchShortcut, kind: explicitKind, teamName = 'Cleantrack', trigger, triggerClassName, ariaLabel }: {
+export function PropertyMenu({ label, value, icon, options, onChange, multiple = false, selectedId, selectedIds = [], compact = false, searchPlaceholder, searchShortcut, kind: explicitKind, teamName = 'Cleantrack', trigger, triggerClassName, ariaLabel, hoverContent, hoverClassName }: {
   label: string
   value?: string
   icon?: ReactNode
@@ -36,8 +37,11 @@ export function PropertyMenu({ label, value, icon, options, onChange, multiple =
   trigger?: ReactNode
   triggerClassName?: string
   ariaLabel?: string
+  hoverContent?: ReactNode
+  hoverClassName?: string
 }) {
   const [open, setOpen] = useState(false)
+  const [hoverOpen, setHoverOpen] = useState(false)
   const listboxId = useId()
   const selected = multiple ? selectedIds : [selectedId ?? options.find(option => option.label === value)?.id ?? '']
   const selectedSet = new Set(selected)
@@ -56,12 +60,12 @@ export function PropertyMenu({ label, value, icon, options, onChange, multiple =
   const noProject = command.filteredOptions.filter(option => !option.id)
   const projects = command.filteredOptions.filter(option => option.id)
   const placeholder = kind === 'labels' ? 'Change or add labels…' : kind === 'project' ? 'Add to project…' : searchPlaceholder ?? `Change ${label.toLowerCase()}…`
-  return <Popover.Root open={open} onOpenChange={setOpen}>
-    <Popover.Trigger asChild>
-      <button type="button" role="combobox" className={triggerClassName ?? (compact ? 'mini-property-trigger' : 'property-row')} aria-label={ariaLabel ?? `Change ${label}. Current value is ${value || 'none'}`} aria-haspopup="dialog" aria-expanded={open}>
+  const triggerButton = <button type="button" role="combobox" className={triggerClassName ?? (compact ? 'mini-property-trigger' : 'property-row')} aria-label={ariaLabel ?? `Change ${label}. Current value is ${value || 'none'}`} aria-haspopup="dialog" aria-expanded={open}>
         {trigger ?? (compact ? <>{icon ?? iconFor(label)}<span>{value || label}</span></> : <><span>{icon ?? iconFor(label)}</span><span className="property-label">{label}</span><span className="property-value">{value || `Add ${label.toLowerCase()}`}</span></>)}
       </button>
-    </Popover.Trigger>
+  const popoverTrigger = <Popover.Trigger asChild>{triggerButton}</Popover.Trigger>
+  return <Tooltip.Provider delayDuration={500} skipDelayDuration={0}><Tooltip.Root open={Boolean(hoverContent) && !open && hoverOpen} onOpenChange={setHoverOpen}><Popover.Root open={open} onOpenChange={next => { setOpen(next); if (next) setHoverOpen(false) }}>
+    {hoverContent ? <Tooltip.Trigger asChild>{popoverTrigger}</Tooltip.Trigger> : popoverTrigger}
     <Popover.Portal>
       <Popover.Content className={`property-command-surface property-command-${kind}`} role="dialog" aria-label={`Change ${label}`} align="start" sideOffset={4} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}>
         <div onKeyDown={command.onKeyDown}>
@@ -78,7 +82,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, multiple =
         </div>
       </Popover.Content>
     </Popover.Portal>
-  </Popover.Root>
+  </Popover.Root>{hoverContent&&<Tooltip.Portal><Tooltip.Content className={hoverClassName ?? 'property-hover-tooltip'} side="left" align="center" sideOffset={6} collisionPadding={8}>{hoverContent}</Tooltip.Content></Tooltip.Portal>}</Tooltip.Root></Tooltip.Provider>
 }
 
 function CommandOption({ option, active, checked, icon, listboxId, multi = false, onChoose, onActive }: { option: PropertyOption; active: boolean; checked: boolean; icon: ReactNode; listboxId: string; multi?: boolean; onChoose: () => void; onActive: () => void }) {
