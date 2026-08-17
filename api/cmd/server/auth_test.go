@@ -9,6 +9,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"flow/api/internal/domain"
@@ -106,6 +107,75 @@ func TestPasswordResetRevokesSessions(t *testing.T) {
 	authRequest[any](t, authClient(t), http.MethodPost, server.URL+"/api/auth/reset-password", map[string]string{"token": reset.ResetToken, "password": "updated-pass"}, "", http.StatusOK)
 	authRequest[any](t, client, http.MethodGet, server.URL+"/api/auth/session", nil, "", http.StatusUnauthorized)
 	authRequest[domain.AuthSession](t, authClient(t), http.MethodPost, server.URL+"/api/auth/login", map[string]string{"email": "leo.zheng.liu@example.com", "password": "updated-pass"}, "", http.StatusOK)
+}
+
+func TestAPIKeyScopesAndTeamProjection(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "api-key.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	server := httptest.NewServer(newHandler(&server{store: repository, uploadPath: t.TempDir()}))
+	defer server.Close()
+	admin := authClient(t)
+	authRequest[domain.AuthSession](t, admin, http.MethodPost, server.URL+"/api/auth/login", map[string]string{"email": "leo.zheng.liu@example.com", "password": "flow-demo"}, "", http.StatusOK)
+	bootstrap := authRequest[domain.Bootstrap](t, admin, http.MethodGet, server.URL+"/api/bootstrap", nil, "cleantrack", http.StatusOK)
+	team := authRequest[domain.Team](t, admin, http.MethodPost, server.URL+"/api/workspaces/cleantrack/teams", map[string]any{"name": "API hidden", "key": "APIH"}, "", http.StatusCreated)
+	authRequest[domain.Issue](t, admin, http.MethodPost, server.URL+"/api/issues", map[string]any{"title": "Hidden from scoped key", "teamId": team.ID}, "cleantrack", http.StatusCreated)
+	key := authRequest[struct {
+		Secret string `json:"secret"`
+	}](t, admin, http.MethodPost, server.URL+"/api/api-keys", map[string]any{"name": "Scoped reader", "scopes": []string{"read"}, "teamIds": []string{bootstrap.Teams[0].ID}}, "cleantrack", http.StatusCreated)
+	request, err := http.NewRequest(http.MethodGet, server.URL+"/api/bootstrap", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", "Bearer "+key.Secret)
+	request.Header.Set("X-Workspace-Key", "cleantrack")
+	response, err := authClient(t).Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("scoped bootstrap status = %d", response.StatusCode)
+	}
+	var projected domain.Bootstrap
+	if err := json.NewDecoder(response.Body).Decode(&projected); err != nil {
+		t.Fatal(err)
+	}
+	if len(projected.Teams) != 1 || projected.Teams[0].ID != bootstrap.Teams[0].ID || slices.ContainsFunc(projected.Issues, func(item domain.Issue) bool { return item.Team.ID == team.ID }) {
+		t.Fatalf("API key team projection leaked resources: teams=%#v issues=%#v", projected.Teams, projected.Issues)
+	}
+	writeRequest, _ := http.NewRequest(http.MethodPost, server.URL+"/api/issues", bytes.NewBufferString(`{"title":"Denied","teamId":"`+bootstrap.Teams[0].ID+`"}`))
+	writeRequest.Header.Set("Authorization", "Bearer "+key.Secret)
+	writeRequest.Header.Set("X-Workspace-Key", "cleantrack")
+	writeRequest.Header.Set("Content-Type", "application/json")
+	writeResponse, err := authClient(t).Do(writeRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writeResponse.Body.Close()
+	if writeResponse.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("read-only key write status = %d", writeResponse.StatusCode)
+	}
+	app := authRequest[domain.OAuthApplication](t, admin, http.MethodPost, server.URL+"/api/oauth-applications", map[string]any{"name": "Automation client", "redirectUris": []string{}, "scopes": []string{"read"}}, "cleantrack", http.StatusCreated)
+	token := authRequest[struct {
+		AccessToken string `json:"access_token"`
+	}](t, authClient(t), http.MethodPost, server.URL+"/api/oauth/token", map[string]string{"grant_type": "client_credentials", "client_id": app.ClientID, "client_secret": app.ClientSecret}, "cleantrack", http.StatusOK)
+	if token.AccessToken == "" {
+		t.Fatal("OAuth client credentials exchange returned no access token")
+	}
+	oauthRequest, _ := http.NewRequest(http.MethodGet, server.URL+"/api/bootstrap", nil)
+	oauthRequest.Header.Set("Authorization", "Bearer "+token.AccessToken)
+	oauthRequest.Header.Set("X-Workspace-Key", "cleantrack")
+	oauthResponse, err := authClient(t).Do(oauthRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer oauthResponse.Body.Close()
+	if oauthResponse.StatusCode != http.StatusOK {
+		t.Fatalf("OAuth access token status = %d", oauthResponse.StatusCode)
+	}
 }
 
 func TestAuthenticationRateLimit(t *testing.T) {

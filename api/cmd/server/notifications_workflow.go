@@ -714,6 +714,12 @@ func (s *server) deleteTeamLabel(w http.ResponseWriter, r *http.Request) {
 }
 
 func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, input domain.IssueTemplateMutationInput) error {
+	if input.TeamID != nil {
+		if *input.TeamID != "" && !teamExists(data, *input.TeamID) {
+			return errInvalid
+		}
+		template.TeamID = *input.TeamID
+	}
 	if input.Name != nil {
 		name := strings.TrimSpace(*input.Name)
 		if name == "" {
@@ -756,6 +762,20 @@ func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, 
 			return errInvalid
 		}
 		template.LabelIDs = slices.Clone(*input.LabelIDs)
+	}
+	if input.TemplateType != nil {
+		if !slices.Contains([]string{"standard", "customForm"}, *input.TemplateType) {
+			return errInvalid
+		}
+		template.TemplateType = *input.TemplateType
+	}
+	if input.FormFields != nil {
+		for _, field := range *input.FormFields {
+			if strings.TrimSpace(field.Label) == "" || !slices.Contains([]string{"text", "textarea", "select", "checkbox", "date"}, field.Type) {
+				return errInvalid
+			}
+		}
+		template.FormFields = slices.Clone(*input.FormFields)
 	}
 	return nil
 }

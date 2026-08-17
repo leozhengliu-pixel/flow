@@ -1,5 +1,6 @@
-import type { AccountBootstrap, Ask, Attachment, AuthSession, BootstrapData, Comment, Customer, CustomerMutationInput, CustomerRequest, Cycle, CycleMutationInput, CycleSettings, CycleSettingsMutationInput, Draft, ExportJob, Favorite, ImportJob, Initiative, InitiativeMutationInput, InitiativeResource, InitiativeUpdate, Invitation, InvitationPreview, Issue, IssueLabel, IssueRelation, IssueRelationType, IssueTemplate, IssueTemplateMutationInput, IssueUpdateInput, FlowDocument, Notification, NotificationDelivery, NotificationList, NotificationMutationInput, NotificationPreferences, Presence, Project, ProjectMilestone, ProjectResource, ProjectTemplate, ProjectUpdate, Release, SavedView, SavedViewMutationInput, SearchResourceType, SearchResponse, SLARule, Subscription, Team, TeamRole, TeamSettings, TeamSettingsMutationInput, WorkflowState, WorkspaceMember, WorkspaceMutationInput, WorkspaceRole } from '@/types/flow'
+import type { AccountBootstrap, AccountSessionInfo, APIKey, Ask, Attachment, AuthSession, BootstrapData, Comment, Customer, CustomerMutationInput, CustomerRequest, Cycle, CycleMutationInput, CycleSettings, CycleSettingsMutationInput, Draft, ExportJob, Favorite, ImportJob, Initiative, InitiativeMutationInput, InitiativeResource, InitiativeUpdate, IntegrationConnection, Invitation, InvitationPreview, Issue, IssueLabel, IssueRelation, IssueRelationType, IssueTemplate, IssueTemplateMutationInput, IssueUpdateInput, FlowDocument, LabelGroup, Notification, NotificationDelivery, NotificationList, NotificationMutationInput, NotificationPreferences, OAuthApplication, Presence, Project, ProjectMilestone, ProjectResource, ProjectStatus, ProjectTemplate, ProjectUpdate, Release, SavedView, SavedViewMutationInput, SearchResourceType, SearchResponse, SLARule, Subscription, Team, TeamRole, TeamSettings, TeamSettingsMutationInput, User, UserSettings, WorkflowState, WorkspaceMember, WorkspaceMutationInput, WorkspaceRole, WorkspaceSettings, WorkspaceUsage } from '@/types/flow'
 import type { ProjectCreateInput, ProjectMutationInput } from '@/components/projects-page/projects-page'
+import type { DocumentTemplate } from '@/types/flow'
 
 export function fetchAccountBootstrap(): Promise<AccountBootstrap> { return request('/api/account/bootstrap') }
 export function setLastWorkspace(workspaceKey: string): Promise<void> { return request('/api/account/last-workspace', jsonRequest('PUT', { workspaceKey })) }
@@ -25,6 +26,37 @@ export function createWorkspace(input: WorkspaceMutationInput & { name: string; 
 export function updateWorkspace(workspaceKey: string, input: WorkspaceMutationInput): Promise<BootstrapData> { return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }) }
 export function deleteWorkspace(workspaceKey: string): Promise<void> { return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}`, { method: 'DELETE' }) }
 export function updateWorkspaceSettings(settings: Record<string, unknown>): Promise<Record<string, unknown>> { return request('/api/workspace/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) }) }
+export function fetchUserSettings(): Promise<UserSettings> { return request('/api/account/settings') }
+export function updateUserSettings(input: UserSettings): Promise<UserSettings> { return request('/api/account/settings', jsonRequest('PATCH', input)) }
+export function updateAccountProfile(input: { displayName: string; username: string; avatarUrl?: string; jobTitle?: string }): Promise<User> { return request('/api/account/profile', jsonRequest('PATCH', input)) }
+export function fetchAccountSessions(): Promise<AccountSessionInfo[]> { return request('/api/account/sessions') }
+export function revokeOtherAccountSessions(): Promise<void> { return request('/api/account/sessions/others', { method: 'DELETE' }) }
+export function changeAccountPassword(currentPassword: string, newPassword: string): Promise<{changed:boolean}> { return request('/api/account/change-password', jsonRequest('POST', { currentPassword, newPassword })) }
+export function updateWorkspacePreferences(input: WorkspaceSettings): Promise<WorkspaceSettings> { return request('/api/workspace/preferences', jsonRequest('PATCH', input)) }
+export function createWorkspaceLabel(input: { name: string; description?: string; color?: string; resourceType: 'issue'|'project'; groupId?: string }): Promise<IssueLabel> { return request('/api/labels', jsonRequest('POST', input)) }
+export function updateWorkspaceLabel(id: string, input: Partial<Pick<IssueLabel,'name'|'description'|'color'|'groupId'>>): Promise<IssueLabel> { return request(`/api/labels/${id}`, jsonRequest('PATCH', input)) }
+export function deleteWorkspaceLabel(id: string): Promise<void> { return request(`/api/labels/${id}`, { method: 'DELETE' }) }
+export function createLabelGroup(input: { name: string; color?: string; resourceType: 'issue'|'project' }): Promise<LabelGroup> { return request('/api/label-groups', jsonRequest('POST', input)) }
+export function updateLabelGroup(id: string, input: Partial<Pick<LabelGroup,'name'|'color'>>): Promise<LabelGroup> { return request(`/api/label-groups/${id}`, jsonRequest('PATCH', input)) }
+export function deleteLabelGroup(id: string): Promise<void> { return request(`/api/label-groups/${id}`, { method: 'DELETE' }) }
+export function createProjectStatus(input: { name: string; color?: string; type?: string }): Promise<ProjectStatus> { return request('/api/project-statuses', jsonRequest('POST', input)) }
+export function updateProjectStatus(id: string, input: Partial<Pick<ProjectStatus,'name'|'color'|'type'>>): Promise<ProjectStatus> { return request(`/api/project-statuses/${id}`, jsonRequest('PATCH', input)) }
+export function deleteProjectStatus(id: string): Promise<void> { return request(`/api/project-statuses/${id}`, { method: 'DELETE' }) }
+export function reorderProjectStatuses(ids: string[]): Promise<ProjectStatus[]> { return request('/api/project-statuses/reorder', jsonRequest('POST', { ids })) }
+export function createWorkspaceIssueTemplate(input: IssueTemplateMutationInput & { name: string }): Promise<IssueTemplate> { return request('/api/issue-templates', jsonRequest('POST', input)) }
+export function updateWorkspaceIssueTemplate(id: string, input: IssueTemplateMutationInput): Promise<IssueTemplate> { return request(`/api/issue-templates/${id}`, jsonRequest('PATCH', input)) }
+export function deleteWorkspaceIssueTemplate(id: string): Promise<void> { return request(`/api/issue-templates/${id}`, { method: 'DELETE' }) }
+export function fetchAPIKeys(): Promise<APIKey[]> { return request('/api/api-keys') }
+export function createAPIKey(input: { name: string; scopes: string[]; teamIds: string[] }): Promise<{key:APIKey;secret:string}> { return request('/api/api-keys', jsonRequest('POST', input)) }
+export function revokeAPIKey(id: string): Promise<void> { return request(`/api/api-keys/${id}`, { method: 'DELETE' }) }
+export function fetchOAuthApplications(): Promise<OAuthApplication[]> { return request('/api/oauth-applications') }
+export function createOAuthApplication(input: { name: string; description?: string; redirectUris: string[]; scopes: string[] }): Promise<OAuthApplication> { return request('/api/oauth-applications', jsonRequest('POST', input)) }
+export function updateOAuthApplication(id: string, input: Partial<Pick<OAuthApplication,'name'|'description'|'redirectUris'|'scopes'>>): Promise<OAuthApplication> { return request(`/api/oauth-applications/${id}`, jsonRequest('PATCH', input)) }
+export function deleteOAuthApplication(id: string): Promise<void> { return request(`/api/oauth-applications/${id}`, { method: 'DELETE' }) }
+export function fetchIntegrations(): Promise<IntegrationConnection[]> { return request('/api/integrations') }
+export function connectIntegration(provider: string, input: {name?:string;config?:Record<string,string>}): Promise<IntegrationConnection> { return request(`/api/integrations/${provider}`, jsonRequest('PUT', input)) }
+export function disconnectIntegration(provider: string): Promise<void> { return request(`/api/integrations/${provider}`, { method: 'DELETE' }) }
+export function fetchWorkspaceUsage(): Promise<WorkspaceUsage> { return request('/api/usage') }
 export function createTeam(workspaceKey: string, input: { name: string; key: string; color?: string; icon?: string; private?: boolean }): Promise<Team> { return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}/teams`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }) }
 export function updateTeam(workspaceKey: string, teamId: string, input: Partial<Pick<Team,'name'|'key'|'color'|'icon'|'private'>>): Promise<Team> { return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}/teams/${teamId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }) }
 export function deleteTeam(workspaceKey: string, teamId: string): Promise<void> { return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}/teams/${teamId}`, { method: 'DELETE' }) }
@@ -36,7 +68,11 @@ export function updateCustomerRequest(id: string, input: Partial<Pick<CustomerRe
 export function deleteCustomerRequest(id: string): Promise<void> { return request(`/api/customer-requests/${id}`, { method: 'DELETE' }) }
 export function uploadCustomerRequestAttachment(id: string, file: File): Promise<Attachment> { const body = new FormData(); body.append('file', file); return request(`/api/customer-requests/${id}/attachments`, { method: 'POST', body }) }
 export function deleteCustomerRequestAttachment(id: string, attachmentId: string): Promise<void> { return request(`/api/customer-requests/${id}/attachments/${attachmentId}`, { method: 'DELETE' }) }
-export function createDocument(input: Partial<Pick<FlowDocument,'title'|'icon'|'content'|'contentState'|'contentData'|'projectIds'|'teamIds'|'subscriberIds'|'favorite'>>): Promise<FlowDocument> { return request('/api/documents', jsonRequest('POST', input)) }
+export function createDocument(input: Partial<Pick<FlowDocument,'title'|'icon'|'content'|'contentState'|'contentData'|'projectIds'|'teamIds'|'subscriberIds'|'favorite'>> & {templateId?:string}): Promise<FlowDocument> { return request('/api/documents', jsonRequest('POST', input)) }
+type DocumentTemplateMutation = Partial<Pick<DocumentTemplate,'teamId'|'name'|'description'|'title'|'icon'|'content'|'contentState'|'contentData'>>
+export function createDocumentTemplate(input: DocumentTemplateMutation & {teamId:string;name:string}):Promise<DocumentTemplate>{return request('/api/document-templates',jsonRequest('POST',input))}
+export function updateDocumentTemplate(id:string,input:DocumentTemplateMutation):Promise<DocumentTemplate>{return request(`/api/document-templates/${id}`,jsonRequest('PATCH',input))}
+export function deleteDocumentTemplate(id:string):Promise<void>{return request(`/api/document-templates/${id}`,{method:'DELETE'})}
 export function updateDocument(id: string, input: Partial<Pick<FlowDocument,'title'|'icon'|'content'|'contentState'|'contentData'|'projectIds'|'teamIds'|'subscriberIds'|'favorite'>> & { archived?: boolean }): Promise<FlowDocument> { return request(`/api/documents/${id}`, jsonRequest('PATCH', input)) }
 export function deleteDocument(id: string): Promise<void> { return request(`/api/documents/${id}`, { method: 'DELETE' }) }
 export function restoreDocumentRevision(id: string, revisionId: string): Promise<FlowDocument> { return request(`/api/documents/${id}/restore/${revisionId}`, { method: 'POST' }) }
@@ -47,8 +83,9 @@ export function createAsk(input: { title: string; body?: string; source?: string
 export function updateAsk(id: string, input: Partial<Pick<Ask,'title'|'body'|'source'|'teamId'|'templateId'|'issueId'>>): Promise<Ask> { return request(`/api/asks/${id}`, jsonRequest('PATCH', input)) }
 export function decideAsk(id: string, decision: 'approved'|'rejected', note?: string): Promise<Ask> { return request(`/api/asks/${id}/decision`, jsonRequest('POST', { decision, note })) }
 export function deleteAsk(id: string): Promise<void> { return request(`/api/asks/${id}`, { method: 'DELETE' }) }
-export function createProjectTemplate(input: { name: string } & Partial<Pick<ProjectTemplate,'description'|'summary'|'icon'|'color'|'statusId'|'priority'|'teamIds'|'labelIds'>>): Promise<ProjectTemplate> { return request('/api/project-templates', jsonRequest('POST', input)) }
-export function updateProjectTemplate(id: string, input: Partial<Pick<ProjectTemplate,'name'|'description'|'summary'|'icon'|'color'|'statusId'|'priority'|'teamIds'|'labelIds'>>): Promise<ProjectTemplate> { return request(`/api/project-templates/${id}`, jsonRequest('PATCH', input)) }
+type ProjectTemplateMutation = Partial<Pick<ProjectTemplate,'name'|'description'|'summary'|'icon'|'color'|'statusId'|'priority'|'teamIds'|'labelIds'|'leadId'|'memberIds'|'dependencyIds'|'initiativeIds'|'issueIds'|'visibility'>>
+export function createProjectTemplate(input: { name: string } & ProjectTemplateMutation): Promise<ProjectTemplate> { return request('/api/project-templates', jsonRequest('POST', input)) }
+export function updateProjectTemplate(id: string, input: ProjectTemplateMutation): Promise<ProjectTemplate> { return request(`/api/project-templates/${id}`, jsonRequest('PATCH', input)) }
 export function deleteProjectTemplate(id: string): Promise<void> { return request(`/api/project-templates/${id}`, { method: 'DELETE' }) }
 export function createSLARule(input: { name: string } & Partial<Pick<SLARule,'teamIds'|'filters'|'targetMinutes'|'pauseStatuses'|'businessHours'|'enabled'>>): Promise<SLARule> { return request('/api/sla-rules', jsonRequest('POST', input)) }
 export function updateSLARule(id: string, input: Partial<Pick<SLARule,'name'|'teamIds'|'filters'|'targetMinutes'|'pauseStatuses'|'businessHours'|'enabled'>>): Promise<SLARule> { return request(`/api/sla-rules/${id}`, jsonRequest('PATCH', input)) }
