@@ -3,26 +3,27 @@ import { Command } from 'cmdk'
 import { Copy, Settings2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import type { Issue, IssueRelationType, IssueUpdateInput, Presence, WorkflowState } from '@/types/flow'
-import { IssueOptionsMenu } from '@/components/issue/issue-options-menu'
+import type { ActivityEvent, BootstrapData, Issue, IssueRelationType, IssueUpdateInput, Presence, WorkflowState } from '@/types/flow'
+import { IssueOptionsMenu, type IssueOptionsActions } from '@/components/issue/issue-options-menu'
 import { FlowBranchIcon, FlowChevronIcon, FlowFavoriteIcon, FlowIssueIdIcon, FlowNextIcon, FlowPreviousIcon, FlowUrlIcon, FlowWorkIcon } from '@/components/issue/flow-header-icons'
 
 export type IssueSaveState = 'idle' | 'saving' | 'saved' | 'error'
 
 interface IssueHeaderProps {
   issue: Issue; states: WorkflowState[]; presence?: Presence[]; saveState: IssueSaveState; onRetrySave?: () => void
+  data: BootstrapData; activities: ActivityEvent[]; issueOptionsActions?: IssueOptionsActions
   position: number; total: number; onClose: () => void; onNavigate: (direction: 'next' | 'previous') => void
   onUpdate: (input: IssueUpdateInput) => Promise<void>; onDelete: () => Promise<void>; onRelation: (type: IssueRelationType) => void
 }
 
-export function IssueHeader({ issue, states, presence = [], saveState, onRetrySave, position, total, onClose, onNavigate, onUpdate, onDelete, onRelation }: IssueHeaderProps) {
-  const [favorite,setFavorite]=useState(false),[working,setWorking]=useState(false)
+export function IssueHeader({ issue, states, presence = [], saveState, onRetrySave, data, activities, issueOptionsActions, position, total, onClose, onNavigate, onUpdate, onDelete, onRelation }: IssueHeaderProps) {
+  const [working,setWorking]=useState(false)
+  const favorite=data.favorites.some(item=>item.resourceType==='issue'&&item.resourceId===issue.id)
   const canGoNext=position<total, canGoPrevious=position>1
-  useEffect(()=>setFavorite(false),[issue.id])
   useEffect(()=>{const onKey=(event:KeyboardEvent)=>{if(isEditable(event.target))return;if((event.metaKey||event.ctrlKey)&&event.altKey&&event.key.toLowerCase()==='p'){event.preventDefault();void copyPrompt(issue)} };addEventListener('keydown',onKey);return()=>removeEventListener('keydown',onKey)},[issue])
   const startWork=async()=>{if(working)return;const started=states.find(state=>state.type==='started');if(!started){toast.error('No started status is configured');return}if(issue.state.id===started.id){toast('Issue is already in progress');return}setWorking(true);try{await onUpdate({stateId:started.id});toast.success(`Moved ${issue.identifier} to ${started.name}`)}finally{setWorking(false)}}
   return <header className="issue-header">
-    <div className="issue-header-context"><button className="issue-breadcrumb" onClick={onClose}><span>My issues</span><span className="issue-breadcrumb-separator" aria-hidden="true">›</span><strong>{issue.identifier}</strong><span>{issue.title}</span></button><button className="issue-header-icon" type="button" role="switch" aria-checked={favorite} aria-label={favorite?'Remove from favorites':'Add to favorites'} onClick={()=>setFavorite(value=>!value)}><FlowFavoriteIcon/></button><IssueOptionsMenu issue={issue} onUpdate={onUpdate} onDelete={onDelete} onRelation={onRelation}/></div>
+    <div className="issue-header-context"><button className="issue-breadcrumb" onClick={onClose}><span>My issues</span><span className="issue-breadcrumb-separator" aria-hidden="true">›</span><strong>{issue.identifier}</strong><span>{issue.title}</span></button><button className="issue-header-icon" type="button" role="switch" aria-checked={favorite} aria-label={favorite?'Remove from favorites':'Add to favorites'} onClick={()=>void issueOptionsActions?.toggleFavorite()}><FlowFavoriteIcon/></button><IssueOptionsMenu issue={issue} data={data} activities={activities} actions={issueOptionsActions} favorited={favorite} onUpdate={onUpdate} onDelete={onDelete} onRelation={onRelation}/></div>
     {presence.length>0&&<div className="issue-presence" aria-label={`${presence.length} other ${presence.length===1?'person':'people'} viewing`}><span className="issue-presence-dot"/>{presence.slice(0,3).map(item=><span className="issue-presence-avatar" title={`${item.user.displayName} is viewing`} key={item.clientId}>{initials(item.user.displayName)}</span>)}</div>}
     {saveState==='error'?<button type="button" className="save-state error" onClick={onRetrySave}>Save failed · Retry</button>:<span className={`save-state ${saveState}`} role="status" aria-live="polite">{saveState==='saving'?'Saving...':saveState==='saved'?'Saved':''}</span>}
     <div className="issue-sequence" aria-label="Issue navigation"><span><strong>{position}</strong><i>/</i>{total}</span><div className="issue-sequence-buttons"><button type="button" aria-label="Go to next item" disabled={!canGoNext} onClick={()=>onNavigate('next')}><FlowNextIcon/></button><button type="button" aria-label="Go to previous item" disabled={!canGoPrevious} onClick={()=>onNavigate('previous')}><FlowPreviousIcon/></button></div></div>

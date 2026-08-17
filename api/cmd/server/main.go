@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -247,6 +248,9 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/issues/{id}/relations", s.createRelation)
 	mux.HandleFunc("DELETE /api/issues/{id}/relations/{relationId}", s.deleteRelation)
 	mux.HandleFunc("POST /api/issues/{id}/attachments", s.createAttachment)
+	mux.HandleFunc("POST /api/issues/{id}/links", s.createIssueLink)
+	mux.HandleFunc("POST /api/issues/{id}/reminders", s.createIssueReminder)
+	mux.HandleFunc("POST /api/issues/{id}/loop-runs", s.createIssueLoopRun)
 	mux.HandleFunc("DELETE /api/issues/{id}/attachments/{attachmentId}", s.deleteAttachment)
 	mux.HandleFunc("GET /api/events", s.events)
 	mux.HandleFunc("GET /uploads/{name}", s.serveUpload)
@@ -2253,6 +2257,46 @@ func (s *server) deleteIssue(w http.ResponseWriter, r *http.Request) {
 		data.Issues = slices.Delete(data.Issues, index, index+1)
 		delete(data.Comments, id)
 		delete(data.Activities, id)
+		removedNotificationIDs := map[string]bool{}
+		for _, notification := range data.Notifications {
+			if notification.IssueID == id || (notification.SourceType == "issue" && notification.SourceID == id) {
+				removedNotificationIDs[notification.ID] = true
+			}
+		}
+		data.Notifications = slices.DeleteFunc(data.Notifications, func(item domain.Notification) bool {
+			return removedNotificationIDs[item.ID]
+		})
+		data.NotificationDeliveries = slices.DeleteFunc(data.NotificationDeliveries, func(item domain.NotificationDelivery) bool {
+			return removedNotificationIDs[item.NotificationID]
+		})
+		data.Asks = slices.DeleteFunc(data.Asks, func(item domain.Ask) bool { return item.IssueID == id })
+		data.IssueSLAs = slices.DeleteFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return item.IssueID == id })
+		data.SLAEvents = slices.DeleteFunc(data.SLAEvents, func(item domain.SLAEvent) bool { return item.IssueID == id })
+		data.Drafts = slices.DeleteFunc(data.Drafts, func(item domain.Draft) bool {
+			return item.Type == "issue" && item.ResourceID == id
+		})
+		data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool {
+			return item.ResourceType == "issue" && item.ResourceID == id
+		})
+		data.Subscriptions = slices.DeleteFunc(data.Subscriptions, func(item domain.Subscription) bool {
+			return item.ResourceType == "issue" && item.ResourceID == id
+		})
+		for i := range data.Releases {
+			data.Releases[i].IssueIDs = removeString(data.Releases[i].IssueIDs, id)
+		}
+		for i := range data.ProjectTemplates {
+			data.ProjectTemplates[i].IssueIDs = removeString(data.ProjectTemplates[i].IssueIDs, id)
+		}
+		for i := range data.CustomerRequests {
+			if data.CustomerRequests[i].IssueID == id {
+				data.CustomerRequests[i].IssueID = ""
+			}
+		}
+		for i := range data.Documents {
+			if data.Documents[i].IssueID == id {
+				data.Documents[i].IssueID = ""
+			}
+		}
 		for i := range data.Issues {
 			data.Issues[i].SubIssueIDs = removeString(data.Issues[i].SubIssueIDs, id)
 			data.Issues[i].Relations = slices.DeleteFunc(data.Issues[i].Relations, func(rel domain.IssueRelation) bool { return rel.RelatedIssueID == id || rel.IssueID == id })
@@ -2583,6 +2627,98 @@ func (s *server) createAttachment(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusCreated, attachment)
 }
 
+func (s *server) createIssueLink(w http.ResponseWriter, r *http.Request) {
+	var input domain.IssueLinkInput
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	parsed, err := url.ParseRequestURI(strings.TrimSpace(input.URL))
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		writeError(w, http.StatusBadRequest, "a valid http or https URL is required")
+		return
+	}
+	id := r.PathValue("id")
+	title := strings.TrimSpace(input.Title)
+	if title == "" {
+		title = parsed.Host
+	}
+	var attachment domain.Attachment
+	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.link_created", id, input, func(data *domain.Bootstrap) error {
+		issue, issueErr := issueByID(data, id)
+		if issueErr != nil {
+			return issueErr
+		}
+		now := time.Now().UTC()
+		attachment = domain.Attachment{ID: fmt.Sprintf("link_%d", now.UnixNano()), IssueID: id, Title: title, URL: parsed.String(), ContentType: "text/uri-list", CreatedAt: now, Creator: data.Viewer}
+		issue.Attachments = append(issue.Attachments, attachment)
+		appendActivity(data, id, "issue.link_created", data.Viewer, map[string]string{"attachmentId": attachment.ID, "title": attachment.Title, "url": attachment.URL})
+		return nil
+	})
+	respondMutation(w, err, http.StatusCreated, attachment)
+}
+
+func (s *server) createIssueReminder(w http.ResponseWriter, r *http.Request) {
+	var input domain.IssueReminderInput
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	remindAt, err := time.Parse(time.RFC3339, strings.TrimSpace(input.RemindAt))
+	if err != nil || !remindAt.After(time.Now()) {
+		writeError(w, http.StatusBadRequest, "remindAt must be a future RFC3339 timestamp")
+		return
+	}
+	id := r.PathValue("id")
+	var reminder domain.Notification
+	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.reminder_created", id, input, func(data *domain.Bootstrap) error {
+		if _, issueErr := issueByID(data, id); issueErr != nil {
+			return issueErr
+		}
+		now := time.Now().UTC()
+		remindAt = remindAt.UTC()
+		reminder = domain.Notification{
+			ID: fmt.Sprintf("notification_%d", now.UnixNano()), RecipientID: data.Viewer.ID,
+			Type: "issueReminder", SourceType: "issue", SourceID: id, IssueID: id,
+			Actor: data.Viewer, Category: "reminders", GroupKey: "issue-reminder:" + id,
+			OccurrenceCount: 1, LatestActorIDs: []string{data.Viewer.ID}, SnoozedUntil: &remindAt,
+			CreatedAt: now, UpdatedAt: now,
+		}
+		data.Notifications = append([]domain.Notification{reminder}, data.Notifications...)
+		appendActivity(data, id, "issue.reminder_created", data.Viewer, map[string]string{"remindAt": remindAt.Format(time.RFC3339)})
+		return nil
+	})
+	respondMutation(w, err, http.StatusCreated, reminder)
+}
+
+func (s *server) createIssueLoopRun(w http.ResponseWriter, r *http.Request) {
+	var input domain.IssueLoopRunInput
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	id := r.PathValue("id")
+	var run domain.Ask
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.loop_run_created", id, input, func(data *domain.Bootstrap) error {
+		issue, issueErr := issueByID(data, id)
+		if issueErr != nil {
+			return issueErr
+		}
+		now := time.Now().UTC()
+		prompt := strings.TrimSpace(input.Prompt)
+		if prompt == "" {
+			prompt = issue.Description
+		}
+		run = domain.Ask{
+			ID: fmt.Sprintf("loop_run_%d", now.UnixNano()), Title: "Run loop on " + issue.Identifier,
+			Body: prompt, Source: "loop", Requester: data.Viewer, TeamID: issue.Team.ID,
+			Status: "approved", IssueID: issue.ID, Approvals: []domain.AskApproval{}, CreatedAt: now, UpdatedAt: now,
+		}
+		data.Asks = append([]domain.Ask{run}, data.Asks...)
+		appendActivity(data, id, "issue.loop_run_created", data.Viewer, map[string]string{"runId": run.ID})
+		appendAudit(data, "loop_run_created", "issue", issue.ID, map[string]any{"runId": run.ID})
+		return nil
+	})
+	respondMutation(w, err, http.StatusCreated, run)
+}
+
 func (s *server) deleteAttachment(w http.ResponseWriter, r *http.Request) {
 	id, attachmentID := r.PathValue("id"), r.PathValue("attachmentId")
 	var path string
@@ -2604,7 +2740,9 @@ func (s *server) deleteAttachment(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
-	_ = os.Remove(filepath.Join(s.uploadPath, filepath.Base(path)))
+	if strings.HasPrefix(path, "/uploads/") {
+		_ = os.Remove(filepath.Join(s.uploadPath, filepath.Base(path)))
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -2771,7 +2909,17 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 	}
 	if input.Description != nil {
 		changes["description"] = "updated"
+		changes["descriptionBefore"] = issue.Description
+		changes["descriptionStateBefore"] = issue.DescriptionState
 		issue.Description = *input.Description
+		if input.DescriptionData == nil && issue.DocumentContent != nil {
+			issue.DocumentContent.Content = *input.Description
+			issue.DocumentContent.ContentData = nil
+			if input.DescriptionState != nil {
+				issue.DocumentContent.ContentState = *input.DescriptionState
+			}
+			issue.DocumentContent.UpdatedAt = time.Now().UTC()
+		}
 	}
 	if input.DescriptionState != nil {
 		issue.DescriptionState = *input.DescriptionState
@@ -2850,6 +2998,27 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 			issue.DueDate = input.DueDate
 		}
 		changes["dueDate"] = *input.DueDate
+	}
+	if input.Recurrence != nil {
+		value := strings.TrimSpace(*input.Recurrence)
+		if value != "" && !slices.Contains([]string{"daily", "weekly", "monthly"}, value) {
+			return nil, fmt.Errorf("%w: unknown recurrence", errInvalid)
+		}
+		issue.Recurrence = value
+		changes["recurrence"] = value
+	}
+	if input.NextOccurrenceAt != nil {
+		if strings.TrimSpace(*input.NextOccurrenceAt) == "" {
+			issue.NextOccurrenceAt = nil
+		} else {
+			parsed, err := time.Parse(time.RFC3339, *input.NextOccurrenceAt)
+			if err != nil {
+				return nil, fmt.Errorf("%w: invalid next occurrence", errInvalid)
+			}
+			parsed = parsed.UTC()
+			issue.NextOccurrenceAt = &parsed
+		}
+		changes["nextOccurrenceAt"] = *input.NextOccurrenceAt
 	}
 	if input.LabelIDs != nil {
 		issue.Labels = labelsByID(data, *input.LabelIDs)
