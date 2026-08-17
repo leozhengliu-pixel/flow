@@ -1,0 +1,3592 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CircleHelp } from "lucide-react";
+import {
+  batchUpdateIssues,
+  completeCycle as completeCycleRequest,
+  createComment,
+  createCustomer,
+  createDocument,
+  createInitiative,
+  createInitiativeComment,
+  createInitiativeResource,
+  createInitiativeUpdate,
+  createInitiativeUpdateComment,
+  createIssue,
+  createProject,
+  createProjectComment,
+  createProjectMilestone,
+  createProjectResource,
+  createProjectUpdate,
+  createProjectUpdateComment,
+  createRelation,
+  createSavedView,
+  createTeam,
+  createWorkspace,
+  deleteAttachment,
+  deleteComment,
+  deleteCustomer,
+  deleteInitiative,
+  deleteInitiativeComment,
+  deleteInitiativeResource,
+  deleteInitiativeUpdate,
+  deleteIssue,
+  deleteProject,
+  deleteProjectMilestone,
+  deleteProjectResource,
+  deleteProjectUpdate,
+  deleteRelation,
+  deleteSavedView,
+  deleteTeam,
+  deleteWorkspace,
+  fetchAccountBootstrap,
+  fetchAuthSession,
+  fetchBootstrap,
+  logoutAccount,
+  recordRecentResource,
+  setProjectDisplayDefault,
+  setLastWorkspace,
+  startCycle as startCycleRequest,
+  toggleCommentReaction,
+  toggleInitiativeCommentReaction,
+  toggleInitiativeUpdateReaction,
+  toggleIssueReaction,
+  toggleProjectUpdateReaction,
+  updateComment,
+  updateCustomer,
+  updateCycle as updateCycleRequest,
+  updateCycleSettings,
+  updateInitiative,
+  updateInitiativeComment,
+  updateInitiativeResource,
+  updateInitiativeUpdate,
+  updateIssue,
+  updateProject,
+  updateProjectMilestone,
+  updateProjectResource,
+  updateProjectUpdate,
+  updateSavedView,
+  updateTeam,
+  updateWorkspace,
+  updateWorkspaceSettings,
+  uploadAttachment,
+  ApiError,
+} from "@/lib/api";
+import type {
+  AccountBootstrap,
+  AuthSession,
+  BootstrapData,
+  Comment,
+  Customer,
+  CustomerMutationInput,
+  Cycle,
+  CycleMutationInput,
+  CycleSettingsMutationInput,
+  Draft,
+  Initiative,
+  InitiativeMutationInput,
+  InitiativeUpdate,
+  Issue,
+  IssueRelationType,
+  IssueUpdateInput,
+  Project,
+  ProjectUpdate,
+  SavedView,
+  SavedViewMutationInput,
+  Team,
+  Workspace,
+  WorkspaceMutationInput,
+  SearchResult,
+  SearchResourceType,
+} from "@/types/flow";
+import { Sidebar, type PageId } from "@/components/layout/sidebar";
+import { DetailPane } from "@/components/detail/detail-pane";
+import { CommandMenu } from "@/components/command/command-menu";
+import { ErrorState, SkeletonRows } from "@/components/state/state-view";
+import { BulkActionBar } from "@/components/issue/bulk-action-bar";
+import { toast } from "sonner";
+import { InboxAppPage } from "@/components/inbox/inbox-app-page";
+import {
+  ProjectsPage,
+  type ProjectCreateInput,
+  type ProjectMutationInput,
+} from "@/components/projects-page/projects-page";
+import { ProjectDetailPage } from "@/components/project-detail/project-detail-page";
+import { MyIssuesPage } from "@/components/my-issues";
+import { IssueExplorerPage } from "@/components/issue-explorer";
+import { ViewsPage } from "@/components/views-page";
+import { InitiativesPage } from "@/components/initiatives/initiatives-page";
+import { InitiativeDetailPage } from "@/components/initiatives/initiative-detail-page";
+import { CyclesPage } from "@/components/cycles/cycles-page";
+import { CycleDetailPage } from "@/components/cycles/cycle-detail-page";
+import { PulsePage } from "@/components/pulse/pulse-page";
+import { useLocation, useNavigate } from "react-router-dom";
+import {
+  customersPath,
+  customerPath,
+  cyclePath,
+  documentPath,
+  inboxPath,
+  initiativePath,
+  initiativesPath,
+  issuePath,
+  membersPath,
+  myIssuesPath,
+  newTeamPath,
+  parseAppRoute,
+  projectPath,
+  projectsNewViewPath,
+  projectsPath,
+  projectsSavedViewPath,
+  pulsePath,
+  releasesPath,
+  searchPath,
+  routeBelongsToWorkspace,
+  teamCyclesPath,
+  teamHomePath,
+  teamIssuesPath,
+  teamProjectsNewViewPath,
+  teamProjectsPath,
+  teamProjectsSavedViewPath,
+  teamSavedViewPath,
+  teamsPath,
+  teamViewsNewPath,
+  teamViewsPath,
+  workspaceIssuesPath,
+  workspaceOnboardingPath,
+  workspaceSavedViewPath,
+  workspaceViewsNewPath,
+  workspaceViewsPath,
+  settingsPath,
+  type AppRoute,
+} from "@/lib/app-routes";
+import {
+  CreateIssueDialog,
+  type CreateIssueInput,
+} from "@/components/create-issue/create-issue-dialog";
+import { WorkspaceOnboarding } from "@/components/workspace/workspace-onboarding";
+import { WorkspaceDirectoryPage } from "@/components/workspace-directory/workspace-directory-page";
+import { TeamCreatePage } from "@/components/workspace-directory/team-create-page";
+import { SettingsPage } from "@/components/settings/settings-page";
+import { AuthPage } from "@/components/auth/auth-page";
+import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
+import { useDesktopNotifications } from "@/hooks/use-desktop-notifications";
+import { WorkspaceSearchPage } from "@/components/search/workspace-search-page";
+import { WorkspaceOperationsPage } from "@/components/workspace-operations/workspace-operations-page";
+import { DocumentPage } from "@/components/documents/document-page";
+import { CustomerDetailPage } from "@/components/customer-detail/customer-detail-page";
+
+function App() {
+  const location = useLocation(),
+    navigateTo = useNavigate(),
+    route = useMemo(
+      () => parseAppRoute(location.pathname),
+      [location.pathname],
+    );
+  const [account, setAccount] = useState<AccountBootstrap | null>(null),
+    [data, setData] = useState<BootstrapData | null>(null),
+    [error, setError] = useState(false);
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [selected, setSelected] = useState(new Set<string>()),
+    [commandOpen, setCommandOpen] = useState(false),
+    [createOpen, setCreateOpen] = useState(false),
+    [createDraftId, setCreateDraftId] = useState<string>(),
+    [createStateId, setCreateStateId] = useState<string>(),
+    [createProjectId, setCreateProjectId] = useState<string>();
+  const shortcutSequence = useRef<{ key: string; at: number }>({ key: "", at: 0 });
+  const recordedResource = useRef("");
+  const requestedWorkspaceKey =
+    "workspaceSlug" in route ? route.workspaceSlug : "";
+  const loadAccount = async () => {
+    setError(false);
+    try {
+      setAccount(await fetchAccountBootstrap());
+    } catch {
+      setError(true);
+    }
+  };
+  const load = async () => {
+    const key = data?.workspace.urlKey || requestedWorkspaceKey;
+    if (!key) return;
+    setError(false);
+    try {
+      setData(await fetchBootstrap(key));
+    } catch {
+      setError(true);
+    }
+  };
+  useEffect(() => {
+    fetchAuthSession()
+      .then(async authenticated => {
+        setSession(authenticated);
+        setAccount(await fetchAccountBootstrap());
+      })
+      .catch(() => {
+        setSession(null);
+        setAccount(null);
+      })
+      .finally(() => setAuthReady(true));
+  }, []);
+  const authPath = ["/login", "/signup", "/verify-email", "/forgot-password", "/reset-password"].some(path => location.pathname === path) || location.pathname.startsWith("/invite/");
+  useEffect(() => {
+    if (authReady && session && authPath && !location.pathname.startsWith("/invite/")) {
+      navigateTo("/", { replace: true });
+    }
+  }, [authPath, authReady, location.pathname, navigateTo, session]);
+  useEffect(() => {
+    if (!account) return;
+    if (
+      account.workspaces.length === 0 &&
+      route.kind !== "workspace-onboarding"
+    ) {
+      setData(null);
+      navigateTo(workspaceOnboardingPath(), { replace: true });
+      return;
+    }
+    if (route.kind === "root") {
+      const next =
+        account.workspaces.find(
+          (item) => item.workspace.urlKey === account.lastWorkspaceKey,
+        )?.workspace ?? account.workspaces[0]?.workspace;
+      navigateTo(next ? myIssuesPath(next.urlKey) : workspaceOnboardingPath(), {
+        replace: true,
+      });
+      return;
+    }
+    if (route.kind === "workspace-onboarding") {
+      setData(null);
+      return;
+    }
+    if (!requestedWorkspaceKey) return;
+    if (
+      !account.workspaces.some(
+        (item) => item.workspace.urlKey === requestedWorkspaceKey,
+      )
+    ) {
+      setData(null);
+      setError(true);
+      return;
+    }
+    setData((current) =>
+      current?.workspace.urlKey === requestedWorkspaceKey ? current : null,
+    );
+    setError(false);
+    fetchBootstrap(requestedWorkspaceKey)
+      .then(setData)
+      .catch(() => setError(true));
+  }, [account, navigateTo, requestedWorkspaceKey, route.kind]);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing) return;
+      const targetEditable = isEditableTarget(e.target);
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setCommandOpen(open => !open);
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey || targetEditable || hasOpenShortcutScope()) return;
+      const pressed = e.key.toLowerCase();
+      const now = Date.now();
+      const sequence = shortcutSequence.current;
+      const inSequence = now - sequence.at < 1100;
+      if (inSequence && sequence.key === "n" && pressed === "p" && data) {
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        navigateTo(`${projectsPath(data.workspace.urlKey)}?create=1`);
+        return;
+      }
+      if (inSequence && sequence.key === "n" && pressed === "i" && data) {
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        navigateTo(`${initiativesPath(data.workspace.urlKey)}?create=1`);
+        return;
+      }
+      if (inSequence && sequence.key === "g" && pressed === "i" && data) {
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        navigateTo(inboxPath(data.workspace.urlKey));
+        return;
+      }
+      if (inSequence && sequence.key === "g" && pressed === "m" && data) {
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        navigateTo(myIssuesPath(data.workspace.urlKey));
+        return;
+      }
+      if (pressed === "n" || pressed === "g") {
+        shortcutSequence.current = { key: pressed, at: now };
+        return;
+      }
+      shortcutSequence.current = { key: "", at: 0 };
+      if (pressed === "q" || pressed === "c") {
+        e.preventDefault();
+        setCreateOpen(true);
+      }
+    };
+    addEventListener("keydown", key);
+    return () => removeEventListener("keydown", key);
+  }, [data, navigateTo]);
+  const selectedIssue =
+    route.kind === "issue"
+      ? data?.issues.find(
+          (i) => i.identifier.toUpperCase() === route.identifier.toUpperCase(),
+        ) || null
+      : null;
+  const selectedProject =
+    route.kind === "project"
+      ? data?.projects.find(
+          (project) => project.slugId === route.projectSlugId,
+        ) || null
+      : null;
+  const selectedDocument =
+    route.kind === "document"
+      ? data?.documents.find(
+          (document) => document.slugId === route.documentSlugId || document.id === route.documentSlugId,
+        ) || null
+      : null;
+  const selectedCustomer =
+    route.kind === "customer"
+      ? data?.customers.find(
+          (customer) => route.customerSlugId.endsWith(customer.id.slice(-12)),
+        ) || null
+      : null;
+  const selectedInitiative =
+    route.kind === "initiative"
+      ? data?.initiatives.find(
+          (initiative) => initiative.slugId === route.initiativeSlugId,
+        ) || null
+      : null;
+  const selectedCycle =
+    route.kind === "cycle"
+      ? data?.cycles.find((cycle) => cycle.id === route.cycleId) || null
+      : null;
+  const availableSavedViews = data?.savedViews ?? [];
+  const issueSavedViews = availableSavedViews.filter(
+    (view) => view.resource !== "projects",
+  );
+  const projectSavedViews = availableSavedViews.filter(
+    (view) => view.resource === "projects",
+  );
+  const selectedSavedView =
+    route.kind === "workspace-saved-view" || route.kind === "team-saved-view"
+      ? issueSavedViews.find((view) => view.id === route.viewId) || null
+      : null;
+  const selectedProjectSavedView =
+    route.kind === "projects-saved-view" ||
+    route.kind === "team-projects-saved-view"
+      ? projectSavedViews.find((view) => view.id === route.viewId) || null
+      : null;
+  const viewedResourceType: SearchResourceType | undefined = selectedIssue ? "issue"
+    : selectedProject ? "project"
+      : selectedInitiative ? "initiative"
+        : selectedDocument ? "document"
+          : selectedCustomer ? "customer"
+            : selectedSavedView || selectedProjectSavedView ? "view"
+              : undefined;
+  const viewedResourceId = selectedIssue?.id ?? selectedProject?.id ?? selectedInitiative?.id
+    ?? selectedDocument?.id ?? selectedCustomer?.id ?? selectedSavedView?.id ?? selectedProjectSavedView?.id;
+  useEffect(() => {
+    if (!data || !viewedResourceType || !viewedResourceId) return;
+    const key = `${data.workspace.id}:${viewedResourceType}:${viewedResourceId}`;
+    if (recordedResource.current === key) return;
+    recordedResource.current = key;
+    void recordRecentResource(viewedResourceType, viewedResourceId).catch(() => {
+      if (recordedResource.current === key) recordedResource.current = "";
+    });
+  }, [data, viewedResourceId, viewedResourceType]);
+  const realtime = useWorkspaceRealtime({
+    workspaceKey: data?.workspace.urlKey,
+    issueId: selectedIssue?.id,
+    route: location.pathname,
+    onRemoteSync: async () => {
+      const workspace = data?.workspace.urlKey;
+      if (!workspace) return;
+      const next = await fetchBootstrap(workspace);
+      setData((current) => current?.workspace.urlKey === workspace ? next : current);
+    },
+  });
+  useDesktopNotifications(data);
+  const replaceIssue = (issue: Issue) =>
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            issues: current.issues.map((i) => (i.id === issue.id ? issue : i)),
+          }
+        : current,
+    );
+  const updateIssueComments = (issueId: string, updater: (comments: Comment[]) => Comment[]) =>
+    setData(current => current ? {
+      ...current,
+      comments: { ...current.comments, [issueId]: updater(current.comments[issueId] ?? []) },
+    } : current);
+  const createCommentOptimistically = async (
+    issue: Issue,
+    body: string,
+    bodyData?: Record<string, unknown>,
+    parentId?: string,
+  ) => {
+    if (!data) throw new Error("Workspace is not loaded");
+    const temporary: Comment = {
+      id: `optimistic-${crypto.randomUUID()}`,
+      version: 0,
+      body,
+      bodyData,
+      parentId,
+      reactions: {},
+      createdAt: new Date().toISOString(),
+      user: data.viewer,
+    };
+    updateIssueComments(issue.id, comments => [...comments, temporary]);
+    try {
+      const saved = await createComment(issue.id, body, bodyData, parentId);
+      updateIssueComments(issue.id, comments => comments.map(comment => comment.id === temporary.id ? saved : comment));
+      return saved;
+    } catch (error) {
+      updateIssueComments(issue.id, comments => comments.filter(comment => comment.id !== temporary.id));
+      toast.error("Could not post comment", { description: error instanceof Error ? error.message : undefined });
+      throw error;
+    }
+  };
+  const editCommentOptimistically = async (
+    issue: Issue,
+    id: string,
+    body: string,
+    bodyData?: Record<string, unknown>,
+  ) => {
+    const current = data?.comments[issue.id]?.find(comment => comment.id === id);
+    if (!current) throw new Error("Comment not found");
+    updateIssueComments(issue.id, comments => comments.map(comment => comment.id === id ? { ...comment, body, bodyData, editedAt: new Date().toISOString() } : comment));
+    try {
+      const saved = await updateComment(issue.id, id, body, bodyData, current.version);
+      updateIssueComments(issue.id, comments => comments.map(comment => comment.id === id ? saved : comment));
+      return saved;
+    } catch (error) {
+      const conflict = error instanceof ApiError && error.code === "VERSION_CONFLICT" ? error.current as Comment | undefined : undefined;
+      updateIssueComments(issue.id, comments => comments.map(comment => comment.id === id ? conflict ?? current : comment));
+      toast.error(conflict ? "Comment changed in another session" : "Could not edit comment", { description: error instanceof Error ? error.message : undefined });
+      throw error;
+    }
+  };
+  const deleteCommentOptimistically = async (issue: Issue, id: string) => {
+    const comments = data?.comments[issue.id] ?? [];
+    const index = comments.findIndex(comment => comment.id === id);
+    const removed = comments[index];
+    if (!removed) return;
+    updateIssueComments(issue.id, current => current.filter(comment => comment.id !== id && comment.parentId !== id));
+    try {
+      await deleteComment(issue.id, id);
+    } catch (error) {
+      updateIssueComments(issue.id, current => {
+        const next = [...current];
+        next.splice(Math.min(index, next.length), 0, removed);
+        return next;
+      });
+      toast.error("Could not delete comment", { description: error instanceof Error ? error.message : undefined });
+      throw error;
+    }
+  };
+  const reactToCommentOptimistically = async (issue: Issue, id: string, emoji: string) => {
+    const current = data?.comments[issue.id]?.find(comment => comment.id === id);
+    if (!current || !data) return;
+    const users = current.reactions[emoji] ?? [];
+    const reactions = { ...current.reactions, [emoji]: users.includes(data.viewer.id) ? users.filter(userId => userId !== data.viewer.id) : [...users, data.viewer.id] };
+    updateIssueComments(issue.id, comments => comments.map(comment => comment.id === id ? { ...comment, reactions } : comment));
+    try {
+      const saved = await toggleCommentReaction(issue.id, id, emoji);
+      updateIssueComments(issue.id, comments => comments.map(comment => comment.id === id ? saved : comment));
+    } catch (error) {
+      updateIssueComments(issue.id, comments => comments.map(comment => comment.id === id ? current : comment));
+      toast.error("Could not update reaction", { description: error instanceof Error ? error.message : undefined });
+      throw error;
+    }
+  };
+  const run = async <T,>(work: () => Promise<T>, message: string) => {
+    try {
+      return await work();
+    } catch (error) {
+      toast.error(message, {
+        description: error instanceof Error ? error.message : undefined,
+      });
+      throw error;
+    }
+  };
+  const refreshActivity = async () => {
+    if (!data) return;
+    const next = await fetchBootstrap(data.workspace.urlKey);
+    setData(next);
+  };
+  const updateSelected = async (input: IssueUpdateInput) => {
+    if (!selectedIssue) return;
+    await updateIssueById(selectedIssue, input);
+  };
+  const removeSelected = async () => {
+    if (!data || !selectedIssue) return;
+    await run(() => deleteIssue(selectedIssue.id), "Could not delete issue");
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            issues: current.issues.filter((i) => i.id !== selectedIssue.id),
+          }
+        : current,
+    );
+    navigateTo(myIssuesPath(data.workspace.urlKey), { replace: true });
+  };
+  const addComment = async (
+    body: string,
+    bodyData?: Record<string, unknown>,
+    parentId?: string,
+  ) => {
+    if (!selectedIssue) return;
+    await createCommentOptimistically(selectedIssue, body, bodyData, parentId);
+  };
+  const editComment = async (
+    id: string,
+    body: string,
+    bodyData?: Record<string, unknown>,
+  ) => {
+    if (!selectedIssue) return;
+    await editCommentOptimistically(selectedIssue, id, body, bodyData);
+  };
+  const removeComment = async (id: string) => {
+    if (!selectedIssue) return;
+    await deleteCommentOptimistically(selectedIssue, id);
+  };
+  const reactComment = async (id: string, emoji: string) => {
+    if (!selectedIssue) return;
+    await reactToCommentOptimistically(selectedIssue, id, emoji);
+  };
+  const reactIssue = async (emoji: string) => {
+    if (!selectedIssue) return;
+    const issue = await run(
+      () => toggleIssueReaction(selectedIssue.id, emoji),
+      "Could not update reaction",
+    );
+    replaceIssue(issue);
+  };
+  const addIssue = async (input: CreateIssueInput): Promise<Issue> => {
+    if (!data) throw new Error("Workspace is not loaded");
+    const issue = await run(
+      () => createIssue({ ...input, teamId: data.teams[0].id }),
+      "Could not create issue",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            issues: [issue, ...current.issues],
+            projects: current.projects.map((project) =>
+              project.id === issue.project?.id
+                ? { ...project, issueCount: project.issueCount + 1 }
+                : project,
+            ),
+            activities: { ...current.activities, [issue.id]: [] },
+          }
+        : current,
+    );
+    if (!input.createMore) navigateTo(issuePath(data.workspace.urlKey, issue));
+    return issue;
+  };
+  const addSubIssue = async (input: {
+    title: string;
+    description: string;
+    stateId: string;
+    priority: number;
+    assigneeId?: string;
+    labelIds: string[];
+    attachments: File[];
+  }) => {
+    if (!data || !selectedIssue) return;
+    const { attachments, ...fields } = input;
+    const child = await createIssue({
+      ...fields,
+      teamId: selectedIssue.team.id,
+      parentId: selectedIssue.id,
+      projectId: selectedIssue.project?.id,
+    });
+    const uploaded = await Promise.all(
+      attachments.map((file) => uploadAttachment(child.id, file)),
+    );
+    const complete = { ...child, attachments: uploaded };
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            issues: [
+              complete,
+              ...current.issues.map((i) =>
+                i.id === selectedIssue.id
+                  ? { ...i, subIssueIds: [...i.subIssueIds, child.id] }
+                  : i,
+              ),
+            ],
+            activities: { ...current.activities, [child.id]: [] },
+          }
+        : current,
+    );
+  };
+  const addRelation = async (
+    type: IssueRelationType,
+    relatedIssueId: string,
+  ) => {
+    if (!selectedIssue) return;
+    await run(
+      () => createRelation(selectedIssue.id, type, relatedIssueId),
+      "Could not add relation",
+    );
+    await refreshActivity();
+  };
+  const removeRelation = async (relationId: string) => {
+    if (!selectedIssue) return;
+    await run(
+      () => deleteRelation(selectedIssue.id, relationId),
+      "Could not remove relation",
+    );
+    await refreshActivity();
+  };
+  const addAttachment = async (file: File) => {
+    if (!selectedIssue) return;
+    await run(
+      () => uploadAttachment(selectedIssue.id, file),
+      "Could not upload attachment",
+    );
+    await refreshActivity();
+  };
+  const removeAttachment = async (id: string) => {
+    if (!selectedIssue) return;
+    await run(
+      () => deleteAttachment(selectedIssue.id, id),
+      "Could not remove attachment",
+    );
+    await refreshActivity();
+  };
+  const updateIssueById = async (issue: Issue, input: IssueUpdateInput) => {
+    const current = data?.issues.find(item => item.id === issue.id) ?? issue;
+    const optimistic = applyOptimisticIssue(current, input, data);
+    replaceIssue(optimistic);
+    try {
+      const updated = await updateIssue(issue.id, { ...input, expectedVersion: current.version });
+      replaceIssue(updated);
+      return updated;
+    } catch (error) {
+      const conflict = error instanceof ApiError && error.code === "VERSION_CONFLICT" ? error.current as Issue | undefined : undefined;
+      replaceIssue(conflict ?? current);
+      toast.error(conflict ? "Issue changed in another session" : "Could not update issue", { description: error instanceof Error ? error.message : undefined });
+      throw error;
+    }
+  };
+  const updateInboxIssue = async (issue: Issue, input: IssueUpdateInput) => {
+    await updateIssueById(issue, input);
+    await refreshActivity();
+  };
+  const deleteInboxIssue = async (issue: Issue) => {
+    await run(() => deleteIssue(issue.id), "Could not delete issue");
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            issues: current.issues.filter((item) => item.id !== issue.id),
+          }
+        : current,
+    );
+  };
+  const createInboxSubIssue = async (
+    issue: Issue,
+    input: {
+      title: string;
+      description: string;
+      stateId: string;
+      priority: number;
+      assigneeId?: string;
+      labelIds: string[];
+      attachments: File[];
+    },
+  ) => {
+    const { attachments, ...fields } = input;
+    const child = await run(
+      () =>
+        createIssue({
+          ...fields,
+          teamId: issue.team.id,
+          parentId: issue.id,
+          projectId: issue.project?.id,
+        }),
+      "Could not create sub-issue",
+    );
+    const uploaded = await Promise.all(
+      attachments.map((file) => uploadAttachment(child.id, file)),
+    );
+    const complete = { ...child, attachments: uploaded };
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            issues: [
+              complete,
+              ...current.issues.map((item) =>
+                item.id === issue.id
+                  ? { ...item, subIssueIds: [...item.subIssueIds, child.id] }
+                  : item,
+              ),
+            ],
+            activities: { ...current.activities, [child.id]: [] },
+          }
+        : current,
+    );
+    await refreshActivity();
+  };
+  const reactToInboxIssue = async (issue: Issue, emoji: string) => {
+    const updated = await run(
+      () => toggleIssueReaction(issue.id, emoji),
+      "Could not update reaction",
+    );
+    replaceIssue(updated);
+  };
+  const createInboxComment = async (
+    issue: Issue,
+    body: string,
+    bodyData?: Record<string, unknown>,
+    parentId?: string,
+  ) => {
+    await createCommentOptimistically(issue, body, bodyData, parentId);
+  };
+  const editInboxComment = async (
+    issue: Issue,
+    id: string,
+    body: string,
+    bodyData?: Record<string, unknown>,
+  ) => {
+    await editCommentOptimistically(issue, id, body, bodyData);
+  };
+  const deleteInboxComment = async (issue: Issue, id: string) => {
+    await deleteCommentOptimistically(issue, id);
+  };
+  const reactToInboxComment = async (
+    issue: Issue,
+    id: string,
+    emoji: string,
+  ) => {
+    await reactToCommentOptimistically(issue, id, emoji);
+  };
+  const createInboxRelation = async (
+    issue: Issue,
+    type: IssueRelationType,
+    relatedIssueId: string,
+  ) => {
+    await run(
+      () => createRelation(issue.id, type, relatedIssueId),
+      "Could not add relation",
+    );
+    await refreshActivity();
+  };
+  const deleteInboxRelation = async (issue: Issue, relationId: string) => {
+    await run(
+      () => deleteRelation(issue.id, relationId),
+      "Could not remove relation",
+    );
+    await refreshActivity();
+  };
+  const uploadInboxAttachment = async (issue: Issue, file: File) => {
+    await run(
+      () => uploadAttachment(issue.id, file),
+      "Could not upload attachment",
+    );
+    await refreshActivity();
+  };
+  const deleteInboxAttachment = async (issue: Issue, id: string) => {
+    await run(
+      () => deleteAttachment(issue.id, id),
+      "Could not remove attachment",
+    );
+    await refreshActivity();
+  };
+  const addProject = async (input: ProjectCreateInput) => {
+    const project = await run(
+      () => createProject(input),
+      "Could not create project",
+    );
+    setData((current) =>
+      current
+        ? { ...current, projects: [project, ...current.projects] }
+        : current,
+    );
+    return project;
+  };
+  const changeProject = async (id: string, input: ProjectMutationInput) => {
+    const project = await run(
+      () => updateProject(id, input),
+      "Could not update project",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            projects: current.projects.map((item) =>
+              item.id === id ? project : item,
+            ),
+          }
+        : current,
+    );
+    return project;
+  };
+  const removeProject = async (id: string) => {
+    await run(() => deleteProject(id), "Could not delete project");
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            projects: current.projects.filter((project) => project.id !== id),
+            projectUpdates: Object.fromEntries(
+              Object.entries(current.projectUpdates ?? {}).filter(
+                ([projectId]) => projectId !== id,
+              ),
+            ),
+            issues: current.issues.map((issue) =>
+              issue.project?.id === id
+                ? { ...issue, project: undefined }
+                : issue,
+            ),
+          }
+        : current,
+    );
+    if (data && selectedProject?.id === id)
+      navigateTo(projectsPath(data.workspace.urlKey), { replace: true });
+  };
+  const addInitiative = async (
+    input: InitiativeMutationInput & { name: string },
+  ) => {
+    const initiative = await run(
+      () => createInitiative(input),
+      "Could not create initiative",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            initiatives: [initiative, ...current.initiatives],
+            initiativeUpdates: {
+              ...current.initiativeUpdates,
+              [initiative.id]: [],
+            },
+            projects: current.projects.map((project) =>
+              initiative.projectIds.includes(project.id)
+                ? {
+                    ...project,
+                    initiatives: [
+                      ...new Set([
+                        ...(project.initiatives ?? []),
+                        initiative.id,
+                      ]),
+                    ],
+                  }
+                : project,
+            ),
+          }
+        : current,
+    );
+    return initiative;
+  };
+  const changeInitiative = async (
+    id: string,
+    input: InitiativeMutationInput,
+  ) => {
+    const initiative = await run(
+      () => updateInitiative(id, input),
+      "Could not update initiative",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            initiatives: current.initiatives.map((item) =>
+              item.id === id ? initiative : item,
+            ),
+            projects: current.projects.map((project) => ({
+              ...project,
+              initiatives: initiative.projectIds.includes(project.id)
+                ? [...new Set([...(project.initiatives ?? []), id])]
+                : (project.initiatives ?? []).filter((item) => item !== id),
+            })),
+          }
+        : current,
+    );
+    return initiative;
+  };
+  const removeInitiative = async (id: string) => {
+    await run(() => deleteInitiative(id), "Could not delete initiative");
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            initiatives: current.initiatives.filter((item) => item.id !== id),
+            initiativeUpdates: Object.fromEntries(
+              Object.entries(current.initiativeUpdates ?? {}).filter(
+                ([initiativeId]) => initiativeId !== id,
+              ),
+            ),
+            projects: current.projects.map((project) => ({
+              ...project,
+              initiatives: (project.initiatives ?? []).filter(
+                (item) => item !== id,
+              ),
+            })),
+          }
+        : current,
+    );
+  };
+  const addInitiativeUpdate = async (
+    id: string,
+    input: { body: string; health?: Project["health"] },
+  ) => {
+    const update = await run(
+      () => createInitiativeUpdate(id, input),
+      "Could not post initiative update",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            initiativeUpdates: {
+              ...current.initiativeUpdates,
+              [id]: [update, ...(current.initiativeUpdates[id] ?? [])],
+            },
+            initiatives: current.initiatives.map((item) =>
+              item.id === id
+                ? {
+                    ...item,
+                    health: update.health,
+                    updatedAt: update.createdAt,
+                  }
+                : item,
+            ),
+          }
+        : current,
+    );
+    return update;
+  };
+  const removeInitiativeUpdate = async (id: string, updateId: string) => {
+    await run(
+      () => deleteInitiativeUpdate(id, updateId),
+      "Could not delete initiative update",
+    );
+    setData((current) => {
+      if (!current) return current;
+      const remaining = (current.initiativeUpdates[id] ?? []).filter(
+        (item) => item.id !== updateId,
+      );
+      return {
+        ...current,
+        initiativeUpdates: { ...current.initiativeUpdates, [id]: remaining },
+        initiatives: current.initiatives.map((item) =>
+          item.id === id
+            ? { ...item, health: remaining[0]?.health ?? "noUpdate" }
+            : item,
+        ),
+      };
+    });
+  };
+  const commentOnInitiative = async (id: string, body: string) => {
+    const comment = await run(
+      () => createInitiativeComment(id, body),
+      "Could not post initiative comment",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            initiatives: current.initiatives.map((item) =>
+              item.id === id
+                ? { ...item, comments: [...(item.comments ?? []), comment] }
+                : item,
+            ),
+          }
+        : current,
+    );
+  };
+  const editInitiativeComment = async (
+    id: string,
+    commentId: string,
+    body: string,
+  ) => {
+    const comment = await run(
+      () => updateInitiativeComment(id, commentId, body),
+      "Could not edit initiative comment",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            initiatives: current.initiatives.map((item) =>
+              item.id === id
+                ? {
+                    ...item,
+                    comments: (item.comments ?? []).map((existing) =>
+                      existing.id === commentId ? comment : existing,
+                    ),
+                  }
+                : item,
+            ),
+          }
+        : current,
+    );
+    return comment;
+  };
+  const removeInitiativeComment = async (id: string, commentId: string) => {
+    await run(
+      () => deleteInitiativeComment(id, commentId),
+      "Could not delete initiative comment",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            initiatives: current.initiatives.map((item) =>
+              item.id === id
+                ? {
+                    ...item,
+                    comments: (item.comments ?? []).filter(
+                      (comment) => comment.id !== commentId,
+                    ),
+                  }
+                : item,
+            ),
+          }
+        : current,
+    );
+  };
+  const reactToInitiativeComment = async (
+    id: string,
+    commentId: string,
+    emoji: string,
+  ) => {
+    const comment = await run(
+      () => toggleInitiativeCommentReaction(id, commentId, emoji),
+      "Could not update initiative reaction",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            initiatives: current.initiatives.map((item) =>
+              item.id === id
+                ? {
+                    ...item,
+                    comments: (item.comments ?? []).map((existing) =>
+                      existing.id === commentId ? comment : existing,
+                    ),
+                  }
+                : item,
+            ),
+          }
+        : current,
+    );
+    return comment;
+  };
+  const addInitiativeResource = async (
+    id: string,
+    input: { type?: "link" | "document"; title?: string; url: string },
+  ) => {
+    const resource = await run(
+      () => createInitiativeResource(id, input),
+      "Could not add initiative resource",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            initiatives: current.initiatives.map((item) =>
+              item.id === id
+                ? { ...item, resources: [...(item.resources ?? []), resource] }
+                : item,
+            ),
+          }
+        : current,
+    );
+    return resource;
+  };
+  const changeInitiativeResource = async (
+    id: string,
+    resourceId: string,
+    input: { type?: "link" | "document"; title?: string; url?: string },
+  ) => {
+    const resource = await run(
+      () => updateInitiativeResource(id, resourceId, input),
+      "Could not update initiative resource",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            initiatives: current.initiatives.map((item) =>
+              item.id === id
+                ? {
+                    ...item,
+                    resources: (item.resources ?? []).map((existing) =>
+                      existing.id === resourceId ? resource : existing,
+                    ),
+                  }
+                : item,
+            ),
+          }
+        : current,
+    );
+    return resource;
+  };
+  const removeInitiativeResource = async (id: string, resourceId: string) => {
+    await run(
+      () => deleteInitiativeResource(id, resourceId),
+      "Could not delete initiative resource",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            initiatives: current.initiatives.map((item) =>
+              item.id === id
+                ? {
+                    ...item,
+                    resources: (item.resources ?? []).filter(
+                      (resource) => resource.id !== resourceId,
+                    ),
+                  }
+                : item,
+            ),
+          }
+        : current,
+    );
+  };
+  const changeInitiativeUpdate = async (
+    id: string,
+    updateId: string,
+    input: { body?: string; health?: Project["health"] },
+  ) => {
+    const update = await run(
+      () => updateInitiativeUpdate(id, updateId, input),
+      "Could not edit initiative update",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            initiativeUpdates: {
+              ...current.initiativeUpdates,
+              [id]: (current.initiativeUpdates[id] ?? []).map((item) =>
+                item.id === updateId ? update : item,
+              ),
+            },
+            initiatives: current.initiatives.map((item) =>
+              item.id === id &&
+              (current.initiativeUpdates[id] ?? [])[0]?.id === updateId
+                ? { ...item, health: update.health }
+                : item,
+            ),
+          }
+        : current,
+    );
+    return update;
+  };
+  const replaceInitiativeUpdate = (
+    initiativeId: string,
+    update: InitiativeUpdate,
+  ) =>
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            initiativeUpdates: {
+              ...current.initiativeUpdates,
+              [initiativeId]: (
+                current.initiativeUpdates[initiativeId] ?? []
+              ).map((item) => (item.id === update.id ? update : item)),
+            },
+          }
+        : current,
+    );
+  const commentOnInitiativeUpdate = async (
+    initiativeId: string,
+    updateId: string,
+    body: string,
+  ) => {
+    const update = await run(
+      () => createInitiativeUpdateComment(initiativeId, updateId, body),
+      "Could not post comment",
+    );
+    replaceInitiativeUpdate(initiativeId, update);
+    return update;
+  };
+  const reactToInitiativeUpdate = async (
+    initiativeId: string,
+    updateId: string,
+    emoji: string,
+  ) => {
+    const update = await run(
+      () => toggleInitiativeUpdateReaction(initiativeId, updateId, emoji),
+      "Could not update reaction",
+    );
+    replaceInitiativeUpdate(initiativeId, update);
+    return update;
+  };
+  const addProjectUpdate = async (
+    id: string,
+    input: { body: string; health?: Project["health"] },
+  ) => {
+    const update = await run(
+      () => createProjectUpdate(id, input),
+      "Could not post project update",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            projectUpdates: {
+              ...(current.projectUpdates ?? {}),
+              [id]: [update, ...(current.projectUpdates?.[id] ?? [])],
+            },
+            projects: current.projects.map((project) =>
+              project.id === id
+                ? {
+                    ...project,
+                    health: update.health,
+                    updatedAt: update.createdAt,
+                  }
+                : project,
+            ),
+          }
+        : current,
+    );
+    return update;
+  };
+  const changeProjectUpdate = async (
+    projectId: string,
+    updateId: string,
+    input: { body?: string; health?: Project["health"] },
+  ) => {
+    const update = await run(
+      () => updateProjectUpdate(projectId, updateId, input),
+      "Could not edit project update",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            projectUpdates: {
+              ...(current.projectUpdates ?? {}),
+              [projectId]: (current.projectUpdates?.[projectId] ?? []).map(
+                (item) => (item.id === updateId ? update : item),
+              ),
+            },
+            projects: current.projects.map((project) =>
+              project.id === projectId &&
+              current.projectUpdates?.[projectId]?.[0]?.id === updateId
+                ? {
+                    ...project,
+                    health: update.health,
+                    updatedAt: update.editedAt ?? project.updatedAt,
+                  }
+                : project,
+            ),
+          }
+        : current,
+    );
+    return update;
+  };
+  const removeProjectUpdate = async (projectId: string, updateId: string) => {
+    await run(
+      () => deleteProjectUpdate(projectId, updateId),
+      "Could not delete project update",
+    );
+    setData((current) => {
+      if (!current) return current;
+      const remaining = (current.projectUpdates?.[projectId] ?? []).filter(
+        (update) => update.id !== updateId,
+      );
+      return {
+        ...current,
+        projectUpdates: {
+          ...(current.projectUpdates ?? {}),
+          [projectId]: remaining,
+        },
+        projects: current.projects.map((project) =>
+          project.id === projectId
+            ? {
+                ...project,
+                health: remaining[0]?.health ?? "noUpdate",
+                updatedAt: remaining[0]?.createdAt ?? project.updatedAt,
+              }
+            : project,
+        ),
+      };
+    });
+  };
+  const replaceProjectUpdate = (projectId: string, update: ProjectUpdate) =>
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            projectUpdates: {
+              ...(current.projectUpdates ?? {}),
+              [projectId]: (current.projectUpdates?.[projectId] ?? []).map(
+                (item) => (item.id === update.id ? update : item),
+              ),
+            },
+          }
+        : current,
+    );
+  const commentOnProjectUpdate = async (
+    projectId: string,
+    updateId: string,
+    body: string,
+  ) => {
+    const update = await run(
+      () => createProjectUpdateComment(projectId, updateId, body),
+      "Could not post comment",
+    );
+    replaceProjectUpdate(projectId, update);
+    return update;
+  };
+  const reactToProjectUpdate = async (
+    projectId: string,
+    updateId: string,
+    emoji: string,
+  ) => {
+    const update = await run(
+      () => toggleProjectUpdateReaction(projectId, updateId, emoji),
+      "Could not update reaction",
+    );
+    replaceProjectUpdate(projectId, update);
+    return update;
+  };
+  const addProjectResource = async (
+    projectId: string,
+    input: { type?: "link" | "document"; title?: string; url: string },
+  ) => {
+    if (input.type === "document") {
+      const document = await run(
+        () => createDocument({ title: input.title || "New document", projectIds: [projectId] }),
+        "Could not create document",
+      );
+      const next = await fetchBootstrap(data?.workspace.urlKey);
+      setData(next);
+      const resource = next.projects.find(project => project.id === projectId)?.resources.find(item => item.id === document.id);
+      if (!resource) throw new Error("Document resource was not linked");
+      navigateTo(documentPath(next.workspace.urlKey, document));
+      return resource;
+    }
+    const resource = await run(
+      () => createProjectResource(projectId, input),
+      "Could not add project resource",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            projects: current.projects.map((project) =>
+              project.id === projectId
+                ? {
+                    ...project,
+                    resources: [...(project.resources ?? []), resource],
+                  }
+                : project,
+            ),
+          }
+        : current,
+    );
+    return resource;
+  };
+  const changeProjectResource = async (
+    projectId: string,
+    resourceId: string,
+    input: { type?: "link" | "document"; title?: string; url?: string },
+  ) => {
+    const resource = await run(
+      () => updateProjectResource(projectId, resourceId, input),
+      "Could not update project resource",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            projects: current.projects.map((project) =>
+              project.id === projectId
+                ? {
+                    ...project,
+                    resources: (project.resources ?? []).map((item) =>
+                      item.id === resourceId ? resource : item,
+                    ),
+                  }
+                : project,
+            ),
+          }
+        : current,
+    );
+    return resource;
+  };
+  const removeProjectResource = async (
+    projectId: string,
+    resourceId: string,
+  ) => {
+    await run(
+      () => deleteProjectResource(projectId, resourceId),
+      "Could not delete project resource",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            projects: current.projects.map((project) =>
+              project.id === projectId
+                ? {
+                    ...project,
+                    resources: (project.resources ?? []).filter(
+                      (item) => item.id !== resourceId,
+                    ),
+                  }
+                : project,
+            ),
+          }
+        : current,
+    );
+  };
+  const addProjectMilestone = async (
+    projectId: string,
+    input: { name: string; targetDate?: string },
+  ) => {
+    const milestone = await run(
+      () => createProjectMilestone(projectId, input),
+      "Could not add project milestone",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            projects: current.projects.map((project) =>
+              project.id === projectId
+                ? {
+                    ...project,
+                    milestones: [...(project.milestones ?? []), milestone],
+                  }
+                : project,
+            ),
+          }
+        : current,
+    );
+    return milestone;
+  };
+  const changeProjectMilestone = async (
+    projectId: string,
+    milestoneId: string,
+    input: { name?: string; targetDate?: string },
+  ) => {
+    const milestone = await run(
+      () => updateProjectMilestone(projectId, milestoneId, input),
+      "Could not update project milestone",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            projects: current.projects.map((project) =>
+              project.id === projectId
+                ? {
+                    ...project,
+                    milestones: (project.milestones ?? []).map((item) =>
+                      item.id === milestoneId ? milestone : item,
+                    ),
+                  }
+                : project,
+            ),
+          }
+        : current,
+    );
+    return milestone;
+  };
+  const removeProjectMilestone = async (
+    projectId: string,
+    milestoneId: string,
+  ) => {
+    await run(
+      () => deleteProjectMilestone(projectId, milestoneId),
+      "Could not delete project milestone",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            projects: current.projects.map((project) =>
+              project.id === projectId
+                ? {
+                    ...project,
+                    milestones: (project.milestones ?? []).filter(
+                      (item) => item.id !== milestoneId,
+                    ),
+                  }
+                : project,
+            ),
+          }
+        : current,
+    );
+  };
+  const commentOnProject = async (projectId: string, body: string) => {
+    const comment = await run(
+      () => createProjectComment(projectId, body),
+      "Could not post project comment",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            projects: current.projects.map((project) =>
+              project.id === projectId
+                ? {
+                    ...project,
+                    comments: [...(project.comments ?? []), comment],
+                  }
+                : project,
+            ),
+          }
+        : current,
+    );
+    return comment;
+  };
+  const changeProjectDisplayDefault = async (
+    display: Record<string, unknown>,
+  ) => {
+    const saved = await run(
+      () => setProjectDisplayDefault(display),
+      "Could not save project view default",
+    );
+    setData((current) =>
+      current ? { ...current, projectDisplayDefault: saved } : current,
+    );
+  };
+  const batchUpdate = async (input: IssueUpdateInput) => {
+    const updated = await run(
+      () => batchUpdateIssues([...selected], input),
+      "Could not update selected issues",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            issues: current.issues.map(
+              (i) => updated.find((x) => x.id === i.id) || i,
+            ),
+          }
+        : current,
+    );
+    setSelected(new Set());
+  };
+  const batchDelete = async () => {
+    if (
+      !window.confirm(
+        `Delete ${selected.size} selected issues? This cannot be undone.`,
+      )
+    )
+      return;
+    await run(
+      () => Promise.all([...selected].map(deleteIssue)),
+      "Could not delete selected issues",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            issues: current.issues.filter((i) => !selected.has(i.id)),
+          }
+        : current,
+    );
+    setSelected(new Set());
+  };
+  const updateIssueFromPage = async (id: string, input: IssueUpdateInput) => {
+    const issue = data?.issues.find(item => item.id === id);
+    if (!issue) throw new Error("Issue not found");
+    return updateIssueById(issue, input);
+  };
+  const changeCycle = async (id: string, input: CycleMutationInput) => {
+    const cycle = await run(
+      () => updateCycleRequest(id, input),
+      "Could not update cycle",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            cycles: current.cycles.map((item) =>
+              item.id === id ? cycle : item,
+            ),
+          }
+        : current,
+    );
+    return cycle;
+  };
+  const startCycle = async (cycle: Cycle) => {
+    await run(() => startCycleRequest(cycle.id), "Could not start cycle");
+    await refreshActivity();
+  };
+  const finishCycle = async (cycle: Cycle) => {
+    await run(() => completeCycleRequest(cycle.id), "Could not complete cycle");
+    await refreshActivity();
+  };
+  const changeCycleSettings = async (
+    teamId: string,
+    input: CycleSettingsMutationInput,
+  ) => {
+    const settings = await run(
+      () => updateCycleSettings(teamId, input),
+      "Could not update cycle settings",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            cycleSettings: { ...current.cycleSettings, [teamId]: settings },
+          }
+        : current,
+    );
+    return settings;
+  };
+  const updateIssuesFromPage = async (
+    ids: string[],
+    input: IssueUpdateInput,
+  ) => {
+    const issues = await run(
+      () => batchUpdateIssues(ids, input),
+      "Could not update issues",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            issues: current.issues.map(
+              (issue) =>
+                issues.find((updated) => updated.id === issue.id) ?? issue,
+            ),
+          }
+        : current,
+    );
+    return issues;
+  };
+  const deleteIssuesFromPage = async (ids: string[]) => {
+    await run(
+      () => Promise.all(ids.map(deleteIssue)),
+      "Could not delete issues",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            issues: current.issues.filter((issue) => !ids.includes(issue.id)),
+          }
+        : current,
+    );
+  };
+  const addSavedView = async (input: SavedViewMutationInput) => {
+    const view = await run(
+      () => createSavedView(input),
+      "Could not create view",
+    );
+    setData((current) =>
+      current
+        ? { ...current, savedViews: [...(current.savedViews ?? []), view] }
+        : current,
+    );
+    return view;
+  };
+  const changeSavedView = async (id: string, input: SavedViewMutationInput) => {
+    const view = await run(
+      () => updateSavedView(id, input),
+      "Could not update view",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            savedViews: (current.savedViews ?? []).map((item) =>
+              item.id === id ? view : item,
+            ),
+          }
+        : current,
+    );
+    return view;
+  };
+  const removeSavedViewOnly = async (view: SavedView) => {
+    await run(() => deleteSavedView(view.id), "Could not delete view");
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            savedViews: (current.savedViews ?? []).filter(
+              (item) => item.id !== view.id,
+            ),
+          }
+        : current,
+    );
+  };
+  const removeSavedView = async (view: SavedView) => {
+    await run(() => deleteSavedView(view.id), "Could not delete view");
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            savedViews: (current.savedViews ?? []).filter(
+              (item) => item.id !== view.id,
+            ),
+          }
+        : current,
+    );
+    if (!data) return;
+    navigateTo(
+      view.scope === "team" && view.teamId
+        ? teamIssuesPath(
+            data.workspace.urlKey,
+            data.teams.find((team) => team.id === view.teamId)?.key ??
+              data.teams[0].key,
+            "all",
+          )
+        : workspaceIssuesPath(data.workspace.urlKey, "all"),
+      { replace: true },
+    );
+  };
+  const removeProjectSavedView = async (view: SavedView) => {
+    await run(() => deleteSavedView(view.id), "Could not delete view");
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            savedViews: (current.savedViews ?? []).filter(
+              (item) => item.id !== view.id,
+            ),
+          }
+        : current,
+    );
+    if (!data) return;
+    const team = data.teams.find((item) => item.id === view.teamId);
+    navigateTo(
+      view.scope === "team" && team
+        ? teamProjectsPath(data.workspace.urlKey, team.key)
+        : projectsPath(data.workspace.urlKey),
+      { replace: true },
+    );
+  };
+  const renderIssuePreview = (issue: Issue, onClose: () => void) => {
+    const refresh = async () => {
+      const next = await fetchBootstrap(data!.workspace.urlKey);
+      setData(next);
+    };
+    return (
+      <IssueDetails
+        key={issue.id}
+        issue={issue}
+        data={data!}
+        onClose={onClose}
+        onNavigateIssue={openIssue}
+        onUpdate={async (input) => {
+          await updateIssueById(issue, input);
+        }}
+        onDelete={async () => {
+          await run(() => deleteIssue(issue.id), "Could not delete issue");
+          setData((current) =>
+            current
+              ? {
+                  ...current,
+                  issues: current.issues.filter((item) => item.id !== issue.id),
+                }
+              : current,
+          );
+          onClose();
+        }}
+        onCreateSubIssue={async (input) => {
+          const { attachments, ...fields } = input;
+          const child = await run(
+            () =>
+              createIssue({
+                ...fields,
+                teamId: issue.team.id,
+                parentId: issue.id,
+                projectId: issue.project?.id,
+              }),
+            "Could not create sub-issue",
+          );
+          const uploaded = await Promise.all(
+            attachments.map((file) => uploadAttachment(child.id, file)),
+          );
+          setData((current) =>
+            current
+              ? {
+                  ...current,
+                  issues: [
+                    { ...child, attachments: uploaded },
+                    ...current.issues.map((item) =>
+                      item.id === issue.id
+                        ? {
+                            ...item,
+                            subIssueIds: [...item.subIssueIds, child.id],
+                          }
+                        : item,
+                    ),
+                  ],
+                  activities: { ...current.activities, [child.id]: [] },
+                }
+              : current,
+          );
+        }}
+        onReactIssue={async (emoji) => {
+          const updated = await run(
+            () => toggleIssueReaction(issue.id, emoji),
+            "Could not update reaction",
+          );
+          replaceIssue(updated);
+        }}
+        onComment={async (body, bodyData, parentId) => {
+          await createCommentOptimistically(issue, body, bodyData, parentId);
+        }}
+        onEditComment={async (id, body, bodyData) => {
+          await editCommentOptimistically(issue, id, body, bodyData);
+        }}
+        onDeleteComment={async (id) => {
+          await deleteCommentOptimistically(issue, id);
+        }}
+        onReactComment={async (id, emoji) => {
+          await reactToCommentOptimistically(issue, id, emoji);
+        }}
+        onRelation={async (type, relatedIssueId) => {
+          await run(
+            () => createRelation(issue.id, type, relatedIssueId),
+            "Could not add relation",
+          );
+          await refresh();
+        }}
+        onDeleteRelation={async (relationId) => {
+          await run(
+            () => deleteRelation(issue.id, relationId),
+            "Could not remove relation",
+          );
+          await refresh();
+        }}
+        onUpload={async (file) => {
+          await run(
+            () => uploadAttachment(issue.id, file),
+            "Could not upload attachment",
+          );
+          await refresh();
+        }}
+        onDeleteAttachment={async (id) => {
+          await run(
+            () => deleteAttachment(issue.id, id),
+            "Could not remove attachment",
+          );
+          await refresh();
+        }}
+      />
+    );
+  };
+  const addWorkspace = async (input: {
+    name: string;
+    urlKey: string;
+    region: string;
+  }) => {
+    const created = await run(
+      () => createWorkspace(input),
+      "Could not create workspace",
+    );
+    const nextAccount = await fetchAccountBootstrap();
+    setAccount(nextAccount);
+    setData(created);
+    navigateTo(myIssuesPath(created.workspace.urlKey), { replace: true });
+    return created;
+  };
+  const switchWorkspace = (workspace: Workspace) => {
+    if (workspace.id === data?.workspace.id) return;
+    void setLastWorkspace(workspace.urlKey).catch(() => toast.error("Could not remember workspace"));
+    setData(null);
+    navigateTo(myIssuesPath(workspace.urlKey));
+  };
+  const changeWorkspace = async (input: WorkspaceMutationInput) => {
+    if (!data) return;
+    const previousKey = data.workspace.urlKey;
+    const updated = await run(
+      () => updateWorkspace(previousKey, input),
+      "Could not update workspace",
+    );
+    setData(updated);
+    setAccount(await fetchAccountBootstrap());
+    if (updated.workspace.urlKey !== previousKey)
+      navigateTo(myIssuesPath(updated.workspace.urlKey), { replace: true });
+  };
+  const removeWorkspace = async () => {
+    if (
+      !data ||
+      !window.confirm(
+        `Delete ${data.workspace.name}? This permanently deletes all workspace data.`,
+      )
+    )
+      return;
+    await run(
+      () => deleteWorkspace(data.workspace.urlKey),
+      "Could not delete workspace",
+    );
+    const next = await fetchAccountBootstrap();
+    setAccount(next);
+    setData(null);
+    const workspace =
+      next.workspaces.find(
+        (item) => item.workspace.urlKey === next.lastWorkspaceKey,
+      )?.workspace ?? next.workspaces[0]?.workspace;
+    navigateTo(
+      workspace ? myIssuesPath(workspace.urlKey) : workspaceOnboardingPath(),
+      { replace: true },
+    );
+  };
+  const addTeam = async (input: {
+    name: string;
+    key: string;
+    color?: string;
+    icon?: string;
+  }) => {
+    if (!data) return;
+    const team = await run(
+      () => createTeam(data.workspace.urlKey, input),
+      "Could not create team",
+    );
+    setData((current) =>
+      current ? { ...current, teams: [...current.teams, team] } : current,
+    );
+  };
+  const changeTeam = async (team: Team, input: Partial<Team>) => {
+    if (!data) return;
+    const updated = await run(
+      () => updateTeam(data.workspace.urlKey, team.id, input),
+      "Could not update team",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            teams: current.teams.map((item) =>
+              item.id === team.id ? updated : item,
+            ),
+            issues: current.issues.map((issue) =>
+              issue.team.id === team.id ? { ...issue, team: updated } : issue,
+            ),
+          }
+        : current,
+    );
+  };
+  const removeTeam = async (team: Team) => {
+    if (
+      !data ||
+      !window.confirm(
+        `Delete ${team.name}? Issues in this team must be moved first.`,
+      )
+    )
+      return;
+    await run(
+      () => deleteTeam(data.workspace.urlKey, team.id),
+      "Could not delete team",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            teams: current.teams.filter((item) => item.id !== team.id),
+          }
+        : current,
+    );
+  };
+  const addCustomer = async (
+    input: CustomerMutationInput & { name: string },
+  ) => {
+    const customer = await run(
+      () => createCustomer(input),
+      "Could not create customer",
+    );
+    setData((current) =>
+      current
+        ? { ...current, customers: [...(current.customers ?? []), customer] }
+        : current,
+    );
+  };
+  const changeCustomer = async (
+    customer: Customer,
+    input: CustomerMutationInput,
+  ) => {
+    const updated = await run(
+      () => updateCustomer(customer.id, input),
+      "Could not update customer",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            customers: (current.customers ?? []).map((item) =>
+              item.id === customer.id ? updated : item,
+            ),
+          }
+        : current,
+    );
+  };
+  const removeCustomer = async (customer: Customer) => {
+    if (!window.confirm(`Delete ${customer.name}?`)) return;
+    await run(() => deleteCustomer(customer.id), "Could not delete customer");
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            customers: (current.customers ?? []).filter(
+              (item) => item.id !== customer.id,
+            ),
+          }
+        : current,
+    );
+  };
+  useEffect(() => {
+    if (!data) return;
+    const workspace = data.workspace.urlKey;
+    if (route.kind === "root" || route.kind === "workspace-root") {
+      navigateTo(myIssuesPath(workspace), { replace: true });
+      return;
+    }
+    if (!routeBelongsToWorkspace(route, workspace)) return;
+    if (route.kind === "inbox" && location.pathname !== inboxPath(workspace))
+      navigateTo(inboxPath(workspace), { replace: true });
+    if (route.kind === "search" && location.pathname !== searchPath(workspace))
+      navigateTo(searchPath(workspace), { replace: true });
+    if (
+      route.kind === "pulse" &&
+      location.pathname !== pulsePath(workspace, route.view)
+    )
+      navigateTo(pulsePath(workspace, route.view), { replace: true });
+    if (
+      route.kind === "my-issues" &&
+      location.pathname !== myIssuesPath(workspace, route.view)
+    )
+      navigateTo(myIssuesPath(workspace, route.view), { replace: true });
+    if (
+      route.kind === "workspace-issues" &&
+      location.pathname !== workspaceIssuesPath(workspace, route.view)
+    )
+      navigateTo(workspaceIssuesPath(workspace, route.view), { replace: true });
+    if (
+      route.kind === "workspace-members" &&
+      location.pathname !== membersPath(workspace)
+    )
+      navigateTo(membersPath(workspace), { replace: true });
+    if (
+      route.kind === "workspace-customers" &&
+      location.pathname !== customersPath(workspace)
+    )
+      navigateTo(customersPath(workspace), { replace: true });
+    if (
+      route.kind === "workspace-teams" &&
+      location.pathname !== teamsPath(workspace)
+    )
+      navigateTo(teamsPath(workspace), { replace: true });
+    if (
+      route.kind === "new-team" &&
+      location.pathname !== newTeamPath(workspace)
+    )
+      navigateTo(newTeamPath(workspace), { replace: true });
+    if (route.kind === "team-issues") {
+      const canonical =
+        location.pathname === teamHomePath(workspace, route.teamKey)
+          ? teamHomePath(workspace, route.teamKey)
+          : teamIssuesPath(workspace, route.teamKey, route.view);
+      if (location.pathname !== canonical)
+        navigateTo(canonical, { replace: true });
+    }
+    if (
+      route.kind === "team-cycles" &&
+      location.pathname !== teamCyclesPath(workspace, route.teamKey, route.view)
+    )
+      navigateTo(teamCyclesPath(workspace, route.teamKey, route.view), {
+        replace: true,
+      });
+    if (
+      route.kind === "workspace-saved-view" &&
+      selectedSavedView &&
+      location.pathname !==
+        workspaceSavedViewPath(workspace, selectedSavedView.id)
+    )
+      navigateTo(workspaceSavedViewPath(workspace, selectedSavedView.id), {
+        replace: true,
+      });
+    if (
+      route.kind === "team-saved-view" &&
+      selectedSavedView &&
+      location.pathname !==
+        teamSavedViewPath(workspace, route.teamKey, selectedSavedView.id)
+    )
+      navigateTo(
+        teamSavedViewPath(workspace, route.teamKey, selectedSavedView.id),
+        { replace: true },
+      );
+    if (
+      route.kind === "workspace-views" &&
+      location.pathname !== workspaceViewsPath(workspace, route.resource)
+    )
+      navigateTo(workspaceViewsPath(workspace, route.resource), {
+        replace: true,
+      });
+    if (
+      route.kind === "workspace-views-new" &&
+      location.pathname !== workspaceViewsNewPath(workspace, route.resource)
+    )
+      navigateTo(workspaceViewsNewPath(workspace, route.resource), {
+        replace: true,
+      });
+    if (
+      route.kind === "team-views" &&
+      location.pathname !==
+        teamViewsPath(workspace, route.teamKey, route.resource)
+    )
+      navigateTo(teamViewsPath(workspace, route.teamKey, route.resource), {
+        replace: true,
+      });
+    if (
+      route.kind === "team-views-new" &&
+      location.pathname !==
+        teamViewsNewPath(workspace, route.teamKey, route.resource)
+    )
+      navigateTo(teamViewsNewPath(workspace, route.teamKey, route.resource), {
+        replace: true,
+      });
+    if (
+      route.kind === "projects" &&
+      location.pathname !== projectsPath(workspace)
+    )
+      navigateTo(projectsPath(workspace), { replace: true });
+    if (
+      route.kind === "initiatives" &&
+      location.pathname !== initiativesPath(workspace, route.view)
+    )
+      navigateTo(initiativesPath(workspace, route.view), { replace: true });
+    if (
+      route.kind === "team-projects" &&
+      location.pathname !== teamProjectsPath(workspace, route.teamKey)
+    )
+      navigateTo(teamProjectsPath(workspace, route.teamKey), { replace: true });
+    if (
+      route.kind === "projects-saved-view" &&
+      selectedProjectSavedView &&
+      location.pathname !==
+        projectsSavedViewPath(workspace, selectedProjectSavedView.id)
+    )
+      navigateTo(
+        projectsSavedViewPath(workspace, selectedProjectSavedView.id),
+        { replace: true },
+      );
+    if (
+      route.kind === "team-projects-saved-view" &&
+      selectedProjectSavedView &&
+      location.pathname !==
+        teamProjectsSavedViewPath(
+          workspace,
+          route.teamKey,
+          selectedProjectSavedView.id,
+        )
+    )
+      navigateTo(
+        teamProjectsSavedViewPath(
+          workspace,
+          route.teamKey,
+          selectedProjectSavedView.id,
+        ),
+        { replace: true },
+      );
+    if (route.kind === "issue" && selectedIssue) {
+      const canonical = issuePath(workspace, selectedIssue);
+      if (location.pathname !== canonical)
+        navigateTo(canonical, { replace: true });
+    }
+    if (route.kind === "cycle" && selectedCycle) {
+      const canonical = cyclePath(workspace, route.teamKey, selectedCycle);
+      if (location.pathname !== canonical)
+        navigateTo(canonical, { replace: true });
+    }
+    if (route.kind === "project" && selectedProject) {
+      const canonical = projectPath(workspace, selectedProject, route.tab);
+      if (location.pathname !== canonical)
+        navigateTo(canonical, { replace: true });
+    }
+    if (route.kind === "document" && selectedDocument) {
+      const canonical = documentPath(workspace, selectedDocument);
+      if (location.pathname !== canonical)
+        navigateTo(canonical, { replace: true });
+    }
+    if (route.kind === "customer" && selectedCustomer) {
+      const canonical = customerPath(workspace, selectedCustomer);
+      if (location.pathname !== canonical)
+        navigateTo(canonical, { replace: true });
+    }
+    if (route.kind === "initiative" && selectedInitiative) {
+      const canonical = initiativePath(
+        workspace,
+        selectedInitiative,
+        route.tab,
+        route.viewId,
+      );
+      if (location.pathname !== canonical)
+        navigateTo(canonical, { replace: true });
+    }
+  }, [
+    data,
+    location.pathname,
+    navigateTo,
+    route,
+    selectedCycle,
+    selectedInitiative,
+    selectedIssue,
+    selectedProject,
+    selectedDocument,
+    selectedCustomer,
+    selectedProjectSavedView,
+    selectedSavedView,
+  ]);
+  if (!authReady)
+    return <div className="auth-page"><div className="auth-brand"><span className="auth-brand-mark"/>Flow</div></div>;
+  if (!session || authPath)
+    return <AuthPage
+      session={session}
+      onAuthenticated={async (authenticated, returnTo) => {
+        setSession(authenticated);
+        const nextAccount = await fetchAccountBootstrap();
+        setAccount(nextAccount);
+        setError(false);
+        navigateTo(returnTo || "/", { replace: true });
+      }}
+      onInvitationAccepted={async workspaceKey => {
+        setAccount(await fetchAccountBootstrap());
+        setData(null);
+        navigateTo(myIssuesPath(workspaceKey), { replace: true });
+      }}
+    />;
+  if (!account)
+    return (
+      <div className="app loading-app">
+        <aside className="sidebar" />
+        <main className="main-panel">
+          {error ? (
+            <ErrorState retry={loadAccount} />
+          ) : (
+            <SkeletonRows count={9} />
+          )}
+        </main>
+      </div>
+    );
+  if (route.kind === "workspace-onboarding" || account.workspaces.length === 0)
+    return (
+      <WorkspaceOnboarding
+        account={account}
+        onCreate={addWorkspace}
+        onBack={() => {
+          const workspace =
+            account.workspaces.find(
+              (item) => item.workspace.urlKey === account.lastWorkspaceKey,
+            )?.workspace ?? account.workspaces[0]?.workspace;
+          navigateTo(workspace ? myIssuesPath(workspace.urlKey) : "/");
+        }}
+      />
+    );
+  if (!data)
+    return (
+      <div className="app loading-app">
+        <aside className="sidebar" />
+        <main className="main-panel">
+          {error ? <ErrorState retry={load} /> : <SkeletonRows count={9} />}
+        </main>
+      </div>
+    );
+  if (route.kind === "settings")
+    return (
+      <SettingsPage
+        data={data}
+        page={route.page}
+        teamKey={route.teamKey}
+        teamSection={route.teamSection}
+        onBack={() => navigateTo(myIssuesPath(data.workspace.urlKey))}
+        onNavigate={(page, teamKey, teamSection) =>
+          navigateTo(settingsPath(data.workspace.urlKey, page, teamKey, teamSection))
+        }
+        onCreateTeam={() => navigateTo(newTeamPath(data.workspace.urlKey))}
+        onWorkspaceUpdate={changeWorkspace}
+        onWorkspaceDelete={removeWorkspace}
+        onSettingsUpdate={updateWorkspaceSettings}
+        onReload={async () => {
+          setData(await fetchBootstrap(data.workspace.urlKey));
+        }}
+      />
+    );
+  const workspaceValid = routeBelongsToWorkspace(route, data.workspace.urlKey);
+  const teamValid =
+    !("teamKey" in route) ||
+    data.teams.some(
+      (team) => team.key.toLowerCase() === route.teamKey.toLowerCase(),
+    );
+  const routeScopeValid = workspaceValid && teamValid;
+  const page = routeScopeValid ? pageForRoute(route) : "not-found";
+  const rememberResult = (type: SearchResourceType, id: string) => {
+    void recordRecentResource(type, id).catch(() => undefined);
+  };
+  const openIssue = (issue: Issue) => {
+    rememberResult("issue", issue.id);
+    navigateTo(issuePath(data.workspace.urlKey, issue), {
+      state: { returnTo: location.pathname },
+    });
+  };
+  const openProject = (project: Project) => {
+    rememberResult("project", project.id);
+    navigateTo(projectPath(data.workspace.urlKey, project));
+  };
+  const openInitiative = (
+    initiative: Initiative,
+    tab: import("@/lib/app-routes").InitiativeRouteTab = "overview",
+  ) => {
+    rememberResult("initiative", initiative.id);
+    navigateTo(initiativePath(data.workspace.urlKey, initiative, tab));
+  };
+  const openSearchResult = (result: SearchResult) => {
+    rememberResult(result.type, result.id);
+    if (result.type === "issue") {
+      const issue = data.issues.find(item => item.id === result.id);
+      if (issue) openIssue(issue);
+      return;
+    }
+    if (result.type === "project") {
+      const project = data.projects.find(item => item.id === result.id);
+      if (project) openProject(project);
+      return;
+    }
+    if (result.type === "initiative") {
+      const initiative = data.initiatives.find(item => item.id === result.id);
+      if (initiative) openInitiative(initiative);
+      return;
+    }
+    if (result.type === "member") {
+      navigateTo(membersPath(data.workspace.urlKey));
+      return;
+    }
+    if (result.type === "document") {
+      const document = data.documents.find(item => item.id === result.id);
+      if (document) {
+        navigateTo(documentPath(data.workspace.urlKey, document));
+        return;
+      }
+    }
+    if (result.type === "customer") {
+      const customer = data.customers.find(item => item.id === result.id);
+      if (customer) navigateTo(customerPath(data.workspace.urlKey, customer));
+      return;
+    }
+    if (result.type === "release") {
+      navigateTo(`${releasesPath(data.workspace.urlKey)}?release=${encodeURIComponent(result.id)}`);
+      return;
+    }
+    if (result.type === "view") {
+      const view = data.savedViews.find(item => item.id === result.id);
+      if (!view) return;
+      const team = view.scope === "team" ? data.teams.find(item => item.id === view.teamId) : undefined;
+      if ((view.resource ?? "issues") === "projects") {
+        navigateTo(team
+          ? teamProjectsSavedViewPath(data.workspace.urlKey, team.key, view.id)
+          : projectsSavedViewPath(data.workspace.urlKey, view.id));
+      } else {
+        navigateTo(team
+          ? teamSavedViewPath(data.workspace.urlKey, team.key, view.id)
+          : workspaceSavedViewPath(data.workspace.urlKey, view.id));
+      }
+      return;
+    }
+    if (result.parentType === "project") {
+      const project = data.projects.find(item => item.id === result.parentId);
+      if (project) openProject(project);
+    } else if (result.parentType === "initiative") {
+      const initiative = data.initiatives.find(item => item.id === result.parentId);
+      if (initiative) openInitiative(initiative);
+    }
+  };
+  const cycleTeam =
+    "teamKey" in route &&
+    (route.kind === "team-cycles" || route.kind === "cycle")
+      ? data.teams.find(
+          (team) => team.key.toLowerCase() === route.teamKey.toLowerCase(),
+        )
+      : undefined;
+  const openCycle = (cycle: Cycle) =>
+    cycleTeam &&
+    navigateTo(cyclePath(data.workspace.urlKey, cycleTeam.key, cycle));
+  const projectTeamKey =
+    "teamKey" in route &&
+    [
+      "team-projects",
+      "team-projects-new-view",
+      "team-projects-saved-view",
+    ].includes(route.kind)
+      ? route.teamKey
+      : undefined;
+  const projectTeam = projectTeamKey
+    ? data.teams.find(
+        (team) => team.key.toLowerCase() === projectTeamKey.toLowerCase(),
+      )
+    : undefined;
+  const scopedProjectSavedViews = projectSavedViews.filter((view) =>
+    projectTeam
+      ? view.scope === "team" && view.teamId === projectTeam.id
+      : view.scope !== "team",
+  );
+  const isProjectsSavedRoute =
+    route.kind === "projects-saved-view" ||
+    route.kind === "team-projects-saved-view";
+  const isViewsRoute =
+    route.kind === "workspace-views" ||
+    route.kind === "workspace-views-new" ||
+    route.kind === "team-views" ||
+    route.kind === "team-views-new";
+  const viewsTeam =
+    isViewsRoute && "teamKey" in route
+      ? data.teams.find(
+          (team) => team.key.toLowerCase() === route.teamKey.toLowerCase(),
+        )
+      : undefined;
+  const viewsScope =
+    isViewsRoute && viewsTeam
+      ? { kind: "team" as const, team: viewsTeam }
+      : { kind: "workspace" as const };
+  const viewsResource = isViewsRoute ? route.resource : "issues";
+  const directoryViews = availableSavedViews.filter(
+    (view) =>
+      (view.resource ?? "issues") === viewsResource &&
+      (viewsTeam
+        ? view.scope === "team" && view.teamId === viewsTeam.id
+        : view.scope === "personal" || view.scope === "workspace"),
+  );
+  const savedIssuePathFor = (view: SavedView) => {
+    const team =
+      view.scope === "team"
+        ? data.teams.find((item) => item.id === view.teamId)
+        : undefined;
+    return team
+      ? teamSavedViewPath(data.workspace.urlKey, team.key, view.id)
+      : workspaceSavedViewPath(data.workspace.urlKey, view.id);
+  };
+  const savedProjectPathFor = (view: SavedView) => {
+    const team =
+      view.scope === "team"
+        ? data.teams.find((item) => item.id === view.teamId)
+        : undefined;
+    return team
+      ? teamProjectsSavedViewPath(data.workspace.urlKey, team.key, view.id)
+      : projectsSavedViewPath(data.workspace.urlKey, view.id);
+  };
+  return (
+    <div className="app">
+      <Sidebar
+        account={account}
+        data={data}
+        page={page}
+        open={mobileSidebarOpen}
+        onOpenChange={setMobileSidebarOpen}
+        onSearch={() => navigateTo(searchPath(data.workspace.urlKey))}
+        onCreate={() => setCreateOpen(true)}
+        onOpenSettings={(page = "workspace") =>
+          navigateTo(settingsPath(data.workspace.urlKey, data.viewerRole === "admin" ? page : "preferences"))
+        }
+        onSwitchWorkspace={switchWorkspace}
+        onCreateWorkspace={() => navigateTo(workspaceOnboardingPath())}
+        onLogout={async () => {
+          await logoutAccount();
+          setSession(null);
+          setAccount(null);
+          setData(null);
+          navigateTo("/login", { replace: true });
+        }}
+      />
+      {page === "search" && route.kind === "search" && (
+        <WorkspaceSearchPage
+          onOpenSidebar={() => setMobileSidebarOpen(true)}
+          onOpenResult={openSearchResult}
+        />
+      )}
+      {(page === "drafts" || page === "releases" || page === "asks" || page === "library") && (
+        <WorkspaceOperationsPage
+          data={data}
+          view={route.kind === "workspace-library" ? route.view : route.kind as "drafts"|"releases"|"asks"}
+          initialReleaseId={route.kind === "releases" ? new URLSearchParams(location.search).get("release") ?? undefined : undefined}
+          onOpenSidebar={() => setMobileSidebarOpen(true)}
+          onReload={async () => setData(await fetchBootstrap(data.workspace.urlKey))}
+          onNavigate={path => navigateTo(path)}
+          onResumeDraft={(draft: Draft) => {
+            setCreateDraftId(draft.id);
+            setCreateOpen(true);
+          }}
+        />
+      )}
+      {page === "document-detail" && selectedDocument && (
+        <DocumentPage
+          data={data}
+          document={selectedDocument}
+          onReload={async () => setData(await fetchBootstrap(data.workspace.urlKey))}
+          onBack={() => {
+            const project = data.projects.find(item => selectedDocument.projectIds.includes(item.id));
+            navigateTo(project ? projectPath(data.workspace.urlKey, project) : projectsPath(data.workspace.urlKey));
+          }}
+        />
+      )}
+      {page === "customer-detail" && selectedCustomer && (
+        <CustomerDetailPage
+          data={data}
+          customer={selectedCustomer}
+          onBack={() => navigateTo(customersPath(data.workspace.urlKey))}
+          onReload={async () => setData(await fetchBootstrap(data.workspace.urlKey))}
+          onOpenResource={(type, id) => {
+            if (type === "issue") {
+              const issue = data.issues.find(item => item.id === id);
+              if (issue) navigateTo(issuePath(data.workspace.urlKey, issue));
+            } else {
+              const project = data.projects.find(item => item.id === id);
+              if (project) navigateTo(projectPath(data.workspace.urlKey, project));
+            }
+          }}
+        />
+      )}
+      {!workspaceValid && (
+        <RouteNotFound
+          title="Workspace not found"
+          description={`This app is connected to ${data.workspace.name}.`}
+        />
+      )}
+      {workspaceValid && !teamValid && (
+        <RouteNotFound
+          title="Team not found"
+          description="This team does not exist in the current workspace."
+        />
+      )}
+      {(page === "members" || page === "customers" || page === "teams") && (
+        <WorkspaceDirectoryPage
+          kind={page}
+          data={data}
+          inviteOnOpen={
+            page === "members" &&
+            new URLSearchParams(location.search).get("invite") === "1"
+          }
+          customerOnOpen={
+            page === "customers" &&
+            new URLSearchParams(location.search).get("create") === "1"
+          }
+          onOpenSidebar={() => setMobileSidebarOpen(true)}
+          onNavigateMembers={() =>
+            navigateTo(membersPath(data.workspace.urlKey))
+          }
+          onNavigateTeam={(team) =>
+            navigateTo(teamHomePath(data.workspace.urlKey, team.key))
+          }
+          onNavigateTeamProjects={(team) =>
+            navigateTo(teamProjectsPath(data.workspace.urlKey, team.key))
+          }
+          onNewTeam={() => navigateTo(newTeamPath(data.workspace.urlKey))}
+          onCreateCustomer={addCustomer}
+          onUpdateCustomer={changeCustomer}
+          onDeleteCustomer={removeCustomer}
+          onOpenCustomer={(customer) => navigateTo(customerPath(data.workspace.urlKey, customer))}
+          onUpdateTeam={changeTeam}
+          onDeleteTeam={removeTeam}
+          onReload={async () => setData(await fetchBootstrap(data.workspace.urlKey))}
+        />
+      )}
+      {page === "new-team" && (
+        <TeamCreatePage
+          teams={data.teams}
+          onBack={() => navigateTo(teamsPath(data.workspace.urlKey))}
+          onCreate={addTeam}
+        />
+      )}
+      {page === "pulse" && route.kind === "pulse" && (
+        <PulsePage
+          data={data}
+          view={route.view}
+          onNavigateView={(view) =>
+            navigateTo(pulsePath(data.workspace.urlKey, view))
+          }
+          onOpenSidebar={() => setMobileSidebarOpen(true)}
+          onCreateProject={addProjectUpdate}
+          onUpdateProject={changeProjectUpdate}
+          onDeleteProject={removeProjectUpdate}
+          onCommentProject={commentOnProjectUpdate}
+          onReactProject={reactToProjectUpdate}
+          onCreateInitiative={addInitiativeUpdate}
+          onUpdateInitiative={changeInitiativeUpdate}
+          onDeleteInitiative={removeInitiativeUpdate}
+          onCommentInitiative={commentOnInitiativeUpdate}
+          onReactInitiative={reactToInitiativeUpdate}
+        />
+      )}
+      {page === "cycles" && route.kind === "team-cycles" && cycleTeam && (
+        <CyclesPage
+          cycles={data.cycles.filter((cycle) => cycle.teamId === cycleTeam.id)}
+          issues={data.issues}
+          settings={
+            data.cycleSettings[cycleTeam.id] ?? {
+              enabled: false,
+              durationWeeks: 2,
+              cooldownWeeks: 0,
+              upcomingCount: 2,
+            }
+          }
+          team={cycleTeam}
+          view={route.view}
+          onViewChange={(view) =>
+            navigateTo(
+              teamCyclesPath(data.workspace.urlKey, cycleTeam.key, view),
+            )
+          }
+          onOpen={openCycle}
+          onUpdateCycle={(cycle, input) => changeCycle(cycle.id, input)}
+          onStartCycle={startCycle}
+          onCompleteCycle={finishCycle}
+          onUpdateSettings={(input) => changeCycleSettings(cycleTeam.id, input)}
+          onOpenSidebar={() => setMobileSidebarOpen(true)}
+        />
+      )}
+      {page === "cycle-detail" &&
+        route.kind === "cycle" &&
+        selectedCycle &&
+        cycleTeam && (
+          <CycleDetailPage
+            key={selectedCycle.id}
+            cycle={selectedCycle}
+            team={cycleTeam}
+            data={data}
+            onBack={() =>
+              navigateTo(teamCyclesPath(data.workspace.urlKey, cycleTeam.key))
+            }
+            onUpdateCycle={(input) => changeCycle(selectedCycle.id, input)}
+            onStartCycle={() => startCycle(selectedCycle)}
+            onCompleteCycle={() => finishCycle(selectedCycle)}
+            onUpdateIssue={updateIssueById}
+            renderIssuePreview={renderIssuePreview}
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
+          />
+        )}
+      {page === "initiatives" && route.kind === "initiatives" && (
+        <InitiativesPage
+          createOnMount={new URLSearchParams(location.search).get("create") === "1"}
+          initiatives={data.initiatives}
+          initiativeUpdates={data.initiativeUpdates}
+          projects={data.projects}
+          projectUpdates={data.projectUpdates}
+          users={data.users}
+          labels={data.labels}
+          viewer={data.viewer}
+          view={route.view}
+          onViewChange={(view) =>
+            navigateTo(initiativesPath(data.workspace.urlKey, view))
+          }
+          onOpen={openInitiative}
+          onCreate={addInitiative}
+          onCreateUpdate={addInitiativeUpdate}
+          onUpdate={changeInitiative}
+          onDelete={removeInitiative}
+          onOpenSidebar={() => setMobileSidebarOpen(true)}
+        />
+      )}
+      {page === "initiative-detail" &&
+        route.kind === "initiative" &&
+        selectedInitiative && (
+          <InitiativeDetailPage
+            key={selectedInitiative.id}
+            initiative={selectedInitiative}
+            initiatives={data.initiatives}
+            initiativeUpdates={
+              data.initiativeUpdates[selectedInitiative.id] ?? []
+            }
+            projects={data.projects}
+            projectStatuses={data.projectStatuses}
+            projectTemplates={data.projectTemplates}
+            projectUpdates={data.projectUpdates}
+            teams={data.teams}
+            users={data.users}
+            labels={data.labels}
+            viewer={data.viewer}
+            tab={route.tab}
+            viewId={route.viewId}
+            onBack={() => navigateTo(initiativesPath(data.workspace.urlKey))}
+            onTabChange={(tab) =>
+              navigateTo(
+                initiativePath(data.workspace.urlKey, selectedInitiative, tab),
+              )
+            }
+            onOpenView={(viewId) =>
+              navigateTo(
+                initiativePath(
+                  data.workspace.urlKey,
+                  selectedInitiative,
+                  "view",
+                  viewId,
+                ),
+              )
+            }
+            onOpenProject={openProject}
+            onCreateProject={addProject}
+            onUpdateProject={changeProject}
+            onCreateProjectUpdate={addProjectUpdate}
+            onUpdateProjectUpdate={changeProjectUpdate}
+            onDeleteProjectUpdate={removeProjectUpdate}
+            onCommentProjectUpdate={commentOnProjectUpdate}
+            onReactProjectUpdate={reactToProjectUpdate}
+            onUpdate={changeInitiative}
+            onDelete={removeInitiative}
+            onCreateUpdate={addInitiativeUpdate}
+            onUpdateInitiativeUpdate={changeInitiativeUpdate}
+            onDeleteUpdate={removeInitiativeUpdate}
+            onComment={commentOnInitiative}
+            onUpdateComment={editInitiativeComment}
+            onDeleteComment={removeInitiativeComment}
+            onReactComment={reactToInitiativeComment}
+            onCreateResource={addInitiativeResource}
+            onUpdateResource={changeInitiativeResource}
+            onDeleteResource={removeInitiativeResource}
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
+          />
+        )}
+      {page === "inbox" && (
+        <InboxAppPage
+          data={data}
+          onOpenSidebar={() => setMobileSidebarOpen(true)}
+          onOpenIssue={openIssue}
+          onOpenProject={openProject}
+          onSubscriberChange={async (issue, subscribed) => {
+            await updateIssueById(issue, {
+              subscriberIds: subscribed
+                ? [...new Set([...issue.subscriberIds, data.viewer.id])]
+                : issue.subscriberIds.filter((id) => id !== data.viewer.id),
+            });
+          }}
+          onUpdateIssue={updateInboxIssue}
+          onDeleteIssue={deleteInboxIssue}
+          onCreateRelation={createInboxRelation}
+          onDeleteRelation={deleteInboxRelation}
+          onCreateSubIssue={createInboxSubIssue}
+          onReactIssue={reactToInboxIssue}
+          onCreateComment={createInboxComment}
+          onEditComment={editInboxComment}
+          onDeleteComment={deleteInboxComment}
+          onReactComment={reactToInboxComment}
+          onUploadAttachment={uploadInboxAttachment}
+          onDeleteAttachment={deleteInboxAttachment}
+          onCopyIssueLink={(issue) =>
+            navigator.clipboard.writeText(
+              `${window.location.origin}${issuePath(data.workspace.urlKey, issue)}`,
+            )
+          }
+        />
+      )}
+      {page === "my-issues" && route.kind === "my-issues" && (
+        <main className="main-panel">
+          <MyIssuesPage
+            key={route.view}
+            data={data}
+            initialView={route.view}
+            onNavigateView={(_view, href) => navigateTo(href)}
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
+            onOpenIssue={openIssue}
+            onCreateIssue={() => setCreateOpen(true)}
+            onUpdateIssue={updateIssueFromPage}
+            onUpdateIssues={updateIssuesFromPage}
+            onDeleteIssues={deleteIssuesFromPage}
+          />
+        </main>
+      )}
+      {page === "workspace-issues" && route.kind === "workspace-issues" && (
+        <IssueExplorerPage
+          key={`workspace-${route.view}`}
+          data={data}
+          scope={{ kind: "workspace" }}
+          view={route.view}
+          viewHref={(view) => workspaceIssuesPath(data.workspace.urlKey, view)}
+          savedViews={issueSavedViews.filter((view) => view.scope !== "team")}
+          savedViewHref={(view) =>
+            workspaceSavedViewPath(data.workspace.urlKey, view.id)
+          }
+          onNavigateView={(view) =>
+            navigateTo(workspaceIssuesPath(data.workspace.urlKey, view))
+          }
+          onNavigateSavedView={(view) =>
+            navigateTo(workspaceSavedViewPath(data.workspace.urlKey, view.id))
+          }
+          onCreateSavedView={addSavedView}
+          onUpdateSavedView={changeSavedView}
+          onDeleteSavedView={removeSavedView}
+          onOpenSidebar={() => setMobileSidebarOpen(true)}
+          onOpenIssue={openIssue}
+          renderIssuePreview={renderIssuePreview}
+          onCreateIssue={(stateId) => {
+            setCreateStateId(stateId);
+            setCreateOpen(true);
+          }}
+          onUpdateIssue={updateIssueFromPage}
+          onUpdateIssues={updateIssuesFromPage}
+          onDeleteIssues={deleteIssuesFromPage}
+        />
+      )}
+      {page === "team-issues" && route.kind === "team-issues" && (
+        <IssueExplorerPage
+          key={`${route.teamKey}-${route.view}`}
+          data={data}
+          scope={{
+            kind: "team",
+            team: data.teams.find(
+              (team) => team.key.toLowerCase() === route.teamKey.toLowerCase(),
+            )!,
+          }}
+          view={route.view}
+          viewHref={(view) =>
+            teamIssuesPath(data.workspace.urlKey, route.teamKey, view)
+          }
+          savedViews={issueSavedViews.filter(
+            (view) =>
+              view.scope === "team" &&
+              view.teamId ===
+                data.teams.find(
+                  (team) =>
+                    team.key.toLowerCase() === route.teamKey.toLowerCase(),
+                )!.id,
+          )}
+          savedViewHref={(view) =>
+            teamSavedViewPath(data.workspace.urlKey, route.teamKey, view.id)
+          }
+          onNavigateView={(view) =>
+            navigateTo(
+              teamIssuesPath(data.workspace.urlKey, route.teamKey, view),
+            )
+          }
+          onNavigateSavedView={(view) =>
+            navigateTo(
+              teamSavedViewPath(data.workspace.urlKey, route.teamKey, view.id),
+            )
+          }
+          onCreateSavedView={addSavedView}
+          onUpdateSavedView={changeSavedView}
+          onDeleteSavedView={removeSavedView}
+          onOpenSidebar={() => setMobileSidebarOpen(true)}
+          onOpenIssue={openIssue}
+          renderIssuePreview={renderIssuePreview}
+          onCreateIssue={(stateId) => {
+            setCreateStateId(stateId);
+            setCreateOpen(true);
+          }}
+          onUpdateIssue={updateIssueFromPage}
+          onUpdateIssues={updateIssuesFromPage}
+          onDeleteIssues={deleteIssuesFromPage}
+        />
+      )}
+      {page === "workspace-issues" &&
+        route.kind === "workspace-saved-view" &&
+        selectedSavedView &&
+        selectedSavedView.scope !== "team" && (
+          <IssueExplorerPage
+            key={selectedSavedView.id}
+            data={data}
+            scope={{ kind: "workspace" }}
+            view={selectedSavedView.view}
+            savedView={selectedSavedView}
+            viewHref={(view) =>
+              workspaceIssuesPath(data.workspace.urlKey, view)
+            }
+            savedViews={issueSavedViews.filter((view) => view.scope !== "team")}
+            savedViewHref={(view) =>
+              workspaceSavedViewPath(data.workspace.urlKey, view.id)
+            }
+            onNavigateView={(view) =>
+              navigateTo(workspaceIssuesPath(data.workspace.urlKey, view))
+            }
+            onNavigateSavedView={(view) =>
+              navigateTo(workspaceSavedViewPath(data.workspace.urlKey, view.id))
+            }
+            onCreateSavedView={addSavedView}
+            onUpdateSavedView={changeSavedView}
+            onDeleteSavedView={removeSavedView}
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
+            onOpenIssue={openIssue}
+            renderIssuePreview={renderIssuePreview}
+            onCreateIssue={(stateId) => {
+              setCreateStateId(stateId);
+              setCreateOpen(true);
+            }}
+            onUpdateIssue={updateIssueFromPage}
+            onUpdateIssues={updateIssuesFromPage}
+            onDeleteIssues={deleteIssuesFromPage}
+          />
+        )}
+      {page === "team-issues" &&
+        route.kind === "team-saved-view" &&
+        selectedSavedView &&
+        selectedSavedView.scope === "team" &&
+        selectedSavedView.teamId ===
+          data.teams.find(
+            (team) => team.key.toLowerCase() === route.teamKey.toLowerCase(),
+          )!.id && (
+          <IssueExplorerPage
+            key={selectedSavedView.id}
+            data={data}
+            scope={{
+              kind: "team",
+              team: data.teams.find(
+                (team) =>
+                  team.key.toLowerCase() === route.teamKey.toLowerCase(),
+              )!,
+            }}
+            view={selectedSavedView.view}
+            savedView={selectedSavedView}
+            viewHref={(view) =>
+              teamIssuesPath(data.workspace.urlKey, route.teamKey, view)
+            }
+            savedViews={issueSavedViews.filter(
+              (view) =>
+                view.scope === "team" &&
+                view.teamId === selectedSavedView.teamId,
+            )}
+            savedViewHref={(view) =>
+              teamSavedViewPath(data.workspace.urlKey, route.teamKey, view.id)
+            }
+            onNavigateView={(view) =>
+              navigateTo(
+                teamIssuesPath(data.workspace.urlKey, route.teamKey, view),
+              )
+            }
+            onNavigateSavedView={(view) =>
+              navigateTo(
+                teamSavedViewPath(
+                  data.workspace.urlKey,
+                  route.teamKey,
+                  view.id,
+                ),
+              )
+            }
+            onCreateSavedView={addSavedView}
+            onUpdateSavedView={changeSavedView}
+            onDeleteSavedView={removeSavedView}
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
+            onOpenIssue={openIssue}
+            renderIssuePreview={renderIssuePreview}
+            onCreateIssue={(stateId) => {
+              setCreateStateId(stateId);
+              setCreateOpen(true);
+            }}
+            onUpdateIssue={updateIssueFromPage}
+            onUpdateIssues={updateIssuesFromPage}
+            onDeleteIssues={deleteIssuesFromPage}
+          />
+        )}
+      {page === "views" &&
+        (route.kind === "workspace-views" || route.kind === "team-views") && (
+          <main className="main-panel">
+            <ViewsPage
+              data={data}
+              resource={viewsResource}
+              scope={viewsScope}
+              views={directoryViews}
+              viewHref={(view) =>
+                (view.resource ?? "issues") === "projects"
+                  ? savedProjectPathFor(view)
+                  : savedIssuePathFor(view)
+              }
+              onCreate={() =>
+                navigateTo(
+                  viewsTeam
+                    ? teamViewsNewPath(
+                        data.workspace.urlKey,
+                        viewsTeam.key,
+                        viewsResource,
+                      )
+                    : workspaceViewsNewPath(
+                        data.workspace.urlKey,
+                        viewsResource,
+                      ),
+                )
+              }
+              onDelete={removeSavedViewOnly}
+              onDuplicate={addSavedView}
+              onOpen={(view) =>
+                navigateTo(
+                  (view.resource ?? "issues") === "projects"
+                    ? savedProjectPathFor(view)
+                    : savedIssuePathFor(view),
+                )
+              }
+              onOpenSidebar={() => setMobileSidebarOpen(true)}
+              onResourceChange={(resource) =>
+                navigateTo(
+                  viewsTeam
+                    ? teamViewsPath(
+                        data.workspace.urlKey,
+                        viewsTeam.key,
+                        resource,
+                      )
+                    : workspaceViewsPath(data.workspace.urlKey, resource),
+                )
+              }
+              resourceHref={(resource) =>
+                viewsTeam
+                  ? teamViewsPath(
+                      data.workspace.urlKey,
+                      viewsTeam.key,
+                      resource,
+                    )
+                  : workspaceViewsPath(data.workspace.urlKey, resource)
+              }
+              onUpdate={changeSavedView}
+            />
+          </main>
+        )}
+      {page === "views" &&
+        (route.kind === "workspace-views-new" ||
+          route.kind === "team-views-new") &&
+        route.resource === "issues" && (
+          <IssueExplorerPage
+            key={`${route.kind}:issues-new`}
+            data={data}
+            scope={viewsScope}
+            view="all"
+            creatingView
+            defaultSaveScope={viewsTeam ? "team" : "personal"}
+            viewHref={(view) =>
+              viewsTeam
+                ? teamIssuesPath(data.workspace.urlKey, viewsTeam.key, view)
+                : workspaceIssuesPath(data.workspace.urlKey, view)
+            }
+            savedViews={issueSavedViews.filter((view) =>
+              viewsTeam
+                ? view.scope === "team" && view.teamId === viewsTeam.id
+                : view.scope === "personal" || view.scope === "workspace",
+            )}
+            savedViewHref={savedIssuePathFor}
+            onNavigateView={(view) =>
+              navigateTo(
+                viewsTeam
+                  ? teamIssuesPath(data.workspace.urlKey, viewsTeam.key, view)
+                  : workspaceIssuesPath(data.workspace.urlKey, view),
+              )
+            }
+            onNavigateSavedView={(view) => navigateTo(savedIssuePathFor(view))}
+            onCreateSavedView={addSavedView}
+            onUpdateSavedView={changeSavedView}
+            onDeleteSavedView={removeSavedView}
+            onCancelCreateSavedView={() =>
+              navigateTo(
+                viewsTeam
+                  ? teamViewsPath(
+                      data.workspace.urlKey,
+                      viewsTeam.key,
+                      "issues",
+                    )
+                  : workspaceViewsPath(data.workspace.urlKey, "issues"),
+              )
+            }
+            onNewViewResourceChange={(resource) =>
+              navigateTo(
+                viewsTeam
+                  ? teamViewsNewPath(
+                      data.workspace.urlKey,
+                      viewsTeam.key,
+                      resource,
+                    )
+                  : workspaceViewsNewPath(data.workspace.urlKey, resource),
+              )
+            }
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
+            onOpenIssue={openIssue}
+            renderIssuePreview={renderIssuePreview}
+            onCreateIssue={(stateId) => {
+              setCreateStateId(stateId);
+              setCreateOpen(true);
+            }}
+            onUpdateIssue={updateIssueFromPage}
+            onUpdateIssues={updateIssuesFromPage}
+            onDeleteIssues={deleteIssuesFromPage}
+          />
+        )}
+      {page === "views" &&
+        (route.kind === "workspace-views-new" ||
+          route.kind === "team-views-new") &&
+        route.resource === "projects" && (
+          <main className="main-panel">
+            <ProjectsPage
+              key={`${route.kind}:projects-new`}
+              projects={data.projects}
+              projectUpdates={data.projectUpdates}
+              projectStatuses={data.projectStatuses}
+              projectTemplates={data.projectTemplates}
+              users={data.users}
+              teams={data.teams}
+              labels={data.labels}
+              workspaceKey={data.workspace.urlKey}
+              scopeTeamId={viewsTeam?.id}
+              viewerId={data.viewer.id}
+              viewer={data.viewer}
+              creatingView
+              defaultSaveScope={viewsTeam ? "team" : "personal"}
+              savedViews={projectSavedViews.filter((view) =>
+                viewsTeam
+                  ? view.scope === "team" && view.teamId === viewsTeam.id
+                  : view.scope === "personal" || view.scope === "workspace",
+              )}
+              projectDisplayDefault={data.projectDisplayDefault}
+              projectHref={(project) =>
+                projectPath(data.workspace.urlKey, project)
+              }
+              onOpenSidebar={() => setMobileSidebarOpen(true)}
+              onRetry={load}
+              onOpenProject={openProject}
+              onOpenProjectIssues={(project) =>
+                navigateTo(
+                  projectPath(data.workspace.urlKey, project, "issues"),
+                )
+              }
+              onCreateProject={addProject}
+              onCreateProjectUpdate={addProjectUpdate}
+              onUpdateProjectUpdate={changeProjectUpdate}
+              onDeleteProjectUpdate={removeProjectUpdate}
+              onCommentProjectUpdate={commentOnProjectUpdate}
+              onReactProjectUpdate={reactToProjectUpdate}
+              onUpdateProject={changeProject}
+              onDeleteProject={removeProject}
+              onSetDisplayDefault={changeProjectDisplayDefault}
+              onCreateSavedView={addSavedView}
+              onUpdateSavedView={changeSavedView}
+              onDeleteSavedView={removeProjectSavedView}
+              onNavigateAllViews={() =>
+                navigateTo(
+                  viewsTeam
+                    ? teamViewsPath(
+                        data.workspace.urlKey,
+                        viewsTeam.key,
+                        "projects",
+                      )
+                    : workspaceViewsPath(data.workspace.urlKey, "projects"),
+                )
+              }
+              onNavigateNewView={() =>
+                navigateTo(
+                  viewsTeam
+                    ? teamViewsNewPath(
+                        data.workspace.urlKey,
+                        viewsTeam.key,
+                        "projects",
+                      )
+                    : workspaceViewsNewPath(data.workspace.urlKey, "projects"),
+                )
+              }
+              onNavigateSavedView={(view) =>
+                navigateTo(savedProjectPathFor(view))
+              }
+              onNewViewResourceChange={(resource) =>
+                navigateTo(
+                  viewsTeam
+                    ? teamViewsNewPath(
+                        data.workspace.urlKey,
+                        viewsTeam.key,
+                        resource,
+                      )
+                    : workspaceViewsNewPath(data.workspace.urlKey, resource),
+                )
+              }
+            />
+          </main>
+        )}
+      {page === "projects" &&
+        (!isProjectsSavedRoute || selectedProjectSavedView) && (
+          <main className="main-panel">
+            <ProjectsPage
+              key={`${route.kind}:${selectedProjectSavedView?.id ?? "all"}`}
+              createOnMount={new URLSearchParams(location.search).get("create") === "1"}
+              projects={data.projects}
+              projectUpdates={data.projectUpdates}
+              projectStatuses={data.projectStatuses}
+              projectTemplates={data.projectTemplates}
+              users={data.users}
+              teams={data.teams}
+              labels={data.labels}
+              workspaceKey={data.workspace.urlKey}
+              scopeTeamId={projectTeam?.id}
+              viewerId={data.viewer.id}
+              viewer={data.viewer}
+              creatingView={
+                route.kind === "projects-new-view" ||
+                route.kind === "team-projects-new-view"
+              }
+              savedView={selectedProjectSavedView ?? undefined}
+              savedViews={scopedProjectSavedViews}
+              projectDisplayDefault={data.projectDisplayDefault}
+              projectHref={(project) =>
+                projectPath(data.workspace.urlKey, project)
+              }
+              onOpenSidebar={() => setMobileSidebarOpen(true)}
+              onRetry={load}
+              onOpenProject={openProject}
+              onOpenProjectIssues={(project) =>
+                navigateTo(
+                  projectPath(data.workspace.urlKey, project, "issues"),
+                )
+              }
+              onCreateProject={addProject}
+              onCreateProjectUpdate={addProjectUpdate}
+              onUpdateProjectUpdate={changeProjectUpdate}
+              onDeleteProjectUpdate={removeProjectUpdate}
+              onCommentProjectUpdate={commentOnProjectUpdate}
+              onReactProjectUpdate={reactToProjectUpdate}
+              onUpdateProject={changeProject}
+              onDeleteProject={removeProject}
+              onSetDisplayDefault={changeProjectDisplayDefault}
+              onCreateSavedView={addSavedView}
+              onUpdateSavedView={changeSavedView}
+              onDeleteSavedView={removeProjectSavedView}
+              onNavigateAllViews={() =>
+                navigateTo(
+                  projectTeamKey
+                    ? teamProjectsPath(data.workspace.urlKey, projectTeamKey)
+                    : projectsPath(data.workspace.urlKey),
+                )
+              }
+              onNavigateNewView={() =>
+                navigateTo(
+                  projectTeamKey
+                    ? teamProjectsNewViewPath(
+                        data.workspace.urlKey,
+                        projectTeamKey,
+                      )
+                    : projectsNewViewPath(data.workspace.urlKey),
+                )
+              }
+              onNavigateSavedView={(view) =>
+                navigateTo(
+                  projectTeamKey
+                    ? teamProjectsSavedViewPath(
+                        data.workspace.urlKey,
+                        projectTeamKey,
+                        view.id,
+                      )
+                    : projectsSavedViewPath(data.workspace.urlKey, view.id),
+                )
+              }
+            />
+          </main>
+        )}
+      {page === "project-detail" &&
+        route.kind === "project" &&
+        selectedProject && (
+          <ProjectDetailPage
+            key={selectedProject.id}
+            project={selectedProject}
+            projects={data.projects}
+            projectUpdates={data.projectUpdates?.[selectedProject.id] ?? []}
+            issues={data.issues}
+            users={data.users}
+            teams={data.teams}
+            labels={data.labels}
+            viewer={data.viewer}
+            tab={route.tab}
+            savedViews={data.savedViews}
+            onTabChange={(tab) =>
+              navigateTo(
+                projectPath(data.workspace.urlKey, selectedProject, tab),
+              )
+            }
+            onUpdate={changeProject}
+            onCreateUpdate={addProjectUpdate}
+            onUpdateProjectUpdate={changeProjectUpdate}
+            onDeleteUpdate={removeProjectUpdate}
+            onCommentProjectUpdate={commentOnProjectUpdate}
+            onReactProjectUpdate={reactToProjectUpdate}
+            onCommentProject={commentOnProject}
+            onCreateResource={addProjectResource}
+            onUpdateResource={changeProjectResource}
+            onDeleteResource={removeProjectResource}
+            onCreateMilestone={addProjectMilestone}
+            onUpdateMilestone={changeProjectMilestone}
+            onDeleteMilestone={removeProjectMilestone}
+            onDelete={removeProject}
+            onCreateSavedView={addSavedView}
+            onUpdateSavedView={changeSavedView}
+            onDeleteSavedView={removeSavedViewOnly}
+            onOpenIssue={openIssue}
+            onUpdateIssue={updateIssueFromPage}
+            onDeleteIssues={deleteIssuesFromPage}
+            onCreateIssue={(projectId) => {
+              setCreateProjectId(projectId);
+              setCreateOpen(true);
+            }}
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
+          />
+        )}
+      {page === "issue-detail" && selectedIssue && (
+        <main className="main-panel issue-panel">
+          <IssueDetails
+            key={selectedIssue.id}
+            issue={selectedIssue}
+            data={data}
+            full
+            presence={realtime.presence.filter(item => item.issueId === selectedIssue.id && item.clientId !== realtime.clientId)}
+            onClose={() =>
+              navigateTo(issueReturnPath(location.state, data.workspace.urlKey))
+            }
+            onExpand={() => {}}
+            onNavigateIssue={openIssue}
+            onUpdate={updateSelected}
+            onDelete={removeSelected}
+            onCreateSubIssue={addSubIssue}
+            onReactIssue={reactIssue}
+            onComment={addComment}
+            onEditComment={editComment}
+            onDeleteComment={removeComment}
+            onReactComment={reactComment}
+            onRelation={addRelation}
+            onDeleteRelation={removeRelation}
+            onUpload={addAttachment}
+            onDeleteAttachment={removeAttachment}
+          />
+        </main>
+      )}
+      {routeScopeValid && page === "not-found" && <RouteNotFound />}
+      {routeScopeValid && page === "issue-detail" && !selectedIssue && (
+        <RouteNotFound
+          title="Issue not found"
+          description="This issue does not exist or is no longer available."
+        />
+      )}
+      {routeScopeValid && page === "cycle-detail" && !selectedCycle && (
+        <RouteNotFound
+          title="Cycle not found"
+          description="This cycle does not exist or is no longer available."
+        />
+      )}
+      {routeScopeValid && page === "project-detail" && !selectedProject && (
+        <RouteNotFound
+          title="Project not found"
+          description="This project does not exist or is no longer available."
+        />
+      )}
+      {routeScopeValid &&
+        page === "initiative-detail" &&
+        !selectedInitiative && (
+          <RouteNotFound
+            title="Initiative not found"
+            description="This initiative does not exist or is no longer available."
+          />
+        )}
+      {routeScopeValid &&
+        (route.kind === "workspace-saved-view" ||
+          route.kind === "team-saved-view") &&
+        !selectedSavedView && (
+          <RouteNotFound
+            title="View not found"
+            description="This saved view does not exist or is no longer available."
+          />
+        )}
+      {routeScopeValid && isProjectsSavedRoute && !selectedProjectSavedView && (
+        <RouteNotFound
+          title="Project view not found"
+          description="This project view does not exist or is no longer available."
+        />
+      )}
+      <BulkActionBar
+        count={selected.size}
+        data={data}
+        onUpdate={batchUpdate}
+        onDelete={batchDelete}
+        onClear={() => setSelected(new Set())}
+      />
+      <CommandMenu
+        open={commandOpen}
+        onOpenChange={setCommandOpen}
+        onCreateIssue={() => setCreateOpen(true)}
+        onCreateLabel={() => navigateTo(settingsPath(data.workspace.urlKey, "issue-labels"))}
+        onCreateProject={() => navigateTo(`${projectsPath(data.workspace.urlKey)}?create=1`)}
+        onCreateView={() => navigateTo(workspaceViewsNewPath(data.workspace.urlKey, "issues"))}
+        onCreateInitiative={() => navigateTo(`${initiativesPath(data.workspace.urlKey)}?create=1`)}
+        onSearchWorkspace={() => navigateTo(searchPath(data.workspace.urlKey))}
+        onNavigateInbox={() => navigateTo(inboxPath(data.workspace.urlKey))}
+        onNavigateMyIssues={() => navigateTo(myIssuesPath(data.workspace.urlKey))}
+        onNavigateProjects={() => navigateTo(projectsPath(data.workspace.urlKey))}
+        onNavigateInitiatives={() => navigateTo(initiativesPath(data.workspace.urlKey))}
+        onNavigateViews={() => navigateTo(workspaceViewsPath(data.workspace.urlKey))}
+        onNavigateMembers={() => navigateTo(membersPath(data.workspace.urlKey))}
+        onNavigateCustomers={() => navigateTo(`${customersPath(data.workspace.urlKey)}?create=1`)}
+        onOpenResult={openSearchResult}
+      />
+      <CreateIssueDialog
+        open={createOpen}
+        draftId={createDraftId}
+        initialProjectId={createProjectId}
+        initialStateId={createStateId}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) {
+            setCreateDraftId(undefined);
+            setCreateStateId(undefined);
+            setCreateProjectId(undefined);
+          }
+        }}
+        data={data}
+        onCreate={addIssue}
+        onDraftSaved={async () => setData(await fetchBootstrap(data.workspace.urlKey))}
+        onDraftDeleted={async () => setData(await fetchBootstrap(data.workspace.urlKey))}
+        onUpload={async (issueId, file) => {
+          const attachment = await run(
+            () => uploadAttachment(issueId, file),
+            "Could not upload attachment",
+          );
+          setData((current) =>
+            current
+              ? {
+                  ...current,
+                  issues: current.issues.map((issue) =>
+                    issue.id === issueId
+                      ? {
+                          ...issue,
+                          attachments: [...issue.attachments, attachment],
+                        }
+                      : issue,
+                  ),
+                }
+              : current,
+          );
+        }}
+      />
+      <div className="bottom-agent">
+        <span>⌁</span> Agent <CircleHelp size={14} />
+      </div>
+    </div>
+  );
+}
+
+function pageForRoute(route: AppRoute): PageId | "not-found" {
+  if (route.kind === "inbox") return "inbox";
+  if (route.kind === "search") return "search";
+  if (route.kind === "pulse") return "pulse";
+  if (route.kind === "my-issues") return "my-issues";
+  if (route.kind === "team-issues") return "team-issues";
+  if (route.kind === "team-cycles") return "cycles";
+  if (route.kind === "cycle") return "cycle-detail";
+  if (route.kind === "workspace-issues") return "workspace-issues";
+  if (route.kind === "workspace-members") return "members";
+  if (route.kind === "workspace-customers") return "customers";
+  if (route.kind === "customer") return "customer-detail";
+  if (route.kind === "document") return "document-detail";
+  if (route.kind === "drafts") return "drafts";
+  if (route.kind === "releases") return "releases";
+  if (route.kind === "asks") return "asks";
+  if (route.kind === "workspace-library") return "library";
+  if (route.kind === "workspace-teams") return "teams";
+  if (route.kind === "new-team") return "new-team";
+  if (route.kind === "team-saved-view") return "team-issues";
+  if (route.kind === "workspace-saved-view") return "workspace-issues";
+  if (
+    route.kind === "workspace-views" ||
+    route.kind === "workspace-views-new" ||
+    route.kind === "team-views" ||
+    route.kind === "team-views-new"
+  )
+    return "views";
+  if (
+    route.kind === "projects" ||
+    route.kind === "team-projects" ||
+    route.kind === "projects-new-view" ||
+    route.kind === "projects-saved-view" ||
+    route.kind === "team-projects-new-view" ||
+    route.kind === "team-projects-saved-view"
+  )
+    return "projects";
+  if (route.kind === "initiatives") return "initiatives";
+  if (route.kind === "initiative") return "initiative-detail";
+  if (route.kind === "project") return "project-detail";
+  if (route.kind === "issue") return "issue-detail";
+  return "not-found";
+}
+function RouteNotFound({
+  title = "Page not found",
+  description = "The requested Flow route is not available.",
+}: {
+  title?: string;
+  description?: string;
+}) {
+  return (
+    <main className="main-panel">
+      <div className="state-fill">
+        <strong>{title}</strong>
+        <span>{description}</span>
+      </div>
+    </main>
+  );
+}
+
+function IssueDetails(
+  props: Omit<
+    React.ComponentProps<typeof DetailPane>,
+    "comments" | "activities"
+  > & { issue: Issue; data: BootstrapData },
+) {
+  return (
+    <DetailPane
+      {...props}
+      comments={props.data.comments[props.issue.id] || []}
+      activities={props.data.activities[props.issue.id] || []}
+    />
+  );
+}
+function isEditableTarget(target: EventTarget | null) {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  );
+}
+function hasOpenShortcutScope() {
+  return Boolean(document.querySelector('[role="dialog"], [role="menu"][data-state="open"], [data-radix-popper-content-wrapper]'));
+}
+function issueReturnPath(state: unknown, workspaceSlug: string) {
+  const returnTo =
+    state && typeof state === "object" && "returnTo" in state
+      ? (state as { returnTo?: unknown }).returnTo
+      : undefined;
+  return typeof returnTo === "string" &&
+    returnTo.startsWith(`/${workspaceSlug}/`)
+    ? returnTo
+    : myIssuesPath(workspaceSlug);
+}
+
+function applyOptimisticIssue(issue: Issue, input: IssueUpdateInput, data: BootstrapData | null): Issue {
+  const next: Issue = { ...issue, updatedAt: new Date().toISOString() };
+  if (input.title !== undefined) next.title = input.title;
+  if (input.description !== undefined) next.description = input.description;
+  if (input.descriptionState !== undefined) next.descriptionState = input.descriptionState;
+  if (input.priority !== undefined) {
+    next.priority = input.priority;
+    next.priorityLabel = ["No priority", "Urgent", "High", "Medium", "Low"][input.priority] ?? "No priority";
+  }
+  if (input.stateId !== undefined) next.state = data?.states.find(item => item.id === input.stateId) ?? next.state;
+  if (input.assigneeId !== undefined) next.assignee = input.assigneeId ? data?.users.find(item => item.id === input.assigneeId) : undefined;
+  if (input.projectId !== undefined) {
+    const project = data?.projects.find(item => item.id === input.projectId);
+    next.project = project ? { id: project.id, name: project.name, icon: project.icon, color: project.color } : undefined;
+  }
+  if (input.cycleId !== undefined) next.cycleId = input.cycleId || undefined;
+  if (input.dueDate !== undefined) next.dueDate = input.dueDate || undefined;
+  if (input.labelIds !== undefined) next.labels = data?.labels.filter(item => input.labelIds?.includes(item.id)) ?? next.labels;
+  if (input.subscriberIds !== undefined) next.subscriberIds = input.subscriberIds;
+  if (input.parentId !== undefined) next.parentId = input.parentId || undefined;
+  if (input.sortOrder !== undefined) next.sortOrder = input.sortOrder;
+  if (input.archived !== undefined) next.archivedAt = input.archived ? new Date().toISOString() : undefined;
+  if (input.descriptionData !== undefined) {
+    next.documentContent = {
+      id: issue.documentContent?.id ?? `document_${issue.id}`,
+      content: input.description ?? issue.description,
+      contentState: input.contentState ?? issue.documentContent?.contentState ?? "",
+      contentData: input.descriptionData,
+      updatedAt: next.updatedAt,
+    };
+  }
+  return next;
+}
+
+export default App;
