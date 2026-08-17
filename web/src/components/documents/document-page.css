@@ -9,7 +9,7 @@
   top: 0;
   z-index: 10;
   height: 48px;
-  border-bottom: 1px solid var(--color-border-subtle, #e7e7e7);
+  border-bottom: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   background: var(--color-bg-primary, #fff);
   display: flex;
   align-items: center;
@@ -33,7 +33,7 @@
   border-radius: 4px;
 }
 .document-breadcrumb:hover {
-  background: var(--color-bg-hover, #f2f2f2);
+  background: var(--color-bg-hover, var(--theme-text-primary));
 }
 .document-header-actions {
   margin-left: auto;
@@ -56,7 +56,7 @@
 }
 .document-header-actions > button:hover,
 .document-header-actions > button[data-state="open"] {
-  background: var(--color-bg-hover, #f2f2f2);
+  background: var(--color-bg-hover, var(--theme-text-primary));
   color: var(--color-text-primary, #222);
 }
 .document-header-actions .document-edited {
@@ -89,7 +89,7 @@
   margin-bottom: 8px;
 }
 .document-icon:hover {
-  background: var(--color-bg-hover, #f2f2f2);
+  background: var(--color-bg-hover, var(--theme-text-primary));
 }
 .document-title {
   display: block;
@@ -122,7 +122,7 @@
 .document-menu {
   z-index: 90;
   min-width: 226px;
-  border: 1px solid var(--color-border-subtle, #ddd);
+  border: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   background: var(--color-bg-elevated, #fff);
   box-shadow: var(--shadow-menu, 0 10px 28px #0002);
   padding: 4px;
@@ -144,11 +144,11 @@
 }
 .document-menu [role="menuitem"][data-highlighted],
 .document-menu [role="menuitemcheckbox"][data-highlighted] {
-  background: var(--color-bg-hover, #f0f0f0);
+  background: var(--color-bg-hover, var(--theme-text-primary));
 }
 .document-menu [role="separator"] {
   height: 1px;
-  background: var(--color-border-subtle, #e4e4e4);
+  background: var(--color-border-subtle, var(--theme-text-primary));
   margin: 4px;
 }
 .document-menu .danger {
@@ -174,7 +174,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  border-bottom: 1px solid var(--color-border-subtle, #e4e4e4);
+  border-bottom: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   padding: 0 16px;
   font-size: 14px;
   font-weight: 400;
@@ -204,7 +204,7 @@
 .document-history-list {
   overflow: auto;
   padding: 8px;
-  border-right: 1px solid var(--color-border-subtle, #e4e4e4);
+  border-right: 1px solid var(--color-border-subtle, var(--theme-text-primary));
 }
 .document-history-list > button {
   width: 100%;
@@ -219,10 +219,10 @@
   color: inherit;
 }
 .document-history-list > button:hover {
-  background: var(--color-bg-hover, #f2f2f2);
+  background: var(--color-bg-hover, var(--theme-text-primary));
 }
 .document-history-list > button.selected {
-  background: var(--color-bg-hover, #ededed);
+  background: var(--color-bg-hover, var(--theme-text-primary));
 }
 .document-history-list span {
   display: flex;
@@ -256,7 +256,7 @@
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--color-border-subtle, #e4e4e4);
+  border-bottom: 1px solid var(--color-border-subtle, var(--theme-text-primary));
 }
 .document-history-preview > header > div {
   display: flex;
@@ -279,7 +279,7 @@
   align-items: center;
   gap: 6px;
   padding: 0 9px;
-  border: 1px solid var(--color-border-subtle, #ddd);
+  border: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   border-radius: 5px;
   background: var(--color-bg-primary, #fff);
   color: inherit;
@@ -295,7 +295,7 @@
 .document-history-preview article {
   overflow: auto;
   padding: 16px;
-  border-right: 1px solid var(--color-border-subtle, #e4e4e4);
+  border-right: 1px solid var(--color-border-subtle, var(--theme-text-primary));
 }
 .document-history-preview article:last-child {
   border-right: 0;
@@ -341,7 +341,7 @@
 }
 .document-delete footer button {
   height: 30px;
-  border: 1px solid var(--color-border-subtle, #ddd);
+  border: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   background: transparent;
   border-radius: 5px;
   padding: 0 11px;
@@ -370,7 +370,7 @@
   .document-history-list {
     max-height: 150px;
     border-right: 0;
-    border-bottom: 1px solid var(--color-border-subtle, #e4e4e4);
+    border-bottom: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   }
   .document-history-preview > div {
     grid-template-columns: 1fr;
@@ -379,6 +379,6 @@
   .document-history-preview article {
     overflow: visible;
     border-right: 0;
-    border-bottom: 1px solid var(--color-border-subtle, #e4e4e4);
+    border-bottom: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   }
 }

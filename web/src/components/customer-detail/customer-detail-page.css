@@ -8,7 +8,7 @@
   top: 0;
   z-index: 10;
   height: 48px;
-  border-bottom: 1px solid var(--color-border-subtle, #e6e6e6);
+  border-bottom: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   background: inherit;
   display: flex;
   align-items: center;
@@ -25,7 +25,7 @@
   border-radius: 4px;
 }
 .customer-detail-header > button:hover {
-  background: var(--color-bg-hover, #f2f2f2);
+  background: var(--color-bg-hover, var(--theme-text-primary));
 }
 .customer-detail-header > i {
   width: 19px;
@@ -59,7 +59,7 @@
 }
 .customer-detail-header > div > button:hover,
 .customer-detail-header > div > button[data-state="open"] {
-  background: var(--color-bg-hover, #f2f2f2);
+  background: var(--color-bg-hover, var(--theme-text-primary));
 }
 .customer-detail-body {
   width: min(840px, calc(100% - 40px));
@@ -98,7 +98,7 @@
 .customer-requests-heading > button,
 .customer-requests-empty > button {
   height: 29px;
-  border: 1px solid var(--color-border-subtle, #ddd);
+  border: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   border-radius: 5px;
   background: transparent;
   color: inherit;
@@ -114,7 +114,7 @@
   align-items: center;
   gap: 8px 12px;
   padding: 17px 0 28px;
-  border-top: 1px solid var(--color-border-subtle, #e8e8e8);
+  border-top: 1px solid var(--color-border-subtle, var(--theme-text-primary));
 }
 .customer-properties label {
   font-size: 12px;
@@ -135,7 +135,7 @@
   font-size: 12px;
 }
 .customer-properties > button:hover {
-  background: var(--color-bg-hover, #f2f2f2);
+  background: var(--color-bg-hover, var(--theme-text-primary));
 }
 .customer-status-dot {
   width: 10px;
@@ -148,7 +148,7 @@
 }
 .customer-requests-heading {
   height: 40px;
-  border-bottom: 1px solid var(--color-border-subtle, #e6e6e6);
+  border-bottom: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   display: flex;
   align-items: center;
   gap: 7px;
@@ -165,12 +165,12 @@
   border: 0;
 }
 .customer-request-list {
-  border-bottom: 1px solid var(--color-border-subtle, #e6e6e6);
+  border-bottom: 1px solid var(--color-border-subtle, var(--theme-text-primary));
 }
 .customer-request-row {
   min-height: 66px;
   padding: 10px 6px;
-  border-bottom: 1px solid var(--color-border-subtle, #ececec);
+  border-bottom: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   display: flex;
   gap: 10px;
 }
@@ -204,9 +204,9 @@
   align-items: center;
   gap: 4px;
   padding: 3px 5px;
-  border: 1px solid var(--color-border-subtle, #ddd);
+  border: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   border-radius: 4px;
-  background: var(--color-bg-secondary, #f4f4f4);
+  background: var(--color-bg-secondary, var(--theme-text-primary));
   font-size: 10px;
 }
 .customer-request-attachments a {
@@ -234,12 +234,12 @@
 }
 .customer-request-attachments button:hover,
 .customer-request-file-queue button:hover {
-  background: var(--color-bg-hover, #ececec);
+  background: var(--color-bg-hover, var(--theme-text-primary));
   color: #c94848;
 }
 .customer-request-row > div > button {
   border: 0;
-  background: var(--color-bg-secondary, #f4f4f4);
+  background: var(--color-bg-secondary, var(--theme-text-primary));
   border-radius: 4px;
   font-size: 11px;
   padding: 3px 6px;
@@ -280,7 +280,7 @@
   color: var(--color-text-tertiary, #888);
 }
 .customer-request-composer {
-  border: 1px solid var(--color-border-subtle, #ddd);
+  border: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   border-radius: 7px;
   margin: 12px 0;
   padding: 10px;
@@ -299,12 +299,12 @@
   display: flex;
   justify-content: flex-end;
   gap: 7px;
-  border-bottom: 1px solid var(--color-border-subtle, #e6e6e6);
+  border-bottom: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   padding: 6px 0 9px;
 }
 .customer-request-tools > button {
   height: 29px;
-  border: 1px solid var(--color-border-subtle, #ddd);
+  border: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   border-radius: 5px;
   background: transparent;
   padding: 0 9px;
@@ -331,7 +331,7 @@
   flex: 1;
   min-width: 0;
   height: 29px;
-  border: 1px solid var(--color-border-subtle, #ddd);
+  border: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   border-radius: 5px;
   background: var(--color-bg-primary, #fff);
   color: inherit;
@@ -339,7 +339,7 @@
 .customer-detail-menu {
   z-index: 90;
   min-width: 190px;
-  border: 1px solid var(--color-border-subtle, #ddd);
+  border: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   background: var(--color-bg-elevated, #fff);
   box-shadow: var(--shadow-menu, 0 10px 26px #0002);
   padding: 4px;
@@ -359,11 +359,11 @@
   margin-left: auto;
 }
 .customer-detail-menu [role="menuitem"][data-highlighted] {
-  background: var(--color-bg-hover, #f0f0f0);
+  background: var(--color-bg-hover, var(--theme-text-primary));
 }
 .customer-detail-menu [role="separator"] {
   height: 1px;
-  background: var(--color-border-subtle, #e5e5e5);
+  background: var(--color-border-subtle, var(--theme-text-primary));
   margin: 4px;
 }
 .customer-detail-menu .danger {
@@ -388,7 +388,7 @@
 .customer-delete-dialog footer button {
   height: 30px;
   padding: 0 11px;
-  border: 1px solid var(--color-border-subtle, #ddd);
+  border: 1px solid var(--color-border-subtle, var(--theme-text-primary));
   background: transparent;
   border-radius: 5px;
 }

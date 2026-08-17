@@ -183,6 +183,7 @@ import { WorkspaceSearchPage } from "@/components/search/workspace-search-page";
 import { WorkspaceOperationsPage } from "@/components/workspace-operations/workspace-operations-page";
 import { DocumentPage } from "@/components/documents/document-page";
 import { CustomerDetailPage } from "@/components/customer-detail/customer-detail-page";
+import { applyTheme } from "@/lib/theme";
 
 function App() {
   const location = useLocation(),
@@ -237,6 +238,10 @@ function App() {
       })
       .finally(() => setAuthReady(true));
   }, []);
+  useEffect(() => {
+    if (!data) return;
+    applyTheme(data.userSettings[data.viewer.id] ?? {});
+  }, [data]);
   const authPath = ["/login", "/signup", "/verify-email", "/forgot-password", "/reset-password"].some(path => location.pathname === path) || location.pathname.startsWith("/invite/");
   useEffect(() => {
     if (authReady && session && authPath && !location.pathname.startsWith("/invite/")) {
