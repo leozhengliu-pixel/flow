@@ -8,6 +8,10 @@ after the first tagged release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Read authentication values from the submitted form so Chrome-autofilled credentials are handled reliably.
+
 ### Added
 
 - Professional open source project documentation and community health files.
