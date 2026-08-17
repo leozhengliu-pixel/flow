@@ -1,0 +1,6 @@
+.DS_Store
+.playwright-cli/
+output/
+api/data/
+web/node_modules/
+web/dist/
