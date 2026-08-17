@@ -1,0 +1,6 @@
+import { Filter, Plus, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import type { FilterCondition, FilterField } from '@/types/flow'
+const fields:FilterField[]=['status','priority','assignee','label','project']
+export function FilterBuilder({filters,onChange}:{filters:FilterCondition[];onChange:(filters:FilterCondition[])=>void}){const add=(field:FilterField)=>onChange([...filters,{id:crypto.randomUUID(),field,operator:'is',value:''}]);return <div className="filter-wrap"><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label="Add filter"><Filter size={14}/></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><div className="menu-heading">Filter by</div>{fields.map(field=><DropdownMenuItem key={field} onSelect={()=>add(field)}><span className="capitalize">{field}</span><Plus size={13} className="menu-chevron"/></DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>{filters.map(f=><span className="filter-chip" key={f.id}>{f.field}<button onClick={()=>onChange(filters.filter(x=>x.id!==f.id))}><X size={11}/></button></span>)}</div>}
