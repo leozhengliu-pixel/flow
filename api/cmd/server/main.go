@@ -30,6 +30,7 @@ var (
 type server struct {
 	store        *store.SQLiteStore
 	uploadPath   string
+	staticPath   string
 	authDisabled bool
 	mailer       *smtpMailer
 	authLimiter  *authRateLimiter
@@ -43,7 +44,12 @@ func main() {
 		log.Fatal(err)
 	}
 	defer repository.Close()
-	s := &server{store: repository, uploadPath: env("FLOW_UPLOAD_PATH", "data/uploads"), mailer: smtpMailerFromEnv()}
+	s := &server{
+		store:      repository,
+		uploadPath: env("FLOW_UPLOAD_PATH", "data/uploads"),
+		staticPath: env("FLOW_STATIC_PATH", ""),
+		mailer:     smtpMailerFromEnv(),
+	}
 	if err := os.MkdirAll(s.uploadPath, 0o755); err != nil {
 		log.Fatal(err)
 	}
@@ -255,7 +261,35 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/events", s.events)
 	mux.HandleFunc("GET /uploads/{name}", s.serveUpload)
 
-	return requestLog(cors(s.authenticate(mux)))
+	handler := s.withStaticFiles(s.authenticate(mux))
+	return requestLog(cors(handler))
+}
+
+func (s *server) withStaticFiles(next http.Handler) http.Handler {
+	if s.staticPath == "" {
+		return next
+	}
+	files := http.FileServer(http.Dir(s.staticPath))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/uploads/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			next.ServeHTTP(w, r)
+			return
+		}
+		path := strings.TrimPrefix(filepath.Clean("/"+strings.TrimPrefix(r.URL.Path, "/")), string(filepath.Separator))
+		if path == "" {
+			http.ServeFile(w, r, filepath.Join(s.staticPath, "index.html"))
+			return
+		}
+		if _, err := os.Stat(filepath.Join(s.staticPath, path)); err == nil {
+			files.ServeHTTP(w, r)
+			return
+		}
+		http.ServeFile(w, r, filepath.Join(s.staticPath, "index.html"))
+	})
 }
 
 func (s *server) accountBootstrap(w http.ResponseWriter, r *http.Request) {

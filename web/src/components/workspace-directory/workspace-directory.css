@@ -1763,3 +1763,21 @@
   background: var(--theme-surface-1);
   color: var(--text);
 }
+:root[data-theme="light"] .workspace-directory__header small,
+:root[data-theme="light"] .workspace-directory__toolbar,
+:root[data-theme="light"] .workspace-team-columns,
+:root[data-theme="light"] .workspace-team-row,
+:root[data-theme="light"] .workspace-row-menu {
+  color: var(--text-label);
+}
+:root[data-theme="light"] .workspace-team-identity small {
+  color: var(--text-placeholder);
+  font-size: 11px;
+}
+:root[data-theme="light"] .workspace-directory-filter-menu,
+:root[data-theme="light"] .workspace-directory-filter-submenu,
+:root[data-theme="light"] .workspace-directory-ordering-menu {
+  border-color: var(--border-card);
+  background: var(--surface-elevated);
+  box-shadow: var(--menu-shadow);
+}

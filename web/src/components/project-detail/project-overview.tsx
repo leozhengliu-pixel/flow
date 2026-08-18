@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { CalendarDays, Check, ChevronRight, ExternalLink, FileText, Flag, Link2, MessageSquare as Slack, MoreHorizontal, Plus, Tags, Trash2, Users } from 'lucide-react'
+import { CalendarDays, Check, ChevronRight, Diamond, ExternalLink, FileText, Flag, Link2, MessageSquare as Slack, MoreHorizontal, Plus, Tags, Trash2, Users } from 'lucide-react'
 import { format, formatDistanceToNowStrict } from 'date-fns'
 import { toast } from 'sonner'
 import { PropertyMenu } from '@/components/property/property-menu'
@@ -26,23 +26,25 @@ export function ProjectOverview({ project, projects, projectUpdates, users, team
       <ViewIconPicker color={project.color} icon={project.icon || 'Project'} onChange={visual => void save(visual)} triggerClassName="project-overview__icon"/>
       <EditableText ariaLabel="Project name" className="project-overview__name" placeholder="Project name" value={project.name} onCommit={name => save({ name })}/>
       <EditableText ariaLabel="Project summary" className="project-overview__summary" placeholder="Add a short summary…" value={project.summary} onCommit={summary => save({ summary })}/>
-      <h3>Properties</h3>
-      <div className="project-overview__properties">
-        <PropertyMenu compact label="Status" value={project.status.name} selectedId={project.status.id} icon={<ProjectStatusDot color={project.status.color}/>} options={statuses.map(status => ({ id: status.id, label: status.name, color: status.color, icon: <ProjectStatusDot color={status.color}/> }))} onChange={statusId => void save({ statusId })}/>
-        <PropertyMenu compact label="Priority" value={project.priorityLabel} selectedId={String(project.priority)} icon={<PriorityIcon priority={project.priority} size={14}/>} options={[0,1,2,3,4].map(priority => ({ id: String(priority), label: PRIORITY_LABELS[priority], icon: <PriorityIcon priority={priority} size={14}/>, shortcut: String(priority) }))} onChange={priority => void save({ priority: Number(priority) })}/>
-        <PropertyMenu compact label="Lead" value={project.lead?.displayName ?? 'Lead'} selectedId={project.lead?.id ?? ''} icon={project.lead ? <Avatar name={project.lead.displayName}/> : <NoAssigneeIcon size={14}/>} options={[{ id: '', label: 'No lead', icon: <NoAssigneeIcon size={14}/> }, ...users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, keywords: `${user.name} ${user.email}`, icon: <Avatar name={user.displayName}/> }))]} onChange={leadId => void save({ leadId })}/>
-        <PropertyMenu compact multiple label="Members" value={members.length === 1 ? members[0].displayName : members.length ? `${members.length} members` : 'Members'} selectedIds={project.memberIds ?? []} icon={members[0] ? <Avatar name={members[0].displayName}/> : <Users size={14}/>} options={users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, icon: <Avatar name={user.displayName}/> }))} onChange={memberId => void save({ memberIds: (project.memberIds ?? []).includes(memberId) ? project.memberIds.filter(id => id !== memberId) : [...(project.memberIds ?? []), memberId] })}/>
-        <DateProperty label="Start date" placeholder="Start date" value={project.startDate} onChange={startDate => void save({ startDate })}/>
-        <span aria-hidden="true" className="project-overview__date-arrow">→</span>
-        <DateProperty label="Target date" placeholder="Target date" value={project.targetDate} onChange={targetDate => void save({ targetDate })}/>
-        <button className="project-overview__team" disabled type="button"><TeamIcon size={14}/>{projectTeams.map(team => team.name).join(', ') || 'Team'}</button>
-        <ProjectMoreMenu labels={labels} project={project} projects={projects} save={save}/>
+      <div className="project-overview__property-section">
+        <h3>Properties</h3>
+        <div className="project-overview__properties">
+          <PropertyMenu compact label="Status" value={project.status.name} selectedId={project.status.id} icon={<ProjectStatusDot color={project.status.color}/>} options={statuses.map(status => ({ id: status.id, label: status.name, color: status.color, icon: <ProjectStatusDot color={status.color}/> }))} onChange={statusId => void save({ statusId })}/>
+          <PropertyMenu compact label="Priority" value={project.priorityLabel} selectedId={String(project.priority)} icon={<PriorityIcon priority={project.priority} size={14}/>} options={[0,1,2,3,4].map(priority => ({ id: String(priority), label: PRIORITY_LABELS[priority], icon: <PriorityIcon priority={priority} size={14}/>, shortcut: String(priority) }))} onChange={priority => void save({ priority: Number(priority) })}/>
+          <PropertyMenu compact label="Lead" value={project.lead?.displayName ?? 'Lead'} selectedId={project.lead?.id ?? ''} icon={project.lead ? <Avatar name={project.lead.displayName}/> : <NoAssigneeIcon size={14}/>} options={[{ id: '', label: 'No lead', icon: <NoAssigneeIcon size={14}/> }, ...users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, keywords: `${user.name} ${user.email}`, icon: <Avatar name={user.displayName}/> }))]} onChange={leadId => void save({ leadId })}/>
+          <PropertyMenu compact multiple label="Members" value={members.length === 1 ? members[0].displayName : members.length ? `${members.length} members` : 'Members'} selectedIds={project.memberIds ?? []} icon={members[0] ? <Avatar name={members[0].displayName}/> : <Users size={14}/>} options={users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, icon: <Avatar name={user.displayName}/> }))} onChange={memberId => void save({ memberIds: (project.memberIds ?? []).includes(memberId) ? project.memberIds.filter(id => id !== memberId) : [...(project.memberIds ?? []), memberId] })}/>
+          <DateProperty label="Start date" placeholder="Start date" value={project.startDate} onChange={startDate => void save({ startDate })}/>
+          <span aria-hidden="true" className="project-overview__date-arrow">→</span>
+          <DateProperty label="Target date" placeholder="Target date" value={project.targetDate} onChange={targetDate => void save({ targetDate })}/>
+          <button className="project-overview__team" disabled type="button"><TeamIcon size={14}/>{projectTeams.map(team => team.name).join(', ') || 'Team'}</button>
+          <ProjectMoreMenu labels={labels} project={project} projects={projects} save={save}/>
+        </div>
       </div>
     </section>
 
     <InitiativeSection project={project} projects={projects} save={save}/>
     <ResourceSection onCreate={input => onCreateResource(project.id, input)} onDelete={resourceId => onDeleteResource(project.id, resourceId)} onUpdate={(resourceId, input) => onUpdateResource(project.id, resourceId, input)} resources={project.resources ?? []}/>
-    <InlineStringSection addLabel="Add customer request" items={project.customers ?? []} onChange={customers => void save({ customers })} title="Customers"/>
+    {(project.customers?.length ?? 0) > 0 && <InlineStringSection addLabel="Add customer request" items={project.customers ?? []} onChange={customers => void save({ customers })} title="Customers"/>}
 
     <section className="project-overview__latest">
       {projectUpdates[0] ? <button className="project-overview__latest-update" onClick={() => onTabChange('activity')} type="button"><span className={`project-overview__health is-${projectUpdates[0].health}`}/><div><strong>{projectUpdates[0].user.displayName}</strong><time>{formatDistanceToNowStrict(new Date(projectUpdates[0].createdAt), { addSuffix: true })}</time><p>{projectUpdates[0].body}</p></div></button> : <button className="project-overview__first-update" onClick={() => onTabChange('activity')} type="button"><FileText size={14}/>Write first project update</button>}
@@ -53,7 +55,18 @@ export function ProjectOverview({ project, projects, projectUpdates, users, team
       <EditableText ariaLabel="Project description" className="project-overview__description-editor" multiline placeholder="Add description…" value={project.description} onCommit={description => save({ description })}/>
     </section>
 
-    <button className="project-overview__milestone-link" type="button" onClick={() => document.querySelector<HTMLElement>('[data-project-milestone-add]')?.click()}><span className="project-overview__milestone-icon">◇</span>Milestone</button>
+    <section className="project-overview__milestones">
+      {(project.milestones?.length ?? 0) > 0 && <h3>Milestones</h3>}
+      {(project.milestones ?? []).map(milestone => <article className="project-overview__milestone" key={milestone.id}>
+        <header>
+          <span className="project-overview__milestone-mark"><Diamond size={12}/></span>
+          <strong>{milestone.name}</strong>
+          <time>{milestone.targetDate ? format(new Date(`${milestone.targetDate}T00:00:00`), 'MMM d') : 'No target date'}</time>
+          <button aria-label={`${milestone.name} actions`} onClick={() => document.querySelector<HTMLElement>('[data-project-milestone-add]')?.click()} type="button"><MoreHorizontal size={14}/></button>
+        </header>
+      </article>)}
+      <button className="project-overview__milestone-link" type="button" onClick={() => document.querySelector<HTMLElement>('[data-project-milestone-add]')?.click()}><Diamond size={15}/>Milestone</button>
+    </section>
     {projectIssues.length === 0 && <span className="project-overview__scope-note">No issues in scope</span>}
   </div>
 }
