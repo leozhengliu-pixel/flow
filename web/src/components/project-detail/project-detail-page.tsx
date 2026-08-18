@@ -30,6 +30,11 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
   const changeIssueFilters = (next: ProjectIssueFilters) => { setIssueFilters(next); localStorage.setItem(`${issueStateKey}:filters`, JSON.stringify(next)) }
   const changeIssueDisplay = (next: typeof issueDisplay) => { setIssueDisplay(next); localStorage.setItem(`${issueStateKey}:display`, JSON.stringify({ ...next, properties: [...next.properties] })) }
   const openSavedView = (view: typeof projectSavedViews[number]) => { setActiveSavedViewId(view.id); changeIssueFilters(filtersFromSavedView(view.filters)); changeIssueDisplay(displayFromSavedView(view.display)); onTabChange('issues') }
+  const openIssueFilter = (field: 'assignee'|'labels', value: string, valueLabel: string) => {
+    setActiveSavedViewId(undefined)
+    changeIssueFilters([{ id: `progress-${field}-${value || 'none'}`, field, fieldLabel: field === 'assignee' ? 'Assignee' : 'Labels', operator: 'is', value, valueLabel, values: [{ value, valueLabel }] }])
+    onTabChange('issues')
+  }
 
   useEffect(() => {
     const toggle = (event: KeyboardEvent) => {
@@ -80,7 +85,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
         {tab === 'issues' && <ProjectIssues {...props} display={issueDisplay} filters={issueFilters} onFiltersChange={changeIssueFilters} projectIssues={projectIssues}/>} 
         {tab === 'new' && <ProjectNewView {...props} display={issueDisplay} filters={issueFilters} onDisplayChange={changeIssueDisplay} onFiltersChange={changeIssueFilters} projectIssues={projectIssues}/>} 
       </div>
-      {detailsOpen && <ProjectDetailsSidebar labels={labels} onCreateMilestone={props.onCreateMilestone} onDeleteMilestone={props.onDeleteMilestone} onTabChange={onTabChange} onUpdate={save} onUpdateMilestone={props.onUpdateMilestone} project={project} projectIssues={projectIssues} projects={projects} projectUpdates={projectUpdates} teams={props.teams} users={users} viewer={viewer}/>} 
+      {detailsOpen && <ProjectDetailsSidebar labels={labels} onCreateMilestone={props.onCreateMilestone} onDeleteMilestone={props.onDeleteMilestone} onOpenIssueFilter={openIssueFilter} onTabChange={onTabChange} onUpdate={save} onUpdateMilestone={props.onUpdateMilestone} project={project} projectIssues={projectIssues} projects={projects} projectUpdates={projectUpdates} teams={props.teams} users={users} viewer={viewer}/>}
     </div>
 
     <Dialog.Root onOpenChange={setDeleteOpen} open={deleteOpen}><Dialog.Portal><Dialog.Overlay className="project-detail-page__dialog-overlay"/><Dialog.Content aria-describedby="project-delete-description" className="project-detail-page__delete-dialog">
