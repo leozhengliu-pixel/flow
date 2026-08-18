@@ -1,6 +1,6 @@
 import * as Popover from '@radix-ui/react-popover'
 import { ChevronLeft, ChevronRight, CircleDot, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
 import styles from './project-row-menus.module.css'
 
 type DateMode = 'day' | 'month' | 'quarter' | 'half-year' | 'year'
@@ -17,13 +17,17 @@ export function ProjectTargetDatePicker({ buttonClassName = '', children, displa
   return <ProjectDatePicker buttonClassName={buttonClassName} displayValue={displayValue} label="Target date" onChange={onChange} value={value}>{children}</ProjectDatePicker>
 }
 
-export function ProjectDatePicker({ buttonClassName = '', children, displayValue, label, onChange, portalled = true, value }: {
+export function ProjectDatePicker({ buttonClassName = '', children, contentClassName = '', displayValue, label, onChange, portalled = true, side, align = 'center', triggerRef, value }: {
   buttonClassName?: string
   children: ReactNode
+  contentClassName?: string
   displayValue?: string
   label: 'Start date' | 'Target date'
   onChange: (value: string) => void
   portalled?: boolean
+  side?: 'top' | 'right' | 'bottom' | 'left'
+  align?: 'start' | 'center' | 'end'
+  triggerRef?: Ref<HTMLButtonElement>
   value?: string
 }) {
   const [open, setOpen] = useState(false)
@@ -48,7 +52,7 @@ export function ProjectDatePicker({ buttonClassName = '', children, displayValue
     if (parsed) choose(parsed)
   }
 
-  const content = <Popover.Content align="center" className={styles.datePicker} collisionPadding={8} onClick={event => event.stopPropagation()} onCloseAutoFocus={event => event.preventDefault()} side={portalled ? 'bottom' : 'right'} sideOffset={4}>
+  const content = <Popover.Content align={align} className={`${styles.datePicker}${contentClassName ? ` ${contentClassName}` : ''}`} collisionPadding={8} onClick={event => event.stopPropagation()} onCloseAutoFocus={event => event.preventDefault()} side={side ?? (portalled ? 'bottom' : 'right')} sideOffset={4}>
     <label className={styles.dateLabel}>{label}<input autoFocus aria-label="Try: May 2027, Q4, 2027/05/20" onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submit() } }} placeholder="Try: May 2027, Q4, 2027/05/20" value={query}/></label>
     <div aria-label="Date precision" className={styles.dateModes} role="tablist">{MODES.map(item => <button aria-selected={mode === item.id} key={item.id} onClick={() => { setMode(item.id); setQuery(formatForMode(cursor, item.id)) }} role="tab" type="button">{item.label}</button>)}</div>
     {mode === 'day' ? <DayPanel cursor={cursor} onChangeCursor={setCursor} onChoose={choose} selected={selected}/> : <PeriodPanel cursor={cursor} mode={mode} onChoose={choose} selected={selected}/>} 
@@ -56,7 +60,7 @@ export function ProjectDatePicker({ buttonClassName = '', children, displayValue
   </Popover.Content>
 
   return <Popover.Root open={open} onOpenChange={setOpen}>
-    <Popover.Trigger asChild><button aria-expanded={open} aria-label={`Change project ${label.toLowerCase()}`} className={`lp-project-property-trigger ${buttonClassName}`} type="button">{children}</button></Popover.Trigger>
+    <Popover.Trigger asChild><button aria-expanded={open} aria-label={`Change project ${label.toLowerCase()}`} className={`lp-project-property-trigger ${buttonClassName}`} ref={triggerRef} type="button">{children}</button></Popover.Trigger>
     {portalled ? <Popover.Portal>{content}</Popover.Portal> : content}
   </Popover.Root>
 }
@@ -67,7 +71,7 @@ function DayPanel({ cursor, onChangeCursor, onChoose, selected }: { cursor: Date
   return <div className={styles.dayPanel}>
     <header><strong>{new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' }).format(cursor)}</strong><span><button aria-label="Jump to today" onClick={() => onChangeCursor(today)} type="button"><CircleDot size={13}/></button><button aria-label="Previous month" onClick={() => onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))} type="button"><ChevronLeft size={14}/></button><button aria-label="Next month" onClick={() => onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))} type="button"><ChevronRight size={14}/></button></span></header>
     <div className={styles.weekdays}>{['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(day => <span key={day}>{day}</span>)}</div>
-    <div aria-label={new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' }).format(cursor)} className={styles.days} role="grid">{days.map(day => <button aria-label={day.toDateString()} className={sameDay(day, selected) ? styles.selectedDate : ''} data-outside={day.getMonth() !== cursor.getMonth()} disabled={day < today} key={isoDate(day)} onClick={() => onChoose(day)} role="gridcell" type="button">{day.getDate()}</button>)}</div>
+    <div aria-label={new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' }).format(cursor)} className={styles.days} role="grid">{days.map(day => <button aria-label={day.toDateString()} className={sameDay(day, selected) ? styles.selectedDate : ''} data-outside={day.getMonth() !== cursor.getMonth()} key={isoDate(day)} onClick={() => onChoose(day)} role="gridcell" type="button">{day.getDate()}</button>)}</div>
   </div>
 }
 
@@ -83,7 +87,7 @@ function PeriodPanel({ cursor: _cursor, mode, onChoose, selected }: { cursor: Da
   return <div className={styles.periodScroller} ref={scrollerRef}>{years.map(year => <section key={year}><h3>{year}</h3><div className={styles.periodGrid} data-mode={mode}>{periodsFor(mode).map((label, index) => {
     const date = endOfPeriod(year, mode, index)
     const isSelected = periodSelected(selected, year, mode, index)
-    return <button className={isSelected ? styles.selectedDate : ''} data-selected={isSelected} disabled={date < startOfDay(new Date())} key={label} onClick={() => onChoose(date)} type="button">{label}</button>
+    return <button className={isSelected ? styles.selectedDate : ''} data-selected={isSelected} key={label} onClick={() => onChoose(date)} type="button">{label}</button>
   })}</div></section>)}</div>
 }
 

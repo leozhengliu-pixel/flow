@@ -499,7 +499,17 @@ func TestProjectLifecycle(t *testing.T) {
 	if milestone.Name != "General availability" || milestone.TargetDate == nil || *milestone.TargetDate != "2026-09-15" {
 		t.Fatalf("project milestone update failed: %#v", milestone)
 	}
+	secondMilestone := requestJSON[domain.ProjectMilestone](t, handler, http.MethodPost, "/api/projects/"+created.ID+"/milestones", map[string]any{
+		"name": "Public launch", "targetDate": "2026-10-01",
+	}, http.StatusCreated)
+	reordered := requestJSON[[]domain.ProjectMilestone](t, handler, http.MethodPost, "/api/projects/"+created.ID+"/milestones/reorder", map[string]any{
+		"ids": []string{secondMilestone.ID, milestone.ID},
+	}, http.StatusOK)
+	if len(reordered) != 2 || reordered[0].ID != secondMilestone.ID || reordered[1].ID != milestone.ID {
+		t.Fatalf("project milestone reorder failed: %#v", reordered)
+	}
 	requestJSON[any](t, handler, http.MethodDelete, "/api/projects/"+created.ID+"/milestones/"+milestone.ID, nil, http.StatusNoContent)
+	requestJSON[any](t, handler, http.MethodDelete, "/api/projects/"+created.ID+"/milestones/"+secondMilestone.ID, nil, http.StatusNoContent)
 
 	comment := requestJSON[domain.Comment](t, handler, http.MethodPost, "/api/projects/"+created.ID+"/comments", map[string]any{
 		"body": "Project-level discussion persists.",
@@ -573,7 +583,7 @@ func TestProjectLifecycle(t *testing.T) {
 		}
 	}
 	events := requestJSON[[]domain.DomainEvent](t, handler, http.MethodGet, "/api/events?aggregateId="+created.ID, nil, http.StatusOK)
-	expectedEvents := []string{"project.created", "project.updated", "project.resource_created", "project.resource_updated", "project.resource_deleted", "project.milestone_created", "project.milestone_updated", "project.milestone_deleted", "project.commented", "project.update_created", "project.update_updated", "project.update_commented", "project.update_reaction_toggled", "project.update_deleted", "project.deleted"}
+	expectedEvents := []string{"project.created", "project.updated", "project.resource_created", "project.resource_updated", "project.resource_deleted", "project.milestone_created", "project.milestone_updated", "project.milestone_created", "project.milestones_reordered", "project.milestone_deleted", "project.milestone_deleted", "project.commented", "project.update_created", "project.update_updated", "project.update_commented", "project.update_reaction_toggled", "project.update_deleted", "project.deleted"}
 	if len(events) != len(expectedEvents) {
 		t.Fatalf("project events = %#v", events)
 	}
