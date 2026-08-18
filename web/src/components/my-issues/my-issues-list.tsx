@@ -1,8 +1,8 @@
 import { type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import * as ContextMenu from '@radix-ui/react-context-menu'
-import { CalendarDays, Check, ChevronDown, ChevronRight, Plus } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import type { MyIssuesProperty } from './my-issues-surface'
-import { LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
+import { CalendarIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { PropertyMenu, type PropertyMenuKind } from '@/components/property/property-menu'
 import { DueDatePicker } from '@/components/issue/due-date-picker'
 import styles from './my-issues-list.module.css'
@@ -125,7 +125,7 @@ export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAU
           <span className={styles.badges}>
             {displayProperties.has('labels') && issue.labels?.length ? <RowCommandPicker propertyLabel="Labels" kind="labels" multi label={`Change labels. ${issue.labels.map(label => label.name).join(', ')} selected`} searchLabel="Change or add labels..." selectedIds={issue.labels.map(label => label.id)} options={propertyOptions.labels} onSelect={value => change('labels', toggleId(issue.labels?.map(label => label.id) ?? [], value))} trigger={<span className={styles.badgeGroup}>{issue.labels.map(label => <PropertyBadge key={label.id} color={label.color}>{label.name}</PropertyBadge>)}</span>}/> : null}
             {displayProperties.has('project') && issue.project ? <RowCommandPicker propertyLabel="Project" kind="project" label={`Change project. Current project is ${issue.project.name}`} searchLabel="Set project..." selectedIds={[issue.project.id]} options={propertyOptions.project} onSelect={value => change('project', value)} trigger={<PropertyBadge color={issue.project.color}>{issue.project.name}</PropertyBadge>}/> : null}
-            {displayProperties.has('dueDate') && issue.dueDate ? <DueDatePicker value={issue.dueDate} onChange={value => change('dueDate', value)} ariaLabel={`Change due date. Current due date is ${formatDueDate(issue.dueDate)}`} triggerClassName={styles.propertyTrigger} trigger={<time className={styles.dueDate} dateTime={issue.dueDate}><CalendarDays size={13}/>{formatDueDate(issue.dueDate)}</time>}/> : null}
+            {displayProperties.has('dueDate') && issue.dueDate ? <DueDatePicker value={issue.dueDate} onChange={value => change('dueDate', value)} ariaLabel={`Change due date. Current due date is ${formatDueDate(issue.dueDate)}`} triggerClassName={styles.propertyTrigger} trigger={<time className={styles.dueDate} dateTime={issue.dueDate}><CalendarIcon size={13}/>{formatDueDate(issue.dueDate)}</time>}/> : null}
             {issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
             {displayProperties.has('assignee') && issue.assignee ? <RowCommandPicker propertyLabel="Assignee" label={`Assign to. Current assignee is ${issue.assignee.name}`} searchLabel="Assign to..." selectedIds={[issue.assignee.id]} options={propertyOptions.assignee} onSelect={value => change('assignee', value)} trigger={<Avatar assignee={issue.assignee}/>}/> : null}
             {mutationError && <button type="button" className={styles.rowError} title={mutationError} onClick={() => onRetryMutation?.(issue)}>Retry</button>}
@@ -187,7 +187,7 @@ function OptionIcon({ option }: { option: MyIssuesContextOption }) {
   if (option.color) return <i className={styles.optionColor} style={{ backgroundColor: option.color }}/>
   if (option.kind === 'assignee') return <NoAssigneeIcon className={styles.optionIcon} size={14}/>
   if (option.kind === 'project') return <NoProjectIcon className={styles.optionIcon} size={14}/>
-  if (option.kind === 'dueDate') return <CalendarDays className={styles.optionIcon} size={14}/>
+  if (option.kind === 'dueDate') return <CalendarIcon className={styles.optionIcon} size={14}/>
   if (option.kind === 'labels') return <LabelIcon className={styles.optionIcon} size={14}/>
   return <span className={styles.optionSpacer}/>
 }

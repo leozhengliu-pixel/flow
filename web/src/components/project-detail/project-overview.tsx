@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { CalendarDays, Check, ChevronRight, Diamond, ExternalLink, FileText, Flag, Link2, MessageSquare as Slack, MoreHorizontal, Plus, Tags, Trash2, Users } from 'lucide-react'
+import { Check, ChevronRight, Diamond, ExternalLink, FileText, Flag, Link2, MoreHorizontal, Plus, Trash2 } from 'lucide-react'
 import { format, formatDistanceToNowStrict } from 'date-fns'
 import { toast } from 'sonner'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { Avatar } from '@/components/issue/issue-row'
-import { NoAssigneeIcon, PriorityIcon, TeamIcon } from '@/components/issue/issue-icons'
+import { CalendarIcon, LabelIcon, MembersIcon, NoAssigneeIcon, PriorityIcon, ProjectStatusIcon, SlackIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { ViewIconPicker } from '@/components/views/view-icon-picker'
 import { ProjectDatePicker } from '@/components/projects-page/project-target-date-picker'
 import type { ProjectMutationInput } from '@/components/projects-page/projects-page'
@@ -16,8 +16,8 @@ import { PRIORITY_LABELS } from './project-detail-types'
 
 type Props = ProjectDetailProps & { projectIssues: Issue[]; save: (input: ProjectMutationInput) => Promise<void> }
 
-export function ProjectOverview({ project, projects, projectUpdates, users, teams, labels, projectIssues, save, onCreateResource, onUpdateResource, onDeleteResource, onTabChange }: Props) {
-  const statuses = useMemo(() => uniqueById(projects.map(item => item.status)), [projects])
+export function ProjectOverview({ project, projects, projectStatuses, projectUpdates, users, teams, labels, projectIssues, save, onCreateResource, onUpdateResource, onDeleteResource, onTabChange }: Props) {
+  const statuses = useMemo(() => uniqueById(projectStatuses.length ? projectStatuses : projects.map(item => item.status)), [projectStatuses, projects])
   const members = users.filter(user => (project.memberIds ?? []).includes(user.id))
   const projectTeams = teams.filter(team => (project.teamIds ?? []).includes(team.id))
 
@@ -29,10 +29,10 @@ export function ProjectOverview({ project, projects, projectUpdates, users, team
       <div className="project-overview__property-section">
         <h3>Properties</h3>
         <div className="project-overview__properties">
-          <PropertyMenu compact label="Status" value={project.status.name} selectedId={project.status.id} icon={<ProjectStatusDot color={project.status.color}/>} options={statuses.map(status => ({ id: status.id, label: status.name, color: status.color, icon: <ProjectStatusDot color={status.color}/> }))} onChange={statusId => void save({ statusId })}/>
+          <PropertyMenu compact label="Status" value={project.status.name} selectedId={project.status.id} icon={<ProjectStatusIcon color={project.status.color} name={project.status.name} size={14} type={project.status.type}/>} options={statuses.map((status, index) => ({ id: status.id, label: status.name, color: status.color, icon: <ProjectStatusIcon color={status.color} name={status.name} size={14} type={status.type}/>, shortcut: String(index + 1) }))} onChange={statusId => void save({ statusId })}/>
           <PropertyMenu compact label="Priority" value={project.priorityLabel} selectedId={String(project.priority)} icon={<PriorityIcon priority={project.priority} size={14}/>} options={[0,1,2,3,4].map(priority => ({ id: String(priority), label: PRIORITY_LABELS[priority], icon: <PriorityIcon priority={priority} size={14}/>, shortcut: String(priority) }))} onChange={priority => void save({ priority: Number(priority) })}/>
           <PropertyMenu compact label="Lead" value={project.lead?.displayName ?? 'Lead'} selectedId={project.lead?.id ?? ''} icon={project.lead ? <Avatar name={project.lead.displayName}/> : <NoAssigneeIcon size={14}/>} options={[{ id: '', label: 'No lead', icon: <NoAssigneeIcon size={14}/> }, ...users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, keywords: `${user.name} ${user.email}`, icon: <Avatar name={user.displayName}/> }))]} onChange={leadId => void save({ leadId })}/>
-          <PropertyMenu compact multiple label="Members" value={members.length === 1 ? members[0].displayName : members.length ? `${members.length} members` : 'Members'} selectedIds={project.memberIds ?? []} icon={members[0] ? <Avatar name={members[0].displayName}/> : <Users size={14}/>} options={users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, icon: <Avatar name={user.displayName}/> }))} onChange={memberId => void save({ memberIds: (project.memberIds ?? []).includes(memberId) ? project.memberIds.filter(id => id !== memberId) : [...(project.memberIds ?? []), memberId] })}/>
+          <PropertyMenu compact multiple label="Members" value={members.length === 1 ? members[0].displayName : members.length ? `${members.length} members` : 'Members'} selectedIds={project.memberIds ?? []} icon={members[0] ? <Avatar name={members[0].displayName}/> : <MembersIcon size={14}/>} options={users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, icon: <Avatar name={user.displayName}/> }))} onChange={memberId => void save({ memberIds: (project.memberIds ?? []).includes(memberId) ? project.memberIds.filter(id => id !== memberId) : [...(project.memberIds ?? []), memberId] })}/>
           <DateProperty label="Start date" placeholder="Start date" value={project.startDate} onChange={startDate => void save({ startDate })}/>
           <span aria-hidden="true" className="project-overview__date-arrow">→</span>
           <DateProperty label="Target date" placeholder="Target date" value={project.targetDate} onChange={targetDate => void save({ targetDate })}/>
@@ -109,8 +109,8 @@ function ProjectMoreMenu({ labels, project, projects, save }: { labels: Props['l
   return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="More project properties" className="project-overview__more" type="button">•••</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="start" className="project-detail-page__menu project-overview__more-menu" sideOffset={4}>
     <MultiSubmenu icon={<Flag size={14}/>} label="Initiatives" shortcut="P then N" options={initiativeNames.map(name => ({ id: name, label: name }))} selected={project.initiatives ?? []} onToggle={name => void save({ initiatives: toggleString(project.initiatives ?? [], name) })}/>
     <MultiSubmenu icon={<Link2 size={14}/>} label="Dependencies" options={projects.filter(item => item.id !== project.id).map(item => ({ id: item.id, label: item.name, color: item.color }))} selected={project.dependencyIds ?? []} onToggle={id => void save({ dependencyIds: toggleString(project.dependencyIds ?? [], id) })}/>
-    <MultiSubmenu icon={<Tags size={14}/>} label="Labels" shortcut="P then L" options={labels.map(label => ({ id: label.id, label: label.name, color: label.color }))} selected={project.labelIds ?? []} onToggle={id => void save({ labelIds: toggleString(project.labelIds ?? [], id) })}/>
-    <DropdownMenu.Separator/><DropdownMenu.Item onSelect={() => toast.info('Slack integration is not connected in this workspace.')}><Slack size={14}/><span>Connect existing Slack channel…</span></DropdownMenu.Item>
+    <MultiSubmenu icon={<LabelIcon size={14}/>} label="Labels" shortcut="P then L" options={labels.map(label => ({ id: label.id, label: label.name, color: label.color }))} selected={project.labelIds ?? []} onToggle={id => void save({ labelIds: toggleString(project.labelIds ?? [], id) })}/>
+    <DropdownMenu.Separator/><DropdownMenu.Item onSelect={() => toast.info('Slack integration is not connected in this workspace.')}><SlackIcon size={14}/><span>Connect existing Slack channel…</span></DropdownMenu.Item>
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 
@@ -127,7 +127,7 @@ function InitiativeSection({ project, projects, save }: { project: Props['projec
 }
 
 function DateProperty({ label, onChange, placeholder, value }: { label: 'Start date'|'Target date'; onChange: (value: string) => void; placeholder: string; value?: string }) {
-  return <ProjectDatePicker buttonClassName="project-overview__date" label={label} onChange={onChange} value={value}><CalendarDays size={14}/><span>{value ? format(new Date(`${value}T00:00:00`), 'MMM do') : placeholder}</span></ProjectDatePicker>
+  return <ProjectDatePicker buttonClassName="project-overview__date" label={label} onChange={onChange} value={value}><CalendarIcon size={14} variant={label === 'Start date' ? 'start' : 'target'}/><span>{value ? format(new Date(`${value}T00:00:00`), 'MMM do') : placeholder}</span></ProjectDatePicker>
 }
 
 function EditableText({ ariaLabel, className, multiline, onCommit, placeholder, value }: { ariaLabel: string; className: string; multiline?: boolean; onCommit: (value: string) => Promise<void>; placeholder: string; value: string }) {
@@ -138,6 +138,5 @@ function EditableText({ ariaLabel, className, multiline, onCommit, placeholder, 
   return <input aria-label={ariaLabel} className={className} onBlur={commit} onChange={event => setDraft(event.target.value)} placeholder={placeholder} value={draft}/>
 }
 
-function ProjectStatusDot({ color }: { color: string }) { return <span aria-hidden="true" className="project-overview__status" style={{ borderColor: color }}/>} 
 function uniqueById<T extends { id: string }>(items: T[]) { return [...new Map(items.map(item => [item.id, item])).values()] }
 function toggleString(values: string[], value: string) { return values.includes(value) ? values.filter(item => item !== value) : [...values, value] }

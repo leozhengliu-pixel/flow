@@ -1,7 +1,7 @@
 import * as Popover from '@radix-ui/react-popover'
 import { Check, Send } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { NoAssigneeIcon, PriorityIcon } from '@/components/issue/issue-icons'
+import { NoAssigneeIcon, PriorityIcon, ProjectStatusIcon } from '@/components/issue/issue-icons'
 import styles from './project-row-menus.module.css'
 
 export type ProjectPickerProperty = 'priority' | 'lead' | 'status'
@@ -128,13 +128,7 @@ export function ProjectStatusGlyph({ color: _color, name, type }: { color?: stri
   const normalized = `${type ?? ''} ${name}`.toLowerCase()
   const kind = normalized.includes('backlog') ? 'backlog' : normalized.includes('progress') || normalized.includes('started') ? 'started' : normalized.includes('complete') ? 'completed' : normalized.includes('cancel') ? 'canceled' : 'planned'
   const iconColor = ({ backlog: '#d6a526', started: '#d6a526', completed: '#5e6ad2', canceled: '#77777c', planned: '#b5b5ba' } as const)[kind]
-  return <svg aria-hidden="true" className={styles.statusIcon} viewBox="0 0 16 16">
-    {kind === 'backlog' && <circle cx="8" cy="8" fill="none" r="6" stroke={iconColor} strokeDasharray="1.2 1.8" strokeLinecap="round" strokeWidth="1.7"/>}
-    {kind === 'planned' && <circle cx="8" cy="8" fill="none" r="5.5" stroke={iconColor} strokeWidth="1.6"/>}
-    {kind === 'started' && <><circle cx="8" cy="8" fill="none" r="5.5" stroke={iconColor} strokeWidth="1.6"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11Z" fill={iconColor}/></>}
-    {kind === 'completed' && <><circle cx="8" cy="8" fill={iconColor} r="6"/><path d="m5 8.2 1.8 1.8L11.2 5.8" fill="none" stroke="#202022" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5"/></>}
-    {kind === 'canceled' && <><circle cx="8" cy="8" fill={iconColor} r="6"/><path d="m5.5 5.5 5 5m0-5-5 5" stroke="#202022" strokeLinecap="round" strokeWidth="1.4"/></>}
-  </svg>
+  return <ProjectStatusIcon className={styles.statusIcon} color={_color || iconColor} name={name} type={type}/>
 }
 
 function orderLeadOptions(options: ProjectPropertyOption[], selected: string, searching: string) {

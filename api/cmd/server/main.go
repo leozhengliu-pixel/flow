@@ -220,6 +220,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/projects/{id}/resources/{resourceId}", s.updateProjectResource)
 	mux.HandleFunc("DELETE /api/projects/{id}/resources/{resourceId}", s.deleteProjectResource)
 	mux.HandleFunc("POST /api/projects/{id}/milestones", s.createProjectMilestone)
+	mux.HandleFunc("POST /api/projects/{id}/milestones/reorder", s.reorderProjectMilestones)
 	mux.HandleFunc("PATCH /api/projects/{id}/milestones/{milestoneId}", s.updateProjectMilestone)
 	mux.HandleFunc("DELETE /api/projects/{id}/milestones/{milestoneId}", s.deleteProjectMilestone)
 	mux.HandleFunc("POST /api/projects/{id}/comments", s.createProjectComment)
@@ -2004,6 +2005,44 @@ func (s *server) updateProjectMilestone(w http.ResponseWriter, r *http.Request) 
 		milestone.UpdatedAt = time.Now().UTC()
 		project.UpdatedAt = milestone.UpdatedAt
 		updated = *milestone
+		return nil
+	})
+	respondMutation(w, err, http.StatusOK, updated)
+}
+
+func (s *server) reorderProjectMilestones(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		IDs []string `json:"ids"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	projectID := r.PathValue("id")
+	var updated []domain.ProjectMilestone
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.milestones_reordered", projectID, input, func(data *domain.Bootstrap) error {
+		project, err := fullProjectByID(data, projectID)
+		if err != nil {
+			return err
+		}
+		if len(input.IDs) != len(project.Milestones) {
+			return errInvalid
+		}
+		ordered := make([]domain.ProjectMilestone, 0, len(input.IDs))
+		seen := make(map[string]struct{}, len(input.IDs))
+		for _, id := range input.IDs {
+			if _, duplicate := seen[id]; duplicate {
+				return errInvalid
+			}
+			index := slices.IndexFunc(project.Milestones, func(milestone domain.ProjectMilestone) bool { return milestone.ID == id })
+			if index < 0 {
+				return errInvalid
+			}
+			seen[id] = struct{}{}
+			ordered = append(ordered, project.Milestones[index])
+		}
+		project.Milestones = ordered
+		project.UpdatedAt = time.Now().UTC()
+		updated = slices.Clone(ordered)
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)

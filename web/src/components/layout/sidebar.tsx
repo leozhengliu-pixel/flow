@@ -1,10 +1,11 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { BookOpen, ChevronDown, CircleCheck, CircleHelp, Download, FileClock, GripVertical, History, Keyboard, MessageCircle, MessageCircleQuestion, MoreHorizontal, Plus, Rocket, Search, Settings, Star, Trash2, Users, X } from 'lucide-react'
+import { BookOpen, ChevronDown, CircleCheck, CircleHelp, Download, FileClock, GripVertical, History, Keyboard, MessageCircle, MessageCircleQuestion, MoreHorizontal, Plus, Rocket, Search, Settings, Star, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { MembersIcon as FlowMembersIcon, SlackIcon as FlowSlackIcon } from '@/components/issue/issue-icons'
 import { WorkspaceMenu } from '@/components/workspace/workspace-menu'
 import { asksPath, customersPath, draftsPath, inboxPath, initiativesPath, membersPath, myIssuesPath, projectsPath, pulsePath, releasesPath, teamCyclesPath, teamHomePath, teamIssuesPath, teamProjectsPath, teamsPath, teamViewsPath, workspaceLibraryPath, workspaceViewsPath } from '@/lib/app-routes'
 import type { AccountBootstrap, BootstrapData, Team, Workspace } from '@/types/flow'
@@ -328,13 +329,13 @@ function ComposeIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><pat
 function IssuesIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2.5" width="8.5" height="8.5" rx="2" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M6 13.5h5.5a2 2 0 0 0 2-2V6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg> }
 function CycleIcon() { return <FlowIcon name="Refresh"/> }
 function GitHubIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.4a6.75 6.75 0 0 0-2.13 13.15c.34.06.46-.14.46-.32v-1.3c-1.88.41-2.28-.8-2.28-.8-.31-.78-.75-.98-.75-.98-.61-.42.05-.41.05-.41.68.05 1.03.69 1.03.69.6 1.03 1.57.73 1.95.56.06-.43.24-.73.43-.9-1.5-.17-3.08-.75-3.08-3.34 0-.74.26-1.34.69-1.81-.07-.17-.3-.86.07-1.79 0 0 .57-.18 1.86.69A6.4 6.4 0 0 1 8 4.61c.58 0 1.15.08 1.69.23 1.29-.87 1.85-.69 1.85-.69.37.93.14 1.62.07 1.79.43.47.69 1.07.69 1.81 0 2.6-1.58 3.16-3.09 3.33.24.21.46.63.46 1.27v1.88c0 .18.12.39.46.32A6.75 6.75 0 0 0 8 1.4Z" fill="currentColor"/></svg> }
-function MembersIcon() { return <Users/> }
+function MembersIcon() { return <FlowMembersIcon/> }
 function CustomersIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.5h7a2 2 0 0 1 2 2v7H5a2 2 0 0 1-2-2v-7Z" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M6 5.5h4M6 8h3M12 5h1a1 1 0 0 1 1 1v7H7" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg> }
 function DraftIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.5h8a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 11 13.5H3A1.5 1.5 0 0 1 1.5 12V4A1.5 1.5 0 0 1 3 2.5Z" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="m5 10 1-2.5 3.2-3.2 1.5 1.5L7.5 9 5 10Z" fill="currentColor"/></svg> }
 function CustomizeIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5h3v3M13.2 2.8 8.7 7.3M7 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8a1.5 1.5 0 0 0 1.5-1.5V9" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg> }
 function UpgradeIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="m5.5 8 2.5-2.5L10.5 8M8 5.7v4.8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> }
 function TeamDisclosureIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M7.00194 10.6239C6.66861 10.8183 6.25 10.5779 6.25 10.192V5.80802C6.25 5.42212 6.66861 5.18169 7.00194 5.37613L10.7596 7.56811C11.0904 7.76105 11.0904 8.23895 10.7596 8.43189L7.00194 10.6239Z"/></svg> }
-function SlackIcon() { return <svg className="slack-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.4 1.5a1.4 1.4 0 1 1 0 2.8H4V2.9a1.4 1.4 0 0 1 1.4-1.4Zm0 3.6h3.5v3.5H5.4a1.75 1.75 0 1 1 0-3.5Zm9.1 1.75a1.4 1.4 0 0 1-2.8 0V5.4h1.4a1.4 1.4 0 0 1 1.4 1.45Zm-3.6 0v3.5H7.4v-3.5a1.75 1.75 0 1 1 3.5 0Zm-1.75 7.65a1.4 1.4 0 0 1 0-2.8h1.45v1.4a1.4 1.4 0 0 1-1.45 1.4Zm0-3.6h-3.5V7.4h3.5a1.75 1.75 0 1 1 0 3.5ZM1.5 9.15a1.4 1.4 0 0 1 2.8 0v1.45H2.9a1.4 1.4 0 0 1-1.4-1.45Zm3.6 0v-3.5h3.5v3.5a1.75 1.75 0 1 1-3.5 0Z"/></svg> }
+function SlackIcon() { return <FlowSlackIcon className="slack-icon"/> }
 function NewsDot() { return <span className="news-dot" aria-hidden="true"/> }
 
 function readSidebarPreferences(): SidebarPreferences { try { return { ...defaultPreferences, ...JSON.parse(localStorage.getItem('flow.sidebar.preferences') ?? '{}') } } catch { return defaultPreferences } }

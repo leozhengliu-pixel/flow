@@ -1,6 +1,7 @@
 import * as Popover from '@radix-ui/react-popover'
-import { CalendarDays, CalendarRange, X } from 'lucide-react'
+import { CalendarRange, X } from 'lucide-react'
 import { useMemo, useState, type ReactNode, type SyntheticEvent } from 'react'
+import { CalendarIcon } from '@/components/issue/issue-icons'
 
 interface DueDatePickerProps {
   value?: string
@@ -16,7 +17,7 @@ export function DueDatePicker({ value, onChange, trigger, triggerClassName = 'du
   return <Popover.Root open={open} onOpenChange={setOpen}>
     <Popover.Trigger asChild>
       <button className={triggerClassName} type="button" aria-label={ariaLabel ?? `Change due date. Current due date is ${value ? formatDate(value) : 'not set'}`}>
-        {trigger ?? <><CalendarDays size={14}/><span>{value ? formatDate(value) : 'Set due date'}</span></>}
+        {trigger ?? <><CalendarIcon size={14}/><span>{value ? formatDate(value) : 'Set due date'}</span></>}
       </button>
     </Popover.Trigger>
     <Popover.Portal>

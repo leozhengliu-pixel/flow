@@ -1,8 +1,8 @@
 import { useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react'
-import { CalendarDays, Check, Ellipsis, Minus, Plus } from 'lucide-react'
+import { Check, Ellipsis, Minus, Plus } from 'lucide-react'
 import type { MyIssuesGroupData, MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import type { MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
-import { NoAssigneeIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
+import { CalendarIcon, NoAssigneeIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import styles from './issue-board.module.css'
 
 export function IssueBoard({ groups, properties, selectedIds, onCreateIssue, onMove, onOpenIssue, onSelectIssue }: {
@@ -78,7 +78,7 @@ function CardProperties({ issue, properties }: { issue: MyIssuesRowData; propert
     {properties.has('project') && issue.project && <span className={`${styles.badge} ${styles.projectBadge}`}><ProjectIcon size={14}/><span>{issue.project.name}</span></span>}
     {shownLabels.map(label => <Badge key={label.id} color={label.color}>{label.name}</Badge>)}
     {hiddenLabelCount > 0 && <span className={styles.badge}><span className={styles.labelStack}>{labels.slice(4, 6).map((label, index) => <i key={label.id} style={{ '--dot-index': index, backgroundColor: label.color } as CSSProperties}/>)}</span><span>+{hiddenLabelCount} labels</span></span>}
-    {properties.has('dueDate') && issue.dueDate && <span className={styles.badge}><CalendarDays size={13}/><span>{formatDate(issue.dueDate)}</span></span>}
+    {properties.has('dueDate') && issue.dueDate && <span className={styles.badge}><CalendarIcon size={13}/><span>{formatDate(issue.dueDate)}</span></span>}
   </div>
 }
 

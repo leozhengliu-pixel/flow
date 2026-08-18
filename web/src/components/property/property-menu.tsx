@@ -20,7 +20,7 @@ export interface PropertyOption {
 
 export type PropertyMenuKind = 'standard' | 'labels' | 'project'
 
-export function PropertyMenu({ label, value, icon, options, onChange, multiple = false, selectedId, selectedIds = [], compact = false, searchPlaceholder, searchShortcut, kind: explicitKind, teamName = 'Cleantrack', trigger, triggerClassName, ariaLabel, hoverContent, hoverClassName }: {
+export function PropertyMenu({ label, value, icon, options, onChange, multiple = false, selectedId, selectedIds = [], compact = false, searchPlaceholder, searchShortcut, kind: explicitKind, teamName = 'Cleantrack', trigger, triggerClassName, surfaceClassName, side = 'bottom', alignOffset = 0, ariaLabel, hoverContent, hoverClassName }: {
   label: string
   value?: string
   icon?: ReactNode
@@ -36,6 +36,9 @@ export function PropertyMenu({ label, value, icon, options, onChange, multiple =
   teamName?: string
   trigger?: ReactNode
   triggerClassName?: string
+  surfaceClassName?: string
+  side?: 'top' | 'right' | 'bottom' | 'left'
+  alignOffset?: number
   ariaLabel?: string
   hoverContent?: ReactNode
   hoverClassName?: string
@@ -67,7 +70,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, multiple =
   return <Tooltip.Provider delayDuration={500} skipDelayDuration={0}><Tooltip.Root open={Boolean(hoverContent) && !open && hoverOpen} onOpenChange={setHoverOpen}><Popover.Root open={open} onOpenChange={next => { setOpen(next); if (next) setHoverOpen(false) }}>
     {hoverContent ? <Tooltip.Trigger asChild>{popoverTrigger}</Tooltip.Trigger> : popoverTrigger}
     <Popover.Portal>
-      <Popover.Content className={`property-command-surface property-command-${kind}`} role="dialog" aria-label={`Change ${label}`} align="start" sideOffset={4} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}>
+      <Popover.Content className={`property-command-surface property-command-${kind}${surfaceClassName ? ` ${surfaceClassName}` : ''}`} role="dialog" aria-label={`Change ${label}`} align="start" alignOffset={alignOffset} side={side} sideOffset={4} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}>
         <div onKeyDown={command.onKeyDown}>
           <div className="property-command-search">
             <input ref={command.inputRef} value={command.query} onChange={event => command.onQueryChange(event.target.value)} aria-label={placeholder} aria-controls={listboxId} aria-activedescendant={command.activeId ? `${listboxId}-${command.activeId || 'none'}` : undefined} placeholder={placeholder} autoComplete="off" spellCheck={false}/>
@@ -76,7 +79,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, multiple =
           <div id={listboxId} className="property-command-options" role="listbox" aria-label={label} aria-multiselectable={multiple || undefined}>
             {kind === 'labels' && <>{selectedOptions.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} multi onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }{selectedOptions.length > 0 && remainingOptions.length > 0 && <div className="property-command-separator" role="separator"/>}{remainingOptions.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} multi onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }</>}
             {kind === 'project' && <>{noProject.map(option => <CommandOption key="none" option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }{projects.length > 0 && <div className="property-command-group">Projects in {teamName} team</div>}{projects.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }<div className="property-command-group">New project</div><button type="button" className="property-command-create" role="option" aria-label="Create new project" onClick={() => setOpen(false)}><Plus size={15}/><span>Create new project…</span></button></>}
-            {kind === 'standard' && command.filteredOptions.map(option => <CommandOption key={option.id || 'none'} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }
+            {kind === 'standard' && command.filteredOptions.map(option => <CommandOption key={option.id || 'none'} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} multi={multiple} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }
             {!command.filteredOptions.length && <div className="core-property-empty">No results</div>}
           </div>
         </div>

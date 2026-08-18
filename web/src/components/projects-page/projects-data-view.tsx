@@ -1,7 +1,7 @@
 import * as Tooltip from '@radix-ui/react-tooltip'
-import { Bell, Box, CalendarPlus, Clipboard, FileText, LayoutGrid, Link2, MessageCirclePlus, Move, Package, Search, Star, Tag, Trash2, UserRound, Users } from 'lucide-react'
+import { Bell, Box, CalendarPlus, Clipboard, FileText, LayoutGrid, Link2, MessageCirclePlus, Move, Package, Search, Star, Tag, Trash2, UserRound } from 'lucide-react'
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
-import { NoAssigneeIcon } from '@/components/issue/issue-icons'
+import { MembersIcon, NoAssigneeIcon } from '@/components/issue/issue-icons'
 import { ViewGlyph, ViewIconPicker } from '@/components/views/view-icon-picker'
 import { CheckIcon, ChevronRightIcon, PlusIcon } from './projects-page-icons'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
@@ -446,7 +446,7 @@ function ProjectContextMenu({ point, onAction, onClose, onPropertyChange, option
       { label: 'Status', icon: <Box/>, kind: 'status', shortcut: 'P then S' },
       { label: 'Priority', icon: <LayoutGrid/>, kind: 'priority', shortcut: 'P then P' },
       { label: 'Project lead', icon: <UserRound/>, kind: 'lead', shortcut: 'P then A' },
-      { label: 'Members', icon: <Users/>, kind: 'members', shortcut: 'P then M' },
+      { label: 'Members', icon: <MembersIcon/>, kind: 'members', shortcut: 'P then M' },
       { label: 'Start date…', icon: <CalendarPlus/>, date: 'startDate', shortcut: 'Ctrl ⌥ S' },
       { label: 'Target date…', icon: <CalendarPlus/>, date: 'targetDate', shortcut: 'Ctrl ⌥ D' },
       { label: 'Labels', icon: <Tag/>, kind: 'labels', shortcut: 'P then L' },
