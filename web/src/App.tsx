@@ -50,6 +50,7 @@ import {
   logoutAccount,
   recordRecentResource,
   removeFavorite,
+  reorderProjectMilestones,
   setProjectDisplayDefault,
   setLastWorkspace,
   startCycle as startCycleRequest,
@@ -97,6 +98,7 @@ import type {
   IssueRelationType,
   IssueUpdateInput,
   Project,
+  ProjectMilestone,
   ProjectUpdate,
   SavedView,
   SavedViewMutationInput,
@@ -1698,6 +1700,56 @@ function App() {
           }
         : current,
     );
+  };
+  const reorderMilestones = async (projectId: string, ids: string[]) => {
+    const original = data?.projects.find((project) => project.id === projectId)?.milestones ?? [];
+    const byId = new Map(original.map((milestone) => [milestone.id, milestone]));
+    const optimistic = ids.flatMap((id) => {
+      const milestone = byId.get(id);
+      return milestone ? [milestone] : [];
+    });
+    const setMilestones = (milestones: ProjectMilestone[]) => setData((current) =>
+      current
+        ? {
+            ...current,
+            projects: current.projects.map((project) =>
+              project.id === projectId ? { ...project, milestones } : project,
+            ),
+          }
+        : current,
+    );
+    setMilestones(optimistic);
+    try {
+      const milestones = await reorderProjectMilestones(projectId, ids);
+      setMilestones(milestones);
+      return milestones;
+    } catch (error) {
+      setMilestones(original);
+      toast.error("Could not reorder project milestones", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+      throw error;
+    }
+  };
+  const moveProjectMilestone = async (projectId: string, milestoneId: string, targetProjectId: string) => {
+    const source = data?.projects.find((project) => project.id === projectId);
+    const milestone = source?.milestones?.find((item) => item.id === milestoneId);
+    if (!milestone) throw new Error("Milestone not found");
+    await addProjectMilestone(targetProjectId, { name: milestone.name, targetDate: milestone.targetDate });
+    await removeProjectMilestone(projectId, milestoneId);
+  };
+  const convertProjectMilestone = async (projectId: string, milestoneId: string) => {
+    const source = data?.projects.find((project) => project.id === projectId);
+    const milestone = source?.milestones?.find((item) => item.id === milestoneId);
+    if (!source || !milestone) throw new Error("Milestone not found");
+    const created = await addProject({
+      name: milestone.name,
+      summary: `Converted from milestone in ${source.name}`,
+      teamIds: source.teamIds,
+      targetDate: milestone.targetDate,
+    });
+    await removeProjectMilestone(projectId, milestoneId);
+    return created;
   };
   const commentOnProject = async (projectId: string, body: string) => {
     const comment = await run(
@@ -3451,6 +3503,7 @@ function App() {
             key={selectedProject.id}
             project={selectedProject}
             projects={data.projects}
+            projectStatuses={data.projectStatuses}
             projectUpdates={data.projectUpdates?.[selectedProject.id] ?? []}
             issues={data.issues}
             users={data.users}
@@ -3477,6 +3530,9 @@ function App() {
             onCreateMilestone={addProjectMilestone}
             onUpdateMilestone={changeProjectMilestone}
             onDeleteMilestone={removeProjectMilestone}
+            onMoveMilestone={moveProjectMilestone}
+            onConvertMilestone={convertProjectMilestone}
+            onReorderMilestones={reorderMilestones}
             onDelete={removeProject}
             onCreateSavedView={addSavedView}
             onUpdateSavedView={changeSavedView}

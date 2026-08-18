@@ -3,7 +3,6 @@ import * as Popover from '@radix-ui/react-popover'
 import { Command } from 'cmdk'
 import {
   Bell,
-  CalendarDays,
   Check,
   ChevronRight,
   Copy,
@@ -24,6 +23,7 @@ import { toast } from 'sonner'
 
 import { DueDateCommand } from '@/components/issue/due-date-picker'
 import { FlowOptionsIcon } from '@/components/issue/flow-header-icons'
+import { CalendarIcon } from '@/components/issue/issue-icons'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
 import type { ActivityEvent, BootstrapData, Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 
@@ -207,7 +207,7 @@ export function IssueOptionsMenu({
             <Command.Input ref={parentFilterRef} className="issue-options-filter" aria-label="Filter..." placeholder="Filter..." autoFocus/>
             <Command.List>
               <Command.Empty className="issue-options-empty">No results found.</Command.Empty>
-              <Option icon={<CalendarDays/>} label="Due date" shortcut="Shift D" nested onSelect={() => { setSubmenu(null); setDatePickerOpen(true) }}/>
+              <Option icon={<CalendarIcon/>} label="Due date" shortcut="Shift D" nested onSelect={() => { setSubmenu(null); setDatePickerOpen(true) }}/>
               <Option icon={<Rocket/>} label="Release" shortcut="Option R" nested onSelect={() => setSubmenu('release')}/>
               <Option icon={<Link/>} label="Add link..." shortcut="Ctrl L" onSelect={beginAddLink}/>
               <Option icon={<UserRoundPlus/>} label="Add customer request..." shortcut="Ctrl R" onSelect={() => {
@@ -293,11 +293,11 @@ export function IssueOptionsMenu({
             <Option icon={<Repeat2/>} label="Monthly" detail={issue.recurrence === 'monthly' ? 'Selected' : undefined} onSelect={() => setRecurrence('monthly')}/>
           </SubmenuSurface>}
           {submenu === 'remind' && <SubmenuSurface label="Remind me" top={354} innerRef={nestedSurfaceRef}>
-            <Option icon={<CalendarDays/>} label="An hour from now" detail={formatDate(reminderDate('hour'))} onSelect={() => remindAt(reminderDate('hour'))}/>
-            <Option icon={<CalendarDays/>} label="Tomorrow" detail={formatDate(reminderDate('tomorrow'))} onSelect={() => remindAt(reminderDate('tomorrow'))}/>
-            <Option icon={<CalendarDays/>} label="Next week" detail={formatDate(reminderDate('week'))} onSelect={() => remindAt(reminderDate('week'))}/>
-            <Option icon={<CalendarDays/>} label="A month from now" detail={formatDate(reminderDate('month'))} onSelect={() => remindAt(reminderDate('month'))}/>
-            <Option icon={<CalendarDays/>} label="Custom..." onSelect={() => {
+            <Option icon={<CalendarIcon/>} label="An hour from now" detail={formatDate(reminderDate('hour'))} onSelect={() => remindAt(reminderDate('hour'))}/>
+            <Option icon={<CalendarIcon/>} label="Tomorrow" detail={formatDate(reminderDate('tomorrow'))} onSelect={() => remindAt(reminderDate('tomorrow'))}/>
+            <Option icon={<CalendarIcon/>} label="Next week" detail={formatDate(reminderDate('week'))} onSelect={() => remindAt(reminderDate('week'))}/>
+            <Option icon={<CalendarIcon/>} label="A month from now" detail={formatDate(reminderDate('month'))} onSelect={() => remindAt(reminderDate('month'))}/>
+            <Option icon={<CalendarIcon/>} label="Custom..." onSelect={() => {
               setCustomReminder(toLocalDateTime(reminderDate('tomorrow')))
               openDialog('reminder')
             }}/>
