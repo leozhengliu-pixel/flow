@@ -1,11 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Bot, CalendarDays, Check, Flag, MessageCircle, MoreHorizontal, Paperclip, SmilePlus, Trash2 } from 'lucide-react'
+import { Bot, Check, Flag, MessageCircle, MoreHorizontal, Paperclip, SmilePlus, Trash2 } from 'lucide-react'
 import { format, formatDistanceToNowStrict } from 'date-fns'
 import { toast } from 'sonner'
 import { Avatar } from '@/components/issue/issue-row'
-import { PriorityIcon } from '@/components/issue/issue-icons'
+import { CalendarIcon, PriorityIcon } from '@/components/issue/issue-icons'
 import { EmojiPicker } from '@/components/reactions/emoji-picker'
 import type { Comment, Project, ProjectUpdate } from '@/types/flow'
 import type { ProjectDetailProps } from './project-detail-types'
@@ -85,7 +85,7 @@ function buildProjectEvents(project: Project, viewerName: string): ProjectProper
   if (project.priority > 0) events.push({ id: 'priority', icon: <PriorityIcon priority={project.priority} size={13}/>, text: `${actor} changed priority from No priority to ${project.priorityLabel}`, time: current })
   if (project.lead) events.push({ id: 'lead', text: `${project.lead.displayName} assigned themselves as a lead`, time: current })
   if (project.status.type !== 'backlog') events.push({ id: 'status', text: `${actor} changed status from Backlog to ${project.status.name}`, time: created })
-  if (project.startDate) events.push({ id: 'start', icon: <CalendarDays size={13}/>, text: `${actor} set start date to ${format(new Date(`${project.startDate}T00:00:00`), 'MMM do')}`, time: created })
+  if (project.startDate) events.push({ id: 'start', icon: <CalendarIcon size={13}/>, text: `${actor} set start date to ${format(new Date(`${project.startDate}T00:00:00`), 'MMM do')}`, time: created })
   events.push({ id: 'created', text: `${actor} created the project`, time: created })
   return events.sort((left, right) => +new Date(right.time) - +new Date(left.time))
 }

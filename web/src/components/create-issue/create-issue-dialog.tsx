@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import type { Editor } from '@tiptap/react'
-import { CalendarDays, ChevronRight, ExternalLink, FilePlus2, Link2, Maximize2, Minimize2, MoreHorizontal, Paperclip, Repeat2, X } from 'lucide-react'
+import { ChevronRight, ExternalLink, FilePlus2, Link2, Maximize2, Minimize2, MoreHorizontal, Paperclip, Repeat2, X } from 'lucide-react'
 import type { BootstrapData, Draft, Issue } from '@/types/flow'
 import { PropertyMenu } from '@/components/property/property-menu'
-import { LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
+import { CalendarIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { Avatar } from '@/components/issue/issue-row'
 import { IssueTitleEditor } from '@/components/issue/issue-title-editor'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
@@ -299,7 +299,7 @@ function MoreActions({ active, dueDate, onDueDateChange, onInsertLink }: { activ
     <DropdownMenu.Trigger asChild><button type="button" className={styles.moreButton} aria-label="More actions"><MoreHorizontal/></button></DropdownMenu.Trigger>
     <DropdownMenu.Portal><DropdownMenu.Content className={styles.moreMenu} align="start" sideOffset={4} collisionPadding={10}>
       <DropdownMenu.Sub open={dateOpen} onOpenChange={setDateOpen}>
-        <DropdownMenu.SubTrigger className={styles.menuItem}><CalendarDays/><span>Set due date</span><kbd>⇧ D</kbd><ChevronRight/></DropdownMenu.SubTrigger>
+        <DropdownMenu.SubTrigger className={styles.menuItem}><CalendarIcon/><span>Set due date</span><kbd>⇧ D</kbd><ChevronRight/></DropdownMenu.SubTrigger>
         <DropdownMenu.Portal><DropdownMenu.SubContent className={styles.dateMenu} sideOffset={3} alignOffset={-5}><DueDateCommand value={dueDate} onSelect={async value => onDueDateChange(value)}/></DropdownMenu.SubContent></DropdownMenu.Portal>
       </DropdownMenu.Sub>
       <DropdownMenu.Item className={styles.menuItem} disabled><Repeat2/><span>Make recurring…</span></DropdownMenu.Item>

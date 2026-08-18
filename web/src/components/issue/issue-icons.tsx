@@ -1,24 +1,19 @@
-import type { SVGProps } from 'react'
+import { useId, type SVGProps } from 'react'
 import type { WorkflowState } from '@/types/flow'
 
-type FlowIconProps = Omit<SVGProps<SVGSVGElement>, 'width' | 'height'> & { size?: number }
+export type FlowIconProps = Omit<SVGProps<SVGSVGElement>, 'width' | 'height'> & { size?: number }
 
 const priorityLabels = ['No Priority', 'Urgent Priority', 'High Priority', 'Medium Priority', 'Low Priority']
 
 export function PriorityIcon({ priority, size = 15, className, ...props }: FlowIconProps & { priority: number }) {
+  const normalized = Math.max(0, Math.min(4, priority))
   const classes = ['priority', `priority-${priority}`, className].filter(Boolean).join(' ')
-  const common = { width: size, height: size, viewBox: '0 0 16 16', fill: 'currentColor', className: classes, role: 'img', focusable: false, 'aria-label': priorityLabels[priority] ?? priorityLabels[0], ...props, style: { color: priority === 1 ? 'lch(66% 80 48)' : undefined, ...props.style } }
-  if (priority === 1) return <svg {...common}><path d="M3 1C1.91067 1 1 1.91067 1 3V13C1 14.0893 1.91067 15 3 15H13C14.0893 15 15 14.0893 15 13V3C15 1.91067 14.0893 1 13 1H3ZM7 4L9 4L8.75391 8.99836H7.25L7 4ZM9 11C9 11.5523 8.55228 12 8 12C7.44772 12 7 11.5523 7 11C7 10.4477 7.44772 10 8 10C8.55228 10 9 10.4477 9 11Z"/></svg>
-  if (priority >= 2 && priority <= 4) return <svg {...common}>
-    <rect x="1.5" y="8" width="3" height="6" rx="1"/>
-    <rect x="6.5" y="5" width="3" height="9" rx="1" fillOpacity={priority === 4 ? 0.4 : 1}/>
-    <rect x="11.5" y="2" width="3" height="12" rx="1" fillOpacity={priority >= 3 ? 0.4 : 1}/>
-  </svg>
-  return <svg {...common}>
-    <rect x="1.5" y="7.25" width="3" height="1.5" rx="0.5" opacity="0.9"/>
-    <rect x="6.5" y="7.25" width="3" height="1.5" rx="0.5" opacity="0.9"/>
-    <rect x="11.5" y="7.25" width="3" height="1.5" rx="0.5" opacity="0.9"/>
-  </svg>
+  return <AssetIcon aria-label={priorityLabels[normalized]} asset={`Priority${normalized}`} className={classes} role="img" size={size} {...props} style={{ color: normalized === 1 ? 'lch(66% 80 48)' : undefined, ...props.style }}/>
+}
+
+function AssetIcon({ asset, size = 16, source = 'property', ...props }: FlowIconProps & { asset: string; source?: 'core'|'property' }) {
+  const labelled = Boolean(props['aria-label'])
+  return <svg aria-hidden={labelled ? undefined : true} fill="currentColor" focusable="false" height={size} role={labelled ? props.role ?? 'img' : undefined} viewBox="0 0 16 16" width={size} {...props}><use href={`/${source === 'core' ? 'flow-core-icons' : 'flow-property-icons'}.svg#${asset}`}/></svg>
 }
 
 function FlowSvg({ size = 16, children, ...props }: FlowIconProps) {
@@ -44,11 +39,61 @@ export function ProjectIcon(props: FlowIconProps) {
 }
 
 export function LabelIcon(props: FlowIconProps) {
-  return <FlowSvg {...props}><path d="M12 11.5V13H5.132v-1.5H12Zm1.5-1.5V6a1.5 1.5 0 0 0-1.346-1.492L12 4.5H5.133a.5.5 0 0 0-.303.103l-.08.076-2.382 2.834a.5.5 0 0 0-.11.234l-.008.087v.331a.5.5 0 0 0 .118.321l2.382 2.835a.5.5 0 0 0 .383.179V13l-.22-.012a2 2 0 0 1-1.16-.54l-.15-.16L1.218 9.45a2 2 0 0 1-.46-1.11L.75 8.165v-.331a2 2 0 0 1 .363-1.147l.106-.14 2.383-2.834a2 2 0 0 1 1.312-.701L5.134 3H12a3 3 0 0 1 3 3v4a3 3 0 0 1-3.002 3v-1.5c.778 0 1.417-.59 1.494-1.347L13.5 10Z"/><path d="M5.5 8a1 1 0 1 1 2 0 1 1 0 0 1-2 0Z"/></FlowSvg>
+  return <AssetIcon asset="Label" source="core" {...props}/>
 }
 
 export function TeamIcon(props: FlowIconProps) {
-  return <FlowSvg {...props}><path d="M12.5 13.5V15h-9v-1.5zm1-1v-9a1 1 0 0 0-1-1h-9a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1V15l-.256-.013a2.5 2.5 0 0 1-2.231-2.231L1 12.5v-9a2.5 2.5 0 0 1 2.244-2.487L3.5 1h9l.256.013A2.5 2.5 0 0 1 15 3.5v9l-.013.256a2.5 2.5 0 0 1-2.231 2.231L12.5 15v-1.5a1 1 0 0 0 1-1"/><path d="M10 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0m1.405 6h-6.81c-.407 0-.714-.336-.55-.693.362-.79 1.344-1.974 3.98-1.974 2.648 0 3.597 1.196 3.935 1.986.152.355-.153.681-.555.681"/></FlowSvg>
+  return <AssetIcon asset="Team" source="core" {...props}/>
+}
+
+export function MembersIcon(props: FlowIconProps) {
+  return <AssetIcon asset="Members" {...props}/>
+}
+
+export function CalendarIcon({ variant = 'target', ...props }: FlowIconProps & { variant?: 'start'|'target' }) {
+  return <AssetIcon asset={variant === 'start' ? 'StartDate' : 'TargetDate'} {...props}/>
+}
+
+export function SlackIcon(props: FlowIconProps) {
+  return <AssetIcon asset="Slack" {...props}/>
+}
+
+type ProjectStatusKind = 'backlog'|'planned'|'started'|'completed'|'canceled'
+
+const projectStatusColors: Record<ProjectStatusKind, string> = {
+  backlog: 'lch(67.969% 62.082 61.651)',
+  planned: 'lch(67.969% 1.608 272.005)',
+  started: 'lch(80% 90 85)',
+  completed: 'lch(48% 59.31 288.43)',
+  canceled: '#8A8F98',
+}
+
+export function ProjectStatusIcon({ color, name, type, size = 16, ...props }: FlowIconProps & { color?: string; name?: string; type?: string }) {
+  const kind = projectStatusKind(type, name)
+  const maskId = `project-status-${useId().replaceAll(':', '')}-${kind}`
+  const standard = ({ backlog: 'Backlog', planned: 'Planned', started: 'In Progress', completed: 'Completed', canceled: 'Canceled' } as const)[kind]
+  const stroke = name === standard || !color ? projectStatusColors[kind] : color
+  const progress = kind === 'started' ? 12.56 : kind === 'completed' || kind === 'canceled' ? 25.12 : 0
+  const finished = kind === 'completed' || kind === 'canceled'
+  const label = props['aria-label'] ?? (name ? `${name} status` : undefined)
+  return <svg aria-hidden={label ? undefined : true} fill="none" focusable="false" height={size} role={label ? props.role ?? 'img' : undefined} viewBox="-1 -1 16 16" width={size} {...props} aria-label={label}>
+    <path d="M2.95778 3.02069L5.70777 1.36023C6.50244 0.88041 7.49756 0.88041 8.29223 1.36024L11.0422 3.02074C11.7918 3.47336 12.25 4.2852 12.25 5.16086V8.84803C12.25 9.7251 11.7904 10.5381 11.0388 10.9902L8.29114 12.6433C7.49693 13.1211 6.50355 13.1203 5.71011 12.6412L2.95775 10.9792C2.20815 10.5266 1.75 9.7148 1.75 8.83911V5.16082C1.75 4.28516 2.20816 3.47332 2.95778 3.02069Z" fill="none" stroke={stroke} strokeDasharray={kind === 'backlog' ? '1.65 1.35' : '3.14 0'} strokeDashoffset={kind === 'backlog' ? 2.3 : 1} strokeLinejoin="bevel" strokeWidth="1.5"/>
+    <g mask={`url(#${maskId})`}><circle cx="7" cy="7" fill="none" r="4" stroke={stroke} strokeDasharray={`${progress} 25.12`} strokeWidth="8" transform="rotate(-90 7 7)"/></g>
+    <mask id={maskId} maskUnits="userSpaceOnUse">
+      <path d="M8.3779 4.74233C8.14438 4.60607 7.85562 4.60607 7.6221 4.74233L5.37209 6.05513C5.14168 6.18957 5 6.4363 5 6.70311V9.34216C5 9.60897 5.14168 9.85573 5.37209 9.99016L7.6221 11.303C7.85562 11.4392 8.14438 11.4392 8.3779 11.303L10.6279 9.99016C10.8583 9.85573 11 9.60897 11 9.34216V6.70311C11 6.4363 10.8583 6.18957 10.6279 6.05513L8.3779 4.74233Z" fill="white" transform={finished ? 'translate(-7.5, -7.5) scale(1.8)' : 'translate(-1, -1)'}/>
+      {kind === 'completed' && <path d="M10.7803 5.28033C11.0732 4.98744 11.0732 4.51256 10.7803 4.21967C10.4874 3.92678 10.0126 3.92678 9.7197 4.21967L5.75 8.18934L4.28033 6.71967C3.98744 6.42678 3.51256 6.42678 3.21967 6.71967C2.92678 7.01256 2.92678 7.48744 3.21967 7.78033L5.21967 9.7803C5.51256 10.0732 5.98744 10.0732 6.28033 9.7803L10.7803 5.28033Z" fill="black"/>}
+      {kind === 'canceled' && <path d="M3.73657 3.73657C4.05199 3.42114 4.56339 3.42114 4.87881 3.73657L7 5.85775L9.12117 3.73657C9.4366 3.42114 9.94801 3.42114 10.2634 3.73657C10.5789 4.05199 10.5789 4.56339 10.2634 4.87881L8.14225 7L10.2634 9.12118C10.5789 9.4366 10.5789 9.94801 10.2634 10.2634C9.94801 10.5789 9.4366 10.5789 9.12117 10.2634L7 8.14225L4.87881 10.2634C4.56339 10.5789 4.05199 10.5789 3.73657 10.2634C3.42114 9.94801 3.42114 9.4366 3.73657 9.12118L5.85775 7L3.73657 4.87881C3.42114 4.56339 3.42114 4.05199 3.73657 3.73657Z" fill="black"/>}
+    </mask>
+  </svg>
+}
+
+function projectStatusKind(type?: string, name?: string): ProjectStatusKind {
+  const normalized = `${type ?? ''} ${name ?? ''}`.toLowerCase()
+  if (normalized.includes('backlog')) return 'backlog'
+  if (normalized.includes('progress') || normalized.includes('started')) return 'started'
+  if (normalized.includes('complete')) return 'completed'
+  if (normalized.includes('cancel')) return 'canceled'
+  return 'planned'
 }
 
 export function StatusIcon({state,size=15}:{state:Pick<WorkflowState,'id'|'name'|'color'|'type'>;size?:number}){

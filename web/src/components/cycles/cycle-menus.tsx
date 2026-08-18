@@ -1,7 +1,8 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { CalendarDays, Check, ChevronRight, Edit3, MoreHorizontal, Play, SlidersHorizontal } from 'lucide-react'
+import { Check, ChevronRight, Edit3, MoreHorizontal, Play, SlidersHorizontal } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { CalendarIcon } from '@/components/issue/issue-icons'
 import type { Cycle, CycleMutationInput } from '@/types/flow'
 
 export function CycleActions({ cycle, onUpdate, onStart, onComplete }: {
@@ -17,11 +18,11 @@ export function CycleActions({ cycle, onUpdate, onStart, onComplete }: {
       <DropdownMenu.Trigger asChild><button aria-label={`${cycle.name} actions`} className="cycle-icon-button" type="button"><MoreHorizontal size={15}/></button></DropdownMenu.Trigger>
       <DropdownMenu.Portal><DropdownMenu.Content align="end" className="cycle-menu" collisionPadding={10} sideOffset={5}>
         <DropdownMenu.Item onSelect={() => setEditor('details')}><Edit3 size={14}/><span>Edit cycle</span><kbd>E</kbd></DropdownMenu.Item>
-        <DropdownMenu.Item onSelect={() => setEditor('dates')}><CalendarDays size={14}/><span>Change dates…</span></DropdownMenu.Item>
+        <DropdownMenu.Item onSelect={() => setEditor('dates')}><CalendarIcon size={14}/><span>Change dates…</span></DropdownMenu.Item>
         <DropdownMenu.Sub><DropdownMenu.SubTrigger><SlidersHorizontal size={14}/><span>Cycle actions</span><ChevronRight size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="cycle-menu" sideOffset={4} alignOffset={-5}>
           {cycle.status === 'upcoming' && <DropdownMenu.Item onSelect={() => setConfirm('start')}><Play size={14}/><span>Start cycle today</span></DropdownMenu.Item>}
           {cycle.status === 'current' && <DropdownMenu.Item onSelect={() => setConfirm('complete')}><Check size={14}/><span>Complete cycle</span></DropdownMenu.Item>}
-          <DropdownMenu.Item onSelect={() => setEditor('dates')}><CalendarDays size={14}/><span>Move or resize cycle</span></DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => setEditor('dates')}><CalendarIcon size={14}/><span>Move or resize cycle</span></DropdownMenu.Item>
         </DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
       </DropdownMenu.Content></DropdownMenu.Portal>
     </DropdownMenu.Root>
@@ -62,4 +63,3 @@ function CycleConfirm({ cycle, kind, open, onOpenChange, onConfirm }: { cycle: C
     <footer><Dialog.Close asChild><button type="button">Cancel</button></Dialog.Close><button className="is-primary" disabled={saving} onClick={() => { setSaving(true); void onConfirm().finally(() => setSaving(false)) }} type="button">{saving ? 'Updating…' : action}</button></footer>
   </Dialog.Content></Dialog.Portal></Dialog.Root>
 }
-

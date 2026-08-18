@@ -1,4 +1,4 @@
-import type { Comment, Issue, IssueLabel, IssueUpdateInput, Project, ProjectMilestone, ProjectResource, ProjectUpdate, SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
+import type { Comment, Issue, IssueLabel, IssueUpdateInput, Project, ProjectMilestone, ProjectResource, ProjectStatus, ProjectUpdate, SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
 import type { ProjectMutationInput } from '@/components/projects-page/projects-page'
 
 export type ProjectDetailTab = 'overview' | 'activity' | 'issues' | 'new'
@@ -6,6 +6,7 @@ export type ProjectDetailTab = 'overview' | 'activity' | 'issues' | 'new'
 export type ProjectDetailProps = {
   project: Project
   projects: Project[]
+  projectStatuses: ProjectStatus[]
   projectUpdates: ProjectUpdate[]
   issues: Issue[]
   users: User[]
@@ -27,6 +28,9 @@ export type ProjectDetailProps = {
   onCreateMilestone: (projectId: string, input: { name: string; targetDate?: string }) => Promise<ProjectMilestone>
   onUpdateMilestone: (projectId: string, milestoneId: string, input: { name?: string; targetDate?: string }) => Promise<ProjectMilestone>
   onDeleteMilestone: (projectId: string, milestoneId: string) => Promise<void>
+  onMoveMilestone: (projectId: string, milestoneId: string, targetProjectId: string) => Promise<void>
+  onConvertMilestone: (projectId: string, milestoneId: string) => Promise<Project>
+  onReorderMilestones: (projectId: string, ids: string[]) => Promise<ProjectMilestone[]>
   onDelete: (projectId: string) => Promise<void>
   onCreateSavedView: (input: SavedViewMutationInput) => Promise<SavedView>
   savedViews: SavedView[]
