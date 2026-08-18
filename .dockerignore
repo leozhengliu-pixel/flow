@@ -1,0 +1,7 @@
+.git
+.github
+**/node_modules
+**/coverage
+api/data
+web/.vite
+.DS_Store

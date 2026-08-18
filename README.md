@@ -106,6 +106,19 @@ npm run dev
 
 Open `http://127.0.0.1:5173`.
 
+### Docker
+
+For a local Docker run, build the frontend and API artifacts first, then start
+the single-container Compose service:
+
+```bash
+./scripts/build-local-docker-assets.sh
+docker compose up -d --build
+```
+
+Open `http://127.0.0.1:5173`. The API health endpoint is also exposed at
+`http://127.0.0.1:8080/api/health`.
+
 ### Development account
 
 The local seed account is intended only for development:

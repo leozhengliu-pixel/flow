@@ -42,7 +42,7 @@
 .sidebar .workspace-row > button.workspace-menu-trigger:hover,
 .sidebar .workspace-row > button.workspace-menu-trigger[data-state="open"] { background: var(--theme-control); }
 .workspace-menu-trigger .workspace-avatar { width: 20px; height: 20px; flex: 0 0 20px; border-radius: 6px; font-size: 9px; }
-.workspace-menu-trigger strong { min-width: 0; overflow: hidden; font-size: 13.3333px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-menu-trigger strong { min-width: 0; overflow: hidden; font-size: 14px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-menu-trigger > svg { width: 8px; height: 8px; flex: 0 0 8px; color: #69696d; stroke-width: 1.8; }
 .workspace-menu-trigger + .sidebar-top-action { margin-left: auto; }
 
@@ -128,6 +128,7 @@
   border: 0;
   border-radius: 8px;
   font-size: 12px;
+  font-weight: 500;
   text-align: left;
 }
 .section-label:hover { color: var(--theme-text-secondary); }
@@ -473,6 +474,8 @@
 :root[data-theme="light"] .sidebar-customize-group select{color:var(--text)}
 :root[data-theme="light"] .sidebar-upgrade-dialog>p,:root[data-theme="light"] .badge-preview,:root[data-theme="light"] .upgrade-columns span{color:var(--muted)}
 :root[data-theme="light"] .sidebar-upgrade-dialog footer button{color:var(--text)}
+:root[data-theme="light"] .workspace-menu-trigger>svg,:root[data-theme="light"] .team-disclosure,:root[data-theme="light"] .section-label svg{color:var(--text-placeholder)}
+:root[data-theme="light"] .sidebar-more-trigger,:root[data-theme="light"] .sidebar-popover [role="menuitem"]>svg,:root[data-theme="light"] .sidebar-help-menu kbd{color:var(--text-label)}
 
 @keyframes sidebar-menu-in { from { opacity: 0; transform: translateY(-2px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 

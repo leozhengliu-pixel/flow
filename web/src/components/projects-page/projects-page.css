@@ -35,6 +35,30 @@
   box-shadow: var(--shadow);
 }
 
+:root[data-theme="light"] .lp-project-table__header,
+:root[data-theme="light"] .lp-project-group__count,
+:root[data-theme="light"] .lp-project-subgroup__header,
+:root[data-theme="light"] .lp-project-subgroup__header small,
+:root[data-theme="light"] .lp-project-row__name small,
+:root[data-theme="light"] .lp-project-row__health,
+:root[data-theme="light"] .lp-project-board__column > header,
+:root[data-theme="light"] .lp-project-card__bottom,
+:root[data-theme="light"] .lp-project-timeline > header {
+  color: var(--text-label);
+}
+:root[data-theme="light"] .lp-project-row__health small,
+:root[data-theme="light"] .lp-project-context__label small,
+:root[data-theme="light"] .lp-project-updates-preview__item > header time {
+  color: var(--text-placeholder);
+}
+:root[data-theme="light"] .lp-project-property__menu,
+:root[data-theme="light"] .lp-project-context,
+:root[data-theme="light"] .lp-projects-filter__nested {
+  border-color: var(--border-card);
+  background: var(--surface-elevated);
+  box-shadow: var(--menu-shadow);
+}
+
 .lp-projects button,
 .lp-projects input,
 .lp-projects select { font: inherit; letter-spacing: 0; }
