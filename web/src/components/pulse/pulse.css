@@ -22,3 +22,6 @@
 :root[data-theme="light"] .pulse-comment-box textarea,:root[data-theme="light"] .pulse-update-editor{border-color:var(--border);background:var(--theme-surface-1)}
 :root[data-theme="light"] .pulse-menu,:root[data-theme="light"] .pulse-delete-dialog{background:var(--theme-surface-2);box-shadow:var(--menu-shadow)}
 :root[data-theme="light"] .pulse-composer{background:var(--theme-surface-2);box-shadow:var(--menu-shadow)}
+:root[data-theme="light"] .pulse-icon-button,:root[data-theme="light"] .pulse-add-view,:root[data-theme="light"] .pulse-toolbar>nav>a,:root[data-theme="light"] .pulse-saved-tab,:root[data-theme="light"] .pulse-update-source,:root[data-theme="light"] .pulse-update-card>header,:root[data-theme="light"] .pulse-update-card>header>time,:root[data-theme="light"] .pulse-update-comments>article header time{color:var(--text-label)}
+:root[data-theme="light"] .pulse-update-source>a,:root[data-theme="light"] .pulse-update-card>header>strong{color:var(--text-body)}
+:root[data-theme="light"] .pulse-menu,:root[data-theme="light"] .pulse-delete-dialog{border-color:var(--border-card);background:var(--surface-elevated);box-shadow:var(--menu-shadow)}

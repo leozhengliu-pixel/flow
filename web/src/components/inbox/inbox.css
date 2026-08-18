@@ -677,3 +677,21 @@ html.flow-inbox-is-resizing * {
   background: var(--theme-surface-1);
   color-scheme: light;
 }
+:root[data-theme="light"] .flow-inbox-row__identifier,
+:root[data-theme="light"] .flow-inbox-row__title,
+:root[data-theme="light"] .flow-inbox-row__body,
+:root[data-theme="light"] .flow-inbox-row__summary time {
+  color: var(--text-label);
+  opacity: 1;
+}
+:root[data-theme="light"] .flow-inbox-row[data-read="false"] .flow-inbox-row__body,
+:root[data-theme="light"] .flow-inbox-row[data-read="false"] .flow-inbox-row__summary time,
+:root[data-theme="light"] .flow-inbox-row[data-active="true"] .flow-inbox-row__body,
+:root[data-theme="light"] .flow-inbox-row[data-active="true"] .flow-inbox-row__summary time {
+  color: var(--text-body);
+}
+:root[data-theme="light"] .flow-inbox-menu {
+  border-color: var(--border-card);
+  background: var(--surface-elevated);
+  box-shadow: var(--menu-shadow);
+}

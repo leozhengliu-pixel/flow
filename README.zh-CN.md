@@ -57,6 +57,18 @@ npm run dev
 
 打开 `http://127.0.0.1:5173`。
 
+### Docker
+
+本地 Docker 启动时，先生成前端与 API 产物，再启动单容器 Compose 服务：
+
+```bash
+./scripts/build-local-docker-assets.sh
+docker compose up -d --build
+```
+
+打开 `http://127.0.0.1:5173`。API 健康检查也暴露在
+`http://127.0.0.1:8080/api/health`。
+
 ### 开发账户
 
 ```text
