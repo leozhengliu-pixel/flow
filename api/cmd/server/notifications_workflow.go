@@ -642,7 +642,7 @@ func (s *server) createTeamLabel(w http.ResponseWriter, r *http.Request) {
 		if !teamExists(data, teamID) {
 			return "", errNotFound
 		}
-		created = domain.IssueLabel{ID: fmt.Sprintf("label_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#5E6AD2", Scope: teamID}
+		created = domain.IssueLabel{ID: fmt.Sprintf("label_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#5E6AD2", Scope: teamID, ResourceType: "issue", CreatedAt: time.Now().UTC()}
 		if input.Color != nil {
 			created.Color = *input.Color
 		}
@@ -679,6 +679,16 @@ func (s *server) updateTeamLabel(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Color != nil {
 			data.Labels[index].Color = *input.Color
+		}
+		if input.ArchivedAt != nil {
+			value := strings.TrimSpace(*input.ArchivedAt)
+			if value == "" {
+				data.Labels[index].ArchivedAt = nil
+			} else if parsed, parseErr := time.Parse(time.RFC3339, value); parseErr == nil {
+				data.Labels[index].ArchivedAt = &parsed
+			} else {
+				return errInvalid
+			}
 		}
 		updated = data.Labels[index]
 		for issueIndex := range data.Issues {

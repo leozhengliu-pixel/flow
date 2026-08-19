@@ -12,7 +12,7 @@ import type { IssueSLA } from '@/types/flow'
 export type MyIssuesStateType = 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled'
 export type MyIssuesContextAction = 'status' | 'priority' | 'assignee' | 'dueDate' | 'labels' | 'project' | 'moreProperties' | 'createRelated' | 'markAs' | 'copy' | 'convertTo' | 'move' | 'openIn' | 'runLoop' | 'favorite' | 'remind' | 'delete'
 export type MyIssuesEditableProperty = 'status' | 'priority' | 'assignee' | 'dueDate' | 'labels' | 'project'
-export interface MyIssuesContextOption { id: string; label: string; color?: string; description?: string; issueCount?: number; scope?: string; avatarUrl?: string; kind?: MyIssuesEditableProperty; priority?: 0 | 1 | 2 | 3 | 4; shortcut?: string; stateType?: MyIssuesStateType }
+export interface MyIssuesContextOption { id: string; label: string; color?: string; description?: string; issueCount?: number; scope?: string; groupId?: string; groupLabel?: string; avatarUrl?: string; kind?: MyIssuesEditableProperty; priority?: 0 | 1 | 2 | 3 | 4; shortcut?: string; stateType?: MyIssuesStateType }
 export interface MyIssuesRowPropertyOptions {
   status: MyIssuesContextOption[]
   priority: MyIssuesContextOption[]
@@ -169,8 +169,9 @@ function IssueContextMenu({ issue, options, onPropertyChange, onAction }: { issu
 
 function ContextPropertySub({ label, multi = false, onSelect, options, selectedIds, shortcut }: { label: string; multi?: boolean; onSelect: (id: string) => void | Promise<void>; options: MyIssuesContextOption[]; selectedIds: string[]; shortcut?: string }) {
   const selected = new Set(selectedIds)
+  const sections = multi && label === 'Labels' ? groupContextOptions(options) : [{ id: 'all', options }]
   return <ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}>
-    {options.map(option => multi ? <ContextMenu.CheckboxItem className={styles.submenuItem} key={option.id} checked={selected.has(option.id)} onSelect={event => event.preventDefault()} onCheckedChange={() => void onSelect(option.id)}><span className={styles.optionCheckbox}>{selected.has(option.id) && <Check size={11}/>}</span><OptionIcon option={option}/><span>{option.label}</span></ContextMenu.CheckboxItem> : <ContextMenu.Item className={styles.submenuItem} key={option.id || 'none'} onSelect={() => void onSelect(option.id)}><OptionIcon option={option}/><span>{option.label}</span>{selected.has(option.id) && <Check className={styles.optionCheck} size={13}/>}</ContextMenu.Item>)}
+    {sections.map(section => <ContextMenu.Group key={section.id}>{section.label && <ContextMenu.Label className={styles.groupLabel}>{section.label}</ContextMenu.Label>}{section.options.map(option => multi ? <ContextMenu.CheckboxItem className={styles.submenuItem} key={option.id} checked={selected.has(option.id)} onSelect={event => event.preventDefault()} onCheckedChange={() => void onSelect(option.id)}><span className={styles.optionCheckbox}>{selected.has(option.id) && <Check size={11}/>}</span><OptionIcon option={option}/><span>{option.label}</span></ContextMenu.CheckboxItem> : <ContextMenu.Item className={styles.submenuItem} key={option.id || 'none'} onSelect={() => void onSelect(option.id)}><OptionIcon option={option}/><span>{option.label}</span>{selected.has(option.id) && <Check className={styles.optionCheck} size={13}/>}</ContextMenu.Item>)}</ContextMenu.Group>)}
   </ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
 }
 
@@ -210,3 +211,18 @@ function formatRowDate(value: string) { return new Intl.DateTimeFormat('en-US', 
 function formatFullDate(value: string) { return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(new Date(value)) }
 function formatDueDate(value: string) { return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(`${value}T00:00:00`)) }
 function initials(value: string) { return value.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() }
+function groupContextOptions(options: MyIssuesContextOption[]) {
+  const sections: { id: string; label?: string; options: MyIssuesContextOption[] }[] = []
+  const indexes = new Map<string, number>()
+  for (const option of options) {
+    const id = option.groupId || option.groupLabel || 'ungrouped'
+    let index = indexes.get(id)
+    if (index === undefined) {
+      index = sections.length
+      indexes.set(id, index)
+      sections.push({ id, label: id === 'ungrouped' ? undefined : option.groupLabel, options: [] })
+    }
+    sections[index].options.push(option)
+  }
+  return sections
+}

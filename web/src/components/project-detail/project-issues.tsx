@@ -57,7 +57,7 @@ export function ProjectNewView({ display, filters, onCreateSavedView, onDisplayC
   </div>
 }
 
-export function ProjectIssues({ display, filters, issues, labels, onCreateIssue, onDeleteIssues, onFiltersChange, onOpenIssue, onUpdateIssue, project, projectIssues, users }: ProjectDetailProps & { projectIssues: Issue[]; filters: ProjectIssueFilters; display: MyIssuesDisplayOptions; onFiltersChange: (filters: ProjectIssueFilters) => void }) {
+export function ProjectIssues({ display, filters, issues, labels, labelGroups, onCreateIssue, onDeleteIssues, onFiltersChange, onOpenIssue, onUpdateIssue, project, projectIssues, users }: ProjectDetailProps & { projectIssues: Issue[]; filters: ProjectIssueFilters; display: MyIssuesDisplayOptions; onFiltersChange: (filters: ProjectIssueFilters) => void }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [deleteTarget, setDeleteTarget] = useState<Issue>()
@@ -65,13 +65,14 @@ export function ProjectIssues({ display, filters, issues, labels, onCreateIssue,
   const allStates = useMemo(() => uniqueById(issues.map(issue => issue.state)).sort((left, right) => left.position - right.position), [issues])
   const groups = useMemo(() => groupIssues(visible, display, allStates), [allStates, display, visible])
   const rowIssues = useMemo(() => new Map(projectIssues.map(issue => [issue.id, issue])), [projectIssues])
+  const labelGroupNames = useMemo(() => new Map(labelGroups.filter(group => group.resourceType === 'issue').map(group => [group.id, group.name])), [labelGroups])
   const propertyOptions = useMemo<MyIssuesRowPropertyOptions>(() => ({
     status: allStates.map(state => ({ id: state.id, label: state.name, kind: 'status', stateType: state.type, color: state.color })),
     priority: [0,1,2,3,4].map(priority => ({ id: String(priority), label: PRIORITY_LABELS[priority], kind: 'priority' as const, priority: priority as 0|1|2|3|4 })),
     assignee: [{ id: '', label: 'No assignee', kind: 'assignee' as const }, ...users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, kind: 'assignee' as const }))],
-    dueDate: dueDateOptions(), labels: labels.map(label => ({ id: label.id, label: label.name, kind: 'labels' as const, color: label.color, description: label.description })),
+    dueDate: dueDateOptions(), labels: labels.map(label => ({ id: label.id, label: label.name, kind: 'labels' as const, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined })),
     project: [{ id: project.id, label: project.name, kind: 'project' as const, color: project.color }],
-  }), [allStates, labels, project.color, project.id, project.name, users])
+  }), [allStates, labelGroupNames, labels, project.color, project.id, project.name, users])
   const changeProperty = async (row: MyIssuesRowData, property: MyIssuesEditableProperty, value: string | string[]) => {
     if (property === 'priority') await onUpdateIssue(row.id, { priority: Number(value) })
     else if (property === 'status') await onUpdateIssue(row.id, { stateId: String(value) })

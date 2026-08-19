@@ -69,7 +69,9 @@ export function MyIssuesFilterMenu({ filters = [], onOpenChange, onToggle, open,
                     <Command.Item
                       className={styles.rootItem}
                       value={item.label}
-                      data-unavailable={hasSubmenu && !hasValues ? '' : undefined}
+                      aria-disabled={!hasValues}
+                      data-unavailable={!hasValues ? '' : undefined}
+                      disabled={!hasValues}
                       onMouseMove={() => { if (activeField && hasValues) setActiveField(field) }}
                       onSelect={() => openValues(field)}
                     >

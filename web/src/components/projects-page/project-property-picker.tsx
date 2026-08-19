@@ -90,7 +90,7 @@ export function ProjectPropertyPicker({ buttonClassName = '', children, label, o
           {!ordered.length && <div className={styles.empty}>No results</div>}
           {ordered.map((option, index) => {
             const previous = ordered[index - 1]
-            const showGroup = property === 'lead' && option.group && option.group !== previous?.group
+            const showGroup = (property === 'lead' || property === 'status') && option.group && option.group !== previous?.group
             return <div key={option.value || '__empty'}>
               {showGroup && <div className={styles.groupLabel}>{option.group}</div>}
               <button
