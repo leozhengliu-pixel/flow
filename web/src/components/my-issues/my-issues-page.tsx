@@ -8,6 +8,7 @@ import { defaultMyIssuesDisplayOptions } from './my-issues-display-defaults'
 import { MyIssuesSurface, type MyIssuesDisplayOptions, type MyIssuesFilterKey, type MyIssuesFilterOption, type MyIssuesView } from './my-issues-surface'
 import { useMyIssuesController } from './use-my-issues-controller'
 import { issuePath } from '@/lib/app-routes'
+import { labelsForResource } from '@/lib/labels'
 
 export interface MyIssuesPageProps {
   data: BootstrapData
@@ -184,12 +185,14 @@ function toRow(issue: Issue, workspaceSlug: string, data: BootstrapData): MyIssu
 
 function propertyOptions(data: BootstrapData, issues = data.issues) {
   const count = (predicate: (issue: Issue) => boolean) => issues.filter(predicate).length
+  const issueLabels = labelsForResource(data.labels, 'issue')
+  const labelGroupNames = new Map(data.labelGroups.filter(group => group.resourceType === 'issue').map(group => [group.id, group.name]))
   return {
     status: [...data.states].sort((a, b) => a.position - b.position).map(state => ({ id: state.id, label: state.name, color: state.color, count: count(issue => issue.state.id === state.id), kind: 'status' as const, stateType: state.type })),
     priority: PRIORITIES.map(priority => ({ ...priority, count: count(issue => String(issue.priority) === priority.id) })),
     assignee: [{ id: '', label: 'No assignee', count: count(issue => !issue.assignee), kind: 'assignee' as const }, ...data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: count(issue => issue.assignee?.id === user.id), kind: 'assignee' as const }))],
     dueDate: dueDateOptions().map(option => ({ ...option, kind: 'dueDate' as const })),
-    labels: data.labels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount ?? count(issue => issue.labels.some(item => item.id === label.id)), scope: label.scope, count: count(issue => issue.labels.some(item => item.id === label.id)), kind: 'labels' as const })),
+    labels: issueLabels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount ?? count(issue => issue.labels.some(item => item.id === label.id)), scope: label.scope, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined, count: count(issue => issue.labels.some(item => item.id === label.id)), kind: 'labels' as const })),
     project: [{ id: '', label: 'No project', count: count(issue => !issue.project), kind: 'project' as const }, ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, count: count(issue => issue.project?.id === project.id), kind: 'project' as const }))],
   }
 }
