@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CircleHelp } from "lucide-react";
 import {
   addFavorite,
+  addSubscription,
   batchUpdateIssues,
   completeCycle as completeCycleRequest,
   createComment,
@@ -50,6 +51,7 @@ import {
   logoutAccount,
   recordRecentResource,
   removeFavorite,
+  removeSubscription,
   reorderProjectMilestones,
   setProjectDisplayDefault,
   setLastWorkspace,
@@ -148,6 +150,7 @@ import {
   projectsNewViewPath,
   projectsPath,
   projectsSavedViewPath,
+  projectsSavedViewEditPath,
   pulsePath,
   releasesPath,
   searchPath,
@@ -158,13 +161,16 @@ import {
   teamProjectsNewViewPath,
   teamProjectsPath,
   teamProjectsSavedViewPath,
+  teamProjectsSavedViewEditPath,
   teamSavedViewPath,
+  teamSavedViewEditPath,
   teamsPath,
   teamViewsNewPath,
   teamViewsPath,
   workspaceIssuesPath,
   workspaceOnboardingPath,
   workspaceSavedViewPath,
+  workspaceSavedViewEditPath,
   workspaceViewsNewPath,
   workspaceViewsPath,
   settingsPath,
@@ -185,6 +191,7 @@ import { WorkspaceSearchPage } from "@/components/search/workspace-search-page";
 import { WorkspaceOperationsPage } from "@/components/workspace-operations/workspace-operations-page";
 import { DocumentPage } from "@/components/documents/document-page";
 import { CustomerDetailPage } from "@/components/customer-detail/customer-detail-page";
+import { labelsForResource } from "@/lib/labels";
 import { applyTheme } from "@/lib/theme";
 
 function App() {
@@ -1934,6 +1941,44 @@ function App() {
     );
     return view;
   };
+  const toggleSavedViewFavorite = async (view: SavedView) => {
+    const current = data?.favorites.find(
+      (item) => item.userId === data.viewer.id && item.resourceType === "view" && item.resourceId === view.id,
+    );
+    if (current || view.favorite) {
+      if (current) await run(() => removeFavorite("view", view.id), "Could not remove favorite");
+      if (view.favorite) await changeSavedView(view.id, { favorite: false });
+      setData((state) => state ? { ...state, favorites: state.favorites.filter((item) => !(item.userId === state.viewer.id && item.resourceType === "view" && item.resourceId === view.id)) } : state);
+      return;
+    }
+    const created = await run(() => addFavorite("view", view.id), "Could not add favorite");
+    setData((state) => state ? { ...state, favorites: [created, ...state.favorites.filter((item) => item.id !== created.id)] } : state);
+  };
+  const toggleSavedViewSubscription = async (view: SavedView) => {
+    const current = data?.subscriptions.find(
+      (item) => item.userId === data.viewer.id && item.resourceType === "view" && item.resourceId === view.id,
+    );
+    if (current || view.subscribed) {
+      if (current) await run(() => removeSubscription("view", view.id), "Could not unsubscribe from view");
+      if (view.subscribed) await changeSavedView(view.id, { subscribed: false });
+      setData((state) => state ? { ...state, subscriptions: state.subscriptions.filter((item) => !(item.userId === state.viewer.id && item.resourceType === "view" && item.resourceId === view.id)) } : state);
+      return;
+    }
+    const created = await run(() => addSubscription("view", view.id, ["issue-added", "issue-completed"]), "Could not subscribe to view");
+    setData((state) => state ? { ...state, subscriptions: [created, ...state.subscriptions.filter((item) => item.id !== created.id)] } : state);
+  };
+  const setSavedViewSubscriptionEvents = async (view: SavedView, events: string[]) => {
+    const current = data?.subscriptions.find(
+      (item) => item.userId === data.viewer.id && item.resourceType === "view" && item.resourceId === view.id,
+    );
+    if (!events.length) {
+      if (current) await run(() => removeSubscription("view", view.id), "Could not unsubscribe from view");
+      setData((state) => state ? { ...state, subscriptions: state.subscriptions.filter((item) => !(item.userId === state.viewer.id && item.resourceType === "view" && item.resourceId === view.id)) } : state);
+      return;
+    }
+    const updated = await run(() => addSubscription("view", view.id, events), "Could not update view subscription");
+    setData((state) => state ? { ...state, subscriptions: [updated, ...state.subscriptions.filter((item) => item.id !== updated.id)] } : state);
+  };
   const removeSavedViewOnly = async (view: SavedView) => {
     await run(() => deleteSavedView(view.id), "Could not delete view");
     setData((current) =>
@@ -2330,19 +2375,28 @@ function App() {
       route.kind === "workspace-saved-view" &&
       selectedSavedView &&
       location.pathname !==
-        workspaceSavedViewPath(workspace, selectedSavedView.id)
+        (route.editing
+          ? workspaceSavedViewEditPath(workspace, selectedSavedView.id)
+          : workspaceSavedViewPath(workspace, selectedSavedView.id))
     )
-      navigateTo(workspaceSavedViewPath(workspace, selectedSavedView.id), {
-        replace: true,
-      });
+      navigateTo(
+        route.editing
+          ? workspaceSavedViewEditPath(workspace, selectedSavedView.id)
+          : workspaceSavedViewPath(workspace, selectedSavedView.id),
+        { replace: true },
+      );
     if (
       route.kind === "team-saved-view" &&
       selectedSavedView &&
       location.pathname !==
-        teamSavedViewPath(workspace, route.teamKey, selectedSavedView.id)
+        (route.editing
+          ? teamSavedViewEditPath(workspace, route.teamKey, selectedSavedView.id)
+          : teamSavedViewPath(workspace, route.teamKey, selectedSavedView.id))
     )
       navigateTo(
-        teamSavedViewPath(workspace, route.teamKey, selectedSavedView.id),
+        route.editing
+          ? teamSavedViewEditPath(workspace, route.teamKey, selectedSavedView.id)
+          : teamSavedViewPath(workspace, route.teamKey, selectedSavedView.id),
         { replace: true },
       );
     if (
@@ -2394,28 +2448,44 @@ function App() {
       route.kind === "projects-saved-view" &&
       selectedProjectSavedView &&
       location.pathname !==
-        projectsSavedViewPath(workspace, selectedProjectSavedView.id)
+        (route.editing
+          ? projectsSavedViewEditPath(workspace, selectedProjectSavedView.id)
+          : projectsSavedViewPath(workspace, selectedProjectSavedView.id))
     )
       navigateTo(
-        projectsSavedViewPath(workspace, selectedProjectSavedView.id),
+        route.editing
+          ? projectsSavedViewEditPath(workspace, selectedProjectSavedView.id)
+          : projectsSavedViewPath(workspace, selectedProjectSavedView.id),
         { replace: true },
       );
     if (
       route.kind === "team-projects-saved-view" &&
       selectedProjectSavedView &&
       location.pathname !==
-        teamProjectsSavedViewPath(
-          workspace,
-          route.teamKey,
-          selectedProjectSavedView.id,
-        )
+        (route.editing
+          ? teamProjectsSavedViewEditPath(
+              workspace,
+              route.teamKey,
+              selectedProjectSavedView.id,
+            )
+          : teamProjectsSavedViewPath(
+              workspace,
+              route.teamKey,
+              selectedProjectSavedView.id,
+            ))
     )
       navigateTo(
-        teamProjectsSavedViewPath(
-          workspace,
-          route.teamKey,
-          selectedProjectSavedView.id,
-        ),
+        route.editing
+          ? teamProjectsSavedViewEditPath(
+              workspace,
+              route.teamKey,
+              selectedProjectSavedView.id,
+            )
+          : teamProjectsSavedViewPath(
+              workspace,
+              route.teamKey,
+              selectedProjectSavedView.id,
+            ),
         { replace: true },
       );
     if (route.kind === "issue" && selectedIssue) {
@@ -2684,6 +2754,9 @@ function App() {
         ? view.scope === "team" && view.teamId === viewsTeam.id
         : view.scope === "personal" || view.scope === "workspace"),
   );
+  const duplicateSavedView = availableSavedViews.find(
+    (view) => view.id === new URLSearchParams(location.search).get("duplicate"),
+  );
   const savedIssuePathFor = (view: SavedView) => {
     const team =
       view.scope === "team"
@@ -2701,6 +2774,18 @@ function App() {
     return team
       ? teamProjectsSavedViewPath(data.workspace.urlKey, team.key, view.id)
       : projectsSavedViewPath(data.workspace.urlKey, view.id);
+  };
+  const savedIssueEditPathFor = (view: SavedView) => {
+    const team = view.scope === "team" ? data.teams.find((item) => item.id === view.teamId) : undefined;
+    return team
+      ? teamSavedViewEditPath(data.workspace.urlKey, team.key, view.id)
+      : workspaceSavedViewEditPath(data.workspace.urlKey, view.id);
+  };
+  const savedProjectEditPathFor = (view: SavedView) => {
+    const team = view.scope === "team" ? data.teams.find((item) => item.id === view.teamId) : undefined;
+    return team
+      ? teamProjectsSavedViewEditPath(data.workspace.urlKey, team.key, view.id)
+      : projectsSavedViewEditPath(data.workspace.urlKey, view.id);
   };
   return (
     <div className="app">
@@ -2900,7 +2985,7 @@ function App() {
           projects={data.projects}
           projectUpdates={data.projectUpdates}
           users={data.users}
-          labels={data.labels}
+          labels={labelsForResource(data.labels, "project")}
           viewer={data.viewer}
           view={route.view}
           onViewChange={(view) =>
@@ -2931,6 +3016,7 @@ function App() {
             teams={data.teams}
             users={data.users}
             labels={data.labels}
+            labelGroups={data.labelGroups}
             viewer={data.viewer}
             tab={route.tab}
             viewId={route.viewId}
@@ -3025,6 +3111,7 @@ function App() {
         <IssueExplorerPage
           key={`workspace-${route.view}`}
           data={data}
+          initialLabelId={new URLSearchParams(location.search).get("label") ?? undefined}
           scope={{ kind: "workspace" }}
           view={route.view}
           viewHref={(view) => workspaceIssuesPath(data.workspace.urlKey, view)}
@@ -3109,11 +3196,12 @@ function App() {
         selectedSavedView &&
         selectedSavedView.scope !== "team" && (
           <IssueExplorerPage
-            key={selectedSavedView.id}
+            key={`${selectedSavedView.id}:${route.editing ? "edit" : "view"}`}
             data={data}
             scope={{ kind: "workspace" }}
             view={selectedSavedView.view}
             savedView={selectedSavedView}
+            editingView={route.editing}
             viewHref={(view) =>
               workspaceIssuesPath(data.workspace.urlKey, view)
             }
@@ -3130,6 +3218,29 @@ function App() {
             onCreateSavedView={addSavedView}
             onUpdateSavedView={changeSavedView}
             onDeleteSavedView={removeSavedView}
+            onToggleSavedViewFavorite={toggleSavedViewFavorite}
+            onSetSavedViewSubscriptionEvents={setSavedViewSubscriptionEvents}
+            onDuplicateSavedView={(view) =>
+              navigateTo(
+                `${workspaceViewsNewPath(data.workspace.urlKey, "issues")}?duplicate=${encodeURIComponent(view.id)}`,
+              )
+            }
+            onBeginEditSavedView={() =>
+              navigateTo(
+                workspaceSavedViewEditPath(
+                  data.workspace.urlKey,
+                  selectedSavedView.id,
+                ),
+              )
+            }
+            onFinishEditSavedView={() =>
+              navigateTo(
+                workspaceSavedViewPath(
+                  data.workspace.urlKey,
+                  selectedSavedView.id,
+                ),
+              )
+            }
             onOpenSidebar={() => setMobileSidebarOpen(true)}
             onOpenIssue={openIssue}
             renderIssuePreview={renderIssuePreview}
@@ -3151,7 +3262,7 @@ function App() {
             (team) => team.key.toLowerCase() === route.teamKey.toLowerCase(),
           )!.id && (
           <IssueExplorerPage
-            key={selectedSavedView.id}
+            key={`${selectedSavedView.id}:${route.editing ? "edit" : "view"}`}
             data={data}
             scope={{
               kind: "team",
@@ -3162,6 +3273,7 @@ function App() {
             }}
             view={selectedSavedView.view}
             savedView={selectedSavedView}
+            editingView={route.editing}
             viewHref={(view) =>
               teamIssuesPath(data.workspace.urlKey, route.teamKey, view)
             }
@@ -3190,6 +3302,31 @@ function App() {
             onCreateSavedView={addSavedView}
             onUpdateSavedView={changeSavedView}
             onDeleteSavedView={removeSavedView}
+            onToggleSavedViewFavorite={toggleSavedViewFavorite}
+            onSetSavedViewSubscriptionEvents={setSavedViewSubscriptionEvents}
+            onDuplicateSavedView={(view) =>
+              navigateTo(
+                `${teamViewsNewPath(data.workspace.urlKey, route.teamKey, "issues")}?duplicate=${encodeURIComponent(view.id)}`,
+              )
+            }
+            onBeginEditSavedView={() =>
+              navigateTo(
+                teamSavedViewEditPath(
+                  data.workspace.urlKey,
+                  route.teamKey,
+                  selectedSavedView.id,
+                ),
+              )
+            }
+            onFinishEditSavedView={() =>
+              navigateTo(
+                teamSavedViewPath(
+                  data.workspace.urlKey,
+                  route.teamKey,
+                  selectedSavedView.id,
+                ),
+              )
+            }
             onOpenSidebar={() => setMobileSidebarOpen(true)}
             onOpenIssue={openIssue}
             renderIssuePreview={renderIssuePreview}
@@ -3230,7 +3367,12 @@ function App() {
                 )
               }
               onDelete={removeSavedViewOnly}
-              onDuplicate={addSavedView}
+              onDuplicate={(view) =>
+                navigateTo(`${viewsTeam
+                  ? teamViewsNewPath(data.workspace.urlKey, viewsTeam.key, viewsResource)
+                  : workspaceViewsNewPath(data.workspace.urlKey, viewsResource)}?duplicate=${encodeURIComponent(view.id)}`)
+              }
+              onEdit={(view) => navigateTo((view.resource ?? "issues") === "projects" ? savedProjectEditPathFor(view) : savedIssueEditPathFor(view))}
               onOpen={(view) =>
                 navigateTo(
                   (view.resource ?? "issues") === "projects"
@@ -3260,6 +3402,8 @@ function App() {
                   : workspaceViewsPath(data.workspace.urlKey, resource)
               }
               onUpdate={changeSavedView}
+              onToggleFavorite={toggleSavedViewFavorite}
+              onSetSubscriptionEvents={setSavedViewSubscriptionEvents}
             />
           </main>
         )}
@@ -3268,11 +3412,16 @@ function App() {
           route.kind === "team-views-new") &&
         route.resource === "issues" && (
           <IssueExplorerPage
-            key={`${route.kind}:issues-new`}
+            key={`${route.kind}:issues-new:${duplicateSavedView?.id ?? "blank"}`}
             data={data}
             scope={viewsScope}
             view="all"
             creatingView
+            duplicateFrom={
+              duplicateSavedView?.resource !== "projects"
+                ? duplicateSavedView
+                : undefined
+            }
             defaultSaveScope={viewsTeam ? "team" : "personal"}
             viewHref={(view) =>
               viewsTeam
@@ -3336,7 +3485,7 @@ function App() {
         route.resource === "projects" && (
           <main className="main-panel">
             <ProjectsPage
-              key={`${route.kind}:projects-new`}
+              key={`${route.kind}:projects-new:${duplicateSavedView?.id ?? "blank"}`}
               projects={data.projects}
               projectUpdates={data.projectUpdates}
               projectStatuses={data.projectStatuses}
@@ -3344,11 +3493,17 @@ function App() {
               users={data.users}
               teams={data.teams}
               labels={data.labels}
+              labelGroups={data.labelGroups}
               workspaceKey={data.workspace.urlKey}
               scopeTeamId={viewsTeam?.id}
               viewerId={data.viewer.id}
               viewer={data.viewer}
               creatingView
+              duplicateFrom={
+                duplicateSavedView?.resource === "projects"
+                  ? duplicateSavedView
+                  : undefined
+              }
               defaultSaveScope={viewsTeam ? "team" : "personal"}
               savedViews={projectSavedViews.filter((view) =>
                 viewsTeam
@@ -3422,7 +3577,7 @@ function App() {
         (!isProjectsSavedRoute || selectedProjectSavedView) && (
           <main className="main-panel">
             <ProjectsPage
-              key={`${route.kind}:${selectedProjectSavedView?.id ?? "all"}`}
+              key={`${route.kind}:${selectedProjectSavedView?.id ?? "all"}:${route.kind === "projects-saved-view" || route.kind === "team-projects-saved-view" ? (route.editing ? "edit" : "view") : "base"}`}
               createOnMount={new URLSearchParams(location.search).get("create") === "1"}
               projects={data.projects}
               projectUpdates={data.projectUpdates}
@@ -3431,6 +3586,7 @@ function App() {
               users={data.users}
               teams={data.teams}
               labels={data.labels}
+              labelGroups={data.labelGroups}
               workspaceKey={data.workspace.urlKey}
               scopeTeamId={projectTeam?.id}
               viewerId={data.viewer.id}
@@ -3440,6 +3596,12 @@ function App() {
                 route.kind === "team-projects-new-view"
               }
               savedView={selectedProjectSavedView ?? undefined}
+              savedViewSubscription={selectedProjectSavedView ? data.subscriptions.find(item => item.userId === data.viewer.id && item.resourceType === "view" && item.resourceId === selectedProjectSavedView.id) : undefined}
+              editingView={
+                (route.kind === "projects-saved-view" ||
+                  route.kind === "team-projects-saved-view") &&
+                route.editing
+              }
               savedViews={scopedProjectSavedViews}
               projectDisplayDefault={data.projectDisplayDefault}
               projectHref={(project) =>
@@ -3465,6 +3627,22 @@ function App() {
               onCreateSavedView={addSavedView}
               onUpdateSavedView={changeSavedView}
               onDeleteSavedView={removeProjectSavedView}
+              onSetSavedViewSubscriptionEvents={setSavedViewSubscriptionEvents}
+              onDuplicateSavedView={(view) =>
+                navigateTo(
+                  `${projectTeamKey
+                    ? teamViewsNewPath(data.workspace.urlKey, projectTeamKey, "projects")
+                    : workspaceViewsNewPath(data.workspace.urlKey, "projects")}?duplicate=${encodeURIComponent(view.id)}`,
+                )
+              }
+              onBeginEditSavedView={() => {
+                if (selectedProjectSavedView)
+                  navigateTo(savedProjectEditPathFor(selectedProjectSavedView));
+              }}
+              onFinishEditSavedView={() => {
+                if (selectedProjectSavedView)
+                  navigateTo(savedProjectPathFor(selectedProjectSavedView));
+              }}
               onNavigateAllViews={() =>
                 navigateTo(
                   projectTeamKey
@@ -3509,6 +3687,7 @@ function App() {
             users={data.users}
             teams={data.teams}
             labels={data.labels}
+            labelGroups={data.labelGroups}
             viewer={data.viewer}
             tab={route.tab}
             savedViews={data.savedViews}
@@ -3801,7 +3980,7 @@ function applyOptimisticIssue(issue: Issue, input: IssueUpdateInput, data: Boots
   }
   if (input.cycleId !== undefined) next.cycleId = input.cycleId || undefined;
   if (input.dueDate !== undefined) next.dueDate = input.dueDate || undefined;
-  if (input.labelIds !== undefined) next.labels = data?.labels.filter(item => input.labelIds?.includes(item.id)) ?? next.labels;
+  if (input.labelIds !== undefined) next.labels = data ? labelsForResource(data.labels, "issue").filter(item => input.labelIds?.includes(item.id)) : next.labels;
   if (input.subscriberIds !== undefined) next.subscriberIds = input.subscriberIds;
   if (input.parentId !== undefined) next.parentId = input.parentId || undefined;
   if (input.recurrence !== undefined) next.recurrence = input.recurrence || undefined;

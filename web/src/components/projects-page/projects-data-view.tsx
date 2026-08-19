@@ -554,11 +554,13 @@ function ProjectContextSubmenu({ kind, onAction, onClose, onPropertyChange, opti
   const property = kind as ProjectProperty
   const propertyOptions = options?.[property] ?? PROPERTY_OPTIONS[property]
   const multiple = property === 'members' || property === 'labels'
-  const selected = new Set(property === 'members' ? project.memberIds ?? [] : property === 'labels' ? project.labelIds ?? [] : [contextPropertyValue(project, property)])
+  const optionValues = new Set(propertyOptions.map(option => option.value))
+  const selected = new Set(property === 'members' ? project.memberIds ?? [] : property === 'labels' ? (project.labelIds ?? []).filter(id => optionValues.has(id)) : [contextPropertyValue(project, property)])
   const filtered = propertyOptions.filter(option => `${option.label} ${option.keywords ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()))
+  const sections = property === 'labels' ? groupProjectOptions(filtered) : [{ id: 'all', options: filtered }]
   return <>
     <label className="lp-project-context__nested-search"><Search size={13}/><input autoFocus aria-label={contextSearchPlaceholder(property)} onChange={event => setQuery(event.target.value)} placeholder={contextSearchPlaceholder(property)} value={query}/></label>
-    <div className="lp-project-context__nested-list">{filtered.map(option => <button aria-checked={selected.has(option.value)} key={option.value || '__empty'} onClick={() => {
+    <div className="lp-project-context__nested-list">{sections.map(section => <div key={section.id}>{section.label && <div className="lp-project-context__group-label">{section.label}</div>}{section.options.map(option => <button aria-checked={selected.has(option.value)} key={option.value || '__empty'} onClick={() => {
       if (multiple) {
         const next = new Set(selected)
         if (next.has(option.value)) next.delete(option.value); else next.add(option.value)
@@ -570,7 +572,7 @@ function ProjectContextSubmenu({ kind, onAction, onClose, onPropertyChange, opti
     }} role={multiple ? 'menuitemcheckbox' : 'menuitemradio'} type="button">
       {multiple && <span className={`lp-project-context__checkbox ${selected.has(option.value) ? 'is-checked' : ''}`}>{selected.has(option.value) && <CheckIcon/>}</span>}
       <ContextOptionIcon option={option} property={property}/><span className="lp-project-context__label">{option.label}</span>{!multiple && selected.has(option.value) && <CheckIcon/>}
-    </button>)}</div>
+    </button>)}</div>)}</div>
     {property === 'labels' && !filtered.length && <div className="lp-project-context__empty">{query ? `Create “${query}”` : 'Start typing to create a new label'}</div>}
     {property === 'members' && <button onClick={onClose} type="button"><UserRound/><span className="lp-project-context__label">Invite and add…</span></button>}
   </>
@@ -609,6 +611,22 @@ function contextSearchPlaceholder(property: ProjectProperty) {
   if (property === 'priority') return 'Change priority…'
   if (property === 'status') return 'Change status…'
   return 'Filter…'
+}
+
+function groupProjectOptions(options: ProjectPropertyOption[]) {
+  const sections: { id: string; label?: string; options: ProjectPropertyOption[] }[] = []
+  const indexes = new Map<string, number>()
+  for (const option of options) {
+    const id = option.group || 'ungrouped'
+    let index = indexes.get(id)
+    if (index === undefined) {
+      index = sections.length
+      indexes.set(id, index)
+      sections.push({ id, label: id === 'ungrouped' ? undefined : option.group, options: [] })
+    }
+    sections[index].options.push(option)
+  }
+  return sections
 }
 
 function menuKeyboard(event: KeyboardEvent<HTMLDivElement>, closeNested: () => void) {

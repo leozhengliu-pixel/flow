@@ -20,8 +20,8 @@ export interface Customer {
 export interface CustomerMutationInput { name?: string; logoUrl?: string; ownerId?: string; status?: Customer['status']; tier?: string; annualRevenue?: number; size?: number; domains?: string[] }
 export type WorkflowStateType = 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled'
 export interface WorkflowState { id: UUID; teamId?: UUID; name: string; description?: string; color: string; type: WorkflowStateType; position: number; default?: boolean; reserved?: boolean }
-export interface IssueLabel { id: UUID; name: string; color: string; description?: string; issueCount?: number; scope?: string; resourceType?: 'issue'|'project'; groupId?: UUID; creatorId?: UUID; createdAt?: string; lastAppliedAt?: string }
-export interface LabelGroup { id: UUID; name: string; color: string; scope?: string; resourceType: 'issue'|'project'; createdAt: string }
+export interface IssueLabel { id: UUID; name: string; color: string; description?: string; issueCount?: number; scope?: string; resourceType?: 'issue'|'project'; groupId?: UUID; creatorId?: UUID; createdAt?: string; lastAppliedAt?: string; archivedAt?: string }
+export interface LabelGroup { id: UUID; name: string; color: string; description?: string; scope?: string; resourceType: 'issue'|'project'; createdAt: string; archivedAt?: string }
 export interface ProjectSummary { id: UUID; name: string; icon?: string; color: string }
 export interface DocumentContent { id: UUID; content: string; contentState: string; contentData: Record<string, unknown>; updatedAt: string }
 export interface DocumentRevision { id: UUID; documentId: UUID; title: string; content: string; contentState?: string; contentData?: Record<string, unknown>; author: User; createdAt: string }
@@ -102,7 +102,7 @@ export interface IssueSLA { id: UUID; issueId: UUID; ruleId: UUID; startedAt: st
 export interface SLAEvent { id: UUID; issueId: UUID; slaId: UUID; type: string; createdAt: string }
 export interface Draft { id: UUID; userId: UUID; type: string; resourceId?: UUID; title: string; body: string; contentData?: Record<string, unknown>; metadata?: Record<string, unknown>; createdAt: string; updatedAt: string }
 export interface Favorite { id: UUID; userId: UUID; resourceType: string; resourceId: UUID; position: number; createdAt: string }
-export interface Subscription { id: UUID; userId: UUID; resourceType: string; resourceId: UUID; createdAt: string }
+export interface Subscription { id: UUID; userId: UUID; resourceType: string; resourceId: UUID; events?: string[]; createdAt: string }
 export interface AuditLogEntry { id: UUID; actor: User; action: string; resourceType: string; resourceId: UUID; metadata?: Record<string, unknown>; createdAt: string }
 export interface TrashEntry { id: UUID; resourceType: string; resourceId: UUID; title: string; deletedBy: User; deletedAt: string; expiresAt: string }
 export interface ImportJob { id: UUID; userId: UUID; filename: string; format: 'csv'|'json'; status: 'mapping'|'running'|'completed'|'failed'; headers: string[]; rows?: Record<string,string>[]; mapping?: Record<string,string>; imported: number; errors: string[]; createdAt: string; updatedAt: string }

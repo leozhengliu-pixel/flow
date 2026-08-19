@@ -53,7 +53,7 @@ function MembersSettings({ data, team, onReload }: { data: BootstrapData; team: 
 }
 
 function LabelsSettings({ data, team, onReload }: { data: BootstrapData; team: Team; onReload: () => Promise<void> }) {
-  const labels = data.labels.filter(label => label.scope === team.id); const [creating, setCreating] = useState(false)
+  const labels = data.labels.filter(label => label.scope === team.id && !label.archivedAt); const [creating, setCreating] = useState(false)
   const add = async (name: string, color: string) => { try { await createTeamLabel(team.id, { name, color }); setCreating(false); await onReload() } catch (error) { toast.error(message(error)) } }
   return <Section title="Issue labels" action={<button className="settings-action" onClick={() => setCreating(true)}><Plus size={13}/>New label</button>}><div className="team-setting-list">{creating && <InlineCreate placeholder="Label name" onCancel={() => setCreating(false)} onCreate={add}/>} {labels.map(label => <LabelRow key={label.id} team={team} label={label} onReload={onReload}/>)} {!labels.length && !creating && <Empty icon={<Circle size={22}/>} title="No team labels" description="Team labels are available only on issues in this team."/>}</div></Section>
 }

@@ -1,4 +1,4 @@
-import type { Comment, Issue, IssueLabel, IssueUpdateInput, Project, ProjectMilestone, ProjectResource, ProjectStatus, ProjectUpdate, SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
+import type { Comment, Issue, IssueLabel, IssueUpdateInput, LabelGroup, Project, ProjectMilestone, ProjectResource, ProjectStatus, ProjectUpdate, SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
 import type { ProjectMutationInput } from '@/components/projects-page/projects-page'
 
 export type ProjectDetailTab = 'overview' | 'activity' | 'issues' | 'new'
@@ -12,6 +12,7 @@ export type ProjectDetailProps = {
   users: User[]
   teams: Team[]
   labels: IssueLabel[]
+  labelGroups: LabelGroup[]
   viewer: User
   tab: ProjectDetailTab
   onTabChange: (tab: ProjectDetailTab) => void
