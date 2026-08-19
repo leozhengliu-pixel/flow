@@ -18,7 +18,7 @@ const VIEWS: { id: TeamIssuesRouteView; label: string }[] = [
 
 export function IssueExplorerSurface({
   children, scopeName, scopeHref, activeView, viewHref, filters, filterBar, viewEditor, viewActions, displayOptions, detailsOpen, itemCount = 0,
-  creatingView = false, favorite = false, filterOpenSignal = 0, filterOptions, savedView, savedViews = [], savedViewHref, onAddView, onSavedViewSelect, onToggleFavorite, onFilterToggle, onDisplayOptionsChange, onDetailsOpenChange, onNavigateView, onNewViewResourceChange, onOpenSidebar,
+  creatingView = false, favorite = false, filterOpenSignal = 0, filterOptions, insightsOpen = false, savedView, savedViews = [], savedViewHref, onAddView, onSavedViewSelect, onToggleFavorite, onFilterToggle, onDisplayOptionsChange, onDetailsOpenChange, onInsightsOpenChange, onNavigateView, onNewViewResourceChange, onOpenSidebar,
 }: {
   children: ReactNode
   scopeName: string
@@ -31,6 +31,7 @@ export function IssueExplorerSurface({
   viewActions?: ReactNode
   displayOptions: MyIssuesDisplayOptions
   detailsOpen: boolean
+  insightsOpen?: boolean
   itemCount?: number
   creatingView?: boolean
   favorite?: boolean
@@ -42,6 +43,7 @@ export function IssueExplorerSurface({
   onFilterToggle: (field: MyIssuesFilterKey, option: MyIssuesFilterOption) => void
   onDisplayOptionsChange: (options: MyIssuesDisplayOptions) => void
   onDetailsOpenChange: (open: boolean) => void
+  onInsightsOpenChange?: (open: boolean) => void
   onNavigateView: (view: TeamIssuesRouteView) => void
   onNewViewResourceChange?: (resource: 'issues' | 'projects') => void
   onAddView?: () => void
@@ -73,8 +75,8 @@ export function IssueExplorerSurface({
     <div className={styles.actions}>
       <MyIssuesFilterMenu open={filterOpen} onOpenChange={setFilterOpen} filters={filters} options={filterOptions} onToggle={onFilterToggle} trigger={<ToolbarButton label="Add filter"><FilterIcon/></ToolbarButton>}/>
       <MyIssuesDisplayMenu open={displayOpen} onOpenChange={setDisplayOpen} options={displayOptions} onChange={onDisplayOptionsChange}/>
-      {!creatingView && savedView && <ToolbarButton label="Open view insights" pressed={detailsOpen} onClick={() => onDetailsOpenChange(true)}><ChartNoAxesColumn size={15}/></ToolbarButton>}
-      {!creatingView && <ToolbarButton label={detailsOpen ? 'Close details' : 'Open details'} title={`${detailsOpen ? 'Close' : 'Open'} details (⌘I)`} pressed={detailsOpen} onClick={() => onDetailsOpenChange(!detailsOpen)}><DetailsIcon open={detailsOpen}/></ToolbarButton>}
+      {!creatingView && savedView && <ToolbarButton label={insightsOpen ? 'Close view insights' : 'Open view insights'} pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}><ChartNoAxesColumn size={15}/></ToolbarButton>}
+      {!creatingView && <ToolbarButton label={savedView ? (detailsOpen ? 'Close view details' : 'Open view details') : (detailsOpen ? 'Close details' : 'Open details')} title={`${detailsOpen ? 'Close' : 'Open'} details (⌘I)`} pressed={detailsOpen} onClick={() => onDetailsOpenChange(!detailsOpen)}><DetailsIcon open={detailsOpen}/></ToolbarButton>}
     </div>
   </div>
 
@@ -87,7 +89,7 @@ export function IssueExplorerSurface({
       </>}
     </header>
     {viewEditor ? <div className={styles.createPanel}>{viewEditor}{toolbar}</div> : toolbar}
-    {filterBar}<div className={styles.body}>{children}</div>
+    {filterBar}<div className={styles.body} data-saved-panel-open={Boolean(savedView && (detailsOpen || insightsOpen))}>{children}</div>
   </main>
 }
 

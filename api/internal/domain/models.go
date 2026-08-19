@@ -877,6 +877,7 @@ type SavedView struct {
 	View        string          `json:"view"`
 	Filters     json.RawMessage `json:"filters"`
 	Display     json.RawMessage `json:"display"`
+	Insights    json.RawMessage `json:"insights"`
 	CreatedAt   time.Time       `json:"createdAt"`
 	UpdatedAt   time.Time       `json:"updatedAt"`
 }
@@ -895,6 +896,7 @@ type SavedViewMutationInput struct {
 	View        *string         `json:"view,omitempty"`
 	Filters     json.RawMessage `json:"filters,omitempty"`
 	Display     json.RawMessage `json:"display,omitempty"`
+	Insights    json.RawMessage `json:"insights,omitempty"`
 }
 
 type IssueCreateInput struct {

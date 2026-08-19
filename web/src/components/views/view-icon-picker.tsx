@@ -29,8 +29,10 @@ const COLORS = [
 export type ViewVisual = { icon: string; color: string }
 
 export function ViewGlyph({ className, color = DEFAULT_VIEW_COLOR, icon = DEFAULT_VIEW_ICON }: { className?: string; color?: string; icon?: string }) {
-  if (!ICON_NAME_SET.has(icon) && icon !== 'Team') return <span aria-hidden="true" className={`${styles.glyph} ${styles.emojiGlyph} ${className ?? ''}`} style={{ color }}>{icon}</span>
   const assetIcon = FLOW_VIEW_ICON_ALIASES[icon] ?? icon
+  if (!ICON_NAME_SET.has(assetIcon) && assetIcon !== 'Team') return isEmoji(icon)
+    ? <span aria-hidden="true" className={`${styles.glyph} ${styles.emojiGlyph} ${className ?? ''}`} style={{ color }}>{icon}</span>
+    : <svg aria-hidden="true" className={`${styles.glyph} ${className ?? ''}`} fill="currentColor" style={{ color }} viewBox="0 0 16 16"><use href="/flow-core-icons.svg#CustomView"/></svg>
   return <svg aria-hidden="true" className={`${styles.glyph} ${className ?? ''}`} fill="currentColor" style={{ color }} viewBox="0 0 16 16"><use href={`${FLOW_CORE_ICON_NAMES.has(assetIcon) ? '/flow-core-icons.svg' : '/flow-view-icons.svg'}#${assetIcon}`}/></svg>
 }
 
@@ -91,3 +93,4 @@ function SearchBox({ onArrowDown, placeholder, query, searchRef, setQuery }: { o
 function CheckMark() { return <svg aria-hidden="true" fill="currentColor" viewBox="0 0 10 8"><path d="M3.47 5.708 1.884 4.123a.576.576 0 0 0-.815.814l1.996 1.994a.576.576 0 0 0 .814 0L8.931 1.883a.576.576 0 0 0-.815-.814L3.47 5.708Z"/></svg> }
 function matchesEmoji(value: string, query: string) { return !query || value.includes(query) || (EMOJI_NAMES[value] ?? '').includes(query.replaceAll(' ', '_')) }
 function validColor(value: string) { return /^#[0-9a-f]{6}$/i.test(value) }
+function isEmoji(value: string) { return /\p{Extended_Pictographic}/u.test(value) }

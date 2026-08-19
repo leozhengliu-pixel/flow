@@ -197,6 +197,9 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 		if ensureCanonicalLabels(&data) {
 			changed = true
 		}
+		if ensureCanonicalSavedViewDisplays(&data) {
+			changed = true
+		}
 		normalize(&data)
 		s.workspaces[key] = data
 		if changed {
@@ -244,6 +247,7 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	ensureCanonicalWorkflowStates(&data)
 	ensureCanonicalLabelGroups(&data)
 	ensureCanonicalLabels(&data)
+	ensureCanonicalSavedViewDisplays(&data)
 	ensureCanonicalNotifications(&data)
 	ensureCanonicalInitiatives(&data)
 	ensureCanonicalCycles(&data)
@@ -375,6 +379,7 @@ func ensureCanonicalLabels(data *domain.Bootstrap) bool {
 }
 
 func migrateDeliverySavedViews(data *domain.Bootstrap) {
+	display := json.RawMessage(`{"layout":"list","grouping":"status","groupOrder":"asc","subGrouping":"none","ordering":"priority","completedWindow":"all","orderCompletedByRecency":false,"showSubIssues":true,"showEmptyGroups":false,"nestedSubIssues":false,"properties":["id","status","priority","assignee","labels","project","created"]}`)
 	filter := func(ids ...string) json.RawMessage {
 		labels := make(map[string]domain.IssueLabel, len(data.Labels)+len(canonicalLabels()))
 		for _, label := range append(append([]domain.IssueLabel{}, data.Labels...), canonicalLabels()...) {
@@ -398,10 +403,36 @@ func migrateDeliverySavedViews(data *domain.Bootstrap) {
 		switch data.SavedViews[index].ID {
 		case "view_strategy", "view_business", "view_product":
 			data.SavedViews[index].Filters = filter("label_type_requirement")
+			data.SavedViews[index].Display = slices.Clone(display)
 		case "view_development", "view_testing", "view_operations":
 			data.SavedViews[index].Filters = filter("label_type_development")
+			data.SavedViews[index].Display = slices.Clone(display)
 		}
 	}
+}
+
+func ensureCanonicalSavedViewDisplays(data *domain.Bootstrap) bool {
+	display := json.RawMessage(`{"layout":"list","grouping":"status","groupOrder":"asc","subGrouping":"none","ordering":"priority","completedWindow":"all","orderCompletedByRecency":false,"showSubIssues":true,"showEmptyGroups":false,"nestedSubIssues":false,"properties":["id","status","priority","assignee","labels","project","created"]}`)
+	builtIn := map[string]bool{
+		"view_strategy": true, "view_business": true, "view_product": true,
+		"view_development": true, "view_testing": true, "view_operations": true,
+	}
+	changed := false
+	for index := range data.SavedViews {
+		if !builtIn[data.SavedViews[index].ID] {
+			continue
+		}
+		var current map[string]any
+		if json.Unmarshal(data.SavedViews[index].Display, &current) != nil {
+			continue
+		}
+		if _, legacy := current["direction"]; !legacy {
+			continue
+		}
+		data.SavedViews[index].Display = slices.Clone(display)
+		changed = true
+	}
+	return changed
 }
 
 func canonicalLabelResourceType(label domain.IssueLabel) string {
