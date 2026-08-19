@@ -73,7 +73,7 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
       return <section className={styles.group} key={group.id} aria-labelledby={`my-issues-group-${group.id}`}>
         <header className={styles.groupHeader}>
           <button className={styles.collapseButton} aria-label={collapsed ? 'Expand group' : 'Collapse group'} aria-expanded={!collapsed} onClick={() => onGroupCollapsedChange?.(group.id, !collapsed)}><ChevronDown size={12}/></button>
-          <GroupStateIcon type={group.stateType}/><span id={`my-issues-group-${group.id}`} className={styles.groupName}>{group.label}</span><span className={styles.groupCount}>{group.issues.length}</span>
+          <GroupStateIcon type={group.stateType}/><span data-i18n-ignore id={`my-issues-group-${group.id}`} className={styles.groupName}>{group.label}</span><span className={styles.groupCount}>{group.issues.length}</span>
           <button className={styles.createButton} aria-label="Create new issue" onClick={() => onCreateIssue?.(group)}><Plus size={16}/></button>
         </header>
         {!collapsed && <div>{group.issues.map(issue => <MyIssuesRow key={issue.id} issue={issue} selected={selectedIds.has(issue.id)} displayProperties={displayProperties} nested={nestedSubIssues && Boolean(issue.parentId)} propertyOptions={propertyOptions} mutationError={mutationErrors.get(issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>)}</div>}
@@ -121,7 +121,7 @@ export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAU
           trigger={<StatusIcon state={{ id: issue.state.id, name: issue.state.name, type: issue.state.type, color: issue.state.color }} size={14}/>}
         />}
         <div className={styles.titleProperties}>
-          <span className={styles.title}>{issue.title}</span>
+          <span className={styles.title} data-i18n-ignore>{issue.title}</span>
           <span className={styles.badges}>
             {displayProperties.has('labels') && issue.labels?.length ? <RowCommandPicker propertyLabel="Labels" kind="labels" multi label={`Change labels. ${issue.labels.map(label => label.name).join(', ')} selected`} searchLabel="Change or add labels..." selectedIds={issue.labels.map(label => label.id)} options={propertyOptions.labels} onSelect={value => change('labels', toggleId(issue.labels?.map(label => label.id) ?? [], value))} trigger={<span className={styles.badgeGroup}>{issue.labels.map(label => <PropertyBadge key={label.id} color={label.color}>{label.name}</PropertyBadge>)}</span>}/> : null}
             {displayProperties.has('project') && issue.project ? <RowCommandPicker propertyLabel="Project" kind="project" label={`Change project. Current project is ${issue.project.name}`} searchLabel="Set project..." selectedIds={[issue.project.id]} options={propertyOptions.project} onSelect={value => change('project', value)} trigger={<PropertyBadge color={issue.project.color}>{issue.project.name}</PropertyBadge>}/> : null}
@@ -193,7 +193,7 @@ function OptionIcon({ option }: { option: MyIssuesContextOption }) {
   return <span className={styles.optionSpacer}/>
 }
 function GroupStateIcon({ type }: { type?: MyIssuesStateType }) { return type ? <span className={styles.groupState}><StatusIcon state={{ id: type, name: type, type, color: 'lch(63.304% 1.425 272)' }} size={14}/></span> : null }
-function PropertyBadge({ children, color }: { children: ReactNode; color: string }) { return <span className={styles.badge}><i style={{ backgroundColor: color }}/><span>{children}</span></span> }
+function PropertyBadge({ children, color }: { children: ReactNode; color: string }) { return <span className={styles.badge}><i style={{ backgroundColor: color }}/><span data-i18n-ignore>{children}</span></span> }
 function Avatar({ assignee }: { assignee: NonNullable<MyIssuesRowData['assignee']> }) { const initials = assignee.name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase(); return <span className={styles.avatar} aria-label={assignee.name} style={{ '--avatar': assignee.color ?? 'lch(70% 60 30)' } as CSSProperties}>{assignee.avatarUrl ? <img src={assignee.avatarUrl} alt=""/> : initials}</span> }
 
 export function MyIssuesListSkeleton({ rows = 6 }: { rows?: number }) { return <div className={styles.skeleton} aria-label="Loading issues" aria-busy="true"><div className={styles.skeletonHeader}/>{Array.from({ length: rows }, (_, index) => <div className={styles.skeletonRow} key={index}><i/><i/><i/><i/></div>)}</div> }
