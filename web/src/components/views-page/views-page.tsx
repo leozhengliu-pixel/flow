@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import * as Dialog from '@radix-ui/react-dialog'
 import * as Popover from '@radix-ui/react-popover'
 import * as Select from '@radix-ui/react-select'
 import { ArrowDown, ArrowUp, Bell, BellOff, Building2, Check, ChevronRight, Copy, Ellipsis, Layers3, LockKeyhole, Pencil, Star, Trash2, UserRound } from 'lucide-react'
 import { TeamIcon } from '@/components/issue/issue-icons'
 import { toast } from 'sonner'
-import type { BootstrapData, SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
+import type { BootstrapData, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
 import type { ViewsResource } from '@/lib/app-routes'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { ViewsEmptyState } from './views-empty-state'
@@ -25,21 +24,23 @@ export type ViewsPageProps = {
   views: SavedView[]
   onCreate: () => void
   onDelete: (view: SavedView) => Promise<void>
-  onDuplicate: (input: SavedViewMutationInput) => Promise<SavedView>
+  onDuplicate: (view: SavedView) => void
+  onEdit: (view: SavedView) => void
   onOpen: (view: SavedView) => void
   onOpenSidebar?: () => void
   onResourceChange: (resource: ViewsResource) => void
   resourceHref: (resource: ViewsResource) => string
   onUpdate: (viewId: string, input: SavedViewMutationInput) => Promise<SavedView>
+  onToggleFavorite: (view: SavedView) => Promise<void>
+  onSetSubscriptionEvents: (view: SavedView, events: string[]) => Promise<void>
   viewHref: (view: SavedView) => string
 }
 
-export function ViewsPage({ data, resource, scope, views, onCreate, onDelete, onDuplicate, onOpen, onOpenSidebar, onResourceChange, resourceHref, onUpdate, viewHref }: ViewsPageProps) {
+export function ViewsPage({ data, resource, scope, views, onCreate, onDelete, onDuplicate, onEdit, onOpen, onOpenSidebar, onResourceChange, resourceHref, onUpdate, onToggleFavorite, onSetSubscriptionEvents, viewHref }: ViewsPageProps) {
   const storageKey = `${data.workspace.urlKey}:views-directory:${scope.kind === 'team' ? scope.team.id : 'workspace'}:${resource}`
   const [ordering, setOrdering] = useState<Ordering>(() => readPreference(`${storageKey}:ordering`, scope.kind === 'team' ? 'owner' : 'name') as Ordering)
   const [direction, setDirection] = useState<Direction>(() => readPreference(`${storageKey}:direction`, 'asc') as Direction)
   const [properties, setProperties] = useState<Set<DisplayProperty>>(() => new Set(readProperties(`${storageKey}:properties`)))
-  const [editing, setEditing] = useState<SavedView>()
   const [teamFavorite, setTeamFavorite] = useState(() => readPreference(`${storageKey}:favorite`, 'false') === 'true')
   const usersById = useMemo(() => new Map(data.users.map(user => [user.id, user])), [data.users])
   const orderedViews = useMemo(() => [...views].sort((left, right) => compareViews(left, right, ordering, direction, usersById, data.viewer)), [data.viewer, direction, ordering, usersById, views])
@@ -68,11 +69,6 @@ export function ViewsPage({ data, resource, scope, views, onCreate, onDelete, on
     })
   }
   const moveView = (view: SavedView, destination: SavedViewMutationInput) => onUpdate(view.id, { ...destination, teamId: destination.scope === 'team' ? destination.teamId : '' })
-  const duplicateView = async (view: SavedView) => {
-    const copy = await onDuplicate({ name: `${view.name} copy`, description: view.description, icon: view.icon, color: view.color, resource: view.resource ?? 'issues', scope: view.scope, teamId: view.teamId ?? '', ownerId: data.viewer.id, view: view.view, filters: view.filters, display: view.display })
-    toast.success(`Duplicated ${view.name}`)
-    return copy
-  }
   const copyLink = async (view: SavedView) => {
     await navigator.clipboard.writeText(`${window.location.origin}${viewHref(view)}`)
     toast.success('View link copied')
@@ -85,9 +81,9 @@ export function ViewsPage({ data, resource, scope, views, onCreate, onDelete, on
   return <div className={styles.page}>
     <header className={styles.header}>
       <button className={styles.mobileMenu} aria-label="Open workspace sidebar" onClick={onOpenSidebar} type="button">☰</button>
-      <h1>Views</h1>
+      <h2>Views</h2>
       {scope.kind === 'team' && <button aria-checked={teamFavorite} aria-label={teamFavorite ? 'Remove from favorites' : 'Add to favorites'} className={styles.favoriteHeader} onClick={() => { const next = !teamFavorite; setTeamFavorite(next); writePreference(`${storageKey}:favorite`, String(next)) }} role="switch" type="button"><FlowFavoriteIcon selected={teamFavorite}/></button>}
-      <button aria-label="Create new view" className={styles.createHeader} onClick={onCreate} type="button"><FlowPlusIcon/></button>
+      <button aria-label="Create new view" className={styles.createHeader} onClick={onCreate} type="button"><FlowPlusIcon/><span>New view</span></button>
     </header>
     <div className={styles.toolbar}>
       <nav aria-label="View resources" className={styles.tabs}>
@@ -105,35 +101,43 @@ export function ViewsPage({ data, resource, scope, views, onCreate, onDelete, on
       {orderedViews.length > 0 && groups.map(group => <div className={styles.group} key={group.id}>
         {scope.kind === 'workspace' && <div className={styles.groupHeader}>
           <ScopeAvatar kind={group.kind} label={group.label}/>
-          <strong>{group.label}</strong>
+          <strong data-i18n-ignore>{group.label}</strong>
           <span>{group.kind === 'personal' ? '· Only visible to you' : '· Workspace'}</span>
           <button aria-label={`Create ${resource === 'issues' ? 'issue' : 'project'} view in ${group.label}`} onClick={onCreate} type="button"><FlowPlusIcon/></button>
         </div>}
-        {group.views.map(view => <ViewRow data={data} href={viewHref(view)} key={view.id} onCopy={() => { void copyLink(view) }} onDelete={() => { void deleteView(view) }} onDuplicate={() => { void duplicateView(view) }} onEdit={() => setEditing(view)} onMove={destination => { void moveView(view, destination) }} onOpen={() => onOpen(view)} onUpdate={input => { void onUpdate(view.id, input) }} properties={properties} resource={resource} usersById={usersById} view={view}/>) }
+        {group.views.map(view => <ViewRow data={data} favorite={view.favorite || data.favorites.some(item => item.userId === data.viewer.id && item.resourceType === 'view' && item.resourceId === view.id)} href={viewHref(view)} key={view.id} onCopy={() => { void copyLink(view) }} onDelete={() => { void deleteView(view) }} onDuplicate={() => onDuplicate(view)} onEdit={() => onEdit(view)} onMove={destination => { void moveView(view, destination) }} onOpen={() => onOpen(view)} onSetSubscriptionEvents={events => { void onSetSubscriptionEvents(view, events) }} onToggleFavorite={() => { void onToggleFavorite(view) }} onUpdate={input => { void onUpdate(view.id, input) }} properties={properties} resource={resource} subscribed={view.subscribed || data.subscriptions.some(item => item.userId === data.viewer.id && item.resourceType === 'view' && item.resourceId === view.id)} subscription={data.subscriptions.find(item => item.userId === data.viewer.id && item.resourceType === 'view' && item.resourceId === view.id)} usersById={usersById} view={view}/>) }
       </div>)}
       {!orderedViews.length && <ViewsEmptyState onCreate={onCreate} resource={resource}/>} 
     </section>
-    <EditViewDialog open={Boolean(editing)} view={editing} onOpenChange={open => { if (!open) setEditing(undefined) }} onSave={async input => { if (!editing) return; await onUpdate(editing.id, input); setEditing(undefined) }}/>
   </div>
 }
 
-function ViewRow({ data, href, onCopy, onDelete, onDuplicate, onEdit, onMove, onOpen, onUpdate, properties, resource, usersById, view }: { data: BootstrapData; href: string; onCopy: () => void; onDelete: () => void; onDuplicate: () => void; onEdit: () => void; onMove: (input: SavedViewMutationInput) => void; onOpen: () => void; onUpdate: (input: SavedViewMutationInput) => void; properties: Set<DisplayProperty>; resource: ViewsResource; usersById: Map<string, User>; view: SavedView }) {
+function ViewRow({ data, favorite, href, onCopy, onDelete, onDuplicate, onEdit, onMove, onOpen, onSetSubscriptionEvents, onToggleFavorite, onUpdate, properties, resource, subscribed, subscription, usersById, view }: { data: BootstrapData; favorite: boolean; href: string; onCopy: () => void; onDelete: () => void; onDuplicate: () => void; onEdit: () => void; onMove: (input: SavedViewMutationInput) => void; onOpen: () => void; onSetSubscriptionEvents: (events: string[]) => void; onToggleFavorite: () => void; onUpdate: (input: SavedViewMutationInput) => void; properties: Set<DisplayProperty>; resource: ViewsResource; subscribed: boolean; subscription?: Subscription; usersById: Map<string, User>; view: SavedView }) {
   const owner = usersById.get(view.ownerId ?? '') ?? data.viewer
-  const row = <div aria-label={`${view.name} ${viewDescription(view, resource)} ${owner.displayName}`} className={styles.row} data-href={href} onClick={onOpen} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen() } }} role="link" style={{ '--views-columns': columnTemplate(properties) } as React.CSSProperties} tabIndex={0}>
-    <div className={styles.identity}><ViewGlyph className={styles.viewIcon} color={view.color} icon={view.icon}/><span><strong>{view.name}</strong><small>{viewDescription(view, resource)}</small></span>{view.favorite && <Star className={styles.rowFavorite} fill="currentColor" size={11}/>}</div>
+  const subscriptionEvents = new Set(subscription?.events?.length ? subscription.events : subscribed ? ['issue-added', 'issue-completed'] : [])
+  const toggleSubscriptionEvent = (event: string) => {
+    const next = new Set(subscriptionEvents)
+    if (next.has(event)) next.delete(event); else next.add(event)
+    onSetSubscriptionEvents([...next])
+  }
+  const row = <a aria-label={`${view.name} ${viewDescription(view, resource)} ${owner.displayName}`} className={styles.row} href={href} onClick={event => { event.preventDefault(); onOpen() }} onKeyDown={event => { if (event.key === ' ') { event.preventDefault(); onOpen() } }} style={{ '--views-columns': columnTemplate(properties) } as React.CSSProperties}>
+    <div className={styles.identity}><ViewGlyph className={styles.viewIcon} color={view.color} icon={view.icon}/><span data-i18n-ignore><strong>{view.name}</strong><small>{viewDescription(view, resource)}</small></span>{favorite && <Star className={styles.rowFavorite} fill="currentColor" size={11}/>}</div>
     {properties.has('created') && <time>{formatDate(view.createdAt)}</time>}
     {properties.has('updated') && <time>{formatDate(view.updatedAt)}</time>}
     {properties.has('owner') && <OwnerMenu owner={owner} users={data.users} onChange={ownerId => onUpdate({ ownerId })}/>} 
-    <button aria-label="View actions" className={styles.more} onClick={event => { event.stopPropagation(); event.currentTarget.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: event.clientX, clientY: event.clientY })) }} type="button"><Ellipsis size={15}/></button>
-  </div>
-  return <ContextMenu.Root><ContextMenu.Trigger asChild>{row}</ContextMenu.Trigger><ContextMenu.Portal><ContextMenu.Content className={styles.contextMenu}>
+    <button aria-label="View actions" className={styles.more} onClick={event => { event.preventDefault(); event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); event.currentTarget.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: event.clientX || rect.right, clientY: event.clientY || rect.bottom })) }} type="button"><Ellipsis size={15}/></button>
+  </a>
+  return <ContextMenu.Root><ContextMenu.Trigger asChild>{row}</ContextMenu.Trigger><ContextMenu.Portal><ContextMenu.Content className={styles.contextMenu} onKeyDown={event => { if (event.altKey && event.key.toLowerCase() === 'f') { event.preventDefault(); onToggleFavorite() } }}>
     <MenuItem icon={<Pencil/>} label="Edit…" onSelect={onEdit}/>
     <MenuItem icon={<Copy/>} label="Duplicate…" onSelect={onDuplicate}/>
-    <ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><UserRound/><span>Owner</span><ChevronRight className={styles.chevron}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent className={styles.contextMenu}>{data.users.map(user => <ContextMenu.Item className={styles.menuItem} key={user.id} onSelect={() => onUpdate({ ownerId: user.id })}><Avatar user={user}/><span>{user.displayName}</span>{owner.id === user.id && <Check className={styles.check}/>}</ContextMenu.Item>)}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
-    <ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><Layers3/><span>Move to</span><ChevronRight className={styles.chevron}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent className={styles.contextMenu}><MenuItem icon={<LockKeyhole/>} label="Personal" onSelect={() => onMove({ scope: 'personal' })}/><MenuItem icon={<Building2/>} label="Workspace" onSelect={() => onMove({ scope: 'workspace' })}/><ContextMenu.Separator className={styles.separator}/>{data.teams.map(team => <MenuItem icon={<TeamIcon/>} key={team.id} label={team.name} onSelect={() => onMove({ scope: 'team', teamId: team.id })}/>)}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
+    <ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><UserRound/><span>Owner</span><ChevronRight className={styles.chevron}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent className={styles.contextMenu} sideOffset={-3}>{data.users.map(user => <ContextMenu.Item className={styles.menuItem} key={user.id} onSelect={() => onUpdate({ ownerId: user.id })}><Avatar user={user}/><span data-i18n-ignore>{user.displayName}</span>{owner.id === user.id && <Check className={styles.check}/>}</ContextMenu.Item>)}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
+    <ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><Layers3/><span>Move to</span><ChevronRight className={styles.chevron}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent className={styles.contextMenu} sideOffset={-3}><MenuItem icon={<LockKeyhole/>} label="Personal" onSelect={() => onMove({ scope: 'personal' })}/><MenuItem icon={<Building2/>} label="Workspace" onSelect={() => onMove({ scope: 'workspace' })}/><ContextMenu.Separator className={styles.separator}/>{data.teams.map(team => <ContextMenu.Item className={styles.menuItem} key={team.id} onSelect={() => onMove({ scope: 'team', teamId: team.id })}><TeamIcon/><span data-i18n-ignore>{team.name}</span></ContextMenu.Item>)}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
     <ContextMenu.Separator className={styles.separator}/>
-    <MenuItem icon={<Star fill={view.favorite ? 'currentColor' : 'none'}/>} label={view.favorite ? 'Unfavorite' : 'Favorite'} onSelect={() => onUpdate({ favorite: !view.favorite })} shortcut="⌥ F"/>
-    <MenuItem icon={view.subscribed ? <BellOff/> : <Bell/>} label={view.subscribed ? 'Unsubscribe' : 'Subscribe'} onSelect={() => onUpdate({ subscribed: !view.subscribed })}/>
+    <MenuItem icon={<Star fill={favorite ? 'currentColor' : 'none'}/>} label={favorite ? 'Unfavorite' : 'Favorite'} onSelect={onToggleFavorite} shortcut="⌥ F"/>
+    <ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}>{subscribed ? <BellOff/> : <Bell/>}<span>Subscribe</span><ChevronRight className={styles.chevron}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent className={`${styles.contextMenu} ${styles.subscriptionMenu}`} sideOffset={-3}>
+      <SubscriptionEventItem checked={subscriptionEvents.has('issue-added')} label={`${resource === 'issues' ? 'An issue' : 'A project'} is added to the view`} onSelect={() => toggleSubscriptionEvent('issue-added')}/>
+      <SubscriptionEventItem checked={subscriptionEvents.has('issue-completed')} label={`${resource === 'issues' ? 'An issue is' : 'A project is'} marked completed or canceled`} onSelect={() => toggleSubscriptionEvent('issue-completed')}/>
+    </ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
     <MenuItem icon={<Copy/>} label="Copy link" onSelect={onCopy}/>
     <ContextMenu.Separator className={styles.separator}/>
     <MenuItem danger icon={<Trash2/>} label="Delete" onSelect={onDelete}/>
@@ -167,21 +171,14 @@ function DisplayMenu({ direction, ordering, properties, onDirection, onOrdering,
 }
 
 function OwnerMenu({ owner, users, onChange }: { owner: User; users: User[]; onChange: (ownerId: string) => void }) {
-  return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={`${owner.displayName} ${owner.displayName}`} className={styles.owner} onClick={event => event.stopPropagation()} type="button"><Avatar user={owner}/><span>{owner.displayName}</span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className={styles.contextMenu} sideOffset={4}>{users.map(user => <DropdownMenu.Item className={styles.menuItem} key={user.id} onSelect={() => onChange(user.id)}><Avatar user={user}/><span>{user.displayName}</span>{user.id === owner.id && <Check className={styles.check}/>}</DropdownMenu.Item>)}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
-}
-
-function EditViewDialog({ open, view, onOpenChange, onSave }: { open: boolean; view?: SavedView; onOpenChange: (open: boolean) => void; onSave: (input: SavedViewMutationInput) => Promise<void> }) {
-  const [name, setName] = useState(view?.name ?? '')
-  const [description, setDescription] = useState(view?.description ?? '')
-  const [saving, setSaving] = useState(false)
-  useEffect(() => { setName(view?.name ?? ''); setDescription(view?.description ?? '') }, [view])
-  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className={styles.dialogOverlay}/><Dialog.Content className={styles.dialog}><Dialog.Title>Edit view</Dialog.Title><label>Name<input autoFocus onChange={event => setName(event.target.value)} value={name}/></label><label>Description<textarea onChange={event => setDescription(event.target.value)} placeholder="Description (optional)" rows={3} value={description}/></label><footer><Dialog.Close asChild><button type="button">Cancel</button></Dialog.Close><button className={styles.dialogSave} disabled={!name.trim() || saving} onClick={() => { setSaving(true); void onSave({ name: name.trim(), description: description.trim() }).finally(() => setSaving(false)) }} type="button">{saving ? 'Saving…' : 'Save'}</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
+  return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={`${owner.displayName} ${owner.displayName}`} className={styles.owner} onClick={event => { event.preventDefault(); event.stopPropagation() }} type="button"><Avatar user={owner}/><span data-i18n-ignore>{owner.displayName}</span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className={styles.contextMenu} sideOffset={4}>{users.map(user => <DropdownMenu.Item className={styles.menuItem} key={user.id} onSelect={() => onChange(user.id)}><Avatar user={user}/><span data-i18n-ignore>{user.displayName}</span>{user.id === owner.id && <Check className={styles.check}/>}</DropdownMenu.Item>)}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 
 function MenuItem({ danger = false, icon, label, onSelect, shortcut }: { danger?: boolean; icon: ReactNode; label: string; onSelect: () => void; shortcut?: string }) { return <ContextMenu.Item className={styles.menuItem} data-danger={danger || undefined} onSelect={onSelect}>{icon}<span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}</ContextMenu.Item> }
+function SubscriptionEventItem({ checked, label, onSelect }: { checked: boolean; label: string; onSelect: () => void }) { return <ContextMenu.CheckboxItem checked={checked} className={styles.menuItem} onSelect={event => { event.preventDefault(); onSelect() }}><span className={styles.menuCheckbox}>{checked && <Check/>}</span><span>{label}</span></ContextMenu.CheckboxItem> }
 function SortButton({ active, direction, label, onClick }: { active: boolean; direction: Direction; label: string; onClick: () => void }) { return <button className={styles.sortButton} onClick={onClick} type="button"><span>{label}</span>{active && (direction === 'asc' ? <ArrowDown size={12}/> : <ArrowUp size={12}/>)}</button> }
 function ScopeAvatar({ kind, label }: { kind: SavedView['scope']; label: string }) { return <span className={styles.scopeAvatar}>{kind === 'personal' ? <UserRound size={13}/> : kind === 'team' ? <TeamIcon size={13}/> : label.slice(0, 2).toUpperCase()}</span> }
-function Avatar({ user }: { user: User }) { return user.avatarUrl ? <img alt="" className={styles.avatar} src={user.avatarUrl}/> : <span className={styles.avatar}>{initials(user.displayName)}</span> }
+function Avatar({ user }: { user: User }) { return user.avatarUrl ? <img alt="" className={styles.avatar} src={user.avatarUrl}/> : <span className={styles.avatar} data-i18n-ignore>{initials(user.displayName)}</span> }
 function FlowPlusIcon() { return <svg aria-hidden="true" fill="currentColor" viewBox="0 0 16 16"><path d="M8.75 4C8.75 3.58579 8.41421 3.25 8 3.25C7.58579 3.25 7.25 3.58579 7.25 4V7.25H4C3.58579 7.25 3.25 7.58579 3.25 8C3.25 8.41421 3.58579 8.75 4 8.75H7.25V12C7.25 12.4142 7.58579 12.75 8 12.75C8.41421 12.75 8.75 12.4142 8.75 12V8.75H12C12.4142 8.75 12.75 8.41421 12.75 8C12.75 7.58579 12.4142 7.25 12 7.25H8.75V4Z"/></svg> }
 function FlowFavoriteIcon({ selected }: { selected: boolean }) { return selected ? <svg aria-hidden="true" fill="lch(80% 90 85)" viewBox="0 0 16 16"><path d="M14.9441 6.05256C14.8798 5.88159 14.7646 5.73411 14.6136 5.6298C14.4626 5.52549 14.2832 5.46931 14.0992 5.46877H10.4417C10.3795 5.46881 10.3187 5.44969 10.2679 5.41405C10.2171 5.37841 10.1787 5.32801 10.1581 5.2698L8.84514 1.58061C8.78083 1.4101 8.66552 1.26313 8.51465 1.15936C8.36377 1.0556 8.18453 1 8.00091 1C7.81728 1 7.63804 1.0556 7.48717 1.15936C7.33629 1.26313 7.22098 1.4101 7.15667 1.58061L7.15367 1.59014L5.84375 5.2698C5.82313 5.32791 5.78483 5.37825 5.73415 5.41388C5.68346 5.44951 5.62288 5.46869 5.56075 5.46877H1.902C1.71682 5.46863 1.53608 5.52504 1.38439 5.63033C1.23269 5.73562 1.11739 5.88468 1.05416 6.05724C.990937 6.22979.982856 6.41746 1.03102 6.59473C1.07919 6.772 1.18126 6.93025 1.32335 7.04798L4.4383 9.6095C4.4849 9.64784 4.51872 9.69923 4.53534 9.75695C4.55196 9.81467 4.5506 9.87603 4.53143 9.93297L3.22272 13.8235C3.16224 14.0034 3.16105 14.1977 3.21932 14.3783C3.27758 14.5589 3.39229 14.7164 3.54684 14.8281C3.70139 14.9398 3.88777 15 4.07903 14.9996C4.27029 14.9994 4.45652 14.9388 4.61076 14.8267L7.82305 12.4915C7.87456 12.4541 7.93675 12.4339 8.00061 12.4339C8.06446 12.4339 8.12665 12.4541 8.17817 12.4915L11.3893 14.8261C11.5434 14.9386 11.7297 14.9995 11.9212 15C12.1126 15.0005 12.2992 14.9406 12.454 14.8289C12.6087 14.7172 12.7236 14.5595 12.782 14.3788C12.8403 14.198 12.8391 14.0035 12.7785 13.8235L11.4698 9.93059C11.4506 9.87364 11.4493 9.81229 11.4659 9.75457C11.4825 9.69685 11.5163 9.64545 11.5629 9.60712L14.6839 7.04202C14.8242 6.9233 14.9243 6.76477 14.9708 6.58783C15.0174 6.41089 15.0081 6.22406 14.9441 6.05256Z"/></svg> : <svg aria-hidden="true" fill="lch(61.803% 1.2 272)" viewBox="0 0 16 16"><path d="M10.5193 4.98997L9.46118 2.01693C9.34483 1.70806 9.1452 1.45362 8.88451 1.27433C8.62466 1.09562 8.31641 1 8.00081 1C7.68521 1 7.37696 1.09562 7.11712 1.27433C6.85642 1.45362 6.65679 1.70806 6.54528 2.00374L5.48248 4.98997H2.55536C2.23765 4.98973 1.92683 5.08675 1.66556 5.26809C1.40342 5.45004 1.20379 5.70812 1.09414 6.00737C.984248 6.30728.970192 6.63372 1.05394 6.94194C1.13753 7.2496 1.31442 7.52386 1.56019 7.7275L4.08545 9.80411L3.02371 12.9604C2.91854 13.2733 2.91647 13.6112 3.01776 13.9252C3.11884 14.2385 3.3175 14.5113 3.58464 14.7044C3.85102 14.8969 4.17178 15.0003 4.50071 14.9996C4.82872 14.9993 5.14907 14.8951 5.41483 14.702L8.00053 12.8223L10.5851 14.7014C10.8496 14.8944 11.17 14.9991 11.4991 15C11.8281 15.0009 12.1491 14.8978 12.4157 14.7054C12.6831 14.5124 12.882 14.2394 12.9833 13.926C13.0848 13.6113 13.0827 13.2731 12.9773 12.9602L11.9156 9.80207L14.444 7.72408C14.695 7.51166 14.8686 7.23684 14.9493 6.92968C15.0168 6.67352 15.0167 6.40505 14.9504 6.15011L14.9022 5.99753C14.791 5.70157 14.5918 5.44667 14.3314 5.26673C14.0718 5.08736 13.7637 4.9909 13.4479 4.98998L10.5193 4.98997ZM13.4986 6.54821C13.4962 6.55733 13.491 6.56562 13.4832 6.57224L10.7049 8.85551C10.546 8.98629 10.4307 9.16168 10.3739 9.35896C10.3168 9.55714 10.3214 9.76807 10.3875 9.96371L11.5556 13.4385C11.5586 13.4474 11.5587 13.4565 11.5559 13.4652C11.553 13.4741 11.5467 13.4827 11.5378 13.4891C11.5281 13.4961 11.5159 13.5 11.503 13.5C11.4902 13.5 11.4779 13.496 11.4683 13.4889L8.60012 11.4036C8.42554 11.2769 8.21577 11.2088 8.00055 11.2088C7.78531 11.2088 7.5755 11.2769 7.40134 11.4034L4.53289 13.4886C4.52321 13.4957 4.511 13.4996 4.49835 13.4996C4.48523 13.4997 4.47312 13.4958 4.46329 13.4887C4.45442 13.4822 4.44826 13.4738 4.4453 13.4646C4.44255 13.4561 4.4426 13.4471 4.44547 13.4386L5.61393 9.96499C5.67961 9.76981 5.68428 9.5592 5.62728 9.3612C5.57043 9.16375 5.45499 8.98835 5.29643 8.85789L2.51507 6.57069C2.50925 6.56586 2.50387 6.55753 2.50146 6.54865C2.49919 6.54032 2.49957 6.53163 2.50257 6.52343C2.50583 6.51453 2.5121 6.50643 2.52085 6.50035C2.53046 6.49368 2.54238 6.48996 2.55479 6.48997H5.8221C6.03248 6.4897 6.23685 6.42501 6.40824 6.30453C6.58053 6.18341 6.71109 6.01179 6.78158 5.81318L7.9609 2.49821C7.95727 2.50944 7.95646 2.51419 7.9574 2.5155C7.97668 2.50367 7.98851 2.5 8.00081 2.5C8.01311 2.5 8.02494 2.50367 8.03451 2.51025C8.04324 2.51625 8.04952 2.52427 8.05284 2.53307L9.22029 5.81379C9.29053 6.01192 9.42137 6.18383 9.59407 6.30503C9.76589 6.4256 9.97082 6.49011 10.1806 6.48997H13.4457C13.4563 6.49001 13.4686 6.49385 13.4786 6.50077L13.4902 6.5114L13.4977 6.52418C13.5004 6.53198 13.5007 6.54022 13.4986 6.54821Z"/></svg> }
 function DisplayOptionsIcon() { return <svg aria-hidden="true" fill="currentColor" viewBox="0 0 16 16"><path clipRule="evenodd" d="M7 2.5C8.11933 2.5 9.06613 3.23584 9.38477 4.25H14.75C15.1642 4.25 15.5 4.58579 15.5 5C15.5 5.41421 15.1642 5.75 14.75 5.75H9.38477C9.06613 6.76416 8.11933 7.5 7 7.5C5.88067 7.5 4.93387 6.76416 4.61523 5.75H2.25C1.83579 5.75 1.5 5.41421 1.5 5C1.5 4.58579 1.83579 4.25 2.25 4.25H4.61523C4.93387 3.23584 5.88067 2.5 7 2.5ZM7 4C6.44772 4 6 4.44772 6 5C6 5.55228 6.44772 6 7 6C7.55228 6 8 5.55228 8 5C8 4.44772 7.55228 4 7 4Z" fillRule="evenodd"/><path clipRule="evenodd" d="M10 13.5C8.88067 13.5 7.93387 12.7642 7.61523 11.75H2.25C1.83579 11.75 1.5 11.4142 1.5 11C1.5 10.5858 1.83579 10.25 2.25 10.25H7.61523C7.93387 9.23584 8.88067 8.5 10 8.5C11.1193 8.5 12.0661 9.23584 12.3848 10.25H14.75C15.1642 10.25 15.5 10.5858 15.5 11C15.5 11.4142 15.1642 11.75 14.75 11.75H12.3848C12.0661 12.7642 11.1193 13.5 10 13.5ZM10 12C10.5523 12 11 11.5523 11 11C11 10.4477 10.5523 10 10 10C9.44772 10 9 10.4477 9 11C9 11.5523 9.44772 12 10 12Z" fillRule="evenodd"/></svg> }
@@ -192,7 +189,7 @@ function orderingLabel(value: Ordering | DisplayProperty) { return value[0].toUp
 function initials(value: string) { return value.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase() }
 function formatDate(value: string) { return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(value)) }
 function viewDescription(view: SavedView, resource: ViewsResource) { if (view.description) return view.description; const count = Array.isArray(view.filters) ? view.filters.length : 0; return count ? `${resource === 'issues' ? 'Issues' : 'Projects'} matching ${count} ${count === 1 ? 'filter' : 'filters'}` : `All ${resource}` }
-function columnTemplate(properties: Set<DisplayProperty>) { return `minmax(240px, 1fr)${properties.has('created') ? ' 110px' : ''}${properties.has('updated') ? ' 110px' : ''}${properties.has('owner') ? ' 146px' : ''}` }
+function columnTemplate(properties: Set<DisplayProperty>) { return `minmax(240px, 1fr)${properties.has('created') ? ' 110px' : ''}${properties.has('updated') ? ' 110px' : ''}${properties.has('owner') ? ' 120px' : ''}` }
 function readProperties(key: string): DisplayProperty[] { try { const value = JSON.parse(localStorage.getItem(key) ?? '["owner"]'); return Array.isArray(value) ? value.filter(item => ['created', 'owner', 'updated'].includes(item)) : ['owner'] } catch { return ['owner'] } }
 function readPreference(key: string, fallback: string) { try { return localStorage.getItem(key) ?? fallback } catch { return fallback } }
 function writePreference(key: string, value: string) { try { localStorage.setItem(key, value) } catch { /* Display preferences are best-effort. */ } }

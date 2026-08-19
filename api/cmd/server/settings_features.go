@@ -173,13 +173,14 @@ type labelInput struct {
 	Color        *string `json:"color,omitempty"`
 	ResourceType *string `json:"resourceType,omitempty"`
 	GroupID      *string `json:"groupId,omitempty"`
+	ArchivedAt   *string `json:"archivedAt,omitempty"`
 }
 
 func (s *server) listWorkspaceLabels(w http.ResponseWriter, r *http.Request) {
 	resource := r.URL.Query().Get("resourceType")
 	result := []domain.IssueLabel{}
 	for _, label := range s.workspaceData(r).Labels {
-		if label.Scope == "" && (resource == "" || label.ResourceType == resource) {
+		if labelScopeIsWorkspace(label.Scope) && (resource == "" || labelResourceType(label) == resource) {
 			result = append(result, label)
 		}
 	}
@@ -202,7 +203,7 @@ func (s *server) createWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 		if resource != "issue" && resource != "project" {
 			return "", errInvalid
 		}
-		created = domain.IssueLabel{ID: fmt.Sprintf("label_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#5E6AD2", ResourceType: resource, CreatorID: actor.ID, CreatedAt: time.Now().UTC()}
+		created = domain.IssueLabel{ID: fmt.Sprintf("label_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#5E6AD2", Scope: "Workspace", ResourceType: resource, CreatorID: actor.ID, CreatedAt: time.Now().UTC()}
 		applyLabelInput(&created, input)
 		if created.GroupID != "" && !slices.ContainsFunc(data.LabelGroups, func(group domain.LabelGroup) bool {
 			return group.ID == created.GroupID && group.ResourceType == resource
@@ -223,9 +224,22 @@ func (s *server) updateWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var updated domain.IssueLabel
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "label.updated", id, input, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id && label.Scope == "" })
+		index := slices.IndexFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id && labelScopeIsWorkspace(label.Scope) })
 		if index < 0 {
 			return errNotFound
+		}
+		resource := labelResourceType(data.Labels[index])
+		if input.ResourceType != nil {
+			nextResource := strings.TrimSpace(*input.ResourceType)
+			if nextResource != "issue" && nextResource != "project" {
+				return errInvalid
+			}
+			resource = nextResource
+		}
+		if input.GroupID != nil && strings.TrimSpace(*input.GroupID) != "" && !slices.ContainsFunc(data.LabelGroups, func(group domain.LabelGroup) bool {
+			return group.ID == strings.TrimSpace(*input.GroupID) && group.ResourceType == resource
+		}) {
+			return errInvalid
 		}
 		applyLabelInput(&data.Labels[index], input)
 		updated = data.Labels[index]
@@ -246,11 +260,23 @@ func applyLabelInput(label *domain.IssueLabel, input labelInput) {
 		label.Color = *input.Color
 	}
 	if input.ResourceType != nil {
-		label.ResourceType = *input.ResourceType
+		label.ResourceType = strings.TrimSpace(*input.ResourceType)
 	}
 	if input.GroupID != nil {
-		label.GroupID = *input.GroupID
+		label.GroupID = strings.TrimSpace(*input.GroupID)
 	}
+	if input.ArchivedAt != nil {
+		value := strings.TrimSpace(*input.ArchivedAt)
+		if value == "" {
+			label.ArchivedAt = nil
+		} else if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+			label.ArchivedAt = &parsed
+		}
+	}
+}
+
+func labelScopeIsWorkspace(scope string) bool {
+	return scope == "" || strings.EqualFold(scope, "workspace")
 }
 
 func cascadeLabel(data *domain.Bootstrap, label domain.IssueLabel) {
@@ -263,11 +289,59 @@ func cascadeLabel(data *domain.Bootstrap, label domain.IssueLabel) {
 	}
 }
 
+func (s *server) moveWorkspaceLabelToTeams(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	moved := []domain.IssueLabel{}
+	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "label.moved_to_teams", id, func(data *domain.Bootstrap) (string, error) {
+		index := slices.IndexFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id && labelScopeIsWorkspace(label.Scope) })
+		if index < 0 {
+			return "", errNotFound
+		}
+		source := data.Labels[index]
+		if labelResourceType(source) != "issue" {
+			return "", errInvalid
+		}
+		usedByTeam := map[string]bool{}
+		for _, issue := range data.Issues {
+			if slices.ContainsFunc(issue.Labels, func(label domain.IssueLabel) bool { return label.ID == id }) {
+				usedByTeam[issue.Team.ID] = true
+			}
+		}
+		if len(usedByTeam) == 0 {
+			return "", errInvalid
+		}
+		for teamIndex, team := range data.Teams {
+			if !usedByTeam[team.ID] {
+				continue
+			}
+			teamLabel := source
+			teamLabel.ID = fmt.Sprintf("label_%d_%d", time.Now().UnixNano(), teamIndex)
+			teamLabel.Scope = team.ID
+			teamLabel.GroupID = ""
+			moved = append(moved, teamLabel)
+			data.Labels = append(data.Labels, teamLabel)
+			for issueIndex := range data.Issues {
+				if data.Issues[issueIndex].Team.ID != team.ID {
+					continue
+				}
+				for labelIndex := range data.Issues[issueIndex].Labels {
+					if data.Issues[issueIndex].Labels[labelIndex].ID == id {
+						data.Issues[issueIndex].Labels[labelIndex] = teamLabel
+					}
+				}
+			}
+		}
+		data.Labels = slices.Delete(data.Labels, index, index+1)
+		return id, nil
+	})
+	respondMutation(w, err, http.StatusOK, moved)
+}
+
 func (s *server) deleteWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "label.deleted", id, nil, func(data *domain.Bootstrap) error {
 		before := len(data.Labels)
-		data.Labels = slices.DeleteFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id && label.Scope == "" })
+		data.Labels = slices.DeleteFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id && labelScopeIsWorkspace(label.Scope) })
 		if before == len(data.Labels) {
 			return errNotFound
 		}
@@ -289,7 +363,9 @@ func (s *server) deleteWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 type labelGroupInput struct {
 	Name         *string `json:"name,omitempty"`
 	Color        *string `json:"color,omitempty"`
+	Description  *string `json:"description,omitempty"`
 	ResourceType *string `json:"resourceType,omitempty"`
+	ArchivedAt   *string `json:"archivedAt,omitempty"`
 }
 
 func (s *server) createLabelGroup(w http.ResponseWriter, r *http.Request) {
@@ -302,11 +378,17 @@ func (s *server) createLabelGroup(w http.ResponseWriter, r *http.Request) {
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "label_group.created", input, func(data *domain.Bootstrap) (string, error) {
 		resource := "issue"
 		if input.ResourceType != nil {
-			resource = *input.ResourceType
+			resource = strings.TrimSpace(*input.ResourceType)
 		}
-		created = domain.LabelGroup{ID: fmt.Sprintf("label_group_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#8b8d98", ResourceType: resource, CreatedAt: time.Now().UTC()}
+		if resource != "issue" && resource != "project" {
+			return "", errInvalid
+		}
+		created = domain.LabelGroup{ID: fmt.Sprintf("label_group_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#8b8d98", Scope: "Workspace", ResourceType: resource, CreatedAt: time.Now().UTC()}
 		if input.Color != nil {
 			created.Color = *input.Color
+		}
+		if input.Description != nil {
+			created.Description = strings.TrimSpace(*input.Description)
 		}
 		data.LabelGroups = append(data.LabelGroups, created)
 		return created.ID, nil
@@ -332,6 +414,28 @@ func (s *server) updateLabelGroup(w http.ResponseWriter, r *http.Request) {
 		if input.Color != nil {
 			data.LabelGroups[index].Color = *input.Color
 		}
+		if input.Description != nil {
+			data.LabelGroups[index].Description = strings.TrimSpace(*input.Description)
+		}
+		if input.ArchivedAt != nil {
+			value := strings.TrimSpace(*input.ArchivedAt)
+			if value == "" {
+				data.LabelGroups[index].ArchivedAt = nil
+			} else {
+				parsed, parseErr := time.Parse(time.RFC3339, value)
+				if parseErr != nil {
+					return errInvalid
+				}
+				data.LabelGroups[index].ArchivedAt = &parsed
+			}
+			for labelIndex := range data.Labels {
+				if data.Labels[labelIndex].GroupID != id {
+					continue
+				}
+				data.Labels[labelIndex].ArchivedAt = data.LabelGroups[index].ArchivedAt
+				cascadeLabel(data, data.Labels[labelIndex])
+			}
+		}
 		updated = data.LabelGroups[index]
 		return nil
 	})
@@ -349,6 +453,7 @@ func (s *server) deleteLabelGroup(w http.ResponseWriter, r *http.Request) {
 		for index := range data.Labels {
 			if data.Labels[index].GroupID == id {
 				data.Labels[index].GroupID = ""
+				cascadeLabel(data, data.Labels[index])
 			}
 		}
 		return nil

@@ -11,7 +11,7 @@ import { useMyIssuesSelection } from '@/components/my-issues/use-my-issues-state
 import { toggleFilterOption, updateFilterOperator, updateFilterValues } from '@/components/my-issues/my-issues-filter-types'
 import { IssueExplorerSurface } from './issue-explorer-surface'
 import { IssueBoard } from './issue-board'
-import { SavedViewEditor, type SavedViewTarget } from './saved-view-editor'
+import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from './saved-view-editor'
 import type { ViewVisual } from '@/components/views/view-icon-picker'
 import {
   ISSUE_FILTER_LABELS, applyExplorerFilters, executeExplorerBulkAction, explorerBulkOptions, explorerFilterOptions,
@@ -21,11 +21,14 @@ import {
 
 export interface IssueExplorerPageProps {
   data: BootstrapData
+  initialLabelId?: string
   scope: { kind: 'team'; team: Team } | { kind: 'workspace' }
   view: TeamIssuesRouteView
   viewHref: (view: TeamIssuesRouteView) => string
   savedView?: SavedView
+  duplicateFrom?: SavedView
   creatingView?: boolean
+  editingView?: boolean
   defaultSaveScope?: SavedView['scope']
   savedViews?: SavedView[]
   savedViewHref?: (view: SavedView) => string
@@ -34,7 +37,12 @@ export interface IssueExplorerPageProps {
   onCreateSavedView?: (input: SavedViewMutationInput) => Promise<SavedView>
   onUpdateSavedView?: (viewId: string, input: SavedViewMutationInput) => Promise<SavedView>
   onDeleteSavedView?: (view: SavedView) => Promise<void>
+  onToggleSavedViewFavorite?: (view: SavedView) => Promise<void>
+  onSetSavedViewSubscriptionEvents?: (view: SavedView, events: string[]) => Promise<void>
+  onDuplicateSavedView?: (view: SavedView) => void
   onCancelCreateSavedView?: () => void
+  onBeginEditSavedView?: () => void
+  onFinishEditSavedView?: () => void
   onNewViewResourceChange?: (resource: 'issues' | 'projects') => void
   onOpenIssue: (issue: Issue) => void
   renderIssuePreview?: (issue: Issue, onClose: () => void) => ReactNode
@@ -45,12 +53,13 @@ export interface IssueExplorerPageProps {
   onDeleteIssues: (issueIds: string[]) => Promise<void>
 }
 
-export function IssueExplorerPage({ data, scope, view, viewHref, savedView, creatingView = false, defaultSaveScope, savedViews = [], savedViewHref, onNavigateView, onNavigateSavedView, onCreateSavedView, onUpdateSavedView, onDeleteSavedView, onCancelCreateSavedView, onNewViewResourceChange, onOpenIssue, renderIssuePreview, onOpenSidebar, onCreateIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues }: IssueExplorerPageProps) {
+export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref, savedView, duplicateFrom, creatingView = false, editingView = false, defaultSaveScope, savedViews = [], savedViewHref, onNavigateView, onNavigateSavedView, onCreateSavedView, onUpdateSavedView, onDeleteSavedView, onToggleSavedViewFavorite, onSetSavedViewSubscriptionEvents, onDuplicateSavedView, onCancelCreateSavedView, onBeginEditSavedView, onFinishEditSavedView, onNewViewResourceChange, onOpenIssue, renderIssuePreview, onOpenSidebar, onCreateIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues }: IssueExplorerPageProps) {
   const storageScope = scope.kind === 'team' ? `team:${scope.team.id}` : 'workspace'
   const preferencesKey = `${data.workspace.urlKey}:issue-explorer:${storageScope}:${view}`
-  const [filters, setFilters] = useState<MyIssuesAppliedFilter[]>(() => savedView ? filtersFromSavedView(savedView) : readFilters(`${preferencesKey}:filters`))
-  const [display, setDisplay] = useState<MyIssuesDisplayOptions>(() => savedView ? displayFromSavedView(savedView, view) : readDisplay(`${preferencesKey}:display`, view))
-  const [detailsOpen, setDetailsOpen] = useState(() => readBoolean(`${data.workspace.urlKey}:issue-explorer:${storageScope}:details`, false))
+  const sourceView = savedView ?? duplicateFrom
+  const [filters, setFilters] = useState<MyIssuesAppliedFilter[]>(() => sourceView ? filtersFromSavedView(sourceView) : initialLabelFilter(data, initialLabelId) ?? readFilters(`${preferencesKey}:filters`))
+  const [display, setDisplay] = useState<MyIssuesDisplayOptions>(() => sourceView ? displayFromSavedView(sourceView, view) : readDisplay(`${preferencesKey}:display`, view))
+  const [detailsOpen, setDetailsOpen] = useState(() => savedView ? true : readBoolean(`${data.workspace.urlKey}:issue-explorer:${storageScope}:details`, false))
   const [detailsWidth, setDetailsWidth] = useState(350)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [filterOpenSignal, setFilterOpenSignal] = useState(0)
@@ -58,11 +67,15 @@ export function IssueExplorerPage({ data, scope, view, viewHref, savedView, crea
   const [rowOverrides, setRowOverrides] = useState<Map<string, MyIssuesRowData>>(new Map())
   const [manualOrder, setManualOrder] = useState<string[]>(() => readOrder(`${preferencesKey}:order`))
   const [previewIssueId, setPreviewIssueId] = useState<string>()
-  const [viewEditor, setViewEditor] = useState<'create' | 'edit'>()
+  const [viewEditor, setViewEditor] = useState<'create' | 'edit' | undefined>(creatingView ? 'create' : editingView ? 'edit' : undefined)
   const [viewSaving, setViewSaving] = useState(false)
   const mutationSequence = useRef(new Map<string, number>())
   const mutationQueues = useRef(new Map<string, Promise<Issue>>())
   const retryUpdates = useRef(new Map<string, IssueUpdateInput>())
+  const savedViewFavorite = Boolean(savedView && (savedView.favorite || data.favorites.some(item => item.userId === data.viewer.id && item.resourceType === 'view' && item.resourceId === savedView.id)))
+  const savedViewSubscribed = Boolean(savedView && (savedView.subscribed || data.subscriptions.some(item => item.userId === data.viewer.id && item.resourceType === 'view' && item.resourceId === savedView.id)))
+  const savedViewSubscription = savedView ? data.subscriptions.find(item => item.userId === data.viewer.id && item.resourceType === 'view' && item.resourceId === savedView.id) : undefined
+  const savedViewSubscriptionEvents = savedViewSubscription?.events?.length ? savedViewSubscription.events : savedViewSubscribed ? ['issue-added', 'issue-completed'] : []
 
   const scopedIssues = useMemo(() => issuesForScope(data.issues, scope, view), [data.issues, scope, view])
   const issuesById = useMemo(() => new Map(data.issues.map(issue => [issue.id, issue])), [data.issues])
@@ -78,18 +91,20 @@ export function IssueExplorerPage({ data, scope, view, viewHref, savedView, crea
     { scope: 'workspace', label: 'Workspace' },
     ...data.teams.map(team => ({ scope: 'team' as const, label: team.name, teamId: team.id })),
   ], [data.teams])
-  const initialSaveTarget = saveTargets.find(target => target.scope === (savedView?.scope ?? defaultSaveScope ?? scope.kind) && (target.scope !== 'team' || target.teamId === (savedView?.teamId ?? (scope.kind === 'team' ? scope.team.id : undefined)))) ?? saveTargets[0]
+  const initialSaveTarget = saveTargets.find(target => target.scope === (sourceView?.scope ?? defaultSaveScope ?? scope.kind) && (target.scope !== 'team' || target.teamId === (sourceView?.teamId ?? (scope.kind === 'team' ? scope.team.id : undefined)))) ?? saveTargets[0]
 
   useEffect(() => {
     if (!savedView) return
     setFilters(filtersFromSavedView(savedView))
     setDisplay(displayFromSavedView(savedView, savedView.view))
-    setViewEditor(undefined)
   }, [savedView])
 
   useEffect(() => { if (!detailsOpen) setPreviewIssueId(undefined) }, [detailsOpen])
 
-  useEffect(() => { if (creatingView) setViewEditor('create') }, [creatingView])
+  useEffect(() => {
+    if (creatingView) setViewEditor('create')
+    else if (editingView) setViewEditor('edit')
+  }, [creatingView, editingView])
 
   useEffect(() => {
     setRowOverrides(current => {
@@ -174,13 +189,14 @@ export function IssueExplorerPage({ data, scope, view, viewHref, savedView, crea
     if (viewSaving) return
     setViewSaving(true)
     try {
-      if (viewEditor === 'edit' && savedView && onUpdateSavedView) await onUpdateSavedView(savedView.id, { name, description, ...visual })
+      if (viewEditor === 'edit' && savedView && onUpdateSavedView) await onUpdateSavedView(savedView.id, { ...savedViewSnapshot(), name, description, ...visual })
       else if (onCreateSavedView) {
         const destination = target ?? initialSaveTarget
         const created = await onCreateSavedView({ ...savedViewSnapshot(), name, description, ...visual, scope: destination.scope, teamId: destination.scope === 'team' ? destination.teamId : '' })
         onNavigateSavedView?.(created)
       }
       setViewEditor(undefined)
+      if (viewEditor === 'edit') onFinishEditSavedView?.()
     } finally { setViewSaving(false) }
   }
 
@@ -192,11 +208,13 @@ export function IssueExplorerPage({ data, scope, view, viewHref, savedView, crea
       activeView={view}
       viewHref={viewHref}
       savedView={savedView}
+      favorite={savedViewFavorite}
       savedViews={savedViews}
       savedViewHref={savedViewHref}
       filters={filters}
       displayOptions={display}
       detailsOpen={detailsOpen}
+      itemCount={rows.length}
       filterOpenSignal={filterOpenSignal}
       filterOptions={field => explorerFilterOptions(field, rowOptions)}
       onFilterToggle={addFilter}
@@ -206,20 +224,31 @@ export function IssueExplorerPage({ data, scope, view, viewHref, savedView, crea
       onNewViewResourceChange={onNewViewResourceChange}
       onAddView={() => setViewEditor('create')}
       onSavedViewSelect={onNavigateSavedView}
-      onEditSavedView={() => setViewEditor('edit')}
-      onUpdateSavedView={() => { if (savedView && onUpdateSavedView) void onUpdateSavedView(savedView.id, savedViewSnapshot()) }}
-      onDeleteSavedView={() => { if (savedView && onDeleteSavedView && window.confirm(`Delete view "${savedView.name}"?`)) void onDeleteSavedView(savedView) }}
+      onToggleFavorite={() => { if (savedView && onToggleSavedViewFavorite) void onToggleSavedViewFavorite(savedView) }}
+      viewActions={savedView && <SavedViewMenu
+        view={savedView}
+        users={data.users}
+        teams={data.teams}
+        subscriptionEvents={savedViewSubscriptionEvents}
+        onEdit={() => { setViewEditor('edit'); onBeginEditSavedView?.() }}
+        onDuplicate={onDuplicateSavedView ? () => onDuplicateSavedView(savedView) : undefined}
+        onUpdate={onUpdateSavedView ? input => { void onUpdateSavedView(savedView.id, input) } : undefined}
+        onSetSubscriptionEvents={onSetSavedViewSubscriptionEvents ? events => { void onSetSavedViewSubscriptionEvents(savedView, events) } : undefined}
+        onCopy={() => { void navigator.clipboard.writeText(window.location.href) }}
+        onExport={() => exportIssuesCsv(rows, savedView.name)}
+        onDelete={() => { if (onDeleteSavedView && window.confirm(`Delete view "${savedView.name}"?`)) void onDeleteSavedView(savedView) }}
+      />}
       onOpenSidebar={onOpenSidebar}
       viewEditor={viewEditor && <SavedViewEditor
-        initialName={viewEditor === 'edit' ? savedView?.name : ''}
+        initialName={viewEditor === 'edit' ? savedView?.name : duplicateFrom?.name ?? ''}
         namePlaceholder="All issues"
-        initialDescription={viewEditor === 'edit' ? savedView?.description : ''}
-        initialIcon={viewEditor === 'edit' ? savedView?.icon : undefined}
-        initialColor={viewEditor === 'edit' ? savedView?.color : undefined}
+        initialDescription={viewEditor === 'edit' ? savedView?.description : duplicateFrom?.description ?? ''}
+        initialIcon={viewEditor === 'edit' ? savedView?.icon : duplicateFrom?.icon}
+        initialColor={viewEditor === 'edit' ? savedView?.color : duplicateFrom?.color}
         initialTarget={initialSaveTarget}
         saveTargets={viewEditor === 'create' ? saveTargets : []}
         saving={viewSaving}
-        onCancel={() => { setViewEditor(undefined); if (creatingView) onCancelCreateSavedView?.() }}
+        onCancel={() => { setViewEditor(undefined); if (creatingView) onCancelCreateSavedView?.(); else if (viewEditor === 'edit') onFinishEditSavedView?.() }}
         onSave={(name, description, target, visual) => { void saveViewEditor(name, description, target, visual) }}
       />}
       filterBar={<MyIssuesFilterBar filters={filters} filterOptions={filter => explorerFilterOptions(filter.field, rowOptions)} onAdd={() => setFilterOpenSignal(value => value + 1)} onClear={() => persistFilters([])} onOperatorChange={(id, operator) => persistFilters(updateFilterOperator(filters, id, operator))} onRemove={id => persistFilters(filters.filter(filter => filter.id !== id))} onValuesChange={(id, options) => persistFilters(updateFilterValues(filters, id, options))}/>}>
@@ -243,6 +272,18 @@ export function IssueExplorerPage({ data, scope, view, viewHref, savedView, crea
     </IssueExplorerSurface>
     <MyIssuesBulkActionBar selectedIssues={selection.selectedIssues} actionOptions={action => explorerBulkOptions(action, rowOptions)} onAction={(action, _issues, value) => { void executeExplorerBulkAction({ action, ids: selection.selectedIssues.map(issue => issue.id), value, data, issuesById, onUpdateIssue, onUpdateIssues }).then(() => selection.clearSelection()) }} onClear={selection.clearSelection}/>
   </>
+}
+
+function exportIssuesCsv(rows: MyIssuesRowData[], name: string) {
+  const quote = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`
+  const csv = [
+    ['Identifier', 'Title', 'Status', 'Priority', 'Assignee', 'Project', 'Due date'],
+    ...rows.map(row => [row.identifier, row.title, row.state.name, row.priority, row.assignee?.name ?? '', row.project?.name ?? '', row.dueDate ?? '']),
+  ].map(line => line.map(quote).join(',')).join('\n')
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url; link.download = `${name.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'view'}.csv`; link.click()
+  URL.revokeObjectURL(url)
 }
 
 function issuesForScope(issues: Issue[], scope: IssueExplorerPageProps['scope'], view: TeamIssuesRouteView) {
@@ -309,6 +350,13 @@ function deriveSummary(groups: MyIssuesGroupData[]): MyIssuesDetailsSummary {
 }
 function countItems(items: Omit<MyIssuesSummaryItem, 'count'>[]) { const values = new Map<string, MyIssuesSummaryItem>(); for (const item of items) values.set(item.id, { ...item, count: (values.get(item.id)?.count ?? 0) + 1 }); return [...values.values()].sort((a, b) => b.count - a.count) }
 function defaultDisplay(view: TeamIssuesRouteView): MyIssuesDisplayOptions { return { ...defaultMyIssuesDisplayOptions, grouping: 'status', completedWindow: view === 'all' ? 'all' : 'none', properties: new Set(defaultMyIssuesDisplayOptions.properties) } }
+function initialLabelFilter(data: BootstrapData, labelId?: string): MyIssuesAppliedFilter[] | undefined {
+  if (!labelId) return
+  const label = data.labels.find(item => item.id === labelId)
+  if (!label) return
+  const value = { value: label.id, valueLabel: label.name, color: label.color }
+  return [{ id: `labels-${label.id}`, field: 'labels', fieldLabel: 'Labels', operator: 'is', ...value, values: [value] }]
+}
 function readFilters(key: string): MyIssuesAppliedFilter[] { try { const value = JSON.parse(localStorage.getItem(key) ?? '[]'); return Array.isArray(value) ? value : [] } catch { return [] } }
 function readDisplay(key: string, view: TeamIssuesRouteView): MyIssuesDisplayOptions { const fallback = defaultDisplay(view); try { const value = JSON.parse(localStorage.getItem(key) ?? 'null'); return value ? { ...fallback, ...value, properties: new Set(Array.isArray(value.properties) ? value.properties : [...fallback.properties]) } : fallback } catch { return fallback } }
 function readBoolean(key: string, fallback: boolean) { try { const value = localStorage.getItem(key); return value == null ? fallback : value === 'true' } catch { return fallback } }

@@ -1,6 +1,6 @@
 import * as Popover from '@radix-ui/react-popover'
 import * as Tooltip from '@radix-ui/react-tooltip'
-import { Check, Layers3, Plus } from 'lucide-react'
+import { Check, ChevronRight, Layers3, Plus } from 'lucide-react'
 import { useId, useState, type ReactNode } from 'react'
 import { LabelIcon, NoAssigneeIcon, ProjectIcon, PriorityIcon } from '@/components/issue/issue-icons'
 import { LabelHoverPreview } from './label-hover-preview'
@@ -13,6 +13,8 @@ export interface PropertyOption {
   description?: string
   issueCount?: number
   scope?: string
+  groupId?: string
+  groupLabel?: string
   keywords?: string
   shortcut?: string
   icon?: ReactNode
@@ -49,7 +51,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, multiple =
   const selected = multiple ? selectedIds : [selectedId ?? options.find(option => option.label === value)?.id ?? '']
   const selectedSet = new Set(selected)
   const kind = explicitKind ?? (multiple && label === 'Labels' ? 'labels' : label === 'Project' ? 'project' : 'standard')
-  const orderedOptions = multiple ? [...options].sort((left, right) => Number(selectedSet.has(right.id)) - Number(selectedSet.has(left.id))) : options
+  const orderedOptions = multiple && kind !== 'labels' ? [...options].sort((left, right) => Number(selectedSet.has(right.id)) - Number(selectedSet.has(left.id))) : options
   const command = usePropertyCommand({
     closeOnSelect: !multiple,
     open,
@@ -58,8 +60,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, multiple =
     onOpenChange: setOpen,
     onSelect: option => onChange?.(option.id),
   })
-  const selectedOptions = command.filteredOptions.filter(option => selectedSet.has(option.id))
-  const remainingOptions = command.filteredOptions.filter(option => !selectedSet.has(option.id))
+  const labelMenu = groupLabelOptions(command.filteredOptions)
   const noProject = command.filteredOptions.filter(option => !option.id)
   const projects = command.filteredOptions.filter(option => option.id)
   const placeholder = kind === 'labels' ? 'Change or add labels…' : kind === 'project' ? 'Add to project…' : searchPlaceholder ?? `Change ${label.toLowerCase()}…`
@@ -77,7 +78,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, multiple =
             {(searchShortcut ?? (kind === 'labels' ? 'L' : kind === 'project' ? 'Shift P' : undefined)) && <kbd>{searchShortcut ?? (kind === 'labels' ? 'L' : 'Shift P')}</kbd>}
           </div>
           <div id={listboxId} className="property-command-options" role="listbox" aria-label={label} aria-multiselectable={multiple || undefined}>
-            {kind === 'labels' && <>{selectedOptions.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} multi onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }{selectedOptions.length > 0 && remainingOptions.length > 0 && <div className="property-command-separator" role="separator"/>}{remainingOptions.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} multi onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }</>}
+            {kind === 'labels' && <>{(labelMenu.options.length > 0 || labelMenu.groups.length > 0) && <div className="property-command-group">Labels</div>}{labelMenu.options.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} multi onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>)}{labelMenu.groups.map(group => <LabelGroupOption key={group.id} group={group} selectedIds={selectedSet} listboxId={listboxId} activeId={command.activeId} onChoose={option => command.choose(option)} onActive={command.setActiveId}/>)}</>}
             {kind === 'project' && <>{noProject.map(option => <CommandOption key="none" option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }{projects.length > 0 && <div className="property-command-group">Projects in {teamName} team</div>}{projects.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }<div className="property-command-group">New project</div><button type="button" className="property-command-create" role="option" aria-label="Create new project" onClick={() => setOpen(false)}><Plus size={15}/><span>Create new project…</span></button></>}
             {kind === 'standard' && command.filteredOptions.map(option => <CommandOption key={option.id || 'none'} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} multi={multiple} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }
             {!command.filteredOptions.length && <div className="core-property-empty">No results</div>}
@@ -86,6 +87,25 @@ export function PropertyMenu({ label, value, icon, options, onChange, multiple =
       </Popover.Content>
     </Popover.Portal>
   </Popover.Root>{hoverContent&&<Tooltip.Portal><Tooltip.Content className={hoverClassName ?? 'property-hover-tooltip'} side="left" align="center" sideOffset={6} collisionPadding={8}>{hoverContent}</Tooltip.Content></Tooltip.Portal>}</Tooltip.Root></Tooltip.Provider>
+}
+
+function groupLabelOptions(options: PropertyOption[]) {
+  const direct: PropertyOption[] = []
+  const groups = new Map<string, { id: string; label: string; options: PropertyOption[] }>()
+  for (const option of options) {
+    if (!option.groupId || !option.groupLabel) { direct.push(option); continue }
+    const group = groups.get(option.groupId) ?? { id: option.groupId, label: option.groupLabel, options: [] }
+    group.options.push(option)
+    groups.set(option.groupId, group)
+  }
+  return { options: direct, groups: [...groups.values()] }
+}
+
+function LabelGroupOption({ group, selectedIds, listboxId, activeId, onChoose, onActive }: { group: { id: string; label: string; options: PropertyOption[] }; selectedIds: Set<string>; listboxId: string; activeId?: string; onChoose: (option: PropertyOption) => void; onActive: (id: string) => void }) {
+  const [open, setOpen] = useState(false)
+  return <Popover.Root open={open} onOpenChange={setOpen}><Popover.Trigger asChild><button type="button" className="property-command-label-group-option" role="option" aria-selected={open} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(true)}>
+    <span className="property-command-option-background"/><span className="property-command-icon"><Layers3 size={14}/></span><span className="property-command-label">{group.label}</span><ChevronRight className="property-command-group-chevron" size={13}/>
+  </button></Popover.Trigger><Popover.Portal><Popover.Content className="property-command-label-submenu" side="right" align="start" sideOffset={4} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}><div className="property-command-options" role="listbox" aria-label={group.label} aria-multiselectable="true">{group.options.map(option => <CommandOption key={option.id} option={option} active={option.id === activeId} checked={selectedIds.has(option.id)} listboxId={`${listboxId}-${group.id}`} icon={<LabelIcon size={14}/>} multi onChoose={() => onChoose(option)} onActive={() => onActive(option.id)}/>)}</div></Popover.Content></Popover.Portal></Popover.Root>
 }
 
 function CommandOption({ option, active, checked, icon, listboxId, multi = false, onChoose, onActive }: { option: PropertyOption; active: boolean; checked: boolean; icon: ReactNode; listboxId: string; multi?: boolean; onChoose: () => void; onActive: () => void }) {

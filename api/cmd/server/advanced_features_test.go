@@ -156,7 +156,13 @@ func TestTemplatesAskApprovalSLAAndUnifiedUserState(t *testing.T) {
 	defer repository.Close()
 	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
 	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
-	team, project, label := bootstrap.Teams[0], bootstrap.Projects[0], bootstrap.Labels[0]
+	team, project := bootstrap.Teams[0], bootstrap.Projects[0]
+	issueLabelIndex := slices.IndexFunc(bootstrap.Labels, func(label domain.IssueLabel) bool { return labelResourceType(label) == "issue" })
+	projectLabelIndex := slices.IndexFunc(bootstrap.Labels, func(label domain.IssueLabel) bool { return labelResourceType(label) == "project" })
+	if issueLabelIndex < 0 || projectLabelIndex < 0 {
+		t.Fatal("seed needs issue and project labels")
+	}
+	issueLabel, projectLabel := bootstrap.Labels[issueLabelIndex], bootstrap.Labels[projectLabelIndex]
 	states := statesForTeam(&bootstrap, team.ID)
 	if len(states) == 0 {
 		t.Fatal("seed team has no workflow states")
@@ -165,15 +171,15 @@ func TestTemplatesAskApprovalSLAAndUnifiedUserState(t *testing.T) {
 
 	projectTemplate := requestJSON[domain.ProjectTemplate](t, handler, http.MethodPost, "/api/project-templates", map[string]any{
 		"name": "Launch template", "summary": "Template summary", "description": "Template body", "statusId": bootstrap.ProjectStatuses[0].ID,
-		"priority": 2, "teamIds": []string{team.ID}, "labelIds": []string{label.ID}, "color": "#d15f5f", "icon": "◇",
+		"priority": 2, "teamIds": []string{team.ID}, "labelIds": []string{projectLabel.ID}, "color": "#d15f5f", "icon": "◇",
 	}, http.StatusCreated)
 	createdProject := requestJSON[domain.Project](t, handler, http.MethodPost, "/api/projects", map[string]any{"templateId": projectTemplate.ID}, http.StatusCreated)
-	if createdProject.Name != projectTemplate.Name || createdProject.Summary != projectTemplate.Summary || createdProject.Priority != 2 || !slices.Contains(createdProject.LabelIDs, label.ID) {
+	if createdProject.Name != projectTemplate.Name || createdProject.Summary != projectTemplate.Summary || createdProject.Priority != 2 || !slices.Contains(createdProject.LabelIDs, projectLabel.ID) {
 		t.Fatalf("project template was not applied: %#v", createdProject)
 	}
 
 	issueTemplate := requestJSON[domain.IssueTemplate](t, handler, http.MethodPost, "/api/teams/"+team.ID+"/templates", map[string]any{
-		"name": "Approved request", "body": "Template issue body", "stateId": state.ID, "priority": 2, "projectId": project.ID, "labelIds": []string{label.ID},
+		"name": "Approved request", "body": "Template issue body", "stateId": state.ID, "priority": 2, "projectId": project.ID, "labelIds": []string{issueLabel.ID},
 	}, http.StatusCreated)
 	ask := requestJSON[domain.Ask](t, handler, http.MethodPost, "/api/asks", map[string]any{
 		"title": "Customer ask", "teamId": team.ID, "templateId": issueTemplate.ID,
@@ -184,7 +190,7 @@ func TestTemplatesAskApprovalSLAAndUnifiedUserState(t *testing.T) {
 	}
 	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	approvedIssue := findIssue(t, bootstrap.Issues, ask.IssueID)
-	if approvedIssue.Description != issueTemplate.Body || approvedIssue.Project == nil || approvedIssue.Project.ID != project.ID || !slices.ContainsFunc(approvedIssue.Labels, func(item domain.IssueLabel) bool { return item.ID == label.ID }) {
+	if approvedIssue.Description != issueTemplate.Body || approvedIssue.Project == nil || approvedIssue.Project.ID != project.ID || !slices.ContainsFunc(approvedIssue.Labels, func(item domain.IssueLabel) bool { return item.ID == issueLabel.ID }) {
 		t.Fatalf("approved ask did not apply its issue template: %#v", approvedIssue)
 	}
 
@@ -211,6 +217,10 @@ func TestTemplatesAskApprovalSLAAndUnifiedUserState(t *testing.T) {
 	subscriptionB := requestJSON[domain.Subscription](t, handler, http.MethodPut, "/api/subscriptions/project/"+project.ID, nil, http.StatusOK)
 	if subscriptionA.ID != subscriptionB.ID {
 		t.Fatal("subscription endpoint created duplicates")
+	}
+	subscriptionC := requestJSON[domain.Subscription](t, handler, http.MethodPut, "/api/subscriptions/project/"+project.ID, map[string]any{"events": []string{"project-added"}}, http.StatusOK)
+	if subscriptionC.ID != subscriptionA.ID || !slices.Equal(subscriptionC.Events, []string{"project-added"}) {
+		t.Fatalf("subscription event update = %#v", subscriptionC)
 	}
 	customer := requestJSON[domain.Customer](t, handler, http.MethodPost, "/api/customers", map[string]any{"name": "Attachment customer"}, http.StatusCreated)
 	request := requestJSON[domain.CustomerRequest](t, handler, http.MethodPost, "/api/customer-requests", map[string]any{"customerId": customer.ID, "body": "Attachment request"}, http.StatusCreated)

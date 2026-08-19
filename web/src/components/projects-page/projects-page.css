@@ -663,6 +663,7 @@
 .lp-project-context__nested { background: var(--theme-control); border: .5px solid var(--theme-border-strong) !important; border-radius: 10px; box-shadow: 0 3px 8px rgb(0 0 0 / 20%); left: calc(100% - 3px); margin: 0 !important; max-height: min(410px, calc(100vh - 16px)); min-width: 240px; overflow: auto; padding: 5px !important; position: absolute; top: 5px; width: max-content; z-index: 2; }
 .lp-project-context__nested-search { border-bottom: .5px solid var(--theme-border-strong); margin: -5px -5px 5px; min-width: 242px; padding: 0 12px; }
 .lp-project-context__nested-list { display: grid; }
+.lp-project-context__group-label { align-items: center; color: var(--muted); display: flex; font-size: 12px; font-weight: 500; height: 28px; padding: 7px 8px 3px; }
 .lp-project-context__nested-list button { min-width: 242px; }
 .lp-project-context__nested-list button:has(.lp-project-context__label small) { height: 42px; }
 .lp-project-context__checkbox { align-items: center; border: 1px solid #57575c; border-radius: 4px; color: #fff; display: inline-flex; flex: 0 0 14px; height: 14px; justify-content: center; width: 14px; }
@@ -824,6 +825,7 @@
 .lp-new-project-picker__surface { background: var(--theme-control); border: .5px solid var(--theme-border-strong); border-radius: 12px; box-shadow: 0 3px 8px rgb(0 0 0 / 18%); left: 0; overflow: hidden; position: absolute; top: 29px; width: 252px; z-index: 40; }
 .lp-new-project-picker__surface input { background: transparent; border: 0; border-bottom: .5px solid var(--theme-border-strong); color: var(--theme-text-primary); font-size: 13px; height: 37px; outline: none; padding: 0 13px; width: 100%; }
 .lp-new-project-picker__surface [role="listbox"] { max-height: 224px; overflow: auto; padding: 5px; }
+.lp-new-project-picker__group { align-items: center; color: var(--muted); display: flex; font-size: 12px; font-weight: 500; height: 28px; padding: 7px 8px 3px; }
 .lp-new-project-picker__surface [role="option"] { align-items: center; background: transparent; border: 0; border-radius: 5px; color: var(--theme-text-primary); display: flex; font-size: 13px; gap: 7px; height: 32px; padding: 0 8px; width: 100%; }
 .lp-new-project-picker__surface [role="option"]:hover,
 .lp-new-project-picker__surface [role="option"]:focus-visible { background: var(--theme-control-active); outline: none; }

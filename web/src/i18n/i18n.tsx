@@ -102,6 +102,8 @@ export function translateToChinese(source: string): string {
     [/^Change priority\. No priority is selected$/, () => '更改优先级。当前未设置优先级'],
     [/^Change assignee\. (.+) is assigned$/, name => `更改负责人。当前负责人是 ${name}`],
     [/^Change project target date$/, () => '更改项目目标日期'],
+    [/^Create (issue|project) view in (.+)$/, (resource, name) => `在 ${name} 中创建${resource === 'issue' ? '事项' : '项目'}视图`],
+    [/^Save to (.+)$/, name => `保存到 ${name}`],
     [/^Add to (.+)$/, resource => `添加到${translateNoun(resource)}`],
     [/^Open (.+) menu$/, name => `打开 ${name} 菜单`],
     [/^Open (.+) issues$/, name => `打开 ${name} 的事项`],

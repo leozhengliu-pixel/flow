@@ -140,7 +140,9 @@ func validateResourceIDs(data *domain.Bootstrap, resourceType string, ids []stri
 		case "team":
 			valid = slices.ContainsFunc(data.Teams, func(item domain.Team) bool { return item.ID == id })
 		case "label":
-			valid = slices.ContainsFunc(data.Labels, func(item domain.IssueLabel) bool { return item.ID == id })
+			valid = labelExistsForResource(data, id, "issue")
+		case "project-label":
+			valid = labelExistsForResource(data, id, "project")
 		case "user":
 			valid = userByID(data, id) != nil
 		}
@@ -925,7 +927,7 @@ func applyProjectTemplateInput(data *domain.Bootstrap, template *domain.ProjectT
 	}
 	if input.LabelIDs != nil {
 		values := normalizedStrings(*input.LabelIDs)
-		if !validateResourceIDs(data, "label", values) {
+		if !validateResourceIDs(data, "project-label", values) {
 			return errInvalid
 		}
 		template.LabelIDs = values
@@ -1371,6 +1373,10 @@ func (s *server) removeFavorite(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) addSubscription(w http.ResponseWriter, r *http.Request) {
 	kind, id := r.PathValue("type"), r.PathValue("id")
+	var input domain.SubscriptionMutationInput
+	if r.ContentLength > 0 && !decodeJSON(w, r, &input) {
+		return
+	}
 	var created domain.Subscription
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "subscription.added", id, map[string]string{"type": kind}, func(data *domain.Bootstrap) error {
 		if !resourceExists(data, kind, id) {
@@ -1380,11 +1386,17 @@ func (s *server) addSubscription(w http.ResponseWriter, r *http.Request) {
 			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
 		})
 		if index >= 0 {
+			if input.Events != nil {
+				data.Subscriptions[index].Events = slices.Clone(*input.Events)
+			}
 			created = data.Subscriptions[index]
 			return nil
 		}
 		now := time.Now().UTC()
 		created = domain.Subscription{ID: fmt.Sprintf("subscription_%d", now.UnixNano()), UserID: data.Viewer.ID, ResourceType: kind, ResourceID: id, CreatedAt: now}
+		if input.Events != nil {
+			created.Events = slices.Clone(*input.Events)
+		}
 		data.Subscriptions = append(data.Subscriptions, created)
 		return nil
 	})

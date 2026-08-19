@@ -150,6 +150,44 @@ func TestSQLiteStoreAddsAndPersistsCanonicalWorkflowStates(t *testing.T) {
 	}
 }
 
+func TestEnsureCanonicalLabelsMigratesLegacyDeliveryTaxonomy(t *testing.T) {
+	data := zentaoDemoSeed()
+	legacyBug := domain.IssueLabel{ID: "label_bug", Name: "Bug", Scope: "Workspace", GroupID: "label_group_quality"}
+	obsoleteVersion := domain.IssueLabel{ID: "label_version_implementing", Name: "版本·实施", Scope: "Workspace", GroupID: "label_group_version"}
+	custom := domain.IssueLabel{ID: "label_custom", Name: "Keep me", Scope: "Workspace"}
+	data.Labels = append(data.Labels, legacyBug, obsoleteVersion, custom)
+	data.LabelGroups = append(data.LabelGroups,
+		domain.LabelGroup{ID: "label_group_quality", Name: "Quality", ResourceType: "issue"},
+		domain.LabelGroup{ID: "label_group_version", Name: "Version", ResourceType: "issue"},
+	)
+	data.Issues[0].Description += " 来源于禅道 Bug #1。"
+	data.Issues[0].Labels = []domain.IssueLabel{legacyBug, custom}
+	data.Issues[1].Labels = []domain.IssueLabel{obsoleteVersion}
+
+	if !ensureCanonicalLabelGroups(&data) || !ensureCanonicalLabels(&data) {
+		t.Fatal("legacy taxonomy migration did not report a change")
+	}
+	if slices.ContainsFunc(data.Labels, func(label domain.IssueLabel) bool { return obsoleteDeliveryLabelIDs[label.ID] }) {
+		t.Fatalf("legacy labels remain after migration: %#v", data.Labels)
+	}
+	if slices.ContainsFunc(data.LabelGroups, func(group domain.LabelGroup) bool { return group.ID == "label_group_quality" }) {
+		t.Fatalf("legacy group remains after migration: %#v", data.LabelGroups)
+	}
+	if !slices.ContainsFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == custom.ID }) {
+		t.Fatal("custom label was removed by taxonomy migration")
+	}
+	if !slices.ContainsFunc(data.Issues[0].Labels, func(label domain.IssueLabel) bool { return label.ID == "label_type_defect" }) {
+		t.Fatalf("issue was not reclassified as a defect: %#v", data.Issues[0].Labels)
+	}
+	if !slices.ContainsFunc(data.Issues[1].Labels, func(label domain.IssueLabel) bool { return label.ID == "label_type_development" }) {
+		t.Fatalf("version-like issue was not reclassified as a development task: %#v", data.Issues[1].Labels)
+	}
+	issueGroups := slices.DeleteFunc(append([]domain.LabelGroup{}, data.LabelGroups...), func(group domain.LabelGroup) bool { return group.ResourceType != "issue" })
+	if len(issueGroups) != 1 || issueGroups[0].ID != "label_group_work_item_type" {
+		t.Fatalf("expected one work item type group, got %#v", issueGroups)
+	}
+}
+
 func TestBootstrapForUserProjectsTeamStatesAndPrivateNotificationData(t *testing.T) {
 	store, err := OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
