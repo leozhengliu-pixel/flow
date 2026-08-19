@@ -46,7 +46,7 @@ export function SavedViewMenu({ view, users = [], teams = [], subscriptionEvents
     {onSetSubscriptionEvents && <DropdownMenu.Sub><DropdownMenu.SubTrigger className={styles.menuItem}><Bell/><span>Subscribe</span><ChevronRight className={styles.trailing}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className={`${styles.menu} ${styles.subscriptionMenu}`} sideOffset={-4}><SubscriptionItem checked={events.has('issue-added')} label={`${entity} is added to the view`} onSelect={() => toggleEvent('issue-added')}/><SubscriptionItem checked={events.has('issue-completed')} label={`${entity} is marked completed or canceled`} onSelect={() => toggleEvent('issue-completed')}/></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>}
     {(onCopy || onExport) && <DropdownMenu.Separator className={styles.separator}/>}
     {onCopy && <DropdownMenu.Item className={styles.menuItem} onSelect={onCopy}><Copy/>Copy link</DropdownMenu.Item>}
-    {onExport && <DropdownMenu.Item className={styles.menuItem} onSelect={onExport}><Download/>Export {view.resource === 'projects' ? 'projects' : 'issues'} as CSV…</DropdownMenu.Item>}
+    {onExport && <DropdownMenu.Item className={styles.menuItem} onSelect={onExport}><Download/><span>{`Export ${view.resource === 'projects' ? 'projects' : 'issues'} as CSV…`}</span></DropdownMenu.Item>}
     <DropdownMenu.Separator className={styles.separator}/>
     <DropdownMenu.Item className={styles.menuItem} data-danger onSelect={onDelete}><Trash2/>Delete</DropdownMenu.Item>
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>

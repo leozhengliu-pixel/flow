@@ -11,3 +11,9 @@
 .layoutTabs button:focus-visible,.orderButton:focus-visible,.selectTrigger:focus-visible,.switchRow>button:focus-visible,.propertyGrid button:focus-visible{outline:2px solid lch(67.6% 34.2 283);outline-offset:2px}
 @keyframes popoverIn{from{opacity:0;transform:translateY(-2px)}to{opacity:1;transform:none}}@keyframes menuIn{from{opacity:0;transform:translateY(-2px)}to{opacity:1;transform:none}}
 @media(max-width:800px){.popover{max-width:calc(100vw - 16px);max-height:calc(100vh - 92px)}}
+:global(:root[data-theme="light"]) .popover,:global(:root[data-theme="light"]) .selectMenu{border-color:lch(90.55% 0 282);background:lch(100% 0 282);box-shadow:0 6px 18px lch(0 0 0/.02),0 3px 9px lch(0 0 0/.04),0 1px 1px lch(0 0 0/.04)}
+:global(:root[data-theme="light"]) .layoutTabs button,:global(:root[data-theme="light"]) .propertyGrid button{background:lch(99.997% .5 282)}
+:global(:root[data-theme="light"]) .layoutTabs button[aria-selected=true],:global(:root[data-theme="light"]) .propertyGrid button[data-active=true]{background:lch(94.857% 0 282);box-shadow:none;color:lch(10% 0 282)}
+:global(:root[data-theme="light"]) .selectTrigger{background:lch(100% 0 282);box-shadow:0 0 0 .5px lch(0 0 0/.088),0 3px 6px -2px lch(0 0 0/.02),0 1px 1px lch(0 0 0/.04)}
+:global(:root[data-theme="light"]) .selectTrigger:hover:not(:disabled),:global(:root[data-theme="light"]) .selectTrigger[data-state=open],:global(:root[data-theme="light"]) .selectItem[data-highlighted],:global(:root[data-theme="light"]) .selectItem[data-state=checked]{background:lch(94.4% .5 282)}
+:global(:root[data-theme="light"]) .switchRow>button{background:lch(82.484% .054 281.837)}

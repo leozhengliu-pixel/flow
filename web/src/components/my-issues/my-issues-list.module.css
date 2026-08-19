@@ -1,4 +1,5 @@
 .list{min-width:0;padding:0 0 8px;font-family:"Inter Variable","SF Pro Display",-apple-system,system-ui,"Segoe UI",sans-serif}.group{min-width:0;padding:0 0 2px}.groupHeader{height:36px;margin:0 8px;display:flex;align-items:center;gap:8px;padding:0 8px 0 0;overflow:hidden;border-radius:8px;background:var(--theme-surface-1)}
+.groupHeader+div{padding-top:2px}
 .collapseButton,.createButton{display:grid;place-items:center;border:0;background:transparent;color:var(--theme-text-secondary);padding:0;cursor:pointer}.collapseButton{width:28px;height:36px;flex:0 0 28px}.collapseButton[aria-expanded=false] svg{transform:rotate(-90deg)}.collapseButton svg{transition:transform 120ms}.groupState{width:14px;height:14px;display:grid;place-items:center;margin-left:-2px}.groupName{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--theme-text-primary);font-size:13px;font-weight:500}.groupCount{color:var(--issue-muted);font-size:12px}.createButton{width:24px;height:24px;margin-left:auto;border-radius:999px}.createButton:hover,.collapseButton:hover{background:var(--bg-active);color:var(--text)}
 .row{--row-columns:8px 18px 16px 50px 16px minmax(80px,1fr) 60px 18px;height:44px;width:100%;display:grid;grid-template-columns:var(--row-columns);column-gap:8px;align-items:center;border-radius:8px;color:var(--bright);outline:0;cursor:pointer;text-decoration:none}.row:hover,.row[data-selected=true]{background:var(--bg-subtle)}.row:focus-visible{background:var(--bg-subtle);box-shadow:inset 0 0 0 1px lch(32% 1.2 272)}
 .row[data-nested=true]{padding-left:28px}
@@ -17,3 +18,8 @@
 .labelPropertyPopover .propertyOption[aria-selected=true]{background:transparent}
 .labelPropertyPopover .propertyOption{padding-left:39.5px}
 .labelPropertyPopover .optionCheckbox{left:15px}
+:global(:root[data-theme="light"]) .badge{border-color:lch(88% 0 282);background:lch(99.997% .5 282)}
+:global(:root[data-theme="light"]) .row:focus-visible{box-shadow:inset 0 0 0 1px lch(82% 2 282)}
+:global(:root[data-theme="light"]) .propertyPopover,:global(:root[data-theme="light"]) .contextMenu,:global(:root[data-theme="light"]) .contextSubmenu{border-color:lch(90.55% 0 282);background:lch(100% 0 282);box-shadow:0 6px 18px lch(0 0 0/.02),0 3px 9px lch(0 0 0/.04),0 1px 1px lch(0 0 0/.04)}
+:global(:root[data-theme="light"]) .propertyOption:hover .optionBackground,:global(:root[data-theme="light"]) .propertyOption[aria-selected=true] .optionBackground,:global(:root[data-theme="light"]) .menuItem[data-highlighted]{background:lch(94.4% .5 282)}
+:global(:root[data-theme="light"]) .skeletonHeader,:global(:root[data-theme="light"]) .skeletonRow i{background:lch(94% .5 282)}
