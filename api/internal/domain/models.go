@@ -128,15 +128,18 @@ type IssueLabel struct {
 	CreatorID     string     `json:"creatorId,omitempty"`
 	CreatedAt     time.Time  `json:"createdAt,omitempty"`
 	LastAppliedAt *time.Time `json:"lastAppliedAt,omitempty"`
+	ArchivedAt    *time.Time `json:"archivedAt,omitempty"`
 }
 
 type LabelGroup struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	Color        string    `json:"color"`
-	Scope        string    `json:"scope,omitempty"`
-	ResourceType string    `json:"resourceType"`
-	CreatedAt    time.Time `json:"createdAt"`
+	ID           string     `json:"id"`
+	Name         string     `json:"name"`
+	Color        string     `json:"color"`
+	Description  string     `json:"description,omitempty"`
+	Scope        string     `json:"scope,omitempty"`
+	ResourceType string     `json:"resourceType"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	ArchivedAt   *time.Time `json:"archivedAt,omitempty"`
 }
 
 type ProjectSummary struct {
@@ -614,7 +617,12 @@ type Subscription struct {
 	UserID       string    `json:"userId"`
 	ResourceType string    `json:"resourceType"`
 	ResourceID   string    `json:"resourceId"`
+	Events       []string  `json:"events,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
+}
+
+type SubscriptionMutationInput struct {
+	Events *[]string `json:"events,omitempty"`
 }
 
 type AuditLogEntry struct {
@@ -1093,6 +1101,7 @@ type IssueLabelMutationInput struct {
 	Name        *string `json:"name,omitempty"`
 	Description *string `json:"description,omitempty"`
 	Color       *string `json:"color,omitempty"`
+	ArchivedAt  *string `json:"archivedAt,omitempty"`
 }
 
 type BatchIssueUpdateInput struct {

@@ -7,6 +7,7 @@ import { CycleGraph } from './cycle-graph'
 import { cycleStatusLabel, cycleStats, formatCycleRange } from './cycle-model'
 import { MyIssuesList, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData, type MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
 import { IssueBoard } from '@/components/issue-explorer/issue-board'
+import { labelsForResource } from '@/lib/labels'
 import './cycles.css'
 
 const LIST_PROPERTIES = new Set(['id', 'status', 'priority', 'labels', 'project', 'dueDate', 'assignee'] as const)
@@ -93,12 +94,14 @@ function CycleIssuePicker({ cycle, issues, onToggle }: { cycle: Cycle; issues: I
 function toRow(issue: Issue): MyIssuesRowData { return { id: issue.id, identifier: issue.identifier, title: issue.title, priority: issue.priority as 0|1|2|3|4, state: issue.state, labels: issue.labels, project: issue.project, assignee: issue.assignee ? { id: issue.assignee.id, name: issue.assignee.displayName, avatarUrl: issue.assignee.avatarUrl } : undefined, estimate: issue.estimate, dueDate: issue.dueDate, createdAt: issue.createdAt, updatedAt: issue.updatedAt, parentId: issue.parentId, sortOrder: issue.sortOrder } }
 
 function buildPropertyOptions(data: BootstrapData): MyIssuesRowPropertyOptions {
+  const issueLabels = labelsForResource(data.labels, 'issue')
+  const labelGroupNames = new Map(data.labelGroups.filter(group => group.resourceType === 'issue').map(group => [group.id, group.name]))
   return {
     status: data.states.map(state => ({ id: state.id, label: state.name, color: state.color, stateType: state.type, kind: 'status' as const })),
     priority: ['No priority', 'Urgent', 'High', 'Medium', 'Low'].map((label, priority) => ({ id: String(priority), label, priority: priority as 0|1|2|3|4, kind: 'priority' as const })),
     assignee: [{ id: '', label: 'No assignee', kind: 'assignee' as const }, ...data.users.map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, kind: 'assignee' as const }))],
     dueDate: [{ id: '', label: 'No due date', kind: 'dueDate' as const }, ...[0, 1, 7, 14].map(days => { const date = new Date(); date.setDate(date.getDate() + days); return { id: date.toISOString().slice(0, 10), label: days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `In ${days} days`, kind: 'dueDate' as const } })],
-    labels: data.labels.map(label => ({ ...label, label: label.name, kind: 'labels' as const })),
+    labels: issueLabels.map(label => ({ ...label, label: label.name, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined, kind: 'labels' as const })),
     project: [{ id: '', label: 'No project', kind: 'project' as const }, ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, kind: 'project' as const }))],
   }
 }

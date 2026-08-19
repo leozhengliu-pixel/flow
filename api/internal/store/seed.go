@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -23,7 +24,7 @@ func EmptyWorkspace(name, urlKey, region string, viewer domain.User) domain.Boot
 	team := domain.Team{ID: fmt.Sprintf("team_%d", now.UnixNano()), Name: name, Key: key, Color: "#5E6AD2"}
 	return domain.Bootstrap{
 		Workspace: domain.Workspace{ID: workspaceID, Name: name, URLKey: urlKey, Color: "#5E6AD2", Region: region, CreatedAt: now},
-		Viewer:    viewer, Users: []domain.User{viewer}, Teams: []domain.Team{team}, Customers: []domain.Customer{}, States: canonicalWorkflowStates(), Labels: canonicalLabels(),
+		Viewer:    viewer, Users: []domain.User{viewer}, Teams: []domain.Team{team}, Customers: []domain.Customer{}, States: canonicalWorkflowStates(), Labels: canonicalLabels(), LabelGroups: canonicalLabelGroups(),
 		Issues: []domain.Issue{}, Cycles: []domain.Cycle{}, CycleSettings: map[string]domain.CycleSettings{}, Projects: []domain.Project{},
 		ProjectStatuses: canonicalProjectStatuses(), ProjectUpdates: map[string][]domain.ProjectUpdate{}, Initiatives: []domain.Initiative{},
 		InitiativeUpdates: map[string][]domain.InitiativeUpdate{}, Comments: map[string][]domain.Comment{}, Activities: map[string][]domain.ActivityEvent{},
@@ -45,7 +46,7 @@ func baseSeed() domain.Bootstrap {
 	team := domain.Team{ID: "team_cleantrack", Name: "Cleantrack", Key: "CLE", Color: "#5E6AD2"}
 	states := canonicalWorkflowStates()
 	projectStatuses := canonicalProjectStatuses()
-	labels := canonicalLabels()
+	labels := append(canonicalLabels(), make([]domain.IssueLabel, 3)...)
 	cruise := domain.ProjectSummary{ID: "project_cruise", Name: "Cruise", Color: "#5E6AD2", Icon: "C"}
 	aut := domain.ProjectSummary{ID: "project_aut", Name: "AUT AI 质量闭环 80%", Color: "#D97757", Icon: "A"}
 	issue := func(id string, number int, title, description string, priority int, state domain.WorkflowState, created time.Time, issueLabels []domain.IssueLabel, project *domain.ProjectSummary) domain.Issue {
@@ -58,6 +59,7 @@ func baseSeed() domain.Bootstrap {
 		issue("issue_26", 26, "Backend: supervisor cleaner detail can expose stale ASSIGNED taskId", "The aggregated room status and task detail may disagree. Recompute the active task reference from authoritative state.", 3, states[1], now.AddDate(0, -4, -12), []domain.IssueLabel{labels[0]}, &aut),
 		issue("issue_24", 24, "RN Web: optional ISSUES step still forces jump to Report Issue in production", "Optional issue reporting must preserve the next workflow step when skipped.", 4, states[1], now.AddDate(0, -4, -14), []domain.IssueLabel{labels[2]}, &aut),
 	}
+	applyDeliveryLabelTaxonomy(issues, labels)
 	currentStart := cycleWeekStart(now)
 	currentEnd := currentStart.AddDate(0, 0, 13)
 	cycles := []domain.Cycle{
@@ -98,7 +100,7 @@ func baseSeed() domain.Bootstrap {
 	initiativeUpdates := map[string][]domain.InitiativeUpdate{
 		initiatives[0].ID: {{ID: "initiative_update_operational_excellence_1", InitiativeID: initiatives[0].ID, Body: "The reliability program is moving forward with the current project scope and target intact.", Health: "onTrack", CreatedAt: now.AddDate(0, 0, -3), User: viewer, Comments: []domain.Comment{}, Reactions: map[string][]string{}}},
 	}
-	data := domain.Bootstrap{Workspace: domain.Workspace{ID: "workspace_cleantrack", Name: "cleantrack", URLKey: "cleantrack"}, Viewer: viewer, Users: []domain.User{viewer, creator}, Teams: []domain.Team{team}, Customers: []domain.Customer{}, States: states, Labels: labels, Issues: issues, Cycles: cycles, CycleSettings: map[string]domain.CycleSettings{team.ID: {Enabled: true, DurationWeeks: 2, CooldownWeeks: 0, StartsOn: 1, UpcomingCount: 2}}, Projects: projects, ProjectStatuses: projectStatuses, ProjectUpdates: projectUpdates, Initiatives: initiatives, InitiativeUpdates: initiativeUpdates, Comments: comments, Activities: activities, SavedViews: []domain.SavedView{}, Notifications: []domain.Notification{}}
+	data := domain.Bootstrap{Workspace: domain.Workspace{ID: "workspace_cleantrack", Name: "cleantrack", URLKey: "cleantrack"}, Viewer: viewer, Users: []domain.User{viewer, creator}, Teams: []domain.Team{team}, Customers: []domain.Customer{}, States: states, Labels: canonicalLabels(), LabelGroups: canonicalLabelGroups(), Issues: issues, Cycles: cycles, CycleSettings: map[string]domain.CycleSettings{team.ID: {Enabled: true, DurationWeeks: 2, CooldownWeeks: 0, StartsOn: 1, UpcomingCount: 2}}, Projects: projects, ProjectStatuses: projectStatuses, ProjectUpdates: projectUpdates, Initiatives: initiatives, InitiativeUpdates: initiativeUpdates, Comments: comments, Activities: activities, SavedViews: []domain.SavedView{}, Notifications: []domain.Notification{}}
 	data.Notifications = projectNotifications(&data)
 	return data
 }
@@ -124,7 +126,7 @@ func zentaoDemoSeed() domain.Bootstrap {
 	teams := []domain.Team{team, deliveryTeam, qualityTeam}
 	states := canonicalWorkflowStates()
 	projectStatuses := canonicalProjectStatuses()
-	labels := canonicalLabels()
+	labels := append(canonicalLabels(), make([]domain.IssueLabel, 3)...)
 	label := func(id string) domain.IssueLabel {
 		for _, item := range labels {
 			if item.ID == id {
@@ -144,7 +146,7 @@ func zentaoDemoSeed() domain.Bootstrap {
 		return item
 	}
 	issues := []domain.Issue{
-		issue("issue_33", 112329, "【印章外带刻制】流程被驳回后，待办当前节点应展示已驳回", "来源于禅道研发需求 #112329。统一驳回状态在待办列表与流程详情中的展示，并补充回归验证。", 3, team, states[1], liyanlu, liquan, []domain.IssueLabel{labels[1], labels[5]}, &sealPlatform, now.AddDate(0, 0, -12)),
+		issue("issue_33", 112329, "【印章外带刻制】流程被驳回后，待办当前节点应展示已驳回", "来源于禅道研发需求 #112329。统一驳回状态在待办列表与流程详情中的展示，并补充回归验证。", 3, team, states[1], liyanlu, liquan, []domain.IssueLabel{labels[1], labels[5], label("label_team_cleantrack")}, &sealPlatform, now.AddDate(0, 0, -12)),
 		issue("issue_20", 112091, "【印章内部交接】被驳回后，待办当前流程节点应展示被驳回", "来源于禅道研发需求 #112091。交接流程驳回后需要同步节点文案和状态。", 3, team, states[2], liquan, lijiangtao, []domain.IssueLabel{labels[1], labels[5]}, &sealPlatform, now.AddDate(0, 0, -18)),
 		issue("issue_25", 112029, "【印章内部交接】重新发起时仍应展示公议流程", "公议过程中被驳回后，发起人重新发起时应保留公议流程入口。来源于禅道研发需求 #112029。", 3, team, states[0], liquan, lijiangtao, []domain.IssueLabel{labels[1], labels[5]}, &sealPlatform, now.AddDate(0, -1, -2)),
 		issue("issue_26", 100718, "印签管理中台 SIT/UAT 测试服务", "覆盖测试用例、接口自动化、功能测试、系统测试、压力测试及测试报告输出。来源于禅道研发需求 #100718。", 1, qualityTeam, states[2], jianyan, viewer, []domain.IssueLabel{labels[2], labels[6]}, &sealPlatform, now.AddDate(0, -1, -10)),
@@ -158,7 +160,7 @@ func zentaoDemoSeed() domain.Bootstrap {
 		issue("issue_53063", 53063, "【白名单状态流转】提报成功后页面持续重复加载", "MMC 提报成功后状态轮询未正确退出，页面持续加载。来源于汽车之家车商城项目 Bug #53063。", 1, deliveryTeam, states[2], yuxiangyang, luoyuying, []domain.IssueLabel{labels[0], labels[4]}, &carMall, now.AddDate(0, -4, -21)),
 		issue("issue_100417", 100417, "【前端-PC】Image 图片预览组件封装", "沉淀统一图片预览组件，支持缩放、旋转、下载和键盘切换。来源于禅道任务 #100417。", 3, deliveryTeam, states[3], yumingyang, guan, []domain.IssueLabel{labels[3], labels[7], label("label_dev_task")}, &carMall, now.AddDate(0, -5, -2)),
 		issue("issue_100879", 100879, "【测试】验证门店与固定金融产品关联", "覆盖门店白名单、产品关联和异常配置场景。来源于禅道任务 #100879。", 3, qualityTeam, states[3], jianyan, guan, []domain.IssueLabel{labels[2], labels[7]}, &carMall, now.AddDate(0, -5, -16)),
-		issue("issue_105130", 105130, "车商城二期-订单流程", "来源于禅道研发需求 #105130。作为订单流程需求主项，向下拆解开发、测试和缺陷任务。", 2, deliveryTeam, states[3], luoyuying, guan, []domain.IssueLabel{label("label_story"), label("label_business"), label("label_product_view"), label("label_car_mall")}, &carMall, now.AddDate(0, -6, -2)),
+		issue("issue_105130", 105130, "车商城二期-订单流程", "来源于禅道研发需求 #105130。作为订单流程需求主项，向下拆解开发、测试和缺陷任务。", 2, deliveryTeam, states[3], luoyuying, guan, []domain.IssueLabel{label("label_story"), label("label_business"), label("label_product_view"), label("label_car_mall"), label("label_team_delivery")}, &carMall, now.AddDate(0, -6, -2)),
 		issue("issue_108415", 108415, "【业务需求】车商城 C 端增加无报告车源外展", "来源于禅道研发需求 #108415。业务诉求经产品澄清后进入交付，覆盖无报告车源展示与转化链路。", 2, deliveryTeam, states[2], luoyuying, guan, []domain.IssueLabel{label("label_story"), label("label_business"), label("label_product_view"), label("label_car_mall")}, &carMall, now.AddDate(0, -5, -8)),
 		issue("issue_100474", 100474, "【事务】316 车商城延保订单禅道问题日清", "来源于禅道任务 #100474。每日收敛延保订单问题，协调开发、测试与线上反馈，任务已关闭。", 3, deliveryTeam, states[3], yumingyang, guan, []domain.IssueLabel{label("label_ops_task"), label("label_car_mall")}, &carMall, now.AddDate(0, -4, -18)),
 		issue("issue_100880", 100880, "【测试】压测接口参数整理", "来源于禅道任务 #100880。整理压力测试接口、参数、数据准备和验收口径。", 3, qualityTeam, states[3], dingyu, guan, []domain.IssueLabel{label("label_test"), label("label_test_plan"), label("label_car_mall")}, &carMall, now.AddDate(0, -5, -18)),
@@ -167,13 +169,14 @@ func zentaoDemoSeed() domain.Bootstrap {
 		issue("issue_49216", 49216, "【测试用例】印章内部交接-终审", "来源于禅道测试用例 #49216，覆盖内部交接终审节点；抓取时状态为未执行。", 3, qualityTeam, states[0], jianyan, jianyan, []domain.IssueLabel{label("label_test_case"), label("label_seal")}, &sealPlatform, now.AddDate(0, 0, -9)),
 		issue("issue_49215", 49215, "【测试用例】印章内部交接-公议流程", "来源于禅道测试用例 #49215，覆盖公议流程；抓取时状态为未执行。", 3, qualityTeam, states[0], jianyan, jianyan, []domain.IssueLabel{label("label_test_case"), label("label_seal")}, &sealPlatform, now.AddDate(0, 0, -9)),
 		issue("issue_52526", 52526, "【测试】【车智汇发车】车辆详情组件与图片加载慢", "来源于禅道 Bug #52526。车辆详情页组件和图片加载慢，影响用户体验；项目动态显示已关闭。", 3, qualityTeam, states[3], zhangqun, jiangyaling, []domain.IssueLabel{label("label_bug"), label("label_test"), label("label_car_mall")}, &carMall, now.AddDate(0, -4, -2)),
-		issue("issue_test_plan", 120001, "智能印控平台 SIT/UAT 测试方案", "平台特性维度：测试方案。Flow 当前没有独立测试计划模型，本项以 Issue 承载计划状态，并关联测试方案文档和禅道用例。", 1, qualityTeam, states[2], jianyan, viewer, []domain.IssueLabel{label("label_test"), label("label_test_plan"), label("label_uat"), label("label_release_gate")}, &sealPlatform, now.AddDate(0, 0, -7)),
+		issue("issue_test_plan", 120001, "智能印控平台 SIT/UAT 测试方案", "平台特性维度：测试方案。Flow 当前没有独立测试计划模型，本项以 Issue 承载计划状态，并关联测试方案文档和禅道用例。", 1, qualityTeam, states[2], jianyan, viewer, []domain.IssueLabel{label("label_test"), label("label_test_plan"), label("label_uat"), label("label_release_gate"), label("label_team_quality")}, &sealPlatform, now.AddDate(0, 0, -7)),
 		issue("issue_test_report", 120002, "智能印控平台 2026.08 测试报告", "平台特性维度：测试报告。禅道产品共有 11 个测试用例，抓取时已执行 0 个；本项用于跟踪报告产出，不代表已通过测试。", 1, qualityTeam, states[1], jianyan, viewer, []domain.IssueLabel{label("label_test"), label("label_test_report"), label("label_uat"), label("label_risk")}, &sealPlatform, now.AddDate(0, 0, -4)),
 		issue("issue_release_review", 120003, "智能印控平台 2026.08 上线评审", "平台特性维度：上线评审。关联评审报告、测试报告、版本范围和未完成门禁。Flow 当前以 Issue 模拟评审单。", 1, qualityTeam, states[1], viewer, liquan, []domain.IssueLabel{label("label_release_gate"), label("label_audit"), label("label_risk")}, &sealPlatform, now.AddDate(0, 0, -3)),
 		issue("issue_delivery_metrics", 120004, "收集车商城项目交付过程数据", "平台特性维度：交付过程数据收集。禅道快照：64 人、累计消耗 5121.5h、剩余需求 15、剩余任务 4、剩余 Bug 1。", 2, deliveryTeam, states[2], viewer, guan, []domain.IssueLabel{label("label_delivery_data"), label("label_business"), label("label_car_mall")}, &carMall, now.AddDate(0, 0, -5)),
 		issue("issue_ai_enablement", 120005, "AI 原生交付人员能力转型试点", "平台特性维度：人员转型。通过需求结构化、测试辅助和交付数据分析验证 AI 转型效果。", 3, deliveryTeam, states[1], viewer, guan, []domain.IssueLabel{label("label_ai_transform"), label("label_strategy")}, &carMall, now.AddDate(0, 0, -2)),
 		issue("issue_audit_gate", 120006, "版本交付合规检查：流程、标准与安全", "平台特性维度：审计视角。按订单、评估、竞价、执行、验收、评价、付款检查交付证据；预算与费用仅能记录在文档中。", 2, qualityTeam, states[1], viewer, liquan, []domain.IssueLabel{label("label_audit"), label("label_release_gate")}, &sealPlatform, now.AddDate(0, 0, -2)),
 	}
+	applyDeliveryLabelTaxonomy(issues, labels)
 	parent := func(childID, parentID string) {
 		for index := range issues {
 			if issues[index].ID == childID {
@@ -346,16 +349,16 @@ func zentaoDemoSeed() domain.Bootstrap {
 		}})
 		return encoded
 	}
+	demandView := viewFilter("label_type_requirement", "原始需求", "#5E6AD2")
+	taskView := viewFilter("label_type_development", "开发任务", "#4AA3F7")
 	issueDisplay := json.RawMessage(`{"layout":"list","ordering":"updatedAt","direction":"desc","grouping":"status","properties":["id","status","priority","assignee","labels","project"]}`)
 	savedViews := []domain.SavedView{
-		{ID: "view_strategy", Name: "战略与价值", Description: "战略目标、业务价值与 AI 转型事项", Icon: "Target", Color: "#7C5CFC", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, Favorite: true, View: "all", Filters: viewFilter("label_strategy", "战略", "#7C5CFC"), Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -8), UpdatedAt: now},
-		{ID: "view_business", Name: "业务诉求", Description: "已进入需求与交付流程的业务诉求", Icon: "MessageCircleQuestion", Color: "#00A6A6", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, Favorite: true, View: "all", Filters: viewFilter("label_business", "业务诉求", "#00A6A6"), Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -8), UpdatedAt: now},
-		{ID: "view_product", Name: "产品需求", Description: "需求澄清、结构化与设计事项", Icon: "FileText", Color: "#18B99A", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, View: "all", Filters: viewFilter("label_product_view", "产品视角", "#18B99A"), Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -7), UpdatedAt: now},
-		{ID: "view_development", Name: "开发执行", Description: "开发任务与需求拆解执行", Icon: "Code2", Color: "#4AA3F7", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, Favorite: true, View: "all", Filters: viewFilter("label_dev_task", "开发任务", "#4AA3F7"), Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -7), UpdatedAt: now},
-		{ID: "view_testing", Name: "测试与质量", Description: "测试用例、测试方案和测试报告", Icon: "ClipboardCheck", Color: "#2D9D78", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, Favorite: true, View: "all", Filters: viewFilter("label_test", "测试", "#2D9D78"), Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -7), UpdatedAt: now},
-		{ID: "view_release_gate", Name: "版本与上线评审", Description: "发布范围、测试准出与上线门禁", Icon: "Rocket", Color: "#F05252", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, Favorite: true, View: "all", Filters: viewFilter("label_release_gate", "发布门禁", "#F05252"), Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -6), UpdatedAt: now},
-		{ID: "view_audit", Name: "审计合规", Description: "流程、标准、安全与费用合规检查", Icon: "ShieldCheck", Color: "#8B5CF6", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, View: "all", Filters: viewFilter("label_audit", "审计合规", "#8B5CF6"), Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -5), UpdatedAt: now},
-		{ID: "view_operations", Name: "运营与改进", Description: "交付数据收集、分析和持续改进", Icon: "ChartNoAxesCombined", Color: "#D97757", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, Favorite: true, View: "all", Filters: viewFilter("label_delivery_data", "交付数据", "#D97757"), Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -5), UpdatedAt: now},
+		{ID: "view_strategy", Name: "原始需求", Description: "从待承接到已交付的原始需求", Icon: "Target", Color: "#5E6AD2", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, Favorite: true, View: "all", Filters: demandView, Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -8), UpdatedAt: now},
+		{ID: "view_business", Name: "待实施需求", Description: "通过状态筛选查看已承接并等待实施的需求", Icon: "MessageCircleQuestion", Color: "#5E6AD2", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, Favorite: true, View: "all", Filters: demandView, Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -8), UpdatedAt: now},
+		{ID: "view_product", Name: "待验收需求", Description: "通过状态筛选查看实施完成并等待验收的需求", Icon: "FileText", Color: "#D6B326", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, View: "all", Filters: demandView, Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -7), UpdatedAt: now},
+		{ID: "view_development", Name: "开发任务", Description: "开发与测试任务的完整执行流程", Icon: "Code2", Color: "#4AA3F7", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, Favorite: true, View: "all", Filters: taskView, Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -7), UpdatedAt: now},
+		{ID: "view_testing", Name: "测试任务", Description: "开发任务中由测试角色执行的工作", Icon: "ClipboardCheck", Color: "#2D9D78", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, Favorite: true, View: "all", Filters: taskView, Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -7), UpdatedAt: now},
+		{ID: "view_operations", Name: "执行中任务", Description: "通过状态筛选查看正在执行的开发任务", Icon: "ChartNoAxesCombined", Color: "#4AA3F7", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, Favorite: true, View: "all", Filters: taskView, Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -5), UpdatedAt: now},
 		{ID: "view_management", Name: "管理驾驶舱", Description: "项目进度、质量、资源与风险概览", Icon: "LayoutDashboard", Color: "#5E6AD2", Resource: "projects", Scope: "workspace", OwnerID: viewer.ID, Favorite: true, View: "active", Filters: json.RawMessage(`[]`), Display: json.RawMessage(`{"layout":"list","ordering":"updatedAt","direction":"desc","grouping":"status","properties":["status","health","progress","lead","targetDate"]}`), CreatedAt: now.AddDate(0, 0, -8), UpdatedAt: now},
 	}
 	members := make([]domain.WorkspaceMember, 0, len(users))
@@ -371,7 +374,7 @@ func zentaoDemoSeed() domain.Bootstrap {
 		{TeamID: deliveryTeam.ID, UserID: viewer.ID, Role: "lead", JoinedAt: now.AddDate(0, -7, 0)}, {TeamID: deliveryTeam.ID, UserID: guan.ID, Role: "member", JoinedAt: now.AddDate(0, -7, 1)}, {TeamID: deliveryTeam.ID, UserID: luoyuying.ID, Role: "member", JoinedAt: now.AddDate(0, -6, 1)}, {TeamID: deliveryTeam.ID, UserID: yuxiangyang.ID, Role: "member", JoinedAt: now.AddDate(0, -6, 2)}, {TeamID: deliveryTeam.ID, UserID: yumingyang.ID, Role: "member", JoinedAt: now.AddDate(0, -6, 3)}, {TeamID: deliveryTeam.ID, UserID: zhangqun.ID, Role: "member", JoinedAt: now.AddDate(0, -5, 1)}, {TeamID: deliveryTeam.ID, UserID: jiangyaling.ID, Role: "member", JoinedAt: now.AddDate(0, -5, 2)},
 		{TeamID: qualityTeam.ID, UserID: viewer.ID, Role: "lead", JoinedAt: now.AddDate(0, -6, 0)}, {TeamID: qualityTeam.ID, UserID: jianyan.ID, Role: "member", JoinedAt: now.AddDate(0, -6, 1)}, {TeamID: qualityTeam.ID, UserID: guan.ID, Role: "member", JoinedAt: now.AddDate(0, -6, 2)}, {TeamID: qualityTeam.ID, UserID: zhangqun.ID, Role: "member", JoinedAt: now.AddDate(0, -5, 1)}, {TeamID: qualityTeam.ID, UserID: jiangyaling.ID, Role: "member", JoinedAt: now.AddDate(0, -5, 2)}, {TeamID: qualityTeam.ID, UserID: dingyu.ID, Role: "member", JoinedAt: now.AddDate(0, -5, 3)},
 	}
-	data := domain.Bootstrap{Workspace: domain.Workspace{ID: "workspace_cleantrack", Name: "海尔数字化交付", URLKey: "cleantrack", Color: "#5E6AD2", Region: "cn", CreatedAt: now.AddDate(-1, 0, 0)}, Viewer: viewer, Users: users, Teams: teams, Customers: customers, CustomerRequests: customerRequests, States: states, Labels: labels, Issues: issues, Cycles: cycles, CycleSettings: map[string]domain.CycleSettings{team.ID: {Enabled: true, DurationWeeks: 2, CooldownWeeks: 0, StartsOn: 1, UpcomingCount: 2, Capacity: 12}, deliveryTeam.ID: {Enabled: true, DurationWeeks: 2, StartsOn: 1, UpcomingCount: 2, Capacity: 64}, qualityTeam.ID: {Enabled: true, DurationWeeks: 2, StartsOn: 1, UpcomingCount: 2, Capacity: 8}}, Projects: projects, ProjectStatuses: projectStatuses, ProjectUpdates: projectUpdates, Initiatives: initiatives, InitiativeUpdates: initiativeUpdates, Comments: comments, Activities: activities, Documents: documents, Releases: releases, Asks: asks, AuditLog: auditLog, Members: members, TeamMembers: teamMembers, SavedViews: savedViews, Notifications: []domain.Notification{}}
+	data := domain.Bootstrap{Workspace: domain.Workspace{ID: "workspace_cleantrack", Name: "海尔数字化交付", URLKey: "cleantrack", Color: "#5E6AD2", Region: "cn", CreatedAt: now.AddDate(-1, 0, 0)}, Viewer: viewer, Users: users, Teams: teams, Customers: customers, CustomerRequests: customerRequests, States: states, Labels: canonicalLabels(), LabelGroups: canonicalLabelGroups(), Issues: issues, Cycles: cycles, CycleSettings: map[string]domain.CycleSettings{team.ID: {Enabled: true, DurationWeeks: 2, CooldownWeeks: 0, StartsOn: 1, UpcomingCount: 2, Capacity: 12}, deliveryTeam.ID: {Enabled: true, DurationWeeks: 2, StartsOn: 1, UpcomingCount: 2, Capacity: 64}, qualityTeam.ID: {Enabled: true, DurationWeeks: 2, StartsOn: 1, UpcomingCount: 2, Capacity: 8}}, Projects: projects, ProjectStatuses: projectStatuses, ProjectUpdates: projectUpdates, Initiatives: initiatives, InitiativeUpdates: initiativeUpdates, Comments: comments, Activities: activities, Documents: documents, Releases: releases, Asks: asks, AuditLog: auditLog, Members: members, TeamMembers: teamMembers, SavedViews: savedViews, Notifications: []domain.Notification{}}
 	data.Notifications = projectNotifications(&data)
 	return data
 }
@@ -406,31 +409,83 @@ func canonicalWorkflowStates() []domain.WorkflowState {
 }
 
 func canonicalLabels() []domain.IssueLabel {
-	return []domain.IssueLabel{
-		{ID: "label_bug", Name: "Bug", Color: "#F15B61", Description: "需要修复和验证的产品缺陷", IssueCount: 7, Scope: "Workspace"},
-		{ID: "label_story", Name: "研发需求", Color: "#5E6AD2", Description: "来自产品规划或业务反馈的研发需求", IssueCount: 4, Scope: "Workspace"},
-		{ID: "label_test", Name: "测试", Color: "#2D9D78", Description: "功能、接口、性能与回归测试工作", IssueCount: 2, Scope: "Workspace"},
-		{ID: "label_feature", Name: "功能", Color: "#9B51E0", Description: "新增或完善产品能力", IssueCount: 3, Scope: "Workspace"},
-		{ID: "label_backend", Name: "后端", Color: "#4AA3F7", Description: "接口、流程编排和数据一致性工作", IssueCount: 4, Scope: "Workspace"},
-		{ID: "label_seal", Name: "印章流程", Color: "#F2C94C", Description: "印章刻制、交接、停启用和销毁流程", IssueCount: 8, Scope: "Workspace"},
-		{ID: "label_uat", Name: "UAT", Color: "#F6A11A", Description: "用户验收测试和发布验证", IssueCount: 2, Scope: "Workspace"},
-		{ID: "label_car_mall", Name: "车商城", Color: "#2F80ED", Description: "车商城订单、交付和金融链路", IssueCount: 4, Scope: "Workspace"},
-		{ID: "label_product", Name: "产品", Color: "#18B99A", Description: "产品规划与体验改进", IssueCount: 5, Scope: "Workspace", ResourceType: "project"},
-		{ID: "label_delivery", Name: "重点交付", Color: "#D97757", Description: "需要跨团队关注的重点交付", IssueCount: 3, Scope: "Workspace", ResourceType: "project"},
-		{ID: "label_release_gate", Name: "发布门禁", Color: "#F05252", Description: "发布前必须完成的质量门禁", IssueCount: 3, Scope: "Workspace"},
-		{ID: "label_strategy", Name: "战略", Color: "#7C5CFC", Description: "战略分析、业务目标与价值分解", Scope: "Workspace"},
-		{ID: "label_business", Name: "业务诉求", Color: "#00A6A6", Description: "业务方提出、变更、接收或拒绝的诉求", Scope: "Workspace"},
-		{ID: "label_product_view", Name: "产品视角", Color: "#18B99A", Description: "需求澄清、结构化、交互与设计", Scope: "Workspace"},
-		{ID: "label_dev_task", Name: "开发任务", Color: "#4AA3F7", Description: "需求拆解形成的开发执行任务", Scope: "Workspace"},
-		{ID: "label_ops_task", Name: "运维任务", Color: "#B7791F", Description: "发布、运行保障与线上问题处理", Scope: "Workspace"},
-		{ID: "label_test_case", Name: "测试用例", Color: "#2D9D78", Description: "从禅道导入的代表性测试用例", Scope: "Workspace"},
-		{ID: "label_test_plan", Name: "测试方案", Color: "#1F9D8A", Description: "Flow 暂以 Issue 与 Document 承载测试方案和计划", Scope: "Workspace"},
-		{ID: "label_test_report", Name: "测试报告", Color: "#167D6B", Description: "Flow 暂以 Issue 与 Document 承载测试结果", Scope: "Workspace"},
-		{ID: "label_delivery_data", Name: "交付数据", Color: "#D97757", Description: "交付过程、资源、节奏和质量数据", Scope: "Workspace"},
-		{ID: "label_audit", Name: "审计合规", Color: "#8B5CF6", Description: "流程、标准、安全、预算与费用合规", Scope: "Workspace"},
-		{ID: "label_risk", Name: "风险", Color: "#E5484D", Description: "影响交付节奏、质量或合规的风险", Scope: "Workspace"},
-		{ID: "label_ai_transform", Name: "AI 转型", Color: "#EC4899", Description: "人员能力与交付方式的 AI 转型", Scope: "Workspace"},
+	labels := []domain.IssueLabel{
+		{ID: "label_type_requirement", Name: "原始需求", Color: "#5E6AD2", Description: "尚未拆分为执行任务的业务或产品需求", Scope: "Workspace", GroupID: "label_group_work_item_type"},
+		{ID: "label_type_development", Name: "开发任务", Color: "#4AA3F7", Description: "开发或测试角色执行的交付任务", Scope: "Workspace", GroupID: "label_group_work_item_type"},
+		{ID: "label_type_defect", Name: "缺陷", Color: "#F15B61", Description: "需要定位、修复与回归检查的缺陷", Scope: "Workspace", GroupID: "label_group_work_item_type"},
+		{ID: "label_product", Name: "产品", Color: "#18B99A", Description: "产品规划与体验改进", IssueCount: 5, Scope: "Workspace", ResourceType: "project", GroupID: "label_group_project_value"},
+		{ID: "label_delivery", Name: "重点交付", Color: "#D97757", Description: "需要跨团队关注的重点交付", IssueCount: 3, Scope: "Workspace", ResourceType: "project", GroupID: "label_group_project_delivery"},
 	}
+	now := time.Now().UTC()
+	for index := range labels {
+		if labels[index].ResourceType == "" {
+			labels[index].ResourceType = "issue"
+		}
+		labels[index].CreatedAt = now.AddDate(0, 0, -(len(labels) - index + 7))
+		if labels[index].IssueCount > 0 {
+			applied := now.Add(-time.Duration(index+1) * time.Hour)
+			labels[index].LastAppliedAt = &applied
+		}
+	}
+	return labels
+}
+
+func canonicalLabelGroups() []domain.LabelGroup {
+	now := time.Now().UTC()
+	return []domain.LabelGroup{
+		{ID: "label_group_work_item_type", Name: "工作项类型", Color: "#5E6AD2", Description: "原始需求、开发任务与缺陷", Scope: "Workspace", ResourceType: "issue", CreatedAt: now},
+		{ID: "label_group_project_value", Name: "Project value", Color: "#18B99A", Description: "项目业务价值与战略属性", Scope: "Workspace", ResourceType: "project", CreatedAt: now},
+		{ID: "label_group_project_delivery", Name: "Project delivery", Color: "#D97757", Description: "项目交付特征与关注级别", Scope: "Workspace", ResourceType: "project", CreatedAt: now},
+	}
+}
+
+func applyDeliveryLabelTaxonomy(issues []domain.Issue, labels []domain.IssueLabel) {
+	byID := make(map[string]domain.IssueLabel, len(labels))
+	for _, label := range labels {
+		byID[label.ID] = label
+	}
+	for index := range issues {
+		preserved := slices.DeleteFunc(append([]domain.IssueLabel{}, issues[index].Labels...), func(label domain.IssueLabel) bool {
+			return label.ID == "" || label.ResourceType == "project" || obsoleteDeliveryLabelIDs[label.ID] || deliveryTaxonomyLabelIDs[label.ID]
+		})
+		typeID := deliveryTaxonomyForIssue(issues[index])
+		if label, ok := byID[typeID]; ok {
+			preserved = append(preserved, label)
+		}
+		issues[index].Labels = preserved
+	}
+}
+
+func deliveryTaxonomyForIssue(issue domain.Issue) string {
+	text := strings.ToLower(issue.Title + " " + issue.Description)
+	legacy := func(ids ...string) bool {
+		return slices.ContainsFunc(issue.Labels, func(label domain.IssueLabel) bool { return slices.Contains(ids, label.ID) })
+	}
+	if legacy("label_bug", "label_type_defect", "label_defect_created", "label_defect_assigned", "label_defect_fixing", "label_defect_checking", "label_defect_closed") || strings.Contains(text, " bug #") || strings.Contains(text, "缺陷") {
+		return "label_type_defect"
+	}
+	if legacy("label_test", "label_test_case", "label_test_plan", "label_test_report", "label_uat", "label_dev_task", "label_ops_task", "label_backend", "label_type_development",
+		"label_task_assigned", "label_task_implementing", "label_task_ready_for_test", "label_task_testing", "label_task_completed", "label_task_type_development", "label_task_type_testing",
+		"label_version_created", "label_version_linking", "label_version_locked", "label_version_implementing", "label_version_delivered", "label_release_gate", "label_audit") ||
+		strings.Contains(text, "任务 #") || strings.Contains(text, "测试") || strings.Contains(text, "uat") || strings.Contains(text, "前端") || strings.Contains(text, "backend") || strings.Contains(text, "web:") || strings.Contains(text, "production") || strings.Contains(text, "生产环境") || strings.Contains(text, "版本") || strings.Contains(text, "上线") || strings.Contains(text, "发布") || strings.Contains(text, "交付合规") {
+		return "label_type_development"
+	}
+	return "label_type_requirement"
+}
+
+var obsoleteDeliveryLabelIDs = map[string]bool{
+	"label_bug": true, "label_story": true, "label_test": true, "label_feature": true, "label_backend": true, "label_seal": true, "label_uat": true, "label_car_mall": true,
+	"label_release_gate": true, "label_strategy": true, "label_business": true, "label_product_view": true, "label_dev_task": true, "label_ops_task": true,
+	"label_test_case": true, "label_test_plan": true, "label_test_report": true, "label_delivery_data": true, "label_audit": true, "label_risk": true, "label_ai_transform": true,
+	"label_team_cleantrack": true, "label_team_delivery": true, "label_team_quality": true,
+	"label_req_pending_acceptance": true, "label_req_pending_implementation": true, "label_req_pending_verification": true, "label_req_pending_release": true, "label_req_delivered": true, "label_req_terminated": true,
+	"label_task_assigned": true, "label_task_implementing": true, "label_task_ready_for_test": true, "label_task_testing": true, "label_task_completed": true, "label_task_type_development": true, "label_task_type_testing": true,
+	"label_version_created": true, "label_version_linking": true, "label_version_locked": true, "label_version_implementing": true, "label_version_delivered": true,
+	"label_defect_created": true, "label_defect_assigned": true, "label_defect_fixing": true, "label_defect_checking": true, "label_defect_closed": true,
+}
+
+var deliveryTaxonomyLabelIDs = map[string]bool{
+	"label_type_requirement": true, "label_type_development": true, "label_type_defect": true,
 }
 
 func priorityLabel(priority int) string {

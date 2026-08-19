@@ -15,6 +15,7 @@ import {
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { changeAccountPassword, connectIntegration, createAPIKey, createOAuthApplication, deleteOAuthApplication, disconnectIntegration, fetchAccountSessions, fetchWorkspaceUsage, revokeAPIKey, revokeOtherAccountSessions, inviteMembers, removeMember, resendInvitation, revokeInvitation, setTeamMembership, suspendMember, updateAccountProfile, updateMemberRole, updateOAuthApplication, updateUserSettings, updateWorkspacePreferences } from "@/lib/api";
 import type { SettingsPageId, TeamSettingsSection } from "@/lib/app-routes";
+import { labelResourceType } from "@/lib/labels";
 import type { APIKey, BootstrapData, OAuthApplication, Team, UserSettings, WorkspaceMutationInput, WorkspaceSettings } from "@/types/flow";
 import { NotificationSettings } from "./notification-settings";
 import { TeamWorkflowSettings } from "./team-workflow-settings";
@@ -217,7 +218,7 @@ const LIST_TITLES: Partial<Record<SettingsPageId, { title: string; empty: string
 };
 function ListSettings({ page, data, settings, setSettings }: { page: SettingsPageId; data: BootstrapData; settings: StoredSettings; setSettings: React.Dispatch<React.SetStateAction<StoredSettings>> }) {
   const config = LIST_TITLES[page]!;
-  const initial = page === "issue-labels" ? data.labels.map(label => ({ id: label.id, name: label.name, description: label.description, color: label.color })) : page === "project-statuses" ? data.projectStatuses.map(status => ({ id: status.id, name: status.name, description: status.type, color: status.color })) : [];
+  const initial = page === "issue-labels" ? data.labels.filter(label => labelResourceType(label) === "issue").map(label => ({ id: label.id, name: label.name, description: label.description, color: label.color })) : page === "project-statuses" ? data.projectStatuses.map(status => ({ id: status.id, name: status.name, description: status.type, color: status.color })) : [];
   const items = settings.lists[config.key] ?? initial;
   const [query, setQuery] = useState("");
   const update = (next: SettingListItem[]) => setSettings(current => ({ ...current, lists: { ...current.lists, [config.key]: next } }));
