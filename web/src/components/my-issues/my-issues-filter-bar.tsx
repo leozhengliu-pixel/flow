@@ -81,8 +81,8 @@ function FilterValuePopover({ onChange, onOpenChange, open, options, selectedIds
 }
 
 function ValueSummary({ values }: { values: ReturnType<typeof filterValues> }) {
-  if (values.length === 1) return <>{values[0].color && <i style={{ backgroundColor: values[0].color }}/>}<span>{values[0].valueLabel}</span></>
-  return <><span className={styles.valueStack}>{values.slice(0, 3).map((value, index) => <i key={value.value} style={{ backgroundColor: value.color ?? `lch(${62 - index * 8}% 1.2 272)`, zIndex: 3 - index }}/>)}</span><span>{values.map(value => value.valueLabel).join(', ')}</span></>
+  if (values.length === 1) return <>{values[0].color && <i style={{ backgroundColor: values[0].color }}/>}<span data-i18n-ignore>{values[0].valueLabel}</span></>
+  return <><span className={styles.valueStack}>{values.slice(0, 3).map((value, index) => <i key={value.value} style={{ backgroundColor: value.color ?? `lch(${62 - index * 8}% 1.2 272)`, zIndex: 3 - index }}/>)}</span><span data-i18n-ignore>{values.map(value => value.valueLabel).join(', ')}</span></>
 }
 
 function FilterGlyph({ field }: { field: MyIssuesAppliedFilter['field'] }) {

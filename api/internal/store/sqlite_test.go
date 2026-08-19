@@ -188,6 +188,35 @@ func TestEnsureCanonicalLabelsMigratesLegacyDeliveryTaxonomy(t *testing.T) {
 	}
 }
 
+func TestEnsureCanonicalSavedViewDisplaysOnlyMigratesLegacyBuiltIns(t *testing.T) {
+	data := zentaoDemoSeed()
+	legacy := json.RawMessage(`{"layout":"list","ordering":"updatedAt","direction":"desc"}`)
+	customized := json.RawMessage(`{"layout":"board","grouping":"assignee"}`)
+	data.SavedViews[0].Display = slices.Clone(legacy)
+	data.SavedViews[1].Display = slices.Clone(customized)
+	data.SavedViews = append(data.SavedViews, domain.SavedView{
+		ID:      "view_custom",
+		Name:    "Custom",
+		Display: slices.Clone(legacy),
+	})
+
+	if !ensureCanonicalSavedViewDisplays(&data) {
+		t.Fatal("legacy built-in display migration did not report a change")
+	}
+	if string(data.SavedViews[0].Display) == string(legacy) {
+		t.Fatal("legacy built-in display was not migrated")
+	}
+	if string(data.SavedViews[1].Display) != string(customized) {
+		t.Fatalf("customized built-in display was overwritten: %s", data.SavedViews[1].Display)
+	}
+	if string(data.SavedViews[len(data.SavedViews)-1].Display) != string(legacy) {
+		t.Fatal("custom view display was migrated")
+	}
+	if ensureCanonicalSavedViewDisplays(&data) {
+		t.Fatal("canonical migration was not idempotent")
+	}
+}
+
 func TestBootstrapForUserProjectsTeamStatesAndPrivateNotificationData(t *testing.T) {
 	store, err := OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {

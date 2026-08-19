@@ -3212,6 +3212,9 @@ func applySavedViewUpdate(data *domain.Bootstrap, view *domain.SavedView, input 
 	if input.Display != nil {
 		view.Display = slices.Clone(input.Display)
 	}
+	if input.Insights != nil {
+		view.Insights = slices.Clone(input.Insights)
+	}
 	if view.Scope == "" {
 		view.Scope = "workspace"
 	}
@@ -3238,6 +3241,9 @@ func applySavedViewUpdate(data *domain.Bootstrap, view *domain.SavedView, input 
 	}
 	if view.Display == nil {
 		view.Display = json.RawMessage("{}")
+	}
+	if view.Insights == nil {
+		view.Insights = json.RawMessage("{}")
 	}
 	return nil
 }
