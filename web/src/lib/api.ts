@@ -34,10 +34,10 @@ export function revokeOtherAccountSessions(): Promise<void> { return request('/a
 export function changeAccountPassword(currentPassword: string, newPassword: string): Promise<{changed:boolean}> { return request('/api/account/change-password', jsonRequest('POST', { currentPassword, newPassword })) }
 export function updateWorkspacePreferences(input: WorkspaceSettings): Promise<WorkspaceSettings> { return request('/api/workspace/preferences', jsonRequest('PATCH', input)) }
 export function createWorkspaceLabel(input: { name: string; description?: string; color?: string; resourceType: 'issue'|'project'; groupId?: string }): Promise<IssueLabel> { return request('/api/labels', jsonRequest('POST', input)) }
-export function updateWorkspaceLabel(id: string, input: Partial<Pick<IssueLabel,'name'|'description'|'color'|'groupId'>>): Promise<IssueLabel> { return request(`/api/labels/${id}`, jsonRequest('PATCH', input)) }
+export function updateWorkspaceLabel(id: string, input: Partial<Pick<IssueLabel,'name'|'description'|'color'|'groupId'|'archivedAt'>>): Promise<IssueLabel> { return request(`/api/labels/${id}`, jsonRequest('PATCH', input)) }
 export function deleteWorkspaceLabel(id: string): Promise<void> { return request(`/api/labels/${id}`, { method: 'DELETE' }) }
-export function createLabelGroup(input: { name: string; color?: string; resourceType: 'issue'|'project' }): Promise<LabelGroup> { return request('/api/label-groups', jsonRequest('POST', input)) }
-export function updateLabelGroup(id: string, input: Partial<Pick<LabelGroup,'name'|'color'>>): Promise<LabelGroup> { return request(`/api/label-groups/${id}`, jsonRequest('PATCH', input)) }
+export function createLabelGroup(input: { name: string; color?: string; description?: string; resourceType: 'issue'|'project' }): Promise<LabelGroup> { return request('/api/label-groups', jsonRequest('POST', input)) }
+export function updateLabelGroup(id: string, input: Partial<Pick<LabelGroup,'name'|'color'|'description'|'archivedAt'>>): Promise<LabelGroup> { return request(`/api/label-groups/${id}`, jsonRequest('PATCH', input)) }
 export function deleteLabelGroup(id: string): Promise<void> { return request(`/api/label-groups/${id}`, { method: 'DELETE' }) }
 export function createProjectStatus(input: { name: string; color?: string; type?: string }): Promise<ProjectStatus> { return request('/api/project-statuses', jsonRequest('POST', input)) }
 export function updateProjectStatus(id: string, input: Partial<Pick<ProjectStatus,'name'|'color'|'type'>>): Promise<ProjectStatus> { return request(`/api/project-statuses/${id}`, jsonRequest('PATCH', input)) }
@@ -96,7 +96,7 @@ export function updateDraft(id: string, input: Partial<Omit<Draft,'id'|'userId'|
 export function deleteDraft(id: string): Promise<void> { return request(`/api/drafts/${id}`, { method: 'DELETE' }) }
 export function addFavorite(type: string, id: string): Promise<Favorite> { return request(`/api/favorites/${type}/${id}`, { method: 'PUT' }) }
 export function removeFavorite(type: string, id: string): Promise<void> { return request(`/api/favorites/${type}/${id}`, { method: 'DELETE' }) }
-export function addSubscription(type: string, id: string): Promise<Subscription> { return request(`/api/subscriptions/${type}/${id}`, { method: 'PUT' }) }
+export function addSubscription(type: string, id: string, events?: string[]): Promise<Subscription> { return request(`/api/subscriptions/${type}/${id}`, { method: 'PUT', body: events ? JSON.stringify({ events }) : undefined }) }
 export function removeSubscription(type: string, id: string): Promise<void> { return request(`/api/subscriptions/${type}/${id}`, { method: 'DELETE' }) }
 export function restoreTrashEntry(id: string): Promise<unknown> { return request(`/api/trash/${id}/restore`, { method: 'POST' }) }
 export function purgeTrashEntry(id: string): Promise<void> { return request(`/api/trash/${id}`, { method: 'DELETE' }) }
@@ -220,8 +220,9 @@ export function updateIssueTemplate(teamId: string, templateId: string, input: I
 export function deleteIssueTemplate(teamId: string, templateId: string): Promise<void> { return request(`/api/teams/${teamId}/templates/${templateId}`, { method: 'DELETE' }) }
 export function fetchTeamLabels(teamId: string): Promise<IssueLabel[]> { return request(`/api/teams/${teamId}/labels`) }
 export function createTeamLabel(teamId: string, input: Pick<IssueLabel,'name'|'color'> & { description?: string }): Promise<IssueLabel> { return request(`/api/teams/${teamId}/labels`, jsonRequest('POST', input)) }
-export function updateTeamLabel(teamId: string, labelId: string, input: Partial<Pick<IssueLabel,'name'|'description'|'color'>>): Promise<IssueLabel> { return request(`/api/teams/${teamId}/labels/${labelId}`, jsonRequest('PATCH', input)) }
+export function updateTeamLabel(teamId: string, labelId: string, input: Partial<Pick<IssueLabel,'name'|'description'|'color'|'archivedAt'>>): Promise<IssueLabel> { return request(`/api/teams/${teamId}/labels/${labelId}`, jsonRequest('PATCH', input)) }
 export function deleteTeamLabel(teamId: string, labelId: string): Promise<void> { return request(`/api/teams/${teamId}/labels/${labelId}`, { method: 'DELETE' }) }
+export function moveWorkspaceLabelToTeams(labelId: string): Promise<IssueLabel[]> { return request(`/api/labels/${labelId}/move-to-teams`, jsonRequest('POST', {})) }
 export function createProject(input: ProjectCreateInput): Promise<Project> { return request('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }) }
 export function updateProject(projectId: string, input: ProjectMutationInput): Promise<Project> { return request(`/api/projects/${projectId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }) }
 export function deleteProject(projectId: string): Promise<void> { return request(`/api/projects/${projectId}`, { method: 'DELETE' }) }

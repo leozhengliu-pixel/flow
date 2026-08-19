@@ -23,7 +23,7 @@ export type NewProjectDraft = {
   milestones: string[]
 }
 
-export type NewProjectChoice = { id: string, label: string, color?: string, initials?: string }
+export type NewProjectChoice = { id: string, label: string, color?: string, groupId?: string, groupLabel?: string, initials?: string }
 export type NewProjectTemplateChoice = {
   id: string
   label: string
@@ -120,6 +120,7 @@ export function NewProjectDialog({
   const set = <K extends keyof NewProjectDraft>(key: K, value: NewProjectDraft[K]) => setDraft(current => ({ ...current, [key]: value }))
   const applyTemplate = (templateId: string) => {
     const template = templates.find(item => item.id === templateId)
+    const labelOptionIds = new Set(labels.map(label => label.id))
     if (!template) {
       set('templateId', undefined)
       return
@@ -135,7 +136,7 @@ export function NewProjectDialog({
       status: template.status ?? current.status,
       priority: template.priority ?? current.priority,
       teamIds: template.teamIds?.length ? [...template.teamIds] : current.teamIds,
-      labelIds: template.labelIds ? [...template.labelIds] : current.labelIds,
+      labelIds: template.labelIds ? template.labelIds.filter(id => labelOptionIds.has(id)) : current.labelIds,
     }))
   }
 
@@ -227,12 +228,28 @@ function DraftPicker(props: {
     <button ref={triggerRef} aria-expanded={open} aria-haspopup="listbox" aria-label={label} onClick={() => setOpen(current => !current)} type="button"><span className="lp-new-project-picker__dot" style={{ background: Array.isArray(selected) ? selected[0]?.color : selected?.color }} />{Array.isArray(selected) ? selected.length ? `${placeholder} · ${selected.length}` : placeholder : selected?.label ?? placeholder}</button>
     {open && <div className="lp-new-project-picker__surface" role="dialog">
       <input ref={command.inputRef} aria-label={`${label}…`} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={command.onKeyDown} placeholder={`${label.replace(/^(Change|Set|Add) /, '')}…`} value={command.query} />
-      <div role="listbox" aria-multiselectable={multiple || undefined} onKeyDown={command.onKeyDown}>{command.filteredOptions.map(option => {
+      <div role="listbox" aria-multiselectable={multiple || undefined} onKeyDown={command.onKeyDown}>{groupDraftOptions(command.filteredOptions).map(section => <div key={section.id}>{section.label && <div className="lp-new-project-picker__group">{section.label}</div>}{section.options.map(option => {
         const checked = command.isSelected(option.id)
         return <button aria-checked={checked} aria-selected={option.id === command.activeId} key={option.id} onFocus={() => command.setActiveId(option.id)} onMouseEnter={() => command.setActiveId(option.id)} onClick={() => command.choose(option)} role="option" type="button"><span className="lp-new-project-picker__check">{checked && <CheckIcon />}</span><span className="lp-new-project-picker__dot" style={{ background: option.color }} />{option.label}</button>
-      })}</div>
+      })}</div>)}</div>
     </div>}
   </span>
+}
+
+function groupDraftOptions(options: NewProjectChoice[]) {
+  const sections: { id: string; label?: string; options: NewProjectChoice[] }[] = []
+  const indexes = new Map<string, number>()
+  for (const option of options) {
+    const id = option.groupId || option.groupLabel || 'ungrouped'
+    let index = indexes.get(id)
+    if (index === undefined) {
+      index = sections.length
+      indexes.set(id, index)
+      sections.push({ id, label: id === 'ungrouped' ? undefined : option.groupLabel, options: [] })
+    }
+    sections[index].options.push(option)
+  }
+  return sections
 }
 
 function DateChip({ label, onChange, placeholder, value }: { label: string, onChange: (value: string) => void, placeholder: string, value?: string }) {

@@ -11,12 +11,13 @@ import { DEFAULT_PROJECT_ISSUE_DISPLAY } from './project-issue-display'
 import { ProjectDetailsSidebar } from './project-details-sidebar'
 import { ProjectActionsMenu, ProjectNotificationMenu } from './project-header-menus'
 import type { ProjectDetailProps, ProjectDetailTab } from './project-detail-types'
+import { labelsForResource } from '@/lib/labels'
 import './project-detail-page.css'
 
 export type { ProjectDetailTab } from './project-detail-types'
 
 export function ProjectDetailPage(props: ProjectDetailProps) {
-  const { project, projects, projectUpdates, issues, users, labels, viewer, tab, onTabChange, onUpdate, onDelete, onOpenSidebar } = props
+  const { project, projects, projectUpdates, issues, users, labels, labelGroups, viewer, tab, onTabChange, onUpdate, onDelete, onOpenSidebar } = props
   const [detailsOpen, setDetailsOpen] = useStoredBoolean(`flow:project:${project.id}:details`, true)
   const [subscribed, setSubscribed] = useStoredBoolean(`flow:project:${project.id}:subscribed`, true)
   const [favorited, setFavorited] = useStoredBoolean(`flow:project:${project.id}:favorited`, false)
@@ -26,6 +27,8 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
   const [issueDisplay, setIssueDisplay] = useState(() => readIssueDisplay(issueStateKey))
   const [activeSavedViewId, setActiveSavedViewId] = useState<string>()
   const projectIssues = useMemo(() => issues.filter(issue => issue.project?.id === project.id), [issues, project.id])
+  const issueLabels = useMemo(() => labelsForResource(labels, 'issue'), [labels])
+  const projectLabels = useMemo(() => labelsForResource(labels, 'project'), [labels])
   const projectSavedViews = useMemo(() => props.savedViews.filter(view => view.resource === 'issues' && JSON.stringify(view.filters).includes(project.id)), [project.id, props.savedViews])
   const changeIssueFilters = (next: ProjectIssueFilters) => { setIssueFilters(next); localStorage.setItem(`${issueStateKey}:filters`, JSON.stringify(next)) }
   const changeIssueDisplay = (next: typeof issueDisplay) => { setIssueDisplay(next); localStorage.setItem(`${issueStateKey}:display`, JSON.stringify({ ...next, properties: [...next.properties] })) }
@@ -80,12 +83,12 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
 
     <div className={`project-detail-page__workspace ${detailsOpen ? 'has-details' : ''} ${tab === 'new' ? 'is-new-view' : ''}`}>
       <div className="project-detail-page__main">
-        {tab === 'overview' && <ProjectOverview {...props} projectIssues={projectIssues} save={save}/>} 
-        {tab === 'activity' && <ProjectActivity {...props}/>} 
-        {tab === 'issues' && <ProjectIssues {...props} display={issueDisplay} filters={issueFilters} onFiltersChange={changeIssueFilters} projectIssues={projectIssues}/>} 
-        {tab === 'new' && <ProjectNewView {...props} display={issueDisplay} filters={issueFilters} onDisplayChange={changeIssueDisplay} onFiltersChange={changeIssueFilters} projectIssues={projectIssues}/>} 
+        {tab === 'overview' && <ProjectOverview {...props} labels={projectLabels} projectIssues={projectIssues} save={save}/>}
+        {tab === 'activity' && <ProjectActivity {...props}/>}
+        {tab === 'issues' && <ProjectIssues {...props} labels={issueLabels} display={issueDisplay} filters={issueFilters} onFiltersChange={changeIssueFilters} projectIssues={projectIssues}/>}
+        {tab === 'new' && <ProjectNewView {...props} labels={issueLabels} display={issueDisplay} filters={issueFilters} onDisplayChange={changeIssueDisplay} onFiltersChange={changeIssueFilters} projectIssues={projectIssues}/>}
       </div>
-      {detailsOpen && <ProjectDetailsSidebar labels={labels} onConvertMilestone={props.onConvertMilestone} onCreateMilestone={props.onCreateMilestone} onDeleteMilestone={props.onDeleteMilestone} onMoveMilestone={props.onMoveMilestone} onOpenIssueFilter={openIssueFilter} onReorderMilestones={props.onReorderMilestones} onTabChange={onTabChange} onUpdate={save} onUpdateProject={props.onUpdate} onUpdateMilestone={props.onUpdateMilestone} project={project} projectIssues={projectIssues} projects={projects} projectStatuses={props.projectStatuses} projectUpdates={projectUpdates} teams={props.teams} users={users} viewer={viewer}/>}
+      {detailsOpen && <ProjectDetailsSidebar labelGroups={labelGroups} labels={projectLabels} onConvertMilestone={props.onConvertMilestone} onCreateMilestone={props.onCreateMilestone} onDeleteMilestone={props.onDeleteMilestone} onMoveMilestone={props.onMoveMilestone} onOpenIssueFilter={openIssueFilter} onReorderMilestones={props.onReorderMilestones} onTabChange={onTabChange} onUpdate={save} onUpdateProject={props.onUpdate} onUpdateMilestone={props.onUpdateMilestone} project={project} projectIssues={projectIssues} projects={projects} projectStatuses={props.projectStatuses} projectUpdates={projectUpdates} teams={props.teams} users={users} viewer={viewer}/>}
     </div>
 
     <Dialog.Root onOpenChange={setDeleteOpen} open={deleteOpen}><Dialog.Portal><Dialog.Overlay className="project-detail-page__dialog-overlay"/><Dialog.Content aria-describedby="project-delete-description" className="project-detail-page__delete-dialog">

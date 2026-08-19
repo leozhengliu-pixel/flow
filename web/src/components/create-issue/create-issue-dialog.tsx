@@ -13,6 +13,7 @@ import type { DescriptionSnapshot } from '@/components/issue/editor/editor-conte
 import { DueDateCommand } from '@/components/issue/due-date-picker'
 import styles from './create-issue-dialog.module.css'
 import { createDraft, deleteDraft, updateDraft } from '@/lib/api'
+import { labelsForResource } from '@/lib/labels'
 
 export interface CreateIssueInput {
   title: string
@@ -115,8 +116,11 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialStat
   const state = availableStates.find(item => item.id === stateId) ?? defaultState
   const assignee = data.users.find(user => user.id === assigneeId)
   const project = data.projects.find(item => item.id === projectId)
-  const availableLabels = data.labels.filter(label => !label.scope || label.scope === 'Workspace' || label.scope === data.teams[0]?.id)
+  const issueLabels = useMemo(() => labelsForResource(data.labels, 'issue'), [data.labels])
+  const availableLabels = useMemo(() => issueLabels.filter(label => !label.scope || label.scope === 'Workspace' || label.scope === data.teams[0]?.id), [data.teams, issueLabels])
+  const availableLabelIds = useMemo(() => new Set(availableLabels.map(label => label.id)), [availableLabels])
   const selectedLabels = availableLabels.filter(label => labelIds.includes(label.id))
+  const labelGroupNames = useMemo(() => new Map(data.labelGroups.map(group => [group.id, group.name])), [data.labelGroups])
 
   const resetBody = (focus = true) => {
     setTitle('')
@@ -189,7 +193,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialStat
         assigneeId,
         projectId,
         dueDate,
-        labelIds,
+        labelIds: labelIds.filter(id => availableLabelIds.has(id)),
         templateId,
         createMore,
       })
@@ -208,7 +212,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialStat
     } finally {
       setSaving(false)
     }
-  }, [assigneeId, createMore, description, draftKey, dueDate, files, labelIds, onCreate, onDraftDeleted, onOpenChange, onUpload, priority, projectId, saving, serverDraftId, stateId, templateId, title])
+  }, [assigneeId, availableLabelIds, createMore, description, draftKey, dueDate, files, labelIds, onCreate, onDraftDeleted, onOpenChange, onUpload, priority, projectId, saving, serverDraftId, stateId, templateId, title])
 
   const changeOpen = (next: boolean) => {
     if (!next && hasDraftContent) {
@@ -248,7 +252,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialStat
             <MiniProperty label="Priority" value={priority ? priorityNames[priority] : 'Priority'} selectedId={String(priority)} icon={<PriorityIcon priority={priority}/>} options={[0,1,2,3,4].map(item => ({ id:String(item),label:priorityNames[item],icon:<PriorityIcon priority={item}/>,shortcut:String(item) }))} onChange={value => setPriority(Number(value))}/>
             <MiniProperty label="Assignee" value={assignee?.displayName ?? 'Assignee'} selectedId={assigneeId} icon={assignee ? <Avatar name={assignee.displayName}/> : <NoAssigneeIcon/>} options={[{id:'',label:'No assignee',icon:<NoAssigneeIcon/>},...data.users.filter(user => user.active).map(user => ({id:user.id,label:user.displayName,keywords:user.email,icon:<Avatar name={user.displayName}/>}))]} onChange={setAssigneeId}/>
             <MiniProperty label="Project" value={project?.name ?? 'Project'} selectedId={projectId} icon={<ProjectIcon/>} options={[{id:'',label:'No project',icon:<NoProjectIcon/>},...data.projects.map(item => ({id:item.id,label:item.name,color:item.color,icon:<ProjectIcon style={{ color: item.color }}/> }))]} onChange={setProjectId}/>
-            <MiniProperty multiple label="Labels" value={selectedLabels.length ? selectedLabels.map(label => label.name).join(', ') : 'Labels'} selectedIds={labelIds} icon={<LabelIcon/>} options={availableLabels.map(item => ({ id: item.id, label: item.name, color: item.color, description: item.description, issueCount: item.issueCount, scope: item.scope }))} onChange={id => setLabelIds(current => current.includes(id) ? current.filter(value => value !== id) : [...current,id])}/>
+            <MiniProperty multiple label="Labels" value={selectedLabels.length ? selectedLabels.map(label => label.name).join(', ') : 'Labels'} selectedIds={labelIds} icon={<LabelIcon/>} options={availableLabels.map(item => ({ id: item.id, label: item.name, color: item.color, description: item.description, issueCount: item.issueCount, scope: item.scope, groupId: item.groupId, groupLabel: item.groupId ? labelGroupNames.get(item.groupId) : undefined }))} onChange={id => setLabelIds(current => current.includes(id) ? current.filter(value => value !== id) : [...current,id])}/>
             <MoreActions active={open && !linkOpen} dueDate={dueDate} onDueDateChange={setDueDate} onInsertLink={() => setLinkOpen(true)}/>
           </div>
 

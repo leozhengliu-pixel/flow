@@ -180,6 +180,7 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	changedWorkspaces := map[string]domain.Bootstrap{}
 	for rows.Next() {
 		var key string
 		var raw []byte
@@ -192,11 +193,23 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 			rows.Close()
 			return err
 		}
+		changed := ensureCanonicalLabelGroups(&data)
+		if ensureCanonicalLabels(&data) {
+			changed = true
+		}
 		normalize(&data)
 		s.workspaces[key] = data
+		if changed {
+			changedWorkspaces[key] = data
+		}
 	}
 	if err := rows.Close(); err != nil {
 		return err
+	}
+	for key, data := range changedWorkspaces {
+		if err := s.persistWorkspace(ctx, key, data, nil); err != nil {
+			return err
+		}
 	}
 	if len(s.workspaces) > 0 {
 		var viewerRaw []byte
@@ -229,6 +242,7 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 		return err
 	}
 	ensureCanonicalWorkflowStates(&data)
+	ensureCanonicalLabelGroups(&data)
 	ensureCanonicalLabels(&data)
 	ensureCanonicalNotifications(&data)
 	ensureCanonicalInitiatives(&data)
@@ -310,12 +324,22 @@ func ensureCanonicalWorkflowStates(data *domain.Bootstrap) bool {
 }
 
 func ensureCanonicalLabels(data *domain.Bootstrap) bool {
+	hadObsolete := slices.ContainsFunc(data.Labels, func(label domain.IssueLabel) bool { return obsoleteDeliveryLabelIDs[label.ID] }) ||
+		slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool {
+			return slices.ContainsFunc(issue.Labels, func(label domain.IssueLabel) bool { return obsoleteDeliveryLabelIDs[label.ID] })
+		})
+	if hadObsolete {
+		applyDeliveryLabelTaxonomy(data.Issues, canonicalLabels())
+		data.Labels = slices.DeleteFunc(data.Labels, func(label domain.IssueLabel) bool { return obsoleteDeliveryLabelIDs[label.ID] })
+		migrateDeliverySavedViews(data)
+	}
 	existing := make(map[string]domain.IssueLabel, len(data.Labels))
 	for _, label := range data.Labels {
 		existing[label.ID] = label
 	}
-	changed := false
-	for _, label := range canonicalLabels() {
+	changed := hadObsolete
+	canonical := canonicalLabels()
+	for _, label := range canonical {
 		current, ok := existing[label.ID]
 		if !ok {
 			data.Labels = append(data.Labels, label)
@@ -323,13 +347,108 @@ func ensureCanonicalLabels(data *domain.Bootstrap) bool {
 			changed = true
 			continue
 		}
-		if current.Description == "" || current.IssueCount == 0 || current.Scope == "" {
+		if current.Description == "" || current.IssueCount == 0 || current.Scope == "" || current.GroupID == "" || current.ResourceType == "" || current.CreatedAt.IsZero() || current.LastAppliedAt == nil {
 			for i := range data.Labels {
 				if data.Labels[i].ID == label.ID {
 					data.Labels[i].Description = label.Description
 					data.Labels[i].IssueCount = label.IssueCount
 					data.Labels[i].Scope = label.Scope
+					if data.Labels[i].GroupID == "" {
+						data.Labels[i].GroupID = label.GroupID
+					}
+					if data.Labels[i].ResourceType == "" {
+						data.Labels[i].ResourceType = canonicalLabelResourceType(label)
+					}
+					if data.Labels[i].CreatedAt.IsZero() {
+						data.Labels[i].CreatedAt = label.CreatedAt
+					}
+					if data.Labels[i].LastAppliedAt == nil && data.Labels[i].IssueCount > 0 {
+						data.Labels[i].LastAppliedAt = label.LastAppliedAt
+					}
+					cascadeBootstrapLabel(data, data.Labels[i])
 				}
+			}
+			changed = true
+		}
+	}
+	return changed
+}
+
+func migrateDeliverySavedViews(data *domain.Bootstrap) {
+	filter := func(ids ...string) json.RawMessage {
+		labels := make(map[string]domain.IssueLabel, len(data.Labels)+len(canonicalLabels()))
+		for _, label := range append(append([]domain.IssueLabel{}, data.Labels...), canonicalLabels()...) {
+			labels[label.ID] = label
+		}
+		values := make([]map[string]string, 0, len(ids))
+		for _, id := range ids {
+			label := labels[id]
+			values = append(values, map[string]string{"value": id, "valueLabel": label.Name, "color": label.Color})
+		}
+		encoded, _ := json.Marshal([]map[string]any{{
+			"id": "labels-delivery-taxonomy", "field": "labels", "fieldLabel": "Labels", "operator": "is",
+			"value": ids[0], "valueLabel": labels[ids[0]].Name, "color": labels[ids[0]].Color, "values": values,
+		}})
+		return encoded
+	}
+	data.SavedViews = slices.DeleteFunc(data.SavedViews, func(view domain.SavedView) bool {
+		return view.ID == "view_release_gate" || view.ID == "view_audit"
+	})
+	for index := range data.SavedViews {
+		switch data.SavedViews[index].ID {
+		case "view_strategy", "view_business", "view_product":
+			data.SavedViews[index].Filters = filter("label_type_requirement")
+		case "view_development", "view_testing", "view_operations":
+			data.SavedViews[index].Filters = filter("label_type_development")
+		}
+	}
+}
+
+func canonicalLabelResourceType(label domain.IssueLabel) string {
+	if label.ResourceType != "" {
+		return label.ResourceType
+	}
+	return "issue"
+}
+
+func cascadeBootstrapLabel(data *domain.Bootstrap, label domain.IssueLabel) {
+	for issueIndex := range data.Issues {
+		for labelIndex := range data.Issues[issueIndex].Labels {
+			if data.Issues[issueIndex].Labels[labelIndex].ID == label.ID {
+				data.Issues[issueIndex].Labels[labelIndex] = label
+			}
+		}
+	}
+}
+
+func ensureCanonicalLabelGroups(data *domain.Bootstrap) bool {
+	legacyGroups := map[string]bool{
+		"label_group_requirement": true, "label_group_delivery": true, "label_group_quality": true, "label_group_release": true, "label_group_value": true,
+		"label_group_original_requirement": true, "label_group_development_task": true, "label_group_version": true, "label_group_defect": true,
+	}
+	before := len(data.LabelGroups)
+	data.LabelGroups = slices.DeleteFunc(data.LabelGroups, func(group domain.LabelGroup) bool { return legacyGroups[group.ID] })
+	existing := make(map[string]int, len(data.LabelGroups))
+	for index, group := range data.LabelGroups {
+		existing[group.ID] = index
+	}
+	changed := len(data.LabelGroups) != before
+	for _, group := range canonicalLabelGroups() {
+		index, ok := existing[group.ID]
+		if !ok {
+			data.LabelGroups = append(data.LabelGroups, group)
+			changed = true
+			continue
+		}
+		if data.LabelGroups[index].Scope == "" || data.LabelGroups[index].ResourceType == "" || data.LabelGroups[index].Description == "" {
+			if data.LabelGroups[index].Scope == "" {
+				data.LabelGroups[index].Scope = group.Scope
+			}
+			if data.LabelGroups[index].ResourceType == "" {
+				data.LabelGroups[index].ResourceType = group.ResourceType
+			}
+			if data.LabelGroups[index].Description == "" {
+				data.LabelGroups[index].Description = group.Description
 			}
 			changed = true
 		}

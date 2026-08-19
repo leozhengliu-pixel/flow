@@ -7,7 +7,7 @@ import { NoAssigneeIcon } from '@/components/issue/issue-icons'
 import { ProjectPropertyPicker, ProjectStatusGlyph, type ProjectPropertyOption } from '@/components/projects-page/project-property-picker'
 import { ProjectTargetDatePicker } from '@/components/projects-page/project-target-date-picker'
 import { LabelPicker } from '@/components/issue/label-project-pickers'
-import type { Initiative, InitiativeMutationInput, IssueLabel, Project, User } from '@/types/flow'
+import type { Initiative, InitiativeMutationInput, IssueLabel, LabelGroup, Project, User } from '@/types/flow'
 import { formatTarget, titleCase } from './initiative-model'
 
 const INITIATIVE_STATUS_OPTIONS: ProjectPropertyOption[] = [
@@ -48,15 +48,16 @@ export function InitiativeProperties({ initiative, users, onUpdate, compact = fa
   return <div className={`${compact ? 'li-properties li-properties--compact' : 'li-properties'} ${only ? `li-properties--${only}` : ''}`}>{only ? controls[only] : <>{controls.status}{controls.priority}{controls.owner}{controls.target}</>}</div>
 }
 
-export function InitiativeLabelsPicker({ initiative, labels, onUpdate, compact = false }: {
+export function InitiativeLabelsPicker({ initiative, labels, labelGroups = [], onUpdate, compact = false }: {
   initiative: Initiative
   labels: IssueLabel[]
+  labelGroups?: LabelGroup[]
   compact?: boolean
   onUpdate: (input: InitiativeMutationInput) => void | Promise<unknown>
 }) {
   const selected = labels.filter(label => initiative.labelIds.includes(label.id))
   return <div className={compact ? 'li-label-picker li-label-picker--compact' : 'li-label-picker'}>
-    <LabelPicker labels={labels} value={selected} onToggle={labelId => { void onUpdate({ labelIds: initiative.labelIds.includes(labelId) ? initiative.labelIds.filter(id => id !== labelId) : [...initiative.labelIds, labelId] }) }}/>
+    <LabelPicker labels={labels} labelGroups={labelGroups} value={selected} onToggle={labelId => { void onUpdate({ labelIds: initiative.labelIds.includes(labelId) ? initiative.labelIds.filter(id => id !== labelId) : [...initiative.labelIds, labelId] }) }}/>
   </div>
 }
 

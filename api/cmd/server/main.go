@@ -140,6 +140,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/labels", s.listWorkspaceLabels)
 	mux.HandleFunc("POST /api/labels", s.createWorkspaceLabel)
 	mux.HandleFunc("PATCH /api/labels/{id}", s.updateWorkspaceLabel)
+	mux.HandleFunc("POST /api/labels/{id}/move-to-teams", s.moveWorkspaceLabelToTeams)
 	mux.HandleFunc("DELETE /api/labels/{id}", s.deleteWorkspaceLabel)
 	mux.HandleFunc("POST /api/label-groups", s.createLabelGroup)
 	mux.HandleFunc("PATCH /api/label-groups/{id}", s.updateLabelGroup)
@@ -862,6 +863,12 @@ func (s *server) deleteSavedView(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		data.SavedViews = slices.Delete(data.SavedViews, index, index+1)
+		data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool {
+			return item.ResourceType == "view" && item.ResourceID == id
+		})
+		data.Subscriptions = slices.DeleteFunc(data.Subscriptions, func(item domain.Subscription) bool {
+			return item.ResourceType == "view" && item.ResourceID == id
+		})
 		return nil
 	})
 	if err != nil {
@@ -3095,7 +3102,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		changes["nextOccurrenceAt"] = *input.NextOccurrenceAt
 	}
 	if input.LabelIDs != nil {
-		issue.Labels = labelsByID(data, *input.LabelIDs)
+		issue.Labels = labelsByIDForResource(data, *input.LabelIDs, "issue")
 		if len(issue.Labels) != len(*input.LabelIDs) {
 			return nil, fmt.Errorf("%w: unknown label", errInvalid)
 		}
@@ -3400,7 +3407,7 @@ func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input d
 	}
 	if input.LabelIDs != nil {
 		for _, id := range input.LabelIDs {
-			if !slices.ContainsFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id }) {
+			if !labelExistsForResource(data, id, "project") {
 				return errInvalid
 			}
 		}
@@ -3547,13 +3554,27 @@ func slug(value string) string {
 	}, value), "-")
 }
 func labelsByID(data *domain.Bootstrap, ids []string) []domain.IssueLabel {
+	return labelsByIDForResource(data, ids, "issue")
+}
+func labelsByIDForResource(data *domain.Bootstrap, ids []string, resourceType string) []domain.IssueLabel {
 	result := []domain.IssueLabel{}
 	for _, label := range data.Labels {
-		if slices.Contains(ids, label.ID) {
+		if slices.Contains(ids, label.ID) && labelResourceType(label) == resourceType {
 			result = append(result, label)
 		}
 	}
 	return result
+}
+func labelExistsForResource(data *domain.Bootstrap, id string, resourceType string) bool {
+	return slices.ContainsFunc(data.Labels, func(label domain.IssueLabel) bool {
+		return label.ID == id && labelResourceType(label) == resourceType
+	})
+}
+func labelResourceType(label domain.IssueLabel) string {
+	if label.ResourceType == "project" {
+		return "project"
+	}
+	return "issue"
 }
 func appendActivity(data *domain.Bootstrap, issueID, eventType string, actor domain.User, metadata map[string]string) domain.ActivityEvent {
 	activity := domain.ActivityEvent{ID: fmt.Sprintf("activity_%d", time.Now().UnixNano()), Type: eventType, CreatedAt: time.Now().UTC(), Actor: actor, Metadata: metadata}

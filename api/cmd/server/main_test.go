@@ -36,6 +36,109 @@ func TestWorkspaceSettingsPersistence(t *testing.T) {
 	}
 }
 
+func TestLabelGroupArchiveCascadesToChildLabels(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+
+	group := requestJSON[domain.LabelGroup](t, handler, http.MethodPost, "/api/label-groups", map[string]any{
+		"name": "Delivery stage", "resourceType": "issue",
+	}, http.StatusCreated)
+	label := requestJSON[domain.IssueLabel](t, handler, http.MethodPost, "/api/labels", map[string]any{
+		"name": "Ready for QA", "resourceType": "issue", "groupId": group.ID,
+	}, http.StatusCreated)
+	archivedAt := time.Now().UTC().Truncate(time.Second).Format(time.RFC3339)
+	group = requestJSON[domain.LabelGroup](t, handler, http.MethodPatch, "/api/label-groups/"+group.ID, map[string]any{
+		"archivedAt": archivedAt,
+	}, http.StatusOK)
+	if group.ArchivedAt == nil {
+		t.Fatal("group was not archived")
+	}
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	labelIndex := slices.IndexFunc(bootstrap.Labels, func(item domain.IssueLabel) bool { return item.ID == label.ID })
+	if labelIndex < 0 || bootstrap.Labels[labelIndex].ArchivedAt == nil {
+		t.Fatalf("child label was not archived with its group: %#v", bootstrap.Labels)
+	}
+
+	group = requestJSON[domain.LabelGroup](t, handler, http.MethodPatch, "/api/label-groups/"+group.ID, map[string]any{
+		"archivedAt": "",
+	}, http.StatusOK)
+	if group.ArchivedAt != nil {
+		t.Fatal("group was not restored")
+	}
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	labelIndex = slices.IndexFunc(bootstrap.Labels, func(item domain.IssueLabel) bool { return item.ID == label.ID })
+	if labelIndex < 0 || bootstrap.Labels[labelIndex].ArchivedAt != nil {
+		t.Fatalf("child label was not restored with its group: %#v", bootstrap.Labels)
+	}
+}
+
+func TestMoveWorkspaceLabelToTeamsPreservesIssueAssignments(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+
+	before := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if len(before.Issues) < 1 {
+		t.Fatal("seed must include issues")
+	}
+	first := before.Issues[0]
+	secondTeam := requestJSON[domain.Team](t, handler, http.MethodPost, "/api/workspaces/cleantrack/teams", map[string]any{"name": "Second team", "key": "SEC"}, http.StatusCreated)
+	second := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Second team issue", "description": "Move label coverage", "teamId": secondTeam.ID}, http.StatusCreated)
+	label := requestJSON[domain.IssueLabel](t, handler, http.MethodPost, "/api/labels", map[string]any{
+		"name": "Shared test label", "resourceType": "issue",
+	}, http.StatusCreated)
+	for _, issue := range []domain.Issue{first, second} {
+		labelIDs := []string{label.ID}
+		for _, existing := range issue.Labels {
+			labelIDs = append(labelIDs, existing.ID)
+		}
+		requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{"labelIds": labelIDs}, http.StatusOK)
+	}
+	sourceID := label.ID
+	before = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	usedByTeam := map[string]bool{}
+	affectedIssues := map[string]string{}
+	for _, issue := range before.Issues {
+		if slices.ContainsFunc(issue.Labels, func(label domain.IssueLabel) bool { return label.ID == sourceID }) {
+			usedByTeam[issue.Team.ID] = true
+			affectedIssues[issue.ID] = issue.Team.ID
+		}
+	}
+	if len(usedByTeam) != 2 {
+		t.Fatalf("seed label must cover multiple teams, got %#v", usedByTeam)
+	}
+
+	moved := requestJSON[[]domain.IssueLabel](t, handler, http.MethodPost, "/api/labels/"+sourceID+"/move-to-teams", map[string]any{}, http.StatusOK)
+	if len(moved) != len(usedByTeam) {
+		t.Fatalf("moved labels = %d, want %d: %#v", len(moved), len(usedByTeam), moved)
+	}
+	for _, label := range moved {
+		if !usedByTeam[label.Scope] || label.ID == sourceID || label.GroupID != "" {
+			t.Fatalf("invalid team label: %#v", label)
+		}
+	}
+
+	after := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if slices.ContainsFunc(after.Labels, func(label domain.IssueLabel) bool { return label.ID == sourceID }) {
+		t.Fatal("workspace label still exists after moving to teams")
+	}
+	for issueID, teamID := range affectedIssues {
+		issue := findIssue(t, after.Issues, issueID)
+		if !slices.ContainsFunc(issue.Labels, func(label domain.IssueLabel) bool {
+			return label.Name == "Shared test label" && label.Scope == teamID && label.ID != sourceID
+		}) {
+			t.Fatalf("issue %s did not receive its team label: %#v", issueID, issue.Labels)
+		}
+	}
+}
+
 func TestIssueLifecycle(t *testing.T) {
 	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
@@ -47,7 +150,7 @@ func TestIssueLifecycle(t *testing.T) {
 
 	created := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{
 		"title": "Issue engine test", "description": "Initial", "stateId": "state_todo", "priority": 2,
-		"assigneeId": "usr_zheng", "projectId": "project_cruise", "dueDate": "2026-09-01", "labelIds": []string{"label_bug"},
+		"assigneeId": "usr_zheng", "projectId": "project_cruise", "dueDate": "2026-09-01", "labelIds": []string{"label_type_defect"},
 		"descriptionState": `{"type":"doc","content":[{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Initial"}]}]}`,
 		"descriptionData":  map[string]any{"type": "doc", "content": []any{map[string]any{"type": "heading", "attrs": map[string]any{"level": 2}}}}, "contentState": "CREATE_STATE",
 	}, http.StatusCreated)
@@ -467,11 +570,13 @@ func TestProjectLifecycle(t *testing.T) {
 
 	updated := requestJSON[domain.Project](t, handler, http.MethodPatch, "/api/projects/"+created.ID, map[string]any{
 		"name": "Updated project", "health": "atRisk", "targetDate": "2026-09-30", "statusId": "ps_planned",
-		"memberIds": []string{"usr_zheng", "usr_jiaozongben"}, "labelIds": []string{"label_bug"},
+		"memberIds": []string{"usr_zheng", "usr_jiaozongben"}, "labelIds": []string{"label_delivery"},
 	}, http.StatusOK)
-	if updated.Name != "Updated project" || updated.Health != "atRisk" || updated.Status.ID != "ps_planned" || updated.TargetDate == nil || *updated.TargetDate != "2026-09-30" || !slices.Equal(updated.MemberIDs, []string{"usr_zheng", "usr_jiaozongben"}) || !slices.Equal(updated.LabelIDs, []string{"label_bug"}) {
+	if updated.Name != "Updated project" || updated.Health != "atRisk" || updated.Status.ID != "ps_planned" || updated.TargetDate == nil || *updated.TargetDate != "2026-09-30" || !slices.Equal(updated.MemberIDs, []string{"usr_zheng", "usr_jiaozongben"}) || !slices.Equal(updated.LabelIDs, []string{"label_delivery"}) {
 		t.Fatalf("project update failed: %#v", updated)
 	}
+	requestJSON[any](t, handler, http.MethodPatch, "/api/projects/"+created.ID, map[string]any{"labelIds": []string{"label_type_defect"}}, http.StatusBadRequest)
+	requestJSON[any](t, handler, http.MethodPatch, "/api/issues/issue_33", map[string]any{"labelIds": []string{"label_product"}}, http.StatusBadRequest)
 
 	resource := requestJSON[domain.ProjectResource](t, handler, http.MethodPost, "/api/projects/"+created.ID+"/resources", map[string]any{
 		"type": "link", "title": "Launch brief", "url": "https://example.com/brief",
@@ -658,9 +763,9 @@ func TestInitiativeLifecycle(t *testing.T) {
 	}
 	updated := requestJSON[domain.Initiative](t, handler, http.MethodPatch, "/api/initiatives/"+created.ID, map[string]any{
 		"name": "Updated initiative", "description": "Persistent description", "status": "active", "health": "atRisk",
-		"labelIds": []string{"label_bug"}, "favorite": true, "subscribed": true,
+		"labelIds": []string{"label_type_defect"}, "favorite": true, "subscribed": true,
 	}, http.StatusOK)
-	if updated.Name != "Updated initiative" || updated.Status != "active" || updated.Health != "atRisk" || !updated.Favorite || !updated.Subscribed || !slices.Equal(updated.LabelIDs, []string{"label_bug"}) {
+	if updated.Name != "Updated initiative" || updated.Status != "active" || updated.Health != "atRisk" || !updated.Favorite || !updated.Subscribed || !slices.Equal(updated.LabelIDs, []string{"label_type_defect"}) {
 		t.Fatalf("initiative update failed: %#v", updated)
 	}
 	resource := requestJSON[domain.InitiativeResource](t, handler, http.MethodPost, "/api/initiatives/"+created.ID+"/resources", map[string]any{"type": "link", "title": "Strategy", "url": "https://example.com/strategy"}, http.StatusCreated)
@@ -760,13 +865,21 @@ func TestIssueBoardOrderAndSavedViewLifecycle(t *testing.T) {
 	if len(bootstrap.SavedViews) != 1 || bootstrap.SavedViews[0].Name != updatedView.Name {
 		t.Fatalf("saved view bootstrap = %#v", bootstrap.SavedViews)
 	}
+	requestJSON[domain.Favorite](t, handler, http.MethodPut, "/api/favorites/view/"+created.ID, nil, http.StatusOK)
+	requestJSON[domain.Subscription](t, handler, http.MethodPut, "/api/subscriptions/view/"+created.ID, nil, http.StatusOK)
 	requestJSON[any](t, handler, http.MethodDelete, "/api/views/"+created.ID, nil, http.StatusNoContent)
 	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	if len(bootstrap.SavedViews) != 0 {
 		t.Fatalf("deleted view remains = %#v", bootstrap.SavedViews)
 	}
+	if slices.ContainsFunc(bootstrap.Favorites, func(item domain.Favorite) bool { return item.ResourceType == "view" && item.ResourceID == created.ID }) {
+		t.Fatalf("deleted view favorite remains = %#v", bootstrap.Favorites)
+	}
+	if slices.ContainsFunc(bootstrap.Subscriptions, func(item domain.Subscription) bool { return item.ResourceType == "view" && item.ResourceID == created.ID }) {
+		t.Fatalf("deleted view subscription remains = %#v", bootstrap.Subscriptions)
+	}
 	events := requestJSON[[]domain.DomainEvent](t, handler, http.MethodGet, "/api/events?aggregateId="+created.ID, nil, http.StatusOK)
-	if len(events) != 3 || events[0].Type != "view.created" || events[1].Type != "view.updated" || events[2].Type != "view.deleted" {
+	if len(events) != 5 || events[0].Type != "view.created" || events[1].Type != "view.updated" || events[2].Type != "favorite.added" || events[3].Type != "subscription.added" || events[4].Type != "view.deleted" {
 		t.Fatalf("saved view events = %#v", events)
 	}
 }

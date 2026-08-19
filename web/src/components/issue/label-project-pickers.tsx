@@ -1,12 +1,13 @@
-import type { IssueLabel, Project, ProjectSummary } from '@/types/flow'
+import type { IssueLabel, LabelGroup, Project, ProjectSummary } from '@/types/flow'
 import { Plus } from 'lucide-react'
 import { LabelIcon, NoProjectIcon, ProjectIcon } from '@/components/issue/issue-icons'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { LabelHoverPreview } from '@/components/property/label-hover-preview'
 import { PropertyShortcutTooltip } from '@/components/property/issue-property-hover'
 
-export function LabelPicker({ value, labels, onToggle, inline = false }: { value: IssueLabel[]; labels: IssueLabel[]; onToggle: (id: string) => void | Promise<void>; inline?: boolean }) {
-  const options = labels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope }))
+export function LabelPicker({ value, labels, labelGroups = [], onToggle, inline = false }: { value: IssueLabel[]; labels: IssueLabel[]; labelGroups?: LabelGroup[]; onToggle: (id: string) => void | Promise<void>; inline?: boolean }) {
+  const groupNames = new Map(labelGroups.map(group => [group.id, group.name]))
+  const options = labels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, groupId: label.groupId, groupLabel: label.groupId ? groupNames.get(label.groupId) : undefined }))
   return <div className={`label-project-picker labels-picker${inline?' labels-picker--inline':''}`}>
     <div className="issue-label-chips" aria-label="Selected labels">{value.map(label => <LabelHoverPreview label={label} key={label.id}><span><i style={{ background: label.color }}/>{label.name}</span></LabelHoverPreview>)}</div>
     <PropertyMenu

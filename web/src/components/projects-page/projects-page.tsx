@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import type { IssueLabel, Project, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
+import type { IssueLabel, LabelGroup, Project, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
 import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from '@/components/issue-explorer/saved-view-editor'
 import { NewProjectDialog, type NewProjectDraft } from './new-project-dialog'
 import { ProjectsDataView, type ProjectAction, type ProjectPageItem, type ProjectProperty, type ProjectPropertyOptions } from './projects-data-view'
@@ -13,6 +13,7 @@ import { createProjectFilter, isProjectFilter, type ProjectFilter, type ProjectF
 import { ProjectsBulkActionBar, type ProjectBulkAction } from './projects-bulk-action-bar'
 import type { ViewVisual } from '@/components/views/view-icon-picker'
 import { ProjectUpdatesPreview } from './project-updates-preview'
+import { labelsForResource } from '@/lib/labels'
 
 export type ProjectMutationInput = {
   templateId?: string
@@ -45,6 +46,7 @@ export type ProjectsPageProps = {
   users: User[]
   teams: Team[]
   labels?: IssueLabel[]
+  labelGroups?: LabelGroup[]
   loading?: boolean
   error?: string | null
   onCreateProject?: (input: ProjectCreateInput) => Promise<Project>
@@ -60,6 +62,8 @@ export type ProjectsPageProps = {
   workspaceKey?: string
   creatingView?: boolean
   savedView?: SavedView
+  duplicateFrom?: SavedView
+  editingView?: boolean
   savedViews?: SavedView[]
   scopeTeamId?: string
   viewerId?: string
@@ -68,6 +72,11 @@ export type ProjectsPageProps = {
   onCreateSavedView?: (input: SavedViewMutationInput) => Promise<SavedView>
   onUpdateSavedView?: (id: string, input: SavedViewMutationInput) => Promise<SavedView>
   onDeleteSavedView?: (view: SavedView) => Promise<void>
+  savedViewSubscription?: Subscription
+  onSetSavedViewSubscriptionEvents?: (view: SavedView, events: string[]) => Promise<void>
+  onDuplicateSavedView?: (view: SavedView) => void
+  onBeginEditSavedView?: () => void
+  onFinishEditSavedView?: () => void
   onNavigateAllViews?: () => void
   onNavigateNewView?: () => void
   onNavigateSavedView?: (view: SavedView) => void
@@ -88,6 +97,7 @@ export function ProjectsPage({
   users,
   teams,
   labels = [],
+  labelGroups = [],
   loading = false,
   error = null,
   onCreateProject,
@@ -103,6 +113,8 @@ export function ProjectsPage({
   workspaceKey = 'cleantrack',
   creatingView = false,
   savedView,
+  duplicateFrom,
+  editingView = false,
   savedViews = [],
   scopeTeamId,
   viewerId,
@@ -111,6 +123,11 @@ export function ProjectsPage({
   onCreateSavedView,
   onUpdateSavedView,
   onDeleteSavedView,
+  savedViewSubscription,
+  onSetSavedViewSubscriptionEvents,
+  onDuplicateSavedView,
+  onBeginEditSavedView,
+  onFinishEditSavedView,
   onNavigateAllViews,
   onNavigateNewView,
   onNavigateSavedView,
@@ -122,13 +139,14 @@ export function ProjectsPage({
   onReactProjectUpdate,
   createOnMount = false,
 }: ProjectsPageProps) {
+  const sourceView = savedView ?? duplicateFrom
   const scopedProjects = useMemo(() => scopeTeamId ? projects.filter(project => project.teamIds.includes(scopeTeamId)) : projects, [projects, scopeTeamId])
   const items = useMemo(() => scopedProjects.map(project => toPageItem(project, projectHref?.(project), teams, projectUpdates[project.id]?.[0])), [projectHref, projectUpdates, scopedProjects, teams])
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [insightMode, setInsightMode] = useState<ProjectInsightMode>('health')
-  const [insightFilter, setInsightFilter] = useState<ProjectInsightFilter>(() => projectFilterFromSavedView(savedView))
+  const [insightFilter, setInsightFilter] = useState<ProjectInsightFilter>(() => projectFilterFromSavedView(sourceView))
   const draftFiltersKey = `flow:projects:draft-filters:${workspaceKey}:${scopeTeamId ?? 'workspace'}`
-  const [projectFilters, setProjectFilters] = useState<ProjectFilter[]>(() => projectFiltersFromSavedView(savedView, creatingView ? readDraftFilters(draftFiltersKey) : []))
+  const [projectFilters, setProjectFilters] = useState<ProjectFilter[]>(() => projectFiltersFromSavedView(sourceView, creatingView ? readDraftFilters(draftFiltersKey) : []))
   const visibleItems = useMemo(() => {
     let result = items.filter(item => projectFilters.every(filter => matchesProjectFilter(item, filter)))
     if (!insightFilter) return result
@@ -137,32 +155,34 @@ export function ProjectsPage({
     return result
   }, [insightFilter, items, projectFilters])
   const workspaceDefault = useMemo(() => parseProjectDisplayDefault(projectDisplayDefault), [projectDisplayDefault])
-  const savedDisplay = useMemo(() => parseProjectDisplayDefault(savedView?.display), [savedView?.display])
+  const savedDisplay = useMemo(() => parseProjectDisplayDefault(sourceView?.display), [sourceView?.display])
   const view = useProjectsViewState(visibleItems, { initial: savedDisplay ? { display: savedDisplay } : undefined, storageKey: `${workspaceKey}:${scopeTeamId ?? 'workspace'}:${savedView?.id ?? 'all'}`, workspaceDefault })
   const [createOpen, setCreateOpen] = useState(false)
   const [createStatus, setCreateStatus] = useState('Backlog')
   const [updatesProjectId, setUpdatesProjectId] = useState<string>()
-  const [viewEditor, setViewEditor] = useState<'create' | 'edit' | undefined>(creatingView ? 'create' : undefined)
+  const [viewEditor, setViewEditor] = useState<'create' | 'edit' | undefined>(creatingView ? 'create' : editingView ? 'edit' : undefined)
   const [viewSaving, setViewSaving] = useState(false)
   const projectById = useMemo(() => new Map(projects.map(project => [project.id, project])), [projects])
+  const projectLabels = useMemo(() => labelsForResource(labels, 'project'), [labels])
+  const projectLabelGroupNames = useMemo(() => new Map(labelGroups.filter(group => group.resourceType === 'project').map(group => [group.id, group.name])), [labelGroups])
   const availableProjectStatuses = useMemo(() => projectStatuses.length ? projectStatuses : uniqueStatuses(projects.map(project => project.status)), [projectStatuses, projects])
   const statusOptions = useMemo(() => availableProjectStatuses.map((status, index) => ({ color: status.color, label: status.name, shortcut: String(index + 1), statusType: status.type, value: status.name })), [availableProjectStatuses])
   const propertyOptions: ProjectPropertyOptions = useMemo(() => ({
     lead: [{ label: 'No lead', shortcut: '0', value: '' }, ...users.filter(user => user.active).map(user => ({ avatarUrl: user.avatarUrl, group: 'Users from the project team', keywords: `${user.name} ${user.email}`, label: user.displayName, value: user.id }))],
     members: users.filter(user => user.active).map(user => ({ avatarUrl: user.avatarUrl, keywords: `${user.name} ${user.email}`, label: user.displayName, value: user.id })),
-    labels: labels.map(label => ({ color: label.color, label: label.name, value: label.id })),
+    labels: projectLabels.map(label => ({ color: label.color, group: label.groupId ? projectLabelGroupNames.get(label.groupId) : undefined, label: label.name, value: label.id })),
     status: statusOptions,
     targetDate: targetDateOptions(),
-  }), [labels, statusOptions, users])
+  }), [projectLabelGroupNames, projectLabels, statusOptions, users])
   const filterOptions = useMemo(() => projectFilterOptions(items, users, availableProjectStatuses), [availableProjectStatuses, items, users])
   const saveTargets = useMemo<SavedViewTarget[]>(() => [
     { scope: 'personal', label: 'Personal' },
     { scope: 'workspace', label: 'Workspace' },
     ...teams.map(team => ({ scope: 'team' as const, label: team.name, teamId: team.id })),
   ], [teams])
-  const initialSaveTarget = saveTargets.find(target => target.scope === (savedView?.scope ?? defaultSaveScope ?? (scopeTeamId ? 'team' : 'workspace')) && (target.scope !== 'team' || target.teamId === (savedView?.teamId ?? scopeTeamId))) ?? saveTargets[0]
+  const initialSaveTarget = saveTargets.find(target => target.scope === (sourceView?.scope ?? defaultSaveScope ?? (scopeTeamId ? 'team' : 'workspace')) && (target.scope !== 'team' || target.teamId === (sourceView?.teamId ?? scopeTeamId))) ?? saveTargets[0]
 
-  useEffect(() => setViewEditor(creatingView ? 'create' : undefined), [creatingView])
+  useEffect(() => setViewEditor(creatingView ? 'create' : editingView ? 'edit' : undefined), [creatingView, editingView])
   useEffect(() => {
     if (createOnMount) setCreateOpen(true)
   }, [createOnMount])
@@ -218,7 +238,7 @@ export function ProjectsPage({
     setViewSaving(true)
     try {
       if (viewEditor === 'edit' && savedView && onUpdateSavedView) {
-        await onUpdateSavedView(savedView.id, { name, description, ...visual })
+        await onUpdateSavedView(savedView.id, { ...savedViewSnapshot(), name, description, ...visual })
       } else if (onCreateSavedView) {
         const destination = target ?? initialSaveTarget
         const created = await onCreateSavedView({ ...savedViewSnapshot(), name, description, ...visual, scope: destination.scope, teamId: destination.scope === 'team' ? destination.teamId : '' })
@@ -226,6 +246,7 @@ export function ProjectsPage({
         onNavigateSavedView?.(created)
       }
       setViewEditor(undefined)
+      if (viewEditor === 'edit') onFinishEditSavedView?.()
     } catch {
       // App owns the request toast; keep the editor open so the user can retry.
     } finally {
@@ -331,18 +352,25 @@ export function ProjectsPage({
     sidebarOpen={sidebarOpen}
     viewActions={savedView && <SavedViewMenu
       view={savedView}
-      onEdit={() => setViewEditor('edit')}
-      onUpdate={() => { if (onUpdateSavedView) void onUpdateSavedView(savedView.id, savedViewSnapshot()) }}
+      users={users}
+      teams={teams}
+      subscriptionEvents={savedViewSubscription?.events?.length ? savedViewSubscription.events : savedViewSubscription || savedView.subscribed ? ['issue-added', 'issue-completed'] : []}
+      onEdit={() => { setViewEditor('edit'); onBeginEditSavedView?.() }}
+      onDuplicate={onDuplicateSavedView ? () => onDuplicateSavedView(savedView) : undefined}
+      onUpdate={onUpdateSavedView ? input => { void onUpdateSavedView(savedView.id, input) } : undefined}
+      onSetSubscriptionEvents={onSetSavedViewSubscriptionEvents ? events => { void onSetSavedViewSubscriptionEvents(savedView, events) } : undefined}
+      onCopy={() => { void navigator.clipboard.writeText(window.location.href) }}
+      onExport={() => exportProjectsCsv(visibleItems, savedView.name)}
       onDelete={() => { if (onDeleteSavedView && window.confirm(`Delete view "${savedView.name}"?`)) void onDeleteSavedView(savedView) }}
     />}
     viewEditor={viewEditor ? actions => <SavedViewEditor
       actions={creatingView ? undefined : actions}
       ariaLabel={viewEditor === 'edit' ? 'Edit project view' : 'New project view'}
-      initialName={viewEditor === 'edit' ? savedView?.name : ''}
+      initialName={viewEditor === 'edit' ? savedView?.name : duplicateFrom?.name ?? ''}
       namePlaceholder="All projects"
-      initialDescription={viewEditor === 'edit' ? savedView?.description : ''}
-      initialIcon={viewEditor === 'edit' ? savedView?.icon : undefined}
-      initialColor={viewEditor === 'edit' ? savedView?.color : undefined}
+      initialDescription={viewEditor === 'edit' ? savedView?.description : duplicateFrom?.description ?? ''}
+      initialIcon={viewEditor === 'edit' ? savedView?.icon : duplicateFrom?.icon}
+      initialColor={viewEditor === 'edit' ? savedView?.color : duplicateFrom?.color}
       initialTarget={initialSaveTarget}
       saveTargets={viewEditor === 'create' ? saveTargets : []}
       saving={viewSaving}
@@ -351,6 +379,8 @@ export function ProjectsPage({
         if (creatingView) {
           removeDraftFilters(draftFiltersKey)
           onNavigateAllViews?.()
+        } else if (viewEditor === 'edit') {
+          onFinishEditSavedView?.()
         }
       }}
       onSave={(name, description, target, visual) => { void saveView(name, description, target, visual) }}
@@ -398,7 +428,7 @@ export function ProjectsPage({
     <NewProjectDialog
       defaultStatus={createStatus}
       dependencies={projects.map(project => ({ id: project.id, label: project.name, color: project.color }))}
-      labels={labels.map(label => ({ id: label.id, label: label.name, color: label.color }))}
+      labels={projectLabels.map(label => ({ id: label.id, label: label.name, color: label.color, groupId: label.groupId, groupLabel: label.groupId ? projectLabelGroupNames.get(label.groupId) : undefined }))}
       leads={users.map(user => ({ id: user.id, label: user.displayName }))}
       members={users.map(user => ({ id: user.id, label: user.displayName }))}
       templates={projectTemplates.map(template => ({
@@ -412,7 +442,7 @@ export function ProjectsPage({
         status: availableProjectStatuses.find(status => status.id === template.statusId)?.name,
         priority: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][template.priority] ?? 'No priority',
         teamIds: template.teamIds,
-        labelIds: template.labelIds,
+        labelIds: template.labelIds.filter(id => projectLabels.some(label => label.id === id)),
       }))}
       onClose={() => setCreateOpen(false)}
       onCreate={create}
@@ -589,3 +619,4 @@ function readDraftFilters(key: string): ProjectFilter[] { try { const value = JS
 function writeDraftFilters(key: string, filters: ProjectFilter[]) { try { sessionStorage.setItem(key, JSON.stringify(filters)) } catch { /* best effort */ } }
 function removeDraftFilters(key: string) { try { sessionStorage.removeItem(key) } catch { /* best effort */ } }
 function bulkActionLabel(action: ProjectBulkAction) { const labels: Partial<Record<ProjectBulkAction, string>> = { edit: 'Project editing', initiatives: 'Initiatives', labels: 'Project labels', dependencies: 'Project dependencies', members: 'Project members', favorite: 'Favorites', subscribe: 'Subscriptions' }; return labels[action] ?? action }
+function exportProjectsCsv(projects: ProjectPageItem[], name: string) { const quote = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`; const csv = [['Name', 'Status', 'Health', 'Priority', 'Lead', 'Start date', 'Target date'], ...projects.map(project => [project.name, project.status, project.health, project.priority, project.lead?.name ?? '', project.rawStartDate ?? '', project.rawTargetDate ?? ''])].map(row => row.map(quote).join(',')).join('\n'); const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); const link = document.createElement('a'); link.href = url; link.download = `${name.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'view'}.csv`; link.click(); URL.revokeObjectURL(url) }

@@ -16,7 +16,7 @@ import { PRIORITY_LABELS } from './project-detail-types'
 
 type Props = ProjectDetailProps & { projectIssues: Issue[]; save: (input: ProjectMutationInput) => Promise<void> }
 
-export function ProjectOverview({ project, projects, projectStatuses, projectUpdates, users, teams, labels, projectIssues, save, onCreateResource, onUpdateResource, onDeleteResource, onTabChange }: Props) {
+export function ProjectOverview({ project, projects, projectStatuses, projectUpdates, users, teams, labels, labelGroups, projectIssues, save, onCreateResource, onUpdateResource, onDeleteResource, onTabChange }: Props) {
   const statuses = useMemo(() => uniqueById(projectStatuses.length ? projectStatuses : projects.map(item => item.status)), [projectStatuses, projects])
   const members = users.filter(user => (project.memberIds ?? []).includes(user.id))
   const projectTeams = teams.filter(team => (project.teamIds ?? []).includes(team.id))
@@ -37,7 +37,7 @@ export function ProjectOverview({ project, projects, projectStatuses, projectUpd
           <span aria-hidden="true" className="project-overview__date-arrow">→</span>
           <DateProperty label="Target date" placeholder="Target date" value={project.targetDate} onChange={targetDate => void save({ targetDate })}/>
           <button className="project-overview__team" disabled type="button"><TeamIcon size={14}/>{projectTeams.map(team => team.name).join(', ') || 'Team'}</button>
-          <ProjectMoreMenu labels={labels} project={project} projects={projects} save={save}/>
+          <ProjectMoreMenu labelGroups={labelGroups} labels={labels} project={project} projects={projects} save={save}/>
         </div>
       </div>
     </section>
@@ -104,18 +104,21 @@ function StringInputDialog({ label, onOpenChange, onSubmit, open }: { label: str
   return <Dialog.Root onOpenChange={onOpenChange} open={open}><Dialog.Portal><Dialog.Overlay className="project-detail-page__dialog-overlay"/><Dialog.Content aria-describedby={undefined} className="project-detail-page__form-dialog project-detail-page__string-dialog"><Dialog.Title>{label.replace('…','')}</Dialog.Title><input autoFocus aria-label={label} onChange={event => setValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && value.trim()) onSubmit(value.trim()) }} placeholder="Name" value={value}/><footer><Dialog.Close asChild><button type="button">Cancel</button></Dialog.Close><button className="is-primary" disabled={!value.trim()} onClick={() => onSubmit(value.trim())} type="button">Add</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
 }
 
-function ProjectMoreMenu({ labels, project, projects, save }: { labels: Props['labels']; project: Props['project']; projects: Props['projects']; save: Props['save'] }) {
+function ProjectMoreMenu({ labels, labelGroups, project, projects, save }: { labels: Props['labels']; labelGroups: Props['labelGroups']; project: Props['project']; projects: Props['projects']; save: Props['save'] }) {
   const initiativeNames = [...new Set(projects.flatMap(item => item.initiatives ?? []))]
+  const projectLabelIds = (project.labelIds ?? []).filter(id => labels.some(label => label.id === id))
+  const groupNames = new Map(labelGroups.filter(group => group.resourceType === 'project').map(group => [group.id, group.name]))
   return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="More project properties" className="project-overview__more" type="button">•••</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="start" className="project-detail-page__menu project-overview__more-menu" sideOffset={4}>
     <MultiSubmenu icon={<Flag size={14}/>} label="Initiatives" shortcut="P then N" options={initiativeNames.map(name => ({ id: name, label: name }))} selected={project.initiatives ?? []} onToggle={name => void save({ initiatives: toggleString(project.initiatives ?? [], name) })}/>
     <MultiSubmenu icon={<Link2 size={14}/>} label="Dependencies" options={projects.filter(item => item.id !== project.id).map(item => ({ id: item.id, label: item.name, color: item.color }))} selected={project.dependencyIds ?? []} onToggle={id => void save({ dependencyIds: toggleString(project.dependencyIds ?? [], id) })}/>
-    <MultiSubmenu icon={<LabelIcon size={14}/>} label="Labels" shortcut="P then L" options={labels.map(label => ({ id: label.id, label: label.name, color: label.color }))} selected={project.labelIds ?? []} onToggle={id => void save({ labelIds: toggleString(project.labelIds ?? [], id) })}/>
+    <MultiSubmenu icon={<LabelIcon size={14}/>} label="Labels" shortcut="P then L" options={labels.map(label => ({ id: label.id, label: label.name, color: label.color, groupId: label.groupId, groupLabel: label.groupId ? groupNames.get(label.groupId) : undefined }))} selected={projectLabelIds} onToggle={id => void save({ labelIds: toggleString(projectLabelIds, id) })}/>
     <DropdownMenu.Separator/><DropdownMenu.Item onSelect={() => toast.info('Slack integration is not connected in this workspace.')}><SlackIcon size={14}/><span>Connect existing Slack channel…</span></DropdownMenu.Item>
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 
-function MultiSubmenu({ icon, label, onToggle, options, selected, shortcut }: { icon: ReactNode; label: string; onToggle: (id: string) => void; options: { id: string; label: string; color?: string }[]; selected: string[]; shortcut?: string }) {
-  return <DropdownMenu.Sub><DropdownMenu.SubTrigger>{icon}<span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<ChevronRight size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="project-detail-page__menu project-overview__submenu" sideOffset={6}><DropdownMenu.Label>Change {label.toLowerCase()}…</DropdownMenu.Label>{options.length ? options.map(option => <DropdownMenu.CheckboxItem checked={selected.includes(option.id)} key={option.id} onCheckedChange={() => onToggle(option.id)} onSelect={event => event.preventDefault()}>{option.color && <i className="project-overview__option-dot" style={{ background: option.color }}/>}<span>{option.label}</span>{selected.includes(option.id) && <Check size={13}/>}</DropdownMenu.CheckboxItem>) : <DropdownMenu.Label>No options</DropdownMenu.Label>}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
+function MultiSubmenu({ icon, label, onToggle, options, selected, shortcut }: { icon: ReactNode; label: string; onToggle: (id: string) => void; options: { id: string; label: string; color?: string; groupId?: string; groupLabel?: string }[]; selected: string[]; shortcut?: string }) {
+  const sections = groupOptionSections(options)
+  return <DropdownMenu.Sub><DropdownMenu.SubTrigger>{icon}<span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<ChevronRight size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="project-detail-page__menu project-overview__submenu" sideOffset={6}><DropdownMenu.Label>Change {label.toLowerCase()}…</DropdownMenu.Label>{options.length ? sections.map(section => <DropdownMenu.Group key={section.id}>{section.label && <DropdownMenu.Label>{section.label}</DropdownMenu.Label>}{section.options.map(option => <DropdownMenu.CheckboxItem checked={selected.includes(option.id)} key={option.id} onCheckedChange={() => onToggle(option.id)} onSelect={event => event.preventDefault()}>{option.color && <i className="project-overview__option-dot" style={{ background: option.color }}/>}<span>{option.label}</span>{selected.includes(option.id) && <Check size={13}/>}</DropdownMenu.CheckboxItem>)}</DropdownMenu.Group>) : <DropdownMenu.Label>No options</DropdownMenu.Label>}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
 }
 
 function InitiativeSection({ project, projects, save }: { project: Props['project']; projects: Props['projects']; save: Props['save'] }) {
@@ -140,3 +143,18 @@ function EditableText({ ariaLabel, className, multiline, onCommit, placeholder, 
 
 function uniqueById<T extends { id: string }>(items: T[]) { return [...new Map(items.map(item => [item.id, item])).values()] }
 function toggleString(values: string[], value: string) { return values.includes(value) ? values.filter(item => item !== value) : [...values, value] }
+function groupOptionSections<T extends { id: string; groupId?: string; groupLabel?: string }>(options: T[]) {
+  const sections: { id: string; label?: string; options: T[] }[] = []
+  const indexes = new Map<string, number>()
+  for (const option of options) {
+    const id = option.groupId || option.groupLabel || 'ungrouped'
+    let index = indexes.get(id)
+    if (index === undefined) {
+      index = sections.length
+      indexes.set(id, index)
+      sections.push({ id, label: id === 'ungrouped' ? undefined : option.groupLabel, options: [] })
+    }
+    sections[index].options.push(option)
+  }
+  return sections
+}
