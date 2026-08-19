@@ -24,7 +24,7 @@
 .targetItem[data-highlighted]:before,.menuItem[data-highlighted]:before{background:var(--theme-surface-hover)}
 .targetItem>svg,.menuItem>svg{width:16px;height:16px;flex:0 0 16px;color:var(--theme-text-secondary)}
 .targetCheck{width:16px;display:grid;place-items:center}
-.menuTrigger{width:28px;height:28px;display:grid;place-items:center;padding:0;border:1px solid transparent;border-radius:9999px;background:var(--theme-surface-1);color:var(--muted);outline:0}
+.menuTrigger{width:28px;height:28px;display:grid;place-items:center;padding:0;border:1px solid transparent;border-radius:9999px;background:transparent;color:var(--muted);outline:0}
 .menuTrigger:hover,.menuTrigger:focus-visible,.menuTrigger[data-state=open]{background:var(--theme-surface-hover);color:var(--text)}
 .menuItem[data-danger]{color:#e5484d}
 .menuItem[data-danger]>svg{color:currentColor}

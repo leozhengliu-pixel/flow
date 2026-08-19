@@ -351,7 +351,7 @@ func zentaoDemoSeed() domain.Bootstrap {
 	}
 	demandView := viewFilter("label_type_requirement", "原始需求", "#5E6AD2")
 	taskView := viewFilter("label_type_development", "开发任务", "#4AA3F7")
-	issueDisplay := json.RawMessage(`{"layout":"list","ordering":"updatedAt","direction":"desc","grouping":"status","properties":["id","status","priority","assignee","labels","project"]}`)
+	issueDisplay := json.RawMessage(`{"layout":"list","grouping":"status","groupOrder":"asc","subGrouping":"none","ordering":"priority","completedWindow":"all","orderCompletedByRecency":false,"showSubIssues":true,"showEmptyGroups":false,"nestedSubIssues":false,"properties":["id","status","priority","assignee","labels","project","created"]}`)
 	savedViews := []domain.SavedView{
 		{ID: "view_strategy", Name: "原始需求", Description: "从待承接到已交付的原始需求", Icon: "Target", Color: "#5E6AD2", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, Favorite: true, View: "all", Filters: demandView, Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -8), UpdatedAt: now},
 		{ID: "view_business", Name: "待实施需求", Description: "通过状态筛选查看已承接并等待实施的需求", Icon: "MessageCircleQuestion", Color: "#5E6AD2", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, Favorite: true, View: "all", Filters: demandView, Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -8), UpdatedAt: now},

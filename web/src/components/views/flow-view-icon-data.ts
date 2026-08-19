@@ -296,4 +296,13 @@ export const FLOW_VIEW_ICON_NAMES = [
   "Team"
 ] as const
 export const FLOW_CORE_ICON_NAMES = new Set(["Attachment","Blockquote","Calendar","Checklist","CodeBlock","Comment","CreditCard","CustomView","Favorite","Folder","Home","Inbox","Initiative","IssueStatusBacklog","IssueStatusDone","IssueStatusReview","IssueStatusStarted","IssueStatusTodo","IssueStatusTriage","Label","Link","Lock","MilestoneNone","MilestoneStatusDone","MilestoneStatusPlanned","MilestoneStatusStarted","MyIssues","Project","Refresh","Search","Send","Subscribe","Team"])
-export const FLOW_VIEW_ICON_ALIASES: Record<string, string> = { Cookie: 'Biscuit' }
+export const FLOW_VIEW_ICON_ALIASES: Record<string, string> = {
+  Cookie: 'Biscuit',
+  Target: 'Favorite',
+  MessageCircleQuestion: 'Chat',
+  FileText: 'Page',
+  Code2: 'CodeBlock',
+  ClipboardCheck: 'Checklist',
+  ChartNoAxesCombined: 'BarChart',
+  LayoutDashboard: 'CustomView',
+}
