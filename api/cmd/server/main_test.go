@@ -848,17 +848,18 @@ func TestIssueBoardOrderAndSavedViewLifecycle(t *testing.T) {
 	created := requestJSON[domain.SavedView](t, handler, http.MethodPost, "/api/views", map[string]any{
 		"name": "Board triage", "description": "Urgent work", "resource": "projects", "scope": "team", "teamId": "team_cleantrack", "view": "active",
 		"icon": "Rocket", "color": "#26b5ce",
-		"filters": []any{map[string]any{"field": "priority", "values": []any{map[string]any{"id": "1", "label": "Urgent"}}}},
-		"display": map[string]any{"layout": "board", "grouping": "status", "properties": []string{"id", "priority"}},
+		"filters":  []any{map[string]any{"field": "priority", "values": []any{map[string]any{"id": "1", "label": "Urgent"}}}},
+		"display":  map[string]any{"layout": "board", "grouping": "status", "properties": []string{"id", "priority"}},
+		"insights": map[string]any{"measure": "issueCount", "slice": "status", "segment": "priority"},
 	}, http.StatusCreated)
-	if created.ID == "" || created.Resource != "projects" || created.Scope != "team" || created.View != "active" || created.Icon != "Rocket" || created.Color != "#26b5ce" || string(created.Filters) == "[]" || string(created.Display) == "{}" {
+	if created.ID == "" || created.Resource != "projects" || created.Scope != "team" || created.View != "active" || created.Icon != "Rocket" || created.Color != "#26b5ce" || string(created.Filters) == "[]" || string(created.Display) == "{}" || string(created.Insights) == "{}" {
 		t.Fatalf("saved view create = %#v", created)
 	}
 	updatedView := requestJSON[domain.SavedView](t, handler, http.MethodPatch, "/api/views/"+created.ID, map[string]any{
 		"name": "Board triage updated", "description": "Current urgent work", "scope": "personal", "teamId": "", "ownerId": "usr_jiaozongben", "favorite": true, "subscribed": true,
-		"icon": "Face", "color": "#eb5757",
+		"icon": "Face", "color": "#eb5757", "insights": map[string]any{"measure": "issueCount", "slice": "project", "segment": "none"},
 	}, http.StatusOK)
-	if updatedView.Name != "Board triage updated" || updatedView.Description != "Current urgent work" || updatedView.Icon != "Face" || updatedView.Color != "#eb5757" || updatedView.Scope != "personal" || updatedView.TeamID != "" || updatedView.OwnerID != "usr_jiaozongben" || !updatedView.Favorite || !updatedView.Subscribed || string(updatedView.Display) != string(created.Display) {
+	if updatedView.Name != "Board triage updated" || updatedView.Description != "Current urgent work" || updatedView.Icon != "Face" || updatedView.Color != "#eb5757" || updatedView.Scope != "personal" || updatedView.TeamID != "" || updatedView.OwnerID != "usr_jiaozongben" || !updatedView.Favorite || !updatedView.Subscribed || string(updatedView.Display) != string(created.Display) || string(updatedView.Insights) == string(created.Insights) {
 		t.Fatalf("saved view update = %#v", updatedView)
 	}
 	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
@@ -875,7 +876,9 @@ func TestIssueBoardOrderAndSavedViewLifecycle(t *testing.T) {
 	if slices.ContainsFunc(bootstrap.Favorites, func(item domain.Favorite) bool { return item.ResourceType == "view" && item.ResourceID == created.ID }) {
 		t.Fatalf("deleted view favorite remains = %#v", bootstrap.Favorites)
 	}
-	if slices.ContainsFunc(bootstrap.Subscriptions, func(item domain.Subscription) bool { return item.ResourceType == "view" && item.ResourceID == created.ID }) {
+	if slices.ContainsFunc(bootstrap.Subscriptions, func(item domain.Subscription) bool {
+		return item.ResourceType == "view" && item.ResourceID == created.ID
+	}) {
 		t.Fatalf("deleted view subscription remains = %#v", bootstrap.Subscriptions)
 	}
 	events := requestJSON[[]domain.DomainEvent](t, handler, http.MethodGet, "/api/events?aggregateId="+created.ID, nil, http.StatusOK)

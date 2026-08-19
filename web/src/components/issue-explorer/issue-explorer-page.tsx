@@ -12,6 +12,7 @@ import { toggleFilterOption, updateFilterOperator, updateFilterValues } from '@/
 import { IssueExplorerSurface } from './issue-explorer-surface'
 import { IssueBoard } from './issue-board'
 import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from './saved-view-editor'
+import { SavedViewDetailsPanel, SavedViewInsightsPanel, type SavedViewInsightsConfig } from './saved-view-panels'
 import type { ViewVisual } from '@/components/views/view-icon-picker'
 import {
   ISSUE_FILTER_LABELS, applyExplorerFilters, executeExplorerBulkAction, explorerBulkOptions, explorerFilterOptions,
@@ -59,7 +60,8 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
   const sourceView = savedView ?? duplicateFrom
   const [filters, setFilters] = useState<MyIssuesAppliedFilter[]>(() => sourceView ? filtersFromSavedView(sourceView) : initialLabelFilter(data, initialLabelId) ?? readFilters(`${preferencesKey}:filters`))
   const [display, setDisplay] = useState<MyIssuesDisplayOptions>(() => sourceView ? displayFromSavedView(sourceView, view) : readDisplay(`${preferencesKey}:display`, view))
-  const [detailsOpen, setDetailsOpen] = useState(() => savedView ? true : readBoolean(`${data.workspace.urlKey}:issue-explorer:${storageScope}:details`, false))
+  const [detailsOpen, setDetailsOpen] = useState(() => readBoolean(`${data.workspace.urlKey}:issue-explorer:${storageScope}:details`, false))
+  const [insightsOpen, setInsightsOpen] = useState(false)
   const [detailsWidth, setDetailsWidth] = useState(350)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [filterOpenSignal, setFilterOpenSignal] = useState(0)
@@ -78,10 +80,12 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
   const savedViewSubscriptionEvents = savedViewSubscription?.events?.length ? savedViewSubscription.events : savedViewSubscribed ? ['issue-added', 'issue-completed'] : []
 
   const scopedIssues = useMemo(() => issuesForScope(data.issues, scope, view), [data.issues, scope, view])
+  const insightIssues = useMemo(() => issuesForScope(data.issues, scope, view, true), [data.issues, scope, view])
   const issuesById = useMemo(() => new Map(data.issues.map(issue => [issue.id, issue])), [data.issues])
   const rowOptions = useMemo(() => explorerPropertyOptions(data, scopedIssues), [data, scopedIssues])
   const visibleIssues = useMemo(() => applyExplorerFilters(scopedIssues, filters), [filters, scopedIssues])
   const rows = useMemo(() => visibleIssues.map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey)), [data.workspace.urlKey, rowOverrides, visibleIssues])
+  const insightRows = useMemo(() => applyExplorerFilters(insightIssues, filters).map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey)), [data.workspace.urlKey, filters, insightIssues, rowOverrides])
   const groups = useMemo(() => projectGroups(rows, display, data, view, manualOrder), [data, display, manualOrder, rows, view])
   const selection = useMyIssuesSelection(groups)
   const summary = useMemo(() => deriveSummary(groups), [groups])
@@ -117,7 +121,8 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
 
   const persistFilters = (next: MyIssuesAppliedFilter[]) => { setFilters(next); writeValue(`${preferencesKey}:filters`, JSON.stringify(next)) }
   const changeDisplay = (next: MyIssuesDisplayOptions) => { setDisplay(next); writeValue(`${preferencesKey}:display`, JSON.stringify({ ...next, properties: [...next.properties] })) }
-  const changeDetails = (open: boolean) => { setDetailsOpen(open); writeValue(`${data.workspace.urlKey}:issue-explorer:${storageScope}:details`, String(open)) }
+  const changeDetails = (open: boolean) => { setDetailsOpen(open); if (open) setInsightsOpen(false); writeValue(`${data.workspace.urlKey}:issue-explorer:${storageScope}:details`, String(open)) }
+  const changeInsights = (open: boolean) => { setInsightsOpen(open); if (open) { setDetailsOpen(false); setPreviewIssueId(undefined) } }
   const openIssueFromExplorer = (row: MyIssuesRowData) => {
     const issue = issuesById.get(row.id)
     if (!issue) return
@@ -199,6 +204,19 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
       if (viewEditor === 'edit') onFinishEditSavedView?.()
     } finally { setViewSaving(false) }
   }
+  const savedViewMenu = savedView && <SavedViewMenu
+    view={savedView}
+    users={data.users}
+    teams={data.teams}
+    subscriptionEvents={savedViewSubscriptionEvents}
+    onEdit={() => { setViewEditor('edit'); onBeginEditSavedView?.() }}
+    onDuplicate={onDuplicateSavedView ? () => onDuplicateSavedView(savedView) : undefined}
+    onUpdate={onUpdateSavedView ? input => { void onUpdateSavedView(savedView.id, input) } : undefined}
+    onSetSubscriptionEvents={onSetSavedViewSubscriptionEvents ? events => { void onSetSavedViewSubscriptionEvents(savedView, events) } : undefined}
+    onCopy={() => { void navigator.clipboard.writeText(window.location.href) }}
+    onExport={() => exportIssuesCsv(rows, savedView.name)}
+    onDelete={() => { if (onDeleteSavedView && window.confirm(`Delete view "${savedView.name}"?`)) void onDeleteSavedView(savedView) }}
+  />
 
   return <>
     <IssueExplorerSurface
@@ -214,30 +232,20 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
       filters={filters}
       displayOptions={display}
       detailsOpen={detailsOpen}
+      insightsOpen={insightsOpen}
       itemCount={rows.length}
       filterOpenSignal={filterOpenSignal}
       filterOptions={field => explorerFilterOptions(field, rowOptions)}
       onFilterToggle={addFilter}
       onDisplayOptionsChange={changeDisplay}
       onDetailsOpenChange={changeDetails}
+      onInsightsOpenChange={changeInsights}
       onNavigateView={onNavigateView}
       onNewViewResourceChange={onNewViewResourceChange}
       onAddView={() => setViewEditor('create')}
       onSavedViewSelect={onNavigateSavedView}
       onToggleFavorite={() => { if (savedView && onToggleSavedViewFavorite) void onToggleSavedViewFavorite(savedView) }}
-      viewActions={savedView && <SavedViewMenu
-        view={savedView}
-        users={data.users}
-        teams={data.teams}
-        subscriptionEvents={savedViewSubscriptionEvents}
-        onEdit={() => { setViewEditor('edit'); onBeginEditSavedView?.() }}
-        onDuplicate={onDuplicateSavedView ? () => onDuplicateSavedView(savedView) : undefined}
-        onUpdate={onUpdateSavedView ? input => { void onUpdateSavedView(savedView.id, input) } : undefined}
-        onSetSubscriptionEvents={onSetSavedViewSubscriptionEvents ? events => { void onSetSavedViewSubscriptionEvents(savedView, events) } : undefined}
-        onCopy={() => { void navigator.clipboard.writeText(window.location.href) }}
-        onExport={() => exportIssuesCsv(rows, savedView.name)}
-        onDelete={() => { if (onDeleteSavedView && window.confirm(`Delete view "${savedView.name}"?`)) void onDeleteSavedView(savedView) }}
-      />}
+      viewActions={savedViewMenu}
       onOpenSidebar={onOpenSidebar}
       viewEditor={viewEditor && <SavedViewEditor
         initialName={viewEditor === 'edit' ? savedView?.name : duplicateFrom?.name ?? ''}
@@ -251,7 +259,8 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
         onCancel={() => { setViewEditor(undefined); if (creatingView) onCancelCreateSavedView?.(); else if (viewEditor === 'edit') onFinishEditSavedView?.() }}
         onSave={(name, description, target, visual) => { void saveViewEditor(name, description, target, visual) }}
       />}
-      filterBar={<MyIssuesFilterBar filters={filters} filterOptions={filter => explorerFilterOptions(filter.field, rowOptions)} onAdd={() => setFilterOpenSignal(value => value + 1)} onClear={() => persistFilters([])} onOperatorChange={(id, operator) => persistFilters(updateFilterOperator(filters, id, operator))} onRemove={id => persistFilters(filters.filter(filter => filter.id !== id))} onValuesChange={(id, options) => persistFilters(updateFilterValues(filters, id, options))}/>}>
+      filterBar={(!savedView || viewEditor) && <MyIssuesFilterBar filters={filters} filterOptions={filter => explorerFilterOptions(filter.field, rowOptions)} onAdd={() => setFilterOpenSignal(value => value + 1)} onClear={() => persistFilters([])} onOperatorChange={(id, operator) => persistFilters(updateFilterOperator(filters, id, operator))} onRemove={id => persistFilters(filters.filter(filter => filter.id !== id))} onValuesChange={(id, options) => persistFilters(updateFilterValues(filters, id, options))}/>}
+    >
       {display.layout === 'list' ? <MyIssuesList
         groups={groups}
         selectedIds={selection.selectedIds}
@@ -268,7 +277,35 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
         onSelectIssue={selection.selectIssue}
         onContextAction={(row, action) => { void contextAction(row, action) }}
       /> : <IssueBoard groups={groups} properties={display.properties} selectedIds={selection.selectedIds} onCreateIssue={group => onCreateIssue?.(stateIdForExplorerGroup(group, data))} onMove={moveIssue} onOpenIssue={openIssueFromExplorer} onSelectIssue={selection.selectIssue}/>}
-      <MyIssuesDetailsPane open={detailsOpen} width={detailsWidth} onWidthChange={setDetailsWidth} onClose={() => { if (previewIssueId) setPreviewIssueId(undefined); else changeDetails(false) }} selectedIssue={previewIssue ? issueToExplorerRow(previewIssue, data.workspace.urlKey) : undefined} previewContent={previewIssue && renderIssuePreview ? renderIssuePreview(previewIssue, () => setPreviewIssueId(undefined)) : undefined} summary={summary} onSummaryItemSelect={summaryFilter}/>
+      {(!savedView || previewIssue) && <MyIssuesDetailsPane
+        open={detailsOpen}
+        width={detailsWidth}
+        onWidthChange={setDetailsWidth}
+        onClose={() => { if (previewIssueId) setPreviewIssueId(undefined); else changeDetails(false) }}
+        selectedIssue={previewIssue ? issueToExplorerRow(previewIssue, data.workspace.urlKey) : undefined}
+        previewContent={previewIssue && renderIssuePreview ? renderIssuePreview(previewIssue, () => setPreviewIssueId(undefined)) : undefined}
+        summary={summary}
+        onSummaryItemSelect={summaryFilter}
+      />}
+      {savedView && detailsOpen && !previewIssue && <SavedViewDetailsPanel
+        favorite={savedViewFavorite}
+        menu={savedViewMenu}
+        onClose={() => changeDetails(false)}
+        onSummaryItemSelect={(dimension, id, label, color) => addFilter(dimension === 'assignee' ? 'assignee' : dimension === 'project' ? 'project' : 'labels', { id, label, color })}
+        onToggleFavorite={() => { if (onToggleSavedViewFavorite) void onToggleSavedViewFavorite(savedView) }}
+        rows={rows}
+        team={data.teams.find(team => team.id === savedView.teamId)}
+        users={data.users}
+        view={savedView}
+        workspace={data.workspace}
+      />}
+      {savedView && insightsOpen && <SavedViewInsightsPanel
+        allRows={insightRows}
+        onClose={() => changeInsights(false)}
+        onSave={async (config: SavedViewInsightsConfig) => { if (onUpdateSavedView) await onUpdateSavedView(savedView.id, { insights: config as unknown as Record<string, unknown> }) }}
+        rows={rows}
+        view={savedView}
+      />}
     </IssueExplorerSurface>
     <MyIssuesBulkActionBar selectedIssues={selection.selectedIssues} actionOptions={action => explorerBulkOptions(action, rowOptions)} onAction={(action, _issues, value) => { void executeExplorerBulkAction({ action, ids: selection.selectedIssues.map(issue => issue.id), value, data, issuesById, onUpdateIssue, onUpdateIssues }).then(() => selection.clearSelection()) }} onClear={selection.clearSelection}/>
   </>
@@ -286,8 +323,8 @@ function exportIssuesCsv(rows: MyIssuesRowData[], name: string) {
   URL.revokeObjectURL(url)
 }
 
-function issuesForScope(issues: Issue[], scope: IssueExplorerPageProps['scope'], view: TeamIssuesRouteView) {
-  return issues.filter(issue => !issue.archivedAt && (scope.kind === 'workspace' || issue.team.id === scope.team.id) && (view === 'all' || (view === 'backlog' ? issue.state.type === 'backlog' : issue.state.type === 'unstarted' || issue.state.type === 'started')))
+function issuesForScope(issues: Issue[], scope: IssueExplorerPageProps['scope'], view: TeamIssuesRouteView, includeArchived = false) {
+  return issues.filter(issue => (includeArchived || !issue.archivedAt) && (scope.kind === 'workspace' || issue.team.id === scope.team.id) && (view === 'all' || (view === 'backlog' ? issue.state.type === 'backlog' : issue.state.type === 'unstarted' || issue.state.type === 'started')))
 }
 
 function projectGroups(issues: MyIssuesRowData[], display: MyIssuesDisplayOptions, data: BootstrapData, view: TeamIssuesRouteView, manualOrder: string[]): MyIssuesGroupData[] {
