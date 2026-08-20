@@ -26,6 +26,7 @@ import "./workflow-settings.css";
 import "./advanced-settings.css";
 import { applyTheme } from "@/lib/theme";
 import { PersonalSettings } from "./personal-settings";
+import { PipelineEditorPage } from "@/components/releases/pipeline-editor-page";
 
 type StoredSettings = {
   values: Record<string, string | boolean>;
@@ -38,8 +39,10 @@ type SettingsPageProps = {
   page: SettingsPageId;
   teamKey?: string;
   teamSection?: TeamSettingsSection;
+  releasePipelineMode?: "new";
   onBack: () => void;
   onNavigate: (page: SettingsPageId, teamKey?: string, teamSection?: TeamSettingsSection) => void;
+  onCreateReleasePipeline: () => void;
   onCreateTeam: () => void;
   onWorkspaceUpdate: (input: WorkspaceMutationInput) => Promise<void>;
   onWorkspaceDelete: () => Promise<void>;
@@ -165,9 +168,10 @@ function SettingsBody(props: SettingsPageProps & { settings: StoredSettings; set
   if (page === "billing") return <BillingPage data={props.data} onReload={props.onReload}/>;
   if (page === "usage") return <UsagePage data={props.data}/>;
   if (page === "import-export") return <ImportExportSettings data={props.data} onReload={props.onReload}/>;
+  if (page === "releases" && props.releasePipelineMode === "new") return <PipelineEditorPage data={props.data} onCancel={() => props.onNavigate("releases")} onCreated={async () => { await props.onReload(); props.onNavigate("releases"); }}/>;
   if (page === "team") { const team = props.data.teams.find(team => team.key.toLowerCase() === props.teamKey?.toLowerCase()); return team ? <TeamWorkflowSettings data={props.data} team={team} section={props.teamSection ?? "overview"} onNavigate={section => props.onNavigate("team", team.key, section)} onReload={props.onReload}/> : <div className="settings-empty"><h3>Team not found</h3></div> }
   if (page === "security") return <SecurityPage data={props.data} onReload={props.onReload}/>;
-  if (["ai","initiatives","documents","customer-requests","releases","pulse","asks","emojis","integrations"].includes(page)) return <FeatureSettingsPage page={page as "ai"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations"} data={props.data} onReload={props.onReload}/>;
+  if (["ai","initiatives","documents","customer-requests","releases","pulse","asks","emojis","integrations"].includes(page)) return <FeatureSettingsPage page={page as "ai"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations"} data={props.data} onCreateReleasePipeline={props.onCreateReleasePipeline} onReload={props.onReload}/>;
   return <FeaturePage page={page} data={props.data} onReload={props.onReload}/>;
 }
 
