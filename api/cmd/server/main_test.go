@@ -570,10 +570,18 @@ func TestProjectLifecycle(t *testing.T) {
 
 	updated := requestJSON[domain.Project](t, handler, http.MethodPatch, "/api/projects/"+created.ID, map[string]any{
 		"name": "Updated project", "health": "atRisk", "targetDate": "2026-09-30", "statusId": "ps_planned",
-		"memberIds": []string{"usr_zheng", "usr_jiaozongben"}, "labelIds": []string{"label_delivery"},
+		"memberIds": []string{"usr_zheng", "usr_jiaozongben"}, "labelIds": []string{"label_delivery"}, "description": "First project description", "updateCadence": "weekly",
 	}, http.StatusOK)
 	if updated.Name != "Updated project" || updated.Health != "atRisk" || updated.Status.ID != "ps_planned" || updated.TargetDate == nil || *updated.TargetDate != "2026-09-30" || !slices.Equal(updated.MemberIDs, []string{"usr_zheng", "usr_jiaozongben"}) || !slices.Equal(updated.LabelIDs, []string{"label_delivery"}) {
 		t.Fatalf("project update failed: %#v", updated)
+	}
+	updated = requestJSON[domain.Project](t, handler, http.MethodPatch, "/api/projects/"+created.ID, map[string]any{"description": "Second project description"}, http.StatusOK)
+	if updated.UpdateCadence != "weekly" || len(updated.DescriptionRevisions) < 1 || updated.DescriptionRevisions[0].Description != "First project description" {
+		t.Fatalf("project cadence or description history was not persisted: %#v", updated)
+	}
+	reminder := requestJSON[domain.Notification](t, handler, http.MethodPost, "/api/projects/"+created.ID+"/reminders", map[string]any{"remindAt": time.Now().UTC().Add(time.Hour).Format(time.RFC3339)}, http.StatusCreated)
+	if reminder.ProjectID != created.ID || reminder.Type != "projectReminder" || reminder.SnoozedUntil == nil {
+		t.Fatalf("project reminder was not created: %#v", reminder)
 	}
 	requestJSON[any](t, handler, http.MethodPatch, "/api/projects/"+created.ID, map[string]any{"labelIds": []string{"label_type_defect"}}, http.StatusBadRequest)
 	requestJSON[any](t, handler, http.MethodPatch, "/api/issues/issue_33", map[string]any{"labelIds": []string{"label_product"}}, http.StatusBadRequest)
@@ -585,25 +593,33 @@ func TestProjectLifecycle(t *testing.T) {
 		t.Fatalf("project resource create failed: %#v", resource)
 	}
 	resource = requestJSON[domain.ProjectResource](t, handler, http.MethodPatch, "/api/projects/"+created.ID+"/resources/"+resource.ID, map[string]any{
-		"title": "Edited brief", "url": "https://example.com/edited",
+		"title": "Edited brief", "url": "https://example.com/edited", "pinnedTeamIds": []string{"team_cleantrack"},
 	}, http.StatusOK)
-	if resource.Title != "Edited brief" || resource.URL != "https://example.com/edited" {
+	if resource.Title != "Edited brief" || resource.URL != "https://example.com/edited" || !slices.Equal(resource.PinnedTeamIDs, []string{"team_cleantrack"}) {
 		t.Fatalf("project resource update failed: %#v", resource)
 	}
+	requestJSON[any](t, handler, http.MethodPatch, "/api/projects/"+created.ID+"/resources/"+resource.ID, map[string]any{"pinnedTeamIds": []string{"missing-team"}}, http.StatusBadRequest)
 	requestJSON[any](t, handler, http.MethodDelete, "/api/projects/"+created.ID+"/resources/"+resource.ID, nil, http.StatusNoContent)
 
 	milestone := requestJSON[domain.ProjectMilestone](t, handler, http.MethodPost, "/api/projects/"+created.ID+"/milestones", map[string]any{
-		"name": "Public beta", "targetDate": "2026-08-30",
+		"name": "Public beta", "description": "Invite the first customer cohort.", "targetDate": "2026-08-30",
 	}, http.StatusCreated)
-	if milestone.ID == "" || milestone.ProjectID != created.ID || milestone.TargetDate == nil || *milestone.TargetDate != "2026-08-30" {
+	if milestone.ID == "" || milestone.ProjectID != created.ID || milestone.Description != "Invite the first customer cohort." || milestone.TargetDate == nil || *milestone.TargetDate != "2026-08-30" {
 		t.Fatalf("project milestone create failed: %#v", milestone)
 	}
 	milestone = requestJSON[domain.ProjectMilestone](t, handler, http.MethodPatch, "/api/projects/"+created.ID+"/milestones/"+milestone.ID, map[string]any{
-		"name": "General availability", "targetDate": "2026-09-15",
+		"name": "General availability", "description": "Launch to every workspace.", "targetDate": "2026-09-15",
 	}, http.StatusOK)
-	if milestone.Name != "General availability" || milestone.TargetDate == nil || *milestone.TargetDate != "2026-09-15" {
+	if milestone.Name != "General availability" || milestone.Description != "Launch to every workspace." || milestone.TargetDate == nil || *milestone.TargetDate != "2026-09-15" {
 		t.Fatalf("project milestone update failed: %#v", milestone)
 	}
+	milestoneIssue := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{
+		"title": "Milestone-scoped work", "projectId": created.ID, "projectMilestoneId": milestone.ID,
+	}, http.StatusCreated)
+	if milestoneIssue.ProjectMilestoneID == nil || *milestoneIssue.ProjectMilestoneID != milestone.ID {
+		t.Fatalf("issue milestone assignment failed: %#v", milestoneIssue)
+	}
+	requestJSON[any](t, handler, http.MethodPatch, "/api/issues/issue_33", map[string]any{"projectMilestoneId": milestone.ID}, http.StatusBadRequest)
 	secondMilestone := requestJSON[domain.ProjectMilestone](t, handler, http.MethodPost, "/api/projects/"+created.ID+"/milestones", map[string]any{
 		"name": "Public launch", "targetDate": "2026-10-01",
 	}, http.StatusCreated)
@@ -614,6 +630,10 @@ func TestProjectLifecycle(t *testing.T) {
 		t.Fatalf("project milestone reorder failed: %#v", reordered)
 	}
 	requestJSON[any](t, handler, http.MethodDelete, "/api/projects/"+created.ID+"/milestones/"+milestone.ID, nil, http.StatusNoContent)
+	bootstrapAfterMilestoneDelete := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if assigned := findIssue(t, bootstrapAfterMilestoneDelete.Issues, milestoneIssue.ID).ProjectMilestoneID; assigned != nil {
+		t.Fatalf("deleted milestone remained assigned to issue: %q", *assigned)
+	}
 	requestJSON[any](t, handler, http.MethodDelete, "/api/projects/"+created.ID+"/milestones/"+secondMilestone.ID, nil, http.StatusNoContent)
 
 	comment := requestJSON[domain.Comment](t, handler, http.MethodPost, "/api/projects/"+created.ID+"/comments", map[string]any{
@@ -688,7 +708,7 @@ func TestProjectLifecycle(t *testing.T) {
 		}
 	}
 	events := requestJSON[[]domain.DomainEvent](t, handler, http.MethodGet, "/api/events?aggregateId="+created.ID, nil, http.StatusOK)
-	expectedEvents := []string{"project.created", "project.updated", "project.resource_created", "project.resource_updated", "project.resource_deleted", "project.milestone_created", "project.milestone_updated", "project.milestone_created", "project.milestones_reordered", "project.milestone_deleted", "project.milestone_deleted", "project.commented", "project.update_created", "project.update_updated", "project.update_commented", "project.update_reaction_toggled", "project.update_deleted", "project.deleted"}
+	expectedEvents := []string{"project.created", "project.updated", "project.updated", "project.reminder_created", "project.resource_created", "project.resource_updated", "project.resource_deleted", "project.milestone_created", "project.milestone_updated", "project.milestone_created", "project.milestones_reordered", "project.milestone_deleted", "project.milestone_deleted", "project.commented", "project.update_created", "project.update_updated", "project.update_commented", "project.update_reaction_toggled", "project.update_deleted", "project.deleted"}
 	if len(events) != len(expectedEvents) {
 		t.Fatalf("project events = %#v", events)
 	}

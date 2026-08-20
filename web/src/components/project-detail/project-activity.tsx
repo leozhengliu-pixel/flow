@@ -11,7 +11,7 @@ import type { Comment, Project, ProjectUpdate } from '@/types/flow'
 import type { ProjectDetailProps } from './project-detail-types'
 import { PROJECT_HEALTHS } from './project-detail-types'
 
-export function ProjectActivity({ project, projectUpdates, viewer, onCommentProject, onCommentProjectUpdate, onCreateUpdate, onDeleteUpdate, onReactProjectUpdate, onUpdateProjectUpdate }: ProjectDetailProps) {
+export function ProjectActivity({ activities, project, projectUpdates, viewer, onCommentProject, onCommentProjectUpdate, onCreateUpdate, onDeleteUpdate, onReactProjectUpdate, onUpdateProjectUpdate }: ProjectDetailProps) {
   const [composerMode, setComposerMode] = useState<'comment'|'update'>('update')
   const [body, setBody] = useState('')
   const [health, setHealth] = useState<Project['health']>(project.health === 'noUpdate' ? 'onTrack' : project.health)
@@ -22,7 +22,7 @@ export function ProjectActivity({ project, projectUpdates, viewer, onCommentProj
     ...projectUpdates.map(update => ({ type: 'update' as const, createdAt: update.createdAt, update })),
     ...(project.comments ?? []).map(comment => ({ type: 'comment' as const, createdAt: comment.createdAt, comment })),
   ].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)), [project.comments, projectUpdates])
-  const propertyEvents = useMemo(() => buildProjectEvents(project, viewer.displayName), [project, viewer.displayName])
+  const propertyEvents = useMemo(() => buildProjectEvents(activities), [activities])
 
   const submit = async () => {
     if (!body.trim() || saving) return
@@ -44,7 +44,7 @@ export function ProjectActivity({ project, projectUpdates, viewer, onCommentProj
         {project.lead && <div><span>Lead</span><div><Avatar name={project.lead.displayName}/><strong>{project.lead.displayName} assigned</strong></div></div>}
         {project.startDate && <div><span>Start date</span><div><strong>set to {format(new Date(`${project.startDate}T00:00:00`), 'MMM do')}</strong></div></div>}
       </div>}
-      <footer>{composerMode === 'update' ? <button onClick={() => toast.info('Agent drafting will be connected with the Agent module.')} type="button"><Bot size={13}/>Write with Agent</button> : <span/>}<div><button aria-label="Attach images, files, or videos" onClick={() => toast.info('Project attachments are not connected yet.')} type="button"><Paperclip size={13}/></button><button className="is-submit" disabled={!body.trim() || saving} onClick={() => void submit()} type="button">{saving ? 'Posting…' : composerMode === 'update' ? 'Post update' : 'Comment'}</button></div></footer>
+      <footer>{composerMode === 'update' ? <button aria-disabled="true" disabled title="Agent drafting is unavailable in this workspace" type="button"><Bot size={13}/>Write with Agent</button> : <span/>}<div><button aria-disabled="true" aria-label="Attach images, files, or videos" disabled title="Project update attachments are unavailable" type="button"><Paperclip size={13}/></button><button className="is-submit" disabled={!body.trim() || saving} onClick={() => void submit()} type="button">{saving ? 'Posting…' : composerMode === 'update' ? 'Post update' : 'Comment'}</button></div></footer>
     </section>
 
     <div className="project-activity__feed">
@@ -76,18 +76,15 @@ function ActivityPropertyTimeline({ events }: { events: ProjectPropertyEvent[] }
   return <>{events.map(event => { const nextMonth = format(new Date(event.time), 'MMMM'); const heading = nextMonth !== month; month = nextMonth; return <div key={event.id}>{heading && <h2>{nextMonth}</h2>}<PropertyEvent icon={event.icon} text={event.text} time={event.time}/></div> })}</>
 }
 
-function buildProjectEvents(project: Project, viewerName: string): ProjectPropertyEvent[] {
-  const actor = project.lead?.displayName ?? viewerName
-  const current = project.updatedAt
-  const created = project.createdAt
-  const events: ProjectPropertyEvent[] = []
-  for (const initiative of project.initiatives ?? []) events.push({ id: `initiative-${initiative}`, icon: <Flag size={13}/>, text: `${actor} added initiative ${initiative}`, time: current })
-  if (project.priority > 0) events.push({ id: 'priority', icon: <PriorityIcon priority={project.priority} size={13}/>, text: `${actor} changed priority from No priority to ${project.priorityLabel}`, time: current })
-  if (project.lead) events.push({ id: 'lead', text: `${project.lead.displayName} assigned themselves as a lead`, time: current })
-  if (project.status.type !== 'backlog') events.push({ id: 'status', text: `${actor} changed status from Backlog to ${project.status.name}`, time: created })
-  if (project.startDate) events.push({ id: 'start', icon: <CalendarIcon size={13}/>, text: `${actor} set start date to ${format(new Date(`${project.startDate}T00:00:00`), 'MMM do')}`, time: created })
-  events.push({ id: 'created', text: `${actor} created the project`, time: created })
-  return events.sort((left, right) => +new Date(right.time) - +new Date(left.time))
+function buildProjectEvents(activities: ProjectDetailProps['activities']): ProjectPropertyEvent[] {
+  return activities.map(event => ({ id: event.id, icon: event.type.includes('initiative') ? <Flag size={13}/> : event.type.includes('date') ? <CalendarIcon size={13}/> : event.type.includes('priority') ? <PriorityIcon priority={Number(event.metadata.priority ?? 0)} size={13}/> : undefined, text: activityLabel(event), time: event.createdAt })).sort((left, right) => +new Date(right.time) - +new Date(left.time))
+}
+
+function activityLabel(event: ProjectDetailProps['activities'][number]) {
+  const actor = event.actor.displayName
+  const value = event.metadata.name ?? event.metadata.label ?? event.metadata.status ?? event.metadata.projectName ?? ''
+  const labels: Record<string, string> = { 'project.created': 'created the project', 'project.updated': 'updated the project', 'project.commented': 'commented on the project', 'project.update_created': 'posted a project update', 'project.reminder_created': 'created a project reminder', 'project.milestone_created': 'added a milestone', 'project.milestone_updated': 'updated a milestone', 'project.milestone_deleted': 'deleted a milestone' }
+  return `${actor} ${labels[event.type] ?? event.type.replaceAll('.', ' ')}${value ? ` ${value}` : ''}`
 }
 
 function EditUpdateDialog({ onOpenChange, onSave, open, update }: { onOpenChange: (open: boolean) => void; onSave: (id: string, input: { body?: string; health?: Project['health'] }) => Promise<void>; open: boolean; update?: ProjectUpdate }) {

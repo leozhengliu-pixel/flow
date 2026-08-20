@@ -32,7 +32,7 @@ export interface Issue {
   priority: number; priorityLabel: string; sortOrder: number; estimate?: number; dueDate?: string
   createdAt: string; updatedAt: string; completedAt?: string; canceledAt?: string; archivedAt?: string
   team: Team; state: WorkflowState; assignee?: User; creator: User; labels: IssueLabel[]
-  project?: ProjectSummary; cycleId?: UUID; parentId?: UUID; recurrence?: 'daily'|'weekly'|'monthly'; nextOccurrenceAt?: string; subscriberIds: UUID[]; reactions: Record<string, UUID[]>; subIssueIds: UUID[]
+  project?: ProjectSummary; projectMilestoneId?: UUID; cycleId?: UUID; parentId?: UUID; recurrence?: 'daily'|'weekly'|'monthly'; nextOccurrenceAt?: string; subscriberIds: UUID[]; reactions: Record<string, UUID[]>; subIssueIds: UUID[]
   relations: IssueRelation[]; attachments: Attachment[]
 }
 export type CycleStatus = 'upcoming'|'current'|'completed'
@@ -75,10 +75,12 @@ export interface Project {
   priority: number; priorityLabel: string; progress: number; health: 'onTrack'|'atRisk'|'offTrack'|'noUpdate'
   status: { id: UUID; name: string; color: string; type: string }; lead?: User; memberIds: UUID[]; labelIds: UUID[]; teamIds: UUID[]
   dependencyIds: UUID[]; initiatives: string[]; customers: string[]; resources: ProjectResource[]; milestones: ProjectMilestone[]; comments: Comment[]
+  descriptionRevisions: ProjectDescriptionRevision[]; updateCadence: 'none'|'weekly'|'biweekly'|'monthly'
   startDate?: string; targetDate?: string; issueCount: number; createdAt: string; updatedAt: string
 }
-export interface ProjectResource { id: UUID; projectId: UUID; type: 'link'|'document'; title: string; url: string; createdAt: string }
-export interface ProjectMilestone { id: UUID; projectId: UUID; name: string; targetDate?: string; createdAt: string; updatedAt: string }
+export interface ProjectDescriptionRevision { id: UUID; projectId: UUID; description: string; author: User; createdAt: string }
+export interface ProjectResource { id: UUID; projectId: UUID; type: 'link'|'document'; title: string; url: string; pinnedTeamIds: UUID[]; createdAt: string }
+export interface ProjectMilestone { id: UUID; projectId: UUID; name: string; description: string; targetDate?: string; createdAt: string; updatedAt: string }
 export type ProjectStatus = Project['status'] & { position?: number }
 export interface ProjectUpdate {
   id: UUID; projectId: UUID; body: string; health: Project['health']; createdAt: string; editedAt?: string; user: User
@@ -142,7 +144,7 @@ export interface FilterCondition { id: string; field: FilterField; operator: 'is
 export interface IssueUpdateInput {
   expectedVersion?: number
   title?: string; description?: string; descriptionState?: string; descriptionData?: Record<string, unknown>; contentState?: string; stateId?: string; priority?: number; assigneeId?: string
-  projectId?: string; cycleId?: string; dueDate?: string; labelIds?: string[]; subscriberIds?: string[]; archived?: boolean
+  projectId?: string; projectMilestoneId?: string; cycleId?: string; dueDate?: string; labelIds?: string[]; subscriberIds?: string[]; archived?: boolean
   recurrence?: ''|'daily'|'weekly'|'monthly'; nextOccurrenceAt?: string
   parentId?: string; sortOrder?: number
 }

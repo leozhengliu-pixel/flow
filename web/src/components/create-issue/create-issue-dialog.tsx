@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import type { Editor } from '@tiptap/react'
-import { ChevronRight, ExternalLink, FilePlus2, Link2, Maximize2, Minimize2, MoreHorizontal, Paperclip, Repeat2, X } from 'lucide-react'
+import { ChevronRight, Diamond, ExternalLink, FilePlus2, Link2, Maximize2, Minimize2, MoreHorizontal, Paperclip, Repeat2, X } from 'lucide-react'
 import type { BootstrapData, Draft, Issue } from '@/types/flow'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { CalendarIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
@@ -25,6 +25,7 @@ export interface CreateIssueInput {
   priority?: number
   assigneeId?: string
   projectId?: string
+  projectMilestoneId?: string
   dueDate?: string
   labelIds?: string[]
   templateId?: string
@@ -37,6 +38,7 @@ export interface CreateIssueDialogProps {
   data: BootstrapData
   initialStateId?: string
   initialProjectId?: string
+  initialProjectMilestoneId?: string
   draftId?: string
   onOpenChange: (open: boolean) => void
   onCreate: (input: CreateIssueInput) => Promise<Issue>
@@ -55,12 +57,13 @@ interface StoredIssueDraft {
   priority: number
   assigneeId: string
   projectId: string
+  projectMilestoneId: string
   dueDate: string
   labelIds: string[]
   templateId?: string
 }
 
-export function CreateIssueDialog({ data, draftId, initialProjectId, initialStateId, onCreate, onDraftDeleted, onDraftSaved, onOpenChange, onUpload, open }: CreateIssueDialogProps) {
+export function CreateIssueDialog({ data, draftId, initialProjectId, initialProjectMilestoneId, initialStateId, onCreate, onDraftDeleted, onDraftSaved, onOpenChange, onUpload, open }: CreateIssueDialogProps) {
   const availableStates = useMemo(() => { const teamId=data.teams[0]?.id; const specific=data.states.some(state=>state.teamId===teamId); return data.states.filter(state=>specific?state.teamId===teamId:!state.teamId) }, [data.states,data.teams])
   const defaultState = useMemo(() => [...availableStates].sort((a, b) => a.position - b.position).find(state => state.type === 'unstarted') ?? availableStates[0], [availableStates])
   const [title, setTitle] = useState('')
@@ -69,6 +72,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialStat
   const [priority, setPriority] = useState(0)
   const [assigneeId, setAssigneeId] = useState(data.viewer.id)
   const [projectId, setProjectId] = useState('')
+  const [projectMilestoneId, setProjectMilestoneId] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [labelIds, setLabelIds] = useState<string[]>([])
   const [templateId, setTemplateId] = useState('')
@@ -93,6 +97,8 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialStat
       ? data.drafts.find(item => item.id === draftId)
       : data.drafts.find(item => item.type === 'issue' && item.metadata?.teamId === data.teams[0]?.id)
     const remote = remoteDraft?.metadata as Partial<StoredIssueDraft> | undefined
+    const requestedProject = initialProjectId ? data.projects.find(project => project.id === initialProjectId) : undefined
+    const requestedMilestone = requestedProject?.milestones.find(milestone => milestone.id === initialProjectMilestoneId)
     if (draft || remote) {
       const restored = draft ?? remote as StoredIssueDraft
       setTitle(restored.title ?? remoteDraft?.title ?? '')
@@ -101,21 +107,26 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialStat
       setPriority(restored.priority ?? 0)
       setAssigneeId(restored.assigneeId ?? data.viewer.id)
       setProjectId(restored.projectId ?? '')
+      setProjectMilestoneId(restored.projectMilestoneId ?? '')
       setDueDate(restored.dueDate ?? '')
       setLabelIds(restored.labelIds ?? [])
       setTemplateId(restored.templateId ?? '')
       setServerDraftId(remoteDraft?.id ?? '')
     } else {
       if (initialStateId && availableStates.some(state => state.id === initialStateId)) setStateId(initialStateId)
-      if (initialProjectId && data.projects.some(project => project.id === initialProjectId)) setProjectId(initialProjectId)
+    }
+    if (requestedProject) {
+      setProjectId(requestedProject.id)
+      setProjectMilestoneId(requestedMilestone?.id ?? '')
     }
     const frame = requestAnimationFrame(() => requestAnimationFrame(() => titleEditorRef.current?.commands.focus('end')))
     return () => cancelAnimationFrame(frame)
-  }, [availableStates, data.drafts, data.projects, data.teams, data.viewer.id, defaultState.id, draftId, draftKey, initialProjectId, initialStateId, open])
+  }, [availableStates, data.drafts, data.projects, data.teams, data.viewer.id, defaultState.id, draftId, draftKey, initialProjectId, initialProjectMilestoneId, initialStateId, open])
 
   const state = availableStates.find(item => item.id === stateId) ?? defaultState
   const assignee = data.users.find(user => user.id === assigneeId)
   const project = data.projects.find(item => item.id === projectId)
+  const projectMilestone = project?.milestones.find(item => item.id === projectMilestoneId)
   const issueLabels = useMemo(() => labelsForResource(data.labels, 'issue'), [data.labels])
   const availableLabels = useMemo(() => issueLabels.filter(label => !label.scope || label.scope === 'Workspace' || label.scope === data.teams[0]?.id), [data.teams, issueLabels])
   const availableLabelIds = useMemo(() => new Set(availableLabels.map(label => label.id)), [availableLabels])
@@ -138,6 +149,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialStat
     setPriority(0)
     setAssigneeId(data.viewer.id)
     setProjectId('')
+    setProjectMilestoneId('')
     setDueDate('')
     setLabelIds([])
     setTemplateId('')
@@ -147,7 +159,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialStat
 
   const saveDraft = async () => {
     if (!hasDraftContent) return
-    const metadata = { title, description, stateId, priority, assigneeId, projectId, dueDate, labelIds, templateId, teamId: data.teams[0]?.id }
+    const metadata = { title, description, stateId, priority, assigneeId, projectId, projectMilestoneId, dueDate, labelIds, templateId, teamId: data.teams[0]?.id }
     setSaving(true)
     setError(undefined)
     try {
@@ -192,6 +204,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialStat
         priority,
         assigneeId,
         projectId,
+        projectMilestoneId,
         dueDate,
         labelIds: labelIds.filter(id => availableLabelIds.has(id)),
         templateId,
@@ -212,7 +225,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialStat
     } finally {
       setSaving(false)
     }
-  }, [assigneeId, availableLabelIds, createMore, description, draftKey, dueDate, files, labelIds, onCreate, onDraftDeleted, onOpenChange, onUpload, priority, projectId, saving, serverDraftId, stateId, templateId, title])
+  }, [assigneeId, availableLabelIds, createMore, description, draftKey, dueDate, files, labelIds, onCreate, onDraftDeleted, onOpenChange, onUpload, priority, projectId, projectMilestoneId, saving, serverDraftId, stateId, templateId, title])
 
   const changeOpen = (next: boolean) => {
     if (!next && hasDraftContent) {
@@ -251,7 +264,8 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialStat
             <MiniProperty label="Status" value={state.name} selectedId={stateId} icon={<StatusIcon state={state}/>} options={[...availableStates].sort((a,b) => a.position-b.position).map((item,index) => ({ id:item.id,label:item.name,color:item.color,icon:<StatusIcon state={item}/>,shortcut:index < 5 ? String(index+1) : undefined }))} onChange={setStateId}/>
             <MiniProperty label="Priority" value={priority ? priorityNames[priority] : 'Priority'} selectedId={String(priority)} icon={<PriorityIcon priority={priority}/>} options={[0,1,2,3,4].map(item => ({ id:String(item),label:priorityNames[item],icon:<PriorityIcon priority={item}/>,shortcut:String(item) }))} onChange={value => setPriority(Number(value))}/>
             <MiniProperty label="Assignee" value={assignee?.displayName ?? 'Assignee'} selectedId={assigneeId} icon={assignee ? <Avatar name={assignee.displayName}/> : <NoAssigneeIcon/>} options={[{id:'',label:'No assignee',icon:<NoAssigneeIcon/>},...data.users.filter(user => user.active).map(user => ({id:user.id,label:user.displayName,keywords:user.email,icon:<Avatar name={user.displayName}/>}))]} onChange={setAssigneeId}/>
-            <MiniProperty label="Project" value={project?.name ?? 'Project'} selectedId={projectId} icon={<ProjectIcon/>} options={[{id:'',label:'No project',icon:<NoProjectIcon/>},...data.projects.map(item => ({id:item.id,label:item.name,color:item.color,icon:<ProjectIcon style={{ color: item.color }}/> }))]} onChange={setProjectId}/>
+            <MiniProperty label="Project" value={project?.name ?? 'Project'} valueIsEntityName={Boolean(project)} selectedId={projectId} icon={<ProjectIcon/>} options={[{id:'',label:'No project',icon:<NoProjectIcon/>},...data.projects.map(item => ({id:item.id,label:item.name,color:item.color,icon:<ProjectIcon style={{ color: item.color }}/>,i18nIgnore:true }))]} onChange={value => { setProjectId(value); setProjectMilestoneId('') }}/>
+            {project && project.milestones.length > 0 && <MiniProperty label="Milestone" value={projectMilestone?.name ?? 'Milestone'} valueIsEntityName={Boolean(projectMilestone)} selectedId={projectMilestoneId} icon={<Diamond size={14}/>} options={[{id:'',label:'No milestone',icon:<Diamond size={14}/>},...project.milestones.map(item => ({id:item.id,label:item.name,icon:<Diamond size={14}/>,i18nIgnore:true}))]} onChange={setProjectMilestoneId}/>}
             <MiniProperty multiple label="Labels" value={selectedLabels.length ? selectedLabels.map(label => label.name).join(', ') : 'Labels'} selectedIds={labelIds} icon={<LabelIcon/>} options={availableLabels.map(item => ({ id: item.id, label: item.name, color: item.color, description: item.description, issueCount: item.issueCount, scope: item.scope, groupId: item.groupId, groupLabel: item.groupId ? labelGroupNames.get(item.groupId) : undefined }))} onChange={id => setLabelIds(current => current.includes(id) ? current.filter(value => value !== id) : [...current,id])}/>
             <MoreActions active={open && !linkOpen} dueDate={dueDate} onDueDateChange={setDueDate} onInsertLink={() => setLinkOpen(true)}/>
           </div>

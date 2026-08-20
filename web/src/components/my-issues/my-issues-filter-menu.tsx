@@ -15,6 +15,7 @@ export interface MyIssuesFilterMenuProps {
   options?: (filter: MyIssuesFilterKey) => MyIssuesFilterOption[] | undefined
   onOpenChange: (open: boolean) => void
   onToggle: (filter: MyIssuesFilterKey, option: MyIssuesFilterOption) => void
+  availableFields?: MyIssuesFilterKey[]
 }
 
 const MY_ISSUES_FILTER_GROUPS = [
@@ -38,7 +39,7 @@ const MY_ISSUES_FILTER_GROUPS = [
   ],
 ] as const
 
-export function MyIssuesFilterMenu({ filters = [], onOpenChange, onToggle, open, options, trigger }: MyIssuesFilterMenuProps) {
+export function MyIssuesFilterMenu({ availableFields, filters = [], onOpenChange, onToggle, open, options, trigger }: MyIssuesFilterMenuProps) {
   const [activeField, setActiveField] = useState<MyIssuesFilterKey>()
   const close = (next: boolean) => {
     if (!next) setActiveField(undefined)
@@ -59,8 +60,11 @@ export function MyIssuesFilterMenu({ filters = [], onOpenChange, onToggle, open,
           </div>
           <Command.List className={styles.rootList}>
             <Command.Empty className={styles.empty}>No filters found</Command.Empty>
-            {MY_ISSUES_FILTER_GROUPS.map((group, groupIndex) => <Command.Group className={styles.rootGroup} key={groupIndex}>
-              {group.map(item => {
+            {MY_ISSUES_FILTER_GROUPS.map((group, groupIndex) => {
+              const visibleItems = group.filter(item => !availableFields || availableFields.includes(item.id as MyIssuesFilterKey))
+              if (!visibleItems.length) return null
+              return <Command.Group className={styles.rootGroup} key={groupIndex}>
+              {visibleItems.map(item => {
                 const field = item.id as MyIssuesFilterKey
                 const hasValues = Boolean(options?.(field)?.length)
                 const hasSubmenu = 'submenu' in item && item.submenu
@@ -81,7 +85,7 @@ export function MyIssuesFilterMenu({ filters = [], onOpenChange, onToggle, open,
                   {hasValues && <ValueMenu field={field} filters={filters} label={item.label} options={options?.(field) ?? []} onClose={() => setActiveField(undefined)} onToggle={onToggle}/>}
                 </Popover.Root>
               })}
-            </Command.Group>)}
+            </Command.Group>})}
           </Command.List>
         </Command>
       </Popover.Content>
