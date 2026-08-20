@@ -234,6 +234,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/initiatives", s.createInitiative)
 	mux.HandleFunc("PATCH /api/initiatives/{id}", s.updateInitiative)
 	mux.HandleFunc("DELETE /api/initiatives/{id}", s.deleteInitiative)
+	mux.HandleFunc("POST /api/initiatives/{id}/reminders", s.createInitiativeReminder)
 	mux.HandleFunc("POST /api/initiatives/{id}/resources", s.createInitiativeResource)
 	mux.HandleFunc("PATCH /api/initiatives/{id}/resources/{resourceId}", s.updateInitiativeResource)
 	mux.HandleFunc("DELETE /api/initiatives/{id}/resources/{resourceId}", s.deleteInitiativeResource)
@@ -1438,7 +1439,7 @@ func (s *server) createInitiative(w http.ResponseWriter, r *http.Request) {
 	var created domain.Initiative
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "initiative.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
-		created = domain.Initiative{ID: fmt.Sprintf("initiative_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), SlugID: slug(*input.Name), Icon: "Initiative", Color: "#d15f64", Status: "active", PriorityLabel: "No priority", Health: "noUpdate", LabelIDs: []string{}, ProjectIDs: []string{}, Resources: []domain.InitiativeResource{}, Comments: []domain.Comment{}, CreatedAt: now, UpdatedAt: now}
+		created = domain.Initiative{ID: fmt.Sprintf("initiative_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), SlugID: slug(*input.Name), Icon: "Initiative", Color: "#d15f64", Status: "active", PriorityLabel: "No priority", Health: "noUpdate", Creator: data.Viewer, ContributingTeamIDs: []string{}, LabelIDs: []string{}, ProjectIDs: []string{}, Resources: []domain.InitiativeResource{}, Comments: []domain.Comment{}, NotificationRules: domain.InitiativeNotificationRules{DescriptionChanges: true, NewUpdate: true}, UpdateSchedule: domain.InitiativeUpdateSchedule{Cadence: "none", Weekday: 1, TimeRange: "09:00-12:00"}, DescriptionHistory: []domain.InitiativeDescriptionRevision{}, CreatedAt: now, UpdatedAt: now}
 		if err := applyInitiativeUpdate(data, &created, input); err != nil {
 			return "", err
 		}
@@ -1484,6 +1485,10 @@ func (s *server) deleteInitiative(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
+		removed := data.Initiatives[index]
+		if err := appendTrash(data, "initiative", removed.ID, removed.Name, deletedInitiativePayload{Initiative: removed, Updates: data.InitiativeUpdates[id]}); err != nil {
+			return err
+		}
 		for i := range data.Projects {
 			data.Projects[i].Initiatives = removeString(data.Projects[i].Initiatives, id)
 		}
@@ -1496,6 +1501,34 @@ func (s *server) deleteInitiative(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *server) createInitiativeReminder(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		RemindAt string `json:"remindAt"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	remindAt, err := time.Parse(time.RFC3339, strings.TrimSpace(input.RemindAt))
+	if err != nil || !remindAt.After(time.Now().UTC()) {
+		writeError(w, http.StatusBadRequest, "remindAt must be a future RFC3339 timestamp")
+		return
+	}
+	id := r.PathValue("id")
+	var reminder domain.Notification
+	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.reminder_created", id, input, func(data *domain.Bootstrap) error {
+		initiative, initiativeErr := initiativeByID(data, id)
+		if initiativeErr != nil {
+			return initiativeErr
+		}
+		now := time.Now().UTC()
+		reminder = domain.Notification{ID: fmt.Sprintf("notification_initiative_reminder_%d", now.UnixNano()), RecipientID: data.Viewer.ID, Type: "initiativeReminder", SourceType: "initiative", SourceID: id, Actor: data.Viewer, Category: "reminders", GroupKey: "initiative-reminder:" + id + ":" + strconv.FormatInt(remindAt.Unix(), 10), OccurrenceCount: 1, LatestActorIDs: []string{data.Viewer.ID}, SnoozedUntil: &remindAt, CreatedAt: now, UpdatedAt: now}
+		data.Notifications = append([]domain.Notification{reminder}, data.Notifications...)
+		appendActivity(data, id, "initiative.reminder_created", data.Viewer, map[string]string{"initiativeName": initiative.Name, "remindAt": remindAt.Format(time.RFC3339)})
+		return nil
+	})
+	respondMutation(w, err, http.StatusCreated, reminder)
 }
 
 func (s *server) createInitiativeResource(w http.ResponseWriter, r *http.Request) {
@@ -3542,6 +3575,10 @@ func applyInitiativeUpdate(data *domain.Bootstrap, initiative *domain.Initiative
 		initiative.Summary = *input.Summary
 	}
 	if input.Description != nil {
+		if *input.Description != initiative.Description {
+			now := time.Now().UTC()
+			initiative.DescriptionHistory = append([]domain.InitiativeDescriptionRevision{{ID: fmt.Sprintf("initiative_description_revision_%d", now.UnixNano()), Description: initiative.Description, EditedAt: now, Editor: data.Viewer}}, initiative.DescriptionHistory...)
+		}
 		initiative.Description = *input.Description
 	}
 	if input.Icon != nil {
@@ -3578,6 +3615,20 @@ func applyInitiativeUpdate(data *domain.Bootstrap, initiative *domain.Initiative
 			return errInvalid
 		}
 	}
+	if input.LeadTeamID != nil {
+		if *input.LeadTeamID != "" && !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == *input.LeadTeamID }) {
+			return errInvalid
+		}
+		initiative.LeadTeamID = *input.LeadTeamID
+	}
+	if input.ContributingTeamIDs != nil {
+		for _, id := range *input.ContributingTeamIDs {
+			if !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == id }) {
+				return errInvalid
+			}
+		}
+		initiative.ContributingTeamIDs = normalizedStrings(*input.ContributingTeamIDs)
+	}
 	if input.LabelIDs != nil {
 		for _, id := range *input.LabelIDs {
 			if !slices.ContainsFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id }) {
@@ -3602,6 +3653,15 @@ func applyInitiativeUpdate(data *domain.Bootstrap, initiative *domain.Initiative
 	}
 	if input.Subscribed != nil {
 		initiative.Subscribed = *input.Subscribed
+	}
+	if input.NotificationRules != nil {
+		initiative.NotificationRules = *input.NotificationRules
+	}
+	if input.UpdateSchedule != nil {
+		if !slices.Contains([]string{"none", "weekly", "biweekly", "monthly", "custom", "never"}, input.UpdateSchedule.Cadence) || input.UpdateSchedule.Weekday < 0 || input.UpdateSchedule.Weekday > 6 || strings.TrimSpace(input.UpdateSchedule.TimeRange) == "" {
+			return errInvalid
+		}
+		initiative.UpdateSchedule = *input.UpdateSchedule
 	}
 	return nil
 }

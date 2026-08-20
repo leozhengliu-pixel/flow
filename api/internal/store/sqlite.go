@@ -826,6 +826,12 @@ func normalize(data *domain.Bootstrap) {
 		data.InitiativeUpdates = map[string][]domain.InitiativeUpdate{}
 	}
 	for i := range data.Initiatives {
+		if data.Initiatives[i].Creator.ID == "" {
+			data.Initiatives[i].Creator = data.Viewer
+		}
+		if data.Initiatives[i].ContributingTeamIDs == nil {
+			data.Initiatives[i].ContributingTeamIDs = []string{}
+		}
 		if data.Initiatives[i].LabelIDs == nil {
 			data.Initiatives[i].LabelIDs = []string{}
 		}
@@ -837,6 +843,15 @@ func normalize(data *domain.Bootstrap) {
 		}
 		if data.Initiatives[i].Comments == nil {
 			data.Initiatives[i].Comments = []domain.Comment{}
+		}
+		if data.Initiatives[i].DescriptionHistory == nil {
+			data.Initiatives[i].DescriptionHistory = []domain.InitiativeDescriptionRevision{}
+		}
+		if data.Initiatives[i].UpdateSchedule.Cadence == "" {
+			data.Initiatives[i].UpdateSchedule = domain.InitiativeUpdateSchedule{Cadence: "none", Weekday: 1, TimeRange: "09:00-12:00"}
+		}
+		if !data.Initiatives[i].NotificationRules.DescriptionChanges && !data.Initiatives[i].NotificationRules.NewUpdate && !data.Initiatives[i].NotificationRules.AllProjectUpdates {
+			data.Initiatives[i].NotificationRules = domain.InitiativeNotificationRules{DescriptionChanges: true, NewUpdate: true}
 		}
 	}
 	for initiativeID := range data.InitiativeUpdates {
