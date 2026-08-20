@@ -64,21 +64,24 @@ type askInput struct {
 }
 
 type projectTemplateInput struct {
-	Name          *string   `json:"name,omitempty"`
-	Description   *string   `json:"description,omitempty"`
-	Summary       *string   `json:"summary,omitempty"`
-	Icon          *string   `json:"icon,omitempty"`
-	Color         *string   `json:"color,omitempty"`
-	StatusID      *string   `json:"statusId,omitempty"`
-	Priority      *int      `json:"priority,omitempty"`
-	TeamIDs       *[]string `json:"teamIds,omitempty"`
-	LabelIDs      *[]string `json:"labelIds,omitempty"`
-	LeadID        *string   `json:"leadId,omitempty"`
-	MemberIDs     *[]string `json:"memberIds,omitempty"`
-	DependencyIDs *[]string `json:"dependencyIds,omitempty"`
-	InitiativeIDs *[]string `json:"initiativeIds,omitempty"`
-	IssueIDs      *[]string `json:"issueIds,omitempty"`
-	Visibility    *string   `json:"visibility,omitempty"`
+	Name                *string                     `json:"name,omitempty"`
+	ProjectName         *string                     `json:"projectName,omitempty"`
+	TemplateDescription *string                     `json:"templateDescription,omitempty"`
+	Description         *string                     `json:"description,omitempty"`
+	Summary             *string                     `json:"summary,omitempty"`
+	Icon                *string                     `json:"icon,omitempty"`
+	Color               *string                     `json:"color,omitempty"`
+	StatusID            *string                     `json:"statusId,omitempty"`
+	Priority            *int                        `json:"priority,omitempty"`
+	TeamIDs             *[]string                   `json:"teamIds,omitempty"`
+	LabelIDs            *[]string                   `json:"labelIds,omitempty"`
+	LeadID              *string                     `json:"leadId,omitempty"`
+	MemberIDs           *[]string                   `json:"memberIds,omitempty"`
+	DependencyIDs       *[]string                   `json:"dependencyIds,omitempty"`
+	InitiativeIDs       *[]string                   `json:"initiativeIds,omitempty"`
+	IssueIDs            *[]string                   `json:"issueIds,omitempty"`
+	Milestones          *[]domain.TemplateMilestone `json:"milestones,omitempty"`
+	Visibility          *string                     `json:"visibility,omitempty"`
 }
 
 type slaRuleInput struct {
@@ -898,6 +901,12 @@ func applyProjectTemplateInput(data *domain.Bootstrap, template *domain.ProjectT
 		}
 		template.Name = strings.TrimSpace(*input.Name)
 	}
+	if input.ProjectName != nil {
+		template.ProjectName = strings.TrimSpace(*input.ProjectName)
+	}
+	if input.TemplateDescription != nil {
+		template.TemplateDescription = strings.TrimSpace(*input.TemplateDescription)
+	}
 	if input.Description != nil {
 		template.Description = *input.Description
 	}
@@ -969,6 +978,21 @@ func applyProjectTemplateInput(data *domain.Bootstrap, template *domain.ProjectT
 			return errInvalid
 		}
 		template.IssueIDs = values
+	}
+	if input.Milestones != nil {
+		milestones := make([]domain.TemplateMilestone, 0, len(*input.Milestones))
+		for index, milestone := range *input.Milestones {
+			milestone.Name = strings.TrimSpace(milestone.Name)
+			milestone.Description = strings.TrimSpace(milestone.Description)
+			if milestone.Name == "" {
+				return errInvalid
+			}
+			if strings.TrimSpace(milestone.ID) == "" {
+				milestone.ID = fmt.Sprintf("template_milestone_%d_%d", time.Now().UnixNano(), index)
+			}
+			milestones = append(milestones, milestone)
+		}
+		template.Milestones = milestones
 	}
 	if input.Visibility != nil {
 		if !slices.Contains([]string{"workspace", "teams"}, *input.Visibility) {
@@ -1238,6 +1262,26 @@ func (s *server) updateProjectUpdateSettings(w http.ResponseWriter, r *http.Requ
 		data.Settings["projectUpdates"] = current
 		result = current
 		appendAudit(data, "updated", "project_update_settings", "workspace", input)
+		return nil
+	})
+	respondMutation(w, err, http.StatusOK, result)
+}
+
+func (s *server) updateSLASettings(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if !decodeJSON(w, r, &input) || input.Enabled == nil {
+		writeError(w, http.StatusBadRequest, "enabled is required")
+		return
+	}
+	result := map[string]any{"enabled": *input.Enabled}
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "sla_settings.updated", "workspace", input, func(data *domain.Bootstrap) error {
+		if data.Settings == nil {
+			data.Settings = map[string]any{}
+		}
+		data.Settings["sla"] = result
+		appendAudit(data, "updated", "sla_settings", "workspace", result)
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, result)
