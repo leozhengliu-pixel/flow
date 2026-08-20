@@ -35,6 +35,11 @@
   box-shadow: var(--shadow);
 }
 
+:root[data-theme="light"] .lp-projects__view { background: lch(99.997% .5 282); color: lch(39.176% 1.25 282); }
+:root[data-theme="light"] .lp-projects__view:not([aria-current="page"]):hover { background: lch(94.854% .5 282); color: lch(19.588% 1.25 282); }
+:root[data-theme="light"] .lp-projects__view[aria-current="page"] { background: lch(93.483% .5 282); color: lch(9.794% 0 282); }
+:root[data-theme="light"] .lp-projects__view[aria-current="page"]:hover { background: lch(89.54% .5 282); color: lch(9.444% 0 282); }
+
 :root[data-theme="light"] .lp-project-table__header,
 :root[data-theme="light"] .lp-project-group__count,
 :root[data-theme="light"] .lp-project-subgroup__header,
@@ -117,12 +122,13 @@
   max-width: 220px;
   padding: 0 10px;
   text-decoration: none;
-  transition: background-color 80ms ease, color 80ms ease;
+  transition: background-color 150ms ease, color 150ms ease;
 }
 
 .lp-projects__view span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lp-projects__view:hover { background: #232325; color: var(--theme-text-secondary); }
-.lp-projects__view[aria-current="page"] { background: var(--theme-control-active); color: #fff; }
+.lp-projects__view:hover { background: var(--theme-control-hover); color: var(--theme-text-primary); }
+.lp-projects__view[aria-current="page"] { background: var(--theme-control-active); color: var(--theme-text-primary); }
+.lp-projects__view[aria-current="page"]:hover { background: var(--theme-surface-active); }
 .lp-projects__view:focus-visible,
 .lp-projects__icon-button:focus-visible { box-shadow: 0 0 0 2px #5e6ad2; outline: none; }
 
@@ -146,7 +152,7 @@
 
 .lp-projects__icon-button svg { fill: currentColor; }
 .lp-projects__icon-button:hover,
-.lp-projects__icon-button.is-active { background: #262628; color: #fff; }
+.lp-projects__icon-button.is-active { background: var(--theme-control-hover); color: var(--theme-text-primary); }
 .lp-projects__add-view { color: #59595e; }
 .lp-projects__badge { background: #5e6ad2; border: 1.5px solid var(--lp-bg); border-radius: 50%; height: 6px; position: absolute; right: 2px; top: 2px; width: 6px; }
 
@@ -377,7 +383,7 @@
 
 /* Projects list: dimensions mirror Flow's desktop subgrid at a 1470px viewport. */
 .lp-project-table {
-  --lp-project-grid: 8px 18px minmax(300px, 425px) 130px 68px 48px 92px 49px 120px 8px;
+  --lp-project-grid: 8px 18px minmax(300px, 1fr) 130px 68px 48px 92px 49px 120px 8px;
   display: grid;
   gap: 0 6px;
   grid-template-columns: var(--lp-project-grid);
