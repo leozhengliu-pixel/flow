@@ -549,6 +549,11 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) authSession(w http.ResponseWriter, r *http.Request) {
+	if s.authDisabled {
+		account := s.store.Account()
+		writeJSON(w, http.StatusOK, domain.AuthSession{User: account.Viewer, Memberships: account.Workspaces, ExpiresAt: time.Now().UTC().Add(24 * time.Hour)})
+		return
+	}
 	cookie, err := r.Cookie(sessionCookieName)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "Sign in required")
