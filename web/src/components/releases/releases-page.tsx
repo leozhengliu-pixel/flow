@@ -51,7 +51,6 @@ export function ReleasesPage({ data, initialReleaseId, onOpenSidebar, onNavigate
     setPipeline(next); setArchive(nextArchive); setTab(nextTab)
     onNavigate(`${root}?pipeline=${encodeURIComponent(next.id)}${nextTab === 'changelog' ? '&tab=changelog' : ''}${nextArchive ? '&archive=1' : ''}`)
   }
-  const showDirectory = () => { setPipeline(undefined); setArchive(false); onNavigate(root) }
   const changeTab = (next: Tab) => { if (!pipeline) return; setTab(next); openPipeline(pipeline, archive, next) }
   const openRelease = (release: Release) => {
     const owner = data.releasePipelines.find(item => item.id === release.pipelineId) ?? pipeline
@@ -66,7 +65,7 @@ export function ReleasesPage({ data, initialReleaseId, onOpenSidebar, onNavigate
     else onNavigate(root)
   }
   return <>
-    {pipeline ? <ReleasePipelineView data={data} pipeline={pipeline} tab={tab} archive={archive} onArchiveChange={value => openPipeline(pipeline, value, 'releases')} onBack={showDirectory} onCreate={() => setCreating(true)} onDelete={setDeleting} onEdit={release => setEditing(release)} onOpen={openRelease} onNavigate={onNavigate} onOpenSidebar={onOpenSidebar} onReload={onReload} onTabChange={changeTab}/>
+    {pipeline ? <ReleasePipelineView data={data} pipeline={pipeline} tab={tab} archive={archive} onArchiveChange={value => openPipeline(pipeline, value, 'releases')} onCreate={() => setCreating(true)} onDelete={setDeleting} onEdit={release => setEditing(release)} onOpen={openRelease} onNavigate={onNavigate} onOpenSidebar={onOpenSidebar} onReload={onReload} onTabChange={changeTab}/>
       : <ReleasePipelinesView data={data} directory={directory} onCreate={() => onNavigate(newReleasePipelinePath(data.workspace.urlKey))} onOpen={openPipeline} onOpenSidebar={onOpenSidebar} onNavigate={onNavigate}/>
     }
     {pipeline && creating && <ReleaseEditorDialog data={data} pipeline={pipeline} onClose={() => setCreating(false)} onSaved={onReload}/>}
@@ -113,7 +112,7 @@ function ReleasePipelinesView({ data, directory, onCreate, onOpen, onOpenSidebar
   </main>
 }
 
-function ReleasePipelineView({ data, pipeline, tab, archive, onArchiveChange, onBack, onCreate, onDelete, onEdit, onOpen, onNavigate, onOpenSidebar, onReload, onTabChange }: { data:BootstrapData;pipeline:ReleasePipeline;tab:Tab;archive:boolean;onArchiveChange:(value:boolean)=>void;onBack:()=>void;onCreate:()=>void;onDelete:(release:Release)=>void;onEdit:(release:Release)=>void;onOpen:(release:Release)=>void;onNavigate:(path:string)=>void;onOpenSidebar:()=>void;onReload:()=>Promise<void>;onTabChange:(value:Tab)=>void }) {
+function ReleasePipelineView({ data, pipeline, tab, archive, onArchiveChange, onCreate, onDelete, onEdit, onOpen, onNavigate, onOpenSidebar, onReload, onTabChange }: { data:BootstrapData;pipeline:ReleasePipeline;tab:Tab;archive:boolean;onArchiveChange:(value:boolean)=>void;onCreate:()=>void;onDelete:(release:Release)=>void;onEdit:(release:Release)=>void;onOpen:(release:Release)=>void;onNavigate:(path:string)=>void;onOpenSidebar:()=>void;onReload:()=>Promise<void>;onTabChange:(value:Tab)=>void }) {
   const { t } = useI18n()
   const releases = releasesForPipeline(data,pipeline,archive)
   const changelog = releasesForPipeline(data,pipeline).filter(item=>item.status==='released')
@@ -122,7 +121,7 @@ function ReleasePipelineView({ data, pipeline, tab, archive, onArchiveChange, on
   const copyUrl=async()=>{try{await navigator.clipboard.writeText(window.location.href);toast.success(t('URL copied'))}catch{toast.error(t('Could not copy URL'))}}
   const pipelineMenu = <DropdownMenu.Root><DropdownMenu.Trigger asChild><IconButton label={t('Pipeline options')}><MoreHorizontal/></IconButton></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="flow-releases-menu flow-pipeline-options" align="start" sideOffset={4}><MenuItem icon={<Plus/>} onSelect={onCreate}>{t('Create release')}</MenuItem><MenuItem icon={<Star fill={favorite?'currentColor':'none'}/>} onSelect={()=>void toggleFavorite()}>{t(favorite?'Remove from favorites':'Favorite')}</MenuItem><MenuItem icon={<Copy/>} onSelect={()=>void copyUrl()}>{t('Copy URL')}</MenuItem><DropdownMenu.Separator/><MenuItem icon={<Settings2/>} onSelect={()=>onNavigate(`/${data.workspace.urlKey}/settings/releases`)}>{t('Pipeline settings')}</MenuItem><DropdownMenu.Separator/><MenuItem icon={<Archive/>} onSelect={()=>onArchiveChange(!archive)}>{t(archive?'View active releases':'Open archive')}</MenuItem><MenuItem icon={<Trash2/>} onSelect={()=>onNavigate(`${workspaceLibraryPath(data.workspace.urlKey,'deleted')}?resource=release`)}>{t('View recently deleted releases')}</MenuItem></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
   return <main className="main-panel flow-releases-page" aria-label={`${pipeline.name} ${t('Releases')}`}>
-    <TopBar onOpenSidebar={onOpenSidebar} title={<div className="flow-release-breadcrumb"><button onClick={onBack}>{t('Releases')}</button><ChevronRight/><h1 data-i18n-ignore>{pipeline.name}</h1><div className="flow-release-breadcrumb-actions"><IconButton aria-pressed={favorite} label={t(favorite?'Remove from favorites':'Favorite')} onClick={()=>void toggleFavorite()}><Star fill={favorite?'currentColor':'none'}/></IconButton>{pipelineMenu}</div></div>}>
+    <TopBar onOpenSidebar={onOpenSidebar} title={<div className="flow-release-title"><h1 data-i18n-ignore>{pipeline.name}</h1><div className="flow-release-title-actions"><IconButton aria-pressed={favorite} label={t(favorite?'Remove from favorites':'Favorite')} onClick={()=>void toggleFavorite()}><Star fill={favorite?'currentColor':'none'}/></IconButton>{pipelineMenu}</div></div>}>
       {!archive&&<IconButton label={t('Create new release')} onClick={onCreate}><Plus/></IconButton>}
     </TopBar>
     <div className="flow-release-toolbar"><div className="flow-release-tabs"><button className={tab==='releases'?'active':''} aria-selected={tab==='releases'} onClick={()=>onTabChange('releases')}>{t(archive?'Archive':'Releases')}</button>{!archive&&<button className={tab==='changelog'?'active':''} aria-selected={tab==='changelog'} onClick={()=>onTabChange('changelog')}>{t('Changelog')}</button>}</div><span>{archive?t('Archived releases'):t(`${releases.length} releases`)}</span></div>
