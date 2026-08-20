@@ -246,7 +246,7 @@ func zentaoDemoSeed() domain.Bootstrap {
 		ID: "initiative_operational_excellence", Name: "企业流程体验升级", SlugID: "enterprise-process-experience",
 		Summary: "从企业流程体验战略分解业务价值与交付目标", Description: "战略层承接行业与企业目标，分解提效、降本、增收、节奏、质量和 AI 转型指标；聚合印控、车商城、稽核和数据采集项目，形成诉求、需求、任务、测试、发布、审计和运营改进闭环。",
 		Icon: "Initiative", Color: "#d15f64", Status: "active", Priority: 2, PriorityLabel: "High", Health: "onTrack",
-		Owner: &viewer, LabelIDs: []string{}, ProjectIDs: []string{sealPlatform.ID, carMall.ID, "project_audit"}, Resources: []domain.InitiativeResource{}, Comments: []domain.Comment{},
+		Owner: &viewer, Creator: viewer, LeadTeamID: deliveryTeam.ID, ContributingTeamIDs: []string{deliveryTeam.ID, qualityTeam.ID}, LabelIDs: []string{}, ProjectIDs: []string{sealPlatform.ID, carMall.ID, "project_audit"}, Resources: []domain.InitiativeResource{}, Comments: []domain.Comment{}, NotificationRules: domain.InitiativeNotificationRules{DescriptionChanges: true, NewUpdate: true}, UpdateSchedule: domain.InitiativeUpdateSchedule{Cadence: "none", Weekday: 1, TimeRange: "09:00-12:00"}, DescriptionHistory: []domain.InitiativeDescriptionRevision{},
 		TargetDate: &initiativeTarget, CreatedAt: now.AddDate(0, -2, 0), UpdatedAt: now,
 	}}
 	projects[0].Initiatives = []string{initiatives[0].ID}

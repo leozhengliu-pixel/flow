@@ -109,6 +109,10 @@ type deletedProjectPayload struct {
 	Project domain.Project         `json:"project"`
 	Updates []domain.ProjectUpdate `json:"updates"`
 }
+type deletedInitiativePayload struct {
+	Initiative domain.Initiative         `json:"initiative"`
+	Updates    []domain.InitiativeUpdate `json:"updates"`
+}
 
 func appendAudit(data *domain.Bootstrap, action, resourceType, resourceID string, metadata map[string]any) {
 	now := time.Now().UTC()
@@ -1476,6 +1480,15 @@ func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 			data.Projects = append([]domain.Project{value.Project}, data.Projects...)
 			data.ProjectUpdates[value.Project.ID] = value.Updates
 			restored = value.Project
+		case "initiative":
+			var value deletedInitiativePayload
+			if json.Unmarshal(entry.Payload, &value) != nil {
+				return errInvalid
+			}
+			data.Initiatives = append([]domain.Initiative{value.Initiative}, data.Initiatives...)
+			data.InitiativeUpdates[value.Initiative.ID] = value.Updates
+			syncInitiativeProjects(data, value.Initiative.ID, nil, value.Initiative.ProjectIDs)
+			restored = value.Initiative
 		default:
 			return errInvalid
 		}
