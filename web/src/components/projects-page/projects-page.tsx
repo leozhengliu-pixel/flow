@@ -34,6 +34,7 @@ export type ProjectMutationInput = {
   customers?: string[]
   startDate?: string
   targetDate?: string
+  updateCadence?: Project['updateCadence']
 }
 
 export type ProjectCreateInput = Required<Pick<ProjectMutationInput, 'name'>> & ProjectMutationInput

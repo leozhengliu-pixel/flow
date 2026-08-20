@@ -193,7 +193,7 @@ func syncDocumentProjectResources(data *domain.Bootstrap, document domain.Docume
 			project.Resources[resourceIndex].URL = url
 			continue
 		}
-		project.Resources = append(project.Resources, domain.ProjectResource{ID: document.ID, ProjectID: project.ID, Type: "document", Title: document.Title, URL: url, CreatedAt: document.CreatedAt})
+		project.Resources = append(project.Resources, domain.ProjectResource{ID: document.ID, ProjectID: project.ID, Type: "document", Title: document.Title, URL: url, PinnedTeamIDs: []string{}, CreatedAt: document.CreatedAt})
 	}
 }
 
@@ -1792,11 +1792,12 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 	needsMutation := slices.ContainsFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return item.Status == "active" && now.After(item.DueAt) })
 	needsMutation = needsMutation || slices.ContainsFunc(data.Trash, func(item domain.TrashEntry) bool { return now.After(item.ExpiresAt) })
 	settings, _ := data.Settings["projectUpdates"].(map[string]any)
-	cadence := intFromAny(settings["cadenceDays"])
+	defaultCadence := intFromAny(settings["cadenceDays"])
 	leadReminders := boolFromAny(settings["reminders"])
 	missingNotifications := settings["missingNotifications"] == nil || boolFromAny(settings["missingNotifications"])
-	if cadence > 0 {
-		for _, project := range data.Projects {
+	for _, project := range data.Projects {
+		cadence := projectCadenceDays(project.UpdateCadence, defaultCadence)
+		if cadence > 0 {
 			updates := data.ProjectUpdates[project.ID]
 			reference := project.CreatedAt
 			if len(updates) > 0 && updates[0].CreatedAt.After(reference) {
@@ -1825,40 +1826,57 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 		for index := range next.Issues {
 			applySLARules(next, &next.Issues[index], now)
 		}
-		if cadence > 0 {
-			for projectIndex := range next.Projects {
-				project := &next.Projects[projectIndex]
-				updates := next.ProjectUpdates[project.ID]
-				reference := project.CreatedAt
-				if len(updates) > 0 && updates[0].CreatedAt.After(reference) {
-					reference = updates[0].CreatedAt
+		for projectIndex := range next.Projects {
+			project := &next.Projects[projectIndex]
+			cadence := projectCadenceDays(project.UpdateCadence, defaultCadence)
+			if cadence <= 0 {
+				continue
+			}
+			updates := next.ProjectUpdates[project.ID]
+			reference := project.CreatedAt
+			if len(updates) > 0 && updates[0].CreatedAt.After(reference) {
+				reference = updates[0].CreatedAt
+			}
+			dueAt := reference.AddDate(0, 0, cadence)
+			missing := now.After(dueAt)
+			dueSoon := leadReminders && !missing && now.After(dueAt.Add(-24*time.Hour))
+			if len(updates) > 0 {
+				updates[0].DueAt, updates[0].Missing = &dueAt, missing
+				next.ProjectUpdates[project.ID] = updates
+			}
+			if missing {
+				project.Health = "noUpdate"
+				archiveProjectUpdateReminders(next, project.ID, "projectUpdateDueReminder", now)
+				if missingNotifications {
+					appendProjectUpdateReminders(next, *project, dueAt, now, false)
 				}
-				dueAt := reference.AddDate(0, 0, cadence)
-				missing := now.After(dueAt)
-				dueSoon := leadReminders && !missing && now.After(dueAt.Add(-24*time.Hour))
-				if len(updates) > 0 {
-					updates[0].DueAt, updates[0].Missing = &dueAt, missing
-					next.ProjectUpdates[project.ID] = updates
-				}
-				if missing {
-					project.Health = "noUpdate"
-					archiveProjectUpdateReminders(next, project.ID, "projectUpdateDueReminder", now)
-					if missingNotifications {
-						appendProjectUpdateReminders(next, *project, dueAt, now, false)
-					}
+			} else {
+				archiveProjectUpdateReminders(next, project.ID, "projectUpdateReminder", now)
+				if dueSoon {
+					appendProjectUpdateReminders(next, *project, dueAt, now, true)
 				} else {
-					archiveProjectUpdateReminders(next, project.ID, "projectUpdateReminder", now)
-					if dueSoon {
-						appendProjectUpdateReminders(next, *project, dueAt, now, true)
-					} else {
-						archiveProjectUpdateReminders(next, project.ID, "projectUpdateDueReminder", now)
-					}
+					archiveProjectUpdateReminders(next, project.ID, "projectUpdateDueReminder", now)
 				}
 			}
 		}
 		next.Trash = slices.DeleteFunc(next.Trash, func(item domain.TrashEntry) bool { return now.After(item.ExpiresAt) })
 		return nil
 	})
+}
+
+func projectCadenceDays(value string, fallback int) int {
+	switch value {
+	case "none":
+		return 0
+	case "weekly":
+		return 7
+	case "biweekly":
+		return 14
+	case "monthly":
+		return 30
+	default:
+		return fallback
+	}
 }
 
 func appendProjectUpdateReminders(data *domain.Bootstrap, project domain.Project, dueAt, now time.Time, leadOnly bool) {
