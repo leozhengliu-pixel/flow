@@ -146,6 +146,7 @@ import {
   issuePath,
   membersPath,
   myIssuesPath,
+  newReleasePipelinePath,
   newTeamPath,
   parseAppRoute,
   projectPath,
@@ -2633,10 +2634,12 @@ function App() {
         page={route.page}
         teamKey={route.teamKey}
         teamSection={route.teamSection}
+        releasePipelineMode={route.releasePipelineMode}
         onBack={() => navigateTo(myIssuesPath(data.workspace.urlKey))}
         onNavigate={(page, teamKey, teamSection) =>
           navigateTo(settingsPath(data.workspace.urlKey, page, teamKey, teamSection))
         }
+        onCreateReleasePipeline={() => navigateTo(newReleasePipelinePath(data.workspace.urlKey))}
         onCreateTeam={() => navigateTo(newTeamPath(data.workspace.urlKey))}
         onWorkspaceUpdate={changeWorkspace}
         onWorkspaceDelete={removeWorkspace}
