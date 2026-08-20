@@ -1,11 +1,12 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as ContextMenu from '@radix-ui/react-context-menu'
+import * as Popover from '@radix-ui/react-popover'
 import { Bell, Check, ChevronRight, Clock3, Copy, Edit3, Filter, MessageSquare, MoreHorizontal, MousePointer2, PanelRightClose, PanelRightOpen, Plus, Search, Send, SlidersHorizontal, Star, Trash2, X } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { toast } from 'sonner'
 import { Avatar } from '@/components/issue/issue-row'
 import { PriorityIcon } from '@/components/issue/issue-icons'
 import { ViewGlyph, ViewIconPicker } from '@/components/views/view-icon-picker'
+import { useI18n } from '@/i18n/i18n'
 import type { Initiative, InitiativeMutationInput, InitiativeStatus, InitiativeUpdate, IssueLabel, Project, ProjectUpdate, Team, User } from '@/types/flow'
 import type { InitiativeRouteTab, InitiativesRouteView } from '@/lib/app-routes'
 import { InitiativeLabelsPicker, InitiativeProperties, InitiativeStatusIcon } from './initiative-shared'
@@ -46,6 +47,9 @@ export function InitiativesPage(props: Props) {
   const { initiatives, initiativeUpdates, projects, projectUpdates, users, teams, labels, viewer, view, onViewChange, onOpen, onCreate, onCreateUpdate, onUpdate, onDelete, onCreateReminder, onOpenSidebar, createOnMount = false } = props
   const [creating, setCreating] = useState(false)
   const [filters, setFilters] = useState<FilterState>({})
+  const [filterMode, setFilterMode] = useState<'all'|'any'>('all')
+  const [advancedFilterEnabled, setAdvancedFilterEnabled] = useState(false)
+  const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false)
   const [properties, setProperties] = useState<Set<Property>>(() => new Set(DEFAULT_PROPERTIES))
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [sort, setSort] = useState<Sort>('manual')
@@ -56,17 +60,11 @@ export function InitiativesPage(props: Props) {
 
   const visible = useMemo(() => initiatives.filter(item => {
     const inView = view === 'active' ? item.status === 'active' : view === 'planned' ? item.status === 'planned' || item.status === 'proposed' : true
+    const matches = Object.entries(filters).map(([key, value]) => matchesInitiativeFilter(item, key as keyof FilterState, value as NonNullable<FilterState[keyof FilterState]>))
+    const matchesFilters = matches.length === 0 || (filterMode === 'all' ? matches.every(Boolean) : matches.some(Boolean))
     return inView
       && (showTeamInitiatives || !(item.leadTeamId && item.contributingTeamIds.includes(item.leadTeamId)))
-      && (filters.status === undefined || item.status === filters.status)
-      && (filters.priority === undefined || item.priority === filters.priority)
-      && (filters.ownerId === undefined || (item.owner?.id ?? '') === filters.ownerId)
-      && (filters.creatorId === undefined || item.creator.id === filters.creatorId)
-      && (filters.leadTeamId === undefined || (item.leadTeamId ?? '') === filters.leadTeamId)
-      && (filters.teamId === undefined || item.contributingTeamIds.includes(filters.teamId))
-      && (filters.health === undefined || item.health === filters.health)
-      && (filters.labelId === undefined || item.labelIds.includes(filters.labelId))
-      && (filters.date === undefined || matchesDateFilter(item, filters.date))
+      && matchesFilters
   }).sort((a, b) => {
     if (sort === 'name') return a.name.localeCompare(b.name)
     if (sort === 'priority') return a.priority - b.priority
@@ -75,7 +73,7 @@ export function InitiativesPage(props: Props) {
     if (sort === 'created') return a.createdAt.localeCompare(b.createdAt)
     if (sort === 'updated') return a.updatedAt.localeCompare(b.updatedAt)
     return 0
-  }), [filters, initiatives, showTeamInitiatives, sort, view])
+  }), [filterMode, filters, initiatives, showTeamInitiatives, sort, view])
 
   const columns = TABLE_PROPERTY_ORDER.filter(property => properties.has(property))
   const columnGrid = `300px ${columns.map(columnWidth).join(' ')}`
@@ -122,12 +120,12 @@ export function InitiativesPage(props: Props) {
     <div className="li-toolbar">
       <nav>{(['active', 'planned', 'all'] as InitiativesRouteView[]).map(item => <button aria-current={view === item ? 'page' : undefined} key={item} onClick={() => onViewChange(item)} type="button">{item === 'all' ? 'All initiatives' : titleCase(item)}</button>)}</nav>
       <div className="li-toolbar-actions">
-        <FilterMenu filters={filters} initiatives={initiatives} labels={labels} onChange={setFilters} teams={teams} users={users}/>
+        <FilterMenu filters={filters} initiatives={initiatives} labels={labels} onAdvanced={() => { setAdvancedFilterEnabled(true); setAdvancedFilterOpen(true) }} onChange={setFilters} teams={teams} users={users}/>
         <DisplayMenu grouping={grouping} properties={properties} showTeamInitiatives={showTeamInitiatives} sort={sort} onGrouping={setGrouping} onProperty={toggleProperty} onShowTeamInitiatives={setShowTeamInitiatives} onSort={setSort}/>
         <button aria-expanded={detailsOpen} aria-label={detailsOpen ? 'Close sidebar' : 'Open sidebar'} className="li-icon-button" onClick={toggleDetails} type="button">{detailsOpen ? <PanelRightClose size={14}/> : <PanelRightOpen size={14}/>}</button>
       </div>
     </div>
-    {Object.keys(filters).length > 0 && <div className="li-filter-chips">{Object.entries(filters).map(([key, value]) => <button key={key} onClick={() => setFilters(current => { const next = { ...current }; delete next[key as keyof FilterState]; return next })} type="button"><span>{filterLabel(key, value, users, teams, labels)}</span><X size={11}/></button>)}<button onClick={() => setFilters({})} type="button">Clear all</button></div>}
+    {advancedFilterEnabled ? <AdvancedFilterBar filters={filters} initiatives={initiatives} labels={labels} mode={filterMode} open={advancedFilterOpen} teams={teams} users={users} onChange={setFilters} onMode={setFilterMode} onOpenChange={setAdvancedFilterOpen} onRemove={() => { setFilters({}); setAdvancedFilterEnabled(false); setAdvancedFilterOpen(false) }}/> : Object.keys(filters).length > 0 && <div className="li-filter-chips">{Object.entries(filters).map(([key, value]) => <button key={key} onClick={() => setFilters(current => { const next = { ...current }; delete next[key as keyof FilterState]; return next })} type="button"><span>{filterLabel(key, value, users, teams, labels)}</span><X size={11}/></button>)}<button onClick={() => setFilters({})} type="button">Clear all</button></div>}
     <div className="li-list-body">
       <div className="li-table" style={{ '--li-extra-columns': columns.length } as React.CSSProperties}>
         {visible.length > 0 && <div className="li-columns" style={{ gridTemplateColumns: columnGrid }}><button onClick={() => setSort('name')} type="button">Name</button>{columns.map(property => <ColumnHeader key={property} property={property} onSort={setSort}/>)}</div>}
@@ -138,7 +136,7 @@ export function InitiativesPage(props: Props) {
       {detailsOpen && <InitiativesListSidebar initiatives={visible} teams={teams} users={users} view={view}/>}
     </div>
     {selected.size > 0 && <InitiativesBulkBar initiatives={initiatives.filter(item => selected.has(item.id))} labels={labels} users={users} onClear={() => setSelected(new Set())} onDelete={async () => { await Promise.all([...selected].map(onDelete)); setSelected(new Set()) }} onUpdate={input => Promise.all([...selected].map(id => onUpdate(id, input)))}/>} 
-    {updatesInitiative && <InitiativeUpdatesPanel initiative={updatesInitiative} updates={initiativeUpdates[updatesInitiative.id] ?? []} viewer={viewer} onClose={() => setUpdatesInitiative(undefined)} onCreateUpdate={onCreateUpdate} onOpen={() => onOpen(updatesInitiative, 'activity')}/>} 
+    {updatesInitiative && <InitiativeUpdatesPanel initiative={updatesInitiative} updates={initiativeUpdates[updatesInitiative.id] ?? []} viewer={viewer} onClose={() => setUpdatesInitiative(undefined)} onCreateUpdate={onCreateUpdate} onOpen={() => onOpen(updatesInitiative, 'activity')} onUpdate={input => onUpdate(updatesInitiative.id, input)}/>}
   </main>
 }
 
@@ -156,10 +154,10 @@ function InitiativesBulkBar({ initiatives, users, labels, onClear, onDelete, onU
   return <div aria-label={`${initiatives.length} selected initiatives`} className="li-bulk" role="toolbar"><span><strong>{initiatives.length}</strong> selected</span><DropdownMenu.Root><DropdownMenu.Trigger asChild><button type="button">⌘&nbsp; Actions</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="center" className="li-menu li-bulk-menu" sideOffset={7}>
     <DropdownMenu.Sub><DropdownMenu.SubTrigger>Status<ChevronRight className="li-menu-end" size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="li-menu">{(['proposed', 'planned', 'active', 'completed', 'canceled'] as InitiativeStatus[]).map(status => <DropdownMenu.Item key={status} onSelect={() => void onUpdate({ status })}><InitiativeStatusIcon status={status}/>{titleCase(status)}</DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
     <DropdownMenu.Sub><DropdownMenu.SubTrigger>Priority<ChevronRight className="li-menu-end" size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="li-menu">{[0, 1, 2, 3, 4].map(priority => <DropdownMenu.Item key={priority} onSelect={() => void onUpdate({ priority })}><PriorityIcon priority={priority} size={14}/>{['No priority', 'Urgent', 'High', 'Medium', 'Low'][priority]}</DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
-    <DropdownMenu.Sub><DropdownMenu.SubTrigger>Owner<ChevronRight className="li-menu-end" size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="li-menu"><DropdownMenu.Item onSelect={() => void onUpdate({ ownerId: '' })}>No owner</DropdownMenu.Item>{users.map(user => <DropdownMenu.Item key={user.id} onSelect={() => void onUpdate({ ownerId: user.id })}><Avatar name={user.displayName || user.name}/>{user.displayName || user.name}</DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
-    <DropdownMenu.Sub><DropdownMenu.SubTrigger>Labels<ChevronRight className="li-menu-end" size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="li-menu">{labels.map(label => <DropdownMenu.Item key={label.id} onSelect={() => void onUpdate({ labelIds: allHaveLabel(label.id) ? initiatives.flatMap(item => item.labelIds).filter((id, index, ids) => id !== label.id && ids.indexOf(id) === index) : [...new Set(initiatives.flatMap(item => item.labelIds).concat(label.id))] })}><i className="li-filter-color" style={{ background: label.color }}/>{label.name}{allHaveLabel(label.id) && <Check className="li-menu-end" size={12}/>}</DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
+    <DropdownMenu.Sub><DropdownMenu.SubTrigger>Owner<ChevronRight className="li-menu-end" size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="li-menu"><DropdownMenu.Item onSelect={() => void onUpdate({ ownerId: '' })}>No owner</DropdownMenu.Item>{users.map(user => <DropdownMenu.Item key={user.id} onSelect={() => void onUpdate({ ownerId: user.id })}><Avatar name={user.displayName || user.name}/><span data-i18n-ignore>{user.displayName || user.name}</span></DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
+    <DropdownMenu.Sub><DropdownMenu.SubTrigger>Labels<ChevronRight className="li-menu-end" size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="li-menu">{labels.map(label => <DropdownMenu.Item key={label.id} onSelect={() => void onUpdate({ labelIds: allHaveLabel(label.id) ? initiatives.flatMap(item => item.labelIds).filter((id, index, ids) => id !== label.id && ids.indexOf(id) === index) : [...new Set(initiatives.flatMap(item => item.labelIds).concat(label.id))] })}><i className="li-filter-color" style={{ background: label.color }}/><span data-i18n-ignore>{label.name}</span>{allHaveLabel(label.id) && <Check className="li-menu-end" size={12}/>}</DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
     <DropdownMenu.Separator/><DropdownMenu.Item className="danger" onSelect={() => void onDelete()}><Trash2 size={14}/>Delete</DropdownMenu.Item>
-  </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root><button aria-label="Ask Flow" onClick={() => toast.info('Ask Flow requires the Flow AI integration.')} type="button"><MousePointer2 size={14}/></button><button aria-label="Clear selected" onClick={onClear} type="button"><X size={14}/></button></div>
+  </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root><button aria-label="Ask Flow" aria-disabled="true" disabled title="Flow AI is not configured for this workspace" type="button"><MousePointer2 size={14}/></button><button aria-label="Clear selected" onClick={onClear} type="button"><X size={14}/></button></div>
 }
 
 function InitiativeRow({ initiative, initiativeUpdates, projects, projectUpdates, properties, columns, selected, users, teams, labels, onCreateReminder, onDelete, onOpen, onOpenUpdates, onSelect, onUpdate }: {
@@ -260,7 +258,7 @@ function DisplayMenu({ grouping, properties, showTeamInitiatives, sort, onGroupi
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 
-function FilterMenu({ filters, initiatives, users, teams, labels, onChange }: { filters: FilterState; initiatives: Initiative[]; users: User[]; teams: Team[]; labels: IssueLabel[]; onChange: (filters: FilterState) => void }) {
+function FilterMenu({ filters, initiatives, users, teams, labels, onChange, onAdvanced }: { filters: FilterState; initiatives: Initiative[]; users: User[]; teams: Team[]; labels: IssueLabel[]; onChange: (filters: FilterState) => void; onAdvanced: () => void }) {
   const [query, setQuery] = useState('')
   const entries = [
     { id: 'status', label: 'Status' }, { id: 'priority', label: 'Priority' }, { id: 'ownerId', label: 'Owner' }, { id: 'creatorId', label: 'Creator' },
@@ -268,21 +266,89 @@ function FilterMenu({ filters, initiatives, users, teams, labels, onChange }: { 
   ].filter(item => item.label.toLowerCase().includes(query.toLowerCase()))
   return <DropdownMenu.Root onOpenChange={open => { if (!open) setQuery('') }}><DropdownMenu.Trigger asChild><button aria-label="Add filter" className="li-icon-button" type="button"><Filter size={14}/>{Object.keys(filters).length > 0 && <i/>}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className="li-menu li-filter-menu" sideOffset={4}>
     <div className="li-menu-search"><Search size={13}/><input aria-label="Add Filter…" autoFocus placeholder="Add Filter…" value={query} onChange={event => setQuery(event.target.value)}/><kbd>F</kbd></div>
-    {!query && <><DropdownMenu.Item disabled title="Requires the Flow AI integration"><span className="li-ai-filter">✦</span>AI filter</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item disabled title="Add multiple property filters below">Advanced filter</DropdownMenu.Item><DropdownMenu.Separator/></>}
+    {!query && <><DropdownMenu.Item disabled title="Requires the Flow AI integration"><span className="li-ai-filter">✦</span>AI filter</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item onSelect={onAdvanced}>Advanced filter</DropdownMenu.Item><DropdownMenu.Separator/></>}
     {entries.map(entry => <DropdownMenu.Sub key={entry.id}><DropdownMenu.SubTrigger>{entry.label}<ChevronRight className="li-menu-end" size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="li-menu li-filter-values" sideOffset={5}>{filterOptions(entry.id, initiatives, users, teams, labels).map(option => <DropdownMenu.Item key={String(option.value)} onSelect={() => onChange({ ...filters, [entry.id]: option.value })}>{option.icon}{option.label}{filters[entry.id as keyof FilterState] === option.value && <Check className="li-menu-end" size={13}/>}</DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>)}
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 
-function InitiativeUpdatesPanel({ initiative, updates, viewer, onClose, onCreateUpdate, onOpen }: { initiative: Initiative; updates: InitiativeUpdate[]; viewer: User; onClose: () => void; onCreateUpdate: Props['onCreateUpdate']; onOpen: () => void }) {
+const ADVANCED_FILTER_FIELDS = [
+  { id: 'status', label: 'Status' }, { id: 'priority', label: 'Priority' }, { id: 'ownerId', label: 'Owner' }, { id: 'creatorId', label: 'Creator' },
+  { id: 'leadTeamId', label: 'Lead team' }, { id: 'teamId', label: 'Contributing teams' }, { id: 'labelId', label: 'Labels' }, { id: 'health', label: 'Health' }, { id: 'date', label: 'Dates' },
+] as const
+
+type AdvancedFilterProps = {
+  filters: FilterState
+  initiatives: Initiative[]
+  users: User[]
+  teams: Team[]
+  labels: IssueLabel[]
+  mode: 'all'|'any'
+  onChange: (value: FilterState) => void
+  onMode: (value: 'all'|'any') => void
+}
+
+function AdvancedFilterBar(props: AdvancedFilterProps & { open: boolean; onOpenChange: (open: boolean) => void; onRemove: () => void }) {
+  const { filters, open, onChange, onOpenChange, onRemove } = props
+  const { t } = useI18n()
+  return <div className="li-filter-chips li-advanced-filter-bar">
+    <Popover.Root onOpenChange={onOpenChange} open={open}>
+      <div className="li-advanced-filter-chip"><Popover.Trigger asChild><button aria-label={t('Open advanced filter')} type="button">Advanced filter</button></Popover.Trigger><button aria-label={t('Remove advanced filter')} onClick={onRemove} type="button"><X size={12}/></button></div>
+      <Popover.Portal><Popover.Content align="start" className="li-advanced-filter-popover" collisionPadding={8} side="bottom" sideOffset={4} onOpenAutoFocus={event => event.preventDefault()}>
+        <AdvancedFilterBuilder {...props}/>
+      </Popover.Content></Popover.Portal>
+    </Popover.Root>
+    <button aria-label={t('Add another filter')} className="li-advanced-filter-add" onClick={() => onOpenChange(true)} type="button"><Plus size={13}/></button>
+    <button className="li-advanced-filter-clear" disabled={!Object.keys(filters).length} onClick={() => onChange({})} type="button">Clear</button>
+  </div>
+}
+
+function AdvancedFilterBuilder(props: AdvancedFilterProps) {
+  const { filters, mode, onChange, onMode } = props
+  const { t } = useI18n()
+  const entries = Object.entries(filters) as [keyof FilterState, NonNullable<FilterState[keyof FilterState]>][]
+  const remove = (field: keyof FilterState) => { const updated = { ...filters }; delete updated[field]; onChange(updated) }
+  const replaceField = (previous: keyof FilterState, next: keyof FilterState) => {
+    const option = filterOptions(next, props.initiatives, props.users, props.teams, props.labels)[0]
+    if (!option) return
+    const updated = { ...filters }; delete updated[previous]; Object.assign(updated, { [next]: option.value }); onChange(updated)
+  }
+  return <>
+    <div className="li-advanced-filter-group">
+      <div className="li-advanced-filter-group-content">{entries.length ? entries.map(([field, value]) => <AdvancedFilterRule field={field} key={field} value={value} {...props} onRemove={() => remove(field)} onReplaceField={next => replaceField(field, next)}/>) : <AdvancedFilterPicker {...props}/>}</div>
+      <button aria-label={t('Delete group')} onClick={() => onChange({})} type="button"><X size={13}/></button>
+    </div>
+    <div className="li-advanced-filter-footer"><button aria-label={t(`Toggle filter operator, currently ${mode === 'all' ? 'and' : 'or'}`)} onClick={() => onMode(mode === 'all' ? 'any' : 'all')} type="button">{mode === 'all' ? 'and' : 'or'}</button><AdvancedFilterPicker {...props}/></div>
+  </>
+}
+
+function AdvancedFilterRule({ field, value, onRemove, onReplaceField, ...props }: AdvancedFilterProps & { field: keyof FilterState; value: NonNullable<FilterState[keyof FilterState]>; onRemove: () => void; onReplaceField: (field: keyof FilterState) => void }) {
+  const fieldLabel = ADVANCED_FILTER_FIELDS.find(item => item.id === field)?.label ?? titleCase(field)
+  const { t } = useI18n()
+  const options = filterOptions(field, props.initiatives, props.users, props.teams, props.labels)
+  const valueOption = options.find(option => String(option.value) === String(value))
+  return <div className="li-advanced-filter-rule">
+    <DropdownMenu.Root><DropdownMenu.Trigger asChild><button type="button">{fieldLabel}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="li-menu li-advanced-filter-menu" sideOffset={4}>{ADVANCED_FILTER_FIELDS.map(item => <DropdownMenu.Item disabled={item.id !== field && props.filters[item.id] !== undefined} key={item.id} onSelect={() => onReplaceField(item.id)}>{item.label}{item.id === field && <Check className="li-menu-end" size={12}/>}</DropdownMenu.Item>)}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+    <span>is</span>
+    <DropdownMenu.Root><DropdownMenu.Trigger asChild><button data-i18n-ignore={['ownerId','creatorId','leadTeamId','teamId','labelId'].includes(field) ? '' : undefined} type="button">{valueOption?.label ?? String(value)}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="li-menu li-advanced-filter-menu" sideOffset={4}>{options.map(option => <DropdownMenu.Item data-i18n-ignore={['ownerId','creatorId','leadTeamId','teamId','labelId'].includes(field) ? '' : undefined} key={String(option.value)} onSelect={() => props.onChange({ ...props.filters, [field]: option.value })}>{option.icon}{option.label}{String(option.value) === String(value) && <Check className="li-menu-end" size={12}/>}</DropdownMenu.Item>)}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+    <button aria-label={`${t('Remove filter')}: ${t(fieldLabel)}`} onClick={onRemove} type="button"><X size={12}/></button>
+  </div>
+}
+
+function AdvancedFilterPicker(props: AdvancedFilterProps) {
+  const { t } = useI18n()
+  return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={t('Filter')} className="li-advanced-filter-picker" disabled={Object.keys(props.filters).length >= ADVANCED_FILTER_FIELDS.length} type="button"><Plus size={12}/>Filter</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="li-menu li-advanced-filter-menu" sideOffset={4}>{ADVANCED_FILTER_FIELDS.map(field => <DropdownMenu.Sub key={field.id}><DropdownMenu.SubTrigger disabled={props.filters[field.id] !== undefined}>{field.label}<ChevronRight className="li-menu-end" size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="li-menu li-filter-values" sideOffset={4}>{filterOptions(field.id, props.initiatives, props.users, props.teams, props.labels).map(option => <DropdownMenu.Item data-i18n-ignore={['ownerId','creatorId','leadTeamId','teamId','labelId'].includes(field.id) ? '' : undefined} key={String(option.value)} onSelect={() => props.onChange({ ...props.filters, [field.id]: option.value })}>{option.icon}{option.label}</DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>)}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+}
+
+function InitiativeUpdatesPanel({ initiative, updates, viewer, onClose, onCreateUpdate, onOpen, onUpdate }: { initiative: Initiative; updates: InitiativeUpdate[]; viewer: User; onClose: () => void; onCreateUpdate: Props['onCreateUpdate']; onOpen: () => void; onUpdate: (input: InitiativeMutationInput) => Promise<Initiative> }) {
   const [composing, setComposing] = useState(false)
   const [body, setBody] = useState('')
   const [health, setHealth] = useState<Project['health']>(initiative.health === 'noUpdate' ? 'onTrack' : initiative.health)
   const [saving, setSaving] = useState(false)
   const submit = async () => { if (!body.trim() || saving) return; setSaving(true); try { await onCreateUpdate(initiative.id, { body: body.trim(), health }); setBody(''); setComposing(false) } finally { setSaving(false) } }
   return <div className="li-update-panel-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) onClose() }}><aside className="li-update-panel" aria-label="Initiative updates">
-    <header><button onClick={onOpen} type="button"><ViewGlyph color={initiative.color} icon={initiative.icon || 'Initiative'}/>{initiative.name}</button><button onClick={() => toast.success('Subscribed to initiative updates')} type="button">Subscribed</button><button onClick={() => setComposing(true)} type="button">New update</button><button aria-label="Close initiative updates" onClick={onClose} type="button"><X size={15}/></button></header>
+    <header><button data-i18n-ignore onClick={onOpen} type="button"><ViewGlyph color={initiative.color} icon={initiative.icon || 'Initiative'}/>{initiative.name}</button><button aria-pressed={initiative.subscribed} onClick={() => void onUpdate({ subscribed: !initiative.subscribed })} type="button">{initiative.subscribed ? 'Subscribed' : 'Subscribe'}</button><button onClick={() => setComposing(true)} type="button">New update</button><button aria-label="Close initiative updates" onClick={onClose} type="button"><X size={15}/></button></header>
     {composing && <div className="li-update-panel-composer"><div><Avatar name={viewer.displayName || viewer.name}/><strong>{viewer.displayName || viewer.name}</strong><select aria-label="Update health" value={health} onChange={event => setHealth(event.target.value as Project['health'])}><option value="onTrack">On track</option><option value="atRisk">At risk</option><option value="offTrack">Off track</option></select></div><textarea autoFocus aria-label="Initiative update" placeholder="Write an initiative update…" value={body} onChange={event => setBody(event.target.value)}/><footer><button onClick={() => setComposing(false)} type="button">Cancel</button><button disabled={!body.trim() || saving} onClick={() => void submit()} type="button">Post update</button></footer></div>}
-    {!updates.length && !composing ? <div className="li-update-panel-empty"><span><Send size={22}/></span><strong>Initiative updates</strong><p>Write a short status report to keep everyone up-to-date on the progress and health of this initiative</p><button onClick={() => setComposing(true)} type="button">New initiative update <kbd>N</kbd><span>then</span><kbd>U</kbd></button><a href="https://flow.app/docs/initiative-and-project-updates" rel="noreferrer" target="_blank">Documentation</a></div> : <div className="li-update-panel-list">{updates.map(update => <article key={update.id}><header><Avatar name={update.user.displayName}/><strong>{update.user.displayName}</strong><time>{new Date(update.createdAt).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</time><span className={`li-update-health is-${update.health}`}/>{healthLabel(update.health)}</header><p>{update.body}</p></article>)}</div>}
+    {!updates.length && !composing ? <div className="li-update-panel-empty"><span><Send size={22}/></span><strong>Initiative updates</strong><p>Write a short status report to keep everyone up-to-date on the progress and health of this initiative</p><button onClick={() => setComposing(true)} type="button">New initiative update <kbd>N</kbd><span>then</span><kbd>U</kbd></button><a href="https://flow.app/docs/initiative-and-project-updates" rel="noreferrer" target="_blank">Documentation</a></div> : <div className="li-update-panel-list">{updates.map(update => <article key={update.id}><header><Avatar name={update.user.displayName}/><strong data-i18n-ignore>{update.user.displayName}</strong><time>{new Date(update.createdAt).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</time><span className={`li-update-health is-${update.health}`}/>{healthLabel(update.health)}</header><p data-i18n-ignore>{update.body}</p></article>)}</div>}
   </aside></div>
 }
 
@@ -318,5 +384,6 @@ function groupInitiatives(initiatives: Initiative[], grouping: Grouping, teams: 
   return [...buckets.values()]
 }
 function matchesDateFilter(initiative: Initiative, filter: NonNullable<FilterState['date']>) { const weekAgo = Date.now() - 7 * 86400000; if (filter === 'created7') return new Date(initiative.createdAt).getTime() >= weekAgo; if (filter === 'updated7') return new Date(initiative.updatedAt).getTime() >= weekAgo; if (filter === 'completed') return initiative.status === 'completed'; if (!initiative.targetDate) return false; const target = new Date(`${initiative.targetDate}T00:00:00`); const now = new Date(); return target.getFullYear() === now.getFullYear() && target.getMonth() === now.getMonth() }
+function matchesInitiativeFilter(initiative: Initiative, key: keyof FilterState, value: NonNullable<FilterState[keyof FilterState]>) { if (key === 'status') return initiative.status === value; if (key === 'priority') return initiative.priority === value; if (key === 'ownerId') return (initiative.owner?.id ?? '') === value; if (key === 'creatorId') return initiative.creator.id === value; if (key === 'leadTeamId') return (initiative.leadTeamId ?? '') === value; if (key === 'teamId') return initiative.contributingTeamIds.includes(String(value)); if (key === 'health') return initiative.health === value; if (key === 'labelId') return initiative.labelIds.includes(String(value)); return matchesDateFilter(initiative, value as NonNullable<FilterState['date']>) }
 function healthLabel(value: Project['health']) { return ({ onTrack: 'On track', atRisk: 'At risk', offTrack: 'Off track', noUpdate: 'No updates' } as const)[value] }
 function isoDate(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
