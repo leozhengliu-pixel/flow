@@ -45,16 +45,17 @@ func main() {
 	}
 	defer repository.Close()
 	s := &server{
-		store:      repository,
-		uploadPath: env("FLOW_UPLOAD_PATH", "data/uploads"),
-		staticPath: env("FLOW_STATIC_PATH", ""),
-		mailer:     smtpMailerFromEnv(),
+		store:        repository,
+		uploadPath:   env("FLOW_UPLOAD_PATH", "data/uploads"),
+		staticPath:   env("FLOW_STATIC_PATH", ""),
+		authDisabled: strings.EqualFold(env("FLOW_AUTH_DISABLED", "false"), "true"),
+		mailer:       smtpMailerFromEnv(),
 	}
 	if err := os.MkdirAll(s.uploadPath, 0o755); err != nil {
 		log.Fatal(err)
 	}
 
-	httpServer := &http.Server{Addr: ":8080", Handler: newHandler(s), ReadHeaderTimeout: 5 * time.Second}
+	httpServer := &http.Server{Addr: env("FLOW_HTTP_ADDR", ":8080"), Handler: newHandler(s), ReadHeaderTimeout: 5 * time.Second}
 	log.Printf("Flow API listening on http://localhost%s using %s", httpServer.Addr, dbPath)
 	log.Fatal(httpServer.ListenAndServe())
 }
@@ -122,6 +123,10 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/releases", s.createRelease)
 	mux.HandleFunc("PATCH /api/releases/{id}", s.updateRelease)
 	mux.HandleFunc("DELETE /api/releases/{id}", s.deleteRelease)
+	mux.HandleFunc("POST /api/release-pipelines", s.createReleasePipeline)
+	mux.HandleFunc("PATCH /api/release-pipelines/{id}", s.updateReleasePipeline)
+	mux.HandleFunc("POST /api/custom-emojis", s.createCustomEmoji)
+	mux.HandleFunc("PATCH /api/custom-emojis/{id}", s.updateCustomEmoji)
 	mux.HandleFunc("POST /api/asks", s.createAsk)
 	mux.HandleFunc("PATCH /api/asks/{id}", s.updateAsk)
 	mux.HandleFunc("POST /api/asks/{id}/decision", s.decideAsk)
@@ -158,6 +163,10 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/oauth-applications", s.createOAuthApplication)
 	mux.HandleFunc("PATCH /api/oauth-applications/{id}", s.updateOAuthApplication)
 	mux.HandleFunc("DELETE /api/oauth-applications/{id}", s.deleteOAuthApplication)
+	mux.HandleFunc("GET /api/webhooks", s.listWebhooks)
+	mux.HandleFunc("POST /api/webhooks", s.createWebhook)
+	mux.HandleFunc("PATCH /api/webhooks/{id}", s.updateWebhook)
+	mux.HandleFunc("DELETE /api/webhooks/{id}", s.deleteWebhook)
 	mux.HandleFunc("POST /api/oauth/token", s.exchangeOAuthToken)
 	mux.HandleFunc("GET /api/integrations", s.listIntegrations)
 	mux.HandleFunc("PUT /api/integrations/{provider}", s.connectIntegration)
@@ -166,6 +175,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/sla-rules", s.createSLARule)
 	mux.HandleFunc("PATCH /api/sla-rules/{id}", s.updateSLARule)
 	mux.HandleFunc("DELETE /api/sla-rules/{id}", s.deleteSLARule)
+	mux.HandleFunc("PUT /api/sla-settings", s.updateSLASettings)
 	mux.HandleFunc("PUT /api/project-update-settings", s.updateProjectUpdateSettings)
 	mux.HandleFunc("POST /api/drafts", s.createDraft)
 	mux.HandleFunc("PATCH /api/drafts/{id}", s.updateDraft)
@@ -328,6 +338,7 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
+	data.ViewerRole = "admin"
 	sanitizeBootstrap(&data)
 	writeJSON(w, http.StatusOK, data)
 }
@@ -498,7 +509,7 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 		if data.TeamSettings == nil {
 			data.TeamSettings = map[string]domain.TeamSettings{}
 		}
-		data.TeamSettings[team.ID] = domain.TeamSettings{TeamID: team.ID, Timezone: "Etc/UTC", EstimateType: "notUsed", DefaultStateID: "state_backlog"}
+		data.TeamSettings[team.ID] = domain.TeamSettings{TeamID: team.ID, Timezone: "Etc/UTC", EstimateType: "notUsed", DefaultStateID: "state_backlog", Access: "public", MembershipRestriction: "open", SettingsPermission: "allMembers", LabelPermission: "allMembers", TemplatePermission: "allMembers", AgentSkillPermission: "allMembers", LoopPermission: "allMembers", MemberPermission: "allMembers", SlackNotifications: map[string]bool{}, PRAutomations: map[string]string{}, StaleMonths: 6, AutoArchiveMonths: 6, ProgressOrder: "first", TriageAction: "none", ReleaseAutomations: []domain.TeamAutomationRule{}, TriageRules: []domain.TeamAutomationRule{}, AgentSkills: []domain.TeamAgentSkill{}, ResolvedSummaries: true, ShowInitiatives: true}
 		if data.CycleSettings == nil {
 			data.CycleSettings = map[string]domain.CycleSettings{}
 		}
@@ -1211,7 +1222,10 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 			}
 			template := data.IssueTemplates[index]
 			if input.Title == "" {
-				input.Title = template.Name
+				input.Title = template.Title
+				if input.Title == "" {
+					input.Title = template.Name
+				}
 			}
 			if input.Description == "" {
 				input.Description = template.Body
@@ -1310,7 +1324,10 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 			}
 			template := data.ProjectTemplates[index]
 			if input.Name == nil || strings.TrimSpace(*input.Name) == "" {
-				input.Name = &template.Name
+				input.Name = &template.ProjectName
+				if strings.TrimSpace(*input.Name) == "" {
+					input.Name = &template.Name
+				}
 			}
 			if input.Summary == nil && template.Summary != "" {
 				input.Summary = &template.Summary
@@ -1362,6 +1379,16 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 		created = domain.Project{ID: id, Name: strings.TrimSpace(*input.Name), SlugID: slug(strings.TrimSpace(*input.Name)), Color: "#5e6ad2", PriorityLabel: "No priority", Health: "noUpdate", Status: status, MemberIDs: []string{}, TeamIDs: teamIDs, DependencyIDs: []string{}, Initiatives: []string{}, Customers: []string{}, Resources: []domain.ProjectResource{}, Milestones: []domain.ProjectMilestone{}, Comments: []domain.Comment{}, DescriptionRevisions: []domain.ProjectDescriptionRevision{}, UpdateCadence: "none", CreatedAt: now, UpdatedAt: now}
 		if err := applyProjectUpdate(data, &created, input); err != nil {
 			return "", err
+		}
+		if input.TemplateID != "" {
+			if index := slices.IndexFunc(data.ProjectTemplates, func(template domain.ProjectTemplate) bool { return template.ID == input.TemplateID }); index >= 0 {
+				for milestoneIndex, milestone := range data.ProjectTemplates[index].Milestones {
+					created.Milestones = append(created.Milestones, domain.ProjectMilestone{
+						ID: fmt.Sprintf("project_milestone_%d_%d", time.Now().UnixNano(), milestoneIndex), ProjectID: created.ID,
+						Name: milestone.Name, Description: milestone.Description, CreatedAt: now, UpdatedAt: now,
+					})
+				}
+			}
 		}
 		data.Projects = append([]domain.Project{created}, data.Projects...)
 		if input.TemplateID != "" {

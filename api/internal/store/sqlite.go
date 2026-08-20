@@ -674,11 +674,37 @@ func normalize(data *domain.Bootstrap) {
 			data.UserSettings[user.ID] = defaultUserSettings(user.ID)
 		}
 	}
+	for userID, settings := range data.UserSettings {
+		if settings.PersonalSettingsVersion < 1 {
+			settings.PersonalSettingsVersion = 1
+			settings.CodeReviewsEnabled = true
+			settings.MergeStrategy = "Squash and merge"
+			settings.CodeTheme = "Flow Light"
+			settings.CodeFont = "12px, Regular, Default"
+			settings.ReviewCommentsFilter = "Exclude Bots"
+			settings.ReviewRequests = true
+			settings.GithubTeamReviewRequests = true
+			settings.ChecksMergeQueue = true
+			settings.GitAttachmentFormat = "Title"
+			settings.GitBranchMoveStarted = true
+			settings.CodingToolMoveStarted = true
+			settings.ChangelogUpdates = true
+			settings.InviteAcceptedUpdates = true
+			settings.PrivacyUpdates = true
+			data.UserSettings[userID] = settings
+		}
+	}
 	if data.WorkspaceSettings.SessionDurationDays == 0 {
 		data.WorkspaceSettings = defaultWorkspaceSettings(data)
 	}
 	if data.WorkspaceSettings.AllowedDomains == nil {
 		data.WorkspaceSettings.AllowedDomains = []string{}
+	}
+	if data.WorkspaceSettings.AICreditReloadThresholdCents == 0 {
+		data.WorkspaceSettings.AICreditReloadThresholdCents = 500
+	}
+	if data.WorkspaceSettings.AICreditReloadAmountCents == 0 {
+		data.WorkspaceSettings.AICreditReloadAmountCents = 2000
 	}
 	if data.LabelGroups == nil {
 		data.LabelGroups = []domain.LabelGroup{}
@@ -774,12 +800,66 @@ func normalize(data *domain.Bootstrap) {
 	if data.ExportJobs == nil {
 		data.ExportJobs = []domain.ExportJob{}
 	}
+	if data.Webhooks == nil {
+		data.Webhooks = []domain.Webhook{}
+	}
 	for _, team := range data.Teams {
 		settings := data.TeamSettings[team.ID]
 		if settings.TeamID == "" {
 			settings = domain.TeamSettings{TeamID: team.ID, Timezone: "Etc/UTC", EstimateType: "notUsed", DefaultStateID: defaultStateID(data, team.ID)}
-			data.TeamSettings[team.ID] = settings
 		}
+		if settings.Access == "" {
+			settings.Access = "public"
+		}
+		if settings.MembershipRestriction == "" {
+			settings.MembershipRestriction = "open"
+		}
+		if settings.SettingsPermission == "" {
+			settings.SettingsPermission = "allMembers"
+		}
+		if settings.LabelPermission == "" {
+			settings.LabelPermission = "allMembers"
+		}
+		if settings.TemplatePermission == "" {
+			settings.TemplatePermission = "allMembers"
+		}
+		if settings.AgentSkillPermission == "" {
+			settings.AgentSkillPermission = "allMembers"
+		}
+		if settings.LoopPermission == "" {
+			settings.LoopPermission = "allMembers"
+		}
+		if settings.MemberPermission == "" {
+			settings.MemberPermission = "allMembers"
+		}
+		if settings.SlackNotifications == nil {
+			settings.SlackNotifications = map[string]bool{}
+		}
+		if settings.PRAutomations == nil {
+			settings.PRAutomations = map[string]string{}
+		}
+		if settings.StaleMonths == 0 {
+			settings.StaleMonths = 6
+		}
+		if settings.AutoArchiveMonths == 0 {
+			settings.AutoArchiveMonths = 6
+		}
+		if settings.ProgressOrder == "" {
+			settings.ProgressOrder = "first"
+		}
+		if settings.TriageAction == "" {
+			settings.TriageAction = "none"
+		}
+		if settings.ReleaseAutomations == nil {
+			settings.ReleaseAutomations = []domain.TeamAutomationRule{}
+		}
+		if settings.TriageRules == nil {
+			settings.TriageRules = []domain.TeamAutomationRule{}
+		}
+		if settings.AgentSkills == nil {
+			settings.AgentSkills = []domain.TeamAgentSkill{}
+		}
+		data.TeamSettings[team.ID] = settings
 		cycle := data.CycleSettings[team.ID]
 		if cycle.DurationWeeks > 0 && cycle.Capacity == 0 {
 			cycle.Capacity = 4
@@ -921,11 +1001,11 @@ func normalize(data *domain.Bootstrap) {
 }
 
 func defaultUserSettings(userID string) domain.UserSettings {
-	return domain.UserSettings{UserID: userID, Language: "en-US", HomeView: "Flow Agent (default)", DisplayNames: "Full name", FirstDay: "Monday", Emoticons: true, SendComments: "Enter", FontSize: "Default", InterfaceTheme: "System preference", LightTheme: "Light", DarkTheme: "Dark", ReviewAutoAssign: true, BranchFormat: "{identifier}-{title}", AgentEnabled: true, UpdatedAt: time.Now().UTC()}
+	return domain.UserSettings{UserID: userID, Language: "en-US", HomeView: "Flow Agent (default)", DisplayNames: "Full name", FirstDay: "Monday", Emoticons: true, SendComments: "Enter", FontSize: "Default", InterfaceTheme: "System preference", LightTheme: "Light", DarkTheme: "Dark", ReviewAutoAssign: true, BranchFormat: "{identifier}-{title}", PersonalSettingsVersion: 1, CodeReviewsEnabled: true, MergeStrategy: "Squash and merge", CodeTheme: "Flow Light", CodeFont: "12px, Regular, Default", ReviewCommentsFilter: "Exclude Bots", ReviewRequests: true, GithubTeamReviewRequests: true, ChecksMergeQueue: true, GitAttachmentFormat: "Title", GitBranchMoveStarted: true, CodingToolMoveStarted: true, ChangelogUpdates: true, InviteAcceptedUpdates: true, PrivacyUpdates: true, AgentEnabled: true, UpdatedAt: time.Now().UTC()}
 }
 
 func defaultWorkspaceSettings(data *domain.Bootstrap) domain.WorkspaceSettings {
-	return domain.WorkspaceSettings{FiscalMonth: "January", GuestsAllowed: true, SessionDurationDays: 30, InvitePermission: "admins", TeamCreatePermission: "members", LabelPermission: "members", TemplatePermission: "members", APIKeyPermission: "members", FeatureFlags: map[string]bool{"ai": true, "initiatives": true, "documents": true, "customer-requests": true, "releases": true, "pulse": true, "asks": true, "emojis": true}, BillingEmail: data.Viewer.Email, Plan: "free", UpdatedAt: time.Now().UTC()}
+	return domain.WorkspaceSettings{FiscalMonth: "January", GuestsAllowed: true, SessionDurationDays: 30, InvitePermission: "admins", TeamCreatePermission: "members", LabelPermission: "members", TemplatePermission: "members", APIKeyPermission: "members", FeatureFlags: map[string]bool{"ai": true, "initiatives": true, "documents": true, "customer-requests": true, "releases": true, "pulse": true, "asks": true, "emojis": true}, FeatureSettings: domain.FeatureSettings{InitiativeUpdateSchedule: "none", CustomerRevenueFormat: "annual", CustomerRevenueCurrency: "USD", CustomerManualEdits: true, CustomerStatuses: []domain.FeatureOption{{ID: "active", Name: "Active", Color: "#4cb782"}, {ID: "prospect", Name: "Prospect", Color: "#5e6ad2"}, {ID: "churned", Name: "Churned", Color: "#f2c94c"}, {ID: "lost", Name: "Lost", Color: "#eb5757"}}, CustomerTiers: []domain.FeatureOption{}, CustomerExcludedDomains: []string{}, CustomerGenericDomains: []string{}, PulseWorkspaceSchedule: "daily", AsksEmailAddresses: []string{}}, BillingEmail: data.Viewer.Email, Plan: "free", GoogleAuthEnabled: true, EmailAuthEnabled: true, InitiativePermission: "members", LoopPermission: "members", AgentGuidancePermission: "admins", AICreditReloadThresholdCents: 500, AICreditReloadAmountCents: 2000, UpdatedAt: time.Now().UTC()}
 }
 
 func defaultStateID(data *domain.Bootstrap, teamID string) string {
