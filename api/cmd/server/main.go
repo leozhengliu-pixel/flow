@@ -3279,7 +3279,7 @@ func applySavedViewUpdate(data *domain.Bootstrap, view *domain.SavedView, input 
 		view.Color = color
 	}
 	if input.Resource != nil {
-		if !slices.Contains([]string{"issues", "projects"}, *input.Resource) {
+		if !slices.Contains([]string{"issues", "projects", "initiativeProjects"}, *input.Resource) {
 			return errInvalid
 		}
 		view.Resource = *input.Resource

@@ -51,7 +51,7 @@ export function InitiativeProperties({ initiative, users, teams = [], onUpdate, 
       <span className={`li-target-glyph ${initiative.targetDate ? '' : 'is-empty'}`} aria-hidden="true"/><span>{formatTarget(initiative.targetDate) || 'Target date'}</span>
     </ProjectTargetDatePicker>,
   }
-  return <div className={`${compact ? 'li-properties li-properties--compact' : 'li-properties'} ${only ? `li-properties--${only}` : ''}`}>{only ? controls[only] : <>{controls.status}{controls.priority}{controls.owner}{controls.leadTeam}{controls.target}</>}</div>
+  return <div className={`${compact ? 'li-properties li-properties--compact' : 'li-properties'} ${only ? `li-properties--${only}` : ''}`}>{only ? controls[only] : <>{controls.status}{controls.priority}{controls.owner}{controls.leadTeam}{controls.contributingTeams}{controls.target}</>}</div>
 }
 
 export function InitiativeTeamsPicker({ initiative, teams, onUpdate }: { initiative: Initiative; teams: Team[]; onUpdate: (input: InitiativeMutationInput) => void | Promise<unknown> }) {
