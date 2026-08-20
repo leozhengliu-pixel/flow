@@ -759,7 +759,7 @@ function projectGrid(visible: Set<string>) {
   return [
     '8px',
     '18px',
-    'minmax(300px, 425px)',
+    'minmax(300px, 1fr)',
     visible.has('Health') ? '130px' : '0px',
     visible.has('Priority') ? '68px' : '0px',
     visible.has('Lead') ? '48px' : '0px',
