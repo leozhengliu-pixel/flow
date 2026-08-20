@@ -3134,20 +3134,18 @@ function App() {
         />
       )}
       {page === "my-issues" && route.kind === "my-issues" && (
-        <main className="main-panel">
-          <MyIssuesPage
-            key={route.view}
-            data={data}
-            initialView={route.view}
-            onNavigateView={(_view, href) => navigateTo(href)}
-            onOpenSidebar={() => setMobileSidebarOpen(true)}
-            onOpenIssue={openIssue}
-            onCreateIssue={() => setCreateOpen(true)}
-            onUpdateIssue={updateIssueFromPage}
-            onUpdateIssues={updateIssuesFromPage}
-            onDeleteIssues={deleteIssuesFromPage}
-          />
-        </main>
+        <MyIssuesPage
+          key={route.view}
+          data={data}
+          initialView={route.view}
+          onNavigateView={(_view, href) => navigateTo(href)}
+          onOpenSidebar={() => setMobileSidebarOpen(true)}
+          onOpenIssue={openIssue}
+          onCreateIssue={() => setCreateOpen(true)}
+          onUpdateIssue={updateIssueFromPage}
+          onUpdateIssues={updateIssuesFromPage}
+          onDeleteIssues={deleteIssuesFromPage}
+        />
       )}
       {page === "workspace-issues" && route.kind === "workspace-issues" && (
         <IssueExplorerPage
