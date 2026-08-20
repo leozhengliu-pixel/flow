@@ -2635,7 +2635,7 @@ function App() {
         teamKey={route.teamKey}
         teamSection={route.teamSection}
         releasePipelineMode={route.releasePipelineMode}
-        onBack={() => navigateTo(myIssuesPath(data.workspace.urlKey))}
+        onBack={() => navigateTo(route.releasePipelineMode === "new" ? releasesPath(data.workspace.urlKey) : myIssuesPath(data.workspace.urlKey))}
         onNavigate={(page, teamKey, teamSection) =>
           navigateTo(settingsPath(data.workspace.urlKey, page, teamKey, teamSection))
         }
