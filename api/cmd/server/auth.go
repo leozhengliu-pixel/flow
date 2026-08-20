@@ -191,7 +191,8 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusForbidden, "You don't have access to this workspace")
 		return false
 	}
-	if adminOnlyRequest(r) && role != "admin" {
+	trashResourceType := trashRestoreResourceType(data, r)
+	if (adminOnlyRequest(r) || trashResourceType == "release_pipeline") && role != "admin" {
 		writeError(w, http.StatusForbidden, "Workspace admin access required")
 		return false
 	}
@@ -211,7 +212,11 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusForbidden, "Your workspace role cannot perform this action")
 		return false
 	}
-	if feature := featureForPath(r.URL.Path); feature != "" && data.WorkspaceSettings.FeatureFlags != nil && !data.WorkspaceSettings.FeatureFlags[feature] {
+	feature := featureForPath(r.URL.Path)
+	if feature == "" && (trashResourceType == "release" || trashResourceType == "release_pipeline") {
+		feature = "releases"
+	}
+	if feature != "" && data.WorkspaceSettings.FeatureFlags != nil && !data.WorkspaceSettings.FeatureFlags[feature] {
 		writeError(w, http.StatusForbidden, "This workspace feature is disabled")
 		return false
 	}
@@ -222,8 +227,24 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	return true
 }
 
+func trashRestoreResourceType(data domain.Bootstrap, r *http.Request) string {
+	if r.Method != http.MethodPost {
+		return ""
+	}
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) != 4 || parts[0] != "api" || parts[1] != "trash" || parts[3] != "restore" {
+		return ""
+	}
+	for _, item := range data.Trash {
+		if item.ID == parts[2] {
+			return item.ResourceType
+		}
+	}
+	return ""
+}
+
 func featureForPath(path string) string {
-	for prefix, feature := range map[string]string{"/api/documents": "documents", "/api/customers": "customer-requests", "/api/customer-requests": "customer-requests", "/api/releases": "releases", "/api/asks": "asks", "/api/initiatives": "initiatives"} {
+	for prefix, feature := range map[string]string{"/api/documents": "documents", "/api/customers": "customer-requests", "/api/customer-requests": "customer-requests", "/api/releases": "releases", "/api/release-pipelines": "releases", "/api/asks": "asks", "/api/initiatives": "initiatives"} {
 		if strings.HasPrefix(path, prefix) {
 			return feature
 		}
@@ -240,6 +261,9 @@ func adminOnlyRequest(r *http.Request) bool {
 		return true
 	}
 	if strings.HasPrefix(path, "/api/oauth-applications") || strings.HasPrefix(path, "/api/project-statuses") {
+		return true
+	}
+	if strings.HasPrefix(path, "/api/release-pipelines") && r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return true
 	}
 	if strings.HasPrefix(path, "/api/workspaces/") && (r.Method == http.MethodPatch || r.Method == http.MethodDelete) && !strings.Contains(path, "/teams/") {
@@ -332,6 +356,27 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 			return item.ID == projectID && (len(item.TeamIDs) == 0 || slices.ContainsFunc(item.TeamIDs, teamAllowed))
 		})
 	}
+	pipelineAllowed := func(pipelineID string) bool {
+		return slices.ContainsFunc(data.ReleasePipelines, func(item domain.ReleasePipeline) bool { return item.ID == pipelineID })
+	}
+	releaseAllowed := func(releaseID string) bool {
+		return slices.ContainsFunc(data.Releases, func(item domain.Release) bool { return item.ID == releaseID })
+	}
+	releaseMutationAllowed := func(input releaseInput) bool {
+		if input.PipelineID != nil && strings.TrimSpace(*input.PipelineID) != "" && !pipelineAllowed(strings.TrimSpace(*input.PipelineID)) {
+			return false
+		}
+		if input.ProjectIDs != nil && slices.ContainsFunc(*input.ProjectIDs, func(id string) bool { return strings.TrimSpace(id) != "" && !projectAllowed(strings.TrimSpace(id)) }) {
+			return false
+		}
+		if input.IssueIDs != nil && slices.ContainsFunc(*input.IssueIDs, func(id string) bool { return strings.TrimSpace(id) != "" && !issueAllowed(strings.TrimSpace(id)) }) {
+			return false
+		}
+		return true
+	}
+	pipelineMutationAllowed := func(input releasePipelineInput) bool {
+		return input.TeamIDs == nil || !slices.ContainsFunc(*input.TeamIDs, func(id string) bool { return strings.TrimSpace(id) != "" && !teamAllowed(strings.TrimSpace(id)) })
+	}
 	mutationAllowed := func(input domain.IssueUpdateInput) bool {
 		if input.ProjectID != nil && *input.ProjectID != "" && !projectAllowed(*input.ProjectID) {
 			return false
@@ -415,6 +460,46 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		if r.Method == http.MethodPatch {
 			var input domain.ProjectMutationInput
 			return peekRequestJSON(r, &input) && projectMutationAllowed(input)
+		}
+		return true
+	case "releases":
+		if len(parts) == 2 && r.Method == http.MethodPost {
+			var input releaseInput
+			return peekRequestJSON(r, &input) && releaseMutationAllowed(input)
+		}
+		if len(parts) < 3 {
+			return true
+		}
+		if parts[2] == "reorder" {
+			var input reorderInput
+			return peekRequestJSON(r, &input) && (input.PipelineID == "" || pipelineAllowed(input.PipelineID)) && !slices.ContainsFunc(input.IDs, func(id string) bool { return !releaseAllowed(id) })
+		}
+		if !releaseAllowed(parts[2]) {
+			return false
+		}
+		if r.Method == http.MethodPatch {
+			var input releaseInput
+			return peekRequestJSON(r, &input) && releaseMutationAllowed(input)
+		}
+		return true
+	case "release-pipelines":
+		if len(parts) == 2 && r.Method == http.MethodPost {
+			var input releasePipelineInput
+			return peekRequestJSON(r, &input) && pipelineMutationAllowed(input)
+		}
+		if len(parts) < 3 {
+			return true
+		}
+		if parts[2] == "reorder" {
+			var input reorderInput
+			return peekRequestJSON(r, &input) && !slices.ContainsFunc(input.IDs, func(id string) bool { return !pipelineAllowed(id) })
+		}
+		if !pipelineAllowed(parts[2]) {
+			return false
+		}
+		if r.Method == http.MethodPatch {
+			var input releasePipelineInput
+			return peekRequestJSON(r, &input) && pipelineMutationAllowed(input)
 		}
 		return true
 	case "cycles":
