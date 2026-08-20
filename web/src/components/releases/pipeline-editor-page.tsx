@@ -1,52 +1,146 @@
-import { Check, ChevronLeft, Plus, Rocket, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import * as Popover from '@radix-ui/react-popover'
+import {
+  CalendarDays, Check, ChevronDown, CircleCheck, CircleDashed, CircleDotDashed,
+  CircleHelp, CircleX, Plus, Repeat2,
+} from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
-import { createReleasePipeline } from '@/lib/api'
 import { useI18n } from '@/i18n/i18n'
-import type { BootstrapData, ReleasePipeline } from '@/types/flow'
+import { createReleasePipeline } from '@/lib/api'
+import type { BootstrapData, Release, ReleasePipeline } from '@/types/flow'
+import './pipeline-editor.css'
 
-export function PipelineEditorPage({ data, onCancel, onCreated, onOpenSidebar }: {
+type StageDraft = { name: string; status: Release['status'] }
+
+const DEFAULT_STAGES: StageDraft[] = [
+  { name: 'Planned', status: 'planned' },
+  { name: 'In Progress', status: 'inProgress' },
+  { name: 'Released', status: 'released' },
+  { name: 'Canceled', status: 'canceled' },
+]
+
+export function PipelineEditorPage({ data, onCancel, onCreated }: {
   data: BootstrapData
   onCancel: () => void
   onCreated: (pipeline: ReleasePipeline) => Promise<void>
-  onOpenSidebar: () => void
 }) {
   const { t } = useI18n()
   const [name, setName] = useState('')
   const [teamIds, setTeamIds] = useState<string[]>([])
+  const [teamOpen, setTeamOpen] = useState(false)
+  const [teamQuery, setTeamQuery] = useState('')
+  const [activeTeam, setActiveTeam] = useState(0)
   const [production, setProduction] = useState(true)
   const [type, setType] = useState<ReleasePipeline['type']>('scheduled')
-  const [stages, setStages] = useState(['Planned', 'In Progress', 'Released', 'Canceled'])
-  const [stageDraft, setStageDraft] = useState<string>()
+  const [stages, setStages] = useState<StageDraft[]>(DEFAULT_STAGES)
+  const [addingStage, setAddingStage] = useState(false)
+  const [stageName, setStageName] = useState('')
   const [saving, setSaving] = useState(false)
+  const filteredTeams = useMemo(() => {
+    const query = teamQuery.trim().toLowerCase()
+    return data.teams.filter(team => !query || `${team.name} ${team.key}`.toLowerCase().includes(query))
+  }, [data.teams, teamQuery])
+  const selectedTeams = data.teams.filter(team => teamIds.includes(team.id))
+
   const toggleTeam = (id: string) => setTeamIds(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id])
-  const createStage = () => {
-    const next = stageDraft?.trim()
-    if (!next || stages.includes(next)) return
-    setStages(current => [...current, next])
-    setStageDraft(undefined)
+  const addStage = () => {
+    const next = stageName.trim()
+    if (!next || stages.some(stage => stage.name.toLowerCase() === next.toLowerCase())) return
+    setStages(current => [...current.slice(0, -2), { name: next, status: 'inProgress' }, ...current.slice(-2)])
+    setStageName('')
+    setAddingStage(false)
   }
   const save = async () => {
+    if (!name.trim() || saving) return
     setSaving(true)
     try {
-      const stageStatuses = Object.fromEntries(stages.map(stage => [stage, stage === 'In Progress' ? 'inProgress' : stage === 'Released' ? 'released' : stage === 'Canceled' ? 'canceled' : 'planned'])) as ReleasePipeline['stageStatuses']
-      await onCreated(await createReleasePipeline({ name: name.trim(), teamIds, production, type, stages, stageStatuses }))
+      const stageStatuses = Object.fromEntries(stages.map(stage => [stage.name, stage.status])) as ReleasePipeline['stageStatuses']
+      await onCreated(await createReleasePipeline({
+        name: name.trim(), teamIds, production, type,
+        stages: stages.map(stage => stage.name), stageStatuses,
+      }))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('Could not create release pipeline'))
-    } finally { setSaving(false) }
+    } finally {
+      setSaving(false)
+    }
   }
-  return <main className="main-panel flow-pipeline-editor-page" aria-label={t('New release pipeline')}>
-    <header className="flow-releases-topbar"><button className="flow-releases-mobile-menu" aria-label={t('Open sidebar')} onClick={onOpenSidebar}><Rocket/></button><button className="flow-pipeline-editor-back" onClick={onCancel}><ChevronLeft/>{t('Releases')}</button><h1>{t('New pipeline')}</h1></header>
-    <div className="flow-pipeline-editor-content">
-      <section><header><h2>{t('General')}</h2></header><div className="flow-pipeline-editor-form">
-        <label><span>{t('Name')}</span><input autoFocus value={name} onChange={event => setName(event.target.value)} placeholder={t('Pipeline name')}/></label>
-        <fieldset><legend>{t('Teams')}</legend><div className="flow-pipeline-team-picker">{data.teams.map(team => <button aria-checked={teamIds.includes(team.id)} key={team.id} onClick={() => toggleTeam(team.id)} role="checkbox"><span>{teamIds.includes(team.id) && <Check/>}</span><i style={{ background: team.color }} data-i18n-ignore>{team.key.slice(0, 2)}</i><strong data-i18n-ignore>{team.name}</strong></button>)}</div><small>{teamIds.length ? t(`${teamIds.length} teams`) : t('All teams')}</small></fieldset>
-        <label className="flow-pipeline-production"><input checked={production} onChange={event => setProduction(event.target.checked)} type="checkbox"/><span><strong>{t('Production')}</strong><small>{t('Mark this pipeline as a production release pipeline.')}</small></span></label>
-        <fieldset className="flow-pipeline-type"><legend>{t('Type')}</legend><div>{(['scheduled','continuous'] as const).map(value => <button aria-checked={type === value} className={type === value ? 'active' : ''} key={value} onClick={() => setType(value)} role="radio"><span><Rocket/></span><strong>{t(value === 'scheduled' ? 'Scheduled' : 'Continuous')}</strong><small>{t(value === 'scheduled' ? 'Plan releases around target dates and ordered stages.' : 'Create releases continuously from your delivery workflow.')}</small>{type === value && <Check/>}</button>)}</div></fieldset>
-      </div></section>
-      <section><header><h2>{t('Stages')}</h2><p>{t('Define the ordered steps every release moves through.')}</p></header><div className="flow-pipeline-stages">{stages.map((stage, index) => <div key={`${stage}-${index}`}><span>{index + 1}</span><strong data-i18n-ignore>{stage}</strong><button aria-label={`${t('Remove')} ${stage}`} disabled={stages.length === 1} onClick={() => setStages(current => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2/></button></div>)}{stageDraft === undefined ? <button className="flow-pipeline-add-stage" onClick={() => setStageDraft('')}><Plus/>{t('Add stage')}</button> : <div className="flow-pipeline-stage-editor"><input autoFocus value={stageDraft} onChange={event => setStageDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') createStage(); if (event.key === 'Escape') setStageDraft(undefined) }} placeholder={t('Stage name')}/><button onClick={() => setStageDraft(undefined)}>{t('Cancel')}</button><button className="primary" disabled={!stageDraft.trim() || stages.includes(stageDraft.trim())} onClick={createStage}>{t('Create')}</button></div>}</div></section>
-    </div>
-    <footer className="flow-pipeline-editor-footer"><button disabled={saving} onClick={onCancel}>{t('Cancel')}</button><button className="primary" disabled={saving || !name.trim() || !stages.length} onClick={() => void save()}>{t(saving ? 'Creating…' : 'Create pipeline')}</button></footer>
-  </main>
+
+  return <form className="flow-pipeline-settings-editor" aria-label={t('New release pipeline')} onSubmit={event => { event.preventDefault(); void save() }}>
+    <section className="flow-pipeline-general" aria-labelledby="pipeline-general-heading">
+      <h2 id="pipeline-general-heading">{t('General')}</h2>
+      <div className="flow-pipeline-general-rows">
+        <div className="flow-pipeline-setting-row">
+          <label htmlFor="pipeline-name">{t('Name')}</label>
+          <input id="pipeline-name" autoFocus value={name} onChange={event => setName(event.target.value)} placeholder={t('Pipeline name')}/>
+        </div>
+
+        <div className="flow-pipeline-setting-row flow-pipeline-team-row">
+          <div className="flow-pipeline-setting-copy"><span>{t('Teams')}</span><small>{t('Optionally select the teams that own this pipeline.')}</small></div>
+          <Popover.Root open={teamOpen} onOpenChange={open => { setTeamOpen(open); if (!open) { setTeamQuery(''); setActiveTeam(0) } }}>
+            <Popover.Anchor asChild>
+              <div className="flow-pipeline-team-trigger">
+                <input data-i18n-ignore={selectedTeams.length ? true : undefined} role="combobox" aria-label={t('Teams')} aria-expanded={teamOpen} aria-haspopup="listbox" aria-controls="flow-pipeline-team-options" aria-activedescendant={teamOpen && filteredTeams[activeTeam] ? `flow-pipeline-team-${filteredTeams[activeTeam].id}` : undefined} autoComplete="off" spellCheck={false} placeholder={t('Select teams…')} value={teamOpen ? teamQuery : selectedTeams.map(team => team.name).join(', ')} onFocus={() => setTeamOpen(true)} onClick={() => setTeamOpen(true)} onChange={event => { setTeamQuery(event.target.value); setActiveTeam(0); setTeamOpen(true) }} onKeyDown={event => {
+                  if (event.key === 'ArrowDown') { event.preventDefault(); setTeamOpen(true); setActiveTeam(value => Math.min(value + 1, filteredTeams.length - 1)) }
+                  if (event.key === 'ArrowUp') { event.preventDefault(); setActiveTeam(value => Math.max(value - 1, 0)) }
+                  if (event.key === 'Enter' && teamOpen && filteredTeams[activeTeam]) { event.preventDefault(); toggleTeam(filteredTeams[activeTeam].id) }
+                  if (event.key === 'Escape') { event.preventDefault(); setTeamOpen(false) }
+                }}/>
+                <ChevronDown/>
+              </div>
+            </Popover.Anchor>
+            <Popover.Portal>
+              <Popover.Content className="flow-pipeline-team-menu" align="start" sideOffset={5} collisionPadding={12} onOpenAutoFocus={event => event.preventDefault()}>
+                <div id="flow-pipeline-team-options" role="listbox" aria-label={t('Teams')} aria-multiselectable="true">
+                  {filteredTeams.map((team, index) => <button id={`flow-pipeline-team-${team.id}`} type="button" role="option" aria-selected={teamIds.includes(team.id)} className={activeTeam === index ? 'active' : ''} key={team.id} onPointerMove={() => setActiveTeam(index)} onMouseDown={event => event.preventDefault()} onClick={() => toggleTeam(team.id)}>
+                    <span className="flow-pipeline-team-check">{teamIds.includes(team.id) && <Check/>}</span><i style={{ color: team.color }} data-i18n-ignore>{team.icon || team.key.slice(0, 1)}</i><strong data-i18n-ignore>{team.name}</strong>
+                  </button>)}
+                  {!filteredTeams.length && <p>{t('No teams found')}</p>}
+                </div>
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
+        </div>
+
+        <div className="flow-pipeline-setting-row">
+          <div className="flow-pipeline-setting-copy"><span>{t('Production')}</span><small>{t('Targets a production environment')}</small></div>
+          <button type="button" className="flow-pipeline-switch" role="switch" aria-label={t('Production')} aria-checked={production} onClick={() => setProduction(value => !value)}><span/></button>
+        </div>
+      </div>
+
+      <div className="flow-pipeline-type-heading"><span>{t('Type')}</span><small>{t('Choose how releases are created in this pipeline.')}</small></div>
+      <div className="flow-pipeline-type-cards" role="radiogroup" aria-label={t('Type')}>
+        <button type="button" role="radio" aria-checked={type === 'scheduled'} className={type === 'scheduled' ? 'selected' : ''} onClick={() => setType('scheduled')}>
+          <span className="flow-pipeline-type-icon"><CalendarDays/></span><strong>{t('Scheduled')}</strong><small>{t('Plan releases around target dates and ordered stages.')}</small>{type === 'scheduled' && <Check className="flow-pipeline-type-check"/>}
+        </button>
+        <button type="button" role="radio" aria-checked={type === 'continuous'} className={type === 'continuous' ? 'selected' : ''} onClick={() => setType('continuous')}>
+          <span className="flow-pipeline-type-icon"><Repeat2/></span><strong>{t('Continuous')}</strong><small>{t('Create releases continuously from your delivery workflow.')}</small>{type === 'continuous' && <Check className="flow-pipeline-type-check"/>}
+        </button>
+      </div>
+    </section>
+
+    <section className="flow-pipeline-stages-section" aria-labelledby="pipeline-stages-heading">
+      <header><h2 id="pipeline-stages-heading">{t('Stages')}</h2><p>{t('Manage the stages that releases move through in this pipeline. Syncs won’t automatically add issues to frozen stages.')}</p></header>
+      <div className="flow-pipeline-stage-list">
+        <StageRow stage={stages[0]}/>
+        <div className="flow-pipeline-started-label"><span>{t('Started')}</span><button type="button" aria-label={t('Add stage')} title={t('Add stage')} onClick={() => setAddingStage(true)}><Plus/></button><span className="flow-pipeline-stage-help" title={t('Stages between planned and released are considered started.')}><CircleHelp/></span></div>
+        {stages.slice(1, -2).map(stage => <StageRow inset key={stage.name} stage={stage}/>)}
+        {addingStage && <div className="flow-pipeline-stage-edit-row">
+          <span className="flow-pipeline-stage-edit-icon"><CircleDotDashed/></span>
+          <input autoFocus value={stageName} onChange={event => setStageName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addStage() } if (event.key === 'Escape') { event.preventDefault(); setAddingStage(false); setStageName('') } }} placeholder={t('Stage name')}/>
+          <div><button type="button" onClick={() => { setAddingStage(false); setStageName('') }}>{t('Cancel')}</button><button type="button" className="primary" disabled={!stageName.trim() || stages.some(stage => stage.name.toLowerCase() === stageName.trim().toLowerCase())} onClick={addStage}>{t('Create')}</button></div>
+        </div>}
+        <StageRow stage={stages.at(-2)!}/>
+        <StageRow stage={stages.at(-1)!}/>
+      </div>
+    </section>
+
+    <footer className="flow-pipeline-settings-actions"><button type="button" disabled={saving} onClick={onCancel}>{t('Cancel')}</button><button type="submit" className="primary" disabled={saving || !name.trim()}>{t(saving ? 'Creating…' : 'Create pipeline')}</button></footer>
+  </form>
+}
+
+function StageRow({ stage, inset = false }: { stage: StageDraft; inset?: boolean }) {
+  const Icon = stage.status === 'planned' ? CircleDashed : stage.status === 'inProgress' ? CircleDotDashed : stage.status === 'released' ? CircleCheck : CircleX
+  return <div className={`flow-pipeline-stage-row status-${stage.status}${inset ? ' inset' : ''}`}><div><Icon/><strong data-i18n-ignore>{stage.name}</strong></div></div>
 }

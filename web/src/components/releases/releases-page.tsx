@@ -7,11 +7,10 @@ import { toast } from 'sonner'
 import { CalendarIcon } from '@/components/issue/issue-icons'
 import { addFavorite, deleteRelease, recordRecentResource, removeFavorite, updateRelease } from '@/lib/api'
 import { useI18n } from '@/i18n/i18n'
-import { workspaceLibraryPath } from '@/lib/app-routes'
+import { newReleasePipelinePath, workspaceLibraryPath } from '@/lib/app-routes'
 import type { BootstrapData, Release, ReleasePipeline } from '@/types/flow'
 
 import { ReleaseEditorDialog } from './release-editor-dialog'
-import { PipelineEditorPage } from './pipeline-editor-page'
 import { pipelineSummary, releaseProgress, releasesByStage, releasesForPipeline, releaseStatusForStage } from './release-view-model'
 import './releases.css'
 
@@ -37,7 +36,6 @@ export function ReleasesPage({ data, initialReleaseId, onOpenSidebar, onNavigate
   const [editing, setEditing] = useState<Release|undefined>()
   const [opened, setOpened] = useState<Release|undefined>(initialRelease)
   const [creating, setCreating] = useState(false)
-  const [creatingPipeline, setCreatingPipeline] = useState(false)
   const [deleting, setDeleting] = useState<Release|undefined>()
   useEffect(() => {
     if (!initialReleaseId) return
@@ -67,10 +65,9 @@ export function ReleasesPage({ data, initialReleaseId, onOpenSidebar, onNavigate
     if (pipeline) openPipeline(pipeline, archive, tab)
     else onNavigate(root)
   }
-  if (creatingPipeline) return <PipelineEditorPage data={data} onCancel={() => setCreatingPipeline(false)} onOpenSidebar={onOpenSidebar} onCreated={async created => { await onReload(); setCreatingPipeline(false); openPipeline(created) }}/>
   return <>
     {pipeline ? <ReleasePipelineView data={data} pipeline={pipeline} tab={tab} archive={archive} onArchiveChange={value => openPipeline(pipeline, value, 'releases')} onBack={showDirectory} onCreate={() => setCreating(true)} onDelete={setDeleting} onEdit={release => setEditing(release)} onOpen={openRelease} onNavigate={onNavigate} onOpenSidebar={onOpenSidebar} onReload={onReload} onTabChange={changeTab}/>
-      : <ReleasePipelinesView data={data} directory={directory} onCreate={() => setCreatingPipeline(true)} onOpen={openPipeline} onOpenSidebar={onOpenSidebar} onNavigate={onNavigate}/>
+      : <ReleasePipelinesView data={data} directory={directory} onCreate={() => onNavigate(newReleasePipelinePath(data.workspace.urlKey))} onOpen={openPipeline} onOpenSidebar={onOpenSidebar} onNavigate={onNavigate}/>
     }
     {pipeline && creating && <ReleaseEditorDialog data={data} pipeline={pipeline} onClose={() => setCreating(false)} onSaved={onReload}/>}
     {pipeline && editing && <ReleaseEditorDialog data={data} pipeline={pipeline} release={editing} onClose={() => { setEditing(undefined); if (initialReleaseId) openPipeline(pipeline, archive, tab) }} onSaved={onReload}/>}

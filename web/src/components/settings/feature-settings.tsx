@@ -24,7 +24,7 @@ import type {
 import "./feature-settings.css";
 
 type FeaturePageId = Extract<SettingsPageId, "ai"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations">;
-type Props = { page: FeaturePageId; data: BootstrapData; onReload: () => Promise<void> };
+type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onReload: () => Promise<void> };
 
 const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
   aiUsageFeedback: false,
@@ -42,7 +42,7 @@ const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
   pulseWorkspaceSchedule: "daily", asksEmailAddresses: [],
 };
 
-export function FeatureSettingsPage({ page, data, onReload }: Props) {
+export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onReload }: Props) {
   const [busy, setBusy] = useState(false);
   const settings = useMemo(() => normalizeSettings(data.workspaceSettings), [data.workspaceSettings]);
   const save = async (next: WorkspaceSettings) => {
@@ -59,7 +59,7 @@ export function FeatureSettingsPage({ page, data, onReload }: Props) {
   if (page === "initiatives") return <InitiativesPage data={data} settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload}/>;
   if (page === "documents") return <DocumentsPage data={data} onReload={onReload}/>;
   if (page === "customer-requests") return <CustomerRequestsPage data={data} settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature}/>;
-  if (page === "releases") return <ReleasesPage data={data} onReload={onReload}/>;
+  if (page === "releases") return <ReleasesPage data={data} onCreate={onCreateReleasePipeline} onReload={onReload}/>;
   if (page === "pulse") return <PulsePage settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature}/>;
   if (page === "asks") return <AsksPage data={data} settings={settings} busy={busy} setFeature={setFeature} onReload={onReload}/>;
   if (page === "emojis") return <EmojisPage data={data} onReload={onReload}/>;
@@ -132,10 +132,10 @@ function CustomerRequestsPage({data,settings,busy,setEnabled,setFeature}:{data:B
   </FeatureShell>;
 }
 
-function ReleasesPage({data,onReload}:{data:BootstrapData;onReload:()=>Promise<void>}) {
+function ReleasesPage({data,onCreate,onReload}:{data:BootstrapData;onCreate:()=>void;onReload:()=>Promise<void>}) {
   const [query,setQuery]=useState(""); const [showArchived,setShowArchived]=useState(false); const [editing,setEditing]=useState<ReleasePipeline|null|undefined>();
   const pipelines=(data.releasePipelines??[]).filter(item=>showArchived?Boolean(item.archivedAt):!item.archivedAt).filter(item=>item.name.toLowerCase().includes(query.toLowerCase()));
-  return <div className="feature-wide"><FeatureShell title="Releases" description="Track which issues ship in each release."><div className="feature-toolbar"><label><Search size={15}/><input type="search" aria-label="Filter by pipeline name" placeholder="Filter by pipeline name…" value={query} onChange={event=>setQuery(event.target.value)}/></label><FeatureSelect label="Pipeline state" value={showArchived?"archived":"active"} options={[{value:"active",label:"Active"},{value:"archived",label:"Archived"}]} onChange={value=>setShowArchived(value==="archived")}/><span/><FeatureButton primary onClick={()=>setEditing(null)}><Plus size={14}/>New pipeline</FeatureButton></div>
+  return <div className="feature-wide"><FeatureShell title="Releases" description="Track which issues ship in each release."><div className="feature-toolbar"><label><Search size={15}/><input type="search" aria-label="Filter by pipeline name" placeholder="Filter by pipeline name…" value={query} onChange={event=>setQuery(event.target.value)}/></label><FeatureSelect label="Pipeline state" value={showArchived?"archived":"active"} options={[{value:"active",label:"Active"},{value:"archived",label:"Archived"}]} onChange={value=>setShowArchived(value==="archived")}/><span/><FeatureButton primary onClick={onCreate}><Plus size={14}/>New pipeline</FeatureButton></div>
     <div className="feature-table"><header><span>Pipeline name</span><span>Teams</span><span>Type</span><span>Releases</span><span/></header>{pipelines.map(item=><button key={item.id} className="feature-table-row" onClick={()=>setEditing(item)}><Rocket size={16}/><strong data-i18n-ignore>{item.name}</strong><span data-i18n-ignore>{item.teamIds.map(id=>data.teams.find(team=>team.id===id)?.name).filter(Boolean).join(", ")||"All teams"}</span><span>{item.type==="scheduled"?"Scheduled":"Continuous"}</span><span>{data.releases.length}</span><ChevronRight size={15}/></button>)}{!pipelines.length&&<FeatureEmpty icon={Rocket} title={query?"No matching pipelines":showArchived?"No archived pipelines":"No release pipelines"}/>}</div>
     {editing!==undefined&&<ReleasePipelineDialog data={data} pipeline={editing} onClose={()=>setEditing(undefined)} onReload={onReload}/>}</FeatureShell></div>;
 }
