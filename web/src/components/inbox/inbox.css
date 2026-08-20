@@ -251,11 +251,11 @@ html.flow-inbox-is-resizing * {
   height: 32px;
   place-items: center;
   object-fit: cover;
-  color: var(--theme-text-primary);
-  background: #55555a;
+  color: #fff;
+  background: var(--flow-inbox-avatar, lch(70% 60 220));
   border-radius: 50%;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 400;
 }
 
 .flow-inbox-row__kind {
