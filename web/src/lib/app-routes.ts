@@ -46,7 +46,7 @@ export type AppRoute =
   | { kind: 'workspace-library'; workspaceSlug: string; view: 'favorites'|'recent'|'audit-log'|'deleted' }
   | { kind: 'workspace-teams'; workspaceSlug: string }
   | { kind: 'new-team'; workspaceSlug: string }
-  | { kind: 'settings'; workspaceSlug: string; page: SettingsPageId; teamKey?: string; teamSection?: TeamSettingsSection }
+  | { kind: 'settings'; workspaceSlug: string; page: SettingsPageId; teamKey?: string; teamSection?: TeamSettingsSection; releasePipelineMode?: 'new' }
   | { kind: 'team-views'; workspaceSlug: string; teamKey: string; resource: ViewsResource }
   | { kind: 'team-views-new'; workspaceSlug: string; teamKey: string; resource: ViewsResource }
   | { kind: 'projects'; workspaceSlug: string }
@@ -93,6 +93,7 @@ export function parseAppRoute(pathname: string): AppRoute {
   if (section === 'settings' && third === 'new-team' && segments.length === 3) return { kind: 'new-team', workspaceSlug }
   if (section === 'settings' && third === 'account' && fourth === 'security' && segments.length === 4) return { kind: 'settings', workspaceSlug, page: 'account-security' }
   if (section === 'settings' && third === 'account' && fourth && ACCOUNT_SETTINGS.has(fourth as SettingsPageId) && segments.length === 4) return { kind: 'settings', workspaceSlug, page: fourth as SettingsPageId }
+  if (section === 'settings' && third === 'releases' && fourth === 'pipelines' && fifth === 'new' && segments.length === 5) return { kind: 'settings', workspaceSlug, page: 'releases', releasePipelineMode: 'new' }
   if (section === 'settings' && third === 'teams' && fourth && fifth === 'ai' && (sixth === 'updates' || sixth === 'summaries') && segments.length === 6) return { kind: 'settings', workspaceSlug, page: 'team', teamKey: fourth, teamSection: `ai-${sixth}` as TeamSettingsSection }
   if (section === 'settings' && third === 'teams' && fourth && (!fifth || TEAM_SETTINGS_SECTIONS.has(fifth as TeamSettingsSection)) && segments.length <= 5) return { kind: 'settings', workspaceSlug, page: 'team', teamKey: fourth, teamSection: (fifth as TeamSettingsSection) || 'overview' }
   if (section === 'settings' && third && SETTINGS_PAGES.has(third as SettingsPageId) && segments.length === 3) return { kind: 'settings', workspaceSlug, page: third as SettingsPageId }
@@ -146,6 +147,7 @@ export function customerPath(workspaceSlug: string, customer: { id: string; name
 export function documentPath(workspaceSlug: string, document: { slugId: string }) { return `${workspaceRootPath(workspaceSlug)}/document/${encode(document.slugId)}` }
 export function draftsPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/drafts` }
 export function releasesPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/releases` }
+export function newReleasePipelinePath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/settings/releases/pipelines/new` }
 export function asksPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/asks` }
 export function workspaceLibraryPath(workspaceSlug: string, view: 'favorites'|'recent'|'audit-log'|'deleted') { return `${workspaceRootPath(workspaceSlug)}/${view}` }
 export function teamsPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/teams` }
