@@ -200,6 +200,9 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 		if ensureCanonicalSavedViewDisplays(&data) {
 			changed = true
 		}
+		if ensureProjectMilestoneFields(&data) {
+			changed = true
+		}
 		normalize(&data)
 		s.workspaces[key] = data
 		if changed {
@@ -248,6 +251,7 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	ensureCanonicalLabelGroups(&data)
 	ensureCanonicalLabels(&data)
 	ensureCanonicalSavedViewDisplays(&data)
+	ensureProjectMilestoneFields(&data)
 	ensureCanonicalNotifications(&data)
 	ensureCanonicalInitiatives(&data)
 	ensureCanonicalCycles(&data)
@@ -256,6 +260,45 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	s.lastWorkspaceKey = data.Workspace.URLKey
 	s.viewer = data.Viewer
 	return s.persistWorkspace(ctx, data.Workspace.URLKey, data, nil)
+}
+
+func ensureProjectMilestoneFields(data *domain.Bootstrap) bool {
+	changed := false
+	validMilestones := map[string]bool{}
+	descriptions := map[string]string{
+		"milestone_seal_test":   "完成高关联测试用例并补齐执行结果。",
+		"milestone_seal_review": "测试报告、回滚方案和代码证据满足上线门禁。",
+		"milestone_car_phase1":  "完成一期订单流程交付与缺陷收敛。",
+		"milestone_car_316":     "完成 316 迭代范围并复盘估算偏差。",
+	}
+	for projectIndex := range data.Projects {
+		if data.Projects[projectIndex].ID == "project_aut" && data.Projects[projectIndex].Name == "汽车之家车商城项目2026" {
+			data.Projects[projectIndex].Name = "[Flow 对比演示] 汽车之家车商城项目 2026"
+			changed = true
+		}
+		for milestoneIndex := range data.Projects[projectIndex].Milestones {
+			milestone := &data.Projects[projectIndex].Milestones[milestoneIndex]
+			validMilestones[milestone.ID] = true
+			if milestone.Description == "" && descriptions[milestone.ID] != "" {
+				milestone.Description = descriptions[milestone.ID]
+				changed = true
+			}
+		}
+	}
+	assignments := map[string]string{
+		"issue_53156": "milestone_car_phase1", "issue_53063": "milestone_car_phase1", "issue_100474": "milestone_car_phase1", "issue_52526": "milestone_car_phase1",
+		"issue_100417": "milestone_car_316", "issue_100879": "milestone_car_316", "issue_105130": "milestone_car_316", "issue_108415": "milestone_car_316", "issue_100880": "milestone_car_316", "issue_101479": "milestone_car_316", "issue_delivery_metrics": "milestone_car_316",
+		"issue_49219": "milestone_seal_test", "issue_49216": "milestone_seal_test", "issue_49215": "milestone_seal_test", "issue_test_plan": "milestone_seal_test", "issue_test_report": "milestone_seal_test",
+		"issue_release_review": "milestone_seal_review", "issue_audit_gate": "milestone_seal_review",
+	}
+	for issueIndex := range data.Issues {
+		milestoneID := assignments[data.Issues[issueIndex].ID]
+		if validMilestones[milestoneID] && data.Issues[issueIndex].ProjectMilestoneID == nil {
+			data.Issues[issueIndex].ProjectMilestoneID = stringPointer(milestoneID)
+			changed = true
+		}
+	}
+	return changed
 }
 
 func ensureCanonicalCycles(data *domain.Bootstrap) bool {
@@ -605,6 +648,13 @@ func activityNotificationType(activity domain.ActivityEvent) string {
 }
 
 func normalize(data *domain.Bootstrap) {
+	for projectIndex := range data.Projects {
+		for resourceIndex := range data.Projects[projectIndex].Resources {
+			if data.Projects[projectIndex].Resources[resourceIndex].PinnedTeamIDs == nil {
+				data.Projects[projectIndex].Resources[resourceIndex].PinnedTeamIDs = []string{}
+			}
+		}
+	}
 	for index := range data.States {
 		if data.States[index].TeamID == "" && data.States[index].ID == "state_backlog" {
 			data.States[index].Default = true

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
-import { Filter, Plus, Trash2 } from 'lucide-react'
+import { Diamond, Filter, Plus, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { MyIssuesDisplayMenu } from '@/components/my-issues/my-issues-display-menu'
 import { MyIssuesFilterMenu } from '@/components/my-issues/my-issues-filter-menu'
@@ -10,7 +10,7 @@ import { MyIssuesList, type MyIssuesContextAction, type MyIssuesEditableProperty
 import type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption, MyIssuesGrouping, MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
 import { IssueBoard } from '@/components/issue-explorer/issue-board'
 import { ViewIconPicker } from '@/components/views/view-icon-picker'
-import type { Issue } from '@/types/flow'
+import type { Issue, ProjectMilestone } from '@/types/flow'
 import type { ProjectDetailProps } from './project-detail-types'
 import { PRIORITY_LABELS } from './project-detail-types'
 
@@ -24,7 +24,7 @@ export function ProjectIssueFilterMenu({ filters, issues, onChange }: { filters:
     const label = FILTER_LABELS[field]
     if (label) onChange(toggleFilterOption(filters, field, label, option))
   }
-  return <MyIssuesFilterMenu filters={filters} onOpenChange={setOpen} onToggle={toggle} open={open} options={field => options[field]} trigger={<button aria-label="Add filter" className="project-detail-page__toolbar-button" data-active={filters.length > 0} type="button"><Filter size={14}/>{filters.length > 0 && <i>{filters.length}</i>}</button>}/>
+  return <MyIssuesFilterMenu availableFields={['status','assignee','priority','labels']} filters={filters} onOpenChange={setOpen} onToggle={toggle} open={open} options={field => options[field]} trigger={<button aria-label="Add filter" className="project-detail-page__toolbar-button" data-active={filters.length > 0} type="button"><Filter size={14}/>{filters.length > 0 && <i>{filters.length}</i>}</button>}/>
 }
 
 export function ProjectIssueDisplayMenu({ display, onChange }: { display: MyIssuesDisplayOptions; onChange: (display: MyIssuesDisplayOptions) => void }) {
@@ -57,7 +57,7 @@ export function ProjectNewView({ display, filters, onCreateSavedView, onDisplayC
   </div>
 }
 
-export function ProjectIssues({ display, filters, issues, labels, labelGroups, onCreateIssue, onDeleteIssues, onFiltersChange, onOpenIssue, onUpdateIssue, project, projectIssues, users }: ProjectDetailProps & { projectIssues: Issue[]; filters: ProjectIssueFilters; display: MyIssuesDisplayOptions; onFiltersChange: (filters: ProjectIssueFilters) => void }) {
+export function ProjectIssues({ display, filters, issues, labels, labelGroups, milestoneScope, onClearMilestoneScope, onCreateIssue, onDeleteIssues, onFiltersChange, onOpenIssue, onUpdateIssue, project, projectIssues, users }: ProjectDetailProps & { projectIssues: Issue[]; filters: ProjectIssueFilters; display: MyIssuesDisplayOptions; milestoneScope?: ProjectMilestone; onClearMilestoneScope?: () => void; onFiltersChange: (filters: ProjectIssueFilters) => void }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [deleteTarget, setDeleteTarget] = useState<Issue>()
@@ -92,9 +92,10 @@ export function ProjectIssues({ display, filters, issues, labels, labelGroups, o
   }
 
   return <div className="project-issues" data-layout={display.layout}>
+    {milestoneScope && <div className="project-issues__milestone-scope"><Diamond size={13}/><span data-i18n-ignore>{milestoneScope.name}</span><button aria-label="Clear milestone filter" onClick={onClearMilestoneScope} type="button"><X size={12}/></button></div>}
     <ProjectIssueFilterBar filters={filters} issues={projectIssues} onChange={onFiltersChange}/>
-    {groups.length > 0 && (display.layout === 'list' ? <MyIssuesList collapsedGroupIds={collapsed} displayProperties={display.properties} groups={groups} nestedSubIssues={display.nestedSubIssues} propertyOptions={propertyOptions} selectedIds={selected} onContextAction={contextAction} onCreateIssue={() => onCreateIssue(project.id)} onGroupCollapsedChange={(groupId, isCollapsed) => setCollapsed(current => { const next = new Set(current); if (isCollapsed) next.add(groupId); else next.delete(groupId); return next })} onOpenIssue={row => { const issue = rowIssues.get(row.id); if (issue) onOpenIssue(issue) }} onPropertyChange={changeProperty} onSelectIssue={select}/> : <IssueBoard groups={groups} onCreateIssue={() => onCreateIssue(project.id)} onMove={move} onOpenIssue={row => { const issue = rowIssues.get(row.id); if (issue) onOpenIssue(issue) }} onSelectIssue={select} properties={display.properties} selectedIds={selected}/>) }
-    {!groups.length && <div className="project-issues__empty"><strong>No matching issues</strong><span>Change the filters or create a new issue.</span><button onClick={() => onCreateIssue(project.id)} type="button"><Plus size={13}/>Create issue</button></div>}
+    {groups.length > 0 && (display.layout === 'list' ? <MyIssuesList collapsedGroupIds={collapsed} displayProperties={display.properties} groups={groups} nestedSubIssues={display.nestedSubIssues} propertyOptions={propertyOptions} selectedIds={selected} onContextAction={contextAction} onCreateIssue={() => onCreateIssue(project.id, milestoneScope?.id)} onGroupCollapsedChange={(groupId, isCollapsed) => setCollapsed(current => { const next = new Set(current); if (isCollapsed) next.add(groupId); else next.delete(groupId); return next })} onOpenIssue={row => { const issue = rowIssues.get(row.id); if (issue) onOpenIssue(issue) }} onPropertyChange={changeProperty} onSelectIssue={select}/> : <IssueBoard groups={groups} onCreateIssue={() => onCreateIssue(project.id, milestoneScope?.id)} onMove={move} onOpenIssue={row => { const issue = rowIssues.get(row.id); if (issue) onOpenIssue(issue) }} onSelectIssue={select} properties={display.properties} selectedIds={selected}/>) }
+    {!groups.length && <div className="project-issues__empty"><strong>No matching issues</strong><span>Change the filters or create a new issue.</span><button onClick={() => onCreateIssue(project.id, milestoneScope?.id)} type="button"><Plus size={13}/>Create issue</button></div>}
     {selected.size > 0 && <div className="project-issues__bulk"><span>{selected.size} selected</span><button onClick={() => setSelected(new Set())} type="button">Clear</button><button className="is-danger" onClick={() => void onDeleteIssues([...selected]).then(() => setSelected(new Set()))} type="button"><Trash2 size={13}/>Delete</button></div>}
     <Dialog.Root onOpenChange={open => { if (!open) setDeleteTarget(undefined) }} open={Boolean(deleteTarget)}><Dialog.Portal><Dialog.Overlay className="project-detail-page__dialog-overlay"/><Dialog.Content aria-describedby={undefined} className="project-detail-page__delete-dialog"><Dialog.Title>Delete {deleteTarget?.identifier}?</Dialog.Title><p>This issue will be permanently deleted.</p><footer><Dialog.Close asChild><button type="button">Cancel</button></Dialog.Close><button autoFocus className="is-danger" onClick={() => deleteTarget && void onDeleteIssues([deleteTarget.id]).then(() => setDeleteTarget(undefined))} type="button">Delete</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
   </div>

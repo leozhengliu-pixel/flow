@@ -1,6 +1,7 @@
 import * as Popover from '@radix-ui/react-popover'
 import { ChevronLeft, ChevronRight, CircleDot, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
+import { useI18n, type AppLocale } from '@/i18n/i18n'
 import styles from './project-row-menus.module.css'
 
 type DateMode = 'day' | 'month' | 'quarter' | 'half-year' | 'year'
@@ -30,6 +31,7 @@ export function ProjectDatePicker({ buttonClassName = '', children, contentClass
   triggerRef?: Ref<HTMLButtonElement>
   value?: string
 }) {
+  const { locale, t } = useI18n()
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<DateMode>('day')
   const [query, setQuery] = useState('')
@@ -53,29 +55,31 @@ export function ProjectDatePicker({ buttonClassName = '', children, contentClass
   }
 
   const content = <Popover.Content align={align} className={`${styles.datePicker}${contentClassName ? ` ${contentClassName}` : ''}`} collisionPadding={8} onClick={event => event.stopPropagation()} onCloseAutoFocus={event => event.preventDefault()} side={side ?? (portalled ? 'bottom' : 'right')} sideOffset={4}>
-    <label className={styles.dateLabel}>{label}<input autoFocus aria-label="Try: May 2027, Q4, 2027/05/20" onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submit() } }} placeholder="Try: May 2027, Q4, 2027/05/20" value={query}/></label>
-    <div aria-label="Date precision" className={styles.dateModes} role="tablist">{MODES.map(item => <button aria-selected={mode === item.id} key={item.id} onClick={() => { setMode(item.id); setQuery(formatForMode(cursor, item.id)) }} role="tab" type="button">{item.label}</button>)}</div>
-    {mode === 'day' ? <DayPanel cursor={cursor} onChangeCursor={setCursor} onChoose={choose} selected={selected}/> : <PeriodPanel cursor={cursor} mode={mode} onChoose={choose} selected={selected}/>} 
-    {value && <button className={styles.removeDate} onClick={() => { onChange(''); setOpen(false) }} type="button"><X size={13}/>Remove {label.toLowerCase()} <span>{displayValue}</span></button>}
+    <label className={styles.dateLabel}>{t(label)}<input autoFocus aria-label={t('Try: May 2027, Q4, 2027/05/20')} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submit() } }} placeholder={t('Try: May 2027, Q4, 2027/05/20')} value={query}/></label>
+    <div aria-label={t('Date precision')} className={styles.dateModes} role="tablist">{MODES.map(item => <button aria-selected={mode === item.id} key={item.id} onClick={() => { setMode(item.id); setQuery(formatForMode(cursor, item.id)) }} role="tab" type="button">{t(item.label)}</button>)}</div>
+    {mode === 'day' ? <DayPanel cursor={cursor} locale={locale} onChangeCursor={setCursor} onChoose={choose} selected={selected}/> : <PeriodPanel cursor={cursor} locale={locale} mode={mode} onChoose={choose} selected={selected}/>}
+    {value && <button aria-label={t(`Remove ${label.toLowerCase()}`)} className={styles.removeDate} onClick={() => { onChange(''); setOpen(false) }} type="button"><X size={13}/>{t(`Remove ${label.toLowerCase()}`)} <span>{displayValue}</span></button>}
   </Popover.Content>
 
   return <Popover.Root open={open} onOpenChange={setOpen}>
-    <Popover.Trigger asChild><button aria-expanded={open} aria-label={`Change project ${label.toLowerCase()}`} className={`lp-project-property-trigger ${buttonClassName}`} ref={triggerRef} type="button">{children}</button></Popover.Trigger>
+    <Popover.Trigger asChild><button aria-expanded={open} aria-label={t(`Change project ${label.toLowerCase()}`)} className={`lp-project-property-trigger ${buttonClassName}`} ref={triggerRef} type="button">{children}</button></Popover.Trigger>
     {portalled ? <Popover.Portal>{content}</Popover.Portal> : content}
   </Popover.Root>
 }
 
-function DayPanel({ cursor, onChangeCursor, onChoose, selected }: { cursor: Date; onChangeCursor: (date: Date) => void; onChoose: (date: Date) => void; selected?: Date }) {
+function DayPanel({ cursor, locale, onChangeCursor, onChoose, selected }: { cursor: Date; locale: AppLocale; onChangeCursor: (date: Date) => void; onChoose: (date: Date) => void; selected?: Date }) {
   const days = useMemo(() => calendarDays(cursor), [cursor])
   const today = startOfDay(new Date())
+  const monthLabel = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(cursor)
+  const weekdays = locale === 'zh-CN' ? ['一', '二', '三', '四', '五', '六', '日'] : ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
   return <div className={styles.dayPanel}>
-    <header><strong>{new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' }).format(cursor)}</strong><span><button aria-label="Jump to today" onClick={() => onChangeCursor(today)} type="button"><CircleDot size={13}/></button><button aria-label="Previous month" onClick={() => onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))} type="button"><ChevronLeft size={14}/></button><button aria-label="Next month" onClick={() => onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))} type="button"><ChevronRight size={14}/></button></span></header>
-    <div className={styles.weekdays}>{['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(day => <span key={day}>{day}</span>)}</div>
-    <div aria-label={new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' }).format(cursor)} className={styles.days} role="grid">{days.map(day => <button aria-label={day.toDateString()} className={sameDay(day, selected) ? styles.selectedDate : ''} data-outside={day.getMonth() !== cursor.getMonth()} key={isoDate(day)} onClick={() => onChoose(day)} role="gridcell" type="button">{day.getDate()}</button>)}</div>
+    <header><strong>{monthLabel}</strong><span><button aria-label={locale === 'zh-CN' ? '跳转到今天' : 'Jump to today'} onClick={() => onChangeCursor(today)} type="button"><CircleDot size={13}/></button><button aria-label={locale === 'zh-CN' ? '上个月' : 'Previous month'} onClick={() => onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))} type="button"><ChevronLeft size={14}/></button><button aria-label={locale === 'zh-CN' ? '下个月' : 'Next month'} onClick={() => onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))} type="button"><ChevronRight size={14}/></button></span></header>
+    <div className={styles.weekdays}>{weekdays.map(day => <span key={day}>{day}</span>)}</div>
+    <div aria-label={monthLabel} className={styles.days} role="grid">{days.map(day => <button aria-label={new Intl.DateTimeFormat(locale, { dateStyle: 'full' }).format(day)} className={sameDay(day, selected) ? styles.selectedDate : ''} data-outside={day.getMonth() !== cursor.getMonth()} key={isoDate(day)} onClick={() => onChoose(day)} role="gridcell" type="button">{day.getDate()}</button>)}</div>
   </div>
 }
 
-function PeriodPanel({ cursor: _cursor, mode, onChoose, selected }: { cursor: Date; mode: Exclude<DateMode, 'day'>; onChoose: (date: Date) => void; selected?: Date }) {
+function PeriodPanel({ cursor: _cursor, locale, mode, onChoose, selected }: { cursor: Date; locale: AppLocale; mode: Exclude<DateMode, 'day'>; onChoose: (date: Date) => void; selected?: Date }) {
   const scrollerRef = useRef<HTMLDivElement>(null)
   const currentYear = new Date().getFullYear()
   const years = Array.from({ length: 7 }, (_, index) => currentYear - 1 + index)
@@ -84,18 +88,18 @@ function PeriodPanel({ cursor: _cursor, mode, onChoose, selected }: { cursor: Da
     const active = scroller?.querySelector<HTMLElement>('[data-selected="true"]')
     if (scroller && active) scroller.scrollTop = Math.max(0, active.offsetTop - scroller.clientHeight / 2)
   }, [mode, selected])
-  return <div className={styles.periodScroller} ref={scrollerRef}>{years.map(year => <section key={year}><h3>{year}</h3><div className={styles.periodGrid} data-mode={mode}>{periodsFor(mode).map((label, index) => {
+  return <div className={styles.periodScroller} ref={scrollerRef}>{years.map(year => <section key={year}><h3>{year}</h3><div className={styles.periodGrid} data-mode={mode}>{periodsFor(mode, locale).map((label, index) => {
     const date = endOfPeriod(year, mode, index)
     const isSelected = periodSelected(selected, year, mode, index)
     return <button className={isSelected ? styles.selectedDate : ''} data-selected={isSelected} key={label} onClick={() => onChoose(date)} type="button">{label}</button>
   })}</div></section>)}</div>
 }
 
-function periodsFor(mode: Exclude<DateMode, 'day'>) {
-  if (mode === 'month') return MONTHS
+function periodsFor(mode: Exclude<DateMode, 'day'>, locale: AppLocale) {
+  if (mode === 'month') return locale === 'zh-CN' ? MONTHS.map((_, index) => `${index + 1}月`) : MONTHS
   if (mode === 'quarter') return ['Q1', 'Q2', 'Q3', 'Q4']
   if (mode === 'half-year') return ['H1', 'H2']
-  return ['Year end']
+  return [locale === 'zh-CN' ? '年末' : 'Year end']
 }
 function endOfPeriod(year: number, mode: Exclude<DateMode, 'day'>, index: number) {
   if (mode === 'month') return new Date(year, index + 1, 0)
