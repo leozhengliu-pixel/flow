@@ -112,10 +112,13 @@ export interface ExportJob { id: UUID; userId: UUID; format: 'csv'|'json'; inclu
 export type InitiativeStatus = 'proposed'|'planned'|'active'|'completed'|'canceled'
 export interface Initiative {
   id: UUID; name: string; slugId: string; summary: string; description: string; icon?: string; color: string
-  status: InitiativeStatus; priority: number; priorityLabel: string; health: Project['health']; owner?: User
+  status: InitiativeStatus; priority: number; priorityLabel: string; health: Project['health']; owner?: User; creator: User; leadTeamId?: UUID; contributingTeamIds: UUID[]
   labelIds: UUID[]; projectIds: UUID[]; resources: InitiativeResource[]; comments: Comment[]; targetDate?: string
-  favorite: boolean; subscribed: boolean; createdAt: string; updatedAt: string
+  favorite: boolean; subscribed: boolean; notificationRules: InitiativeNotificationRules; updateSchedule: InitiativeUpdateSchedule; descriptionHistory: InitiativeDescriptionRevision[]; createdAt: string; updatedAt: string
 }
+export interface InitiativeNotificationRules { descriptionChanges: boolean; newUpdate: boolean; allProjectUpdates: boolean }
+export interface InitiativeUpdateSchedule { cadence: 'none'|'weekly'|'biweekly'|'monthly'|'custom'|'never'; weekday: number; timeRange: string }
+export interface InitiativeDescriptionRevision { id: UUID; description: string; editedAt: string; editor: User }
 export interface InitiativeResource { id: UUID; initiativeId: UUID; type: 'link'|'document'; title: string; url: string; createdAt: string }
 export interface InitiativeUpdate {
   id: UUID; initiativeId: UUID; body: string; health: Project['health']; createdAt: string; editedAt?: string; user: User
@@ -123,8 +126,8 @@ export interface InitiativeUpdate {
 }
 export interface InitiativeMutationInput {
   name?: string; summary?: string; description?: string; icon?: string; color?: string; status?: InitiativeStatus
-  priority?: number; health?: Project['health']; ownerId?: string; labelIds?: string[]; projectIds?: string[]
-  targetDate?: string; favorite?: boolean; subscribed?: boolean
+  priority?: number; health?: Project['health']; ownerId?: string; leadTeamId?: string; contributingTeamIds?: string[]; labelIds?: string[]; projectIds?: string[]
+  targetDate?: string; favorite?: boolean; subscribed?: boolean; notificationRules?: InitiativeNotificationRules; updateSchedule?: InitiativeUpdateSchedule
 }
 export interface BootstrapData {
   workspace: Workspace; viewer: User; users: User[]; teams: Team[]; customers: Customer[]; states: WorkflowState[]; labels: IssueLabel[]

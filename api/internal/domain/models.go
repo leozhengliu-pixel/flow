@@ -691,27 +691,52 @@ type ExportJob struct {
 // ProjectIDs intentionally stores stable project IDs; list progress and health
 // are projections computed by the client from the associated projects.
 type Initiative struct {
-	ID            string               `json:"id"`
-	Name          string               `json:"name"`
-	SlugID        string               `json:"slugId"`
-	Summary       string               `json:"summary"`
-	Description   string               `json:"description"`
-	Icon          string               `json:"icon,omitempty"`
-	Color         string               `json:"color"`
-	Status        string               `json:"status"`
-	Priority      int                  `json:"priority"`
-	PriorityLabel string               `json:"priorityLabel"`
-	Health        string               `json:"health"`
-	Owner         *User                `json:"owner,omitempty"`
-	LabelIDs      []string             `json:"labelIds"`
-	ProjectIDs    []string             `json:"projectIds"`
-	Resources     []InitiativeResource `json:"resources"`
-	Comments      []Comment            `json:"comments"`
-	TargetDate    *string              `json:"targetDate,omitempty"`
-	Favorite      bool                 `json:"favorite"`
-	Subscribed    bool                 `json:"subscribed"`
-	CreatedAt     time.Time            `json:"createdAt"`
-	UpdatedAt     time.Time            `json:"updatedAt"`
+	ID                  string                          `json:"id"`
+	Name                string                          `json:"name"`
+	SlugID              string                          `json:"slugId"`
+	Summary             string                          `json:"summary"`
+	Description         string                          `json:"description"`
+	Icon                string                          `json:"icon,omitempty"`
+	Color               string                          `json:"color"`
+	Status              string                          `json:"status"`
+	Priority            int                             `json:"priority"`
+	PriorityLabel       string                          `json:"priorityLabel"`
+	Health              string                          `json:"health"`
+	Owner               *User                           `json:"owner,omitempty"`
+	Creator             User                            `json:"creator"`
+	LeadTeamID          string                          `json:"leadTeamId,omitempty"`
+	ContributingTeamIDs []string                        `json:"contributingTeamIds"`
+	LabelIDs            []string                        `json:"labelIds"`
+	ProjectIDs          []string                        `json:"projectIds"`
+	Resources           []InitiativeResource            `json:"resources"`
+	Comments            []Comment                       `json:"comments"`
+	TargetDate          *string                         `json:"targetDate,omitempty"`
+	Favorite            bool                            `json:"favorite"`
+	Subscribed          bool                            `json:"subscribed"`
+	NotificationRules   InitiativeNotificationRules     `json:"notificationRules"`
+	UpdateSchedule      InitiativeUpdateSchedule        `json:"updateSchedule"`
+	DescriptionHistory  []InitiativeDescriptionRevision `json:"descriptionHistory"`
+	CreatedAt           time.Time                       `json:"createdAt"`
+	UpdatedAt           time.Time                       `json:"updatedAt"`
+}
+
+type InitiativeNotificationRules struct {
+	DescriptionChanges bool `json:"descriptionChanges"`
+	NewUpdate          bool `json:"newUpdate"`
+	AllProjectUpdates  bool `json:"allProjectUpdates"`
+}
+
+type InitiativeUpdateSchedule struct {
+	Cadence   string `json:"cadence"`
+	Weekday   int    `json:"weekday"`
+	TimeRange string `json:"timeRange"`
+}
+
+type InitiativeDescriptionRevision struct {
+	ID          string    `json:"id"`
+	Description string    `json:"description"`
+	EditedAt    time.Time `json:"editedAt"`
+	Editor      User      `json:"editor"`
 }
 
 type InitiativeResource struct {
@@ -954,20 +979,24 @@ type ProjectMutationInput struct {
 }
 
 type InitiativeMutationInput struct {
-	Name        *string   `json:"name,omitempty"`
-	Summary     *string   `json:"summary,omitempty"`
-	Description *string   `json:"description,omitempty"`
-	Icon        *string   `json:"icon,omitempty"`
-	Color       *string   `json:"color,omitempty"`
-	Status      *string   `json:"status,omitempty"`
-	Priority    *int      `json:"priority,omitempty"`
-	Health      *string   `json:"health,omitempty"`
-	OwnerID     *string   `json:"ownerId,omitempty"`
-	LabelIDs    *[]string `json:"labelIds,omitempty"`
-	ProjectIDs  *[]string `json:"projectIds,omitempty"`
-	TargetDate  *string   `json:"targetDate,omitempty"`
-	Favorite    *bool     `json:"favorite,omitempty"`
-	Subscribed  *bool     `json:"subscribed,omitempty"`
+	Name                *string                      `json:"name,omitempty"`
+	Summary             *string                      `json:"summary,omitempty"`
+	Description         *string                      `json:"description,omitempty"`
+	Icon                *string                      `json:"icon,omitempty"`
+	Color               *string                      `json:"color,omitempty"`
+	Status              *string                      `json:"status,omitempty"`
+	Priority            *int                         `json:"priority,omitempty"`
+	Health              *string                      `json:"health,omitempty"`
+	OwnerID             *string                      `json:"ownerId,omitempty"`
+	LeadTeamID          *string                      `json:"leadTeamId,omitempty"`
+	ContributingTeamIDs *[]string                    `json:"contributingTeamIds,omitempty"`
+	LabelIDs            *[]string                    `json:"labelIds,omitempty"`
+	ProjectIDs          *[]string                    `json:"projectIds,omitempty"`
+	TargetDate          *string                      `json:"targetDate,omitempty"`
+	Favorite            *bool                        `json:"favorite,omitempty"`
+	Subscribed          *bool                        `json:"subscribed,omitempty"`
+	NotificationRules   *InitiativeNotificationRules `json:"notificationRules,omitempty"`
+	UpdateSchedule      *InitiativeUpdateSchedule    `json:"updateSchedule,omitempty"`
 }
 
 type InitiativeUpdateCreateInput struct {
