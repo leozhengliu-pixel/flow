@@ -30,7 +30,7 @@ Validated Linear surfaces:
 - Update schedule, description history, add-link, create-project and delete dialogs
 - Hover, focus, open, checked, disabled, empty, destructive confirmation and Escape/arrow/Enter behavior
 
-Flow implements the same functional surfaces. AI filtering and Slack remain disabled because the workspace has no configured integration; they no longer present a success toast or pretend to complete an action.
+Flow implements the same functional surfaces. AI filtering, AI-assisted writing, update attachments and Slack remain disabled because the workspace has no configured integration or backend capability; they no longer present a success toast or pretend to complete an action.
 
 ## Data and API parity
 
@@ -45,6 +45,8 @@ Flow implements the same functional surfaces. AI filtering and Slack remain disa
 | Delete and restore for 30 days | `TrashEntry` stores initiative plus updates | Added; delete/restore lifecycle-tested |
 | Project association | Bidirectional initiative/project IDs | Existing; Add existing and Create project both mutate real data |
 | Grouping and property display | Computed from initiative/team/label data | Added; no placeholder groups or hard-coded team names |
+| Initiative project saved views | `SavedView.resource = initiativeProjects`, initiative filter and display payload | Added; create/edit/duplicate/favorite/delete and zoom/filter/property settings use the SavedView API and survive reload |
+| Advanced filter matching | Initiative filter state plus `all`/`any` operator | Added; mapped to Linear's `and`/`or` group control and applied to real result rows |
 
 ## Desktop measurements
 
@@ -69,6 +71,11 @@ Values are CSS pixels. Entity text widths are data-dependent.
 | Actions row height | `31.93` | `32` | `+0.07` |
 | Display Portal `w / h / radius` | `302 / 326.5 / 12` | `302 / 327 / 12` | `0 / +0.5 / 0` |
 | Notification Portal width | `342` | `342` | Exact |
+| Advanced filter chip height / radius | `24 / 8` | `24 / 8` | Exact |
+| Advanced filter Portal `w / h` (empty) | `321 / 98` | `321 / 98` | Exact |
+| Advanced filter Portal padding / radius | `12 / 12` | `12 / 12` | Exact |
+| Advanced filter group `w / h / padding` | `296 / 41 / 8` | `296 / 41 / 8` | Exact |
+| Detail Progress tabs height / gap | `28 / 3` | `28 / 3` | Exact; Health, Status and Leads render distinct real aggregates |
 
 ## Computed visual tokens
 
@@ -92,6 +99,7 @@ Values are CSS pixels. Entity text widths are data-dependent.
 | Detail actions/submenus | Light/dark, zh/en | `600` | Copy, subscription, reminder and keyboard traversal |
 | Notification popover | Light/dark, zh/en | `600` | Persisted event checkboxes and update schedule |
 | Team/project/label pickers | Light/dark, zh/en | `500` | Entity names remain untranslated |
+| Advanced filter group | Light/dark, zh/en | `500`; menus `520` | Anchored under the filter chip; add/change/remove rules, `and`/`or`, Clear and Escape |
 | Schedule/history/reminder dialogs | Light/dark, zh/en | `700/701` | Focus isolation, Save/Cancel and Escape |
 | Delete confirmation | Light/dark, zh/en | `700/701` | 30-day restore copy; destructive submit not used in Chrome |
 
@@ -103,6 +111,10 @@ Values are CSS pixels. Entity text widths are data-dependent.
 - Description edits create revisions; restore writes the selected revision through the mutation API.
 - Grouping uses owner, teams, health, status, priority or labels and renders real counts.
 - Filters use creator/team/date fields from the data model; hard-coded `Cleantrack` behavior was removed.
+- Advanced filter activation creates the Linear-style filter bar and anchored `321px` group editor instead of a centered modal. Two-condition `and` returned zero rows and switching to `or` returned one row in the QA dataset.
+- Saved initiative project views use `/api/views`; the QA view retained `Quarter` zoom after reload.
+- Progress Health, Status and Leads tabs render separate aggregates from linked projects and updates.
+- Ask Flow, Write with Agent and update attachments are disabled with translated unavailable reasons until their integrations exist.
 - Inline Create remains disabled until a name is present; Escape cancels and Cmd/Ctrl+Enter submits.
 - `Cmd/Ctrl+I` toggles details; menu Arrow navigation, Enter and Escape use Radix behavior.
 - Delete confirmation was opened and canceled; no Linear or Flow initiative was deleted during browser QA.
@@ -126,6 +138,7 @@ Mobile measurements:
 - Details rail defaults closed on a mobile mount and does not occlude list controls
 - Display Portal: `74.5 / 84.5 / 302 / 327`; right edge `376.5`, entirely inside the viewport
 - Dark Portal: `rgb(32 32 34)`, `.5px solid lch(25.68 1.93 272)`, `z-index 500`
+- Advanced filter Portal: `11 / 126 / 321 / 98`; `12px` padding, `.5px` border, `12px` radius, `z-index 500`
 - Chrome device metrics were cleared; the page returned to the desktop viewport
 
 ## Automated verification
