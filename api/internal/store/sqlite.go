@@ -647,6 +647,19 @@ func activityNotificationType(activity domain.ActivityEvent) string {
 	return "activity"
 }
 
+func legacyReleaseStageStatus(stage string) string {
+	switch strings.ToLower(strings.TrimSpace(stage)) {
+	case "in progress":
+		return "inProgress"
+	case "released":
+		return "released"
+	case "canceled", "cancelled":
+		return "canceled"
+	default:
+		return "planned"
+	}
+}
+
 func normalize(data *domain.Bootstrap) {
 	for projectIndex := range data.Projects {
 		for resourceIndex := range data.Projects[projectIndex].Resources {
@@ -766,6 +779,19 @@ func normalize(data *domain.Bootstrap) {
 	}
 	if data.Releases == nil {
 		data.Releases = []domain.Release{}
+	}
+	if data.ReleasePipelines == nil {
+		data.ReleasePipelines = []domain.ReleasePipeline{}
+	}
+	for index := range data.ReleasePipelines {
+		if data.ReleasePipelines[index].StageStatuses == nil {
+			data.ReleasePipelines[index].StageStatuses = map[string]string{}
+		}
+		for _, stage := range data.ReleasePipelines[index].Stages {
+			if _, ok := data.ReleasePipelines[index].StageStatuses[stage]; !ok {
+				data.ReleasePipelines[index].StageStatuses[stage] = legacyReleaseStageStatus(stage)
+			}
+		}
 	}
 	if data.Asks == nil {
 		data.Asks = []domain.Ask{}

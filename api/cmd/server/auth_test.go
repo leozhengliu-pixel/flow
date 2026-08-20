@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"mime/multipart"
@@ -178,6 +179,112 @@ func TestAPIKeyScopesAndTeamProjection(t *testing.T) {
 	}
 }
 
+func TestReleaseAuthorizationAndFeatureGate(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "release-auth.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	server := httptest.NewServer(newHandler(&server{store: repository, uploadPath: t.TempDir()}))
+	defer server.Close()
+
+	admin := authClient(t)
+	authRequest[domain.AuthSession](t, admin, http.MethodPost, server.URL+"/api/auth/login", map[string]string{"email": "leo.zheng.liu@example.com", "password": "flow-demo"}, "", http.StatusOK)
+	bootstrap := authRequest[domain.Bootstrap](t, admin, http.MethodGet, server.URL+"/api/bootstrap", nil, "cleantrack", http.StatusOK)
+	publicTeam := bootstrap.Teams[0]
+
+	member, memberUser := verifiedAuthClient(t, server.URL, "Release member", "release-member@example.com")
+	guest, guestUser := verifiedAuthClient(t, server.URL, "Release guest", "release-guest@example.com")
+	for _, invitation := range []struct {
+		client *http.Client
+		user   domain.User
+		role   string
+	}{
+		{client: member, user: memberUser, role: "member"},
+		{client: guest, user: guestUser, role: "guest"},
+	} {
+		invites := authRequest[[]domain.Invitation](t, admin, http.MethodPost, server.URL+"/api/workspaces/cleantrack/invitations", map[string]any{
+			"emails": []string{invitation.user.Email}, "role": invitation.role, "teamIds": []string{publicTeam.ID},
+		}, "", http.StatusCreated)
+		authRequest[domain.WorkspaceMembership](t, invitation.client, http.MethodPost, server.URL+"/api/invitations/accept", map[string]string{"token": invites[0].Token}, "", http.StatusOK)
+	}
+
+	privateTeam := authRequest[domain.Team](t, admin, http.MethodPost, server.URL+"/api/workspaces/cleantrack/teams", map[string]any{"name": "Release private", "key": "RPRV", "private": true}, "", http.StatusCreated)
+	hiddenIssue := authRequest[domain.Issue](t, admin, http.MethodPost, server.URL+"/api/issues", map[string]any{"title": "Private release issue", "teamId": privateTeam.ID}, "cleantrack", http.StatusCreated)
+	hiddenProject := authRequest[domain.Project](t, admin, http.MethodPost, server.URL+"/api/projects", map[string]any{"name": "Private release project", "teamIds": []string{privateTeam.ID}}, "cleantrack", http.StatusCreated)
+	publicPipeline := authRequest[domain.ReleasePipeline](t, admin, http.MethodPost, server.URL+"/api/release-pipelines", map[string]any{"name": "Public deploys", "teamIds": []string{publicTeam.ID}}, "cleantrack", http.StatusCreated)
+	privatePipeline := authRequest[domain.ReleasePipeline](t, admin, http.MethodPost, server.URL+"/api/release-pipelines", map[string]any{"name": "Private deploys", "teamIds": []string{privateTeam.ID}}, "cleantrack", http.StatusCreated)
+	publicRelease := authRequest[domain.Release](t, admin, http.MethodPost, server.URL+"/api/releases", map[string]any{"name": "Public release", "pipelineId": publicPipeline.ID}, "cleantrack", http.StatusCreated)
+	privateRelease := authRequest[domain.Release](t, admin, http.MethodPost, server.URL+"/api/releases", map[string]any{
+		"name": "Private release", "pipelineId": privatePipeline.ID, "issueIds": []string{hiddenIssue.ID}, "projectIds": []string{hiddenProject.ID},
+	}, "cleantrack", http.StatusCreated)
+
+	memberBootstrap := authRequest[domain.Bootstrap](t, member, http.MethodGet, server.URL+"/api/bootstrap", nil, "cleantrack", http.StatusOK)
+	if !slices.ContainsFunc(memberBootstrap.ReleasePipelines, func(item domain.ReleasePipeline) bool { return item.ID == publicPipeline.ID }) ||
+		slices.ContainsFunc(memberBootstrap.ReleasePipelines, func(item domain.ReleasePipeline) bool { return item.ID == privatePipeline.ID }) ||
+		!slices.ContainsFunc(memberBootstrap.Releases, func(item domain.Release) bool { return item.ID == publicRelease.ID }) ||
+		slices.ContainsFunc(memberBootstrap.Releases, func(item domain.Release) bool { return item.ID == privateRelease.ID }) {
+		t.Fatalf("member release projection leaked private resources: pipelines=%#v releases=%#v", memberBootstrap.ReleasePipelines, memberBootstrap.Releases)
+	}
+	listedPipelines := authRequest[[]domain.ReleasePipeline](t, member, http.MethodGet, server.URL+"/api/release-pipelines", nil, "cleantrack", http.StatusOK)
+	listedReleases := authRequest[[]domain.Release](t, member, http.MethodGet, server.URL+"/api/releases", nil, "cleantrack", http.StatusOK)
+	if slices.ContainsFunc(listedPipelines, func(item domain.ReleasePipeline) bool { return item.ID == privatePipeline.ID }) || slices.ContainsFunc(listedReleases, func(item domain.Release) bool { return item.ID == privateRelease.ID }) {
+		t.Fatal("release list API leaked private resources")
+	}
+	guestBootstrap := authRequest[domain.Bootstrap](t, guest, http.MethodGet, server.URL+"/api/bootstrap", nil, "cleantrack", http.StatusOK)
+	if slices.ContainsFunc(guestBootstrap.ReleasePipelines, func(item domain.ReleasePipeline) bool { return item.ID == privatePipeline.ID }) ||
+		slices.ContainsFunc(guestBootstrap.Releases, func(item domain.Release) bool { return item.ID == privateRelease.ID }) {
+		t.Fatal("guest release projection leaked private resources")
+	}
+	authRequest[domain.Release](t, member, http.MethodPatch, server.URL+"/api/releases/"+publicRelease.ID, map[string]any{"status": "inProgress"}, "cleantrack", http.StatusOK)
+	authRequest[any](t, member, http.MethodGet, server.URL+"/api/release-pipelines/"+privatePipeline.ID, nil, "cleantrack", http.StatusForbidden)
+	authRequest[any](t, member, http.MethodGet, server.URL+"/api/releases/"+privateRelease.ID, nil, "cleantrack", http.StatusForbidden)
+	authRequest[any](t, member, http.MethodPatch, server.URL+"/api/releases/"+publicRelease.ID, map[string]any{"pipelineId": privatePipeline.ID}, "cleantrack", http.StatusForbidden)
+	authRequest[any](t, member, http.MethodPost, server.URL+"/api/releases", map[string]any{"name": "Hidden association", "issueIds": []string{hiddenIssue.ID}}, "cleantrack", http.StatusForbidden)
+	authRequest[any](t, member, http.MethodPost, server.URL+"/api/releases/reorder", map[string]any{"pipelineId": privatePipeline.ID, "ids": []string{privateRelease.ID}}, "cleantrack", http.StatusForbidden)
+	authRequest[any](t, member, http.MethodDelete, server.URL+"/api/releases/"+privateRelease.ID, nil, "cleantrack", http.StatusForbidden)
+
+	for _, client := range []*http.Client{member, guest} {
+		authRequest[any](t, client, http.MethodPost, server.URL+"/api/release-pipelines", map[string]any{"name": "Denied", "teamIds": []string{publicTeam.ID}}, "cleantrack", http.StatusForbidden)
+		authRequest[any](t, client, http.MethodPatch, server.URL+"/api/release-pipelines/"+publicPipeline.ID, map[string]any{"name": "Denied"}, "cleantrack", http.StatusForbidden)
+		authRequest[any](t, client, http.MethodPost, server.URL+"/api/release-pipelines/reorder", map[string]any{"ids": []string{publicPipeline.ID}}, "cleantrack", http.StatusForbidden)
+		authRequest[any](t, client, http.MethodPost, server.URL+"/api/release-pipelines/"+publicPipeline.ID+"/access-key", nil, "cleantrack", http.StatusForbidden)
+		authRequest[any](t, client, http.MethodDelete, server.URL+"/api/release-pipelines/"+publicPipeline.ID, nil, "cleantrack", http.StatusForbidden)
+	}
+	adminKey := authRequest[releasePipelineAccessKey](t, admin, http.MethodPost, server.URL+"/api/release-pipelines/"+publicPipeline.ID+"/access-key", nil, "cleantrack", http.StatusCreated)
+	if adminKey.Secret == "" {
+		t.Fatal("admin access-key rotation returned no secret")
+	}
+	authRequest[any](t, admin, http.MethodPost, server.URL+"/api/release-pipelines", map[string]any{"name": "Unknown team", "teamIds": []string{"team_unknown"}}, "cleantrack", http.StatusForbidden)
+	authRequest[any](t, admin, http.MethodPatch, server.URL+"/api/release-pipelines/"+publicPipeline.ID, map[string]any{"teamIds": []string{"team_unknown"}}, "cleantrack", http.StatusForbidden)
+	authRequest[any](t, admin, http.MethodPost, server.URL+"/api/release-pipelines/reorder", map[string]any{"ids": []string{"release_pipeline_unknown"}}, "cleantrack", http.StatusForbidden)
+	disposablePipeline := authRequest[domain.ReleasePipeline](t, admin, http.MethodPost, server.URL+"/api/release-pipelines", map[string]any{"name": "Disposable", "teamIds": []string{publicTeam.ID}}, "cleantrack", http.StatusCreated)
+	authRequest[any](t, admin, http.MethodDelete, server.URL+"/api/release-pipelines/"+disposablePipeline.ID, nil, "cleantrack", http.StatusNoContent)
+	adminBootstrap := authRequest[domain.Bootstrap](t, admin, http.MethodGet, server.URL+"/api/bootstrap", nil, "cleantrack", http.StatusOK)
+	trashIndex := slices.IndexFunc(adminBootstrap.Trash, func(item domain.TrashEntry) bool {
+		return item.ResourceType == "release_pipeline" && item.ResourceID == disposablePipeline.ID
+	})
+	if trashIndex < 0 {
+		t.Fatal("deleted pipeline did not enter trash")
+	}
+	pipelineTrashID := adminBootstrap.Trash[trashIndex].ID
+	authRequest[any](t, member, http.MethodPost, server.URL+"/api/trash/"+pipelineTrashID+"/restore", nil, "cleantrack", http.StatusForbidden)
+
+	err = repository.MutateWorkspace(context.Background(), "cleantrack", "test.releases_disabled", "workspace", nil, func(data *domain.Bootstrap) error {
+		data.WorkspaceSettings.FeatureFlags["releases"] = false
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/api/releases", "/api/release-pipelines"} {
+		authRequest[any](t, admin, http.MethodGet, server.URL+path, nil, "cleantrack", http.StatusForbidden)
+	}
+	authRequest[any](t, admin, http.MethodPost, server.URL+"/api/releases", map[string]any{"name": "Disabled"}, "cleantrack", http.StatusForbidden)
+	authRequest[any](t, admin, http.MethodPost, server.URL+"/api/release-pipelines/"+publicPipeline.ID+"/access-key", nil, "cleantrack", http.StatusForbidden)
+	authRequest[any](t, admin, http.MethodPost, server.URL+"/api/trash/"+pipelineTrashID+"/restore", nil, "cleantrack", http.StatusForbidden)
+}
+
 func TestAuthenticationRateLimit(t *testing.T) {
 	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "rate-limit.db"))
 	if err != nil {
@@ -212,6 +319,18 @@ func authClient(t *testing.T) *http.Client {
 		t.Fatal(err)
 	}
 	return &http.Client{Jar: jar}
+}
+
+func verifiedAuthClient(t *testing.T, baseURL, name, email string) (*http.Client, domain.User) {
+	t.Helper()
+	client := authClient(t)
+	registered := authRequest[struct {
+		User              domain.User `json:"user"`
+		VerificationToken string      `json:"verificationToken"`
+	}](t, client, http.MethodPost, baseURL+"/api/auth/register", map[string]string{"name": name, "email": email, "password": "initial-pass"}, "", http.StatusCreated)
+	authRequest[any](t, client, http.MethodPost, baseURL+"/api/auth/verify-email", map[string]string{"token": registered.VerificationToken}, "", http.StatusOK)
+	authRequest[domain.AuthSession](t, client, http.MethodPost, baseURL+"/api/auth/login", map[string]string{"email": email, "password": "initial-pass"}, "", http.StatusOK)
+	return client, registered.User
 }
 
 func uploadAuthAttachment(t *testing.T, client *http.Client, baseURL, issueID, workspaceKey string, wantStatus int) domain.Attachment {
