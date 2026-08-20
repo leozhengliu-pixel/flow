@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"path"
 	"slices"
 	"strings"
 	"time"
@@ -11,12 +12,16 @@ import (
 )
 
 type releasePipelineInput struct {
-	Name       *string   `json:"name,omitempty"`
-	TeamIDs    *[]string `json:"teamIds,omitempty"`
-	Type       *string   `json:"type,omitempty"`
-	Production *bool     `json:"production,omitempty"`
-	Stages     *[]string `json:"stages,omitempty"`
-	Archived   *bool     `json:"archived,omitempty"`
+	Name                     *string            `json:"name,omitempty"`
+	TeamIDs                  *[]string          `json:"teamIds,omitempty"`
+	Type                     *string            `json:"type,omitempty"`
+	Production               *bool              `json:"production,omitempty"`
+	Stages                   *[]string          `json:"stages,omitempty"`
+	StageStatuses            *map[string]string `json:"stageStatuses,omitempty"`
+	PathFilters              *[]string          `json:"pathFilters,omitempty"`
+	ReleaseNotesTemplate     *string            `json:"releaseNotesTemplate,omitempty"`
+	AutoGenerateReleaseNotes *bool              `json:"autoGenerateReleaseNotes,omitempty"`
+	Archived                 *bool              `json:"archived,omitempty"`
 }
 
 func applyReleasePipelineInput(data *domain.Bootstrap, item *domain.ReleasePipeline, input releasePipelineInput) error {
@@ -44,10 +49,59 @@ func applyReleasePipelineInput(data *domain.Bootstrap, item *domain.ReleasePipel
 		item.Production = *input.Production
 	}
 	if input.Stages != nil {
-		item.Stages = normalizedStrings(*input.Stages)
-		if len(item.Stages) == 0 {
+		stages := normalizedStrings(*input.Stages)
+		if len(stages) == 0 {
 			return errInvalid
 		}
+		if slices.ContainsFunc(data.Releases, func(release domain.Release) bool {
+			return release.PipelineID == item.ID && release.Stage != "" && !slices.Contains(stages, release.Stage)
+		}) {
+			return errConflict
+		}
+		item.Stages = stages
+		if item.StageStatuses == nil {
+			item.StageStatuses = map[string]string{}
+		}
+		for key := range item.StageStatuses {
+			if !slices.Contains(stages, key) {
+				delete(item.StageStatuses, key)
+			}
+		}
+		for _, stage := range stages {
+			if _, ok := item.StageStatuses[stage]; !ok {
+				item.StageStatuses[stage] = defaultReleaseStageStatus(stage)
+			}
+		}
+	}
+	if input.StageStatuses != nil {
+		statuses := map[string]string{}
+		for stage, status := range *input.StageStatuses {
+			if !slices.Contains(item.Stages, stage) || !slices.Contains([]string{"planned", "inProgress", "released", "canceled"}, status) {
+				return errInvalid
+			}
+			statuses[stage] = status
+		}
+		for _, stage := range item.Stages {
+			if _, ok := statuses[stage]; !ok {
+				statuses[stage] = defaultReleaseStageStatus(stage)
+			}
+		}
+		item.StageStatuses = statuses
+	}
+	if input.PathFilters != nil {
+		filters := normalizedStrings(*input.PathFilters)
+		for _, filter := range filters {
+			if _, err := path.Match(filter, ""); err != nil {
+				return errInvalid
+			}
+		}
+		item.PathFilters = filters
+	}
+	if input.ReleaseNotesTemplate != nil {
+		item.ReleaseNotesTemplate = *input.ReleaseNotesTemplate
+	}
+	if input.AutoGenerateReleaseNotes != nil {
+		item.AutoGenerateReleaseNotes = *input.AutoGenerateReleaseNotes
 	}
 	if input.Archived != nil {
 		if *input.Archived && item.ArchivedAt == nil {
@@ -69,14 +123,21 @@ func (s *server) createReleasePipeline(w http.ResponseWriter, r *http.Request) {
 	var created domain.ReleasePipeline
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release_pipeline.created", "release_pipeline", input, func(data *domain.Bootstrap) error {
 		now := time.Now().UTC()
-		created = domain.ReleasePipeline{ID: fmt.Sprintf("release_pipeline_%d", now.UnixNano()), Type: "scheduled", Production: true, TeamIDs: []string{}, Stages: []string{"Planned", "In Progress", "Released", "Canceled"}, CreatedAt: now, UpdatedAt: now}
+		created = domain.ReleasePipeline{ID: fmt.Sprintf("release_pipeline_%d", now.UnixNano()), Type: "scheduled", Production: true, Position: nextReleasePipelinePosition(data), TeamIDs: []string{}, Stages: []string{"Planned", "In Progress", "Released", "Canceled"}, StageStatuses: map[string]string{"Planned": "planned", "In Progress": "inProgress", "Released": "released", "Canceled": "canceled"}, PathFilters: []string{}, CreatedAt: now, UpdatedAt: now}
 		if err := applyReleasePipelineInput(data, &created, input); err != nil {
 			return err
 		}
 		data.ReleasePipelines = append([]domain.ReleasePipeline{created}, data.ReleasePipelines...)
 		return nil
 	})
+	if err == nil {
+		created = publicReleasePipeline(created)
+	}
 	respondMutation(w, err, http.StatusCreated, created)
+}
+
+func defaultReleaseStageStatus(_ string) string {
+	return "planned"
 }
 
 func (s *server) updateReleasePipeline(w http.ResponseWriter, r *http.Request) {
@@ -97,6 +158,13 @@ func (s *server) updateReleasePipeline(w http.ResponseWriter, r *http.Request) {
 		updated = data.ReleasePipelines[index]
 		return nil
 	})
+	if err == nil {
+		updated = publicReleasePipeline(updated)
+	}
+	if err == errConflict {
+		writeError(w, http.StatusConflict, "pipeline stages are still referenced by releases")
+		return
+	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
