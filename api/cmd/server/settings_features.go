@@ -51,6 +51,24 @@ func (s *server) updateUserSettings(w http.ResponseWriter, r *http.Request) {
 		if input.BranchFormat == "" {
 			input.BranchFormat = current.BranchFormat
 		}
+		if input.PersonalSettingsVersion == 0 {
+			input.PersonalSettingsVersion = current.PersonalSettingsVersion
+		}
+		if input.MergeStrategy == "" {
+			input.MergeStrategy = current.MergeStrategy
+		}
+		if input.CodeTheme == "" {
+			input.CodeTheme = current.CodeTheme
+		}
+		if input.CodeFont == "" {
+			input.CodeFont = current.CodeFont
+		}
+		if input.ReviewCommentsFilter == "" {
+			input.ReviewCommentsFilter = current.ReviewCommentsFilter
+		}
+		if input.GitAttachmentFormat == "" {
+			input.GitAttachmentFormat = current.GitAttachmentFormat
+		}
 		data.UserSettings[actor.ID] = input
 		updated = input
 		return nil
@@ -159,6 +177,21 @@ func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Reque
 		if input.FeatureFlags == nil {
 			input.FeatureFlags = data.WorkspaceSettings.FeatureFlags
 		}
+		if input.FeatureSettings.InitiativeUpdateSchedule == "" {
+			input.FeatureSettings.InitiativeUpdateSchedule = "none"
+		}
+		if input.FeatureSettings.CustomerRevenueFormat == "" {
+			input.FeatureSettings.CustomerRevenueFormat = "annual"
+		}
+		if input.FeatureSettings.CustomerRevenueCurrency == "" {
+			input.FeatureSettings.CustomerRevenueCurrency = "USD"
+		}
+		if input.FeatureSettings.PulseWorkspaceSchedule == "" {
+			input.FeatureSettings.PulseWorkspaceSchedule = "daily"
+		}
+		input.FeatureSettings.CustomerExcludedDomains = normalizedStrings(input.FeatureSettings.CustomerExcludedDomains)
+		input.FeatureSettings.CustomerGenericDomains = normalizedStrings(input.FeatureSettings.CustomerGenericDomains)
+		input.FeatureSettings.AsksEmailAddresses = normalizedStrings(input.FeatureSettings.AsksEmailAddresses)
 		input.UpdatedAt = time.Now().UTC()
 		data.WorkspaceSettings = input
 		updated = input
@@ -466,9 +499,10 @@ func (s *server) deleteLabelGroup(w http.ResponseWriter, r *http.Request) {
 }
 
 type projectStatusInput struct {
-	Name  *string `json:"name,omitempty"`
-	Color *string `json:"color,omitempty"`
-	Type  *string `json:"type,omitempty"`
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Color       *string `json:"color,omitempty"`
+	Type        *string `json:"type,omitempty"`
 }
 
 func (s *server) createProjectStatus(w http.ResponseWriter, r *http.Request) {
@@ -487,6 +521,9 @@ func (s *server) createProjectStatus(w http.ResponseWriter, r *http.Request) {
 			return "", errInvalid
 		}
 		created = domain.ProjectStatus{ID: fmt.Sprintf("project_status_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#8b8d98", Type: statusType, Position: float64(len(data.ProjectStatuses))}
+		if input.Description != nil {
+			created.Description = strings.TrimSpace(*input.Description)
+		}
 		if input.Color != nil {
 			created.Color = *input.Color
 		}
@@ -510,6 +547,9 @@ func (s *server) updateProjectStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Name != nil && strings.TrimSpace(*input.Name) != "" {
 			data.ProjectStatuses[index].Name = strings.TrimSpace(*input.Name)
+		}
+		if input.Description != nil {
+			data.ProjectStatuses[index].Description = strings.TrimSpace(*input.Description)
 		}
 		if input.Color != nil {
 			data.ProjectStatuses[index].Color = *input.Color
@@ -929,7 +969,29 @@ func (s *server) getWorkspaceUsage(w http.ResponseWriter, r *http.Request) {
 	if data.WorkspaceSettings.Plan == "business" {
 		limits = map[string]int64{"members": 1000, "issues": 100000, "storageBytes": 100 * 1024 * 1024 * 1024}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"plan": data.WorkspaceSettings.Plan, "members": len(data.Members), "issues": len(data.Issues), "storageBytes": storage, "limits": limits})
+	events := make([]map[string]any, 0)
+	for _, event := range data.AuditLog {
+		feature := ""
+		amount := int64(0)
+		action := strings.ToLower(event.Action)
+		if strings.Contains(action, "loop") {
+			feature, amount = "loops", 10
+		} else if strings.Contains(action, "agent") || strings.Contains(action, "coding") {
+			feature, amount = "coding-sessions", 25
+		}
+		if feature != "" {
+			events = append(events, map[string]any{"id": event.ID, "feature": feature, "userId": event.Actor.ID, "amountCents": amount, "createdAt": event.CreatedAt})
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"plan": data.WorkspaceSettings.Plan, "members": len(data.Members), "issues": len(data.Issues), "storageBytes": storage, "limits": limits,
+		"aiCredits": map[string]any{
+			"balanceCents": data.WorkspaceSettings.AICreditBalanceCents, "autoReloadEnabled": data.WorkspaceSettings.AICreditAutoReload,
+			"autoReloadThresholdCents": data.WorkspaceSettings.AICreditReloadThresholdCents, "autoReloadAmountCents": data.WorkspaceSettings.AICreditReloadAmountCents,
+			"workspaceSpendLimitCents": data.WorkspaceSettings.AIWorkspaceSpendLimitCents,
+		},
+		"events": events,
+	})
 }
 
 type documentTemplateInput struct {

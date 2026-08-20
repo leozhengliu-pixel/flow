@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"regexp"
 	"slices"
@@ -521,6 +522,112 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 		if input.DetailedHistory != nil {
 			settings.DetailedHistory = *input.DetailedHistory
 		}
+		permissionValues := []string{"allMembers", "teamMembers", "owners"}
+		if input.Access != nil {
+			if !slices.Contains([]string{"public", "private"}, *input.Access) {
+				return errInvalid
+			}
+			settings.Access = *input.Access
+		}
+		if input.MembershipRestriction != nil {
+			if !slices.Contains([]string{"open", "members", "owners"}, *input.MembershipRestriction) {
+				return errInvalid
+			}
+			settings.MembershipRestriction = *input.MembershipRestriction
+		}
+		for value, target := range map[*string]*string{
+			input.SettingsPermission:   &settings.SettingsPermission,
+			input.LabelPermission:      &settings.LabelPermission,
+			input.TemplatePermission:   &settings.TemplatePermission,
+			input.AgentSkillPermission: &settings.AgentSkillPermission,
+			input.LoopPermission:       &settings.LoopPermission,
+			input.MemberPermission:     &settings.MemberPermission,
+		} {
+			if value != nil {
+				if !slices.Contains(permissionValues, *value) {
+					return errInvalid
+				}
+				*target = *value
+			}
+		}
+		if input.SlackChannelID != nil {
+			settings.SlackChannelID = strings.TrimSpace(*input.SlackChannelID)
+		}
+		if input.SlackChannelName != nil {
+			settings.SlackChannelName = strings.TrimSpace(*input.SlackChannelName)
+		}
+		if input.SlackNotifications != nil {
+			settings.SlackNotifications = maps.Clone(*input.SlackNotifications)
+		}
+		if input.PRAutomations != nil {
+			settings.PRAutomations = maps.Clone(*input.PRAutomations)
+		}
+		if input.AutoCloseParents != nil {
+			settings.AutoCloseParents = *input.AutoCloseParents
+		}
+		if input.AutoCloseSubIssues != nil {
+			settings.AutoCloseSubIssues = *input.AutoCloseSubIssues
+		}
+		if input.AutoCloseStale != nil {
+			settings.AutoCloseStale = *input.AutoCloseStale
+		}
+		if input.StaleMonths != nil {
+			if *input.StaleMonths < 1 || *input.StaleMonths > 24 {
+				return errInvalid
+			}
+			settings.StaleMonths = *input.StaleMonths
+		}
+		if input.StaleStatusID != nil {
+			if *input.StaleStatusID != "" && stateForTeam(data, teamID, *input.StaleStatusID) == nil {
+				return errInvalid
+			}
+			settings.StaleStatusID = *input.StaleStatusID
+		}
+		if input.AutoArchiveMonths != nil {
+			if *input.AutoArchiveMonths < 1 || *input.AutoArchiveMonths > 24 {
+				return errInvalid
+			}
+			settings.AutoArchiveMonths = *input.AutoArchiveMonths
+		}
+		if input.ProgressOrder != nil {
+			if !slices.Contains([]string{"first", "last", "noAction"}, *input.ProgressOrder) {
+				return errInvalid
+			}
+			settings.ProgressOrder = *input.ProgressOrder
+		}
+		if input.ReleaseAutomations != nil {
+			settings.ReleaseAutomations = slices.Clone(*input.ReleaseAutomations)
+		}
+		if input.TriageEnabled != nil {
+			settings.TriageEnabled = *input.TriageEnabled
+		}
+		if input.TriageRequirePriority != nil {
+			settings.TriageRequirePriority = *input.TriageRequirePriority
+		}
+		if input.TriageAction != nil {
+			settings.TriageAction = strings.TrimSpace(*input.TriageAction)
+		}
+		if input.TriageRules != nil {
+			settings.TriageRules = slices.Clone(*input.TriageRules)
+		}
+		if input.AgentSkills != nil {
+			settings.AgentSkills = slices.Clone(*input.AgentSkills)
+		}
+		if input.ProjectUpdatePrompt != nil {
+			settings.ProjectUpdatePrompt = strings.TrimSpace(*input.ProjectUpdatePrompt)
+		}
+		if input.ResolvedSummaries != nil {
+			settings.ResolvedSummaries = *input.ResolvedSummaries
+		}
+		if input.ShowInitiatives != nil {
+			settings.ShowInitiatives = *input.ShowInitiatives
+		}
+		if input.ParentTeamID != nil {
+			if *input.ParentTeamID == teamID || (*input.ParentTeamID != "" && !teamExists(data, *input.ParentTeamID)) {
+				return errInvalid
+			}
+			settings.ParentTeamID = *input.ParentTeamID
+		}
 		if input.Identifier != nil {
 			identifier := strings.ToUpper(strings.TrimSpace(*input.Identifier))
 			if !teamIdentifierPattern.MatchString(identifier) {
@@ -737,6 +844,9 @@ func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, 
 		}
 		template.Name = name
 	}
+	if input.Title != nil {
+		template.Title = strings.TrimSpace(*input.Title)
+	}
 	if input.Description != nil {
 		template.Description = strings.TrimSpace(*input.Description)
 	}
@@ -799,7 +909,15 @@ func teamExists(data *domain.Bootstrap, teamID string) bool {
 func teamSettings(data *domain.Bootstrap, teamID string) domain.TeamSettings {
 	settings := data.TeamSettings[teamID]
 	if settings.TeamID == "" {
-		settings = domain.TeamSettings{TeamID: teamID, Timezone: "Etc/UTC", EstimateType: "notUsed"}
+		settings = domain.TeamSettings{
+			TeamID: teamID, Timezone: "Etc/UTC", EstimateType: "notUsed", Access: "public",
+			MembershipRestriction: "open", SettingsPermission: "allMembers", LabelPermission: "allMembers",
+			TemplatePermission: "allMembers", AgentSkillPermission: "allMembers", LoopPermission: "allMembers",
+			MemberPermission: "allMembers", SlackNotifications: map[string]bool{}, PRAutomations: map[string]string{},
+			StaleMonths: 6, AutoArchiveMonths: 6, ProgressOrder: "first", TriageAction: "none",
+			ReleaseAutomations: []domain.TeamAutomationRule{}, TriageRules: []domain.TeamAutomationRule{},
+			AgentSkills: []domain.TeamAgentSkill{}, ResolvedSummaries: true, ShowInitiatives: true,
+		}
 		states := statesForTeam(data, teamID)
 		if len(states) > 0 {
 			settings.DefaultStateID = states[0].ID
@@ -809,6 +927,57 @@ func teamSettings(data *domain.Bootstrap, teamID string) domain.TeamSettings {
 				}
 			}
 		}
+	}
+	if settings.Access == "" {
+		settings.Access = "public"
+	}
+	if settings.MembershipRestriction == "" {
+		settings.MembershipRestriction = "open"
+	}
+	if settings.SettingsPermission == "" {
+		settings.SettingsPermission = "allMembers"
+	}
+	if settings.LabelPermission == "" {
+		settings.LabelPermission = "allMembers"
+	}
+	if settings.TemplatePermission == "" {
+		settings.TemplatePermission = "allMembers"
+	}
+	if settings.AgentSkillPermission == "" {
+		settings.AgentSkillPermission = "allMembers"
+	}
+	if settings.LoopPermission == "" {
+		settings.LoopPermission = "allMembers"
+	}
+	if settings.MemberPermission == "" {
+		settings.MemberPermission = "allMembers"
+	}
+	if settings.SlackNotifications == nil {
+		settings.SlackNotifications = map[string]bool{}
+	}
+	if settings.PRAutomations == nil {
+		settings.PRAutomations = map[string]string{}
+	}
+	if settings.StaleMonths == 0 {
+		settings.StaleMonths = 6
+	}
+	if settings.AutoArchiveMonths == 0 {
+		settings.AutoArchiveMonths = 6
+	}
+	if settings.ProgressOrder == "" {
+		settings.ProgressOrder = "first"
+	}
+	if settings.TriageAction == "" {
+		settings.TriageAction = "none"
+	}
+	if settings.ReleaseAutomations == nil {
+		settings.ReleaseAutomations = []domain.TeamAutomationRule{}
+	}
+	if settings.TriageRules == nil {
+		settings.TriageRules = []domain.TeamAutomationRule{}
+	}
+	if settings.AgentSkills == nil {
+		settings.AgentSkills = []domain.TeamAgentSkill{}
 	}
 	return settings
 }

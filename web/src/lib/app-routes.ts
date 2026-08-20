@@ -14,7 +14,11 @@ export type SettingsPageId =
   | 'project-labels' | 'project-templates' | 'project-statuses' | 'project-updates'
   | 'ai' | 'initiatives' | 'documents' | 'customer-requests' | 'releases' | 'pulse' | 'asks' | 'emojis' | 'integrations'
   | 'workspace' | 'teams' | 'members' | 'security' | 'api' | 'applications' | 'billing' | 'usage' | 'import-export' | 'team'
-export type TeamSettingsSection = 'general'|'members'|'labels'|'templates'|'statuses'|'cycles'
+export type TeamSettingsSection =
+  | 'overview' | 'general' | 'security' | 'members' | 'notifications'
+  | 'issue-labels' | 'templates' | 'recurring-issues' | 'statuses'
+  | 'workflow' | 'triage' | 'cycles' | 'agents' | 'agent-skills'
+  | 'ai-updates' | 'ai-summaries'
 
 export type AppRoute =
   | { kind: 'root' }
@@ -89,7 +93,8 @@ export function parseAppRoute(pathname: string): AppRoute {
   if (section === 'settings' && third === 'new-team' && segments.length === 3) return { kind: 'new-team', workspaceSlug }
   if (section === 'settings' && third === 'account' && fourth === 'security' && segments.length === 4) return { kind: 'settings', workspaceSlug, page: 'account-security' }
   if (section === 'settings' && third === 'account' && fourth && ACCOUNT_SETTINGS.has(fourth as SettingsPageId) && segments.length === 4) return { kind: 'settings', workspaceSlug, page: fourth as SettingsPageId }
-  if (section === 'settings' && third === 'teams' && fourth && (!fifth || TEAM_SETTINGS_SECTIONS.has(fifth as TeamSettingsSection)) && segments.length <= 5) return { kind: 'settings', workspaceSlug, page: 'team', teamKey: fourth, teamSection: (fifth as TeamSettingsSection) || 'general' }
+  if (section === 'settings' && third === 'teams' && fourth && fifth === 'ai' && (sixth === 'updates' || sixth === 'summaries') && segments.length === 6) return { kind: 'settings', workspaceSlug, page: 'team', teamKey: fourth, teamSection: `ai-${sixth}` as TeamSettingsSection }
+  if (section === 'settings' && third === 'teams' && fourth && (!fifth || TEAM_SETTINGS_SECTIONS.has(fifth as TeamSettingsSection)) && segments.length <= 5) return { kind: 'settings', workspaceSlug, page: 'team', teamKey: fourth, teamSection: (fifth as TeamSettingsSection) || 'overview' }
   if (section === 'settings' && third && SETTINGS_PAGES.has(third as SettingsPageId) && segments.length === 3) return { kind: 'settings', workspaceSlug, page: third as SettingsPageId }
   if (section === 'views' && VIEWS_RESOURCES.has(third as ViewsResource) && fourth === 'new' && segments.length === 4) return { kind: 'workspace-views-new', workspaceSlug, resource: third as ViewsResource }
   if (section === 'views' && VIEWS_RESOURCES.has(third as ViewsResource) && segments.length === 3) return { kind: 'workspace-views', workspaceSlug, resource: third as ViewsResource }
@@ -147,10 +152,18 @@ export function teamsPath(workspaceSlug: string) { return `${workspaceRootPath(w
 export function newTeamPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/settings/new-team` }
 const ACCOUNT_SETTINGS = new Set<SettingsPageId>(['preferences','profile','notifications','code-and-reviews','account-security','connections','agents'])
 const SETTINGS_PAGES = new Set<SettingsPageId>(['issue-labels','issue-templates','sla','project-labels','project-templates','project-statuses','project-updates','ai','initiatives','documents','customer-requests','releases','pulse','asks','emojis','integrations','workspace','teams','members','security','api','applications','billing','usage','import-export'])
-const TEAM_SETTINGS_SECTIONS = new Set<TeamSettingsSection>(['general','members','labels','templates','statuses','cycles'])
+const TEAM_SETTINGS_SECTIONS = new Set<TeamSettingsSection>([
+  'overview','general','security','members','notifications','issue-labels','templates',
+  'recurring-issues','statuses','workflow','triage','cycles','agents','agent-skills',
+])
 export function settingsPath(workspaceSlug: string, page: SettingsPageId, teamKey?: string, teamSection?: TeamSettingsSection) {
   const root = `${workspaceRootPath(workspaceSlug)}/settings`
-  if (page === 'team' && teamKey) return `${root}/teams/${encode(teamKey)}${teamSection && teamSection !== 'general' ? `/${teamSection}` : ''}`
+  if (page === 'team' && teamKey) {
+    if (!teamSection || teamSection === 'overview') return `${root}/teams/${encode(teamKey)}`
+    if (teamSection === 'ai-updates') return `${root}/teams/${encode(teamKey)}/ai/updates`
+    if (teamSection === 'ai-summaries') return `${root}/teams/${encode(teamKey)}/ai/summaries`
+    return `${root}/teams/${encode(teamKey)}/${teamSection}`
+  }
   if (page === 'account-security') return `${root}/account/security`
   return ACCOUNT_SETTINGS.has(page) ? `${root}/account/${page}` : `${root}/${page}`
 }

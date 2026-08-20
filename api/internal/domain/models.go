@@ -272,20 +272,65 @@ type CycleSettings struct {
 }
 
 type TeamSettings struct {
-	TeamID            string `json:"teamId"`
-	Description       string `json:"description,omitempty"`
-	Timezone          string `json:"timezone"`
-	EstimateType      string `json:"estimateType"`
-	DefaultStateID    string `json:"defaultStateId"`
-	DefaultPriority   int    `json:"defaultPriority"`
-	IssueEmailEnabled bool   `json:"issueEmailEnabled"`
-	DetailedHistory   bool   `json:"detailedHistory"`
+	TeamID                string               `json:"teamId"`
+	Description           string               `json:"description,omitempty"`
+	Timezone              string               `json:"timezone"`
+	EstimateType          string               `json:"estimateType"`
+	DefaultStateID        string               `json:"defaultStateId"`
+	DefaultPriority       int                  `json:"defaultPriority"`
+	IssueEmailEnabled     bool                 `json:"issueEmailEnabled"`
+	DetailedHistory       bool                 `json:"detailedHistory"`
+	Access                string               `json:"access"`
+	MembershipRestriction string               `json:"membershipRestriction"`
+	SettingsPermission    string               `json:"settingsPermission"`
+	LabelPermission       string               `json:"labelPermission"`
+	TemplatePermission    string               `json:"templatePermission"`
+	AgentSkillPermission  string               `json:"agentSkillPermission"`
+	LoopPermission        string               `json:"loopPermission"`
+	MemberPermission      string               `json:"memberPermission"`
+	SlackChannelID        string               `json:"slackChannelId,omitempty"`
+	SlackChannelName      string               `json:"slackChannelName,omitempty"`
+	SlackNotifications    map[string]bool      `json:"slackNotifications"`
+	PRAutomations         map[string]string    `json:"prAutomations"`
+	AutoCloseParents      bool                 `json:"autoCloseParents"`
+	AutoCloseSubIssues    bool                 `json:"autoCloseSubIssues"`
+	AutoCloseStale        bool                 `json:"autoCloseStale"`
+	StaleMonths           int                  `json:"staleMonths"`
+	StaleStatusID         string               `json:"staleStatusId,omitempty"`
+	AutoArchiveMonths     int                  `json:"autoArchiveMonths"`
+	ProgressOrder         string               `json:"progressOrder"`
+	ReleaseAutomations    []TeamAutomationRule `json:"releaseAutomations"`
+	TriageEnabled         bool                 `json:"triageEnabled"`
+	TriageRequirePriority bool                 `json:"triageRequirePriority"`
+	TriageAction          string               `json:"triageAction"`
+	TriageRules           []TeamAutomationRule `json:"triageRules"`
+	AgentSkills           []TeamAgentSkill     `json:"agentSkills"`
+	ProjectUpdatePrompt   string               `json:"projectUpdatePrompt"`
+	ResolvedSummaries     bool                 `json:"resolvedThreadSummaries"`
+	ShowInitiatives       bool                 `json:"showInitiatives"`
+	ParentTeamID          string               `json:"parentTeamId,omitempty"`
+}
+
+type TeamAutomationRule struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Trigger string `json:"trigger"`
+	Action  string `json:"action"`
+	Enabled bool   `json:"enabled"`
+}
+
+type TeamAgentSkill struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Instructions string `json:"instructions"`
+	Enabled      bool   `json:"enabled"`
 }
 
 type IssueTemplate struct {
 	ID           string              `json:"id"`
 	TeamID       string              `json:"teamId"`
 	Name         string              `json:"name"`
+	Title        string              `json:"title,omitempty"`
 	Description  string              `json:"description,omitempty"`
 	Body         string              `json:"body,omitempty"`
 	StateID      string              `json:"stateId,omitempty"`
@@ -329,11 +374,12 @@ type Attachment struct {
 }
 
 type ProjectStatus struct {
-	ID       string  `json:"id"`
-	Name     string  `json:"name"`
-	Color    string  `json:"color"`
-	Type     string  `json:"type"`
-	Position float64 `json:"position"`
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Description string  `json:"description,omitempty"`
+	Color       string  `json:"color"`
+	Type        string  `json:"type"`
+	Position    float64 `json:"position"`
 }
 
 type Project struct {
@@ -467,68 +513,158 @@ type AskApproval struct {
 }
 
 type ProjectTemplate struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	Description   string    `json:"description,omitempty"`
-	Summary       string    `json:"summary,omitempty"`
-	Icon          string    `json:"icon,omitempty"`
-	Color         string    `json:"color,omitempty"`
-	StatusID      string    `json:"statusId,omitempty"`
-	Priority      int       `json:"priority"`
-	TeamIDs       []string  `json:"teamIds"`
-	LabelIDs      []string  `json:"labelIds"`
-	LeadID        string    `json:"leadId,omitempty"`
-	MemberIDs     []string  `json:"memberIds,omitempty"`
-	DependencyIDs []string  `json:"dependencyIds,omitempty"`
-	InitiativeIDs []string  `json:"initiativeIds,omitempty"`
-	IssueIDs      []string  `json:"issueIds,omitempty"`
-	Visibility    string    `json:"visibility,omitempty"`
-	Creator       User      `json:"creator"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	ID                  string              `json:"id"`
+	Name                string              `json:"name"`
+	ProjectName         string              `json:"projectName,omitempty"`
+	TemplateDescription string              `json:"templateDescription,omitempty"`
+	Description         string              `json:"description,omitempty"`
+	Summary             string              `json:"summary,omitempty"`
+	Icon                string              `json:"icon,omitempty"`
+	Color               string              `json:"color,omitempty"`
+	StatusID            string              `json:"statusId,omitempty"`
+	Priority            int                 `json:"priority"`
+	TeamIDs             []string            `json:"teamIds"`
+	LabelIDs            []string            `json:"labelIds"`
+	LeadID              string              `json:"leadId,omitempty"`
+	MemberIDs           []string            `json:"memberIds,omitempty"`
+	DependencyIDs       []string            `json:"dependencyIds,omitempty"`
+	InitiativeIDs       []string            `json:"initiativeIds,omitempty"`
+	IssueIDs            []string            `json:"issueIds,omitempty"`
+	Milestones          []TemplateMilestone `json:"milestones,omitempty"`
+	Visibility          string              `json:"visibility,omitempty"`
+	Creator             User                `json:"creator"`
+	CreatedAt           time.Time           `json:"createdAt"`
+	UpdatedAt           time.Time           `json:"updatedAt"`
+}
+
+type TemplateMilestone struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
 }
 
 type UserSettings struct {
-	UserID            string    `json:"userId"`
-	Language          string    `json:"language"`
-	HomeView          string    `json:"homeView"`
-	DisplayNames      string    `json:"displayNames"`
-	FirstDay          string    `json:"firstDay"`
-	Emoticons         bool      `json:"emoticons"`
-	SendComments      string    `json:"sendComments"`
-	FontSize          string    `json:"fontSize"`
-	PointerCursor     bool      `json:"pointerCursor"`
-	UnderlineLinks    bool      `json:"underlineLinks"`
-	InterfaceTheme    string    `json:"interfaceTheme"`
-	LightTheme        string    `json:"lightTheme"`
-	DarkTheme         string    `json:"darkTheme"`
-	DesktopLinks      bool      `json:"desktopLinks"`
-	AutoAssign        bool      `json:"autoAssign"`
-	AssignStarted     bool      `json:"assignStarted"`
-	ReviewAutoAssign  bool      `json:"reviewAutoAssign"`
-	BranchFormat      string    `json:"branchFormat"`
-	AgentEnabled      bool      `json:"agentEnabled"`
-	AgentInstructions string    `json:"agentInstructions"`
-	JobTitle          string    `json:"jobTitle,omitempty"`
-	Username          string    `json:"username,omitempty"`
-	UpdatedAt         time.Time `json:"updatedAt"`
+	UserID                   string    `json:"userId"`
+	Language                 string    `json:"language"`
+	HomeView                 string    `json:"homeView"`
+	DisplayNames             string    `json:"displayNames"`
+	FirstDay                 string    `json:"firstDay"`
+	Emoticons                bool      `json:"emoticons"`
+	SendComments             string    `json:"sendComments"`
+	FontSize                 string    `json:"fontSize"`
+	PointerCursor            bool      `json:"pointerCursor"`
+	UnderlineLinks           bool      `json:"underlineLinks"`
+	InterfaceTheme           string    `json:"interfaceTheme"`
+	LightTheme               string    `json:"lightTheme"`
+	DarkTheme                string    `json:"darkTheme"`
+	DesktopLinks             bool      `json:"desktopLinks"`
+	AutoAssign               bool      `json:"autoAssign"`
+	AssignStarted            bool      `json:"assignStarted"`
+	ReviewAutoAssign         bool      `json:"reviewAutoAssign"`
+	BranchFormat             string    `json:"branchFormat"`
+	PersonalSettingsVersion  int       `json:"personalSettingsVersion"`
+	CodeReviewsEnabled       bool      `json:"codeReviewsEnabled"`
+	AutoConvertDrafts        bool      `json:"autoConvertDrafts"`
+	MergeStrategy            string    `json:"mergeStrategy"`
+	CodeTheme                string    `json:"codeTheme"`
+	CodeFont                 string    `json:"codeFont"`
+	ReviewCommentsFilter     string    `json:"reviewCommentsFilter"`
+	ReviewRequests           bool      `json:"reviewRequests"`
+	GithubTeamReviewRequests bool      `json:"githubTeamReviewRequests"`
+	ChecksMergeQueue         bool      `json:"checksMergeQueue"`
+	RequireSignedCommits     bool      `json:"requireSignedCommits"`
+	GitAttachmentFormat      string    `json:"gitAttachmentFormat"`
+	GitBranchMoveStarted     bool      `json:"gitBranchMoveStarted"`
+	CodingToolMoveStarted    bool      `json:"codingToolMoveStarted"`
+	ChangelogUpdates         bool      `json:"changelogUpdates"`
+	ChangelogNewsletter      bool      `json:"changelogNewsletter"`
+	MarketingUpdates         bool      `json:"marketingUpdates"`
+	InviteAcceptedUpdates    bool      `json:"inviteAcceptedUpdates"`
+	PrivacyUpdates           bool      `json:"privacyUpdates"`
+	DPAUpdates               bool      `json:"dpaUpdates"`
+	AgentEnabled             bool      `json:"agentEnabled"`
+	AgentInstructions        string    `json:"agentInstructions"`
+	JobTitle                 string    `json:"jobTitle,omitempty"`
+	Username                 string    `json:"username,omitempty"`
+	UpdatedAt                time.Time `json:"updatedAt"`
 }
 
 type WorkspaceSettings struct {
-	FiscalMonth          string          `json:"fiscalMonth"`
-	GuestsAllowed        bool            `json:"guestsAllowed"`
-	RequireTwoFactor     bool            `json:"requireTwoFactor"`
-	SessionDurationDays  int             `json:"sessionDurationDays"`
-	AllowedDomains       []string        `json:"allowedDomains"`
-	InvitePermission     string          `json:"invitePermission"`
-	TeamCreatePermission string          `json:"teamCreatePermission"`
-	LabelPermission      string          `json:"labelPermission"`
-	TemplatePermission   string          `json:"templatePermission"`
-	APIKeyPermission     string          `json:"apiKeyPermission"`
-	FeatureFlags         map[string]bool `json:"featureFlags"`
-	BillingEmail         string          `json:"billingEmail,omitempty"`
-	Plan                 string          `json:"plan"`
-	UpdatedAt            time.Time       `json:"updatedAt"`
+	FiscalMonth                  string          `json:"fiscalMonth"`
+	GuestsAllowed                bool            `json:"guestsAllowed"`
+	RequireTwoFactor             bool            `json:"requireTwoFactor"`
+	SessionDurationDays          int             `json:"sessionDurationDays"`
+	AllowedDomains               []string        `json:"allowedDomains"`
+	InvitePermission             string          `json:"invitePermission"`
+	TeamCreatePermission         string          `json:"teamCreatePermission"`
+	LabelPermission              string          `json:"labelPermission"`
+	TemplatePermission           string          `json:"templatePermission"`
+	APIKeyPermission             string          `json:"apiKeyPermission"`
+	FeatureFlags                 map[string]bool `json:"featureFlags"`
+	FeatureSettings              FeatureSettings `json:"featureSettings"`
+	BillingEmail                 string          `json:"billingEmail,omitempty"`
+	Plan                         string          `json:"plan"`
+	InviteLinksEnabled           bool            `json:"inviteLinksEnabled"`
+	GoogleAuthEnabled            bool            `json:"googleAuthEnabled"`
+	EmailAuthEnabled             bool            `json:"emailAuthEnabled"`
+	DisableAdminBypass           bool            `json:"disableAdminBypass"`
+	InitiativePermission         string          `json:"initiativePermission,omitempty"`
+	LoopPermission               string          `json:"loopPermission,omitempty"`
+	AgentGuidancePermission      string          `json:"agentGuidancePermission,omitempty"`
+	PreventGuestAgents           bool            `json:"preventGuestAgents"`
+	AIUsageSharing               bool            `json:"aiUsageSharing"`
+	AgentWebSearch               bool            `json:"agentWebSearch"`
+	ExternalLoopTriggers         bool            `json:"externalLoopTriggers"`
+	MCPConnectorsEnabled         bool            `json:"mcpConnectorsEnabled"`
+	AICreditBalanceCents         int64           `json:"aiCreditBalanceCents"`
+	AICreditAutoReload           bool            `json:"aiCreditAutoReload"`
+	AICreditReloadThresholdCents int64           `json:"aiCreditReloadThresholdCents"`
+	AICreditReloadAmountCents    int64           `json:"aiCreditReloadAmountCents"`
+	AIWorkspaceSpendLimitCents   int64           `json:"aiWorkspaceSpendLimitCents"`
+	UpdatedAt                    time.Time       `json:"updatedAt"`
+}
+
+type FeatureOption struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Color string `json:"color,omitempty"`
+}
+
+type FeatureSettings struct {
+	AIUsageFeedback          bool            `json:"aiUsageFeedback"`
+	InitiativeUpdateSchedule string          `json:"initiativeUpdateSchedule"`
+	CustomerDefaultTeamID    string          `json:"customerDefaultTeamId,omitempty"`
+	CustomerRevenueFormat    string          `json:"customerRevenueFormat"`
+	CustomerRevenueCurrency  string          `json:"customerRevenueCurrency"`
+	CustomerManualEdits      bool            `json:"customerManualEdits"`
+	CustomerStatuses         []FeatureOption `json:"customerStatuses"`
+	CustomerTiers            []FeatureOption `json:"customerTiers"`
+	CustomerExcludedDomains  []string        `json:"customerExcludedDomains"`
+	CustomerGenericDomains   []string        `json:"customerGenericDomains"`
+	PulseWorkspaceSchedule   string          `json:"pulseWorkspaceSchedule"`
+	AsksEmailAddresses       []string        `json:"asksEmailAddresses"`
+}
+
+type ReleasePipeline struct {
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	TeamIDs    []string   `json:"teamIds"`
+	Type       string     `json:"type"`
+	Production bool       `json:"production"`
+	Stages     []string   `json:"stages"`
+	ArchivedAt *time.Time `json:"archivedAt,omitempty"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	UpdatedAt  time.Time  `json:"updatedAt"`
+}
+
+type CustomEmoji struct {
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	ImageURL   string     `json:"imageUrl"`
+	Creator    User       `json:"creator"`
+	ArchivedAt *time.Time `json:"archivedAt,omitempty"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	UpdatedAt  time.Time  `json:"updatedAt"`
 }
 
 type APIKey struct {
@@ -555,6 +691,18 @@ type OAuthApplication struct {
 	CreatorID    string    `json:"creatorId"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
+type Webhook struct {
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	URL           string    `json:"url"`
+	ResourceTypes []string  `json:"resourceTypes"`
+	TeamIDs       []string  `json:"teamIds"`
+	Enabled       bool      `json:"enabled"`
+	CreatorID     string    `json:"creatorId"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
 type IntegrationConnection struct {
@@ -865,6 +1013,8 @@ type Bootstrap struct {
 	Documents               []Document                         `json:"documents"`
 	CustomerRequests        []CustomerRequest                  `json:"customerRequests"`
 	Releases                []Release                          `json:"releases"`
+	ReleasePipelines        []ReleasePipeline                  `json:"releasePipelines"`
+	CustomEmojis            []CustomEmoji                      `json:"customEmojis"`
 	Asks                    []Ask                              `json:"asks"`
 	SLARules                []SLARule                          `json:"slaRules"`
 	IssueSLAs               []IssueSLA                         `json:"issueSlas"`
@@ -892,6 +1042,7 @@ type Bootstrap struct {
 	WorkspaceSettings       WorkspaceSettings                  `json:"workspaceSettings"`
 	APIKeys                 []APIKey                           `json:"apiKeys"`
 	OAuthApplications       []OAuthApplication                 `json:"oauthApplications"`
+	Webhooks                []Webhook                          `json:"webhooks"`
 	IntegrationConnections  []IntegrationConnection            `json:"integrationConnections"`
 	Settings                map[string]any                     `json:"settings"`
 	Members                 []WorkspaceMember                  `json:"members"`
@@ -1122,19 +1273,49 @@ type WorkflowStateReorderInput struct {
 }
 
 type TeamSettingsMutationInput struct {
-	Description       *string `json:"description,omitempty"`
-	Timezone          *string `json:"timezone,omitempty"`
-	EstimateType      *string `json:"estimateType,omitempty"`
-	DefaultStateID    *string `json:"defaultStateId,omitempty"`
-	DefaultPriority   *int    `json:"defaultPriority,omitempty"`
-	IssueEmailEnabled *bool   `json:"issueEmailEnabled,omitempty"`
-	DetailedHistory   *bool   `json:"detailedHistory,omitempty"`
-	Identifier        *string `json:"identifier,omitempty"`
+	Description           *string               `json:"description,omitempty"`
+	Timezone              *string               `json:"timezone,omitempty"`
+	EstimateType          *string               `json:"estimateType,omitempty"`
+	DefaultStateID        *string               `json:"defaultStateId,omitempty"`
+	DefaultPriority       *int                  `json:"defaultPriority,omitempty"`
+	IssueEmailEnabled     *bool                 `json:"issueEmailEnabled,omitempty"`
+	DetailedHistory       *bool                 `json:"detailedHistory,omitempty"`
+	Identifier            *string               `json:"identifier,omitempty"`
+	Access                *string               `json:"access,omitempty"`
+	MembershipRestriction *string               `json:"membershipRestriction,omitempty"`
+	SettingsPermission    *string               `json:"settingsPermission,omitempty"`
+	LabelPermission       *string               `json:"labelPermission,omitempty"`
+	TemplatePermission    *string               `json:"templatePermission,omitempty"`
+	AgentSkillPermission  *string               `json:"agentSkillPermission,omitempty"`
+	LoopPermission        *string               `json:"loopPermission,omitempty"`
+	MemberPermission      *string               `json:"memberPermission,omitempty"`
+	SlackChannelID        *string               `json:"slackChannelId,omitempty"`
+	SlackChannelName      *string               `json:"slackChannelName,omitempty"`
+	SlackNotifications    *map[string]bool      `json:"slackNotifications,omitempty"`
+	PRAutomations         *map[string]string    `json:"prAutomations,omitempty"`
+	AutoCloseParents      *bool                 `json:"autoCloseParents,omitempty"`
+	AutoCloseSubIssues    *bool                 `json:"autoCloseSubIssues,omitempty"`
+	AutoCloseStale        *bool                 `json:"autoCloseStale,omitempty"`
+	StaleMonths           *int                  `json:"staleMonths,omitempty"`
+	StaleStatusID         *string               `json:"staleStatusId,omitempty"`
+	AutoArchiveMonths     *int                  `json:"autoArchiveMonths,omitempty"`
+	ProgressOrder         *string               `json:"progressOrder,omitempty"`
+	ReleaseAutomations    *[]TeamAutomationRule `json:"releaseAutomations,omitempty"`
+	TriageEnabled         *bool                 `json:"triageEnabled,omitempty"`
+	TriageRequirePriority *bool                 `json:"triageRequirePriority,omitempty"`
+	TriageAction          *string               `json:"triageAction,omitempty"`
+	TriageRules           *[]TeamAutomationRule `json:"triageRules,omitempty"`
+	AgentSkills           *[]TeamAgentSkill     `json:"agentSkills,omitempty"`
+	ProjectUpdatePrompt   *string               `json:"projectUpdatePrompt,omitempty"`
+	ResolvedSummaries     *bool                 `json:"resolvedThreadSummaries,omitempty"`
+	ShowInitiatives       *bool                 `json:"showInitiatives,omitempty"`
+	ParentTeamID          *string               `json:"parentTeamId,omitempty"`
 }
 
 type IssueTemplateMutationInput struct {
 	TeamID       *string              `json:"teamId,omitempty"`
 	Name         *string              `json:"name,omitempty"`
+	Title        *string              `json:"title,omitempty"`
 	Description  *string              `json:"description,omitempty"`
 	Body         *string              `json:"body,omitempty"`
 	StateID      *string              `json:"stateId,omitempty"`
