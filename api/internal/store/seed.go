@@ -136,7 +136,7 @@ func zentaoDemoSeed() domain.Bootstrap {
 		return domain.IssueLabel{}
 	}
 	sealPlatform := domain.ProjectSummary{ID: "project_cruise", Name: "智能印控平台(S04763)", Color: "#5E6AD2", Icon: "印"}
-	carMall := domain.ProjectSummary{ID: "project_aut", Name: "汽车之家车商城项目2026", Color: "#2F80ED", Icon: "车"}
+	carMall := domain.ProjectSummary{ID: "project_aut", Name: "[Flow 对比演示] 汽车之家车商城项目 2026", Color: "#2F80ED", Icon: "车"}
 	issue := func(id string, number int, title, description string, priority int, issueTeam domain.Team, state domain.WorkflowState, assignee, creator domain.User, issueLabels []domain.IssueLabel, project *domain.ProjectSummary, created time.Time) domain.Issue {
 		item := domain.Issue{ID: id, Version: 1, Identifier: issueTeam.Key + "-" + itoa(number), Number: number, Title: title, Description: description, Priority: priority, PriorityLabel: priorityLabel(priority), SortOrder: float64(number), CreatedAt: created, UpdatedAt: now, Team: issueTeam, State: state, Assignee: &assignee, Creator: creator, Labels: issueLabels, Project: project, SubscriberIDs: []string{viewer.ID, assignee.ID, creator.ID}, Reactions: map[string][]string{}, SubIssueIDs: []string{}, Relations: []domain.IssueRelation{}, Attachments: []domain.Attachment{}}
 		if state.Type == "completed" {
@@ -307,8 +307,8 @@ func zentaoDemoSeed() domain.Bootstrap {
 		{ID: "document_release_review", ProjectID: sealPlatform.ID, Type: "document", Title: "智能印控上线评审报告", URL: "/cleantrack/document/seal-release-review", CreatedAt: now.AddDate(0, 0, -3)},
 	}
 	projects[0].Milestones = []domain.ProjectMilestone{
-		{ID: "milestone_seal_test", ProjectID: sealPlatform.ID, Name: "关键用例执行完成", TargetDate: &releaseOneTarget, CreatedAt: now.AddDate(0, 0, -7), UpdatedAt: now},
-		{ID: "milestone_seal_review", ProjectID: sealPlatform.ID, Name: "上线评审通过", TargetDate: &releaseOneTarget, CreatedAt: now.AddDate(0, 0, -6), UpdatedAt: now},
+		{ID: "milestone_seal_test", ProjectID: sealPlatform.ID, Name: "关键用例执行完成", Description: "完成高关联测试用例并补齐执行结果。", TargetDate: &releaseOneTarget, CreatedAt: now.AddDate(0, 0, -7), UpdatedAt: now},
+		{ID: "milestone_seal_review", ProjectID: sealPlatform.ID, Name: "上线评审通过", Description: "测试报告、回滚方案和代码证据满足上线门禁。", TargetDate: &releaseOneTarget, CreatedAt: now.AddDate(0, 0, -6), UpdatedAt: now},
 	}
 	projects[1].Resources = []domain.ProjectResource{
 		{ID: "resource_car_source", ProjectID: carMall.ID, Type: "link", Title: "禅道：汽车之家车商城项目2026", URL: "https://chandao.haier.net/project-index-10155.html", CreatedAt: now.AddDate(0, 0, -9)},
@@ -316,8 +316,20 @@ func zentaoDemoSeed() domain.Bootstrap {
 		{ID: "document_delivery_data", ProjectID: carMall.ID, Type: "document", Title: "车商城交付数据与改进清单", URL: "/cleantrack/document/car-mall-delivery-data", CreatedAt: now.AddDate(0, 0, -5)},
 	}
 	projects[1].Milestones = []domain.ProjectMilestone{
-		{ID: "milestone_car_phase1", ProjectID: carMall.ID, Name: "车商城一期迭代完成", TargetDate: stringPointer("2026-07-10"), CreatedAt: time.Date(2026, 1, 4, 0, 0, 0, 0, time.UTC), UpdatedAt: now},
-		{ID: "milestone_car_316", ProjectID: carMall.ID, Name: "车商城316迭代完成", TargetDate: stringPointer("2026-08-01"), CreatedAt: time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC), UpdatedAt: now},
+		{ID: "milestone_car_phase1", ProjectID: carMall.ID, Name: "车商城一期迭代完成", Description: "完成一期订单流程交付与缺陷收敛。", TargetDate: stringPointer("2026-07-10"), CreatedAt: time.Date(2026, 1, 4, 0, 0, 0, 0, time.UTC), UpdatedAt: now},
+		{ID: "milestone_car_316", ProjectID: carMall.ID, Name: "车商城316迭代完成", Description: "完成 316 迭代范围并复盘估算偏差。", TargetDate: stringPointer("2026-08-01"), CreatedAt: time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC), UpdatedAt: now},
+	}
+	for index := range issues {
+		switch issues[index].ID {
+		case "issue_53156", "issue_53063", "issue_100474", "issue_52526":
+			issues[index].ProjectMilestoneID = stringPointer("milestone_car_phase1")
+		case "issue_100417", "issue_100879", "issue_105130", "issue_108415", "issue_100880", "issue_101479", "issue_delivery_metrics":
+			issues[index].ProjectMilestoneID = stringPointer("milestone_car_316")
+		case "issue_49219", "issue_49216", "issue_49215", "issue_test_plan", "issue_test_report":
+			issues[index].ProjectMilestoneID = stringPointer("milestone_seal_test")
+		case "issue_release_review", "issue_audit_gate":
+			issues[index].ProjectMilestoneID = stringPointer("milestone_seal_review")
+		}
 	}
 	customers := []domain.Customer{
 		{ID: "customer_seal_ops", Name: "集团法务与印控运营", OwnerID: liquan.ID, Status: "active", Tier: "Enterprise", Size: 120, Domains: []string{"seal-operations.demo"}, CreatedAt: now.AddDate(-1, 0, 0), UpdatedAt: now},
