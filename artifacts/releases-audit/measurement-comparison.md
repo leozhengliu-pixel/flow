@@ -30,10 +30,12 @@ Date: 2026-08-20
 | Stage menu | `175 x 177.5` | `175 x 177` | `0.5px` height delta |
 | Custom calendar | `x=454, y=68.84, 562 x 486.5` | `x=454, y=68.8359, 562 x 486.5` | Match within rounding |
 | Release detail | `x=1061.5, y=96, 400 x 560.5` | `x=1062, y=96, 400 x 561` | `0.5px` x/height delta |
-| New pipeline content | Linear controls start near `x=549` | centered `x=533, width=640, height=604` | Flow page container measured; child controls below |
-| Pipeline name input | `300 x 32` | `300 x 32` | Match |
-| Type cards | `300 x 129.59` | `300 x 129.5` | `0.09px` height delta |
-| Stage form area | `408.46px` wide | `408px` wide | `0.46px` delta |
+| New pipeline form | `x=533`, width `640`; General at `x=549, y=162.5` | `x=533`, width `640`; General at `x=549, y=162.5` | Match |
+| Pipeline name input | `x=857, y=217.5, 300 x 32` | `x=857, y=217.5, 300 x 32` | Match |
+| Team control | `x=857`, `300 x 32` | `x=857`, `300 x 32` | Match |
+| Type cards | `x=549/857, y=455.5, 300 x 129.59375` | `x=549/857, y=455.5, 300 x 129.59375` | Match |
+| Stage list | `x=533`, `640 x 242.5` | `x=533`, `640 x 242.5` | Match |
+| Inline stage input | `408.4609375 x 34` | `408.4609375 x 34` | Match |
 
 ## Typography, spacing, and motion
 
@@ -61,6 +63,8 @@ Date: 2026-08-20
 | Dark Portal border | `lch(25.68 1.93 272)` | `lch(25.68 1.93 272)` | Match |
 | Dark Portal shadow | three layers at `.125` | same three layers | Match |
 | Light Portal | light surface/border/shadow measured in Linear | Flow verified after changing Preferences to Light | Theme inheritance passed |
+| Team selector Portal | `149 x 56.5`, z-index `500` | `149 x 56.5`, z-index `500` | Match |
+| Team selector motion | `150ms ease` | `150ms ease` | Match |
 
 Portal content was checked outside its trigger subtree. It is not clipped by
 the list or composer scroll containers. The calendar's Radix wrapper is fixed
@@ -85,7 +89,10 @@ y=12`. On mobile its surface is `366 x 486.5`, z-index `701`.
 | Changelog | Missing-notes state and release notes | Released entries render notes; empty state supported | Functional, illustration differs |
 | Archive | Dedicated archived release route | Active/archive view and restore action | Functional extension |
 | Recently deleted | Linear pipeline trash observed | Releases and pipelines project into Flow trash | Functional extension |
-| New pipeline | Full settings page | Full page; Cancel path and validation verified | Presentation match |
+| New pipeline | `/settings/releases/pipelines/new` inside Settings | Same route structure; both entry points navigate into Settings | Information architecture match |
+| Pipeline team selector | Searchable Combobox; ArrowDown/Enter/Escape | Searchable Portal Combobox; selection and close keys verified | Match |
+| Add pipeline stage | Inline `33 x 32` icon selector, `408.46 x 34` input, Cancel/Create | Same geometry; Enter creates and Escape cancels | Match |
+| Cancel pipeline | Returns to `/settings/releases` | Returns to `/settings/releases` | Match |
 | CI access key | Existing pipeline settings | Admin-only one-time key rotation API | Model/API parity; settings surface owns UI |
 
 No Releases button is decorative: header controls, display controls, favorites,
@@ -121,7 +128,7 @@ trash, key hashing, and `stageStatuses` round trips.
 | Chinese + Dark | Passed for translated chrome and protected entity values |
 | Mobile detail | `390px` wide, `800px` high at `y=44`; no horizontal overflow |
 | Mobile calendar | `366 x 486.5` at `x=12, y=12`; no clipping or overflow |
-| Mobile pipeline editor | main `386 x 808`; document `scrollWidth=390` |
+| Mobile pipeline editor | `390 x 844`: main `378 x 832`, form `353px`; document `scrollWidth=390` |
 
 Business values remained literal across locale changes, including
 `Flow QA Releases`, `Released`, `版本 QA 1`, `v2026.08`, team names, issue
@@ -137,6 +144,5 @@ identifiers and issue titles. Only application chrome is translated.
   `144.26 x 110` illustration.
 - Linear's detail architecture exposes richer properties and issue-row metadata;
   Flow matches the aside geometry but intentionally has a smaller content model.
-- The Flow new-pipeline team picker is inline rather than Linear's Portal menu.
 - Linear trash restore for an already deleted release could not be measured
   without mutating Linear production data.
