@@ -478,11 +478,19 @@ type Release struct {
 	Version       string     `json:"version"`
 	Description   string     `json:"description"`
 	Status        string     `json:"status"`
+	PipelineID    string     `json:"pipelineId,omitempty"`
+	Stage         string     `json:"stage,omitempty"`
+	CommitSHA     string     `json:"commitSha,omitempty"`
+	ReleaseNotes  string     `json:"releaseNotes,omitempty"`
+	Position      float64    `json:"position"`
 	TargetDate    *string    `json:"targetDate,omitempty"`
 	ProjectIDs    []string   `json:"projectIds"`
 	IssueIDs      []string   `json:"issueIds"`
 	SubscriberIDs []string   `json:"subscriberIds"`
 	Creator       User       `json:"creator"`
+	StartedAt     *time.Time `json:"startedAt,omitempty"`
+	ReleasedAt    *time.Time `json:"releasedAt,omitempty"`
+	StageFrozenAt *time.Time `json:"stageFrozenAt,omitempty"`
 	ArchivedAt    *time.Time `json:"archivedAt,omitempty"`
 	CreatedAt     time.Time  `json:"createdAt"`
 	UpdatedAt     time.Time  `json:"updatedAt"`
@@ -646,15 +654,23 @@ type FeatureSettings struct {
 }
 
 type ReleasePipeline struct {
-	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	TeamIDs    []string   `json:"teamIds"`
-	Type       string     `json:"type"`
-	Production bool       `json:"production"`
-	Stages     []string   `json:"stages"`
-	ArchivedAt *time.Time `json:"archivedAt,omitempty"`
-	CreatedAt  time.Time  `json:"createdAt"`
-	UpdatedAt  time.Time  `json:"updatedAt"`
+	ID                       string            `json:"id"`
+	Name                     string            `json:"name"`
+	TeamIDs                  []string          `json:"teamIds"`
+	Type                     string            `json:"type"`
+	Production               bool              `json:"production"`
+	Stages                   []string          `json:"stages"`
+	StageStatuses            map[string]string `json:"stageStatuses"`
+	Position                 float64           `json:"position"`
+	PathFilters              []string          `json:"pathFilters"`
+	ReleaseNotesTemplate     string            `json:"releaseNotesTemplate,omitempty"`
+	AutoGenerateReleaseNotes bool              `json:"autoGenerateReleaseNotes"`
+	AccessKeyPrefix          string            `json:"accessKeyPrefix,omitempty"`
+	AccessKeyHash            string            `json:"accessKeyHash,omitempty"`
+	AccessKeyCreatedAt       *time.Time        `json:"accessKeyCreatedAt,omitempty"`
+	ArchivedAt               *time.Time        `json:"archivedAt,omitempty"`
+	CreatedAt                time.Time         `json:"createdAt"`
+	UpdatedAt                time.Time         `json:"updatedAt"`
 }
 
 type CustomEmoji struct {
