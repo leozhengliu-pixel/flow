@@ -121,10 +121,18 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/documents/{id}", s.deleteDocument)
 	mux.HandleFunc("POST /api/documents/{id}/restore/{revisionId}", s.restoreDocumentRevision)
 	mux.HandleFunc("POST /api/releases", s.createRelease)
+	mux.HandleFunc("GET /api/releases", s.listReleases)
+	mux.HandleFunc("GET /api/releases/{id}", s.getRelease)
+	mux.HandleFunc("POST /api/releases/reorder", s.reorderReleases)
 	mux.HandleFunc("PATCH /api/releases/{id}", s.updateRelease)
 	mux.HandleFunc("DELETE /api/releases/{id}", s.deleteRelease)
 	mux.HandleFunc("POST /api/release-pipelines", s.createReleasePipeline)
+	mux.HandleFunc("GET /api/release-pipelines", s.listReleasePipelines)
+	mux.HandleFunc("GET /api/release-pipelines/{id}", s.getReleasePipeline)
+	mux.HandleFunc("POST /api/release-pipelines/reorder", s.reorderReleasePipelines)
+	mux.HandleFunc("POST /api/release-pipelines/{id}/access-key", s.rotateReleasePipelineAccessKey)
 	mux.HandleFunc("PATCH /api/release-pipelines/{id}", s.updateReleasePipeline)
+	mux.HandleFunc("DELETE /api/release-pipelines/{id}", s.deleteReleasePipeline)
 	mux.HandleFunc("POST /api/custom-emojis", s.createCustomEmoji)
 	mux.HandleFunc("PATCH /api/custom-emojis/{id}", s.updateCustomEmoji)
 	mux.HandleFunc("POST /api/asks", s.createAsk)
@@ -346,6 +354,9 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 func sanitizeBootstrap(data *domain.Bootstrap) {
 	for index := range data.APIKeys {
 		data.APIKeys[index].SecretHash = ""
+	}
+	for index := range data.ReleasePipelines {
+		data.ReleasePipelines[index].AccessKeyHash = ""
 	}
 	for index := range data.OAuthApplications {
 		data.OAuthApplications[index].ClientSecret = ""

@@ -807,6 +807,25 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 	for _, project := range data.Projects {
 		visibleProjects[project.ID] = true
 	}
+	visibleIssues := map[string]bool{}
+	for _, issue := range data.Issues {
+		visibleIssues[issue.ID] = true
+	}
+	data.ReleasePipelines = slices.DeleteFunc(data.ReleasePipelines, func(pipeline domain.ReleasePipeline) bool {
+		return len(pipeline.TeamIDs) > 0 && !slices.ContainsFunc(pipeline.TeamIDs, func(teamID string) bool { return allowed[teamID] })
+	})
+	visiblePipelines := map[string]bool{}
+	for index := range data.ReleasePipelines {
+		data.ReleasePipelines[index].TeamIDs = slices.DeleteFunc(data.ReleasePipelines[index].TeamIDs, func(teamID string) bool { return !allowed[teamID] })
+		visiblePipelines[data.ReleasePipelines[index].ID] = true
+	}
+	data.Releases = slices.DeleteFunc(data.Releases, func(release domain.Release) bool {
+		if release.PipelineID != "" && !visiblePipelines[release.PipelineID] {
+			return true
+		}
+		return slices.ContainsFunc(release.ProjectIDs, func(id string) bool { return !visibleProjects[id] }) ||
+			slices.ContainsFunc(release.IssueIDs, func(id string) bool { return !visibleIssues[id] })
+	})
 	for id := range data.ProjectUpdates {
 		if !visibleProjects[id] {
 			delete(data.ProjectUpdates, id)
@@ -822,22 +841,18 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 	data.Initiatives = []domain.Initiative{}
 	data.InitiativeUpdates = map[string][]domain.InitiativeUpdate{}
 	data.Customers = []domain.Customer{}
-	allowedIssues := map[string]bool{}
-	for _, issue := range data.Issues {
-		allowedIssues[issue.ID] = true
-	}
 	for id := range data.Comments {
-		if !allowedIssues[id] {
+		if !visibleIssues[id] {
 			delete(data.Comments, id)
 		}
 	}
 	for id := range data.Activities {
-		if !allowedIssues[id] {
+		if !visibleIssues[id] {
 			delete(data.Activities, id)
 		}
 	}
 	data.Notifications = slices.DeleteFunc(data.Notifications, func(item domain.Notification) bool {
-		return item.RecipientID != data.Viewer.ID || !allowedIssues[item.IssueID]
+		return item.RecipientID != data.Viewer.ID || !visibleIssues[item.IssueID]
 	})
 }
 
