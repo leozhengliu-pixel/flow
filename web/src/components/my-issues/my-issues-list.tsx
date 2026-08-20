@@ -67,7 +67,8 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
   if (loading) return <MyIssuesListSkeleton/>
   if (error) return <MyIssuesListError message={error} onRetry={onClearError}/>
   if (!groups.some(group => group.issues.length)) return <MyIssuesListEmpty/>
-  return <div className={styles.list} role="list" aria-label="Issues">
+  const identifierLength = Math.max(6, ...groups.flatMap(group => group.issues.map(issue => [...issue.identifier].length)))
+  return <div className={styles.list} role="list" aria-label="Issues" style={{ '--issue-identifier-width': `${identifierLength}ch` } as CSSProperties}>
     {groups.map(group => {
       const collapsed = collapsedGroupIds.has(group.id)
       return <section className={styles.group} key={group.id} aria-labelledby={`my-issues-group-${group.id}`}>
@@ -94,7 +95,7 @@ export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAU
     if ((event.target as Element).closest('button,input,[role="checkbox"]')) { event.preventDefault(); return }
     if (onOpen && !event.metaKey && !event.ctrlKey && !event.shiftKey && event.button === 0) { event.preventDefault(); open() }
   }
-  const columns = ['8px', '18px', displayProperties.has('priority') && '16px', displayProperties.has('id') && '50px', displayProperties.has('status') && '16px', 'minmax(80px,1fr)', displayProperties.has('created') && '60px', displayProperties.has('updated') && '60px', '18px'].filter(Boolean).join(' ')
+  const columns = ['8px', '18px', displayProperties.has('priority') && '16px', displayProperties.has('id') && 'var(--issue-identifier-width, 52px)', displayProperties.has('status') && '16px', 'minmax(80px,1fr)', displayProperties.has('created') && '60px', displayProperties.has('updated') && '60px', '18px'].filter(Boolean).join(' ')
   const change = (property: MyIssuesEditableProperty, value: string | string[]) => onPropertyChange?.(issue, property, value)
   return <ContextMenu.Root>
     <ContextMenu.Trigger asChild>
