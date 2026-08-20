@@ -87,7 +87,7 @@ export interface ProjectUpdate {
   comments: Comment[]; reactions: Record<string, UUID[]>; dueAt?: string; missing?: boolean
 }
 export interface CustomerRequest { id: UUID; customerId: UUID; body: string; source: string; sourceUrl?: string; creator: User; issueId?: UUID; projectId?: UUID; attachments: Attachment[]; createdAt: string; updatedAt: string }
-export interface Release { id: UUID; name: string; version: string; description: string; status: 'planned'|'inProgress'|'released'|'canceled'; targetDate?: string; projectIds: UUID[]; issueIds: UUID[]; subscriberIds: UUID[]; creator: User; archivedAt?: string; createdAt: string; updatedAt: string }
+export interface Release { id: UUID; name: string; version: string; description: string; status: 'planned'|'inProgress'|'released'|'canceled'; pipelineId?: UUID; stage?: string; commitSha?: string; releaseNotes?: string; position: number; targetDate?: string; projectIds: UUID[]; issueIds: UUID[]; subscriberIds: UUID[]; creator: User; startedAt?: string; releasedAt?: string; stageFrozenAt?: string; archivedAt?: string; createdAt: string; updatedAt: string }
 export interface AskApproval { id: UUID; askId: UUID; approver: User; decision: 'approved'|'rejected'; note?: string; decidedAt?: string }
 export interface Ask { id: UUID; title: string; body: string; source: string; requester: User; teamId?: UUID; templateId?: UUID; status: 'pending'|'approved'|'rejected'; issueId?: UUID; approvals: AskApproval[]; createdAt: string; updatedAt: string }
 export interface TemplateMilestone { id: UUID; name: string; description?: string }
@@ -101,7 +101,8 @@ export interface WorkspaceSettings {
   inviteLinksEnabled?: boolean; googleAuthEnabled?: boolean; emailAuthEnabled?: boolean; disableAdminBypass?: boolean; initiativePermission?: string; loopPermission?: string; agentGuidancePermission?: string; preventGuestAgents?: boolean; aiUsageSharing?: boolean; agentWebSearch?: boolean; externalLoopTriggers?: boolean; mcpConnectorsEnabled?: boolean
   aiCreditBalanceCents?: number; aiCreditAutoReload?: boolean; aiCreditReloadThresholdCents?: number; aiCreditReloadAmountCents?: number; aiWorkspaceSpendLimitCents?: number
 }
-export interface ReleasePipeline { id: UUID; name: string; teamIds: UUID[]; type: 'scheduled'|'continuous'; production: boolean; stages: string[]; archivedAt?: string; createdAt: string; updatedAt: string }
+export interface ReleasePipeline { id: UUID; name: string; teamIds: UUID[]; type: 'scheduled'|'continuous'; production: boolean; stages: string[]; stageStatuses: Record<string, Release['status']>; position: number; pathFilters: string[]; releaseNotesTemplate?: string; autoGenerateReleaseNotes: boolean; accessKeyPrefix?: string; accessKeyCreatedAt?: string; archivedAt?: string; createdAt: string; updatedAt: string }
+export interface ReleasePipelineAccessKey { pipelineId: UUID; prefix: string; secret: string; createdAt: string }
 export interface CustomEmoji { id: UUID; name: string; imageUrl: string; creator: User; archivedAt?: string; createdAt: string; updatedAt: string }
 export interface APIKey { id: UUID; name: string; prefix: string; creatorId: UUID; scopes: string[]; teamIds: UUID[]; createdAt: string; lastUsedAt?: string; revokedAt?: string }
 export interface OAuthApplication { id: UUID; name: string; description?: string; clientId: string; clientSecret?: string; redirectUris: string[]; scopes: string[]; creatorId: UUID; createdAt: string; updatedAt: string }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -47,10 +48,15 @@ type releaseInput struct {
 	Version       *string   `json:"version,omitempty"`
 	Description   *string   `json:"description,omitempty"`
 	Status        *string   `json:"status,omitempty"`
+	PipelineID    *string   `json:"pipelineId,omitempty"`
+	Stage         *string   `json:"stage,omitempty"`
+	CommitSHA     *string   `json:"commitSha,omitempty"`
+	ReleaseNotes  *string   `json:"releaseNotes,omitempty"`
 	TargetDate    *string   `json:"targetDate,omitempty"`
 	ProjectIDs    *[]string `json:"projectIds,omitempty"`
 	IssueIDs      *[]string `json:"issueIds,omitempty"`
 	SubscriberIDs *[]string `json:"subscriberIds,omitempty"`
+	StageFrozen   *bool     `json:"stageFrozen,omitempty"`
 	Archived      *bool     `json:"archived,omitempty"`
 }
 
@@ -587,17 +593,60 @@ func applyReleaseInput(data *domain.Bootstrap, release *domain.Release, input re
 	if input.Description != nil {
 		release.Description = *input.Description
 	}
+	if input.PipelineID != nil {
+		pipelineID := strings.TrimSpace(*input.PipelineID)
+		if pipelineID == "" {
+			release.PipelineID, release.Stage = "", ""
+		} else {
+			pipeline := releasePipelineByID(data, pipelineID)
+			if pipeline == nil || pipeline.ArchivedAt != nil {
+				return errInvalid
+			}
+			release.PipelineID = pipelineID
+		}
+	}
+	if input.Stage != nil {
+		release.Stage = strings.TrimSpace(*input.Stage)
+	}
+	if release.Stage != "" {
+		pipeline := releasePipelineByID(data, release.PipelineID)
+		if pipeline == nil || !slices.Contains(pipeline.Stages, release.Stage) {
+			return errInvalid
+		}
+	}
+	if input.CommitSHA != nil {
+		release.CommitSHA = strings.TrimSpace(*input.CommitSHA)
+	}
+	if input.ReleaseNotes != nil {
+		release.ReleaseNotes = *input.ReleaseNotes
+	}
 	if input.Status != nil {
 		if !slices.Contains([]string{"planned", "inProgress", "released", "canceled"}, *input.Status) {
 			return errInvalid
 		}
 		release.Status = *input.Status
+		now := time.Now().UTC()
+		if *input.Status == "inProgress" && release.StartedAt == nil {
+			release.StartedAt = &now
+		}
+		if *input.Status == "released" {
+			if release.StartedAt == nil {
+				release.StartedAt = &now
+			}
+			if release.ReleasedAt == nil {
+				release.ReleasedAt = &now
+			}
+		}
 	}
 	if input.TargetDate != nil {
 		if *input.TargetDate == "" {
 			release.TargetDate = nil
 		} else {
-			release.TargetDate = input.TargetDate
+			value := strings.TrimSpace(*input.TargetDate)
+			if _, err := time.Parse("2006-01-02", value); err != nil {
+				return errInvalid
+			}
+			release.TargetDate = &value
 		}
 	}
 	if input.ProjectIDs != nil {
@@ -612,6 +661,10 @@ func applyReleaseInput(data *domain.Bootstrap, release *domain.Release, input re
 		if !validateResourceIDs(data, "issue", values) {
 			return errInvalid
 		}
+		willRemainFrozen := release.StageFrozenAt != nil && (input.StageFrozen == nil || *input.StageFrozen)
+		if willRemainFrozen && slices.ContainsFunc(values, func(id string) bool { return !slices.Contains(release.IssueIDs, id) }) {
+			return errConflict
+		}
 		release.IssueIDs = values
 	}
 	if input.SubscriberIDs != nil {
@@ -620,6 +673,22 @@ func applyReleaseInput(data *domain.Bootstrap, release *domain.Release, input re
 			return errInvalid
 		}
 		release.SubscriberIDs = values
+	}
+	if input.StageFrozen != nil {
+		if *input.StageFrozen {
+			if release.PipelineID == "" || release.Stage == "" {
+				return errInvalid
+			}
+			if release.StageFrozenAt == nil {
+				now := time.Now().UTC()
+				release.StageFrozenAt = &now
+			}
+		} else {
+			release.StageFrozenAt = nil
+		}
+	}
+	if release.StageFrozenAt != nil && (release.PipelineID == "" || release.Stage == "") {
+		return errInvalid
 	}
 	if input.Archived != nil {
 		now := time.Now().UTC()
@@ -641,7 +710,7 @@ func (s *server) createRelease(w http.ResponseWriter, r *http.Request) {
 	var created domain.Release
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "release.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
-		created = domain.Release{ID: fmt.Sprintf("release_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), Status: "planned", ProjectIDs: []string{}, IssueIDs: []string{}, SubscriberIDs: []string{data.Viewer.ID}, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
+		created = domain.Release{ID: fmt.Sprintf("release_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), Status: "planned", Position: nextReleasePosition(data, stringValue(input.PipelineID)), ProjectIDs: []string{}, IssueIDs: []string{}, SubscriberIDs: []string{data.Viewer.ID}, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
 		if err := applyReleaseInput(data, &created, input); err != nil {
 			return "", err
 		}
@@ -664,14 +733,26 @@ func (s *server) updateRelease(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
+		previousPipelineID := data.Releases[index].PipelineID
+		targetPosition := data.Releases[index].Position
+		if input.PipelineID != nil && stringValue(input.PipelineID) != previousPipelineID {
+			targetPosition = nextReleasePosition(data, stringValue(input.PipelineID))
+		}
 		if err := applyReleaseInput(data, &data.Releases[index], input); err != nil {
 			return err
+		}
+		if data.Releases[index].PipelineID != previousPipelineID {
+			data.Releases[index].Position = targetPosition
 		}
 		data.Releases[index].UpdatedAt = time.Now().UTC()
 		updated = data.Releases[index]
 		appendAudit(data, "updated", "release", id, nil)
 		return nil
 	})
+	if errors.Is(err, errConflict) {
+		writeError(w, http.StatusConflict, "frozen release stages do not accept new issues")
+		return
+	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
@@ -1376,6 +1457,8 @@ func resourceExists(data *domain.Bootstrap, kind, id string) bool {
 		return slices.ContainsFunc(data.Documents, func(item domain.Document) bool { return item.ID == id })
 	case "release":
 		return slices.ContainsFunc(data.Releases, func(item domain.Release) bool { return item.ID == id })
+	case "release_pipeline":
+		return slices.ContainsFunc(data.ReleasePipelines, func(item domain.ReleasePipeline) bool { return item.ID == id && item.ArchivedAt == nil })
 	case "customer":
 		return slices.ContainsFunc(data.Customers, func(item domain.Customer) bool { return item.ID == id })
 	case "initiative":
@@ -1485,8 +1568,21 @@ func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 			if json.Unmarshal(entry.Payload, &value) != nil {
 				return errInvalid
 			}
+			if slices.ContainsFunc(data.Releases, func(item domain.Release) bool { return item.ID == value.ID }) || value.PipelineID != "" && releasePipelineByID(data, value.PipelineID) == nil {
+				return errConflict
+			}
 			data.Releases = append([]domain.Release{value}, data.Releases...)
 			restored = value
+		case "release_pipeline":
+			var value domain.ReleasePipeline
+			if json.Unmarshal(entry.Payload, &value) != nil {
+				return errInvalid
+			}
+			if releasePipelineByID(data, value.ID) != nil {
+				return errConflict
+			}
+			data.ReleasePipelines = append([]domain.ReleasePipeline{value}, data.ReleasePipelines...)
+			restored = publicReleasePipeline(value)
 		case "ask":
 			var value domain.Ask
 			if json.Unmarshal(entry.Payload, &value) != nil {
@@ -1540,6 +1636,10 @@ func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 		appendAudit(data, "restored", entry.ResourceType, entry.ResourceID, nil)
 		return nil
 	})
+	if errors.Is(err, errConflict) {
+		writeError(w, http.StatusConflict, "resource cannot be restored until its dependencies are available")
+		return
+	}
 	respondMutation(w, err, http.StatusOK, restored)
 }
 
