@@ -18,11 +18,12 @@ export interface PropertyOption {
   keywords?: string
   shortcut?: string
   icon?: ReactNode
+  i18nIgnore?: boolean
 }
 
 export type PropertyMenuKind = 'standard' | 'labels' | 'project'
 
-export function PropertyMenu({ label, value, icon, options, onChange, multiple = false, selectedId, selectedIds = [], compact = false, searchPlaceholder, searchShortcut, kind: explicitKind, teamName = 'Cleantrack', trigger, triggerClassName, surfaceClassName, side = 'bottom', alignOffset = 0, ariaLabel, hoverContent, hoverClassName }: {
+export function PropertyMenu({ label, value, icon, options, onChange, multiple = false, selectedId, selectedIds = [], compact = false, searchPlaceholder, searchShortcut, kind: explicitKind, teamName = 'Cleantrack', trigger, triggerClassName, surfaceClassName, side = 'bottom', alignOffset = 0, ariaLabel, hoverContent, hoverClassName, valueIsEntityName = false }: {
   label: string
   value?: string
   icon?: ReactNode
@@ -44,6 +45,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, multiple =
   ariaLabel?: string
   hoverContent?: ReactNode
   hoverClassName?: string
+  valueIsEntityName?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [hoverOpen, setHoverOpen] = useState(false)
@@ -65,7 +67,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, multiple =
   const projects = command.filteredOptions.filter(option => option.id)
   const placeholder = kind === 'labels' ? 'Change or add labels…' : kind === 'project' ? 'Add to project…' : searchPlaceholder ?? `Change ${label.toLowerCase()}…`
   const triggerButton = <button type="button" role="combobox" className={triggerClassName ?? (compact ? 'mini-property-trigger' : 'property-row')} aria-label={ariaLabel ?? `Change ${label}. Current value is ${value || 'none'}`} aria-haspopup="dialog" aria-expanded={open}>
-        {trigger ?? (compact ? <>{icon ?? iconFor(label)}<span>{value || label}</span></> : <><span>{icon ?? iconFor(label)}</span><span className="property-label">{label}</span><span className="property-value">{value || `Add ${label.toLowerCase()}`}</span></>)}
+        {trigger ?? (compact ? <>{icon ?? iconFor(label)}<span data-i18n-ignore={valueIsEntityName || undefined}>{value || label}</span></> : <><span>{icon ?? iconFor(label)}</span><span className="property-label">{label}</span><span className="property-value" data-i18n-ignore={valueIsEntityName || undefined}>{value || `Add ${label.toLowerCase()}`}</span></>)}
       </button>
   const popoverTrigger = <Popover.Trigger asChild>{triggerButton}</Popover.Trigger>
   return <Tooltip.Provider delayDuration={500} skipDelayDuration={0}><Tooltip.Root open={Boolean(hoverContent) && !open && hoverOpen} onOpenChange={setHoverOpen}><Popover.Root open={open} onOpenChange={next => { setOpen(next); if (next) setHoverOpen(false) }}>
@@ -110,7 +112,7 @@ function LabelGroupOption({ group, selectedIds, listboxId, activeId, onChoose, o
 
 function CommandOption({ option, active, checked, icon, listboxId, multi = false, onChoose, onActive }: { option: PropertyOption; active: boolean; checked: boolean; icon: ReactNode; listboxId: string; multi?: boolean; onChoose: () => void; onActive: () => void }) {
   const row = <button type="button" id={`${listboxId}-${option.id || 'none'}`} role="option" aria-selected={active} aria-checked={checked} onPointerMove={onActive} onFocus={onActive} onClick={onChoose}>
-    <span className="property-command-option-background"/>{multi && <span className="property-command-checkbox">{checked && <Check size={12}/>}</span>}<span className="property-command-icon">{option.icon ?? (option.color ? <i className="option-dot" style={{ background: option.color }}/> : icon)}</span><span className="property-command-label">{option.label}</span>{!multi && checked && <span className="property-command-check"><Check size={14}/></span>}{option.shortcut && <kbd>{option.shortcut}</kbd>}
+    <span className="property-command-option-background"/>{multi && <span className="property-command-checkbox">{checked && <Check size={12}/>}</span>}<span className="property-command-icon">{option.icon ?? (option.color ? <i className="option-dot" style={{ background: option.color }}/> : icon)}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.label}</span>{!multi && checked && <span className="property-command-check"><Check size={14}/></span>}{option.shortcut && <kbd>{option.shortcut}</kbd>}
   </button>
   return multi && option.color ? <LabelHoverPreview label={{ name: option.label, color: option.color, description: option.description, issueCount: option.issueCount, scope: option.scope }}>{row}</LabelHoverPreview> : row
 }

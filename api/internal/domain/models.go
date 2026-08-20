@@ -205,39 +205,40 @@ type DocumentTemplate struct {
 
 // Issue follows Flow's public GraphQL entity naming and relationship shape.
 type Issue struct {
-	ID               string              `json:"id"`
-	Version          int64               `json:"version"`
-	Identifier       string              `json:"identifier"`
-	Number           int                 `json:"number"`
-	Title            string              `json:"title"`
-	Description      string              `json:"description"`
-	DescriptionState string              `json:"descriptionState,omitempty"`
-	DocumentContent  *DocumentContent    `json:"documentContent,omitempty"`
-	Priority         int                 `json:"priority"`
-	PriorityLabel    string              `json:"priorityLabel"`
-	SortOrder        float64             `json:"sortOrder"`
-	Estimate         *float64            `json:"estimate,omitempty"`
-	DueDate          *string             `json:"dueDate,omitempty"`
-	CreatedAt        time.Time           `json:"createdAt"`
-	UpdatedAt        time.Time           `json:"updatedAt"`
-	CompletedAt      *time.Time          `json:"completedAt,omitempty"`
-	CanceledAt       *time.Time          `json:"canceledAt,omitempty"`
-	ArchivedAt       *time.Time          `json:"archivedAt,omitempty"`
-	Team             Team                `json:"team"`
-	State            WorkflowState       `json:"state"`
-	Assignee         *User               `json:"assignee,omitempty"`
-	Creator          User                `json:"creator"`
-	Labels           []IssueLabel        `json:"labels"`
-	Project          *ProjectSummary     `json:"project,omitempty"`
-	CycleID          *string             `json:"cycleId,omitempty"`
-	ParentID         *string             `json:"parentId,omitempty"`
-	Recurrence       string              `json:"recurrence,omitempty"`
-	NextOccurrenceAt *time.Time          `json:"nextOccurrenceAt,omitempty"`
-	SubscriberIDs    []string            `json:"subscriberIds"`
-	Reactions        map[string][]string `json:"reactions"`
-	SubIssueIDs      []string            `json:"subIssueIds"`
-	Relations        []IssueRelation     `json:"relations"`
-	Attachments      []Attachment        `json:"attachments"`
+	ID                 string              `json:"id"`
+	Version            int64               `json:"version"`
+	Identifier         string              `json:"identifier"`
+	Number             int                 `json:"number"`
+	Title              string              `json:"title"`
+	Description        string              `json:"description"`
+	DescriptionState   string              `json:"descriptionState,omitempty"`
+	DocumentContent    *DocumentContent    `json:"documentContent,omitempty"`
+	Priority           int                 `json:"priority"`
+	PriorityLabel      string              `json:"priorityLabel"`
+	SortOrder          float64             `json:"sortOrder"`
+	Estimate           *float64            `json:"estimate,omitempty"`
+	DueDate            *string             `json:"dueDate,omitempty"`
+	CreatedAt          time.Time           `json:"createdAt"`
+	UpdatedAt          time.Time           `json:"updatedAt"`
+	CompletedAt        *time.Time          `json:"completedAt,omitempty"`
+	CanceledAt         *time.Time          `json:"canceledAt,omitempty"`
+	ArchivedAt         *time.Time          `json:"archivedAt,omitempty"`
+	Team               Team                `json:"team"`
+	State              WorkflowState       `json:"state"`
+	Assignee           *User               `json:"assignee,omitempty"`
+	Creator            User                `json:"creator"`
+	Labels             []IssueLabel        `json:"labels"`
+	Project            *ProjectSummary     `json:"project,omitempty"`
+	ProjectMilestoneID *string             `json:"projectMilestoneId,omitempty"`
+	CycleID            *string             `json:"cycleId,omitempty"`
+	ParentID           *string             `json:"parentId,omitempty"`
+	Recurrence         string              `json:"recurrence,omitempty"`
+	NextOccurrenceAt   *time.Time          `json:"nextOccurrenceAt,omitempty"`
+	SubscriberIDs      []string            `json:"subscriberIds"`
+	Reactions          map[string][]string `json:"reactions"`
+	SubIssueIDs        []string            `json:"subIssueIds"`
+	Relations          []IssueRelation     `json:"relations"`
+	Attachments        []Attachment        `json:"attachments"`
 }
 
 type Cycle struct {
@@ -336,51 +337,63 @@ type ProjectStatus struct {
 }
 
 type Project struct {
-	ID            string             `json:"id"`
-	Name          string             `json:"name"`
-	SlugID        string             `json:"slugId"`
-	Summary       string             `json:"summary"`
-	Description   string             `json:"description"`
-	Icon          string             `json:"icon,omitempty"`
-	Color         string             `json:"color"`
-	Priority      int                `json:"priority"`
-	PriorityLabel string             `json:"priorityLabel"`
-	Progress      float64            `json:"progress"`
-	Health        string             `json:"health"`
-	Status        ProjectStatus      `json:"status"`
-	Lead          *User              `json:"lead,omitempty"`
-	MemberIDs     []string           `json:"memberIds"`
-	LabelIDs      []string           `json:"labelIds"`
-	TeamIDs       []string           `json:"teamIds"`
-	DependencyIDs []string           `json:"dependencyIds"`
-	Initiatives   []string           `json:"initiatives"`
-	Customers     []string           `json:"customers"`
-	Resources     []ProjectResource  `json:"resources"`
-	Milestones    []ProjectMilestone `json:"milestones"`
-	Comments      []Comment          `json:"comments"`
-	StartDate     *string            `json:"startDate,omitempty"`
-	TargetDate    *string            `json:"targetDate,omitempty"`
-	IssueCount    int                `json:"issueCount"`
-	CreatedAt     time.Time          `json:"createdAt"`
-	UpdatedAt     time.Time          `json:"updatedAt"`
+	ID                   string                       `json:"id"`
+	Name                 string                       `json:"name"`
+	SlugID               string                       `json:"slugId"`
+	Summary              string                       `json:"summary"`
+	Description          string                       `json:"description"`
+	Icon                 string                       `json:"icon,omitempty"`
+	Color                string                       `json:"color"`
+	Priority             int                          `json:"priority"`
+	PriorityLabel        string                       `json:"priorityLabel"`
+	Progress             float64                      `json:"progress"`
+	Health               string                       `json:"health"`
+	Status               ProjectStatus                `json:"status"`
+	Lead                 *User                        `json:"lead,omitempty"`
+	MemberIDs            []string                     `json:"memberIds"`
+	LabelIDs             []string                     `json:"labelIds"`
+	TeamIDs              []string                     `json:"teamIds"`
+	DependencyIDs        []string                     `json:"dependencyIds"`
+	Initiatives          []string                     `json:"initiatives"`
+	Customers            []string                     `json:"customers"`
+	Resources            []ProjectResource            `json:"resources"`
+	Milestones           []ProjectMilestone           `json:"milestones"`
+	Comments             []Comment                    `json:"comments"`
+	DescriptionRevisions []ProjectDescriptionRevision `json:"descriptionRevisions"`
+	UpdateCadence        string                       `json:"updateCadence"`
+	StartDate            *string                      `json:"startDate,omitempty"`
+	TargetDate           *string                      `json:"targetDate,omitempty"`
+	IssueCount           int                          `json:"issueCount"`
+	CreatedAt            time.Time                    `json:"createdAt"`
+	UpdatedAt            time.Time                    `json:"updatedAt"`
+}
+
+type ProjectDescriptionRevision struct {
+	ID          string    `json:"id"`
+	ProjectID   string    `json:"projectId"`
+	Description string    `json:"description"`
+	Author      User      `json:"author"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 type ProjectResource struct {
-	ID        string    `json:"id"`
-	ProjectID string    `json:"projectId"`
-	Type      string    `json:"type"`
-	Title     string    `json:"title"`
-	URL       string    `json:"url"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID            string    `json:"id"`
+	ProjectID     string    `json:"projectId"`
+	Type          string    `json:"type"`
+	Title         string    `json:"title"`
+	URL           string    `json:"url"`
+	PinnedTeamIDs []string  `json:"pinnedTeamIds"`
+	CreatedAt     time.Time `json:"createdAt"`
 }
 
 type ProjectMilestone struct {
-	ID         string    `json:"id"`
-	ProjectID  string    `json:"projectId"`
-	Name       string    `json:"name"`
-	TargetDate *string   `json:"targetDate,omitempty"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	ID          string    `json:"id"`
+	ProjectID   string    `json:"projectId"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	TargetDate  *string   `json:"targetDate,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 // ProjectUpdate mirrors the update stream shown on a Flow project. Updates
@@ -900,21 +913,22 @@ type SavedViewMutationInput struct {
 }
 
 type IssueCreateInput struct {
-	Title            string         `json:"title"`
-	Description      string         `json:"description"`
-	DescriptionState *string        `json:"descriptionState,omitempty"`
-	DescriptionData  map[string]any `json:"descriptionData,omitempty"`
-	ContentState     *string        `json:"contentState,omitempty"`
-	TeamID           string         `json:"teamId"`
-	ParentID         *string        `json:"parentId,omitempty"`
-	StateID          *string        `json:"stateId,omitempty"`
-	Priority         *int           `json:"priority,omitempty"`
-	AssigneeID       *string        `json:"assigneeId,omitempty"`
-	ProjectID        *string        `json:"projectId,omitempty"`
-	CycleID          *string        `json:"cycleId,omitempty"`
-	DueDate          *string        `json:"dueDate,omitempty"`
-	LabelIDs         []string       `json:"labelIds,omitempty"`
-	TemplateID       string         `json:"templateId,omitempty"`
+	Title              string         `json:"title"`
+	Description        string         `json:"description"`
+	DescriptionState   *string        `json:"descriptionState,omitempty"`
+	DescriptionData    map[string]any `json:"descriptionData,omitempty"`
+	ContentState       *string        `json:"contentState,omitempty"`
+	TeamID             string         `json:"teamId"`
+	ParentID           *string        `json:"parentId,omitempty"`
+	StateID            *string        `json:"stateId,omitempty"`
+	Priority           *int           `json:"priority,omitempty"`
+	AssigneeID         *string        `json:"assigneeId,omitempty"`
+	ProjectID          *string        `json:"projectId,omitempty"`
+	ProjectMilestoneID *string        `json:"projectMilestoneId,omitempty"`
+	CycleID            *string        `json:"cycleId,omitempty"`
+	DueDate            *string        `json:"dueDate,omitempty"`
+	LabelIDs           []string       `json:"labelIds,omitempty"`
+	TemplateID         string         `json:"templateId,omitempty"`
 }
 
 type ProjectMutationInput struct {
@@ -935,6 +949,7 @@ type ProjectMutationInput struct {
 	Customers     []string `json:"customers,omitempty"`
 	StartDate     *string  `json:"startDate,omitempty"`
 	TargetDate    *string  `json:"targetDate,omitempty"`
+	UpdateCadence *string  `json:"updateCadence,omitempty"`
 	TemplateID    string   `json:"templateId,omitempty"`
 }
 
@@ -961,14 +976,16 @@ type InitiativeUpdateCreateInput struct {
 }
 
 type ProjectResourceMutationInput struct {
-	Type  *string `json:"type,omitempty"`
-	Title *string `json:"title,omitempty"`
-	URL   *string `json:"url,omitempty"`
+	Type          *string   `json:"type,omitempty"`
+	Title         *string   `json:"title,omitempty"`
+	URL           *string   `json:"url,omitempty"`
+	PinnedTeamIDs *[]string `json:"pinnedTeamIds,omitempty"`
 }
 
 type ProjectMilestoneMutationInput struct {
-	Name       *string `json:"name,omitempty"`
-	TargetDate *string `json:"targetDate,omitempty"`
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+	TargetDate  *string `json:"targetDate,omitempty"`
 }
 
 type ProjectUpdateCreateInput struct {
@@ -997,25 +1014,26 @@ type ReactionInput struct {
 }
 
 type IssueUpdateInput struct {
-	ExpectedVersion  *int64         `json:"expectedVersion,omitempty"`
-	Title            *string        `json:"title,omitempty"`
-	Description      *string        `json:"description,omitempty"`
-	DescriptionState *string        `json:"descriptionState,omitempty"`
-	DescriptionData  map[string]any `json:"descriptionData,omitempty"`
-	ContentState     *string        `json:"contentState,omitempty"`
-	StateID          *string        `json:"stateId,omitempty"`
-	Priority         *int           `json:"priority,omitempty"`
-	AssigneeID       *string        `json:"assigneeId,omitempty"`
-	ProjectID        *string        `json:"projectId,omitempty"`
-	CycleID          *string        `json:"cycleId,omitempty"`
-	DueDate          *string        `json:"dueDate,omitempty"`
-	LabelIDs         *[]string      `json:"labelIds,omitempty"`
-	SubscriberIDs    *[]string      `json:"subscriberIds,omitempty"`
-	Archived         *bool          `json:"archived,omitempty"`
-	ParentID         *string        `json:"parentId,omitempty"`
-	SortOrder        *float64       `json:"sortOrder,omitempty"`
-	Recurrence       *string        `json:"recurrence,omitempty"`
-	NextOccurrenceAt *string        `json:"nextOccurrenceAt,omitempty"`
+	ExpectedVersion    *int64         `json:"expectedVersion,omitempty"`
+	Title              *string        `json:"title,omitempty"`
+	Description        *string        `json:"description,omitempty"`
+	DescriptionState   *string        `json:"descriptionState,omitempty"`
+	DescriptionData    map[string]any `json:"descriptionData,omitempty"`
+	ContentState       *string        `json:"contentState,omitempty"`
+	StateID            *string        `json:"stateId,omitempty"`
+	Priority           *int           `json:"priority,omitempty"`
+	AssigneeID         *string        `json:"assigneeId,omitempty"`
+	ProjectID          *string        `json:"projectId,omitempty"`
+	ProjectMilestoneID *string        `json:"projectMilestoneId,omitempty"`
+	CycleID            *string        `json:"cycleId,omitempty"`
+	DueDate            *string        `json:"dueDate,omitempty"`
+	LabelIDs           *[]string      `json:"labelIds,omitempty"`
+	SubscriberIDs      *[]string      `json:"subscriberIds,omitempty"`
+	Archived           *bool          `json:"archived,omitempty"`
+	ParentID           *string        `json:"parentId,omitempty"`
+	SortOrder          *float64       `json:"sortOrder,omitempty"`
+	Recurrence         *string        `json:"recurrence,omitempty"`
+	NextOccurrenceAt   *string        `json:"nextOccurrenceAt,omitempty"`
 }
 
 type IssueLinkInput struct {
