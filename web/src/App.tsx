@@ -19,6 +19,7 @@ import {
   createIssueLoopRun,
   createIssueReminder,
   createProject,
+  createProjectReminder,
   createProjectComment,
   createProjectMilestone,
   createProjectResource,
@@ -212,7 +213,8 @@ function App() {
     [createOpen, setCreateOpen] = useState(false),
     [createDraftId, setCreateDraftId] = useState<string>(),
     [createStateId, setCreateStateId] = useState<string>(),
-    [createProjectId, setCreateProjectId] = useState<string>();
+    [createProjectId, setCreateProjectId] = useState<string>(),
+    [createProjectMilestoneId, setCreateProjectMilestoneId] = useState<string>();
   const shortcutSequence = useRef<{ key: string; at: number }>({ key: "", at: 0 });
   const recordedResource = useRef("");
   const requestedWorkspaceKey =
@@ -1034,6 +1036,30 @@ function App() {
     if (data && selectedProject?.id === id)
       navigateTo(projectsPath(data.workspace.urlKey), { replace: true });
   };
+  const toggleProjectFavorite = async (projectId: string, favorite: boolean) => {
+    const current = data?.favorites.find((item) => item.userId === data.viewer.id && item.resourceType === "project" && item.resourceId === projectId);
+    if (!favorite) {
+      if (current) await run(() => removeFavorite("project", projectId), "Could not update favorite");
+      setData((state) => state ? { ...state, favorites: state.favorites.filter((item) => !(item.userId === state.viewer.id && item.resourceType === "project" && item.resourceId === projectId)) } : state);
+      return;
+    }
+    const created = await run(() => addFavorite("project", projectId), "Could not update favorite");
+    setData((state) => state ? { ...state, favorites: [created, ...state.favorites.filter((item) => item.id !== created.id)] } : state);
+  };
+  const setProjectSubscriptionEvents = async (projectId: string, events: string[]) => {
+    if (!events.length) {
+      await run(() => removeSubscription("project", projectId), "Could not update project notifications");
+      setData((state) => state ? { ...state, subscriptions: state.subscriptions.filter((item) => !(item.userId === state.viewer.id && item.resourceType === "project" && item.resourceId === projectId)) } : state);
+      return;
+    }
+    const updated = await run(() => addSubscription("project", projectId, events), "Could not update project notifications");
+    setData((state) => state ? { ...state, subscriptions: [updated, ...state.subscriptions.filter((item) => item.id !== updated.id)] } : state);
+  };
+  const addProjectReminder = async (projectId: string, remindAt: string) => {
+    const notification = await run(() => createProjectReminder(projectId, remindAt), "Could not create project reminder");
+    setData((state) => state ? { ...state, notifications: [notification, ...state.notifications.filter((item) => item.id !== notification.id)] } : state);
+    return notification;
+  };
   const addInitiative = async (
     input: InitiativeMutationInput & { name: string },
   ) => {
@@ -1631,7 +1657,7 @@ function App() {
   };
   const addProjectMilestone = async (
     projectId: string,
-    input: { name: string; targetDate?: string },
+    input: { name: string; description?: string; targetDate?: string },
   ) => {
     const milestone = await run(
       () => createProjectMilestone(projectId, input),
@@ -1657,7 +1683,7 @@ function App() {
   const changeProjectMilestone = async (
     projectId: string,
     milestoneId: string,
-    input: { name?: string; targetDate?: string },
+    input: { name?: string; description?: string; targetDate?: string },
   ) => {
     const milestone = await run(
       () => updateProjectMilestone(projectId, milestoneId, input),
@@ -1742,7 +1768,7 @@ function App() {
     const source = data?.projects.find((project) => project.id === projectId);
     const milestone = source?.milestones?.find((item) => item.id === milestoneId);
     if (!milestone) throw new Error("Milestone not found");
-    await addProjectMilestone(targetProjectId, { name: milestone.name, targetDate: milestone.targetDate });
+    await addProjectMilestone(targetProjectId, { name: milestone.name, description: milestone.description, targetDate: milestone.targetDate });
     await removeProjectMilestone(projectId, milestoneId);
   };
   const convertProjectMilestone = async (projectId: string, milestoneId: string) => {
@@ -3681,6 +3707,7 @@ function App() {
             key={selectedProject.id}
             project={selectedProject}
             projects={data.projects}
+            initiatives={data.initiatives}
             projectStatuses={data.projectStatuses}
             projectUpdates={data.projectUpdates?.[selectedProject.id] ?? []}
             issues={data.issues}
@@ -3689,6 +3716,9 @@ function App() {
             labels={data.labels}
             labelGroups={data.labelGroups}
             viewer={data.viewer}
+            activities={data.activities?.[selectedProject.id] ?? []}
+            favorite={data.favorites.find((item) => item.userId === data.viewer.id && item.resourceType === "project" && item.resourceId === selectedProject.id)}
+            subscription={data.subscriptions.find((item) => item.userId === data.viewer.id && item.resourceType === "project" && item.resourceId === selectedProject.id)}
             tab={route.tab}
             savedViews={data.savedViews}
             onTabChange={(tab) =>
@@ -3713,14 +3743,18 @@ function App() {
             onConvertMilestone={convertProjectMilestone}
             onReorderMilestones={reorderMilestones}
             onDelete={removeProject}
+            onToggleFavorite={toggleProjectFavorite}
+            onSetSubscriptionEvents={setProjectSubscriptionEvents}
+            onCreateReminder={addProjectReminder}
             onCreateSavedView={addSavedView}
             onUpdateSavedView={changeSavedView}
             onDeleteSavedView={removeSavedViewOnly}
             onOpenIssue={openIssue}
             onUpdateIssue={updateIssueFromPage}
             onDeleteIssues={deleteIssuesFromPage}
-            onCreateIssue={(projectId) => {
+            onCreateIssue={(projectId, projectMilestoneId) => {
               setCreateProjectId(projectId);
+              setCreateProjectMilestoneId(projectMilestoneId);
               setCreateOpen(true);
             }}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
@@ -3826,6 +3860,7 @@ function App() {
         open={createOpen}
         draftId={createDraftId}
         initialProjectId={createProjectId}
+        initialProjectMilestoneId={createProjectMilestoneId}
         initialStateId={createStateId}
         onOpenChange={(open) => {
           setCreateOpen(open);
@@ -3833,6 +3868,7 @@ function App() {
             setCreateDraftId(undefined);
             setCreateStateId(undefined);
             setCreateProjectId(undefined);
+            setCreateProjectMilestoneId(undefined);
           }
         }}
         data={data}

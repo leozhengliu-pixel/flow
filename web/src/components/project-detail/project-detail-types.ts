@@ -1,4 +1,4 @@
-import type { Comment, Issue, IssueLabel, IssueUpdateInput, LabelGroup, Project, ProjectMilestone, ProjectResource, ProjectStatus, ProjectUpdate, SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
+import type { ActivityEvent, Comment, Favorite, Initiative, Issue, IssueLabel, IssueUpdateInput, LabelGroup, Notification, Project, ProjectMilestone, ProjectResource, ProjectStatus, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
 import type { ProjectMutationInput } from '@/components/projects-page/projects-page'
 
 export type ProjectDetailTab = 'overview' | 'activity' | 'issues' | 'new'
@@ -6,6 +6,7 @@ export type ProjectDetailTab = 'overview' | 'activity' | 'issues' | 'new'
 export type ProjectDetailProps = {
   project: Project
   projects: Project[]
+  initiatives: Initiative[]
   projectStatuses: ProjectStatus[]
   projectUpdates: ProjectUpdate[]
   issues: Issue[]
@@ -14,6 +15,9 @@ export type ProjectDetailProps = {
   labels: IssueLabel[]
   labelGroups: LabelGroup[]
   viewer: User
+  activities: ActivityEvent[]
+  favorite?: Favorite
+  subscription?: Subscription
   tab: ProjectDetailTab
   onTabChange: (tab: ProjectDetailTab) => void
   onUpdate: (projectId: string, input: ProjectMutationInput) => Promise<Project>
@@ -24,15 +28,18 @@ export type ProjectDetailProps = {
   onReactProjectUpdate: (projectId: string, updateId: string, emoji: string) => Promise<ProjectUpdate>
   onCommentProject: (projectId: string, body: string) => Promise<Comment>
   onCreateResource: (projectId: string, input: { type?: 'link'|'document'; title?: string; url: string }) => Promise<ProjectResource>
-  onUpdateResource: (projectId: string, resourceId: string, input: { type?: 'link'|'document'; title?: string; url?: string }) => Promise<ProjectResource>
+  onUpdateResource: (projectId: string, resourceId: string, input: { type?: 'link'|'document'; title?: string; url?: string; pinnedTeamIds?: string[] }) => Promise<ProjectResource>
   onDeleteResource: (projectId: string, resourceId: string) => Promise<void>
-  onCreateMilestone: (projectId: string, input: { name: string; targetDate?: string }) => Promise<ProjectMilestone>
-  onUpdateMilestone: (projectId: string, milestoneId: string, input: { name?: string; targetDate?: string }) => Promise<ProjectMilestone>
+  onCreateMilestone: (projectId: string, input: { name: string; description?: string; targetDate?: string }) => Promise<ProjectMilestone>
+  onUpdateMilestone: (projectId: string, milestoneId: string, input: { name?: string; description?: string; targetDate?: string }) => Promise<ProjectMilestone>
   onDeleteMilestone: (projectId: string, milestoneId: string) => Promise<void>
   onMoveMilestone: (projectId: string, milestoneId: string, targetProjectId: string) => Promise<void>
   onConvertMilestone: (projectId: string, milestoneId: string) => Promise<Project>
   onReorderMilestones: (projectId: string, ids: string[]) => Promise<ProjectMilestone[]>
   onDelete: (projectId: string) => Promise<void>
+  onToggleFavorite: (projectId: string, favorite: boolean) => Promise<void>
+  onSetSubscriptionEvents: (projectId: string, events: string[]) => Promise<void>
+  onCreateReminder: (projectId: string, remindAt: string) => Promise<Notification>
   onCreateSavedView: (input: SavedViewMutationInput) => Promise<SavedView>
   savedViews: SavedView[]
   onUpdateSavedView: (viewId: string, input: SavedViewMutationInput) => Promise<SavedView>
@@ -40,7 +47,7 @@ export type ProjectDetailProps = {
   onOpenIssue: (issue: Issue) => void
   onUpdateIssue: (issueId: string, input: IssueUpdateInput) => Promise<Issue>
   onDeleteIssues: (issueIds: string[]) => Promise<void>
-  onCreateIssue: (projectId: string) => void
+  onCreateIssue: (projectId: string, projectMilestoneId?: string) => void
   onOpenSidebar?: () => void
 }
 
