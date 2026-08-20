@@ -217,6 +217,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/projects", s.createProject)
 	mux.HandleFunc("PATCH /api/projects/{id}", s.updateProject)
 	mux.HandleFunc("DELETE /api/projects/{id}", s.deleteProject)
+	mux.HandleFunc("POST /api/projects/{id}/reminders", s.createProjectReminder)
 	mux.HandleFunc("POST /api/projects/{id}/resources", s.createProjectResource)
 	mux.HandleFunc("PATCH /api/projects/{id}/resources/{resourceId}", s.updateProjectResource)
 	mux.HandleFunc("DELETE /api/projects/{id}/resources/{resourceId}", s.deleteProjectResource)
@@ -1259,7 +1260,7 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		if preferences := data.UserSettings[data.Viewer.ID]; preferences.AutoAssign && input.AssigneeID == nil {
 			input.AssigneeID = &data.Viewer.ID
 		}
-		createUpdate := domain.IssueUpdateInput{DescriptionState: input.DescriptionState, DescriptionData: input.DescriptionData, ContentState: input.ContentState, StateID: input.StateID, Priority: input.Priority, AssigneeID: input.AssigneeID, ProjectID: input.ProjectID, CycleID: input.CycleID, DueDate: input.DueDate}
+		createUpdate := domain.IssueUpdateInput{DescriptionState: input.DescriptionState, DescriptionData: input.DescriptionData, ContentState: input.ContentState, StateID: input.StateID, Priority: input.Priority, AssigneeID: input.AssigneeID, ProjectID: input.ProjectID, ProjectMilestoneID: input.ProjectMilestoneID, CycleID: input.CycleID, DueDate: input.DueDate}
 		if len(input.LabelIDs) > 0 {
 			createUpdate.LabelIDs = &input.LabelIDs
 		}
@@ -1357,7 +1358,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 		if len(teamIDs) == 0 {
 			teamIDs = []string{data.Teams[0].ID}
 		}
-		created = domain.Project{ID: id, Name: strings.TrimSpace(*input.Name), SlugID: slug(strings.TrimSpace(*input.Name)), Color: "#5e6ad2", PriorityLabel: "No priority", Health: "noUpdate", Status: status, MemberIDs: []string{}, TeamIDs: teamIDs, DependencyIDs: []string{}, Initiatives: []string{}, Customers: []string{}, Resources: []domain.ProjectResource{}, Milestones: []domain.ProjectMilestone{}, Comments: []domain.Comment{}, CreatedAt: now, UpdatedAt: now}
+		created = domain.Project{ID: id, Name: strings.TrimSpace(*input.Name), SlugID: slug(strings.TrimSpace(*input.Name)), Color: "#5e6ad2", PriorityLabel: "No priority", Health: "noUpdate", Status: status, MemberIDs: []string{}, TeamIDs: teamIDs, DependencyIDs: []string{}, Initiatives: []string{}, Customers: []string{}, Resources: []domain.ProjectResource{}, Milestones: []domain.ProjectMilestone{}, Comments: []domain.Comment{}, DescriptionRevisions: []domain.ProjectDescriptionRevision{}, UpdateCadence: "none", CreatedAt: now, UpdatedAt: now}
 		if err := applyProjectUpdate(data, &created, input); err != nil {
 			return "", err
 		}
@@ -1387,6 +1388,9 @@ func (s *server) updateProject(w http.ResponseWriter, r *http.Request) {
 		project, err := fullProjectByID(data, id)
 		if err != nil {
 			return err
+		}
+		if input.Description != nil && *input.Description != project.Description {
+			project.DescriptionRevisions = append([]domain.ProjectDescriptionRevision{{ID: fmt.Sprintf("project_description_revision_%d", time.Now().UnixNano()), ProjectID: id, Description: project.Description, Author: data.Viewer, CreatedAt: time.Now().UTC()}}, project.DescriptionRevisions...)
 		}
 		if err := applyProjectUpdate(data, project, input); err != nil {
 			return err
@@ -1889,7 +1893,7 @@ func (s *server) createProjectResource(w http.ResponseWriter, r *http.Request) {
 		if input.Title != nil && strings.TrimSpace(*input.Title) != "" {
 			title = strings.TrimSpace(*input.Title)
 		}
-		created = domain.ProjectResource{ID: fmt.Sprintf("project_resource_%d", time.Now().UnixNano()), ProjectID: projectID, Type: resourceType, Title: title, URL: strings.TrimSpace(*input.URL), CreatedAt: time.Now().UTC()}
+		created = domain.ProjectResource{ID: fmt.Sprintf("project_resource_%d", time.Now().UnixNano()), ProjectID: projectID, Type: resourceType, Title: title, URL: strings.TrimSpace(*input.URL), PinnedTeamIDs: []string{}, CreatedAt: time.Now().UTC()}
 		project.Resources = append(project.Resources, created)
 		project.UpdatedAt = created.CreatedAt
 		return nil
@@ -1928,6 +1932,15 @@ func (s *server) updateProjectResource(w http.ResponseWriter, r *http.Request) {
 				return errInvalid
 			}
 			resource.URL = strings.TrimSpace(*input.URL)
+		}
+		if input.PinnedTeamIDs != nil {
+			teamIDs := normalizedStrings(*input.PinnedTeamIDs)
+			if slices.ContainsFunc(teamIDs, func(id string) bool {
+				return !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == id })
+			}) {
+				return errInvalid
+			}
+			resource.PinnedTeamIDs = teamIDs
 		}
 		project.UpdatedAt = time.Now().UTC()
 		updated = *resource
@@ -1973,6 +1986,9 @@ func (s *server) createProjectMilestone(w http.ResponseWriter, r *http.Request) 
 		}
 		now := time.Now().UTC()
 		created = domain.ProjectMilestone{ID: fmt.Sprintf("project_milestone_%d", time.Now().UnixNano()), ProjectID: projectID, Name: strings.TrimSpace(*input.Name), CreatedAt: now, UpdatedAt: now}
+		if input.Description != nil {
+			created.Description = strings.TrimSpace(*input.Description)
+		}
 		if input.TargetDate != nil {
 			created.TargetDate = optionalString(*input.TargetDate)
 		}
@@ -2008,6 +2024,9 @@ func (s *server) updateProjectMilestone(w http.ResponseWriter, r *http.Request) 
 		}
 		if input.TargetDate != nil {
 			milestone.TargetDate = optionalString(*input.TargetDate)
+		}
+		if input.Description != nil {
+			milestone.Description = strings.TrimSpace(*input.Description)
 		}
 		milestone.UpdatedAt = time.Now().UTC()
 		project.UpdatedAt = milestone.UpdatedAt
@@ -2066,6 +2085,13 @@ func (s *server) deleteProjectMilestone(w http.ResponseWriter, r *http.Request) 
 		project.Milestones = slices.DeleteFunc(project.Milestones, func(milestone domain.ProjectMilestone) bool { return milestone.ID == milestoneID })
 		if len(project.Milestones) == before {
 			return errNotFound
+		}
+		for index := range data.Issues {
+			if data.Issues[index].ProjectMilestoneID != nil && *data.Issues[index].ProjectMilestoneID == milestoneID {
+				data.Issues[index].ProjectMilestoneID = nil
+				data.Issues[index].UpdatedAt = time.Now().UTC()
+				data.Issues[index].Version++
+			}
 		}
 		project.UpdatedAt = time.Now().UTC()
 		return nil
@@ -2769,6 +2795,34 @@ func (s *server) createIssueReminder(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusCreated, reminder)
 }
 
+func (s *server) createProjectReminder(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		RemindAt string `json:"remindAt"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	remindAt, err := time.Parse(time.RFC3339, input.RemindAt)
+	if err != nil || !remindAt.After(time.Now().UTC()) {
+		writeError(w, http.StatusBadRequest, "remindAt must be a future RFC3339 timestamp")
+		return
+	}
+	id := r.PathValue("id")
+	var reminder domain.Notification
+	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.reminder_created", id, input, func(data *domain.Bootstrap) error {
+		project, err := fullProjectByID(data, id)
+		if err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		reminder = domain.Notification{ID: fmt.Sprintf("notification_project_reminder_%d", time.Now().UnixNano()), RecipientID: data.Viewer.ID, Type: "projectReminder", SourceType: "project", SourceID: id, ProjectID: id, Actor: data.Viewer, Category: "reminders", GroupKey: "project-reminder:" + id + ":" + strconv.FormatInt(remindAt.Unix(), 10), OccurrenceCount: 1, LatestActorIDs: []string{data.Viewer.ID}, SnoozedUntil: &remindAt, CreatedAt: now, UpdatedAt: now}
+		data.Notifications = append([]domain.Notification{reminder}, data.Notifications...)
+		appendActivity(data, id, "project.reminder_created", data.Viewer, map[string]string{"projectName": project.Name, "remindAt": remindAt.Format(time.RFC3339)})
+		return nil
+	})
+	respondMutation(w, err, http.StatusCreated, reminder)
+}
+
 func (s *server) createIssueLoopRun(w http.ResponseWriter, r *http.Request) {
 	var input domain.IssueLoopRunInput
 	if !decodeJSON(w, r, &input) {
@@ -3059,6 +3113,27 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 			return nil, fmt.Errorf("%w: unknown project", errInvalid)
 		}
 		changes["project"] = *input.ProjectID
+		if issue.ProjectMilestoneID != nil {
+			project, err := fullProjectByID(data, *input.ProjectID)
+			if err != nil || !slices.ContainsFunc(project.Milestones, func(milestone domain.ProjectMilestone) bool { return milestone.ID == *issue.ProjectMilestoneID }) {
+				issue.ProjectMilestoneID = nil
+			}
+		}
+	}
+	if input.ProjectMilestoneID != nil {
+		if *input.ProjectMilestoneID == "" {
+			issue.ProjectMilestoneID = nil
+		} else {
+			if issue.Project == nil {
+				return nil, fmt.Errorf("%w: a project milestone requires a project", errInvalid)
+			}
+			project, err := fullProjectByID(data, issue.Project.ID)
+			if err != nil || !slices.ContainsFunc(project.Milestones, func(milestone domain.ProjectMilestone) bool { return milestone.ID == *input.ProjectMilestoneID }) {
+				return nil, fmt.Errorf("%w: unknown project milestone", errInvalid)
+			}
+			issue.ProjectMilestoneID = stringPointer(*input.ProjectMilestoneID)
+		}
+		changes["projectMilestone"] = *input.ProjectMilestoneID
 	}
 	if input.CycleID != nil {
 		if *input.CycleID == "" {
@@ -3370,6 +3445,12 @@ func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input d
 	}
 	if input.Description != nil {
 		project.Description = *input.Description
+	}
+	if input.UpdateCadence != nil {
+		if !slices.Contains([]string{"none", "weekly", "biweekly", "monthly"}, *input.UpdateCadence) {
+			return errInvalid
+		}
+		project.UpdateCadence = *input.UpdateCadence
 	}
 	if input.Icon != nil {
 		project.Icon = *input.Icon
