@@ -1,20 +1,33 @@
 import { useEffect, useState } from 'react'
-import { Check, Circle, GripVertical, MoreHorizontal, Plus, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Bot, Check, ChevronRight, Circle, GitBranch, GripVertical, MoreHorizontal, Plus, Sparkles, Trash2, WandSparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import {
-  createDocumentTemplate, createTeamLabel, createWorkflowState, deleteDocumentTemplate, deleteTeamLabel, deleteWorkflowState,
+  createDocumentTemplate, createIssue, createTeamLabel, createWorkflowState, deleteDocumentTemplate, deleteTeamLabel, deleteWorkflowState,
   fetchWorkflowStates, reorderWorkflowStates, setTeamMembership, updateCycleSettings,
-  updateDocumentTemplate, updateStructuredTeamSettings, updateTeam, updateTeamLabel, updateWorkflowState,
+  updateDocumentTemplate, updateIssue, updateStructuredTeamSettings, updateTeam, updateTeamLabel, updateWorkflowState,
 } from '@/lib/api'
 import type { BootstrapData, CycleSettings, DocumentTemplate, IssueLabel, IssueTemplate, ProjectTemplate, Team, TeamSettings, WorkflowState, WorkflowStateType } from '@/types/flow'
 import type { TeamSettingsSection } from '@/lib/app-routes'
 import { TemplateEditor } from './advanced-settings'
 
-const SECTIONS: { id: TeamSettingsSection; label: string }[] = [
-  { id: 'general', label: 'General' }, { id: 'members', label: 'Members' }, { id: 'labels', label: 'Issue labels' },
-  { id: 'templates', label: 'Templates' }, { id: 'statuses', label: 'Issue statuses' }, { id: 'cycles', label: 'Cycles' },
+const SECTIONS: { id: TeamSettingsSection; label: string; description: string }[] = [
+  { id: 'general', label: 'General', description: 'Name, identifier, timezone, and issue defaults' },
+  { id: 'security', label: 'Access and permissions', description: 'Team access and management permissions' },
+  { id: 'members', label: 'Members', description: 'Manage who belongs to this team' },
+  { id: 'notifications', label: 'Slack notifications', description: 'Send team activity to Slack' },
+  { id: 'issue-labels', label: 'Issue labels', description: 'Team-scoped labels' },
+  { id: 'templates', label: 'Templates', description: 'Issue, project, and document templates' },
+  { id: 'recurring-issues', label: 'Recurring issues', description: 'Issues recreated on a schedule' },
+  { id: 'statuses', label: 'Issue statuses', description: 'Workflow states and ordering' },
+  { id: 'workflow', label: 'Workflows and automations', description: 'PR, closing, and archive automations' },
+  { id: 'triage', label: 'Triage', description: 'Route and prioritize incoming issues' },
+  { id: 'cycles', label: 'Cycles', description: 'Cycle schedule and automations' },
+  { id: 'agents', label: 'Team agents', description: 'Connected agents available to the team' },
+  { id: 'agent-skills', label: 'Agent skills', description: 'Reusable team instructions for agents' },
+  { id: 'ai-updates', label: 'Project updates prompt', description: 'Guidance used for generated project updates' },
+  { id: 'ai-summaries', label: 'Resolved thread summaries', description: 'Summarize resolved comment threads' },
 ]
 const STATUS_GROUPS: { type: WorkflowStateType; label: string; reserved?: boolean }[] = [
   { type: 'backlog', label: 'Backlog' }, { type: 'unstarted', label: 'Unstarted' }, { type: 'started', label: 'Started' }, { type: 'completed', label: 'Completed' }, { type: 'canceled', label: 'Canceled' }, { type: 'canceled', label: 'Duplicate', reserved: true },
@@ -22,15 +35,40 @@ const STATUS_GROUPS: { type: WorkflowStateType; label: string; reserved?: boolea
 
 export function TeamWorkflowSettings({ data, team, section, onNavigate, onReload }: { data: BootstrapData; team: Team; section: TeamSettingsSection; onNavigate: (section: TeamSettingsSection) => void; onReload: () => Promise<void> }) {
   return <>
-    <header className="settings-page-header team-settings-header"><div><span className="settings-team-icon large" style={{ color: team.color }}>{team.icon || team.key[0]}</span><h1>{team.name}</h1></div></header>
-    <nav className="team-settings-tabs" aria-label={`${team.name} settings`}>{SECTIONS.map(item => <button key={item.id} className={section === item.id ? 'active' : ''} onClick={() => onNavigate(item.id)}>{item.label}</button>)}</nav>
-    {section === 'general' && <GeneralSettings data={data} team={team} onReload={onReload}/>} 
-    {section === 'members' && <MembersSettings data={data} team={team} onReload={onReload}/>} 
-    {section === 'labels' && <LabelsSettings data={data} team={team} onReload={onReload}/>} 
-    {section === 'templates' && <TemplatesSettings data={data} team={team} onReload={onReload}/>} 
-    {section === 'statuses' && <StatusesSettings data={data} team={team} onReload={onReload}/>} 
-    {section === 'cycles' && <CyclesSettings data={data} team={team} onReload={onReload}/>} 
+    <header className="settings-page-header team-settings-header"><div>{section !== 'overview' && <button className="settings-icon-action team-settings-back" aria-label="Back to team settings" onClick={() => onNavigate('overview')}><ArrowLeft size={15}/></button>}<span className="settings-team-icon large" style={{ color: team.color }}>{team.icon || team.key[0]}</span><h1>{section === 'overview' ? team.name : SECTIONS.find(item => item.id === section)?.label}</h1></div></header>
+    {section === 'overview' && <TeamOverview data={data} team={team} onNavigate={onNavigate} onReload={onReload}/>}
+    {section === 'general' && <GeneralSettings data={data} team={team} onReload={onReload}/>}
+    {section === 'security' && <AccessSettings data={data} team={team} onReload={onReload}/>}
+    {section === 'members' && <MembersSettings data={data} team={team} onReload={onReload}/>}
+    {section === 'notifications' && <SlackSettings data={data} team={team} onReload={onReload}/>}
+    {section === 'issue-labels' && <LabelsSettings data={data} team={team} onReload={onReload}/>}
+    {section === 'templates' && <TemplatesSettings data={data} team={team} onReload={onReload}/>}
+    {section === 'recurring-issues' && <RecurringIssuesSettings data={data} team={team} onReload={onReload}/>}
+    {section === 'statuses' && <StatusesSettings data={data} team={team} onReload={onReload}/>}
+    {section === 'workflow' && <WorkflowSettings data={data} team={team} onReload={onReload}/>}
+    {section === 'triage' && <TriageSettings data={data} team={team} onReload={onReload}/>}
+    {section === 'cycles' && <CyclesSettings data={data} team={team} onReload={onReload}/>}
+    {section === 'agents' && <TeamAgentsSettings data={data}/>}
+    {section === 'agent-skills' && <AgentSkillsSettings data={data} team={team} onReload={onReload}/>}
+    {section === 'ai-updates' && <ProjectUpdatePromptSettings data={data} team={team} onReload={onReload}/>}
+    {section === 'ai-summaries' && <ResolvedSummariesSettings data={data} team={team} onReload={onReload}/>}
   </>
+}
+
+function useTeamSettings(data: BootstrapData, team: Team, onReload: () => Promise<void>) {
+  const [settings, setSettings] = useState(data.teamSettings?.[team.id] ?? defaultTeamSettings(team.id, data.states))
+  useEffect(() => setSettings(data.teamSettings?.[team.id] ?? defaultTeamSettings(team.id, data.states)), [data.states, data.teamSettings, team.id])
+  const save = async (patch: Partial<TeamSettings>) => {
+    const previous = settings; setSettings({ ...settings, ...patch })
+    try { const next = await updateStructuredTeamSettings(team.id, patch); setSettings(next); await onReload() }
+    catch (error) { setSettings(previous); toast.error(message(error)) }
+  }
+  return { settings, setSettings, save }
+}
+
+function TeamOverview({ data, team, onNavigate, onReload }: { data: BootstrapData; team: Team; onNavigate: (section: TeamSettingsSection) => void; onReload: () => Promise<void> }) {
+  const { settings, save } = useTeamSettings(data, team, onReload)
+  return <><Section><div className="team-overview-list">{SECTIONS.map(item => <button key={item.id} onClick={() => onNavigate(item.id)}><span><strong>{item.label}</strong><small>{item.description}</small></span><ChevronRight size={15}/></button>)}</div></Section><Section title="Team hierarchy"><SelectRow title="Parent team" value={settings.parentTeamId ?? ''} options={['', ...data.teams.filter(item => item.id !== team.id).map(item => item.id)]} labels={{ '': 'No parent team', ...Object.fromEntries(data.teams.map(item => [item.id, item.name])) }} onChange={value => save({ parentTeamId: value })}/><ToggleRow title="Show initiatives in sidebar" checked={settings.showInitiatives} onChange={value => save({ showInitiatives: value })}/></Section></>
 }
 
 function GeneralSettings({ data, team, onReload }: { data: BootstrapData; team: Team; onReload: () => Promise<void> }) {
@@ -44,6 +82,63 @@ function GeneralSettings({ data, team, onReload }: { data: BootstrapData; team: 
     <Section title="General"><InputRow title="Identifier" description="Used as the prefix for new issue identifiers. Existing issue identifiers won't change." value={identifier} onChange={value => setIdentifier(value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5))} onCommit={value => save({ identifier: value })}/><InputRow title="Description" value={settings.description ?? ''} onChange={value => setSettings(current => ({ ...current, description: value }))} onCommit={value => save({ description: value })}/><SelectRow title="Timezone" description="Used when scheduling cycles and team automations." value={settings.timezone} options={['Etc/UTC','Asia/Shanghai','America/Los_Angeles','Europe/London']} onChange={value => save({ timezone: value })}/></Section>
     <Section title="Issues"><SelectRow title="Issue estimation" value={settings.estimateType} options={['notUsed','exponential','fibonacci','flow']} labels={{ notUsed: 'Not used', exponential: 'Exponential', fibonacci: 'Fibonacci', flow: 'Flow' }} onChange={value => save({ estimateType: value as TeamSettings['estimateType'] })}/><SelectRow title="Default status" value={settings.defaultStateId} options={statesForTeam(data, team.id).map(state => state.id)} labels={Object.fromEntries(statesForTeam(data, team.id).map(state => [state.id, state.name]))} onChange={value => save({ defaultStateId: value })}/><SelectRow title="Default priority" value={String(settings.defaultPriority)} options={['0','4','3','2','1']} labels={{ '0': 'No priority', '4': 'Low', '3': 'Medium', '2': 'High', '1': 'Urgent' }} onChange={value => save({ defaultPriority: Number(value) })}/><ToggleRow title="Create issues by email" description="Accept new team issues at a generated email address." checked={settings.issueEmailEnabled} onChange={value => save({ issueEmailEnabled: value })}/><ToggleRow title="Detailed issue history" description="Keep a full record of issue property changes." checked={settings.detailedHistory} onChange={value => save({ detailedHistory: value })}/></Section>
   </>
+}
+
+function AccessSettings({ data, team, onReload }: { data: BootstrapData; team: Team; onReload: () => Promise<void> }) {
+  const { settings, save } = useTeamSettings(data, team, onReload)
+  const permissionLabels = { allMembers: 'All workspace members', teamMembers: 'Team members', owners: 'Team owners' }
+  const permissionOptions = Object.keys(permissionLabels)
+  return <><Section title="Team access"><SelectRow title="Team visibility" description="Private teams are visible only to members." value={settings.access} options={['public','private']} labels={{ public: 'Public', private: 'Private' }} onChange={value => save({ access: value as TeamSettings['access'] })}/><SelectRow title="Who can join" value={settings.membershipRestriction} options={['open','members','owners']} labels={{ open: 'Anyone in the workspace', members: 'By invitation', owners: 'Team owners only' }} onChange={value => save({ membershipRestriction: value as TeamSettings['membershipRestriction'] })}/></Section><Section title="Management permissions">{([
+    ['settingsPermission','Change team settings'], ['labelPermission','Manage labels'], ['templatePermission','Manage templates'], ['agentSkillPermission','Manage agent skills'], ['loopPermission','Create Loops'], ['memberPermission','Manage members'],
+  ] as const).map(([key, label]) => <SelectRow key={key} title={label} value={settings[key]} options={permissionOptions} labels={permissionLabels} onChange={value => save({ [key]: value } as Partial<TeamSettings>)}/>)}</Section></>
+}
+
+function SlackSettings({ data, team, onReload }: { data: BootstrapData; team: Team; onReload: () => Promise<void> }) {
+  const { settings, save } = useTeamSettings(data, team, onReload)
+  const slack = data.integrationConnections.find(item => item.provider.toLowerCase() === 'slack' && item.status === 'connected')
+  const choices = [['issueCreated','Issue created'],['issueCompleted','Issue completed'],['issueCanceled','Issue canceled'],['commentCreated','New comments'],['projectUpdates','Project updates'],['cycleUpdates','Cycle updates']] as const
+  return <><Section title="Slack connection"><Row title="Workspace connection" description={slack ? `Connected as ${slack.name}` : 'Connect Slack from workspace Integrations before choosing a channel.'}><span className="settings-static">{slack ? 'Connected' : 'Not connected'}</span></Row><InputRow title="Channel" description="Slack channel name, for example #engineering" value={settings.slackChannelName ?? ''} onChange={value => void save({ slackChannelName: value })} onCommit={() => undefined}/></Section><div className={!slack || !settings.slackChannelName ? 'settings-disabled-area' : ''}><Section title="Notifications">{choices.map(([key,label]) => <ToggleRow key={key} title={label} checked={settings.slackNotifications[key] ?? false} onChange={value => save({ slackNotifications: { ...settings.slackNotifications, [key]: value } })}/>)}</Section></div></>
+}
+
+function RecurringIssuesSettings({ data, team, onReload }: { data: BootstrapData; team: Team; onReload: () => Promise<void> }) {
+  const issues = data.issues.filter(issue => issue.team.id === team.id && issue.recurrence)
+  const [creating, setCreating] = useState(false); const [title, setTitle] = useState(''); const [cadence, setCadence] = useState<'daily'|'weekly'|'monthly'>('weekly')
+  const create = async () => { if (!title.trim()) return; try { const issue = await createIssue({ title: title.trim(), description: '', teamId: team.id }); await updateIssue(issue.id, { recurrence: cadence }); setCreating(false); setTitle(''); await onReload() } catch (error) { toast.error(message(error)) } }
+  return <Section title="Recurring issues" action={<button className="settings-action" onClick={() => setCreating(true)}><Plus size={13}/>New recurring issue</button>}><div className="team-setting-list">{creating && <form className="recurring-issue-create" onSubmit={event => { event.preventDefault(); void create() }}><input autoFocus className="settings-input" placeholder="Issue title" value={title} onChange={event => setTitle(event.target.value)}/><select className="settings-select native" value={cadence} onChange={event => setCadence(event.target.value as typeof cadence)}><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select><button type="button" className="settings-icon-action" aria-label="Cancel" onClick={() => setCreating(false)}><X size={14}/></button><button className="settings-action primary" disabled={!title.trim()}>Create</button></form>}{issues.map(issue => <div className="recurring-issue-row" key={issue.id}><span><strong>{issue.identifier} {issue.title}</strong><small>{titleCase(issue.recurrence ?? '')}{issue.nextOccurrenceAt ? ` · Next ${new Date(issue.nextOccurrenceAt).toLocaleDateString()}` : ''}</small></span><select aria-label={`${issue.title} cadence`} className="settings-select native" value={issue.recurrence} onChange={event => void updateIssue(issue.id, { recurrence: event.target.value as 'daily'|'weekly'|'monthly' }).then(onReload)}><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>)}{!issues.length && !creating && <Empty icon={<Circle size={22}/>} title="No recurring issues" description="Create issues that repeat on a daily, weekly, or monthly schedule."/>}</div></Section>
+}
+
+function WorkflowSettings({ data, team, onReload }: { data: BootstrapData; team: Team; onReload: () => Promise<void> }) {
+  const { settings, save } = useTeamSettings(data, team, onReload)
+  const states = statesForTeam(data, team.id); const stateOptions = ['', ...states.map(item => item.id)]; const stateLabels = { '': 'No action', ...Object.fromEntries(states.map(item => [item.id, item.name])) }
+  const prRows = [['opened','PR opened'],['draft','PR marked as draft'],['ready','PR ready for review'],['merged','PR merged'],['closed','PR closed']] as const
+  return <><Section title="Pull request automations">{prRows.map(([key,label]) => <SelectRow key={key} title={label} value={settings.prAutomations[key] ?? ''} options={stateOptions} labels={stateLabels} onChange={value => save({ prAutomations: { ...settings.prAutomations, [key]: value } })}/>)}</Section><Section title="Issue automations"><ToggleRow title="Close parent issues when all sub-issues are closed" checked={settings.autoCloseParents} onChange={value => save({ autoCloseParents: value })}/><ToggleRow title="Close sub-issues when their parent is closed" checked={settings.autoCloseSubIssues} onChange={value => save({ autoCloseSubIssues: value })}/><ToggleRow title="Close stale issues automatically" checked={settings.autoCloseStale} onChange={value => save({ autoCloseStale: value })}/>{settings.autoCloseStale && <><NumberRow title="Stale after" description="Months without activity" value={settings.staleMonths} onCommit={value => save({ staleMonths: value })}/><SelectRow title="Move stale issues to" value={settings.staleStatusId ?? ''} options={stateOptions} labels={stateLabels} onChange={value => save({ staleStatusId: value })}/></>}</Section><Section title="Archive and ordering"><NumberRow title="Archive completed issues after" description="Months after completion" value={settings.autoArchiveMonths} onCommit={value => save({ autoArchiveMonths: value })}/><SelectRow title="Newly started statuses" value={settings.progressOrder} options={['first','last','noAction']} labels={{ first: 'Move to first position', last: 'Move to last position', noAction: 'Do not reorder' }} onChange={value => save({ progressOrder: value as TeamSettings['progressOrder'] })}/></Section></>
+}
+
+function TriageSettings({ data, team, onReload }: { data: BootstrapData; team: Team; onReload: () => Promise<void> }) {
+  const { settings, save } = useTeamSettings(data, team, onReload); const [name, setName] = useState('')
+  const addRule = async () => { if (!name.trim()) return; await save({ triageRules: [...settings.triageRules, { id: `rule_${Date.now()}`, name: name.trim(), trigger: 'issueCreated', action: settings.triageAction, enabled: true }] }); setName('') }
+  return <><Section><ToggleRow title="Enable Triage" description="Send new issues to Triage before they enter the team's workflow." checked={settings.triageEnabled} onChange={value => save({ triageEnabled: value })}/></Section><div className={!settings.triageEnabled ? 'settings-disabled-area' : ''}><Section title="Triage behavior"><ToggleRow title="Require priority" checked={settings.triageRequirePriority} onChange={value => save({ triageRequirePriority: value })}/><SelectRow title="Default responsibility" value={settings.triageAction} options={['none','creator','teamOwner']} labels={{ none: 'No assignee', creator: 'Issue creator', teamOwner: 'Team owner' }} onChange={value => save({ triageAction: value })}/></Section><Section title="Rules"><form className="workflow-rule-create" onSubmit={event => { event.preventDefault(); void addRule() }}><input className="settings-input" placeholder="Rule name" value={name} onChange={event => setName(event.target.value)}/><button className="settings-action" disabled={!name.trim()}><Plus size={13}/>Add rule</button></form>{settings.triageRules.map(rule => <div className="automation-rule-row" key={rule.id}><span><strong>{rule.name}</strong><small>{rule.trigger} → {rule.action}</small></span><ToggleRow title="Enabled" checked={rule.enabled} onChange={value => save({ triageRules: settings.triageRules.map(item => item.id === rule.id ? { ...item, enabled: value } : item) })}/><Menu onDelete={() => void save({ triageRules: settings.triageRules.filter(item => item.id !== rule.id) })}/></div>)}{!settings.triageRules.length && <Empty icon={<GitBranch size={22}/>} title="No triage rules" description="Rules route incoming issues based on their properties."/>}</Section></div></>
+}
+
+function TeamAgentsSettings({ data }: { data: BootstrapData }) {
+  const agents = data.integrationConnections.filter(item => /agent|copilot|cursor|github/i.test(`${item.provider} ${item.name}`) && item.status === 'connected')
+  return <Section title="Connected agents">{agents.map(item => <Row key={item.id} title={item.name} description={item.provider}><span className="settings-static">Connected</span></Row>)}{!agents.length && <Empty icon={<Bot size={24}/>} title="No team agents" description="Agent integrations connected at workspace level will appear here."/>}</Section>
+}
+
+function AgentSkillsSettings({ data, team, onReload }: { data: BootstrapData; team: Team; onReload: () => Promise<void> }) {
+  const { settings, save } = useTeamSettings(data, team, onReload); const [creating, setCreating] = useState(false); const [name, setName] = useState(''); const [instructions, setInstructions] = useState('')
+  const add = async () => { if (!name.trim() || !instructions.trim()) return; await save({ agentSkills: [...settings.agentSkills, { id: `skill_${Date.now()}`, name: name.trim(), instructions: instructions.trim(), enabled: true }] }); setName(''); setInstructions(''); setCreating(false) }
+  return <Section title="Agent skills" action={<button className="settings-action" onClick={() => setCreating(true)}><Plus size={13}/>New skill</button>}><div className="team-setting-list">{creating && <form className="agent-skill-editor" onSubmit={event => { event.preventDefault(); void add() }}><input autoFocus className="settings-input" placeholder="Skill name" value={name} onChange={event => setName(event.target.value)}/><textarea className="settings-textarea" placeholder="Instructions" value={instructions} onChange={event => setInstructions(event.target.value)}/><footer><button type="button" className="settings-action" onClick={() => setCreating(false)}>Cancel</button><button className="settings-action primary" disabled={!name.trim() || !instructions.trim()}>Create</button></footer></form>}{settings.agentSkills.map(skill => <div className="agent-skill-row" key={skill.id}><WandSparkles size={17}/><span><strong>{skill.name}</strong><small>{skill.instructions}</small></span><button role="switch" aria-label={`${skill.name} enabled`} aria-checked={skill.enabled} className="settings-toggle" onClick={() => void save({ agentSkills: settings.agentSkills.map(item => item.id === skill.id ? { ...item, enabled: !item.enabled } : item) })}><span/></button><Menu onDelete={() => void save({ agentSkills: settings.agentSkills.filter(item => item.id !== skill.id) })}/></div>)}{!settings.agentSkills.length && !creating && <Empty icon={<Sparkles size={24}/>} title="No agent skills" description="Add reusable instructions for agents working with this team."/>}</div></Section>
+}
+
+function ProjectUpdatePromptSettings({ data, team, onReload }: { data: BootstrapData; team: Team; onReload: () => Promise<void> }) {
+  const { settings, setSettings, save } = useTeamSettings(data, team, onReload)
+  return <Section title="Project update prompt"><div className="team-prompt-editor"><p>Guidance used when generating project updates for {team.name}.</p><textarea aria-label="Project update prompt" value={settings.projectUpdatePrompt} onChange={event => setSettings({ ...settings, projectUpdatePrompt: event.target.value })} onBlur={() => void save({ projectUpdatePrompt: settings.projectUpdatePrompt })}/><span>{settings.projectUpdatePrompt.length} characters</span></div></Section>
+}
+
+function ResolvedSummariesSettings({ data, team, onReload }: { data: BootstrapData; team: Team; onReload: () => Promise<void> }) {
+  const { settings, save } = useTeamSettings(data, team, onReload)
+  return <Section><ToggleRow title="Resolved thread summaries" description="Generate a concise summary when a project comment thread is resolved." checked={settings.resolvedThreadSummaries} onChange={value => save({ resolvedThreadSummaries: value })}/></Section>
 }
 
 function MembersSettings({ data, team, onReload }: { data: BootstrapData; team: Team; onReload: () => Promise<void> }) {
@@ -94,7 +189,12 @@ function InlineCreate({ placeholder, onCancel, onCreate }: { placeholder: string
 function Menu({ onDelete }: { onDelete: () => void }) { return <DropdownMenu><DropdownMenuTrigger asChild><button className="settings-icon-action" aria-label="More actions"><MoreHorizontal size={15}/></button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem className="danger-item" onSelect={onDelete}><Trash2 size={14}/>Delete</DropdownMenuItem></DropdownMenuContent></DropdownMenu> }
 function Empty({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) { return <div className="settings-empty compact">{icon}<h3>{title}</h3><p>{description}</p></div> }
 function statesForTeam(data: BootstrapData, teamId: string) { const specific = data.states.some(state => state.teamId === teamId); return data.states.filter(state => specific ? state.teamId === teamId : !state.teamId).sort((a,b) => a.position-b.position) }
-function defaultTeamSettings(teamId: string, states: WorkflowState[]): TeamSettings { return { teamId, timezone: 'Etc/UTC', estimateType: 'notUsed', defaultStateId: states.find(state => state.default)?.id ?? states[0]?.id ?? '', defaultPriority: 0, issueEmailEnabled: false, detailedHistory: false } }
+function defaultTeamSettings(teamId: string, states: WorkflowState[]): TeamSettings { return {
+  teamId, timezone: 'Etc/UTC', estimateType: 'notUsed', defaultStateId: states.find(state => state.default)?.id ?? states[0]?.id ?? '', defaultPriority: 0, issueEmailEnabled: false, detailedHistory: false,
+  access: 'public', membershipRestriction: 'open', settingsPermission: 'allMembers', labelPermission: 'allMembers', templatePermission: 'allMembers', agentSkillPermission: 'allMembers', loopPermission: 'allMembers', memberPermission: 'allMembers',
+  slackNotifications: {}, prAutomations: {}, autoCloseParents: false, autoCloseSubIssues: false, autoCloseStale: false, staleMonths: 6, autoArchiveMonths: 6, progressOrder: 'first', releaseAutomations: [],
+  triageEnabled: false, triageRequirePriority: false, triageAction: 'none', triageRules: [], agentSkills: [], projectUpdatePrompt: '', resolvedThreadSummaries: true, showInitiatives: true,
+} }
 function defaultCycles(): CycleSettings { return { enabled: false, durationWeeks: 2, cooldownWeeks: 0, startsOn: 1, upcomingCount: 2, capacity: 4, autoCreate: true, autoAddActive: false, autoAddDueDate: false, autoAddStarted: false, autoAddCompleted: false, autoMigrate: true } }
 function initials(value: string) { return value.split(/\s+/).map(part => part[0]).join('').slice(0,2).toUpperCase() }
 function message(error: unknown) { return error instanceof Error ? error.message : 'Could not save team settings' }
