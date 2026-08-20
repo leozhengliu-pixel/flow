@@ -1,6 +1,6 @@
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { useCallback, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { useCallback, useRef, useState, type CSSProperties, type FocusEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 
 import { StatusIcon } from '@/components/issue/issue-icons'
 import type { WorkflowState } from '@/types/flow'
@@ -16,6 +16,7 @@ export type InboxSnoozePreset = 'hour' | 'tomorrow' | 'nextWeek' | 'month' | {
 export interface InboxNotificationRowData {
   id: string
   href?: string
+  actorId?: string
   actor: string
   actorAvatarUrl?: string
   actorInitials?: string
@@ -226,7 +227,7 @@ function ActorVisual({ notification }: { notification: InboxNotificationRowData 
       {notification.actorAvatarUrl ? (
         <img src={notification.actorAvatarUrl} alt="" aria-label={notification.actor} />
       ) : (
-        <span className="flow-inbox-row__initials" aria-label={notification.actor}>
+        <span className="flow-inbox-row__initials" aria-label={notification.actor} style={{ '--flow-inbox-avatar': actorColor(notification.actorId ?? notification.actor) } as CSSProperties}>
           {notification.actorInitials ?? initials(notification.actor)}
         </span>
       )}
@@ -470,6 +471,12 @@ function cssAttributeValue(value: string) {
 
 function initials(value: string) {
   return value.split(/\s|@/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || '?'
+}
+
+function actorColor(value: string) {
+  const colors = ['lch(40% 60 0)', 'lch(55% 60 40)', 'lch(62% 45 145)', 'lch(70% 60 220)', 'lch(55% 55 285)', 'lch(60% 55 335)']
+  const index = [...value].reduce((sum, character) => sum + character.charCodeAt(0), 0) % colors.length
+  return colors[index]
 }
 
 function KindIcon({ kind }: { kind: InboxNotificationKind }) {
