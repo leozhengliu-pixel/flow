@@ -892,6 +892,15 @@ func TestIssueBoardOrderAndSavedViewLifecycle(t *testing.T) {
 	if created.ID == "" || created.Resource != "projects" || created.Scope != "team" || created.View != "active" || created.Icon != "Rocket" || created.Color != "#26b5ce" || string(created.Filters) == "[]" || string(created.Display) == "{}" || string(created.Insights) == "{}" {
 		t.Fatalf("saved view create = %#v", created)
 	}
+	initiativeView := requestJSON[domain.SavedView](t, handler, http.MethodPost, "/api/views", map[string]any{
+		"name": "Initiative roadmap", "resource": "initiativeProjects", "scope": "workspace", "view": "all",
+		"filters": []any{map[string]any{"field": "initiative", "operator": "is", "values": []string{"initiative_1"}}},
+		"display": map[string]any{"zoom": "Quarter", "query": "mobile", "properties": map[string]bool{"health": true, "priority": false, "lead": true}},
+	}, http.StatusCreated)
+	if initiativeView.Resource != "initiativeProjects" || string(initiativeView.Filters) == "[]" || string(initiativeView.Display) == "{}" {
+		t.Fatalf("initiative saved view create = %#v", initiativeView)
+	}
+	requestJSON[any](t, handler, http.MethodDelete, "/api/views/"+initiativeView.ID, nil, http.StatusNoContent)
 	updatedView := requestJSON[domain.SavedView](t, handler, http.MethodPatch, "/api/views/"+created.ID, map[string]any{
 		"name": "Board triage updated", "description": "Current urgent work", "scope": "personal", "teamId": "", "ownerId": "usr_jiaozongben", "favorite": true, "subscribed": true,
 		"icon": "Face", "color": "#eb5757", "insights": map[string]any{"measure": "issueCount", "slice": "project", "segment": "none"},

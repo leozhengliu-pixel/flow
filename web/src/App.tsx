@@ -389,7 +389,7 @@ function App() {
       : null;
   const availableSavedViews = data?.savedViews ?? [];
   const issueSavedViews = availableSavedViews.filter(
-    (view) => view.resource !== "projects",
+    (view) => view.resource !== "projects" && view.resource !== "initiativeProjects",
   );
   const projectSavedViews = availableSavedViews.filter(
     (view) => view.resource === "projects",
@@ -3055,6 +3055,7 @@ function App() {
             labels={data.labels}
             labelGroups={data.labelGroups}
             viewer={data.viewer}
+            savedViews={availableSavedViews.filter((view) => view.resource === "initiativeProjects")}
             tab={route.tab}
             viewId={route.viewId}
             onBack={() => navigateTo(initiativesPath(data.workspace.urlKey))}
@@ -3094,6 +3095,9 @@ function App() {
             onCreateResource={addInitiativeResource}
             onUpdateResource={changeInitiativeResource}
             onDeleteResource={removeInitiativeResource}
+            onCreateSavedView={addSavedView}
+            onUpdateSavedView={changeSavedView}
+            onDeleteSavedView={removeSavedViewOnly}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
           />
         )}
