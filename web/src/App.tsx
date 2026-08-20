@@ -12,6 +12,7 @@ import {
   createInitiative,
   createInitiativeComment,
   createInitiativeResource,
+  createInitiativeReminder,
   createInitiativeUpdate,
   createInitiativeUpdateComment,
   createIssue,
@@ -1093,6 +1094,14 @@ function App() {
         : current,
     );
     return initiative;
+  };
+  const addInitiativeReminder = async (initiativeId: string, remindAt: string) => {
+    const notification = await run(
+      () => createInitiativeReminder(initiativeId, remindAt),
+      "Could not create initiative reminder",
+    );
+    setData((current) => current ? { ...current, notifications: [notification, ...current.notifications.filter((item) => item.id !== notification.id)] } : current);
+    return notification;
   };
   const changeInitiative = async (
     id: string,
@@ -3010,6 +3019,7 @@ function App() {
           initiativeUpdates={data.initiativeUpdates}
           projects={data.projects}
           projectUpdates={data.projectUpdates}
+          teams={data.teams}
           users={data.users}
           labels={labelsForResource(data.labels, "project")}
           viewer={data.viewer}
@@ -3022,6 +3032,7 @@ function App() {
           onCreateUpdate={addInitiativeUpdate}
           onUpdate={changeInitiative}
           onDelete={removeInitiative}
+          onCreateReminder={addInitiativeReminder}
           onOpenSidebar={() => setMobileSidebarOpen(true)}
         />
       )}
@@ -3072,6 +3083,7 @@ function App() {
             onReactProjectUpdate={reactToProjectUpdate}
             onUpdate={changeInitiative}
             onDelete={removeInitiative}
+            onCreateReminder={addInitiativeReminder}
             onCreateUpdate={addInitiativeUpdate}
             onUpdateInitiativeUpdate={changeInitiativeUpdate}
             onDeleteUpdate={removeInitiativeUpdate}
