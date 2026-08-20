@@ -776,16 +776,18 @@ func TestInitiativeLifecycle(t *testing.T) {
 
 	created := requestJSON[domain.Initiative](t, handler, http.MethodPost, "/api/initiatives", map[string]any{
 		"name": "Initiative API test", "summary": "Initial", "status": "planned", "priority": 2,
-		"ownerId": "usr_zheng", "targetDate": "2026-12-31", "projectIds": []string{"project_cruise"},
+		"ownerId": "usr_zheng", "targetDate": "2026-12-31", "projectIds": []string{"project_cruise"}, "leadTeamId": "team_cleantrack", "contributingTeamIds": []string{"team_cleantrack"},
 	}, http.StatusCreated)
-	if created.ID == "" || created.Status != "planned" || created.Priority != 2 || created.Owner == nil || !slices.Equal(created.ProjectIDs, []string{"project_cruise"}) {
+	if created.ID == "" || created.Status != "planned" || created.Priority != 2 || created.Owner == nil || created.LeadTeamID != "team_cleantrack" || !slices.Equal(created.ContributingTeamIDs, []string{"team_cleantrack"}) || !slices.Equal(created.ProjectIDs, []string{"project_cruise"}) {
 		t.Fatalf("initiative create failed: %#v", created)
 	}
 	updated := requestJSON[domain.Initiative](t, handler, http.MethodPatch, "/api/initiatives/"+created.ID, map[string]any{
 		"name": "Updated initiative", "description": "Persistent description", "status": "active", "health": "atRisk",
 		"labelIds": []string{"label_type_defect"}, "favorite": true, "subscribed": true,
+		"notificationRules": map[string]any{"descriptionChanges": true, "newUpdate": false, "allProjectUpdates": true},
+		"updateSchedule":    map[string]any{"cadence": "weekly", "weekday": 2, "timeRange": "09:00-12:00"},
 	}, http.StatusOK)
-	if updated.Name != "Updated initiative" || updated.Status != "active" || updated.Health != "atRisk" || !updated.Favorite || !updated.Subscribed || !slices.Equal(updated.LabelIDs, []string{"label_type_defect"}) {
+	if updated.Name != "Updated initiative" || updated.Status != "active" || updated.Health != "atRisk" || !updated.Favorite || !updated.Subscribed || len(updated.DescriptionHistory) != 1 || updated.NotificationRules.NewUpdate || updated.UpdateSchedule.Cadence != "weekly" || !slices.Equal(updated.LabelIDs, []string{"label_type_defect"}) {
 		t.Fatalf("initiative update failed: %#v", updated)
 	}
 	resource := requestJSON[domain.InitiativeResource](t, handler, http.MethodPost, "/api/initiatives/"+created.ID+"/resources", map[string]any{"type": "link", "title": "Strategy", "url": "https://example.com/strategy"}, http.StatusCreated)
@@ -830,9 +832,24 @@ func TestInitiativeLifecycle(t *testing.T) {
 		t.Fatalf("initiative bootstrap projection failed: %#v", bootstrap.InitiativeUpdates[created.ID])
 	}
 	requestJSON[any](t, handler, http.MethodDelete, "/api/initiatives/"+created.ID+"/updates/"+initiativeUpdate.ID, nil, http.StatusNoContent)
+	reminder := requestJSON[domain.Notification](t, handler, http.MethodPost, "/api/initiatives/"+created.ID+"/reminders", map[string]string{"remindAt": time.Now().UTC().Add(time.Hour).Format(time.RFC3339)}, http.StatusCreated)
+	if reminder.SourceType != "initiative" || reminder.SourceID != created.ID || reminder.SnoozedUntil == nil {
+		t.Fatalf("initiative reminder failed: %#v", reminder)
+	}
 	requestJSON[any](t, handler, http.MethodDelete, "/api/initiatives/"+created.ID, nil, http.StatusNoContent)
+	deletedBootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	trashIndex := slices.IndexFunc(deletedBootstrap.Trash, func(entry domain.TrashEntry) bool {
+		return entry.ResourceType == "initiative" && entry.ResourceID == created.ID
+	})
+	if trashIndex < 0 {
+		t.Fatalf("deleted initiative was not retained in trash: %#v", deletedBootstrap.Trash)
+	}
+	restored := requestJSON[domain.Initiative](t, handler, http.MethodPost, "/api/trash/"+deletedBootstrap.Trash[trashIndex].ID+"/restore", nil, http.StatusOK)
+	if restored.ID != created.ID || restored.LeadTeamID != "team_cleantrack" {
+		t.Fatalf("initiative restore failed: %#v", restored)
+	}
 	events := requestJSON[[]domain.DomainEvent](t, handler, http.MethodGet, "/api/events?aggregateId="+created.ID, nil, http.StatusOK)
-	expected := []string{"initiative.created", "initiative.updated", "initiative.resource_created", "initiative.resource_updated", "initiative.resource_deleted", "initiative.commented", "initiative.comment_updated", "initiative.comment_reaction_toggled", "initiative.comment_deleted", "initiative.update_created", "initiative.update_updated", "initiative.update_commented", "initiative.update_reaction_toggled", "initiative.update_deleted", "initiative.deleted"}
+	expected := []string{"initiative.created", "initiative.updated", "initiative.resource_created", "initiative.resource_updated", "initiative.resource_deleted", "initiative.commented", "initiative.comment_updated", "initiative.comment_reaction_toggled", "initiative.comment_deleted", "initiative.update_created", "initiative.update_updated", "initiative.update_commented", "initiative.update_reaction_toggled", "initiative.update_deleted", "initiative.reminder_created", "initiative.deleted"}
 	if len(events) != len(expected) {
 		t.Fatalf("initiative events = %#v", events)
 	}
