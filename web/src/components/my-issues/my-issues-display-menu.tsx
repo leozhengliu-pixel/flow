@@ -11,6 +11,8 @@ export interface MyIssuesDisplayMenuProps {
   options: MyIssuesDisplayOptions
   onChange: (options: MyIssuesDisplayOptions) => void
   hiddenProperties?: MyIssuesProperty[]
+  availableGroupings?: MyIssuesGrouping[]
+  hideSubGrouping?: boolean
 }
 
 type DisplayPatch = Partial<MyIssuesDisplayOptions>
@@ -56,7 +58,7 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
   { value: 'updated', label: 'Updated' },
 ]
 
-export function MyIssuesDisplayMenu({ hiddenProperties = [], open, onOpenChange, options, onChange }: MyIssuesDisplayMenuProps) {
+export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, hideSubGrouping = false, open, onOpenChange, options, onChange }: MyIssuesDisplayMenuProps) {
   const change = (patch: DisplayPatch) => onChange({ ...options, ...patch })
   const toggleProperty = (property: MyIssuesProperty) => {
     const properties = new Set(options.properties)
@@ -64,6 +66,8 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], open, onOpenChange,
     else properties.add(property)
     change({ properties })
   }
+  const visibleGroupingOptions = availableGroupings ? groupingOptions.filter(option => availableGroupings.includes(option.value)) : groupingOptions
+  const visibleSubGroupingOptions = availableGroupings ? subGroupingOptions.filter(option => availableGroupings.includes(option.value)) : subGroupingOptions
 
   return <Popover.Root open={open} onOpenChange={onOpenChange}>
     <Popover.Trigger asChild>
@@ -90,10 +94,10 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], open, onOpenChange,
                 data-order={options.groupOrder}
                 onClick={() => change({ groupOrder: options.groupOrder === 'asc' ? 'desc' : 'asc' })}
               ><ArrowDownUp size={14} /></button>
-              <SelectControl ariaLabel="Grouping" value={options.grouping} options={groupingOptions} onChange={grouping => change({ grouping })} />
+              <SelectControl ariaLabel="Grouping" value={options.grouping} options={visibleGroupingOptions} onChange={grouping => change({ grouping })} />
             </div>
           </div>
-          <SelectField label={options.layout === 'board' ? 'Rows' : 'Sub-grouping'} value={options.subGrouping} options={subGroupingOptions} onChange={subGrouping => change({ subGrouping })} />
+          {!hideSubGrouping && <SelectField label={options.layout === 'board' ? 'Rows' : 'Sub-grouping'} value={options.subGrouping} options={visibleSubGroupingOptions} onChange={subGrouping => change({ subGrouping })} />}
           <SelectField label="Ordering" value={options.ordering} options={[{ value: 'importance' as const, label: 'Importance' }, { value: 'priority' as const, label: 'Priority' }, { value: 'created' as const, label: 'Created' }, { value: 'updated' as const, label: 'Updated' }]} onChange={ordering => change({ ordering })} />
           <SwitchRow label="Order completed by recency" checked={options.orderCompletedByRecency} onChange={orderCompletedByRecency => change({ orderCompletedByRecency })} />
           <SelectField label="Completed issues" value={options.completedWindow} options={completedOptions} onChange={completedWindow => change({ completedWindow })} />

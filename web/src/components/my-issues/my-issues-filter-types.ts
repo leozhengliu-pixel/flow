@@ -14,7 +14,14 @@ export interface MyIssuesAppliedFilter {
 }
 
 export function filterValues(filter: MyIssuesAppliedFilter): MyIssuesFilterValue[] {
-  return filter.values?.length ? filter.values : [{ value: filter.value, valueLabel: filter.valueLabel, color: filter.color }]
+  const persistedValues = Array.isArray(filter.values) ? filter.values as unknown[] : []
+  const values = persistedValues.flatMap(value => {
+    if (typeof value === 'string') return [{ value, valueLabel: value }]
+    if (!value || typeof value !== 'object') return []
+    const item = value as Partial<MyIssuesFilterValue>
+    return typeof item.value === 'string' ? [{ value: item.value, valueLabel: item.valueLabel ?? item.value, color: item.color }] : []
+  })
+  return values.length ? values : [{ value: filter.value, valueLabel: filter.valueLabel, color: filter.color }]
 }
 
 export function toggleFilterOption(filters: MyIssuesAppliedFilter[], field: MyIssuesFilterKey, fieldLabel: string, option: MyIssuesFilterOption): MyIssuesAppliedFilter[] {
