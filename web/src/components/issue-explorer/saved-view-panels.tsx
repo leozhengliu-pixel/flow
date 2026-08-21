@@ -6,6 +6,7 @@ import { TeamIcon } from '@/components/issue/issue-icons'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import type { SavedView, Team, User, Workspace } from '@/types/flow'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
+import { useI18n } from '@/i18n/i18n'
 import styles from './saved-view-panels.module.css'
 
 export type SavedViewInsightDimension = 'status' | 'priority' | 'assignee' | 'project' | 'labels'
@@ -82,6 +83,7 @@ export function SavedViewInsightsPanel({ allRows, onClose, onSave, rows, view }:
   rows: MyIssuesRowData[]
   view: SavedView
 }) {
+  const { t } = useI18n()
   const persisted = useMemo(() => savedViewInsightsConfig(view), [view])
   const [config, setConfig] = useState(persisted)
   const [saving, setSaving] = useState(false)
@@ -133,12 +135,12 @@ export function SavedViewInsightsPanel({ allRows, onClose, onSave, rows, view }:
         {insight.rows.length ? insight.rows.map(item => <div className={styles.chartColumn} key={item.id}>
           <small>{item.total}</small>
           <div className={styles.chartBar} style={{ height: `${Math.max(4, item.total / max * 190)}px` }}>{insight.segments.map((segment, index) => item.segments[segment.id] ? <i aria-label={`${item.label}, ${segment.label}: ${item.segments[segment.id]}`} key={segment.id} style={{ backgroundColor: insightColor(segment.color, index), flexGrow: item.segments[segment.id] }} title={`${segment.label}: ${item.segments[segment.id]}`}/> : null)}</div>
-          <span data-i18n-ignore={config.slice === 'priority' ? undefined : true}>{item.label}</span>
+          <span data-i18n-ignore>{insightValueLabel(t, config.slice, item.label)}</span>
         </div>) : <div className={styles.empty}>No data for this insight</div>}
       </div>
       <div className={styles.insightTable} style={tableStyle}>
-        <div className={styles.insightTableRow} role="row"><span>{dimensionLabel(config.slice)}</span><span>Issue count</span>{insight.segments.map((segment, index) => <span key={segment.id}><i className={styles.legendMark} style={{ backgroundColor: insightColor(segment.color, index) }}/><b data-i18n-ignore={config.segment === 'priority' ? undefined : true}>{segment.label}</b></span>)}</div>
-        {insight.rows.map(item => <div className={styles.insightTableRow} key={item.id} role="row"><span><i className={styles.tableMark} style={{ backgroundColor: item.color }}/><b data-i18n-ignore={config.slice === 'priority' ? undefined : true}>{item.label}</b></span><span>{item.total}</span>{insight.segments.map(segment => <span key={segment.id}>{item.segments[segment.id] ?? 0}</span>)}</div>)}
+        <div className={styles.insightTableRow} role="row"><span>{dimensionLabel(config.slice)}</span><span>Issue count</span>{insight.segments.map((segment, index) => <span key={segment.id}><i className={styles.legendMark} style={{ backgroundColor: insightColor(segment.color, index) }}/><b data-i18n-ignore>{insightValueLabel(t, config.segment, segment.label)}</b></span>)}</div>
+        {insight.rows.map(item => <div className={styles.insightTableRow} key={item.id} role="row"><span><i className={styles.tableMark} style={{ backgroundColor: item.color }}/><b data-i18n-ignore>{insightValueLabel(t, config.slice, item.label)}</b></span><span>{item.total}</span>{insight.segments.map(segment => <span key={segment.id}>{item.segments[segment.id] ?? 0}</span>)}</div>)}
       </div>
       <button className={styles.saveInsight} disabled={!dirty || saving} onClick={() => void save()} type="button">{saving ? 'Saving…' : 'Set default for everyone'}</button>
     </section>
@@ -216,6 +218,7 @@ function dimensionValues(row: MyIssuesRowData, dimension: SavedViewInsightDimens
 function insightColor(color: string | undefined, index: number) { return color || ['#73737f', '#5e6ad2', '#2d9d78', '#d6b326', '#4aa3f7', '#ef787c'][index % 6] }
 function dimensionOptions(): [string, string][] { return [['status', 'Status'], ['priority', 'Priority'], ['assignee', 'Assignee'], ['project', 'Project'], ['labels', 'Labels']] }
 function dimensionLabel(value: SavedViewInsightDimension) { return dimensionOptions().find(([id]) => id === value)?.[1] ?? value }
+function insightValueLabel(t: (source: string) => string, dimension: SavedViewInsightDimension | 'none', label: string) { return dimension === 'status' || dimension === 'priority' || dimension === 'none' ? t(label) : label }
 function isDimension(value: unknown): value is SavedViewInsightDimension { return typeof value === 'string' && ['status', 'priority', 'assignee', 'project', 'labels'].includes(value) }
 function SummaryMark({ color, kind }: { color?: string; kind: string }) { return kind === 'assignee' ? <span className={styles.avatarMark} style={{ backgroundColor: color }}>•</span> : kind === 'project' ? <span className={styles.projectMark}>◇</span> : <i className={styles.dot} style={{ backgroundColor: color }}/>}
 function Avatar({ user }: { user?: User }) { return <span className={styles.avatar} data-i18n-ignore>{user ? user.displayName.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() : '?'}</span> }

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Building2, FileText, FolderKanban, Layers3, Lightbulb, Rocket, Search, SlidersHorizontal, UserRound, X } from 'lucide-react'
+import { Building2, FileText, FolderKanban, Layers3, Lightbulb, Search, SlidersHorizontal, UserRound, X } from 'lucide-react'
+
+import { ReleasesIcon } from '@/components/releases/release-icons'
 
 import { clearSearchHistory, searchWorkspace } from '@/lib/api'
 import type { SearchHistoryEntry, SearchResourceType, SearchResponse, SearchResult } from '@/types/flow'
@@ -126,7 +128,7 @@ function SearchResultIcon({ result }: { result: SearchResult }) {
   if (result.type === 'initiative') return <span className="workspace-search-result-icon" style={style}><Lightbulb/></span>
   if (result.type === 'member') return <span className="workspace-search-result-icon"><UserRound/></span>
   if (result.type === 'customer') return <span className="workspace-search-result-icon"><Building2/></span>
-  if (result.type === 'release') return <span className="workspace-search-result-icon"><Rocket/></span>
+  if (result.type === 'release') return <span className="workspace-search-result-icon"><ReleasesIcon/></span>
   if (result.type === 'view') return <span className="workspace-search-result-icon" style={style}><Layers3/></span>
   return <span className="workspace-search-result-icon"><FileText/></span>
 }
