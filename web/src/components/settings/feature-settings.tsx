@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Archive, Bot, Check, ChevronDown, ChevronRight, CircleDot, Code2, FileText,
-  Inbox, Mail, MessageSquare, MoreHorizontal, Plus, Radio, Rocket,
+  Inbox, Mail, MessageSquare, MoreHorizontal, Plus, Radio,
   Search, Settings2, Smile, Sparkles, Upload, UsersRound, Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ReleasesIcon } from "@/components/releases/release-icons";
 import { useI18n } from "@/i18n/i18n";
 import {
   connectIntegration, createCustomEmoji, createDocumentTemplate, createReleasePipeline,
@@ -136,7 +137,7 @@ function ReleasesPage({data,onCreate,onReload}:{data:BootstrapData;onCreate:()=>
   const [query,setQuery]=useState(""); const [showArchived,setShowArchived]=useState(false); const [editing,setEditing]=useState<ReleasePipeline|null|undefined>();
   const pipelines=(data.releasePipelines??[]).filter(item=>showArchived?Boolean(item.archivedAt):!item.archivedAt).filter(item=>item.name.toLowerCase().includes(query.toLowerCase()));
   return <div className="feature-wide"><FeatureShell title="Releases" description="Track which issues ship in each release."><div className="feature-toolbar"><label><Search size={15}/><input type="search" aria-label="Filter by pipeline name" placeholder="Filter by pipeline name…" value={query} onChange={event=>setQuery(event.target.value)}/></label><FeatureSelect label="Pipeline state" value={showArchived?"archived":"active"} options={[{value:"active",label:"Active"},{value:"archived",label:"Archived"}]} onChange={value=>setShowArchived(value==="archived")}/><span/><FeatureButton primary onClick={onCreate}><Plus size={14}/>New pipeline</FeatureButton></div>
-    <div className="feature-table"><header><span>Pipeline name</span><span>Teams</span><span>Type</span><span>Releases</span><span/></header>{pipelines.map(item=><button key={item.id} className="feature-table-row" onClick={()=>setEditing(item)}><Rocket size={16}/><strong data-i18n-ignore>{item.name}</strong><span data-i18n-ignore>{item.teamIds.map(id=>data.teams.find(team=>team.id===id)?.name).filter(Boolean).join(", ")||"All teams"}</span><span>{item.type==="scheduled"?"Scheduled":"Continuous"}</span><span>{data.releases.length}</span><ChevronRight size={15}/></button>)}{!pipelines.length&&<FeatureEmpty icon={Rocket} title={query?"No matching pipelines":showArchived?"No archived pipelines":"No release pipelines"}/>}</div>
+    <div className="feature-table"><header><span>Pipeline name</span><span>Teams</span><span>Type</span><span>Releases</span><span/></header>{pipelines.map(item=><button key={item.id} className="feature-table-row" onClick={()=>setEditing(item)}><ReleasesIcon size={16}/><strong data-i18n-ignore>{item.name}</strong><span data-i18n-ignore>{item.teamIds.map(id=>data.teams.find(team=>team.id===id)?.name).filter(Boolean).join(", ")||"All teams"}</span><span>{item.type==="scheduled"?"Scheduled":"Continuous"}</span><span>{data.releases.length}</span><ChevronRight size={15}/></button>)}{!pipelines.length&&<FeatureEmpty icon={ReleasesIcon} title={query?"No matching pipelines":showArchived?"No archived pipelines":"No release pipelines"}/>}</div>
     {editing!==undefined&&<ReleasePipelineDialog data={data} pipeline={editing} onClose={()=>setEditing(undefined)} onReload={onReload}/>}</FeatureShell></div>;
 }
 

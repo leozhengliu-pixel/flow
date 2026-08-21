@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { Command } from 'cmdk'
 import {
   Building2, Clipboard, FilePlus2, FileText, Filter, FolderKanban, Inbox, Layers3, Lightbulb,
-  ListFilter, Plus, Rocket, Search, SquareDot, UserRound, UsersRound,
+  ListFilter, Plus, Search, SquareDot, UserRound, UsersRound,
 } from 'lucide-react'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { ReleasesIcon } from '@/components/releases/release-icons'
 import { searchWorkspace } from '@/lib/api'
 import type { SearchResult } from '@/types/flow'
 
@@ -133,7 +134,7 @@ function ResourceIcon({ result }: { result: SearchResult }) {
   if (result.type === 'initiative') return <span className="command-item-icon"><Lightbulb/></span>
   if (result.type === 'member') return <span className="command-item-icon"><UserRound/></span>
   if (result.type === 'customer') return <span className="command-item-icon"><Building2/></span>
-  if (result.type === 'release') return <span className="command-item-icon"><Rocket/></span>
+  if (result.type === 'release') return <span className="command-item-icon"><ReleasesIcon/></span>
   if (result.type === 'view') return <span className="command-item-icon"><Layers3/></span>
   return <span className="command-item-icon"><FileText/></span>
 }

@@ -3,7 +3,7 @@ import {
   Activity, AppWindow, ArrowLeft, Bell, Bot, Braces, Building2, Check, ChevronDown,
   CircleDot, Code2, CreditCard, FileText, Flame, Gauge,
   Import, KeyRound, LayoutTemplate, Link2, ListFilter, MessageCircleQuestion,
-  MoreHorizontal, PanelTop, Plug, Plus, Radio, Rocket, Search, ShieldCheck,
+  MoreHorizontal, PanelTop, Plug, Plus, Radio, Search, ShieldCheck,
   SlidersHorizontal, Smile, Sparkles, Tag, UserRound, UsersRound,
   X, Zap, type LucideIcon,
 } from "lucide-react";
@@ -27,6 +27,7 @@ import "./advanced-settings.css";
 import { applyTheme } from "@/lib/theme";
 import { PersonalSettings } from "./personal-settings";
 import { PipelineEditorPage } from "@/components/releases/pipeline-editor-page";
+import { ReleasesIcon } from "@/components/releases/release-icons";
 
 type StoredSettings = {
   values: Record<string, string | boolean>;
@@ -77,7 +78,7 @@ const NAV: { title: string; items: NavItem[] }[] = [
     { id: "initiatives", label: "Initiatives", icon: Zap },
     { id: "documents", label: "Documents", icon: FileText },
     { id: "customer-requests", label: "Customer requests", icon: UsersRound },
-    { id: "releases", label: "Releases", icon: Rocket },
+    { id: "releases", label: "Releases", icon: ReleasesIcon },
     { id: "pulse", label: "Pulse", icon: Radio },
     { id: "asks", label: "Asks", icon: MessageCircleQuestion },
     { id: "emojis", label: "Emojis", icon: Smile },

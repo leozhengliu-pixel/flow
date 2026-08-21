@@ -5,7 +5,7 @@ import type { MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
 import { CalendarIcon, NoAssigneeIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import styles from './issue-board.module.css'
 
-export function IssueBoard({ groups, properties, selectedIds, onCreateIssue, onMove, onOpenIssue, onSelectIssue }: {
+export function IssueBoard({ groups, properties, selectedIds, onCreateIssue, onMove, onOpenIssue, onSelectIssue, createIssueLabel = 'Add new issue' }: {
   groups: MyIssuesGroupData[]
   properties: ReadonlySet<MyIssuesProperty>
   selectedIds: ReadonlySet<string>
@@ -13,6 +13,7 @@ export function IssueBoard({ groups, properties, selectedIds, onCreateIssue, onM
   onMove: (issue: MyIssuesRowData, sourceGroupId: string, targetGroupId: string, targetIndex: number) => void
   onOpenIssue: (issue: MyIssuesRowData) => void
   onSelectIssue: (issueId: string, selected: boolean, range: boolean) => void
+  createIssueLabel?: string
 }) {
   const [draggingId, setDraggingId] = useState<string>()
   const [over, setOver] = useState<{ groupId: string; index: number }>()
@@ -30,7 +31,7 @@ export function IssueBoard({ groups, properties, selectedIds, onCreateIssue, onM
         {group.stateType && <StatusIcon state={{ id: group.id, name: group.label, type: group.stateType, color: '#8a8d93' }} size={14}/>}
         <strong>{group.label}</strong><button className={styles.count} type="button" aria-label={`${group.issues.length} issues`}>{group.issues.length}</button>
         <button className={styles.headerButton} type="button" aria-label="Open menu"><Ellipsis size={14}/></button>
-        <button className={styles.headerButton} type="button" aria-label="Create new issue" onClick={() => onCreateIssue?.(group)}><Plus size={15}/></button>
+        {onCreateIssue && <button className={styles.headerButton} type="button" aria-label={createIssueLabel} onClick={() => onCreateIssue(group)}><Plus size={15}/></button>}
       </header>
       <div className={styles.cards} data-over={over?.groupId === group.id && over.index === group.issues.length}>
         {group.issues.map((issue, index) => <IssueBoardCard
@@ -40,7 +41,7 @@ export function IssueBoard({ groups, properties, selectedIds, onCreateIssue, onM
           onDragOver={event => { event.preventDefault(); event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); setOver({ groupId: group.id, index: index + (event.clientY > rect.top + rect.height / 2 ? 1 : 0) }) }}
           onDrop={event => { event.stopPropagation(); drop(event, group, over?.groupId === group.id ? over.index : index) }}
           onOpen={() => onOpenIssue(issue)} onSelect={(selected, range) => onSelectIssue(issue.id, selected, range)}/>) }
-        <button className={styles.addIssue} type="button" onClick={() => onCreateIssue?.(group)}><Plus size={14}/>Add new issue</button>
+        {onCreateIssue && <button className={styles.addIssue} type="button" onClick={() => onCreateIssue(group)}><Plus size={14}/>{createIssueLabel}</button>}
       </div>
     </section>)}
   </div>

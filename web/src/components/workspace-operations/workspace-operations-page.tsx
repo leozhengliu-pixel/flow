@@ -4,15 +4,16 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { ReleasesIcon } from '@/components/releases/release-icons'
 import { ReleasesPage } from '@/components/releases/releases-page'
 import { createAsk, decideAsk, deleteAsk, deleteDraft, purgeTrashEntry, restoreTrashEntry, searchWorkspace } from '@/lib/api'
-import type { Ask, BootstrapData, Draft, SearchResponse } from '@/types/flow'
+import type { Ask, BootstrapData, Draft, Issue, IssueUpdateInput, SearchResponse } from '@/types/flow'
 
 import './workspace-operations.css'
 
 export type OperationsView = 'drafts'|'releases'|'asks'|'favorites'|'recent'|'audit-log'|'deleted'
 
-export function WorkspaceOperationsPage({ data, view, initialReleaseId, onOpenSidebar, onReload, onNavigate, onResumeDraft }: { data: BootstrapData; view: OperationsView; initialReleaseId?: string; onOpenSidebar: () => void; onReload: () => Promise<void>; onNavigate: (path: string) => void; onResumeDraft: (draft: Draft) => void }) {
+export function WorkspaceOperationsPage({ data, view, initialPipelineId, initialPipelineTab, initialReleaseId, initialReleaseTab, onOpenSidebar, onReload, onNavigate, onResumeDraft, onOpenIssue, onUpdateIssue, onDeleteIssues }: { data: BootstrapData; view: OperationsView; initialPipelineId?: string; initialPipelineTab?: 'releases'|'changelog'; initialReleaseId?: string; initialReleaseTab?: 'issues'|'release-notes'; onOpenSidebar: () => void; onReload: () => Promise<void>; onNavigate: (path: string) => void; onResumeDraft: (draft: Draft) => void; onOpenIssue: (issue: Issue) => void; onUpdateIssue: (id: string, input: IssueUpdateInput) => Promise<Issue>; onDeleteIssues: (ids: string[]) => Promise<void> }) {
   const deletedResource = new URLSearchParams(window.location.search).get('resource')
   const [query, setQuery] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
@@ -30,7 +31,7 @@ export function WorkspaceOperationsPage({ data, view, initialReleaseId, onOpenSi
   }, [deletedResource, view])
   const title = ({ drafts: 'Drafts', releases: 'Releases', asks: 'Asks', favorites: 'Favorites', recent: 'Recently viewed', 'audit-log': 'Audit log', deleted: 'Recently deleted' } as const)[view]
   const canCreate = view === 'asks'
-  if (view === 'releases') return <ReleasesPage data={data} initialReleaseId={initialReleaseId} onOpenSidebar={onOpenSidebar} onReload={onReload} onNavigate={onNavigate}/>
+  if (view === 'releases') return <ReleasesPage data={data} initialPipelineId={initialPipelineId} initialPipelineTab={initialPipelineTab} initialReleaseId={initialReleaseId} initialReleaseTab={initialReleaseTab} onDeleteIssues={onDeleteIssues} onOpenIssue={onOpenIssue} onOpenSidebar={onOpenSidebar} onReload={onReload} onNavigate={onNavigate} onUpdateIssue={onUpdateIssue}/>
   if (view === 'asks') return <>
     <AsksPage data={data} surface={askSurface} onSurfaceChange={setAskSurface} onOpenSidebar={onOpenSidebar} onCreate={() => setCreateOpen(true)} onDecide={(ask, decision) => setAskDecision({ ask, decision })} onDelete={async id => { await deleteAsk(id); await onReload() }}/>
     {createOpen && (
@@ -96,7 +97,7 @@ function ArchivePage({ data, selected, filterOpen, query, onSelectedChange, onFi
   </main>
 }
 
-function archiveIcon(type: string) { if(type==='issue')return <CircleDashed/>; if(type==='project'||type==='release'||type==='release_pipeline')return <Rocket/>; if(type==='document')return <FilePenLine/>; return <Archive/> }
+function archiveIcon(type: string) { if(type==='issue')return <CircleDashed/>; if(type==='project')return <Rocket/>; if(type==='release'||type==='release_pipeline')return <ReleasesIcon/>; if(type==='document')return <FilePenLine/>; return <Archive/> }
 function capitalize(value: string) { return value.charAt(0).toUpperCase()+value.slice(1) }
 function archiveTypeLabel(type:string){if(type==='release_pipeline')return'Release pipeline';if(type==='release')return'Release';return capitalize(type)}
 function archiveEmptyLabel(tab: (typeof archiveTabs)[number]) { const resource=tab.resource ?? tab.id.replace(/^recent-/,'').replace(/s$/,''); return `No matching ${resource === 'issue' ? 'issues' : `${resource}s`}` }

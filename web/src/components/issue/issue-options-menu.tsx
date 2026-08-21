@@ -12,7 +12,6 @@ import {
   Link2,
   RefreshCw,
   Repeat2,
-  Rocket,
   Star,
   Trash2,
   UserRoundPlus,
@@ -24,6 +23,7 @@ import { toast } from 'sonner'
 import { DueDateCommand } from '@/components/issue/due-date-picker'
 import { FlowOptionsIcon } from '@/components/issue/flow-header-icons'
 import { CalendarIcon } from '@/components/issue/issue-icons'
+import { ReleasesIcon } from '@/components/releases/release-icons'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
 import type { ActivityEvent, BootstrapData, Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 
@@ -208,7 +208,7 @@ export function IssueOptionsMenu({
             <Command.List>
               <Command.Empty className="issue-options-empty">No results found.</Command.Empty>
               <Option icon={<CalendarIcon/>} label="Due date" shortcut="Shift D" nested onSelect={() => { setSubmenu(null); setDatePickerOpen(true) }}/>
-              <Option icon={<Rocket/>} label="Release" shortcut="Option R" nested onSelect={() => setSubmenu('release')}/>
+              <Option icon={<ReleasesIcon/>} label="Release" shortcut="Option R" nested onSelect={() => setSubmenu('release')}/>
               <Option icon={<Link/>} label="Add link..." shortcut="Ctrl L" onSelect={beginAddLink}/>
               <Option icon={<UserRoundPlus/>} label="Add customer request..." shortcut="Ctrl R" onSelect={() => {
                 setCustomerId(data?.customers[0]?.id ?? '')

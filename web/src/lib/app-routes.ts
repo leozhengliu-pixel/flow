@@ -1,4 +1,4 @@
-import type { Cycle, Initiative, Issue, Project } from '@/types/flow'
+import type { Cycle, Initiative, Issue, Project, Release, ReleasePipeline } from '@/types/flow'
 
 export type MyIssuesRouteView = 'assigned' | 'created' | 'subscribed' | 'activity'
 export type ProjectRouteTab = 'overview' | 'activity' | 'issues' | 'new'
@@ -8,6 +8,7 @@ export type InitiativesRouteView = 'active' | 'planned' | 'all'
 export type InitiativeRouteTab = 'overview' | 'activity' | 'projects' | 'new' | 'view'
 export type CyclesRouteView = 'all' | 'current' | 'upcoming'
 export type PulseRouteView = 'following' | 'popular' | 'all'
+export type ReleaseRouteTab = 'issues' | 'release-notes'
 export type SettingsPageId =
   | 'preferences' | 'profile' | 'notifications' | 'code-and-reviews' | 'account-security' | 'connections' | 'agents'
   | 'issue-labels' | 'issue-templates' | 'sla'
@@ -41,7 +42,7 @@ export type AppRoute =
   | { kind: 'customer'; workspaceSlug: string; customerSlugId: string }
   | { kind: 'document'; workspaceSlug: string; documentSlugId: string }
   | { kind: 'drafts'; workspaceSlug: string }
-  | { kind: 'releases'; workspaceSlug: string }
+  | { kind: 'releases'; workspaceSlug: string; pipelineSlugId?: string; pipelineTab?: 'releases'|'changelog'; releaseSlugId?: string; releaseTab?: ReleaseRouteTab }
   | { kind: 'asks'; workspaceSlug: string }
   | { kind: 'workspace-library'; workspaceSlug: string; view: 'favorites'|'recent'|'audit-log'|'deleted' }
   | { kind: 'workspace-teams'; workspaceSlug: string }
@@ -87,6 +88,8 @@ export function parseAppRoute(pathname: string): AppRoute {
   if (section === 'document' && third && segments.length === 3) return { kind: 'document', workspaceSlug, documentSlugId: third }
   if (section === 'drafts' && segments.length === 2) return { kind: 'drafts', workspaceSlug }
   if (section === 'releases' && segments.length === 2) return { kind: 'releases', workspaceSlug }
+  if (section === 'pipeline' && third && (fourth === 'releases' || fourth === 'changelog') && segments.length === 4) return { kind: 'releases', workspaceSlug, pipelineSlugId: third, pipelineTab: fourth }
+  if (section === 'pipeline' && third && fourth === 'release' && fifth && (sixth === 'issues' || sixth === 'release-notes') && segments.length === 6) return { kind: 'releases', workspaceSlug, pipelineSlugId: third, releaseSlugId: fifth, releaseTab: sixth }
   if (section === 'asks' && segments.length === 2) return { kind: 'asks', workspaceSlug }
   if ((section === 'favorites' || section === 'recent' || section === 'audit-log' || section === 'deleted') && segments.length === 2) return { kind: 'workspace-library', workspaceSlug, view: section }
   if (section === 'teams' && segments.length === 2) return { kind: 'workspace-teams', workspaceSlug }
@@ -147,6 +150,9 @@ export function customerPath(workspaceSlug: string, customer: { id: string; name
 export function documentPath(workspaceSlug: string, document: { slugId: string }) { return `${workspaceRootPath(workspaceSlug)}/document/${encode(document.slugId)}` }
 export function draftsPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/drafts` }
 export function releasesPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/releases` }
+export function releasePipelinePath(workspaceSlug: string, pipeline: Pick<ReleasePipeline, 'id'|'name'>, tab: 'releases'|'changelog' = 'releases') { return `${workspaceRootPath(workspaceSlug)}/pipeline/${encode(entityRouteSlug(pipeline))}/${tab}` }
+export function releasePath(workspaceSlug: string, pipeline: Pick<ReleasePipeline, 'id'|'name'>, release: Pick<Release, 'id'|'name'>, tab: ReleaseRouteTab = 'issues') { return `${workspaceRootPath(workspaceSlug)}/pipeline/${encode(entityRouteSlug(pipeline))}/release/${encode(entityRouteSlug(release))}/${tab}` }
+export function routeEntityMatches(slugId: string, entity: { id: string; name: string }) { return slugId === entity.id || slugId === entityRouteSlug(entity) }
 export function newReleasePipelinePath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/settings/releases/pipelines/new` }
 export function asksPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/asks` }
 export function workspaceLibraryPath(workspaceSlug: string, view: 'favorites'|'recent'|'audit-log'|'deleted') { return `${workspaceRootPath(workspaceSlug)}/${view}` }
@@ -199,4 +205,8 @@ export function routeBelongsToWorkspace(route: AppRoute, workspaceSlug: string) 
 function encode(value: string) { return encodeURIComponent(value) }
 function slug(value: string) {
   return value.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'issue'
+}
+function entityRouteSlug(entity: { id: string; name: string }) {
+  const suffix = entity.id.replace(/[^\p{L}\p{N}]/gu, '').slice(-12).toLowerCase()
+  return `${slug(entity.name)}-${suffix}`
 }
