@@ -156,6 +156,7 @@ import {
   projectsSavedViewEditPath,
   pulsePath,
   releasesPath,
+  routeEntityMatches,
   searchPath,
   routeBelongsToWorkspace,
   teamCyclesPath,
@@ -388,6 +389,16 @@ function App() {
     route.kind === "cycle"
       ? data?.cycles.find((cycle) => cycle.id === route.cycleId) || null
       : null;
+  const selectedRelease =
+    route.kind === "releases" && route.releaseSlugId
+      ? data?.releases.find(release => routeEntityMatches(route.releaseSlugId!, release)) || null
+      : null;
+  const selectedReleasePipeline =
+    route.kind === "releases" && route.pipelineSlugId
+      ? data?.releasePipelines.find(pipeline => routeEntityMatches(route.pipelineSlugId!, pipeline)) || null
+      : selectedRelease
+        ? data?.releasePipelines.find(pipeline => pipeline.id === selectedRelease.pipelineId) || null
+        : null;
   const availableSavedViews = data?.savedViews ?? [];
   const issueSavedViews = availableSavedViews.filter(
     (view) => view.resource !== "projects" && view.resource !== "initiativeProjects",
@@ -2858,10 +2869,16 @@ function App() {
         <WorkspaceOperationsPage
           data={data}
           view={route.kind === "workspace-library" ? route.view : route.kind as "drafts"|"releases"|"asks"}
-          initialReleaseId={route.kind === "releases" ? new URLSearchParams(location.search).get("release") ?? undefined : undefined}
+          initialPipelineId={selectedReleasePipeline?.id}
+          initialPipelineTab={route.kind === "releases" ? route.pipelineTab : undefined}
+          initialReleaseId={selectedRelease?.id ?? (route.kind === "releases" ? new URLSearchParams(location.search).get("release") ?? undefined : undefined)}
+          initialReleaseTab={route.kind === "releases" ? route.releaseTab : undefined}
           onOpenSidebar={() => setMobileSidebarOpen(true)}
           onReload={async () => setData(await fetchBootstrap(data.workspace.urlKey))}
           onNavigate={path => navigateTo(path)}
+          onOpenIssue={openIssue}
+          onUpdateIssue={updateIssueFromPage}
+          onDeleteIssues={deleteIssuesFromPage}
           onResumeDraft={(draft: Draft) => {
             setCreateDraftId(draft.id);
             setCreateOpen(true);

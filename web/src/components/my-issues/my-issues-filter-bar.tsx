@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import * as Popover from '@radix-ui/react-popover'
 import { Check, Plus, X } from 'lucide-react'
 import { usePropertyCommand } from '@/components/property/use-property-command'
+import { useI18n } from '@/i18n/i18n'
 import { filterValues, type MyIssuesAppliedFilter, type MyIssuesFilterOperator } from './my-issues-filter-types'
 import type { MyIssuesFilterOption } from './my-issues-surface'
 import styles from './my-issues-filter-bar.module.css'
@@ -53,13 +54,14 @@ function ValueEditor({ filter, onChange, options = [] }: { filter: MyIssuesAppli
   const selectedOptions = useMemo(() => selected.map(value => options.find(option => option.id === value.value) ?? { id: value.value, label: value.valueLabel, color: value.color }), [options, selected])
   return <Popover.Root open={open} onOpenChange={setOpen}>
     <Popover.Trigger asChild><button type="button" className={styles.value} aria-label={`${filter.fieldLabel} value`}>
-      <ValueSummary values={selected}/>
+      <ValueSummary field={filter.field} values={selected}/>
     </button></Popover.Trigger>
-    {options.length > 0 && <FilterValuePopover open={open} options={options} selectedIds={selectedIds} onChange={onChange} onOpenChange={setOpen} selectedOptions={selectedOptions}/>}
+    {options.length > 0 && <FilterValuePopover field={filter.field} open={open} options={options} selectedIds={selectedIds} onChange={onChange} onOpenChange={setOpen} selectedOptions={selectedOptions}/>}
   </Popover.Root>
 }
 
-function FilterValuePopover({ onChange, onOpenChange, open, options, selectedIds, selectedOptions }: { open: boolean; options: MyIssuesFilterOption[]; selectedIds: string[]; selectedOptions: MyIssuesFilterOption[]; onChange: (values: MyIssuesFilterOption[]) => void; onOpenChange: (open: boolean) => void }) {
+function FilterValuePopover({ field, onChange, onOpenChange, open, options, selectedIds, selectedOptions }: { field: MyIssuesAppliedFilter['field']; open: boolean; options: MyIssuesFilterOption[]; selectedIds: string[]; selectedOptions: MyIssuesFilterOption[]; onChange: (values: MyIssuesFilterOption[]) => void; onOpenChange: (open: boolean) => void }) {
+  const { t } = useI18n()
   const command = usePropertyCommand({
     closeOnSelect: false,
     onOpenChange,
@@ -73,17 +75,21 @@ function FilterValuePopover({ onChange, onOpenChange, open, options, selectedIds
     <div className={styles.valueOptions} role="listbox" aria-multiselectable="true">
       {command.filteredOptions.map(option => <button type="button" role="option" aria-selected={command.activeId === option.id} aria-checked={command.isSelected(option.id)} key={option.id || 'none'} onMouseMove={() => command.setActiveId(option.id)} onClick={() => command.choose(option)}>
         <span className={styles.checkbox}>{command.isSelected(option.id) && <Check size={11}/>}</span>
-        <i style={{ backgroundColor: option.color ?? 'currentColor' }}/><span>{option.label}</span>
+        <i style={{ backgroundColor: option.color ?? 'currentColor' }}/><span data-i18n-ignore>{isSystemEnumField(field) ? t(option.label) : option.label}</span>
       </button>)}
       {!command.filteredOptions.length && <span className={styles.empty}>No results</span>}
     </div>
   </Popover.Content></Popover.Portal>
 }
 
-function ValueSummary({ values }: { values: ReturnType<typeof filterValues> }) {
-  if (values.length === 1) return <>{values[0].color && <i style={{ backgroundColor: values[0].color }}/>}<span data-i18n-ignore>{values[0].valueLabel}</span></>
-  return <><span className={styles.valueStack}>{values.slice(0, 3).map((value, index) => <i key={value.value} style={{ backgroundColor: value.color ?? `lch(${62 - index * 8}% 1.2 272)`, zIndex: 3 - index }}/>)}</span><span data-i18n-ignore>{values.map(value => value.valueLabel).join(', ')}</span></>
+function ValueSummary({ field, values }: { field: MyIssuesAppliedFilter['field']; values: ReturnType<typeof filterValues> }) {
+  const { t } = useI18n()
+  const label = (value: string) => isSystemEnumField(field) ? t(value) : value
+  if (values.length === 1) return <>{values[0].color && <i style={{ backgroundColor: values[0].color }}/>}<span data-i18n-ignore>{label(values[0].valueLabel)}</span></>
+  return <><span className={styles.valueStack}>{values.slice(0, 3).map((value, index) => <i key={value.value} style={{ backgroundColor: value.color ?? `lch(${62 - index * 8}% 1.2 272)`, zIndex: 3 - index }}/>)}</span><span data-i18n-ignore>{values.map(value => label(value.valueLabel)).join(', ')}</span></>
 }
+
+function isSystemEnumField(field: MyIssuesAppliedFilter['field']) { return field === 'status' || field === 'priority' }
 
 function FilterGlyph({ field }: { field: MyIssuesAppliedFilter['field'] }) {
   if (field === 'priority') return <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="1" y="8" width="3" height="5" rx="1"/><rect x="5.5" y="5" width="3" height="8" rx="1"/><rect x="10" y="2" width="3" height="11" rx="1"/></svg>

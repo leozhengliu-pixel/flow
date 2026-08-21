@@ -425,6 +425,46 @@
 .customize-row-icon { width: 16px; height: 16px; display: grid; place-items: center; color: #99999d; }
 .customize-row-icon svg { width: 15px; height: 15px; fill: currentColor; stroke-width: 1.5; }
 .sidebar-customize-group select { color: var(--theme-text-primary); }
+.sidebar-customize-views > p { margin: -3px 0 9px; color: var(--theme-text-secondary); font-size: 12px; }
+.sidebar-customize-view-search {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 7px;
+  padding: 0 9px;
+  color: var(--theme-text-secondary);
+  background: var(--theme-control-hover);
+  border: .5px solid var(--theme-border-strong);
+  border-radius: 7px;
+}
+.sidebar-customize-view-search svg { width: 13px; height: 13px; flex: 0 0 13px; }
+.sidebar-customize-view-search input { width: 100%; min-width: 0; padding: 0; color: var(--theme-text-primary); background: transparent; border: 0; outline: 0; font: inherit; }
+.sidebar-customize-view-search input::placeholder { color: var(--theme-text-secondary); }
+.sidebar-customize-views > .sidebar-customize-view-list { max-height: 248px; overflow-y: auto; padding: 7px; }
+.sidebar-customize-view-row {
+  width: 100%;
+  height: 36px;
+  display: grid;
+  grid-template-columns: 16px 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 5px;
+  color: var(--theme-text-primary);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  text-align: left;
+}
+.sidebar-customize-view-row:hover,
+.sidebar-customize-view-row:focus-visible { background: #323235; outline: 0; }
+.sidebar-customize-view-row > svg { width: 15px; height: 15px; }
+.sidebar-customize-view-row > span:nth-of-type(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-customize-view-row small { color: var(--theme-text-secondary); font-size: 11px; font-weight: 400; }
+.sidebar-customize-view-check { width: 14px; height: 14px; display: grid; place-items: center; color: white; border: .5px solid #55555a; border-radius: 4px; }
+.sidebar-customize-view-row[aria-checked="true"] .sidebar-customize-view-check { background: #5e6ad2; border-color: #5e6ad2; }
+.sidebar-customize-view-check svg { width: 10px; height: 10px; stroke-width: 2.5; }
+.sidebar-customize-view-empty { min-height: 54px; display: grid; place-items: center; color: var(--theme-text-secondary); font-size: 12px; }
 
 .sidebar-upgrade-dialog {
   top: 50%;
@@ -471,6 +511,7 @@
 :root[data-theme="light"] .sidebar-popover,:root[data-theme="light"] .sidebar-help-menu,:root[data-theme="light"] .sidebar-customize-popover,:root[data-theme="light"] .sidebar-upgrade-dialog{border-color:var(--border-strong);background:var(--theme-surface-2);color:var(--text);box-shadow:var(--menu-shadow)}
 :root[data-theme="light"] .sidebar-customize-row{color:var(--text)}
 :root[data-theme="light"] .sidebar-customize-row:hover{background:var(--theme-control-hover)}
+:root[data-theme="light"] .sidebar-customize-view-row:hover,:root[data-theme="light"] .sidebar-customize-view-row:focus-visible{background:var(--theme-control-hover)}
 :root[data-theme="light"] .sidebar-customize-group select{color:var(--text)}
 :root[data-theme="light"] .sidebar-upgrade-dialog>p,:root[data-theme="light"] .badge-preview,:root[data-theme="light"] .upgrade-columns span{color:var(--muted)}
 :root[data-theme="light"] .sidebar-upgrade-dialog footer button{color:var(--text)}

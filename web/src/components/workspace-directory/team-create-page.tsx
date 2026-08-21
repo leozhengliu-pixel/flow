@@ -22,7 +22,6 @@ import {
   PanelTop,
   Plug,
   Radio,
-  Rocket,
   Search,
   ShieldCheck,
   SlidersHorizontal,
@@ -36,6 +35,7 @@ import {
 import { useMemo, useState, type FormEvent } from "react";
 
 import { ViewIconPicker } from "@/components/views/view-icon-picker";
+import { ReleasesIcon } from "@/components/releases/release-icons";
 import type { Team } from "@/types/flow";
 
 import "./workspace-directory.css";
@@ -80,7 +80,7 @@ const SETTINGS_SECTIONS: {
       { label: "Initiatives", icon: Goal },
       { label: "Documents", icon: FileText },
       { label: "Customer requests", icon: UsersRound },
-      { label: "Releases", icon: Rocket },
+      { label: "Releases", icon: ReleasesIcon },
       { label: "Pulse", icon: Radio },
       { label: "Asks", icon: MessageCircleQuestion },
       { label: "Emojis", icon: Smile },

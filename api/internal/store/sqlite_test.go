@@ -188,6 +188,53 @@ func TestEnsureCanonicalLabelsMigratesLegacyDeliveryTaxonomy(t *testing.T) {
 	}
 }
 
+func TestEnsureCanonicalLabelsRenamesRequirementLabelReferences(t *testing.T) {
+	data := zentaoDemoSeed()
+	for index := range data.Labels {
+		if data.Labels[index].ID == "label_type_requirement" {
+			data.Labels[index].Name = "原始需求"
+		}
+	}
+	for issueIndex := range data.Issues {
+		for labelIndex := range data.Issues[issueIndex].Labels {
+			if data.Issues[issueIndex].Labels[labelIndex].ID == "label_type_requirement" {
+				data.Issues[issueIndex].Labels[labelIndex].Name = "原始需求"
+			}
+		}
+	}
+	data.SavedViews[0].Filters = json.RawMessage(`[{
+		"field":"labels","operator":"is","value":"label_type_requirement","valueLabel":"原始需求",
+		"values":[{"value":"label_type_requirement","valueLabel":"原始需求","color":"#5E6AD2"}]
+	}]`)
+
+	if !ensureCanonicalLabels(&data) {
+		t.Fatal("requirement label rename did not report a change")
+	}
+	if !slices.ContainsFunc(data.Labels, func(label domain.IssueLabel) bool {
+		return label.ID == "label_type_requirement" && label.Name == "IT需求"
+	}) {
+		t.Fatalf("canonical requirement label was not renamed: %#v", data.Labels)
+	}
+	for _, issue := range data.Issues {
+		for _, label := range issue.Labels {
+			if label.ID == "label_type_requirement" && label.Name != "IT需求" {
+				t.Fatalf("issue label reference was not renamed: %#v", label)
+			}
+		}
+	}
+	var filters []map[string]any
+	if err := json.Unmarshal(data.SavedViews[0].Filters, &filters); err != nil {
+		t.Fatal(err)
+	}
+	if filters[0]["valueLabel"] != "IT需求" {
+		t.Fatalf("saved view filter was not renamed: %#v", filters[0])
+	}
+	values := filters[0]["values"].([]any)
+	if values[0].(map[string]any)["valueLabel"] != "IT需求" {
+		t.Fatalf("saved view filter value was not renamed: %#v", values[0])
+	}
+}
+
 func TestEnsureCanonicalSavedViewDisplaysOnlyMigratesLegacyBuiltIns(t *testing.T) {
 	data := zentaoDemoSeed()
 	legacy := json.RawMessage(`{"layout":"list","ordering":"updatedAt","direction":"desc"}`)
@@ -214,6 +261,121 @@ func TestEnsureCanonicalSavedViewDisplaysOnlyMigratesLegacyBuiltIns(t *testing.T
 	}
 	if ensureCanonicalSavedViewDisplays(&data) {
 		t.Fatal("canonical migration was not idempotent")
+	}
+}
+
+func TestEnsureCanonicalSavedViewNamesRenamesRequirementView(t *testing.T) {
+	data := zentaoDemoSeed()
+	data.SavedViews[0].Name = "原始需求"
+	data.SavedViews = append(data.SavedViews, domain.SavedView{ID: "view_unrelated", Name: "原始需求", Filters: json.RawMessage(`[]`)})
+
+	if !ensureCanonicalSavedViewNames(&data) {
+		t.Fatal("requirement view rename did not report a change")
+	}
+	if data.SavedViews[0].Name != "IT需求池" {
+		t.Fatalf("requirement view name = %q", data.SavedViews[0].Name)
+	}
+	if data.SavedViews[len(data.SavedViews)-1].Name != "原始需求" {
+		t.Fatal("unrelated view with the same name was renamed")
+	}
+	if ensureCanonicalSavedViewNames(&data) {
+		t.Fatal("requirement view rename was not idempotent")
+	}
+}
+
+func TestEnsureCanonicalSavedViewFiltersMigratesCompactValues(t *testing.T) {
+	data := zentaoDemoSeed()
+	data.SavedViews = []domain.SavedView{{
+		ID: "view_compact", Name: "Compact", Filters: json.RawMessage(`[
+			{"field":"project","operator":"is","values":["project_aut"]},
+			{"field":"labels","operator":"is","values":["label_type_requirement"]}
+		]`),
+	}}
+
+	if !ensureCanonicalSavedViewFilters(&data) {
+		t.Fatal("compact saved view filters were not migrated")
+	}
+	var filters []map[string]any
+	if err := json.Unmarshal(data.SavedViews[0].Filters, &filters); err != nil {
+		t.Fatal(err)
+	}
+	if got := filters[0]["valueLabel"]; got != "[Flow 对比演示] 汽车之家车商城项目 2026" {
+		t.Fatalf("unexpected project label: %v", got)
+	}
+	values, ok := filters[1]["values"].([]any)
+	if !ok || len(values) != 1 {
+		t.Fatalf("unexpected migrated values: %#v", filters[1]["values"])
+	}
+	labelValue, ok := values[0].(map[string]any)
+	if !ok || labelValue["value"] != "label_type_requirement" || labelValue["valueLabel"] != "IT需求" {
+		t.Fatalf("unexpected migrated label value: %#v", values[0])
+	}
+	if ensureCanonicalSavedViewFilters(&data) {
+		t.Fatal("saved view filter migration was not idempotent")
+	}
+}
+
+func TestEnsureCarMallReleaseManagementMigratesVersionMilestones(t *testing.T) {
+	data := zentaoDemoSeed()
+	data.ReleasePipelines = slices.DeleteFunc(data.ReleasePipelines, func(pipeline domain.ReleasePipeline) bool {
+		return pipeline.ID == "release_pipeline_car_mall"
+	})
+	data.Releases = slices.DeleteFunc(data.Releases, func(release domain.Release) bool {
+		return release.ID == "release_car_phase1" || release.ID == "release_car_316"
+	})
+	for releaseIndex := range data.Releases {
+		if data.Releases[releaseIndex].ID == "release_car_phase2" {
+			data.Releases[releaseIndex].PipelineID = ""
+			data.Releases[releaseIndex].Stage = ""
+			data.Releases[releaseIndex].Position = 0
+		}
+	}
+	projectIndex := slices.IndexFunc(data.Projects, func(project domain.Project) bool { return project.ID == "project_aut" })
+	if projectIndex < 0 {
+		t.Fatal("car mall project missing from seed")
+	}
+	data.Projects[projectIndex].Milestones = []domain.ProjectMilestone{
+		{ID: "milestone_car_phase1", ProjectID: "project_aut", Name: "车商城一期迭代完成"},
+		{ID: "milestone_car_316", ProjectID: "project_aut", Name: "车商城316迭代完成"},
+	}
+	assignments := map[string]string{"issue_53156": "milestone_car_phase1", "issue_105130": "milestone_car_316"}
+	for issueIndex := range data.Issues {
+		if milestoneID := assignments[data.Issues[issueIndex].ID]; milestoneID != "" {
+			data.Issues[issueIndex].ProjectMilestoneID = stringPointer(milestoneID)
+		}
+	}
+
+	if !ensureCarMallReleaseManagement(&data) {
+		t.Fatal("car mall release migration did not report a change")
+	}
+	if slices.ContainsFunc(data.Projects[projectIndex].Milestones, func(milestone domain.ProjectMilestone) bool {
+		return milestone.ID == "milestone_car_phase1" || milestone.ID == "milestone_car_316"
+	}) {
+		t.Fatalf("version milestones remain after migration: %#v", data.Projects[projectIndex].Milestones)
+	}
+	for _, issue := range data.Issues {
+		if assignments[issue.ID] != "" && issue.ProjectMilestoneID != nil {
+			t.Fatalf("issue %s still references milestone %q", issue.ID, *issue.ProjectMilestoneID)
+		}
+	}
+	pipelineIndex := slices.IndexFunc(data.ReleasePipelines, func(pipeline domain.ReleasePipeline) bool {
+		return pipeline.ID == "release_pipeline_car_mall"
+	})
+	if pipelineIndex < 0 || data.ReleasePipelines[pipelineIndex].Name != "车商城交付发布管线" || !slices.Equal(data.ReleasePipelines[pipelineIndex].TeamIDs, data.Projects[projectIndex].TeamIDs) {
+		t.Fatalf("car mall release pipeline = %#v", data.ReleasePipelines)
+	}
+	for releaseID, issueID := range map[string]string{"release_car_phase1": "issue_53156", "release_car_316": "issue_105130"} {
+		releaseIndex := slices.IndexFunc(data.Releases, func(release domain.Release) bool { return release.ID == releaseID })
+		if releaseIndex < 0 || data.Releases[releaseIndex].PipelineID != "release_pipeline_car_mall" || data.Releases[releaseIndex].Stage != "已发布" || !slices.Contains(data.Releases[releaseIndex].IssueIDs, issueID) {
+			t.Fatalf("migrated release %s = %#v", releaseID, data.Releases)
+		}
+	}
+	phaseTwoIndex := slices.IndexFunc(data.Releases, func(release domain.Release) bool { return release.ID == "release_car_phase2" })
+	if phaseTwoIndex < 0 || data.Releases[phaseTwoIndex].PipelineID != "release_pipeline_car_mall" || data.Releases[phaseTwoIndex].Stage != "待规划" {
+		t.Fatalf("phase two release was not attached to pipeline: %#v", data.Releases)
+	}
+	if ensureCarMallReleaseManagement(&data) {
+		t.Fatal("car mall release migration was not idempotent")
 	}
 }
 

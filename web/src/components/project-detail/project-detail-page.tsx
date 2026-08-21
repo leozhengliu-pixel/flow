@@ -38,7 +38,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
   const favorited = Boolean(props.favorite)
   const changeIssueFilters = (next: ProjectIssueFilters) => { setIssueFilters(next); localStorage.setItem(`${issueStateKey}:filters`, JSON.stringify(next)) }
   const changeIssueDisplay = (next: typeof issueDisplay) => { setIssueDisplay(next); localStorage.setItem(`${issueStateKey}:display`, JSON.stringify({ ...next, properties: [...next.properties] })) }
-  const openSavedView = (view: typeof projectSavedViews[number]) => { setActiveSavedViewId(view.id); changeIssueFilters(filtersFromSavedView(view.filters)); changeIssueDisplay(displayFromSavedView(view.display)); onTabChange('issues') }
+  const openSavedView = (view: typeof projectSavedViews[number]) => { setActiveSavedViewId(view.id); changeIssueFilters(filtersFromSavedView(view.filters, issueLabels)); changeIssueDisplay(displayFromSavedView(view.display)); onTabChange('issues') }
   const openIssueFilter = (field: 'assignee'|'labels', value: string, valueLabel: string) => {
     setMilestoneScopeId('')
     setActiveSavedViewId(undefined)
@@ -140,4 +140,22 @@ function useStoredBoolean(key: string, fallback: boolean) {
 function readIssueFilters(key: string): ProjectIssueFilters { try { const value = JSON.parse(localStorage.getItem(`${key}:filters`) ?? '[]'); return Array.isArray(value) ? value : [] } catch { return [] } }
 function readIssueDisplay(key: string) { try { const value = JSON.parse(localStorage.getItem(`${key}:display`) ?? 'null'); return value ? { ...DEFAULT_PROJECT_ISSUE_DISPLAY, ...value, properties: new Set(value.properties ?? [...DEFAULT_PROJECT_ISSUE_DISPLAY.properties]) } : DEFAULT_PROJECT_ISSUE_DISPLAY } catch { return DEFAULT_PROJECT_ISSUE_DISPLAY } }
 function displayFromSavedView(value: Record<string, unknown>) { return { ...DEFAULT_PROJECT_ISSUE_DISPLAY, ...value, properties: new Set(Array.isArray(value.properties) ? value.properties : [...DEFAULT_PROJECT_ISSUE_DISPLAY.properties]) } }
-function filtersFromSavedView(value: unknown[]): ProjectIssueFilters { return value.flatMap((item, index) => { if (!item || typeof item !== 'object') return []; const raw = item as { field?: string; operator?: string; values?: unknown[] }; if (raw.field === 'project') return []; const values = (raw.values ?? []).map(String); if (!values.length) return []; const field = raw.field === 'label' ? 'labels' : raw.field; if (!['status','assignee','priority','labels'].includes(field ?? '')) return []; const first = values[0]; return [{ id: `saved-${index}`, field: field as ProjectIssueFilters[number]['field'], fieldLabel: ({status:'Status',assignee:'Assignee',priority:'Priority',labels:'Labels'} as Record<string,string>)[field!], operator: raw.operator === 'isNot' ? 'isNot' as const : 'is' as const, value: first, valueLabel: first, values: values.map(value => ({ value, valueLabel: value })) }] }) }
+function filtersFromSavedView(value: unknown[], labels: ProjectDetailProps['labels']): ProjectIssueFilters {
+  const labelsById = new Map(labels.map(label => [label.id, label]))
+  return value.flatMap((item, index) => {
+    if (!item || typeof item !== 'object') return []
+    const raw = item as { field?: string; operator?: string; valueLabel?: string; color?: string; values?: unknown[] }
+    if (raw.field === 'project') return []
+    const field = raw.field === 'label' ? 'labels' : raw.field
+    if (!['status','assignee','priority','labels'].includes(field ?? '')) return []
+    const values = (raw.values ?? []).flatMap(entry => {
+      const stored = typeof entry === 'string' ? { value: entry } : entry && typeof entry === 'object' ? entry as { value?: unknown; id?: unknown; valueLabel?: unknown; label?: unknown; color?: unknown } : undefined
+      const id = stored?.value ?? stored?.id
+      if (typeof id !== 'string' || !id) return []
+      const label = field === 'labels' ? labelsById.get(id) : undefined
+      return [{ value: id, valueLabel: label?.name ?? (typeof stored?.valueLabel === 'string' ? stored.valueLabel : typeof stored?.label === 'string' ? stored.label : raw.valueLabel ?? id), color: label?.color ?? (typeof stored?.color === 'string' ? stored.color : raw.color) }]
+    })
+    if (!values.length) return []
+    return [{ id: `saved-${index}`, field: field as ProjectIssueFilters[number]['field'], fieldLabel: ({status:'Status',assignee:'Assignee',priority:'Priority',labels:'Labels'} as Record<string,string>)[field!], operator: raw.operator === 'isNot' ? 'isNot' as const : 'is' as const, ...values[0], values }]
+  })
+}
