@@ -361,11 +361,11 @@ func zentaoDemoSeed() domain.Bootstrap {
 		}})
 		return encoded
 	}
-	demandView := viewFilter("label_type_requirement", "原始需求", "#5E6AD2")
+	demandView := viewFilter("label_type_requirement", "IT需求", "#5E6AD2")
 	taskView := viewFilter("label_type_development", "开发任务", "#4AA3F7")
 	issueDisplay := json.RawMessage(`{"layout":"list","grouping":"status","groupOrder":"asc","subGrouping":"none","ordering":"priority","completedWindow":"all","orderCompletedByRecency":false,"showSubIssues":true,"showEmptyGroups":false,"nestedSubIssues":false,"properties":["id","status","priority","assignee","labels","project","created"]}`)
 	savedViews := []domain.SavedView{
-		{ID: "view_strategy", Name: "原始需求", Description: "从待承接到已交付的原始需求", Icon: "Target", Color: "#5E6AD2", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, Favorite: true, View: "all", Filters: demandView, Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -8), UpdatedAt: now},
+		{ID: "view_strategy", Name: "IT需求池", Description: "从待承接到已交付的原始需求", Icon: "Target", Color: "#5E6AD2", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, Favorite: true, View: "all", Filters: demandView, Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -8), UpdatedAt: now},
 		{ID: "view_business", Name: "待实施需求", Description: "通过状态筛选查看已承接并等待实施的需求", Icon: "MessageCircleQuestion", Color: "#5E6AD2", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, Favorite: true, View: "all", Filters: demandView, Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -8), UpdatedAt: now},
 		{ID: "view_product", Name: "待验收需求", Description: "通过状态筛选查看实施完成并等待验收的需求", Icon: "FileText", Color: "#D6B326", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, View: "all", Filters: demandView, Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -7), UpdatedAt: now},
 		{ID: "view_development", Name: "开发任务", Description: "开发与测试任务的完整执行流程", Icon: "Code2", Color: "#4AA3F7", Resource: "issues", Scope: "workspace", OwnerID: viewer.ID, Favorite: true, View: "all", Filters: taskView, Display: issueDisplay, CreatedAt: now.AddDate(0, 0, -7), UpdatedAt: now},
@@ -387,6 +387,7 @@ func zentaoDemoSeed() domain.Bootstrap {
 		{TeamID: qualityTeam.ID, UserID: viewer.ID, Role: "lead", JoinedAt: now.AddDate(0, -6, 0)}, {TeamID: qualityTeam.ID, UserID: jianyan.ID, Role: "member", JoinedAt: now.AddDate(0, -6, 1)}, {TeamID: qualityTeam.ID, UserID: guan.ID, Role: "member", JoinedAt: now.AddDate(0, -6, 2)}, {TeamID: qualityTeam.ID, UserID: zhangqun.ID, Role: "member", JoinedAt: now.AddDate(0, -5, 1)}, {TeamID: qualityTeam.ID, UserID: jiangyaling.ID, Role: "member", JoinedAt: now.AddDate(0, -5, 2)}, {TeamID: qualityTeam.ID, UserID: dingyu.ID, Role: "member", JoinedAt: now.AddDate(0, -5, 3)},
 	}
 	data := domain.Bootstrap{Workspace: domain.Workspace{ID: "workspace_cleantrack", Name: "海尔数字化交付", URLKey: "cleantrack", Color: "#5E6AD2", Region: "cn", CreatedAt: now.AddDate(-1, 0, 0)}, Viewer: viewer, Users: users, Teams: teams, Customers: customers, CustomerRequests: customerRequests, States: states, Labels: canonicalLabels(), LabelGroups: canonicalLabelGroups(), Issues: issues, Cycles: cycles, CycleSettings: map[string]domain.CycleSettings{team.ID: {Enabled: true, DurationWeeks: 2, CooldownWeeks: 0, StartsOn: 1, UpcomingCount: 2, Capacity: 12}, deliveryTeam.ID: {Enabled: true, DurationWeeks: 2, StartsOn: 1, UpcomingCount: 2, Capacity: 64}, qualityTeam.ID: {Enabled: true, DurationWeeks: 2, StartsOn: 1, UpcomingCount: 2, Capacity: 8}}, Projects: projects, ProjectStatuses: projectStatuses, ProjectUpdates: projectUpdates, Initiatives: initiatives, InitiativeUpdates: initiativeUpdates, Comments: comments, Activities: activities, Documents: documents, Releases: releases, Asks: asks, AuditLog: auditLog, Members: members, TeamMembers: teamMembers, SavedViews: savedViews, Notifications: []domain.Notification{}}
+	ensureCarMallReleaseManagement(&data)
 	data.Notifications = projectNotifications(&data)
 	return data
 }
@@ -422,7 +423,7 @@ func canonicalWorkflowStates() []domain.WorkflowState {
 
 func canonicalLabels() []domain.IssueLabel {
 	labels := []domain.IssueLabel{
-		{ID: "label_type_requirement", Name: "原始需求", Color: "#5E6AD2", Description: "尚未拆分为执行任务的业务或产品需求", Scope: "Workspace", GroupID: "label_group_work_item_type"},
+		{ID: "label_type_requirement", Name: "IT需求", Color: "#5E6AD2", Description: "尚未拆分为执行任务的业务或产品需求", Scope: "Workspace", GroupID: "label_group_work_item_type"},
 		{ID: "label_type_development", Name: "开发任务", Color: "#4AA3F7", Description: "开发或测试角色执行的交付任务", Scope: "Workspace", GroupID: "label_group_work_item_type"},
 		{ID: "label_type_defect", Name: "缺陷", Color: "#F15B61", Description: "需要定位、修复与回归检查的缺陷", Scope: "Workspace", GroupID: "label_group_work_item_type"},
 		{ID: "label_product", Name: "产品", Color: "#18B99A", Description: "产品规划与体验改进", IssueCount: 5, Scope: "Workspace", ResourceType: "project", GroupID: "label_group_project_value"},
@@ -445,7 +446,7 @@ func canonicalLabels() []domain.IssueLabel {
 func canonicalLabelGroups() []domain.LabelGroup {
 	now := time.Now().UTC()
 	return []domain.LabelGroup{
-		{ID: "label_group_work_item_type", Name: "工作项类型", Color: "#5E6AD2", Description: "原始需求、开发任务与缺陷", Scope: "Workspace", ResourceType: "issue", CreatedAt: now},
+		{ID: "label_group_work_item_type", Name: "工作项类型", Color: "#5E6AD2", Description: "IT需求、开发任务与缺陷", Scope: "Workspace", ResourceType: "issue", CreatedAt: now},
 		{ID: "label_group_project_value", Name: "Project value", Color: "#18B99A", Description: "项目业务价值与战略属性", Scope: "Workspace", ResourceType: "project", CreatedAt: now},
 		{ID: "label_group_project_delivery", Name: "Project delivery", Color: "#D97757", Description: "项目交付特征与关注级别", Scope: "Workspace", ResourceType: "project", CreatedAt: now},
 	}
