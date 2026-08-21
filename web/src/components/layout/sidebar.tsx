@@ -1,14 +1,16 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { BookOpen, ChevronDown, CircleCheck, CircleHelp, Download, FileClock, GripVertical, History, Keyboard, MessageCircle, MessageCircleQuestion, MoreHorizontal, Plus, Rocket, Search, Settings, Star, Trash2, X } from 'lucide-react'
+import { BookOpen, Check, ChevronDown, CircleCheck, CircleHelp, Download, FileClock, GripVertical, History, Keyboard, MessageCircle, MessageCircleQuestion, MoreHorizontal, Plus, Search, Settings, Star, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { MembersIcon as FlowMembersIcon, SlackIcon as FlowSlackIcon } from '@/components/issue/issue-icons'
+import { ReleasesIcon } from '@/components/releases/release-icons'
+import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { WorkspaceMenu } from '@/components/workspace/workspace-menu'
-import { asksPath, customersPath, draftsPath, inboxPath, initiativesPath, membersPath, myIssuesPath, projectsPath, pulsePath, releasesPath, teamCyclesPath, teamHomePath, teamIssuesPath, teamProjectsPath, teamsPath, teamViewsPath, workspaceLibraryPath, workspaceViewsPath } from '@/lib/app-routes'
-import type { AccountBootstrap, BootstrapData, Team, Workspace } from '@/types/flow'
+import { asksPath, customersPath, draftsPath, inboxPath, initiativesPath, membersPath, myIssuesPath, projectsPath, projectsSavedViewPath, pulsePath, releasesPath, teamCyclesPath, teamHomePath, teamIssuesPath, teamProjectsPath, teamsPath, teamViewsPath, workspaceLibraryPath, workspaceSavedViewPath, workspaceViewsPath } from '@/lib/app-routes'
+import type { AccountBootstrap, BootstrapData, SavedView, Team, Workspace } from '@/types/flow'
 
 import './sidebar.css'
 
@@ -19,6 +21,7 @@ type SidebarVisibility = 'always' | 'badged' | 'never'
 type SidebarPreferences = Record<SidebarEntry, SidebarVisibility>
 type SidebarGroup = 'personal' | 'workspace'
 type SidebarOrder = Record<SidebarGroup, SidebarEntry[]>
+type PinnedViewsByWorkspace = Record<string, string[]>
 
 const defaultPersonalOrder: SidebarEntry[] = ['inbox', 'myIssues', 'pulse', 'drafts', 'agent']
 const defaultWorkspaceOrder: SidebarEntry[] = ['initiatives', 'projects', 'views', 'members', 'customers', 'teams']
@@ -38,6 +41,7 @@ export function Sidebar({ account, data, page, open = false, onOpenChange, onSea
   const [planOpen, setPlanOpen] = useState(false)
   const [preferences, setPreferences] = useState(readSidebarPreferences)
   const [sidebarOrder, setSidebarOrder] = useState(readSidebarOrder)
+  const [pinnedViewsByWorkspace, setPinnedViewsByWorkspace] = useState(readPinnedViews)
   const [dismissedTry, setDismissedTry] = useState<string[]>(readDismissedTry)
   const [navOverflowing, setNavOverflowing] = useState(false)
   const navRef = useRef<HTMLElement>(null)
@@ -45,6 +49,7 @@ export function Sidebar({ account, data, page, open = false, onOpenChange, onSea
 
   useEffect(() => persistPreference('flow.sidebar.preferences', preferences), [preferences])
   useEffect(() => persistPreference('flow.sidebar.order', sidebarOrder), [sidebarOrder])
+  useEffect(() => persistPreference('flow.sidebar.pinned-views', pinnedViewsByWorkspace), [pinnedViewsByWorkspace])
   useEffect(() => persistPreference('flow.sidebar.dismissed-try', dismissedTry), [dismissedTry])
   useEffect(() => {
     const nav = navRef.current
@@ -65,10 +70,20 @@ export function Sidebar({ account, data, page, open = false, onOpenChange, onSea
     && (entry !== 'customers' || featureEnabled('customer-requests'))
   const hiddenWorkspaceEntries = sidebarOrder.workspace.filter(entry => available(entry) && !show(entry) && (data.viewerRole !== 'guest' || !['initiatives','views','customers'].includes(entry)))
   const inboxUnread = data.notifications.filter(item => item.recipientId === data.viewer.id && !item.readAt && !item.archivedAt && !item.deletedAt && (!item.snoozedUntil || new Date(item.snoozedUntil) <= new Date())).length
+  const workspaceViews = data.savedViews.filter(view => view.scope !== 'team')
+  const pinnedViewIds = pinnedViewsByWorkspace[data.workspace.id] ?? []
+  const pinnedViews = pinnedViewIds.map(id => workspaceViews.find(view => view.id === id)).filter((view): view is SavedView => Boolean(view))
   const dismissTry = (id: string) => setDismissedTry(current => [...new Set([...current, id])])
   const reorderSidebar = (group: SidebarGroup, active: SidebarEntry, target: SidebarEntry) => {
     setSidebarOrder(current => ({ ...current, [group]: reorderEntries(current[group], active, target) }))
   }
+  const togglePinnedView = (viewId: string) => setPinnedViewsByWorkspace(current => {
+    const selected = current[data.workspace.id] ?? []
+    return { ...current, [data.workspace.id]: selected.includes(viewId) ? selected.filter(id => id !== viewId) : [...selected, viewId] }
+  })
+  const savedViewPath = (view: SavedView) => (view.resource ?? 'issues') === 'projects'
+    ? projectsSavedViewPath(workspaceSlug, view.id)
+    : workspaceSavedViewPath(workspaceSlug, view.id)
 
   const personalNavigation: Record<SidebarEntry, ReactNode> = {
     inbox: <Nav badge={inboxUnread} icon={<FlowIcon name="Inbox"/>} label="Inbox" to={inboxPath(workspaceSlug)} onClick={close}/>,
@@ -104,15 +119,24 @@ export function Sidebar({ account, data, page, open = false, onOpenChange, onSea
 
         <Section label="Workspace" storageKey="workspace">
           {sidebarOrder.workspace.map(entry => show(entry) ? <span className="sidebar-ordered-entry" key={entry}>{workspaceNavigation[entry]}</span> : null)}
-          <MoreMenu entries={hiddenWorkspaceEntries} onCustomize={() => setCustomizeOpen(true)} workspaceSlug={workspaceSlug} releases={featureEnabled('releases')} asks={featureEnabled('asks')}/>
+          {pinnedViews.map(view => <Nav entityLabel icon={<ViewGlyph color={view.color} icon={view.icon}/>} key={view.id} label={view.name} to={savedViewPath(view)} onClick={close}/>)}
+          {featureEnabled('releases') && <Nav active={page === 'releases'} icon={<ReleasesIcon/>} label="Releases" to={releasesPath(workspaceSlug)} onClick={close}/>}
+          <MoreMenu
+            entries={hiddenWorkspaceEntries}
+            onCustomize={() => setCustomizeOpen(true)}
+            workspaceSlug={workspaceSlug}
+            asks={featureEnabled('asks')}
+            recentlyDeleted={featureEnabled('recently-deleted')}
+            auditLog={featureEnabled('audit-log')}
+          />
         </Section>
 
-        <Section label="Library" storageKey="library">
+        {featureEnabled('library') && <Section label="Library" storageKey="library">
           {data.favorites.length > 0 && <Nav active={page === 'library' && location.pathname.endsWith('/favorites')} icon={<Star/>} label="Favorites" to={workspaceLibraryPath(workspaceSlug, 'favorites')} onClick={close}/>}
           <Nav active={page === 'library' && location.pathname.endsWith('/recent')} icon={<History/>} label="Recently viewed" to={workspaceLibraryPath(workspaceSlug, 'recent')} onClick={close}/>
-        </Section>
+        </Section>}
 
-        <Section label="Your teams" storageKey="teams" action={<NavLink className="section-action" aria-label="Join a team" title="Join a team" to={teamsPath(workspaceSlug)} onClick={close}><Plus/></NavLink>}>
+        {featureEnabled('sidebar-teams') && <Section label="Your teams" storageKey="teams" action={<NavLink className="section-action" aria-label="Join a team" title="Join a team" to={teamsPath(workspaceSlug)} onClick={close}><Plus/></NavLink>}>
           <div className="sidebar-team-list">
             {data.teams.map(team => <TeamNavigation
               key={team.id}
@@ -123,13 +147,13 @@ export function Sidebar({ account, data, page, open = false, onOpenChange, onSea
               onNavigate={close}
             />)}
           </div>
-        </Section>
+        </Section>}
 
-        <Section label="Try" storageKey="try">
+        {featureEnabled('sidebar-try') && <Section label="Try" storageKey="try">
           {data.viewerRole === 'admin' && !dismissedTry.includes('invite') && <TryItem icon={<Plus/>} label="Invite people" to={`${membersPath(workspaceSlug)}?invite=1`} onClick={close} onDismiss={() => dismissTry('invite')}/>}
           {!dismissedTry.includes('cycles') && data.teams[0] ? <TryItem icon={<CycleIcon/>} label="Cycles" to={teamCyclesPath(workspaceSlug, data.teams[0].key)} onClick={close} onDismiss={() => dismissTry('cycles')}/> : null}
           {!dismissedTry.includes('github') && <TryItem icon={<GitHubIcon/>} label="Connect GitHub" onClick={() => toast.info('GitHub is not connected in this workspace.')} onDismiss={() => dismissTry('github')}/>}
-        </Section>
+        </Section>}
       </nav>
 
       <footer className="sidebar-footer">
@@ -138,7 +162,7 @@ export function Sidebar({ account, data, page, open = false, onOpenChange, onSea
       </footer>
     </aside>
 
-    <SidebarCustomization open={customizeOpen} onOpenChange={setCustomizeOpen} preferences={preferences} order={sidebarOrder} onChange={setPreferences} onReorder={reorderSidebar}/>
+    <SidebarCustomization open={customizeOpen} onOpenChange={setCustomizeOpen} preferences={preferences} order={sidebarOrder} pinnedViewIds={pinnedViewIds} views={workspaceViews} onChange={setPreferences} onPinnedViewChange={togglePinnedView} onReorder={reorderSidebar}/>
     <UpgradeDialog open={planOpen} onOpenChange={setPlanOpen}/>
   </>
 }
@@ -176,7 +200,7 @@ function TeamNavigation({ team, workspaceSlug, page, cyclesEnabled, onNavigate }
   </div>
 }
 
-function MoreMenu({ entries, onCustomize, workspaceSlug, releases, asks }: { entries: SidebarEntry[]; onCustomize: () => void; workspaceSlug: string; releases: boolean; asks: boolean }) {
+function MoreMenu({ entries, onCustomize, workspaceSlug, asks, recentlyDeleted, auditLog }: { entries: SidebarEntry[]; onCustomize: () => void; workspaceSlug: string; asks: boolean; recentlyDeleted: boolean; auditLog: boolean }) {
   const items: Partial<Record<SidebarEntry, { label: string; icon: ReactElement; onSelect?: () => void; to?: string }>> = {
     initiatives: { label: 'Initiatives', icon: <FlowIcon name="Initiative"/>, to: initiativesPath(workspaceSlug) },
     projects: { label: 'Projects', icon: <FlowIcon name="Project"/>, to: projectsPath(workspaceSlug) },
@@ -194,10 +218,9 @@ function MoreMenu({ entries, onCustomize, workspaceSlug, releases, asks }: { ent
         if (item.to) return <DropdownMenu.Item key={entry} asChild><NavLink to={item.to}>{item.icon}<span>{item.label}</span></NavLink></DropdownMenu.Item>
         return <DropdownMenu.Item key={entry} onSelect={item.onSelect}>{item.icon}<span>{item.label}</span></DropdownMenu.Item>
       })}
-      {releases&&<DropdownMenu.Item asChild><NavLink to={releasesPath(workspaceSlug)}><Rocket/><span>Releases</span></NavLink></DropdownMenu.Item>}
       {asks&&<DropdownMenu.Item asChild><NavLink to={asksPath(workspaceSlug)}><MessageCircleQuestion/><span>Asks</span></NavLink></DropdownMenu.Item>}
-      <DropdownMenu.Item asChild><NavLink to={workspaceLibraryPath(workspaceSlug,'deleted')}><Trash2/><span>Recently deleted</span></NavLink></DropdownMenu.Item>
-      <DropdownMenu.Item asChild><NavLink to={workspaceLibraryPath(workspaceSlug,'audit-log')}><FileClock/><span>Audit log</span></NavLink></DropdownMenu.Item>
+      {recentlyDeleted&&<DropdownMenu.Item asChild><NavLink to={workspaceLibraryPath(workspaceSlug,'deleted')}><Trash2/><span>Recently deleted</span></NavLink></DropdownMenu.Item>}
+      {auditLog&&<DropdownMenu.Item asChild><NavLink to={workspaceLibraryPath(workspaceSlug,'audit-log')}><FileClock/><span>Audit log</span></NavLink></DropdownMenu.Item>}
       <DropdownMenu.Separator/>
       <DropdownMenu.Item onSelect={onCustomize}><CustomizeIcon/><span>Customize sidebar</span></DropdownMenu.Item>
     </DropdownMenu.Content></DropdownMenu.Portal>
@@ -212,13 +235,13 @@ function TryItem({ icon, label, onClick, onDismiss, to }: { icon: ReactNode; lab
   </div>
 }
 
-function Nav({ icon, label, badge, active, onClick, to }: { icon: ReactElement; label: string; badge?: number; active?: boolean; onClick?: () => void; to?: string }) {
-  const content = <><span className="nav-icon">{icon}</span><span className="nav-label">{label}</span>{badge ? <span className="nav-unread" aria-label={`${badge} unread`}>{badge > 99 ? '99+' : badge}</span> : null}</>
+function Nav({ icon, label, badge, active, entityLabel = false, onClick, to }: { icon: ReactElement; label: string; badge?: number; active?: boolean; entityLabel?: boolean; onClick?: () => void; to?: string }) {
+  const content = <><span className="nav-icon">{icon}</span><span className="nav-label" data-i18n-ignore={entityLabel || undefined}>{label}</span>{badge ? <span className="nav-unread" aria-label={`${badge} unread`}>{badge > 99 ? '99+' : badge}</span> : null}</>
   if (!to) return <button type="button" className={`nav-item ${active ? 'active' : ''}`} onClick={onClick}>{content}</button>
   return <NavLink end={false} className={({ isActive }) => `nav-item ${active || isActive ? 'active' : ''}`} to={to} onClick={onClick}>{content}</NavLink>
 }
 
-function SidebarCustomization({ open, onOpenChange, preferences, order, onChange, onReorder }: { open: boolean; onOpenChange: (open: boolean) => void; preferences: SidebarPreferences; order: SidebarOrder; onChange: (preferences: SidebarPreferences) => void; onReorder: (group: SidebarGroup, active: SidebarEntry, target: SidebarEntry) => void }) {
+function SidebarCustomization({ open, onOpenChange, preferences, order, pinnedViewIds, views, onChange, onPinnedViewChange, onReorder }: { open: boolean; onOpenChange: (open: boolean) => void; preferences: SidebarPreferences; order: SidebarOrder; pinnedViewIds: string[]; views: SavedView[]; onChange: (preferences: SidebarPreferences) => void; onPinnedViewChange: (viewId: string) => void; onReorder: (group: SidebarGroup, active: SidebarEntry, target: SidebarEntry) => void }) {
   const personal: Record<SidebarEntry, [string, ReactElement]> = { inbox: ['Inbox', <FlowIcon key="inbox" name="Inbox"/>], myIssues: ['My issues', <FlowIcon key="my-issues" name="MyIssues"/>], pulse: ['Pulse', <PulseIcon key="pulse"/>], drafts: ['Drafts', <DraftIcon key="drafts"/>], agent: ['Agent', <AgentIcon key="agent"/>], initiatives: ['', <></>], projects: ['', <></>], views: ['', <></>], members: ['', <></>], customers: ['', <></>], teams: ['', <></>] }
   const workspace: Record<SidebarEntry, [string, ReactElement]> = { initiatives: ['Initiatives', <FlowIcon key="initiatives" name="Initiative"/>], projects: ['Projects', <FlowIcon key="projects" name="Project"/>], views: ['Views', <FlowIcon key="views" name="CustomView"/>], members: ['Members', <MembersIcon key="members"/>], customers: ['Customers', <CustomersIcon key="customers"/>], teams: ['Teams', <FlowIcon key="teams" name="Team"/>], inbox: ['', <></>], myIssues: ['', <></>], pulse: ['', <></>], drafts: ['', <></>], agent: ['', <></>] }
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="sidebar-customize-dialog">
@@ -226,7 +249,32 @@ function SidebarCustomization({ open, onOpenChange, preferences, order, onChange
     <label className="sidebar-badge-style"><span>Default badge style</span><span className="badge-preview">1</span><select aria-label="Default badge style" defaultValue="count"><option value="count">Count</option><option value="dot">Dot</option></select></label>
     <CustomizationGroup group="personal" label="Personal" entries={order.personal.map(id => [id, ...personal[id]])} preferences={preferences} onChange={onChange} onReorder={onReorder}/>
     <CustomizationGroup group="workspace" label="Workspace" entries={order.workspace.map(id => [id, ...workspace[id]])} preferences={preferences} onChange={onChange} onReorder={onReorder}/>
+    <PinnedViewsCustomization pinnedViewIds={pinnedViewIds} views={views} onChange={onPinnedViewChange}/>
   </DialogContent></Dialog>
+}
+
+function PinnedViewsCustomization({ pinnedViewIds, views, onChange }: { pinnedViewIds: string[]; views: SavedView[]; onChange: (viewId: string) => void }) {
+  const [query, setQuery] = useState('')
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  const visibleViews = views.filter(view => !normalizedQuery || view.name.toLocaleLowerCase().includes(normalizedQuery))
+  return <section className="sidebar-customize-group sidebar-customize-views">
+    <h3>Pinned views</h3>
+    <p>Pin existing workspace views for quick access.</p>
+    {views.length > 5 && <label className="sidebar-customize-view-search"><Search aria-hidden="true"/><input aria-label="Search workspace views" onChange={event => setQuery(event.target.value)} placeholder="Search views…" value={query}/></label>}
+    <div className="sidebar-customize-view-list">
+      {visibleViews.map(view => {
+        const pinned = pinnedViewIds.includes(view.id)
+        return <button aria-checked={pinned} className="sidebar-customize-view-row" key={view.id} onClick={() => onChange(view.id)} role="checkbox" type="button">
+          <span className="sidebar-customize-view-check">{pinned && <Check/>}</span>
+          <ViewGlyph color={view.color} icon={view.icon}/>
+          <span data-i18n-ignore>{view.name}</span>
+          <small>{(view.resource ?? 'issues') === 'projects' ? 'Project view' : 'Issue view'}</small>
+        </button>
+      })}
+      {!views.length && <span className="sidebar-customize-view-empty">No workspace views available.</span>}
+      {views.length > 0 && !visibleViews.length && <span className="sidebar-customize-view-empty">No matching views.</span>}
+    </div>
+  </section>
 }
 
 function CustomizationGroup({ group, label, entries, preferences, onChange, onReorder }: { group: SidebarGroup; label: string; entries: Array<[SidebarEntry, string, ReactElement]>; preferences: SidebarPreferences; onChange: (preferences: SidebarPreferences) => void; onReorder: (group: SidebarGroup, active: SidebarEntry, target: SidebarEntry) => void }) {
@@ -344,6 +392,12 @@ function readSidebarOrder(): SidebarOrder {
     const stored = JSON.parse(localStorage.getItem('flow.sidebar.order') ?? '{}') as Partial<SidebarOrder>
     return { personal: normalizeOrder(stored.personal, defaultPersonalOrder), workspace: normalizeOrder(stored.workspace, defaultWorkspaceOrder) }
   } catch { return { personal: [...defaultPersonalOrder], workspace: [...defaultWorkspaceOrder] } }
+}
+function readPinnedViews(): PinnedViewsByWorkspace {
+  try {
+    const stored = JSON.parse(localStorage.getItem('flow.sidebar.pinned-views') ?? '{}') as Record<string, unknown>
+    return Object.fromEntries(Object.entries(stored).map(([workspaceId, ids]) => [workspaceId, Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []]))
+  } catch { return {} }
 }
 function normalizeOrder(stored: SidebarEntry[] | undefined, defaults: SidebarEntry[]) {
   const allowed = new Set(defaults)

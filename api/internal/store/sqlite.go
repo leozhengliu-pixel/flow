@@ -197,10 +197,19 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 		if ensureCanonicalLabels(&data) {
 			changed = true
 		}
+		if ensureCanonicalSavedViewNames(&data) {
+			changed = true
+		}
 		if ensureCanonicalSavedViewDisplays(&data) {
 			changed = true
 		}
+		if ensureCanonicalSavedViewFilters(&data) {
+			changed = true
+		}
 		if ensureProjectMilestoneFields(&data) {
+			changed = true
+		}
+		if ensureCarMallReleaseManagement(&data) {
 			changed = true
 		}
 		normalize(&data)
@@ -250,8 +259,11 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	ensureCanonicalWorkflowStates(&data)
 	ensureCanonicalLabelGroups(&data)
 	ensureCanonicalLabels(&data)
+	ensureCanonicalSavedViewNames(&data)
 	ensureCanonicalSavedViewDisplays(&data)
+	ensureCanonicalSavedViewFilters(&data)
 	ensureProjectMilestoneFields(&data)
+	ensureCarMallReleaseManagement(&data)
 	ensureCanonicalNotifications(&data)
 	ensureCanonicalInitiatives(&data)
 	ensureCanonicalCycles(&data)
@@ -268,8 +280,6 @@ func ensureProjectMilestoneFields(data *domain.Bootstrap) bool {
 	descriptions := map[string]string{
 		"milestone_seal_test":   "完成高关联测试用例并补齐执行结果。",
 		"milestone_seal_review": "测试报告、回滚方案和代码证据满足上线门禁。",
-		"milestone_car_phase1":  "完成一期订单流程交付与缺陷收敛。",
-		"milestone_car_316":     "完成 316 迭代范围并复盘估算偏差。",
 	}
 	for projectIndex := range data.Projects {
 		if data.Projects[projectIndex].ID == "project_aut" && data.Projects[projectIndex].Name == "汽车之家车商城项目2026" {
@@ -286,8 +296,6 @@ func ensureProjectMilestoneFields(data *domain.Bootstrap) bool {
 		}
 	}
 	assignments := map[string]string{
-		"issue_53156": "milestone_car_phase1", "issue_53063": "milestone_car_phase1", "issue_100474": "milestone_car_phase1", "issue_52526": "milestone_car_phase1",
-		"issue_100417": "milestone_car_316", "issue_100879": "milestone_car_316", "issue_105130": "milestone_car_316", "issue_108415": "milestone_car_316", "issue_100880": "milestone_car_316", "issue_101479": "milestone_car_316", "issue_delivery_metrics": "milestone_car_316",
 		"issue_49219": "milestone_seal_test", "issue_49216": "milestone_seal_test", "issue_49215": "milestone_seal_test", "issue_test_plan": "milestone_seal_test", "issue_test_report": "milestone_seal_test",
 		"issue_release_review": "milestone_seal_review", "issue_audit_gate": "milestone_seal_review",
 	}
@@ -299,6 +307,117 @@ func ensureProjectMilestoneFields(data *domain.Bootstrap) bool {
 		}
 	}
 	return changed
+}
+
+func ensureCarMallReleaseManagement(data *domain.Bootstrap) bool {
+	projectIndex := slices.IndexFunc(data.Projects, func(project domain.Project) bool { return project.ID == "project_aut" })
+	if projectIndex < 0 {
+		return false
+	}
+
+	const pipelineID = "release_pipeline_car_mall"
+	versionMilestones := map[string]bool{"milestone_car_phase1": true, "milestone_car_316": true}
+	issueIDsByMilestone := map[string][]string{}
+	changed := false
+	for issueIndex := range data.Issues {
+		milestoneID := ""
+		if data.Issues[issueIndex].ProjectMilestoneID != nil {
+			milestoneID = *data.Issues[issueIndex].ProjectMilestoneID
+		}
+		if !versionMilestones[milestoneID] {
+			continue
+		}
+		issueIDsByMilestone[milestoneID] = append(issueIDsByMilestone[milestoneID], data.Issues[issueIndex].ID)
+		data.Issues[issueIndex].ProjectMilestoneID = nil
+		changed = true
+	}
+
+	project := &data.Projects[projectIndex]
+	milestones := project.Milestones[:0]
+	for _, milestone := range project.Milestones {
+		if versionMilestones[milestone.ID] {
+			changed = true
+			continue
+		}
+		milestones = append(milestones, milestone)
+	}
+	project.Milestones = milestones
+
+	now := time.Now().UTC()
+	pipelineIndex := slices.IndexFunc(data.ReleasePipelines, func(pipeline domain.ReleasePipeline) bool { return pipeline.ID == pipelineID })
+	if pipelineIndex < 0 {
+		data.ReleasePipelines = append(data.ReleasePipelines, domain.ReleasePipeline{
+			ID: pipelineID, Name: "车商城交付发布管线", TeamIDs: slices.Clone(project.TeamIDs), Type: "scheduled", Production: true,
+			Stages: []string{"待规划", "进行中", "已发布", "已取消"}, StageStatuses: map[string]string{"待规划": "planned", "进行中": "inProgress", "已发布": "released", "已取消": "canceled"},
+			Position: float64(len(data.ReleasePipelines)), PathFilters: []string{}, CreatedAt: now, UpdatedAt: now,
+		})
+		changed = true
+	} else {
+		pipeline := &data.ReleasePipelines[pipelineIndex]
+		if pipeline.Name != "车商城交付发布管线" || !slices.Equal(pipeline.TeamIDs, project.TeamIDs) {
+			pipeline.Name = "车商城交付发布管线"
+			pipeline.TeamIDs = slices.Clone(project.TeamIDs)
+			pipeline.UpdatedAt = now
+			changed = true
+		}
+	}
+
+	creator := data.Viewer
+	if project.Lead != nil {
+		creator = *project.Lead
+	}
+	phaseOneTarget, phase316Target := "2026-07-10", "2026-08-01"
+	phaseOneReleasedAt := time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC)
+	phase316ReleasedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	changed = ensureCarMallRelease(data, domain.Release{
+		ID: "release_car_phase1", Name: "车商城一期迭代", Version: "一期", Description: "由车商城一期版本里程碑迁移，覆盖订单流程交付与缺陷收敛。",
+		Status: "released", PipelineID: pipelineID, Stage: "已发布", Position: 0, TargetDate: &phaseOneTarget, ProjectIDs: []string{project.ID},
+		IssueIDs: issueIDsByMilestone["milestone_car_phase1"], SubscriberIDs: slices.Clone(project.MemberIDs), Creator: creator, ReleasedAt: &phaseOneReleasedAt, CreatedAt: phaseOneReleasedAt, UpdatedAt: now,
+	}) || changed
+	changed = ensureCarMallRelease(data, domain.Release{
+		ID: "release_car_316", Name: "车商城 316 迭代", Version: "316", Description: "由车商城 316 版本里程碑迁移，覆盖 316 版本范围和估算偏差复盘。",
+		Status: "released", PipelineID: pipelineID, Stage: "已发布", Position: 1, TargetDate: &phase316Target, ProjectIDs: []string{project.ID},
+		IssueIDs: issueIDsByMilestone["milestone_car_316"], SubscriberIDs: slices.Clone(project.MemberIDs), Creator: creator, ReleasedAt: &phase316ReleasedAt, CreatedAt: phase316ReleasedAt, UpdatedAt: now,
+	}) || changed
+
+	if releaseIndex := slices.IndexFunc(data.Releases, func(release domain.Release) bool { return release.ID == "release_car_phase2" }); releaseIndex >= 0 {
+		release := &data.Releases[releaseIndex]
+		if release.PipelineID != pipelineID || release.Stage != "待规划" || release.Position != 2 {
+			release.PipelineID, release.Stage, release.Position, release.UpdatedAt = pipelineID, "待规划", 2, now
+			changed = true
+		}
+	}
+	return changed
+}
+
+func ensureCarMallRelease(data *domain.Bootstrap, canonical domain.Release) bool {
+	index := slices.IndexFunc(data.Releases, func(release domain.Release) bool { return release.ID == canonical.ID })
+	if index < 0 {
+		canonical.IssueIDs = uniqueStrings(canonical.IssueIDs)
+		data.Releases = append(data.Releases, canonical)
+		return true
+	}
+	release := &data.Releases[index]
+	issueIDs := uniqueStrings(append(append([]string{}, release.IssueIDs...), canonical.IssueIDs...))
+	if release.PipelineID == canonical.PipelineID && release.Stage == canonical.Stage && release.Position == canonical.Position && slices.Equal(release.ProjectIDs, canonical.ProjectIDs) && slices.Equal(release.IssueIDs, issueIDs) {
+		return false
+	}
+	release.PipelineID, release.Stage, release.Position = canonical.PipelineID, canonical.Stage, canonical.Position
+	release.ProjectIDs, release.IssueIDs, release.UpdatedAt = slices.Clone(canonical.ProjectIDs), issueIDs, time.Now().UTC()
+	return true
+}
+
+func uniqueStrings(values []string) []string {
+	seen := map[string]bool{}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		result = append(result, value)
+	}
+	return result
 }
 
 func ensureCanonicalCycles(data *domain.Bootstrap) bool {
@@ -394,6 +513,17 @@ func ensureCanonicalLabels(data *domain.Bootstrap) bool {
 			changed = true
 			continue
 		}
+		if label.ID == "label_type_requirement" && current.Name == "原始需求" {
+			for i := range data.Labels {
+				if data.Labels[i].ID == label.ID {
+					data.Labels[i].Name = label.Name
+					cascadeBootstrapLabel(data, data.Labels[i])
+				}
+			}
+			renameSavedViewLabelReferences(data, label.ID, current.Name, label.Name)
+			current.Name = label.Name
+			changed = true
+		}
 		if current.Description == "" || current.IssueCount == 0 || current.Scope == "" || current.GroupID == "" || current.ResourceType == "" || current.CreatedAt.IsZero() || current.LastAppliedAt == nil {
 			for i := range data.Labels {
 				if data.Labels[i].ID == label.ID {
@@ -419,6 +549,45 @@ func ensureCanonicalLabels(data *domain.Bootstrap) bool {
 		}
 	}
 	return changed
+}
+
+func renameSavedViewLabelReferences(data *domain.Bootstrap, labelID, oldName, newName string) {
+	for viewIndex := range data.SavedViews {
+		var filters []map[string]any
+		if len(data.SavedViews[viewIndex].Filters) == 0 || json.Unmarshal(data.SavedViews[viewIndex].Filters, &filters) != nil {
+			continue
+		}
+		changed := false
+		for _, filter := range filters {
+			if field, _ := filter["field"].(string); field != "labels" {
+				continue
+			}
+			if value, _ := filter["value"].(string); value == labelID {
+				if valueLabel, _ := filter["valueLabel"].(string); valueLabel == oldName {
+					filter["valueLabel"] = newName
+					changed = true
+				}
+			}
+			values, _ := filter["values"].([]any)
+			for _, rawValue := range values {
+				value, _ := rawValue.(map[string]any)
+				if id, _ := value["value"].(string); id != labelID {
+					continue
+				}
+				if valueLabel, _ := value["valueLabel"].(string); valueLabel == oldName {
+					value["valueLabel"] = newName
+					changed = true
+				}
+			}
+		}
+		if !changed {
+			continue
+		}
+		encoded, err := json.Marshal(filters)
+		if err == nil {
+			data.SavedViews[viewIndex].Filters = encoded
+		}
+	}
 }
 
 func migrateDeliverySavedViews(data *domain.Bootstrap) {
@@ -454,6 +623,40 @@ func migrateDeliverySavedViews(data *domain.Bootstrap) {
 	}
 }
 
+func ensureCanonicalSavedViewNames(data *domain.Bootstrap) bool {
+	changed := false
+	for index := range data.SavedViews {
+		if data.SavedViews[index].Name == "原始需求" && savedViewFiltersByLabel(data.SavedViews[index], "label_type_requirement") {
+			data.SavedViews[index].Name = "IT需求池"
+			changed = true
+		}
+	}
+	return changed
+}
+
+func savedViewFiltersByLabel(view domain.SavedView, labelID string) bool {
+	var filters []map[string]any
+	if len(view.Filters) == 0 || json.Unmarshal(view.Filters, &filters) != nil {
+		return false
+	}
+	for _, filter := range filters {
+		if field, _ := filter["field"].(string); field != "labels" {
+			continue
+		}
+		if value, _ := filter["value"].(string); value == labelID {
+			return true
+		}
+		values, _ := filter["values"].([]any)
+		for _, rawValue := range values {
+			value, _ := rawValue.(map[string]any)
+			if id, _ := value["value"].(string); id == labelID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func ensureCanonicalSavedViewDisplays(data *domain.Bootstrap) bool {
 	display := json.RawMessage(`{"layout":"list","grouping":"status","groupOrder":"asc","subGrouping":"none","ordering":"priority","completedWindow":"all","orderCompletedByRecency":false,"showSubIssues":true,"showEmptyGroups":false,"nestedSubIssues":false,"properties":["id","status","priority","assignee","labels","project","created"]}`)
 	builtIn := map[string]bool{
@@ -476,6 +679,124 @@ func ensureCanonicalSavedViewDisplays(data *domain.Bootstrap) bool {
 		changed = true
 	}
 	return changed
+}
+
+func ensureCanonicalSavedViewFilters(data *domain.Bootstrap) bool {
+	changed := false
+	for viewIndex := range data.SavedViews {
+		var filters []map[string]any
+		if len(data.SavedViews[viewIndex].Filters) == 0 || json.Unmarshal(data.SavedViews[viewIndex].Filters, &filters) != nil {
+			continue
+		}
+		viewChanged := false
+		for _, filter := range filters {
+			field, _ := filter["field"].(string)
+			rawValues, _ := filter["values"].([]any)
+			values := make([]map[string]string, 0, len(rawValues))
+			for _, rawValue := range rawValues {
+				switch value := rawValue.(type) {
+				case string:
+					values = append(values, savedViewFilterValue(data, field, value))
+					viewChanged = true
+				case map[string]any:
+					id, _ := value["value"].(string)
+					if id == "" {
+						continue
+					}
+					canonical := savedViewFilterValue(data, field, id)
+					for _, key := range []string{"valueLabel", "color"} {
+						if current, ok := value[key].(string); ok && current != "" {
+							canonical[key] = current
+						} else if canonical[key] != "" {
+							viewChanged = true
+						}
+					}
+					values = append(values, canonical)
+				}
+			}
+			if len(values) == 0 {
+				if value, ok := filter["value"].(string); ok && value != "" {
+					values = append(values, savedViewFilterValue(data, field, value))
+					viewChanged = true
+				} else {
+					continue
+				}
+			}
+			filter["values"] = values
+			first := values[0]
+			for key, value := range map[string]string{
+				"id":         firstNonEmptyString(filter["id"], field+"-"+first["value"]),
+				"fieldLabel": firstNonEmptyString(filter["fieldLabel"], savedViewFilterFieldLabel(field)),
+				"value":      firstNonEmptyString(filter["value"], first["value"]),
+				"valueLabel": firstNonEmptyString(filter["valueLabel"], first["valueLabel"]),
+			} {
+				if current, _ := filter[key].(string); current != value {
+					filter[key] = value
+					viewChanged = true
+				}
+			}
+			if _, ok := filter["color"].(string); !ok && first["color"] != "" {
+				filter["color"] = first["color"]
+				viewChanged = true
+			}
+		}
+		if !viewChanged {
+			continue
+		}
+		encoded, err := json.Marshal(filters)
+		if err != nil {
+			continue
+		}
+		data.SavedViews[viewIndex].Filters = encoded
+		changed = true
+	}
+	return changed
+}
+
+func savedViewFilterValue(data *domain.Bootstrap, field, id string) map[string]string {
+	value := map[string]string{"value": id, "valueLabel": id}
+	switch field {
+	case "labels":
+		if labelIndex := slices.IndexFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id }); labelIndex >= 0 {
+			value["valueLabel"] = data.Labels[labelIndex].Name
+			value["color"] = data.Labels[labelIndex].Color
+		}
+	case "project":
+		if projectIndex := slices.IndexFunc(data.Projects, func(project domain.Project) bool { return project.ID == id }); projectIndex >= 0 {
+			value["valueLabel"] = data.Projects[projectIndex].Name
+			value["color"] = data.Projects[projectIndex].Color
+		}
+	case "status":
+		if stateIndex := slices.IndexFunc(data.States, func(state domain.WorkflowState) bool { return state.ID == id }); stateIndex >= 0 {
+			value["valueLabel"] = data.States[stateIndex].Name
+			value["color"] = data.States[stateIndex].Color
+		}
+	case "assignee", "creator", "subscribers":
+		if userIndex := slices.IndexFunc(data.Users, func(user domain.User) bool { return user.ID == id }); userIndex >= 0 {
+			value["valueLabel"] = data.Users[userIndex].DisplayName
+		}
+	case "priority":
+		priorities := map[string]string{"0": "No priority", "1": "Urgent", "2": "High", "3": "Medium", "4": "Low"}
+		if label := priorities[id]; label != "" {
+			value["valueLabel"] = label
+		}
+	}
+	return value
+}
+
+func savedViewFilterFieldLabel(field string) string {
+	labels := map[string]string{"status": "Status", "priority": "Priority", "assignee": "Assignee", "creator": "Creator", "labels": "Labels", "project": "Project", "dates": "Dates", "subscribers": "Subscribers", "relations": "Relations", "links": "Links"}
+	if label := labels[field]; label != "" {
+		return label
+	}
+	return field
+}
+
+func firstNonEmptyString(value any, fallback string) string {
+	if current, ok := value.(string); ok && current != "" {
+		return current
+	}
+	return fallback
 }
 
 func canonicalLabelResourceType(label domain.IssueLabel) string {
@@ -1031,7 +1352,7 @@ func defaultUserSettings(userID string) domain.UserSettings {
 }
 
 func defaultWorkspaceSettings(data *domain.Bootstrap) domain.WorkspaceSettings {
-	return domain.WorkspaceSettings{FiscalMonth: "January", GuestsAllowed: true, SessionDurationDays: 30, InvitePermission: "admins", TeamCreatePermission: "members", LabelPermission: "members", TemplatePermission: "members", APIKeyPermission: "members", FeatureFlags: map[string]bool{"ai": true, "initiatives": true, "documents": true, "customer-requests": true, "releases": true, "pulse": true, "asks": true, "emojis": true}, FeatureSettings: domain.FeatureSettings{InitiativeUpdateSchedule: "none", CustomerRevenueFormat: "annual", CustomerRevenueCurrency: "USD", CustomerManualEdits: true, CustomerStatuses: []domain.FeatureOption{{ID: "active", Name: "Active", Color: "#4cb782"}, {ID: "prospect", Name: "Prospect", Color: "#5e6ad2"}, {ID: "churned", Name: "Churned", Color: "#f2c94c"}, {ID: "lost", Name: "Lost", Color: "#eb5757"}}, CustomerTiers: []domain.FeatureOption{}, CustomerExcludedDomains: []string{}, CustomerGenericDomains: []string{}, PulseWorkspaceSchedule: "daily", AsksEmailAddresses: []string{}}, BillingEmail: data.Viewer.Email, Plan: "free", GoogleAuthEnabled: true, EmailAuthEnabled: true, InitiativePermission: "members", LoopPermission: "members", AgentGuidancePermission: "admins", AICreditReloadThresholdCents: 500, AICreditReloadAmountCents: 2000, UpdatedAt: time.Now().UTC()}
+	return domain.WorkspaceSettings{FiscalMonth: "January", GuestsAllowed: true, SessionDurationDays: 30, InvitePermission: "admins", TeamCreatePermission: "members", LabelPermission: "members", TemplatePermission: "members", APIKeyPermission: "members", FeatureFlags: map[string]bool{"ai": true, "initiatives": true, "documents": true, "customer-requests": true, "releases": true, "pulse": true, "asks": true, "library": true, "sidebar-teams": true, "sidebar-try": true, "recently-deleted": true, "audit-log": true, "emojis": true}, FeatureSettings: domain.FeatureSettings{InitiativeUpdateSchedule: "none", CustomerRevenueFormat: "annual", CustomerRevenueCurrency: "USD", CustomerManualEdits: true, CustomerStatuses: []domain.FeatureOption{{ID: "active", Name: "Active", Color: "#4cb782"}, {ID: "prospect", Name: "Prospect", Color: "#5e6ad2"}, {ID: "churned", Name: "Churned", Color: "#f2c94c"}, {ID: "lost", Name: "Lost", Color: "#eb5757"}}, CustomerTiers: []domain.FeatureOption{}, CustomerExcludedDomains: []string{}, CustomerGenericDomains: []string{}, PulseWorkspaceSchedule: "daily", AsksEmailAddresses: []string{}}, BillingEmail: data.Viewer.Email, Plan: "free", GoogleAuthEnabled: true, EmailAuthEnabled: true, InitiativePermission: "members", LoopPermission: "members", AgentGuidancePermission: "admins", AICreditReloadThresholdCents: 500, AICreditReloadAmountCents: 2000, UpdatedAt: time.Now().UTC()}
 }
 
 func defaultStateID(data *domain.Bootstrap, teamID string) string {
