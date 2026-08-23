@@ -14,3 +14,4 @@
 :root[data-theme="light"] .auth-error{border-color:#efb7ba;background:#fff2f2;color:#b4232b}
 :root[data-theme="light"] .auth-success{border-color:#a8d5b5;background:#effaf2;color:#287a43}
 :root[data-theme="light"] .auth-mail-icon{border-color:var(--border);background:var(--theme-surface-2)}
+.auth-provider{text-decoration:none}.auth-provider b{font-weight:600}

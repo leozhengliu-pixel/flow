@@ -210,12 +210,12 @@ function buildInsightData(rows: MyIssuesRowData[], slice: SavedViewInsightDimens
 function dimensionValues(row: MyIssuesRowData, dimension: SavedViewInsightDimension): InsightValue[] {
   if (dimension === 'labels') return row.labels?.length ? row.labels.map(label => ({ id: label.id, label: label.name, color: label.color })) : [{ id: 'none', label: 'No labels' }]
   if (dimension === 'status') return [{ id: row.state.id, label: row.state.name, color: row.state.color }]
-  if (dimension === 'priority') return [{ id: String(row.priority), label: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][row.priority], color: ['#8a8a92', '#ef4444', '#f59e0b', '#eab308', '#60a5fa'][row.priority] }]
+  if (dimension === 'priority') return [{ id: String(row.priority), label: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][row.priority], color: ['var(--status-neutral)', 'var(--priority-urgent)', 'var(--priority-high)', 'var(--priority-medium)', 'var(--priority-low)'][row.priority] }]
   if (dimension === 'project') return [{ id: row.project?.id ?? 'none', label: row.project?.name ?? 'No project', color: row.project?.color }]
   return [{ id: row.assignee?.id ?? 'none', label: row.assignee?.name ?? 'No assignee', color: row.assignee?.color }]
 }
 
-function insightColor(color: string | undefined, index: number) { return color || ['#73737f', '#5e6ad2', '#2d9d78', '#d6b326', '#4aa3f7', '#ef787c'][index % 6] }
+function insightColor(color: string | undefined, index: number) { return color || ['var(--data-vis-neutral)', 'var(--data-vis-1)', 'var(--data-vis-2)', 'var(--data-vis-3)', 'var(--data-vis-4)', 'var(--data-vis-5)'][index % 6] }
 function dimensionOptions(): [string, string][] { return [['status', 'Status'], ['priority', 'Priority'], ['assignee', 'Assignee'], ['project', 'Project'], ['labels', 'Labels']] }
 function dimensionLabel(value: SavedViewInsightDimension) { return dimensionOptions().find(([id]) => id === value)?.[1] ?? value }
 function insightValueLabel(t: (source: string) => string, dimension: SavedViewInsightDimension | 'none', label: string) { return dimension === 'status' || dimension === 'priority' || dimension === 'none' ? t(label) : label }

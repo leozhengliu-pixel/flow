@@ -134,6 +134,7 @@ import { InitiativeDetailPage } from "@/components/initiatives/initiative-detail
 import { CyclesPage } from "@/components/cycles/cycles-page";
 import { CycleDetailPage } from "@/components/cycles/cycle-detail-page";
 import { PulsePage } from "@/components/pulse/pulse-page";
+import { ReviewsPage } from "@/components/reviews/reviews-page";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   customersPath,
@@ -144,19 +145,27 @@ import {
   initiativePath,
   initiativesPath,
   issuePath,
+  issueTemplateEditPath,
+  integrationSettingsPath,
   membersPath,
   myIssuesPath,
   newReleasePipelinePath,
+  newIssueTemplatePath,
+  newProjectTemplatePath,
   newTeamPath,
   parseAppRoute,
   projectPath,
+  projectTemplateEditPath,
   projectsNewViewPath,
   projectsPath,
   projectsSavedViewPath,
   projectsSavedViewEditPath,
   pulsePath,
-  releasesPath,
-  routeEntityMatches,
+  releasePipelinesPath,
+  releasePath,
+  releasePipelineSettingsPath,
+  reviewPath,
+  reviewsPath,
   searchPath,
   routeBelongsToWorkspace,
   teamCyclesPath,
@@ -171,6 +180,7 @@ import {
   teamsPath,
   teamViewsNewPath,
   teamViewsPath,
+  upcomingCyclePath,
   workspaceIssuesPath,
   workspaceOnboardingPath,
   workspaceSavedViewPath,
@@ -189,6 +199,7 @@ import { WorkspaceDirectoryPage } from "@/components/workspace-directory/workspa
 import { TeamCreatePage } from "@/components/workspace-directory/team-create-page";
 import { SettingsPage } from "@/components/settings/settings-page";
 import { AuthPage } from "@/components/auth/auth-page";
+import { OAuthAuthorizePage } from "@/components/auth/oauth-authorize-page";
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { useDesktopNotifications } from "@/hooks/use-desktop-notifications";
 import { WorkspaceSearchPage } from "@/components/search/workspace-search-page";
@@ -256,7 +267,14 @@ function App() {
     if (!data) return;
     applyTheme(data.userSettings[data.viewer.id] ?? {});
   }, [data]);
+  const oauthPath = location.pathname === "/oauth/authorize";
   const authPath = ["/login", "/signup", "/verify-email", "/forgot-password", "/reset-password"].some(path => location.pathname === path) || location.pathname.startsWith("/invite/");
+  useEffect(() => {
+    if (authReady && !session && oauthPath) {
+      const returnTo = `${location.pathname}${location.search}`;
+      navigateTo(`/login?returnTo=${encodeURIComponent(returnTo)}`, { replace: true });
+    }
+  }, [authReady, location.pathname, location.search, navigateTo, oauthPath, session]);
   useEffect(() => {
     if (authReady && session && authPath && !location.pathname.startsWith("/invite/")) {
       navigateTo("/", { replace: true });
@@ -264,6 +282,7 @@ function App() {
   }, [authPath, authReady, location.pathname, navigateTo, session]);
   useEffect(() => {
     if (!account) return;
+    if (oauthPath) return;
     if (
       account.workspaces.length === 0 &&
       route.kind !== "workspace-onboarding"
@@ -303,7 +322,7 @@ function App() {
     fetchBootstrap(requestedWorkspaceKey)
       .then(setData)
       .catch(() => setError(true));
-  }, [account, navigateTo, requestedWorkspaceKey, route.kind]);
+  }, [account, navigateTo, oauthPath, requestedWorkspaceKey, route.kind]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return;
@@ -355,6 +374,7 @@ function App() {
     addEventListener("keydown", key);
     return () => removeEventListener("keydown", key);
   }, [data, navigateTo]);
+  useEffect(()=>{const params=new URLSearchParams(location.search);if(location.pathname.includes('/issues/')&&params.get('create')==='1'&&params.get('template'))setCreateOpen(true)},[location.pathname,location.search])
   const selectedIssue =
     route.kind === "issue"
       ? data?.issues.find(
@@ -385,20 +405,12 @@ function App() {
           (initiative) => initiative.slugId === route.initiativeSlugId,
         ) || null
       : null;
-  const selectedCycle =
-    route.kind === "cycle"
-      ? data?.cycles.find((cycle) => cycle.id === route.cycleId) || null
+  const selectedCycle = route.kind === "cycle"
+    ? data?.cycles.find(cycle=>String(cycle.number)===route.cycleId)||null
+    : route.kind==="cycle-upcoming"
+      ? [...(data?.cycles??[])].filter(cycle=>cycle.status==='upcoming'&&data?.teams.find(team=>team.key.toLowerCase()===route.teamKey.toLowerCase())?.id===cycle.teamId).sort((a,b)=>a.startsAt.localeCompare(b.startsAt))[0]??null
       : null;
-  const selectedRelease =
-    route.kind === "releases" && route.releaseSlugId
-      ? data?.releases.find(release => routeEntityMatches(route.releaseSlugId!, release)) || null
-      : null;
-  const selectedReleasePipeline =
-    route.kind === "releases" && route.pipelineSlugId
-      ? data?.releasePipelines.find(pipeline => routeEntityMatches(route.pipelineSlugId!, pipeline)) || null
-      : selectedRelease
-        ? data?.releasePipelines.find(pipeline => pipeline.id === selectedRelease.pipelineId) || null
-        : null;
+  const selectedReview = route.kind === "review" ? data?.reviews.find(item=>item.slugId===route.reviewSlug)||null:null;
   const availableSavedViews = data?.savedViews ?? [];
   const issueSavedViews = availableSavedViews.filter(
     (view) => view.resource !== "projects" && view.resource !== "initiativeProjects",
@@ -2378,6 +2390,8 @@ function App() {
       location.pathname !== myIssuesPath(workspace, route.view)
     )
       navigateTo(myIssuesPath(workspace, route.view), { replace: true });
+    if(route.kind==="reviews"&&location.pathname!==reviewsPath(workspace,route.view))navigateTo(reviewsPath(workspace,route.view),{replace:true});
+    if(route.kind==="review"&&selectedReview){const canonical=reviewPath(workspace,selectedReview,route.tab);if(location.pathname!==canonical)navigateTo(canonical,{replace:true})}
     if (
       route.kind === "workspace-issues" &&
       location.pathname !== workspaceIssuesPath(workspace, route.view)
@@ -2413,11 +2427,12 @@ function App() {
     }
     if (
       route.kind === "team-cycles" &&
-      location.pathname !== teamCyclesPath(workspace, route.teamKey, route.view)
+      location.pathname !== teamCyclesPath(workspace, route.teamKey)
     )
-      navigateTo(teamCyclesPath(workspace, route.teamKey, route.view), {
+      navigateTo(teamCyclesPath(workspace, route.teamKey), {
         replace: true,
       });
+    if(route.kind==="cycle-upcoming"&&location.pathname!==upcomingCyclePath(workspace,route.teamKey))navigateTo(upcomingCyclePath(workspace,route.teamKey),{replace:true});
     if (
       route.kind === "workspace-saved-view" &&
       selectedSavedView &&
@@ -2583,6 +2598,7 @@ function App() {
     selectedCustomer,
     selectedProjectSavedView,
     selectedSavedView,
+    selectedReview,
   ]);
   if (!authReady)
     return <div className="auth-page"><div className="auth-brand"><span className="auth-brand-mark"/>Flow</div></div>;
@@ -2615,6 +2631,8 @@ function App() {
         </main>
       </div>
     );
+  if (oauthPath)
+    return <OAuthAuthorizePage account={account}/>;
   if (route.kind === "workspace-onboarding" || account.workspaces.length === 0)
     return (
       <WorkspaceOnboarding
@@ -2646,11 +2664,25 @@ function App() {
         teamKey={route.teamKey}
         teamSection={route.teamSection}
         releasePipelineMode={route.releasePipelineMode}
-        onBack={() => navigateTo(route.releasePipelineMode === "new" ? releasesPath(data.workspace.urlKey) : myIssuesPath(data.workspace.urlKey))}
+        releasePipelineSlug={route.releasePipelineSlug}
+        integrationProvider={route.integrationProvider}
+        issueTemplateMode={route.issueTemplateMode}
+        issueTemplateId={route.issueTemplateId}
+        projectTemplateMode={route.projectTemplateMode}
+        projectTemplateId={route.projectTemplateId}
+        onBack={() => navigateTo(route.releasePipelineMode ? releasePipelinesPath(data.workspace.urlKey) : myIssuesPath(data.workspace.urlKey))}
         onNavigate={(page, teamKey, teamSection) =>
           navigateTo(settingsPath(data.workspace.urlKey, page, teamKey, teamSection))
         }
         onCreateReleasePipeline={() => navigateTo(newReleasePipelinePath(data.workspace.urlKey))}
+        onOpenReleasePipeline={pipeline => navigateTo(releasePipelineSettingsPath(data.workspace.urlKey, pipeline.slugId || pipeline.id))}
+        onOpenIntegration={provider=>navigateTo(integrationSettingsPath(data.workspace.urlKey,provider))}
+        onCreateIssueTemplate={form=>navigateTo(newIssueTemplatePath(data.workspace.urlKey,form))}
+        onOpenIssueTemplate={template=>navigateTo(issueTemplateEditPath(data.workspace.urlKey,template.id))}
+        onDuplicateIssueTemplate={template=>navigateTo(`${newIssueTemplatePath(data.workspace.urlKey,template.templateType==='customForm')}?duplicate=${encodeURIComponent(template.id)}`)}
+        onCreateProjectTemplate={()=>navigateTo(newProjectTemplatePath(data.workspace.urlKey))}
+        onOpenProjectTemplate={template=>navigateTo(projectTemplateEditPath(data.workspace.urlKey,template.id))}
+        onDuplicateProjectTemplate={template=>navigateTo(`${newProjectTemplatePath(data.workspace.urlKey)}?duplicate=${encodeURIComponent(template.id)}`)}
         onCreateTeam={() => navigateTo(newTeamPath(data.workspace.urlKey))}
         onWorkspaceUpdate={changeWorkspace}
         onWorkspaceDelete={removeWorkspace}
@@ -2722,7 +2754,9 @@ function App() {
       return;
     }
     if (result.type === "release") {
-      navigateTo(`${releasesPath(data.workspace.urlKey)}?release=${encodeURIComponent(result.id)}`);
+      const release = data.releases.find(item => item.id === result.id);
+      const pipeline = release ? data.releasePipelines.find(item => item.id === release.pipelineId) : undefined;
+      if (release && pipeline) navigateTo(releasePath(data.workspace.urlKey, pipeline.slugId, release.slugId));
       return;
     }
     if (result.type === "view") {
@@ -2750,7 +2784,7 @@ function App() {
   };
   const cycleTeam =
     "teamKey" in route &&
-    (route.kind === "team-cycles" || route.kind === "cycle")
+    (route.kind === "team-cycles" || route.kind === "cycle" || route.kind==="cycle-upcoming")
       ? data.teams.find(
           (team) => team.key.toLowerCase() === route.teamKey.toLowerCase(),
         )
@@ -2865,20 +2899,18 @@ function App() {
           onOpenResult={openSearchResult}
         />
       )}
+      {page==="reviews"&&(route.kind==="reviews"||route.kind==="review")&&<ReviewsPage data={data} view={route.kind==="reviews"?route.view:"for-you"} review={route.kind==="review"?selectedReview??undefined:undefined} tab={route.kind==="review"?route.tab:undefined} onNavigate={navigateTo} onReload={async()=>setData(await fetchBootstrap(data.workspace.urlKey))} onOpenSidebar={()=>setMobileSidebarOpen(true)}/>}
       {(page === "drafts" || page === "releases" || page === "asks" || page === "library") && (
         <WorkspaceOperationsPage
           data={data}
-          view={route.kind === "workspace-library" ? route.view : route.kind as "drafts"|"releases"|"asks"}
-          initialPipelineId={selectedReleasePipeline?.id}
-          initialPipelineTab={route.kind === "releases" ? route.pipelineTab : undefined}
-          initialReleaseId={selectedRelease?.id ?? (route.kind === "releases" ? new URLSearchParams(location.search).get("release") ?? undefined : undefined)}
-          initialReleaseTab={route.kind === "releases" ? route.releaseTab : undefined}
+          view={route.kind === "workspace-library" ? route.view : route.kind === "release-pipeline" || route.kind === "release" ? "releases" : route.kind as "drafts"|"releases"|"asks"}
+          pipelineSlug={route.kind === "release-pipeline" || route.kind === "release" ? route.pipelineSlug : undefined}
+          releaseSlug={route.kind === "release" ? route.releaseSlug : undefined}
+          pipelineTab={route.kind === "release-pipeline" ? route.tab : undefined}
+          releaseTab={route.kind === "release" ? route.tab : undefined}
           onOpenSidebar={() => setMobileSidebarOpen(true)}
           onReload={async () => setData(await fetchBootstrap(data.workspace.urlKey))}
           onNavigate={path => navigateTo(path)}
-          onOpenIssue={openIssue}
-          onUpdateIssue={updateIssueFromPage}
-          onDeleteIssues={deleteIssuesFromPage}
           onResumeDraft={(draft: Draft) => {
             setCreateDraftId(draft.id);
             setCreateOpen(true);
@@ -2998,22 +3030,17 @@ function App() {
             }
           }
           team={cycleTeam}
-          view={route.view}
-          onViewChange={(view) =>
-            navigateTo(
-              teamCyclesPath(data.workspace.urlKey, cycleTeam.key, view),
-            )
-          }
           onOpen={openCycle}
           onUpdateCycle={(cycle, input) => changeCycle(cycle.id, input)}
           onStartCycle={startCycle}
           onCompleteCycle={finishCycle}
           onUpdateSettings={(input) => changeCycleSettings(cycleTeam.id, input)}
+          onReload={refreshActivity}
           onOpenSidebar={() => setMobileSidebarOpen(true)}
         />
       )}
       {page === "cycle-detail" &&
-        route.kind === "cycle" &&
+        (route.kind === "cycle"||route.kind==="cycle-upcoming") &&
         selectedCycle &&
         cycleTeam && (
           <CycleDetailPage
@@ -3030,6 +3057,9 @@ function App() {
             onUpdateIssue={updateIssueById}
             renderIssuePreview={renderIssuePreview}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
+            onCreateIssue={()=>setCreateOpen(true)}
+            onReload={refreshActivity}
+            onNavigate={navigateTo}
           />
         )}
       {page === "initiatives" && route.kind === "initiatives" && (
@@ -3639,6 +3669,7 @@ function App() {
             <ProjectsPage
               key={`${route.kind}:${selectedProjectSavedView?.id ?? "all"}:${route.kind === "projects-saved-view" || route.kind === "team-projects-saved-view" ? (route.editing ? "edit" : "view") : "base"}`}
               createOnMount={new URLSearchParams(location.search).get("create") === "1"}
+              initialTemplateId={new URLSearchParams(location.search).get("template")??undefined}
               projects={data.projects}
               projectUpdates={data.projectUpdates}
               projectStatuses={data.projectStatuses}
@@ -3806,6 +3837,7 @@ function App() {
             onClose={() =>
               navigateTo(issueReturnPath(location.state, data.workspace.urlKey))
             }
+            onNavigateRoot={() => navigateTo(myIssuesPath(data.workspace.urlKey))}
             onExpand={() => {}}
             onNavigateIssue={openIssue}
             onUpdate={updateSelected}
@@ -3896,6 +3928,7 @@ function App() {
         initialProjectId={createProjectId}
         initialProjectMilestoneId={createProjectMilestoneId}
         initialStateId={createStateId}
+        initialTemplateId={new URLSearchParams(location.search).get('template')??undefined}
         onOpenChange={(open) => {
           setCreateOpen(open);
           if (!open) {
@@ -3943,16 +3976,17 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
   if (route.kind === "search") return "search";
   if (route.kind === "pulse") return "pulse";
   if (route.kind === "my-issues") return "my-issues";
+  if (route.kind === "reviews" || route.kind === "review") return "reviews";
   if (route.kind === "team-issues") return "team-issues";
   if (route.kind === "team-cycles") return "cycles";
-  if (route.kind === "cycle") return "cycle-detail";
+  if (route.kind === "cycle"||route.kind==="cycle-upcoming") return "cycle-detail";
   if (route.kind === "workspace-issues") return "workspace-issues";
   if (route.kind === "workspace-members") return "members";
   if (route.kind === "workspace-customers") return "customers";
   if (route.kind === "customer") return "customer-detail";
   if (route.kind === "document") return "document-detail";
   if (route.kind === "drafts") return "drafts";
-  if (route.kind === "releases") return "releases";
+  if (route.kind === "releases" || route.kind === "release-pipeline" || route.kind === "release") return "releases";
   if (route.kind === "asks") return "asks";
   if (route.kind === "workspace-library") return "library";
   if (route.kind === "workspace-teams") return "teams";

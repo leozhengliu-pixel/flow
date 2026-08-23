@@ -90,7 +90,7 @@ function SummaryView({ activeTab, items, onTabChange, onItem }: { activeTab: MyI
 }
 
 function SummaryItemIcon({ tab, item }: { tab: MyIssuesSummaryTab; item: MyIssuesSummaryItem }) {
-  if (tab === 'labels') return <i className={styles.labelDot} style={{ backgroundColor: item.color ?? 'lch(63.304% 1.425 272)' }}/>
+  if (tab === 'labels') return <i className={styles.labelDot} style={{ backgroundColor: item.color ?? 'var(--theme-text-secondary)' }}/>
   if (tab === 'priority') return <span className={styles.summaryIcon}><PriorityIcon priority={Number(item.id)} size={16}/></span>
   return <Box className={styles.summaryIcon} size={16}/>
 }

@@ -1,0 +1,88 @@
+{
+  "items": [
+    {
+      "disabled": null,
+      "rect": {
+        "height": 31.986000061035156,
+        "width": 228.89987182617188
+      },
+      "text": "编辑…"
+    },
+    {
+      "disabled": null,
+      "rect": {
+        "height": 31.98601531982422,
+        "width": 228.89987182617188
+      },
+      "text": "阶段"
+    },
+    {
+      "disabled": null,
+      "rect": {
+        "height": 31.985992431640625,
+        "width": 228.89987182617188
+      },
+      "text": "添加事项到发布版本…⌥ R"
+    },
+    {
+      "disabled": null,
+      "rect": {
+        "height": 31.986007690429688,
+        "width": 228.89987182617188
+      },
+      "text": "添加文档…"
+    },
+    {
+      "disabled": null,
+      "rect": {
+        "height": 31.986007690429688,
+        "width": 228.89987182617188
+      },
+      "text": "添加链接…Ctrl L"
+    },
+    {
+      "disabled": null,
+      "rect": {
+        "height": 31.985992431640625,
+        "width": 228.89987182617188
+      },
+      "text": "收藏⌥ F"
+    },
+    {
+      "disabled": null,
+      "rect": {
+        "height": 31.98602294921875,
+        "width": 228.89987182617188
+      },
+      "text": "复制 URL⌘ ⇧ ,"
+    },
+    {
+      "disabled": null,
+      "rect": {
+        "height": 31.985992431640625,
+        "width": 228.89987182617188
+      },
+      "text": "删除"
+    }
+  ],
+  "rect": {
+    "height": 340.8508605957031,
+    "width": 229.8994140625,
+    "x": 500.5,
+    "y": 48.5
+  },
+  "search": [
+    {
+      "aria": "筛选…",
+      "placeholder": "筛选…"
+    }
+  ],
+  "separators": 3,
+  "style": {
+    "border": "0.5px solid lch(86.5 0 282)",
+    "borderRadius": "12px",
+    "boxShadow": "lch(0 0 0 / 0.02) 0px 6px 18px 0px, lch(0 0 0 / 0.04) 0px 3px 9px 0px, lch(0 0 0 / 0.04) 0px 1px 1px 0px",
+    "padding": "6px 0px",
+    "zIndex": "600"
+  }
+}
