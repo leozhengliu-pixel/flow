@@ -1,13 +1,14 @@
-import { type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import * as ContextMenu from '@radix-ui/react-context-menu'
+import * as Popover from '@radix-ui/react-popover'
 import { Check, ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import type { MyIssuesProperty } from './my-issues-surface'
 import { CalendarIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { PropertyMenu, type PropertyMenuKind } from '@/components/property/property-menu'
+import { LabelHoverPreview } from '@/components/property/label-hover-preview'
 import { DueDatePicker } from '@/components/issue/due-date-picker'
 import styles from './my-issues-list.module.css'
 import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
-import { useI18n } from '@/i18n/i18n'
 import type { IssueSLA } from '@/types/flow'
 
 export type MyIssuesStateType = 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled'
@@ -30,7 +31,7 @@ export interface MyIssuesRowData {
   href?: string
   priority: 0 | 1 | 2 | 3 | 4
   state: { id: string; name: string; type: MyIssuesStateType; color: string }
-  labels?: { id: string; name: string; color: string }[]
+  labels?: { id: string; name: string; color: string; description?:string; issueCount?:number; scope?:string }[]
   project?: { id: string; name: string; color: string }
   assignee?: { id: string; name: string; avatarUrl?: string; color?: string }
   estimate?: number
@@ -39,6 +40,10 @@ export interface MyIssuesRowData {
   createdAt: string
   updatedAt: string
   parentId?: string
+  parent?: { id: string; identifier: string; title: string }
+  ancestors?: { id: string; identifier: string; title: string }[]
+  subIssueProgress?: { completed: number; total: number }
+  subIssues?: MyIssuesRowData[]
   sortOrder?: number
 }
 
@@ -65,8 +70,7 @@ export interface MyIssuesListProps {
   createIssueLabel?: string
 }
 
-export function MyIssuesList({ groups, loading = false, error, selectedIds = EMPTY_SET, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues = false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue' }: MyIssuesListProps) {
-  const { t } = useI18n()
+export function MyIssuesList({ groups, loading = false, error, selectedIds = EMPTY_SET, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues=false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue' }: MyIssuesListProps) {
   if (loading) return <MyIssuesListSkeleton/>
   if (error) return <MyIssuesListError message={error} onRetry={onClearError}/>
   if (!groups.some(group => group.issues.length)) return <MyIssuesListEmpty/>
@@ -77,17 +81,17 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
       return <section className={styles.group} key={group.id} aria-labelledby={`my-issues-group-${group.id}`}>
         <header className={styles.groupHeader}>
           <button className={styles.collapseButton} aria-label={collapsed ? 'Expand group' : 'Collapse group'} aria-expanded={!collapsed} onClick={() => onGroupCollapsedChange?.(group.id, !collapsed)}><ChevronDown size={12}/></button>
-          <GroupStateIcon type={group.stateType}/><span data-i18n-ignore id={`my-issues-group-${group.id}`} className={styles.groupName}>{group.stateType ? t(group.label) : group.label}</span><span className={styles.groupCount}>{group.issues.length}</span>
+          <GroupStateIcon type={group.stateType}/><span data-i18n-ignore id={`my-issues-group-${group.id}`} className={styles.groupName}>{group.label}</span><span className={styles.groupCount}>{group.issues.length}</span>
           {onCreateIssue && <button className={styles.createButton} aria-label={createIssueLabel} onClick={() => onCreateIssue(group)}><Plus size={16}/></button>}
         </header>
-        {!collapsed && <div>{group.issues.map(issue => <MyIssuesRow key={issue.id} issue={issue} selected={selectedIds.has(issue.id)} displayProperties={displayProperties} nested={nestedSubIssues && Boolean(issue.parentId)} propertyOptions={propertyOptions} mutationError={mutationErrors.get(issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>)}</div>}
+        {!collapsed && <div>{group.issues.map(issue => <MyIssuesRow key={issue.id} issue={issue} selected={selectedIds.has(issue.id)} displayProperties={displayProperties} nestedDepth={nestedSubIssues?(issue.ancestors?.length??(issue.parentId?1:0)):0} propertyOptions={propertyOptions} mutationError={mutationErrors.get(issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>)}</div>}
       </section>
     })}
   </div>
 }
 
-export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAULT_PROPERTIES, nested = false, propertyOptions = EMPTY_OPTIONS, mutationError, onContextAction, onOpen, onPropertyChange, onRetryMutation, onSelect }: {
-  issue: MyIssuesRowData; selected?: boolean; displayProperties?: ReadonlySet<MyIssuesProperty>; nested?: boolean; propertyOptions?: MyIssuesRowPropertyOptions; mutationError?: string
+export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAULT_PROPERTIES, nestedDepth=0, propertyOptions = EMPTY_OPTIONS, mutationError, onContextAction, onOpen, onPropertyChange, onRetryMutation, onSelect }: {
+  issue: MyIssuesRowData; selected?: boolean; displayProperties?: ReadonlySet<MyIssuesProperty>; nestedDepth?:number; propertyOptions?: MyIssuesRowPropertyOptions; mutationError?: string
   onContextAction?: (issue: MyIssuesRowData, action: MyIssuesContextAction) => void; onOpen?: (issue: MyIssuesRowData) => void
   onPropertyChange?: (issue: MyIssuesRowData, property: MyIssuesEditableProperty, value: string | string[]) => void | Promise<void>; onRetryMutation?: (issue: MyIssuesRowData) => void
   onSelect?: (issueId: string, selected: boolean, range: boolean) => void
@@ -102,7 +106,7 @@ export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAU
   const change = (property: MyIssuesEditableProperty, value: string | string[]) => onPropertyChange?.(issue, property, value)
   return <ContextMenu.Root>
     <ContextMenu.Trigger asChild>
-      <a className={styles.row} style={{ '--row-columns': columns } as CSSProperties} data-selected={selected} data-nested={nested} href={issue.href} aria-label={rowAriaLabel(issue)} onClick={click} onKeyDown={keydown}>
+      <a className={styles.row} style={{'--row-columns':columns,'--nested-depth':nestedDepth} as CSSProperties} data-selected={selected} data-nested={nestedDepth>0} href={issue.href} aria-label={rowAriaLabel(issue)} onClick={click} onKeyDown={keydown}>
         <span aria-hidden="true"/><IssueCheckbox checked={selected} onChange={(checked, range) => onSelect?.(issue.id, checked, range)}/>
         {displayProperties.has('priority') && <RowCommandPicker
           propertyLabel="Priority"
@@ -126,8 +130,14 @@ export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAU
         />}
         <div className={styles.titleProperties}>
           <span className={styles.title} data-i18n-ignore>{issue.title}</span>
+          {!nestedDepth&&issue.parent&&<IssueParentTrail ancestors={issue.ancestors??[issue.parent]}/>}
+          {issue.subIssueProgress&&issue.subIssues?.length?<SubIssueProgress
+            progress={issue.subIssueProgress}
+            subIssues={issue.subIssues}
+            onOpenSubIssue={onOpen}
+          />:null}
           <span className={styles.badges}>
-            {displayProperties.has('labels') && issue.labels?.length ? <RowCommandPicker propertyLabel="Labels" kind="labels" multi label={`Change labels. ${issue.labels.map(label => label.name).join(', ')} selected`} searchLabel="Change or add labels..." selectedIds={issue.labels.map(label => label.id)} options={propertyOptions.labels} onSelect={value => change('labels', toggleId(issue.labels?.map(label => label.id) ?? [], value))} trigger={<span className={styles.badgeGroup}>{issue.labels.map(label => <PropertyBadge key={label.id} color={label.color}>{label.name}</PropertyBadge>)}</span>}/> : null}
+            {displayProperties.has('labels') && issue.labels?.length ? <RowCommandPicker propertyLabel="Labels" kind="labels" multi label={`Change labels. ${issue.labels.map(label => label.name).join(', ')} selected`} searchLabel="Change or add labels..." selectedIds={issue.labels.map(label => label.id)} options={propertyOptions.labels} onSelect={value => change('labels', toggleId(issue.labels?.map(label => label.id) ?? [], value))} triggerClassName={styles.labelsTrigger} trigger={<span className={styles.badgeGroup}>{issue.labels.map(label => <PropertyBadge key={label.id} label={label}/>)}</span>}/> : null}
             {displayProperties.has('project') && issue.project ? <RowCommandPicker propertyLabel="Project" kind="project" label={`Change project. Current project is ${issue.project.name}`} searchLabel="Set project..." selectedIds={[issue.project.id]} options={propertyOptions.project} onSelect={value => change('project', value)} trigger={<PropertyBadge color={issue.project.color}>{issue.project.name}</PropertyBadge>}/> : null}
             {displayProperties.has('dueDate') && issue.dueDate ? <DueDatePicker value={issue.dueDate} onChange={value => change('dueDate', value)} ariaLabel={`Change due date. Current due date is ${formatDueDate(issue.dueDate)}`} triggerClassName={styles.propertyTrigger} trigger={<time className={styles.dueDate} dateTime={issue.dueDate}><CalendarIcon size={13}/>{formatDueDate(issue.dueDate)}</time>}/> : null}
             {issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
@@ -140,13 +150,21 @@ export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAU
         <span aria-hidden="true"/>
       </a>
     </ContextMenu.Trigger>
-    <ContextMenu.Portal><IssueContextMenu issue={issue} options={propertyOptions} onPropertyChange={change} onAction={action => onContextAction?.(issue, action)}/></ContextMenu.Portal>
+    <ContextMenu.Portal><IssueContextMenu editable={Boolean(onPropertyChange)} issue={issue} options={propertyOptions} onPropertyChange={change} onAction={onContextAction?action=>onContextAction(issue,action):undefined}/></ContextMenu.Portal>
   </ContextMenu.Root>
 }
 
-function RowCommandPicker({ propertyLabel, label, multi = false, onSelect, options, searchLabel, searchShortcut, selectedIds, trigger, kind = 'standard' }: { propertyLabel: string; label: string; multi?: boolean; onSelect: (id: string) => void | Promise<void>; options: MyIssuesContextOption[]; searchLabel: string; searchShortcut?: string; selectedIds: string[]; trigger: ReactNode; kind?: PropertyMenuKind }) {
+export function IssueParentTrail({ancestors,board=false}:{ancestors:NonNullable<MyIssuesRowData['ancestors']>;board?:boolean}){if(!ancestors.length)return null;const shown=board?ancestors:ancestors.slice(0,1);return <span className={`${styles.parentTrail}${board?` ${styles.boardParentTrail}`:''}`} data-i18n-ignore>{shown.map(parent=><span key={parent.id}><b>›</b>{parent.title}</span>)}</span>}
+
+export function SubIssueProgress({progress,subIssues,onOpenSubIssue}:{progress:NonNullable<MyIssuesRowData['subIssueProgress']>;subIssues:MyIssuesRowData[];onOpenSubIssue?:(issue:MyIssuesRowData)=>void}){
+  const ratio=progress.total?progress.completed/progress.total:0,[open,setOpen]=useState(false),closeTimer=useRef<number|undefined>(undefined)
+  const enter=()=>{if(closeTimer.current)window.clearTimeout(closeTimer.current);setOpen(true)},leave=()=>{closeTimer.current=window.setTimeout(()=>setOpen(false),100)}
+  return <Popover.Root open={open} onOpenChange={setOpen}><Popover.Trigger asChild><button type="button" className={styles.subIssueProgress} aria-label={`${progress.completed} of ${progress.total} sub-issues completed`} onPointerEnter={enter} onPointerLeave={leave} onFocus={enter} onBlur={leave} onClick={event=>{event.preventDefault();event.stopPropagation();setOpen(value=>!value)}}><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.25"/><circle className={styles.subIssueProgressValue} cx="10" cy="10" r="7.25" pathLength="100" style={{'--sub-progress':`${ratio*100}`} as CSSProperties}/></svg><span>{progress.completed}/{progress.total}</span></button></Popover.Trigger><Popover.Portal><Popover.Content className={styles.subIssuePopover} side="top" align="start" sideOffset={4} collisionPadding={8} onOpenAutoFocus={event=>event.preventDefault()} onCloseAutoFocus={event=>event.preventDefault()} onPointerEnter={enter} onPointerLeave={leave}>{subIssues.map(item=><button type="button" className={styles.subIssuePopoverRow} key={item.id} onClick={event=>{event.preventDefault();event.stopPropagation();setOpen(false);onOpenSubIssue?.(item)}}><StatusIcon state={{id:item.state.id,name:item.state.name,type:item.state.type,color:item.state.color}} size={16}/><span data-i18n-ignore>{item.title}</span></button>)}</Popover.Content></Popover.Portal></Popover.Root>
+}
+
+export function RowCommandPicker({ propertyLabel, label, multi = false, onSelect, options, searchLabel, searchShortcut, selectedIds, trigger, triggerClassName, kind = 'standard' }: { propertyLabel: string; label: string; multi?: boolean; onSelect: (id: string) => void | Promise<void>; options: MyIssuesContextOption[]; searchLabel: string; searchShortcut?: string; selectedIds: string[]; trigger: ReactNode; triggerClassName?: string; kind?: PropertyMenuKind }) {
   const commandOptions = options.map((option, index) => ({ ...option, icon: <OptionIcon option={option}/>, shortcut: option.kind === 'priority' ? option.id : option.kind === 'status' ? String(index + 1) : option.shortcut }))
-  return <PropertyMenu label={propertyLabel} value={options.find(option => selectedIds.includes(option.id))?.label} multiple={multi} selectedId={selectedIds[0]} selectedIds={selectedIds} options={commandOptions} kind={kind} searchPlaceholder={searchLabel} searchShortcut={searchShortcut} ariaLabel={label} triggerClassName={styles.propertyTrigger} trigger={trigger} onChange={onSelect}/>
+  return <PropertyMenu label={propertyLabel} value={options.find(option => selectedIds.includes(option.id))?.label} multiple={multi} selectedId={selectedIds[0]} selectedIds={selectedIds} options={commandOptions} kind={kind} searchPlaceholder={searchLabel} searchShortcut={searchShortcut} ariaLabel={label} triggerClassName={triggerClassName ?? styles.propertyTrigger} trigger={trigger} onChange={onSelect}/>
 }
 
 function IssueCheckbox({ checked, onChange }: { checked: boolean; onChange: (checked: boolean, range: boolean) => void }) {
@@ -154,20 +172,15 @@ function IssueCheckbox({ checked, onChange }: { checked: boolean; onChange: (che
   return <span className={styles.checkboxCell}><button type="button" className={styles.checkbox} role="checkbox" aria-label="Select issue" aria-checked={checked} data-checked={checked} onClick={click}>{checked && <Check size={10}/>}</button></span>
 }
 
-function IssueContextMenu({ issue, options, onPropertyChange, onAction }: { issue: MyIssuesRowData; options: MyIssuesRowPropertyOptions; onPropertyChange: (property: MyIssuesEditableProperty, value: string | string[]) => void | Promise<void>; onAction: (action: MyIssuesContextAction) => void }) {
+function IssueContextMenu({ editable, issue, options, onPropertyChange, onAction }: { editable:boolean;issue:MyIssuesRowData;options: MyIssuesRowPropertyOptions; onPropertyChange: (property: MyIssuesEditableProperty, value: string | string[]) => void | Promise<void>; onAction?: (action: MyIssuesContextAction) => void }) {
   return <ContextMenu.Content className={styles.contextMenu} collisionPadding={10}>
-    <ContextPropertySub label="Status" shortcut="S" options={options.status} selectedIds={[issue.state.id]} onSelect={id => onPropertyChange('status', id)}/>
+    {editable&&<><ContextPropertySub label="Status" shortcut="S" options={options.status} selectedIds={[issue.state.id]} onSelect={id => onPropertyChange('status', id)}/>
     <ContextPropertySub label="Priority" shortcut="P" options={options.priority} selectedIds={[String(issue.priority)]} onSelect={id => onPropertyChange('priority', id)}/>
     <ContextPropertySub label="Assignee" shortcut="A" options={options.assignee} selectedIds={[issue.assignee?.id ?? '']} onSelect={id => onPropertyChange('assignee', id)}/>
     <ContextPropertySub label="Due date" shortcut="⇧ D" options={options.dueDate} selectedIds={[issue.dueDate ?? '']} onSelect={id => onPropertyChange('dueDate', id)}/>
     <ContextPropertySub multi label="Labels" shortcut="L" options={options.labels} selectedIds={issue.labels?.map(label => label.id) ?? []} onSelect={id => onPropertyChange('labels', toggleId(issue.labels?.map(label => label.id) ?? [], id))}/>
-    <ContextPropertySub label="Project" shortcut="⇧ P" options={options.project} selectedIds={[issue.project?.id ?? '']} onSelect={id => onPropertyChange('project', id)}/>
-    <MenuItem action="moreProperties" label="More properties" onAction={onAction}/><ContextMenu.Separator className={styles.menuSeparator}/>
-    <MenuItem action="createRelated" label="Create related" onAction={onAction}/><MenuItem action="markAs" label="Mark as" onAction={onAction}/><ContextMenu.Separator className={styles.menuSeparator}/>
-    <MenuItem action="copy" label="Copy" onAction={onAction} submenu={false}/><MenuItem action="convertTo" label="Convert to" onAction={onAction}/><MenuItem action="move" label="Move" onAction={onAction}/><MenuItem action="openIn" label="Open in" onAction={onAction}/><ContextMenu.Separator className={styles.menuSeparator}/>
-    <MenuItem action="runLoop" label={`Run loop on ${issue.identifier}...`} onAction={onAction} submenu={false}/><ContextMenu.Separator className={styles.menuSeparator}/>
-    <MenuItem action="favorite" label="Favorite" shortcut="⌥ F" onAction={onAction} submenu={false}/><MenuItem action="remind" label="Remind me" shortcut="⇧ H" onAction={onAction}/><ContextMenu.Separator className={styles.menuSeparator}/>
-    <MenuItem action="delete" label="Delete" shortcut="⌘ ⌫" danger onAction={onAction} submenu={false}/>
+    <ContextPropertySub label="Project" shortcut="⇧ P" options={options.project} selectedIds={[issue.project?.id ?? '']} onSelect={id => onPropertyChange('project', id)}/></>}
+    {onAction&&<>{editable&&<ContextMenu.Separator className={styles.menuSeparator}/>}<MenuItem action="copy" label="Copy" onAction={onAction} submenu={false}/><ContextMenu.Separator className={styles.menuSeparator}/><MenuItem action="delete" label="Delete" shortcut="⌘ ⌫" danger onAction={onAction} submenu={false}/></>}
   </ContextMenu.Content>
 }
 
@@ -196,9 +209,12 @@ function OptionIcon({ option }: { option: MyIssuesContextOption }) {
   if (option.kind === 'labels') return <LabelIcon className={styles.optionIcon} size={14}/>
   return <span className={styles.optionSpacer}/>
 }
-function GroupStateIcon({ type }: { type?: MyIssuesStateType }) { return type ? <span className={styles.groupState}><StatusIcon state={{ id: type, name: type, type, color: 'lch(63.304% 1.425 272)' }} size={14}/></span> : null }
-function PropertyBadge({ children, color }: { children: ReactNode; color: string }) { return <span className={styles.badge}><i style={{ backgroundColor: color }}/><span data-i18n-ignore>{children}</span></span> }
-function Avatar({ assignee }: { assignee: NonNullable<MyIssuesRowData['assignee']> }) { const initials = assignee.name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase(); return <span className={styles.avatar} aria-label={assignee.name} style={{ '--avatar': assignee.color ?? 'lch(70% 60 30)' } as CSSProperties}>{assignee.avatarUrl ? <img src={assignee.avatarUrl} alt=""/> : initials}</span> }
+function GroupStateIcon({ type }: { type?: MyIssuesStateType }) { return type ? <span className={styles.groupState}><StatusIcon state={{ id: type, name: type, type, color: 'var(--theme-text-secondary)' }} size={14}/></span> : null }
+function PropertyBadge(props:{label:NonNullable<MyIssuesRowData['labels']>[number]}|{children:ReactNode;color:string}){
+  if('label'in props){const{label}=props;return <LabelHoverPreview label={label} side="bottom" align="start"><span className={styles.badge}><i style={{backgroundColor:label.color}}/><span data-i18n-ignore>{label.name}</span></span></LabelHoverPreview>}
+  return <span className={styles.badge}><i style={{backgroundColor:props.color}}/><span data-i18n-ignore>{props.children}</span></span>
+}
+function Avatar({ assignee }: { assignee: NonNullable<MyIssuesRowData['assignee']> }) { const initials = assignee.name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase(); return <span className={styles.avatar} aria-label={assignee.name} style={{ '--avatar': assignee.color ?? 'var(--avatar-fallback)' } as CSSProperties}>{assignee.avatarUrl ? <img src={assignee.avatarUrl} alt=""/> : initials}</span> }
 
 export function MyIssuesListSkeleton({ rows = 6 }: { rows?: number }) { return <div className={styles.skeleton} aria-label="Loading issues" aria-busy="true"><div className={styles.skeletonHeader}/>{Array.from({ length: rows }, (_, index) => <div className={styles.skeletonRow} key={index}><i/><i/><i/><i/></div>)}</div> }
 export function MyIssuesListEmpty() { return <div className={styles.state} role="status"><span className={styles.emptyIcon}><Check size={15}/></span><strong>No issues</strong><p>No issues match this view.</p></div> }

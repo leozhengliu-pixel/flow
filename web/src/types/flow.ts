@@ -29,23 +29,25 @@ export interface FlowDocument { id: UUID; slugId: string; title: string; icon?: 
 export interface DocumentTemplate { id: UUID; teamId: UUID; name: string; description?: string; title?: string; icon?: string; content?: string; contentState?: string; contentData?: Record<string,unknown>; creator: User; createdAt: string; updatedAt: string }
 export interface Issue {
   id: UUID; version: number; identifier: string; number: number; title: string; description: string; descriptionState?: string; documentContent?: DocumentContent
-  priority: number; priorityLabel: string; sortOrder: number; estimate?: number; dueDate?: string
+  priority: number; priorityLabel: string; sortOrder: number; estimate?: number; dueDate?: string; slaBreachesAt?: string; slaType?: 'all'|'onlyBusinessDays'
   createdAt: string; updatedAt: string; completedAt?: string; canceledAt?: string; archivedAt?: string
-  team: Team; state: WorkflowState; assignee?: User; creator: User; labels: IssueLabel[]
+  team: Team; state: WorkflowState; assignee?: User; delegate?: User; creator: User; labels: IssueLabel[]
   project?: ProjectSummary; projectMilestoneId?: UUID; cycleId?: UUID; parentId?: UUID; recurrence?: 'daily'|'weekly'|'monthly'; nextOccurrenceAt?: string; subscriberIds: UUID[]; reactions: Record<string, UUID[]>; subIssueIds: UUID[]
   relations: IssueRelation[]; attachments: Attachment[]
 }
 export type CycleStatus = 'upcoming'|'current'|'completed'
 export interface Cycle {
   id: UUID; number: number; name: string; description: string; teamId: UUID; startsAt: string; endsAt: string
-  status: CycleStatus; capacity: number; favorite: boolean; createdAt: string; updatedAt: string
+  status: CycleStatus; capacity: number; favorite: boolean; resources: CycleResource[]; insight?: Record<string,string>; createdAt: string; updatedAt: string
 }
+export interface CycleResource { id: UUID; type: 'link'|'document'; title: string; url: string; documentId?: UUID; createdAt: string }
 export interface CycleSettings {
   enabled: boolean; durationWeeks: number; cooldownWeeks: number; startsOn: number; upcomingCount: number
   capacity: number; autoCreate: boolean; autoAddActive: boolean; autoAddDueDate: boolean
   autoAddStarted: boolean; autoAddCompleted: boolean; autoMigrate: boolean
+  favoriteView: boolean
 }
-export interface CycleMutationInput { name?: string; description?: string; startsAt?: string; endsAt?: string; capacity?: number; favorite?: boolean }
+export interface CycleMutationInput { name?: string; description?: string; startsAt?: string; endsAt?: string; capacity?: number; favorite?: boolean; insight?: Record<string,string> }
 export type CycleSettingsMutationInput = Partial<CycleSettings>
 export type IssueRelationType = 'related'|'blocks'|'blocked_by'|'duplicate'|'parent_of'|'sub_issue_of'
 export interface IssueRelation { id: UUID; type: IssueRelationType; issueId: UUID; relatedIssueId: UUID }
@@ -76,7 +78,7 @@ export interface Project {
   status: { id: UUID; name: string; color: string; type: string }; lead?: User; memberIds: UUID[]; labelIds: UUID[]; teamIds: UUID[]
   dependencyIds: UUID[]; initiatives: string[]; customers: string[]; resources: ProjectResource[]; milestones: ProjectMilestone[]; comments: Comment[]
   descriptionRevisions: ProjectDescriptionRevision[]; updateCadence: 'none'|'weekly'|'biweekly'|'monthly'
-  startDate?: string; targetDate?: string; issueCount: number; createdAt: string; updatedAt: string
+  startDate?: string; startDateResolution?: 'halfYear'|'month'|'quarter'|'year'; targetDate?: string; targetDateResolution?: 'halfYear'|'month'|'quarter'|'year'; issueCount: number; createdAt: string; updatedAt: string
 }
 export interface ProjectDescriptionRevision { id: UUID; projectId: UUID; description: string; author: User; createdAt: string }
 export interface ProjectResource { id: UUID; projectId: UUID; type: 'link'|'document'; title: string; url: string; pinnedTeamIds: UUID[]; createdAt: string }
@@ -87,12 +89,15 @@ export interface ProjectUpdate {
   comments: Comment[]; reactions: Record<string, UUID[]>; dueAt?: string; missing?: boolean
 }
 export interface CustomerRequest { id: UUID; customerId: UUID; body: string; source: string; sourceUrl?: string; creator: User; issueId?: UUID; projectId?: UUID; attachments: Attachment[]; createdAt: string; updatedAt: string }
-export interface Release { id: UUID; name: string; version: string; description: string; status: 'planned'|'inProgress'|'released'|'canceled'; pipelineId?: UUID; stage?: string; commitSha?: string; releaseNotes?: string; position: number; targetDate?: string; projectIds: UUID[]; issueIds: UUID[]; subscriberIds: UUID[]; creator: User; startedAt?: string; releasedAt?: string; stageFrozenAt?: string; archivedAt?: string; createdAt: string; updatedAt: string }
+export interface ReleaseResource { id: UUID; type: 'link'|'document'; title: string; url?: string; documentId?: UUID; createdAt: string }
+export interface Release { id: UUID; slugId: string; name: string; version: string; description: string; status: 'planned'|'inProgress'|'released'|'canceled'; pipelineId?: UUID; stage?: string; commitSha?: string; releaseNotes?: string; position: number; startDate?: string; targetDate?: string; projectIds: UUID[]; issueIds: UUID[]; subscriberIds: UUID[]; resources: ReleaseResource[]; creator: User; startedAt?: string; releasedAt?: string; stageFrozenAt?: string; archivedAt?: string; createdAt: string; updatedAt: string }
 export interface AskApproval { id: UUID; askId: UUID; approver: User; decision: 'approved'|'rejected'; note?: string; decidedAt?: string }
 export interface Ask { id: UUID; title: string; body: string; source: string; requester: User; teamId?: UUID; templateId?: UUID; status: 'pending'|'approved'|'rejected'; issueId?: UUID; approvals: AskApproval[]; createdAt: string; updatedAt: string }
 export interface TemplateMilestone { id: UUID; name: string; description?: string }
-export interface ProjectTemplate { id: UUID; name: string; projectName?: string; templateDescription?: string; description?: string; summary?: string; icon?: string; color?: string; statusId?: UUID; priority: number; teamIds: UUID[]; labelIds: UUID[]; leadId?: UUID; memberIds?: UUID[]; dependencyIds?: UUID[]; initiativeIds?: UUID[]; issueIds?: UUID[]; milestones?: TemplateMilestone[]; visibility?: 'workspace'|'teams'; creator: User; createdAt: string; updatedAt: string }
-export interface TemplateFormField { id: UUID; label: string; description?: string; type: 'text'|'textarea'|'select'|'checkbox'|'date'; required: boolean; options?: string[] }
+export interface ProjectTemplate { id: UUID; name: string; projectName?: string; templateDescription?: string; description?: string; summary?: string; icon?: string; color?: string; statusId?: UUID; priority: number; teamIds: UUID[]; labelIds: UUID[]; leadId?: UUID; memberIds?: UUID[]; dependencyIds?: UUID[]; initiativeIds?: UUID[]; issueIds?: UUID[]; milestones?: TemplateMilestone[]; visibility?: 'workspace'|'teams'; visibilityTeamId?:UUID; creator: User; createdAt: string; updatedAt: string }
+export type TemplateFormFieldType = 'text'|'longText'|'dropdown'|'checkboxes'|'date'|'upload'|'instructions'|'title'|'labelGroup'|'priority'|'dueDate'
+export interface TemplateFormField { id: UUID; label: string; description?: string; type: TemplateFormFieldType; required: boolean; options?: string[] }
+export interface TemplateSubIssue { id: UUID; title: string; description?: string; teamId?: UUID; priority: number; assigneeId?: UUID; labelIds: UUID[] }
 export interface UserSettings { userId: UUID; language: string; homeView: string; displayNames: string; firstDay: string; emoticons: boolean; sendComments: string; fontSize: string; pointerCursor: boolean; underlineLinks: boolean; interfaceTheme: string; lightTheme: string; darkTheme: string; desktopLinks: boolean; autoAssign: boolean; assignStarted: boolean; reviewAutoAssign: boolean; branchFormat: string; personalSettingsVersion?: number; codeReviewsEnabled?: boolean; autoConvertDrafts?: boolean; mergeStrategy?: string; codeTheme?: string; codeFont?: string; reviewCommentsFilter?: string; reviewRequests?: boolean; githubTeamReviewRequests?: boolean; checksMergeQueue?: boolean; requireSignedCommits?: boolean; gitAttachmentFormat?: string; gitBranchMoveStarted?: boolean; codingToolMoveStarted?: boolean; changelogUpdates?: boolean; changelogNewsletter?: boolean; marketingUpdates?: boolean; inviteAcceptedUpdates?: boolean; privacyUpdates?: boolean; dpaUpdates?: boolean; agentEnabled: boolean; agentInstructions: string; jobTitle?: string; username?: string; updatedAt: string }
 export interface FeatureOption { id: UUID; name: string; color?: string }
 export interface FeatureSettings { aiUsageFeedback: boolean; initiativeUpdateSchedule: string; customerDefaultTeamId?: UUID; customerRevenueFormat: string; customerRevenueCurrency: string; customerManualEdits: boolean; customerStatuses: FeatureOption[]; customerTiers: FeatureOption[]; customerExcludedDomains: string[]; customerGenericDomains: string[]; pulseWorkspaceSchedule: string; asksEmailAddresses: string[] }
@@ -101,12 +106,23 @@ export interface WorkspaceSettings {
   inviteLinksEnabled?: boolean; googleAuthEnabled?: boolean; emailAuthEnabled?: boolean; disableAdminBypass?: boolean; initiativePermission?: string; loopPermission?: string; agentGuidancePermission?: string; preventGuestAgents?: boolean; aiUsageSharing?: boolean; agentWebSearch?: boolean; externalLoopTriggers?: boolean; mcpConnectorsEnabled?: boolean
   aiCreditBalanceCents?: number; aiCreditAutoReload?: boolean; aiCreditReloadThresholdCents?: number; aiCreditReloadAmountCents?: number; aiWorkspaceSpendLimitCents?: number
 }
-export interface ReleasePipeline { id: UUID; name: string; teamIds: UUID[]; type: 'scheduled'|'continuous'; production: boolean; stages: string[]; stageStatuses: Record<string, Release['status']>; position: number; pathFilters: string[]; releaseNotesTemplate?: string; autoGenerateReleaseNotes: boolean; accessKeyPrefix?: string; accessKeyCreatedAt?: string; archivedAt?: string; createdAt: string; updatedAt: string }
+export interface ReleasePipeline { id: UUID; slugId: string; name: string; teamIds: UUID[]; type: 'scheduled'|'continuous'; production: boolean; stages: string[]; stageStatuses: Record<string, Release['status']>; position: number; pathFilters: string[]; releaseNotesTemplate?: string; autoGenerateReleaseNotes: boolean; moveOpenIssuesToNextRelease?: boolean; accessKeyPrefix?: string; accessKeyCreatedAt?: string; createdAt: string; updatedAt: string }
 export interface ReleasePipelineAccessKey { pipelineId: UUID; prefix: string; secret: string; createdAt: string }
 export interface CustomEmoji { id: UUID; name: string; imageUrl: string; creator: User; archivedAt?: string; createdAt: string; updatedAt: string }
-export interface APIKey { id: UUID; name: string; prefix: string; creatorId: UUID; scopes: string[]; teamIds: UUID[]; createdAt: string; lastUsedAt?: string; revokedAt?: string }
+export interface APIKey { id: UUID; name: string; prefix: string; creatorId: UUID; scopes: string[]; teamIds: UUID[]; createdAt: string; lastUsedAt?: string; revokedAt?: string; expiresAt?: string; oauthClientId?: string; authorizationId?: string }
 export interface OAuthApplication { id: UUID; name: string; description?: string; clientId: string; clientSecret?: string; redirectUris: string[]; scopes: string[]; creatorId: UUID; createdAt: string; updatedAt: string }
+export interface OAuthAuthorization { id: UUID; clientId: string; clientName: string; userId: UUID; scopes: string[]; createdAt: string; lastUsedAt?: string; revokedAt?: string }
 export interface IntegrationConnection { id: UUID; provider: string; name: string; status: string; config?: Record<string,string>; connectedBy: UUID; createdAt: string; updatedAt: string }
+export interface ReviewCheck { id: UUID; name: string; status: 'pending'|'running'|'passed'|'failed'|'skipped'; url?: string }
+export interface ReviewFile { path: string; status: 'added'|'modified'|'deleted'|'renamed'; additions: number; deletions: number; patch: string }
+export interface ReviewEvent { id: UUID; type: string; body?: string; actor: User; createdAt: string }
+export interface CodeReview {
+  id: UUID; slugId: string; provider: 'github'|'gitlab'; externalId: string; number: number; title: string; description: string
+  status: 'open'|'inReview'|'approved'|'merged'|'closed'; repositoryOwner: string; repositoryName: string; url: string; author: User
+  reviewerIds: UUID[]; teamReviewers: string[]; issueIds: UUID[]; baseBranch: string; headBranch: string; branchState: 'upToDate'|'behind'|'conflicted'
+  additions: number; deletions: number; commitCount: number; checks: ReviewCheck[]; files: ReviewFile[]; events: ReviewEvent[]
+  favorite: boolean; draft: boolean; quickToReview: boolean; createdAt: string; updatedAt: string; mergedAt?: string; closedAt?: string
+}
 export interface Webhook { id: UUID; name: string; url: string; resourceTypes: string[]; teamIds: UUID[]; enabled: boolean; creatorId: UUID; createdAt: string; updatedAt: string }
 export interface AccountSessionInfo { id: string; current: boolean; createdAt: string; lastSeenAt: string; expiresAt: string }
 export interface WorkspaceUsageEvent { id: UUID; feature: 'coding-sessions'|'loops'; userId?: UUID; amountCents: number; createdAt: string }
@@ -125,7 +141,7 @@ export type InitiativeStatus = 'proposed'|'planned'|'active'|'completed'|'cancel
 export interface Initiative {
   id: UUID; name: string; slugId: string; summary: string; description: string; icon?: string; color: string
   status: InitiativeStatus; priority: number; priorityLabel: string; health: Project['health']; owner?: User; creator: User; leadTeamId?: UUID; contributingTeamIds: UUID[]
-  labelIds: UUID[]; projectIds: UUID[]; resources: InitiativeResource[]; comments: Comment[]; targetDate?: string
+  labelIds: UUID[]; parentInitiativeIds?: UUID[]; projectIds: UUID[]; resources: InitiativeResource[]; comments: Comment[]; targetDate?: string
   favorite: boolean; subscribed: boolean; notificationRules: InitiativeNotificationRules; updateSchedule: InitiativeUpdateSchedule; descriptionHistory: InitiativeDescriptionRevision[]; createdAt: string; updatedAt: string
 }
 export interface InitiativeNotificationRules { descriptionChanges: boolean; newUpdate: boolean; allProjectUpdates: boolean }
@@ -144,7 +160,7 @@ export interface InitiativeMutationInput {
 export interface BootstrapData {
   workspace: Workspace; viewer: User; users: User[]; teams: Team[]; customers: Customer[]; states: WorkflowState[]; labels: IssueLabel[]
   issues: Issue[]; cycles: Cycle[]; cycleSettings: Record<UUID, CycleSettings>; teamSettings: Record<UUID, TeamSettings>; issueTemplates: IssueTemplate[]; projectTemplates: ProjectTemplate[]; documentTemplates: DocumentTemplate[]; documents: FlowDocument[]; customerRequests: CustomerRequest[]; releases: Release[]; releasePipelines: ReleasePipeline[]; customEmojis: CustomEmoji[]; asks: Ask[]; slaRules: SLARule[]; issueSlas: IssueSLA[]; slaEvents: SLAEvent[]; drafts: Draft[]; favorites: Favorite[]; subscriptions: Subscription[]; auditLog: AuditLogEntry[]; trash: TrashEntry[]; importJobs: ImportJob[]; exportJobs: ExportJob[]; projects: Project[]; projectStatuses: ProjectStatus[]; projectDisplayDefault?: Record<string, unknown>; projectUpdates: Record<UUID, ProjectUpdate[]>; initiatives: Initiative[]; initiativeUpdates: Record<UUID, InitiativeUpdate[]>; comments: Record<UUID, Comment[]>; activities: Record<UUID, ActivityEvent[]>; savedViews: SavedView[]; notifications: Notification[]; notificationPreferences: Record<UUID, NotificationPreferences>; notificationDeliveries: NotificationDelivery[]; settings?: Record<string, unknown>
-  labelGroups: LabelGroup[]; userSettings: Record<UUID,UserSettings>; workspaceSettings: WorkspaceSettings; apiKeys: APIKey[]; oauthApplications: OAuthApplication[]; webhooks: Webhook[]; integrationConnections: IntegrationConnection[]
+  labelGroups: LabelGroup[]; userSettings: Record<UUID,UserSettings>; workspaceSettings: WorkspaceSettings; apiKeys: APIKey[]; oauthApplications: OAuthApplication[]; oauthAuthorizations: OAuthAuthorization[]; webhooks: Webhook[]; integrationConnections: IntegrationConnection[]; reviews: CodeReview[]
   members: WorkspaceMember[]; teamMembers: TeamMember[]; invitations: Invitation[]; viewerRole: WorkspaceRole
 }
 export interface TeamAutomationRule { id: UUID; name: string; trigger: string; action: string; enabled: boolean }
@@ -158,8 +174,8 @@ export interface TeamSettings {
   agentSkills: TeamAgentSkill[]; projectUpdatePrompt: string; resolvedThreadSummaries: boolean; showInitiatives: boolean; parentTeamId?: UUID
 }
 export interface TeamSettingsMutationInput extends Partial<Omit<TeamSettings,'teamId'>> { identifier?: string }
-export interface IssueTemplate { id: UUID; teamId?: UUID; scope?: 'workspace'|'team'; templateType?: 'standard'|'customForm'; formFields?: TemplateFormField[]; name: string; title?: string; description?: string; body?: string; stateId?: UUID; priority: number; assigneeId?: UUID; projectId?: UUID; labelIds: UUID[]; creator: User; createdAt: string; updatedAt: string }
-export type IssueTemplateMutationInput = Partial<Pick<IssueTemplate,'teamId'|'templateType'|'formFields'|'name'|'title'|'description'|'body'|'stateId'|'priority'|'assigneeId'|'projectId'|'labelIds'>>
+export interface IssueTemplate { id: UUID; teamId?: UUID; scope?: 'workspace'|'team'; visibilityTeamId?:UUID; icon?: string; color?: string; templateType?: 'standard'|'customForm'; formFields?: TemplateFormField[]; subIssues?: TemplateSubIssue[]; name: string; title?: string; description?: string; body?: string; stateId?: UUID; priority: number; assigneeId?: UUID; projectId?: UUID; labelIds: UUID[]; creator: User; createdAt: string; updatedAt: string }
+export type IssueTemplateMutationInput = Partial<Pick<IssueTemplate,'teamId'|'visibilityTeamId'|'icon'|'color'|'templateType'|'formFields'|'subIssues'|'name'|'title'|'description'|'body'|'stateId'|'priority'|'assigneeId'|'projectId'|'labelIds'>>
 export type SavedViewResource = 'issues'|'projects'|'initiativeProjects'
 export interface SavedView { id: UUID; name: string; description: string; icon?: string; color?: string; resource?: SavedViewResource; scope: 'personal'|'team'|'workspace'; teamId?: UUID; ownerId?: UUID; favorite?: boolean; subscribed?: boolean; view: 'active'|'backlog'|'all'; filters: unknown[]; display: Record<string, unknown>; insights?: Record<string, unknown>; createdAt: string; updatedAt: string }
 export interface SavedViewMutationInput { name?: string; description?: string; icon?: string; color?: string; resource?: SavedViewResource; scope?: 'personal'|'team'|'workspace'; teamId?: string; ownerId?: string; favorite?: boolean; subscribed?: boolean; view?: 'active'|'backlog'|'all'; filters?: unknown[]; display?: Record<string, unknown>; insights?: Record<string, unknown> }

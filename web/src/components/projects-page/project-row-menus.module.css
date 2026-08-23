@@ -1,22 +1,8 @@
-.command,.datePicker{z-index:160;background:var(--theme-control);border:.5px solid var(--theme-border-strong);box-shadow:0 3px 8px rgb(0 0 0/.2),0 1px 2px rgb(0 0 0/.2);color:var(--theme-text-primary);font-family:"Inter Variable","SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:0}
+.command,.datePicker{background:var(--theme-control);border:.5px solid var(--theme-border-strong);box-shadow:0 3px 8px rgb(0 0 0/.2),0 1px 2px rgb(0 0 0/.2);color:var(--theme-text-primary);font-family:"Inter Variable","SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:0}
 .command{width:252px;border-radius:10px;overflow:hidden}
-.commandHeader{height:42px;display:flex;align-items:center;padding:0 12px;border-bottom:.5px solid var(--theme-border-strong);gap:8px}
-.commandHeader input{min-width:0;flex:1;height:36px;padding:0;border:0;outline:0;background:transparent;color:var(--theme-text-primary);font-size:13px;letter-spacing:0}
-.commandHeader input::placeholder{color:#8b8b90}
-.sequence{display:flex;align-items:center;gap:4px;color:#77777c;white-space:nowrap;font-size:10px}
-.sequence kbd{min-width:16px;height:17px;display:grid;place-items:center;padding:0 3px;border:.5px solid var(--theme-border-strong);border-radius:4px;font:inherit;color:#8a8a90}
-.commandList{max-height:322px;overflow:auto;padding:5px}
-.commandList>div>button,.commandList>button{width:100%;height:32px;display:flex;align-items:center;gap:8px;padding:0 8px;border:0;border-radius:5px;background:transparent;color:var(--theme-text-primary);font-size:13px;text-align:left;outline:0}
-.commandList button:hover,.commandList button.active{background:var(--theme-control-active)}
-.commandList button[aria-selected=true]{background:var(--theme-border-strong)}
-.commandList button[aria-selected=true]:hover,.commandList button[aria-selected=true].active{background:var(--theme-border-strong)}
 .optionIcon,.statusIcon{width:15px;height:15px;flex:0 0 15px;color:var(--theme-text-secondary)}
 .avatar{width:16px;height:16px;flex:0 0 16px;display:grid;place-items:center;border-radius:50%;object-fit:cover;color:white;font-size:8px;line-height:16px}
-.optionLabel{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.optionEnd{display:flex;align-items:center;gap:8px;color:#77777c;font-size:11px}.optionEnd svg{color:var(--theme-text-primary)}
-.groupLabel{height:26px;display:flex;align-items:center;padding:5px 8px 0;color:#75757a;font-size:11px}
-.empty{padding:14px;color:#77777c;text-align:center;font-size:12px}
-.datePicker{width:304px;height:330px;display:flex;flex-direction:column;border-radius:8px;overflow:hidden}
+.datePicker{z-index:160;width:304px;height:330px;display:flex;flex-direction:column;border-radius:8px;overflow:hidden}
 .dateLabel{display:flex;flex-direction:column;gap:4px;padding:12px 16px 8px;color:var(--theme-text-secondary);font-size:11px}
 .dateLabel input{box-sizing:border-box;width:100%;height:32px;padding:0 10px;border:1px solid #5e6ad2;border-radius:6px;outline:1px solid rgb(94 106 210/.22);background:var(--theme-surface-1);color:var(--theme-text-primary);font-size:12px;letter-spacing:0}
 .dateModes{height:45px;display:flex;align-items:center;gap:4px;padding:0 16px;border-bottom:.5px solid var(--theme-border-strong)}

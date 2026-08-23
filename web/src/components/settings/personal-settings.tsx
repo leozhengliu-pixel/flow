@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   fetchAccountSessions, removeMember, revokeOtherAccountSessions,
-  updateAccountProfile, updateNotificationPreferences,
+  revokeOAuthAuthorization, updateAccountProfile, updateNotificationPreferences,
 } from "@/lib/api";
 import type { SettingsPageId } from "@/lib/app-routes";
 import type { BootstrapData, NotificationPreferences } from "@/types/flow";
@@ -192,7 +192,7 @@ function CodeReviews({ values, setValue, text }: PersonalProps) {
   </>;
 }
 
-function Security({ data, onNavigate, text }: PersonalProps) {
+function Security({ data, onNavigate, onReload, text }: PersonalProps) {
   const { formatDate } = useI18n();
   const [sessions,setSessions]=useState<Awaited<ReturnType<typeof fetchAccountSessions>>>([]);
   const [confirmOpen,setConfirmOpen]=useState(false);
@@ -205,7 +205,7 @@ function Security({ data, onNavigate, text }: PersonalProps) {
     <Section title="Passkeys" description="Passkeys are a secure way to sign in to your Flow account"><div className="personal-empty"><KeyRound/><h3>No passkeys registered</h3><span>Passkey enrollment is not available on this server.</span></div></Section>
     <Section title="Personal API keys" description="Use Flow’s API to build your own integrations"><div className="personal-empty"><Code2/><h3>{data.apiKeys.filter(k=>k.creatorId===data.viewer.id&&!k.revokedAt).length ? `${data.apiKeys.filter(k=>k.creatorId===data.viewer.id&&!k.revokedAt).length} active API key` : "No API keys created"}</h3><Action onClick={()=>onNavigate("api")}>Manage API keys</Action></div></Section>
     <Section title="Commit signing key" description="Coding sessions use this key to sign your commits"><Row title="No signing key added"><Action disabled>Add key</Action></Row></Section>
-    <Section title="Authorized applications"><div className="personal-empty"><ShieldCheck/><h3>No authorized applications</h3></div></Section>
+    <Section title="Authorized applications">{data.oauthAuthorizations.filter(item=>item.userId===data.viewer.id&&!item.revokedAt).map(item=><Row key={item.id} icon={<ShieldCheck/>} title={item.clientName} description={`MCP · ${item.scopes.join(', ')}`}><Action danger onClick={()=>void revokeOAuthAuthorization(item.id).then(onReload)}>Revoke</Action></Row>)}{!data.oauthAuthorizations.some(item=>item.userId===data.viewer.id&&!item.revokedAt)&&<div className="personal-empty"><ShieldCheck/><h3>No authorized applications</h3></div>}</Section>
     <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}><DialogContent className="personal-dialog"><DialogTitle>Revoke all other sessions?</DialogTitle><p>Every other device will need to sign in again.</p><footer><Action onClick={()=>setConfirmOpen(false)}>Cancel</Action><Action danger onClick={()=>void revoke()}>Revoke all</Action></footer></DialogContent></Dialog>
   </>;
 }

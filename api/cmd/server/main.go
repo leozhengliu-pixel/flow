@@ -15,9 +15,12 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	appconfig "flow/api/internal/config"
 	"flow/api/internal/domain"
+	"flow/api/internal/objectstore"
 	"flow/api/internal/store"
 )
 
@@ -28,35 +31,56 @@ var (
 )
 
 type server struct {
-	store        *store.SQLiteStore
-	uploadPath   string
-	staticPath   string
-	authDisabled bool
-	mailer       *smtpMailer
-	authLimiter  *authRateLimiter
-	realtime     *realtimeHub
+	store         *store.SQLiteStore
+	uploadPath    string
+	objectStore   objectstore.Store
+	staticPath    string
+	authDisabled  bool
+	mailer        *smtpMailer
+	authLimiter   *authRateLimiter
+	realtime      *realtimeHub
+	externalAuth  *externalAuth
+	allowedOrigin string
+	mcpUploadMu   sync.Mutex
+	mcpUploads    map[string]*mcpPendingUpload
 }
 
 func main() {
-	dbPath := env("FLOW_DB_PATH", "data/flow.db")
-	repository, err := store.OpenSQLite(dbPath)
+	applicationConfig, err := appconfig.Load()
+	if err != nil {
+		log.Fatal(err)
+	}
+	repository, err := store.OpenDatabase(applicationConfig.Database)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer repository.Close()
-	s := &server{
-		store:        repository,
-		uploadPath:   env("FLOW_UPLOAD_PATH", "data/uploads"),
-		staticPath:   env("FLOW_STATIC_PATH", ""),
-		authDisabled: strings.EqualFold(env("FLOW_AUTH_DISABLED", "false"), "true"),
-		mailer:       smtpMailerFromEnv(),
-	}
-	if err := os.MkdirAll(s.uploadPath, 0o755); err != nil {
+	objects, err := objectstore.Open(context.Background(), applicationConfig.Storage)
+	if err != nil {
 		log.Fatal(err)
 	}
+	external, err := newExternalAuth(context.Background(), applicationConfig.Auth, applicationConfig.AppURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	shutdownTelemetry, err := configureTelemetry(context.Background(), applicationConfig.Telemetry)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer shutdownTelemetry(context.Background())
+	s := &server{
+		store:         repository,
+		uploadPath:    applicationConfig.Storage.LocalPath,
+		objectStore:   objects,
+		staticPath:    applicationConfig.StaticPath,
+		authDisabled:  applicationConfig.AuthDisabled,
+		mailer:        smtpMailerFromEnv(),
+		externalAuth:  external,
+		allowedOrigin: applicationConfig.AppURL,
+	}
 
-	httpServer := &http.Server{Addr: env("FLOW_HTTP_ADDR", ":8080"), Handler: newHandler(s), ReadHeaderTimeout: 5 * time.Second}
-	log.Printf("Flow API listening on http://localhost%s using %s", httpServer.Addr, dbPath)
+	httpServer := &http.Server{Addr: applicationConfig.HTTPAddr, Handler: telemetryHandler(newHandler(s), applicationConfig.Telemetry.Enabled), ReadHeaderTimeout: 5 * time.Second}
+	log.Printf("Flow API listening on %s using database=%s storage=%s", httpServer.Addr, applicationConfig.Database.Driver, applicationConfig.Storage.Driver)
 	log.Fatal(httpServer.ListenAndServe())
 }
 
@@ -72,14 +96,36 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
-	mux.Handle("POST /api/auth/register", s.limitAuth("register", 5, 15*time.Minute, http.HandlerFunc(s.register)))
-	mux.Handle("POST /api/auth/verify-email", s.limitAuth("verify-email", 10, 15*time.Minute, http.HandlerFunc(s.verifyEmail)))
-	mux.Handle("POST /api/auth/resend-verification", s.limitAuth("resend-verification", 5, 15*time.Minute, http.HandlerFunc(s.resendVerification)))
-	mux.Handle("POST /api/auth/login", s.limitAuth("login", 8, 15*time.Minute, http.HandlerFunc(s.login)))
+	mux.HandleFunc("GET /.well-known/oauth-protected-resource", s.oauthProtectedResource)
+	mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", s.oauthProtectedResource)
+	mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp/readonly", s.oauthProtectedResource)
+	mux.HandleFunc("GET /.well-known/oauth-authorization-server", s.oauthAuthorizationServer)
+	mux.HandleFunc("POST /oauth/register", s.registerOAuthClient)
+	mux.HandleFunc("POST /oauth/token", s.exchangeMCPToken)
+	mux.HandleFunc("POST /oauth/revoke", s.revokeOAuthToken)
+	mux.HandleFunc("POST /mcp", s.mcpHTTP(false))
+	mux.HandleFunc("POST /mcp/readonly", s.mcpHTTP(true))
+	mux.HandleFunc("PUT /api/mcp/uploads/{token}", s.putMCPUpload)
+	mux.HandleFunc("GET /api/oauth/authorization-request", s.getOAuthAuthorizationRequest)
+	mux.HandleFunc("POST /api/oauth/authorization-request", s.decideOAuthAuthorization)
+	mux.HandleFunc("DELETE /api/oauth/authorizations/{id}", s.revokeOAuthAuthorization)
+	mux.Handle("POST /api/auth/register", s.requireEmailAuth(s.limitAuth("register", 5, 15*time.Minute, http.HandlerFunc(s.register))))
+	mux.Handle("POST /api/auth/verify-email", s.requireEmailAuth(s.limitAuth("verify-email", 10, 15*time.Minute, http.HandlerFunc(s.verifyEmail))))
+	mux.Handle("POST /api/auth/resend-verification", s.requireEmailAuth(s.limitAuth("resend-verification", 5, 15*time.Minute, http.HandlerFunc(s.resendVerification))))
+	mux.Handle("POST /api/auth/login", s.requireEmailAuth(s.limitAuth("login", 8, 15*time.Minute, http.HandlerFunc(s.login))))
 	mux.HandleFunc("POST /api/auth/logout", s.logout)
 	mux.HandleFunc("GET /api/auth/session", s.authSession)
-	mux.Handle("POST /api/auth/forgot-password", s.limitAuth("forgot-password", 5, 15*time.Minute, http.HandlerFunc(s.forgotPassword)))
-	mux.Handle("POST /api/auth/reset-password", s.limitAuth("reset-password", 8, 15*time.Minute, http.HandlerFunc(s.resetPassword)))
+	mux.Handle("POST /api/auth/forgot-password", s.requireEmailAuth(s.limitAuth("forgot-password", 5, 15*time.Minute, http.HandlerFunc(s.forgotPassword))))
+	mux.Handle("POST /api/auth/reset-password", s.requireEmailAuth(s.limitAuth("reset-password", 8, 15*time.Minute, http.HandlerFunc(s.resetPassword))))
+	mux.HandleFunc("GET /api/auth/providers", s.authProviders)
+	mux.HandleFunc("GET /api/auth/{provider}/start", s.startOIDC)
+	mux.HandleFunc("GET /api/auth/{provider}/callback", s.finishOIDC)
+	mux.HandleFunc("GET /api/auth/saml/start", s.startSAML)
+	if s.externalAuth != nil && s.externalAuth.saml != nil {
+		mux.Handle("GET /api/auth/saml/metadata", s.externalAuth.saml)
+		mux.Handle("POST /api/auth/saml/acs", s.externalAuth.saml)
+		mux.Handle("GET /api/auth/saml/complete", s.externalAuth.saml.RequireAccount(http.HandlerFunc(s.finishSAML)))
+	}
 	mux.HandleFunc("POST /api/invitations/accept", s.acceptInvitation)
 	mux.HandleFunc("GET /api/invitations/preview/{token}", s.invitationPreview)
 	mux.HandleFunc("GET /api/account/bootstrap", s.accountBootstrap)
@@ -179,6 +225,13 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/integrations", s.listIntegrations)
 	mux.HandleFunc("PUT /api/integrations/{provider}", s.connectIntegration)
 	mux.HandleFunc("DELETE /api/integrations/{provider}", s.disconnectIntegration)
+	mux.HandleFunc("PATCH /api/integrations/{provider}/{id}", s.updateIntegration)
+	mux.HandleFunc("DELETE /api/integrations/{provider}/{id}", s.disconnectIntegrationConnection)
+	mux.HandleFunc("GET /api/reviews", s.listReviews)
+	mux.HandleFunc("GET /api/reviews/{id}", s.getReview)
+	mux.HandleFunc("PATCH /api/reviews/{id}", s.updateReview)
+	mux.HandleFunc("POST /api/reviews/{id}/submit", s.submitReview)
+	mux.HandleFunc("POST /api/reviews/{id}/comments", s.commentOnReview)
 	mux.HandleFunc("GET /api/usage", s.getWorkspaceUsage)
 	mux.HandleFunc("POST /api/sla-rules", s.createSLARule)
 	mux.HandleFunc("PATCH /api/sla-rules/{id}", s.updateSLARule)
@@ -232,6 +285,10 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/cycles/{id}", s.updateCycle)
 	mux.HandleFunc("POST /api/cycles/{id}/start", s.startCycle)
 	mux.HandleFunc("POST /api/cycles/{id}/complete", s.completeCycle)
+	mux.HandleFunc("POST /api/cycles/{id}/resources", s.createCycleResource)
+	mux.HandleFunc("DELETE /api/cycles/{id}/resources/{resourceId}", s.deleteCycleResource)
+	mux.HandleFunc("POST /api/cycles/{id}/calendar-token", s.cycleCalendarToken)
+	mux.HandleFunc("GET /api/calendar/cycles/{id}", s.cycleCalendar)
 	mux.HandleFunc("POST /api/projects", s.createProject)
 	mux.HandleFunc("PATCH /api/projects/{id}", s.updateProject)
 	mux.HandleFunc("DELETE /api/projects/{id}", s.deleteProject)
@@ -266,6 +323,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/initiatives/{id}/updates/{updateId}/comments", s.createInitiativeUpdateComment)
 	mux.HandleFunc("POST /api/initiatives/{id}/updates/{updateId}/reactions", s.toggleInitiativeUpdateReaction)
 	mux.HandleFunc("PATCH /api/issues/{id}", s.updateIssue)
+	mux.HandleFunc("PUT /api/issues/{id}/releases", s.setIssueReleases)
 	mux.HandleFunc("DELETE /api/issues/{id}", s.deleteIssue)
 	mux.HandleFunc("POST /api/issues/{id}/reactions", s.toggleIssueReaction)
 	mux.HandleFunc("POST /api/issues/batch", s.batchUpdate)
@@ -284,7 +342,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /uploads/{name}", s.serveUpload)
 
 	handler := s.withStaticFiles(s.authenticate(mux))
-	return requestLog(cors(handler))
+	return requestLog(s.cors(handler))
 }
 
 func (s *server) withStaticFiles(next http.Handler) http.Handler {
@@ -293,7 +351,7 @@ func (s *server) withStaticFiles(next http.Handler) http.Handler {
 	}
 	files := http.FileServer(http.Dir(s.staticPath))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/uploads/") {
+		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/uploads/") || strings.HasPrefix(r.URL.Path, "/.well-known/oauth-") || r.URL.Path == "/mcp" || r.URL.Path == "/mcp/readonly" || r.URL.Path == "/oauth/register" || r.URL.Path == "/oauth/token" || r.URL.Path == "/oauth/revoke" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -352,6 +410,9 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 }
 
 func sanitizeBootstrap(data *domain.Bootstrap) {
+	for index := range data.Cycles {
+		data.Cycles[index].CalendarToken = ""
+	}
 	for index := range data.APIKeys {
 		data.APIKeys[index].SecretHash = ""
 	}
@@ -717,6 +778,9 @@ func normalizeWorkspaceKey(value string) string {
 }
 
 func workspaceKey(r *http.Request) string {
+	if key, ok := r.Context().Value(workspaceKeyContextKey{}).(string); ok && strings.TrimSpace(key) != "" {
+		return strings.TrimSpace(key)
+	}
 	if key := strings.TrimSpace(r.Header.Get("X-Workspace-Key")); key != "" {
 		return key
 	}
@@ -953,6 +1017,9 @@ func (s *server) updateCycleSettings(w http.ResponseWriter, r *http.Request) {
 		if input.AutoMigrate != nil {
 			settings.AutoMigrate = *input.AutoMigrate
 		}
+		if input.FavoriteView != nil {
+			settings.FavoriteView = *input.FavoriteView
+		}
 		if settings.DurationWeeks < 1 || settings.DurationWeeks > 8 || settings.CooldownWeeks < 0 || settings.CooldownWeeks > 8 || settings.StartsOn < 0 || settings.StartsOn > 6 || settings.UpcomingCount < 1 || settings.UpcomingCount > 15 || settings.Capacity < 0 || settings.Capacity > 10000 {
 			return errInvalid
 		}
@@ -1028,6 +1095,13 @@ func (s *server) updateCycle(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Favorite != nil {
 			cycle.Favorite = *input.Favorite
+		}
+		if input.Insight != nil {
+			measure, slice, segment := input.Insight["measure"], input.Insight["slice"], input.Insight["segment"]
+			if !slices.Contains([]string{"Issue count", "Estimate"}, measure) || !slices.Contains([]string{"Status", "Assignee"}, slice) || !slices.Contains([]string{"Priority", "Project"}, segment) {
+				return errInvalid
+			}
+			cycle.Insight = map[string]string{"measure": measure, "slice": slice, "segment": segment}
 		}
 		cycle.UpdatedAt = time.Now().UTC()
 		updated = *cycle
@@ -1217,6 +1291,7 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var created domain.Issue
+	var templateSubIssues []domain.TemplateSubIssue
 	if !s.authDisabled && input.TeamID == "" {
 		projected, ok, err := s.store.BootstrapForUser(r.Context(), workspaceKey(r), authUser(r).ID)
 		if err != nil || !ok || len(projected.Teams) == 0 {
@@ -1232,6 +1307,7 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 				return "", errNotFound
 			}
 			template := data.IssueTemplates[index]
+			templateSubIssues = slices.Clone(template.SubIssues)
 			if input.Title == "" {
 				input.Title = template.Title
 				if input.Title == "" {
@@ -1286,7 +1362,7 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		if preferences := data.UserSettings[data.Viewer.ID]; preferences.AutoAssign && input.AssigneeID == nil {
 			input.AssigneeID = &data.Viewer.ID
 		}
-		createUpdate := domain.IssueUpdateInput{DescriptionState: input.DescriptionState, DescriptionData: input.DescriptionData, ContentState: input.ContentState, StateID: input.StateID, Priority: input.Priority, AssigneeID: input.AssigneeID, ProjectID: input.ProjectID, ProjectMilestoneID: input.ProjectMilestoneID, CycleID: input.CycleID, DueDate: input.DueDate}
+		createUpdate := domain.IssueUpdateInput{DescriptionState: input.DescriptionState, DescriptionData: input.DescriptionData, ContentState: input.ContentState, StateID: input.StateID, Priority: input.Priority, AssigneeID: input.AssigneeID, DelegateID: input.DelegateID, ProjectID: input.ProjectID, ProjectMilestoneID: input.ProjectMilestoneID, CycleID: input.CycleID, DueDate: input.DueDate, SLABreachesAt: input.SLABreachesAt, SLAType: input.SLAType}
 		if len(input.LabelIDs) > 0 {
 			createUpdate.LabelIDs = &input.LabelIDs
 		}
@@ -1302,8 +1378,38 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 			}
 			parent.SubIssueIDs = appendUnique(parent.SubIssueIDs, created.ID)
 		}
-		data.Issues = append([]domain.Issue{created}, data.Issues...)
+		children := make([]domain.Issue, 0, len(templateSubIssues))
+		for childIndex, templateChild := range templateSubIssues {
+			childTeam := team
+			if templateChild.TeamID != "" {
+				teamIndex := slices.IndexFunc(data.Teams, func(item domain.Team) bool { return item.ID == templateChild.TeamID })
+				if teamIndex < 0 {
+					return "", errInvalid
+				}
+				childTeam = data.Teams[teamIndex]
+			}
+			childSettings := teamSettings(data, childTeam.ID)
+			childState := stateForTeam(data, childTeam.ID, childSettings.DefaultStateID)
+			if childState == nil {
+				states := statesForTeam(data, childTeam.ID)
+				if len(states) == 0 {
+					return "", errInvalid
+				}
+				childState = &states[0]
+			}
+			childNumber := number + childIndex + 1
+			child := domain.Issue{ID: fmt.Sprintf("issue_%d", childNumber), Version: 1, Identifier: fmt.Sprintf("%s-%d", childTeam.Key, childNumber), Number: childNumber, Title: strings.TrimSpace(templateChild.Title), Description: strings.TrimSpace(templateChild.Description), Priority: templateChild.Priority, PriorityLabel: priorityLabel(templateChild.Priority), SortOrder: float64(childNumber), CreatedAt: now, UpdatedAt: now, Team: childTeam, State: *childState, Creator: data.Viewer, Labels: labelsByID(data, templateChild.LabelIDs), ParentID: &created.ID, SubscriberIDs: []string{data.Viewer.ID}, Reactions: map[string][]string{}, SubIssueIDs: []string{}, Relations: []domain.IssueRelation{}, Attachments: []domain.Attachment{}}
+			if templateChild.AssigneeID != "" {
+				child.Assignee = userByID(data, templateChild.AssigneeID)
+			}
+			created.SubIssueIDs = append(created.SubIssueIDs, child.ID)
+			children = append(children, child)
+		}
+		data.Issues = append([]domain.Issue{created}, append(children, data.Issues...)...)
 		appendActivity(data, created.ID, "issue.created", data.Viewer, map[string]string{})
+		for _, child := range children {
+			appendActivity(data, child.ID, "issue.created", data.Viewer, map[string]string{})
+		}
 		return created.ID, nil
 	})
 	respondMutation(w, err, http.StatusCreated, created)
@@ -1477,7 +1583,7 @@ func (s *server) createInitiative(w http.ResponseWriter, r *http.Request) {
 	var created domain.Initiative
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "initiative.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
-		created = domain.Initiative{ID: fmt.Sprintf("initiative_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), SlugID: slug(*input.Name), Icon: "Initiative", Color: "#d15f64", Status: "active", PriorityLabel: "No priority", Health: "noUpdate", Creator: data.Viewer, ContributingTeamIDs: []string{}, LabelIDs: []string{}, ProjectIDs: []string{}, Resources: []domain.InitiativeResource{}, Comments: []domain.Comment{}, NotificationRules: domain.InitiativeNotificationRules{DescriptionChanges: true, NewUpdate: true}, UpdateSchedule: domain.InitiativeUpdateSchedule{Cadence: "none", Weekday: 1, TimeRange: "09:00-12:00"}, DescriptionHistory: []domain.InitiativeDescriptionRevision{}, CreatedAt: now, UpdatedAt: now}
+		created = domain.Initiative{ID: fmt.Sprintf("initiative_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), SlugID: slug(*input.Name), Icon: "Initiative", Color: "#d15f64", Status: "active", PriorityLabel: "No priority", Health: "noUpdate", Creator: data.Viewer, ContributingTeamIDs: []string{}, LabelIDs: []string{}, ParentInitiativeIDs: []string{}, ProjectIDs: []string{}, Resources: []domain.InitiativeResource{}, Comments: []domain.Comment{}, NotificationRules: domain.InitiativeNotificationRules{DescriptionChanges: true, NewUpdate: true}, UpdateSchedule: domain.InitiativeUpdateSchedule{Cadence: "none", Weekday: 1, TimeRange: "09:00-12:00"}, DescriptionHistory: []domain.InitiativeDescriptionRevision{}, CreatedAt: now, UpdatedAt: now}
 		if err := applyInitiativeUpdate(data, &created, input); err != nil {
 			return "", err
 		}
@@ -2702,6 +2808,9 @@ func (s *server) createRelation(w http.ResponseWriter, r *http.Request) {
 		if id == input.RelatedIssueID {
 			return errInvalid
 		}
+		if input.Type == "parent_of" && issueParentCreatesCycle(data, target.ID, issue.ID) || input.Type == "sub_issue_of" && issueParentCreatesCycle(data, issue.ID, target.ID) {
+			return fmt.Errorf("%w: issue relation would create a parent cycle", errInvalid)
+		}
 		relation = domain.IssueRelation{ID: fmt.Sprintf("relation_%d", time.Now().UnixNano()), Type: input.Type, IssueID: id, RelatedIssueID: input.RelatedIssueID}
 		issue.Relations = append(issue.Relations, relation)
 		inverse := domain.IssueRelation{ID: relation.ID, Type: inverseRelation(input.Type), IssueID: input.RelatedIssueID, RelatedIssueID: id}
@@ -2769,21 +2878,19 @@ func (s *server) createAttachment(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	attachmentID := fmt.Sprintf("attachment_%d", time.Now().UnixNano())
 	safeName := attachmentID + "_" + filepath.Base(header.Filename)
-	diskPath := filepath.Join(s.uploadPath, safeName)
-	out, err := os.Create(diskPath)
+	storage, err := s.storage()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, http.StatusInternalServerError, "storage unavailable")
 		return
 	}
-	size, copyErr := io.Copy(out, io.LimitReader(file, 20<<20))
-	closeErr := out.Close()
-	if copyErr != nil || closeErr != nil {
-		_ = os.Remove(diskPath)
+	size, copyErr := storage.Put(r.Context(), safeName, io.LimitReader(file, (20<<20)+1), header.Header.Get("Content-Type"))
+	if copyErr != nil {
+		_ = storage.Delete(r.Context(), safeName)
 		writeError(w, http.StatusInternalServerError, "upload failed")
 		return
 	}
-	if size >= 20<<20 {
-		_ = os.Remove(diskPath)
+	if size > 20<<20 {
+		_ = storage.Delete(r.Context(), safeName)
 		writeError(w, http.StatusRequestEntityTooLarge, "attachment exceeds 20 MB")
 		return
 	}
@@ -2799,7 +2906,7 @@ func (s *server) createAttachment(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err != nil {
-		_ = os.Remove(diskPath)
+		_ = storage.Delete(r.Context(), safeName)
 	}
 	respondMutation(w, err, http.StatusCreated, attachment)
 }
@@ -2946,7 +3053,9 @@ func (s *server) deleteAttachment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.HasPrefix(path, "/uploads/") {
-		_ = os.Remove(filepath.Join(s.uploadPath, filepath.Base(path)))
+		if storage, storageErr := s.storage(); storageErr == nil {
+			_ = storage.Delete(r.Context(), filepath.Base(path))
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -2965,7 +3074,25 @@ func (s *server) serveUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	http.ServeFile(w, r, filepath.Join(s.uploadPath, name))
+	storage, err := s.storage()
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	reader, contentType, size, err := storage.Open(r.Context(), name)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer reader.Close()
+	if contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	}
+	if size >= 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	}
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	_, _ = io.Copy(w, reader)
 }
 
 func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBootstrap, userID, url string) bool {
@@ -2976,6 +3103,11 @@ func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBo
 		}
 		for _, issue := range data.Issues {
 			if slices.ContainsFunc(issue.Attachments, func(attachment domain.Attachment) bool { return attachment.URL == url }) {
+				return true
+			}
+		}
+		for _, request := range data.CustomerRequests {
+			if slices.ContainsFunc(request.Attachments, func(attachment domain.Attachment) bool { return attachment.URL == url }) {
 				return true
 			}
 		}
@@ -3178,6 +3310,13 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		}
 		changes["assignee"] = *input.AssigneeID
 	}
+	if input.DelegateID != nil {
+		issue.Delegate = userByID(data, *input.DelegateID)
+		if *input.DelegateID != "" && issue.Delegate == nil {
+			return nil, fmt.Errorf("%w: unknown delegate", errInvalid)
+		}
+		changes["delegate"] = *input.DelegateID
+	}
 	if input.ProjectID != nil {
 		issue.Project = projectByID(data, *input.ProjectID)
 		if *input.ProjectID != "" && issue.Project == nil {
@@ -3225,6 +3364,24 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 			issue.DueDate = input.DueDate
 		}
 		changes["dueDate"] = *input.DueDate
+	}
+	if input.SLABreachesAt != nil {
+		if *input.SLABreachesAt == "" {
+			issue.SLABreachesAt = nil
+		} else {
+			value, err := time.Parse(time.RFC3339, *input.SLABreachesAt)
+			if err != nil {
+				return nil, fmt.Errorf("%w: invalid SLA breach time", errInvalid)
+			}
+			value = value.UTC()
+			issue.SLABreachesAt = &value
+		}
+	}
+	if input.SLAType != nil {
+		if *input.SLAType != "" && !slices.Contains([]string{"all", "onlyBusinessDays"}, *input.SLAType) {
+			return nil, fmt.Errorf("%w: invalid SLA type", errInvalid)
+		}
+		issue.SLAType = *input.SLAType
 	}
 	if input.Recurrence != nil {
 		value := strings.TrimSpace(*input.Recurrence)
@@ -3279,6 +3436,9 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		if *input.ParentID != "" {
 			if _, err := issueByID(data, *input.ParentID); err != nil {
 				return nil, fmt.Errorf("%w: unknown parent", errInvalid)
+			}
+			if issueParentCreatesCycle(data, issue.ID, *input.ParentID) {
+				return nil, fmt.Errorf("%w: issue parent would create a cycle", errInvalid)
 			}
 		}
 		setParent(data, issue, *input.ParentID)
@@ -3429,6 +3589,22 @@ func setParent(data *domain.Bootstrap, issue *domain.Issue, parentID string) {
 	if parent, err := issueByID(data, parentID); err == nil {
 		parent.SubIssueIDs = appendUnique(parent.SubIssueIDs, issue.ID)
 	}
+}
+
+func issueParentCreatesCycle(data *domain.Bootstrap, issueID, parentID string) bool {
+	seen := map[string]bool{}
+	for parentID != "" && !seen[parentID] {
+		if parentID == issueID {
+			return true
+		}
+		seen[parentID] = true
+		parent, err := issueByID(data, parentID)
+		if err != nil || parent.ParentID == nil {
+			return false
+		}
+		parentID = *parent.ParentID
+	}
+	return parentID != ""
 }
 
 func issueByID(data *domain.Bootstrap, id string) (*domain.Issue, error) {
@@ -3596,8 +3772,20 @@ func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input d
 	if input.StartDate != nil {
 		project.StartDate = optionalString(*input.StartDate)
 	}
+	if input.StartDateResolution != nil {
+		if !slices.Contains([]string{"halfYear", "month", "quarter", "year"}, *input.StartDateResolution) {
+			return errInvalid
+		}
+		project.StartDateResolution = *input.StartDateResolution
+	}
 	if input.TargetDate != nil {
 		project.TargetDate = optionalString(*input.TargetDate)
+	}
+	if input.TargetDateResolution != nil {
+		if !slices.Contains([]string{"halfYear", "month", "quarter", "year"}, *input.TargetDateResolution) {
+			return errInvalid
+		}
+		project.TargetDateResolution = *input.TargetDateResolution
 	}
 	return nil
 }
@@ -3674,6 +3862,14 @@ func applyInitiativeUpdate(data *domain.Bootstrap, initiative *domain.Initiative
 			}
 		}
 		initiative.LabelIDs = slices.Clone(*input.LabelIDs)
+	}
+	if input.ParentInitiativeIDs != nil {
+		for _, id := range *input.ParentInitiativeIDs {
+			if id == initiative.ID || !slices.ContainsFunc(data.Initiatives, func(item domain.Initiative) bool { return item.ID == id }) {
+				return errInvalid
+			}
+		}
+		initiative.ParentInitiativeIDs = normalizedStrings(*input.ParentInitiativeIDs)
 	}
 	if input.ProjectIDs != nil {
 		for _, id := range *input.ProjectIDs {
@@ -3889,9 +4085,13 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 		log.Printf("encode response: %v", err)
 	}
 }
-func cors(next http.Handler) http.Handler {
+func (s *server) cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
+		origin := s.allowedOrigin
+		if origin == "" {
+			origin = "http://localhost:5173"
+		}
+		w.Header().Set("Access-Control-Allow-Origin", strings.TrimRight(origin, "/"))
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Workspace-Key, X-Client-ID")
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
@@ -3908,10 +4108,4 @@ func requestLog(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 		log.Printf("%s %s %s", r.Method, r.URL.Path, time.Since(started).Round(time.Millisecond))
 	})
-}
-func env(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return fallback
 }

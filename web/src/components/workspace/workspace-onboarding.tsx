@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronLeft } from 'lucide-react'
+import { ChevronLeft } from 'lucide-react'
 import type { AccountBootstrap, BootstrapData } from '@/types/flow'
 import { slugifyWorkspace } from './workspace-model'
 import { LanguageSelect } from '@/i18n/i18n'
@@ -9,7 +9,6 @@ export function WorkspaceOnboarding({ account, onCreate, onBack }: { account: Ac
   const [urlKey, setUrlKey] = useState('')
   const [slugEdited, setSlugEdited] = useState(false)
   const [region, setRegion] = useState('us')
-  const [regionOpen, setRegionOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -34,12 +33,7 @@ export function WorkspaceOnboarding({ account, onCreate, onBack }: { account: Ac
       <p>Move work forward across teams and agents</p>
       <label><span>Name</span><input autoFocus aria-label="Name" value={name} onChange={event => setName(event.target.value)} /></label>
       <label><span>URL</span><div className="workspace-url-field"><i>flow.app/</i><input aria-label="URL" value={urlKey} onChange={event => { setSlugEdited(true); setUrlKey(slugifyWorkspace(event.target.value)) }} /></div></label>
-      <label className="workspace-region-field"><span>Region</span><button type="button" aria-haspopup="listbox" aria-expanded={regionOpen} onClick={() => setRegionOpen(open => !open)}>{region === 'eu' ? 'European Union' : 'United States'}<ChevronDown size={14}/></button>
-        {regionOpen && <div role="listbox" className="workspace-region-menu">
-          <button type="button" role="option" aria-selected={region === 'us'} onClick={() => { setRegion('us'); setRegionOpen(false) }}>United States</button>
-          <button type="button" role="option" aria-selected={region === 'eu'} onClick={() => { setRegion('eu'); setRegionOpen(false) }}>European Union</button>
-        </div>}
-      </label>
+      <label className="workspace-region-field"><span>Region</span><select aria-label="Region" value={region} onChange={event=>setRegion(event.target.value)}><option value="us">United States</option><option value="eu">European Union</option></select></label>
       {error && <div className="workspace-form-error">{error}</div>}
       <button className="workspace-create-submit" disabled={!name.trim() || !urlKey || saving}>{saving ? 'Creating workspace…' : 'Create workspace'}</button>
     </form>

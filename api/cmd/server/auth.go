@@ -85,6 +85,7 @@ func authClientAddress(r *http.Request) string {
 
 type authUserContextKey struct{}
 type apiKeyContextKey struct{}
+type workspaceKeyContextKey struct{}
 
 func (s *server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -92,7 +93,7 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		user, apiKey := s.authenticateAPIKey(r)
+		user, apiKey, apiWorkspace := s.authenticateAPIKey(r)
 		if apiKey == nil {
 			cookie, err := r.Cookie(sessionCookieName)
 			if err != nil || cookie.Value == "" {
@@ -109,6 +110,7 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), authUserContextKey{}, user)
 		if apiKey != nil {
 			ctx = context.WithValue(ctx, apiKeyContextKey{}, *apiKey)
+			ctx = context.WithValue(ctx, workspaceKeyContextKey{}, apiWorkspace)
 		}
 		ctx = store.ContextWithActor(ctx, user)
 		ctx = store.ContextWithRealtimeClient(ctx, r.Header.Get("X-Client-ID"))
@@ -120,42 +122,55 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 	})
 }
 
-func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKey) {
+func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKey, string) {
 	header := strings.TrimSpace(r.Header.Get("Authorization"))
 	if !strings.HasPrefix(strings.ToLower(header), "bearer ") {
-		return domain.User{}, nil
+		return domain.User{}, nil, ""
 	}
 	secret := strings.TrimSpace(header[len("Bearer "):])
-	data, ok := s.store.BootstrapFor(workspaceKey(r))
+	key := workspaceKey(r)
+	data, ok := s.store.BootstrapFor(key)
 	if !ok {
-		return domain.User{}, nil
+		if resolved, _, found := s.store.FindAPIKey(secretHash(secret)); found {
+			key = resolved
+			data, ok = s.store.BootstrapFor(key)
+		}
+	}
+	if !ok {
+		return domain.User{}, nil, ""
 	}
 	hash := secretHash(secret)
 	for _, key := range data.APIKeys {
-		if key.SecretHash != hash || key.RevokedAt != nil {
+		if key.SecretHash != hash || key.RevokedAt != nil || key.ExpiresAt != nil && time.Now().UTC().After(*key.ExpiresAt) {
 			continue
 		}
 		if r.Method != http.MethodGet && r.Method != http.MethodHead && !slices.Contains(key.Scopes, "write") {
-			return domain.User{}, nil
+			return domain.User{}, nil, ""
 		}
-		for _, user := range data.Users {
-			if user.ID == key.CreatorID {
-				now := time.Now().UTC()
-				_ = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "api_key.used", key.ID, nil, func(next *domain.Bootstrap) error {
-					if index := slices.IndexFunc(next.APIKeys, func(item domain.APIKey) bool { return item.ID == key.ID }); index >= 0 {
-						next.APIKeys[index].LastUsedAt = &now
+		if user, err := s.store.UserByID(r.Context(), key.CreatorID); err == nil {
+			now := time.Now().UTC()
+			_ = s.store.MutateWorkspace(r.Context(), data.Workspace.URLKey, "api_key.used", key.ID, nil, func(next *domain.Bootstrap) error {
+				if index := slices.IndexFunc(next.APIKeys, func(item domain.APIKey) bool { return item.ID == key.ID }); index >= 0 {
+					next.APIKeys[index].LastUsedAt = &now
+				}
+				if key.AuthorizationID != "" {
+					if index := slices.IndexFunc(next.OAuthAuthorizations, func(item domain.OAuthAuthorization) bool { return item.ID == key.AuthorizationID }); index >= 0 {
+						next.OAuthAuthorizations[index].LastUsedAt = &now
 					}
-					return nil
-				})
-				return user, &key
-			}
+				}
+				return nil
+			})
+			return user, &key, data.Workspace.URLKey
 		}
 	}
-	return domain.User{}, nil
+	return domain.User{}, nil, ""
 }
 
 func publicAuthPath(path string) bool {
-	return path == "/api/health" || path == "/api/oauth/token" || path == "/api/auth/register" || path == "/api/auth/verify-email" || path == "/api/auth/resend-verification" || path == "/api/auth/login" || path == "/api/auth/logout" || path == "/api/auth/session" || path == "/api/auth/forgot-password" || path == "/api/auth/reset-password" || strings.HasPrefix(path, "/api/invitations/preview/")
+	if path == "/mcp" || path == "/mcp/readonly" || path == "/oauth/register" || path == "/oauth/token" || path == "/oauth/revoke" || strings.HasPrefix(path, "/.well-known/oauth-") || strings.HasPrefix(path, "/api/mcp/uploads/") {
+		return true
+	}
+	return path == "/api/health" || path == "/api/oauth/token" || path == "/api/auth/register" || path == "/api/auth/verify-email" || path == "/api/auth/resend-verification" || path == "/api/auth/login" || path == "/api/auth/logout" || path == "/api/auth/session" || path == "/api/auth/forgot-password" || path == "/api/auth/reset-password" || path == "/api/auth/providers" || strings.HasPrefix(path, "/api/auth/google/") || strings.HasPrefix(path, "/api/auth/oidc/") || strings.HasPrefix(path, "/api/auth/saml/") || strings.HasPrefix(path, "/api/invitations/preview/") || strings.HasPrefix(path, "/api/calendar/cycles/")
 }
 
 func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Request, user domain.User) bool {
@@ -244,6 +259,9 @@ func trashRestoreResourceType(data domain.Bootstrap, r *http.Request) string {
 }
 
 func featureForPath(path string) string {
+	if strings.HasPrefix(path, "/api/issues/") && strings.HasSuffix(path, "/releases") {
+		return "releases"
+	}
 	for prefix, feature := range map[string]string{"/api/documents": "documents", "/api/customers": "customer-requests", "/api/customer-requests": "customer-requests", "/api/releases": "releases", "/api/release-pipelines": "releases", "/api/asks": "asks", "/api/initiatives": "initiatives"} {
 		if strings.HasPrefix(path, prefix) {
 			return feature
@@ -440,6 +458,10 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 				RelatedIssueID string `json:"relatedIssueId"`
 			}
 			return peekRequestJSON(r, &input) && issueAllowed(input.RelatedIssueID)
+		}
+		if len(parts) >= 4 && parts[3] == "releases" && r.Method == http.MethodPut {
+			var input issueReleasesInput
+			return peekRequestJSON(r, &input) && !slices.ContainsFunc(input.ReleaseIDs, func(id string) bool { return !releaseAllowed(id) })
 		}
 		if r.Method == http.MethodPatch {
 			var input domain.IssueUpdateInput

@@ -574,7 +574,6 @@ function ProjectContextSubmenu({ kind, onAction, onClose, onPropertyChange, opti
       <ContextOptionIcon option={option} property={property}/><span className="lp-project-context__label">{option.label}</span>{!multiple && selected.has(option.value) && <CheckIcon/>}
     </button>)}</div>)}</div>
     {property === 'labels' && !filtered.length && <div className="lp-project-context__empty">{query ? `Create “${query}”` : 'Start typing to create a new label'}</div>}
-    {property === 'members' && <button onClick={onClose} type="button"><UserRound/><span className="lp-project-context__label">Invite and add…</span></button>}
   </>
 }
 

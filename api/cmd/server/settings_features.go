@@ -554,6 +554,9 @@ func (s *server) updateProjectStatus(w http.ResponseWriter, r *http.Request) {
 		if input.Color != nil {
 			data.ProjectStatuses[index].Color = *input.Color
 		}
+		if input.Type != nil && *input.Type != data.ProjectStatuses[index].Type {
+			return fmt.Errorf("%w: project status type cannot be changed", errInvalid)
+		}
 		if input.Type != nil {
 			data.ProjectStatuses[index].Type = *input.Type
 		}
@@ -571,6 +574,19 @@ func (s *server) updateProjectStatus(w http.ResponseWriter, r *http.Request) {
 func (s *server) deleteProjectStatus(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project_status.deleted", id, nil, func(data *domain.Bootstrap) error {
+		statusIndex := slices.IndexFunc(data.ProjectStatuses, func(status domain.ProjectStatus) bool { return status.ID == id })
+		if statusIndex < 0 {
+			return errNotFound
+		}
+		statusType, typeCount := data.ProjectStatuses[statusIndex].Type, 0
+		for _, status := range data.ProjectStatuses {
+			if status.Type == statusType {
+				typeCount++
+			}
+		}
+		if typeCount == 1 {
+			return fmt.Errorf("%w: can't delete the last status of a type", errInvalid)
+		}
 		if slices.ContainsFunc(data.Projects, func(project domain.Project) bool { return project.Status.ID == id }) {
 			return errors.New("status is used by projects")
 		}
@@ -619,8 +635,7 @@ func (s *server) reorderProjectStatuses(w http.ResponseWriter, r *http.Request) 
 func (s *server) listWorkspaceIssueTemplates(w http.ResponseWriter, r *http.Request) {
 	result := []domain.IssueTemplate{}
 	for _, template := range s.workspaceData(r).IssueTemplates {
-		if template.Scope == "workspace" || template.TeamID == "" {
-			template.TeamID = ""
+		if template.Scope == "workspace" || template.VisibilityTeamID == "" {
 			result = append(result, template)
 		}
 	}
@@ -656,7 +671,7 @@ func (s *server) updateWorkspaceIssueTemplate(w http.ResponseWriter, r *http.Req
 	var updated domain.IssueTemplate
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue_template.updated", id, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.IssueTemplates, func(template domain.IssueTemplate) bool {
-			return template.ID == id && (template.Scope == "workspace" || template.TeamID == "")
+			return template.ID == id && (template.Scope == "workspace" || template.VisibilityTeamID == "")
 		})
 		if index < 0 {
 			return errNotFound
@@ -676,7 +691,7 @@ func (s *server) deleteWorkspaceIssueTemplate(w http.ResponseWriter, r *http.Req
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue_template.deleted", id, nil, func(data *domain.Bootstrap) error {
 		before := len(data.IssueTemplates)
 		data.IssueTemplates = slices.DeleteFunc(data.IssueTemplates, func(template domain.IssueTemplate) bool {
-			return template.ID == id && (template.Scope == "workspace" || template.TeamID == "")
+			return template.ID == id && (template.Scope == "workspace" || template.VisibilityTeamID == "")
 		})
 		if before == len(data.IssueTemplates) {
 			return errNotFound
@@ -910,7 +925,7 @@ func (s *server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 	provider := strings.ToLower(r.PathValue("provider"))
-	if !slices.Contains([]string{"github", "slack", "figma", "google"}, provider) {
+	if !slices.Contains([]string{"github", "gitlab", "slack", "figma", "google"}, provider) {
 		writeError(w, http.StatusBadRequest, "unsupported integration")
 		return
 	}
@@ -921,16 +936,46 @@ func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	if input.Config == nil {
+		input.Config = map[string]string{}
+	}
+	secret := strings.TrimSpace(input.Config["apiToken"])
+	if provider == "github" && strings.TrimSpace(input.Config["organization"]) == "" {
+		writeError(w, http.StatusBadRequest, "organization is required")
+		return
+	}
+	if provider == "gitlab" && secret == "" {
+		writeError(w, http.StatusBadRequest, "API access token is required")
+		return
+	}
+	delete(input.Config, "apiToken")
+	if secret != "" {
+		input.Config["tokenHint"] = secret[max(0, len(secret)-4):]
+	}
 	actor := requestActor(s, r)
 	var updated domain.IntegrationConnection
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.connected", provider, input, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.Provider == provider })
-		updated = domain.IntegrationConnection{ID: "integration_" + provider, Provider: provider, Name: strings.TrimSpace(input.Name), Status: "configured", Config: input.Config, ConnectedBy: actor.ID, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+		scope := strings.TrimSpace(input.Config["organization"])
+		if scope == "" {
+			scope = strings.TrimSpace(input.Config["host"])
+		}
+		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool {
+			return item.Provider == provider && (scope == "" || item.Config["organization"] == scope || item.Config["host"] == scope)
+		})
+		now := time.Now().UTC()
+		updated = domain.IntegrationConnection{ID: fmt.Sprintf("integration_%s_%d", provider, now.UnixNano()), Provider: provider, Name: strings.TrimSpace(input.Name), Status: "configured", Config: input.Config, ConnectedBy: actor.ID, CreatedAt: now, UpdatedAt: now}
+		if secret != "" {
+			updated.SecretHash = secretHash(secret)
+		}
 		if updated.Name == "" {
 			updated.Name = strings.ToUpper(provider[:1]) + provider[1:]
 		}
 		if index >= 0 {
 			updated.CreatedAt = data.IntegrationConnections[index].CreatedAt
+			updated.ID = data.IntegrationConnections[index].ID
+			if updated.SecretHash == "" {
+				updated.SecretHash = data.IntegrationConnections[index].SecretHash
+			}
 			data.IntegrationConnections[index] = updated
 		} else {
 			data.IntegrationConnections = append(data.IntegrationConnections, updated)
@@ -938,6 +983,57 @@ func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
+}
+
+func (s *server) updateIntegration(w http.ResponseWriter, r *http.Request) {
+	provider, id := strings.ToLower(r.PathValue("provider")), r.PathValue("id")
+	var input struct {
+		Name   *string           `json:"name"`
+		Config map[string]string `json:"config"`
+		Status *string           `json:"status"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	var updated domain.IntegrationConnection
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.updated", id, input, func(data *domain.Bootstrap) error {
+		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
+		if index < 0 {
+			return errNotFound
+		}
+		updated = data.IntegrationConnections[index]
+		if updated.Config == nil {
+			updated.Config = map[string]string{}
+		}
+		if input.Name != nil && strings.TrimSpace(*input.Name) != "" {
+			updated.Name = strings.TrimSpace(*input.Name)
+		}
+		for key, value := range input.Config {
+			if key != "apiToken" {
+				updated.Config[key] = strings.TrimSpace(value)
+			}
+		}
+		if input.Status != nil && slices.Contains([]string{"configured", "paused"}, *input.Status) {
+			updated.Status = *input.Status
+		}
+		updated.UpdatedAt = time.Now().UTC()
+		data.IntegrationConnections[index] = updated
+		return nil
+	})
+	respondMutation(w, err, http.StatusOK, updated)
+}
+
+func (s *server) disconnectIntegrationConnection(w http.ResponseWriter, r *http.Request) {
+	provider, id := strings.ToLower(r.PathValue("provider")), r.PathValue("id")
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.disconnected", id, nil, func(data *domain.Bootstrap) error {
+		before := len(data.IntegrationConnections)
+		data.IntegrationConnections = slices.DeleteFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
+		if before == len(data.IntegrationConnections) {
+			return errNotFound
+		}
+		return nil
+	})
+	respondMutation(w, err, http.StatusNoContent, nil)
 }
 
 func (s *server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
