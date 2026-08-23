@@ -15,8 +15,8 @@
 
 Flow brings issues, projects, cycles, initiatives, documents, customer requests,
 and workspace administration into one focused application. It ships as a React
-web client backed by a Go API and SQLite, with no external database required for
-local development.
+web client backed by a Go API. SQLite and local files require no external
+services for development; PostgreSQL, MySQL, and S3 are configurable for production.
 
 > [!IMPORTANT]
 > Flow is under active development. Review the security settings and replace all
@@ -43,8 +43,10 @@ React 19 / TypeScript / Vite
   | /api proxy in development
   v
 Go HTTP API
-  |-- SQLite persistence
-  |-- Local attachment storage
+  |-- SQLite, PostgreSQL, or MySQL
+  |-- Local or S3-compatible object storage
+  |-- Email, Google OAuth, OIDC, and SAML authentication
+  |-- OpenTelemetry OTLP export (optional)
   `-- SMTP delivery (optional)
 ```
 
@@ -56,7 +58,7 @@ updates and real-time invalidation to keep active sessions synchronized.
 
 ```text
 .
-|-- api/                 Go API, domain model, SQLite store, and tests
+|-- api/                 Go API, domain model, SQL/object stores, and tests
 |-- docs/                Product, routing, and module documentation
 |-- web/                 React application and design system
 |-- .github/             CI, dependency updates, and contribution templates
@@ -137,8 +139,11 @@ Flow reads configuration from environment variables passed to the API process.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `FLOW_DB_PATH` | `data/flow.db` | SQLite database path, relative to `api/` when started there. |
-| `FLOW_UPLOAD_PATH` | `data/uploads` | Local attachment storage directory. |
+| `FLOW_DATABASE_DRIVER` | `sqlite` | `sqlite`, `postgres`, or `mysql`. |
+| `FLOW_DATABASE_PATH` | `data/flow.db` | SQLite database path. |
+| `FLOW_DATABASE_URL` | unset | PostgreSQL/MySQL connection URL. |
+| `FLOW_STORAGE_DRIVER` | `local` | `local` or `s3`. |
+| `FLOW_STORAGE_LOCAL_PATH` | `data/uploads` | Local attachment storage directory. |
 | `FLOW_SEED_PASSWORD` | `flow-demo` | Initial local administrator password. |
 | `FLOW_APP_URL` | unset | Public web origin used in account emails. |
 | `FLOW_SMTP_HOST` | unset | SMTP server hostname. |
@@ -154,8 +159,11 @@ Example production-oriented environment:
 
 ```bash
 export FLOW_APP_URL=https://flow.example
-export FLOW_DB_PATH=/var/lib/flow/flow.db
-export FLOW_UPLOAD_PATH=/var/lib/flow/uploads
+export FLOW_DATABASE_DRIVER=postgres
+export FLOW_DATABASE_URL='postgres://flow:secret@db:5432/flow?sslmode=require'
+export FLOW_STORAGE_DRIVER=s3
+export FLOW_S3_BUCKET=flow-uploads
+export FLOW_S3_REGION=us-east-1
 export FLOW_SMTP_HOST=smtp.example.com
 export FLOW_SMTP_PORT=587
 export FLOW_SMTP_USERNAME=apikey
@@ -167,6 +175,10 @@ export FLOW_DEV_AUTH_TOKENS=false
 
 Enable `FLOW_TRUST_PROXY_HEADERS` only when a trusted proxy overwrites incoming
 forwarded headers.
+
+See [Deployment configuration](docs/configuration.md) and [`.env.example`](.env.example)
+for PostgreSQL/MySQL, S3/MinIO, Google OAuth, enterprise OIDC, SAML, secret-file,
+connection-pool, and OpenTelemetry settings.
 
 ## Quality Checks
 

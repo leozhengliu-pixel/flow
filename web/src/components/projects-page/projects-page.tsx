@@ -88,6 +88,7 @@ export type ProjectsPageProps = {
   onCommentProjectUpdate?: (projectId: string, updateId: string, body: string) => Promise<ProjectUpdate>
   onReactProjectUpdate?: (projectId: string, updateId: string, emoji: string) => Promise<ProjectUpdate>
   createOnMount?: boolean
+  initialTemplateId?: string
 }
 
 export function ProjectsPage({
@@ -139,6 +140,7 @@ export function ProjectsPage({
   onCommentProjectUpdate,
   onReactProjectUpdate,
   createOnMount = false,
+  initialTemplateId,
 }: ProjectsPageProps) {
   const sourceView = savedView ?? duplicateFrom
   const scopedProjects = useMemo(() => scopeTeamId ? projects.filter(project => project.teamIds.includes(scopeTeamId)) : projects, [projects, scopeTeamId])
@@ -427,6 +429,7 @@ export function ProjectsPage({
       viewer={viewer ?? users.find(user => user.id === viewerId)}
     />}
     <NewProjectDialog
+      initialTemplateId={initialTemplateId}
       defaultStatus={createStatus}
       dependencies={projects.map(project => ({ id: project.id, label: project.name, color: project.color }))}
       labels={projectLabels.map(label => ({ id: label.id, label: label.name, color: label.color, groupId: label.groupId, groupLabel: label.groupId ? projectLabelGroupNames.get(label.groupId) : undefined }))}

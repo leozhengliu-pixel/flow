@@ -210,6 +210,10 @@ func TestIssueLifecycle(t *testing.T) {
 	if child.ParentID == nil || *child.ParentID != created.ID || !contains(parent.SubIssueIDs, child.ID) {
 		t.Fatalf("parent linkage missing: parent=%#v child=%#v", parent.SubIssueIDs, child.ParentID)
 	}
+	requestJSON[any](t, handler, http.MethodPatch, "/api/issues/"+created.ID, map[string]any{"parentId": child.ID}, http.StatusBadRequest)
+	requestJSON[any](t, handler, http.MethodPost, "/api/issues/"+child.ID+"/relations", map[string]any{
+		"type": "parent_of", "relatedIssueId": created.ID,
+	}, http.StatusBadRequest)
 
 	relation := requestJSON[domain.IssueRelation](t, handler, http.MethodPost, "/api/issues/"+created.ID+"/relations", map[string]any{
 		"type": "blocks", "relatedIssueId": child.ID,

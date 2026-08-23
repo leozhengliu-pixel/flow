@@ -1,65 +1,25 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Check, ChevronRight, Edit3, MoreHorizontal, Play, SlidersHorizontal } from 'lucide-react'
+import { CalendarDays, Check, ChevronRight, Copy, Download, Edit3, ExternalLink, Link2, MoreHorizontal, Play, Star } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { CalendarIcon } from '@/components/issue/issue-icons'
+import { toast } from 'sonner'
+
 import type { Cycle, CycleMutationInput } from '@/types/flow'
+import { getCycleCalendarFeed } from '@/lib/api'
+import { useI18n } from '@/i18n/i18n'
 
-export function CycleActions({ cycle, onUpdate, onStart, onComplete }: {
-  cycle: Cycle
-  onUpdate: (input: CycleMutationInput) => Promise<unknown>
-  onStart: () => Promise<unknown>
-  onComplete: () => Promise<unknown>
-}) {
-  const [editor, setEditor] = useState<'details'|'dates'>()
-  const [confirm, setConfirm] = useState<'start'|'complete'>()
-  return <>
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild><button aria-label={`${cycle.name} actions`} className="cycle-icon-button" type="button"><MoreHorizontal size={15}/></button></DropdownMenu.Trigger>
-      <DropdownMenu.Portal><DropdownMenu.Content align="end" className="cycle-menu" collisionPadding={10} sideOffset={5}>
-        <DropdownMenu.Item onSelect={() => setEditor('details')}><Edit3 size={14}/><span>Edit cycle</span><kbd>E</kbd></DropdownMenu.Item>
-        <DropdownMenu.Item onSelect={() => setEditor('dates')}><CalendarIcon size={14}/><span>Change dates…</span></DropdownMenu.Item>
-        <DropdownMenu.Sub><DropdownMenu.SubTrigger><SlidersHorizontal size={14}/><span>Cycle actions</span><ChevronRight size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="cycle-menu" sideOffset={4} alignOffset={-5}>
-          {cycle.status === 'upcoming' && <DropdownMenu.Item onSelect={() => setConfirm('start')}><Play size={14}/><span>Start cycle today</span></DropdownMenu.Item>}
-          {cycle.status === 'current' && <DropdownMenu.Item onSelect={() => setConfirm('complete')}><Check size={14}/><span>Complete cycle</span></DropdownMenu.Item>}
-          <DropdownMenu.Item onSelect={() => setEditor('dates')}><CalendarIcon size={14}/><span>Move or resize cycle</span></DropdownMenu.Item>
-        </DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
-      </DropdownMenu.Content></DropdownMenu.Portal>
-    </DropdownMenu.Root>
-    <CycleEditor cycle={cycle} mode={editor} open={Boolean(editor)} onOpenChange={open => { if (!open) setEditor(undefined) }} onSubmit={onUpdate}/>
-    <CycleConfirm cycle={cycle} kind={confirm} open={Boolean(confirm)} onOpenChange={open => { if (!open) setConfirm(undefined) }} onConfirm={async () => { if (confirm === 'start') await onStart(); else await onComplete(); setConfirm(undefined) }}/>
-  </>
+export function CycleActions({cycle,onUpdate,onStart,onComplete,onReload,canonicalPath,detail=false}:{cycle:Cycle;onUpdate:(input:CycleMutationInput)=>Promise<unknown>;onStart?:()=>Promise<unknown>;onComplete?:()=>Promise<unknown>;onReload:()=>Promise<void>;canonicalPath?:string;detail?:boolean}){
+  const {t}=useI18n(),[editor,setEditor]=useState<'details'|'start'|'end'>(),[confirm,setConfirm]=useState<'start'|'complete'>()
+  const feed=async(action:'copy'|'download'|'google')=>{try{const result=await getCycleCalendarFeed(cycle.id),absolute=new URL(result.url,location.origin).toString();if(action==='copy'){await navigator.clipboard.writeText(absolute);toast.success(t('Calendar feed URL copied'))}else if(action==='download'){const anchor=document.createElement('a');anchor.href=absolute;anchor.download=`cycle-${cycle.number}.ics`;anchor.click()}else window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(cycle.name)}&dates=${dateForGoogle(cycle.startsAt)}/${dateForGoogle(cycle.endsAt)}`,'_blank')}catch(error){toast.error(error instanceof Error?error.message:t('Could not create calendar feed'))}}
+  return <><DropdownMenu.Root><DropdownMenu.Trigger asChild><button className="cycle-row-menu" aria-label={t(detail?'Cycle options':'Open menu')}><MoreHorizontal/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="linear-cycle-menu" align="end" sideOffset={5} collisionPadding={10}><DropdownMenu.Item onSelect={()=>setEditor('details')}><Edit3/><span>{t('Edit cycle name and description…')}</span></DropdownMenu.Item><DropdownMenu.Sub><DropdownMenu.SubTrigger><CalendarDays/><span>{t('Change cycle dates')}</span><ChevronRight/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="linear-cycle-menu" sideOffset={4}><DropdownMenu.Item onSelect={()=>setEditor('start')}>{t('Move start date…')}</DropdownMenu.Item><DropdownMenu.Item onSelect={()=>setEditor('end')}>{t('Move end date…')}</DropdownMenu.Item></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub><DropdownMenu.Separator/><DropdownMenu.Item onSelect={()=>void onUpdate({favorite:!cycle.favorite})}><Star/><span>{t(cycle.favorite?'Unfavorite':'Favorite')}</span></DropdownMenu.Item><DropdownMenu.Item onSelect={()=>void navigator.clipboard.writeText(new URL(canonicalPath??location.pathname,location.origin).toString())}><Copy/><span>{t('Copy link')}</span></DropdownMenu.Item><DropdownMenu.Sub><DropdownMenu.SubTrigger><CalendarDays/><span>{t('Subscribe to cycle calendar')}</span><ChevronRight/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="linear-cycle-menu cycle-calendar-menu" sideOffset={4}><DropdownMenu.Item onSelect={()=>void feed('google')}><ExternalLink/>{t('Add to Google Calendar')}</DropdownMenu.Item><DropdownMenu.Item onSelect={()=>void feed('copy')}><Link2/>{t('Copy feed URL for your calendar')}</DropdownMenu.Item><DropdownMenu.Item onSelect={()=>void feed('download')}><Download/>{t('Download .ics calendar file')}</DropdownMenu.Item></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>{cycle.status==='upcoming'&&onStart&&<><DropdownMenu.Separator/><DropdownMenu.Item onSelect={()=>setConfirm('start')}><Play/>{t('Start cycle today')}</DropdownMenu.Item></>}{cycle.status==='current'&&onComplete&&<><DropdownMenu.Separator/><DropdownMenu.Item onSelect={()=>setConfirm('complete')}><Check/>{t('Complete cycle')}</DropdownMenu.Item></>}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root><CycleEditor cycle={cycle} mode={editor} open={Boolean(editor)} onOpenChange={open=>!open&&setEditor(undefined)} onSubmit={async input=>{await onUpdate(input);await onReload()}}/><CycleConfirm cycle={cycle} kind={confirm} open={Boolean(confirm)} onOpenChange={open=>!open&&setConfirm(undefined)} onConfirm={async()=>{if(confirm==='start')await onStart?.();else await onComplete?.();await onReload();setConfirm(undefined)}}/></>
 }
 
-function CycleEditor({ cycle, mode, open, onOpenChange, onSubmit }: { cycle: Cycle; mode?: 'details'|'dates'; open: boolean; onOpenChange: (open: boolean) => void; onSubmit: (input: CycleMutationInput) => Promise<unknown> }) {
-  const [name, setName] = useState(cycle.name)
-  const [description, setDescription] = useState(cycle.description)
-  const [startsAt, setStartsAt] = useState(cycle.startsAt.slice(0, 10))
-  const [endsAt, setEndsAt] = useState(cycle.endsAt.slice(0, 10))
-  const [capacity, setCapacity] = useState(cycle.capacity)
-  const [saving, setSaving] = useState(false)
-  useEffect(() => { setName(cycle.name); setDescription(cycle.description); setStartsAt(cycle.startsAt.slice(0, 10)); setEndsAt(cycle.endsAt.slice(0, 10)); setCapacity(cycle.capacity) }, [cycle, open])
-  const submit = async () => {
-    if (!name.trim() || !startsAt || !endsAt || startsAt >= endsAt) return
-    setSaving(true)
-    try { await onSubmit({ name: name.trim(), description: description.trim(), startsAt, endsAt, capacity }); onOpenChange(false) } finally { setSaving(false) }
-  }
-  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="cycle-dialog-overlay"/><Dialog.Content aria-describedby={undefined} className="cycle-dialog">
-    <Dialog.Title>{mode === 'dates' ? 'Change cycle dates' : 'Edit cycle'}</Dialog.Title>
-    <div className="cycle-dialog__fields">
-      {mode !== 'dates' && <><label><span>Name</span><input autoFocus value={name} onChange={event => setName(event.target.value)}/></label><label><span>Description</span><textarea placeholder="Add a description…" value={description} onChange={event => setDescription(event.target.value)}/></label></>}
-      <div><label><span>Start date</span><input type="date" value={startsAt} onChange={event => setStartsAt(event.target.value)}/></label><label><span>End date</span><input type="date" value={endsAt} onChange={event => setEndsAt(event.target.value)}/></label></div>
-      {mode !== 'dates' && <label><span>Capacity</span><input min="0" type="number" value={capacity} onChange={event => setCapacity(Number(event.target.value))}/></label>}
-    </div>
-    <footer><Dialog.Close asChild><button type="button">Cancel</button></Dialog.Close><button className="is-primary" disabled={saving || !name.trim() || startsAt >= endsAt} onClick={() => void submit()} type="button">{saving ? 'Saving…' : 'Save changes'}</button></footer>
-  </Dialog.Content></Dialog.Portal></Dialog.Root>
+function CycleEditor({cycle,mode,open,onOpenChange,onSubmit}:{cycle:Cycle;mode?:'details'|'start'|'end';open:boolean;onOpenChange:(open:boolean)=>void;onSubmit:(input:CycleMutationInput)=>Promise<void>}){
+  const{t}=useI18n(),[name,setName]=useState(cycle.name),[description,setDescription]=useState(cycle.description),[startsAt,setStartsAt]=useState(cycle.startsAt.slice(0,10)),[endsAt,setEndsAt]=useState(cycle.endsAt.slice(0,10)),[saving,setSaving]=useState(false)
+  useEffect(()=>{setName(cycle.name);setDescription(cycle.description);setStartsAt(cycle.startsAt.slice(0,10));setEndsAt(cycle.endsAt.slice(0,10))},[cycle,open])
+  const save=async()=>{setSaving(true);try{await onSubmit(mode==='details'?{name:name.trim(),description:description.trim()}:mode==='start'?{startsAt}:{endsAt});onOpenChange(false)}finally{setSaving(false)}}
+  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="cycle-dialog-overlay"/><Dialog.Content aria-describedby={undefined} className={`linear-cycle-dialog ${mode==='details'?'edit':'date'}`}><Dialog.Title>{t(mode==='details'?'Edit cycle':mode==='start'?'Move start date':'Move end date')}</Dialog.Title><Dialog.Close aria-label={t('Discard')}>×</Dialog.Close>{mode==='details'?<><label>{t('Cycle name')}<input autoFocus value={name} onChange={event=>setName(event.target.value)}/></label><label>{t('Cycle description')}<textarea placeholder={t('Add description…')} value={description} onChange={event=>setDescription(event.target.value)}/></label></>:<label>{t(mode==='start'?'Start date':'End date')}<input autoFocus type="date" value={mode==='start'?startsAt:endsAt} onChange={event=>mode==='start'?setStartsAt(event.target.value):setEndsAt(event.target.value)}/></label>}<footer><Dialog.Close>{t('Cancel')}</Dialog.Close><button className="primary" disabled={saving||mode==='details'&&!name.trim()||startsAt>=endsAt} onClick={()=>void save()}>{saving?t('Saving…'):t(mode==='details'?'Save':'Apply')}</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
 }
 
-function CycleConfirm({ cycle, kind, open, onOpenChange, onConfirm }: { cycle: Cycle; kind?: 'start'|'complete'; open: boolean; onOpenChange: (open: boolean) => void; onConfirm: () => Promise<void> }) {
-  const [saving, setSaving] = useState(false)
-  const action = kind === 'start' ? 'Start cycle today' : 'Complete cycle'
-  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="cycle-dialog-overlay"/><Dialog.Content aria-describedby={undefined} className="cycle-dialog cycle-dialog--confirm">
-    <Dialog.Title>{action}?</Dialog.Title><p>{kind === 'start' ? `The current cycle will complete and unfinished issues will move to ${cycle.name}.` : 'Unfinished issues will roll over to the next cycle.'}</p>
-    <footer><Dialog.Close asChild><button type="button">Cancel</button></Dialog.Close><button className="is-primary" disabled={saving} onClick={() => { setSaving(true); void onConfirm().finally(() => setSaving(false)) }} type="button">{saving ? 'Updating…' : action}</button></footer>
-  </Dialog.Content></Dialog.Portal></Dialog.Root>
-}
+function CycleConfirm({cycle:_cycle,kind,open,onOpenChange,onConfirm}:{cycle:Cycle;kind?:'start'|'complete';open:boolean;onOpenChange:(open:boolean)=>void;onConfirm:()=>Promise<void>}){const{t}=useI18n(),[saving,setSaving]=useState(false);const action=kind==='start'?'Start cycle today':'Complete cycle';return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="cycle-dialog-overlay"/><Dialog.Content aria-describedby={undefined} className="linear-cycle-dialog confirm"><Dialog.Title>{t(`${action}?`)}</Dialog.Title><p>{t(kind==='start'?'The current cycle will complete and unfinished issues will move to this cycle.':'Unfinished issues will roll over to the next cycle.')}</p><footer><Dialog.Close>{t('Cancel')}</Dialog.Close><button className="primary" disabled={saving} onClick={()=>{setSaving(true);void onConfirm().finally(()=>setSaving(false))}}>{t(action)}</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>}
+function dateForGoogle(value:string){return new Date(value).toISOString().slice(0,10).replaceAll('-','')}

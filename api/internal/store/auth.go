@@ -72,12 +72,12 @@ func (s *SQLiteStore) ensureAuthSeed(ctx context.Context) error {
 	defer tx.Rollback()
 	for _, data := range s.workspaces {
 		for _, user := range data.Users {
-			_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+			_, err = tx.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
 				user.ID, normalizeEmail(user.Email), user.Name, user.DisplayName, user.AvatarURL, string(hash), now.Format(time.RFC3339Nano), boolInt(user.Active), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 			if err != nil {
 				return err
 			}
-			_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?)`,
+			_, err = tx.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
 				data.Workspace.ID, user.ID, "admin", "active", now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 			if err != nil {
 				return err
@@ -87,7 +87,7 @@ func (s *SQLiteStore) ensureAuthSeed(ctx context.Context) error {
 				teamRole = "owner"
 			}
 			for _, team := range data.Teams {
-				_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?)`, data.Workspace.ID, team.ID, user.ID, teamRole, now.Format(time.RFC3339Nano))
+				_, err = tx.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`, data.Workspace.ID, team.ID, user.ID, teamRole, now.Format(time.RFC3339Nano))
 				if err != nil {
 					return err
 				}
@@ -129,6 +129,68 @@ func (s *SQLiteStore) Login(ctx context.Context, email, password string) (domain
 	if !user.EmailVerified {
 		return domain.AuthSession{}, "", errors.New("email is not verified")
 	}
+	token, err := randomToken()
+	if err != nil {
+		return domain.AuthSession{}, "", err
+	}
+	now := time.Now().UTC()
+	expires := now.Add(30 * 24 * time.Hour)
+	_, err = s.db.ExecContext(ctx, `INSERT INTO auth_sessions(token_hash,user_id,expires_at,created_at,last_seen_at) VALUES(?,?,?,?,?)`, tokenHash(token), user.ID, expires.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	if err != nil {
+		return domain.AuthSession{}, "", err
+	}
+	return s.sessionForUser(ctx, user, expires), token, nil
+}
+
+func (s *SQLiteStore) LoginExternal(ctx context.Context, email, name, avatarURL string, autoProvision bool) (domain.AuthSession, string, error) {
+	email = normalizeEmail(email)
+	name = strings.TrimSpace(name)
+	if email == "" || !strings.Contains(email, "@") {
+		return domain.AuthSession{}, "", ErrAuthInvalid
+	}
+	if name == "" {
+		name = strings.Split(email, "@")[0]
+	}
+	user, _, err := s.authUserByEmail(ctx, email)
+	now := time.Now().UTC()
+	if errors.Is(err, sql.ErrNoRows) {
+		if !autoProvision {
+			return domain.AuthSession{}, "", ErrAuthInvalid
+		}
+		user = domain.User{ID: fmt.Sprintf("usr_%d", now.UnixNano()), Name: name, DisplayName: name, Email: email, AvatarURL: strings.TrimSpace(avatarURL), Active: true, EmailVerified: true}
+		_, err = s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, user.ID, user.Email, user.Name, user.DisplayName, user.AvatarURL, "", now.Format(time.RFC3339Nano), 1, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	} else if err == nil {
+		if !user.Active {
+			return domain.AuthSession{}, "", ErrAuthInvalid
+		}
+		_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET name=?,display_name=?,avatar_url=?,email_verified_at=?,updated_at=? WHERE id=?`, name, name, strings.TrimSpace(avatarURL), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), user.ID)
+		user.Name, user.DisplayName, user.AvatarURL, user.EmailVerified = name, name, strings.TrimSpace(avatarURL), true
+	}
+	if err != nil {
+		return domain.AuthSession{}, "", err
+	}
+	if autoProvision {
+		s.mu.RLock()
+		workspaceKey := s.lastWorkspaceKey
+		if workspaceKey == "" {
+			workspaceKey = firstWorkspaceKey(s.workspaces)
+		}
+		workspace := s.workspaces[workspaceKey]
+		s.mu.RUnlock()
+		if workspace.Workspace.ID != "" {
+			_, err = s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING`, workspace.Workspace.ID, user.ID, "member", "active", now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+			if err == nil && len(workspace.Teams) > 0 {
+				_, err = s.db.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`, workspace.Workspace.ID, workspace.Teams[0].ID, user.ID, "member", now.Format(time.RFC3339Nano))
+			}
+		}
+	}
+	if err != nil {
+		return domain.AuthSession{}, "", err
+	}
+	return s.createSession(ctx, user)
+}
+
+func (s *SQLiteStore) createSession(ctx context.Context, user domain.User) (domain.AuthSession, string, error) {
 	token, err := randomToken()
 	if err != nil {
 		return domain.AuthSession{}, "", err
@@ -556,7 +618,7 @@ func (s *SQLiteStore) AcceptInvitation(ctx context.Context, token, userID string
 	var teamIDs []string
 	_ = json.Unmarshal([]byte(teamRaw), &teamIDs)
 	for _, teamID := range teamIDs {
-		if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?)`, workspaceID, teamID, userID, "member", now.Format(time.RFC3339Nano)); err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`, workspaceID, teamID, userID, "member", now.Format(time.RFC3339Nano)); err != nil {
 			return domain.WorkspaceMembership{}, err
 		}
 	}

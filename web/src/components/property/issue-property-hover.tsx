@@ -11,7 +11,7 @@ export function StatusHoverPreview({ state, activities, issueCreatedAt }: { stat
   const previous = [...changes].reverse().find(activity => activity.metadata.stateBefore && activity.metadata.stateBefore !== state.name)
   return <div className="status-hover-preview">
     <strong>Time in status</strong>
-    {previous&&<div><StatusIcon state={{...state,name:previous.metadata.stateBefore,color:'#8b8d93',type:'unstarted'}}/><span>{previous.metadata.stateBefore}</span><time>{duration(issueCreatedAt,previous.createdAt)}</time></div>}
+    {previous&&<div><StatusIcon state={{...state,name:previous.metadata.stateBefore,color:'var(--status-neutral)',type:'unstarted'}}/><span>{previous.metadata.stateBefore}</span><time>{duration(issueCreatedAt,previous.createdAt)}</time></div>}
     <div><StatusIcon state={state}/><span>{state.name}</span><time>{duration(currentChange?.createdAt ?? issueCreatedAt)}</time></div>
     <footer><span>Change status</span><kbd>S</kbd></footer>
   </div>

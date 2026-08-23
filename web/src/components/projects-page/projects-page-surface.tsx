@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { ChevronRight, Link2 } from 'lucide-react'
 import {
   AddViewIcon,
@@ -11,6 +11,7 @@ import {
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { ProjectsDisplayMenu } from './projects-display-menu'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
+import { usePropertyCommand } from '@/components/property/use-property-command'
 import type { ProjectFilterOption } from './projects-filter-model'
 import { DEFAULT_PROJECTS_DISPLAY, type ProjectsDisplaySettings } from './projects-display-model'
 import './projects-page.css'
@@ -204,15 +205,8 @@ function IconButton({ active = false, badge = false, buttonRef, children, classN
 }
 
 function ProjectsFilterMenu({ filterOptions = {}, onSelect, rootRef }: { filterOptions?: Partial<Record<string, ProjectFilterOption[]>>; onSelect: (filter: string, option?: ProjectFilterOption) => void; rootRef?: RefObject<HTMLDivElement | null> }) {
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [query, setQuery] = useState('')
-  const [activeIndex, setActiveIndex] = useState(-1)
   const [nested, setNested] = useState<string>()
-  const listboxId = useId()
-  const items = useMemo(() => FILTER_GROUPS.flat().filter(item => item.toLowerCase().includes(query.toLowerCase())), [query])
-
-  useEffect(() => inputRef.current?.focus(), [])
-
+  const options=FILTER_GROUPS.flat().map(item=>({id:item,label:item})),command=usePropertyCommand({open:true,options,onOpenChange:()=>{},onSelect:option=>choose(option.id)})
   const choose = (item: string) => {
     if (filterOptions[item]?.length) setNested(item)
     else onSelect(item)
@@ -221,60 +215,45 @@ function ProjectsFilterMenu({ filterOptions = {}, onSelect, rootRef }: { filterO
   return <div aria-label="Project filters" className="lp-projects-filter" ref={rootRef} role="dialog">
     <div className="lp-projects-filter__search">
       <input
-        aria-activedescendant={activeIndex >= 0 ? `${listboxId}-${activeIndex}` : undefined}
-        aria-controls={listboxId}
+        ref={command.inputRef}
+        aria-activedescendant={command.activeId?`project-filter-${command.activeId}`:undefined}
+        aria-controls="project-filter-options"
         aria-label="Add Filter…"
-        onChange={event => {
-          setQuery(event.target.value)
-          setActiveIndex(-1)
-        }}
-        onKeyDown={event => {
-          if (event.key === 'ArrowDown') {
-            event.preventDefault()
-            setActiveIndex(index => Math.min(index + 1, items.length - 1))
-          } else if (event.key === 'ArrowUp') {
-            event.preventDefault()
-            setActiveIndex(index => Math.max(index - 1, 0))
-          } else if (event.key === 'Enter' && activeIndex >= 0) {
-            event.preventDefault()
-            choose(items[activeIndex])
-          }
-        }}
+        onChange={event=>command.onQueryChange(event.target.value)}
+        onKeyDown={command.onKeyDown}
         placeholder="Add Filter…"
-        ref={inputRef}
         role="searchbox"
-        value={query}
+        value={command.query}
       />
       <kbd>F</kbd>
     </div>
-    <div className="lp-projects-filter__list" id={listboxId} role="listbox">
+    <div className="lp-projects-filter__list" id="project-filter-options" role="listbox" onKeyDown={command.onKeyDown}>
       {FILTER_GROUPS.map((group, groupIndex) => {
-        const visible = group.filter(item => items.includes(item))
+        const visible = group.filter(item=>command.filteredOptions.some(option=>option.id===item))
         if (!visible.length) return null
         return <div className="lp-projects-filter__group" key={groupIndex} role="group">
           {visible.map(item => {
-            const itemIndex = items.indexOf(item)
             return <button
-              aria-selected={itemIndex === activeIndex}
-              className={itemIndex === activeIndex ? 'is-active' : ''}
-              id={`${listboxId}-${itemIndex}`}
+              aria-selected={command.activeId===item}
+              className={command.activeId===item?'is-active':''}
+              id={`project-filter-${item}`}
               key={item}
               onClick={() => choose(item)}
-              onMouseEnter={() => { setActiveIndex(itemIndex); if (filterOptions[item]?.length) setNested(item) }}
+              onMouseEnter={()=>{command.setActiveId(item);if(filterOptions[item]?.length)setNested(item)}}
+              onFocus={()=>command.setActiveId(item)}
               role="option"
               type="button"
             ><span>{item}</span>{FILTER_CHILDREN.has(item) && <ChevronRightIcon />}</button>
           })}
         </div>
       })}
-      {items.length === 0 && <div className="lp-projects-filter__empty">No filters found</div>}
+      {!command.filteredOptions.length&&<div className="lp-projects-filter__empty">No filters found</div>}
     </div>
     {nested && filterOptions[nested]?.length ? <ProjectFilterValues field={nested} onSelect={option => onSelect(nested, option)} options={filterOptions[nested]!} /> : null}
   </div>
 }
 
 function ProjectFilterValues({ field, onSelect, options }: { field: string; onSelect: (option: ProjectFilterOption) => void; options: ProjectFilterOption[] }) {
-  const [query, setQuery] = useState('')
-  const values = options.filter(option => option.label.toLowerCase().includes(query.toLowerCase()))
-  return <div aria-label={`${field} filters`} className="lp-projects-filter__nested" role="dialog"><div className="lp-projects-filter__search"><input aria-label="Filter…" autoFocus onChange={event => setQuery(event.target.value)} placeholder="Filter…" value={query} /></div><div className="lp-projects-filter__values" role="listbox">{values.map(option => <button key={option.id} onClick={() => onSelect(option)} role="option" type="button"><span className="lp-projects-filter__checkbox" /><i style={{ background: option.color ?? '#77777c' }} /><span>{option.label}</span>{option.count !== undefined && <small>{option.count} {option.count === 1 ? 'project' : 'projects'}</small>}</button>)}{!values.length && <div className="lp-projects-filter__empty">No results</div>}</div></div>
+  const command=usePropertyCommand({open:true,options,onOpenChange:()=>{},onSelect:option=>{const selected=options.find(item=>item.id===option.id);if(selected)onSelect(selected)}})
+  return <div aria-label={`${field} filters`} className="lp-projects-filter__nested" role="dialog"><div className="lp-projects-filter__search"><input ref={command.inputRef} aria-label="Filter…" autoFocus onChange={event=>command.onQueryChange(event.target.value)} onKeyDown={command.onKeyDown} placeholder="Filter…" value={command.query}/></div><div className="lp-projects-filter__values" role="listbox" onKeyDown={command.onKeyDown}>{command.filteredOptions.map(option=><button aria-selected={command.activeId===option.id} key={option.id} onPointerMove={()=>command.setActiveId(option.id)} onFocus={()=>command.setActiveId(option.id)} onClick={()=>command.choose(option)} role="option" type="button"><span className="lp-projects-filter__checkbox"/><i style={{background:option.color??'#77777c'}}/><span>{option.label}</span>{option.count!==undefined&&<small>{option.count} {option.count===1?'project':'projects'}</small>}</button>)}{!command.filteredOptions.length&&<div className="lp-projects-filter__empty">No results</div>}</div></div>
 }

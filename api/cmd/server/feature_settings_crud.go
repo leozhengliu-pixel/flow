@@ -12,16 +12,16 @@ import (
 )
 
 type releasePipelineInput struct {
-	Name                     *string            `json:"name,omitempty"`
-	TeamIDs                  *[]string          `json:"teamIds,omitempty"`
-	Type                     *string            `json:"type,omitempty"`
-	Production               *bool              `json:"production,omitempty"`
-	Stages                   *[]string          `json:"stages,omitempty"`
-	StageStatuses            *map[string]string `json:"stageStatuses,omitempty"`
-	PathFilters              *[]string          `json:"pathFilters,omitempty"`
-	ReleaseNotesTemplate     *string            `json:"releaseNotesTemplate,omitempty"`
-	AutoGenerateReleaseNotes *bool              `json:"autoGenerateReleaseNotes,omitempty"`
-	Archived                 *bool              `json:"archived,omitempty"`
+	Name                        *string            `json:"name,omitempty"`
+	TeamIDs                     *[]string          `json:"teamIds,omitempty"`
+	Type                        *string            `json:"type,omitempty"`
+	Production                  *bool              `json:"production,omitempty"`
+	Stages                      *[]string          `json:"stages,omitempty"`
+	StageStatuses               *map[string]string `json:"stageStatuses,omitempty"`
+	PathFilters                 *[]string          `json:"pathFilters,omitempty"`
+	ReleaseNotesTemplate        *string            `json:"releaseNotesTemplate,omitempty"`
+	AutoGenerateReleaseNotes    *bool              `json:"autoGenerateReleaseNotes,omitempty"`
+	MoveOpenIssuesToNextRelease *bool              `json:"moveOpenIssuesToNextRelease,omitempty"`
 }
 
 func applyReleasePipelineInput(data *domain.Bootstrap, item *domain.ReleasePipeline, input releasePipelineInput) error {
@@ -103,13 +103,9 @@ func applyReleasePipelineInput(data *domain.Bootstrap, item *domain.ReleasePipel
 	if input.AutoGenerateReleaseNotes != nil {
 		item.AutoGenerateReleaseNotes = *input.AutoGenerateReleaseNotes
 	}
-	if input.Archived != nil {
-		if *input.Archived && item.ArchivedAt == nil {
-			now := time.Now().UTC()
-			item.ArchivedAt = &now
-		} else if !*input.Archived {
-			item.ArchivedAt = nil
-		}
+	if input.MoveOpenIssuesToNextRelease != nil {
+		value := *input.MoveOpenIssuesToNextRelease
+		item.MoveOpenIssuesToNextRelease = &value
 	}
 	item.UpdatedAt = time.Now().UTC()
 	return nil
@@ -123,7 +119,8 @@ func (s *server) createReleasePipeline(w http.ResponseWriter, r *http.Request) {
 	var created domain.ReleasePipeline
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release_pipeline.created", "release_pipeline", input, func(data *domain.Bootstrap) error {
 		now := time.Now().UTC()
-		created = domain.ReleasePipeline{ID: fmt.Sprintf("release_pipeline_%d", now.UnixNano()), Type: "scheduled", Production: true, Position: nextReleasePipelinePosition(data), TeamIDs: []string{}, Stages: []string{"Planned", "In Progress", "Released", "Canceled"}, StageStatuses: map[string]string{"Planned": "planned", "In Progress": "inProgress", "Released": "released", "Canceled": "canceled"}, PathFilters: []string{}, CreatedAt: now, UpdatedAt: now}
+		moveOpenIssues := true
+		created = domain.ReleasePipeline{ID: fmt.Sprintf("release_pipeline_%d", now.UnixNano()), SlugID: uniqueReleasePipelineSlug(data, strings.TrimSpace(*input.Name)), Type: "scheduled", Production: true, MoveOpenIssuesToNextRelease: &moveOpenIssues, Position: nextReleasePipelinePosition(data), TeamIDs: []string{}, Stages: []string{"Planned", "In Progress", "Released", "Canceled"}, StageStatuses: map[string]string{"Planned": "planned", "In Progress": "inProgress", "Released": "released", "Canceled": "canceled"}, PathFilters: []string{}, CreatedAt: now, UpdatedAt: now}
 		if err := applyReleasePipelineInput(data, &created, input); err != nil {
 			return err
 		}

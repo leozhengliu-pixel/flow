@@ -9,6 +9,9 @@ import { MyIssuesSurface, type MyIssuesDisplayOptions, type MyIssuesFilterKey, t
 import { useMyIssuesController } from './use-my-issues-controller'
 import { issuePath } from '@/lib/app-routes'
 import { labelsForResource } from '@/lib/labels'
+import { issueHierarchyFields } from '@/components/issue-explorer/issue-explorer-model'
+import { SavedViewInsightsPanel, type SavedViewInsightsConfig } from '@/components/issue-explorer/saved-view-panels'
+import type { SavedView } from '@/types/flow'
 
 export interface MyIssuesPageProps {
   data: BootstrapData
@@ -35,6 +38,8 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [projectedView, setProjectedView] = useState(initialView)
   const [filterOpenSignal, setFilterOpenSignal] = useState(0)
+  const [insightsOpen,setInsightsOpen]=useState(false)
+  const [insightsConfig,setInsightsConfig]=useState<Record<string,unknown>>(()=>readInsights(`${workspaceSlug}:my-issues:${initialView}:insights`))
   const [mutationErrors, setMutationErrors] = useState<Map<string, string>>(new Map())
   const mutationSequence = useRef(new Map<string, number>())
   const mutationQueues = useRef(new Map<string, Promise<Issue>>())
@@ -106,18 +111,22 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
     const field = tab === 'labels' ? 'labels' : tab === 'projects' ? 'project' : 'priority'
     addFilter(field, { id: item.id, label: item.label, color: item.color })
   }
+  const insightRows=controller.visibleGroups.flatMap(group=>group.issues)
+  const insightsView:SavedView={id:`my-issues-${controller.view}`,name:'My issues',description:'',resource:'issues',scope:'personal',ownerId:data.viewer.id,view:'all',filters:controller.filters,display:{},insights:insightsConfig,createdAt:'',updatedAt:''}
 
   return <>
     <MyIssuesSurface
       activeView={controller.view}
       detailsOpen={controller.detailsOpen}
+      insightsOpen={insightsOpen}
       displayOptions={controller.display}
       filterOpenSignal={filterOpenSignal}
       filters={controller.filters}
       filterOptions={field => filterOptions(field, rowOptions)}
       viewCounts={controller.counts}
       viewHref={controller.viewHref}
-      onDetailsOpenChange={controller.setDetailsOpen}
+      onDetailsOpenChange={open=>{controller.setDetailsOpen(open);if(open)setInsightsOpen(false)}}
+      onInsightsOpenChange={open=>{setInsightsOpen(open);if(open){controller.setDetailsOpen(false);setInsightsConfig(readInsights(`${workspaceSlug}:my-issues:${controller.view}:insights`))}}}
       onDisplayOptionsChange={controller.changeDisplay}
       onFilterSelect={addFilter}
       onFilterToggle={(field, option) => { const fieldLabel = FILTER_LABELS[field]; if (fieldLabel) controller.toggleFilter(field, fieldLabel, option) }}
@@ -155,6 +164,17 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onContextAction={(row, action) => { void contextAction(row, action) }}
       />
       <MyIssuesDetailsPane open={controller.detailsOpen} width={controller.detailsWidth} onWidthChange={controller.setDetailsWidth} onClose={() => controller.setDetailsOpen(false)} summary={controller.summary} onSummaryItemSelect={summaryFilter}/>
+      {insightsOpen && <SavedViewInsightsPanel
+        allRows={insightRows}
+        rows={insightRows}
+        view={insightsView}
+        onClose={() => setInsightsOpen(false)}
+        onSave={async (config: SavedViewInsightsConfig) => {
+          const value = config as unknown as Record<string, unknown>
+          setInsightsConfig(value)
+          try { localStorage.setItem(`${workspaceSlug}:my-issues:${controller.view}:insights`, JSON.stringify(value)) } catch {}
+        }}
+      />}
     </MyIssuesSurface>
     <MyIssuesBulkActionBar selectedIssues={controller.selectedIssues} loading={controller.bulkLoading} error={controller.bulkError} actionOptions={action => bulkOptions(action, rowOptions)} onAction={(action, _issues, value) => { void controller.executeBulk(action, value) }} onClear={controller.clearSelection}/>
   </>
@@ -180,7 +200,7 @@ function groupIssues(issues: Issue[], workspaceSlug: string, data: BootstrapData
 
 function toRow(issue: Issue, workspaceSlug: string, data: BootstrapData): MyIssuesRowData {
   const sla=data.issueSlas.find(item=>item.issueId===issue.id&&item.status!=='removed');const rule=sla?data.slaRules.find(item=>item.id===sla.ruleId):undefined
-  return { id: issue.id, identifier: issue.identifier, title: issue.title, href: issuePath(workspaceSlug, issue), priority: clampPriority(issue.priority), state: issue.state, labels: issue.labels, project: issue.project, assignee: issue.assignee ? { id: issue.assignee.id, name: issue.assignee.displayName, avatarUrl: issue.assignee.avatarUrl } : undefined, dueDate: issue.dueDate, sla:sla?{...sla,ruleName:rule?.name}:undefined, createdAt: issue.createdAt, updatedAt: issue.updatedAt, parentId: issue.parentId }
+  return { id: issue.id, identifier: issue.identifier, title: issue.title, href: issuePath(workspaceSlug, issue), priority: clampPriority(issue.priority), state: issue.state, labels: issue.labels, project: issue.project, assignee: issue.assignee ? { id: issue.assignee.id, name: issue.assignee.displayName, avatarUrl: issue.assignee.avatarUrl } : undefined, dueDate: issue.dueDate, sla:sla?{...sla,ruleName:rule?.name}:undefined, createdAt: issue.createdAt, updatedAt: issue.updatedAt, parentId: issue.parentId, ...issueHierarchyFields(issue,data.issues) }
 }
 
 function propertyOptions(data: BootstrapData, issues = data.issues) {
@@ -256,6 +276,7 @@ function optimisticRow(row: MyIssuesRowData, input: IssueUpdateInput, data: Boot
 function replaceRow(groups: MyIssuesGroupData[], row: MyIssuesRowData) { return groups.map(group => ({ ...group, issues: group.issues.map(issue => issue.id === row.id ? row : issue) })) }
 function withoutKey(map: Map<string, string>, key: string) { const next = new Map(map); next.delete(key); return next }
 function withKey(map: Map<string, string>, key: string, value: string) { const next = new Map(map); next.set(key, value); return next }
+function readInsights(key:string):Record<string,unknown>{try{const value=JSON.parse(localStorage.getItem(key)??'{}');return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}catch{return {}}}
 
 async function copyIssues(action: MyIssuesBulkAction, ids: string[], issuesById: Map<string, Issue>, workspaceSlug: string) {
   const issues = ids.map(id => issuesById.get(id)).filter(Boolean) as Issue[]

@@ -17,6 +17,90 @@ type reorderInput struct {
 	Archived   bool     `json:"archived,omitempty"`
 }
 
+type reorderPipelinesInput struct {
+	IDs []string `json:"ids"`
+}
+
+type issueReleasesInput struct {
+	ReleaseIDs []string `json:"releaseIds"`
+}
+
+func (s *server) setIssueReleases(w http.ResponseWriter, r *http.Request) {
+	var input issueReleasesInput
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	issueID := r.PathValue("id")
+	var updated []domain.Release
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.releases_updated", issueID, input, func(data *domain.Bootstrap) error {
+		if _, err := issueByID(data, issueID); err != nil {
+			return err
+		}
+		ids := normalizedStrings(input.ReleaseIDs)
+		if len(ids) != len(input.ReleaseIDs) {
+			return errInvalid
+		}
+		for _, id := range ids {
+			index := slices.IndexFunc(data.Releases, func(item domain.Release) bool { return item.ID == id && item.ArchivedAt == nil })
+			if index < 0 {
+				return errInvalid
+			}
+			if data.Releases[index].StageFrozenAt != nil && !slices.Contains(data.Releases[index].IssueIDs, issueID) {
+				return errConflict
+			}
+		}
+		previous := []string{}
+		for _, release := range data.Releases {
+			if slices.Contains(release.IssueIDs, issueID) {
+				previous = append(previous, release.ID)
+			}
+		}
+		now := time.Now().UTC()
+		for index := range data.Releases {
+			selected := slices.Contains(ids, data.Releases[index].ID)
+			linked := slices.Contains(data.Releases[index].IssueIDs, issueID)
+			if selected == linked {
+				continue
+			}
+			if selected {
+				data.Releases[index].IssueIDs = append(data.Releases[index].IssueIDs, issueID)
+			} else {
+				data.Releases[index].IssueIDs = slices.DeleteFunc(data.Releases[index].IssueIDs, func(id string) bool { return id == issueID })
+			}
+			data.Releases[index].UpdatedAt = now
+		}
+		for _, id := range ids {
+			index := slices.IndexFunc(data.Releases, func(item domain.Release) bool { return item.ID == id })
+			updated = append(updated, data.Releases[index])
+		}
+		nameFor := func(id string) string {
+			index := slices.IndexFunc(data.Releases, func(item domain.Release) bool { return item.ID == id })
+			if index < 0 {
+				return id
+			}
+			return data.Releases[index].Name
+		}
+		added, removed := []string{}, []string{}
+		for _, id := range ids {
+			if !slices.Contains(previous, id) {
+				added = append(added, nameFor(id))
+			}
+		}
+		for _, id := range previous {
+			if !slices.Contains(ids, id) {
+				removed = append(removed, nameFor(id))
+			}
+		}
+		appendActivity(data, issueID, "issue.releases_updated", data.Viewer, map[string]string{"releaseIds": strings.Join(ids, ","), "added": strings.Join(added, ", "), "removed": strings.Join(removed, ", ")})
+		return nil
+	})
+	if errors.Is(err, errConflict) {
+		writeError(w, http.StatusConflict, "frozen release stages do not accept new issues")
+		return
+	}
+	respondMutation(w, err, http.StatusOK, updated)
+}
+
 type releasePipelineAccessKey struct {
 	PipelineID string    `json:"pipelineId"`
 	Prefix     string    `json:"prefix"`
@@ -162,16 +246,13 @@ func (s *server) reorderReleases(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listReleasePipelines(w http.ResponseWriter, r *http.Request) {
-	filter, ok := archiveFilter(r)
-	if !ok {
-		writeError(w, http.StatusBadRequest, "archived must be true, false, or all")
+	if r.URL.Query().Has("archived") {
+		writeError(w, http.StatusBadRequest, "archived pipeline filtering is not supported")
 		return
 	}
 	result := []domain.ReleasePipeline{}
 	for _, item := range s.workspaceData(r).ReleasePipelines {
-		if archiveMatches(item.ArchivedAt, filter) {
-			result = append(result, publicReleasePipeline(item))
-		}
+		result = append(result, publicReleasePipeline(item))
 	}
 	sort.SliceStable(result, func(i, j int) bool { return releasePipelineLess(result[i], result[j]) })
 	writeJSON(w, http.StatusOK, result)
@@ -188,7 +269,7 @@ func (s *server) getReleasePipeline(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) reorderReleasePipelines(w http.ResponseWriter, r *http.Request) {
-	var input reorderInput
+	var input reorderPipelinesInput
 	if !decodeJSON(w, r, &input) {
 		return
 	}
@@ -196,9 +277,7 @@ func (s *server) reorderReleasePipelines(w http.ResponseWriter, r *http.Request)
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release_pipeline.reordered", "release_pipelines", input, func(data *domain.Bootstrap) error {
 		scope := []string{}
 		for _, item := range data.ReleasePipelines {
-			if (item.ArchivedAt != nil) == input.Archived {
-				scope = append(scope, item.ID)
-			}
+			scope = append(scope, item.ID)
 		}
 		if !sameIDs(scope, input.IDs) {
 			return errInvalid
@@ -260,9 +339,17 @@ func (s *server) deleteReleasePipeline(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
-		if slices.ContainsFunc(data.Releases, func(item domain.Release) bool { return item.PipelineID == id }) {
-			return errConflict
+		remainingReleases := make([]domain.Release, 0, len(data.Releases))
+		for _, release := range data.Releases {
+			if release.PipelineID != id {
+				remainingReleases = append(remainingReleases, release)
+				continue
+			}
+			if err := appendTrash(data, "release", release.ID, release.Name, release); err != nil {
+				return err
+			}
 		}
+		data.Releases = remainingReleases
 		item := data.ReleasePipelines[index]
 		item.AccessKeyHash = ""
 		if err := appendTrash(data, "release_pipeline", item.ID, item.Name, item); err != nil {
@@ -271,9 +358,5 @@ func (s *server) deleteReleasePipeline(w http.ResponseWriter, r *http.Request) {
 		data.ReleasePipelines = slices.Delete(data.ReleasePipelines, index, index+1)
 		return nil
 	})
-	if errors.Is(err, errConflict) {
-		writeError(w, http.StatusConflict, "release pipeline is still referenced by releases")
-		return
-	}
 	respondMutation(w, err, http.StatusNoContent, nil)
 }

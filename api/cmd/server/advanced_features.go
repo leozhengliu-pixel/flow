@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -44,20 +43,46 @@ type customerRequestInput struct {
 }
 
 type releaseInput struct {
-	Name          *string   `json:"name,omitempty"`
-	Version       *string   `json:"version,omitempty"`
-	Description   *string   `json:"description,omitempty"`
-	Status        *string   `json:"status,omitempty"`
-	PipelineID    *string   `json:"pipelineId,omitempty"`
-	Stage         *string   `json:"stage,omitempty"`
-	CommitSHA     *string   `json:"commitSha,omitempty"`
-	ReleaseNotes  *string   `json:"releaseNotes,omitempty"`
-	TargetDate    *string   `json:"targetDate,omitempty"`
-	ProjectIDs    *[]string `json:"projectIds,omitempty"`
-	IssueIDs      *[]string `json:"issueIds,omitempty"`
-	SubscriberIDs *[]string `json:"subscriberIds,omitempty"`
-	StageFrozen   *bool     `json:"stageFrozen,omitempty"`
-	Archived      *bool     `json:"archived,omitempty"`
+	Name          *string                   `json:"name,omitempty"`
+	Version       *string                   `json:"version,omitempty"`
+	Description   *string                   `json:"description,omitempty"`
+	Status        *string                   `json:"status,omitempty"`
+	PipelineID    *string                   `json:"pipelineId,omitempty"`
+	Stage         *string                   `json:"stage,omitempty"`
+	CommitSHA     *string                   `json:"commitSha,omitempty"`
+	ReleaseNotes  *string                   `json:"releaseNotes,omitempty"`
+	TargetDate    *string                   `json:"targetDate,omitempty"`
+	ProjectIDs    *[]string                 `json:"projectIds,omitempty"`
+	IssueIDs      *[]string                 `json:"issueIds,omitempty"`
+	SubscriberIDs *[]string                 `json:"subscriberIds,omitempty"`
+	Resources     *[]domain.ReleaseResource `json:"resources,omitempty"`
+	StageFrozen   *bool                     `json:"stageFrozen,omitempty"`
+	Archived      *bool                     `json:"archived,omitempty"`
+}
+
+func uniqueReleasePipelineSlug(data *domain.Bootstrap, name string) string {
+	base := slug(name)
+	if base == "" {
+		base = "pipeline"
+	}
+	candidate := base
+	for suffix := 2; slices.ContainsFunc(data.ReleasePipelines, func(item domain.ReleasePipeline) bool { return item.SlugID == candidate }); suffix++ {
+		candidate = fmt.Sprintf("%s-%d", base, suffix)
+	}
+	return candidate
+}
+
+func uniqueReleaseSlug(data *domain.Bootstrap, name string, now time.Time) string {
+	base := slug(name)
+	if base == "" {
+		base = "release"
+	}
+	candidate := fmt.Sprintf("%s-%x", base, now.UnixNano()&0xffffffffffff)
+	for slices.ContainsFunc(data.Releases, func(item domain.Release) bool { return item.SlugID == candidate }) {
+		now = now.Add(time.Nanosecond)
+		candidate = fmt.Sprintf("%s-%x", base, now.UnixNano()&0xffffffffffff)
+	}
+	return candidate
 }
 
 type askInput struct {
@@ -88,6 +113,7 @@ type projectTemplateInput struct {
 	IssueIDs            *[]string                   `json:"issueIds,omitempty"`
 	Milestones          *[]domain.TemplateMilestone `json:"milestones,omitempty"`
 	Visibility          *string                     `json:"visibility,omitempty"`
+	VisibilityTeamID    *string                     `json:"visibilityTeamId,omitempty"`
 }
 
 type slaRuleInput struct {
@@ -158,6 +184,9 @@ func validateResourceIDs(data *domain.Bootstrap, resourceType string, ids []stri
 			valid = labelExistsForResource(data, id, "project")
 		case "user":
 			valid = userByID(data, id) != nil
+		case "document":
+			_, err := documentByID(data, id)
+			valid = err == nil
 		}
 		if !valid {
 			return false
@@ -520,17 +549,15 @@ func (s *server) createCustomerRequestAttachment(w http.ResponseWriter, r *http.
 	requestID := r.PathValue("id")
 	attachmentID := fmt.Sprintf("customer_request_attachment_%d", time.Now().UnixNano())
 	safeName := attachmentID + "_" + filepath.Base(header.Filename)
-	diskPath := filepath.Join(s.uploadPath, safeName)
-	out, err := os.Create(diskPath)
+	storage, err := s.storage()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not store attachment")
 		return
 	}
-	size, copyErr := io.Copy(out, io.LimitReader(file, 20<<20))
-	closeErr := out.Close()
-	if copyErr != nil || closeErr != nil || size >= 20<<20 {
-		_ = os.Remove(diskPath)
-		if size >= 20<<20 {
+	size, copyErr := storage.Put(r.Context(), safeName, io.LimitReader(file, (20<<20)+1), header.Header.Get("Content-Type"))
+	if copyErr != nil || size > 20<<20 {
+		_ = storage.Delete(r.Context(), safeName)
+		if size > 20<<20 {
 			writeError(w, http.StatusRequestEntityTooLarge, "attachment exceeds 20 MB")
 		} else {
 			writeError(w, http.StatusInternalServerError, "upload failed")
@@ -550,14 +577,14 @@ func (s *server) createCustomerRequestAttachment(w http.ResponseWriter, r *http.
 		return nil
 	})
 	if err != nil {
-		_ = os.Remove(diskPath)
+		_ = storage.Delete(r.Context(), safeName)
 	}
 	respondMutation(w, err, http.StatusCreated, attachment)
 }
 
 func (s *server) deleteCustomerRequestAttachment(w http.ResponseWriter, r *http.Request) {
 	requestID, attachmentID := r.PathValue("id"), r.PathValue("attachmentId")
-	var diskPath string
+	var objectKey string
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "customer_request.attachment_deleted", requestID, map[string]string{"attachmentId": attachmentID}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool { return item.ID == requestID })
 		if index < 0 {
@@ -568,14 +595,16 @@ func (s *server) deleteCustomerRequestAttachment(w http.ResponseWriter, r *http.
 		if attachmentIndex < 0 {
 			return errNotFound
 		}
-		diskPath = filepath.Join(s.uploadPath, filepath.Base(request.Attachments[attachmentIndex].URL))
+		objectKey = filepath.Base(request.Attachments[attachmentIndex].URL)
 		request.Attachments = slices.Delete(request.Attachments, attachmentIndex, attachmentIndex+1)
 		request.UpdatedAt = time.Now().UTC()
 		appendAudit(data, "attachment_deleted", "customer_request", requestID, map[string]any{"attachmentId": attachmentID})
 		return nil
 	})
-	if err == nil && diskPath != "" {
-		_ = os.Remove(diskPath)
+	if err == nil && objectKey != "" {
+		if storage, storageErr := s.storage(); storageErr == nil {
+			_ = storage.Delete(r.Context(), objectKey)
+		}
 	}
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
@@ -599,7 +628,7 @@ func applyReleaseInput(data *domain.Bootstrap, release *domain.Release, input re
 			release.PipelineID, release.Stage = "", ""
 		} else {
 			pipeline := releasePipelineByID(data, pipelineID)
-			if pipeline == nil || pipeline.ArchivedAt != nil {
+			if pipeline == nil {
 				return errInvalid
 			}
 			release.PipelineID = pipelineID
@@ -674,6 +703,28 @@ func applyReleaseInput(data *domain.Bootstrap, release *domain.Release, input re
 		}
 		release.SubscriberIDs = values
 	}
+	if input.Resources != nil {
+		resources := make([]domain.ReleaseResource, 0, len(*input.Resources))
+		seen := map[string]bool{}
+		for index, resource := range *input.Resources {
+			resource.Title, resource.URL, resource.DocumentID = strings.TrimSpace(resource.Title), strings.TrimSpace(resource.URL), strings.TrimSpace(resource.DocumentID)
+			if resource.Type != "link" && resource.Type != "document" || resource.Title == "" || resource.Type == "link" && resource.URL == "" || resource.Type == "document" && !validateResourceIDs(data, "document", []string{resource.DocumentID}) {
+				return errInvalid
+			}
+			if resource.ID == "" {
+				resource.ID = fmt.Sprintf("release_resource_%d_%d", time.Now().UTC().UnixNano(), index)
+			}
+			if seen[resource.ID] {
+				return errInvalid
+			}
+			seen[resource.ID] = true
+			if resource.CreatedAt.IsZero() {
+				resource.CreatedAt = time.Now().UTC()
+			}
+			resources = append(resources, resource)
+		}
+		release.Resources = resources
+	}
 	if input.StageFrozen != nil {
 		if *input.StageFrozen {
 			if release.PipelineID == "" || release.Stage == "" {
@@ -710,7 +761,13 @@ func (s *server) createRelease(w http.ResponseWriter, r *http.Request) {
 	var created domain.Release
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "release.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
-		created = domain.Release{ID: fmt.Sprintf("release_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), Status: "planned", Position: nextReleasePosition(data, stringValue(input.PipelineID)), ProjectIDs: []string{}, IssueIDs: []string{}, SubscriberIDs: []string{data.Viewer.ID}, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
+		if input.PipelineID != nil {
+			pipeline := releasePipelineByID(data, stringValue(input.PipelineID))
+			if pipeline != nil && pipeline.Type == "continuous" {
+				return "", errConflict
+			}
+		}
+		created = domain.Release{ID: fmt.Sprintf("release_%d", now.UnixNano()), SlugID: uniqueReleaseSlug(data, strings.TrimSpace(*input.Name), now), Name: strings.TrimSpace(*input.Name), Status: "planned", Position: nextReleasePosition(data, stringValue(input.PipelineID)), ProjectIDs: []string{}, IssueIDs: []string{}, SubscriberIDs: []string{data.Viewer.ID}, Resources: []domain.ReleaseResource{}, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
 		if err := applyReleaseInput(data, &created, input); err != nil {
 			return "", err
 		}
@@ -718,6 +775,10 @@ func (s *server) createRelease(w http.ResponseWriter, r *http.Request) {
 		appendAudit(data, "created", "release", created.ID, map[string]any{"name": created.Name})
 		return created.ID, nil
 	})
+	if errors.Is(err, errConflict) {
+		writeError(w, http.StatusConflict, "continuous pipelines create releases through CI/CD integrations")
+		return
+	}
 	respondMutation(w, err, http.StatusCreated, created)
 }
 
@@ -1080,6 +1141,16 @@ func applyProjectTemplateInput(data *domain.Bootstrap, template *domain.ProjectT
 			return errInvalid
 		}
 		template.Visibility = *input.Visibility
+	}
+	if input.VisibilityTeamID != nil {
+		if *input.VisibilityTeamID != "" && !validateResourceIDs(data, "team", []string{*input.VisibilityTeamID}) {
+			return errInvalid
+		}
+		template.VisibilityTeamID = *input.VisibilityTeamID
+		template.Visibility = "workspace"
+		if *input.VisibilityTeamID != "" {
+			template.Visibility = "teams"
+		}
 	}
 	return nil
 }
@@ -1458,7 +1529,7 @@ func resourceExists(data *domain.Bootstrap, kind, id string) bool {
 	case "release":
 		return slices.ContainsFunc(data.Releases, func(item domain.Release) bool { return item.ID == id })
 	case "release_pipeline":
-		return slices.ContainsFunc(data.ReleasePipelines, func(item domain.ReleasePipeline) bool { return item.ID == id && item.ArchivedAt == nil })
+		return slices.ContainsFunc(data.ReleasePipelines, func(item domain.ReleasePipeline) bool { return item.ID == id })
 	case "customer":
 		return slices.ContainsFunc(data.Customers, func(item domain.Customer) bool { return item.ID == id })
 	case "initiative":
