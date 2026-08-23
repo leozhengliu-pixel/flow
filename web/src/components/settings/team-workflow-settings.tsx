@@ -195,7 +195,7 @@ function defaultTeamSettings(teamId: string, states: WorkflowState[]): TeamSetti
   slackNotifications: {}, prAutomations: {}, autoCloseParents: false, autoCloseSubIssues: false, autoCloseStale: false, staleMonths: 6, autoArchiveMonths: 6, progressOrder: 'first', releaseAutomations: [],
   triageEnabled: false, triageRequirePriority: false, triageAction: 'none', triageRules: [], agentSkills: [], projectUpdatePrompt: '', resolvedThreadSummaries: true, showInitiatives: true,
 } }
-function defaultCycles(): CycleSettings { return { enabled: false, durationWeeks: 2, cooldownWeeks: 0, startsOn: 1, upcomingCount: 2, capacity: 4, autoCreate: true, autoAddActive: false, autoAddDueDate: false, autoAddStarted: false, autoAddCompleted: false, autoMigrate: true } }
+function defaultCycles(): CycleSettings { return { enabled: false, durationWeeks: 2, cooldownWeeks: 0, startsOn: 1, upcomingCount: 2, capacity: 4, autoCreate: true, autoAddActive: false, autoAddDueDate: false, autoAddStarted: false, autoAddCompleted: false, autoMigrate: true, favoriteView: false } }
 function initials(value: string) { return value.split(/\s+/).map(part => part[0]).join('').slice(0,2).toUpperCase() }
 function message(error: unknown) { return error instanceof Error ? error.message : 'Could not save team settings' }
 function titleCase(value:string){return value.slice(0,1).toUpperCase()+value.slice(1)}
