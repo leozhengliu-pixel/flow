@@ -837,6 +837,22 @@ func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, 
 		}
 		template.TeamID = *input.TeamID
 	}
+	if input.VisibilityTeamID != nil {
+		if *input.VisibilityTeamID != "" && !teamExists(data, *input.VisibilityTeamID) {
+			return errInvalid
+		}
+		template.VisibilityTeamID = *input.VisibilityTeamID
+		template.Scope = "workspace"
+		if *input.VisibilityTeamID != "" {
+			template.Scope = "team"
+		}
+	}
+	if input.Icon != nil {
+		template.Icon = strings.TrimSpace(*input.Icon)
+	}
+	if input.Color != nil {
+		template.Color = strings.TrimSpace(*input.Color)
+	}
 	if input.Name != nil {
 		name := strings.TrimSpace(*input.Name)
 		if name == "" {
@@ -891,11 +907,35 @@ func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, 
 	}
 	if input.FormFields != nil {
 		for _, field := range *input.FormFields {
-			if strings.TrimSpace(field.Label) == "" || !slices.Contains([]string{"text", "textarea", "select", "checkbox", "date"}, field.Type) {
+			if !slices.Contains([]string{"text", "longText", "dropdown", "checkboxes", "date", "upload", "instructions", "title", "labelGroup", "priority", "dueDate"}, field.Type) {
+				return errInvalid
+			}
+			if !slices.Contains([]string{"instructions", "title", "labelGroup", "priority", "dueDate"}, field.Type) && strings.TrimSpace(field.Label) == "" {
 				return errInvalid
 			}
 		}
 		template.FormFields = slices.Clone(*input.FormFields)
+	}
+	if input.SubIssues != nil {
+		for index := range *input.SubIssues {
+			item := &(*input.SubIssues)[index]
+			if strings.TrimSpace(item.Title) == "" || item.Priority < 0 || item.Priority > 4 {
+				return errInvalid
+			}
+			if item.TeamID != "" && !teamExists(data, item.TeamID) {
+				return errInvalid
+			}
+			if item.AssigneeID != "" && userByID(data, item.AssigneeID) == nil {
+				return errInvalid
+			}
+			if len(labelsByID(data, item.LabelIDs)) != len(item.LabelIDs) {
+				return errInvalid
+			}
+			if item.ID == "" {
+				item.ID = fmt.Sprintf("template_sub_issue_%d_%d", time.Now().UnixNano(), index)
+			}
+		}
+		template.SubIssues = slices.Clone(*input.SubIssues)
 	}
 	return nil
 }

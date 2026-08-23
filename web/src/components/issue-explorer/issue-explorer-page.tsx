@@ -15,7 +15,7 @@ import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from './saved-vi
 import { SavedViewDetailsPanel, SavedViewInsightsPanel, type SavedViewInsightsConfig } from './saved-view-panels'
 import type { ViewVisual } from '@/components/views/view-icon-picker'
 import {
-  ISSUE_FILTER_LABELS, applyExplorerFilters, executeExplorerBulkAction, explorerBulkOptions, explorerFilterOptions,
+  ISSUE_FILTER_LABELS, applyExplorerFilters, buildExplorerIssueGroups, executeExplorerBulkAction, explorerBulkOptions, explorerFilterOptions,
   explorerPropertyOptions, explorerUpdateForAction, explorerUpdateForProperty, issueToExplorerRow, optimisticExplorerRow,
   stateIdForExplorerGroup, withMapKey, withoutMapKey,
 } from './issue-explorer-model'
@@ -71,6 +71,7 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
   const [previewIssueId, setPreviewIssueId] = useState<string>()
   const [viewEditor, setViewEditor] = useState<'create' | 'edit' | undefined>(creatingView ? 'create' : editingView ? 'edit' : undefined)
   const [viewSaving, setViewSaving] = useState(false)
+  const hydratedSavedViewId = useRef(savedView?.id)
   const mutationSequence = useRef(new Map<string, number>())
   const mutationQueues = useRef(new Map<string, Promise<Issue>>())
   const retryUpdates = useRef(new Map<string, IssueUpdateInput>())
@@ -84,9 +85,9 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
   const issuesById = useMemo(() => new Map(data.issues.map(issue => [issue.id, issue])), [data.issues])
   const rowOptions = useMemo(() => explorerPropertyOptions(data, scopedIssues), [data, scopedIssues])
   const visibleIssues = useMemo(() => applyExplorerFilters(scopedIssues, filters), [filters, scopedIssues])
-  const rows = useMemo(() => visibleIssues.map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey)), [data.workspace.urlKey, rowOverrides, visibleIssues])
-  const insightRows = useMemo(() => applyExplorerFilters(insightIssues, filters).map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey)), [data.workspace.urlKey, filters, insightIssues, rowOverrides])
-  const groups = useMemo(() => projectGroups(rows, display, data, view, manualOrder), [data, display, manualOrder, rows, view])
+  const rows = useMemo(() => visibleIssues.map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues)), [data.issues,data.workspace.urlKey, rowOverrides, visibleIssues])
+  const insightRows = useMemo(() => applyExplorerFilters(insightIssues, filters).map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues)), [data.issues,data.workspace.urlKey, filters, insightIssues, rowOverrides])
+  const groups = useMemo(() => buildExplorerIssueGroups(rows, display, data, view, manualOrder), [data, display, manualOrder, rows, view])
   const selection = useMyIssuesSelection(groups)
   const summary = useMemo(() => deriveSummary(groups), [groups])
   const previewIssue = previewIssueId ? issuesById.get(previewIssueId) : undefined
@@ -98,7 +99,8 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
   const initialSaveTarget = saveTargets.find(target => target.scope === (sourceView?.scope ?? defaultSaveScope ?? scope.kind) && (target.scope !== 'team' || target.teamId === (sourceView?.teamId ?? (scope.kind === 'team' ? scope.team.id : undefined)))) ?? saveTargets[0]
 
   useEffect(() => {
-    if (!savedView) return
+    if (!savedView || hydratedSavedViewId.current === savedView.id) return
+    hydratedSavedViewId.current = savedView.id
     setFilters(filtersFromSavedView(savedView))
     setDisplay(displayFromSavedView(savedView, savedView.view))
   }, [savedView])
@@ -120,7 +122,11 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
   }, [data.issues])
 
   const persistFilters = (next: MyIssuesAppliedFilter[]) => { setFilters(next); writeValue(`${preferencesKey}:filters`, JSON.stringify(next)) }
-  const changeDisplay = (next: MyIssuesDisplayOptions) => { setDisplay(next); writeValue(`${preferencesKey}:display`, JSON.stringify({ ...next, properties: [...next.properties] })) }
+  const changeDisplay = (next: MyIssuesDisplayOptions) => {
+    setDisplay(next)
+    writeValue(`${preferencesKey}:display`, JSON.stringify({ ...next, properties: [...next.properties] }))
+    if (savedView && onUpdateSavedView) void onUpdateSavedView(savedView.id, { resource: 'issues', scope: savedView.scope, teamId: savedView.teamId, ownerId: savedView.ownerId, view: savedView.view, filters, display: displaySnapshot(next) }).catch(() => undefined)
+  }
   const changeDetails = (open: boolean) => { setDetailsOpen(open); if (open) setInsightsOpen(false); writeValue(`${data.workspace.urlKey}:issue-explorer:${storageScope}:details`, String(open)) }
   const changeInsights = (open: boolean) => { setInsightsOpen(open); if (open) { setDetailsOpen(false); setPreviewIssueId(undefined) } }
   const openIssueFromExplorer = (row: MyIssuesRowData) => {
@@ -146,7 +152,7 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
     try {
       const updated = await request
       if (mutationSequence.current.get(row.id) === sequence) {
-        setRowOverrides(current => new Map(current).set(row.id, issueToExplorerRow(updated, data.workspace.urlKey)))
+        setRowOverrides(current => new Map(current).set(row.id, issueToExplorerRow(updated, data.workspace.urlKey,data.issues)))
         retryUpdates.current.delete(row.id)
       }
       return updated
@@ -183,10 +189,8 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
     const insertAt = beforeId ? without.indexOf(beforeId) : afterId ? without.indexOf(afterId) + 1 : without.length
     const nextOrder = [...without.slice(0, Math.max(0, insertAt)), row.id, ...without.slice(Math.max(0, insertAt))]
     setManualOrder(nextOrder); writeValue(`${preferencesKey}:order`, JSON.stringify(nextOrder))
-    const targetStateId = data.states.some(state => state.id === targetGroupId) ? targetGroupId : undefined
     const sortOrder = targetIndex === 0 ? (targetIssues[0]?.sortOrder ?? 1) - 1 : targetIndex >= targetIds.length ? (targetIssues.at(-1)?.sortOrder ?? 0) + 1 : ((targetIssues[targetIndex - 1]?.sortOrder ?? 0) + (targetIssues[targetIndex]?.sortOrder ?? 0)) / 2
-    const update: IssueUpdateInput = { sortOrder }
-    if (targetStateId && sourceGroupId !== targetGroupId) update.stateId = targetStateId
+    const update: IssueUpdateInput = { sortOrder, ...(sourceGroupId === targetGroupId ? {} : explorerBoardGroupUpdate(row, display.grouping, targetGroupId, data)) }
     void updateOne(row, update).catch(() => undefined)
   }
   const savedViewSnapshot = (): SavedViewMutationInput => ({ resource: 'issues', scope: scope.kind, teamId: scope.kind === 'team' ? scope.team.id : '', ownerId: data.viewer.id, view, filters, display: displaySnapshot(display) })
@@ -276,13 +280,26 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
         onRetryMutation={row => { const input = retryUpdates.current.get(row.id); if (input) void updateOne(row, input).catch(() => undefined) }}
         onSelectIssue={selection.selectIssue}
         onContextAction={(row, action) => { void contextAction(row, action) }}
-      /> : <IssueBoard groups={groups} properties={display.properties} selectedIds={selection.selectedIds} onCreateIssue={group => onCreateIssue?.(stateIdForExplorerGroup(group, data))} onMove={moveIssue} onOpenIssue={openIssueFromExplorer} onSelectIssue={selection.selectIssue}/>}
+      /> : <IssueBoard
+        groups={groups}
+        hiddenGroupIds={display.hiddenGroupIds}
+        properties={display.properties}
+        propertyOptions={rowOptions}
+        selectedIds={selection.selectedIds}
+        onCreateIssue={group => onCreateIssue?.(stateIdForExplorerGroup(group, data))}
+        onHideGroup={groupId => changeDisplay({ ...display, hiddenGroupIds: [...new Set([...display.hiddenGroupIds, groupId])] })}
+        onShowGroup={groupId => changeDisplay({ ...display, hiddenGroupIds: display.hiddenGroupIds.filter(id => id !== groupId) })}
+        onMove={moveIssue}
+        onOpenIssue={openIssueFromExplorer}
+        onPropertyChange={changeProperty}
+        onSelectIssue={selection.selectIssue}
+      />}
       {(!savedView || previewIssue) && <MyIssuesDetailsPane
         open={detailsOpen}
         width={detailsWidth}
         onWidthChange={setDetailsWidth}
         onClose={() => { if (previewIssueId) setPreviewIssueId(undefined); else changeDetails(false) }}
-        selectedIssue={previewIssue ? issueToExplorerRow(previewIssue, data.workspace.urlKey) : undefined}
+        selectedIssue={previewIssue ? issueToExplorerRow(previewIssue, data.workspace.urlKey,data.issues) : undefined}
         previewContent={previewIssue && renderIssuePreview ? renderIssuePreview(previewIssue, () => setPreviewIssueId(undefined)) : undefined}
         summary={summary}
         onSummaryItemSelect={summaryFilter}
@@ -327,54 +344,17 @@ function issuesForScope(issues: Issue[], scope: IssueExplorerPageProps['scope'],
   return issues.filter(issue => (includeArchived || !issue.archivedAt) && (scope.kind === 'workspace' || issue.team.id === scope.team.id) && (view === 'all' || (view === 'backlog' ? issue.state.type === 'backlog' : issue.state.type === 'unstarted' || issue.state.type === 'started')))
 }
 
-function projectGroups(issues: MyIssuesRowData[], display: MyIssuesDisplayOptions, data: BootstrapData, view: TeamIssuesRouteView, manualOrder: string[]): MyIssuesGroupData[] {
-  let projected = issues.filter(issue => display.showSubIssues || !issue.parentId)
-  if (view !== 'all') projected = projected.filter(issue => issue.state.type !== 'completed' && issue.state.type !== 'canceled')
-  else if (display.completedWindow === 'none') projected = projected.filter(issue => issue.state.type !== 'completed' && issue.state.type !== 'canceled')
-  projected = [...projected].sort(issueComparator(display.ordering, manualOrder))
-  if (display.grouping === 'none') return [{ id: 'all-issues', label: 'All issues', issues: projected }]
-  const groups = new Map<string, MyIssuesGroupData>()
-  for (const issue of projected) {
-    const descriptor = groupForIssue(issue, display.grouping)
-    const group = groups.get(descriptor.id) ?? { ...descriptor, issues: [] }
-    group.issues.push(issue); groups.set(group.id, group)
+function explorerBoardGroupUpdate(row: MyIssuesRowData, grouping: MyIssuesGrouping, targetGroupId: string, data: BootstrapData): IssueUpdateInput {
+  if ((grouping === 'status' || grouping === 'focus') && data.states.some(state => state.id === targetGroupId)) return { stateId: targetGroupId }
+  if (grouping === 'priority' && targetGroupId.startsWith('priority-')) return { priority: Number(targetGroupId.slice('priority-'.length)) }
+  if (grouping === 'project' && targetGroupId.startsWith('project-')) return { projectId: targetGroupId === 'project-none' ? '' : targetGroupId.slice('project-'.length) }
+  if (grouping === 'assignee' && targetGroupId.startsWith('assignee-')) return { assigneeId: targetGroupId === 'assignee-none' ? '' : targetGroupId.slice('assignee-'.length) }
+  if (grouping === 'label' && targetGroupId.startsWith('label-')) {
+    if (targetGroupId === 'label-none') return { labelIds: [] }
+    const labelId = targetGroupId.slice('label-'.length)
+    return { labelIds: [labelId, ...(row.labels ?? []).map(label => label.id).filter(id => id !== labelId)] }
   }
-  if (display.layout === 'board' && display.grouping === 'status' && display.showEmptyGroups) {
-    for (const state of data.states.filter(state => stateVisibleInView(state.type, view, display.completedWindow))) {
-      if (!groups.has(state.id)) groups.set(state.id, { id: state.id, label: state.name, stateType: state.type, issues: [] })
-    }
-  }
-  const stateOrder = new Map(data.states.map((state, index) => [state.id, index]))
-  const ordered = [...groups.values()].sort((left, right) => {
-    if (display.grouping !== 'status' && display.grouping !== 'focus') return left.label.localeCompare(right.label)
-    return (stateOrder.get(left.id) ?? 99) - (stateOrder.get(right.id) ?? 99)
-  })
-  return display.groupOrder === 'desc' ? ordered.reverse() : ordered
-}
-
-function stateVisibleInView(type: string, view: TeamIssuesRouteView, completedWindow: MyIssuesDisplayOptions['completedWindow']) {
-  if (view === 'active') return type === 'unstarted' || type === 'started'
-  if (view === 'backlog') return type === 'backlog'
-  return completedWindow !== 'none' || (type !== 'completed' && type !== 'canceled')
-}
-
-function groupForIssue(issue: MyIssuesRowData, grouping: MyIssuesGrouping): Omit<MyIssuesGroupData, 'issues'> {
-  if (grouping === 'status' || grouping === 'focus') return { id: issue.state.id, label: issue.state.name, stateType: issue.state.type }
-  if (grouping === 'priority') return { id: `priority-${issue.priority}`, label: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][issue.priority] }
-  if (grouping === 'project') return { id: `project-${issue.project?.id ?? 'none'}`, label: issue.project?.name ?? 'No project' }
-  if (grouping === 'assignee') return { id: `assignee-${issue.assignee?.id ?? 'none'}`, label: issue.assignee?.name ?? 'No assignee' }
-  if (grouping === 'label') { const label = issue.labels?.[0]; return { id: `label-${label?.id ?? 'none'}`, label: label?.name ?? 'No label' } }
-  return { id: `${grouping}-none`, label: grouping[0].toUpperCase() + grouping.slice(1) }
-}
-
-function issueComparator(ordering: MyIssuesDisplayOptions['ordering'], manualOrder: string[]) {
-  const manual = new Map(manualOrder.map((id, index) => [id, index]))
-  return (left: MyIssuesRowData, right: MyIssuesRowData) => {
-    if (manual.has(left.id) || manual.has(right.id)) return (manual.get(left.id) ?? 999999) - (manual.get(right.id) ?? 999999)
-    if (ordering === 'created') return Date.parse(right.createdAt) - Date.parse(left.createdAt)
-    if (ordering === 'updated') return Date.parse(right.updatedAt) - Date.parse(left.updatedAt)
-    return (left.sortOrder ?? 0) - (right.sortOrder ?? 0) || left.priority - right.priority || Date.parse(right.updatedAt) - Date.parse(left.updatedAt)
-  }
+  return {}
 }
 
 function deriveSummary(groups: MyIssuesGroupData[]): MyIssuesDetailsSummary {

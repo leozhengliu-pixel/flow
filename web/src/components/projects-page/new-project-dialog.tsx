@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { CheckIcon, PlusIcon } from './projects-page-icons'
-import { usePropertyCommand } from '@/components/property/use-property-command'
+import { PlusIcon } from './projects-page-icons'
+import { PropertyMenu, type PropertyOption } from '@/components/property/property-menu'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
 import './projects-page.css'
 
@@ -40,6 +40,7 @@ export type NewProjectTemplateChoice = {
 
 export type NewProjectDialogProps = {
   open: boolean
+  initialTemplateId?: string
   teamLabel?: string
   defaultStatus?: string
   teams?: NewProjectChoice[]
@@ -60,6 +61,7 @@ const EMPTY_CHOICES: NewProjectChoice[] = []
 
 export function NewProjectDialog({
   open,
+  initialTemplateId,
   teamLabel = 'CLE',
   defaultStatus = 'Backlog',
   teams = DEFAULT_TEAMS,
@@ -81,11 +83,11 @@ export function NewProjectDialog({
 
   useEffect(() => {
     if (!open) return
-    setDraft(emptyDraft(defaultStatus, defaultTeamId))
+    setDraft(applyProjectTemplateDraft(emptyDraft(defaultStatus, defaultTeamId), initialTemplateId, templates, labels))
     setError(null)
     setNameError(false)
     requestAnimationFrame(() => nameRef.current?.focus())
-  }, [defaultStatus, defaultTeamId, open])
+  }, [defaultStatus, defaultTeamId, initialTemplateId, labels, open, templates])
 
   useEffect(() => {
     if (!open) return
@@ -119,25 +121,7 @@ export function NewProjectDialog({
 
   const set = <K extends keyof NewProjectDraft>(key: K, value: NewProjectDraft[K]) => setDraft(current => ({ ...current, [key]: value }))
   const applyTemplate = (templateId: string) => {
-    const template = templates.find(item => item.id === templateId)
-    const labelOptionIds = new Set(labels.map(label => label.id))
-    if (!template) {
-      set('templateId', undefined)
-      return
-    }
-    setDraft(current => ({
-      ...current,
-      templateId,
-      name: template.name ?? template.label,
-      summary: template.summary ?? '',
-      description: template.description ?? '',
-      icon: template.icon,
-      color: template.color,
-      status: template.status ?? current.status,
-      priority: template.priority ?? current.priority,
-      teamIds: template.teamIds?.length ? [...template.teamIds] : current.teamIds,
-      labelIds: template.labelIds ? template.labelIds.filter(id => labelOptionIds.has(id)) : current.labelIds,
-    }))
+    setDraft(current => applyProjectTemplateDraft(current, templateId, templates, labels))
   }
 
   return <div aria-label="Create project" aria-modal="true" className="lp-new-project" onKeyDown={trapFocus} role="dialog">
@@ -168,15 +152,15 @@ export function NewProjectDialog({
           </div>
         </div>
         <div className="lp-new-project__properties">
-          {templates.length > 0 && <DraftPicker label="Apply project template" options={[{ id: '', label: 'No template' }, ...templates]} placeholder="Template" value={draft.templateId ?? ''} onChange={applyTemplate} />}
-          <DraftPicker label="Change project status" options={STATUS.map(value => ({ id: value, label: value }))} value={draft.status} onChange={value => set('status', value)} />
-          <DraftPicker label="Change project priority" options={PRIORITY.map(value => ({ id: value, label: value }))} value={draft.priority} onChange={value => set('priority', value)} />
-          <DraftPicker label="Set project lead" options={[{ id: '', label: 'Lead' }, ...leads]} value={draft.leadId ?? ''} onChange={value => set('leadId', value)} />
-          <DraftPicker label="Change project members" multiple options={members} placeholder="Members" value={draft.memberIds} onChange={value => set('memberIds', value)} />
+          {templates.length > 0 && <ProjectDraftProperty label="Apply project template" options={[{ id: '', label: 'No template' }, ...templates]} placeholder="Template" value={draft.templateId ?? ''} onChange={applyTemplate} />}
+          <ProjectDraftProperty label="Change project status" options={STATUS.map(value => ({ id: value, label: value }))} value={draft.status} onChange={value => set('status', value)} />
+          <ProjectDraftProperty label="Change project priority" options={PRIORITY.map(value => ({ id: value, label: value }))} value={draft.priority} onChange={value => set('priority', value)} />
+          <ProjectDraftProperty label="Set project lead" options={[{ id: '', label: 'Lead' }, ...leads]} value={draft.leadId ?? ''} onChange={value => set('leadId', value)} />
+          <ProjectDraftProperty label="Change project members" multiple options={members} placeholder="Members" value={draft.memberIds} onChange={value => set('memberIds', value)} />
           <DateChip label="Change project start date" placeholder="Start" value={draft.startDate} onChange={value => set('startDate', value)} />
           <DateChip label="Change project target date" placeholder="Target" value={draft.targetDate} onChange={value => set('targetDate', value)} />
-          <DraftPicker label="Change labels" multiple options={labels} placeholder="Labels" value={draft.labelIds} onChange={value => set('labelIds', value)} />
-          <DraftPicker label="Add dependencies" multiple options={dependencies} placeholder="Dependencies" value={draft.dependencyIds} onChange={value => set('dependencyIds', value)} />
+          <ProjectDraftProperty label="Change labels" multiple options={labels} placeholder="Labels" value={draft.labelIds} onChange={value => set('labelIds', value)} />
+          <ProjectDraftProperty label="Add dependencies" multiple options={dependencies} placeholder="Dependencies" value={draft.dependencyIds} onChange={value => set('dependencyIds', value)} />
         </div>
         <textarea aria-label="Project description" className="lp-new-project__description" onChange={event => set('description', event.target.value)} placeholder="Write a description, a project brief, or collect ideas…" value={draft.description} />
         <MilestonesEditor milestones={draft.milestones} onChange={value => set('milestones', value)} />
@@ -190,7 +174,7 @@ export function NewProjectDialog({
   </div>
 }
 
-function DraftPicker(props: {
+function ProjectDraftProperty(props: {
   label: string
   multiple?: false
   onChange: (value: string) => void
@@ -207,49 +191,31 @@ function DraftPicker(props: {
 }) {
   const { label, options, placeholder, value } = props
   const multiple = props.multiple === true
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLSpanElement>(null)
-  const triggerRef = useRef<HTMLButtonElement>(null)
   const selected = Array.isArray(value) ? options.filter(option => value.includes(option.id)) : options.find(option => option.id === value)
-  const command = usePropertyCommand({
-    closeOnSelect: !multiple,
-    open,
-    options,
-    selectedIds: Array.isArray(value) ? value : [value],
-    onOpenChange: setOpen,
-    onSelect: option => {
-      if (Array.isArray(value)) {
-        if (props.multiple) props.onChange(value.includes(option.id) ? value.filter(id => id !== option.id) : [...value, option.id])
-      } else if (!props.multiple) props.onChange(option.id)
-    },
-  })
-  useDismissibleLayer({ open, refs: [ref], onDismiss: () => setOpen(false), restoreFocusRef: triggerRef })
-  return <span className="lp-new-project-picker" ref={ref}>
-    <button ref={triggerRef} aria-expanded={open} aria-haspopup="listbox" aria-label={label} onClick={() => setOpen(current => !current)} type="button"><span className="lp-new-project-picker__dot" style={{ background: Array.isArray(selected) ? selected[0]?.color : selected?.color }} />{Array.isArray(selected) ? selected.length ? `${placeholder} · ${selected.length}` : placeholder : selected?.label ?? placeholder}</button>
-    {open && <div className="lp-new-project-picker__surface" role="dialog">
-      <input ref={command.inputRef} aria-label={`${label}…`} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={command.onKeyDown} placeholder={`${label.replace(/^(Change|Set|Add) /, '')}…`} value={command.query} />
-      <div role="listbox" aria-multiselectable={multiple || undefined} onKeyDown={command.onKeyDown}>{groupDraftOptions(command.filteredOptions).map(section => <div key={section.id}>{section.label && <div className="lp-new-project-picker__group">{section.label}</div>}{section.options.map(option => {
-        const checked = command.isSelected(option.id)
-        return <button aria-checked={checked} aria-selected={option.id === command.activeId} key={option.id} onFocus={() => command.setActiveId(option.id)} onMouseEnter={() => command.setActiveId(option.id)} onClick={() => command.choose(option)} role="option" type="button"><span className="lp-new-project-picker__check">{checked && <CheckIcon />}</span><span className="lp-new-project-picker__dot" style={{ background: option.color }} />{option.label}</button>
-      })}</div>)}</div>
-    </div>}
-  </span>
-}
-
-function groupDraftOptions(options: NewProjectChoice[]) {
-  const sections: { id: string; label?: string; options: NewProjectChoice[] }[] = []
-  const indexes = new Map<string, number>()
-  for (const option of options) {
-    const id = option.groupId || option.groupLabel || 'ungrouped'
-    let index = indexes.get(id)
-    if (index === undefined) {
-      index = sections.length
-      indexes.set(id, index)
-      sections.push({ id, label: id === 'ungrouped' ? undefined : option.groupLabel, options: [] })
-    }
-    sections[index].options.push(option)
+  const selectedIds = Array.isArray(value) ? value : [value]
+  const display = Array.isArray(selected) ? selected.length ? `${placeholder} · ${selected.length}` : placeholder : selected?.label ?? placeholder ?? label
+  const propertyOptions: PropertyOption[] = options.map(option => ({ id: option.id, label: option.label, color: option.color, groupId: option.groupId, groupLabel: option.groupLabel, i18nIgnore: Boolean(option.id) }))
+  const choose = (id: string) => {
+    if (Array.isArray(value)) {
+      if (props.multiple) props.onChange(value.includes(id) ? value.filter(item => item !== id) : [...value, id])
+    } else if (!props.multiple) props.onChange(id)
   }
-  return sections
+  return <PropertyMenu
+    ariaLabel={label}
+    compact
+    label={placeholder ?? label}
+    multiple={multiple}
+    onChange={choose}
+    options={propertyOptions}
+    searchPlaceholder={`${label.replace(/^(Change|Set|Add) /, '')}…`}
+    selectedId={Array.isArray(value) ? undefined : value}
+    selectedIds={selectedIds}
+    surfaceClassName="lp-new-project-picker__surface"
+    trigger={<><span className="lp-new-project-picker__dot" style={{ background: Array.isArray(selected) ? selected[0]?.color : selected?.color }}/><span data-i18n-ignore={Boolean(Array.isArray(selected) ? selected.length : selected) || undefined}>{display}</span></>}
+    triggerClassName="lp-new-project-picker__trigger"
+    value={display}
+    valueIsEntityName={Boolean(Array.isArray(selected) ? selected.length : selected)}
+  />
 }
 
 function DateChip({ label, onChange, placeholder, value }: { label: string, onChange: (value: string) => void, placeholder: string, value?: string }) {
@@ -297,4 +263,12 @@ function trapFocus(event: KeyboardEvent<HTMLDivElement>) {
 
 function emptyDraft(status: string, teamId?: string): NewProjectDraft {
   return { name: '', summary: '', description: '', status, priority: 'No priority', memberIds: [], teamIds: teamId ? [teamId] : [], labelIds: [], dependencyIds: [], milestones: [] }
+}
+
+function applyProjectTemplateDraft(current:NewProjectDraft,templateId:string|undefined,templates:NewProjectTemplateChoice[],labels:NewProjectChoice[]):NewProjectDraft{
+  if(!templateId)return current
+  const template=templates.find(item=>item.id===templateId)
+  if(!template)return current
+  const labelOptionIds=new Set(labels.map(label=>label.id))
+  return {...current,templateId,name:template.name??template.label,summary:template.summary??'',description:template.description??'',icon:template.icon,color:template.color,status:template.status??current.status,priority:template.priority??current.priority,teamIds:template.teamIds?.length?[...template.teamIds]:current.teamIds,labelIds:template.labelIds?template.labelIds.filter(id=>labelOptionIds.has(id)):current.labelIds}
 }

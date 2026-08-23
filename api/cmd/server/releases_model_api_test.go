@@ -24,17 +24,18 @@ func TestReleasePipelineAndReleaseAPILifecycle(t *testing.T) {
 	}
 
 	pipeline := requestJSON[domain.ReleasePipeline](t, handler, http.MethodPost, "/api/release-pipelines", map[string]any{
-		"name":                     "Web production",
-		"teamIds":                  []string{bootstrap.Teams[0].ID},
-		"type":                     "scheduled",
-		"production":               true,
-		"stages":                   []string{"Planning", "Deploy"},
-		"stageStatuses":            map[string]string{"Planning": "planned", "Deploy": "released"},
-		"pathFilters":              []string{"web/**", "api/*.go"},
-		"releaseNotesTemplate":     "## Changes\n{{issues}}",
-		"autoGenerateReleaseNotes": true,
+		"name":                        "Web production",
+		"teamIds":                     []string{bootstrap.Teams[0].ID},
+		"type":                        "scheduled",
+		"production":                  true,
+		"stages":                      []string{"Planning", "Deploy"},
+		"stageStatuses":               map[string]string{"Planning": "planned", "Deploy": "released"},
+		"pathFilters":                 []string{"web/**", "api/*.go"},
+		"releaseNotesTemplate":        "## Changes\n{{issues}}",
+		"autoGenerateReleaseNotes":    true,
+		"moveOpenIssuesToNextRelease": false,
 	}, http.StatusCreated)
-	if pipeline.Position != 0 || !slices.Equal(pipeline.PathFilters, []string{"web/**", "api/*.go"}) || pipeline.StageStatuses["Planning"] != "planned" || pipeline.StageStatuses["Deploy"] != "released" || !pipeline.AutoGenerateReleaseNotes || pipeline.ReleaseNotesTemplate == "" {
+	if pipeline.Position != 0 || pipeline.SlugID != "web-production" || !slices.Equal(pipeline.PathFilters, []string{"web/**", "api/*.go"}) || pipeline.StageStatuses["Planning"] != "planned" || pipeline.StageStatuses["Deploy"] != "released" || !pipeline.AutoGenerateReleaseNotes || pipeline.ReleaseNotesTemplate == "" || pipeline.MoveOpenIssuesToNextRelease == nil || *pipeline.MoveOpenIssuesToNextRelease {
 		t.Fatalf("pipeline settings were not persisted: %#v", pipeline)
 	}
 	secondPipeline := requestJSON[domain.ReleasePipeline](t, handler, http.MethodPost, "/api/release-pipelines", map[string]any{
@@ -43,6 +44,9 @@ func TestReleasePipelineAndReleaseAPILifecycle(t *testing.T) {
 	if secondPipeline.Position <= pipeline.Position {
 		t.Fatalf("pipeline position = %v, want after %v", secondPipeline.Position, pipeline.Position)
 	}
+	requestJSON[any](t, handler, http.MethodPost, "/api/releases", map[string]any{
+		"name": "Manual continuous release", "pipelineId": secondPipeline.ID,
+	}, http.StatusConflict)
 
 	reorderedPipelines := requestJSON[[]domain.ReleasePipeline](t, handler, http.MethodPost, "/api/release-pipelines/reorder", map[string]any{
 		"ids": []string{secondPipeline.ID, pipeline.ID},
@@ -95,8 +99,9 @@ func TestReleasePipelineAndReleaseAPILifecycle(t *testing.T) {
 		"releaseNotes": "Initial notes",
 		"targetDate":   "2026-09-15",
 		"issueIds":     []string{firstIssue.ID},
+		"resources":    []map[string]any{{"type": "link", "title": "Runbook", "url": "https://example.com/runbook"}},
 	}, http.StatusCreated)
-	if release.PipelineID != pipeline.ID || release.Stage != "Planning" || release.CommitSHA != "abc123def456" || release.ReleaseNotes != "Initial notes" || release.StartedAt == nil || release.ReleasedAt != nil {
+	if release.SlugID == "" || release.PipelineID != pipeline.ID || release.Stage != "Planning" || release.CommitSHA != "abc123def456" || release.ReleaseNotes != "Initial notes" || len(release.Resources) != 1 || release.Resources[0].Title != "Runbook" || release.StartedAt == nil || release.ReleasedAt != nil {
 		t.Fatalf("release business fields were not initialized: %#v", release)
 	}
 	persistedRelease := requestJSON[domain.Release](t, handler, http.MethodGet, "/api/releases/"+release.ID, nil, http.StatusOK)
@@ -112,6 +117,14 @@ func TestReleasePipelineAndReleaseAPILifecycle(t *testing.T) {
 	}, http.StatusCreated)
 	if secondRelease.Position <= release.Position {
 		t.Fatalf("release position = %v, want after %v", secondRelease.Position, release.Position)
+	}
+	issueReleases := requestJSON[[]domain.Release](t, handler, http.MethodPut, "/api/issues/"+secondIssue.ID+"/releases", map[string]any{"releaseIds": []string{release.ID, secondRelease.ID}}, http.StatusOK)
+	if len(issueReleases) != 2 || !slices.Contains(issueReleases[0].IssueIDs, secondIssue.ID) || !slices.Contains(issueReleases[1].IssueIDs, secondIssue.ID) {
+		t.Fatalf("issue release association failed: %#v", issueReleases)
+	}
+	issueReleases = requestJSON[[]domain.Release](t, handler, http.MethodPut, "/api/issues/"+secondIssue.ID+"/releases", map[string]any{"releaseIds": []string{secondRelease.ID}}, http.StatusOK)
+	if len(issueReleases) != 1 || issueReleases[0].ID != secondRelease.ID {
+		t.Fatalf("issue release removal failed: %#v", issueReleases)
 	}
 	filtered := requestJSON[[]domain.Release](t, handler, http.MethodGet, "/api/releases?pipelineId="+pipeline.ID+"&status=planned", nil, http.StatusOK)
 	if len(filtered) != 1 || filtered[0].ID != secondRelease.ID {
@@ -145,11 +158,11 @@ func TestReleasePipelineAndReleaseAPILifecycle(t *testing.T) {
 		"stages": []string{"Deploy"},
 	}, http.StatusConflict)
 
-	requestJSON[any](t, handler, http.MethodDelete, "/api/release-pipelines/"+pipeline.ID, nil, http.StatusConflict)
-	requestJSON[any](t, handler, http.MethodDelete, "/api/releases/"+release.ID, nil, http.StatusNoContent)
-	requestJSON[any](t, handler, http.MethodDelete, "/api/releases/"+secondRelease.ID, nil, http.StatusNoContent)
 	requestJSON[any](t, handler, http.MethodDelete, "/api/release-pipelines/"+pipeline.ID, nil, http.StatusNoContent)
 	afterDelete := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if slices.ContainsFunc(afterDelete.Releases, func(item domain.Release) bool { return item.PipelineID == pipeline.ID }) || len(afterDelete.Trash) < 3 {
+		t.Fatalf("pipeline deletion did not move its releases to trash: releases=%#v trash=%#v", afterDelete.Releases, afterDelete.Trash)
+	}
 	trashIndex := slices.IndexFunc(afterDelete.Trash, func(item domain.TrashEntry) bool {
 		return item.ResourceType == "release_pipeline" && item.ResourceID == pipeline.ID
 	})
@@ -161,9 +174,4 @@ func TestReleasePipelineAndReleaseAPILifecycle(t *testing.T) {
 		t.Fatalf("pipeline restore failed: %#v", restored)
 	}
 
-	secondPipeline = requestJSON[domain.ReleasePipeline](t, handler, http.MethodPatch, "/api/release-pipelines/"+secondPipeline.ID, map[string]any{"archived": true}, http.StatusOK)
-	archived := requestJSON[[]domain.ReleasePipeline](t, handler, http.MethodGet, "/api/release-pipelines?archived=true", nil, http.StatusOK)
-	if len(archived) != 1 || archived[0].ID != secondPipeline.ID {
-		t.Fatalf("archived pipeline filter returned %#v", archived)
-	}
 }

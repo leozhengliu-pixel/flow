@@ -4,6 +4,8 @@ import type { MyIssuesBulkAction, MyIssuesBulkActionOption } from '@/components/
 import type { MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-bar'
 import type { MyIssuesContextAction, MyIssuesContextOption, MyIssuesEditableProperty, MyIssuesGroupData, MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import type { MyIssuesFilterKey, MyIssuesFilterOption } from '@/components/my-issues/my-issues-surface'
+import type { MyIssuesDisplayOptions, MyIssuesGrouping } from '@/components/my-issues/my-issues-surface'
+import type { TeamIssuesRouteView } from '@/lib/app-routes'
 import { filterValues } from '@/components/my-issues/my-issues-filter-types'
 import { labelsForResource } from '@/lib/labels'
 
@@ -16,7 +18,7 @@ const PRIORITIES: MyIssuesContextOption[] = ['No priority', 'Urgent', 'High', 'M
   id: String(id), label, kind: 'priority', priority: id as 0 | 1 | 2 | 3 | 4,
 }))
 
-export function issueToExplorerRow(issue: Issue, workspaceSlug: string): MyIssuesRowData {
+export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: Issue[] = []): MyIssuesRowData {
   return {
     id: issue.id,
     identifier: issue.identifier,
@@ -32,7 +34,29 @@ export function issueToExplorerRow(issue: Issue, workspaceSlug: string): MyIssue
     createdAt: issue.createdAt,
     updatedAt: issue.updatedAt,
     parentId: issue.parentId,
+    ...issueHierarchyFields(issue, issues),
     sortOrder: issue.sortOrder,
+  }
+}
+
+export function issueHierarchyFields(issue: Issue, issues: Issue[]): Pick<MyIssuesRowData,'parent'|'ancestors'|'subIssueProgress'|'subIssues'> {
+  const byId = new Map(issues.map(item => [item.id,item]))
+  const ancestors: NonNullable<MyIssuesRowData['ancestors']> = []
+  const seen = new Set<string>([issue.id])
+  let parentId = issue.parentId
+  while (parentId && !seen.has(parentId)) {
+    const parent = byId.get(parentId)
+    if (!parent) break
+    seen.add(parentId)
+    ancestors.push({id:parent.id,identifier:parent.identifier,title:parent.title})
+    parentId = parent.parentId
+  }
+  const children = issue.subIssueIds.map(id=>byId.get(id)).filter((item):item is Issue=>Boolean(item)&&!item!.archivedAt)
+  return {
+    parent: ancestors[0],
+    ancestors,
+    subIssueProgress: children.length ? {completed:children.filter(child=>child.state.type==='completed').length,total:children.length} : undefined,
+    subIssues:children.map(child=>({id:child.id,identifier:child.identifier,title:child.title,priority:clampPriority(child.priority),state:child.state,labels:child.labels,project:child.project,assignee:child.assignee?{id:child.assignee.id,name:child.assignee.displayName,avatarUrl:child.assignee.avatarUrl}:undefined,createdAt:child.createdAt,updatedAt:child.updatedAt,parentId:child.parentId})),
   }
 }
 
@@ -145,6 +169,57 @@ export function applyExplorerFilters(issues: Issue[], filters: MyIssuesAppliedFi
     else if (filter.field === 'links') matched = values.includes(issue.attachments.length ? 'has-links' : 'no-links')
     return filter.operator === 'is' ? matched : !matched
   }))
+}
+
+export function buildExplorerIssueGroups(issues: MyIssuesRowData[], display: MyIssuesDisplayOptions, data: BootstrapData, view: TeamIssuesRouteView = 'all', manualOrder: string[] = []): MyIssuesGroupData[] {
+  let projected = issues.filter(issue => display.showSubIssues || !issue.parentId)
+  if (view !== 'all') projected = projected.filter(issue => issue.state.type !== 'completed' && issue.state.type !== 'canceled')
+  else if (display.completedWindow === 'none') projected = projected.filter(issue => issue.state.type !== 'completed' && issue.state.type !== 'canceled')
+  projected = [...projected].sort(issueComparator(display.ordering, manualOrder))
+  if (display.grouping === 'none') return [{ id: 'all-issues', label: 'All issues', issues: projected }]
+  const groups = new Map<string, MyIssuesGroupData>()
+  for (const issue of projected) {
+    const descriptor = groupForIssue(issue, display.grouping)
+    const group = groups.get(descriptor.id) ?? { ...descriptor, issues: [] }
+    group.issues.push(issue)
+    groups.set(group.id, group)
+  }
+  if (display.layout === 'board' && display.grouping === 'status' && display.showEmptyGroups) {
+    for (const state of data.states.filter(state => stateVisibleInView(state.type, view, display.completedWindow))) {
+      if (!groups.has(state.id)) groups.set(state.id, { id: state.id, label: state.name, stateType: state.type, issues: [] })
+    }
+  }
+  const stateOrder = new Map(data.states.map((state, index) => [state.id, index]))
+  const ordered = [...groups.values()].sort((left, right) => {
+    if (display.grouping !== 'status' && display.grouping !== 'focus') return left.label.localeCompare(right.label)
+    return (stateOrder.get(left.id) ?? 99) - (stateOrder.get(right.id) ?? 99)
+  })
+  return display.groupOrder === 'desc' ? ordered.reverse() : ordered
+}
+
+function stateVisibleInView(type: string, view: TeamIssuesRouteView, completedWindow: MyIssuesDisplayOptions['completedWindow']) {
+  if (view === 'active') return type === 'unstarted' || type === 'started'
+  if (view === 'backlog') return type === 'backlog'
+  return completedWindow !== 'none' || (type !== 'completed' && type !== 'canceled')
+}
+
+function groupForIssue(issue: MyIssuesRowData, grouping: MyIssuesGrouping): Omit<MyIssuesGroupData, 'issues'> {
+  if (grouping === 'status' || grouping === 'focus') return { id: issue.state.id, label: issue.state.name, stateType: issue.state.type }
+  if (grouping === 'priority') return { id: `priority-${issue.priority}`, label: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][issue.priority] }
+  if (grouping === 'project') return { id: `project-${issue.project?.id ?? 'none'}`, label: issue.project?.name ?? 'No project' }
+  if (grouping === 'assignee') return { id: `assignee-${issue.assignee?.id ?? 'none'}`, label: issue.assignee?.name ?? 'No assignee' }
+  if (grouping === 'label') { const label = issue.labels?.[0]; return { id: `label-${label?.id ?? 'none'}`, label: label?.name ?? 'No label' } }
+  return { id: `${grouping}-none`, label: grouping[0].toUpperCase() + grouping.slice(1) }
+}
+
+function issueComparator(ordering: MyIssuesDisplayOptions['ordering'], manualOrder: string[]) {
+  const manual = new Map(manualOrder.map((id, index) => [id, index]))
+  return (left: MyIssuesRowData, right: MyIssuesRowData) => {
+    if (manual.has(left.id) || manual.has(right.id)) return (manual.get(left.id) ?? 999999) - (manual.get(right.id) ?? 999999)
+    if (ordering === 'created') return Date.parse(right.createdAt) - Date.parse(left.createdAt)
+    if (ordering === 'updated') return Date.parse(right.updatedAt) - Date.parse(left.updatedAt)
+    return (left.sortOrder ?? 0) - (right.sortOrder ?? 0) || left.priority - right.priority || Date.parse(right.updatedAt) - Date.parse(left.updatedAt)
+  }
 }
 
 export function explorerDueDateOptions(): MyIssuesBulkActionOption[] {
