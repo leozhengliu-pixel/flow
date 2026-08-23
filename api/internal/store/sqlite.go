@@ -6,20 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"flow/api/internal/domain"
-
-	_ "modernc.org/sqlite"
 )
 
 type SQLiteStore struct {
-	db               *sql.DB
+	db               *sqlDatabase
+	dialect          string
 	mu               sync.RWMutex
 	workspaces       map[string]domain.Bootstrap
 	lastWorkspaceKey string
@@ -28,28 +25,7 @@ type SQLiteStore struct {
 }
 
 func OpenSQLite(path string) (*SQLiteStore, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, err
-	}
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		return nil, err
-	}
-	db.SetMaxOpenConns(1)
-	s := &SQLiteStore{db: db}
-	if err := s.migrate(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.loadOrSeed(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.ensureAuthSeed(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	return s, nil
+	return OpenDatabase(DatabaseConfig{Driver: "sqlite", Path: path, MaxOpenConns: 1})
 }
 
 func (s *SQLiteStore) Close() error { return s.db.Close() }
@@ -61,117 +37,15 @@ func (s *SQLiteStore) SetRealtimeSink(sink func(string, domain.RealtimeEvent)) {
 }
 
 func (s *SQLiteStore) migrate(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `
-CREATE TABLE IF NOT EXISTS workspace_state (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  data BLOB NOT NULL,
-  updated_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS workspace_states (
-  workspace_key TEXT PRIMARY KEY,
-  workspace_id TEXT NOT NULL UNIQUE,
-  data BLOB NOT NULL,
-  updated_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS account_state (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  last_workspace_key TEXT NOT NULL DEFAULT '',
-  viewer BLOB NOT NULL,
-  updated_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS domain_events (
-  id TEXT PRIMARY KEY,
-  event_type TEXT NOT NULL,
-  aggregate_id TEXT NOT NULL,
-  payload BLOB NOT NULL,
-  created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS domain_events_aggregate_idx ON domain_events(aggregate_id, created_at);
-CREATE TABLE IF NOT EXISTS auth_users (
-  id TEXT PRIMARY KEY,
-  email TEXT NOT NULL COLLATE NOCASE UNIQUE,
-  name TEXT NOT NULL,
-  display_name TEXT NOT NULL,
-  avatar_url TEXT NOT NULL DEFAULT '',
-  password_hash TEXT NOT NULL,
-  email_verified_at TEXT,
-  active INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS auth_sessions (
-  token_hash TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
-  expires_at TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  last_seen_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS auth_sessions_user_idx ON auth_sessions(user_id, expires_at);
-CREATE TABLE IF NOT EXISTS auth_account_state (
-  user_id TEXT PRIMARY KEY REFERENCES auth_users(id) ON DELETE CASCADE,
-  last_workspace_key TEXT NOT NULL DEFAULT '',
-  updated_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS auth_tokens (
-  token_hash TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
-  kind TEXT NOT NULL,
-  expires_at TEXT NOT NULL,
-  used_at TEXT,
-  created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS workspace_memberships (
-  workspace_id TEXT NOT NULL,
-  user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
-  role TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active',
-  joined_at TEXT NOT NULL,
-  last_seen_at TEXT,
-  PRIMARY KEY(workspace_id, user_id)
-);
-CREATE INDEX IF NOT EXISTS workspace_memberships_user_idx ON workspace_memberships(user_id, status);
-CREATE TABLE IF NOT EXISTS team_memberships (
-  workspace_id TEXT NOT NULL,
-  team_id TEXT NOT NULL,
-  user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
-  role TEXT NOT NULL DEFAULT 'member',
-  joined_at TEXT NOT NULL,
-  PRIMARY KEY(workspace_id, team_id, user_id)
-);
-CREATE TABLE IF NOT EXISTS workspace_invitations (
-  id TEXT PRIMARY KEY,
-  workspace_id TEXT NOT NULL,
-  email TEXT NOT NULL COLLATE NOCASE,
-  role TEXT NOT NULL,
-  team_ids BLOB NOT NULL,
-  token_hash TEXT NOT NULL UNIQUE,
-  inviter_id TEXT NOT NULL REFERENCES auth_users(id),
-  status TEXT NOT NULL DEFAULT 'pending',
-  expires_at TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  accepted_at TEXT
-);
-CREATE INDEX IF NOT EXISTS workspace_invitations_email_idx ON workspace_invitations(email, status);
-CREATE TABLE IF NOT EXISTS search_history (
-  user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
-  workspace_id TEXT NOT NULL,
-  query TEXT NOT NULL,
-  use_count INTEGER NOT NULL DEFAULT 1,
-  last_used_at TEXT NOT NULL,
-  PRIMARY KEY(user_id, workspace_id, query)
-);
-CREATE INDEX IF NOT EXISTS search_history_recent_idx ON search_history(user_id, workspace_id, last_used_at DESC);
-CREATE TABLE IF NOT EXISTS recently_viewed (
-  user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
-  workspace_id TEXT NOT NULL,
-  resource_type TEXT NOT NULL,
-  resource_id TEXT NOT NULL,
-  last_viewed_at TEXT NOT NULL,
-  PRIMARY KEY(user_id, workspace_id, resource_type, resource_id)
-);
-CREATE INDEX IF NOT EXISTS recently_viewed_recent_idx ON recently_viewed(user_id, workspace_id, last_viewed_at DESC);
-`)
-	return err
+	for _, statement := range databaseMigrations(s.dialect) {
+		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+			if s.dialect == "mysql" && strings.Contains(strings.ToLower(err.Error()), "duplicate key name") {
+				continue
+			}
+			return fmt.Errorf("database migration: %w", err)
+		}
+	}
+	return nil
 }
 
 func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
@@ -981,6 +855,16 @@ func legacyReleaseStageStatus(stage string) string {
 	}
 }
 
+func legacyReleaseSlug(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	return strings.Trim(strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			return r
+		}
+		return '-'
+	}, value), "-")
+}
+
 func normalize(data *domain.Bootstrap) {
 	for projectIndex := range data.Projects {
 		for resourceIndex := range data.Projects[projectIndex].Resources {
@@ -1049,8 +933,19 @@ func normalize(data *domain.Bootstrap) {
 	if data.OAuthApplications == nil {
 		data.OAuthApplications = []domain.OAuthApplication{}
 	}
+	if data.OAuthAuthorizations == nil {
+		data.OAuthAuthorizations = []domain.OAuthAuthorization{}
+	}
 	if data.IntegrationConnections == nil {
 		data.IntegrationConnections = []domain.IntegrationConnection{}
+	}
+	if data.Reviews == nil {
+		data.Reviews = defaultCodeReviews(data)
+	}
+	for index := range data.Initiatives {
+		if data.Initiatives[index].ParentInitiativeIDs == nil {
+			data.Initiatives[index].ParentInitiativeIDs = []string{}
+		}
 	}
 	for index := range data.Labels {
 		if data.Labels[index].ResourceType == "" {
@@ -1077,6 +972,14 @@ func normalize(data *domain.Bootstrap) {
 	if data.Cycles == nil {
 		data.Cycles = []domain.Cycle{}
 	}
+	for index := range data.Cycles {
+		if data.Cycles[index].Resources == nil {
+			data.Cycles[index].Resources = []domain.CycleResource{}
+		}
+		if data.Cycles[index].Insight == nil {
+			data.Cycles[index].Insight = map[string]string{"measure": "Issue count", "slice": "Status", "segment": "Priority"}
+		}
+	}
 	if data.CycleSettings == nil {
 		data.CycleSettings = map[string]domain.CycleSettings{}
 	}
@@ -1101,10 +1004,33 @@ func normalize(data *domain.Bootstrap) {
 	if data.Releases == nil {
 		data.Releases = []domain.Release{}
 	}
+	for index := range data.Releases {
+		if data.Releases[index].SlugID == "" {
+			base := legacyReleaseSlug(data.Releases[index].Name)
+			if base == "" {
+				base = "release"
+			}
+			data.Releases[index].SlugID = fmt.Sprintf("%s-%x", base, data.Releases[index].CreatedAt.UnixNano()&0xffffffffffff)
+		}
+		if data.Releases[index].Resources == nil {
+			data.Releases[index].Resources = []domain.ReleaseResource{}
+		}
+	}
 	if data.ReleasePipelines == nil {
 		data.ReleasePipelines = []domain.ReleasePipeline{}
 	}
 	for index := range data.ReleasePipelines {
+		if data.ReleasePipelines[index].SlugID == "" {
+			base := legacyReleaseSlug(data.ReleasePipelines[index].Name)
+			if base == "" {
+				base = fmt.Sprintf("pipeline-%d", index+1)
+			}
+			candidate := base
+			for suffix := 2; slices.ContainsFunc(data.ReleasePipelines[:index], func(item domain.ReleasePipeline) bool { return item.SlugID == candidate }); suffix++ {
+				candidate = fmt.Sprintf("%s-%d", base, suffix)
+			}
+			data.ReleasePipelines[index].SlugID = candidate
+		}
 		if data.ReleasePipelines[index].StageStatuses == nil {
 			data.ReleasePipelines[index].StageStatuses = map[string]string{}
 		}
@@ -1219,6 +1145,18 @@ func normalize(data *domain.Bootstrap) {
 		data.ProjectStatuses = canonicalProjectStatuses()
 	}
 	for index := range data.ProjectStatuses {
+		switch data.ProjectStatuses[index].ID {
+		case "ps_backlog":
+			data.ProjectStatuses[index].Color = "#E79D4F"
+		case "ps_planned":
+			data.ProjectStatuses[index].Color = "#A8A8AA"
+		case "ps_progress":
+			data.ProjectStatuses[index].Color = "#E2B714"
+		case "ps_completed":
+			data.ProjectStatuses[index].Color = "#5E6AD2"
+		case "ps_canceled":
+			data.ProjectStatuses[index].Color = "#8A8F98"
+		}
 		if data.ProjectStatuses[index].Position == 0 && index > 0 {
 			data.ProjectStatuses[index].Position = float64(index)
 		}
@@ -1345,6 +1283,50 @@ func normalize(data *domain.Bootstrap) {
 			data.Issues[i].Attachments = []domain.Attachment{}
 		}
 	}
+	issueIndexes := make(map[string]int, len(data.Issues))
+	for i := range data.Issues {
+		issueIndexes[data.Issues[i].ID] = i
+	}
+	for i := range data.Issues {
+		if data.Issues[i].ParentID == nil {
+			continue
+		}
+		parentIndex, ok := issueIndexes[*data.Issues[i].ParentID]
+		if !ok || parentIndex == i {
+			data.Issues[i].ParentID = nil
+			continue
+		}
+		if !slices.Contains(data.Issues[parentIndex].SubIssueIDs, data.Issues[i].ID) {
+			data.Issues[parentIndex].SubIssueIDs = append(data.Issues[parentIndex].SubIssueIDs, data.Issues[i].ID)
+		}
+	}
+}
+
+func defaultCodeReviews(data *domain.Bootstrap) []domain.CodeReview {
+	if len(data.Users) == 0 {
+		return []domain.CodeReview{}
+	}
+	now := time.Now().UTC()
+	author := data.Users[0]
+	if len(data.Users) > 1 {
+		author = data.Users[1]
+	}
+	issueIDs := []string{}
+	if len(data.Issues) > 0 {
+		issueIDs = []string{data.Issues[0].ID}
+	}
+	opened := now.AddDate(0, 0, -5)
+	return []domain.CodeReview{{
+		ID: "review_flow_keyboard", SlugID: "improve-release-keyboard-navigation-a81f2c9d", Provider: "github", ExternalID: "flow-pr-42", Number: 42,
+		Title: "Improve release association keyboard navigation", Description: "Align the release picker keyboard flow with the rest of the application and add regression coverage.", Status: "open",
+		RepositoryOwner: "heliumlabz", RepositoryName: "flow", URL: "https://github.com/heliumlabz/flow/pull/42", Author: author,
+		ReviewerIDs: []string{data.Viewer.ID}, TeamReviewers: []string{"frontend"}, IssueIDs: issueIDs, BaseBranch: "main", HeadBranch: "reviews/release-keyboard", BranchState: "behind",
+		Additions: 184, Deletions: 37, CommitCount: 3, Favorite: false, Draft: false, QuickToReview: true,
+		Checks:    []domain.ReviewCheck{{ID: "check_review_build", Name: "Web build", Status: "passed"}, {ID: "check_review_api", Name: "API tests", Status: "passed"}, {ID: "check_review_lint", Name: "Lint", Status: "passed"}},
+		Files:     []domain.ReviewFile{{Path: "web/src/components/issue/issue-release-picker.tsx", Status: "modified", Additions: 121, Deletions: 21, Patch: "@@ Release picker keyboard handling\n+ Support nested Escape navigation\n+ Keep checkbox focus stable"}, {Path: "api/cmd/server/releases_model_api_test.go", Status: "modified", Additions: 63, Deletions: 16, Patch: "@@ Release association tests\n+ Verify add and remove round trip\n+ Reject frozen release stages"}},
+		Events:    []domain.ReviewEvent{{ID: "review_event_opened", Type: "opened", Actor: author, CreatedAt: opened}, {ID: "review_event_requested", Type: "review_requested", Actor: author, Body: data.Viewer.DisplayName, CreatedAt: opened.Add(time.Second)}},
+		CreatedAt: opened, UpdatedAt: now.Add(-2 * time.Hour),
+	}}
 }
 
 func defaultUserSettings(userID string) domain.UserSettings {
@@ -1413,6 +1395,19 @@ func (s *SQLiteStore) BootstrapFor(workspaceKey string) (domain.Bootstrap, bool)
 	var clone domain.Bootstrap
 	_ = json.Unmarshal(raw, &clone)
 	return clone, true
+}
+
+func (s *SQLiteStore) CycleForCalendar(id, token string) (domain.Cycle, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, data := range s.workspaces {
+		for _, cycle := range data.Cycles {
+			if cycle.ID == id && cycle.CalendarToken != "" && cycle.CalendarToken == token {
+				return cycle, true
+			}
+		}
+	}
+	return domain.Cycle{}, false
 }
 
 func (s *SQLiteStore) Account() domain.AccountBootstrap {
@@ -1562,10 +1557,10 @@ func (s *SQLiteStore) CreateWorkspace(ctx context.Context, name, urlKey, region 
 	s.workspaces[urlKey] = data
 	s.lastWorkspaceKey = urlKey
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, _ = s.db.ExecContext(ctx, `INSERT OR REPLACE INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?)`, data.Workspace.ID, viewer.ID, "admin", "active", now, now)
+	_, _ = s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,status=excluded.status,joined_at=excluded.joined_at,last_seen_at=excluded.last_seen_at`, data.Workspace.ID, viewer.ID, "admin", "active", now, now)
 	_, _ = s.db.ExecContext(ctx, `INSERT INTO auth_account_state(user_id,last_workspace_key,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,updated_at=excluded.updated_at`, viewer.ID, urlKey, now)
 	if len(data.Teams) > 0 {
-		_, _ = s.db.ExecContext(ctx, `INSERT OR REPLACE INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?)`, data.Workspace.ID, data.Teams[0].ID, viewer.ID, "owner", now)
+		_, _ = s.db.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT(workspace_id,team_id,user_id) DO UPDATE SET role=excluded.role,joined_at=excluded.joined_at`, data.Workspace.ID, data.Teams[0].ID, viewer.ID, "owner", now)
 	}
 	return data, nil
 }

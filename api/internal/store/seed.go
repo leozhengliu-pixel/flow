@@ -402,11 +402,11 @@ func stringPointer(value string) *string { return &value }
 
 func canonicalProjectStatuses() []domain.ProjectStatus {
 	return []domain.ProjectStatus{
-		{ID: "ps_backlog", Name: "Backlog", Color: "#6B6F76", Type: "backlog"},
-		{ID: "ps_planned", Name: "Planned", Color: "#D6B326", Type: "planned"},
-		{ID: "ps_progress", Name: "In Progress", Color: "#5E8FD8", Type: "started"},
+		{ID: "ps_backlog", Name: "Backlog", Color: "#E79D4F", Type: "backlog"},
+		{ID: "ps_planned", Name: "Planned", Color: "#A8A8AA", Type: "planned"},
+		{ID: "ps_progress", Name: "In Progress", Color: "#E2B714", Type: "started"},
 		{ID: "ps_completed", Name: "Completed", Color: "#5E6AD2", Type: "completed"},
-		{ID: "ps_canceled", Name: "Canceled", Color: "#77777C", Type: "canceled"},
+		{ID: "ps_canceled", Name: "Canceled", Color: "#8A8F98", Type: "canceled"},
 	}
 }
 

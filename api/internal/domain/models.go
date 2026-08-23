@@ -218,6 +218,8 @@ type Issue struct {
 	SortOrder          float64             `json:"sortOrder"`
 	Estimate           *float64            `json:"estimate,omitempty"`
 	DueDate            *string             `json:"dueDate,omitempty"`
+	SLABreachesAt      *time.Time          `json:"slaBreachesAt,omitempty"`
+	SLAType            string              `json:"slaType,omitempty"`
 	CreatedAt          time.Time           `json:"createdAt"`
 	UpdatedAt          time.Time           `json:"updatedAt"`
 	CompletedAt        *time.Time          `json:"completedAt,omitempty"`
@@ -226,6 +228,7 @@ type Issue struct {
 	Team               Team                `json:"team"`
 	State              WorkflowState       `json:"state"`
 	Assignee           *User               `json:"assignee,omitempty"`
+	Delegate           *User               `json:"delegate,omitempty"`
 	Creator            User                `json:"creator"`
 	Labels             []IssueLabel        `json:"labels"`
 	Project            *ProjectSummary     `json:"project,omitempty"`
@@ -242,18 +245,30 @@ type Issue struct {
 }
 
 type Cycle struct {
-	ID          string    `json:"id"`
-	Number      int       `json:"number"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	TeamID      string    `json:"teamId"`
-	StartsAt    time.Time `json:"startsAt"`
-	EndsAt      time.Time `json:"endsAt"`
-	Status      string    `json:"status"`
-	Capacity    int       `json:"capacity"`
-	Favorite    bool      `json:"favorite"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID            string            `json:"id"`
+	Number        int               `json:"number"`
+	Name          string            `json:"name"`
+	Description   string            `json:"description"`
+	TeamID        string            `json:"teamId"`
+	StartsAt      time.Time         `json:"startsAt"`
+	EndsAt        time.Time         `json:"endsAt"`
+	Status        string            `json:"status"`
+	Capacity      int               `json:"capacity"`
+	Favorite      bool              `json:"favorite"`
+	Resources     []CycleResource   `json:"resources"`
+	CalendarToken string            `json:"calendarToken,omitempty"`
+	Insight       map[string]string `json:"insight,omitempty"`
+	CreatedAt     time.Time         `json:"createdAt"`
+	UpdatedAt     time.Time         `json:"updatedAt"`
+}
+
+type CycleResource struct {
+	ID         string    `json:"id"`
+	Type       string    `json:"type"`
+	Title      string    `json:"title"`
+	URL        string    `json:"url"`
+	DocumentID string    `json:"documentId,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
 }
 
 type CycleSettings struct {
@@ -269,6 +284,7 @@ type CycleSettings struct {
 	AutoAddStarted   bool `json:"autoAddStarted"`
 	AutoAddCompleted bool `json:"autoAddCompleted"`
 	AutoMigrate      bool `json:"autoMigrate"`
+	FavoriteView     bool `json:"favoriteView"`
 }
 
 type TeamSettings struct {
@@ -327,23 +343,27 @@ type TeamAgentSkill struct {
 }
 
 type IssueTemplate struct {
-	ID           string              `json:"id"`
-	TeamID       string              `json:"teamId"`
-	Name         string              `json:"name"`
-	Title        string              `json:"title,omitempty"`
-	Description  string              `json:"description,omitempty"`
-	Body         string              `json:"body,omitempty"`
-	StateID      string              `json:"stateId,omitempty"`
-	Priority     int                 `json:"priority"`
-	AssigneeID   string              `json:"assigneeId,omitempty"`
-	ProjectID    string              `json:"projectId,omitempty"`
-	LabelIDs     []string            `json:"labelIds"`
-	Scope        string              `json:"scope,omitempty"`
-	TemplateType string              `json:"templateType,omitempty"`
-	FormFields   []TemplateFormField `json:"formFields,omitempty"`
-	Creator      User                `json:"creator"`
-	CreatedAt    time.Time           `json:"createdAt"`
-	UpdatedAt    time.Time           `json:"updatedAt"`
+	ID               string              `json:"id"`
+	TeamID           string              `json:"teamId"`
+	Icon             string              `json:"icon,omitempty"`
+	Color            string              `json:"color,omitempty"`
+	Name             string              `json:"name"`
+	Title            string              `json:"title,omitempty"`
+	Description      string              `json:"description,omitempty"`
+	Body             string              `json:"body,omitempty"`
+	StateID          string              `json:"stateId,omitempty"`
+	Priority         int                 `json:"priority"`
+	AssigneeID       string              `json:"assigneeId,omitempty"`
+	ProjectID        string              `json:"projectId,omitempty"`
+	LabelIDs         []string            `json:"labelIds"`
+	Scope            string              `json:"scope,omitempty"`
+	VisibilityTeamID string              `json:"visibilityTeamId,omitempty"`
+	TemplateType     string              `json:"templateType,omitempty"`
+	FormFields       []TemplateFormField `json:"formFields,omitempty"`
+	SubIssues        []TemplateSubIssue  `json:"subIssues,omitempty"`
+	Creator          User                `json:"creator"`
+	CreatedAt        time.Time           `json:"createdAt"`
+	UpdatedAt        time.Time           `json:"updatedAt"`
 }
 
 type TemplateFormField struct {
@@ -353,6 +373,16 @@ type TemplateFormField struct {
 	Type        string   `json:"type"`
 	Required    bool     `json:"required"`
 	Options     []string `json:"options,omitempty"`
+}
+
+type TemplateSubIssue struct {
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	Description string   `json:"description,omitempty"`
+	TeamID      string   `json:"teamId,omitempty"`
+	Priority    int      `json:"priority"`
+	AssigneeID  string   `json:"assigneeId,omitempty"`
+	LabelIDs    []string `json:"labelIds,omitempty"`
 }
 
 type IssueRelation struct {
@@ -408,7 +438,9 @@ type Project struct {
 	DescriptionRevisions []ProjectDescriptionRevision `json:"descriptionRevisions"`
 	UpdateCadence        string                       `json:"updateCadence"`
 	StartDate            *string                      `json:"startDate,omitempty"`
+	StartDateResolution  string                       `json:"startDateResolution,omitempty"`
 	TargetDate           *string                      `json:"targetDate,omitempty"`
+	TargetDateResolution string                       `json:"targetDateResolution,omitempty"`
 	IssueCount           int                          `json:"issueCount"`
 	CreatedAt            time.Time                    `json:"createdAt"`
 	UpdatedAt            time.Time                    `json:"updatedAt"`
@@ -473,27 +505,39 @@ type CustomerRequest struct {
 }
 
 type Release struct {
-	ID            string     `json:"id"`
-	Name          string     `json:"name"`
-	Version       string     `json:"version"`
-	Description   string     `json:"description"`
-	Status        string     `json:"status"`
-	PipelineID    string     `json:"pipelineId,omitempty"`
-	Stage         string     `json:"stage,omitempty"`
-	CommitSHA     string     `json:"commitSha,omitempty"`
-	ReleaseNotes  string     `json:"releaseNotes,omitempty"`
-	Position      float64    `json:"position"`
-	TargetDate    *string    `json:"targetDate,omitempty"`
-	ProjectIDs    []string   `json:"projectIds"`
-	IssueIDs      []string   `json:"issueIds"`
-	SubscriberIDs []string   `json:"subscriberIds"`
-	Creator       User       `json:"creator"`
-	StartedAt     *time.Time `json:"startedAt,omitempty"`
-	ReleasedAt    *time.Time `json:"releasedAt,omitempty"`
-	StageFrozenAt *time.Time `json:"stageFrozenAt,omitempty"`
-	ArchivedAt    *time.Time `json:"archivedAt,omitempty"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	UpdatedAt     time.Time  `json:"updatedAt"`
+	ID            string            `json:"id"`
+	SlugID        string            `json:"slugId"`
+	Name          string            `json:"name"`
+	Version       string            `json:"version"`
+	Description   string            `json:"description"`
+	Status        string            `json:"status"`
+	PipelineID    string            `json:"pipelineId,omitempty"`
+	Stage         string            `json:"stage,omitempty"`
+	CommitSHA     string            `json:"commitSha,omitempty"`
+	ReleaseNotes  string            `json:"releaseNotes,omitempty"`
+	Position      float64           `json:"position"`
+	StartDate     *string           `json:"startDate,omitempty"`
+	TargetDate    *string           `json:"targetDate,omitempty"`
+	ProjectIDs    []string          `json:"projectIds"`
+	IssueIDs      []string          `json:"issueIds"`
+	SubscriberIDs []string          `json:"subscriberIds"`
+	Resources     []ReleaseResource `json:"resources"`
+	Creator       User              `json:"creator"`
+	StartedAt     *time.Time        `json:"startedAt,omitempty"`
+	ReleasedAt    *time.Time        `json:"releasedAt,omitempty"`
+	StageFrozenAt *time.Time        `json:"stageFrozenAt,omitempty"`
+	ArchivedAt    *time.Time        `json:"archivedAt,omitempty"`
+	CreatedAt     time.Time         `json:"createdAt"`
+	UpdatedAt     time.Time         `json:"updatedAt"`
+}
+
+type ReleaseResource struct {
+	ID         string    `json:"id"`
+	Type       string    `json:"type"`
+	Title      string    `json:"title"`
+	URL        string    `json:"url,omitempty"`
+	DocumentID string    `json:"documentId,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
 }
 
 type Ask struct {
@@ -540,6 +584,7 @@ type ProjectTemplate struct {
 	IssueIDs            []string            `json:"issueIds,omitempty"`
 	Milestones          []TemplateMilestone `json:"milestones,omitempty"`
 	Visibility          string              `json:"visibility,omitempty"`
+	VisibilityTeamID    string              `json:"visibilityTeamId,omitempty"`
 	Creator             User                `json:"creator"`
 	CreatedAt           time.Time           `json:"createdAt"`
 	UpdatedAt           time.Time           `json:"updatedAt"`
@@ -654,23 +699,24 @@ type FeatureSettings struct {
 }
 
 type ReleasePipeline struct {
-	ID                       string            `json:"id"`
-	Name                     string            `json:"name"`
-	TeamIDs                  []string          `json:"teamIds"`
-	Type                     string            `json:"type"`
-	Production               bool              `json:"production"`
-	Stages                   []string          `json:"stages"`
-	StageStatuses            map[string]string `json:"stageStatuses"`
-	Position                 float64           `json:"position"`
-	PathFilters              []string          `json:"pathFilters"`
-	ReleaseNotesTemplate     string            `json:"releaseNotesTemplate,omitempty"`
-	AutoGenerateReleaseNotes bool              `json:"autoGenerateReleaseNotes"`
-	AccessKeyPrefix          string            `json:"accessKeyPrefix,omitempty"`
-	AccessKeyHash            string            `json:"accessKeyHash,omitempty"`
-	AccessKeyCreatedAt       *time.Time        `json:"accessKeyCreatedAt,omitempty"`
-	ArchivedAt               *time.Time        `json:"archivedAt,omitempty"`
-	CreatedAt                time.Time         `json:"createdAt"`
-	UpdatedAt                time.Time         `json:"updatedAt"`
+	ID                          string            `json:"id"`
+	SlugID                      string            `json:"slugId"`
+	Name                        string            `json:"name"`
+	TeamIDs                     []string          `json:"teamIds"`
+	Type                        string            `json:"type"`
+	Production                  bool              `json:"production"`
+	Stages                      []string          `json:"stages"`
+	StageStatuses               map[string]string `json:"stageStatuses"`
+	Position                    float64           `json:"position"`
+	PathFilters                 []string          `json:"pathFilters"`
+	ReleaseNotesTemplate        string            `json:"releaseNotesTemplate,omitempty"`
+	AutoGenerateReleaseNotes    bool              `json:"autoGenerateReleaseNotes"`
+	MoveOpenIssuesToNextRelease *bool             `json:"moveOpenIssuesToNextRelease,omitempty"`
+	AccessKeyPrefix             string            `json:"accessKeyPrefix,omitempty"`
+	AccessKeyHash               string            `json:"accessKeyHash,omitempty"`
+	AccessKeyCreatedAt          *time.Time        `json:"accessKeyCreatedAt,omitempty"`
+	CreatedAt                   time.Time         `json:"createdAt"`
+	UpdatedAt                   time.Time         `json:"updatedAt"`
 }
 
 type CustomEmoji struct {
@@ -684,13 +730,59 @@ type CustomEmoji struct {
 }
 
 type APIKey struct {
+	ID              string     `json:"id"`
+	Name            string     `json:"name"`
+	Prefix          string     `json:"prefix"`
+	SecretHash      string     `json:"secretHash,omitempty"`
+	CreatorID       string     `json:"creatorId"`
+	Scopes          []string   `json:"scopes"`
+	TeamIDs         []string   `json:"teamIds"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	LastUsedAt      *time.Time `json:"lastUsedAt,omitempty"`
+	RevokedAt       *time.Time `json:"revokedAt,omitempty"`
+	ExpiresAt       *time.Time `json:"expiresAt,omitempty"`
+	OAuthClientID   string     `json:"oauthClientId,omitempty"`
+	AuthorizationID string     `json:"authorizationId,omitempty"`
+}
+
+type OAuthClient struct {
+	ClientID                string    `json:"client_id"`
+	ClientName              string    `json:"client_name"`
+	ClientURI               string    `json:"client_uri,omitempty"`
+	LogoURI                 string    `json:"logo_uri,omitempty"`
+	RedirectURIs            []string  `json:"redirect_uris"`
+	GrantTypes              []string  `json:"grant_types"`
+	ResponseTypes           []string  `json:"response_types"`
+	TokenEndpointAuthMethod string    `json:"token_endpoint_auth_method"`
+	CreatedAt               time.Time `json:"created_at"`
+}
+
+type OAuthAuthorizationCode struct {
+	ClientID        string    `json:"clientId"`
+	WorkspaceKey    string    `json:"workspaceKey"`
+	UserID          string    `json:"userId"`
+	RedirectURI     string    `json:"redirectUri"`
+	Scopes          []string  `json:"scopes"`
+	CodeChallenge   string    `json:"codeChallenge"`
+	AuthorizationID string    `json:"authorizationId"`
+	ExpiresAt       time.Time `json:"expiresAt"`
+}
+
+type OAuthRefreshGrant struct {
+	ClientID        string    `json:"clientId"`
+	WorkspaceKey    string    `json:"workspaceKey"`
+	UserID          string    `json:"userId"`
+	Scopes          []string  `json:"scopes"`
+	AuthorizationID string    `json:"authorizationId"`
+	ExpiresAt       time.Time `json:"expiresAt"`
+}
+
+type OAuthAuthorization struct {
 	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	Prefix     string     `json:"prefix"`
-	SecretHash string     `json:"secretHash,omitempty"`
-	CreatorID  string     `json:"creatorId"`
+	ClientID   string     `json:"clientId"`
+	ClientName string     `json:"clientName"`
+	UserID     string     `json:"userId"`
 	Scopes     []string   `json:"scopes"`
-	TeamIDs    []string   `json:"teamIds"`
 	CreatedAt  time.Time  `json:"createdAt"`
 	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
 	RevokedAt  *time.Time `json:"revokedAt,omitempty"`
@@ -727,9 +819,71 @@ type IntegrationConnection struct {
 	Name        string            `json:"name"`
 	Status      string            `json:"status"`
 	Config      map[string]string `json:"config,omitempty"`
+	SecretHash  string            `json:"-"`
 	ConnectedBy string            `json:"connectedBy"`
 	CreatedAt   time.Time         `json:"createdAt"`
 	UpdatedAt   time.Time         `json:"updatedAt"`
+}
+
+type ReviewCheck struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	URL    string `json:"url,omitempty"`
+}
+
+type ReviewFile struct {
+	Path      string `json:"path"`
+	Status    string `json:"status"`
+	Additions int    `json:"additions"`
+	Deletions int    `json:"deletions"`
+	Patch     string `json:"patch"`
+}
+
+type ReviewEvent struct {
+	ID        string    `json:"id"`
+	Type      string    `json:"type"`
+	Body      string    `json:"body,omitempty"`
+	ParentID  string    `json:"parentId,omitempty"`
+	Path      string    `json:"path,omitempty"`
+	Line      int       `json:"line,omitempty"`
+	Resolved  bool      `json:"resolved,omitempty"`
+	Actor     User      `json:"actor"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+type CodeReview struct {
+	ID              string        `json:"id"`
+	SlugID          string        `json:"slugId"`
+	Provider        string        `json:"provider"`
+	ExternalID      string        `json:"externalId"`
+	Number          int           `json:"number"`
+	Title           string        `json:"title"`
+	Description     string        `json:"description"`
+	Status          string        `json:"status"`
+	RepositoryOwner string        `json:"repositoryOwner"`
+	RepositoryName  string        `json:"repositoryName"`
+	URL             string        `json:"url"`
+	Author          User          `json:"author"`
+	ReviewerIDs     []string      `json:"reviewerIds"`
+	TeamReviewers   []string      `json:"teamReviewers"`
+	IssueIDs        []string      `json:"issueIds"`
+	BaseBranch      string        `json:"baseBranch"`
+	HeadBranch      string        `json:"headBranch"`
+	BranchState     string        `json:"branchState"`
+	Additions       int           `json:"additions"`
+	Deletions       int           `json:"deletions"`
+	CommitCount     int           `json:"commitCount"`
+	Checks          []ReviewCheck `json:"checks"`
+	Files           []ReviewFile  `json:"files"`
+	Events          []ReviewEvent `json:"events"`
+	Favorite        bool          `json:"favorite"`
+	Draft           bool          `json:"draft"`
+	QuickToReview   bool          `json:"quickToReview"`
+	CreatedAt       time.Time     `json:"createdAt"`
+	UpdatedAt       time.Time     `json:"updatedAt"`
+	MergedAt        *time.Time    `json:"mergedAt,omitempty"`
+	ClosedAt        *time.Time    `json:"closedAt,omitempty"`
 }
 
 type SLARule struct {
@@ -871,6 +1025,7 @@ type Initiative struct {
 	LeadTeamID          string                          `json:"leadTeamId,omitempty"`
 	ContributingTeamIDs []string                        `json:"contributingTeamIds"`
 	LabelIDs            []string                        `json:"labelIds"`
+	ParentInitiativeIDs []string                        `json:"parentInitiativeIds"`
 	ProjectIDs          []string                        `json:"projectIds"`
 	Resources           []InitiativeResource            `json:"resources"`
 	Comments            []Comment                       `json:"comments"`
@@ -1058,8 +1213,10 @@ type Bootstrap struct {
 	WorkspaceSettings       WorkspaceSettings                  `json:"workspaceSettings"`
 	APIKeys                 []APIKey                           `json:"apiKeys"`
 	OAuthApplications       []OAuthApplication                 `json:"oauthApplications"`
+	OAuthAuthorizations     []OAuthAuthorization               `json:"oauthAuthorizations"`
 	Webhooks                []Webhook                          `json:"webhooks"`
 	IntegrationConnections  []IntegrationConnection            `json:"integrationConnections"`
+	Reviews                 []CodeReview                       `json:"reviews"`
 	Settings                map[string]any                     `json:"settings"`
 	Members                 []WorkspaceMember                  `json:"members"`
 	TeamMembers             []TeamMember                       `json:"teamMembers"`
@@ -1115,34 +1272,39 @@ type IssueCreateInput struct {
 	StateID            *string        `json:"stateId,omitempty"`
 	Priority           *int           `json:"priority,omitempty"`
 	AssigneeID         *string        `json:"assigneeId,omitempty"`
+	DelegateID         *string        `json:"delegateId,omitempty"`
 	ProjectID          *string        `json:"projectId,omitempty"`
 	ProjectMilestoneID *string        `json:"projectMilestoneId,omitempty"`
 	CycleID            *string        `json:"cycleId,omitempty"`
 	DueDate            *string        `json:"dueDate,omitempty"`
+	SLABreachesAt      *string        `json:"slaBreachesAt,omitempty"`
+	SLAType            *string        `json:"slaType,omitempty"`
 	LabelIDs           []string       `json:"labelIds,omitempty"`
 	TemplateID         string         `json:"templateId,omitempty"`
 }
 
 type ProjectMutationInput struct {
-	Name          *string  `json:"name,omitempty"`
-	Summary       *string  `json:"summary,omitempty"`
-	Description   *string  `json:"description,omitempty"`
-	Icon          *string  `json:"icon,omitempty"`
-	Color         *string  `json:"color,omitempty"`
-	StatusID      *string  `json:"statusId,omitempty"`
-	Priority      *int     `json:"priority,omitempty"`
-	Health        *string  `json:"health,omitempty"`
-	LeadID        *string  `json:"leadId,omitempty"`
-	MemberIDs     []string `json:"memberIds,omitempty"`
-	LabelIDs      []string `json:"labelIds,omitempty"`
-	TeamIDs       []string `json:"teamIds,omitempty"`
-	DependencyIDs []string `json:"dependencyIds,omitempty"`
-	Initiatives   []string `json:"initiatives,omitempty"`
-	Customers     []string `json:"customers,omitempty"`
-	StartDate     *string  `json:"startDate,omitempty"`
-	TargetDate    *string  `json:"targetDate,omitempty"`
-	UpdateCadence *string  `json:"updateCadence,omitempty"`
-	TemplateID    string   `json:"templateId,omitempty"`
+	Name                 *string  `json:"name,omitempty"`
+	Summary              *string  `json:"summary,omitempty"`
+	Description          *string  `json:"description,omitempty"`
+	Icon                 *string  `json:"icon,omitempty"`
+	Color                *string  `json:"color,omitempty"`
+	StatusID             *string  `json:"statusId,omitempty"`
+	Priority             *int     `json:"priority,omitempty"`
+	Health               *string  `json:"health,omitempty"`
+	LeadID               *string  `json:"leadId,omitempty"`
+	MemberIDs            []string `json:"memberIds,omitempty"`
+	LabelIDs             []string `json:"labelIds,omitempty"`
+	TeamIDs              []string `json:"teamIds,omitempty"`
+	DependencyIDs        []string `json:"dependencyIds,omitempty"`
+	Initiatives          []string `json:"initiatives,omitempty"`
+	Customers            []string `json:"customers,omitempty"`
+	StartDate            *string  `json:"startDate,omitempty"`
+	StartDateResolution  *string  `json:"startDateResolution,omitempty"`
+	TargetDate           *string  `json:"targetDate,omitempty"`
+	TargetDateResolution *string  `json:"targetDateResolution,omitempty"`
+	UpdateCadence        *string  `json:"updateCadence,omitempty"`
+	TemplateID           string   `json:"templateId,omitempty"`
 }
 
 type InitiativeMutationInput struct {
@@ -1158,6 +1320,7 @@ type InitiativeMutationInput struct {
 	LeadTeamID          *string                      `json:"leadTeamId,omitempty"`
 	ContributingTeamIDs *[]string                    `json:"contributingTeamIds,omitempty"`
 	LabelIDs            *[]string                    `json:"labelIds,omitempty"`
+	ParentInitiativeIDs *[]string                    `json:"parentInitiativeIds,omitempty"`
 	ProjectIDs          *[]string                    `json:"projectIds,omitempty"`
 	TargetDate          *string                      `json:"targetDate,omitempty"`
 	Favorite            *bool                        `json:"favorite,omitempty"`
@@ -1219,10 +1382,13 @@ type IssueUpdateInput struct {
 	StateID            *string        `json:"stateId,omitempty"`
 	Priority           *int           `json:"priority,omitempty"`
 	AssigneeID         *string        `json:"assigneeId,omitempty"`
+	DelegateID         *string        `json:"delegateId,omitempty"`
 	ProjectID          *string        `json:"projectId,omitempty"`
 	ProjectMilestoneID *string        `json:"projectMilestoneId,omitempty"`
 	CycleID            *string        `json:"cycleId,omitempty"`
 	DueDate            *string        `json:"dueDate,omitempty"`
+	SLABreachesAt      *string        `json:"slaBreachesAt,omitempty"`
+	SLAType            *string        `json:"slaType,omitempty"`
 	LabelIDs           *[]string      `json:"labelIds,omitempty"`
 	SubscriberIDs      *[]string      `json:"subscriberIds,omitempty"`
 	Archived           *bool          `json:"archived,omitempty"`
@@ -1246,12 +1412,13 @@ type IssueLoopRunInput struct {
 }
 
 type CycleMutationInput struct {
-	Name        *string `json:"name,omitempty"`
-	Description *string `json:"description,omitempty"`
-	StartsAt    *string `json:"startsAt,omitempty"`
-	EndsAt      *string `json:"endsAt,omitempty"`
-	Capacity    *int    `json:"capacity,omitempty"`
-	Favorite    *bool   `json:"favorite,omitempty"`
+	Name        *string           `json:"name,omitempty"`
+	Description *string           `json:"description,omitempty"`
+	StartsAt    *string           `json:"startsAt,omitempty"`
+	EndsAt      *string           `json:"endsAt,omitempty"`
+	Capacity    *int              `json:"capacity,omitempty"`
+	Favorite    *bool             `json:"favorite,omitempty"`
+	Insight     map[string]string `json:"insight,omitempty"`
 }
 
 type CycleSettingsMutationInput struct {
@@ -1267,6 +1434,7 @@ type CycleSettingsMutationInput struct {
 	AutoAddActive    *bool `json:"autoAddActive,omitempty"`
 	AutoAddDueDate   *bool `json:"autoAddDueDate,omitempty"`
 	AutoMigrate      *bool `json:"autoMigrate,omitempty"`
+	FavoriteView     *bool `json:"favoriteView,omitempty"`
 }
 
 type NotificationBatchInput struct {
@@ -1329,18 +1497,22 @@ type TeamSettingsMutationInput struct {
 }
 
 type IssueTemplateMutationInput struct {
-	TeamID       *string              `json:"teamId,omitempty"`
-	Name         *string              `json:"name,omitempty"`
-	Title        *string              `json:"title,omitempty"`
-	Description  *string              `json:"description,omitempty"`
-	Body         *string              `json:"body,omitempty"`
-	StateID      *string              `json:"stateId,omitempty"`
-	Priority     *int                 `json:"priority,omitempty"`
-	AssigneeID   *string              `json:"assigneeId,omitempty"`
-	ProjectID    *string              `json:"projectId,omitempty"`
-	LabelIDs     *[]string            `json:"labelIds,omitempty"`
-	TemplateType *string              `json:"templateType,omitempty"`
-	FormFields   *[]TemplateFormField `json:"formFields,omitempty"`
+	TeamID           *string              `json:"teamId,omitempty"`
+	VisibilityTeamID *string              `json:"visibilityTeamId,omitempty"`
+	Icon             *string              `json:"icon,omitempty"`
+	Color            *string              `json:"color,omitempty"`
+	Name             *string              `json:"name,omitempty"`
+	Title            *string              `json:"title,omitempty"`
+	Description      *string              `json:"description,omitempty"`
+	Body             *string              `json:"body,omitempty"`
+	StateID          *string              `json:"stateId,omitempty"`
+	Priority         *int                 `json:"priority,omitempty"`
+	AssigneeID       *string              `json:"assigneeId,omitempty"`
+	ProjectID        *string              `json:"projectId,omitempty"`
+	LabelIDs         *[]string            `json:"labelIds,omitempty"`
+	TemplateType     *string              `json:"templateType,omitempty"`
+	FormFields       *[]TemplateFormField `json:"formFields,omitempty"`
+	SubIssues        *[]TemplateSubIssue  `json:"subIssues,omitempty"`
 }
 
 type IssueLabelMutationInput struct {

@@ -1,0 +1,12 @@
+{
+  "crop": {
+    "left": 244,
+    "top": 8,
+    "right": 1462,
+    "bottom": 657
+  },
+  "rgbThreshold": 3,
+  "listRawChangedRatio": 0.0768088330917086,
+  "editorRawChangedRatio": 0.0898831345938301,
+  "geometryTolerancePx": 1
+}

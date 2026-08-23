@@ -23,7 +23,7 @@ const FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = {
 const RELEASE_DISPLAY: MyIssuesDisplayOptions = {
   layout: 'list', grouping: 'status', groupOrder: 'asc', subGrouping: 'none', ordering: 'priority',
   completedWindow: 'all', orderCompletedByRecency: false, showSubIssues: true, showEmptyGroups: false,
-  nestedSubIssues: false, properties: new Set(['id', 'assignee', 'priority', 'project', 'labels', 'created']),
+  nestedSubIssues: false, hiddenGroupIds: [], properties: new Set(['id', 'assignee', 'priority', 'project', 'labels', 'created']),
 }
 
 export function ReleaseIssues({ data, release, onAddIssues, onDeleteIssues, onOpenIssue, onRemoveIssues, onUpdateIssue }: {
