@@ -3,19 +3,20 @@ import {
   Activity, AppWindow, ArrowLeft, Bell, Bot, Braces, Building2, Check, ChevronDown,
   CircleDot, Code2, CreditCard, FileText, Flame, Gauge,
   Import, KeyRound, LayoutTemplate, Link2, ListFilter, MessageCircleQuestion,
-  MoreHorizontal, PanelTop, Plug, Plus, Radio, Search, ShieldCheck,
+  MoreHorizontal, PanelTop, Plug, Plus, Radio, Rocket, Search, ShieldCheck,
   SlidersHorizontal, Smile, Sparkles, Tag, UserRound, UsersRound,
   X, Zap, type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useI18n } from "@/i18n/i18n";
 
 import {
   DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { connectIntegration, createAPIKey, createOAuthApplication, createWebhook, deleteOAuthApplication, deleteWebhook, disconnectIntegration, fetchWorkspaceUsage, revokeAPIKey, inviteMembers, removeMember, resendInvitation, revokeInvitation, setTeamMembership, suspendMember, updateMemberRole, updateOAuthApplication, updateUserSettings, updateWebhook, updateWorkspacePreferences } from "@/lib/api";
+import { connectIntegration, createAPIKey, createOAuthApplication, createWebhook, deleteOAuthApplication, deleteWebhook, disconnectIntegration, fetchWorkspaceUsage, revokeAPIKey, revokeOAuthAuthorization, inviteMembers, removeMember, resendInvitation, revokeInvitation, setTeamMembership, suspendMember, updateMemberRole, updateOAuthApplication, updateUserSettings, updateWebhook, updateWorkspacePreferences } from "@/lib/api";
 import type { SettingsPageId, TeamSettingsSection } from "@/lib/app-routes";
-import type { BootstrapData, OAuthApplication, Team, UserSettings, Webhook, WorkspaceMutationInput, WorkspaceSettings } from "@/types/flow";
+import type { BootstrapData, IssueTemplate, OAuthApplication, ProjectTemplate, ReleasePipeline, Team, UserSettings, Webhook, WorkspaceMutationInput, WorkspaceSettings } from "@/types/flow";
 import { TeamWorkflowSettings } from "./team-workflow-settings";
 import { ImportExportSettings, ProjectUpdateSettings, SLASettings, TemplateSettings } from "./advanced-settings";
 import { DomainLabelsSettings, ProjectStatusesSettings } from "./domain-settings";
@@ -27,7 +28,7 @@ import "./advanced-settings.css";
 import { applyTheme } from "@/lib/theme";
 import { PersonalSettings } from "./personal-settings";
 import { PipelineEditorPage } from "@/components/releases/pipeline-editor-page";
-import { ReleasesIcon } from "@/components/releases/release-icons";
+import { CodeIntegrationSettings } from "./code-integration-settings";
 
 type StoredSettings = {
   values: Record<string, string | boolean>;
@@ -40,10 +41,24 @@ type SettingsPageProps = {
   page: SettingsPageId;
   teamKey?: string;
   teamSection?: TeamSettingsSection;
-  releasePipelineMode?: "new";
+  releasePipelineMode?: "new"|"edit";
+  releasePipelineSlug?: string;
+  integrationProvider?: "github"|"gitlab";
+  issueTemplateMode?: "new"|"new-form"|"edit";
+  issueTemplateId?: string;
+  projectTemplateMode?: "new"|"edit";
+  projectTemplateId?: string;
   onBack: () => void;
   onNavigate: (page: SettingsPageId, teamKey?: string, teamSection?: TeamSettingsSection) => void;
   onCreateReleasePipeline: () => void;
+  onOpenReleasePipeline: (pipeline: ReleasePipeline) => void;
+  onOpenIntegration: (provider:"github"|"gitlab") => void;
+  onCreateIssueTemplate: (form:boolean) => void;
+  onOpenIssueTemplate: (template:IssueTemplate) => void;
+  onDuplicateIssueTemplate: (template:IssueTemplate) => void;
+  onCreateProjectTemplate: () => void;
+  onOpenProjectTemplate: (template:ProjectTemplate) => void;
+  onDuplicateProjectTemplate: (template:ProjectTemplate) => void;
   onCreateTeam: () => void;
   onWorkspaceUpdate: (input: WorkspaceMutationInput) => Promise<void>;
   onWorkspaceDelete: () => Promise<void>;
@@ -78,7 +93,7 @@ const NAV: { title: string; items: NavItem[] }[] = [
     { id: "initiatives", label: "Initiatives", icon: Zap },
     { id: "documents", label: "Documents", icon: FileText },
     { id: "customer-requests", label: "Customer requests", icon: UsersRound },
-    { id: "releases", label: "Releases", icon: ReleasesIcon },
+    { id: "releases", label: "Releases", icon: Rocket },
     { id: "pulse", label: "Pulse", icon: Radio },
     { id: "asks", label: "Asks", icon: MessageCircleQuestion },
     { id: "emojis", label: "Emojis", icon: Smile },
@@ -149,6 +164,7 @@ function SettingsNavButton({ item, active, onClick }: { item: NavItem; active: b
 }
 
 function SettingsBody(props: SettingsPageProps & { settings: StoredSettings; setSettings: React.Dispatch<React.SetStateAction<StoredSettings>>; setValue: (key: string, value: string | boolean) => void }) {
+  const { t } = useI18n();
   const { page } = props;
   const personal = ["preferences","profile","notifications","code-and-reviews","account-security","connections","agents"].includes(page);
   const teamOwner = page === "team" && props.data.teams.some(team => team.key.toLowerCase() === props.teamKey?.toLowerCase() && props.data.teamMembers.some(member => member.teamId === team.id && member.userId === props.data.viewer.id && member.role === "owner"));
@@ -157,8 +173,8 @@ function SettingsBody(props: SettingsPageProps & { settings: StoredSettings; set
   if (page === "issue-labels") return <DomainLabelsSettings data={props.data} resourceType="issue" onReload={props.onReload}/>;
   if (page === "project-labels") return <DomainLabelsSettings data={props.data} resourceType="project" onReload={props.onReload}/>;
   if (page === "project-statuses") return <ProjectStatusesSettings data={props.data} onReload={props.onReload}/>;
-  if (page === "issue-templates") return <TemplateSettings data={props.data} type="issue" onReload={props.onReload}/>;
-  if (page === "project-templates") return <TemplateSettings data={props.data} type="project" onReload={props.onReload}/>;
+  if (page === "issue-templates") return <TemplateSettings data={props.data} type="issue" mode={props.issueTemplateMode} templateId={props.issueTemplateId} onCreateIssue={props.onCreateIssueTemplate} onOpenIssue={props.onOpenIssueTemplate} onDuplicateIssue={props.onDuplicateIssueTemplate} onNavigateList={()=>props.onNavigate('issue-templates')} onReload={props.onReload}/>;
+  if (page === "project-templates") return <TemplateSettings data={props.data} type="project" mode={props.projectTemplateMode} templateId={props.projectTemplateId} onCreateProject={props.onCreateProjectTemplate} onOpenProject={props.onOpenProjectTemplate} onDuplicateProject={props.onDuplicateProjectTemplate} onNavigateList={()=>props.onNavigate('project-templates')} onReload={props.onReload}/>;
   if (page === "sla") return <SLASettings data={props.data} onReload={props.onReload}/>;
   if (page === "project-updates") return <ProjectUpdateSettings data={props.data} onReload={props.onReload}/>;
   if (page === "workspace") return <WorkspacePage {...props}/>;
@@ -169,10 +185,11 @@ function SettingsBody(props: SettingsPageProps & { settings: StoredSettings; set
   if (page === "billing") return <BillingPage data={props.data} onReload={props.onReload}/>;
   if (page === "usage") return <UsagePage data={props.data}/>;
   if (page === "import-export") return <ImportExportSettings data={props.data} onReload={props.onReload}/>;
-  if (page === "releases" && props.releasePipelineMode === "new") return <PipelineEditorPage data={props.data} onCancel={() => props.onNavigate("releases")} onCreated={async () => { await props.onReload(); props.onNavigate("releases"); }}/>;
+  if (page === "releases" && props.releasePipelineMode) { const pipeline=props.releasePipelineMode==='edit'?props.data.releasePipelines.find(item=>item.slugId===props.releasePipelineSlug):undefined; if(props.releasePipelineMode==='edit'&&!pipeline)return <div className="settings-empty"><h3>{t('Release pipeline not found')}</h3></div>; return <PipelineEditorPage data={props.data} pipeline={pipeline} onCancel={() => props.onNavigate("releases")} onSaved={async () => { await props.onReload(); props.onNavigate("releases"); }}/> }
+  if(page==="integrations"&&props.integrationProvider)return <CodeIntegrationSettings provider={props.integrationProvider} data={props.data} onBack={()=>props.onNavigate("integrations")} onReload={props.onReload}/>
   if (page === "team") { const team = props.data.teams.find(team => team.key.toLowerCase() === props.teamKey?.toLowerCase()); return team ? <TeamWorkflowSettings data={props.data} team={team} section={props.teamSection ?? "overview"} onNavigate={section => props.onNavigate("team", team.key, section)} onReload={props.onReload}/> : <div className="settings-empty"><h3>Team not found</h3></div> }
   if (page === "security") return <SecurityPage data={props.data} onReload={props.onReload}/>;
-  if (["ai","initiatives","documents","customer-requests","releases","pulse","asks","emojis","integrations"].includes(page)) return <FeatureSettingsPage page={page as "ai"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations"} data={props.data} onCreateReleasePipeline={props.onCreateReleasePipeline} onReload={props.onReload}/>;
+  if (["ai","initiatives","documents","customer-requests","releases","pulse","asks","emojis","integrations"].includes(page)) return <FeatureSettingsPage page={page as "ai"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations"} data={props.data} onCreateReleasePipeline={props.onCreateReleasePipeline} onOpenReleasePipeline={props.onOpenReleasePipeline} onOpenIntegration={props.onOpenIntegration} onReload={props.onReload}/>;
   return <FeaturePage page={page} data={props.data} onReload={props.onReload}/>;
 }
 
@@ -243,7 +260,15 @@ function ApiPage({data,onReload}:{data:BootstrapData;onReload:()=>Promise<void>}
   const reset=()=>{setOpen(false);setSecret('');setName('');setTeamIds([]);setScopes(['read','write'])}
   return <><PageTitle description="Developer applications, webhooks, and member API access.">API</PageTitle><Section title="OAuth applications">{data.oauthApplications.map(item=><Row key={item.id} title={item.name} description={`${item.clientId} · ${item.scopes.join(', ')}`}><ActionButton onClick={()=>setEditingOAuth(item)}>Configure</ActionButton></Row>)}{!data.oauthApplications.length&&<div className="settings-empty compact"><AppWindow size={24}/><h3>No OAuth applications</h3><p>Create an application for third-party OAuth access.</p></div>}<div className="settings-section-action"><ActionButton onClick={()=>setEditingOAuth(null)}><Plus size={14}/>New OAuth application</ActionButton></div></Section><Section title="Webhooks">{data.webhooks.map(item=><Row key={item.id} title={item.name} description={`${item.url} · ${item.resourceTypes.join(', ') || 'all resources'}`}><div className="settings-inline-actions"><Toggle label={`${item.name} enabled`} checked={item.enabled} onChange={value=>void updateWebhook(item.id,{enabled:value}).then(onReload)}/><ActionButton onClick={()=>setEditingWebhook(item)}>Configure</ActionButton></div></Row>)}{!data.webhooks.length&&<div className="settings-empty compact"><Radio size={24}/><h3>No webhooks</h3><p>Send workspace events to an HTTPS endpoint.</p></div>}<div className="settings-section-action"><ActionButton onClick={()=>setEditingWebhook(null)}><Plus size={14}/>New webhook</ActionButton></div></Section><Section title="Personal API keys"><Row title="Member API key creation" description="Controlled by the workspace Security policy."><span className="settings-static">{data.workspaceSettings.apiKeyPermission==='admins'?'Admins only':'All members'}</span></Row>{items.map(item=><Row key={item.id} title={item.name} description={`${item.prefix}… · ${item.scopes.join(', ')} · ${item.teamIds.length?`${item.teamIds.length} teams`:'all teams'} · ${item.lastUsedAt?`last used ${formatDate(item.lastUsedAt)}`:'never used'}`}><ActionButton danger onClick={()=>void revokeAPIKey(item.id).then(onReload)}>Revoke</ActionButton></Row>)}{!items.length&&<div className="settings-empty compact"><Braces size={24}/><h3>No personal API keys</h3><p>Create a scoped key to access the Flow API.</p></div>}<div className="settings-section-action"><ActionButton onClick={()=>setOpen(true)}><Plus size={14}/>New API key</ActionButton></div></Section><Dialog open={open} onOpenChange={value=>value?setOpen(true):reset()}><DialogContent className="settings-confirm"><DialogTitle>{secret?'API key created':'New API key'}</DialogTitle>{secret?<><p>This secret is shown once.</p><input className="settings-input" readOnly value={secret} onFocus={event=>event.currentTarget.select()}/><footer><ActionButton onClick={()=>{void navigator.clipboard.writeText(secret);toast.success('Copied')}}>Copy</ActionButton><ActionButton primary onClick={reset}>Done</ActionButton></footer></>:<><label>Name<input className="settings-input" autoFocus value={name} onChange={event=>setName(event.target.value)}/></label><label>Scopes<div className="settings-segmented"><button className={scopes.includes('read')?'active':''} onClick={()=>setScopes(current=>current.includes('read')?current.filter(x=>x!=='read'):[...current,'read'])}>Read</button><button className={scopes.includes('write')?'active':''} onClick={()=>setScopes(current=>current.includes('write')?current.filter(x=>x!=='write'):[...current,'write'])}>Write</button></div></label><fieldset className="settings-check-list"><legend>Team access</legend><label><input type="checkbox" checked={!teamIds.length} onChange={()=>setTeamIds([])}/>All teams</label>{data.teams.map(team=><label key={team.id}><input type="checkbox" checked={teamIds.includes(team.id)} onChange={event=>setTeamIds(current=>event.target.checked?[...current,team.id]:current.filter(id=>id!==team.id))}/>{team.name}</label>)}</fieldset><footer><ActionButton onClick={reset}>Cancel</ActionButton><ActionButton primary disabled={!name.trim()||!scopes.length} onClick={()=>void submit()}>Create key</ActionButton></footer></>}</DialogContent></Dialog>{editingOAuth!==undefined&&<OAuthEditor app={editingOAuth} onClose={()=>setEditingOAuth(undefined)} onSaved={onReload}/>} {editingWebhook!==undefined&&<WebhookEditor data={data} webhook={editingWebhook} onClose={()=>setEditingWebhook(undefined)} onSaved={onReload}/>}</>
 }
-function ApplicationsPage({data,onReload}:{data:BootstrapData;onReload:()=>Promise<void>}){return <><PageTitle description="Third-party applications authorized for this workspace.">Applications</PageTitle><Section>{data.integrationConnections.map(item=><Row key={item.id} title={item.name} description={`${title(item.provider)} · ${item.status}`}><ActionButton danger onClick={()=>void disconnectIntegration(item.provider).then(onReload)}>Revoke access</ActionButton></Row>)}{!data.integrationConnections.length&&<div className="settings-empty"><AppWindow size={28}/><h3>No authorized applications</h3><p>Applications authorized by workspace members will appear here.</p></div>}</Section></>}
+function ApplicationsPage({data,onReload}:{data:BootstrapData;onReload:()=>Promise<void>}){
+  const authorizations=(data.oauthAuthorizations??[]).filter(item=>!item.revokedAt)
+  const empty=!data.integrationConnections.length&&!authorizations.length
+  return <><PageTitle description="Third-party applications authorized for this workspace.">Applications</PageTitle><Section>
+    {authorizations.map(item=><Row key={item.id} title={item.clientName} description={`MCP · ${item.scopes.join(', ')} · ${item.lastUsedAt?`last used ${formatDate(item.lastUsedAt)}`:`authorized ${formatDate(item.createdAt)}`}`}><ActionButton danger onClick={()=>void revokeOAuthAuthorization(item.id).then(onReload)}>Revoke access</ActionButton></Row>)}
+    {data.integrationConnections.map(item=><Row key={item.id} title={item.name} description={`${title(item.provider)} · ${item.status}`}><ActionButton danger onClick={()=>void disconnectIntegration(item.provider).then(onReload)}>Revoke access</ActionButton></Row>)}
+    {empty&&<div className="settings-empty"><AppWindow size={28}/><h3>No authorized applications</h3><p>Applications authorized by workspace members will appear here.</p></div>}
+  </Section></>
+}
 function WebhookEditor({data,webhook,onClose,onSaved}:{data:BootstrapData;webhook:Webhook|null;onClose:()=>void;onSaved:()=>Promise<void>}){const[name,setName]=useState(webhook?.name??'');const[url,setUrl]=useState(webhook?.url??'');const[resourceTypes,setResourceTypes]=useState(webhook?.resourceTypes??['issues']);const[teamIds,setTeamIds]=useState(webhook?.teamIds??[]);const resources=['issues','comments','projects','cycles','documents','customers'];const save=async()=>{try{const input={name:name.trim(),url:url.trim(),resourceTypes,teamIds,enabled:webhook?.enabled??true};if(webhook)await updateWebhook(webhook.id,input);else await createWebhook(input);await onSaved();onClose()}catch(error){toast.error(error instanceof Error?error.message:'Could not save webhook')}};return <Dialog open onOpenChange={value=>!value&&onClose()}><DialogContent className="settings-invite-dialog settings-webhook-dialog"><DialogTitle>{webhook?'Configure webhook':'New webhook'}</DialogTitle><label>Name<input autoFocus value={name} onChange={event=>setName(event.target.value)}/></label><label>Endpoint URL<input value={url} onChange={event=>setUrl(event.target.value)} placeholder="https://example.com/webhooks/flow"/></label><fieldset className="settings-check-list"><legend>Resources</legend>{resources.map(resource=><label key={resource}><input type="checkbox" checked={resourceTypes.includes(resource)} onChange={event=>setResourceTypes(current=>event.target.checked?[...current,resource]:current.filter(item=>item!==resource))}/>{title(resource)}</label>)}</fieldset><fieldset className="settings-check-list"><legend>Teams</legend><label><input type="checkbox" checked={!teamIds.length} onChange={()=>setTeamIds([])}/>All teams</label>{data.teams.map(team=><label key={team.id}><input type="checkbox" checked={teamIds.includes(team.id)} onChange={event=>setTeamIds(current=>event.target.checked?[...current,team.id]:current.filter(id=>id!==team.id))}/>{team.name}</label>)}</fieldset><footer>{webhook&&<ActionButton danger onClick={()=>void deleteWebhook(webhook.id).then(async()=>{await onSaved();onClose()})}>Delete</ActionButton>}<ActionButton onClick={onClose}>Cancel</ActionButton><ActionButton primary disabled={!name.trim()||!/^https?:\/\//.test(url)||!resourceTypes.length} onClick={()=>void save()}>Save</ActionButton></footer></DialogContent></Dialog>}
 function OAuthEditor({app,onClose,onSaved}:{app:OAuthApplication|null;onClose:()=>void;onSaved:()=>Promise<void>}){const[name,setName]=useState(app?.name??'');const[description,setDescription]=useState(app?.description??'');const[redirects,setRedirects]=useState(app?.redirectUris.join('\n')??'');const[scopes,setScopes]=useState(app?.scopes.join(', ')??'read');const save=async()=>{try{const input={name,description,redirectUris:redirects.split(/\s+/).filter(Boolean),scopes:scopes.split(',').map(x=>x.trim()).filter(Boolean)};const result=app?await updateOAuthApplication(app.id,input):await createOAuthApplication(input);await onSaved();if(result.clientSecret)toast.success(`Client secret: ${result.clientSecret}`,{duration:15000});onClose()}catch(error){toast.error(error instanceof Error?error.message:'Could not save application')}};return <Dialog open onOpenChange={value=>!value&&onClose()}><DialogContent className="settings-invite-dialog"><DialogTitle>{app?'Configure application':'New application'}</DialogTitle><label>Name<input value={name} onChange={event=>setName(event.target.value)}/></label><label>Description<textarea value={description} onChange={event=>setDescription(event.target.value)}/></label><label>Redirect URIs<textarea value={redirects} onChange={event=>setRedirects(event.target.value)} placeholder="https://app.example.com/oauth/callback"/></label><label>Scopes<input value={scopes} onChange={event=>setScopes(event.target.value)}/></label><footer>{app&&<ActionButton danger onClick={()=>void deleteOAuthApplication(app.id).then(async()=>{await onSaved();onClose()})}>Delete</ActionButton>}<ActionButton onClick={onClose}>Cancel</ActionButton><ActionButton primary disabled={!name.trim()} onClick={()=>void save()}>Save</ActionButton></footer></DialogContent></Dialog>}
 function BillingPage({data,onReload}:{data:BootstrapData;onReload:()=>Promise<void>}){const settings=data.workspaceSettings;const[email,setEmail]=useState(settings.billingEmail||data.viewer.email);const save=(patch:Partial<WorkspaceSettings>)=>updateWorkspacePreferences({...settings,...patch}).then(onReload);return <><PageTitle>Billing</PageTitle><Section title="Current plan"><Row title={title(settings.plan)} description={`${data.users.length} members`}><span className="settings-static">Managed locally</span></Row><Row title="Billing email"><input className="settings-input" value={email} onChange={event=>setEmail(event.target.value)} onBlur={()=>email!==settings.billingEmail&&void save({billingEmail:email})}/></Row></Section><Section title="Payments"><div className="settings-empty compact"><CreditCard size={24}/><h3>Billing provider not configured</h3><p>Plan checkout and invoices require a payment provider.</p></div></Section></>}

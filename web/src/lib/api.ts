@@ -1,10 +1,12 @@
-import type { AccountBootstrap, AccountSessionInfo, APIKey, Ask, Attachment, AuthSession, BootstrapData, Comment, Customer, CustomerMutationInput, CustomerRequest, CustomEmoji, Cycle, CycleMutationInput, CycleSettings, CycleSettingsMutationInput, Draft, ExportJob, Favorite, ImportJob, Initiative, InitiativeMutationInput, InitiativeResource, InitiativeUpdate, IntegrationConnection, Invitation, InvitationPreview, Issue, IssueLabel, IssueRelation, IssueRelationType, IssueTemplate, IssueTemplateMutationInput, IssueUpdateInput, FlowDocument, LabelGroup, Notification, NotificationDelivery, NotificationList, NotificationMutationInput, NotificationPreferences, OAuthApplication, Presence, Project, ProjectMilestone, ProjectResource, ProjectStatus, ProjectTemplate, ProjectUpdate, Release, ReleasePipeline, ReleasePipelineAccessKey, SavedView, SavedViewMutationInput, SearchResourceType, SearchResponse, SLARule, Subscription, Team, TeamRole, TeamSettings, TeamSettingsMutationInput, User, UserSettings, Webhook, WorkflowState, WorkspaceMember, WorkspaceMutationInput, WorkspaceRole, WorkspaceSettings, WorkspaceUsage } from '@/types/flow'
+import type { AccountBootstrap, AccountSessionInfo, APIKey, Ask, Attachment, AuthSession, BootstrapData, CodeReview, Comment, Customer, CustomerMutationInput, CustomerRequest, CustomEmoji, Cycle, CycleMutationInput, CycleSettings, CycleSettingsMutationInput, Draft, ExportJob, Favorite, ImportJob, Initiative, InitiativeMutationInput, InitiativeResource, InitiativeUpdate, IntegrationConnection, Invitation, InvitationPreview, Issue, IssueLabel, IssueRelation, IssueRelationType, IssueTemplate, IssueTemplateMutationInput, IssueUpdateInput, FlowDocument, LabelGroup, Notification, NotificationDelivery, NotificationList, NotificationMutationInput, NotificationPreferences, OAuthApplication, Presence, Project, ProjectMilestone, ProjectResource, ProjectStatus, ProjectTemplate, ProjectUpdate, Release, ReleasePipeline, ReleasePipelineAccessKey, SavedView, SavedViewMutationInput, SearchResourceType, SearchResponse, SLARule, Subscription, Team, TeamRole, TeamSettings, TeamSettingsMutationInput, User, UserSettings, Webhook, WorkflowState, WorkspaceMember, WorkspaceMembership, WorkspaceMutationInput, WorkspaceRole, WorkspaceSettings, WorkspaceUsage } from '@/types/flow'
 import type { ProjectCreateInput, ProjectMutationInput } from '@/components/projects-page/projects-page'
 import type { DocumentTemplate } from '@/types/flow'
 
 export function fetchAccountBootstrap(): Promise<AccountBootstrap> { return request('/api/account/bootstrap') }
 export function setLastWorkspace(workspaceKey: string): Promise<void> { return request('/api/account/last-workspace', jsonRequest('PUT', { workspaceKey })) }
 export function fetchAuthSession(): Promise<AuthSession> { return request('/api/auth/session') }
+export type AuthProviderConfig={email:boolean;providers:Array<{id:'google'|'oidc'|'saml';name:string;startUrl:string}>}
+export function fetchAuthProviders():Promise<AuthProviderConfig>{return request('/api/auth/providers')}
 export function registerAccount(input: { name: string; email: string; password: string }): Promise<{ user: AuthSession['user']; verificationRequired: boolean; verificationToken?: string }> { return request('/api/auth/register', jsonRequest('POST', input)) }
 export function verifyEmail(token: string): Promise<{ verified: boolean }> { return request('/api/auth/verify-email', jsonRequest('POST', { token })) }
 export function resendVerification(email: string): Promise<{ sent: boolean; verificationToken?: string }> { return request('/api/auth/resend-verification', jsonRequest('POST', { email })) }
@@ -26,7 +28,7 @@ export function createWorkspace(input: WorkspaceMutationInput & { name: string; 
 export function updateWorkspace(workspaceKey: string, input: WorkspaceMutationInput): Promise<BootstrapData> { return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }) }
 export function deleteWorkspace(workspaceKey: string): Promise<void> { return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}`, { method: 'DELETE' }) }
 export function updateWorkspaceSettings(settings: Record<string, unknown>): Promise<Record<string, unknown>> { return request('/api/workspace/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) }) }
-export function fetchUserSettings(): Promise<UserSettings> { return request('/api/account/settings') }
+export function fetchUserSettings(workspaceKey?: string): Promise<UserSettings> { return request('/api/account/settings', workspaceKey ? { headers: { 'X-Workspace-Key': workspaceKey } } : undefined) }
 export function updateUserSettings(input: UserSettings): Promise<UserSettings> { return request('/api/account/settings', jsonRequest('PATCH', input)) }
 export function updateAccountProfile(input: { displayName: string; username: string; avatarUrl?: string; jobTitle?: string }): Promise<User> { return request('/api/account/profile', jsonRequest('PATCH', input)) }
 export function fetchAccountSessions(): Promise<AccountSessionInfo[]> { return request('/api/account/sessions') }
@@ -53,9 +55,20 @@ export function fetchOAuthApplications(): Promise<OAuthApplication[]> { return r
 export function createOAuthApplication(input: { name: string; description?: string; redirectUris: string[]; scopes: string[] }): Promise<OAuthApplication> { return request('/api/oauth-applications', jsonRequest('POST', input)) }
 export function updateOAuthApplication(id: string, input: Partial<Pick<OAuthApplication,'name'|'description'|'redirectUris'|'scopes'>>): Promise<OAuthApplication> { return request(`/api/oauth-applications/${id}`, jsonRequest('PATCH', input)) }
 export function deleteOAuthApplication(id: string): Promise<void> { return request(`/api/oauth-applications/${id}`, { method: 'DELETE' }) }
+export interface OAuthAuthorizationRequest { client: { client_id: string; client_name: string; client_uri?: string; logo_uri?: string }; redirectUri: string; scopes: string[]; scopeLabels: string[]; workspaces: WorkspaceMembership[]; viewer: User }
+export function fetchOAuthAuthorizationRequest(query: string): Promise<OAuthAuthorizationRequest> { return request(`/api/oauth/authorization-request?${query.replace(/^\?/, '')}`) }
+export function decideOAuthAuthorization(input: { clientId: string; redirectUri: string; responseType: string; scope: string; state: string; codeChallenge: string; codeChallengeMethod: string; resource?: string; workspaceKey: string; approve: boolean }): Promise<{redirect:string}> { return request('/api/oauth/authorization-request', jsonRequest('POST', input)) }
+export function revokeOAuthAuthorization(id: string): Promise<void> { return request(`/api/oauth/authorizations/${id}`, { method: 'DELETE' }) }
 export function fetchIntegrations(): Promise<IntegrationConnection[]> { return request('/api/integrations') }
 export function connectIntegration(provider: string, input: {name?:string;config?:Record<string,string>}): Promise<IntegrationConnection> { return request(`/api/integrations/${provider}`, jsonRequest('PUT', input)) }
 export function disconnectIntegration(provider: string): Promise<void> { return request(`/api/integrations/${provider}`, { method: 'DELETE' }) }
+export function updateIntegrationConnection(provider:string,id:string,input:{name?:string;status?:string;config?:Record<string,string>}):Promise<IntegrationConnection>{return request(`/api/integrations/${provider}/${id}`,jsonRequest('PATCH',input))}
+export function disconnectIntegrationConnection(provider:string,id:string):Promise<void>{return request(`/api/integrations/${provider}/${id}`,{method:'DELETE'})}
+export function listReviews():Promise<CodeReview[]>{return request('/api/reviews')}
+export function getReview(id:string):Promise<CodeReview>{return request(`/api/reviews/${id}`)}
+export function updateReview(id:string,input:Partial<Pick<CodeReview,'title'|'status'|'reviewerIds'|'issueIds'|'favorite'|'draft'|'branchState'>>):Promise<CodeReview>{return request(`/api/reviews/${id}`,jsonRequest('PATCH',input))}
+export function submitReview(id:string,input:{decision:'approve'|'comment'|'requestChanges';body:string}):Promise<CodeReview>{return request(`/api/reviews/${id}/submit`,jsonRequest('POST',input))}
+export function commentOnReview(id:string,body:string):Promise<CodeReview>{return request(`/api/reviews/${id}/comments`,jsonRequest('POST',{body}))}
 export function fetchWorkspaceUsage(): Promise<WorkspaceUsage> { return request('/api/usage') }
 export function fetchWebhooks(): Promise<Webhook[]> { return request('/api/webhooks') }
 export function createWebhook(input: Pick<Webhook,'name'|'url'|'resourceTypes'|'teamIds'|'enabled'>): Promise<Webhook> { return request('/api/webhooks', jsonRequest('POST', input)) }
@@ -80,20 +93,20 @@ export function deleteDocumentTemplate(id:string):Promise<void>{return request(`
 export function updateDocument(id: string, input: Partial<Pick<FlowDocument,'title'|'icon'|'content'|'contentState'|'contentData'|'projectIds'|'teamIds'|'issueId'|'subscriberIds'|'favorite'>> & { archived?: boolean }): Promise<FlowDocument> { return request(`/api/documents/${id}`, jsonRequest('PATCH', input)) }
 export function deleteDocument(id: string): Promise<void> { return request(`/api/documents/${id}`, { method: 'DELETE' }) }
 export function restoreDocumentRevision(id: string, revisionId: string): Promise<FlowDocument> { return request(`/api/documents/${id}/restore/${revisionId}`, { method: 'POST' }) }
-type ReleaseMutation=Partial<Pick<Release,'name'|'version'|'description'|'status'|'pipelineId'|'stage'|'commitSha'|'releaseNotes'|'targetDate'|'projectIds'|'issueIds'|'subscriberIds'>>
+type ReleaseMutation=Partial<Pick<Release,'name'|'version'|'description'|'status'|'pipelineId'|'stage'|'commitSha'|'releaseNotes'|'targetDate'|'projectIds'|'issueIds'|'subscriberIds'|'resources'>>
 export function createRelease(input: ReleaseMutation & {name:string}): Promise<Release> { return request('/api/releases', jsonRequest('POST', input)) }
 export function listReleases(filters: {pipelineId?:string;status?:Release['status'];archived?:boolean|'all'} = {}): Promise<Release[]> { const query=new URLSearchParams(); if(filters.pipelineId)query.set('pipelineId',filters.pipelineId);if(filters.status)query.set('status',filters.status);if(filters.archived!==undefined)query.set('archived',String(filters.archived));return request(`/api/releases${query.size?`?${query}`:''}`) }
 export function getRelease(id:string):Promise<Release>{return request(`/api/releases/${id}`)}
 export function updateRelease(id: string, input: ReleaseMutation & { archived?: boolean; stageFrozen?: boolean }): Promise<Release> { return request(`/api/releases/${id}`, jsonRequest('PATCH', input)) }
 export function deleteRelease(id: string): Promise<void> { return request(`/api/releases/${id}`, { method: 'DELETE' }) }
 export function reorderReleases(pipelineId:string,ids:string[],archived=false):Promise<Release[]>{return request('/api/releases/reorder',jsonRequest('POST',{pipelineId,ids,archived}))}
-type ReleasePipelineMutation=Partial<Pick<ReleasePipeline,'name'|'teamIds'|'type'|'production'|'stages'|'stageStatuses'|'pathFilters'|'releaseNotesTemplate'|'autoGenerateReleaseNotes'>>
-export function listReleasePipelines(archived:boolean|'all'=false):Promise<ReleasePipeline[]>{return request(`/api/release-pipelines?archived=${archived}`)}
+type ReleasePipelineMutation=Partial<Pick<ReleasePipeline,'name'|'teamIds'|'type'|'production'|'stages'|'stageStatuses'|'pathFilters'|'releaseNotesTemplate'|'autoGenerateReleaseNotes'|'moveOpenIssuesToNextRelease'>>
+export function listReleasePipelines():Promise<ReleasePipeline[]>{return request('/api/release-pipelines')}
 export function getReleasePipeline(id:string):Promise<ReleasePipeline>{return request(`/api/release-pipelines/${id}`)}
 export function createReleasePipeline(input:ReleasePipelineMutation & {name:string}):Promise<ReleasePipeline>{return request('/api/release-pipelines',jsonRequest('POST',input))}
-export function updateReleasePipeline(id:string,input:ReleasePipelineMutation & {archived?:boolean}):Promise<ReleasePipeline>{return request(`/api/release-pipelines/${id}`,jsonRequest('PATCH',input))}
+export function updateReleasePipeline(id:string,input:ReleasePipelineMutation):Promise<ReleasePipeline>{return request(`/api/release-pipelines/${id}`,jsonRequest('PATCH',input))}
 export function deleteReleasePipeline(id:string):Promise<void>{return request(`/api/release-pipelines/${id}`,{method:'DELETE'})}
-export function reorderReleasePipelines(ids:string[],archived=false):Promise<ReleasePipeline[]>{return request('/api/release-pipelines/reorder',jsonRequest('POST',{ids,archived}))}
+export function reorderReleasePipelines(ids:string[]):Promise<ReleasePipeline[]>{return request('/api/release-pipelines/reorder',jsonRequest('POST',{ids}))}
 export function rotateReleasePipelineAccessKey(id:string):Promise<ReleasePipelineAccessKey>{return request(`/api/release-pipelines/${id}/access-key`,{method:'POST'})}
 export function createCustomEmoji(input:{name:string;imageUrl:string}):Promise<CustomEmoji>{return request('/api/custom-emojis',jsonRequest('POST',input))}
 export function updateCustomEmoji(id:string,input:{name?:string;imageUrl?:string;archived?:boolean}):Promise<CustomEmoji>{return request(`/api/custom-emojis/${id}`,jsonRequest('PATCH',input))}
@@ -101,7 +114,7 @@ export function createAsk(input: { title: string; body?: string; source?: string
 export function updateAsk(id: string, input: Partial<Pick<Ask,'title'|'body'|'source'|'teamId'|'templateId'|'issueId'>>): Promise<Ask> { return request(`/api/asks/${id}`, jsonRequest('PATCH', input)) }
 export function decideAsk(id: string, decision: 'approved'|'rejected', note?: string): Promise<Ask> { return request(`/api/asks/${id}/decision`, jsonRequest('POST', { decision, note })) }
 export function deleteAsk(id: string): Promise<void> { return request(`/api/asks/${id}`, { method: 'DELETE' }) }
-type ProjectTemplateMutation = Partial<Pick<ProjectTemplate,'name'|'projectName'|'templateDescription'|'description'|'summary'|'icon'|'color'|'statusId'|'priority'|'teamIds'|'labelIds'|'leadId'|'memberIds'|'dependencyIds'|'initiativeIds'|'issueIds'|'milestones'|'visibility'>>
+type ProjectTemplateMutation = Partial<Pick<ProjectTemplate,'name'|'projectName'|'templateDescription'|'description'|'summary'|'icon'|'color'|'statusId'|'priority'|'teamIds'|'labelIds'|'leadId'|'memberIds'|'dependencyIds'|'initiativeIds'|'issueIds'|'milestones'|'visibility'|'visibilityTeamId'>>
 export function createProjectTemplate(input: { name: string } & ProjectTemplateMutation): Promise<ProjectTemplate> { return request('/api/project-templates', jsonRequest('POST', input)) }
 export function updateProjectTemplate(id: string, input: ProjectTemplateMutation): Promise<ProjectTemplate> { return request(`/api/project-templates/${id}`, jsonRequest('PATCH', input)) }
 export function deleteProjectTemplate(id: string): Promise<void> { return request(`/api/project-templates/${id}`, { method: 'DELETE' }) }
@@ -178,9 +191,13 @@ export async function createIssue(input: { title: string; description: string; d
 export function updateIssue(issueId: string, input: IssueUpdateInput): Promise<Issue> {
   return request(`/api/issues/${issueId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
 }
+export function setIssueReleases(issueId:string,releaseIds:string[]):Promise<Release[]>{return request(`/api/issues/${issueId}/releases`,jsonRequest('PUT',{releaseIds}))}
 export function updateCycle(id: string, input: CycleMutationInput): Promise<Cycle> { return request(`/api/cycles/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }) }
 export function startCycle(id: string): Promise<Cycle> { return request(`/api/cycles/${id}/start`, { method: 'POST' }) }
 export function completeCycle(id: string): Promise<Cycle> { return request(`/api/cycles/${id}/complete`, { method: 'POST' }) }
+export function createCycleResource(id:string,input:{type:'link'|'document';title?:string;url?:string;documentId?:string}):Promise<import('@/types/flow').CycleResource>{return request(`/api/cycles/${id}/resources`,jsonRequest('POST',input))}
+export function deleteCycleResource(id:string,resourceId:string):Promise<void>{return request(`/api/cycles/${id}/resources/${resourceId}`,{method:'DELETE'})}
+export function getCycleCalendarFeed(id:string):Promise<{url:string}>{return request(`/api/cycles/${id}/calendar-token`,{method:'POST'})}
 export function updateCycleSettings(teamId: string, input: CycleSettingsMutationInput): Promise<CycleSettings> { return request(`/api/teams/${teamId}/cycle-settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }) }
 
 export function deleteIssue(issueId: string): Promise<void> { return request(`/api/issues/${issueId}`, { method: 'DELETE' }) }
@@ -200,7 +217,7 @@ export async function createComment(issueId: string, body: string, bodyData?:Rec
 function currentWorkspaceKey() {
   if (typeof window === 'undefined') return ''
   const key = decodeURIComponent(window.location.pathname.split('/').filter(Boolean)[0] ?? '')
-  return ['join','login','signup','verify-email','forgot-password','reset-password','invite'].includes(key) ? '' : key
+  return ['join','login','signup','verify-email','forgot-password','reset-password','invite','oauth'].includes(key) ? '' : key
 }
 export function updateComment(issueId:string,commentId:string,body:string,bodyData?:Record<string,unknown>,expectedVersion?:number):Promise<Comment>{return request(`/api/issues/${issueId}/comments/${commentId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({body,bodyData,expectedVersion})})}
 export function deleteComment(issueId:string,commentId:string):Promise<void>{return request(`/api/issues/${issueId}/comments/${commentId}`,{method:'DELETE'})}

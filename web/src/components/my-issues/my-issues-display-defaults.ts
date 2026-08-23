@@ -11,5 +11,6 @@ export const defaultMyIssuesDisplayOptions: MyIssuesDisplayOptions = {
   showSubIssues: true,
   showEmptyGroups: false,
   nestedSubIssues: false,
+  hiddenGroupIds: [],
   properties: new Set<MyIssuesProperty>(['id', 'status', 'assignee', 'priority', 'project', 'labels', 'created']),
 }

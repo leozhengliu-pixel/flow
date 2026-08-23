@@ -8,13 +8,14 @@ export interface PropertyCommandOption {
   disabled?: boolean
 }
 
-export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus = true, closeOnSelect = true, onOpenChange, onSelect, open, options, selectedIds = [] }: {
+export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus = true, closeOnSelect = true, onOpenChange, onSelect, open, options, resetKey, selectedIds = [] }: {
   autoFocus?: boolean
   closeOnSelect?: boolean
   onOpenChange: (open: boolean) => void
   onSelect: (option: T) => void | Promise<void>
   open: boolean
   options: T[]
+  resetKey?: string
   selectedIds?: string[]
 }) {
   const [query, setQuery] = useState('')
@@ -22,17 +23,18 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
   const inputRef = useRef<HTMLInputElement>(null)
   const optionsRef = useRef(options)
   optionsRef.current = options
-  const selectedKey = selectedIds.join('\u0000')
+  const selectedIdsRef = useRef(selectedIds)
+  selectedIdsRef.current = selectedIds
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const filteredOptions = useMemo(() => normalizedQuery ? options.filter(option => `${option.label} ${option.keywords ?? ''}`.toLocaleLowerCase().includes(normalizedQuery)) : options, [normalizedQuery, options])
 
   useEffect(() => {
     if (!open) return
     setQuery('')
-    const currentIds = selectedKey.split('\u0000')
+    const currentIds = selectedIdsRef.current
     setActiveId(optionsRef.current.find(option => currentIds.includes(option.id) && !option.disabled)?.id ?? optionsRef.current.find(option => !option.disabled)?.id)
     if (autoFocus) requestAnimationFrame(() => inputRef.current?.focus())
-  }, [autoFocus, open, selectedKey])
+  }, [autoFocus, open, resetKey])
 
   const choose = (option: T) => {
     if (option.disabled) return

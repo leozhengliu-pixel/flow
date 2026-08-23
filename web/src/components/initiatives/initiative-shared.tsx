@@ -6,6 +6,7 @@ import { PriorityIcon } from '@/components/issue/issue-icons'
 import { NoAssigneeIcon } from '@/components/issue/issue-icons'
 import { ProjectPropertyPicker, ProjectStatusGlyph, type ProjectPropertyOption } from '@/components/projects-page/project-property-picker'
 import { ProjectTargetDatePicker } from '@/components/projects-page/project-target-date-picker'
+import { usePropertyCommand } from '@/components/property/use-property-command'
 import { LabelPicker } from '@/components/issue/label-project-pickers'
 import type { Initiative, InitiativeMutationInput, IssueLabel, LabelGroup, Project, Team, User } from '@/types/flow'
 import { formatTarget, titleCase } from './initiative-model'
@@ -77,17 +78,16 @@ export function ProjectAssociationPicker({ children, initiative, projects, onUpd
 	children?: ReactNode; initiative: Initiative; projects: Project[]; label?: string; onUpdate: (input: InitiativeMutationInput) => void | Promise<unknown>
 }) {
   const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState('')
-  const filtered = projects.filter(project => `${project.name} ${project.summary}`.toLowerCase().includes(query.trim().toLowerCase()))
   const toggle = (id: string) => {
     const next = initiative.projectIds.includes(id) ? initiative.projectIds.filter(item => item !== id) : [...initiative.projectIds, id]
     void onUpdate({ projectIds: next })
   }
-  return <Popover.Root open={open} onOpenChange={next => { setOpen(next); if (!next) setQuery('') }}>
+  const options=projects.map(project=>({id:project.id,label:project.name,keywords:project.summary})),command=usePropertyCommand({closeOnSelect:false,open,options,selectedIds:initiative.projectIds,onOpenChange:setOpen,onSelect:option=>toggle(option.id)})
+  return <Popover.Root open={open} onOpenChange={setOpen}>
     <Popover.Trigger asChild>{children ?? <button className="li-icon-button" aria-label={label} type="button"><span>+</span></button>}</Popover.Trigger>
     <Popover.Portal><Popover.Content align="end" className="li-project-picker" collisionPadding={8} sideOffset={4} onOpenAutoFocus={event => event.preventDefault()}>
-      <label><Search size={14}/><input autoFocus aria-label="Search projects…" placeholder="Search projects…" value={query} onChange={event => setQuery(event.target.value)}/></label>
-      <div role="listbox" aria-multiselectable="true">{filtered.map(project => <button aria-checked={initiative.projectIds.includes(project.id)} key={project.id} onClick={() => toggle(project.id)} role="option" type="button"><span className="li-picker-checkbox">{initiative.projectIds.includes(project.id) && <Check size={11}/>}</span><span className="li-project-icon" style={{ color: project.color }}><FolderKanban size={14}/></span><span><strong>{project.name}</strong><small>{project.summary || project.status.name}</small></span></button>)}{!filtered.length && <p>No projects found</p>}</div>
+      <label><Search size={14}/><input ref={command.inputRef} autoFocus aria-label="Search projects…" placeholder="Search projects…" value={command.query} onChange={event=>command.onQueryChange(event.target.value)} onKeyDown={command.onKeyDown}/></label>
+      <div role="listbox" aria-multiselectable="true" onKeyDown={command.onKeyDown}>{command.filteredOptions.map(option=>{const project=projects.find(item=>item.id===option.id)!;return <button aria-checked={command.isSelected(option.id)} aria-selected={command.activeId===option.id} key={option.id} onPointerMove={()=>command.setActiveId(option.id)} onFocus={()=>command.setActiveId(option.id)} onClick={()=>command.choose(option)} role="option" type="button"><span className="li-picker-checkbox">{command.isSelected(option.id)&&<Check size={11}/>}</span><span className="li-project-icon" style={{color:project.color}}><FolderKanban size={14}/></span><span><strong data-i18n-ignore>{project.name}</strong><small data-i18n-ignore>{project.summary||project.status.name}</small></span></button>})}{!command.filteredOptions.length&&<p>No projects found</p>}</div>
     </Popover.Content></Popover.Portal>
   </Popover.Root>
 }

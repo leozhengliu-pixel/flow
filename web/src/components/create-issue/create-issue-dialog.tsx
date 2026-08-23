@@ -39,6 +39,7 @@ export interface CreateIssueDialogProps {
   initialStateId?: string
   initialProjectId?: string
   initialProjectMilestoneId?: string
+  initialTemplateId?: string
   draftId?: string
   onOpenChange: (open: boolean) => void
   onCreate: (input: CreateIssueInput) => Promise<Issue>
@@ -63,7 +64,7 @@ interface StoredIssueDraft {
   templateId?: string
 }
 
-export function CreateIssueDialog({ data, draftId, initialProjectId, initialProjectMilestoneId, initialStateId, onCreate, onDraftDeleted, onDraftSaved, onOpenChange, onUpload, open }: CreateIssueDialogProps) {
+export function CreateIssueDialog({ data, draftId, initialProjectId, initialProjectMilestoneId, initialStateId, initialTemplateId, onCreate, onDraftDeleted, onDraftSaved, onOpenChange, onUpload, open }: CreateIssueDialogProps) {
   const availableStates = useMemo(() => { const teamId=data.teams[0]?.id; const specific=data.states.some(state=>state.teamId===teamId); return data.states.filter(state=>specific?state.teamId===teamId:!state.teamId) }, [data.states,data.teams])
   const defaultState = useMemo(() => [...availableStates].sort((a, b) => a.position - b.position).find(state => state.type === 'unstarted') ?? availableStates[0], [availableStates])
   const [title, setTitle] = useState('')
@@ -88,6 +89,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
   const descriptionEditorRef = useRef<Editor | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const draftKey = `${draftStoragePrefix}${data.teams[0]?.id ?? data.teams[0]?.key ?? 'default'}`
+  useEffect(()=>{if(!open||!initialTemplateId)return;const template=data.issueTemplates.find(item=>item.id===initialTemplateId);if(!template)return;setTemplateId(template.id);setTitle(current=>current||template.title||template.name);setStateId(template.stateId||defaultState.id);setPriority(template.priority);setAssigneeId(template.assigneeId??data.viewer.id);setProjectId(template.projectId??'');setLabelIds(template.labelIds);const templateBody=template.body;if(templateBody)requestAnimationFrame(()=>descriptionEditorRef.current?.commands.setContent(templateBody,{contentType:'markdown'}))},[data.issueTemplates,data.viewer.id,defaultState.id,initialTemplateId,open])
   const hasDraftContent = Boolean(title.trim() || description?.markdown.trim() || files.length)
 
   useEffect(() => {

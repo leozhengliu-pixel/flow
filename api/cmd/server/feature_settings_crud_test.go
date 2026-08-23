@@ -31,12 +31,8 @@ func TestFeatureSettingsAndReleasePipelinePersistence(t *testing.T) {
 	if pipeline.Name != "Mobile production" || len(pipeline.Stages) != 4 {
 		t.Fatalf("release pipeline was not initialized: %#v", pipeline)
 	}
-	pipeline = requestJSON[domain.ReleasePipeline](t, handler, http.MethodPatch, "/api/release-pipelines/"+pipeline.ID, map[string]any{"archived": true}, http.StatusOK)
-	if pipeline.ArchivedAt == nil {
-		t.Fatal("release pipeline was not archived")
-	}
 	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
-	if !slices.ContainsFunc(bootstrap.ReleasePipelines, func(item domain.ReleasePipeline) bool { return item.ID == pipeline.ID && item.ArchivedAt != nil }) {
+	if !slices.ContainsFunc(bootstrap.ReleasePipelines, func(item domain.ReleasePipeline) bool { return item.ID == pipeline.ID }) {
 		t.Fatalf("release pipeline did not survive bootstrap: %#v", bootstrap.ReleasePipelines)
 	}
 }

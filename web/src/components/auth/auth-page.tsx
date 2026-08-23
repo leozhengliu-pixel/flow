@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import {
   acceptInvitation,
   fetchInvitationPreview,
+  fetchAuthProviders,
   forgotPassword,
   loginAccount,
   registerAccount,
@@ -12,6 +13,7 @@ import {
   resetPassword,
   verifyEmail,
 } from '@/lib/api'
+import type { AuthProviderConfig } from '@/lib/api'
 import type { AuthSession, InvitationPreview } from '@/types/flow'
 import { LanguageSelect } from '@/i18n/i18n'
 
@@ -40,6 +42,9 @@ export function AuthPage({ session, onAuthenticated, onInvitationAccepted }: Pro
   const [message, setMessage] = useState('')
   const [devToken, setDevToken] = useState('')
   const [invitation, setInvitation] = useState<InvitationPreview | null>(null)
+  const [providers,setProviders]=useState<AuthProviderConfig>({email:true,providers:[]})
+
+  useEffect(()=>{fetchAuthProviders().then(setProviders).catch(()=>undefined)},[])
 
   useEffect(() => {
     if (!inviteToken) return
@@ -128,19 +133,19 @@ export function AuthPage({ session, onAuthenticated, onInvitationAccepted }: Pro
   return <AuthShell>
     {(isForgot || isReset) && <button className="auth-back" onClick={() => navigate('/login')}><ArrowLeft/>Back</button>}
     <h1>{isSignup ? 'Create your account' : isForgot ? 'Reset your password' : isReset ? 'Choose a new password' : 'Log in to Flow'}</h1>
-    {!isReset && !isForgot && <button className="auth-google" type="button" onClick={() => setError('Google sign-in is not configured for this workspace.')}><span>G</span>Continue with Google</button>}
-    {!isReset && !isForgot && <div className="auth-divider"><span>or</span></div>}
-    <form onSubmit={submit}>
+    {!isReset&&!isForgot&&providers.providers.map(provider=><a className="auth-google auth-provider" href={provider.startUrl} key={provider.id}><span>{provider.id==='google'?'G':provider.id==='saml'?'S':'O'}</span>Continue with <b>{provider.name}</b></a>)}
+    {!isReset && !isForgot && providers.email&&providers.providers.length>0&&<div className="auth-divider"><span>or</span></div>}
+    {providers.email&&<form onSubmit={submit}>
       {isSignup && <label>Full name<input name="name" autoFocus autoComplete="name" value={name} onChange={event => setName(event.target.value)} placeholder="Your name" required/></label>}
       {!isReset && <label>Email address<input name="email" autoFocus={!isSignup} type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="name@company.com" required/></label>}
       {!isForgot && <label>Password<div className="auth-password"><input name="password" autoFocus={isReset} type={showPassword ? 'text' : 'password'} autoComplete={isSignup ? 'new-password' : 'current-password'} value={password} onChange={event => setPassword(event.target.value)} placeholder={isSignup || isReset ? 'At least 8 characters' : 'Enter your password'} minLength={8} required/><button type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff/> : <Eye/>}</button></div></label>}
       {!isSignup && !isForgot && !isReset && <button type="button" className="auth-forgot" onClick={() => navigate(`/forgot-password?email=${encodeURIComponent(email)}`)}>Forgot password?</button>}
       <button className="auth-primary" disabled={pending}>{pending ? <LoaderCircle className="auth-spinner"/> : isSignup ? 'Create account' : isForgot ? 'Send reset link' : isReset ? 'Update password' : 'Continue'}</button>
-    </form>
+    </form>}
     {message && <div className="auth-success"><Check/>{message}</div>}
     {devToken && <button className="auth-dev-link" onClick={() => navigate(`/reset-password?token=${encodeURIComponent(devToken)}`)}>Open development reset link</button>}
     {error && <div className="auth-error">{error}</div>}
-    {!isForgot && !isReset && <p className="auth-switch">{isSignup ? 'Already have an account?' : 'New to Flow?'} <button onClick={() => navigate(isSignup ? '/login' : '/signup')}>{isSignup ? 'Log in' : 'Create an account'}</button></p>}
+    {providers.email&&!isForgot && !isReset && <p className="auth-switch">{isSignup ? 'Already have an account?' : 'New to Flow?'} <button onClick={() => navigate(isSignup ? '/login' : '/signup')}>{isSignup ? 'Log in' : 'Create an account'}</button></p>}
   </AuthShell>
 }
 

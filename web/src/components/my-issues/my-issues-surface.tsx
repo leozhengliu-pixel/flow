@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { ChartNoAxesColumn } from 'lucide-react'
 import { DetailsIcon, FilterIcon } from './my-issues-icons'
 import { defaultMyIssuesDisplayOptions } from './my-issues-display-defaults'
 import { MyIssuesDisplayMenu } from './my-issues-display-menu'
@@ -21,6 +22,7 @@ export interface MyIssuesDisplayOptions {
   showSubIssues: boolean
   showEmptyGroups: boolean
   nestedSubIssues: boolean
+  hiddenGroupIds: string[]
   properties: Set<MyIssuesProperty>
 }
 
@@ -31,10 +33,12 @@ export interface MyIssuesSurfaceProps {
   viewCounts?: Partial<Record<MyIssuesView, number>>
   viewHref?: (view: MyIssuesView) => string
   detailsOpen?: boolean
+  insightsOpen?: boolean
   displayOptions?: MyIssuesDisplayOptions
   filterOpenSignal?: number
   filters?: MyIssuesAppliedFilter[]
   onDetailsOpenChange?: (open: boolean) => void
+  onInsightsOpenChange?: (open: boolean) => void
   onDisplayOptionsChange?: (options: MyIssuesDisplayOptions) => void
   filterOptions?: (filter: MyIssuesFilterKey) => MyIssuesFilterOption[] | undefined
   onFilterSelect?: (filter: MyIssuesFilterKey, option?: MyIssuesFilterOption) => void
@@ -75,12 +79,14 @@ const filterGroups = [
 ] as const
 
 export function MyIssuesSurface({
-  activeView = 'assigned', children, filterBar, detailsOpen = false, displayOptions = defaultMyIssuesDisplayOptions, filterOpenSignal = 0, filters = [], viewCounts, viewHref,
-  filterOptions, onDetailsOpenChange, onDisplayOptionsChange, onFilterSelect, onFilterToggle, onViewChange, onOpenSidebar,
+  activeView = 'assigned', children, filterBar, detailsOpen = false, insightsOpen = false, displayOptions = defaultMyIssuesDisplayOptions, filterOpenSignal = 0, filters = [], viewCounts, viewHref,
+  filterOptions, onDetailsOpenChange, onInsightsOpenChange, onDisplayOptionsChange, onFilterSelect, onFilterToggle, onViewChange, onOpenSidebar,
 }: MyIssuesSurfaceProps) {
   const [filterOpen, setFilterOpen] = useState(false)
   const [displayOpen, setDisplayOpen] = useState(false)
-  useEffect(() => { if (filterOpenSignal > 0) setFilterOpen(true) }, [filterOpenSignal])
+  const changeFilterOpen = (open: boolean) => { setFilterOpen(open); if (open) setDisplayOpen(false) }
+  const changeDisplayOpen = (open: boolean) => { setDisplayOpen(open); if (open) setFilterOpen(false) }
+  useEffect(() => { if (filterOpenSignal > 0) { setDisplayOpen(false); setFilterOpen(true) } }, [filterOpenSignal])
   useEffect(() => {
     const toggleDetails = (event: globalThis.KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'i') return
@@ -102,8 +108,9 @@ export function MyIssuesSurface({
         {views.map(view => <a key={view.id} href={viewHref?.(view.id) ?? `#${view.id}`} className={styles.tab} data-active={activeView === view.id} data-disabled={activeView === view.id} aria-current={activeView === view.id ? 'page' : undefined} aria-label={viewCounts?.[view.id] == null ? view.label : `${view.label}, ${viewCounts[view.id]} issues`} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onViewChange?.(view.id) }}>{view.label}</a>)}
       </nav>
       <div className={styles.actions}>
-        <MyIssuesFilterMenu open={filterOpen} onOpenChange={setFilterOpen} filters={filters} options={filterOptions} onToggle={(field, option) => { if (onFilterToggle) onFilterToggle(field, option); else onFilterSelect?.(field, option) }} trigger={<ToolbarButton label="Add filter"><FilterIcon/></ToolbarButton>}/>
-        <MyIssuesDisplayMenu open={displayOpen} onOpenChange={setDisplayOpen} options={displayOptions} onChange={options => onDisplayOptionsChange?.(options)}/>
+        <MyIssuesFilterMenu open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onToggle={(field, option) => { if (onFilterToggle) onFilterToggle(field, option); else onFilterSelect?.(field, option) }} trigger={<ToolbarButton label="Add filter"><FilterIcon/></ToolbarButton>}/>
+        <MyIssuesDisplayMenu open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={options => onDisplayOptionsChange?.(options)}/>
+        <ToolbarButton label={insightsOpen ? 'Close insights' : 'Open insights'} pressed={insightsOpen} aria-expanded={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}><ChartNoAxesColumn size={15}/></ToolbarButton>
         <ToolbarButton label={detailsOpen ? 'Close details' : 'Open details'} title={`${detailsOpen ? 'Close' : 'Open'} details (⌘I)`} pressed={detailsOpen} aria-expanded={detailsOpen} onClick={() => onDetailsOpenChange?.(!detailsOpen)}><DetailsIcon open={detailsOpen}/></ToolbarButton>
       </div>
     </div>

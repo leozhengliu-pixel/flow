@@ -53,8 +53,10 @@ export function IssueExplorerSurface({
 }) {
   const [filterOpen, setFilterOpen] = useState(false)
   const [displayOpen, setDisplayOpen] = useState(false)
+  const changeFilterOpen = (open: boolean) => { setFilterOpen(open); if (open) setDisplayOpen(false) }
+  const changeDisplayOpen = (open: boolean) => { setDisplayOpen(open); if (open) setFilterOpen(false) }
 
-  useEffect(() => { if (filterOpenSignal > 0) setFilterOpen(true) }, [filterOpenSignal])
+  useEffect(() => { if (filterOpenSignal > 0) { setDisplayOpen(false); setFilterOpen(true) } }, [filterOpenSignal])
 
   useEffect(() => {
     const toggleDetails = (event: KeyboardEvent) => {
@@ -73,8 +75,8 @@ export function IssueExplorerSurface({
       <button className={styles.addView} type="button" aria-label="Add new view" title="Add new view" onClick={onAddView}><Plus size={14}/></button>
     </nav>}
     <div className={styles.actions}>
-      <MyIssuesFilterMenu open={filterOpen} onOpenChange={setFilterOpen} filters={filters} options={filterOptions} onToggle={onFilterToggle} trigger={<ToolbarButton label="Add filter"><FilterIcon/></ToolbarButton>}/>
-      <MyIssuesDisplayMenu open={displayOpen} onOpenChange={setDisplayOpen} options={displayOptions} onChange={onDisplayOptionsChange}/>
+      <MyIssuesFilterMenu open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onToggle={onFilterToggle} trigger={<ToolbarButton label="Add filter"><FilterIcon/></ToolbarButton>}/>
+      <MyIssuesDisplayMenu open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={onDisplayOptionsChange}/>
       {!creatingView && savedView && <ToolbarButton label={insightsOpen ? 'Close view insights' : 'Open view insights'} pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}><ChartNoAxesColumn size={15}/></ToolbarButton>}
       {!creatingView && <ToolbarButton label={savedView ? (detailsOpen ? 'Close view details' : 'Open view details') : (detailsOpen ? 'Close details' : 'Open details')} title={`${detailsOpen ? 'Close' : 'Open'} details (⌘I)`} pressed={detailsOpen} onClick={() => onDetailsOpenChange(!detailsOpen)}><DetailsIcon open={detailsOpen}/></ToolbarButton>}
     </div>

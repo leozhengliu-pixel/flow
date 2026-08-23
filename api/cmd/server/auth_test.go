@@ -210,6 +210,7 @@ func TestReleaseAuthorizationAndFeatureGate(t *testing.T) {
 	}
 
 	privateTeam := authRequest[domain.Team](t, admin, http.MethodPost, server.URL+"/api/workspaces/cleantrack/teams", map[string]any{"name": "Release private", "key": "RPRV", "private": true}, "", http.StatusCreated)
+	publicIssue := authRequest[domain.Issue](t, admin, http.MethodPost, server.URL+"/api/issues", map[string]any{"title": "Public release issue", "teamId": publicTeam.ID}, "cleantrack", http.StatusCreated)
 	hiddenIssue := authRequest[domain.Issue](t, admin, http.MethodPost, server.URL+"/api/issues", map[string]any{"title": "Private release issue", "teamId": privateTeam.ID}, "cleantrack", http.StatusCreated)
 	hiddenProject := authRequest[domain.Project](t, admin, http.MethodPost, server.URL+"/api/projects", map[string]any{"name": "Private release project", "teamIds": []string{privateTeam.ID}}, "cleantrack", http.StatusCreated)
 	publicPipeline := authRequest[domain.ReleasePipeline](t, admin, http.MethodPost, server.URL+"/api/release-pipelines", map[string]any{"name": "Public deploys", "teamIds": []string{publicTeam.ID}}, "cleantrack", http.StatusCreated)
@@ -237,6 +238,8 @@ func TestReleaseAuthorizationAndFeatureGate(t *testing.T) {
 		t.Fatal("guest release projection leaked private resources")
 	}
 	authRequest[domain.Release](t, member, http.MethodPatch, server.URL+"/api/releases/"+publicRelease.ID, map[string]any{"status": "inProgress"}, "cleantrack", http.StatusOK)
+	authRequest[[]domain.Release](t, member, http.MethodPut, server.URL+"/api/issues/"+publicIssue.ID+"/releases", map[string]any{"releaseIds": []string{publicRelease.ID}}, "cleantrack", http.StatusOK)
+	authRequest[any](t, member, http.MethodPut, server.URL+"/api/issues/"+publicIssue.ID+"/releases", map[string]any{"releaseIds": []string{privateRelease.ID}}, "cleantrack", http.StatusForbidden)
 	authRequest[any](t, member, http.MethodGet, server.URL+"/api/release-pipelines/"+privatePipeline.ID, nil, "cleantrack", http.StatusForbidden)
 	authRequest[any](t, member, http.MethodGet, server.URL+"/api/releases/"+privateRelease.ID, nil, "cleantrack", http.StatusForbidden)
 	authRequest[any](t, member, http.MethodPatch, server.URL+"/api/releases/"+publicRelease.ID, map[string]any{"pipelineId": privatePipeline.ID}, "cleantrack", http.StatusForbidden)
@@ -281,6 +284,7 @@ func TestReleaseAuthorizationAndFeatureGate(t *testing.T) {
 		authRequest[any](t, admin, http.MethodGet, server.URL+path, nil, "cleantrack", http.StatusForbidden)
 	}
 	authRequest[any](t, admin, http.MethodPost, server.URL+"/api/releases", map[string]any{"name": "Disabled"}, "cleantrack", http.StatusForbidden)
+	authRequest[any](t, admin, http.MethodPut, server.URL+"/api/issues/"+publicIssue.ID+"/releases", map[string]any{"releaseIds": []string{publicRelease.ID}}, "cleantrack", http.StatusForbidden)
 	authRequest[any](t, admin, http.MethodPost, server.URL+"/api/release-pipelines/"+publicPipeline.ID+"/access-key", nil, "cleantrack", http.StatusForbidden)
 	authRequest[any](t, admin, http.MethodPost, server.URL+"/api/trash/"+pipelineTrashID+"/restore", nil, "cleantrack", http.StatusForbidden)
 }

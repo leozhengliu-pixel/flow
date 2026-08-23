@@ -2,6 +2,7 @@ import * as Popover from '@radix-ui/react-popover'
 import * as Select from '@radix-ui/react-select'
 import { ArrowDownUp, Check, ChevronDown, LayoutGrid, List } from 'lucide-react'
 import { DisplayIcon } from './my-issues-icons'
+import { useI18n } from '@/i18n/i18n'
 import type { MyIssuesDisplayOptions, MyIssuesGrouping, MyIssuesProperty } from './my-issues-surface'
 import styles from './my-issues-display-menu.module.css'
 
@@ -59,6 +60,7 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
 ]
 
 export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, hideSubGrouping = false, open, onOpenChange, options, onChange }: MyIssuesDisplayMenuProps) {
+  const { t } = useI18n()
   const change = (patch: DisplayPatch) => onChange({ ...options, ...patch })
   const toggleProperty = (property: MyIssuesProperty) => {
     const properties = new Set(options.properties)
@@ -71,20 +73,20 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
 
   return <Popover.Root open={open} onOpenChange={onOpenChange}>
     <Popover.Trigger asChild>
-      <button type="button" className={styles.trigger} aria-label="Display options" aria-pressed={open}>
+      <button type="button" className={styles.trigger} aria-label={t('Display options')} aria-pressed={open}>
         <DisplayIcon />
       </button>
     </Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content className={styles.popover} side="bottom" align="end" sideOffset={3} collisionPadding={11} aria-label="Display options">
+      <Popover.Content className={styles.popover} side="bottom" align="end" sideOffset={3} collisionPadding={11} aria-label={t('Display options')}>
         <div className={styles.layoutTabs} role="tablist" aria-label="Layout">
-          <button type="button" role="tab" aria-selected={options.layout === 'list'} onClick={() => change({ layout: 'list' })}><List size={14} />List</button>
-          <button type="button" role="tab" aria-selected={options.layout === 'board'} onClick={() => change({ layout: 'board' })}><LayoutGrid size={13} />Board</button>
+          <button type="button" role="tab" aria-selected={options.layout === 'list'} onClick={() => change({ layout: 'list' })}><List size={14} />{t('List')}</button>
+          <button type="button" role="tab" aria-selected={options.layout === 'board'} onClick={() => change({ layout: 'board' })}><LayoutGrid size={13} />{t('Board')}</button>
         </div>
 
-        <section className={styles.section} aria-label="Grouping options">
+        <section className={styles.section} aria-label={t('Grouping options')}>
           <div className={styles.groupingControl}>
-            <span className={styles.rowLabel}>{options.layout === 'board' ? 'Columns' : 'Grouping'}</span>
+            <span className={styles.rowLabel}>{t(options.layout === 'board' ? 'Columns' : 'Grouping')}</span>
             <div className={styles.groupingActions}>
               <button
                 type="button"
@@ -104,16 +106,16 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
           <SwitchRow label="Show sub-issues" checked={options.showSubIssues} onChange={showSubIssues => change({ showSubIssues })} />
         </section>
 
-        <section className={styles.section} aria-label={options.layout === 'board' ? 'Board options' : 'List options'}>
-          <span className={styles.sectionLabel}>{options.layout === 'board' ? 'Board options' : 'List options'}</span>
+        <section className={styles.section} aria-label={t(options.layout === 'board' ? 'Board options' : 'List options')}>
+          <span className={styles.sectionLabel}>{t(options.layout === 'board' ? 'Board options' : 'List options')}</span>
           {options.layout === 'board' && <SwitchRow label="Show empty columns" checked={options.showEmptyGroups} onChange={showEmptyGroups => change({ showEmptyGroups })} />}
           {options.layout === 'list' && <SwitchRow label="Nested sub-issues" checked={options.nestedSubIssues} onChange={nestedSubIssues => change({ nestedSubIssues })} />}
-          <span className={styles.sectionLabel}>Display properties</span>
+          <span className={styles.sectionLabel}>{t('Display properties')}</span>
           <div className={styles.propertyGrid}>
             {propertyOptions.filter(property => !hiddenProperties.includes(property.value)).map(property => {
               const active = options.properties.has(property.value)
               return <button key={property.value} type="button" data-active={active} aria-pressed={active} onClick={() => toggleProperty(property.value)}>
-                <span>{property.label}</span>
+                <span>{t(property.label)}</span>
               </button>
             })}
           </div>
@@ -130,8 +132,9 @@ function SelectField<T extends string>({ disabled = false, label, onChange, opti
   options: { value: T; label: string }[]
   value: T
 }) {
+  const { t } = useI18n()
   return <label className={styles.selectField}>
-    <span>{label}</span>
+    <span>{t(label)}</span>
     <SelectControl ariaLabel={label} disabled={disabled} value={value} options={options} onChange={onChange} />
   </label>
 }
@@ -143,15 +146,16 @@ function SelectControl<T extends string>({ ariaLabel, disabled = false, onChange
   options: { value: T; label: string }[]
   value: T
 }) {
+  const { t } = useI18n()
   return <Select.Root disabled={disabled} value={value} onValueChange={onChange}>
-    <Select.Trigger className={styles.selectTrigger} aria-label={ariaLabel}>
+    <Select.Trigger className={styles.selectTrigger} aria-label={t(ariaLabel)}>
       <Select.Value /><Select.Icon><ChevronDown size={12} aria-hidden="true" /></Select.Icon>
     </Select.Trigger>
     <Select.Portal>
       <Select.Content className={styles.selectMenu} position="popper" side="bottom" align="end" sideOffset={5} collisionPadding={10}>
         <Select.Viewport className={styles.selectViewport}>
           {options.map(option => <Select.Item className={styles.selectItem} key={option.value} value={option.value}>
-            <Select.ItemText>{option.label}</Select.ItemText>
+            <Select.ItemText>{t(option.label)}</Select.ItemText>
             <Select.ItemIndicator className={styles.selectIndicator}><Check size={13} aria-hidden="true" /></Select.ItemIndicator>
           </Select.Item>)}
         </Select.Viewport>
@@ -161,8 +165,9 @@ function SelectControl<T extends string>({ ariaLabel, disabled = false, onChange
 }
 
 function SwitchRow({ checked, label, onChange }: { checked: boolean; label: string; onChange: (checked: boolean) => void }) {
+  const { t } = useI18n()
   return <div className={styles.switchRow}>
-    <span>{label}</span>
-    <button type="button" role="checkbox" aria-label={label} aria-checked={checked} data-checked={checked} onClick={() => onChange(!checked)}><i /></button>
+    <span>{t(label)}</span>
+    <button type="button" role="checkbox" aria-label={t(label)} aria-checked={checked} data-checked={checked} onClick={() => onChange(!checked)}><i /></button>
   </div>
 }

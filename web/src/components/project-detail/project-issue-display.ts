@@ -11,5 +11,6 @@ export const DEFAULT_PROJECT_ISSUE_DISPLAY: MyIssuesDisplayOptions = {
   showSubIssues: true,
   showEmptyGroups: false,
   nestedSubIssues: false,
+  hiddenGroupIds: [],
   properties: new Set<MyIssuesProperty>(['id', 'status', 'assignee', 'priority', 'dueDate', 'labels', 'created']),
 }

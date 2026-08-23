@@ -26,7 +26,7 @@
 .targetCheck{width:16px;display:grid;place-items:center}
 .menuTrigger{width:28px;height:28px;display:grid;place-items:center;padding:0;border:1px solid transparent;border-radius:9999px;background:transparent;color:var(--muted);outline:0}
 .menuTrigger:hover,.menuTrigger:focus-visible,.menuTrigger[data-state=open]{background:var(--theme-surface-hover);color:var(--text)}
-.menuItem[data-danger]{color:#e5484d}
+.menuItem[data-danger]{color:var(--semantic-danger)}
 .menuItem[data-danger]>svg{color:currentColor}
 .trailing{margin-left:auto}
 .ownerMenu{width:210px}
@@ -34,15 +34,15 @@
 .menu[data-side=right]{z-index:601}
 .checkbox{width:16px;height:16px;display:grid;place-items:center;flex:0 0 16px;border:1px solid var(--theme-border-strong);border-radius:4px}
 .checkbox svg{width:12px;height:12px}
-.avatar{width:18px;height:18px;display:grid;place-items:center;flex:0 0 18px;border-radius:9999px;background:#ef787c;color:white;font-size:8px;font-weight:600;line-height:1}
+.avatar{width:18px;height:18px;display:grid;place-items:center;flex:0 0 18px;border-radius:9999px;background:var(--avatar-fallback-alt);color:var(--on-accent);font-size:8px;font-weight:600;line-height:1}
 .separator{position:relative;height:12px;margin:0;background:transparent}
 .separator:after{content:"";position:absolute;left:8px;right:8px;top:5.5px;height:1px;background:var(--border)}
 .withActions{height:150px;flex-basis:150px;grid-template-rows:44px 40px 58px;padding-bottom:0}
 .actions{grid-column:1/6;align-self:stretch;display:flex;align-items:center;justify-content:flex-end;gap:6px;margin:0 -12px 0 -14px;padding:0 12px;border-top:1px solid var(--border)}
 @keyframes savedViewMenuIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
 @keyframes savedViewMenuOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.98)}}
-:global(:root[data-theme="light"]) .targetMenu,:global(:root[data-theme="light"]) .menu{border-color:lch(90.55% 0 282);background:lch(100% 0 282)}
-:global(:root[data-theme="light"]) .targetMenu,:global(:root[data-theme="light"]) .menu{box-shadow:0 6px 18px lch(0 0 0/.02),0 3px 9px lch(0 0 0/.04),0 1px 1px lch(0 0 0/.04)}
-:global(:root[data-theme="light"]) .menu[data-side=right]{box-shadow:0 9px 48px lch(0 0 0/.08),0 6px 24px lch(0 0 0/.1),0 1px 1px lch(0 0 0/.04)}
+:global(:root[data-theme="light"]) .targetMenu,:global(:root[data-theme="light"]) .menu{border-color:var(--theme-border);background:var(--theme-surface-2)}
+:global(:root[data-theme="light"]) .targetMenu,:global(:root[data-theme="light"]) .menu{box-shadow:0 6px 18px var(--shadow-color-faint),0 3px 9px var(--shadow-color-soft),0 1px 1px var(--shadow-color-soft)}
+:global(:root[data-theme="light"]) .menu[data-side=right]{box-shadow:0 9px 48px var(--shadow-color-medium),0 6px 24px var(--shadow-color),0 1px 1px var(--shadow-color-soft)}
 @media(prefers-reduced-motion:reduce){.targetMenu[data-state],.menu[data-state]{animation:none}}
 @media(max-width:700px){.editor{grid-template-columns:28px minmax(80px,1fr) auto auto}.saveTo{grid-column:2/5;grid-row:2}.description{display:none}.cancel{grid-column:3}.save{grid-column:4}.targetMenu,.menu{max-width:calc(100vw - 16px)}}

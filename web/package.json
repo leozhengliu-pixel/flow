@@ -18,7 +18,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "oxlint",
+    "lint": "oxlint && npm run check:pickers && npm run check:design-tokens",
+    "check:pickers": "node scripts/check-picker-architecture.mjs",
+    "check:design-tokens": "node scripts/check-design-token-colors.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
