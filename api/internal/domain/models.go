@@ -223,6 +223,10 @@ type Issue struct {
 	CreatedAt          time.Time           `json:"createdAt"`
 	UpdatedAt          time.Time           `json:"updatedAt"`
 	CompletedAt        *time.Time          `json:"completedAt,omitempty"`
+	StartedAt          *time.Time          `json:"startedAt,omitempty"`
+	TriagedAt          *time.Time          `json:"triagedAt,omitempty"`
+	StatusChangedAt    *time.Time          `json:"statusChangedAt,omitempty"`
+	AutoClosedAt       *time.Time          `json:"autoClosedAt,omitempty"`
 	CanceledAt         *time.Time          `json:"canceledAt,omitempty"`
 	ArchivedAt         *time.Time          `json:"archivedAt,omitempty"`
 	Team               Team                `json:"team"`
@@ -234,6 +238,12 @@ type Issue struct {
 	Project            *ProjectSummary     `json:"project,omitempty"`
 	ProjectMilestoneID *string             `json:"projectMilestoneId,omitempty"`
 	CycleID            *string             `json:"cycleId,omitempty"`
+	AddedToCycle       string              `json:"addedToCycle,omitempty"`
+	AgentSessionID     string              `json:"agentSessionId,omitempty"`
+	SuggestedLabelIDs  []string            `json:"suggestedLabelIds,omitempty"`
+	ExternalSource     string              `json:"externalSource,omitempty"`
+	AutoClosed         bool                `json:"autoClosed,omitempty"`
+	TemplateID         string              `json:"templateId,omitempty"`
 	ParentID           *string             `json:"parentId,omitempty"`
 	Recurrence         string              `json:"recurrence,omitempty"`
 	NextOccurrenceAt   *time.Time          `json:"nextOccurrenceAt,omitempty"`

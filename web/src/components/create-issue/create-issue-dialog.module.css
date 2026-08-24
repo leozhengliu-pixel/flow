@@ -10,8 +10,10 @@
 .iconButton { width: 28px; height: 28px; display: grid; place-items: center; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: lch(91.201% 1.65 272); }
 .saveDraft { height: 24px; margin-left: auto; padding: 0 8px; border: .5px solid transparent; border-radius: 9999px; background: lch(17.574% 1.589 272); color: lch(91.201% 1.65 272); font-size: 12px; line-height: 12px; font-weight: 500; }
 .saveDraft:hover { background: lch(22% 1.5 272); }
+.saveDraft[aria-label="Discard draft"]{width:28px;height:28px;display:grid;place-items:center;padding:0;border-radius:9999px;background:transparent}.saveDraft[aria-label="Discard draft"] svg{width:14px;height:14px}
 .expandButton { margin-left: auto; }
 .saveDraft + .expandButton { margin-left: 0; }
+.confirmDiscard{border-color:var(--semantic-danger)!important;background:var(--semantic-danger)!important;color:var(--on-danger)!important}
 .iconButton:hover { background: lch(17.574% 1.589 272); }
 .iconButton svg { width: 15px; height: 15px; stroke-width: 1.8; }
 .document { min-height: 0; flex: 1; padding: 0 18px; overflow: auto; }

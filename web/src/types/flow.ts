@@ -30,9 +30,9 @@ export interface DocumentTemplate { id: UUID; teamId: UUID; name: string; descri
 export interface Issue {
   id: UUID; version: number; identifier: string; number: number; title: string; description: string; descriptionState?: string; documentContent?: DocumentContent
   priority: number; priorityLabel: string; sortOrder: number; estimate?: number; dueDate?: string; slaBreachesAt?: string; slaType?: 'all'|'onlyBusinessDays'
-  createdAt: string; updatedAt: string; completedAt?: string; canceledAt?: string; archivedAt?: string
+  createdAt: string; updatedAt: string; completedAt?: string; startedAt?:string; triagedAt?:string; statusChangedAt?:string; autoClosedAt?:string; canceledAt?: string; archivedAt?: string
   team: Team; state: WorkflowState; assignee?: User; delegate?: User; creator: User; labels: IssueLabel[]
-  project?: ProjectSummary; projectMilestoneId?: UUID; cycleId?: UUID; parentId?: UUID; recurrence?: 'daily'|'weekly'|'monthly'; nextOccurrenceAt?: string; subscriberIds: UUID[]; reactions: Record<string, UUID[]>; subIssueIds: UUID[]
+  project?: ProjectSummary; projectMilestoneId?: UUID; cycleId?: UUID; addedToCycle?: 'planned'|'during'|'after'; agentSessionId?:UUID; suggestedLabelIds?:UUID[]; externalSource?:string; autoClosed?:boolean; templateId?:UUID; parentId?: UUID; recurrence?: 'daily'|'weekly'|'monthly'; nextOccurrenceAt?: string; subscriberIds: UUID[]; reactions: Record<string, UUID[]>; subIssueIds: UUID[]
   relations: IssueRelation[]; attachments: Attachment[]
 }
 export type CycleStatus = 'upcoming'|'current'|'completed'

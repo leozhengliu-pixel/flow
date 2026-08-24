@@ -31,14 +31,47 @@ export interface MyIssuesRowData {
   href?: string
   priority: 0 | 1 | 2 | 3 | 4
   state: { id: string; name: string; type: MyIssuesStateType; color: string }
-  labels?: { id: string; name: string; color: string; description?:string; issueCount?:number; scope?:string }[]
+  labels?: { id: string; name: string; color: string; description?:string; issueCount?:number; scope?:string; groupId?: string }[]
   project?: { id: string; name: string; color: string }
   assignee?: { id: string; name: string; avatarUrl?: string; color?: string }
+  delegate?: { id: string; name: string; avatarUrl?: string; color?: string }
+  creatorId?: string
+  creatorName?: string
+  isAssignedToViewer?: boolean
+  cycleId?: string
+  addedToCycle?: string
+  agentSessionId?: string
+  suggestedLabelIds?: string[]
+  externalSource?: string
+  autoClosed?: boolean
+  templateId?: string
+  initiativeIds?: string[]
+  projectStatusId?: string
+  projectStatusType?: string
+  projectPriority?: number
+  projectLabelIds?: string[]
+  projectLeadId?: string
+  projectMilestoneNames?: string[]
+  releaseIds?: string[]
+  releasePipelineIds?: string[]
+  releaseStages?: string[]
+  releaseStatuses?: string[]
+  hasReleasedRelease?: boolean
+  subscriberIds?: string[]
+  relationTypes?: string[]
+  hasLinks?: boolean
+  hasContent?: boolean
   estimate?: number
   dueDate?: string
   sla?: IssueSLA & { ruleName?: string }
   createdAt: string
   updatedAt: string
+  completedAt?: string
+  startedAt?: string
+  statusChangedAt?: string
+  statusIntervals?: { stateId: string; stateType?: string; enteredAt: string; exitedAt?: string }[]
+  canceledAt?: string
+  archivedAt?: string
   parentId?: string
   parent?: { id: string; identifier: string; title: string }
   ancestors?: { id: string; identifier: string; title: string }[]
@@ -47,7 +80,7 @@ export interface MyIssuesRowData {
   sortOrder?: number
 }
 
-export interface MyIssuesGroupData { id: string; label: string; stateType?: MyIssuesStateType; issues: MyIssuesRowData[] }
+export interface MyIssuesGroupData { id: string; label: string; stateType?: MyIssuesStateType; state?: MyIssuesRowData['state']; issues: MyIssuesRowData[] }
 
 export interface MyIssuesListProps {
   groups: MyIssuesGroupData[]
@@ -81,7 +114,7 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
       return <section className={styles.group} key={group.id} aria-labelledby={`my-issues-group-${group.id}`}>
         <header className={styles.groupHeader}>
           <button className={styles.collapseButton} aria-label={collapsed ? 'Expand group' : 'Collapse group'} aria-expanded={!collapsed} onClick={() => onGroupCollapsedChange?.(group.id, !collapsed)}><ChevronDown size={12}/></button>
-          <GroupStateIcon type={group.stateType}/><span data-i18n-ignore id={`my-issues-group-${group.id}`} className={styles.groupName}>{group.label}</span><span className={styles.groupCount}>{group.issues.length}</span>
+          <GroupStateIcon state={group.state ?? group.issues[0]?.state} type={group.stateType}/><span data-i18n-ignore id={`my-issues-group-${group.id}`} className={styles.groupName}>{group.label}</span><span className={styles.groupCount}>{group.issues.length}</span>
           {onCreateIssue && <button className={styles.createButton} aria-label={createIssueLabel} onClick={() => onCreateIssue(group)}><Plus size={16}/></button>}
         </header>
         {!collapsed && <div>{group.issues.map(issue => <MyIssuesRow key={issue.id} issue={issue} selected={selectedIds.has(issue.id)} displayProperties={displayProperties} nestedDepth={nestedSubIssues?(issue.ancestors?.length??(issue.parentId?1:0)):0} propertyOptions={propertyOptions} mutationError={mutationErrors.get(issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>)}</div>}
@@ -209,7 +242,7 @@ function OptionIcon({ option }: { option: MyIssuesContextOption }) {
   if (option.kind === 'labels') return <LabelIcon className={styles.optionIcon} size={14}/>
   return <span className={styles.optionSpacer}/>
 }
-function GroupStateIcon({ type }: { type?: MyIssuesStateType }) { return type ? <span className={styles.groupState}><StatusIcon state={{ id: type, name: type, type, color: 'var(--theme-text-secondary)' }} size={14}/></span> : null }
+function GroupStateIcon({ state, type }: { state?: MyIssuesRowData['state']; type?: MyIssuesStateType }) { return state || type ? <span className={styles.groupState}><StatusIcon state={state ?? { id: type!, name: type!, type: type!, color: 'var(--theme-text-secondary)' }} size={14}/></span> : null }
 function PropertyBadge(props:{label:NonNullable<MyIssuesRowData['labels']>[number]}|{children:ReactNode;color:string}){
   if('label'in props){const{label}=props;return <LabelHoverPreview label={label} side="bottom" align="start"><span className={styles.badge}><i style={{backgroundColor:label.color}}/><span data-i18n-ignore>{label.name}</span></span></LabelHoverPreview>}
   return <span className={styles.badge}><i style={{backgroundColor:props.color}}/><span data-i18n-ignore>{props.children}</span></span>

@@ -5,10 +5,12 @@ import { toast } from 'sonner'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { ReleasesPage } from '@/components/releases/releases-page'
-import { createAsk, decideAsk, deleteAsk, deleteDraft, purgeTrashEntry, restoreTrashEntry, searchWorkspace } from '@/lib/api'
+import { createAsk, decideAsk, deleteAllDrafts, deleteAsk, deleteDraft, purgeTrashEntry, restoreTrashEntry, searchWorkspace } from '@/lib/api'
 import type { Ask, BootstrapData, Draft, SearchResponse } from '@/types/flow'
 import type { ReleasePipelineTab, ReleaseRouteTab } from '@/lib/app-routes'
 import { releasePath, releasePipelinePath } from '@/lib/app-routes'
+import { useI18n } from '@/i18n/i18n'
+import { StatusIcon } from '@/components/issue/issue-icons'
 
 import './workspace-operations.css'
 
@@ -44,6 +46,7 @@ export function WorkspaceOperationsPage({ data, view, pipelineSlug, releaseSlug,
   </>
   if (view === 'deleted') return <ArchivePage data={data} selected={archiveView} filterOpen={archiveFilterOpen} query={query} onSelectedChange={setArchiveView} onFilterOpenChange={setArchiveFilterOpen} onQueryChange={setQuery} onOpenSidebar={onOpenSidebar} onRestore={async id => { await restoreTrashEntry(id); await onReload() }} onPurge={async id => { await purgeTrashEntry(id); await onReload() }}/>
   if (view === 'audit-log') return <AuditLogPage data={data} query={query} hideSessions={auditHideSessions} onQueryChange={setQuery} onHideSessionsChange={setAuditHideSessions} onOpenSidebar={onOpenSidebar}/>
+  if (view === 'drafts') return <DraftsPage data={data} onOpenSidebar={onOpenSidebar} onReload={onReload} onNavigate={onNavigate} onResume={onResumeDraft}/>
   return <main className="main-panel operations-page" aria-label={title}>
     <header className="operations-header">
       <button className="operations-mobile-menu" aria-label="Open sidebar" onClick={onOpenSidebar}><Menu/></button>
@@ -51,7 +54,6 @@ export function WorkspaceOperationsPage({ data, view, pipelineSlug, releaseSlug,
       {canCreate && <button className="operations-icon-button" aria-label={`New ${view === 'asks' ? 'ask' : 'release'}`} onClick={() => setCreateOpen(true)}><Plus size={16}/></button>}
     </header>
     <div className="operations-toolbar"><label><Search size={14}/><input aria-label={`Search ${title}`} placeholder={`Search ${title.toLowerCase()}…`} value={query} onChange={event => setQuery(event.target.value)}/>{query && <button aria-label="Clear search" onClick={() => setQuery('')}><X size={12}/></button>}</label></div>
-    {view === 'drafts' && <DraftRows data={data} drafts={data.drafts} query={query} onDelete={async draft => { await deleteDraft(draft.id); clearLocalIssueDraft(draft); await onReload() }} onNavigate={onNavigate} onResume={onResumeDraft}/>} 
     {view === 'favorites' && <FavoriteRows data={data} query={query} onNavigate={onNavigate}/>} 
     {view === 'recent' && <RecentRows data={data} recent={recent} query={query} onNavigate={onNavigate}/>} 
   </main>
@@ -117,10 +119,65 @@ function RowMenu({ children }: { children: ReactNode }) { return <DropdownMenu.R
 function MenuItem({ icon, children, onSelect, danger }: { icon: ReactNode; children: ReactNode; onSelect: () => void; danger?: boolean }) { return <DropdownMenu.Item className={danger ? 'danger' : ''} onSelect={onSelect}>{icon}<span>{children}</span></DropdownMenu.Item> }
 function relative(value: string) { const delta = Date.now() - new Date(value).getTime(); const minutes = Math.max(0, Math.floor(delta/60000)); if (minutes < 60) return `${minutes || 1}m`; const hours = Math.floor(minutes/60); if (hours < 24) return `${hours}h`; return `${Math.floor(hours/24)}d` }
 
-function DraftRows({ data, drafts, query, onDelete, onNavigate, onResume }: { data: BootstrapData; drafts: Draft[]; query: string; onDelete: (draft: Draft) => Promise<void>; onNavigate: (path: string) => void; onResume: (draft: Draft) => void }) {
-  const rows = drafts.filter(item => matches(query, item.title, item.body, item.type))
-  if (!rows.length) return <Empty icon={<FilePenLine/>} title="No active drafts" body="Unfinished issues, comments, and documents appear here automatically."/>
-  return <div className="operations-list">{rows.map(item => <div className="operations-row" key={item.id}><span className="operations-glyph"><FilePenLine/></span><button className="operations-row-main" onClick={() => item.type === 'issue' && !item.resourceId ? onResume(item) : item.resourceId && resourcePath(data,item.type,item.resourceId) ? onNavigate(resourcePath(data,item.type,item.resourceId)) : toast.info('Open the matching composer to continue this draft')}><strong>{item.title || 'Untitled draft'}</strong><small>{item.type} · Edited {relative(item.updatedAt)} ago</small></button><RowMenu><MenuItem icon={<Trash2/>} danger onSelect={() => void onDelete(item)}>Delete draft</MenuItem></RowMenu></div>)}</div>
+function DraftsPage({ data, onOpenSidebar, onReload, onNavigate, onResume }: { data: BootstrapData; onOpenSidebar: () => void; onReload: () => Promise<void>; onNavigate: (path: string) => void; onResume: (draft: Draft) => void }) {
+  const { t } = useI18n()
+  const drafts = data.drafts.filter(item => item.userId === data.viewer.id)
+  const [confirm, setConfirm] = useState<{ kind: 'one'; draft: Draft } | { kind: 'all' }>()
+  const [deleting, setDeleting] = useState(false)
+  const discard = async () => {
+    if (!confirm) return
+    setDeleting(true)
+    try {
+      if (confirm.kind === 'all') {
+        await deleteAllDrafts()
+        drafts.forEach(clearLocalIssueDraft)
+      } else {
+        await deleteDraft(confirm.draft.id)
+        clearLocalIssueDraft(confirm.draft)
+      }
+      setConfirm(undefined)
+      await onReload()
+    } finally { setDeleting(false) }
+  }
+  const open = (draft: Draft) => {
+    if (draft.type === 'issue' && !draft.resourceId) { onResume(draft); return }
+    const path = draft.resourceId ? resourcePath(data, draft.type, draft.resourceId) : ''
+    if (path) onNavigate(path)
+  }
+  const groups = draftGroups(drafts)
+  return <main className="main-panel operations-page drafts-page" aria-label={t('Drafts')}>
+    <header className="operations-header drafts-header"><button className="operations-mobile-menu" aria-label={t('Open sidebar')} onClick={onOpenSidebar}><Menu/></button><h1>{t('Drafts')}</h1>{drafts.length > 0 && <button className="draft-discard-all" aria-label={t('Discard all')} onClick={() => setConfirm({ kind: 'all' })} type="button"><Trash2/></button>}</header>
+    {drafts.length === 0 ? <DraftEmpty/> : <div className="draft-groups">{groups.map(group => <section key={group.type}><h2>{t(group.label)}</h2><div className="draft-grid">{group.items.map(draft => <article className={`draft-card is-${draft.type}`} key={draft.id}><button aria-label={t('Edit draft')} className="draft-card-link" onClick={() => open(draft)} type="button"/><header><DraftTypeIcon data={data} draft={draft}/><strong data-i18n-ignore>{draft.title || t('Untitled draft')}</strong><time dateTime={draft.updatedAt} title={new Date(draft.updatedAt).toLocaleString()}>{relative(draft.updatedAt)}</time><button aria-label={t('Discard draft')} className="draft-discard" onClick={() => setConfirm({ kind: 'one', draft })} type="button"><Trash2/></button></header>{draft.type === 'comment' && <div className="draft-context"><MessageCircleQuestion/><span>{t('Commenting on an issue')}</span></div>}{draft.body && <div aria-label={t('Draft content')} className="draft-content" role="document" data-i18n-ignore>{draft.body}</div>}</article>)}</div></section>)}</div>}
+    <DraftDiscardDialog all={confirm?.kind === 'all'} deleting={deleting} open={Boolean(confirm)} onCancel={() => !deleting && setConfirm(undefined)} onConfirm={() => void discard()}/>
+  </main>
+}
+
+function draftGroups(drafts: Draft[]) {
+  const definitions = [{ type: 'issue', label: 'Issues' }, { type: 'comment', label: 'Comments' }, { type: 'document', label: 'Documents' }]
+  const known = new Set(definitions.map(item => item.type))
+  const groups = definitions.map(item => ({ ...item, items: drafts.filter(draft => draft.type === item.type) })).filter(group => group.items.length)
+  const other = drafts.filter(draft => !known.has(draft.type))
+  return other.length ? [...groups, { type: 'other', label: 'Other', items: other }] : groups
+}
+
+function DraftTypeIcon({ data, draft }: { data: BootstrapData; draft: Draft }) {
+  if (draft.type === 'comment') { const issue=data.issues.find(item=>item.id===draft.resourceId); if(issue)return <StatusIcon state={issue.state} size={14}/> }
+  if (draft.type === 'issue') return <svg aria-hidden="true" className="draft-type-icon" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="1.4 1.74" strokeDashoffset=".65"/><circle cx="7" cy="7" r="2" fill="none" stroke="currentColor" strokeWidth="4" strokeDasharray="12.189 24.379" strokeDashoffset="12.189" transform="rotate(-90 7 7)"/></svg>
+  return <FilePenLine className="draft-type-icon"/>
+}
+
+function DraftDiscardDialog({ all, deleting, onCancel, onConfirm, open }: { all: boolean; deleting: boolean; onCancel: () => void; onConfirm: () => void; open: boolean }) {
+  const { t } = useI18n()
+  return <Dialog open={open} onOpenChange={value => { if (!value) onCancel() }}><DialogContent aria-describedby="draft-discard-description" className="draft-discard-dialog"><DialogTitle>{t(all ? 'Discard all drafts?' : 'Discard this draft?')}</DialogTitle><p id="draft-discard-description">{t(all ? 'All your drafts will be deleted.' : 'Your draft will be deleted.')}</p><footer><button disabled={deleting} onClick={onCancel} type="button">{t('Cancel')}</button><button autoFocus className="danger" disabled={deleting} onClick={onConfirm} type="button">{t(deleting ? 'Discarding…' : all ? 'Discard all' : 'Discard')}</button></footer></DialogContent></Dialog>
+}
+
+function DraftEmpty() {
+  const { t } = useI18n()
+  return <div className="draft-empty"><DraftEmptyIllustration/><span>{t('No active drafts')}</span></div>
+}
+
+function DraftEmptyIllustration() {
+  return <svg aria-hidden="true" viewBox="0 0 132 130" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.4 99.7c-1.8-1.1-2.8-2.5-2.8-4V91l53-27.2c3.8-1.9 9.3-1.9 13 0L123.8 89v4.8c0 1.5-1 3-2.8 4l-49.8 29.1a15.3 15.3 0 0 1-14 0L10.4 99.7Z" fill="var(--draft-bg)" stroke="var(--draft-line-faint)" strokeWidth="1.5"/><path d="M10.4 94.7c-3.8-2.2-3.8-5.8 0-8L60.2 58c3.8-2.2 10-2.2 13.9 0l47 27.1c3.7 2.2 3.7 5.8 0 8l-49.9 28.7c-3.8 2.3-10 2.3-13.8 0l-47-27Z" fill="var(--draft-bg)" stroke="var(--draft-line-muted)" strokeWidth="1.5"/><path d="M10.4 85.3c-1.8-1-2.8-2.5-2.8-4v-4.6l53-27.2c3.8-2 9.3-2 13 0l50.2 25.2v4.8c0 1.4-1 2.9-2.8 4l-49.8 29a15.3 15.3 0 0 1-14 0L10.4 85.4Z" fill="var(--draft-bg)" stroke="var(--draft-line-muted)" strokeWidth="1.5"/><path d="M10.4 80.4c-3.8-2.2-3.8-5.8 0-8l49.8-28.7c3.8-2.3 10-2.3 13.9 0l47 27c3.7 2.3 3.7 5.9 0 8l-49.9 28.8c-3.8 2.2-10 2.2-13.8 0l-47-27.1Z" fill="var(--draft-bg)" stroke="var(--draft-line)" strokeWidth="1.5"/><path d="M32 82.5 76.2 57M39.8 87 84 61.5m-36.4 30L91.8 66M55.3 96 83 80" stroke="var(--draft-line-faint)" strokeWidth="1.5" strokeLinecap="round"/><path d="M10.3 45c-1.5-1.5-2.1-3.2-1.8-4.6l1.3-4.5L68 23.3c4-.8 9.4.6 12.5 3.4l42 37.3-1.3 4.6c-.4 1.5-1.7 2.6-3.7 3.2L61.9 87a15.3 15.3 0 0 1-13.5-3.6L10.3 45Z" fill="var(--draft-bg)" stroke="var(--draft-line)" strokeWidth="1.5"/><path d="M11.5 40.2c-3-3.1-2.2-6.6 2.1-7.7l55.5-14.9c4.3-1.1 10.3.5 13.4 3.6L121 59.5c3 3.2 2.2 6.6-2.1 7.8L63.3 82a15.3 15.3 0 0 1-13.4-3.6L11.5 40.2Z" fill="var(--draft-bg)" stroke="var(--draft-line-strong)" strokeWidth="1.5"/><path d="m27.2 40.6 49.3-13.2M33.5 47l49.3-13.2M40 53.3l49.3-13.2m-43 19.6L77 51.5" stroke="var(--draft-line-strong)" strokeWidth="1.5" strokeLinecap="round"/><path fillRule="evenodd" clipRule="evenodd" d="M128.1 2.6a5.5 5.5 0 0 1 0 7.8l-33 33A19.4 19.4 0 0 1 82.6 49c-.5 0-1-.4-.9-1 .3-4.6 2.3-9 5.6-12.4l33-33a5.5 5.5 0 0 1 7.8 0Z" fill="var(--draft-bg)" stroke="var(--draft-line)" strokeWidth="1.5"/></svg>
 }
 
 function clearLocalIssueDraft(draft: Draft) {
