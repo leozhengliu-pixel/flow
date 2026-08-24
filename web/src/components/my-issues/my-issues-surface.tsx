@@ -48,7 +48,7 @@ export interface MyIssuesSurfaceProps {
 }
 
 export type MyIssuesFilterKey = typeof filterGroups[number]['items'][number]['id']
-export interface MyIssuesFilterOption { id: string; label: string; color?: string; count?: number }
+export interface MyIssuesFilterOption { id: string; label: string; color?: string; count?: number; children?: MyIssuesFilterOption[]; kind?: string; stateType?: 'backlog'|'unstarted'|'started'|'completed'|'canceled'; priority?: 0|1|2|3|4; avatarUrl?: string }
 
 const views: { id: MyIssuesView; label: string }[] = [
   { id: 'assigned', label: 'Assigned' },
@@ -69,10 +69,11 @@ const filterGroups = [
   ] },
   { items: [
     { id: 'project', label: 'Project', submenu: true }, { id: 'projectProperties', label: 'Project properties', submenu: true },
-    { id: 'initiative', label: 'Initiative', submenu: true }, { id: 'customers', label: 'Customers', submenu: true },
+    { id: 'initiative', label: 'Initiative', submenu: true }, { id: 'cycle', label: 'Cycle', submenu: true },
+    { id: 'addedToCycle', label: 'Added to cycle', submenu: true }, { id: 'releases', label: 'Releases', submenu: true },
   ] },
   { items: [
-    { id: 'subscribers', label: 'Subscribers', submenu: true }, { id: 'autoClosed', label: 'Auto-closed' },
+    { id: 'subscribers', label: 'Subscribers', submenu: true }, { id: 'externalSource', label: 'External source', submenu: true }, { id: 'autoClosed', label: 'Auto-closed' },
     { id: 'content', label: 'Content', submenu: true }, { id: 'links', label: 'Links', submenu: true },
     { id: 'template', label: 'Template', submenu: true },
   ] },

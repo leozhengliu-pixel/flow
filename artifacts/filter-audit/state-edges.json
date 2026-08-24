@@ -1,0 +1,21 @@
+{
+  "root": {
+    "default":"closed",
+    "open":"click Filter; search input focused",
+    "keyboard":"ArrowDown/ArrowUp changes active option; Enter opens submenu",
+    "escape":"closes root and restores focus to Filter trigger",
+    "searchEmpty":"No filters found",
+    "disabledItems":0
+  },
+  "valueMenu": {
+    "open":"click or Enter on a supported root option",
+    "selected":"checkbox and aria-checked reflect current filter",
+    "commit":"selecting first value closes both Portals, creates filter bar and changes visible issues",
+    "escape":"returns to root menu"
+  },
+  "persistence": {
+    "myIssues":"localStorage per workspace/view; optional persisted view API",
+    "savedView":"SavedView.filters API payload",
+    "refresh":"controller hydrates stored filter JSON"
+  }
+}

@@ -189,8 +189,8 @@ function ReleaseDetailPage({data,pipeline,release,tab,onNavigate,onOpenSidebar,o
   const changeDisplayOpen=(open:boolean)=>{setDisplayOpen(open);if(open)setFilterOpen(false)}
   const issues=data.issues.filter(issue=>release.issueIds.includes(issue.id))
   const issueOptions=useMemo(()=>explorerPropertyOptions(data,issues),[data,issues])
-  const visibleIssues=useMemo(()=>applyExplorerFilters(issues,filters),[filters,issues])
-  const issueRows=useMemo(()=>visibleIssues.map(issue=>issueToExplorerRow(issue,data.workspace.urlKey,data.issues)),[data.issues,data.workspace.urlKey,visibleIssues])
+  const visibleIssues=useMemo(()=>applyExplorerFilters(issues,filters,data),[data,filters,issues])
+  const issueRows=useMemo(()=>visibleIssues.map(issue=>issueToExplorerRow(issue,data.workspace.urlKey,data.issues,data)),[data,visibleIssues])
   const issueGroups=useMemo(()=>buildExplorerIssueGroups(issueRows,display,data),[data,display,issueRows])
   const favorite=data.favorites.some(item=>item.resourceType==='release'&&item.resourceId===release.id)
   const toggleFavorite=async()=>{try{if(favorite)await removeFavorite('release',release.id);else await addFavorite('release',release.id);await onReload()}catch(error){toast.error(error instanceof Error?error.message:t('Could not update favorite'))}}

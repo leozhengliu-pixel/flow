@@ -1,0 +1,22 @@
+{
+  "verifiedAt": "2026-08-24T08:20:00+08:00",
+  "routes": {
+    "linear": "/leozhengliu/drafts",
+    "flow": "/cleantrack/drafts",
+    "resumeIssue": "same drafts route plus Create issue dialog",
+    "resumeComment": "source issue route"
+  },
+  "states": [
+    {"node":"Draft page","from":"loading","to":"empty","evidence":"linear-empty-dom.json, flow-empty-dom.json"},
+    {"node":"Issue draft card","from":"default","to":"hover","effect":"card background changes and Discard draft opacity changes 0 to 1","evidence":"linear-list-dom.json, flow-list-dom.json"},
+    {"node":"Issue draft card","from":"default","trigger":"whole-card click","to":"Create issue editor","effect":"title, description and properties restored; refresh persistence verified"},
+    {"node":"Issue draft editor","trigger":"Close","to":"Draft list","effect":"existing server draft updated; stale serverDraftId cleared when remote draft no longer exists"},
+    {"node":"Discard draft","from":"closed","trigger":"hover action click","to":"Discard this draft? dialog","focus":"Discard","escape":"Cancel","effect":"DELETE /api/drafts/{id}"},
+    {"node":"Discard all","from":"closed","trigger":"header button","to":"Discard all drafts? dialog","focus":"Discard all","escape":"Cancel","effect":"DELETE /api/drafts"},
+    {"node":"Comment draft","from":"source issue comment editor","trigger":"navigate away","to":"Comments draft card","effect":"source issue title, status and Edit draft link retained","evidence":"linear-comment-dom.json"},
+    {"node":"I18n","state":"Chinese","result":"Drafts, No active drafts and ARIA translated","evidence":"screenshots/flow-empty-zh.png"},
+    {"node":"Theme","state":"Dark","result":"surface and SVG tokens recomputed without hardcoded light colors","evidence":"screenshots/flow-empty-dark.png"}
+  ],
+  "consoleErrors": [],
+  "testDataCleanup": {"linear":"temporary issue and comment drafts deleted","flow":"temporary drafts deleted; page returned to empty"}
+}

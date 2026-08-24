@@ -126,7 +126,7 @@ function groupIssues(issues: Issue[], display: MyIssuesDisplayOptions, states: I
     const current = groups.get(value.id) ?? { ...value, issues: [] }
     current.issues.push(toRow(issue, data)); groups.set(value.id, current)
   }
-  if (grouping === 'status' && display.showEmptyGroups) for (const state of states) if (!groups.has(state.id)) groups.set(state.id, { id: state.id, label: state.name, stateType: state.type, issues: [] })
+  if (grouping === 'status' && display.showEmptyGroups) for (const state of states) if (!groups.has(state.id)) groups.set(state.id, { id: state.id, label: state.name, stateType: state.type, state, issues: [] })
   let result = [...groups.values()]
   if (grouping === 'status') { const order = new Map(states.map((state,index) => [state.id,index])); result.sort((a,b) => (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99)) }
   else result.sort((a,b) => a.label.localeCompare(b.label))
@@ -134,7 +134,7 @@ function groupIssues(issues: Issue[], display: MyIssuesDisplayOptions, states: I
 }
 
 function groupFor(issue: Issue, grouping: MyIssuesGrouping, data: BootstrapData): Omit<MyIssuesGroupData,'issues'> {
-  if (grouping === 'status') return { id: issue.state.id, label: issue.state.name, stateType: issue.state.type }
+  if (grouping === 'status') return { id: issue.state.id, label: issue.state.name, stateType: issue.state.type, state: issue.state }
   if (grouping === 'priority') return { id: `priority-${issue.priority}`, label: ['No priority','Urgent','High','Medium','Low'][issue.priority] ?? 'No priority' }
   if (grouping === 'project') return { id: issue.project?.id ?? 'no-project', label: issue.project?.name ?? 'No project' }
   if (grouping === 'assignee') return { id: issue.assignee?.id ?? 'unassigned', label: issue.assignee?.displayName ?? 'No assignee' }

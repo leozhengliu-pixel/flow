@@ -1,0 +1,21 @@
+{
+  "initial": "Status",
+  "arrowDown": "Assignee",
+  "escape": {
+    "dialogs": 0,
+    "focus": "Add filter",
+    "expanded": false
+  },
+  "persistence": {
+    "before": {
+      "filter": true,
+      "backlog": false,
+      "canceled": false
+    },
+    "after": {
+      "filter": true,
+      "backlog": false,
+      "canceled": false
+    }
+  }
+}
