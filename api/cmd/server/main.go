@@ -239,6 +239,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PUT /api/sla-settings", s.updateSLASettings)
 	mux.HandleFunc("PUT /api/project-update-settings", s.updateProjectUpdateSettings)
 	mux.HandleFunc("POST /api/drafts", s.createDraft)
+	mux.HandleFunc("DELETE /api/drafts", s.deleteAllDrafts)
 	mux.HandleFunc("PATCH /api/drafts/{id}", s.updateDraft)
 	mux.HandleFunc("DELETE /api/drafts/{id}", s.deleteDraft)
 	mux.HandleFunc("PUT /api/favorites/{type}/{id}", s.addFavorite)
@@ -1358,7 +1359,7 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 			}
 			defaultState = stateForTeam(data, team.ID, states[0].ID)
 		}
-		created = domain.Issue{ID: fmt.Sprintf("issue_%d", number), Version: 1, Identifier: fmt.Sprintf("%s-%d", team.Key, number), Number: number, Title: strings.TrimSpace(input.Title), Description: strings.TrimSpace(input.Description), Priority: settings.DefaultPriority, PriorityLabel: priorityLabel(settings.DefaultPriority), SortOrder: float64(number), CreatedAt: now, UpdatedAt: now, Team: team, State: *defaultState, Creator: data.Viewer, Labels: []domain.IssueLabel{}, ParentID: input.ParentID, SubscriberIDs: []string{data.Viewer.ID}, Reactions: map[string][]string{}, SubIssueIDs: []string{}, Relations: []domain.IssueRelation{}, Attachments: []domain.Attachment{}}
+		created = domain.Issue{ID: fmt.Sprintf("issue_%d", number), Version: 1, Identifier: fmt.Sprintf("%s-%d", team.Key, number), Number: number, Title: strings.TrimSpace(input.Title), Description: strings.TrimSpace(input.Description), Priority: settings.DefaultPriority, PriorityLabel: priorityLabel(settings.DefaultPriority), SortOrder: float64(number), CreatedAt: now, UpdatedAt: now, Team: team, State: *defaultState, Creator: data.Viewer, Labels: []domain.IssueLabel{}, ParentID: input.ParentID, SubscriberIDs: []string{data.Viewer.ID}, Reactions: map[string][]string{}, SubIssueIDs: []string{}, Relations: []domain.IssueRelation{}, Attachments: []domain.Attachment{}, TemplateID: input.TemplateID, SuggestedLabelIDs: []string{}}
 		if preferences := data.UserSettings[data.Viewer.ID]; preferences.AutoAssign && input.AssigneeID == nil {
 			input.AssigneeID = &data.Viewer.ID
 		}
@@ -3287,9 +3288,28 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		if value == nil {
 			return nil, fmt.Errorf("%w: unknown state", errInvalid)
 		}
-		changes["stateBefore"] = issue.State.Name
-		changes["state"] = value.Name
-		issue.State = *value
+		if value.ID != issue.State.ID {
+			now := time.Now().UTC()
+			changes["stateBefore"] = issue.State.Name
+			changes["stateBeforeId"] = issue.State.ID
+			changes["state"] = value.Name
+			changes["stateId"] = value.ID
+			issue.StatusChangedAt = &now
+			if value.Type == "started" && issue.StartedAt == nil {
+				issue.StartedAt = &now
+			}
+			if value.Type == "completed" {
+				issue.CompletedAt = &now
+				issue.CanceledAt = nil
+			} else if value.Type == "canceled" {
+				issue.CanceledAt = &now
+				issue.CompletedAt = nil
+			} else {
+				issue.CompletedAt = nil
+				issue.CanceledAt = nil
+			}
+			issue.State = *value
+		}
 		if value.Type == "started" && issue.Assignee == nil && data.UserSettings[data.Viewer.ID].AssignStarted {
 			issue.Assignee = &data.Viewer
 			changes["assignee"] = data.Viewer.ID

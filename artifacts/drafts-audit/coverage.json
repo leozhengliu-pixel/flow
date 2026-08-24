@@ -1,0 +1,26 @@
+{
+  "mapped": [
+    "page header",
+    "empty illustration",
+    "empty label",
+    "issue group",
+    "comment group",
+    "draft card",
+    "draft type/status icon",
+    "relative update time",
+    "read-only draft content",
+    "whole-card edit target",
+    "hover discard action",
+    "single discard confirmation",
+    "discard-all header action",
+    "discard-all confirmation",
+    "issue draft resume",
+    "comment draft source navigation",
+    "Chinese strings and ARIA",
+    "Light and Dark tokens"
+  ],
+  "unmapped": [
+    {"state":"true mobile viewport DOM measurement in the signed-in Chrome surface","reason":"the attached Chrome control surface exposes a fixed viewport and no device-metrics capability"},
+    {"state":"permission-denied draft page","reason":"the signed-in Linear account exposes only its own drafts and no lower-permission draft role"}
+  ]
+}
