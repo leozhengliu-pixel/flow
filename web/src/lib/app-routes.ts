@@ -46,6 +46,7 @@ export type AppRoute =
   | { kind: 'customer'; workspaceSlug: string; customerSlugId: string }
   | { kind: 'document'; workspaceSlug: string; documentSlugId: string }
   | { kind: 'drafts'; workspaceSlug: string }
+  | { kind: 'agent'; workspaceSlug: string; chatSlug?: string }
   | { kind: 'releases'; workspaceSlug: string }
   | { kind: 'release-pipeline'; workspaceSlug: string; pipelineSlug: string; tab: ReleasePipelineTab }
   | { kind: 'release'; workspaceSlug: string; pipelineSlug: string; releaseSlug: string; tab: ReleaseRouteTab }
@@ -53,7 +54,7 @@ export type AppRoute =
   | { kind: 'workspace-library'; workspaceSlug: string; view: 'favorites'|'recent'|'audit-log'|'deleted' }
   | { kind: 'workspace-teams'; workspaceSlug: string }
   | { kind: 'new-team'; workspaceSlug: string }
-  | { kind: 'settings'; workspaceSlug: string; page: SettingsPageId; teamKey?: string; teamSection?: TeamSettingsSection; issueTemplateMode?: 'new'|'new-form'|'edit'; issueTemplateId?: string; projectTemplateMode?: 'new'|'edit'; projectTemplateId?: string; releasePipelineMode?: 'new'|'edit'; releasePipelineSlug?: string; integrationProvider?: 'github'|'gitlab' }
+  | { kind: 'settings'; workspaceSlug: string; page: SettingsPageId; teamKey?: string; teamSection?: TeamSettingsSection; issueTemplateMode?: 'new'|'new-form'|'edit'; issueTemplateId?: string; projectTemplateMode?: 'new'|'edit'; projectTemplateId?: string; agentSkillMode?: 'new'|'edit'; agentSkillId?: string; releasePipelineMode?: 'new'|'edit'; releasePipelineSlug?: string; integrationProvider?: 'github'|'gitlab' }
   | { kind: 'team-views'; workspaceSlug: string; teamKey: string; resource: ViewsResource }
   | { kind: 'team-views-new'; workspaceSlug: string; teamKey: string; resource: ViewsResource }
   | { kind: 'projects'; workspaceSlug: string }
@@ -97,6 +98,7 @@ export function parseAppRoute(pathname: string): AppRoute {
   if (section === 'customer' && third && segments.length === 3) return { kind: 'customer', workspaceSlug, customerSlugId: third }
   if (section === 'document' && third && segments.length === 3) return { kind: 'document', workspaceSlug, documentSlugId: third }
   if (section === 'drafts' && segments.length === 2) return { kind: 'drafts', workspaceSlug }
+  if (section === 'agent' && segments.length <= 3) return { kind: 'agent', workspaceSlug, chatSlug: third }
   if (section === 'release-pipelines' && segments.length === 2) return { kind: 'releases', workspaceSlug }
   if (section === 'pipeline' && third && (fourth === 'releases' || fourth === 'changelog') && segments.length === 4) return { kind: 'release-pipeline', workspaceSlug, pipelineSlug: third, tab: fourth }
   if (section === 'pipeline' && third && fourth === 'releases' && fifth === 'archived' && segments.length === 5) return { kind: 'release-pipeline', workspaceSlug, pipelineSlug: third, tab: 'archive' }
@@ -107,6 +109,8 @@ export function parseAppRoute(pathname: string): AppRoute {
   if (section === 'settings' && third === 'new-team' && segments.length === 3) return { kind: 'new-team', workspaceSlug }
   if (section === 'settings' && third === 'account' && fourth === 'security' && segments.length === 4) return { kind: 'settings', workspaceSlug, page: 'account-security' }
   if (section === 'settings' && third === 'account' && fourth && ACCOUNT_SETTINGS.has(fourth as SettingsPageId) && segments.length === 4) return { kind: 'settings', workspaceSlug, page: fourth as SettingsPageId }
+  if (section === 'settings' && third === 'skill' && fourth === 'new' && segments.length === 4) return { kind: 'settings', workspaceSlug, page: 'agents', agentSkillMode: 'new' }
+  if (section === 'settings' && third === 'skill' && fourth && segments.length === 4) return { kind: 'settings', workspaceSlug, page: 'agents', agentSkillMode: 'edit', agentSkillId: fourth }
   if (section === 'settings' && third === 'templates' && fourth === 'issue' && fifth === 'new' && !sixth && segments.length === 5) return { kind: 'settings', workspaceSlug, page: 'issue-templates', issueTemplateMode: 'new' }
   if (section === 'settings' && third === 'templates' && fourth === 'issue' && fifth === 'new' && sixth === 'form' && segments.length === 6) return { kind: 'settings', workspaceSlug, page: 'issue-templates', issueTemplateMode: 'new-form' }
   if (section === 'settings' && third === 'templates' && fourth === 'issue' && fifth && sixth === 'edit' && segments.length === 6) return { kind: 'settings', workspaceSlug, page: 'issue-templates', issueTemplateMode: 'edit', issueTemplateId: fifth }
@@ -169,6 +173,9 @@ export function customersPath(workspaceSlug: string) { return `${workspaceRootPa
 export function customerPath(workspaceSlug: string, customer: { id: string; name: string }) { return `${workspaceRootPath(workspaceSlug)}/customer/${slug(customer.name)}-${customer.id.slice(-12)}` }
 export function documentPath(workspaceSlug: string, document: { slugId: string }) { return `${workspaceRootPath(workspaceSlug)}/document/${encode(document.slugId)}` }
 export function draftsPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/drafts` }
+export function agentPath(workspaceSlug: string, chatSlug?: string) { return `${workspaceRootPath(workspaceSlug)}/agent${chatSlug?`/${encodeURIComponent(chatSlug)}`:''}` }
+export function newAgentSkillPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/settings/skill/new` }
+export function agentSkillPath(workspaceSlug: string, skillId: string) { return `${workspaceRootPath(workspaceSlug)}/settings/skill/${encodeURIComponent(skillId)}` }
 export function releasePipelinesPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/release-pipelines` }
 export function newReleasePipelinePath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/settings/releases/pipelines/new` }
 export function releasePipelinePath(workspaceSlug: string, pipelineSlug: string, tab: ReleasePipelineTab = 'releases') { return `${workspaceRootPath(workspaceSlug)}/pipeline/${encode(pipelineSlug)}/${tab==='archive'?'releases/archived':tab}` }

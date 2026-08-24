@@ -50,6 +50,37 @@ type AuthSession struct {
 	ExpiresAt   time.Time             `json:"expiresAt"`
 }
 
+type AgentMessage struct {
+	ID         string    `json:"id"`
+	Role       string    `json:"role"`
+	Content    string    `json:"content"`
+	DurationMS int64     `json:"durationMs,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+type AgentSession struct {
+	ID        string         `json:"id"`
+	SlugID    string         `json:"slugId"`
+	UserID    string         `json:"userId"`
+	Title     string         `json:"title"`
+	Favorite  bool           `json:"favorite"`
+	Location  string         `json:"location"`
+	IssueIDs  []string       `json:"issueIds"`
+	SkillIDs  []string       `json:"skillIds"`
+	Messages  []AgentMessage `json:"messages"`
+	CreatedAt time.Time      `json:"createdAt"`
+	UpdatedAt time.Time      `json:"updatedAt"`
+}
+
+type PersonalAgentSkill struct {
+	ID           string    `json:"id"`
+	UserID       string    `json:"userId"`
+	Name         string    `json:"name"`
+	Instructions string    `json:"instructions"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
 type AccountSession struct {
 	ID         string    `json:"id"`
 	Current    bool      `json:"current"`
@@ -1227,6 +1258,8 @@ type Bootstrap struct {
 	Webhooks                []Webhook                          `json:"webhooks"`
 	IntegrationConnections  []IntegrationConnection            `json:"integrationConnections"`
 	Reviews                 []CodeReview                       `json:"reviews"`
+	AgentSessions           []AgentSession                     `json:"agentSessions"`
+	AgentSkills             []PersonalAgentSkill               `json:"agentSkills"`
 	Settings                map[string]any                     `json:"settings"`
 	Members                 []WorkspaceMember                  `json:"members"`
 	TeamMembers             []TeamMember                       `json:"teamMembers"`

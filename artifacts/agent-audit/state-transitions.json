@@ -1,0 +1,40 @@
+{
+  "linear": {
+    "switchAgentChat": {
+      "default": {"height": 28, "padding": "0 8px", "radius": 9999, "font": "500 12px", "ariaExpanded": false},
+      "open": {"ariaExpanded": true, "portal": {"width": 321, "heightEmpty": 42, "zIndex": 600, "radius": 12}},
+      "keyboard": ["Enter", "Space", "Escape"]
+    },
+    "composer": {
+      "default": {"width": 712, "height": 104, "padding": 12, "radius": 10},
+      "textbox": {"height": 24, "lineHeight": 24, "autoFocus": true},
+      "attachment": {"multiple": true, "hiddenInput": true},
+      "submit": {"width": 24, "height": 24}
+    },
+    "skillsMenu": {
+      "searchbox": "Search skills…",
+      "items": ["Create skill"],
+      "createSideEffect": "navigate /settings/skill/new"
+    },
+    "session": {
+      "creating": "route changes from /agent to /agent/{uuid}",
+      "success": ["user message", "worked duration", "assistant message"],
+      "messageHover": ["Copy message", "Edit message"],
+      "editing": ["Editing message", "Cancel editing", "composer contains original message"],
+      "options": ["Copy as markdown", "separator", "Delete"],
+      "moveToToolbar": "returns /agent and opens 400x554 toolbar panel"
+    },
+    "animation": {
+      "headerButtons": {"properties": ["border", "background-color", "color", "opacity"], "durationMs": 150},
+      "historyEmpty": {"opacityDurationMs": 150, "delayMs": 200},
+      "reducedMotion": "not exposed as an independent animation on measured new-chat nodes"
+    }
+  },
+  "flow": {
+    "switchAgentChat": {"sharedContract": "usePropertyCommand", "keyboard": ["ArrowUp", "ArrowDown", "Home", "End", "Enter", "Escape"]},
+    "composer": {"desktop": {"width": 712, "height": 104}, "mobile": {"x": 24, "width": 342, "height": 104}, "attachmentInput": "display:none; matching accept list; multiple"},
+    "session": {"persistent": true, "deepLinkRefresh": true, "followUp": true, "editRegenerate": true, "favorite": true, "toolbar": true, "fullPage": true},
+    "portals": {"history": 950, "skills": 950, "options": 950, "deleteConfirm": 1000},
+    "animation": {"toolbarPanel": {"durationMs": 190, "easing": "cubic-bezier(.16,1,.3,1)"}, "reducedMotion": "toolbar panel animation disabled"}
+  }
+}

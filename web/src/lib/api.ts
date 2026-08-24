@@ -177,6 +177,19 @@ export function searchWorkspace(query: string, types: SearchResourceType[] = [],
   if (types.length) params.set('types', types.join(','))
   return request(`/api/search?${params}`)
 }
+export function fetchAgentStatus(): Promise<import('@/types/flow').AgentStatus> { return request('/api/agent/status') }
+export function sendAgentMessage(input: { message: string; issueIds: string[]; history: import('@/types/flow').AgentChatMessage[] }): Promise<import('@/types/flow').AgentChatResponse> { return request('/api/agent/chat', jsonRequest('POST', input)) }
+export function listAgentSessions(): Promise<import('@/types/flow').AgentSession[]> { return request('/api/agent/sessions') }
+export function getAgentSession(id: string): Promise<import('@/types/flow').AgentSession> { return request(`/api/agent/sessions/${encodeURIComponent(id)}`) }
+export function createAgentSession(input: { message: string; issueIds?: string[]; skillIds?: string[]; location?: 'page'|'toolbar' }): Promise<import('@/types/flow').AgentSession> { return request('/api/agent/sessions', jsonRequest('POST', input)) }
+export function createAgentSessionMessage(id: string, message: string): Promise<import('@/types/flow').AgentSession> { return request(`/api/agent/sessions/${encodeURIComponent(id)}/messages`, jsonRequest('POST', { message })) }
+export function updateAgentSessionMessage(id: string, messageId: string, message: string): Promise<import('@/types/flow').AgentSession> { return request(`/api/agent/sessions/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}`, jsonRequest('PATCH', { message })) }
+export function updateAgentSession(id: string, input: { title?: string; favorite?: boolean; location?: 'page'|'toolbar' }): Promise<import('@/types/flow').AgentSession> { return request(`/api/agent/sessions/${encodeURIComponent(id)}`, jsonRequest('PATCH', input)) }
+export function deleteAgentSession(id: string): Promise<void> { return request(`/api/agent/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }) }
+export function listAgentSkills(): Promise<import('@/types/flow').PersonalAgentSkill[]> { return request('/api/agent/skills') }
+export function createAgentSkill(input: { name: string; instructions: string }): Promise<import('@/types/flow').PersonalAgentSkill> { return request('/api/agent/skills', jsonRequest('POST', input)) }
+export function updateAgentSkill(id: string, input: { name: string; instructions: string }): Promise<import('@/types/flow').PersonalAgentSkill> { return request(`/api/agent/skills/${encodeURIComponent(id)}`, jsonRequest('PATCH', input)) }
+export function deleteAgentSkill(id: string): Promise<void> { return request(`/api/agent/skills/${encodeURIComponent(id)}`, { method: 'DELETE' }) }
 export function clearSearchHistory(): Promise<void> { return request('/api/search/history', { method: 'DELETE' }) }
 export function recordRecentResource(type: SearchResourceType, id: string): Promise<void> { return request('/api/recent', jsonRequest('POST', { type, id })) }
 export function updatePresence(clientId: string, issueId: string | undefined, route: string, active = true): Promise<Presence[]> { return request('/api/realtime/presence', jsonRequest('POST', { clientId, issueId, route, active })) }
