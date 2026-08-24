@@ -14,7 +14,7 @@ import {
   DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { connectIntegration, createAPIKey, createOAuthApplication, createWebhook, deleteOAuthApplication, deleteWebhook, disconnectIntegration, fetchWorkspaceUsage, revokeAPIKey, revokeOAuthAuthorization, inviteMembers, removeMember, resendInvitation, revokeInvitation, setTeamMembership, suspendMember, updateMemberRole, updateOAuthApplication, updateUserSettings, updateWebhook, updateWorkspacePreferences } from "@/lib/api";
+import { connectIntegration, createAgentSkill, createAPIKey, createOAuthApplication, createWebhook, deleteOAuthApplication, deleteWebhook, disconnectIntegration, fetchWorkspaceUsage, revokeAPIKey, revokeOAuthAuthorization, inviteMembers, removeMember, resendInvitation, revokeInvitation, setTeamMembership, suspendMember, updateAgentSkill, updateMemberRole, updateOAuthApplication, updateUserSettings, updateWebhook, updateWorkspacePreferences } from "@/lib/api";
 import type { SettingsPageId, TeamSettingsSection } from "@/lib/app-routes";
 import type { BootstrapData, IssueTemplate, OAuthApplication, ProjectTemplate, ReleasePipeline, Team, UserSettings, Webhook, WorkspaceMutationInput, WorkspaceSettings } from "@/types/flow";
 import { TeamWorkflowSettings } from "./team-workflow-settings";
@@ -48,6 +48,8 @@ type SettingsPageProps = {
   issueTemplateId?: string;
   projectTemplateMode?: "new"|"edit";
   projectTemplateId?: string;
+  agentSkillMode?: "new"|"edit";
+  agentSkillId?: string;
   onBack: () => void;
   onNavigate: (page: SettingsPageId, teamKey?: string, teamSection?: TeamSettingsSection) => void;
   onCreateReleasePipeline: () => void;
@@ -169,6 +171,7 @@ function SettingsBody(props: SettingsPageProps & { settings: StoredSettings; set
   const personal = ["preferences","profile","notifications","code-and-reviews","account-security","connections","agents"].includes(page);
   const teamOwner = page === "team" && props.data.teams.some(team => team.key.toLowerCase() === props.teamKey?.toLowerCase() && props.data.teamMembers.some(member => member.teamId === team.id && member.userId === props.data.viewer.id && member.role === "owner"));
   if (!personal && props.data.viewerRole !== "admin" && !teamOwner && !memberCanManage(page,props.data.workspaceSettings)) return <div className="settings-empty"><ShieldCheck size={28}/><h3>Admin access required</h3><p>You don't have permission to manage this workspace setting.</p></div>;
+  if (props.agentSkillMode) return <AgentSkillEditor data={props.data} id={props.agentSkillId} mode={props.agentSkillMode} onCancel={()=>props.onNavigate('agents')} onReload={props.onReload}/>;
   if (personal) return <PersonalSettings page={page} data={props.data} values={props.settings.values} setValue={props.setValue} onNavigate={props.onNavigate} onReload={props.onReload} onBack={props.onBack}/>;
   if (page === "issue-labels") return <DomainLabelsSettings data={props.data} resourceType="issue" onReload={props.onReload}/>;
   if (page === "project-labels") return <DomainLabelsSettings data={props.data} resourceType="project" onReload={props.onReload}/>;
@@ -196,6 +199,7 @@ function SettingsBody(props: SettingsPageProps & { settings: StoredSettings; set
 function PageTitle({ children, description, action }: { children: ReactNode; description?: ReactNode; action?: ReactNode }) {
   return <header className="settings-page-header"><div><h1>{children}</h1>{description && <p>{description}</p>}</div>{action}</header>;
 }
+function AgentSkillEditor({data,id,mode,onCancel,onReload}:{data:BootstrapData;id?:string;mode:'new'|'edit';onCancel:()=>void;onReload:()=>Promise<void>}){const existing=mode==='edit'?data.agentSkills.find(item=>item.id===id):undefined;const[name,setName]=useState(existing?.name??''),[instructions,setInstructions]=useState(existing?.instructions??''),[saving,setSaving]=useState(false);const save=async()=>{if(!name.trim()||!instructions.trim()||saving)return;setSaving(true);try{if(existing)await updateAgentSkill(existing.id,{name:name.trim(),instructions:instructions.trim()});else await createAgentSkill({name:name.trim(),instructions:instructions.trim()});await onReload();onCancel()}finally{setSaving(false)}};return <div className="agent-skill-editor-page"><nav><button onClick={onCancel}>Agent personalization</button><span>›</span><span>{existing?existing.name:'New skill'}</span></nav><div className="agent-skill-name" contentEditable suppressContentEditableWarning role="textbox" aria-label="Skill name" data-placeholder="Skill name" onInput={event=>setName(event.currentTarget.textContent??'')}>{name}</div><div className="agent-skill-instructions" contentEditable suppressContentEditableWarning role="textbox" aria-label="Skill instructions" data-placeholder="Add instructions…" onInput={event=>setInstructions(event.currentTarget.textContent??'')}>{instructions}</div><footer><button onClick={onCancel}>Cancel</button><button className="primary" disabled={!name.trim()||!instructions.trim()||saving} onClick={()=>void save()}>{saving?'Creating…':existing?'Save':'Create'}</button></footer></div>}
 function Section({ title, children }: { title?: string; children: ReactNode }) { return <section className="settings-section">{title && <h3>{title}</h3>}<div className="settings-card">{children}</div></section>; }
 function Row({ title, description, children, danger }: { title: string; description?: ReactNode; children?: ReactNode; danger?: boolean }) { return <div className={`settings-row${danger ? " danger" : ""}`}><div><strong>{title}</strong>{description && <span>{description}</span>}</div>{children && <div className="settings-control">{children}</div>}</div>; }
 function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (value: boolean) => void; label: string }) { return <button type="button" role="switch" aria-label={label} aria-checked={checked} className="settings-toggle" onClick={() => onChange(!checked)}><span/></button>; }

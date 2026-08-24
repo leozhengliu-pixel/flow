@@ -7,12 +7,12 @@ import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { MembersIcon as FlowMembersIcon, SlackIcon as FlowSlackIcon } from '@/components/issue/issue-icons'
 import { WorkspaceMenu } from '@/components/workspace/workspace-menu'
-import { asksPath, customersPath, draftsPath, inboxPath, initiativesPath, membersPath, myIssuesPath, projectsPath, pulsePath, releasePipelinesPath, reviewsPath, teamCyclesPath, teamHomePath, teamIssuesPath, teamProjectsPath, teamsPath, teamViewsPath, upcomingCyclePath, workspaceLibraryPath, workspaceViewsPath } from '@/lib/app-routes'
+import { agentPath, asksPath, customersPath, draftsPath, inboxPath, initiativesPath, membersPath, myIssuesPath, projectsPath, pulsePath, releasePipelinesPath, reviewsPath, teamCyclesPath, teamHomePath, teamIssuesPath, teamProjectsPath, teamsPath, teamViewsPath, upcomingCyclePath, workspaceLibraryPath, workspaceViewsPath } from '@/lib/app-routes'
 import type { AccountBootstrap, BootstrapData, Team, Workspace } from '@/types/flow'
 
 import './sidebar.css'
 
-export type PageId = 'inbox' | 'search' | 'pulse' | 'reviews' | 'my-issues' | 'workspace-issues' | 'team-issues' | 'cycles' | 'cycle-detail' | 'projects' | 'views' | 'project-detail' | 'issue-detail' | 'initiatives' | 'initiative-detail' | 'members' | 'customers' | 'teams' | 'new-team' | 'drafts' | 'releases' | 'asks' | 'library' | 'document-detail' | 'customer-detail'
+export type PageId = 'inbox' | 'search' | 'pulse' | 'reviews' | 'my-issues' | 'workspace-issues' | 'team-issues' | 'cycles' | 'cycle-detail' | 'projects' | 'views' | 'project-detail' | 'issue-detail' | 'initiatives' | 'initiative-detail' | 'members' | 'customers' | 'teams' | 'new-team' | 'drafts' | 'agent' | 'releases' | 'asks' | 'library' | 'document-detail' | 'customer-detail'
 
 type SidebarEntry = 'inbox' | 'reviews' | 'myIssues' | 'pulse' | 'drafts' | 'agent' | 'initiatives' | 'projects' | 'views' | 'members' | 'customers' | 'teams'
 type SidebarVisibility = 'always' | 'badged' | 'never'
@@ -76,7 +76,7 @@ export function Sidebar({ account, data, page, open = false, onOpenChange, onSea
     myIssues: <Nav active={page === 'issue-detail'} icon={<FlowIcon name="MyIssues"/>} label="My issues" to={myIssuesPath(workspaceSlug, 'activity')} onClick={close}/>,
     pulse: featureEnabled('pulse') ? <Nav icon={<PulseIcon/>} label="Pulse" to={pulsePath(workspaceSlug)} onClick={close}/> : null,
     drafts: <Nav badge={data.drafts.length} active={page === 'drafts'} icon={<DraftIcon/>} label="Drafts" to={draftsPath(workspaceSlug)} onClick={close}/>,
-    agent: featureEnabled('ai') ? <Nav icon={<AgentIcon/>} label="Agent" onClick={() => toast.info('Agent requires the Flow AI integration.')}/> : null,
+    agent: featureEnabled('ai') ? <Nav icon={<AgentIcon/>} label="Agent" to={agentPath(workspaceSlug)} onClick={close}/> : null,
     initiatives: null, projects: null, views: null, members: null, customers: null, teams: null,
   }
   const workspaceNavigation: Record<SidebarEntry, ReactNode> = {
