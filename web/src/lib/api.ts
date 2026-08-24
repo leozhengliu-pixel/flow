@@ -126,6 +126,7 @@ export function updateProjectUpdateSettings(input: Record<string, unknown>): Pro
 export function createDraft(input: { type?: string; resourceId?: string; title?: string; body?: string; contentData?: Record<string,unknown>; metadata?: Record<string,unknown> }): Promise<Draft> { return request('/api/drafts', jsonRequest('POST', input)) }
 export function updateDraft(id: string, input: Partial<Omit<Draft,'id'|'userId'|'createdAt'|'updatedAt'>>): Promise<Draft> { return request(`/api/drafts/${id}`, jsonRequest('PATCH', input)) }
 export function deleteDraft(id: string): Promise<void> { return request(`/api/drafts/${id}`, { method: 'DELETE' }) }
+export function deleteAllDrafts(): Promise<void> { return request('/api/drafts', { method: 'DELETE' }) }
 export function addFavorite(type: string, id: string): Promise<Favorite> { return request(`/api/favorites/${type}/${id}`, { method: 'PUT' }) }
 export function removeFavorite(type: string, id: string): Promise<void> { return request(`/api/favorites/${type}/${id}`, { method: 'DELETE' }) }
 export function addSubscription(type: string, id: string, events?: string[]): Promise<Subscription> { return request(`/api/subscriptions/${type}/${id}`, { method: 'PUT', body: events ? JSON.stringify({ events }) : undefined }) }
