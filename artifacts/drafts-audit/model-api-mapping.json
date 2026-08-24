@@ -1,0 +1,8 @@
+[
+  {"linearBehavior":"Save unfinished issue","flowField":"Draft{type,title,body,contentData,metadata}","api":"POST /api/drafts","persistence":"SQLite draft record; survives reload","supported":true},
+  {"linearBehavior":"Resume issue draft","flowField":"Draft.metadata","api":"GET /api/bootstrap","persistence":"CreateIssueDialog restored title, description and properties","supported":true},
+  {"linearBehavior":"Update resumed issue draft on close","flowField":"Draft.updatedAt and content","api":"PATCH /api/drafts/{id}","persistence":"SQLite draft record","supported":true},
+  {"linearBehavior":"Discard one draft","flowField":"Draft.id","api":"DELETE /api/drafts/{id}","persistence":"record removed after confirmation","supported":true},
+  {"linearBehavior":"Discard all current-user drafts","flowField":"Draft.userId","api":"DELETE /api/drafts","persistence":"atomic current-user deletion","supported":true},
+  {"linearBehavior":"Comment draft card links to source issue","flowField":"Draft{type=comment,resourceId}","api":"GET /api/bootstrap","persistence":"source issue lookup","supported":true}
+]

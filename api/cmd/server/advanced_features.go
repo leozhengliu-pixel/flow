@@ -1518,6 +1518,15 @@ func (s *server) deleteDraft(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
 
+func (s *server) deleteAllDrafts(w http.ResponseWriter, r *http.Request) {
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "drafts.deleted", "all", nil, func(data *domain.Bootstrap) error {
+		viewerID := data.Viewer.ID
+		data.Drafts = slices.DeleteFunc(data.Drafts, func(item domain.Draft) bool { return item.UserID == viewerID })
+		return nil
+	})
+	respondMutation(w, err, http.StatusNoContent, nil)
+}
+
 func resourceExists(data *domain.Bootstrap, kind, id string) bool {
 	switch kind {
 	case "issue":

@@ -84,9 +84,9 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
   const insightIssues = useMemo(() => issuesForScope(data.issues, scope, view, true), [data.issues, scope, view])
   const issuesById = useMemo(() => new Map(data.issues.map(issue => [issue.id, issue])), [data.issues])
   const rowOptions = useMemo(() => explorerPropertyOptions(data, scopedIssues), [data, scopedIssues])
-  const visibleIssues = useMemo(() => applyExplorerFilters(scopedIssues, filters), [filters, scopedIssues])
-  const rows = useMemo(() => visibleIssues.map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues)), [data.issues,data.workspace.urlKey, rowOverrides, visibleIssues])
-  const insightRows = useMemo(() => applyExplorerFilters(insightIssues, filters).map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues)), [data.issues,data.workspace.urlKey, filters, insightIssues, rowOverrides])
+  const visibleIssues = useMemo(() => applyExplorerFilters(scopedIssues, filters, data), [data, filters, scopedIssues])
+  const rows = useMemo(() => visibleIssues.map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)), [data, rowOverrides, visibleIssues])
+  const insightRows = useMemo(() => applyExplorerFilters(insightIssues, filters, data).map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)), [data, filters, insightIssues, rowOverrides])
   const groups = useMemo(() => buildExplorerIssueGroups(rows, display, data, view, manualOrder), [data, display, manualOrder, rows, view])
   const selection = useMyIssuesSelection(groups)
   const summary = useMemo(() => deriveSummary(groups), [groups])
@@ -152,7 +152,7 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
     try {
       const updated = await request
       if (mutationSequence.current.get(row.id) === sequence) {
-        setRowOverrides(current => new Map(current).set(row.id, issueToExplorerRow(updated, data.workspace.urlKey,data.issues)))
+        setRowOverrides(current => new Map(current).set(row.id, issueToExplorerRow(updated, data.workspace.urlKey,data.issues,data)))
         retryUpdates.current.delete(row.id)
       }
       return updated
@@ -299,7 +299,7 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
         width={detailsWidth}
         onWidthChange={setDetailsWidth}
         onClose={() => { if (previewIssueId) setPreviewIssueId(undefined); else changeDetails(false) }}
-        selectedIssue={previewIssue ? issueToExplorerRow(previewIssue, data.workspace.urlKey,data.issues) : undefined}
+        selectedIssue={previewIssue ? issueToExplorerRow(previewIssue, data.workspace.urlKey,data.issues,data) : undefined}
         previewContent={previewIssue && renderIssuePreview ? renderIssuePreview(previewIssue, () => setPreviewIssueId(undefined)) : undefined}
         summary={summary}
         onSummaryItemSelect={summaryFilter}
@@ -318,6 +318,7 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
       />}
       {savedView && insightsOpen && <SavedViewInsightsPanel
         allRows={insightRows}
+        data={data}
         onClose={() => changeInsights(false)}
         onSave={async (config: SavedViewInsightsConfig) => { if (onUpdateSavedView) await onUpdateSavedView(savedView.id, { insights: config as unknown as Record<string, unknown> }) }}
         rows={rows}

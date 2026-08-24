@@ -1,0 +1,255 @@
+{
+  "linear": {
+    "buttons": [
+      {
+        "name": "Expand to fullscreen",
+        "rect": {
+          "bottom": 141.5,
+          "height": 24,
+          "left": 1361,
+          "right": 1385,
+          "top": 117.5,
+          "width": 24,
+          "x": 1361,
+          "y": 117.5
+        },
+        "style": {
+          "background": "rgba(0, 0, 0, 0)",
+          "border": "0.5px solid rgba(0, 0, 0, 0)",
+          "borderRadius": "9999px",
+          "color": "lch(20 1 282)",
+          "padding": "0px 2px"
+        },
+        "svg": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" role=\"img\" focusable=\"false\" aria-hidden=\"true\" xmlns=\"http://www.w3.org/2000/svg\" class=\"sx-1fwcy2r sx-13jp3wb sx-13wgh6h sx-31pjnn sx-m5nenu sx-1fwcy2r sx-13jp3wb sx-18202ia sx-ge2tmq\" fill=\"lch(40% 1 282 / 1)\" style=\"--x---icon-default-color: lch(40% 1 282 / 1);\"><path d=\"M6.2168 8.72266C6.50798 8.42824 6.98279 8.4257 7.27734 8.7168C7.57154 9.00799 7.57423 9.48287 7.2832 9.77734L4.59863 12.5H6.2998C6.71402 12.5 7.0498 12.8358 7.0498 13.25C7.04964 13.6641 6.71392 14 6.2998 14H2.75C2.55116 14 2.36036 13.9208 2.21973 13.7803C2.07915 13.6397 2.00008 13.4488 2 13.25V9.75C2 9.33579 2.33579 9 2.75 9C3.16421 9 3.5 9.33579 3.5 9.75V11.4775L6.2168 8.72266Z\"></path><path d=\"M13.25 2C13.4488 2.00006 13.6397 2.07917 13.7803 2.21973C13.9208 2.36033 14 2.55119 14 2.75V6.25C14 6.66414 13.6641 6.99988 13.25 7C12.8358 7 12.5 6.66421 12.5 6.25V4.52246L9.7832 7.27734C9.49206 7.57173 9.01721 7.57419 8.72266 7.2832C8.42838 6.99201 8.42575 6.51716 8.7168 6.22266L11.4014 3.5H9.7002C9.28598 3.5 8.9502 3.16421 8.9502 2.75C8.95028 2.33586 9.28603 2 9.7002 2H13.25Z\"></path></svg>"
+      },
+      {
+        "name": "Insights display options",
+        "rect": {
+          "bottom": 141.5,
+          "height": 24,
+          "left": 1391,
+          "right": 1415,
+          "top": 117.5,
+          "width": 24,
+          "x": 1391,
+          "y": 117.5
+        },
+        "style": {
+          "background": "rgba(0, 0, 0, 0)",
+          "border": "0.5px solid rgba(0, 0, 0, 0)",
+          "borderRadius": "9999px",
+          "color": "lch(20 1 282)",
+          "padding": "0px 2px"
+        },
+        "svg": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" role=\"img\" focusable=\"false\" aria-hidden=\"true\" xmlns=\"http://www.w3.org/2000/svg\" class=\"sx-1fwcy2r sx-13jp3wb sx-13wgh6h sx-31pjnn sx-m5nenu sx-1fwcy2r sx-13jp3wb sx-18202ia sx-ge2tmq\" fill=\"lch(40% 1 282 / 1)\" style=\"--x---icon-default-color: lch(40% 1 282 / 1);\"><path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M7 2.5C8.11933 2.5 9.06613 3.23584 9.38477 4.25H14.75C15.1642 4.25 15.5 4.58579 15.5 5C15.5 5.41421 15.1642 5.75 14.75 5.75H9.38477C9.06613 6.76416 8.11933 7.5 7 7.5C5.88067 7.5 4.93387 6.76416 4.61523 5.75H2.25C1.83579 5.75 1.5 5.41421 1.5 5C1.5 4.58579 1.83579 4.25 2.25 4.25H4.61523C4.93387 3.23584 5.88067 2.5 7 2.5ZM7 4C6.44772 4 6 4.44772 6 5C6 5.55228 6.44772 6 7 6C7.55228 6 8 5.55228 8 5C8 4.44772 7.55228 4 7 4Z\"></path><path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M10 13.5C8.88067 13.5 7.93387 12.7642 7.61523 11.75H2.25C1.83579 11.75 1.5 11.4142 1.5 11C1.5 10.5858 1.83579 10.25 2.25 10.25H7.61523C7.93387 9.23584 8.88067 8.5 10 8.5C11.1193 8.5 12.0661 9.23584 12.3848 10.25H14.75C15.1642 10.25 15.5 10.5858 15.5 11C15.5 11.4142 15.1642 11.75 14.75 11.75H12.3848C12.0661 12.7642 11.1193 13.5 10 13.5ZM10 12C10.5523 12 11 11.5523 11 11C11 10.4477 10.5523 10 10 10C9.44772 10 9 10.4477 9 11C9 11.5523 9.44772 12 10 12Z\"></path></svg>"
+      },
+      {
+        "name": "Open menu",
+        "rect": {
+          "bottom": 141.5,
+          "height": 24,
+          "left": 1421,
+          "right": 1445,
+          "top": 117.5,
+          "width": 24,
+          "x": 1421,
+          "y": 117.5
+        },
+        "style": {
+          "background": "lch(96.914 0 282)",
+          "border": "0.5px solid rgba(0, 0, 0, 0)",
+          "borderRadius": "9999px",
+          "color": "lch(10 0 282)",
+          "padding": "0px 2px"
+        },
+        "svg": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" role=\"img\" focusable=\"false\" aria-hidden=\"true\" xmlns=\"http://www.w3.org/2000/svg\" class=\"sx-1fwcy2r sx-13jp3wb sx-13wgh6h sx-31pjnn sx-m5nenu sx-1fwcy2r sx-13jp3wb sx-18202ia sx-ge2tmq\" fill=\"lch(40% 1 282 / 1)\" style=\"--x---icon-default-color: lch(40% 1 282 / 1);\"><path d=\"M3 6.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z\"></path></svg>"
+      }
+    ],
+    "panel": {
+      "rect": {
+        "bottom": 648.5,
+        "height": 552.5,
+        "left": 1115.5,
+        "right": 1461.5,
+        "top": 96,
+        "width": 346,
+        "x": 1115.5,
+        "y": 96
+      },
+      "style": {
+        "background": "lch(100 0 282)",
+        "border": "0.5px solid lch(91.9 0 282)",
+        "borderRadius": "10px",
+        "boxShadow": "lch(0 0 0 / 0.02) 0px 3px 6px -2px, lch(0 0 0 / 0.04) 0px 1px 1px 0px",
+        "color": "lch(9.794 0 282)",
+        "font": "16px / 24px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+        "overflow": "hidden",
+        "padding": "0px",
+        "zIndex": "auto"
+      }
+    },
+    "selects": [],
+    "viewport": {
+      "dpr": 2,
+      "height": 693,
+      "width": 1470
+    }
+  },
+  "flow": {
+    "buttons": [
+      {
+        "name": "Expand to fullscreen",
+        "rect": {
+          "bottom": 142,
+          "height": 24,
+          "left": 1361,
+          "right": 1385,
+          "top": 118,
+          "width": 24,
+          "x": 1361,
+          "y": 118
+        },
+        "style": {
+          "background": "lch(94.4 0.5 282)",
+          "border": "0.5px solid rgba(0, 0, 0, 0)",
+          "borderRadius": "9999px",
+          "color": "lch(9.794 0 282)",
+          "padding": "0px"
+        },
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-expand\" aria-hidden=\"true\"><path d=\"m15 15 6 6\"></path><path d=\"m15 9 6-6\"></path><path d=\"M21 16v5h-5\"></path><path d=\"M21 8V3h-5\"></path><path d=\"M3 16v5h5\"></path><path d=\"m3 21 6-6\"></path><path d=\"M3 8V3h5\"></path><path d=\"M9 9 3 3\"></path></svg>"
+      },
+      {
+        "name": "Insights display options",
+        "rect": {
+          "bottom": 142,
+          "height": 24,
+          "left": 1391,
+          "right": 1415,
+          "top": 118,
+          "width": 24,
+          "x": 1391,
+          "y": 118
+        },
+        "style": {
+          "background": "rgba(0, 0, 0, 0)",
+          "border": "0.5px solid rgba(0, 0, 0, 0)",
+          "borderRadius": "9999px",
+          "color": "lch(37.776 1.25 282)",
+          "padding": "0px"
+        },
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-sliders-horizontal\" aria-hidden=\"true\"><path d=\"M10 5H3\"></path><path d=\"M12 19H3\"></path><path d=\"M14 3v4\"></path><path d=\"M16 17v4\"></path><path d=\"M21 12h-9\"></path><path d=\"M21 19h-5\"></path><path d=\"M21 5h-7\"></path><path d=\"M8 10v4\"></path><path d=\"M8 12H3\"></path></svg>"
+      },
+      {
+        "name": "Open menu",
+        "rect": {
+          "bottom": 142,
+          "height": 24,
+          "left": 1421,
+          "right": 1445,
+          "top": 118,
+          "width": 24,
+          "x": 1421,
+          "y": 118
+        },
+        "style": {
+          "background": "rgba(0, 0, 0, 0)",
+          "border": "0.5px solid rgba(0, 0, 0, 0)",
+          "borderRadius": "9999px",
+          "color": "lch(37.776 1.25 282)",
+          "padding": "0px"
+        },
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-ellipsis\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"1\"></circle><circle cx=\"19\" cy=\"12\" r=\"1\"></circle><circle cx=\"5\" cy=\"12\" r=\"1\"></circle></svg>"
+      }
+    ],
+    "panel": {
+      "rect": {
+        "bottom": 704.5,
+        "height": 608,
+        "left": 1115.5,
+        "right": 1461.5,
+        "top": 96.5,
+        "width": 346,
+        "x": 1115.5,
+        "y": 96.5
+      },
+      "style": {
+        "background": "lch(100 0 282)",
+        "border": "0.5px solid lch(89.84 0 282)",
+        "borderRadius": "10px",
+        "boxShadow": "lch(0 0 0 / 0.02) 0px 3px 6px -2px, lch(0 0 0 / 0.04) 0px 1px 1px 0px",
+        "color": "lch(9.794 0 282)",
+        "font": "450 13px / 19.5px \"Inter Variable\", \"SF Pro Display\", -apple-system, system-ui, \"Segoe UI\", sans-serif",
+        "overflow": "hidden",
+        "padding": "0px",
+        "zIndex": "auto"
+      }
+    },
+    "selects": [
+      {
+        "aria": "Measure",
+        "rect": {
+          "bottom": 204,
+          "height": 30,
+          "left": 1132,
+          "right": 1225.6640625,
+          "top": 174,
+          "width": 93.6640625,
+          "x": 1132,
+          "y": 174
+        },
+        "style": {
+          "border": "0.5px solid rgba(0, 0, 0, 0)",
+          "borderRadius": "8px",
+          "font": "500 13px / 19.5px \"Inter Variable\", \"SF Pro Display\", -apple-system, system-ui, \"Segoe UI\", sans-serif",
+          "padding": "0px 28px 0px 10px"
+        },
+        "text": "Issue count"
+      },
+      {
+        "aria": "Slice",
+        "rect": {
+          "bottom": 204,
+          "height": 30,
+          "left": 1241.6640625,
+          "right": 1335.328125,
+          "top": 174,
+          "width": 93.6640625,
+          "x": 1241.6640625,
+          "y": 174
+        },
+        "style": {
+          "border": "0.5px solid rgba(0, 0, 0, 0)",
+          "borderRadius": "8px",
+          "font": "500 13px / 19.5px \"Inter Variable\", \"SF Pro Display\", -apple-system, system-ui, \"Segoe UI\", sans-serif",
+          "padding": "0px 28px 0px 10px"
+        },
+        "text": "Status"
+      },
+      {
+        "aria": "Segment",
+        "rect": {
+          "bottom": 204,
+          "height": 30,
+          "left": 1351.328125,
+          "right": 1444.9921875,
+          "top": 174,
+          "width": 93.6640625,
+          "x": 1351.328125,
+          "y": 174
+        },
+        "style": {
+          "border": "0.5px solid rgba(0, 0, 0, 0)",
+          "borderRadius": "8px",
+          "font": "500 13px / 19.5px \"Inter Variable\", \"SF Pro Display\", -apple-system, system-ui, \"Segoe UI\", sans-serif",
+          "padding": "0px 28px 0px 10px"
+        },
+        "text": "Priority"
+      }
+    ],
+    "viewport": {
+      "dpr": 2,
+      "height": 749,
+      "width": 1470
+    }
+  }
+}

@@ -3,13 +3,11 @@ import type { BootstrapData, Issue, IssueUpdateInput } from '@/types/flow'
 import { MyIssuesBulkActionBar, type MyIssuesBulkAction, type MyIssuesBulkActionOption } from './my-issues-bulk-action-bar'
 import { MyIssuesDetailsPane, type MyIssuesSummaryItem, type MyIssuesSummaryTab } from './my-issues-details-pane'
 import { MyIssuesFilterBar, type MyIssuesAppliedFilter } from './my-issues-filter-bar'
-import { MyIssuesList, type MyIssuesContextAction, type MyIssuesContextOption, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData } from './my-issues-list'
+import { MyIssuesList, type MyIssuesContextAction, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData } from './my-issues-list'
 import { defaultMyIssuesDisplayOptions } from './my-issues-display-defaults'
 import { MyIssuesSurface, type MyIssuesDisplayOptions, type MyIssuesFilterKey, type MyIssuesFilterOption, type MyIssuesView } from './my-issues-surface'
 import { useMyIssuesController } from './use-my-issues-controller'
-import { issuePath } from '@/lib/app-routes'
-import { labelsForResource } from '@/lib/labels'
-import { issueHierarchyFields } from '@/components/issue-explorer/issue-explorer-model'
+import { applyExplorerFilters, explorerFilterOptions, explorerPropertyOptions, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import { SavedViewInsightsPanel, type SavedViewInsightsConfig } from '@/components/issue-explorer/saved-view-panels'
 import type { SavedView } from '@/types/flow'
 
@@ -31,8 +29,7 @@ export interface MyIssuesPageProps {
   onUpdateIssues: (issueIds: string[], input: IssueUpdateInput) => Promise<Issue[]>
 }
 
-const FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = { status: 'Status', assignee: 'Assignee', priority: 'Priority', labels: 'Labels', project: 'Project' }
-const PRIORITIES: MyIssuesContextOption[] = ['No priority', 'Urgent', 'High', 'Medium', 'Low'].map((label, id) => ({ id: String(id), label, kind: 'priority', priority: id as 0 | 1 | 2 | 3 | 4 }))
+const FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = { ai:'AI filter',advanced:'Advanced filter',status:'Status',assignee:'Assignee',agent:'Agent',agentSession:'Agent Session',creator:'Creator',priority:'Priority',labels:'Labels',relations:'Relations',suggestedLabel:'Suggested label',dates:'Dates',project:'Project',projectProperties:'Project properties',initiative:'Initiative',cycle:'Cycle',addedToCycle:'Added to cycle',releases:'Releases',subscribers:'Subscribers',externalSource:'External source',autoClosed:'Auto-closed',content:'Content',links:'Links',template:'Template' }
 
 export function MyIssuesPage({ data, initialView = 'assigned', loading = false, error, workspaceSlug = data.workspace.urlKey, onClearError, onCreateIssue, onDeleteIssues, onNavigateView, onOpenIssue, onOpenSidebar, onPersistDisplay, onPersistFilters, onUpdateIssue, onUpdateIssues }: MyIssuesPageProps) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
@@ -47,7 +44,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const sourceIssues = useMemo(() => issuesForView(data, projectedView), [data, projectedView])
   const initialGroups = useMemo(() => groupIssues(sourceIssues, workspaceSlug, data), [data, sourceIssues, workspaceSlug])
   const issuesById = useMemo(() => new Map(data.issues.map(issue => [issue.id, issue])), [data.issues])
-  const rowOptions = useMemo(() => propertyOptions(data, sourceIssues), [data, sourceIssues])
+  const rowOptions = useMemo(() => explorerPropertyOptions(data, sourceIssues), [data, sourceIssues])
 
   const controller = useMyIssuesController({
     workspaceSlug,
@@ -112,7 +109,8 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
     addFilter(field, { id: item.id, label: item.label, color: item.color })
   }
   const insightRows=controller.visibleGroups.flatMap(group=>group.issues)
-  const insightsView:SavedView={id:`my-issues-${controller.view}`,name:'My issues',description:'',resource:'issues',scope:'personal',ownerId:data.viewer.id,view:'all',filters:controller.filters,display:{},insights:insightsConfig,createdAt:'',updatedAt:''}
+  const allInsightRows=useMemo(()=>applyExplorerFilters(issuesForView(data,projectedView,true),controller.filters,data).map(issue=>issueToExplorerRow(issue,workspaceSlug,data.issues,data)),[controller.filters,data,projectedView,workspaceSlug])
+  const insightsView:SavedView={id:`my-issues-${controller.view}`,name:({assigned:'Assigned to me',created:'Created by me',subscribed:'Subscribed',activity:'Activity'} as const)[controller.view],description:'',resource:'issues',scope:'personal',ownerId:data.viewer.id,view:'all',filters:controller.filters,display:{},insights:insightsConfig,createdAt:'',updatedAt:''}
 
   return <>
     <MyIssuesSurface
@@ -122,7 +120,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
       displayOptions={controller.display}
       filterOpenSignal={filterOpenSignal}
       filters={controller.filters}
-      filterOptions={field => filterOptions(field, rowOptions)}
+      filterOptions={field => explorerFilterOptions(field, rowOptions)}
       viewCounts={controller.counts}
       viewHref={controller.viewHref}
       onDetailsOpenChange={open=>{controller.setDetailsOpen(open);if(open)setInsightsOpen(false)}}
@@ -134,7 +132,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
       onViewChange={view => { setProjectedView(view); controller.changeView(view) }}
       filterBar={<MyIssuesFilterBar
         filters={controller.filters}
-        filterOptions={filter => filterOptions(filter.field, rowOptions)}
+        filterOptions={filter => explorerFilterOptions(filter.field, rowOptions)}
         saveState={controller.filterSaveState}
         onAdd={() => setFilterOpenSignal(value => value + 1)}
         onClear={controller.clearFilters}
@@ -165,7 +163,8 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
       />
       <MyIssuesDetailsPane open={controller.detailsOpen} width={controller.detailsWidth} onWidthChange={controller.setDetailsWidth} onClose={() => controller.setDetailsOpen(false)} summary={controller.summary} onSummaryItemSelect={summaryFilter}/>
       {insightsOpen && <SavedViewInsightsPanel
-        allRows={insightRows}
+        allRows={allInsightRows}
+        data={data}
         rows={insightRows}
         view={insightsView}
         onClose={() => setInsightsOpen(false)}
@@ -180,8 +179,8 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   </>
 }
 
-function issuesForView(data: BootstrapData, view: MyIssuesView) {
-  const active = data.issues.filter(issue => !issue.archivedAt)
+function issuesForView(data: BootstrapData, view: MyIssuesView, includeArchived = false) {
+  const active = data.issues.filter(issue => includeArchived || !issue.archivedAt)
   if (view === 'created') return active.filter(issue => issue.creator.id === data.viewer.id)
   if (view === 'subscribed') return active.filter(issue => issue.subscriberIds.includes(data.viewer.id))
   if (view === 'activity') return active.filter(issue => data.activities[issue.id]?.some(activity => activity.actor.id === data.viewer.id))
@@ -192,7 +191,7 @@ function groupIssues(issues: Issue[], workspaceSlug: string, data: BootstrapData
   const groups = new Map<string, MyIssuesGroupData>()
   for (const issue of issues) {
     const id = issue.state.type === 'started' ? 'other-active' : issue.state.id
-    const group = groups.get(id) ?? { id, label: issue.state.type === 'started' ? 'Other active' : issue.state.name, stateType: issue.state.type, issues: [] }
+    const group = groups.get(id) ?? { id, label: issue.state.type === 'started' ? 'Other active' : issue.state.name, stateType: issue.state.type, state: issue.state, issues: [] }
     group.issues.push(toRow(issue, workspaceSlug, data)); groups.set(id, group)
   }
   return [...groups.values()]
@@ -200,28 +199,10 @@ function groupIssues(issues: Issue[], workspaceSlug: string, data: BootstrapData
 
 function toRow(issue: Issue, workspaceSlug: string, data: BootstrapData): MyIssuesRowData {
   const sla=data.issueSlas.find(item=>item.issueId===issue.id&&item.status!=='removed');const rule=sla?data.slaRules.find(item=>item.id===sla.ruleId):undefined
-  return { id: issue.id, identifier: issue.identifier, title: issue.title, href: issuePath(workspaceSlug, issue), priority: clampPriority(issue.priority), state: issue.state, labels: issue.labels, project: issue.project, assignee: issue.assignee ? { id: issue.assignee.id, name: issue.assignee.displayName, avatarUrl: issue.assignee.avatarUrl } : undefined, dueDate: issue.dueDate, sla:sla?{...sla,ruleName:rule?.name}:undefined, createdAt: issue.createdAt, updatedAt: issue.updatedAt, parentId: issue.parentId, ...issueHierarchyFields(issue,data.issues) }
+  return { ...issueToExplorerRow(issue,workspaceSlug,data.issues,data), sla:sla?{...sla,ruleName:rule?.name}:undefined }
 }
 
-function propertyOptions(data: BootstrapData, issues = data.issues) {
-  const count = (predicate: (issue: Issue) => boolean) => issues.filter(predicate).length
-  const issueLabels = labelsForResource(data.labels, 'issue')
-  const labelGroupNames = new Map(data.labelGroups.filter(group => group.resourceType === 'issue').map(group => [group.id, group.name]))
-  return {
-    status: [...data.states].sort((a, b) => a.position - b.position).map(state => ({ id: state.id, label: state.name, color: state.color, count: count(issue => issue.state.id === state.id), kind: 'status' as const, stateType: state.type })),
-    priority: PRIORITIES.map(priority => ({ ...priority, count: count(issue => String(issue.priority) === priority.id) })),
-    assignee: [{ id: '', label: 'No assignee', count: count(issue => !issue.assignee), kind: 'assignee' as const }, ...data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: count(issue => issue.assignee?.id === user.id), kind: 'assignee' as const }))],
-    dueDate: dueDateOptions().map(option => ({ ...option, kind: 'dueDate' as const })),
-    labels: issueLabels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount ?? count(issue => issue.labels.some(item => item.id === label.id)), scope: label.scope, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined, count: count(issue => issue.labels.some(item => item.id === label.id)), kind: 'labels' as const })),
-    project: [{ id: '', label: 'No project', count: count(issue => !issue.project), kind: 'project' as const }, ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, count: count(issue => issue.project?.id === project.id), kind: 'project' as const }))],
-  }
-}
-
-function filterOptions(field: MyIssuesFilterKey, options: ReturnType<typeof propertyOptions>): MyIssuesFilterOption[] | undefined {
-  if (field === 'status' || field === 'assignee' || field === 'priority' || field === 'labels' || field === 'project') return options[field]
-}
-
-function bulkOptions(action: MyIssuesBulkAction, options: ReturnType<typeof propertyOptions>): MyIssuesBulkActionOption[] | undefined {
+function bulkOptions(action: MyIssuesBulkAction, options: ReturnType<typeof explorerPropertyOptions>): MyIssuesBulkActionOption[] | undefined {
   if (action === 'status') return options.status
   if (action === 'priority') return options.priority
   if (action === 'assign') return options.assignee

@@ -1,0 +1,2230 @@
+{
+  "linear": {
+    "measure": {
+      "items": [
+        {
+          "checked": "true",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 247.5,
+            "height": 32,
+            "left": 1051.1640625,
+            "right": 1225.1640625,
+            "top": 215.5,
+            "width": 174,
+            "x": 1051.1640625,
+            "y": 215.5
+          },
+          "role": "option",
+          "svg": [
+            "<svg aria-hidden=\"true\" width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" role=\"img\" focusable=\"false\" xmlns=\"http://www.w3.org/2000/svg\" class=\"sx-1fwcy2r sx-13jp3wb sx-13wgh6h sx-31pjnn sx-m5nenu sx-2lah0s sx-1fwcy2r sx-13jp3wb sx-18202ia sx-ge2tmq\" fill=\"lch(40% 1 282 / 1)\" style=\"--x---icon-default-color: lch(40% 1 282 / 1); margin-right: 1px;\"><path d=\"M6.336 13.6a1.049 1.049 0 0 1-.8-.376L2.632 9.736a.992.992 0 0 1 .152-1.424 1.056 1.056 0 0 1 1.456.152l2.008 2.4 5.448-8a1.048 1.048 0 0 1 1.432-.288A.992.992 0 0 1 13.424 4L7.2 13.144a1.04 1.04 0 0 1-.8.456h-.064Z\"></path></svg>"
+          ],
+          "text": "Issue count"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 259.5,
+            "height": 12,
+            "left": 1051.1640625,
+            "right": 1225.1640625,
+            "top": 247.5,
+            "width": 174,
+            "x": 1051.1640625,
+            "y": 247.5
+          },
+          "role": "separator",
+          "svg": [],
+          "text": ""
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 291.5,
+            "height": 32,
+            "left": 1051.1640625,
+            "right": 1225.1640625,
+            "top": 259.5,
+            "width": 174,
+            "x": 1051.1640625,
+            "y": 259.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Cycle time"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 323.5,
+            "height": 32,
+            "left": 1051.1640625,
+            "right": 1225.1640625,
+            "top": 291.5,
+            "width": 174,
+            "x": 1051.1640625,
+            "y": 291.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Lead time"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 355.5,
+            "height": 32,
+            "left": 1051.1640625,
+            "right": 1225.1640625,
+            "top": 323.5,
+            "width": 174,
+            "x": 1051.1640625,
+            "y": 323.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Issue age"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": "false",
+          "rect": {
+            "bottom": 387.5,
+            "height": 32,
+            "left": 1051.1640625,
+            "right": 1225.1640625,
+            "top": 355.5,
+            "width": 174,
+            "x": 1051.1640625,
+            "y": 355.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Time in status▶"
+        }
+      ],
+      "rect": {
+        "bottom": 394,
+        "height": 185,
+        "left": 1050.6640625,
+        "right": 1225.6640625,
+        "top": 209,
+        "width": 175,
+        "x": 1050.6640625,
+        "y": 209
+      },
+      "style": {
+        "border": "0.5px solid lch(91.9 0 282)",
+        "borderRadius": "12px",
+        "boxShadow": "lch(0 0 0 / 0.02) 0px 6px 18px 0px, lch(0 0 0 / 0.04) 0px 3px 9px 0px, lch(0 0 0 / 0.04) 0px 1px 1px 0px",
+        "font": "13px / 19.5px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+        "padding": "0px",
+        "transformOrigin": "174px 0px",
+        "zIndex": "600"
+      }
+    },
+    "slice": {
+      "items": [
+        {
+          "checked": "true",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 247.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 215.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 215.5
+          },
+          "role": "option",
+          "svg": [
+            "<svg aria-hidden=\"true\" width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" role=\"img\" focusable=\"false\" xmlns=\"http://www.w3.org/2000/svg\" class=\"sx-1fwcy2r sx-13jp3wb sx-13wgh6h sx-31pjnn sx-m5nenu sx-2lah0s sx-1fwcy2r sx-13jp3wb sx-18202ia sx-ge2tmq\" fill=\"lch(40% 1 282 / 1)\" style=\"--x---icon-default-color: lch(40% 1 282 / 1); margin-right: 1px;\"><path d=\"M6.336 13.6a1.049 1.049 0 0 1-.8-.376L2.632 9.736a.992.992 0 0 1 .152-1.424 1.056 1.056 0 0 1 1.456.152l2.008 2.4 5.448-8a1.048 1.048 0 0 1 1.432-.288A.992.992 0 0 1 13.424 4L7.2 13.144a1.04 1.04 0 0 1-.8.456h-.064Z\"></path></svg>"
+          ],
+          "text": "Status"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 279.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 247.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 247.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Status type"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 311.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 279.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 279.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Assignee"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 343.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 311.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 311.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Agent"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 375.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 343.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 343.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Agent session"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 407.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 375.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 375.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Creator"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 439.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 407.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 407.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Priority"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 471.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 439.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 439.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Label"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": "false",
+          "rect": {
+            "bottom": 503.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 471.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 471.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Label group▶"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 535.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 503.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 503.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Template"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 567.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 535.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 535.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "External source"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 579.5,
+            "height": 12,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 567.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 567.5
+          },
+          "role": "separator",
+          "svg": [],
+          "text": ""
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 611.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 579.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 579.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Project"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 643.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 611.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 611.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Initiative"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 675.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 643.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 643.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Project label"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": "false",
+          "rect": {
+            "bottom": 707.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 675.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 675.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Project label group▶"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 739.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 707.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 707.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Cycle"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 771.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 739.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 739.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Added to cycle"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 783.5,
+            "height": 12,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 771.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 771.5
+          },
+          "role": "separator",
+          "svg": [],
+          "text": ""
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 815.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 783.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 783.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Created date"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 847.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 815.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 815.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Completed date"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 879.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 847.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 847.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Canceled date"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 911.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 879.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 879.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Started date"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 943.5,
+            "height": 32,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 911.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 911.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Due date"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 955.5,
+            "height": 12,
+            "left": 1160.828125,
+            "right": 1334.828125,
+            "top": 943.5,
+            "width": 174,
+            "x": 1160.828125,
+            "y": 943.5
+          },
+          "role": "separator",
+          "svg": [],
+          "text": ""
+        }
+      ],
+      "rect": {
+        "bottom": 662,
+        "height": 453,
+        "left": 1160.328125,
+        "right": 1335.328125,
+        "top": 209,
+        "width": 175,
+        "x": 1160.328125,
+        "y": 209
+      },
+      "style": {
+        "border": "0.5px solid lch(91.9 0 282)",
+        "borderRadius": "12px",
+        "boxShadow": "lch(0 0 0 / 0.02) 0px 6px 18px 0px, lch(0 0 0 / 0.04) 0px 3px 9px 0px, lch(0 0 0 / 0.04) 0px 1px 1px 0px",
+        "font": "13px / 19.5px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+        "padding": "0px",
+        "transformOrigin": "174px 0px",
+        "zIndex": "600"
+      }
+    },
+    "segment": {
+      "items": [
+        {
+          "checked": "true",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 204.5,
+            "height": 32,
+            "left": 1270.4921875,
+            "right": 1444.4921875,
+            "top": 172.5,
+            "width": 174,
+            "x": 1270.4921875,
+            "y": 172.5
+          },
+          "role": "option",
+          "svg": [
+            "<svg aria-hidden=\"true\" width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" role=\"img\" focusable=\"false\" xmlns=\"http://www.w3.org/2000/svg\" class=\"sx-1fwcy2r sx-13jp3wb sx-13wgh6h sx-31pjnn sx-m5nenu sx-2lah0s sx-1fwcy2r sx-13jp3wb sx-18202ia sx-ge2tmq\" fill=\"lch(40% 1 282 / 1)\" style=\"--x---icon-default-color: lch(40% 1 282 / 1); margin-right: 1px;\"><path d=\"M6.336 13.6a1.049 1.049 0 0 1-.8-.376L2.632 9.736a.992.992 0 0 1 .152-1.424 1.056 1.056 0 0 1 1.456.152l2.008 2.4 5.448-8a1.048 1.048 0 0 1 1.432-.288A.992.992 0 0 1 13.424 4L7.2 13.144a1.04 1.04 0 0 1-.8.456h-.064Z\"></path></svg>"
+          ],
+          "text": "No Value"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 216.5,
+            "height": 12,
+            "left": 1270.4921875,
+            "right": 1444.4921875,
+            "top": 204.5,
+            "width": 174,
+            "x": 1270.4921875,
+            "y": 204.5
+          },
+          "role": "separator",
+          "svg": [],
+          "text": ""
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 248.5,
+            "height": 32,
+            "left": 1270.4921875,
+            "right": 1444.4921875,
+            "top": 216.5,
+            "width": 174,
+            "x": 1270.4921875,
+            "y": 216.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Assignee"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 280.5,
+            "height": 32,
+            "left": 1270.4921875,
+            "right": 1444.4921875,
+            "top": 248.5,
+            "width": 174,
+            "x": 1270.4921875,
+            "y": 248.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Agent"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 312.5,
+            "height": 32,
+            "left": 1270.4921875,
+            "right": 1444.4921875,
+            "top": 280.5,
+            "width": 174,
+            "x": 1270.4921875,
+            "y": 280.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Agent session"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 344.5,
+            "height": 32,
+            "left": 1270.4921875,
+            "right": 1444.4921875,
+            "top": 312.5,
+            "width": 174,
+            "x": 1270.4921875,
+            "y": 312.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Creator"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 376.5,
+            "height": 32,
+            "left": 1270.4921875,
+            "right": 1444.4921875,
+            "top": 344.5,
+            "width": 174,
+            "x": 1270.4921875,
+            "y": 344.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Priority"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 408.5,
+            "height": 32,
+            "left": 1270.4921875,
+            "right": 1444.4921875,
+            "top": 376.5,
+            "width": 174,
+            "x": 1270.4921875,
+            "y": 376.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Label"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": "false",
+          "rect": {
+            "bottom": 440.5,
+            "height": 32,
+            "left": 1270.4921875,
+            "right": 1444.4921875,
+            "top": 408.5,
+            "width": 174,
+            "x": 1270.4921875,
+            "y": 408.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Label group▶"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 472.5,
+            "height": 32,
+            "left": 1270.4921875,
+            "right": 1444.4921875,
+            "top": 440.5,
+            "width": 174,
+            "x": 1270.4921875,
+            "y": 440.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Template"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 504.5,
+            "height": 32,
+            "left": 1270.4921875,
+            "right": 1444.4921875,
+            "top": 472.5,
+            "width": 174,
+            "x": 1270.4921875,
+            "y": 472.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "External source"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 516.5,
+            "height": 12,
+            "left": 1270.4921875,
+            "right": 1444.4921875,
+            "top": 504.5,
+            "width": 174,
+            "x": 1270.4921875,
+            "y": 504.5
+          },
+          "role": "separator",
+          "svg": [],
+          "text": ""
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 548.5,
+            "height": 32,
+            "left": 1270.4921875,
+            "right": 1444.4921875,
+            "top": 516.5,
+            "width": 174,
+            "x": 1270.4921875,
+            "y": 516.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Project"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 580.5,
+            "height": 32,
+            "left": 1270.4921875,
+            "right": 1444.4921875,
+            "top": 548.5,
+            "width": 174,
+            "x": 1270.4921875,
+            "y": 548.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Initiative"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 612.5,
+            "height": 32,
+            "left": 1270.4921875,
+            "right": 1444.4921875,
+            "top": 580.5,
+            "width": 174,
+            "x": 1270.4921875,
+            "y": 580.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Project label"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": "false",
+          "rect": {
+            "bottom": 644.5,
+            "height": 32,
+            "left": 1270.4921875,
+            "right": 1444.4921875,
+            "top": 612.5,
+            "width": 174,
+            "x": 1270.4921875,
+            "y": 612.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Project label group▶"
+        },
+        {
+          "checked": "false",
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 676.5,
+            "height": 32,
+            "left": 1270.4921875,
+            "right": 1444.4921875,
+            "top": 644.5,
+            "width": 174,
+            "x": 1270.4921875,
+            "y": 644.5
+          },
+          "role": "option",
+          "svg": [],
+          "text": "Added to cycle"
+        }
+      ],
+      "rect": {
+        "bottom": 683,
+        "height": 517,
+        "left": 1269.9921875,
+        "right": 1444.9921875,
+        "top": 166,
+        "width": 175,
+        "x": 1269.9921875,
+        "y": 166
+      },
+      "style": {
+        "border": "0.5px solid lch(91.9 0 282)",
+        "borderRadius": "12px",
+        "boxShadow": "lch(0 0 0 / 0.02) 0px 6px 18px 0px, lch(0 0 0 / 0.04) 0px 3px 9px 0px, lch(0 0 0 / 0.04) 0px 1px 1px 0px",
+        "font": "13px / 19.5px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+        "padding": "0px",
+        "transformOrigin": "174px 0px",
+        "zIndex": "600"
+      }
+    },
+    "actions": {
+      "items": [
+        {
+          "checked": null,
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 184.4524078369141,
+            "height": 31.96044921875,
+            "left": 1237.7552490234375,
+            "right": 1444.499267578125,
+            "top": 152.49195861816406,
+            "width": 206.7440185546875,
+            "x": 1237.7552490234375,
+            "y": 152.49195861816406
+          },
+          "role": "option",
+          "svg": [
+            "<svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" role=\"img\" focusable=\"false\" aria-hidden=\"true\" xmlns=\"http://www.w3.org/2000/svg\" class=\"sx-1fwcy2r sx-13jp3wb sx-13wgh6h sx-31pjnn sx-m5nenu sx-1fwcy2r sx-13jp3wb sx-18202ia sx-ge2tmq\" fill=\"lch(40% 1 282 / 1)\" style=\"--x---icon-default-color: lch(40% 1 282 / 1);\"><path d=\"M9.30558 10.206C9.57224 10.4726 9.59447 10.8912 9.37225 11.1831L9.30558 11.2594L6.84751 13.7175C5.58692 14.9781 3.54311 14.9781 2.28252 13.7175C1.0654 12.5004 1.02344 10.5531 2.15661 9.28564L2.28252 9.15251L4.74059 6.69443C5.0315 6.40353 5.50315 6.40353 5.79405 6.69443C6.06071 6.9611 6.08294 7.37963 5.86072 7.67161L5.79405 7.74789L3.33598 10.206C2.6572 10.8847 2.6572 11.9853 3.33598 12.664C3.98082 13.3089 5.00628 13.3411 5.68918 12.7608L5.79405 12.664L8.25212 10.206C8.54303 9.91506 9.01468 9.91506 9.30558 10.206ZM9.82982 6.17019C10.1207 6.46109 10.1207 6.93274 9.82982 7.22365L7.34921 9.70427C7.0583 9.99518 6.58665 9.99518 6.29575 9.70427C6.00484 9.41337 6.00484 8.94172 6.29575 8.65081L8.77637 6.17019C9.06727 5.87928 9.53892 5.87928 9.82982 6.17019ZM13.7175 2.2825C14.9346 3.49962 14.9766 5.44688 13.8434 6.71436L13.7175 6.84749L11.2594 9.30557C10.9685 9.59647 10.4969 9.59647 10.206 9.30557C9.93931 9.03891 9.91709 8.62037 10.1393 8.32839L10.206 8.25211L12.664 5.79403C13.3428 5.11525 13.3428 4.01474 12.664 3.33596C12.0192 2.69112 10.9938 2.65888 10.3109 3.23923L10.206 3.33596L7.74791 5.79403C7.457 6.08494 6.98535 6.08494 6.69445 5.79403C6.42779 5.52737 6.40556 5.10883 6.62778 4.81686L6.69445 4.74057L9.15252 2.2825C10.4131 1.02191 12.4569 1.02191 13.7175 2.2825Z\"></path></svg>"
+          ],
+          "text": "Copy link"
+        },
+        {
+          "checked": null,
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 216.412841796875,
+            "height": 31.960433959960938,
+            "left": 1237.7552490234375,
+            "right": 1444.499267578125,
+            "top": 184.4524078369141,
+            "width": 206.7440185546875,
+            "x": 1237.7552490234375,
+            "y": 184.4524078369141
+          },
+          "role": "option",
+          "svg": [
+            "<svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" role=\"img\" focusable=\"false\" aria-hidden=\"true\" xmlns=\"http://www.w3.org/2000/svg\" class=\"sx-1fwcy2r sx-13jp3wb sx-13wgh6h sx-31pjnn sx-m5nenu sx-1fwcy2r sx-13jp3wb sx-18202ia sx-ge2tmq\" fill=\"lch(40% 1 282 / 1)\" style=\"--x---icon-default-color: lch(40% 1 282 / 1);\"><path d=\"M7 2a1 1 0 0 1 2 0v5h2.5c.444 0 .668.568.353.9l-3.5 2.946a.482.482 0 0 1-.706 0L4.147 7.9c-.314-.332-.091-.9.354-.9H7V2Z\"></path><path d=\"M1.808 8.382c.446 0 .807.342.807.763v2.546c0 .984.844 1.782 1.885 1.782h7c1.04 0 1.885-.798 1.885-1.782V9.145c0-.421.361-.763.807-.763.446 0 .808.342.808.763v2.546C15 13.518 13.433 15 11.5 15h-7C2.567 15 1 13.518 1 11.69V9.146c0-.421.362-.763.808-.763Z\"></path></svg>"
+          ],
+          "text": "Export insights as CSV…"
+        },
+        {
+          "checked": null,
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 248.373291015625,
+            "height": 31.96044921875,
+            "left": 1237.7552490234375,
+            "right": 1444.499267578125,
+            "top": 216.412841796875,
+            "width": 206.7440185546875,
+            "x": 1237.7552490234375,
+            "y": 216.412841796875
+          },
+          "role": "option",
+          "svg": [
+            "<svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" role=\"img\" focusable=\"false\" aria-hidden=\"true\" xmlns=\"http://www.w3.org/2000/svg\" class=\"sx-1fwcy2r sx-13jp3wb sx-13wgh6h sx-31pjnn sx-m5nenu sx-1fwcy2r sx-13jp3wb sx-18202ia sx-ge2tmq\" fill=\"lch(40% 1 282 / 1)\" style=\"--x---icon-default-color: lch(40% 1 282 / 1);\"><path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M3 9C3.55228 9 4 9.44772 4 10V13C4 13.5523 3.55228 14 3 14H2C1.44772 14 1 13.5523 1 13V10C1 9.44772 1.44772 9 2 9H3ZM14 6C14.5523 6 15 6.44772 15 7V13C15 13.5523 14.5523 14 14 14H13C12.4477 14 12 13.5523 12 13V7C12 6.44772 12.4477 6 13 6H14ZM8.5 2C9.05229 2 9.5 2.44772 9.5 3V13C9.5 13.5523 9.05229 14 8.5 14H7.5C6.94772 14 6.5 13.5523 6.5 13V3C6.5 2.44772 6.94772 2 7.5 2H8.5Z\"></path></svg>"
+          ],
+          "text": "Insights examples"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 260.35845947265625,
+            "height": 11.98516845703125,
+            "left": 1237.7552490234375,
+            "right": 1444.499267578125,
+            "top": 248.373291015625,
+            "width": 206.7440185546875,
+            "x": 1237.7552490234375,
+            "y": 248.373291015625
+          },
+          "role": "separator",
+          "svg": [],
+          "text": ""
+        },
+        {
+          "checked": null,
+          "disabled": "false",
+          "expanded": null,
+          "rect": {
+            "bottom": 292.31890869140625,
+            "height": 31.96044921875,
+            "left": 1237.7552490234375,
+            "right": 1444.499267578125,
+            "top": 260.35845947265625,
+            "width": 206.7440185546875,
+            "x": 1237.7552490234375,
+            "y": 260.35845947265625
+          },
+          "role": "option",
+          "svg": [
+            "<svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" role=\"img\" focusable=\"false\" aria-hidden=\"true\" xmlns=\"http://www.w3.org/2000/svg\" class=\"sx-1fwcy2r sx-13jp3wb sx-13wgh6h sx-31pjnn sx-m5nenu sx-1fwcy2r sx-13jp3wb sx-18202ia sx-ge2tmq\" fill=\"lch(40% 1 282 / 1)\" style=\"--x---icon-default-color: lch(40% 1 282 / 1);\"><path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M12.9488 10.0524C13.349 10.158 13.5865 10.5635 13.4795 10.9576L12.6645 13.9523C12.502 14.5482 11.7291 14.6844 11.3578 14.2292L11.2896 14.1305L10.877 13.427C9.57129 14.1292 8.00024 14.3576 6.44922 13.9484C3.68286 13.2185 1.8893 10.7014 2.00424 7.99682C2.02284 7.55936 2.46371 7.28625 2.89325 7.39952C3.26763 7.4983 3.4998 7.85939 3.49998 8.24101C3.5002 10.1985 4.826 11.9899 6.83775 12.5207C7.98813 12.8242 9.15275 12.6587 10.1258 12.1459L9.06299 10.3333C8.72901 9.76319 9.26142 9.07965 9.90719 9.24999L12.9488 10.0524Z\"></path><path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M9.55741 2.52691C12.1241 3.20406 13.8533 5.41994 13.9979 7.89647C14.0252 8.36595 13.5598 8.68346 13.0985 8.56175C12.7501 8.46983 12.5195 8.15125 12.4838 7.79786C12.3034 6.01554 11.0301 4.44563 9.16889 3.95459C8.1414 3.68351 7.10225 3.78579 6.19871 4.17616L7.0729 5.667C7.40657 6.23707 6.87437 6.92063 6.2287 6.75032L3.18712 5.94787C2.78699 5.8423 2.54966 5.43673 2.65638 5.04275L3.47137 2.04796C3.63368 1.45164 4.40673 1.31556 4.77806 1.77107L4.84631 1.86977L5.44408 2.8892C6.68392 2.3133 8.12954 2.1502 9.55741 2.52691Z\"></path></svg>"
+          ],
+          "text": "Refresh"
+        }
+      ],
+      "rect": {
+        "bottom": 298.81085205078125,
+        "height": 152.81085205078125,
+        "left": 1237.255859375,
+        "right": 1444.998779296875,
+        "top": 146,
+        "width": 207.742919921875,
+        "x": 1237.255859375,
+        "y": 146
+      },
+      "style": {
+        "border": "0.5px solid lch(91.9 0 282)",
+        "borderRadius": "12px",
+        "boxShadow": "lch(0 0 0 / 0.02) 0px 6px 18px 0px, lch(0 0 0 / 0.04) 0px 3px 9px 0px, lch(0 0 0 / 0.04) 0px 1px 1px 0px",
+        "font": "13px / 19.5px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+        "padding": "0px",
+        "transformOrigin": "207px 0px",
+        "zIndex": "600"
+      }
+    }
+  },
+  "flow": {
+    "measure": {
+      "items": [
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 246.5,
+            "height": 32,
+            "left": 1138.5,
+            "right": 1345.5,
+            "top": 214.5,
+            "width": 207,
+            "x": 1138.5,
+            "y": 214.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-dot\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><circle cx=\"12\" cy=\"12\" r=\"1\"></circle></svg>",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-check _trailingCheck_oawke_7\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"></path></svg>"
+          ],
+          "text": "Issue countNumber of individual issues"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 252,
+            "height": 0.5,
+            "left": 1137.5,
+            "right": 1346.5,
+            "top": 251.5,
+            "width": 209,
+            "x": 1137.5,
+            "y": 251.5
+          },
+          "role": "separator",
+          "svg": [],
+          "text": ""
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 289,
+            "height": 32,
+            "left": 1138.5,
+            "right": 1345.5,
+            "top": 257,
+            "width": 207,
+            "x": 1138.5,
+            "y": 257
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-rotate-ccw-clock\" aria-hidden=\"true\"><path d=\"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8\"></path><path d=\"M3 3v5h5\"></path><path d=\"M12 7v5l4 2\"></path></svg>"
+          ],
+          "text": "Cycle timeTime from started to completed"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 321,
+            "height": 32,
+            "left": 1138.5,
+            "right": 1345.5,
+            "top": 289,
+            "width": 207,
+            "x": 1138.5,
+            "y": 289
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-clock3 lucide-clock-3\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><path d=\"M12 6v6h4\"></path></svg>"
+          ],
+          "text": "Lead timeTime from created to completed"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 353,
+            "height": 32,
+            "left": 1138.5,
+            "right": 1345.5,
+            "top": 321,
+            "width": 207,
+            "x": 1138.5,
+            "y": 321
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-calendar-days\" aria-hidden=\"true\"><path d=\"M8 2v3\"></path><path d=\"M16 2v3\"></path><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"></rect><path d=\"M3 9h18\"></path><path d=\"M8 13h.01\"></path><path d=\"M12 13h.01\"></path><path d=\"M16 13h.01\"></path><path d=\"M8 17h.01\"></path><path d=\"M12 17h.01\"></path><path d=\"M16 17h.01\"></path></svg>"
+          ],
+          "text": "Issue ageTime from created to now (not completed)"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": "false",
+          "rect": {
+            "bottom": 385,
+            "height": 32,
+            "left": 1138.5,
+            "right": 1345.5,
+            "top": 353,
+            "width": 207,
+            "x": 1138.5,
+            "y": 353
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-layers\" aria-hidden=\"true\"><path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\"></path><path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\"></path><path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\"></path></svg>",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-right _menuChevron_oawke_7\" aria-hidden=\"true\"><path d=\"m9 18 6-6-6-6\"></path></svg>"
+          ],
+          "text": "Time in statusTime spent in status"
+        }
+      ],
+      "rect": {
+        "bottom": 391.5,
+        "height": 183.5,
+        "left": 1132,
+        "right": 1352,
+        "top": 208,
+        "width": 220,
+        "x": 1132,
+        "y": 208
+      },
+      "style": {
+        "border": "0.5px solid lch(86.5 0 282)",
+        "borderRadius": "12px",
+        "boxShadow": "lch(0 0 0 / 0.12) 0px 8px 24px 0px, lch(0 0 0 / 0.08) 0px 2px 7px 0px",
+        "font": "13px / 19.5px \"Inter Variable\", \"SF Pro Display\", -apple-system, system-ui, \"Segoe UI\", sans-serif",
+        "padding": "0px",
+        "transformOrigin": "0px 0px",
+        "zIndex": "620"
+      }
+    },
+    "slice": {
+      "items": [
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 246.5,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 214.5,
+            "width": 207,
+            "x": 1248,
+            "y": 214.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-dot\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><circle cx=\"12\" cy=\"12\" r=\"1\"></circle></svg>",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-check _trailingCheck_oawke_7\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"></path></svg>"
+          ],
+          "text": "Status"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 278.5,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 246.5,
+            "width": 207,
+            "x": 1248,
+            "y": 246.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-dot\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><circle cx=\"12\" cy=\"12\" r=\"1\"></circle></svg>"
+          ],
+          "text": "Status type"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 310.5,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 278.5,
+            "width": 207,
+            "x": 1248,
+            "y": 278.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-user-round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"8\" r=\"5\"></circle><path d=\"M20 21a8 8 0 0 0-16 0\"></path></svg>"
+          ],
+          "text": "Assignee"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 342.5,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 310.5,
+            "width": 207,
+            "x": 1248,
+            "y": 310.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-bot\" aria-hidden=\"true\"><path d=\"M12 8V4H8\"></path><rect width=\"16\" height=\"12\" x=\"4\" y=\"8\" rx=\"2\"></rect><path d=\"M2 14h2\"></path><path d=\"M20 14h2\"></path><path d=\"M15 13v2\"></path><path d=\"M9 13v2\"></path></svg>"
+          ],
+          "text": "Agent"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 374.5,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 342.5,
+            "width": 207,
+            "x": 1248,
+            "y": 342.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-bot\" aria-hidden=\"true\"><path d=\"M12 8V4H8\"></path><rect width=\"16\" height=\"12\" x=\"4\" y=\"8\" rx=\"2\"></rect><path d=\"M2 14h2\"></path><path d=\"M20 14h2\"></path><path d=\"M15 13v2\"></path><path d=\"M9 13v2\"></path></svg>"
+          ],
+          "text": "Agent session"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 406.5,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 374.5,
+            "width": 207,
+            "x": 1248,
+            "y": 374.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-user-round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"8\" r=\"5\"></circle><path d=\"M20 21a8 8 0 0 0-16 0\"></path></svg>"
+          ],
+          "text": "Creator"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 438.5,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 406.5,
+            "width": 207,
+            "x": 1248,
+            "y": 406.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-flame\" aria-hidden=\"true\"><path d=\"M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4\"></path></svg>"
+          ],
+          "text": "Priority"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 470.5,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 438.5,
+            "width": 207,
+            "x": 1248,
+            "y": 438.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-tag\" aria-hidden=\"true\"><path d=\"M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z\"></path><circle cx=\"7.5\" cy=\"7.5\" r=\".5\" fill=\"currentColor\"></circle></svg>"
+          ],
+          "text": "Label"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": "false",
+          "rect": {
+            "bottom": 502.5,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 470.5,
+            "width": 207,
+            "x": 1248,
+            "y": 470.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-layers\" aria-hidden=\"true\"><path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\"></path><path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\"></path><path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\"></path></svg>",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-right _menuChevron_oawke_7\" aria-hidden=\"true\"><path d=\"m9 18 6-6-6-6\"></path></svg>"
+          ],
+          "text": "Label group"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 534.5,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 502.5,
+            "width": 207,
+            "x": 1248,
+            "y": 502.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-copy\" aria-hidden=\"true\"><rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\" ry=\"2\"></rect><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"></path></svg>"
+          ],
+          "text": "Template"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 566.5,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 534.5,
+            "width": 207,
+            "x": 1248,
+            "y": 534.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-link2 lucide-link-2\" aria-hidden=\"true\"><path d=\"M9 17H7A5 5 0 0 1 7 7h2\"></path><path d=\"M15 7h2a5 5 0 1 1 0 10h-2\"></path><line x1=\"8\" x2=\"16\" y1=\"12\" y2=\"12\"></line></svg>"
+          ],
+          "text": "External source"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 572,
+            "height": 0.5,
+            "left": 1247,
+            "right": 1456,
+            "top": 571.5,
+            "width": 209,
+            "x": 1247,
+            "y": 571.5
+          },
+          "role": "separator",
+          "svg": [],
+          "text": ""
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 609,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 577,
+            "width": 207,
+            "x": 1248,
+            "y": 577
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-folder-kanban\" aria-hidden=\"true\"><path d=\"M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z\"></path><path d=\"M8 10v4\"></path><path d=\"M12 10v2\"></path><path d=\"M16 10v6\"></path></svg>"
+          ],
+          "text": "Project"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 641,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 609,
+            "width": 207,
+            "x": 1248,
+            "y": 609
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-layers\" aria-hidden=\"true\"><path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\"></path><path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\"></path><path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\"></path></svg>"
+          ],
+          "text": "Initiative"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 673,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 641,
+            "width": 207,
+            "x": 1248,
+            "y": 641
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-tag\" aria-hidden=\"true\"><path d=\"M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z\"></path><circle cx=\"7.5\" cy=\"7.5\" r=\".5\" fill=\"currentColor\"></circle></svg>"
+          ],
+          "text": "Project label"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": "false",
+          "rect": {
+            "bottom": 705,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 673,
+            "width": 207,
+            "x": 1248,
+            "y": 673
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-layers\" aria-hidden=\"true\"><path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\"></path><path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\"></path><path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\"></path></svg>",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-right _menuChevron_oawke_7\" aria-hidden=\"true\"><path d=\"m9 18 6-6-6-6\"></path></svg>"
+          ],
+          "text": "Project label group"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 737,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 705,
+            "width": 207,
+            "x": 1248,
+            "y": 705
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-refresh-cw\" aria-hidden=\"true\"><path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"></path><path d=\"M21 3v5h-5\"></path><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"></path><path d=\"M8 16H3v5\"></path></svg>"
+          ],
+          "text": "Cycle"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 769,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 737,
+            "width": 207,
+            "x": 1248,
+            "y": 737
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-calendar-days\" aria-hidden=\"true\"><path d=\"M8 2v3\"></path><path d=\"M16 2v3\"></path><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"></rect><path d=\"M3 9h18\"></path><path d=\"M8 13h.01\"></path><path d=\"M12 13h.01\"></path><path d=\"M16 13h.01\"></path><path d=\"M8 17h.01\"></path><path d=\"M12 17h.01\"></path><path d=\"M16 17h.01\"></path></svg>"
+          ],
+          "text": "Added to cycle"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 774.5,
+            "height": 0.5,
+            "left": 1247,
+            "right": 1456,
+            "top": 774,
+            "width": 209,
+            "x": 1247,
+            "y": 774
+          },
+          "role": "separator",
+          "svg": [],
+          "text": ""
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 811.5,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 779.5,
+            "width": 207,
+            "x": 1248,
+            "y": 779.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-calendar-days\" aria-hidden=\"true\"><path d=\"M8 2v3\"></path><path d=\"M16 2v3\"></path><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"></rect><path d=\"M3 9h18\"></path><path d=\"M8 13h.01\"></path><path d=\"M12 13h.01\"></path><path d=\"M16 13h.01\"></path><path d=\"M8 17h.01\"></path><path d=\"M12 17h.01\"></path><path d=\"M16 17h.01\"></path></svg>"
+          ],
+          "text": "Created date"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 843.5,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 811.5,
+            "width": 207,
+            "x": 1248,
+            "y": 811.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-calendar-days\" aria-hidden=\"true\"><path d=\"M8 2v3\"></path><path d=\"M16 2v3\"></path><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"></rect><path d=\"M3 9h18\"></path><path d=\"M8 13h.01\"></path><path d=\"M12 13h.01\"></path><path d=\"M16 13h.01\"></path><path d=\"M8 17h.01\"></path><path d=\"M12 17h.01\"></path><path d=\"M16 17h.01\"></path></svg>"
+          ],
+          "text": "Completed date"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 875.5,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 843.5,
+            "width": 207,
+            "x": 1248,
+            "y": 843.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-calendar-days\" aria-hidden=\"true\"><path d=\"M8 2v3\"></path><path d=\"M16 2v3\"></path><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"></rect><path d=\"M3 9h18\"></path><path d=\"M8 13h.01\"></path><path d=\"M12 13h.01\"></path><path d=\"M16 13h.01\"></path><path d=\"M8 17h.01\"></path><path d=\"M12 17h.01\"></path><path d=\"M16 17h.01\"></path></svg>"
+          ],
+          "text": "Canceled date"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 907.5,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 875.5,
+            "width": 207,
+            "x": 1248,
+            "y": 875.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-calendar-days\" aria-hidden=\"true\"><path d=\"M8 2v3\"></path><path d=\"M16 2v3\"></path><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"></rect><path d=\"M3 9h18\"></path><path d=\"M8 13h.01\"></path><path d=\"M12 13h.01\"></path><path d=\"M16 13h.01\"></path><path d=\"M8 17h.01\"></path><path d=\"M12 17h.01\"></path><path d=\"M16 17h.01\"></path></svg>"
+          ],
+          "text": "Started date"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 939.5,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 907.5,
+            "width": 207,
+            "x": 1248,
+            "y": 907.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-calendar-days\" aria-hidden=\"true\"><path d=\"M8 2v3\"></path><path d=\"M16 2v3\"></path><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"></rect><path d=\"M3 9h18\"></path><path d=\"M8 13h.01\"></path><path d=\"M12 13h.01\"></path><path d=\"M16 13h.01\"></path><path d=\"M8 17h.01\"></path><path d=\"M12 17h.01\"></path><path d=\"M16 17h.01\"></path></svg>"
+          ],
+          "text": "Due date"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 945,
+            "height": 0.5,
+            "left": 1247,
+            "right": 1456,
+            "top": 944.5,
+            "width": 209,
+            "x": 1247,
+            "y": 944.5
+          },
+          "role": "separator",
+          "svg": [],
+          "text": ""
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 982,
+            "height": 32,
+            "left": 1248,
+            "right": 1455,
+            "top": 950,
+            "width": 207,
+            "x": 1248,
+            "y": 950
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chart-column\" aria-hidden=\"true\"><path d=\"M3 3v16a2 2 0 0 0 2 2h16\"></path><path d=\"M18 17V9\"></path><path d=\"M13 17V5\"></path><path d=\"M8 17v-3\"></path></svg>"
+          ],
+          "text": "Burn-up"
+        }
+      ],
+      "rect": {
+        "bottom": 699,
+        "height": 491,
+        "left": 1241.5,
+        "right": 1461.5,
+        "top": 208,
+        "width": 220,
+        "x": 1241.5,
+        "y": 208
+      },
+      "style": {
+        "border": "0.5px solid lch(86.5 0 282)",
+        "borderRadius": "12px",
+        "boxShadow": "lch(0 0 0 / 0.12) 0px 8px 24px 0px, lch(0 0 0 / 0.08) 0px 2px 7px 0px",
+        "font": "13px / 19.5px \"Inter Variable\", \"SF Pro Display\", -apple-system, system-ui, \"Segoe UI\", sans-serif",
+        "padding": "0px",
+        "transformOrigin": "0px 0px",
+        "zIndex": "620"
+      }
+    },
+    "segment": {
+      "items": [
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 246.5,
+            "height": 32,
+            "left": 1248.5,
+            "right": 1455.5,
+            "top": 214.5,
+            "width": 207,
+            "x": 1248.5,
+            "y": 214.5
+          },
+          "role": "menuitem",
+          "svg": [],
+          "text": "No Value"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 252,
+            "height": 0.5,
+            "left": 1247.5,
+            "right": 1456.5,
+            "top": 251.5,
+            "width": 209,
+            "x": 1247.5,
+            "y": 251.5
+          },
+          "role": "separator",
+          "svg": [],
+          "text": ""
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 289,
+            "height": 32,
+            "left": 1248.5,
+            "right": 1455.5,
+            "top": 257,
+            "width": 207,
+            "x": 1248.5,
+            "y": 257
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-user-round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"8\" r=\"5\"></circle><path d=\"M20 21a8 8 0 0 0-16 0\"></path></svg>"
+          ],
+          "text": "Assignee"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 321,
+            "height": 32,
+            "left": 1248.5,
+            "right": 1455.5,
+            "top": 289,
+            "width": 207,
+            "x": 1248.5,
+            "y": 289
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-bot\" aria-hidden=\"true\"><path d=\"M12 8V4H8\"></path><rect width=\"16\" height=\"12\" x=\"4\" y=\"8\" rx=\"2\"></rect><path d=\"M2 14h2\"></path><path d=\"M20 14h2\"></path><path d=\"M15 13v2\"></path><path d=\"M9 13v2\"></path></svg>"
+          ],
+          "text": "Agent"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 353,
+            "height": 32,
+            "left": 1248.5,
+            "right": 1455.5,
+            "top": 321,
+            "width": 207,
+            "x": 1248.5,
+            "y": 321
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-bot\" aria-hidden=\"true\"><path d=\"M12 8V4H8\"></path><rect width=\"16\" height=\"12\" x=\"4\" y=\"8\" rx=\"2\"></rect><path d=\"M2 14h2\"></path><path d=\"M20 14h2\"></path><path d=\"M15 13v2\"></path><path d=\"M9 13v2\"></path></svg>"
+          ],
+          "text": "Agent session"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 385,
+            "height": 32,
+            "left": 1248.5,
+            "right": 1455.5,
+            "top": 353,
+            "width": 207,
+            "x": 1248.5,
+            "y": 353
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-user-round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"8\" r=\"5\"></circle><path d=\"M20 21a8 8 0 0 0-16 0\"></path></svg>"
+          ],
+          "text": "Creator"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 417,
+            "height": 32,
+            "left": 1248.5,
+            "right": 1455.5,
+            "top": 385,
+            "width": 207,
+            "x": 1248.5,
+            "y": 385
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-flame\" aria-hidden=\"true\"><path d=\"M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4\"></path></svg>",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-check _trailingCheck_oawke_7\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"></path></svg>"
+          ],
+          "text": "Priority"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 449,
+            "height": 32,
+            "left": 1248.5,
+            "right": 1455.5,
+            "top": 417,
+            "width": 207,
+            "x": 1248.5,
+            "y": 417
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-tag\" aria-hidden=\"true\"><path d=\"M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z\"></path><circle cx=\"7.5\" cy=\"7.5\" r=\".5\" fill=\"currentColor\"></circle></svg>"
+          ],
+          "text": "Label"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": "false",
+          "rect": {
+            "bottom": 481,
+            "height": 32,
+            "left": 1248.5,
+            "right": 1455.5,
+            "top": 449,
+            "width": 207,
+            "x": 1248.5,
+            "y": 449
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-layers\" aria-hidden=\"true\"><path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\"></path><path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\"></path><path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\"></path></svg>",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-right _menuChevron_oawke_7\" aria-hidden=\"true\"><path d=\"m9 18 6-6-6-6\"></path></svg>"
+          ],
+          "text": "Label group"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 513,
+            "height": 32,
+            "left": 1248.5,
+            "right": 1455.5,
+            "top": 481,
+            "width": 207,
+            "x": 1248.5,
+            "y": 481
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-copy\" aria-hidden=\"true\"><rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\" ry=\"2\"></rect><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"></path></svg>"
+          ],
+          "text": "Template"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 545,
+            "height": 32,
+            "left": 1248.5,
+            "right": 1455.5,
+            "top": 513,
+            "width": 207,
+            "x": 1248.5,
+            "y": 513
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-link2 lucide-link-2\" aria-hidden=\"true\"><path d=\"M9 17H7A5 5 0 0 1 7 7h2\"></path><path d=\"M15 7h2a5 5 0 1 1 0 10h-2\"></path><line x1=\"8\" x2=\"16\" y1=\"12\" y2=\"12\"></line></svg>"
+          ],
+          "text": "External source"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 550.5,
+            "height": 0.5,
+            "left": 1247.5,
+            "right": 1456.5,
+            "top": 550,
+            "width": 209,
+            "x": 1247.5,
+            "y": 550
+          },
+          "role": "separator",
+          "svg": [],
+          "text": ""
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 587.5,
+            "height": 32,
+            "left": 1248.5,
+            "right": 1455.5,
+            "top": 555.5,
+            "width": 207,
+            "x": 1248.5,
+            "y": 555.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-folder-kanban\" aria-hidden=\"true\"><path d=\"M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z\"></path><path d=\"M8 10v4\"></path><path d=\"M12 10v2\"></path><path d=\"M16 10v6\"></path></svg>"
+          ],
+          "text": "Project"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 619.5,
+            "height": 32,
+            "left": 1248.5,
+            "right": 1455.5,
+            "top": 587.5,
+            "width": 207,
+            "x": 1248.5,
+            "y": 587.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-layers\" aria-hidden=\"true\"><path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\"></path><path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\"></path><path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\"></path></svg>"
+          ],
+          "text": "Initiative"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 651.5,
+            "height": 32,
+            "left": 1248.5,
+            "right": 1455.5,
+            "top": 619.5,
+            "width": 207,
+            "x": 1248.5,
+            "y": 619.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-tag\" aria-hidden=\"true\"><path d=\"M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z\"></path><circle cx=\"7.5\" cy=\"7.5\" r=\".5\" fill=\"currentColor\"></circle></svg>"
+          ],
+          "text": "Project label"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": "false",
+          "rect": {
+            "bottom": 683.5,
+            "height": 32,
+            "left": 1248.5,
+            "right": 1455.5,
+            "top": 651.5,
+            "width": 207,
+            "x": 1248.5,
+            "y": 651.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-layers\" aria-hidden=\"true\"><path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\"></path><path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\"></path><path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\"></path></svg>",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-right _menuChevron_oawke_7\" aria-hidden=\"true\"><path d=\"m9 18 6-6-6-6\"></path></svg>"
+          ],
+          "text": "Project label group"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 715.5,
+            "height": 32,
+            "left": 1248.5,
+            "right": 1455.5,
+            "top": 683.5,
+            "width": 207,
+            "x": 1248.5,
+            "y": 683.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-calendar-days\" aria-hidden=\"true\"><path d=\"M8 2v3\"></path><path d=\"M16 2v3\"></path><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"></rect><path d=\"M3 9h18\"></path><path d=\"M8 13h.01\"></path><path d=\"M12 13h.01\"></path><path d=\"M16 13h.01\"></path><path d=\"M8 17h.01\"></path><path d=\"M12 17h.01\"></path><path d=\"M16 17h.01\"></path></svg>"
+          ],
+          "text": "Added to cycle"
+        }
+      ],
+      "rect": {
+        "bottom": 699,
+        "height": 491,
+        "left": 1242,
+        "right": 1462,
+        "top": 208,
+        "width": 220,
+        "x": 1242,
+        "y": 208
+      },
+      "style": {
+        "border": "0.5px solid lch(86.5 0 282)",
+        "borderRadius": "12px",
+        "boxShadow": "lch(0 0 0 / 0.12) 0px 8px 24px 0px, lch(0 0 0 / 0.08) 0px 2px 7px 0px",
+        "font": "13px / 19.5px \"Inter Variable\", \"SF Pro Display\", -apple-system, system-ui, \"Segoe UI\", sans-serif",
+        "padding": "0px",
+        "transformOrigin": "0px 0px",
+        "zIndex": "620"
+      }
+    },
+    "actions": {
+      "items": [
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 184.5,
+            "height": 32,
+            "left": 1249,
+            "right": 1438.4296875,
+            "top": 152.5,
+            "width": 189.4296875,
+            "x": 1249,
+            "y": 152.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-link2 lucide-link-2\" aria-hidden=\"true\"><path d=\"M9 17H7A5 5 0 0 1 7 7h2\"></path><path d=\"M15 7h2a5 5 0 1 1 0 10h-2\"></path><line x1=\"8\" x2=\"16\" y1=\"12\" y2=\"12\"></line></svg>"
+          ],
+          "text": "Copy link"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 216.5,
+            "height": 32,
+            "left": 1249,
+            "right": 1438.4296875,
+            "top": 184.5,
+            "width": 189.4296875,
+            "x": 1249,
+            "y": 184.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-download\" aria-hidden=\"true\"><path d=\"M12 15V3\"></path><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"></path><path d=\"m7 10 5 5 5-5\"></path></svg>"
+          ],
+          "text": "Export insights as CSV…"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 248.5,
+            "height": 32,
+            "left": 1249,
+            "right": 1438.4296875,
+            "top": 216.5,
+            "width": 189.4296875,
+            "x": 1249,
+            "y": 216.5
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chart-column\" aria-hidden=\"true\"><path d=\"M3 3v16a2 2 0 0 0 2 2h16\"></path><path d=\"M18 17V9\"></path><path d=\"M13 17V5\"></path><path d=\"M8 17v-3\"></path></svg>"
+          ],
+          "text": "Insights examples"
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 254,
+            "height": 0.5,
+            "left": 1248,
+            "right": 1439.4296875,
+            "top": 253.5,
+            "width": 191.4296875,
+            "x": 1248,
+            "y": 253.5
+          },
+          "role": "separator",
+          "svg": [],
+          "text": ""
+        },
+        {
+          "checked": null,
+          "disabled": null,
+          "expanded": null,
+          "rect": {
+            "bottom": 291,
+            "height": 32,
+            "left": 1249,
+            "right": 1438.4296875,
+            "top": 259,
+            "width": 189.4296875,
+            "x": 1249,
+            "y": 259
+          },
+          "role": "menuitem",
+          "svg": [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-refresh-cw\" aria-hidden=\"true\"><path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"></path><path d=\"M21 3v5h-5\"></path><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"></path><path d=\"M8 16H3v5\"></path></svg>"
+          ],
+          "text": "Refresh"
+        }
+      ],
+      "rect": {
+        "bottom": 297.5,
+        "height": 151.5,
+        "left": 1242.5,
+        "right": 1444.9296875,
+        "top": 146,
+        "width": 202.4296875,
+        "x": 1242.5,
+        "y": 146
+      },
+      "style": {
+        "border": "0.5px solid lch(86.5 0 282)",
+        "borderRadius": "12px",
+        "boxShadow": "lch(0 0 0 / 0.12) 0px 8px 24px 0px, lch(0 0 0 / 0.08) 0px 2px 7px 0px",
+        "font": "13px / 19.5px \"Inter Variable\", \"SF Pro Display\", -apple-system, system-ui, \"Segoe UI\", sans-serif",
+        "padding": "6px",
+        "transformOrigin": "202.43px 0px",
+        "zIndex": "620"
+      }
+    }
+  }
+}

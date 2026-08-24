@@ -1,0 +1,18 @@
+{
+  "component": "Insights",
+  "verifiedAt": "2026-08-24T00:15:00+08:00",
+  "states": [
+    {"from":"closed","trigger":"toolbar Insights button","to":"panel","verified":true},
+    {"from":"panel","trigger":"Measure","to":"measure menu","verified":true,"keyboard":["ArrowUp","ArrowDown","Enter","Escape"]},
+    {"from":"panel","trigger":"Slice","to":"slice menu","verified":true,"submenus":["Label group","Project label group"]},
+    {"from":"panel","trigger":"Segment","to":"segment menu","verified":true,"submenus":["Label group","Project label group"]},
+    {"from":"measure menu","trigger":"Cycle time","to":"duration aggregation","verified":true,"sideEffect":"chart and table recomputed from startedAt/completedAt"},
+    {"from":"panel","trigger":"Display options","to":"display popover","verified":true,"controls":["Show archived issues","Colors"]},
+    {"from":"panel","trigger":"Export insights as CSV","to":"download","verified":true,"artifact":"exported-insights.csv"},
+    {"from":"panel","trigger":"Set default for everyone","to":"persisted default","verified":true,"sideEffect":"survives reload"},
+    {"from":"panel","trigger":"Expand to fullscreen","to":"fullscreen split workspace","verified":true},
+    {"from":"fullscreen","trigger":"chart column or table row","to":"selected slice","verified":true,"sideEffect":"right issue list updates"},
+    {"from":"fullscreen","trigger":"Escape or Close fullscreen","to":"panel","verified":true,"focus":"toolbar remains available"}
+  ],
+  "consoleErrors": []
+}

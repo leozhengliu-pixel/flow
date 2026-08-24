@@ -1,0 +1,62 @@
+{
+  "container": {
+    "rect": {
+      "bottom": 694.5,
+      "height": 624,
+      "left": 262.5,
+      "right": 1443.5,
+      "top": 70.5,
+      "width": 1181,
+      "x": 262.5,
+      "y": 70.5
+    },
+    "style": {
+      "color": "lch(37.776 1.25 282)",
+      "display": "flex",
+      "font": "450 13px / 19.5px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+      "gap": "20px",
+      "margin": "18px",
+      "padding": "120px 60px"
+    }
+  },
+  "svg": {
+    "rect": {
+      "bottom": 424.75,
+      "height": 120,
+      "left": 792.078125,
+      "right": 913.921875,
+      "top": 304.75,
+      "width": 121.84375,
+      "x": 792.078125,
+      "y": 304.75
+    },
+    "style": {
+      "color": "lch(37.776 1.25 282)",
+      "display": "block",
+      "font": "450 13px / 19.5px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+      "gap": "normal",
+      "margin": "0px",
+      "padding": "0px"
+    }
+  },
+  "text": {
+    "rect": {
+      "bottom": 460.25,
+      "height": 15.5,
+      "left": 803.890625,
+      "right": 902.109375,
+      "top": 444.75,
+      "width": 98.21875,
+      "x": 803.890625,
+      "y": 444.75
+    },
+    "style": {
+      "color": "lch(37.776 1.25 282)",
+      "display": "block",
+      "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+      "gap": "normal",
+      "margin": "0px",
+      "padding": "0px"
+    }
+  }
+}

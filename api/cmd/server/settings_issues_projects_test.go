@@ -35,10 +35,13 @@ func TestSettingsIssueAndProjectTemplateRoundTrips(t *testing.T) {
 	issue := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{
 		"teamId": team.ID, "templateId": issueTemplate.ID,
 	}, http.StatusCreated)
-	if issue.Title != issueTemplate.Title || issue.Description != issueTemplate.Body || len(issue.SubIssueIDs) != 1 {
+	if issue.Title != issueTemplate.Title || issue.Description != issueTemplate.Body || issue.TemplateID != issueTemplate.ID || len(issue.SubIssueIDs) != 1 {
 		t.Fatalf("issue template defaults were not applied: %#v", issue)
 	}
 	bootstrapAfterIssue := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if !slices.ContainsFunc(bootstrapAfterIssue.Issues, func(item domain.Issue) bool { return item.ID == issue.ID && item.TemplateID == issueTemplate.ID }) {
+		t.Fatalf("issue template provenance did not persist: %#v", issue)
+	}
 	if !slices.ContainsFunc(bootstrapAfterIssue.Issues, func(item domain.Issue) bool {
 		return item.ParentID != nil && *item.ParentID == issue.ID && item.Title == "Verify regression"
 	}) {
