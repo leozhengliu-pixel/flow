@@ -19,7 +19,16 @@ type Config struct {
 	Database     store.DatabaseConfig
 	Storage      objectstore.Config
 	Auth         AuthConfig
+	Agent        AgentConfig
 	Telemetry    TelemetryConfig
+}
+
+type AgentConfig struct {
+	Enabled bool
+	BaseURL string
+	APIKey  string
+	Model   string
+	Timeout time.Duration
 }
 
 type AuthConfig struct {
@@ -103,6 +112,7 @@ func Load() (Config, error) {
 			SAML:          SAMLProvider{Enabled: boolean("FLOW_AUTH_SAML_ENABLED", false), MetadataURL: value("FLOW_SAML_METADATA_URL", ""), MetadataXML: secret("FLOW_SAML_METADATA_XML"), EntityID: value("FLOW_SAML_ENTITY_ID", appURL), ACSURL: value("FLOW_SAML_ACS_URL", appURL+"/api/auth/saml/acs"), SPPrivateKey: secret("FLOW_SAML_SP_PRIVATE_KEY"), SPCertificate: secret("FLOW_SAML_SP_CERTIFICATE"), DisplayName: value("FLOW_SAML_DISPLAY_NAME", "SAML")},
 			AutoProvision: boolean("FLOW_AUTH_AUTO_PROVISION", true), AllowedDomains: csv(value("FLOW_AUTH_ALLOWED_DOMAINS", "")),
 		},
+		Agent:     AgentConfig{Enabled: boolean("FLOW_AGENT_ENABLED", false), BaseURL: value("FLOW_AGENT_BASE_URL", "https://api.openai.com/v1"), APIKey: secret("FLOW_AGENT_API_KEY"), Model: value("FLOW_AGENT_MODEL", "gpt-5-mini"), Timeout: duration("FLOW_AGENT_TIMEOUT", 60*time.Second)},
 		Telemetry: TelemetryConfig{Enabled: boolean("FLOW_TELEMETRY_ENABLED", false) && !boolean("OTEL_SDK_DISABLED", false), ServiceName: value("OTEL_SERVICE_NAME", "flow-api"), Environment: value("FLOW_ENVIRONMENT", "production"), Endpoint: value("OTEL_EXPORTER_OTLP_ENDPOINT", ""), TraceEndpoint: value("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", ""), MetricEndpoint: value("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "")},
 	}
 	return config, config.Validate()
@@ -143,6 +153,9 @@ func (c Config) Validate() error {
 	}
 	if !c.AuthDisabled && !c.Auth.EmailEnabled && !c.Auth.Google.Enabled && !c.Auth.OIDC.Enabled && !c.Auth.SAML.Enabled {
 		return fmt.Errorf("at least one authentication provider must be enabled")
+	}
+	if c.Agent.Enabled && (c.Agent.BaseURL == "" || c.Agent.Model == "") {
+		return fmt.Errorf("FLOW_AGENT_BASE_URL and FLOW_AGENT_MODEL are required when Flow Agent is enabled")
 	}
 	if c.Telemetry.Enabled && c.Telemetry.Endpoint == "" && (c.Telemetry.TraceEndpoint == "" || c.Telemetry.MetricEndpoint == "") {
 		return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT or both signal-specific trace and metric endpoints are required when telemetry is enabled")

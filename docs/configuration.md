@@ -99,6 +99,28 @@ Google and generic OIDC use authorization code, state, nonce, PKCE, discovery,
 and signed ID-token verification. SAML assertions are validated against IdP
 metadata and mapped from standard email/name attributes.
 
+## Flow Agent
+
+Flow Agent uses an OpenAI-compatible Chat Completions endpoint. The browser
+sends selected issue IDs to Flow; the API loads the authorized workspace issues
+and builds the model context server-side. Provider credentials are never sent to
+the browser.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FLOW_AGENT_ENABLED` | `false` | Enable Agent chat requests. |
+| `FLOW_AGENT_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API base URL. |
+| `FLOW_AGENT_API_KEY` | empty | Provider bearer token; `_FILE` is supported. |
+| `FLOW_AGENT_MODEL` | `gpt-5-mini` | Provider model identifier. |
+| `FLOW_AGENT_TIMEOUT` | `60s` | Per-request Go timeout. |
+
+```dotenv
+FLOW_AGENT_ENABLED=true
+FLOW_AGENT_BASE_URL=https://api.example.com/v1
+FLOW_AGENT_API_KEY=secret
+FLOW_AGENT_MODEL=your-model
+```
+
 ## Telemetry
 
 Telemetry is opt-in. When enabled, Flow exports HTTP traces and request metrics through OTLP/HTTP.
