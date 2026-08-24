@@ -10,6 +10,8 @@ export interface MyIssuesAppliedFilter {
   value: string
   valueLabel: string
   color?: string
+  operatorLabel?: string
+  negativeOperatorLabel?: string
   values?: MyIssuesFilterValue[]
 }
 
@@ -26,8 +28,9 @@ export function filterValues(filter: MyIssuesAppliedFilter): MyIssuesFilterValue
 
 export function toggleFilterOption(filters: MyIssuesAppliedFilter[], field: MyIssuesFilterKey, fieldLabel: string, option: MyIssuesFilterOption): MyIssuesAppliedFilter[] {
   filters = consolidateFilters(filters)
-  const existing = filters.find(filter => filter.field === field && filter.operator === 'is')
-  if (!existing) return [...filters, fromOption(field, fieldLabel, option)]
+  const effectiveLabel = option.filterLabel ?? fieldLabel
+  const existing = filters.find(filter => filter.field === field && filter.fieldLabel === effectiveLabel && filter.operator === 'is')
+  if (!existing) return [...filters, fromOption(field, effectiveLabel, option)]
   const current = filterValues(existing)
   const values = current.some(value => value.value === option.id)
     ? current.filter(value => value.value !== option.id)
@@ -40,7 +43,7 @@ export function toggleFilterOption(filters: MyIssuesAppliedFilter[], field: MyIs
 export function consolidateFilters(filters: MyIssuesAppliedFilter[]) {
   const result: MyIssuesAppliedFilter[] = []
   for (const filter of filters) {
-    const existingIndex = result.findIndex(item => item.field === filter.field && item.operator === filter.operator)
+    const existingIndex = result.findIndex(item => item.field === filter.field && item.fieldLabel === filter.fieldLabel && item.operator === filter.operator)
     if (existingIndex < 0) { result.push(filter); continue }
     const existing = result[existingIndex]
     const values = [...filterValues(existing)]
@@ -69,5 +72,5 @@ export function updateFilterValues(filters: MyIssuesAppliedFilter[], id: string,
 
 function fromOption(field: MyIssuesFilterKey, fieldLabel: string, option: MyIssuesFilterOption): MyIssuesAppliedFilter {
   const value = { value: option.id, valueLabel: option.label, color: option.color }
-  return { id: `${field}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, field, fieldLabel, operator: 'is', ...value, values: [value] }
+  return { id: `${field}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, field, fieldLabel, operator: 'is', operatorLabel: option.operatorLabel, negativeOperatorLabel: option.negativeOperatorLabel, ...value, values: [value] }
 }

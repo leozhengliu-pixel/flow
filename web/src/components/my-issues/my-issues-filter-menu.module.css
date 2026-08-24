@@ -28,5 +28,22 @@
 .optionAvatar{width:16px;height:16px;display:grid;place-items:center;overflow:hidden;border-radius:50%;background-color:var(--avatar-option-fallback);background-position:center;background-size:cover;color:var(--on-accent);font-size:7px}
 .optionIcon{width:14px;height:14px;display:grid;place-items:center;color:var(--theme-text-secondary)}
 .optionIcon svg,.valueItem>svg:not(:last-child){width:14px;height:14px;color:currentColor}
+.categoryIcon{width:16px!important;height:16px!important;color:var(--theme-text-secondary)}
+.textConditionItem{grid-template-columns:14px minmax(0,1fr);padding-right:18px}
+.conditionOverlay{position:fixed;z-index:700;inset:0;background:var(--overlay-modal);animation:conditionFadeIn .15s ease-out}
+.conditionDialog{position:fixed;z-index:701;top:24%;left:50%;width:min(480px,calc(100vw - 32px));transform:translateX(-50%);overflow:hidden;border:.5px solid var(--popover-border);border-radius:12px;outline:0;background:var(--theme-surface-2);box-shadow:var(--shadow-dialog);color:var(--theme-text-primary);animation:conditionDialogIn .19s cubic-bezier(.16,1,.3,1)}
+.conditionDialog form{display:flex;flex-direction:column}
+.conditionBody{padding:32px 32px 0}
+.conditionBody h2{margin:0 0 18px;font-size:15px;font-weight:600;line-height:23px}
+.conditionInput{display:block;width:100%;height:32px;padding:6px 12px;border:.5px solid var(--theme-border-strong);border-radius:8px;outline:0;background:var(--theme-surface-1);color:var(--theme-text-primary);font-size:13px;line-height:19.5px}
+.conditionInput:focus-visible{border-color:var(--focus-ring);box-shadow:0 0 0 1px var(--focus-ring)}
+.conditionDialog footer{display:flex;align-items:flex-start;justify-content:flex-end;gap:10px;padding:16px 32px 32px}
+.conditionDialog footer button{height:32px;padding:0 12px;border:.5px solid transparent;border-radius:9999px;background:var(--theme-surface-2);color:var(--theme-text-primary);font-size:13px;font-weight:500}
+.conditionDialog footer button:hover{background:var(--theme-surface-hover)}
+.conditionDialog footer .conditionApply{background:var(--accent-primary);box-shadow:var(--shadow);color:var(--on-accent)}
+.conditionDialog footer .conditionApply:hover:not(:disabled){background:var(--accent-primary-hover)}
+@keyframes conditionFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes conditionDialogIn{from{opacity:0;transform:translateX(-50%) translateY(4px) scale(.985)}to{opacity:1;transform:translateX(-50%)}}
 @media(max-width:600px){.rootMenu{width:207px;max-width:calc(100vw - 22px)}.valueMenu{width:max-content;max-width:calc(100vw - 22px)}}
 :global(:root[data-theme="light"]) .valueMenu{box-shadow:var(--shadow-dialog)}
+@media(prefers-reduced-motion:reduce){.conditionOverlay,.conditionDialog{animation:none}}
