@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Command } from 'cmdk'
-import { ChevronLeft, ChevronRight, Sparkles, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import type { MyIssuesRowData } from './my-issues-list'
+import { AgentChatPanel } from '@/components/agent/agent-chat-panel'
+import { AgentPointerIcon } from '@/components/agent/agent-icons'
 import styles from './my-issues-bulk-action-bar.module.css'
 
 export type MyIssuesBulkAction = 'assign' | 'unassignMe' | 'status' | 'priority' | 'project' | 'labels' | 'dueDate' | 'copyId' | 'copyUrl' | 'copyTitle' | 'copyTitleLink' | 'copyDescriptionMarkdown' | 'copyContentMarkdown' | 'copyBranch' | 'copyPrompt' | 'subscribers' | 'removeSubscribers' | 'markAs'
@@ -33,6 +35,8 @@ const actions: { id: MyIssuesBulkAction; label: string; shortcut?: string }[] = 
 export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, actionOptions, onAction, onAskFlow, onClear }: MyIssuesBulkActionBarProps) {
   const [open, setOpen] = useState(false)
   const [pendingAction, setPendingAction] = useState<MyIssuesBulkAction>()
+  const [agentIssues, setAgentIssues] = useState<MyIssuesRowData[]>([])
+  const [agentOpen, setAgentOpen] = useState(false)
   useEffect(() => { if (!selectedIssues.length) setOpen(false) }, [selectedIssues.length])
   useEffect(() => { if (!open) setPendingAction(undefined) }, [open])
   if (!selectedIssues.length) return null
@@ -41,7 +45,7 @@ export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, 
     <div className={styles.bar} role="toolbar" aria-label={`${count} selected issues`} data-error={Boolean(error)}>
       <span className={styles.count}>{loading ? 'Updating...' : `${count}\u00a0selected`}</span>
       <button className={styles.actionsButton} aria-label="Open command menu" aria-expanded={open} disabled={loading} onClick={() => setOpen(true)}>Actions<ChevronRight size={12}/></button>
-      <button className={styles.iconButton} aria-label="Ask Flow" disabled={loading} onClick={() => onAskFlow?.(selectedIssues)}><Sparkles size={15}/></button>
+      <button className={styles.iconButton} aria-label="Ask Flow" tabIndex={-1} disabled={loading} onClick={() => { setAgentIssues([...selectedIssues]); setAgentOpen(true); onAskFlow?.(selectedIssues) }}><AgentPointerIcon/></button>
       <button className={styles.clearButton} aria-label="Clear selected" disabled={loading} onClick={onClear}><X size={15}/></button>
       {error && <span className={styles.error} role="alert">{error}</span>}
     </div>
@@ -56,5 +60,6 @@ export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, 
           : actions.map(action => <Command.Item key={action.id} value={action.label} className={styles.commandItem} onSelect={() => { const options = actionOptions?.(action.id); if (options?.length) setPendingAction(action.id); else { onAction(action.id, selectedIssues); setOpen(false) } }}><span>{action.label}</span>{action.shortcut && <kbd>{action.shortcut}</kbd>}</Command.Item>)}</Command.List>
       </Command>
     </Dialog.Content></Dialog.Portal></Dialog.Root>
+    <AgentChatPanel issues={agentIssues} onClose={()=>{setAgentOpen(false);setAgentIssues([])}} open={agentOpen}/>
   </>
 }

@@ -160,7 +160,7 @@ export interface InitiativeMutationInput {
 export interface BootstrapData {
   workspace: Workspace; viewer: User; users: User[]; teams: Team[]; customers: Customer[]; states: WorkflowState[]; labels: IssueLabel[]
   issues: Issue[]; cycles: Cycle[]; cycleSettings: Record<UUID, CycleSettings>; teamSettings: Record<UUID, TeamSettings>; issueTemplates: IssueTemplate[]; projectTemplates: ProjectTemplate[]; documentTemplates: DocumentTemplate[]; documents: FlowDocument[]; customerRequests: CustomerRequest[]; releases: Release[]; releasePipelines: ReleasePipeline[]; customEmojis: CustomEmoji[]; asks: Ask[]; slaRules: SLARule[]; issueSlas: IssueSLA[]; slaEvents: SLAEvent[]; drafts: Draft[]; favorites: Favorite[]; subscriptions: Subscription[]; auditLog: AuditLogEntry[]; trash: TrashEntry[]; importJobs: ImportJob[]; exportJobs: ExportJob[]; projects: Project[]; projectStatuses: ProjectStatus[]; projectDisplayDefault?: Record<string, unknown>; projectUpdates: Record<UUID, ProjectUpdate[]>; initiatives: Initiative[]; initiativeUpdates: Record<UUID, InitiativeUpdate[]>; comments: Record<UUID, Comment[]>; activities: Record<UUID, ActivityEvent[]>; savedViews: SavedView[]; notifications: Notification[]; notificationPreferences: Record<UUID, NotificationPreferences>; notificationDeliveries: NotificationDelivery[]; settings?: Record<string, unknown>
-  labelGroups: LabelGroup[]; userSettings: Record<UUID,UserSettings>; workspaceSettings: WorkspaceSettings; apiKeys: APIKey[]; oauthApplications: OAuthApplication[]; oauthAuthorizations: OAuthAuthorization[]; webhooks: Webhook[]; integrationConnections: IntegrationConnection[]; reviews: CodeReview[]
+  labelGroups: LabelGroup[]; userSettings: Record<UUID,UserSettings>; workspaceSettings: WorkspaceSettings; apiKeys: APIKey[]; oauthApplications: OAuthApplication[]; oauthAuthorizations: OAuthAuthorization[]; webhooks: Webhook[]; integrationConnections: IntegrationConnection[]; reviews: CodeReview[]; agentSessions: AgentSession[]; agentSkills: PersonalAgentSkill[]
   members: WorkspaceMember[]; teamMembers: TeamMember[]; invitations: Invitation[]; viewerRole: WorkspaceRole
 }
 export interface TeamAutomationRule { id: UUID; name: string; trigger: string; action: string; enabled: boolean }
@@ -196,6 +196,12 @@ export interface SearchResult {
   email?: string; icon?: string; color?: string; score: number; updatedAt?: string
 }
 export interface SearchHistoryEntry { query: string; useCount: number; lastUsedAt: string }
+export interface AgentChatMessage { role: 'user'|'assistant'; content: string }
+export interface AgentMessage extends AgentChatMessage { id: UUID; durationMs?: number; createdAt: string }
+export interface AgentSession { id: UUID; slugId: string; userId: UUID; title: string; favorite: boolean; location: 'page'|'toolbar'; issueIds: UUID[]; skillIds: UUID[]; messages: AgentMessage[]; createdAt: string; updatedAt: string }
+export interface PersonalAgentSkill { id: UUID; userId: UUID; name: string; instructions: string; createdAt: string; updatedAt: string }
+export interface AgentStatus { enabled: boolean; model: string }
+export interface AgentChatResponse { message: string; model: string }
 export interface RecentResource { resourceType: SearchResourceType; resourceId: UUID; lastViewedAt: string }
 export interface SearchResponse { results: SearchResult[]; history: SearchHistoryEntry[]; recent: RecentResource[] }
 export interface Presence { clientId: string; user: User; issueId?: UUID; route?: string; lastSeenAt: string }

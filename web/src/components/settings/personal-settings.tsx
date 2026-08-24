@@ -5,6 +5,7 @@ import {
   Smartphone,
 } from "lucide-react";
 import { toast } from "sonner";
+import { NavLink } from "react-router-dom";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -15,6 +16,7 @@ import {
   revokeOAuthAuthorization, updateAccountProfile, updateNotificationPreferences,
 } from "@/lib/api";
 import type { SettingsPageId } from "@/lib/app-routes";
+import { agentSkillPath, newAgentSkillPath } from "@/lib/app-routes";
 import type { BootstrapData, NotificationPreferences } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
 
@@ -221,12 +223,12 @@ function Connections({ data, onNavigate, text }: PersonalProps) {
   return <><PageTitle description="Connect your user accounts to sync attribution of your actions between apps">{text.connections}</PageTitle><div className="personal-connection-list">{entries.map(item=>{const connection=integrations.get(item.provider);return <div className="settings-card" key={item.provider}><Row icon={item.icon} title={<span data-i18n-ignore>{item.name}</span>} description={item.description}>{connection?<Action onClick={()=>onNavigate("integrations")}>Connected</Action>:<Action disabled>Unavailable</Action>}</Row></div>})}</div></>;
 }
 
-function Agents({ values, setValue, onNavigate, text }: PersonalProps) {
+function Agents({ data, values, setValue, onNavigate, text }: PersonalProps) {
   const [draft,setDraft]=useState(String(values.agentInstructions||""));
   const dirty=draft !== String(values.agentInstructions||"");
   return <><PageTitle description="Your personal settings for Flow Agent">{text.agents}</PageTitle>
     <Section title="Guidance" description="Provide personal instructions and context for Flow Agent when responding to conversations"><div className="personal-agent-editor"><textarea aria-label="AI prompt rules" placeholder="Enter personal guidance for Flow Agent (optional)…" maxLength={4000} value={draft} onChange={e=>setDraft(e.target.value)}/><footer><span>{draft.length}/4000</span><Action primary disabled={!dirty} onClick={()=>setValue("agentInstructions",draft)}>Save</Action></footer></div></Section>
-    <Section title="Skills" description="Reusable prompts auto-selected by the agent or invoked via slash commands"><div className="personal-empty"><Bot/><h3>No skills created</h3><span>Personal skill creation is not available in this build.</span></div></Section>
+    <Section title="Skills" description="Reusable prompts auto-selected by the agent or invoked via slash commands"><div className="personal-agent-skills"><header><span>{data.agentSkills.length} skills</span><NavLink className="settings-action" to={newAgentSkillPath(data.workspace.urlKey)}>New skill</NavLink></header>{data.agentSkills.map(skill=><NavLink data-i18n-ignore key={skill.id} to={agentSkillPath(data.workspace.urlKey,skill.id)}><Bot/><span><strong>{skill.name}</strong><small>{skill.instructions}</small></span></NavLink>)}{!data.agentSkills.length&&<div className="personal-empty"><Bot/><h3>No skills created</h3></div>}</div></Section>
     <Section title="MCP connectors" description="Add MCP connectors for use with Flow Agent. Workspace admins can manage available connectors in security settings."><Row title="Agent MCP access disabled in this workspace"><Action onClick={()=>onNavigate("security")}>Configure</Action></Row></Section>
   </>;
 }
