@@ -40,6 +40,8 @@ type server struct {
 	authLimiter   *authRateLimiter
 	realtime      *realtimeHub
 	externalAuth  *externalAuth
+	agent         appconfig.AgentConfig
+	agentClient   *http.Client
 	allowedOrigin string
 	mcpUploadMu   sync.Mutex
 	mcpUploads    map[string]*mcpPendingUpload
@@ -76,6 +78,8 @@ func main() {
 		authDisabled:  applicationConfig.AuthDisabled,
 		mailer:        smtpMailerFromEnv(),
 		externalAuth:  external,
+		agent:         applicationConfig.Agent,
+		agentClient:   &http.Client{Timeout: applicationConfig.Agent.Timeout},
 		allowedOrigin: applicationConfig.AppURL,
 	}
 
@@ -141,6 +145,19 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/search", s.searchWorkspace)
 	mux.HandleFunc("DELETE /api/search/history", s.clearSearchHistory)
 	mux.HandleFunc("POST /api/recent", s.recordRecentResource)
+	mux.HandleFunc("GET /api/agent/status", s.agentStatus)
+	mux.HandleFunc("POST /api/agent/chat", s.agentChat)
+	mux.HandleFunc("GET /api/agent/sessions", s.listAgentSessions)
+	mux.HandleFunc("POST /api/agent/sessions", s.createAgentSession)
+	mux.HandleFunc("GET /api/agent/sessions/{id}", s.getAgentSession)
+	mux.HandleFunc("PATCH /api/agent/sessions/{id}", s.updateAgentSession)
+	mux.HandleFunc("DELETE /api/agent/sessions/{id}", s.deleteAgentSession)
+	mux.HandleFunc("POST /api/agent/sessions/{id}/messages", s.createAgentSessionMessage)
+	mux.HandleFunc("PATCH /api/agent/sessions/{id}/messages/{messageId}", s.updateAgentSessionMessage)
+	mux.HandleFunc("GET /api/agent/skills", s.listAgentSkillsHTTP)
+	mux.HandleFunc("POST /api/agent/skills", s.createAgentSkill)
+	mux.HandleFunc("PATCH /api/agent/skills/{id}", s.updateAgentSkill)
+	mux.HandleFunc("DELETE /api/agent/skills/{id}", s.deleteAgentSkill)
 	mux.HandleFunc("POST /api/workspaces", s.createWorkspace)
 	mux.HandleFunc("PATCH /api/workspaces/{workspaceKey}", s.updateWorkspace)
 	mux.HandleFunc("DELETE /api/workspaces/{workspaceKey}", s.deleteWorkspace)
@@ -411,6 +428,8 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 }
 
 func sanitizeBootstrap(data *domain.Bootstrap) {
+	data.AgentSessions = slices.DeleteFunc(data.AgentSessions, func(item domain.AgentSession) bool { return item.UserID != data.Viewer.ID })
+	data.AgentSkills = slices.DeleteFunc(data.AgentSkills, func(item domain.PersonalAgentSkill) bool { return item.UserID != data.Viewer.ID })
 	for index := range data.Cycles {
 		data.Cycles[index].CalendarToken = ""
 	}

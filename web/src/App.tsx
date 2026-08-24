@@ -64,6 +64,7 @@ import {
   toggleIssueReaction,
   toggleProjectUpdateReaction,
   updateComment,
+  updateAgentSession as updateAgentSessionRequest,
   updateCustomer,
   updateCycle as updateCycleRequest,
   updateCycleSettings,
@@ -135,8 +136,12 @@ import { CyclesPage } from "@/components/cycles/cycles-page";
 import { CycleDetailPage } from "@/components/cycles/cycle-detail-page";
 import { PulsePage } from "@/components/pulse/pulse-page";
 import { ReviewsPage } from "@/components/reviews/reviews-page";
+import { AgentPage } from "@/components/agent/agent-page";
+import { AgentChatPanel } from "@/components/agent/agent-chat-panel";
+import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+  agentPath,
   customersPath,
   customerPath,
   cyclePath,
@@ -222,6 +227,7 @@ function App() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [closedAgentSessionIds, setClosedAgentSessionIds] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState(new Set<string>()),
     [commandOpen, setCommandOpen] = useState(false),
     [createOpen, setCreateOpen] = useState(false),
@@ -2673,7 +2679,9 @@ function App() {
         issueTemplateId={route.issueTemplateId}
         projectTemplateMode={route.projectTemplateMode}
         projectTemplateId={route.projectTemplateId}
-        onBack={() => navigateTo(route.releasePipelineMode ? releasePipelinesPath(data.workspace.urlKey) : myIssuesPath(data.workspace.urlKey))}
+        agentSkillMode={route.agentSkillMode}
+        agentSkillId={route.agentSkillId}
+        onBack={() => navigateTo(route.releasePipelineMode ? releasePipelinesPath(data.workspace.urlKey) : route.agentSkillMode ? agentPath(data.workspace.urlKey) : myIssuesPath(data.workspace.urlKey))}
         onNavigate={(page, teamKey, teamSection) =>
           navigateTo(settingsPath(data.workspace.urlKey, page, teamKey, teamSection))
         }
@@ -2703,6 +2711,8 @@ function App() {
     );
   const routeScopeValid = workspaceValid && teamValid;
   const page = routeScopeValid ? pageForRoute(route) : "not-found";
+  const toolbarAgentSession = data.agentSessions?.find(item=>item.location==="toolbar"&&!closedAgentSessionIds.has(item.id));
+  const toolbarAgentIssues = toolbarAgentSession ? toolbarAgentSession.issueIds.map(id=>data.issues.find(issue=>issue.id===id)).filter((issue):issue is Issue=>Boolean(issue)).map(issue=>issueToExplorerRow(issue,data.workspace.urlKey,data.issues,data)) : [];
   const rememberResult = (type: SearchResourceType, id: string) => {
     void recordRecentResource(type, id).catch(() => undefined);
   };
@@ -2902,6 +2912,7 @@ function App() {
           onOpenResult={openSearchResult}
         />
       )}
+      {page === "agent" && route.kind === "agent" && <AgentPage chatSlug={route.chatSlug} data={data} onNavigate={navigateTo} onOpenSidebar={()=>setMobileSidebarOpen(true)} onReload={async()=>setData(await fetchBootstrap(data.workspace.urlKey))}/>}
       {page==="reviews"&&(route.kind==="reviews"||route.kind==="review")&&<ReviewsPage data={data} view={route.kind==="reviews"?route.view:"for-you"} review={route.kind==="review"?selectedReview??undefined:undefined} tab={route.kind==="review"?route.tab:undefined} onNavigate={navigateTo} onReload={async()=>setData(await fetchBootstrap(data.workspace.urlKey))} onOpenSidebar={()=>setMobileSidebarOpen(true)}/>}
       {(page === "drafts" || page === "releases" || page === "asks" || page === "library") && (
         <WorkspaceOperationsPage
@@ -3967,9 +3978,10 @@ function App() {
           );
         }}
       />
-      <div className="bottom-agent">
+      {toolbarAgentSession&&<AgentChatPanel initialSession={toolbarAgentSession} issues={toolbarAgentIssues} open onClose={()=>setClosedAgentSessionIds(current=>new Set(current).add(toolbarAgentSession.id))} onSessionChange={next=>setData(current=>current?{...current,agentSessions:current.agentSessions.map(item=>item.id===next.id?next:item)}:current)} onOpenFullPage={session=>{if(!session){navigateTo(agentPath(data.workspace.urlKey));return}void updateAgentSessionRequest(session.id,{location:"page"}).then(next=>{setData(current=>current?{...current,agentSessions:current.agentSessions.map(item=>item.id===next.id?next:item)}:current);navigateTo(agentPath(data.workspace.urlKey,next.slugId))})}}/>}
+      <button className="bottom-agent" aria-label="Agent" onClick={()=>navigateTo(agentPath(data.workspace.urlKey))} type="button">
         <span>⌁</span> Agent <CircleHelp size={14} />
-      </div>
+      </button>
     </div>
   );
 }
@@ -3989,6 +4001,7 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
   if (route.kind === "customer") return "customer-detail";
   if (route.kind === "document") return "document-detail";
   if (route.kind === "drafts") return "drafts";
+  if (route.kind === "agent") return "agent";
   if (route.kind === "releases" || route.kind === "release-pipeline" || route.kind === "release") return "releases";
   if (route.kind === "asks") return "asks";
   if (route.kind === "workspace-library") return "library";
