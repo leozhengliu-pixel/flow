@@ -36,6 +36,58 @@ func TestWorkspaceSettingsPersistence(t *testing.T) {
 	}
 }
 
+func TestIssueStateTransitionsPersistInsightTimestamps(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if len(bootstrap.Issues) == 0 {
+		t.Fatal("seed must include an issue")
+	}
+	findState := func(kind string) string {
+		for _, state := range bootstrap.States {
+			if state.Type == kind {
+				return state.ID
+			}
+		}
+		t.Fatalf("seed must include a %s state", kind)
+		return ""
+	}
+	issueID := bootstrap.Issues[0].ID
+	requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+issueID, map[string]any{"stateId": findState("unstarted")}, http.StatusOK)
+	started := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+issueID, map[string]any{"stateId": findState("started")}, http.StatusOK)
+	if started.StartedAt == nil || started.StatusChangedAt == nil || started.CompletedAt != nil || started.CanceledAt != nil {
+		t.Fatalf("started timestamps are inconsistent: %#v", started)
+	}
+	completed := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+issueID, map[string]any{"stateId": findState("completed")}, http.StatusOK)
+	if completed.CompletedAt == nil || completed.StatusChangedAt == nil || completed.CanceledAt != nil {
+		t.Fatalf("completed timestamps are inconsistent: %#v", completed)
+	}
+	reopened := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+issueID, map[string]any{"stateId": findState("started")}, http.StatusOK)
+	if reopened.CompletedAt != nil || reopened.CanceledAt != nil || reopened.StartedAt == nil {
+		t.Fatalf("reopened timestamps are inconsistent: %#v", reopened)
+	}
+}
+
+func TestDeleteAllDraftsOnlyRemovesViewerDrafts(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	requestJSON[domain.Draft](t, handler, http.MethodPost, "/api/drafts", map[string]any{"type": "issue", "title": "First"}, http.StatusCreated)
+	requestJSON[domain.Draft](t, handler, http.MethodPost, "/api/drafts", map[string]any{"type": "document", "title": "Second"}, http.StatusCreated)
+	requestJSON[any](t, handler, http.MethodDelete, "/api/drafts", nil, http.StatusNoContent)
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if slices.ContainsFunc(bootstrap.Drafts, func(item domain.Draft) bool { return item.UserID == bootstrap.Viewer.ID }) {
+		t.Fatalf("viewer drafts survived discard all: %#v", bootstrap.Drafts)
+	}
+}
+
 func TestLabelGroupArchiveCascadesToChildLabels(t *testing.T) {
 	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {

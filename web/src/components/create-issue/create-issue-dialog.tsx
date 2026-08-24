@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import type { Editor } from '@tiptap/react'
-import { ChevronRight, Diamond, ExternalLink, FilePlus2, Link2, Maximize2, Minimize2, MoreHorizontal, Paperclip, Repeat2, X } from 'lucide-react'
+import { ChevronRight, Diamond, ExternalLink, FilePlus2, Link2, Maximize2, Minimize2, MoreHorizontal, Paperclip, Repeat2, Trash2, X } from 'lucide-react'
 import type { BootstrapData, Draft, Issue } from '@/types/flow'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { CalendarIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
@@ -85,6 +85,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
   const [files, setFiles] = useState<File[]>([])
   const [linkOpen, setLinkOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false)
   const titleEditorRef = useRef<Editor | null>(null)
   const descriptionEditorRef = useRef<Editor | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -115,6 +116,9 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
       setTemplateId(restored.templateId ?? '')
       setServerDraftId(remoteDraft?.id ?? '')
     } else {
+      setTitle(''); setDescription(null); setFiles([]); setError(undefined); setServerDraftId('')
+      setStateId(defaultState.id); setPriority(0); setAssigneeId(data.viewer.id); setProjectId(''); setProjectMilestoneId(''); setDueDate(''); setLabelIds([]); setTemplateId(''); setCreateMore(false); setExpanded(false)
+      titleEditorRef.current?.commands.clearContent(); descriptionEditorRef.current?.commands.clearContent()
       if (initialStateId && availableStates.some(state => state.id === initialStateId)) setStateId(initialStateId)
     }
     if (requestedProject) {
@@ -147,6 +151,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
 
   const resetDraft = () => {
     resetBody(false)
+    setServerDraftId('')
     setStateId(defaultState.id)
     setPriority(0)
     setAssigneeId(data.viewer.id)
@@ -230,6 +235,10 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
   }, [assigneeId, availableLabelIds, createMore, description, draftKey, dueDate, files, labelIds, onCreate, onDraftDeleted, onOpenChange, onUpload, priority, projectId, projectMilestoneId, saving, serverDraftId, stateId, templateId, title])
 
   const changeOpen = (next: boolean) => {
+    if (!next && serverDraftId && hasDraftContent) {
+      void saveDraft()
+      return
+    }
     if (!next && hasDraftContent) {
       setConfirmOpen(true)
       return
@@ -251,7 +260,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
           <header className={styles.header}>
             <button type="button" className={styles.team} aria-label="Set team" disabled><TeamIcon/><span>{data.teams[0].key}</span></button>
             <span className={styles.breadcrumb}>›</span><Dialog.Title>New issue</Dialog.Title>
-            {hasDraftContent && <button type="button" className={styles.saveDraft} aria-label="Save draft" disabled={saving} onClick={() => void saveDraft()}>{saving ? 'Saving...' : 'Save as draft'}</button>}
+            {serverDraftId ? <button type="button" className={styles.saveDraft} aria-label="Discard draft" disabled={saving} onClick={() => setDiscardConfirmOpen(true)}><Trash2/></button> : hasDraftContent && <button type="button" className={styles.saveDraft} aria-label="Save draft" disabled={saving} onClick={() => void saveDraft()}>{saving ? 'Saving...' : 'Save as draft'}</button>}
             <button type="button" className={`${styles.iconButton} ${styles.expandButton}`} aria-label={expanded ? 'Collapse' : 'Expand'} aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? <Minimize2/> : <Maximize2/>}</button>
             <Dialog.Close asChild><button type="button" className={styles.iconButton} aria-label="Close"><X/></button></Dialog.Close>
           </header>
@@ -289,8 +298,14 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
         editor.chain().focus().insertContent(label ? `<a href="${escapeAttribute(url)}">${escapeHtml(label)}</a>` : url).run()
       }}/>
       <DraftConfirmDialog open={confirmOpen} saving={saving} onCancel={() => setConfirmOpen(false)} onDiscard={() => void discardDraft()} onSave={() => void saveDraft()}/>
+      <ExistingDraftDiscardDialog open={discardConfirmOpen} saving={saving} onCancel={() => setDiscardConfirmOpen(false)} onDiscard={() => void discardDraft()}/>
     </Dialog.Portal>
   </Dialog.Root>
+}
+
+function ExistingDraftDiscardDialog({ onCancel, onDiscard, open, saving }: { onCancel: () => void; onDiscard: () => void; open: boolean; saving: boolean }) {
+  const discardRef = useRef<HTMLButtonElement>(null)
+  return <Dialog.Root open={open} onOpenChange={next => { if (!next) onCancel() }}><Dialog.Portal><Dialog.Overlay className={styles.confirmOverlay}/><Dialog.Content className={styles.confirmDialog} aria-describedby="existing-draft-discard-description" onOpenAutoFocus={event => { event.preventDefault(); discardRef.current?.focus() }} onPointerDownOutside={event => event.preventDefault()}><Dialog.Title>Discard this draft?</Dialog.Title><Dialog.Description id="existing-draft-discard-description">Your draft will be deleted.</Dialog.Description><div className={styles.confirmActions}><span/><span/><button type="button" disabled={saving} onClick={onCancel}>Cancel</button><button ref={discardRef} type="button" className={styles.confirmDiscard} disabled={saving} onClick={onDiscard}>Discard</button></div></Dialog.Content></Dialog.Portal></Dialog.Root>
 }
 
 function MiniProperty(props: React.ComponentProps<typeof PropertyMenu>) { return <PropertyMenu compact {...props}/> }
