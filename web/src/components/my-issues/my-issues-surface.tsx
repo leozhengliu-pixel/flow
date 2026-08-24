@@ -48,7 +48,7 @@ export interface MyIssuesSurfaceProps {
 }
 
 export type MyIssuesFilterKey = typeof filterGroups[number]['items'][number]['id']
-export interface MyIssuesFilterOption { id: string; label: string; color?: string; count?: number; children?: MyIssuesFilterOption[]; kind?: string; stateType?: 'backlog'|'unstarted'|'started'|'completed'|'canceled'; priority?: 0|1|2|3|4; avatarUrl?: string }
+export interface MyIssuesFilterOption { id: string; label: string; color?: string; count?: number; children?: MyIssuesFilterOption[]; kind?: string; stateType?: 'backlog'|'unstarted'|'started'|'completed'|'canceled'; projectType?: string; priority?: 0|1|2|3|4; avatarUrl?: string; filterLabel?: string; operatorLabel?: string; negativeOperatorLabel?: string; textConditionPrefix?: string }
 
 const views: { id: MyIssuesView; label: string }[] = [
   { id: 'assigned', label: 'Assigned' },

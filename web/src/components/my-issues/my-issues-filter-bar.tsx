@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import * as Popover from '@radix-ui/react-popover'
 import { Check, Plus, X } from 'lucide-react'
 import { usePropertyCommand } from '@/components/property/use-property-command'
+import { useI18n } from '@/i18n/i18n'
 import { filterValues, type MyIssuesAppliedFilter, type MyIssuesFilterOperator } from './my-issues-filter-types'
 import type { MyIssuesFilterOption } from './my-issues-surface'
 import styles from './my-issues-filter-bar.module.css'
@@ -38,10 +39,13 @@ export function MyIssuesFilterBar({ filters, filterOptions, saveState = 'idle', 
 }
 
 function OperatorMenu({ filter, onChange }: { filter: MyIssuesAppliedFilter; onChange: (operator: MyIssuesFilterOperator) => void }) {
+  const { t } = useI18n()
+  const positiveLabel = t(filter.operatorLabel ?? 'is')
+  const negativeLabel = t(filter.negativeOperatorLabel ?? 'is not')
   return <Popover.Root>
-    <Popover.Trigger asChild><button type="button" className={styles.operator} aria-label={`${filter.fieldLabel} operator`}>{filter.operator === 'is' ? 'is' : 'is not'}</button></Popover.Trigger>
+    <Popover.Trigger asChild><button type="button" className={styles.operator} aria-label={`${filter.fieldLabel} operator`}>{filter.operator === 'is' ? positiveLabel : negativeLabel}</button></Popover.Trigger>
     <Popover.Portal><Popover.Content className={styles.operatorMenu} side="bottom" align="start" sideOffset={4} collisionPadding={8}>
-      {(['is', 'isNot'] as const).map(operator => <Popover.Close asChild key={operator}><button type="button" role="menuitemradio" aria-checked={filter.operator === operator} onClick={() => onChange(operator)}><span>{operator === 'is' ? 'is' : 'is not'}</span>{filter.operator === operator && <Check size={13}/>}</button></Popover.Close>)}
+      {(['is', 'isNot'] as const).map(operator => <Popover.Close asChild key={operator}><button type="button" role="menuitemradio" aria-checked={filter.operator === operator} onClick={() => onChange(operator)}><span>{operator === 'is' ? positiveLabel : negativeLabel}</span>{filter.operator === operator && <Check size={13}/>}</button></Popover.Close>)}
     </Popover.Content></Popover.Portal>
   </Popover.Root>
 }

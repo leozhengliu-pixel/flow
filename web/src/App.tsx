@@ -646,6 +646,9 @@ function App() {
     stateId: string;
     priority: number;
     assigneeId?: string;
+    projectId?: string;
+    cycleId?: string;
+    dueDate?: string;
     labelIds: string[];
     attachments: File[];
   }) => {
@@ -655,7 +658,6 @@ function App() {
       ...fields,
       teamId: selectedIssue.team.id,
       parentId: selectedIssue.id,
-      projectId: selectedIssue.project?.id,
     });
     const uploaded = await Promise.all(
       attachments.map((file) => uploadAttachment(child.id, file)),
@@ -907,6 +909,9 @@ function App() {
       stateId: string;
       priority: number;
       assigneeId?: string;
+      projectId?: string;
+      cycleId?: string;
+      dueDate?: string;
       labelIds: string[];
       attachments: File[];
     },
@@ -918,7 +923,6 @@ function App() {
           ...fields,
           teamId: issue.team.id,
           parentId: issue.id,
-          projectId: issue.project?.id,
         }),
       "Could not create sub-issue",
     );
@@ -2132,7 +2136,6 @@ function App() {
                 ...fields,
                 teamId: issue.team.id,
                 parentId: issue.id,
-                projectId: issue.project?.id,
               }),
             "Could not create sub-issue",
           );
