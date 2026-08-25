@@ -11,7 +11,7 @@
 
 </div>
 
-Flow 将任务、项目、周期、计划、文档、客户请求与工作区管理集中在一个专注的应用中。项目由 React Web 客户端与 Go API 组成，默认使用 SQLite 和本地文件，也可配置 PostgreSQL、MySQL 与标准 S3/MinIO。
+Flow 将任务、项目、周期、计划、文档、客户请求与工作区管理集中在一个专注的应用中。项目由 React Web 客户端与 Go API 组成，默认使用 SQLite 和本地文件，也可配置 PostgreSQL、MySQL、标准 S3/MinIO 与 Redis 协调层。
 
 > [!IMPORTANT]
 > Flow 仍处于活跃开发阶段。将实例暴露到互联网之前，请审查安全配置并替换全部开发凭据。
@@ -85,6 +85,8 @@ docker compose up -d --build
 | `FLOW_DATABASE_DRIVER` | `sqlite` | `sqlite`、`postgres` 或 `mysql`。 |
 | `FLOW_DATABASE_PATH` | `data/flow.db` | SQLite 数据库路径。 |
 | `FLOW_DATABASE_URL` | 未设置 | PostgreSQL/MySQL 连接 URL。 |
+| `FLOW_REDIS_MODE` | `disabled` | `disabled`、`standalone` 或 `cluster`；启用时必须使用 PostgreSQL/MySQL。 |
+| `FLOW_REDIS_URL` | 未设置 | Redis 连接 URL；也可使用 `FLOW_REDIS_ADDRS`。 |
 | `FLOW_STORAGE_DRIVER` | `local` | `local` 或 `s3`。 |
 | `FLOW_STORAGE_LOCAL_PATH` | `data/uploads` | 本地附件存储目录。 |
 | `FLOW_SEED_PASSWORD` | `flow-demo` | 本地管理员初始密码。 |

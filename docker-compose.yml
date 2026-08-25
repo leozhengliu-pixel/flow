@@ -9,6 +9,22 @@ services:
       FLOW_DATABASE_MAX_OPEN_CONNS: ${FLOW_DATABASE_MAX_OPEN_CONNS:-0}
       FLOW_DATABASE_MAX_IDLE_CONNS: ${FLOW_DATABASE_MAX_IDLE_CONNS:-0}
       FLOW_DATABASE_CONN_MAX_LIFETIME: ${FLOW_DATABASE_CONN_MAX_LIFETIME:-30m}
+      FLOW_REDIS_MODE: ${FLOW_REDIS_MODE:-disabled}
+      FLOW_REDIS_URL: ${FLOW_REDIS_URL:-}
+      FLOW_REDIS_ADDRS: ${FLOW_REDIS_ADDRS:-}
+      FLOW_REDIS_USERNAME: ${FLOW_REDIS_USERNAME:-}
+      FLOW_REDIS_PASSWORD: ${FLOW_REDIS_PASSWORD:-}
+      FLOW_REDIS_DB: ${FLOW_REDIS_DB:-0}
+      FLOW_REDIS_TLS: ${FLOW_REDIS_TLS:-false}
+      FLOW_REDIS_PREFIX: ${FLOW_REDIS_PREFIX:-flow}
+      FLOW_REDIS_POOL_SIZE: ${FLOW_REDIS_POOL_SIZE:-40}
+      FLOW_REDIS_MIN_IDLE_CONNS: ${FLOW_REDIS_MIN_IDLE_CONNS:-5}
+      FLOW_REDIS_DIAL_TIMEOUT: ${FLOW_REDIS_DIAL_TIMEOUT:-5s}
+      FLOW_REDIS_READ_TIMEOUT: ${FLOW_REDIS_READ_TIMEOUT:-3s}
+      FLOW_REDIS_WRITE_TIMEOUT: ${FLOW_REDIS_WRITE_TIMEOUT:-3s}
+      FLOW_REDIS_CONNECT_TIMEOUT: ${FLOW_REDIS_CONNECT_TIMEOUT:-15s}
+      FLOW_REDIS_LOCK_TTL: ${FLOW_REDIS_LOCK_TTL:-30s}
+      FLOW_REDIS_LOCK_WAIT: ${FLOW_REDIS_LOCK_WAIT:-5s}
       FLOW_STORAGE_DRIVER: ${FLOW_STORAGE_DRIVER:-local}
       FLOW_STORAGE_LOCAL_PATH: ${FLOW_STORAGE_LOCAL_PATH:-/app/data/uploads}
       FLOW_S3_BUCKET: ${FLOW_S3_BUCKET:-}
@@ -85,6 +101,53 @@ services:
     volumes:
       - flow-mysql-data:/var/lib/mysql
 
+  redis:
+    image: redis:8.2-alpine
+    profiles: ["redis"]
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    volumes:
+      - flow-redis-data:/data
+
+  redis-cluster-1:
+    image: redis:8.2-alpine
+    profiles: ["redis-cluster"]
+    command: ["redis-server", "--cluster-enabled", "yes", "--cluster-config-file", "nodes.conf", "--cluster-node-timeout", "5000", "--appendonly", "yes", "--protected-mode", "no", "--bind", "0.0.0.0"]
+    volumes:
+      - flow-redis-cluster-1:/data
+
+  redis-cluster-2:
+    image: redis:8.2-alpine
+    profiles: ["redis-cluster"]
+    command: ["redis-server", "--cluster-enabled", "yes", "--cluster-config-file", "nodes.conf", "--cluster-node-timeout", "5000", "--appendonly", "yes", "--protected-mode", "no", "--bind", "0.0.0.0"]
+    volumes:
+      - flow-redis-cluster-2:/data
+
+  redis-cluster-3:
+    image: redis:8.2-alpine
+    profiles: ["redis-cluster"]
+    command: ["redis-server", "--cluster-enabled", "yes", "--cluster-config-file", "nodes.conf", "--cluster-node-timeout", "5000", "--appendonly", "yes", "--protected-mode", "no", "--bind", "0.0.0.0"]
+    volumes:
+      - flow-redis-cluster-3:/data
+
+  redis-cluster-init:
+    image: redis:8.2-alpine
+    profiles: ["redis-cluster"]
+    depends_on:
+      - redis-cluster-1
+      - redis-cluster-2
+      - redis-cluster-3
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        until redis-cli -h redis-cluster-1 ping && redis-cli -h redis-cluster-2 ping && redis-cli -h redis-cluster-3 ping; do sleep 1; done;
+        redis-cli --cluster create redis-cluster-1:6379 redis-cluster-2:6379 redis-cluster-3:6379 --cluster-replicas 0 --cluster-yes || true
+
   minio:
     image: minio/minio:latest
     profiles: ["s3"]
@@ -115,4 +178,8 @@ volumes:
   flow-api-data:
   flow-postgres-data:
   flow-mysql-data:
+  flow-redis-data:
+  flow-redis-cluster-1:
+  flow-redis-cluster-2:
+  flow-redis-cluster-3:
   flow-s3-data:
