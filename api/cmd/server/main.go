@@ -16,9 +16,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	appconfig "flow/api/internal/config"
+	"flow/api/internal/coordination"
 	"flow/api/internal/domain"
 	"flow/api/internal/objectstore"
 	"flow/api/internal/store"
@@ -31,20 +33,22 @@ var (
 )
 
 type server struct {
-	store         *store.SQLiteStore
-	uploadPath    string
-	objectStore   objectstore.Store
-	staticPath    string
-	authDisabled  bool
-	mailer        *smtpMailer
-	authLimiter   *authRateLimiter
-	realtime      *realtimeHub
-	externalAuth  *externalAuth
-	agent         appconfig.AgentConfig
-	agentClient   *http.Client
-	allowedOrigin string
-	mcpUploadMu   sync.Mutex
-	mcpUploads    map[string]*mcpPendingUpload
+	store               *store.SQLiteStore
+	uploadPath          string
+	objectStore         objectstore.Store
+	staticPath          string
+	authDisabled        bool
+	mailer              *smtpMailer
+	authLimiter         authRateLimitBackend
+	realtime            *realtimeHub
+	coordinator         *coordination.Redis
+	coordinationStarted atomic.Bool
+	externalAuth        *externalAuth
+	agent               appconfig.AgentConfig
+	agentClient         *http.Client
+	allowedOrigin       string
+	mcpUploadMu         sync.Mutex
+	mcpUploads          map[string]*mcpPendingUpload
 }
 
 func main() {
@@ -61,6 +65,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	redisCoordinator, err := coordination.Open(context.Background(), applicationConfig.Redis)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if redisCoordinator != nil {
+		defer redisCoordinator.Close()
+		repository.SetWorkspaceCoordinator(redisCoordinator)
+	}
 	external, err := newExternalAuth(context.Background(), applicationConfig.Auth, applicationConfig.AppURL)
 	if err != nil {
 		log.Fatal(err)
@@ -76,6 +88,7 @@ func main() {
 		objectStore:   objects,
 		staticPath:    applicationConfig.StaticPath,
 		authDisabled:  applicationConfig.AuthDisabled,
+		coordinator:   redisCoordinator,
 		mailer:        smtpMailerFromEnv(),
 		externalAuth:  external,
 		agent:         applicationConfig.Agent,
@@ -84,21 +97,37 @@ func main() {
 	}
 
 	httpServer := &http.Server{Addr: applicationConfig.HTTPAddr, Handler: telemetryHandler(newHandler(s), applicationConfig.Telemetry.Enabled), ReadHeaderTimeout: 5 * time.Second}
-	log.Printf("Flow API listening on %s using database=%s storage=%s", httpServer.Addr, applicationConfig.Database.Driver, applicationConfig.Storage.Driver)
-	log.Fatal(httpServer.ListenAndServe())
+	log.Printf("Flow API listening on %s using database=%s storage=%s redis=%s", httpServer.Addr, applicationConfig.Database.Driver, applicationConfig.Storage.Driver, applicationConfig.Redis.Mode)
+	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Fatal(err)
+	}
 }
 
 func newHandler(s *server) http.Handler {
 	if s.authLimiter == nil {
-		s.authLimiter = newAuthRateLimiter()
+		if s.coordinator != nil {
+			s.authLimiter = s.coordinator
+		} else {
+			s.authLimiter = newAuthRateLimiter()
+		}
 	}
 	if s.realtime == nil {
 		s.realtime = newRealtimeHub()
 	}
-	s.store.SetRealtimeSink(s.realtime.publish)
+	s.store.SetRealtimeSink(s.publishRealtime)
+	s.startCoordination()
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
+		response := map[string]string{"status": "ok", "redis": "disabled"}
+		if s.coordinator != nil {
+			response["redis"] = s.coordinator.Mode()
+			if err := s.coordinator.Ping(r.Context()); err != nil {
+				response["status"] = "degraded"
+				writeJSON(w, http.StatusServiceUnavailable, response)
+				return
+			}
+		}
+		writeJSON(w, http.StatusOK, response)
 	})
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource", s.oauthProtectedResource)
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", s.oauthProtectedResource)

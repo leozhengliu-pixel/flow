@@ -6,7 +6,7 @@ import (
 )
 
 func TestLoadDefaultsAndBackendValidation(t *testing.T) {
-	for _, key := range []string{"FLOW_DATABASE_DRIVER", "FLOW_DATABASE_URL", "FLOW_STORAGE_DRIVER", "FLOW_S3_BUCKET", "FLOW_S3_REGION", "FLOW_AUTH_GOOGLE_ENABLED", "FLOW_AUTH_OIDC_ENABLED", "FLOW_AUTH_SAML_ENABLED", "FLOW_AGENT_ENABLED", "FLOW_AGENT_BASE_URL", "FLOW_AGENT_MODEL", "FLOW_TELEMETRY_ENABLED", "OTEL_EXPORTER_OTLP_ENDPOINT"} {
+	for _, key := range []string{"FLOW_DATABASE_DRIVER", "FLOW_DATABASE_URL", "FLOW_REDIS_MODE", "FLOW_REDIS_URL", "FLOW_REDIS_ADDRS", "FLOW_STORAGE_DRIVER", "FLOW_S3_BUCKET", "FLOW_S3_REGION", "FLOW_AUTH_GOOGLE_ENABLED", "FLOW_AUTH_OIDC_ENABLED", "FLOW_AUTH_SAML_ENABLED", "FLOW_AGENT_ENABLED", "FLOW_AGENT_BASE_URL", "FLOW_AGENT_MODEL", "FLOW_TELEMETRY_ENABLED", "OTEL_EXPORTER_OTLP_ENDPOINT"} {
 		t.Setenv(key, "")
 	}
 	loaded, err := Load()
@@ -24,6 +24,28 @@ func TestLoadDefaultsAndBackendValidation(t *testing.T) {
 	t.Setenv("FLOW_STORAGE_DRIVER", "s3")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_S3_BUCKET") {
 		t.Fatalf("S3 without bucket error = %v", err)
+	}
+}
+
+func TestLoadRedisClusterValidation(t *testing.T) {
+	t.Setenv("FLOW_REDIS_MODE", "cluster")
+	t.Setenv("FLOW_REDIS_ADDRS", "redis-1:6379, redis-2:6379,redis-3:6379")
+	t.Setenv("FLOW_DATABASE_DRIVER", "postgres")
+	t.Setenv("FLOW_DATABASE_URL", "postgres://flow:flow@postgres/flow")
+	loaded, err := Load()
+	if err != nil || loaded.Redis.Mode != "cluster" || len(loaded.Redis.Addrs) != 3 || loaded.Redis.PoolSize != 40 {
+		t.Fatalf("Redis cluster config = %#v, %v", loaded.Redis, err)
+	}
+
+	t.Setenv("FLOW_REDIS_DB", "1")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_REDIS_DB") {
+		t.Fatalf("cluster DB validation error = %v", err)
+	}
+	t.Setenv("FLOW_REDIS_DB", "0")
+	t.Setenv("FLOW_DATABASE_DRIVER", "sqlite")
+	t.Setenv("FLOW_DATABASE_URL", "")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SQLite") {
+		t.Fatalf("Redis with SQLite validation error = %v", err)
 	}
 }
 

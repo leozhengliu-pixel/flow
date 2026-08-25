@@ -31,13 +31,21 @@ type authRateLimiter struct {
 	windows map[string]authRateWindow
 }
 
+type authRateLimitBackend interface {
+	Allow(context.Context, string, int, time.Duration) (bool, time.Duration, error)
+}
+
 func newAuthRateLimiter() *authRateLimiter {
 	return &authRateLimiter{windows: map[string]authRateWindow{}}
 }
 
 func (s *server) limitAuth(action string, limit int, window time.Duration, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		allowed, retryAfter := s.authLimiter.allow(action+":"+authClientAddress(r), limit, window)
+		allowed, retryAfter, err := s.authLimiter.Allow(r.Context(), action+":"+authClientAddress(r), limit, window)
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "Authentication rate limiting is temporarily unavailable")
+			return
+		}
 		if !allowed {
 			seconds := max(1, int(retryAfter.Round(time.Second)/time.Second))
 			w.Header().Set("Retry-After", strconv.Itoa(seconds))
@@ -48,7 +56,7 @@ func (s *server) limitAuth(action string, limit int, window time.Duration, next 
 	})
 }
 
-func (l *authRateLimiter) allow(key string, limit int, duration time.Duration) (bool, time.Duration) {
+func (l *authRateLimiter) Allow(_ context.Context, key string, limit int, duration time.Duration) (bool, time.Duration, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := time.Now()
@@ -60,14 +68,14 @@ func (l *authRateLimiter) allow(key string, limit int, duration time.Duration) (
 	item, ok := l.windows[key]
 	if !ok {
 		l.windows[key] = authRateWindow{count: 1, reset: now.Add(duration)}
-		return true, 0
+		return true, 0, nil
 	}
 	if item.count >= limit {
-		return false, time.Until(item.reset)
+		return false, time.Until(item.reset), nil
 	}
 	item.count++
 	l.windows[key] = item
-	return true, 0
+	return true, 0, nil
 }
 
 func authClientAddress(r *http.Request) string {

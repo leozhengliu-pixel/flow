@@ -6,8 +6,12 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
+	"flow/api/internal/coordination"
 	"flow/api/internal/domain"
+
+	"github.com/alicebob/miniredis/v2"
 )
 
 func TestSQLiteStorePersistsStateAndDomainEvents(t *testing.T) {
@@ -47,6 +51,85 @@ func TestSQLiteStorePersistsStateAndDomainEvents(t *testing.T) {
 	}
 	if len(events) != 1 || events[0].Type != "issue.created" || events[0].AggregateID != issueID {
 		t.Fatalf("unexpected events: %#v", events)
+	}
+}
+
+func TestCoordinatedStoresReloadBeforeMutation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "coordinated.db")
+	first, err := OpenSQLite(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	second, err := OpenSQLite(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+
+	redisServer := miniredis.RunT(t)
+	firstCoordinator, err := coordination.Open(t.Context(), coordination.Config{Mode: "standalone", Addrs: []string{redisServer.Addr()}, Prefix: "store-test", ConnectTimeout: time.Second, LockTTL: time.Second, LockWait: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer firstCoordinator.Close()
+	secondCoordinator, err := coordination.Open(t.Context(), coordination.Config{Mode: "standalone", Addrs: []string{redisServer.Addr()}, Prefix: "store-test", ConnectTimeout: time.Second, LockTTL: time.Second, LockWait: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer secondCoordinator.Close()
+	first.SetWorkspaceCoordinator(firstCoordinator)
+	second.SetWorkspaceCoordinator(secondCoordinator)
+
+	data := first.Bootstrap()
+	issueID := data.Issues[0].ID
+	if err := first.MutateWorkspace(t.Context(), data.Workspace.URLKey, "test.title", issueID, nil, func(next *domain.Bootstrap) error {
+		next.Issues[0].Title = "coordinated title"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := second.MutateWorkspace(t.Context(), data.Workspace.URLKey, "test.priority", issueID, nil, func(next *domain.Bootstrap) error {
+		next.Issues[0].Priority = 1
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := first.ReloadWorkspace(t.Context(), data.Workspace.URLKey); err != nil {
+		t.Fatal(err)
+	}
+	updated, _ := first.BootstrapFor(data.Workspace.URLKey)
+	if updated.Issues[0].Title != "coordinated title" || updated.Issues[0].Priority != 1 {
+		t.Fatalf("coordinated mutations lost data: %#v", updated.Issues[0])
+	}
+
+	created, err := first.CreateWorkspace(t.Context(), "Coordinated workspace", "coordinated-workspace", "us")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := second.CreateWorkspace(t.Context(), "Duplicate", "coordinated-workspace", "us"); err == nil {
+		t.Fatal("catalog lock allowed a duplicate workspace key")
+	}
+	workspace := created.Workspace
+	workspace.Name = "Renamed workspace"
+	if _, err := second.UpdateWorkspace(t.Context(), created.Workspace.URLKey, workspace); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.ReloadAllWorkspaces(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if reloaded, ok := first.BootstrapFor(created.Workspace.URLKey); !ok || reloaded.Workspace.Name != "Renamed workspace" {
+		t.Fatalf("coordinated workspace update = %#v, %v", reloaded.Workspace, ok)
+	}
+	if err := first.DeleteWorkspace(t.Context(), created.Workspace.URLKey); err != nil {
+		t.Fatal(err)
+	}
+	if err := second.ReloadAllWorkspaces(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := second.BootstrapFor(created.Workspace.URLKey); ok {
+		t.Fatal("deleted workspace remained in a remote cache")
 	}
 }
 

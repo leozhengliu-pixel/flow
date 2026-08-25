@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -131,13 +132,18 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	workspace := workspaceKey(r)
+	presence, err := s.snapshotPresence(r.Context(), workspace)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "Presence is temporarily unavailable")
+		return
+	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache, no-transform")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 	channel, unsubscribe := s.realtime.subscribe(workspace)
 	defer unsubscribe()
-	initial, _ := json.Marshal(map[string]any{"presence": s.realtime.snapshotPresence(workspace)})
+	initial, _ := json.Marshal(map[string]any{"presence": presence})
 	if !writeSSE(w, domain.RealtimeEvent{ID: fmt.Sprintf("connected_%d", time.Now().UnixNano()), Type: "connected", Payload: initial, CreatedAt: time.Now().UTC()}) {
 		return
 	}
@@ -154,7 +160,14 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 			}
 			flusher.Flush()
 		case <-ticker.C:
-			s.realtime.cleanupPresence(workspace)
+			if s.coordinator != nil {
+				presence, changed, err := s.coordinator.CleanupPresence(r.Context(), workspace, presenceTTL)
+				if err == nil && changed {
+					s.publishPresence(workspace, presence)
+				}
+			} else {
+				s.realtime.cleanupPresence(workspace)
+			}
 			if _, err := fmt.Fprint(w, ": keepalive\n\n"); err != nil {
 				return
 			}
@@ -188,7 +201,18 @@ func (s *server) updatePresence(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if input.Active != nil && !*input.Active {
-		writeJSON(w, http.StatusOK, s.realtime.removePresence(workspaceKey(r), input.ClientID))
+		workspace := workspaceKey(r)
+		if s.coordinator != nil {
+			presence, err := s.coordinator.RemovePresence(r.Context(), workspace, input.ClientID, presenceTTL)
+			if err != nil {
+				writeError(w, http.StatusServiceUnavailable, "Presence is temporarily unavailable")
+				return
+			}
+			s.publishPresence(workspace, presence)
+			writeJSON(w, http.StatusOK, presence)
+			return
+		}
+		writeJSON(w, http.StatusOK, s.realtime.removePresence(workspace, input.ClientID))
 		return
 	}
 	if input.IssueID != "" {
@@ -198,5 +222,28 @@ func (s *server) updatePresence(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, s.realtime.updatePresence(workspaceKey(r), input.ClientID, authUser(r), input.IssueID, input.Route))
+	workspace := workspaceKey(r)
+	if s.coordinator != nil {
+		presence, err := s.coordinator.UpdatePresence(r.Context(), workspace, input.ClientID, domain.Presence{ClientID: input.ClientID, User: authUser(r), IssueID: input.IssueID, Route: input.Route, LastSeenAt: time.Now().UTC()}, presenceTTL)
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "Presence is temporarily unavailable")
+			return
+		}
+		s.publishPresence(workspace, presence)
+		writeJSON(w, http.StatusOK, presence)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.realtime.updatePresence(workspace, input.ClientID, authUser(r), input.IssueID, input.Route))
+}
+
+func (s *server) snapshotPresence(ctx context.Context, workspace string) ([]domain.Presence, error) {
+	if s.coordinator != nil {
+		return s.coordinator.Presence(ctx, workspace, presenceTTL)
+	}
+	return s.realtime.snapshotPresence(workspace), nil
+}
+
+func (s *server) publishPresence(workspace string, presence []domain.Presence) {
+	payload, _ := json.Marshal(map[string]any{"presence": presence})
+	s.publishRealtime(workspace, domain.RealtimeEvent{ID: fmt.Sprintf("presence_%d", time.Now().UnixNano()), Type: "presence.updated", Payload: payload, CreatedAt: time.Now().UTC()})
 }
