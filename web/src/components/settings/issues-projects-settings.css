@@ -76,3 +76,5 @@
 :root[data-theme=light] .ip-status-menu{border-color:lch(91.9 0 282);color:lch(20 1 282)}
 :root[data-theme=light] .ip-status-menu>button{color:lch(20 1 282)}
 :root[data-theme=light] .ip-status-menu>button svg{fill:lch(40 1 282)}
+.ip-combobox:hover,.ip-combobox[data-state=open]{background:var(--dropdown-hover)}
+.ip-cadence-item[data-highlighted],.ip-row-menu [role=menuitem][data-highlighted]{background:var(--dropdown-hover)}
