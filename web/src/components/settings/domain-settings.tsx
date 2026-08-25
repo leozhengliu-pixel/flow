@@ -220,8 +220,11 @@ function EditableText({ value, field, editing, archived, onEdit, onCancel, onSav
 function EditableDescription({ value, editing, archived, onEdit, onCancel, onSave }: { value: string; editing: boolean; archived: boolean; onEdit: () => void; onCancel: () => void; onSave: (value: string) => Promise<void> }) {
   const { t } = useI18n()
   const [draft, setDraft] = useState(value)
-  if (editing) return <input autoFocus className="domain-label-description domain-label-inline-input" aria-label={t('Edit description')} placeholder={t('Add label description…')} value={draft} onChange={event => setDraft(event.target.value)} onBlur={() => { if (draft !== value) void onSave(draft); else onCancel() }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') { setDraft(value); onCancel() } }}/>
-  return <button className={`domain-label-description domain-label-description-button${value ? '' : ' is-empty'}`} disabled={archived} onClick={onEdit}>{value || t('Add label description…')}</button>
+  const editorRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => setDraft(value), [value])
+  useEffect(() => { if (editing) { editorRef.current?.focus(); editorRef.current?.select() } }, [editing])
+  if (editing) return <textarea ref={editorRef} rows={1} className="domain-label-description domain-label-description-editor" aria-label={t('Edit description')} placeholder={t('Add label description…')} value={draft} onChange={event => setDraft(event.target.value.replace(/[\r\n]+/g, ' '))} onBlur={() => { if (draft !== value) void onSave(draft); else onCancel() }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() } if (event.key === 'Escape') { event.preventDefault(); setDraft(value); onCancel(); requestAnimationFrame(() => editorRef.current?.blur()) } }}/>
+  return <button type="button" tabIndex={-1} className={`domain-label-description domain-label-description-button${value ? '' : ' is-empty'}`} disabled={archived} onClick={onEdit}>{value || t('Add label description…')}</button>
 }
 
 function MenuShell({ label, kind, children }: { label: string; kind: 'group'|'label'|'bulk'; children: ReactNode }) {
