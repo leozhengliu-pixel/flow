@@ -128,6 +128,39 @@ func TestLabelGroupArchiveCascadesToChildLabels(t *testing.T) {
 	}
 }
 
+func TestWorkspaceLabelMovesBetweenGroups(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+
+	first := requestJSON[domain.LabelGroup](t, handler, http.MethodPost, "/api/label-groups", map[string]any{
+		"name": "First group", "resourceType": "issue",
+	}, http.StatusCreated)
+	second := requestJSON[domain.LabelGroup](t, handler, http.MethodPost, "/api/label-groups", map[string]any{
+		"name": "Second group", "resourceType": "issue",
+	}, http.StatusCreated)
+	label := requestJSON[domain.IssueLabel](t, handler, http.MethodPost, "/api/labels", map[string]any{
+		"name": "Movable label", "resourceType": "issue", "groupId": first.ID,
+	}, http.StatusCreated)
+
+	label = requestJSON[domain.IssueLabel](t, handler, http.MethodPatch, "/api/labels/"+label.ID, map[string]any{
+		"groupId": second.ID,
+	}, http.StatusOK)
+	if label.GroupID != second.ID {
+		t.Fatalf("label was not moved to the target group: %#v", label)
+	}
+
+	label = requestJSON[domain.IssueLabel](t, handler, http.MethodPatch, "/api/labels/"+label.ID, map[string]any{
+		"groupId": "",
+	}, http.StatusOK)
+	if label.GroupID != "" {
+		t.Fatalf("label was not removed from its group: %#v", label)
+	}
+}
+
 func TestMoveWorkspaceLabelToTeamsPreservesIssueAssignments(t *testing.T) {
 	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
