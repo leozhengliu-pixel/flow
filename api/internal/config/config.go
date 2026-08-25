@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"flow/api/internal/coordination"
 	"flow/api/internal/objectstore"
 	"flow/api/internal/store"
 )
@@ -17,6 +18,7 @@ type Config struct {
 	AppURL       string
 	AuthDisabled bool
 	Database     store.DatabaseConfig
+	Redis        coordination.Config
 	Storage      objectstore.Config
 	Auth         AuthConfig
 	Agent        AgentConfig
@@ -92,6 +94,13 @@ func Load() (Config, error) {
 			MaxIdleConns:    integer("FLOW_DATABASE_MAX_IDLE_CONNS", 0),
 			ConnMaxLifetime: duration("FLOW_DATABASE_CONN_MAX_LIFETIME", 30*time.Minute),
 		},
+		Redis: coordination.Config{
+			Mode: value("FLOW_REDIS_MODE", "disabled"), URL: secret("FLOW_REDIS_URL"), Addrs: csvRaw(value("FLOW_REDIS_ADDRS", "")),
+			Username: secret("FLOW_REDIS_USERNAME"), Password: secret("FLOW_REDIS_PASSWORD"), DB: integer("FLOW_REDIS_DB", 0), TLS: boolean("FLOW_REDIS_TLS", false),
+			Prefix: value("FLOW_REDIS_PREFIX", "flow"), PoolSize: integer("FLOW_REDIS_POOL_SIZE", 40), MinIdleConns: integer("FLOW_REDIS_MIN_IDLE_CONNS", 5),
+			DialTimeout: duration("FLOW_REDIS_DIAL_TIMEOUT", 5*time.Second), ReadTimeout: duration("FLOW_REDIS_READ_TIMEOUT", 3*time.Second), WriteTimeout: duration("FLOW_REDIS_WRITE_TIMEOUT", 3*time.Second),
+			ConnectTimeout: duration("FLOW_REDIS_CONNECT_TIMEOUT", 15*time.Second), LockTTL: duration("FLOW_REDIS_LOCK_TTL", 30*time.Second), LockWait: duration("FLOW_REDIS_LOCK_WAIT", 5*time.Second),
+		},
 		Storage: objectstore.Config{
 			Driver:          value("FLOW_STORAGE_DRIVER", "local"),
 			LocalPath:       value("FLOW_STORAGE_LOCAL_PATH", value("FLOW_UPLOAD_PATH", "data/uploads")),
@@ -125,6 +134,19 @@ func (c Config) Validate() error {
 	}
 	if driver != "sqlite" && c.Database.URL == "" {
 		return fmt.Errorf("FLOW_DATABASE_URL is required when FLOW_DATABASE_DRIVER=%s", driver)
+	}
+	redisMode := strings.ToLower(strings.TrimSpace(c.Redis.Mode))
+	if redisMode != "disabled" && redisMode != "standalone" && redisMode != "cluster" {
+		return fmt.Errorf("FLOW_REDIS_MODE must be disabled, standalone, or cluster")
+	}
+	if redisMode != "disabled" && c.Redis.URL == "" && len(c.Redis.Addrs) == 0 {
+		return fmt.Errorf("FLOW_REDIS_URL or FLOW_REDIS_ADDRS is required when Redis is enabled")
+	}
+	if redisMode == "cluster" && c.Redis.DB != 0 {
+		return fmt.Errorf("FLOW_REDIS_DB must be 0 in cluster mode")
+	}
+	if redisMode != "disabled" && driver == "sqlite" {
+		return fmt.Errorf("Redis multi-instance coordination requires PostgreSQL or MySQL; SQLite is single-instance only")
 	}
 	storage := strings.ToLower(c.Storage.Driver)
 	if storage != "local" && storage != "s3" {
@@ -220,6 +242,16 @@ func csv(value string) []string {
 	result := []string{}
 	for _, item := range strings.Split(value, ",") {
 		if item = strings.ToLower(strings.TrimSpace(item)); item != "" {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func csvRaw(value string) []string {
+	result := []string{}
+	for _, item := range strings.Split(value, ",") {
+		if item = strings.TrimSpace(item); item != "" {
 			result = append(result, item)
 		}
 	}
