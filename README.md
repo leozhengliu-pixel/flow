@@ -16,7 +16,7 @@
 Flow brings issues, projects, cycles, initiatives, documents, customer requests,
 and workspace administration into one focused application. It ships as a React
 web client backed by a Go API. SQLite and local files require no external
-services for development; PostgreSQL, MySQL, and S3 are configurable for production.
+services for development; PostgreSQL, MySQL, S3, and Redis coordination are configurable for production.
 
 > [!IMPORTANT]
 > Flow is under active development. Review the security settings and replace all
@@ -30,6 +30,7 @@ services for development; PostgreSQL, MySQL, and S3 are configurable for product
 - **Workspace administration**: account lifecycle, invitations, roles, teams, labels, templates, imports, and exports.
 - **Customer context**: customers, requests, releases, asks, subscriptions, and SLA rules.
 - **Internationalization**: English and Simplified Chinese interfaces with a persistent language preference.
+- **Horizontal scaling**: Redis standalone/cluster coordination for shared limits, realtime events, presence, and serialized workspace writes.
 
 ## Architecture
 
@@ -44,6 +45,7 @@ React 19 / TypeScript / Vite
   v
 Go HTTP API
   |-- SQLite, PostgreSQL, or MySQL
+  |-- Redis standalone or cluster coordination (optional)
   |-- Local or S3-compatible object storage
   |-- Email, Google OAuth, OIDC, and SAML authentication
   |-- OpenTelemetry OTLP export (optional)
@@ -142,6 +144,8 @@ Flow reads configuration from environment variables passed to the API process.
 | `FLOW_DATABASE_DRIVER` | `sqlite` | `sqlite`, `postgres`, or `mysql`. |
 | `FLOW_DATABASE_PATH` | `data/flow.db` | SQLite database path. |
 | `FLOW_DATABASE_URL` | unset | PostgreSQL/MySQL connection URL. |
+| `FLOW_REDIS_MODE` | `disabled` | `disabled`, `standalone`, or `cluster`; PostgreSQL/MySQL is required when enabled. |
+| `FLOW_REDIS_URL` | unset | Redis connection URL; alternatively use `FLOW_REDIS_ADDRS`. |
 | `FLOW_STORAGE_DRIVER` | `local` | `local` or `s3`. |
 | `FLOW_STORAGE_LOCAL_PATH` | `data/uploads` | Local attachment storage directory. |
 | `FLOW_SEED_PASSWORD` | `flow-demo` | Initial local administrator password. |
