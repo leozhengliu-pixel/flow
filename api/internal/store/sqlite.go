@@ -22,6 +22,11 @@ type SQLiteStore struct {
 	lastWorkspaceKey string
 	viewer           domain.User
 	realtimeSink     func(string, domain.RealtimeEvent)
+	coordinator      WorkspaceCoordinator
+}
+
+type WorkspaceCoordinator interface {
+	WithWorkspaceLock(context.Context, string, func() error) error
 }
 
 func OpenSQLite(path string) (*SQLiteStore, error) {
@@ -34,6 +39,68 @@ func (s *SQLiteStore) SetRealtimeSink(sink func(string, domain.RealtimeEvent)) {
 	s.mu.Lock()
 	s.realtimeSink = sink
 	s.mu.Unlock()
+}
+
+func (s *SQLiteStore) SetWorkspaceCoordinator(coordinator WorkspaceCoordinator) {
+	s.mu.Lock()
+	s.coordinator = coordinator
+	s.mu.Unlock()
+}
+
+func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) error {
+	data, err := s.loadWorkspaceState(ctx, workspaceKey)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.workspaces[workspaceKey] = data
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *SQLiteStore) ReloadAllWorkspaces(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, `SELECT workspace_key,data FROM workspace_states`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	workspaces := map[string]domain.Bootstrap{}
+	for rows.Next() {
+		var key string
+		var raw []byte
+		if err := rows.Scan(&key, &raw); err != nil {
+			return err
+		}
+		var data domain.Bootstrap
+		if err := json.Unmarshal(raw, &data); err != nil {
+			return err
+		}
+		normalize(&data)
+		workspaces[key] = data
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.workspaces = workspaces
+	if _, ok := workspaces[s.lastWorkspaceKey]; !ok {
+		s.lastWorkspaceKey = firstWorkspaceKey(workspaces)
+	}
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *SQLiteStore) loadWorkspaceState(ctx context.Context, workspaceKey string) (domain.Bootstrap, error) {
+	var raw []byte
+	if err := s.db.QueryRowContext(ctx, `SELECT data FROM workspace_states WHERE workspace_key=?`, workspaceKey).Scan(&raw); err != nil {
+		return domain.Bootstrap{}, err
+	}
+	var data domain.Bootstrap
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return data, err
+	}
+	normalize(&data)
+	return data, nil
 }
 
 func (s *SQLiteStore) migrate(ctx context.Context) error {
@@ -1444,12 +1511,21 @@ func (s *SQLiteStore) MutateWithAggregate(ctx context.Context, eventType string,
 }
 
 func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
-	s.mu.Lock()
+	if workspaceKey == "" {
+		s.mu.RLock()
+		workspaceKey = s.lastWorkspaceKey
+		s.mu.RUnlock()
+	}
 	var event domain.DomainEvent
-	err := func() error {
+	apply := func() error {
+		s.mu.Lock()
 		defer s.mu.Unlock()
-		if workspaceKey == "" {
-			workspaceKey = s.lastWorkspaceKey
+		if s.coordinator != nil {
+			latest, err := s.loadWorkspaceState(ctx, workspaceKey)
+			if err != nil {
+				return fmt.Errorf("reload workspace before mutation: %w", err)
+			}
+			s.workspaces[workspaceKey] = latest
 		}
 		current, ok := s.workspaces[workspaceKey]
 		if !ok {
@@ -1483,7 +1559,13 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 		s.workspaces[workspaceKey] = next
 		s.lastWorkspaceKey = workspaceKey
 		return nil
-	}()
+	}
+	var err error
+	if s.coordinator != nil {
+		err = s.coordinator.WithWorkspaceLock(ctx, workspaceKey, apply)
+	} else {
+		err = apply()
+	}
 	if err != nil {
 		return err
 	}
@@ -1540,6 +1622,25 @@ func firstWorkspaceKey(workspaces map[string]domain.Bootstrap) string {
 }
 
 func (s *SQLiteStore) CreateWorkspace(ctx context.Context, name, urlKey, region string) (domain.Bootstrap, error) {
+	if s.coordinator == nil {
+		return s.createWorkspace(ctx, name, urlKey, region)
+	}
+	var created domain.Bootstrap
+	err := s.coordinator.WithWorkspaceLock(ctx, "__workspace_catalog__", func() error {
+		if err := s.ReloadAllWorkspaces(ctx); err != nil {
+			return err
+		}
+		var err error
+		created, err = s.createWorkspace(ctx, name, urlKey, region)
+		return err
+	})
+	if err == nil {
+		s.publishWorkspaceEvent(ctx, created.Workspace.URLKey, "workspace.created", created.Workspace.ID, map[string]string{"urlKey": created.Workspace.URLKey})
+	}
+	return created, err
+}
+
+func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region string) (domain.Bootstrap, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.workspaces[urlKey]; exists {
@@ -1566,6 +1667,25 @@ func (s *SQLiteStore) CreateWorkspace(ctx context.Context, name, urlKey, region 
 }
 
 func (s *SQLiteStore) UpdateWorkspace(ctx context.Context, workspaceKey string, workspace domain.Workspace) (domain.Bootstrap, error) {
+	if s.coordinator == nil {
+		return s.updateWorkspace(ctx, workspaceKey, workspace)
+	}
+	var updated domain.Bootstrap
+	err := s.coordinator.WithWorkspaceLock(ctx, "__workspace_catalog__", func() error {
+		if err := s.ReloadAllWorkspaces(ctx); err != nil {
+			return err
+		}
+		var err error
+		updated, err = s.updateWorkspace(ctx, workspaceKey, workspace)
+		return err
+	})
+	if err == nil {
+		s.publishWorkspaceEvent(ctx, updated.Workspace.URLKey, "workspace.updated", updated.Workspace.ID, map[string]string{"previousUrlKey": workspaceKey, "urlKey": updated.Workspace.URLKey})
+	}
+	return updated, err
+}
+
+func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, workspace domain.Workspace) (domain.Bootstrap, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	data, ok := s.workspaces[workspaceKey]
@@ -1622,6 +1742,26 @@ func (s *SQLiteStore) UpdateWorkspace(ctx context.Context, workspaceKey string, 
 }
 
 func (s *SQLiteStore) DeleteWorkspace(ctx context.Context, workspaceKey string) error {
+	if s.coordinator == nil {
+		return s.deleteWorkspace(ctx, workspaceKey)
+	}
+	var workspaceID string
+	err := s.coordinator.WithWorkspaceLock(ctx, "__workspace_catalog__", func() error {
+		if err := s.ReloadAllWorkspaces(ctx); err != nil {
+			return err
+		}
+		if data, ok := s.BootstrapFor(workspaceKey); ok {
+			workspaceID = data.Workspace.ID
+		}
+		return s.deleteWorkspace(ctx, workspaceKey)
+	})
+	if err == nil {
+		s.publishWorkspaceEvent(ctx, workspaceKey, "workspace.deleted", workspaceID, map[string]string{"urlKey": workspaceKey})
+	}
+	return err
+}
+
+func (s *SQLiteStore) deleteWorkspace(ctx context.Context, workspaceKey string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	data, ok := s.workspaces[workspaceKey]
@@ -1659,6 +1799,15 @@ func (s *SQLiteStore) DeleteWorkspace(ctx context.Context, workspaceKey string) 
 		return err
 	}
 	return tx.Commit()
+}
+
+func (s *SQLiteStore) publishWorkspaceEvent(ctx context.Context, workspaceKey, eventType, aggregateID string, payload any) {
+	if s.realtimeSink == nil {
+		return
+	}
+	raw, _ := json.Marshal(payload)
+	actor, _ := actorFromContext(ctx)
+	s.realtimeSink(workspaceKey, domain.RealtimeEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: aggregateID, ActorID: actor.ID, ClientID: realtimeClientFromContext(ctx), Payload: raw, CreatedAt: time.Now().UTC()})
 }
 
 func (s *SQLiteStore) Events(ctx context.Context, aggregateID string) ([]domain.DomainEvent, error) {
