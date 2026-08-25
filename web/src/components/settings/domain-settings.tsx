@@ -164,9 +164,32 @@ function LabelSectionRows({ section, data, resourceType, availableGroups, select
 interface NewLabelInput { name: string; description: string; color: string }
 function InlineLabelRow({ kind, grouped = false, treeLast = false, continuous = false, onCancel, onSave }: { kind: 'label'|'group'; grouped?: boolean; treeLast?:boolean; continuous?: boolean; onCancel: () => void; onSave: (input: NewLabelInput) => Promise<boolean> }) {
   const { t } = useI18n()
+  const formRef = useRef<HTMLFormElement>(null)
+  const savingRef = useRef(false)
   const [name, setName] = useState(''); const [description, setDescription] = useState(''); const [color, setColor] = useState(kind === 'group' ? '#8b8d98' : '#5E6AD2')
-  const submit = async () => { if (!name.trim()) return; const saved = await onSave({ name: name.trim(), description, color }); if (saved && continuous) { setName(''); setDescription('') } }
-  return <form className={`domain-labels-row is-editing${kind === 'group' ? ' is-group' : ''}${grouped ? ' is-nested' : ''}`} onSubmit={event => { event.preventDefault(); void submit() }} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); onCancel() } else if (event.key === 'Enter') { event.preventDefault(); void submit() } }}>
+  const submit = async () => {
+    if (savingRef.current || !name.trim()) return
+    savingRef.current = true
+    try {
+      const saved = await onSave({ name: name.trim(), description, color })
+      if (saved && continuous) { setName(''); setDescription('') }
+    } finally { savingRef.current = false }
+  }
+  const saveWhenFocusLeaves = () => requestAnimationFrame(() => {
+    const active = document.activeElement
+    if (active instanceof Element && (formRef.current?.contains(active) || active.closest('.domain-label-color-popover'))) return
+    void submit()
+  })
+  useEffect(() => {
+    const saveOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Element) || formRef.current?.contains(target) || target.closest('.domain-label-color-popover')) return
+      void submit()
+    }
+    document.addEventListener('pointerdown', saveOnOutsidePointer, true)
+    return () => document.removeEventListener('pointerdown', saveOnOutsidePointer, true)
+  })
+  return <form ref={formRef} className={`domain-labels-row is-editing${kind === 'group' ? ' is-group' : ''}${grouped ? ' is-nested' : ''}`} onBlur={saveWhenFocusLeaves} onSubmit={event => { event.preventDefault(); void submit() }} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); onCancel() } else if (event.key === 'Enter') { event.preventDefault(); void submit() } }}>
     <span className="domain-label-indent"/>
     <div className={`domain-label-name${kind === 'group' ? ' is-group-name' : ''}`}>{grouped&&<GroupTreeBranch last={treeLast}/>}{kind === 'group' && <span className="domain-label-group-chevron is-placeholder"/>}<LabelColorPicker color={color} kind={kind} label={t(kind === 'group' ? 'Choose group color' : 'Choose label color')} onChange={setColor}/><input autoFocus placeholder={t(kind === 'group' ? 'Group name' : 'Label name')} value={name} onChange={event => setName(event.target.value)}/></div>
     <input className="domain-label-description" aria-label={t(kind === 'group' ? 'Group description' : 'Label description')} disabled={!name.trim()} placeholder={t('Add label description…')} value={description} onChange={event => setDescription(event.target.value)}/><span/><span/><span/>
