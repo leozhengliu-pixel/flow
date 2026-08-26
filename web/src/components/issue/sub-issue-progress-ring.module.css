@@ -1,0 +1,1 @@
+.ring{width:14px;height:14px;flex:0 0 14px;overflow:visible;fill:none;stroke-width:2;stroke-linecap:round}.track{stroke:var(--sub-issue-progress-track)}.value{stroke:var(--sub-issue-progress-value);transition:stroke-dashoffset 180ms cubic-bezier(.2,0,0,1)}
