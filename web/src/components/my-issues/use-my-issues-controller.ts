@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MyIssuesBulkAction } from './my-issues-bulk-action-bar'
 import type { MyIssuesDetailsSummary, MyIssuesSummaryItem } from './my-issues-details-pane'
-import { consolidateFilters, filterValues, toggleFilterOption, updateFilterOperator, updateFilterValues, type MyIssuesAppliedFilter, type MyIssuesFilterOperator } from './my-issues-filter-types'
+import { consolidateFilters, toggleFilterOption, updateFilterOperator, updateFilterValues, type MyIssuesAppliedFilter, type MyIssuesFilterOperator } from './my-issues-filter-types'
 import type { MyIssuesGroupData, MyIssuesRowData } from './my-issues-list'
 import { useMyIssuesSelection } from './use-my-issues-state'
 import type { MyIssuesDisplayOptions, MyIssuesProperty, MyIssuesView } from './my-issues-surface'
+import { matchesExplorerFilter } from '@/components/issue-explorer/issue-explorer-model'
 
 export interface MyIssuesControllerAdapter {
   navigate: (href: string) => void
@@ -109,7 +110,7 @@ export function useMyIssuesController({ workspaceSlug, initialView, initialGroup
 export function myIssuesViewHref(workspaceSlug: string, view: MyIssuesView) { return `/${workspaceSlug}/my-issues/${view}` }
 
 function applyFilters(groups: MyIssuesGroupData[], filters: MyIssuesAppliedFilter[]) {
-  return groups.map(group => ({ ...group, issues: group.issues.filter(issue => filters.every(filter => matches(issue, filter))) })).filter(group => group.issues.length)
+  return groups.map(group => ({ ...group, issues: group.issues.filter(issue => filters.every(filter => matchesExplorerFilter(issue, filter))) })).filter(group => group.issues.length)
 }
 
 function projectGroups(groups: MyIssuesGroupData[], display: MyIssuesDisplayOptions): MyIssuesGroupData[] {
@@ -195,36 +196,6 @@ function readNumber(key: string, fallback: number) { try { const value = Number(
 function writeValue(key: string, value: string) { try { globalThis.localStorage?.setItem(key, value) } catch { /* Persistence is best-effort in private browsing. */ } }
 function isDisplayProperty(value: unknown): value is MyIssuesProperty { return typeof value === 'string' && DISPLAY_PROPERTIES.has(value as MyIssuesProperty) }
 const DISPLAY_PROPERTIES = new Set<MyIssuesProperty>(['id', 'status', 'assignee', 'priority', 'project', 'dueDate', 'milestone', 'labels', 'links', 'customers', 'customerRevenue', 'timeInStatus', 'created', 'updated'])
-function matches(issue: MyIssuesRowData, filter: MyIssuesAppliedFilter) {
-  const values = filterValues(filter).map(value => value.value)
-  let matched = true
-  if (filter.field === 'priority') matched = values.includes(String(issue.priority))
-  else if (filter.field === 'status') matched = values.includes(issue.state.id) || values.includes(issue.state.type)
-  else if (filter.field === 'assignee') matched = values.includes(issue.assignee?.id ?? '')
-  else if (filter.field === 'agent') matched = values.includes('*') ? Boolean(issue.delegate) : values.includes(issue.delegate?.id ?? '')
-  else if(filter.field==='agentSession')matched=values.includes('*')?Boolean(issue.agentSessionId):values.includes(issue.agentSessionId??'')
-  else if (filter.field === 'creator') matched = values.includes(issue.creatorId ?? '')
-  else if (filter.field === 'labels') matched = Boolean(issue.labels?.some(label => values.includes(label.id)))
-  else if(filter.field==='suggestedLabel')matched=values.includes('')?!issue.suggestedLabelIds?.length:Boolean(issue.suggestedLabelIds?.some(id=>values.includes(id)))
-  else if (filter.field === 'project') matched = values.includes(issue.project?.id ?? '')
-  else if(filter.field==='projectProperties')matched=values.some(value=>value.startsWith('project-status:')?issue.projectStatusId===value.slice(15):value.startsWith('project-status-type:')?issue.projectStatusType===value.slice(20):value.startsWith('project-priority:')?String(issue.projectPriority)===value.slice(17):value.startsWith('project-label:')?issue.projectLabelIds?.includes(value.slice(14)):value==='project-lead:'?!issue.projectLeadId:value.startsWith('project-lead:')?issue.projectLeadId===value.slice(13):value.startsWith('project-milestone-name-contains:')?issue.projectMilestoneNames?.some(name=>name.toLocaleLowerCase().includes(value.slice(32).toLocaleLowerCase())):false)
-  else if(filter.field==='initiative')matched=values.includes('')?!issue.initiativeIds?.length:Boolean(issue.initiativeIds?.some(id=>values.includes(id)))
-  else if (filter.field === 'cycle') matched = values.includes(issue.cycleId ?? '')
-  else if(filter.field==='addedToCycle')matched=values.includes(issue.addedToCycle??'')
-  else if(filter.field==='releases')matched=values.some(value=>value==='no-releases'?!issue.releaseIds?.length:value==='released-any'?Boolean(issue.hasReleasedRelease):value.startsWith('release:')?issue.releaseIds?.includes(value.slice(8)):value.startsWith('release-pipeline:')?issue.releasePipelineIds?.includes(value.slice(17)):value.startsWith('release-stage:')?issue.releaseStages?.includes(value.slice(14)):value.startsWith('release-stage-type:')?issue.releaseStatuses?.includes(value.slice(19)):false)
-  else if (filter.field === 'subscribers') matched = values.includes('') ? !issue.subscriberIds?.length : Boolean(issue.subscriberIds?.some(id=>values.includes(id)))
-  else if (filter.field === 'relations') matched = values.includes('') ? !issue.relationTypes?.length : Boolean(issue.relationTypes?.some(type=>values.includes(type)))
-  else if (filter.field === 'links') matched = values.includes(issue.hasLinks ? 'has-links' : 'no-links')
-  else if(filter.field==='content')matched=values.some(value=>value.startsWith('query:')?issue.title.toLocaleLowerCase().includes(value.slice(6).toLocaleLowerCase()):false)
-  else if (filter.field === 'dates') matched = values.some(value=>rowMatchesDateFilter(issue,value))
-  else if(filter.field==='externalSource')matched=values.includes(issue.externalSource??'')
-  else if(filter.field==='autoClosed')matched=values.includes(String(Boolean(issue.autoClosed)))
-  else if(filter.field==='template')matched=values.includes(issue.templateId??'')
-  else if(filter.field==='ai')matched=values.some(value=>value==='assigned-to-me'?Boolean(issue.isAssignedToViewer):value==='completed-last-month'?issue.state.type==='completed'&&Date.parse(issue.updatedAt)>=Date.now()-30*86_400_000:value==='due-next-two-weeks'?Boolean(issue.dueDate&&Date.parse(`${issue.dueDate.slice(0,10)}T00:00:00`)<=Date.now()+14*86_400_000):value.startsWith('query:')?issue.title.toLocaleLowerCase().includes(value.slice(6).toLocaleLowerCase()):false)
-  else if(filter.field==='advanced')matched=values.every(value=>{const separator=value.indexOf(':');if(separator<0)return true;const field=value.slice(0,separator),expected=value.slice(separator+1);return field==='status'?(issue.state.id===expected||issue.state.type===expected):field==='assignee'?issue.assignee?.id===expected:field==='priority'?String(issue.priority)===expected:field==='labels'?issue.labels?.some(label=>label.id===expected):field==='project'?issue.project?.id===expected:true})
-  return filter.operator === 'is' ? matched : !matched
-}
-function rowMatchesDateFilter(issue:MyIssuesRowData,value:string){const today=new Date();today.setHours(0,0,0,0);if(value==='created-past-day')return Date.parse(issue.createdAt)>=today.getTime()-86_400_000;if(value==='updated-past-day')return Date.parse(issue.updatedAt)>=today.getTime()-86_400_000;if(value==='has-due-date')return Boolean(issue.dueDate);if(value==='no-due-date')return !issue.dueDate;if(!issue.dueDate)return false;const due=Date.parse(`${issue.dueDate.slice(0,10)}T00:00:00`);if(value==='overdue')return due<today.getTime();if(value==='today')return due===today.getTime();if(value==='next-week')return due>=today.getTime()&&due<=today.getTime()+7*86_400_000;return false}
 function replaceIssues(groups: MyIssuesGroupData[], replacements: MyIssuesRowData[]) {
   const byId = new Map(replacements.map(issue => [issue.id, issue]))
   return groups.map(group => ({ ...group, issues: group.issues.map(issue => byId.get(issue.id) ?? issue) }))
