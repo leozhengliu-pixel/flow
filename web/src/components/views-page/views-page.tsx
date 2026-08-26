@@ -12,6 +12,7 @@ import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { ViewsEmptyState } from './views-empty-state'
 import styles from './views-page.module.css'
 import { UserAvatar } from '@/components/ui/user-avatar'
+import { CheckboxMark } from '@/components/ui/checkbox-mark'
 
 type ViewsScope = { kind: 'workspace' } | { kind: 'team'; team: Team }
 type Ordering = 'created' | 'name' | 'owner' | 'updated'
@@ -176,7 +177,7 @@ function OwnerMenu({ owner, users, onChange }: { owner: User; users: User[]; onC
 }
 
 function ViewMenuItem({ danger = false, icon, label, onSelect, shortcut }: { danger?: boolean; icon: ReactNode; label: string; onSelect: () => void; shortcut?: string }) { return <ContextMenu.Item className={styles.menuItem} data-danger={danger || undefined} onSelect={onSelect}>{icon}<span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}</ContextMenu.Item> }
-function SubscriptionEventItem({ checked, label, onSelect }: { checked: boolean; label: string; onSelect: () => void }) { return <ContextMenu.CheckboxItem checked={checked} className={styles.menuItem} onSelect={event => { event.preventDefault(); onSelect() }}><span className={styles.menuCheckbox}>{checked && <Check/>}</span><span>{label}</span></ContextMenu.CheckboxItem> }
+function SubscriptionEventItem({ checked, label, onSelect }: { checked: boolean; label: string; onSelect: () => void }) { return <ContextMenu.CheckboxItem checked={checked} className={styles.menuItem} onSelect={event => { event.preventDefault(); onSelect() }}><span className={styles.menuCheckbox}>{checked && <CheckboxMark/>}</span><span>{label}</span></ContextMenu.CheckboxItem> }
 function SortButton({ active, direction, label, onClick }: { active: boolean; direction: Direction; label: string; onClick: () => void }) { return <button className={styles.sortButton} onClick={onClick} type="button"><span>{label}</span>{active && (direction === 'asc' ? <ArrowDown size={12}/> : <ArrowUp size={12}/>)}</button> }
 function ScopeAvatar({ kind, label }: { kind: SavedView['scope']; label: string }) { return <span className={styles.scopeAvatar}>{kind === 'personal' ? <UserRound size={13}/> : kind === 'team' ? <TeamIcon size={13}/> : label.slice(0, 2).toUpperCase()}</span> }
 function ViewOwnerAvatar({ user }: { user: User }) { return <UserAvatar avatarUrl={user.avatarUrl} className={styles.avatar} name={user.displayName}/> }
