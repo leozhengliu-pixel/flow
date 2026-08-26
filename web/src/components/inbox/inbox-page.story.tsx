@@ -22,7 +22,6 @@ export function InboxPageStory({ initialSelectedId = null }: { initialSelectedId
     adapter={storyAdapter}
     displayOptions={displayOptions}
     onDisplayOptionsChange={setDisplayOptions}
-    onAddFilter={()=>undefined}
     onRetryLoad={()=>undefined}
     onOpenIssue={()=>undefined}
     onCopyLink={()=>undefined}

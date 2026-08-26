@@ -7,6 +7,7 @@ import { format, formatDistanceToNowStrict } from 'date-fns'
 import { toast } from 'sonner'
 import { SlackIcon } from '@/components/issue/issue-icons'
 import type { Project, Subscription } from '@/types/flow'
+import { NotificationCheckbox, NotificationOptionSection } from '@/components/ui/notification-controls'
 
 const EVENT_OPTIONS = [
   ['issueAdded', 'An issue is added to the project'],
@@ -24,7 +25,7 @@ export function ProjectNotificationMenu({ onOpenChange, open, project, subscript
   return <Popover.Root onOpenChange={onOpenChange} open={open}>
     <Popover.Trigger asChild><button aria-label="Setup project notifications" className="project-detail-page__header-action" data-active={Boolean(subscription)} title="Setup project notifications" type="button"><Bell size={14}/></button></Popover.Trigger>
     <Popover.Portal><Popover.Content align="end" className="project-notifications" collisionPadding={10} sideOffset={4}>
-      <NotificationSection title={<><span>Send inbox notifications for</span> <span data-i18n-ignore>{project.name}</span></>}>{EVENT_OPTIONS.map(([eventName, label]) => <NotificationCheck checked={events.includes(eventName)} key={eventName} label={label} onChange={checked => void changeEvent(eventName, checked)}/>)}</NotificationSection>
+      <NotificationOptionSection className="project-notifications__section" title={<><span>Send inbox notifications for</span> <span data-i18n-ignore>{project.name}</span></>}>{EVENT_OPTIONS.map(([eventName, label]) => <NotificationCheckbox checked={events.includes(eventName)} key={eventName} label={label} onChange={checked => void changeEvent(eventName, checked)}/>)}</NotificationOptionSection>
       <section className="project-notifications__schedule"><div><strong>Update schedule</strong><span>{scheduleLabel(project.updateCadence || 'none')}</span></div><DropdownMenu.Root><DropdownMenu.Trigger asChild><button type="button">Change</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className="project-detail-page__menu" sideOffset={5}>{(['none','weekly','biweekly','monthly'] as const).map(schedule => <DropdownMenu.Item key={schedule} onSelect={() => void onUpdate({ updateCadence: schedule })}><Clock3 size={13}/><span>{scheduleLabel(schedule)}</span>{project.updateCadence === schedule && <Check size={13}/>}</DropdownMenu.Item>)}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></section>
       <section className="project-notifications__slack"><SlackIcon size={15}/><strong>Slack notifications</strong><button aria-disabled="true" disabled title="Connect Slack in workspace settings first" type="button">Connect</button></section>
     </Popover.Content></Popover.Portal>
@@ -68,7 +69,5 @@ export function ProjectDescriptionHistoryDialog({ onOpenChange, open, project }:
 }
 
 function CopyItem({ icon, label, value }: { icon: ReactNode; label: string; value: string }) { return <DropdownMenu.Item onSelect={() => void navigator.clipboard.writeText(value).then(() => toast.success(`${label} copied`))}>{icon}<span>{label}</span></DropdownMenu.Item> }
-function NotificationSection({ children, title }: { children: ReactNode; title: ReactNode }) { return <section className="project-notifications__section"><h2>{title}</h2>{children}</section> }
-function NotificationCheck({ checked, label, onChange }: { checked: boolean; label: string; onChange: (checked: boolean) => void }) { return <label><span>{label}</span><button aria-checked={checked} aria-label={label} data-checked={checked} onClick={() => onChange(!checked)} role="checkbox" type="button">{checked && <Check size={11}/>}</button></label> }
 function scheduleLabel(schedule: Project['updateCadence']) { return ({ none: 'No expectation for updates', weekly: 'Weekly', biweekly: 'Every two weeks', monthly: 'Monthly' })[schedule] }
 function nextReminder(hours: number) { return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString() }

@@ -83,7 +83,7 @@ export function Sidebar({ account, data, page, open = false, onOpenChange, onSea
     initiatives: data.viewerRole === 'guest' || !featureEnabled('initiatives') ? null : <Nav active={page === 'initiative-detail'} icon={<FlowIcon name="Initiative"/>} label="Initiatives" to={initiativesPath(workspaceSlug)} onClick={close}/>,
     projects: <Nav active={page === 'project-detail'} icon={<FlowIcon name="Project"/>} label="Projects" to={projectsPath(workspaceSlug)} onClick={close}/>,
     views: data.viewerRole === 'guest' ? null : <Nav icon={<FlowIcon name="CustomView"/>} label="Views" to={workspaceViewsPath(workspaceSlug)} onClick={close}/>,
-    members: <Nav active={page === 'members'} icon={<MembersIcon/>} label="Members" to={membersPath(workspaceSlug)} onClick={close}/>,
+    members: <Nav active={page === 'members'} icon={<SidebarMembersIcon/>} label="Members" to={membersPath(workspaceSlug)} onClick={close}/>,
     customers: data.viewerRole === 'guest' || !featureEnabled('customer-requests') ? null : <Nav active={page === 'customers'} icon={<CustomersIcon/>} label="Customers" to={customersPath(workspaceSlug)} onClick={close}/>,
     teams: <Nav active={page === 'teams'} icon={<FlowIcon name="Team"/>} label="Teams" to={teamsPath(workspaceSlug)} onClick={close}/>,
     inbox: null, reviews: null, myIssues: null, pulse: null, drafts: null, agent: null,
@@ -184,7 +184,7 @@ function MoreMenu({ entries, onCustomize, workspaceSlug, releases, asks }: { ent
     initiatives: { label: 'Initiatives', icon: <FlowIcon name="Initiative"/>, to: initiativesPath(workspaceSlug) },
     projects: { label: 'Projects', icon: <FlowIcon name="Project"/>, to: projectsPath(workspaceSlug) },
     views: { label: 'Views', icon: <FlowIcon name="CustomView"/>, to: workspaceViewsPath(workspaceSlug) },
-    members: { label: 'Members', icon: <MembersIcon/>, to: membersPath(workspaceSlug) },
+    members: { label: 'Members', icon: <SidebarMembersIcon/>, to: membersPath(workspaceSlug) },
     customers: { label: 'Customers', icon: <CustomersIcon/>, to: customersPath(workspaceSlug) },
     teams: { label: 'Teams', icon: <FlowIcon name="Team"/>, to: teamsPath(workspaceSlug) },
   }
@@ -223,7 +223,7 @@ function Nav({ icon, label, badge, active, onClick, to }: { icon: ReactElement; 
 
 function SidebarCustomization({ open, onOpenChange, preferences, order, onChange, onReorder }: { open: boolean; onOpenChange: (open: boolean) => void; preferences: SidebarPreferences; order: SidebarOrder; onChange: (preferences: SidebarPreferences) => void; onReorder: (group: SidebarGroup, active: SidebarEntry, target: SidebarEntry) => void }) {
   const personal: Record<SidebarEntry, [string, ReactElement]> = { inbox: ['Inbox', <FlowIcon key="inbox" name="Inbox"/>], reviews: ['Reviews', <GitPullRequest key="reviews"/>], myIssues: ['My issues', <FlowIcon key="my-issues" name="MyIssues"/>], pulse: ['Pulse', <PulseIcon key="pulse"/>], drafts: ['Drafts', <DraftIcon key="drafts"/>], agent: ['Agent', <AgentIcon key="agent"/>], initiatives: ['', <></>], projects: ['', <></>], views: ['', <></>], members: ['', <></>], customers: ['', <></>], teams: ['', <></>] }
-  const workspace: Record<SidebarEntry, [string, ReactElement]> = { initiatives: ['Initiatives', <FlowIcon key="initiatives" name="Initiative"/>], projects: ['Projects', <FlowIcon key="projects" name="Project"/>], views: ['Views', <FlowIcon key="views" name="CustomView"/>], members: ['Members', <MembersIcon key="members"/>], customers: ['Customers', <CustomersIcon key="customers"/>], teams: ['Teams', <FlowIcon key="teams" name="Team"/>], inbox: ['', <></>], reviews: ['', <></>], myIssues: ['', <></>], pulse: ['', <></>], drafts: ['', <></>], agent: ['', <></>] }
+  const workspace: Record<SidebarEntry, [string, ReactElement]> = { initiatives: ['Initiatives', <FlowIcon key="initiatives" name="Initiative"/>], projects: ['Projects', <FlowIcon key="projects" name="Project"/>], views: ['Views', <FlowIcon key="views" name="CustomView"/>], members: ['Members', <SidebarMembersIcon key="members"/>], customers: ['Customers', <CustomersIcon key="customers"/>], teams: ['Teams', <FlowIcon key="teams" name="Team"/>], inbox: ['', <></>], reviews: ['', <></>], myIssues: ['', <></>], pulse: ['', <></>], drafts: ['', <></>], agent: ['', <></>] }
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="sidebar-customize-dialog">
     <DialogTitle>Customize sidebar</DialogTitle>
     <label className="sidebar-badge-style"><span>Default badge style</span><span className="badge-preview">1</span><select aria-label="Default badge style" defaultValue="count"><option value="count">Count</option><option value="dot">Dot</option></select></label>
@@ -306,7 +306,7 @@ function HelpMenu({ onSettings }: { onSettings: () => void }) {
       <DropdownMenu.Item onSelect={() => openExternal('https://flowstatus.com')}><CircleCheck/>Flow status</DropdownMenu.Item>
       <DropdownMenu.Item onSelect={() => openExternal('https://flow.app/download')}><Download/>Download apps</DropdownMenu.Item>
       <DropdownMenu.Item onSelect={onSettings}><Settings/>Settings<kbd className="menu-end">G then S</kbd></DropdownMenu.Item>
-      <DropdownMenu.Item onSelect={() => openExternal('https://flow.app/join-slack')}><SlackIcon/>Slack community</DropdownMenu.Item>
+      <DropdownMenu.Item onSelect={() => openExternal('https://flow.app/join-slack')}><SidebarSlackIcon/>Slack community</DropdownMenu.Item>
       <DropdownMenu.Label className="sidebar-help-label">What’s new</DropdownMenu.Label>
       <DropdownMenu.Item className="sidebar-news-item" onSelect={() => openExternal('https://flow.app/changelog')}><NewsDot/>Team initiatives</DropdownMenu.Item>
       <DropdownMenu.Item className="sidebar-news-item" onSelect={() => openExternal('https://flow.app/changelog')}><NewsDot/>Coding sessions on mobile</DropdownMenu.Item>
@@ -332,13 +332,13 @@ function ComposeIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><pat
 function IssuesIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2.5" width="8.5" height="8.5" rx="2" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M6 13.5h5.5a2 2 0 0 0 2-2V6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg> }
 function CycleIcon() { return <FlowIcon name="Refresh"/> }
 function GitHubIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.4a6.75 6.75 0 0 0-2.13 13.15c.34.06.46-.14.46-.32v-1.3c-1.88.41-2.28-.8-2.28-.8-.31-.78-.75-.98-.75-.98-.61-.42.05-.41.05-.41.68.05 1.03.69 1.03.69.6 1.03 1.57.73 1.95.56.06-.43.24-.73.43-.9-1.5-.17-3.08-.75-3.08-3.34 0-.74.26-1.34.69-1.81-.07-.17-.3-.86.07-1.79 0 0 .57-.18 1.86.69A6.4 6.4 0 0 1 8 4.61c.58 0 1.15.08 1.69.23 1.29-.87 1.85-.69 1.85-.69.37.93.14 1.62.07 1.79.43.47.69 1.07.69 1.81 0 2.6-1.58 3.16-3.09 3.33.24.21.46.63.46 1.27v1.88c0 .18.12.39.46.32A6.75 6.75 0 0 0 8 1.4Z" fill="currentColor"/></svg> }
-function MembersIcon() { return <FlowMembersIcon/> }
+function SidebarMembersIcon() { return <FlowMembersIcon/> }
 function CustomersIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.5h7a2 2 0 0 1 2 2v7H5a2 2 0 0 1-2-2v-7Z" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="M6 5.5h4M6 8h3M12 5h1a1 1 0 0 1 1 1v7H7" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg> }
 function DraftIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.5h8a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 11 13.5H3A1.5 1.5 0 0 1 1.5 12V4A1.5 1.5 0 0 1 3 2.5Z" fill="none" stroke="currentColor" strokeWidth="1.3"/><path d="m5 10 1-2.5 3.2-3.2 1.5 1.5L7.5 9 5 10Z" fill="currentColor"/></svg> }
 function CustomizeIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5h3v3M13.2 2.8 8.7 7.3M7 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8a1.5 1.5 0 0 0 1.5-1.5V9" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg> }
 function UpgradeIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="m5.5 8 2.5-2.5L10.5 8M8 5.7v4.8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> }
 function TeamDisclosureIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M7.00194 10.6239C6.66861 10.8183 6.25 10.5779 6.25 10.192V5.80802C6.25 5.42212 6.66861 5.18169 7.00194 5.37613L10.7596 7.56811C11.0904 7.76105 11.0904 8.23895 10.7596 8.43189L7.00194 10.6239Z"/></svg> }
-function SlackIcon() { return <FlowSlackIcon className="slack-icon"/> }
+function SidebarSlackIcon() { return <FlowSlackIcon className="slack-icon"/> }
 function NewsDot() { return <span className="news-dot" aria-hidden="true"/> }
 
 function readSidebarPreferences(): SidebarPreferences { try { return { ...defaultPreferences, ...JSON.parse(localStorage.getItem('flow.sidebar.preferences') ?? '{}') } } catch { return defaultPreferences } }

@@ -3,12 +3,12 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Copy, MessageCircle, MoreHorizontal, Pencil, SmilePlus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { formatDistanceToNowStrict } from 'date-fns'
-import { toast } from 'sonner'
 import { Avatar } from '@/components/issue/issue-row'
 import { EmojiPicker } from '@/components/reactions/emoji-picker'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import type { InitiativeUpdate, Project, ProjectUpdate } from '@/types/flow'
 import type { PulseUpdateItem } from './pulse-model'
+import { useCommentComposer } from '@/hooks/use-comment-composer'
 
 type Props = {
   item: PulseUpdateItem
@@ -29,8 +29,7 @@ export function PulseUpdateCard(props: Props) {
   const update = item.update
   const source = item.kind === 'project' ? item.project : item.initiative
   const [commentsOpen, setCommentsOpen] = useState(false)
-  const [comment, setComment] = useState('')
-  const [posting, setPosting] = useState(false)
+  const {comment,posting,setComment,submitComment:postComment}=useCommentComposer(body=>item.kind==='project'?props.onCommentProject(item.project.id,update.id,body):props.onCommentInitiative(item.initiative.id,update.id,body))
   const [editing, setEditing] = useState(false)
   const [editBody, setEditBody] = useState(update.body)
   const [editHealth, setEditHealth] = useState(update.health)
@@ -42,16 +41,6 @@ export function PulseUpdateCard(props: Props) {
   const reactions = update.reactions ?? {}
   const href = item.kind === 'project' ? `/${props.workspaceSlug}/project/${item.project.slugId}/activity` : `/${props.workspaceSlug}/initiative/${item.initiative.slugId}/activity`
 
-  const postComment = async () => {
-    if (!comment.trim() || posting) return
-    setPosting(true)
-    try {
-      if (item.kind === 'project') await props.onCommentProject(item.project.id, update.id, comment.trim())
-      else await props.onCommentInitiative(item.initiative.id, update.id, comment.trim())
-      setComment('')
-    } catch (error) { toast.error('Could not post comment', { description: error instanceof Error ? error.message : undefined }) }
-    finally { setPosting(false) }
-  }
   const react = async (emoji: string) => {
     if (item.kind === 'project') await props.onReactProject(item.project.id, update.id, emoji)
     else await props.onReactInitiative(item.initiative.id, update.id, emoji)

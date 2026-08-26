@@ -1,6 +1,8 @@
 import type { MyIssuesDisplayOptions, MyIssuesProperty } from './my-issues-surface'
 
-export const defaultMyIssuesDisplayOptions: MyIssuesDisplayOptions = {
+export function createIssueDisplayOptions(overrides: Partial<Omit<MyIssuesDisplayOptions,'properties'>> & {properties?:Iterable<MyIssuesProperty>} = {}): MyIssuesDisplayOptions {
+  const { properties, ...rest } = overrides
+  return {
   layout: 'list',
   grouping: 'focus',
   groupOrder: 'asc',
@@ -12,5 +14,9 @@ export const defaultMyIssuesDisplayOptions: MyIssuesDisplayOptions = {
   showEmptyGroups: false,
   nestedSubIssues: false,
   hiddenGroupIds: [],
-  properties: new Set<MyIssuesProperty>(['id', 'status', 'assignee', 'priority', 'project', 'labels', 'created']),
+  properties: new Set(properties ?? ['id', 'status', 'assignee', 'priority', 'project', 'labels', 'created']),
+  ...rest,
+  }
 }
+
+export const defaultMyIssuesDisplayOptions = createIssueDisplayOptions()

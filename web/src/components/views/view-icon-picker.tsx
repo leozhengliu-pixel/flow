@@ -3,6 +3,7 @@ import * as Popover from '@radix-ui/react-popover'
 import { Search } from 'lucide-react'
 import { FLOW_CORE_ICON_NAMES, FLOW_VIEW_ICON_ALIASES, FLOW_VIEW_ICON_NAMES } from './flow-view-icon-data'
 import styles from './view-icon-picker.module.css'
+import { FLOW_COLOR_PALETTE } from '@/components/ui/color-palette'
 
 export const DEFAULT_VIEW_ICON = 'CustomView'
 export const DEFAULT_VIEW_COLOR = '#bec2c8'
@@ -13,18 +14,6 @@ const ICON_NAME_SET = new Set<string>(ICON_NAMES)
 const FREQUENT_EMOJIS = `👍 👌 🙏 😂 ❤️ 👀 ✅ 🙂 😃 😄 😀 🤔 😅 ⚠️ 😕 ❌ 🙌 🎉 😉 😊 🤷 👋 ❓`.split(' ')
 const PEOPLE_EMOJIS = `😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 🫠 😉 😊 😇 🥰 😍 🤩 😘 😗 ☺️ 😚 😙 🥲 😋 😛 😜 🤪 😝 🤑 🤗 🤭 🫢 🫣 🤫 🤔 🫡 🤐 🤨 😐 😑 😶 😶‍🌫️ 😏 😒 🙄 😬 😮‍💨 🤥 😌 😔 😪 🤤 😴 😷 🤒 🤕 🤢 🤮 🤧 🥵 🥶 🥴 😵 😵‍💫 🤯 🤠 🥳 🥸 😎 🤓 🧐 😕 🫤 😟 🙁 ☹️ 😮 😯 😲 😳 🥺 🥹 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 ☠️ 💩 🤡 👻 👽 👾 🤖 👋 🤚 🖐️ ✋ 🖖 🫱 🫲 🫳 🫴 👌 🤌 🤏 ✌️ 🤞 🫰 🤟 🤘 🤙 👈 👉 👆 🖕 👇 ☝️ 🫵 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 🫶 👐 🤲 🤝 🙏 ✍️ 💅`.split(' ')
 const EMOJI_NAMES: Record<string, string> = { '👍': '+1', '👌': 'ok_hand', '🙏': 'pray', '😂': 'joy', '❤️': 'heart', '👀': 'eyes', '✅': 'white_check_mark', '🙂': 'slightly_smiling_face', '⚠️': 'warning', '❌': 'x', '🙌': 'raised_hands', '🎉': 'tada', '🤷': 'shrug', '👋': 'wave', '❓': 'question' }
-
-const COLORS = [
-  { name: 'Grey', value: '#bec2c8' },
-  { name: 'Dark Grey', value: '#95a2b3' },
-  { name: 'Purple', value: '#5e6ad2' },
-  { name: 'Teal', value: '#26b5ce' },
-  { name: 'Green', value: '#4cb782' },
-  { name: 'Yellow', value: '#f2c94c' },
-  { name: 'Orange', value: '#f2994a' },
-  { name: 'Pink', value: '#f7c8c1' },
-  { name: 'Red', value: '#eb5757' },
-] as const
 
 export type ViewVisual = { icon: string; color: string }
 
@@ -74,7 +63,7 @@ export function ViewIconPicker({ align = 'start', color = DEFAULT_VIEW_COLOR, ic
         <button aria-controls="view-emojis-panel" aria-selected={tab === 'emojis'} className={styles.tab} onClick={() => { setTab('emojis'); setQuery(''); requestAnimationFrame(() => searchRef.current?.focus()) }} role="tab" type="button">Emojis</button>
       </div>
       {tab === 'icons' && <div aria-label="Icons" className={styles.panel} id="view-icons-panel" role="tabpanel">
-        <div className={styles.colors}>{COLORS.map(option => <button aria-label={option.name} className={styles.colorButton} data-selected={color.toLowerCase() === option.value} key={option.value} onClick={() => chooseColor(option.value)} type="button"><span style={{ background: option.value }}>{color.toLowerCase() === option.value && <CheckMark/>}</span></button>)}<button aria-label="Set custom color" className={`${styles.colorButton} ${styles.customColor}`} data-selected={!COLORS.some(option => option.value === color.toLowerCase())} onClick={() => customColorRef.current?.click()} type="button"><span/>{!COLORS.some(option => option.value === color.toLowerCase()) && <i/>}</button><input aria-hidden="true" className={styles.colorInput} onChange={event => chooseColor(event.target.value)} ref={customColorRef} tabIndex={-1} type="color" value={validColor(color) ? color : DEFAULT_VIEW_COLOR}/></div>
+        <div className={styles.colors}>{FLOW_COLOR_PALETTE.map(option => <button aria-label={option.name} className={styles.colorButton} data-selected={color.toLowerCase() === option.value} key={option.value} onClick={() => chooseColor(option.value)} type="button"><span style={{ background: option.value }}>{color.toLowerCase() === option.value && <CheckMark/>}</span></button>)}<button aria-label="Set custom color" className={`${styles.colorButton} ${styles.customColor}`} data-selected={!FLOW_COLOR_PALETTE.some(option => option.value === color.toLowerCase())} onClick={() => customColorRef.current?.click()} type="button"><span/>{!FLOW_COLOR_PALETTE.some(option => option.value === color.toLowerCase()) && <i/>}</button><input aria-hidden="true" className={styles.colorInput} onChange={event => chooseColor(event.target.value)} ref={customColorRef} tabIndex={-1} type="color" value={validColor(color) ? color : DEFAULT_VIEW_COLOR}/></div>
         <SearchBox onArrowDown={() => focusGridItem(0)} placeholder="Search icons…" query={query} searchRef={searchRef} setQuery={setQuery}/>
         <div className={styles.iconGrid} ref={gridRef}>{filteredIcons.map((name, index) => <button aria-label={name} className={styles.iconButton} data-selected={icon === name} key={name} onClick={() => chooseIcon(name)} onKeyDown={event => moveGridFocus(event, index)} title={name} type="button"><ViewGlyph color={color} icon={name}/></button>)}</div>
       </div>}

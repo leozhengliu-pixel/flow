@@ -31,6 +31,7 @@ import {
   AgentSubmitIcon,
 } from "./agent-icons";
 import styles from "./agent-page.module.css";
+import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
 
 const examples = [
   ["Create a new project", "Turn an idea into a well-scoped project"],
@@ -420,17 +421,14 @@ export function AgentPage({
               {attachments.map((file, index) => (
                 <span key={`${file.name}-${file.lastModified}`}>
                   <b>{file.name}</b>
-                  <button
-                    aria-label={`${t("Remove attachment")} ${file.name}`}
+                  <AttachmentRemoveButton
+                    label={`${t("Remove attachment")} ${file.name}`}
                     onClick={() =>
                       setAttachments((items) =>
                         items.filter((_, itemIndex) => itemIndex !== index),
                       )
                     }
-                    type="button"
-                  >
-                    <X />
-                  </button>
+                  />
                 </span>
               ))}
             </div>
