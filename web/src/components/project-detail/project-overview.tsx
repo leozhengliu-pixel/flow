@@ -9,6 +9,7 @@ import { Avatar } from '@/components/issue/issue-row'
 import { CalendarIcon, LabelIcon, MembersIcon, NoAssigneeIcon, PriorityIcon, ProjectStatusIcon, SlackIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { ViewIconPicker } from '@/components/views/view-icon-picker'
 import { ProjectDatePicker } from '@/components/projects-page/project-target-date-picker'
+import { groupOptionSections } from '@/lib/group-options'
 import { useI18n } from '@/i18n/i18n'
 import type { ProjectMutationInput } from '@/components/projects-page/projects-page'
 import type { Issue, ProjectResource, Team } from '@/types/flow'
@@ -26,8 +27,8 @@ export function ProjectOverview({ project, projects, initiatives, projectStatuse
   return <div className="project-overview">
     <section className="project-overview__intro">
       <ViewIconPicker color={project.color} icon={project.icon || 'Project'} onChange={visual => void save(visual)} triggerClassName="project-overview__icon"/>
-      <EditableText ariaLabel="Project name" className="project-overview__name" placeholder="Project name" value={project.name} onCommit={name => save({ name })}/>
-      <EditableText ariaLabel="Project summary" className="project-overview__summary" placeholder="Add a short summary…" value={project.summary} onCommit={summary => save({ summary })}/>
+      <ProjectEditableText ariaLabel="Project name" className="project-overview__name" placeholder="Project name" value={project.name} onCommit={name => save({ name })}/>
+      <ProjectEditableText ariaLabel="Project summary" className="project-overview__summary" placeholder="Add a short summary…" value={project.summary} onCommit={summary => save({ summary })}/>
       <div className="project-overview__property-section">
         <h3>Properties</h3>
         <div className="project-overview__properties">
@@ -54,7 +55,7 @@ export function ProjectOverview({ project, projects, initiatives, projectStatuse
 
     <section className="project-overview__description">
       <h3>Description</h3>
-      <EditableText ariaLabel="Project description" className="project-overview__description-editor" multiline placeholder="Add description…" value={project.description} onCommit={description => save({ description })}/>
+      <ProjectEditableText ariaLabel="Project description" className="project-overview__description-editor" multiline placeholder="Add description…" value={project.description} onCommit={description => save({ description })}/>
     </section>
 
     <section className="project-overview__milestones">
@@ -80,7 +81,7 @@ function OverviewMilestone({ issues, milestone, onDelete, onOpenIssues, onUpdate
   return <article className="project-overview__milestone" data-expanded={expanded} id={`milestone-${milestone.id}`}>
     <header>
       <span className="project-overview__milestone-mark"><MilestoneProgress progress={progress}/></span>
-      <EditableText ariaLabel="Milestone name" className="project-overview__milestone-name" placeholder="Milestone name" value={milestone.name} onCommit={name => onUpdate({ name }).then(() => undefined)}/>
+      <ProjectEditableText ariaLabel="Milestone name" className="project-overview__milestone-name" placeholder="Milestone name" value={milestone.name} onCommit={name => onUpdate({ name }).then(() => undefined)}/>
       <button aria-expanded={expanded} aria-label={expanded ? 'Collapse' : 'Expand'} className="project-overview__milestone-collapse" onClick={() => setExpanded(value => !value)} type="button"><ChevronRight size={16}/></button>
       <span className="project-overview__milestone-spacer"/>
       <ProjectDatePicker buttonClassName="project-overview__milestone-date" label="Target date" onChange={targetDate => void onUpdate({ targetDate })} value={milestone.targetDate}><span>{milestone.targetDate ? locale === 'en-US' ? format(new Date(`${milestone.targetDate}T00:00:00`), 'MMM d') : formatDate(`${milestone.targetDate}T00:00:00`, { month: 'short', day: 'numeric' }) : 'Choose date'}</span></ProjectDatePicker>
@@ -93,7 +94,7 @@ function OverviewMilestone({ issues, milestone, onDelete, onOpenIssues, onUpdate
         <DropdownMenu.Item className="is-danger" onSelect={() => { if (window.confirm(`Delete “${milestone.name}”?`)) void onDelete() }}><Trash2 size={14}/><span>Delete…</span></DropdownMenu.Item>
       </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
     </header>
-    {expanded && <EditableText
+    {expanded && <ProjectEditableText
       ariaLabel="Milestone description"
       className="project-overview__milestone-description"
       multiline
@@ -146,12 +147,12 @@ function ResourceSection({ onCreate, onDelete, onUpdate, resources, teams }: { r
       <DropdownMenu.Separator/><DropdownMenu.Item className="is-danger" onSelect={() => setDeleteResource(resource)}><Trash2 size={14}/><span>Delete</span></DropdownMenu.Item>
     </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></div>)}
     <DropdownMenu.Root onOpenChange={setMenuOpen} open={menuOpen}><DropdownMenu.Trigger asChild><button className="project-overview__inline-add" type="button"><Plus size={13}/>Add document or link…</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="start" className="project-detail-page__menu project-overview__resource-menu" sideOffset={4}><DropdownMenu.Label>Add document or link…</DropdownMenu.Label><DropdownMenu.Item onSelect={() => void createDocument()}><FileText size={14}/><span>Create new document…</span></DropdownMenu.Item><DropdownMenu.Item onSelect={() => setDialog({ mode: 'create' })}><Link2 size={14}/><span>Add a link…</span><kbd>Ctrl L</kbd></DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
-  </div><ResourceDialog key={dialog?.resource?.id ?? dialog?.mode ?? 'closed'} onOpenChange={open => { if (!open) setDialog(undefined) }} open={Boolean(dialog)} resource={dialog?.resource} onSubmit={async input => { if (dialog?.resource) await onUpdate(dialog.resource.id, input); else await onCreate({ type: 'link', url: input.url!, title: input.title }); setDialog(undefined) }}/>
+  </div><ProjectResourceDialog key={dialog?.resource?.id ?? dialog?.mode ?? 'closed'} onOpenChange={open => { if (!open) setDialog(undefined) }} open={Boolean(dialog)} resource={dialog?.resource} onSubmit={async input => { if (dialog?.resource) await onUpdate(dialog.resource.id, input); else await onCreate({ type: 'link', url: input.url!, title: input.title }); setDialog(undefined) }}/>
   <Dialog.Root onOpenChange={open => { if (!open) setDeleteResource(undefined) }} open={Boolean(deleteResource)}><Dialog.Portal><Dialog.Overlay className="project-detail-page__dialog-overlay"/><Dialog.Content aria-describedby="project-resource-delete-description" className="project-detail-page__form-dialog"><Dialog.Title>{`Delete “${deleteResource?.title ?? ''}”?`}</Dialog.Title><Dialog.Description id="project-resource-delete-description">This resource will be removed from the project.</Dialog.Description><footer><Dialog.Close asChild><button type="button">Cancel</button></Dialog.Close><button className="is-danger" onClick={() => { if (!deleteResource) return; void onDelete(deleteResource.id).then(() => setDeleteResource(undefined)) }} type="button">Delete</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
   </section>
 }
 
-function ResourceDialog({ onOpenChange, onSubmit, open, resource }: { onOpenChange: (open: boolean) => void; onSubmit: (input: { title?: string; url?: string }) => Promise<void>; open: boolean; resource?: ProjectResource }) {
+function ProjectResourceDialog({ onOpenChange, onSubmit, open, resource }: { onOpenChange: (open: boolean) => void; onSubmit: (input: { title?: string; url?: string }) => Promise<void>; open: boolean; resource?: ProjectResource }) {
   const [url, setUrl] = useState(resource?.url ?? '')
   const [title, setTitle] = useState(resource?.title ?? '')
   const [saving, setSaving] = useState(false)
@@ -193,7 +194,7 @@ function DateProperty({ label, onChange, placeholder, value }: { label: 'Start d
   return <ProjectDatePicker buttonClassName="project-overview__date" label={label} onChange={onChange} value={value}><CalendarIcon size={14} variant={label === 'Start date' ? 'start' : 'target'}/><span>{value ? locale === 'en-US' ? format(new Date(`${value}T00:00:00`), 'MMM do') : formatDate(`${value}T00:00:00`, { month: 'short', day: 'numeric' }) : placeholder}</span></ProjectDatePicker>
 }
 
-function EditableText({ ariaLabel, className, multiline, onCommit, placeholder, value }: { ariaLabel: string; className: string; multiline?: boolean; onCommit: (value: string) => Promise<void>; placeholder: string; value: string }) {
+function ProjectEditableText({ ariaLabel, className, multiline, onCommit, placeholder, value }: { ariaLabel: string; className: string; multiline?: boolean; onCommit: (value: string) => Promise<void>; placeholder: string; value: string }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
   const commit = () => { const next = draft.trim(); if (next !== value) void onCommit(next) }
@@ -203,18 +204,3 @@ function EditableText({ ariaLabel, className, multiline, onCommit, placeholder, 
 
 function uniqueById<T extends { id: string }>(items: T[]) { return [...new Map(items.map(item => [item.id, item])).values()] }
 function toggleString(values: string[], value: string) { return values.includes(value) ? values.filter(item => item !== value) : [...values, value] }
-function groupOptionSections<T extends { id: string; groupId?: string; groupLabel?: string }>(options: T[]) {
-  const sections: { id: string; label?: string; options: T[] }[] = []
-  const indexes = new Map<string, number>()
-  for (const option of options) {
-    const id = option.groupId || option.groupLabel || 'ungrouped'
-    let index = indexes.get(id)
-    if (index === undefined) {
-      index = sections.length
-      indexes.set(id, index)
-      sections.push({ id, label: id === 'ungrouped' ? undefined : option.groupLabel, options: [] })
-    }
-    sections[index].options.push(option)
-  }
-  return sections
-}

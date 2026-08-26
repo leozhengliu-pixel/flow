@@ -42,7 +42,6 @@
 .sidebar .workspace-row > button.workspace-menu-trigger:hover,
 .sidebar .workspace-row > button.workspace-menu-trigger[data-state="open"] { background: var(--theme-control); }
 .workspace-menu-trigger .workspace-avatar { width: 20px; height: 20px; flex: 0 0 20px; border-radius: 6px; font-size: 9px; }
-.workspace-menu-trigger strong { min-width: 0; overflow: hidden; font-size: 14px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-menu-trigger > svg { width: 8px; height: 8px; flex: 0 0 8px; color: #69696d; stroke-width: 1.8; }
 .workspace-menu-trigger + .sidebar-top-action { margin-left: auto; }
 
@@ -323,18 +322,6 @@
 }
 .sidebar-more-menu [role="menuitem"] > svg { width: 14px; height: 14px; flex-basis: 14px; }
 .sidebar-more-menu [role="separator"] { margin: 5.75px 6px; }
-
-.workspace-primary-menu {
-  width: 225px;
-  padding: 6px 0;
-  background: var(--theme-surface-2);
-  border-radius: 12px;
-}
-.workspace-primary-menu .menu-item {
-  height: 32px;
-  padding: 0 18px 0 14px;
-  border-radius: 0;
-}
 .workspace-primary-menu .menu-separator {
   height: .5px;
   margin: 5.75px 4px;

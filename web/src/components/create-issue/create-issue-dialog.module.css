@@ -37,7 +37,6 @@
 .attachments > span { height: 24px; max-width: 210px; display: flex; align-items: center; gap: 5px; padding: 0 4px 0 7px; border: .5px solid lch(25% 1.2 272); border-radius: 999px; color: lch(72% 1.2 272); font-size: 11px; }
 .attachments svg { width: 12px; height: 12px; }
 .attachments > span > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.attachments button { width: 18px; height: 18px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; }
 .error { min-height: 28px; display: flex; align-items: center; margin: 0 12px 4px; padding: 0 8px; border-radius: 5px; background: #f1717814; color: #f17178; font-size: 11px; }
 .footer { height: 51.5px; flex: 0 0 51.5px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-top: .5px solid lch(14% 1.2 272); }
 .attachButton { width: 28px; height: 28px; }
