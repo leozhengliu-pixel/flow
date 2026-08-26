@@ -266,8 +266,14 @@ func TestIssueLifecycle(t *testing.T) {
 		"descriptionState": `{"type":"doc","content":[{"type":"paragraph"}]}`,
 		"descriptionData":  map[string]any{"type": "doc", "content": []any{map[string]any{"type": "paragraph"}}}, "contentState": "AQID",
 	}, http.StatusOK)
-	if updated.Title != "Autosaved title" || updated.DescriptionState == "" || len(updated.SubscriberIDs) != 2 || updated.DocumentContent == nil || updated.DocumentContent.ContentState != "AQID" || updated.DocumentContent.Content != "Autosaved description" || updated.DocumentContent.ContentData["type"] != "doc" {
+	if updated.Title != "Autosaved title" || updated.DescriptionState == "" || len(updated.SubscriberIDs) != 2 || updated.DocumentContent == nil || updated.DocumentContent.Version != created.DocumentContent.Version+1 || updated.DocumentContent.ContentState != "AQID" || updated.DocumentContent.Content != "Autosaved description" || updated.DocumentContent.ContentData["type"] != "doc" {
 		t.Fatalf("update failed: %#v", updated)
+	}
+	conflict := requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/issues/"+created.ID, map[string]any{
+		"description": "Stale snapshot", "descriptionData": map[string]any{"type": "doc"}, "contentState": "STALE", "expectedDocumentVersion": created.DocumentContent.Version,
+	}, http.StatusConflict)
+	if conflict["code"] != "VERSION_CONFLICT" {
+		t.Fatalf("stale document snapshot conflict = %#v", conflict)
 	}
 	bootstrapAfterSave := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	persisted := findIssue(t, bootstrapAfterSave.Issues, created.ID)
@@ -463,7 +469,7 @@ func TestIssueOptionsPersistence(t *testing.T) {
 	}
 }
 
-func TestSearchHistoryRecentResourcesAndVersionConflicts(t *testing.T) {
+func TestSearchHistoryRecentResourcesAndConcurrentIssuePatches(t *testing.T) {
 	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -491,13 +497,13 @@ func TestSearchHistoryRecentResourcesAndVersionConflicts(t *testing.T) {
 		t.Fatalf("search history was not cleared: %#v", cleared.History)
 	}
 
-	updated := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{"title": "First writer", "expectedVersion": issue.Version}, http.StatusOK)
+	updated := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{"priority": 1, "expectedVersion": issue.Version}, http.StatusOK)
 	if updated.Version != issue.Version+1 {
 		t.Fatalf("issue version = %d, want %d", updated.Version, issue.Version+1)
 	}
-	conflict := requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{"title": "Stale writer", "expectedVersion": issue.Version}, http.StatusConflict)
-	if conflict["code"] != "VERSION_CONFLICT" || conflict["current"] == nil {
-		t.Fatalf("issue conflict payload = %#v", conflict)
+	merged := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{"title": "Stale writer", "expectedVersion": issue.Version}, http.StatusOK)
+	if merged.Title != "Stale writer" || merged.Priority != 1 || merged.Version != issue.Version+2 {
+		t.Fatalf("concurrent issue patch did not merge by field: %#v", merged)
 	}
 
 	comment := requestJSON[domain.Comment](t, handler, http.MethodPost, "/api/issues/"+issue.ID+"/comments", map[string]string{"body": "Versioned"}, http.StatusCreated)

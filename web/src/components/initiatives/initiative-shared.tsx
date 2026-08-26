@@ -1,5 +1,5 @@
 import * as Popover from '@radix-ui/react-popover'
-import { Check, FolderKanban, Search, UsersRound } from 'lucide-react'
+import { FolderKanban, Search, UsersRound } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { Avatar } from '@/components/issue/issue-row'
 import { PriorityIcon } from '@/components/issue/issue-icons'
@@ -10,6 +10,7 @@ import { usePropertyCommand } from '@/components/property/use-property-command'
 import { LabelPicker } from '@/components/issue/label-project-pickers'
 import type { Initiative, InitiativeMutationInput, IssueLabel, LabelGroup, Project, Team, User } from '@/types/flow'
 import { formatTarget, titleCase } from './initiative-model'
+import { CheckboxMark } from '@/components/ui/checkbox-mark'
 
 const INITIATIVE_STATUS_OPTIONS: ProjectPropertyOption[] = [
   { value: 'proposed', label: 'Proposed', statusType: 'backlog', shortcut: '1' },
@@ -58,7 +59,7 @@ export function InitiativeProperties({ initiative, users, teams = [], onUpdate, 
 export function InitiativeTeamsPicker({ initiative, teams, onUpdate }: { initiative: Initiative; teams: Team[]; onUpdate: (input: InitiativeMutationInput) => void | Promise<unknown> }) {
   const selected = teams.filter(team => initiative.contributingTeamIds?.includes(team.id))
   const toggle = (teamId: string) => void onUpdate({ contributingTeamIds: initiative.contributingTeamIds?.includes(teamId) ? initiative.contributingTeamIds.filter(id => id !== teamId) : [...(initiative.contributingTeamIds ?? []), teamId] })
-  return <Popover.Root><Popover.Trigger asChild><button aria-label="Change contributing teams" className="li-team-picker" type="button">{selected.length ? <><span className="li-team-mark" style={{ background: selected[0].color }}>{selected[0].key.slice(0, 2)}</span><span data-i18n-ignore>{selected.length === 1 ? selected[0].name : `${selected.length} teams`}</span></> : <><UsersRound size={14}/><span>Contributing teams</span></>}</button></Popover.Trigger><Popover.Portal><Popover.Content align="start" className="li-team-picker-menu" collisionPadding={8} sideOffset={4}><header>Contributing teams</header>{teams.map(team => <button aria-checked={initiative.contributingTeamIds?.includes(team.id)} key={team.id} onClick={() => toggle(team.id)} role="checkbox" type="button"><span className="li-picker-checkbox">{initiative.contributingTeamIds?.includes(team.id) && <Check size={11}/>}</span><span className="li-team-mark" style={{ background: team.color }}>{team.key.slice(0, 2)}</span><span data-i18n-ignore>{team.name}</span></button>)}</Popover.Content></Popover.Portal></Popover.Root>
+  return <Popover.Root><Popover.Trigger asChild><button aria-label="Change contributing teams" className="li-team-picker" type="button">{selected.length ? <><span className="li-team-mark" style={{ background: selected[0].color }}>{selected[0].key.slice(0, 2)}</span><span data-i18n-ignore>{selected.length === 1 ? selected[0].name : `${selected.length} teams`}</span></> : <><UsersRound size={14}/><span>Contributing teams</span></>}</button></Popover.Trigger><Popover.Portal><Popover.Content align="start" className="li-team-picker-menu" collisionPadding={8} sideOffset={4}><header>Contributing teams</header>{teams.map(team => <button aria-checked={initiative.contributingTeamIds?.includes(team.id)} key={team.id} onClick={() => toggle(team.id)} role="checkbox" type="button"><span className="li-picker-checkbox">{initiative.contributingTeamIds?.includes(team.id) && <CheckboxMark/>}</span><span className="li-team-mark" style={{ background: team.color }}>{team.key.slice(0, 2)}</span><span data-i18n-ignore>{team.name}</span></button>)}</Popover.Content></Popover.Portal></Popover.Root>
 }
 
 export function InitiativeLabelsPicker({ initiative, labels, labelGroups = [], onUpdate, onCreateLabel, compact = false }: {
@@ -88,7 +89,7 @@ export function ProjectAssociationPicker({ children, initiative, projects, onUpd
     <Popover.Trigger asChild>{children ?? <button className="li-icon-button" aria-label={label} type="button"><span>+</span></button>}</Popover.Trigger>
     <Popover.Portal><Popover.Content align="end" className="li-project-picker" collisionPadding={8} sideOffset={4} onOpenAutoFocus={event => event.preventDefault()}>
       <label><Search size={14}/><input ref={command.inputRef} autoFocus aria-label="Search projects…" placeholder="Search projects…" value={command.query} onChange={event=>command.onQueryChange(event.target.value)} onKeyDown={command.onKeyDown}/></label>
-      <div role="listbox" aria-multiselectable="true" onKeyDown={command.onKeyDown}>{command.filteredOptions.map(option=>{const project=projects.find(item=>item.id===option.id)!;return <button aria-checked={command.isSelected(option.id)} aria-selected={command.activeId===option.id} key={option.id} onPointerMove={()=>command.setActiveId(option.id)} onFocus={()=>command.setActiveId(option.id)} onClick={()=>command.choose(option)} role="option" type="button"><span className="li-picker-checkbox">{command.isSelected(option.id)&&<Check size={11}/>}</span><span className="li-project-icon" style={{color:project.color}}><FolderKanban size={14}/></span><span><strong data-i18n-ignore>{project.name}</strong><small data-i18n-ignore>{project.summary||project.status.name}</small></span></button>})}{!command.filteredOptions.length&&<p>No projects found</p>}</div>
+      <div role="listbox" aria-multiselectable="true" onKeyDown={command.onKeyDown}>{command.filteredOptions.map(option=>{const project=projects.find(item=>item.id===option.id)!;return <button aria-checked={command.isSelected(option.id)} aria-selected={command.activeId===option.id} key={option.id} onPointerMove={()=>command.setActiveId(option.id)} onFocus={()=>command.setActiveId(option.id)} onClick={()=>command.choose(option)} role="option" type="button"><span className="li-picker-checkbox">{command.isSelected(option.id)&&<CheckboxMark/>}</span><span className="li-project-icon" style={{color:project.color}}><FolderKanban size={14}/></span><span><strong data-i18n-ignore>{project.name}</strong><small data-i18n-ignore>{project.summary||project.status.name}</small></span></button>})}{!command.filteredOptions.length&&<p>No projects found</p>}</div>
     </Popover.Content></Popover.Portal>
   </Popover.Root>
 }

@@ -46,3 +46,4 @@
 :global(:root[data-theme="light"]) .menu[data-side=right]{box-shadow:0 9px 48px var(--shadow-color-medium),0 6px 24px var(--shadow-color),0 1px 1px var(--shadow-color-soft)}
 @media(prefers-reduced-motion:reduce){.targetMenu[data-state],.menu[data-state]{animation:none}}
 @media(max-width:700px){.editor{grid-template-columns:28px minmax(80px,1fr) auto auto}.saveTo{grid-column:2/5;grid-row:2}.description{display:none}.cancel{grid-column:3}.save{grid-column:4}.targetMenu,.menu{max-width:calc(100vw - 16px)}}
+.menuItem[data-state=checked] .checkbox,.targetItem[data-state=checked] .targetCheck{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill);color:var(--on-accent)}

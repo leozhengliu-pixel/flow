@@ -35,6 +35,9 @@ func (s *server) startCoordination() {
 			}
 			cancel()
 			err := s.coordinator.Listen(context.Background(), func(envelope coordination.EventEnvelope) {
+				if s.receiveCollaborationEvent(envelope.Workspace, envelope.Event) {
+					return
+				}
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				var err error
 				if slices.Contains([]string{"workspace.created", "workspace.updated", "workspace.deleted"}, envelope.Event.Type) {

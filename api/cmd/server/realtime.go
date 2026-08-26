@@ -20,10 +20,11 @@ type realtimeHub struct {
 	nextID      uint64
 	subscribers map[string]map[uint64]chan domain.RealtimeEvent
 	presence    map[string]map[string]domain.Presence
+	sockets     map[string]map[uint64]*realtimeSocketClient
 }
 
 func newRealtimeHub() *realtimeHub {
-	return &realtimeHub{subscribers: map[string]map[uint64]chan domain.RealtimeEvent{}, presence: map[string]map[string]domain.Presence{}}
+	return &realtimeHub{subscribers: map[string]map[uint64]chan domain.RealtimeEvent{}, presence: map[string]map[string]domain.Presence{}, sockets: map[string]map[uint64]*realtimeSocketClient{}}
 }
 
 func (h *realtimeHub) subscribe(workspace string) (<-chan domain.RealtimeEvent, func()) {
