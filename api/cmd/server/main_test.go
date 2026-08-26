@@ -870,13 +870,25 @@ func TestInitiativeLifecycle(t *testing.T) {
 	if created.ID == "" || created.Status != "planned" || created.Priority != 2 || created.Owner == nil || created.LeadTeamID != "team_cleantrack" || !slices.Equal(created.ContributingTeamIDs, []string{"team_cleantrack"}) || !slices.Equal(created.ProjectIDs, []string{"project_cruise"}) {
 		t.Fatalf("initiative create failed: %#v", created)
 	}
+	initiativeLabel := requestJSON[domain.IssueLabel](t, handler, http.MethodPost, "/api/labels", map[string]any{
+		"name": "Initiative label", "resourceType": "initiative",
+	}, http.StatusCreated)
+	if initiativeLabel.ResourceType != "initiative" || initiativeLabel.GroupID != "" || !labelScopeIsWorkspace(initiativeLabel.Scope) {
+		t.Fatalf("initiative label contract failed: %#v", initiativeLabel)
+	}
+	requestJSON[map[string]any](t, handler, http.MethodPost, "/api/labels", map[string]any{
+		"name": "Invalid grouped initiative label", "resourceType": "initiative", "groupId": "label_group_work_type",
+	}, http.StatusBadRequest)
+	requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/initiatives/"+created.ID, map[string]any{
+		"labelIds": []string{"label_type_defect"},
+	}, http.StatusBadRequest)
 	updated := requestJSON[domain.Initiative](t, handler, http.MethodPatch, "/api/initiatives/"+created.ID, map[string]any{
 		"name": "Updated initiative", "description": "Persistent description", "status": "active", "health": "atRisk",
-		"labelIds": []string{"label_type_defect"}, "favorite": true, "subscribed": true,
+		"labelIds": []string{initiativeLabel.ID}, "favorite": true, "subscribed": true,
 		"notificationRules": map[string]any{"descriptionChanges": true, "newUpdate": false, "allProjectUpdates": true},
 		"updateSchedule":    map[string]any{"cadence": "weekly", "weekday": 2, "timeRange": "09:00-12:00"},
 	}, http.StatusOK)
-	if updated.Name != "Updated initiative" || updated.Status != "active" || updated.Health != "atRisk" || !updated.Favorite || !updated.Subscribed || len(updated.DescriptionHistory) != 1 || updated.NotificationRules.NewUpdate || updated.UpdateSchedule.Cadence != "weekly" || !slices.Equal(updated.LabelIDs, []string{"label_type_defect"}) {
+	if updated.Name != "Updated initiative" || updated.Status != "active" || updated.Health != "atRisk" || !updated.Favorite || !updated.Subscribed || len(updated.DescriptionHistory) != 1 || updated.NotificationRules.NewUpdate || updated.UpdateSchedule.Cadence != "weekly" || !slices.Equal(updated.LabelIDs, []string{initiativeLabel.ID}) {
 		t.Fatalf("initiative update failed: %#v", updated)
 	}
 	resource := requestJSON[domain.InitiativeResource](t, handler, http.MethodPost, "/api/initiatives/"+created.ID+"/resources", map[string]any{"type": "link", "title": "Strategy", "url": "https://example.com/strategy"}, http.StatusCreated)

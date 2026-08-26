@@ -129,17 +129,7 @@ func (s *SQLiteStore) Login(ctx context.Context, email, password string) (domain
 	if !user.EmailVerified {
 		return domain.AuthSession{}, "", errors.New("email is not verified")
 	}
-	token, err := randomToken()
-	if err != nil {
-		return domain.AuthSession{}, "", err
-	}
-	now := time.Now().UTC()
-	expires := now.Add(30 * 24 * time.Hour)
-	_, err = s.db.ExecContext(ctx, `INSERT INTO auth_sessions(token_hash,user_id,expires_at,created_at,last_seen_at) VALUES(?,?,?,?,?)`, tokenHash(token), user.ID, expires.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
-	if err != nil {
-		return domain.AuthSession{}, "", err
-	}
-	return s.sessionForUser(ctx, user, expires), token, nil
+	return s.createSession(ctx, user)
 }
 
 func (s *SQLiteStore) LoginExternal(ctx context.Context, email, name, avatarURL string, autoProvision bool) (domain.AuthSession, string, error) {

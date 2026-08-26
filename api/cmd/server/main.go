@@ -3925,7 +3925,9 @@ func applyInitiativeUpdate(data *domain.Bootstrap, initiative *domain.Initiative
 	}
 	if input.LabelIDs != nil {
 		for _, id := range *input.LabelIDs {
-			if !slices.ContainsFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id }) {
+			if !slices.ContainsFunc(data.Labels, func(label domain.IssueLabel) bool {
+				return label.ID == id && labelResourceType(label) == "initiative" && label.ArchivedAt == nil
+			}) {
 				return errInvalid
 			}
 		}
@@ -4020,8 +4022,8 @@ func labelExistsForResource(data *domain.Bootstrap, id string, resourceType stri
 	})
 }
 func labelResourceType(label domain.IssueLabel) string {
-	if label.ResourceType == "project" {
-		return "project"
+	if label.ResourceType == "project" || label.ResourceType == "initiative" {
+		return label.ResourceType
 	}
 	return "issue"
 }

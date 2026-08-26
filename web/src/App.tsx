@@ -30,6 +30,7 @@ import {
   createSavedView,
   createTeam,
   createWorkspace,
+  createWorkspaceLabel,
   createWorkspaceIssueTemplate,
   deleteAttachment,
   deleteComment,
@@ -100,6 +101,7 @@ import type {
   InitiativeMutationInput,
   InitiativeUpdate,
   Issue,
+  IssueLabel,
   IssueRelationType,
   IssueUpdateInput,
   Project,
@@ -1128,6 +1130,16 @@ function App() {
         : current,
     );
     return initiative;
+  };
+  const addInitiativeLabel = async (name: string): Promise<IssueLabel> => {
+    const label = await run(
+      () => createWorkspaceLabel({ name, resourceType: "initiative" }),
+      "Could not create initiative label",
+    );
+    setData((current) =>
+      current ? { ...current, labels: [...current.labels, label] } : current,
+    );
+    return label;
   };
   const addInitiativeReminder = async (initiativeId: string, remindAt: string) => {
     const notification = await run(
@@ -3085,7 +3097,7 @@ function App() {
           projectUpdates={data.projectUpdates}
           teams={data.teams}
           users={data.users}
-          labels={labelsForResource(data.labels, "project")}
+          labels={labelsForResource(data.labels, "initiative")}
           viewer={data.viewer}
           view={route.view}
           onViewChange={(view) =>
@@ -3093,6 +3105,7 @@ function App() {
           }
           onOpen={openInitiative}
           onCreate={addInitiative}
+          onCreateLabel={addInitiativeLabel}
           onCreateUpdate={addInitiativeUpdate}
           onUpdate={changeInitiative}
           onDelete={removeInitiative}
@@ -3140,6 +3153,7 @@ function App() {
             }
             onOpenProject={openProject}
             onCreateProject={addProject}
+            onCreateLabel={addInitiativeLabel}
             onUpdateProject={changeProject}
             onCreateProjectUpdate={addProjectUpdate}
             onUpdateProjectUpdate={changeProjectUpdate}
