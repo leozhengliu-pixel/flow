@@ -24,6 +24,7 @@ export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: 
     id: issue.id,
     identifier: issue.identifier,
     title: issue.title,
+    description: issue.description,
     href: issuePath(workspaceSlug, issue),
     priority: clampPriority(issue.priority),
     state: issue.state,
@@ -40,6 +41,8 @@ export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: 
     suggestedLabelIds:issue.suggestedLabelIds??[],
     externalSource:issue.externalSource,
     autoClosed:issue.autoClosed,
+    autoClosedAt:issue.autoClosedAt,
+    triagedAt:issue.triagedAt,
     templateId:issue.templateId,
     initiativeIds:fullProject?.initiatives??[],
     projectStatusId:fullProject?.status?.id,
@@ -218,35 +221,72 @@ export function replaceExplorerRow(groups: MyIssuesGroupData[], row: MyIssuesRow
 }
 
 export function applyExplorerFilters(issues: Issue[], filters: MyIssuesAppliedFilter[], data?: BootstrapData) {
-  return issues.filter(issue => filters.every(filter => {
-    const values = filterValues(filter).map(value => value.value)
-    let matched = true
-    if (filter.field === 'priority') matched = values.includes(String(issue.priority))
-    else if (filter.field === 'status') matched = values.includes(issue.state.id) || values.includes(issue.state.type)
-    else if (filter.field === 'assignee') matched = values.includes(issue.assignee?.id ?? '')
-    else if (filter.field === 'agent') matched = values.includes('*') ? Boolean(issue.delegate) : values.includes(issue.delegate?.id ?? '')
-    else if(filter.field==='agentSession')matched=values.includes('*')?Boolean(issue.agentSessionId):values.includes(issue.agentSessionId??'')
-    else if (filter.field === 'creator') matched = values.includes(issue.creator.id)
-    else if (filter.field === 'labels') matched = issue.labels.some(label => values.includes(label.id))
-    else if(filter.field==='suggestedLabel')matched=values.includes('')?!issue.suggestedLabelIds?.length:Boolean(issue.suggestedLabelIds?.some(id=>values.includes(id)))
-    else if (filter.field === 'project') matched = values.includes(issue.project?.id ?? '')
-    else if(filter.field==='projectProperties')matched=issueMatchesProjectProperties(issue,values,data)
-    else if(filter.field==='initiative'){const project=data?.projects.find(project=>project.id===issue.project?.id);matched=values.includes('')?!project?.initiatives.length:Boolean(project?.initiatives.some(id=>values.includes(id)))}
-    else if (filter.field === 'cycle') matched = values.includes(issue.cycleId ?? '')
-    else if(filter.field==='addedToCycle')matched=values.includes(issue.addedToCycle??'')
-    else if (filter.field === 'releases') matched=issueMatchesReleaseFilter(issue,values,data)
-    else if (filter.field === 'dates') matched = values.some(value => issueMatchesDateFilter(issue, value))
-    else if (filter.field === 'subscribers') matched = values.includes('') ? !issue.subscriberIds.length : issue.subscriberIds.some(id => values.includes(id))
-    else if (filter.field === 'relations') matched = values.includes('') ? !issue.relations.length : issue.relations.some(relation => values.includes(relation.type))
-    else if (filter.field === 'links') matched = values.includes(issue.attachments.length ? 'has-links' : 'no-links')
-    else if(filter.field==='content')matched=values.some(value=>value.startsWith('query:')?`${issue.title} ${issue.description}`.toLocaleLowerCase().includes(value.slice(6).toLocaleLowerCase()):false)
-    else if(filter.field==='externalSource')matched=values.includes(issue.externalSource??'')
-    else if(filter.field==='autoClosed')matched=values.includes(String(Boolean(issue.autoClosed)))
-    else if(filter.field==='template')matched=values.includes(issue.templateId??'')
-    else if(filter.field==='ai')matched=issueMatchesAI(issue,values,data)
-    else if(filter.field==='advanced')matched=values.every(value=>{const separator=value.indexOf(':');if(separator<0)return true;const field=value.slice(0,separator),expected=value.slice(separator+1);return field==='status'?(issue.state.id===expected||issue.state.type===expected):field==='assignee'?issue.assignee?.id===expected:field==='priority'?String(issue.priority)===expected:field==='labels'?issue.labels.some(label=>label.id===expected):field==='project'?issue.project?.id===expected:true})
-    return filter.operator === 'is' ? matched : !matched
-  }))
+  const workspaceSlug = data?.workspace.urlKey ?? ''
+  const allIssues = data?.issues ?? issues
+  return issues.filter(issue => filters.every(filter => matchesExplorerFilter(issueToExplorerRow(issue, workspaceSlug, allIssues, data), filter)))
+}
+
+export function matchesExplorerFilter(issue: MyIssuesRowData, filter: MyIssuesAppliedFilter) {
+  const values = filterValues(filter).map(value => value.value)
+  let matched = true
+  if (filter.field === 'priority') matched = values.includes(String(issue.priority))
+  else if (filter.field === 'status') matched = values.includes(issue.state.id) || values.includes(issue.state.type)
+  else if (filter.field === 'assignee') matched = values.includes(issue.assignee?.id ?? '')
+  else if (filter.field === 'agent') matched = values.includes('*') ? Boolean(issue.delegate) : values.includes(issue.delegate?.id ?? '')
+  else if (filter.field === 'agentSession') matched = values.includes('*') ? Boolean(issue.agentSessionId) : values.includes(issue.agentSessionId ?? '')
+  else if (filter.field === 'creator') matched = values.includes(issue.creatorId ?? '')
+  else if (filter.field === 'labels') matched = Boolean(issue.labels?.some(label => values.includes(label.id)))
+  else if (filter.field === 'suggestedLabel') matched = values.includes('') ? !issue.suggestedLabelIds?.length : Boolean(issue.suggestedLabelIds?.some(id => values.includes(id)))
+  else if (filter.field === 'project') matched = values.includes(issue.project?.id ?? '')
+  else if (filter.field === 'projectProperties') matched = matchesProjectProperties(issue, values)
+  else if (filter.field === 'initiative') matched = values.includes('') ? !issue.initiativeIds?.length : Boolean(issue.initiativeIds?.some(id => values.includes(id)))
+  else if (filter.field === 'cycle') matched = values.includes(issue.cycleId ?? '')
+  else if (filter.field === 'addedToCycle') matched = values.includes(issue.addedToCycle ?? '')
+  else if (filter.field === 'releases') matched = matchesReleaseFilter(issue, values)
+  else if (filter.field === 'dates') matched = values.some(value => matchesDateFilter(issue, value))
+  else if (filter.field === 'subscribers') matched = values.includes('') ? !issue.subscriberIds?.length : Boolean(issue.subscriberIds?.some(id => values.includes(id)))
+  else if (filter.field === 'relations') matched = values.includes('') ? !issue.relationTypes?.length : Boolean(issue.relationTypes?.some(type => values.includes(type)))
+  else if (filter.field === 'links') matched = values.includes(issue.hasLinks ? 'has-links' : 'no-links')
+  else if (filter.field === 'content') matched = values.some(value => value.startsWith('query:') && `${issue.title} ${issue.description ?? ''}`.toLocaleLowerCase().includes(value.slice(6).toLocaleLowerCase()))
+  else if (filter.field === 'externalSource') matched = values.includes(issue.externalSource ?? '')
+  else if (filter.field === 'autoClosed') matched = values.includes(String(Boolean(issue.autoClosed)))
+  else if (filter.field === 'template') matched = values.includes(issue.templateId ?? '')
+  else if (filter.field === 'ai') matched = matchesAIFilter(issue, values)
+  else if (filter.field === 'advanced') matched = values.every(value => matchesAdvancedFilter(issue, value))
+  return filter.operator === 'is' ? matched : !matched
+}
+
+function matchesProjectProperties(issue: MyIssuesRowData, values: string[]) {
+  return values.some(value => value.startsWith('project-status:') ? issue.projectStatusId === value.slice(15) : value.startsWith('project-status-type:') ? issue.projectStatusType === value.slice(20) : value.startsWith('project-priority:') ? String(issue.projectPriority) === value.slice(17) : value.startsWith('project-label:') ? issue.projectLabelIds?.includes(value.slice(14)) : value === 'project-lead:' ? !issue.projectLeadId : value.startsWith('project-lead:') ? issue.projectLeadId === value.slice(13) : value.startsWith('project-milestone-name-contains:') ? issue.projectMilestoneNames?.some(name => name.toLocaleLowerCase().includes(value.slice(32).toLocaleLowerCase())) : false)
+}
+function matchesReleaseFilter(issue: MyIssuesRowData, values: string[]) {
+  return values.some(value => value === 'no-releases' ? !issue.releaseIds?.length : value === 'released-any' ? Boolean(issue.hasReleasedRelease) : value.startsWith('release:') ? issue.releaseIds?.includes(value.slice(8)) : value.startsWith('release-pipeline:') ? issue.releasePipelineIds?.includes(value.slice(17)) : value.startsWith('release-stage:') ? issue.releaseStages?.includes(value.slice(14)) : value.startsWith('release-stage-type:') ? issue.releaseStatuses?.includes(value.slice(19)) : false)
+}
+function matchesDateFilter(issue: MyIssuesRowData, value: string) {
+  const now = Date.now(); const age = (input: string | undefined, days: number) => Boolean(input && Date.parse(input) >= now - days * 86_400_000)
+  if (value === 'created-past-day' || value === 'created-past-week' || value === 'created-past-month') return age(issue.createdAt, value.endsWith('day') ? 1 : value.endsWith('week') ? 7 : 30)
+  if (value === 'updated-past-day' || value === 'updated-past-week' || value === 'updated-past-month') return age(issue.updatedAt, value.endsWith('day') ? 1 : value.endsWith('week') ? 7 : 30)
+  if (value === 'started-any') return Boolean(issue.startedAt)
+  if (value === 'completed-any') return Boolean(issue.completedAt)
+  if (value === 'auto-closed-any') return Boolean(issue.autoClosedAt)
+  if (value === 'triaged-any') return Boolean(issue.triagedAt)
+  if (value === 'status-over-week') return Boolean(issue.statusChangedAt && Date.parse(issue.statusChangedAt) < now - 7 * 86_400_000)
+  if (value === 'has-due-date') return Boolean(issue.dueDate)
+  if (value === 'no-due-date') return !issue.dueDate
+  if (!issue.dueDate) return false
+  const due = Date.parse(`${issue.dueDate.slice(0, 10)}T00:00:00`); const today = new Date(); today.setHours(0, 0, 0, 0)
+  if (value === 'overdue') return due < today.getTime()
+  if (value === 'today') return due === today.getTime()
+  if (value === 'next-week') return due >= today.getTime() && due <= today.getTime() + 7 * 86_400_000
+  return false
+}
+function matchesAIFilter(issue: MyIssuesRowData, values: string[]) {
+  return values.some(value => value === 'assigned-to-me' ? Boolean(issue.isAssignedToViewer) : value === 'completed-last-month' ? Boolean(issue.completedAt && Date.parse(issue.completedAt) >= Date.now() - 30 * 86_400_000) : value === 'due-next-two-weeks' ? Boolean(issue.dueDate && Date.parse(`${issue.dueDate.slice(0, 10)}T00:00:00`) <= Date.now() + 14 * 86_400_000) : value.startsWith('query:') ? `${issue.title} ${issue.description ?? ''}`.toLocaleLowerCase().includes(value.slice(6).toLocaleLowerCase()) : false)
+}
+function matchesAdvancedFilter(issue: MyIssuesRowData, value: string) {
+  const separator = value.indexOf(':'); if (separator < 0) return true
+  const field = value.slice(0, separator), expected = value.slice(separator + 1)
+  return field === 'status' ? issue.state.id === expected || issue.state.type === expected : field === 'assignee' ? issue.assignee?.id === expected : field === 'priority' ? String(issue.priority) === expected : field === 'labels' ? Boolean(issue.labels?.some(label => label.id === expected)) : field === 'project' ? issue.project?.id === expected : true
 }
 
 export function buildExplorerIssueGroups(issues: MyIssuesRowData[], display: MyIssuesDisplayOptions, data: BootstrapData, view: TeamIssuesRouteView = 'all', manualOrder: string[] = []): MyIssuesGroupData[] {
@@ -310,7 +350,7 @@ function issueDateFilterOptions(issues: Issue[]): MyIssuesFilterOption[] {
     { id: 'overdue', label: 'Overdue' }, { id: 'today', label: 'Due today' }, { id: 'next-week', label: 'Due in the next week' },
     { id: 'has-due-date', label: 'Has due date' }, { id: 'no-due-date', label: 'No due date' },
   ]
-  return definitions.map(option => ({ ...option, count: issues.filter(issue => issueMatchesDateFilter(issue, option.id)).length }))
+  return definitions.map(option => ({ ...option, count: issues.filter(issue => matchesDateFilter(issueToExplorerRow(issue, ''), option.id)).length }))
 }
 function dateFilterCategories(issues:Issue[]):MyIssuesFilterOption[]{const simple=issueDateFilterOptions(issues);const common=[{id:'overdue',label:'Overdue'},{id:'today',label:'Due today'},{id:'next-week',label:'Due in the next week'},{id:'has-due-date',label:'Has due date'},{id:'no-due-date',label:'No due date'}].map(item=>simple.find(option=>option.id===item.id)??item);return[
   {id:'due-date',label:'Due date',children:common},
@@ -332,28 +372,6 @@ function releaseFilterCategories(data:BootstrapData,issues:Issue[]):MyIssuesFilt
   {id:'no-releases',label:'No releases',count:count(issue=>!data.releases.some(release=>release.issueIds.includes(issue.id)))},
 ]}
 
-function issueMatchesDateFilter(issue: Issue, value: string) {
-  const now=Date.now(),age=(input:string|undefined,days:number)=>Boolean(input&&Date.parse(input)>=now-days*86_400_000)
-  if(value==='created-past-day'||value==='created-past-week'||value==='created-past-month')return age(issue.createdAt,value.endsWith('day')?1:value.endsWith('week')?7:30)
-  if(value==='updated-past-day'||value==='updated-past-week'||value==='updated-past-month')return age(issue.updatedAt,value.endsWith('day')?1:value.endsWith('week')?7:30)
-  if(value==='started-any')return Boolean(issue.startedAt)
-  if(value==='completed-any')return Boolean(issue.completedAt)
-  if(value==='auto-closed-any')return Boolean(issue.autoClosedAt)
-  if(value==='triaged-any')return Boolean(issue.triagedAt)
-  if(value==='status-over-week')return Boolean(issue.statusChangedAt&&Date.parse(issue.statusChangedAt)<now-7*86_400_000)
-  if (value === 'has-due-date') return Boolean(issue.dueDate)
-  if (value === 'no-due-date') return !issue.dueDate
-  if (!issue.dueDate) return false
-  const due = new Date(`${issue.dueDate.slice(0, 10)}T00:00:00`).getTime()
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  if (value === 'overdue') return due < today.getTime()
-  if (value === 'today') return due === today.getTime()
-  if (value === 'next-week') return due >= today.getTime() && due <= today.getTime() + 7 * 86_400_000
-  return false
-}
-function issueMatchesAI(issue:Issue,values:string[],data?:BootstrapData){return values.some(value=>value==='assigned-to-me'?issue.assignee?.id===data?.viewer.id:value==='completed-last-month'?Boolean(issue.completedAt&&Date.parse(issue.completedAt)>=Date.now()-30*86_400_000):value==='due-next-two-weeks'?Boolean(issue.dueDate&&Date.parse(`${issue.dueDate.slice(0,10)}T00:00:00`)<=Date.now()+14*86_400_000):value.startsWith('query:')?`${issue.title} ${issue.description}`.toLocaleLowerCase().includes(value.slice(6).toLocaleLowerCase()):false)}
-function issueMatchesReleaseFilter(issue:Issue,values:string[],data?:BootstrapData){const releases=data?.releases.filter(release=>release.issueIds.includes(issue.id))??[];return values.some(value=>value==='no-releases'?!releases.length:value==='released-any'?releases.some(release=>Boolean(release.releasedAt)):value.startsWith('release:')?releases.some(release=>release.id===value.slice(8)):value.startsWith('release-pipeline:')?releases.some(release=>release.pipelineId===value.slice(17)):value.startsWith('release-stage:')?releases.some(release=>release.stage===value.slice(14)):value.startsWith('release-stage-type:')?releases.some(release=>release.status===value.slice(19)):false)}
-function issueMatchesProjectProperties(issue:Issue,values:string[],data?:BootstrapData){const project=data?.projects.find(project=>project.id===issue.project?.id);if(!project)return false;return values.some(value=>value.startsWith('project-status:')?project.status.id===value.slice(15):value.startsWith('project-status-type:')?project.status.type===value.slice(20):value.startsWith('project-priority:')?String(project.priority)===value.slice(17):value.startsWith('project-label:')?project.labelIds.includes(value.slice(14)):value==='project-lead:'?!project.lead:value.startsWith('project-lead:')?project.lead?.id===value.slice(13):value.startsWith('project-milestone-name-contains:')?project.milestones?.some(milestone=>milestone.name.toLocaleLowerCase().includes(value.slice(32).toLocaleLowerCase()))??false:false)}
 
 function uniqueStrings(values:(string|undefined)[]){return [...new Set(values.filter((value):value is string=>Boolean(value)))]}
 function relationFilterOptions(issues:Issue[]):MyIssuesFilterOption[]{const count=(predicate:(issue:Issue)=>boolean)=>issues.filter(predicate).length;return[

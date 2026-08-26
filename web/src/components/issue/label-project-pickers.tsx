@@ -5,7 +5,7 @@ import { PropertyMenu } from '@/components/property/property-menu'
 import { LabelHoverPreview } from '@/components/property/label-hover-preview'
 import { PropertyShortcutTooltip } from '@/components/property/issue-property-hover'
 
-export function LabelPicker({ value, labels, labelGroups = [], onToggle, inline = false }: { value: IssueLabel[]; labels: IssueLabel[]; labelGroups?: LabelGroup[]; onToggle: (id: string) => void | Promise<void>; inline?: boolean }) {
+export function LabelPicker({ value, labels, labelGroups = [], onToggle, onCreate, inline = false }: { value: IssueLabel[]; labels: IssueLabel[]; labelGroups?: LabelGroup[]; onToggle: (id: string) => void | Promise<void>; onCreate?: (name: string) => void | Promise<void>; inline?: boolean }) {
   const groupNames = new Map(labelGroups.map(group => [group.id, group.name]))
   const options = labels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, groupId: label.groupId, groupLabel: label.groupId ? groupNames.get(label.groupId) : undefined }))
   return <div className={`label-project-picker labels-picker${inline?' labels-picker--inline':''}`}>
@@ -23,6 +23,7 @@ export function LabelPicker({ value, labels, labelGroups = [], onToggle, inline 
       trigger={inline?<Plus size={15}/>:<><LabelIcon size={15}/><span>Add label</span></>}
       hoverContent={<PropertyShortcutTooltip label="Change or add labels" shortcut="L"/>}
       onChange={onToggle}
+      onCreate={onCreate}
     />
   </div>
 }

@@ -1,18 +1,18 @@
-import { Archive, ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, MoreHorizontal, Plus, RotateCcw, Search, Star, Trash2, X } from 'lucide-react'
+import { Archive, Check, ChevronDown, ChevronRight, MoreHorizontal, Plus, RotateCcw, Search, Star, Trash2, X } from 'lucide-react'
 import * as Popover from '@radix-ui/react-popover'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
 import {
-  addFavorite, createLabelGroup, createProjectStatus, createWorkspaceLabel, deleteLabelGroup, deleteProjectStatus, deleteTeamLabel,
-  deleteWorkspaceLabel, moveWorkspaceLabelToTeams, reorderProjectStatuses, updateLabelGroup, updateProjectStatus, updateTeamLabel, updateWorkspaceLabel,
+  addFavorite, createLabelGroup, createWorkspaceLabel, deleteLabelGroup, deleteTeamLabel,
+  deleteWorkspaceLabel, moveWorkspaceLabelToTeams, updateLabelGroup, updateTeamLabel, updateWorkspaceLabel,
 } from '@/lib/api'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent,
   DropdownMenuSubTrigger, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import type { BootstrapData, IssueLabel, LabelGroup, ProjectStatus } from '@/types/flow'
+import type { BootstrapData, IssueLabel, LabelGroup } from '@/types/flow'
 import { groupsForResource, isWorkspaceLabel, labelResourceType } from '@/lib/labels'
 import { useI18n } from '@/i18n/i18n'
 
@@ -313,7 +313,4 @@ function sortLabels(labels: IssueLabel[], sort: { key: LabelSort; descending: bo
 function shortDate(value: string, locale: 'en-US'|'zh-CN') { return new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(new Date(value)) }
 function relativeDate(value: string, locale: 'en-US'|'zh-CN') { const days = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 86400000)); if (locale === 'zh-CN') { if (days === 0) return '今天'; if (days < 30) return `${days} 天前` } else { if (days === 0) return 'Today'; if (days === 1) return '1 day ago'; if (days < 30) return `${days} days ago` } return shortDate(value, locale) }
 
-export function LegacyProjectStatusesSettings({data,onReload}:{data:BootstrapData;onReload:()=>Promise<void>}){const[creating,setCreating]=useState(false);const statuses=[...data.projectStatuses].sort((a,b)=>(a.position??0)-(b.position??0));const run=async(action:()=>Promise<unknown>)=>{try{await action();await onReload()}catch(error){toast.error(message(error))}};const move=(index:number,delta:number)=>{const next=[...statuses];const target=index+delta;if(target<0||target>=next.length)return;[next[index],next[target]]=[next[target],next[index]];void run(()=>reorderProjectStatuses(next.map(item=>item.id)))};return <><header className="settings-page-header"><div><h1>Project statuses</h1><p>Project statuses define the workflow projects move through.</p></div><button className="settings-action primary" onClick={()=>setCreating(true)}><Plus size={14}/>New status</button></header><section className="settings-section"><div className="settings-card advanced-settings-list">{creating&&<StatusEditor onCancel={()=>setCreating(false)} onSave={async input=>{await run(()=>createProjectStatus(input));setCreating(false)}}/>}{statuses.map((status,index)=><StatusRow key={status.id} status={status} first={index===0} last={index===statuses.length-1} onMove={delta=>move(index,delta)} onSave={input=>run(()=>updateProjectStatus(status.id,input))} onDelete={()=>run(()=>deleteProjectStatus(status.id))}/> )}</div></section></>}
-function StatusEditor({onCancel,onSave}:{onCancel:()=>void;onSave:(input:{name:string;color:string;type:string})=>Promise<void>}){const[name,setName]=useState('');const[color,setColor]=useState('#8b8d98');const[type,setType]=useState('planned');return <div className="advanced-settings-editor"><div className="advanced-settings-fields"><input type="color" value={color} onChange={event=>setColor(event.target.value)}/><input autoFocus placeholder="Status name" value={name} onChange={event=>setName(event.target.value)}/><select value={type} onChange={event=>setType(event.target.value)}>{['backlog','planned','started','completed','canceled'].map(value=><option key={value}>{value}</option>)}</select></div><footer><button onClick={onCancel}>Cancel</button><button className="primary" disabled={!name.trim()} onClick={()=>void onSave({name:name.trim(),color,type})}>Create</button></footer></div>}
-function StatusRow({status,first,last,onMove,onSave,onDelete}:{status:ProjectStatus;first:boolean;last:boolean;onMove:(delta:number)=>void;onSave:(input:Partial<ProjectStatus>)=>Promise<void>;onDelete:()=>Promise<void>}){const[name,setName]=useState(status.name);return <div className="settings-list-row project-status-setting"><input type="color" value={status.color} onChange={event=>void onSave({color:event.target.value})}/><input value={name} onChange={event=>setName(event.target.value)} onBlur={()=>name.trim()!==status.name&&void onSave({name:name.trim()})}/><select value={status.type} onChange={event=>void onSave({type:event.target.value})}>{['backlog','planned','started','completed','canceled'].map(value=><option key={value}>{value}</option>)}</select><button disabled={first} aria-label="Move status up" onClick={()=>onMove(-1)}><ArrowUp size={14}/></button><button disabled={last} aria-label="Move status down" onClick={()=>onMove(1)}><ArrowDown size={14}/></button><button aria-label={`Delete ${status.name}`} onClick={()=>void onDelete()}><Trash2 size={14}/></button></div>}
 function message(error:unknown){return error instanceof Error?error.message:'Could not save setting'}

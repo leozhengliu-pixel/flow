@@ -229,19 +229,10 @@ func (s *server) createWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 	actor := requestActor(s, r)
 	var created domain.IssueLabel
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "label.created", input, func(data *domain.Bootstrap) (string, error) {
-		resource := "issue"
-		if input.ResourceType != nil {
-			resource = *input.ResourceType
-		}
-		if resource != "issue" && resource != "project" {
-			return "", errInvalid
-		}
-		created = domain.IssueLabel{ID: fmt.Sprintf("label_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#5E6AD2", Scope: "Workspace", ResourceType: resource, CreatorID: actor.ID, CreatedAt: time.Now().UTC()}
-		applyLabelInput(&created, input)
-		if created.GroupID != "" && !slices.ContainsFunc(data.LabelGroups, func(group domain.LabelGroup) bool {
-			return group.ID == created.GroupID && group.ResourceType == resource
-		}) {
-			return "", errInvalid
+		var err error
+		created, err = newLabel(data, actor.ID, "Workspace", input)
+		if err != nil {
+			return "", err
 		}
 		data.Labels = append(data.Labels, created)
 		return created.ID, nil
@@ -264,14 +255,16 @@ func (s *server) updateWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 		resource := labelResourceType(data.Labels[index])
 		if input.ResourceType != nil {
 			nextResource := strings.TrimSpace(*input.ResourceType)
-			if nextResource != "issue" && nextResource != "project" {
+			if !validLabelResourceType(nextResource) {
 				return errInvalid
 			}
 			resource = nextResource
 		}
-		if input.GroupID != nil && strings.TrimSpace(*input.GroupID) != "" && !slices.ContainsFunc(data.LabelGroups, func(group domain.LabelGroup) bool {
-			return group.ID == strings.TrimSpace(*input.GroupID) && group.ResourceType == resource
-		}) {
+		groupID := data.Labels[index].GroupID
+		if input.GroupID != nil {
+			groupID = strings.TrimSpace(*input.GroupID)
+		}
+		if !validLabelGroup(data, resource, groupID) {
 			return errInvalid
 		}
 		applyLabelInput(&data.Labels[index], input)
@@ -280,6 +273,38 @@ func (s *server) updateWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
+}
+
+func newLabel(data *domain.Bootstrap, actorID, scope string, input labelInput) (domain.IssueLabel, error) {
+	resource := "issue"
+	if input.ResourceType != nil {
+		resource = strings.TrimSpace(*input.ResourceType)
+	}
+	if !validLabelResourceType(resource) || resource == "initiative" && !labelScopeIsWorkspace(scope) {
+		return domain.IssueLabel{}, errInvalid
+	}
+	created := domain.IssueLabel{ID: fmt.Sprintf("label_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#5E6AD2", Scope: scope, ResourceType: resource, CreatorID: actorID, CreatedAt: time.Now().UTC()}
+	applyLabelInput(&created, input)
+	if !validLabelGroup(data, resource, created.GroupID) {
+		return domain.IssueLabel{}, errInvalid
+	}
+	return created, nil
+}
+
+func validLabelResourceType(resource string) bool {
+	return resource == "issue" || resource == "project" || resource == "initiative"
+}
+
+func validLabelGroup(data *domain.Bootstrap, resource, groupID string) bool {
+	if groupID == "" {
+		return true
+	}
+	if resource == "initiative" {
+		return false
+	}
+	return slices.ContainsFunc(data.LabelGroups, func(group domain.LabelGroup) bool {
+		return group.ID == groupID && group.ResourceType == resource && group.ArchivedAt == nil
+	})
 }
 
 func applyLabelInput(label *domain.IssueLabel, input labelInput) {
@@ -383,6 +408,9 @@ func (s *server) deleteWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 		}
 		for index := range data.Projects {
 			data.Projects[index].LabelIDs = removeString(data.Projects[index].LabelIDs, id)
+		}
+		for index := range data.Initiatives {
+			data.Initiatives[index].LabelIDs = removeString(data.Initiatives[index].LabelIDs, id)
 		}
 		return nil
 	})
