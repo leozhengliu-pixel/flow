@@ -47,3 +47,4 @@
 @media(max-width:600px){.rootMenu{width:207px;max-width:calc(100vw - 22px)}.valueMenu{width:max-content;max-width:calc(100vw - 22px)}}
 :global(:root[data-theme="light"]) .valueMenu{box-shadow:var(--shadow-dialog)}
 @media(prefers-reduced-motion:reduce){.conditionOverlay,.conditionDialog{animation:none}}
+.valueItem[aria-checked=true] .checkbox{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}

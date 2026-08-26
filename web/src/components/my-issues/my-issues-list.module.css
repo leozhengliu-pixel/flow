@@ -31,3 +31,4 @@
 .badges{max-width:58%;flex:0 1 auto;justify-content:flex-end;margin-left:auto;overflow:hidden}
 .badges>.propertyTrigger{flex:0 1 auto}
 .badges>.propertyTrigger:last-of-type{flex:0 0 auto}
+.checkbox[data-checked=true]{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}

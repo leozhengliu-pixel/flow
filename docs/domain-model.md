@@ -166,6 +166,11 @@ The current Go aggregate intentionally uses Flow's public entity vocabulary:
   transition layer until this aggregate is implemented. Flow's live editor
   also demonstrates stable block IDs and author attribution; those node
   attributes belong in the document schema, not persisted DOM HTML.
+  Live edits use a workspace-authenticated WebSocket room per
+  `DocumentContent`. Yjs updates are appended idempotently before broadcast,
+  Awareness carries ephemeral cursors and selections, and versioned snapshots
+  compact only the update IDs explicitly included by the saving client. Redis
+  Pub/Sub forwards the same document events between API instances.
 - `IssueRelation` supports `related`, `blocks`, `blocked_by`, `duplicate`,
   `parent_of`, and `sub_issue_of`. The API writes the inverse projection on the
   related issue in the same transaction.
@@ -197,8 +202,9 @@ GET    /api/events
 
 The Detail Pane and full detail view share a selected Issue ID. Both derive the
 current aggregate from the bootstrap store; neither keeps an independent Issue
-copy. Title and rich-text description updates debounce for 600 ms before
-persistence.
+copy. Ordinary fields are optimistic, field-level patches over the workspace
+event stream. Rich-text edits are merged continuously with Yjs and periodically
+persisted as a guarded `DocumentContent` snapshot.
 
 See [`flow-prosemirror.md`](flow-prosemirror.md) for the real-application
 probe and exact evidence behind this contract.

@@ -12,6 +12,7 @@ import type { BootstrapData, CycleSettings, DocumentTemplate, IssueLabel, IssueT
 import type { TeamSettingsSection } from '@/lib/app-routes'
 import { TemplateEditor } from './advanced-settings'
 import { SettingsRow, SettingsSection, SettingsToggle } from './settings-primitives'
+import { CheckboxMark } from '@/components/ui/checkbox-mark'
 
 const SECTIONS: { id: TeamSettingsSection; label: string; description: string }[] = [
   { id: 'general', label: 'General', description: 'Name, identifier, timezone, and issue defaults' },
@@ -138,7 +139,7 @@ function ResolvedSummariesSettings({ data, team, onReload }: { data: BootstrapDa
 function MembersSettings({ data, team, onReload }: { data: BootstrapData; team: Team; onReload: () => Promise<void> }) {
   const memberships = new Map(data.teamMembers.filter(item => item.teamId === team.id).map(item => [item.userId, item]))
   const change = async (userId: string, member: boolean) => { try { await setTeamMembership(data.workspace.urlKey, team.id, userId, member, memberships.get(userId)?.role ?? 'member'); await onReload() } catch (error) { toast.error(message(error)) } }
-  return <TeamSection title="Team members"><div className="team-setting-list">{data.members.filter(item => item.status === 'active').map(member => <div className="team-member-setting" key={member.user.id}><span className="settings-member-avatar">{initials(member.user.displayName)}</span><span><strong>{member.user.displayName}</strong><small>{member.user.email}</small></span>{memberships.get(member.user.id)?.role === 'owner' && <em>Owner</em>}<button role="checkbox" aria-checked={memberships.has(member.user.id)} onClick={() => void change(member.user.id, !memberships.has(member.user.id))}>{memberships.has(member.user.id) && <Check size={13}/>}</button></div>)}</div></TeamSection>
+  return <TeamSection title="Team members"><div className="team-setting-list">{data.members.filter(item => item.status === 'active').map(member => <div className="team-member-setting" key={member.user.id}><span className="settings-member-avatar">{initials(member.user.displayName)}</span><span><strong>{member.user.displayName}</strong><small>{member.user.email}</small></span>{memberships.get(member.user.id)?.role === 'owner' && <em>Owner</em>}<button role="checkbox" aria-checked={memberships.has(member.user.id)} onClick={() => void change(member.user.id, !memberships.has(member.user.id))}>{memberships.has(member.user.id) && <CheckboxMark/>}</button></div>)}</div></TeamSection>
 }
 
 function LabelsSettings({ data, team, onReload }: { data: BootstrapData; team: Team; onReload: () => Promise<void> }) {

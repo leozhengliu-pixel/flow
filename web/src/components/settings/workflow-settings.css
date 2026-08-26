@@ -35,3 +35,4 @@
 :root[data-theme="light"] .notification-category-list small,:root[data-theme="light"] .team-member-setting small,:root[data-theme="light"] .team-template-setting small,:root[data-theme="light"] .team-label-setting>span,:root[data-theme="light"] .workflow-state-row>span input:last-child{color:var(--muted)}
 :root[data-theme="light"] .team-settings-section-title h3,:root[data-theme="light"] .team-label-setting>input:not([type=color]),:root[data-theme="light"] .team-template-setting input,:root[data-theme="light"] .workflow-state-row input,:root[data-theme="light"] .workflow-inline-create>input:not([type=color]){color:var(--text)}
 :root[data-theme="light"] .team-member-setting em,:root[data-theme="light"] .workflow-state-row em{background:var(--theme-control-hover);color:var(--muted)}
+.team-member-setting>button[aria-checked=true]{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}
