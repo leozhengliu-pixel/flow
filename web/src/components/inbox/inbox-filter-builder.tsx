@@ -5,6 +5,7 @@ import { Check, ChevronRight, CircleDotDashed, Flag, Plus, UserRound, X } from '
 
 import { PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { usePropertyCommand } from '@/components/property/use-property-command'
+import { CheckboxMark } from '@/components/ui/checkbox-mark'
 
 import {
   normalizeInboxFilters,
@@ -500,7 +501,7 @@ function FilterValueList({ activeId, footer, inputRef, isSelected, onActive, onC
 
 function FilterValueOption({ active, checked, option, property, onActive, onChoose }: { active: boolean; checked: boolean; option: InboxFilterOption; property: InboxFilterProperty; onActive: () => void; onChoose: () => void }) {
   return <button className={styles.valueItem} type="button" role="option" aria-selected={active} aria-checked={checked} disabled={option.disabled} onMouseMove={onActive} onClick={onChoose}>
-    <span className={styles.checkbox}>{checked ? <Check size={11} aria-hidden="true"/> : null}</span>
+    <span className={styles.checkbox}>{checked ? <CheckboxMark/> : null}</span>
     <OptionVisual option={option} property={property}/>
     <span className={styles.valueLabel}>{option.label}</span>
     {option.count != null ? <span className={styles.valueCount}>{option.count} {option.count === 1 ? 'notification' : 'notifications'}</span> : null}

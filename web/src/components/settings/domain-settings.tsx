@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import type { BootstrapData, IssueLabel, LabelGroup } from '@/types/flow'
 import { groupsForResource, isWorkspaceLabel, labelResourceType } from '@/lib/labels'
 import { useI18n } from '@/i18n/i18n'
+import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import { FLOW_COLOR_PALETTE } from '@/components/ui/color-palette'
 
 export { ProjectStatusesSettings } from './issues-projects-settings'
@@ -225,7 +226,7 @@ function LabelColorPicker({ color, disabled = false, kind, label, onChange }: { 
 function PaletteMark({ color }: { color: string }) { return <svg aria-hidden="true" fill={color} viewBox="0 0 16 16"><path clipRule="evenodd" d="M7.95 6A1.75 1.75 0 1 0 7.95 2.5 1.75 1.75 0 0 0 7.95 6ZM4.45 9.5A1.75 1.75 0 1 0 4.45 6a1.75 1.75 0 0 0 0 3.5ZM7.95 13a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5Zm5.25-5.25a1.75 1.75 0 1 1-3.5 0 1.75 1.75 0 0 1 3.5 0Z" fillRule="evenodd"/></svg> }
 function ColorCheck() { return <svg aria-hidden="true" fill="currentColor" viewBox="0 0 10 8"><path d="M3.47 5.708 1.884 4.123a.576.576 0 0 0-.815.814l1.996 1.994a.576.576 0 0 0 .814 0L8.931 1.883a.576.576 0 0 0-.815-.814L3.47 5.708Z"/></svg> }
 
-function SelectionCell({ kind, selected, onToggle }: { kind: 'label'|'group'; selected: boolean; onToggle: () => void }) { const { t } = useI18n(); return <label className="domain-label-indent domain-label-select"><input type="checkbox" aria-label={t(kind === 'group' ? 'Select group' : 'Select label')} checked={selected} onChange={onToggle}/><span>{selected && <Check size={11}/>}</span></label> }
+function SelectionCell({ kind, selected, onToggle }: { kind: 'label'|'group'; selected: boolean; onToggle: () => void }) { const { t } = useI18n(); return <label className="domain-label-indent domain-label-select"><input type="checkbox" aria-label={t(kind === 'group' ? 'Select group' : 'Select label')} checked={selected} onChange={onToggle}/><span>{selected && <CheckboxMark/>}</span></label> }
 
 function LabelEditableText({ value, field, editing, archived, onEdit, onCancel, onSave }: { value: string; field: string; editing: boolean; archived: boolean; onEdit: () => void; onCancel: () => void; onSave: (value: string) => Promise<void> }) {
   const [draft, setDraft] = useState(value)

@@ -1,12 +1,13 @@
 import { useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Check, Ellipsis, Minus, Plus } from 'lucide-react'
+import { Ellipsis, Minus, Plus } from 'lucide-react'
 import { IssueParentTrail, RowCommandPicker, SubIssueProgress, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData, type MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
 import type { MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
 import { CalendarIcon, NoAssigneeIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { DueDatePicker } from '@/components/issue/due-date-picker'
 import { useI18n } from '@/i18n/i18n'
 import styles from './issue-board.module.css'
+import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import { UserAvatar } from '@/components/ui/user-avatar'
 
 const EMPTY_OPTIONS: MyIssuesRowPropertyOptions = { status: [], priority: [], assignee: [], dueDate: [], labels: [], project: [] }
@@ -86,7 +87,7 @@ function IssueBoardCard({ issue, properties, propertyOptions, selected, dragging
     </div>
     <div className={styles.titleRow}>
       {properties.has('status') && <span className={styles.status}><StatusIcon state={issue.state} size={14}/></span>}
-      <button className={styles.checkbox} type="button" role="checkbox" aria-label="Select issue" aria-checked={selected} data-checked={selected} onClick={event => onSelect(!selected, event.shiftKey)}>{selected && <Check size={11}/>}</button>
+      <button className={styles.checkbox} type="button" role="checkbox" aria-label="Select issue" aria-checked={selected} data-checked={selected} onClick={event => onSelect(!selected, event.shiftKey)}>{selected && <CheckboxMark/>}</button>
       <strong className={styles.title} data-i18n-ignore>{issue.title}</strong>
     </div>
     <div className={styles.cardFooter}><CardProperties issue={issue} properties={properties} propertyOptions={propertyOptions} onPropertyChange={change}/>{issue.subIssueProgress&&issue.subIssues?.length?<SubIssueProgress progress={issue.subIssueProgress} subIssues={issue.subIssues} onOpenSubIssue={onOpenSubIssue}/>:null}</div>

@@ -2,7 +2,7 @@ import { cloneElement, Fragment, isValidElement, useMemo, useState, type ReactEl
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Popover from '@radix-ui/react-popover'
 import { Command } from 'cmdk'
-import { Archive, Bot, CalendarDays, Check, CircleDot, ExternalLink, FileText, Flag, GitBranch, Layers3, Link2, ListFilter, RefreshCw, Rocket, Sparkles, Tags, UserRound, Users } from 'lucide-react'
+import { Archive, Bot, CalendarDays, CircleDot, ExternalLink, FileText, Flag, GitBranch, Layers3, Link2, ListFilter, RefreshCw, Rocket, Sparkles, Tags, UserRound, Users } from 'lucide-react'
 import { ChevronRightIcon } from './my-issues-icons'
 import { CalendarIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, StatusIcon } from '@/components/issue/issue-icons'
 import type { MyIssuesAppliedFilter } from './my-issues-filter-types'
@@ -10,6 +10,7 @@ import type { MyIssuesFilterKey, MyIssuesFilterOption } from './my-issues-surfac
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { useI18n } from '@/i18n/i18n'
 import styles from './my-issues-filter-menu.module.css'
+import { CheckboxMark } from '@/components/ui/checkbox-mark'
 
 export interface MyIssuesFilterMenuProps {
   open: boolean
@@ -136,7 +137,7 @@ function FilterValueItem({ field, option, active, selected, nestedOpen, onActive
   const {t}=useI18n()
   if(option.children?.length)return <Popover.Root open={nestedOpen} onOpenChange={onNestedOpen}><Popover.Trigger asChild><button type="button" role="option" aria-selected={active} aria-expanded={nestedOpen} aria-haspopup="listbox" className={styles.valueItem} onMouseMove={()=>{onActive();onNestedOpen(true)}}><span className={styles.optionSpacer}/><OptionMark field={field} option={option}/><span className={styles.valueLabel}>{t(option.label)}</span><ChevronRightIcon/></button></Popover.Trigger><Popover.Portal><NestedValueMenu field={field} label={option.label} options={option.children} onChoose={onChoose} onClose={()=>onNestedOpen(false)}/></Popover.Portal></Popover.Root>
   if(option.textConditionPrefix)return <button type="button" role="option" aria-selected={active} className={`${styles.valueItem} ${styles.textConditionItem}`} onMouseMove={onActive} onClick={()=>onChoose(option)}><span className={styles.optionSpacer}/><span className={styles.valueLabel}>{t(option.label)}</span></button>
-  return <button type="button" role="option" aria-selected={active} aria-checked={selected} className={styles.valueItem} onMouseMove={onActive} onClick={()=>onChoose(option)}><span className={styles.checkbox} role="checkbox" aria-checked={selected}>{selected&&<Check size={11}/>}</span><OptionMark field={field} option={option}/><span className={styles.valueLabel} data-i18n-ignore>{option.label}</span>{optionCount(option)!=null&&<span className={styles.count}>{optionCount(option)} {t(optionCount(option)===1?'issue':'issues')}</span>}</button>
+  return <button type="button" role="option" aria-selected={active} aria-checked={selected} className={styles.valueItem} onMouseMove={onActive} onClick={()=>onChoose(option)}><span className={styles.checkbox} role="checkbox" aria-checked={selected}>{selected&&<CheckboxMark/>}</span><OptionMark field={field} option={option}/><span className={styles.valueLabel} data-i18n-ignore>{option.label}</span>{optionCount(option)!=null&&<span className={styles.count}>{optionCount(option)} {t(optionCount(option)===1?'issue':'issues')}</span>}</button>
 }
 
 function NestedValueMenu({ field, label, onChoose, onClose, options }: { field: MyIssuesFilterKey; label: string; onChoose: (option: MyIssuesFilterOption) => void; onClose: () => void; options: MyIssuesFilterOption[] }) {
