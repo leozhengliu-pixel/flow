@@ -61,16 +61,17 @@ export function InitiativeTeamsPicker({ initiative, teams, onUpdate }: { initiat
   return <Popover.Root><Popover.Trigger asChild><button aria-label="Change contributing teams" className="li-team-picker" type="button">{selected.length ? <><span className="li-team-mark" style={{ background: selected[0].color }}>{selected[0].key.slice(0, 2)}</span><span data-i18n-ignore>{selected.length === 1 ? selected[0].name : `${selected.length} teams`}</span></> : <><UsersRound size={14}/><span>Contributing teams</span></>}</button></Popover.Trigger><Popover.Portal><Popover.Content align="start" className="li-team-picker-menu" collisionPadding={8} sideOffset={4}><header>Contributing teams</header>{teams.map(team => <button aria-checked={initiative.contributingTeamIds?.includes(team.id)} key={team.id} onClick={() => toggle(team.id)} role="checkbox" type="button"><span className="li-picker-checkbox">{initiative.contributingTeamIds?.includes(team.id) && <Check size={11}/>}</span><span className="li-team-mark" style={{ background: team.color }}>{team.key.slice(0, 2)}</span><span data-i18n-ignore>{team.name}</span></button>)}</Popover.Content></Popover.Portal></Popover.Root>
 }
 
-export function InitiativeLabelsPicker({ initiative, labels, labelGroups = [], onUpdate, compact = false }: {
+export function InitiativeLabelsPicker({ initiative, labels, labelGroups = [], onUpdate, onCreateLabel, compact = false }: {
   initiative: Initiative
   labels: IssueLabel[]
   labelGroups?: LabelGroup[]
   compact?: boolean
   onUpdate: (input: InitiativeMutationInput) => void | Promise<unknown>
+  onCreateLabel?: (name: string) => Promise<IssueLabel>
 }) {
   const selected = labels.filter(label => initiative.labelIds.includes(label.id))
   return <div className={compact ? 'li-label-picker li-label-picker--compact' : 'li-label-picker'}>
-    <LabelPicker labels={labels} labelGroups={labelGroups} value={selected} onToggle={labelId => { void onUpdate({ labelIds: initiative.labelIds.includes(labelId) ? initiative.labelIds.filter(id => id !== labelId) : [...initiative.labelIds, labelId] }) }}/>
+    <LabelPicker labels={labels} labelGroups={labelGroups} value={selected} onToggle={labelId => { void onUpdate({ labelIds: initiative.labelIds.includes(labelId) ? initiative.labelIds.filter(id => id !== labelId) : [...initiative.labelIds, labelId] }) }} onCreate={onCreateLabel ? async name => { const label = await onCreateLabel(name); await onUpdate({ labelIds: [...new Set([...initiative.labelIds, label.id])] }) } : undefined}/>
   </div>
 }
 

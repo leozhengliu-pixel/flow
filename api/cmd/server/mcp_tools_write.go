@@ -96,9 +96,13 @@ func (s *server) createMCPLabel(ctx context.Context, actor mcpActor, data domain
 		color = "#5e6ad2"
 	}
 	if boolArg(args, "isGroup") {
-		group := domain.LabelGroup{ID: fmt.Sprintf("label_group_%d", time.Now().UnixNano()), Name: name, Color: color, Description: stringArg(args, "description"), Scope: scope, ResourceType: resourceType, CreatedAt: time.Now().UTC()}
-		err := s.store.MutateWorkspace(ctx, actor.WorkspaceKey, "label_group.created", group.ID, args, func(next *domain.Bootstrap) error { next.LabelGroups = append(next.LabelGroups, group); return nil })
-		return group, err
+		if resourceType == "initiative" {
+			return nil, fmt.Errorf("initiative labels do not support groups")
+		}
+		groupInput := labelGroupInput{Name: &name, Color: &color, ResourceType: &resourceType}
+		description := stringArg(args, "description")
+		groupInput.Description = &description
+		return invokeJSONHandler(ctx, http.MethodPost, nil, groupInput, s.createLabelGroup)
 	}
 	groupID := ""
 	if parent := stringArg(args, "parent"); parent != "" {
@@ -112,8 +116,21 @@ func (s *server) createMCPLabel(ctx context.Context, actor mcpActor, data domain
 			return nil, fmt.Errorf("parent label group not found")
 		}
 	}
-	label := domain.IssueLabel{ID: fmt.Sprintf("label_%d", time.Now().UnixNano()), Name: name, Color: color, Description: stringArg(args, "description"), Scope: scope, ResourceType: resourceType, GroupID: groupID, CreatorID: actor.User.ID, CreatedAt: time.Now().UTC()}
-	err := s.store.MutateWorkspace(ctx, actor.WorkspaceKey, "label.created", label.ID, args, func(next *domain.Bootstrap) error { next.Labels = append(next.Labels, label); return nil })
+	input := labelInput{Name: &name, Color: &color, ResourceType: &resourceType, GroupID: &groupID}
+	description := stringArg(args, "description")
+	input.Description = &description
+	if scope == "" {
+		return invokeJSONHandler(ctx, http.MethodPost, nil, input, s.createWorkspaceLabel)
+	}
+	var label domain.IssueLabel
+	err := s.store.MutateWorkspace(ctx, actor.WorkspaceKey, "label.created", name, args, func(next *domain.Bootstrap) error {
+		var err error
+		label, err = newLabel(next, actor.User.ID, scope, input)
+		if err == nil {
+			next.Labels = append(next.Labels, label)
+		}
+		return err
+	})
 	return label, err
 }
 

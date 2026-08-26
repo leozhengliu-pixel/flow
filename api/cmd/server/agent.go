@@ -43,26 +43,67 @@ type agentSkillInput struct {
 
 const maxAgentMessageBytes = 3 << 20
 
+func (s *server) requireAgent(w http.ResponseWriter) bool {
+	if s.agent.Enabled {
+		return true
+	}
+	writeError(w, http.StatusServiceUnavailable, "Flow Agent is not configured")
+	return false
+}
+
+func validAgentMessage(w http.ResponseWriter, value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > maxAgentMessageBytes {
+		writeError(w, http.StatusBadRequest, "message is required and must not exceed 3 MB")
+		return "", false
+	}
+	return value, true
+}
+
+func decodeAgentMessage(w http.ResponseWriter, r *http.Request) (string, bool) {
+	var input struct {
+		Message string `json:"message"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return "", false
+	}
+	return validAgentMessage(w, input.Message)
+}
+
+func validAgentIssueCount(w http.ResponseWriter, issueIDs []string) bool {
+	if len(issueIDs) <= 25 {
+		return true
+	}
+	writeError(w, http.StatusBadRequest, "no more than 25 issueIds are allowed")
+	return false
+}
+
+func (s *server) completeAgentSessionResponse(w http.ResponseWriter, r *http.Request, id string, status int) {
+	completed, err := s.completeAgentSession(r, id)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, status, completed)
+}
+
 func (s *server) agentStatus(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"enabled": s.agent.Enabled, "model": s.agent.Model})
 }
 
 func (s *server) agentChat(w http.ResponseWriter, r *http.Request) {
-	if !s.agent.Enabled {
-		writeError(w, http.StatusServiceUnavailable, "Flow Agent is not configured")
+	if !s.requireAgent(w) {
 		return
 	}
 	var input agentChatInput
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	input.Message = strings.TrimSpace(input.Message)
-	if input.Message == "" || len(input.Message) > maxAgentMessageBytes {
-		writeError(w, http.StatusBadRequest, "message is required and must not exceed 3 MB")
+	var ok bool
+	if input.Message, ok = validAgentMessage(w, input.Message); !ok {
 		return
 	}
-	if len(input.IssueIDs) > 25 {
-		writeError(w, http.StatusBadRequest, "no more than 25 issueIds are allowed")
+	if !validAgentIssueCount(w, input.IssueIDs) {
 		return
 	}
 	data := s.workspaceData(r)
@@ -117,21 +158,18 @@ func (s *server) getAgentSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) createAgentSession(w http.ResponseWriter, r *http.Request) {
-	if !s.agent.Enabled {
-		writeError(w, http.StatusServiceUnavailable, "Flow Agent is not configured")
+	if !s.requireAgent(w) {
 		return
 	}
 	var input agentSessionInput
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	input.Message = strings.TrimSpace(input.Message)
-	if input.Message == "" || len(input.Message) > maxAgentMessageBytes {
-		writeError(w, http.StatusBadRequest, "message is required and must not exceed 3 MB")
+	var ok bool
+	if input.Message, ok = validAgentMessage(w, input.Message); !ok {
 		return
 	}
-	if len(input.IssueIDs) > 25 {
-		writeError(w, http.StatusBadRequest, "no more than 25 issueIds are allowed")
+	if !validAgentIssueCount(w, input.IssueIDs) {
 		return
 	}
 	if input.Location == "" {
@@ -160,30 +198,18 @@ func (s *server) createAgentSession(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusCreated, session)
 		return
 	}
-	completed, err := s.completeAgentSession(r, sessionID)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusCreated, completed)
+	s.completeAgentSessionResponse(w, r, sessionID, http.StatusCreated)
 }
 
 func (s *server) createAgentSessionMessage(w http.ResponseWriter, r *http.Request) {
-	if !s.agent.Enabled {
-		writeError(w, http.StatusServiceUnavailable, "Flow Agent is not configured")
+	if !s.requireAgent(w) {
 		return
 	}
-	var input struct {
-		Message string `json:"message"`
-	}
-	if !decodeJSON(w, r, &input) {
+	message, ok := decodeAgentMessage(w, r)
+	if !ok {
 		return
 	}
-	input.Message = strings.TrimSpace(input.Message)
-	if input.Message == "" || len(input.Message) > maxAgentMessageBytes {
-		writeError(w, http.StatusBadRequest, "message is required and must not exceed 3 MB")
-		return
-	}
+	input := map[string]string{"message": message}
 	id := r.PathValue("id")
 	now := time.Now().UTC()
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.message_created", id, input, func(data *domain.Bootstrap) error {
@@ -191,7 +217,7 @@ func (s *server) createAgentSessionMessage(w http.ResponseWriter, r *http.Reques
 		if err != nil {
 			return err
 		}
-		session.Messages = append(session.Messages, domain.AgentMessage{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: input.Message, CreatedAt: now})
+		session.Messages = append(session.Messages, domain.AgentMessage{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: message, CreatedAt: now})
 		session.UpdatedAt = now
 		return nil
 	})
@@ -199,30 +225,18 @@ func (s *server) createAgentSessionMessage(w http.ResponseWriter, r *http.Reques
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
-	completed, err := s.completeAgentSession(r, id)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, completed)
+	s.completeAgentSessionResponse(w, r, id, http.StatusOK)
 }
 
 func (s *server) updateAgentSessionMessage(w http.ResponseWriter, r *http.Request) {
-	if !s.agent.Enabled {
-		writeError(w, http.StatusServiceUnavailable, "Flow Agent is not configured")
+	if !s.requireAgent(w) {
 		return
 	}
-	var input struct {
-		Message string `json:"message"`
-	}
-	if !decodeJSON(w, r, &input) {
+	message, ok := decodeAgentMessage(w, r)
+	if !ok {
 		return
 	}
-	input.Message = strings.TrimSpace(input.Message)
-	if input.Message == "" || len(input.Message) > maxAgentMessageBytes {
-		writeError(w, http.StatusBadRequest, "message is required and must not exceed 3 MB")
-		return
-	}
+	input := map[string]string{"message": message}
 	id, messageID := r.PathValue("id"), r.PathValue("messageId")
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.message_updated", id, input, func(data *domain.Bootstrap) error {
 		session, err := ownedAgentSession(data, id)
@@ -232,7 +246,7 @@ func (s *server) updateAgentSessionMessage(w http.ResponseWriter, r *http.Reques
 		for index := range session.Messages {
 			message := &session.Messages[index]
 			if message.ID == messageID && message.Role == "user" {
-				message.Content = input.Message
+				message.Content = input["message"]
 				session.Messages = session.Messages[:index+1]
 				session.UpdatedAt = time.Now().UTC()
 				return nil
@@ -244,12 +258,7 @@ func (s *server) updateAgentSessionMessage(w http.ResponseWriter, r *http.Reques
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
-	completed, err := s.completeAgentSession(r, id)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, completed)
+	s.completeAgentSessionResponse(w, r, id, http.StatusOK)
 }
 
 func (s *server) completeAgentSession(r *http.Request, id string) (domain.AgentSession, error) {

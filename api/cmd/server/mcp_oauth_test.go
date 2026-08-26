@@ -84,6 +84,20 @@ func TestMCPOAuthPKCEAndToolLifecycle(t *testing.T) {
 	if !ok || !slices.ContainsFunc(bootstrap.Issues, func(item domain.Issue) bool { return item.Title == "MCP lifecycle issue" && item.Priority == 2 }) {
 		t.Fatal("save_issue did not persist the created issue")
 	}
+	createdLabel := callMCP(t, server.URL+"/mcp", tokens.AccessToken, map[string]any{"jsonrpc": "2.0", "id": 32, "method": "tools/call", "params": map[string]any{"name": "create_initiative_label", "arguments": map[string]any{"name": "MCP initiative label", "color": "#5e6ad2"}}})
+	if createdLabel.Result.(map[string]any)["isError"] == true {
+		t.Fatalf("create_initiative_label response = %#v", createdLabel)
+	}
+	bootstrap, _ = repository.BootstrapFor("cleantrack")
+	if !slices.ContainsFunc(bootstrap.Labels, func(item domain.IssueLabel) bool {
+		return item.Name == "MCP initiative label" && item.ResourceType == "initiative" && labelScopeIsWorkspace(item.Scope) && item.GroupID == ""
+	}) {
+		t.Fatal("create_initiative_label did not use the initiative label contract")
+	}
+	groupedLabel := callMCP(t, server.URL+"/mcp", tokens.AccessToken, map[string]any{"jsonrpc": "2.0", "id": 33, "method": "tools/call", "params": map[string]any{"name": "create_initiative_label", "arguments": map[string]any{"name": "Invalid initiative group", "isGroup": true}}})
+	if groupedLabel.Result.(map[string]any)["isError"] != true {
+		t.Fatalf("initiative label group was accepted: %#v", groupedLabel)
+	}
 
 	readonly := callMCP(t, server.URL+"/mcp/readonly", tokens.AccessToken, map[string]any{"jsonrpc": "2.0", "id": 4, "method": "tools/list", "params": map[string]any{}})
 	for _, raw := range readonly.Result.(map[string]any)["tools"].([]any) {
