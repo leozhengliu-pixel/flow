@@ -9,7 +9,7 @@ import { filterValues, toggleFilterOption, updateFilterOperator, updateFilterVal
 import { MyIssuesList, type MyIssuesContextAction, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData, type MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
 import type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption, MyIssuesGrouping, MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
 import { IssueBoard } from '@/components/issue-explorer/issue-board'
-import { issueHierarchyFields } from '@/components/issue-explorer/issue-explorer-model'
+import { issueHierarchyFields, nestedIssueProjection } from '@/components/issue-explorer/issue-explorer-model'
 import { ViewIconPicker } from '@/components/views/view-icon-picker'
 import type { Issue, IssueUpdateInput, ProjectMilestone } from '@/types/flow'
 import type { ProjectDetailProps } from './project-detail-types'
@@ -115,15 +115,18 @@ function projectFilterOptions(issues: Issue[]): Partial<Record<MyIssuesFilterKey
 function matchesFilters(issue: Issue, filters: ProjectIssueFilters) { return filters.every(filter => { const values = filterValues(filter).map(value => value.value); let match = true; if (filter.field === 'priority') match = values.includes(String(issue.priority)); else if (filter.field === 'status') match = values.includes(issue.state.id); else if (filter.field === 'assignee') match = values.includes(issue.assignee?.id ?? ''); else if (filter.field === 'labels') match = issue.labels.some(label => values.includes(label.id)); return filter.operator === 'is' ? match : !match }) }
 function groupIssues(issues: Issue[], display: MyIssuesDisplayOptions, allStates: Issue['state'][]): MyIssuesGroupData[] {
   const grouping = display.grouping === 'focus' ? 'status' : display.grouping
-  if (grouping === 'none') return [{ id: 'all', label: 'All issues', issues: issues.map(issue=>toRowData(issue,issues)) }]
+  let rows=issues.map(issue=>toRowData(issue,issues))
+  const nested=display.nestedSubIssues?nestedIssueProjection(rows):undefined
+  if(nested)rows=nested.rows
+  if (grouping === 'none') return [{ id: 'all', label: 'All issues', issues: rows }]
   const groups = new Map<string, MyIssuesGroupData>()
-  for (const issue of issues) { const group = groupFor(issue, grouping); const current = groups.get(group.id) ?? { ...group, issues: [] }; current.issues.push(toRowData(issue,issues)); groups.set(group.id, current) }
+  for (const issue of rows) { const group = groupForRow(nested?.roots.get(issue.id)??issue, grouping); const current = groups.get(group.id) ?? { ...group, issues: [] }; current.issues.push(issue); groups.set(group.id, current) }
   if (grouping === 'status' && display.showEmptyGroups) for (const state of allStates) if (!groups.has(state.id)) groups.set(state.id, { id: state.id, label: state.name, stateType: state.type, state, issues: [] })
   let result = [...groups.values()]
   if (grouping === 'status') { const order = new Map(allStates.map((state, index) => [state.id, index])); result.sort((left, right) => (order.get(left.id) ?? 99) - (order.get(right.id) ?? 99)) } else result.sort((left, right) => left.label.localeCompare(right.label))
   return display.groupOrder === 'desc' ? result.reverse() : result
 }
-function groupFor(issue: Issue, grouping: MyIssuesGrouping): Omit<MyIssuesGroupData, 'issues'> { if (grouping === 'status') return { id: issue.state.id, label: issue.state.name, stateType: issue.state.type, state: issue.state }; if (grouping === 'priority') return { id: `priority-${issue.priority}`, label: PRIORITY_LABELS[issue.priority] }; if (grouping === 'assignee') return { id: issue.assignee?.id ?? 'unassigned', label: issue.assignee?.displayName ?? 'No assignee' }; if (grouping === 'label') { const label = issue.labels[0]; return { id: label?.id ?? 'no-label', label: label?.name ?? 'No label' } } return { id: 'project', label: issue.project?.name ?? 'Project' } }
+function groupForRow(issue: MyIssuesRowData, grouping: MyIssuesGrouping): Omit<MyIssuesGroupData, 'issues'> { if (grouping === 'status') return { id: issue.state.id, label: issue.state.name, stateType: issue.state.type, state: issue.state }; if (grouping === 'priority') return { id: `priority-${issue.priority}`, label: PRIORITY_LABELS[issue.priority] }; if (grouping === 'assignee') return { id: issue.assignee?.id ?? 'unassigned', label: issue.assignee?.name ?? 'No assignee' }; if (grouping === 'label') { const label = issue.labels?.[0]; return { id: label?.id ?? 'no-label', label: label?.name ?? 'No label' } } return { id: 'project', label: issue.project?.name ?? 'Project' } }
 function projectBoardGroupUpdate(row: MyIssuesRowData, grouping: MyIssuesGrouping, targetGroupId: string, states: Issue['state'][]): IssueUpdateInput {
   if (grouping === 'status' && states.some(state => state.id === targetGroupId)) return { stateId: targetGroupId }
   if (grouping === 'priority' && targetGroupId.startsWith('priority-')) return { priority: Number(targetGroupId.slice('priority-'.length)) }
@@ -134,7 +137,7 @@ function projectBoardGroupUpdate(row: MyIssuesRowData, grouping: MyIssuesGroupin
   }
   return {}
 }
-function sortIssues(issues: Issue[], display: MyIssuesDisplayOptions) { return [...issues].sort((left, right) => { if (display.ordering === 'priority' || display.ordering === 'importance') return left.priority - right.priority || left.sortOrder - right.sortOrder; if (display.ordering === 'created') return +new Date(right.createdAt) - +new Date(left.createdAt); return +new Date(right.updatedAt) - +new Date(left.updatedAt) }) }
+function sortIssues(issues: Issue[], display: MyIssuesDisplayOptions) { return [...issues].sort((left, right) => { if (display.ordering === 'priority') return left.priority - right.priority || left.sortOrder - right.sortOrder; if (display.ordering === 'importance') return left.sortOrder - right.sortOrder; if (display.ordering === 'created') return +new Date(right.createdAt) - +new Date(left.createdAt); return +new Date(right.updatedAt) - +new Date(left.updatedAt) }) }
 function displaySnapshot(display: MyIssuesDisplayOptions) { return { ...display, properties: [...display.properties] } }
 function filterSnapshot(filter: MyIssuesAppliedFilter): MyIssuesAppliedFilter { const values = filterValues(filter); return { ...filter, ...values[0], values } }
 function dueDateOptions() { const today = new Date(); const iso = (date: Date) => date.toISOString().slice(0,10); return [{ id: '', label: 'No due date', kind: 'dueDate' as const }, { id: iso(today), label: 'Today', kind: 'dueDate' as const }, { id: iso(new Date(today.getTime() + 86_400_000)), label: 'Tomorrow', kind: 'dueDate' as const }] }

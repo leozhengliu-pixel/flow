@@ -105,7 +105,7 @@ export function issueHierarchyFields(issue: Issue, issues: Issue[]): Pick<MyIssu
   return {
     parent: ancestors[0],
     ancestors,
-    subIssueProgress: children.length ? {completed:children.filter(child=>child.state.type==='completed').length,total:children.length} : undefined,
+    subIssueProgress: children.length ? {completed:children.filter(child=>child.state.type==='completed'||child.state.type==='canceled').length,total:children.length} : undefined,
     subIssues:children.map(child=>({id:child.id,identifier:child.identifier,title:child.title,priority:clampPriority(child.priority),state:child.state,labels:child.labels,project:child.project,assignee:child.assignee?{id:child.assignee.id,name:child.assignee.displayName,avatarUrl:child.assignee.avatarUrl}:undefined,createdAt:child.createdAt,updatedAt:child.updatedAt,parentId:child.parentId})),
   }
 }
@@ -294,10 +294,12 @@ export function buildExplorerIssueGroups(issues: MyIssuesRowData[], display: MyI
   if (view !== 'all') projected = projected.filter(issue => issue.state.type !== 'completed' && issue.state.type !== 'canceled')
   else if (display.completedWindow === 'none') projected = projected.filter(issue => issue.state.type !== 'completed' && issue.state.type !== 'canceled')
   projected = [...projected].sort(issueComparator(display.ordering, manualOrder))
+  const nested = display.nestedSubIssues ? nestedIssueProjection(projected) : undefined
+  if (nested) projected = nested.rows
   if (display.grouping === 'none') return [{ id: 'all-issues', label: 'All issues', issues: projected }]
   const groups = new Map<string, MyIssuesGroupData>()
   for (const issue of projected) {
-    const descriptor = groupForIssue(issue, display.grouping)
+    const descriptor = groupForIssue(nested?.roots.get(issue.id) ?? issue, display.grouping)
     const group = groups.get(descriptor.id) ?? { ...descriptor, issues: [] }
     group.issues.push(issue)
     groups.set(group.id, group)
@@ -313,6 +315,30 @@ export function buildExplorerIssueGroups(issues: MyIssuesRowData[], display: MyI
     return (stateOrder.get(left.id) ?? 99) - (stateOrder.get(right.id) ?? 99)
   })
   return display.groupOrder === 'desc' ? ordered.reverse() : ordered
+}
+
+export function nestedIssueProjection(rows: MyIssuesRowData[]) {
+  const byId = new Map(rows.map(row => [row.id, row]))
+  const children = new Map<string, MyIssuesRowData[]>()
+  for (const row of rows) {
+    if (!row.parentId || !byId.has(row.parentId)) continue
+    const siblings = children.get(row.parentId) ?? []
+    siblings.push(row)
+    children.set(row.parentId, siblings)
+  }
+  const ordered: MyIssuesRowData[] = []
+  const roots = new Map<string, MyIssuesRowData>()
+  const seen = new Set<string>()
+  const visit = (row: MyIssuesRowData, root: MyIssuesRowData) => {
+    if (seen.has(row.id)) return
+    seen.add(row.id)
+    ordered.push(row)
+    roots.set(row.id, root)
+    for (const child of children.get(row.id) ?? []) visit(child, root)
+  }
+  for (const row of rows) if (!row.parentId || !byId.has(row.parentId)) visit(row, row)
+  for (const row of rows) visit(row, roots.get(row.id) ?? row)
+  return { rows: ordered, roots }
 }
 
 function stateVisibleInView(type: string, view: TeamIssuesRouteView, completedWindow: MyIssuesDisplayOptions['completedWindow']) {
@@ -333,10 +359,11 @@ function groupForIssue(issue: MyIssuesRowData, grouping: MyIssuesGrouping): Omit
 function issueComparator(ordering: MyIssuesDisplayOptions['ordering'], manualOrder: string[]) {
   const manual = new Map(manualOrder.map((id, index) => [id, index]))
   return (left: MyIssuesRowData, right: MyIssuesRowData) => {
-    if (manual.has(left.id) || manual.has(right.id)) return (manual.get(left.id) ?? 999999) - (manual.get(right.id) ?? 999999)
+    if (ordering === 'importance' && (manual.has(left.id) || manual.has(right.id))) return (manual.get(left.id) ?? 999999) - (manual.get(right.id) ?? 999999)
     if (ordering === 'created') return Date.parse(right.createdAt) - Date.parse(left.createdAt)
     if (ordering === 'updated') return Date.parse(right.updatedAt) - Date.parse(left.updatedAt)
-    return (left.sortOrder ?? 0) - (right.sortOrder ?? 0) || left.priority - right.priority || Date.parse(right.updatedAt) - Date.parse(left.updatedAt)
+    if (ordering === 'priority') return left.priority - right.priority || (left.sortOrder ?? 0) - (right.sortOrder ?? 0)
+    return (left.sortOrder ?? 0) - (right.sortOrder ?? 0)
   }
 }
 
