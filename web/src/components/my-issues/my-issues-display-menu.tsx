@@ -103,13 +103,13 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
           <SelectField label="Ordering" value={options.ordering} options={[{ value: 'importance' as const, label: 'Importance' }, { value: 'priority' as const, label: 'Priority' }, { value: 'created' as const, label: 'Created' }, { value: 'updated' as const, label: 'Updated' }]} onChange={ordering => change({ ordering })} />
           <SwitchRow label="Order completed by recency" checked={options.orderCompletedByRecency} onChange={orderCompletedByRecency => change({ orderCompletedByRecency })} />
           <SelectField label="Completed issues" value={options.completedWindow} options={completedOptions} onChange={completedWindow => change({ completedWindow })} />
-          <SwitchRow label="Show sub-issues" checked={options.showSubIssues} onChange={showSubIssues => change({ showSubIssues })} />
+          <SwitchRow label="Show sub-issues" checked={options.showSubIssues} onChange={showSubIssues => change({ showSubIssues, nestedSubIssues: showSubIssues ? options.nestedSubIssues : false })} />
         </section>
 
         <section className={styles.section} aria-label={t(options.layout === 'board' ? 'Board options' : 'List options')}>
           <span className={styles.sectionLabel}>{t(options.layout === 'board' ? 'Board options' : 'List options')}</span>
           {options.layout === 'board' && <SwitchRow label="Show empty columns" checked={options.showEmptyGroups} onChange={showEmptyGroups => change({ showEmptyGroups })} />}
-          {options.layout === 'list' && <SwitchRow label="Nested sub-issues" checked={options.nestedSubIssues} onChange={nestedSubIssues => change({ nestedSubIssues })} />}
+          {options.layout === 'list' && <SwitchRow label="Nested sub-issues" checked={options.nestedSubIssues} onChange={nestedSubIssues => change({ nestedSubIssues, showSubIssues: nestedSubIssues || options.showSubIssues })} />}
           <span className={styles.sectionLabel}>{t('Display properties')}</span>
           <div className={styles.propertyGrid}>
             {propertyOptions.filter(property => !hiddenProperties.includes(property.value)).map(property => {

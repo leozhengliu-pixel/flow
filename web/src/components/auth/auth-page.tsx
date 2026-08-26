@@ -25,14 +25,17 @@ type Props = {
   onInvitationAccepted: (workspaceKey: string) => Promise<void>
 }
 
+const AUTH_MODES = new Set(['login', 'signup', 'verify-email', 'forgot-password', 'reset-password', 'invite'])
+
 export function AuthPage({ session, onAuthenticated, onInvitationAccepted }: Props) {
   const location = useLocation()
   const navigate = useNavigate()
   const params = useMemo(() => new URLSearchParams(location.search), [location.search])
   const route = location.pathname.split('/').filter(Boolean)
-  const mode = route[0] || 'login'
+  const requestedMode = route[0] || 'login'
+  const mode = AUTH_MODES.has(requestedMode) ? requestedMode : 'login'
   const inviteToken = mode === 'invite' ? route[1] ?? '' : ''
-  const returnTo = params.get('returnTo') || undefined
+  const returnTo = params.get('returnTo') || (requestedMode !== mode ? `${location.pathname}${location.search}` : undefined)
   const [email, setEmail] = useState(params.get('email') ?? '')
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')

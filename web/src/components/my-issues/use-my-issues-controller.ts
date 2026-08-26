@@ -5,7 +5,7 @@ import { consolidateFilters, toggleFilterOption, updateFilterOperator, updateFil
 import type { MyIssuesGroupData, MyIssuesRowData } from './my-issues-list'
 import { useMyIssuesSelection } from './use-my-issues-state'
 import type { MyIssuesDisplayOptions, MyIssuesProperty, MyIssuesView } from './my-issues-surface'
-import { matchesExplorerFilter } from '@/components/issue-explorer/issue-explorer-model'
+import { matchesExplorerFilter, nestedIssueProjection } from '@/components/issue-explorer/issue-explorer-model'
 
 export interface MyIssuesControllerAdapter {
   navigate: (href: string) => void
@@ -115,18 +115,22 @@ function applyFilters(groups: MyIssuesGroupData[], filters: MyIssuesAppliedFilte
 
 function projectGroups(groups: MyIssuesGroupData[], display: MyIssuesDisplayOptions): MyIssuesGroupData[] {
   const completedCutoff = completedCutoffDate(display.completedWindow)
-  let issues = groups.flatMap(group => group.issues).filter(issue => {
+  let issues = groups.flatMap(group => group.issues)
+  if (!display.nestedSubIssues) issues = issues.filter(issue => issue.viewMatch !== false)
+  issues = issues.filter(issue => {
     if (!display.showSubIssues && issue.parentId) return false
     if (display.completedWindow === 'none' && (issue.state.type === 'completed' || issue.state.type === 'canceled')) return false
     if (display.completedWindow === 'all' || display.completedWindow === 'currentCycle' || (issue.state.type !== 'completed' && issue.state.type !== 'canceled')) return true
     return new Date(issue.updatedAt).getTime() >= completedCutoff
   })
   issues = [...issues].sort(issueComparator(display.ordering, display.orderCompletedByRecency))
+  const nested = display.nestedSubIssues ? nestedIssueProjection(issues) : undefined
+  if (nested) issues = nested.rows
   if (display.grouping === 'none') return [{ id: 'all-issues', label: 'All issues', issues }]
 
   const projected = new Map<string, MyIssuesGroupData>()
   for (const issue of issues) {
-    const group = groupForIssue(issue, display.grouping)
+    const group = groupForIssue(nested?.roots.get(issue.id) ?? issue, display.grouping)
     const current = projected.get(group.id) ?? { ...group, issues: [] }
     current.issues.push(issue)
     projected.set(group.id, current)
@@ -155,8 +159,8 @@ function issueComparator(ordering: MyIssuesDisplayOptions['ordering'], completed
     if (completedByRecency && bothCompleted) return Date.parse(right.updatedAt) - Date.parse(left.updatedAt)
     if (ordering === 'created') return Date.parse(right.createdAt) - Date.parse(left.createdAt)
     if (ordering === 'updated') return Date.parse(right.updatedAt) - Date.parse(left.updatedAt)
-    if (ordering === 'priority') return left.priority - right.priority
-    return left.priority - right.priority || Date.parse(right.updatedAt) - Date.parse(left.updatedAt)
+    if (ordering === 'priority') return left.priority - right.priority || (left.sortOrder ?? 0) - (right.sortOrder ?? 0)
+    return (left.sortOrder ?? 0) - (right.sortOrder ?? 0)
   }
 }
 
