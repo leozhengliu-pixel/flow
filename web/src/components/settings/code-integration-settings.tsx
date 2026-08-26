@@ -1,9 +1,10 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Check, ChevronDown, ExternalLink, GitMerge, GitPullRequest, Plus, Unplug, X } from 'lucide-react'
+import { ChevronDown, ExternalLink, GitMerge, GitPullRequest, Plus, Unplug, X } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { Toggle } from '@/components/ui/toggle'
 import { useI18n } from '@/i18n/i18n'
 import { connectIntegration, disconnectIntegrationConnection, updateIntegrationConnection } from '@/lib/api'
 import type { BootstrapData, IntegrationConnection } from '@/types/flow'
@@ -35,5 +36,5 @@ export function CodeIntegrationSettings({provider,data,onBack,onReload}:{provide
 function IntegrationOptions({provider,connection,onChange}:{provider:'github'|'gitlab';connection:IntegrationConnection;onChange:(connection:IntegrationConnection,key:string,value:string)=>Promise<void>}){
   const {t}=useI18n()
   const options=[['privateLinkbacks',provider==='github'?'Private repositories':'Private/Internal repositories'],['publicLinkbacks','Public repositories'],['includeDescriptions','Include issue descriptions in linkbacks'],['magicWords','Link commits to issues with magic words'],['reviewGuides','Generate Pull Request guides'],['autoLink','Automatically link Flow issues']] as const
-  return <><section className="code-integration-section"><h2>{t('Branch format')}</h2><div className="code-setting-row"><div><strong>{t('Format')}</strong><span>{t('Keep generated branch names consistent across the workspace.')}</span></div><select aria-label={t('Format')} value={connection.config?.branchFormat||'username/identifier-title'} onChange={event=>void onChange(connection,'branchFormat',event.target.value)}><option>username/identifier-title</option><option>identifier-title</option><option>identifier/title</option></select></div></section><section className="code-integration-section"><h2>{t('Linkbacks')}</h2>{options.map(([key,label])=>{const checked=connection.config?.[key]??(key==='privateLinkbacks'||key==='includeDescriptions'||key==='reviewGuides'?'true':'false');return <div className="code-setting-row" key={key}><div><strong>{t(label)}</strong>{key==='reviewGuides'&&<span>{t('Generate guided reviews for new pull requests')}</span>}</div><button role="checkbox" aria-label={t(label)} aria-checked={checked==='true'} className="code-checkbox" onClick={()=>void onChange(connection,key,checked==='true'?'false':'true')}>{checked==='true'&&<Check/>}</button></div>})}</section></>
+  return <><section className="code-integration-section"><h2>{t('Branch format')}</h2><div className="code-setting-row"><div><strong>{t('Format')}</strong><span>{t('Keep generated branch names consistent across the workspace.')}</span></div><select aria-label={t('Format')} value={connection.config?.branchFormat||'username/identifier-title'} onChange={event=>void onChange(connection,'branchFormat',event.target.value)}><option>username/identifier-title</option><option>identifier-title</option><option>identifier/title</option></select></div></section><section className="code-integration-section"><h2>{t('Linkbacks')}</h2>{options.map(([key,label])=>{const checked=connection.config?.[key]??(key==='privateLinkbacks'||key==='includeDescriptions'||key==='reviewGuides'?'true':'false');return <div className="code-setting-row" key={key}><div><strong>{t(label)}</strong>{key==='reviewGuides'&&<span>{t('Generate guided reviews for new pull requests')}</span>}</div><Toggle checked={checked==='true'} label={t(label)} onChange={value=>onChange(connection,key,String(value))} size="regular"/></div>})}</section></>
 }

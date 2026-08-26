@@ -15,6 +15,7 @@ import styles from './create-issue-dialog.module.css'
 import { createDraft, deleteDraft, updateDraft } from '@/lib/api'
 import { labelsForResource } from '@/lib/labels'
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
+import { Toggle } from '@/components/ui/toggle'
 
 export interface CreateIssueInput {
   title: string
@@ -288,7 +289,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
           <footer className={styles.footer}>
             <button type="button" className={styles.attachButton} aria-label="Attach images, files, or videos" onClick={() => fileRef.current?.click()}><Paperclip/></button>
             <input ref={fileRef} type="file" hidden multiple onChange={addFiles}/>
-            <label className={styles.createMore}><button type="button" role="checkbox" aria-checked={createMore} data-checked={createMore} onClick={() => setCreateMore(value => !value)}><i/></button><span>Create more</span></label>
+            <label className={styles.createMore}><Toggle checked={createMore} label="Create more" onChange={setCreateMore}/><span>Create more</span></label>
             <button className={styles.submit} type="submit" disabled={!title.trim() || saving}>{saving ? 'Creating…' : 'Create issue'}</button>
           </footer>
         </form>

@@ -365,18 +365,12 @@
 .lp-projects-display__section { border-top: .5px solid var(--theme-border-strong); padding: 9px 16px 10px; }
 .lp-projects-display__section h2 { color: #77777c; font-size: 11px; font-weight: 500; line-height: 20px; margin: 0 0 4px; }
 .lp-projects-display__check { align-items: center; color: var(--theme-text-primary); display: flex; font-size: 12px; height: 28px; justify-content: space-between; }
-.lp-projects-display__check-control { background: #505055; border: 0; border-radius: 9999px; height: 14px; padding: 2px; width: 24px; }
-.lp-projects-display__check-control:hover { background: #626267; }
-.lp-projects-display__check-control[aria-checked="true"] { background: #5e6ad2; }
-.lp-projects-display__check-control i { background: #fff; border-radius: 50%; display: block; height: 10px; transition: transform 140ms ease; width: 10px; }
-.lp-projects-display__check-control[aria-checked="true"] i { transform: translateX(10px); }
 .lp-projects-display__properties > div { display: flex; flex-wrap: wrap; gap: 5px; }
 .lp-projects-display__properties button { align-items: center; background: var(--theme-control-hover); border: .5px solid #3a3a3e; border-radius: 9999px; color: #96969b; display: inline-flex; font-size: 11px; height: 24px; line-height: 18px; padding: 0 8px; }
 .lp-projects-display__properties button:hover { background: #323235; color: var(--theme-text-primary); }
 .lp-projects-display__properties button.is-selected { background: var(--theme-border-strong); color: var(--theme-text-primary); }
 .lp-projects-display__properties button:focus-visible,
 .lp-projects-display__footer button:focus-visible,
-.lp-projects-display__check-control:focus-visible { box-shadow: 0 0 0 2px #90c0f7; outline: 0; }
 .lp-projects-display__footer { align-items: center; border-top: .5px solid var(--theme-border-strong); display: flex; gap: 8px; justify-content: flex-end; padding: 8px 12px; }
 .lp-projects-display__footer button { background: var(--theme-control-hover); border: .5px solid #3a3a3e; border-radius: 5px; color: var(--theme-text-secondary); font-size: 11px; height: 26px; padding: 0 8px; }
 .lp-projects-display__footer button:hover { background: #323235; color: var(--theme-text-primary); }
