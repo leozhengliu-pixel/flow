@@ -82,6 +82,7 @@ export interface MyIssuesRowData {
   subIssueProgress?: { completed: number; total: number }
   subIssues?: MyIssuesRowData[]
   sortOrder?: number
+  viewMatch?: boolean
 }
 
 export interface MyIssuesGroupData { id: string; label: string; stateType?: MyIssuesStateType; state?: MyIssuesRowData['state']; issues: MyIssuesRowData[] }
@@ -115,24 +116,26 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
   return <div className={styles.list} role="list" aria-label="Issues" style={{ '--issue-identifier-width': `${identifierLength}ch` } as CSSProperties}>
     {groups.map(group => {
       const collapsed = collapsedGroupIds.has(group.id)
+      const nestedLines = nestedSubIssues ? nestedLinesByIssue(group.issues) : EMPTY_LINE_MAP
       return <section className={styles.group} key={group.id} aria-labelledby={`my-issues-group-${group.id}`}>
         <header className={styles.groupHeader}>
           <button className={styles.collapseButton} aria-label={collapsed ? 'Expand group' : 'Collapse group'} aria-expanded={!collapsed} onClick={() => onGroupCollapsedChange?.(group.id, !collapsed)}><ChevronDown size={12}/></button>
           <GroupStateIcon state={group.state ?? group.issues[0]?.state} type={group.stateType}/><span data-i18n-ignore id={`my-issues-group-${group.id}`} className={styles.groupName}>{group.label}</span><span className={styles.groupCount}>{group.issues.length}</span>
           {onCreateIssue && <button className={styles.createButton} aria-label={createIssueLabel} onClick={() => onCreateIssue(group)}><Plus size={16}/></button>}
         </header>
-        {!collapsed && <div>{group.issues.map(issue => <MyIssuesRow key={issue.id} issue={issue} selected={selectedIds.has(issue.id)} displayProperties={displayProperties} nestedDepth={nestedSubIssues?(issue.ancestors?.length??(issue.parentId?1:0)):0} propertyOptions={propertyOptions} mutationError={mutationErrors.get(issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>)}</div>}
+        {!collapsed && <div>{group.issues.map(issue => <MyIssuesRow key={issue.id} issue={issue} selected={selectedIds.has(issue.id)} displayProperties={displayProperties} nestedLines={nestedLines.get(issue.id)??EMPTY_LINES} showSubIssueProgress={!nestedSubIssues} propertyOptions={propertyOptions} mutationError={mutationErrors.get(issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>)}</div>}
       </section>
     })}
   </div>
 }
 
-export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAULT_PROPERTIES, nestedDepth=0, propertyOptions = EMPTY_OPTIONS, mutationError, onContextAction, onOpen, onPropertyChange, onRetryMutation, onSelect }: {
-  issue: MyIssuesRowData; selected?: boolean; displayProperties?: ReadonlySet<MyIssuesProperty>; nestedDepth?:number; propertyOptions?: MyIssuesRowPropertyOptions; mutationError?: string
+export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAULT_PROPERTIES, nestedLines=EMPTY_LINES, showSubIssueProgress=true, propertyOptions = EMPTY_OPTIONS, mutationError, onContextAction, onOpen, onPropertyChange, onRetryMutation, onSelect }: {
+  issue: MyIssuesRowData; selected?: boolean; displayProperties?: ReadonlySet<MyIssuesProperty>; nestedLines?:readonly boolean[]; showSubIssueProgress?:boolean; propertyOptions?: MyIssuesRowPropertyOptions; mutationError?: string
   onContextAction?: (issue: MyIssuesRowData, action: MyIssuesContextAction) => void; onOpen?: (issue: MyIssuesRowData) => void
   onPropertyChange?: (issue: MyIssuesRowData, property: MyIssuesEditableProperty, value: string | string[]) => void | Promise<void>; onRetryMutation?: (issue: MyIssuesRowData) => void
   onSelect?: (issueId: string, selected: boolean, range: boolean) => void
 }) {
+  const nestedDepth=nestedLines.length
   const open = () => onOpen?.(issue)
   const keydown = (event: KeyboardEvent<HTMLAnchorElement>) => { if (event.target === event.currentTarget && event.key === ' ') { event.preventDefault(); open() } }
   const click = (event: MouseEvent<HTMLAnchorElement>) => {
@@ -144,6 +147,7 @@ export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAU
   return <ContextMenu.Root>
     <ContextMenu.Trigger asChild>
       <a className={styles.row} style={{'--row-columns':columns,'--nested-depth':nestedDepth} as CSSProperties} data-selected={selected} data-nested={nestedDepth>0} href={issue.href} aria-label={rowAriaLabel(issue)} onClick={click} onKeyDown={keydown}>
+        {nestedDepth>0&&<NestedIssueGuide lines={nestedLines}/>}
         <span aria-hidden="true"/><IssueCheckbox checked={selected} onChange={(checked, range) => onSelect?.(issue.id, checked, range)}/>
         {displayProperties.has('priority') && <RowCommandPicker
           propertyLabel="Priority"
@@ -168,7 +172,7 @@ export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAU
         <div className={styles.titleProperties}>
           <span className={styles.title} data-i18n-ignore>{issue.title}</span>
           {!nestedDepth&&issue.parent&&<IssueParentTrail ancestors={issue.ancestors??[issue.parent]}/>}
-          {issue.subIssueProgress&&issue.subIssues?.length?<SubIssueProgress
+          {showSubIssueProgress&&issue.subIssueProgress&&issue.subIssues?.length?<SubIssueProgress
             progress={issue.subIssueProgress}
             subIssues={issue.subIssues}
             onOpenSubIssue={onOpen}
@@ -191,12 +195,25 @@ export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAU
   </ContextMenu.Root>
 }
 
+const EMPTY_LINES:readonly boolean[]=[]
+const EMPTY_LINE_MAP=new Map<string,readonly boolean[]>()
+function nestedLinesByIssue(issues:MyIssuesRowData[]){
+  const byId=new Map(issues.map(item=>[item.id,item])),children=new Map<string,MyIssuesRowData[]>()
+  for(const item of issues){if(!item.parentId||!byId.has(item.parentId))continue;const siblings=children.get(item.parentId)??[];siblings.push(item);children.set(item.parentId,siblings)}
+  const result=new Map<string,readonly boolean[]>()
+  for(const issue of issues){const path:MyIssuesRowData[]=[];let child=issue;while(child.parentId){const parent=byId.get(child.parentId);if(!parent)break;path.unshift(child);child=parent}result.set(issue.id,path.map(item=>children.get(item.parentId!)?.at(-1)?.id===item.id))}
+  return result
+}
+function NestedIssueGuide({lines}:{lines:readonly boolean[]}){return <span aria-hidden="true" className={styles.nestingGuide}>{lines.map((last,level)=>{const current=level===lines.length-1;if(!current&&last)return null;return <span className={`${styles.nestingSegment}${current?` ${styles.nestingCurrent}`:''}${current&&last?` ${styles.nestingLast}`:''}`} key={level} style={{'--nest-level':level} as CSSProperties}>{current&&<svg className={styles.nestingBranch} viewBox="0 0 10 9"><path d="M0 0h1v1c0 2.5 2.212 3.546 2.212 3.546L9.737 8.06c.568.306.094 1.186-.474.88l-6.48-3.488S0 4 0 1V0Z"/></svg>}</span>})}</span>}
+
 export function IssueParentTrail({ancestors,board=false}:{ancestors:NonNullable<MyIssuesRowData['ancestors']>;board?:boolean}){if(!ancestors.length)return null;const shown=board?ancestors:ancestors.slice(0,1);return <span className={`${styles.parentTrail}${board?` ${styles.boardParentTrail}`:''}`} data-i18n-ignore>{shown.map(parent=><span key={parent.id}><b>›</b>{parent.title}</span>)}</span>}
 
 export function SubIssueProgress({progress,subIssues,onOpenSubIssue}:{progress:NonNullable<MyIssuesRowData['subIssueProgress']>;subIssues:MyIssuesRowData[];onOpenSubIssue?:(issue:MyIssuesRowData)=>void}){
   const ratio=progress.total?progress.completed/progress.total:0,[open,setOpen]=useState(false),closeTimer=useRef<number|undefined>(undefined)
+  const circumference=2*Math.PI*7,trackOffset=6.4835,minimumArc=.4835
+  const progressOffset=circumference-(minimumArc+Math.min(1,Math.max(0,ratio))*(circumference-trackOffset-minimumArc))
   const enter=()=>{if(closeTimer.current)window.clearTimeout(closeTimer.current);setOpen(true)},leave=()=>{closeTimer.current=window.setTimeout(()=>setOpen(false),100)}
-  return <Popover.Root open={open} onOpenChange={setOpen}><Popover.Trigger asChild><button type="button" className={styles.subIssueProgress} aria-label={`${progress.completed} of ${progress.total} sub-issues completed`} onPointerEnter={enter} onPointerLeave={leave} onFocus={enter} onBlur={leave} onClick={event=>{event.preventDefault();event.stopPropagation();setOpen(value=>!value)}}><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.25"/><circle className={styles.subIssueProgressValue} cx="10" cy="10" r="7.25" pathLength="100" style={{'--sub-progress':`${ratio*100}`} as CSSProperties}/></svg><span>{progress.completed}/{progress.total}</span></button></Popover.Trigger><Popover.Portal><Popover.Content className={styles.subIssuePopover} side="top" align="start" sideOffset={4} collisionPadding={8} onOpenAutoFocus={event=>event.preventDefault()} onCloseAutoFocus={event=>event.preventDefault()} onPointerEnter={enter} onPointerLeave={leave}>{subIssues.map(item=><button type="button" className={styles.subIssuePopoverRow} key={item.id} onClick={event=>{event.preventDefault();event.stopPropagation();setOpen(false);onOpenSubIssue?.(item)}}><StatusIcon state={{id:item.state.id,name:item.state.name,type:item.state.type,color:item.state.color}} size={16}/><span data-i18n-ignore>{item.title}</span></button>)}</Popover.Content></Popover.Portal></Popover.Root>
+  return <Popover.Root open={open} onOpenChange={setOpen}><Popover.Trigger asChild><button type="button" className={styles.subIssueProgress} aria-label={`${progress.completed} of ${progress.total} sub-issues completed`} onPointerEnter={enter} onPointerLeave={leave} onFocus={enter} onBlur={leave} onClick={event=>{event.preventDefault();event.stopPropagation();setOpen(value=>!value)}}><svg viewBox="0 0 16 16" aria-hidden="true"><circle className={styles.subIssueProgressTrack} cx="8" cy="8" r="7" strokeDasharray={circumference} strokeDashoffset={trackOffset} transform="rotate(-47.354 8 8)"/><circle className={styles.subIssueProgressValue} cx="8" cy="8" r="7" strokeDasharray={circumference} strokeDashoffset={progressOffset} transform="rotate(-76 8 8)"/></svg><span>{progress.completed}/{progress.total}</span></button></Popover.Trigger><Popover.Portal><Popover.Content className={styles.subIssuePopover} side="top" align="start" sideOffset={4} collisionPadding={8} onOpenAutoFocus={event=>event.preventDefault()} onCloseAutoFocus={event=>event.preventDefault()} onPointerEnter={enter} onPointerLeave={leave}>{subIssues.map(item=><button type="button" className={styles.subIssuePopoverRow} key={item.id} onClick={event=>{event.preventDefault();event.stopPropagation();setOpen(false);onOpenSubIssue?.(item)}}><StatusIcon state={{id:item.state.id,name:item.state.name,type:item.state.type,color:item.state.color}} size={16}/><span data-i18n-ignore>{item.title}</span></button>)}</Popover.Content></Popover.Portal></Popover.Root>
 }
 
 export function RowCommandPicker({ propertyLabel, label, multi = false, onSelect, options, searchLabel, searchShortcut, selectedIds, trigger, triggerClassName, kind = 'standard' }: { propertyLabel: string; label: string; multi?: boolean; onSelect: (id: string) => void | Promise<void>; options: MyIssuesContextOption[]; searchLabel: string; searchShortcut?: string; selectedIds: string[]; trigger: ReactNode; triggerClassName?: string; kind?: PropertyMenuKind }) {

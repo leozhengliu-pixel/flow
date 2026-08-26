@@ -42,7 +42,9 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const mutationQueues = useRef(new Map<string, Promise<Issue>>())
   const retryUpdates = useRef(new Map<string, IssueUpdateInput>())
   const sourceIssues = useMemo(() => issuesForView(data, projectedView), [data, projectedView])
-  const initialGroups = useMemo(() => groupIssues(sourceIssues, workspaceSlug, data), [data, sourceIssues, workspaceSlug])
+  const sourceIssueIds = useMemo(() => new Set(sourceIssues.map(issue => issue.id)), [sourceIssues])
+  const hierarchyIssues = useMemo(() => issuesWithHierarchyContext(sourceIssues, data.issues), [data.issues, sourceIssues])
+  const initialGroups = useMemo(() => groupIssues(hierarchyIssues, workspaceSlug, data, sourceIssueIds), [data, hierarchyIssues, sourceIssueIds, workspaceSlug])
   const issuesById = useMemo(() => new Map(data.issues.map(issue => [issue.id, issue])), [data.issues])
   const rowOptions = useMemo(() => explorerPropertyOptions(data, sourceIssues), [data, sourceIssues])
 
@@ -55,7 +57,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
       navigate: href => onNavigateView?.(viewFromHref(href), href),
       persistDisplay: (view, options) => onPersistDisplay?.(view, options) ?? Promise.resolve(),
       persistFilters: onPersistFilters,
-      executeBulk: async (action, ids, value) => (await executeBulkAction({ action, ids, value, data, issuesById, onUpdateIssue, onUpdateIssues }))?.map(issue => toRow(issue, workspaceSlug, data)),
+      executeBulk: async (action, ids, value) => (await executeBulkAction({ action, ids, value, data, issuesById, onUpdateIssue, onUpdateIssues }))?.map(issue => toRow(issue, workspaceSlug, data, issueMatchesView(issue, data, projectedView))),
     },
   })
 
@@ -77,7 +79,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
     try {
       const updated = await request
       if (mutationSequence.current.get(row.id) === sequence) {
-        controller.replaceGroups(current => replaceRow(current, toRow(updated, workspaceSlug, data)))
+        controller.replaceGroups(current => replaceRow(current, toRow(updated, workspaceSlug, data, issueMatchesView(updated, data, projectedView))))
         retryUpdates.current.delete(row.id)
       }
       return updated
@@ -181,25 +183,37 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
 
 function issuesForView(data: BootstrapData, view: MyIssuesView, includeArchived = false) {
   const active = data.issues.filter(issue => includeArchived || !issue.archivedAt)
-  if (view === 'created') return active.filter(issue => issue.creator.id === data.viewer.id)
-  if (view === 'subscribed') return active.filter(issue => issue.subscriberIds.includes(data.viewer.id))
-  if (view === 'activity') return active.filter(issue => data.activities[issue.id]?.some(activity => activity.actor.id === data.viewer.id))
-  return active.filter(issue => issue.assignee?.id === data.viewer.id)
+  return active.filter(issue => issueMatchesView(issue, data, view))
 }
 
-function groupIssues(issues: Issue[], workspaceSlug: string, data: BootstrapData): MyIssuesGroupData[] {
+function issueMatchesView(issue: Issue, data: BootstrapData, view: MyIssuesView) {
+  if (view === 'created') return issue.creator.id === data.viewer.id
+  if (view === 'subscribed') return issue.subscriberIds.includes(data.viewer.id)
+  if (view === 'activity') return Boolean(data.activities[issue.id]?.some(activity => activity.actor.id === data.viewer.id))
+  return issue.assignee?.id === data.viewer.id
+}
+
+function issuesWithHierarchyContext(primary: Issue[], issues: Issue[]) {
+  const byId=new Map(issues.map(issue=>[issue.id,issue])),children=new Map<string,Issue[]>(),included=new Set(primary.map(issue=>issue.id))
+  for(const issue of issues){if(!issue.parentId)continue;const siblings=children.get(issue.parentId)??[];siblings.push(issue);children.set(issue.parentId,siblings)}
+  const addDescendants=(id:string)=>{for(const child of children.get(id)??[]){if(child.archivedAt||included.has(child.id))continue;included.add(child.id);addDescendants(child.id)}}
+  for(const issue of primary){addDescendants(issue.id);let parentId=issue.parentId;while(parentId){const parent=byId.get(parentId);if(!parent||parent.archivedAt||included.has(parent.id))break;included.add(parent.id);parentId=parent.parentId}}
+  return issues.filter(issue=>included.has(issue.id)&&!issue.archivedAt)
+}
+
+function groupIssues(issues: Issue[], workspaceSlug: string, data: BootstrapData, viewMatches: ReadonlySet<string>): MyIssuesGroupData[] {
   const groups = new Map<string, MyIssuesGroupData>()
   for (const issue of issues) {
     const id = issue.state.type === 'started' ? 'other-active' : issue.state.id
     const group = groups.get(id) ?? { id, label: issue.state.type === 'started' ? 'Other active' : issue.state.name, stateType: issue.state.type, state: issue.state, issues: [] }
-    group.issues.push(toRow(issue, workspaceSlug, data)); groups.set(id, group)
+    group.issues.push(toRow(issue, workspaceSlug, data, viewMatches.has(issue.id))); groups.set(id, group)
   }
   return [...groups.values()]
 }
 
-function toRow(issue: Issue, workspaceSlug: string, data: BootstrapData): MyIssuesRowData {
+function toRow(issue: Issue, workspaceSlug: string, data: BootstrapData, viewMatch = true): MyIssuesRowData {
   const sla=data.issueSlas.find(item=>item.issueId===issue.id&&item.status!=='removed');const rule=sla?data.slaRules.find(item=>item.id===sla.ruleId):undefined
-  return { ...issueToExplorerRow(issue,workspaceSlug,data.issues,data), sla:sla?{...sla,ruleName:rule?.name}:undefined }
+  return { ...issueToExplorerRow(issue,workspaceSlug,data.issues,data), viewMatch, sla:sla?{...sla,ruleName:rule?.name}:undefined }
 }
 
 function bulkOptions(action: MyIssuesBulkAction, options: ReturnType<typeof explorerPropertyOptions>): MyIssuesBulkActionOption[] | undefined {
