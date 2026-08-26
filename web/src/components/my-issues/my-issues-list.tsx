@@ -28,6 +28,7 @@ export interface MyIssuesRowData {
   id: string
   identifier: string
   title: string
+  description?: string
   href?: string
   priority: 0 | 1 | 2 | 3 | 4
   state: { id: string; name: string; type: MyIssuesStateType; color: string }
@@ -44,6 +45,8 @@ export interface MyIssuesRowData {
   suggestedLabelIds?: string[]
   externalSource?: string
   autoClosed?: boolean
+  autoClosedAt?: string
+  triagedAt?: string
   templateId?: string
   initiativeIds?: string[]
   projectStatusId?: string

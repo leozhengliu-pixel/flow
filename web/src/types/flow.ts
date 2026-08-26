@@ -20,7 +20,8 @@ export interface Customer {
 export interface CustomerMutationInput { name?: string; logoUrl?: string; ownerId?: string; status?: Customer['status']; tier?: string; annualRevenue?: number; size?: number; domains?: string[] }
 export type WorkflowStateType = 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled'
 export interface WorkflowState { id: UUID; teamId?: UUID; name: string; description?: string; color: string; type: WorkflowStateType; position: number; default?: boolean; reserved?: boolean }
-export interface IssueLabel { id: UUID; name: string; color: string; description?: string; issueCount?: number; scope?: string; resourceType?: 'issue'|'project'; groupId?: UUID; creatorId?: UUID; createdAt?: string; lastAppliedAt?: string; archivedAt?: string }
+export type LabelResourceType = 'issue'|'project'|'initiative'
+export interface IssueLabel { id: UUID; name: string; color: string; description?: string; issueCount?: number; scope?: string; resourceType?: LabelResourceType; groupId?: UUID; creatorId?: UUID; createdAt?: string; lastAppliedAt?: string; archivedAt?: string }
 export interface LabelGroup { id: UUID; name: string; color: string; description?: string; scope?: string; resourceType: 'issue'|'project'; createdAt: string; archivedAt?: string }
 export interface ProjectSummary { id: UUID; name: string; icon?: string; color: string }
 export interface DocumentContent { id: UUID; content: string; contentState: string; contentData: Record<string, unknown>; updatedAt: string }

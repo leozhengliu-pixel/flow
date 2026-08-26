@@ -1,10 +1,10 @@
-import type { IssueLabel, LabelGroup, Team } from '@/types/flow'
+import type { IssueLabel, LabelGroup, LabelResourceType, Team } from '@/types/flow'
 
-export function labelResourceType(label: IssueLabel): 'issue' | 'project' {
-  return label.resourceType === 'project' ? 'project' : 'issue'
+export function labelResourceType(label: IssueLabel): LabelResourceType {
+	return label.resourceType === 'project' || label.resourceType === 'initiative' ? label.resourceType : 'issue'
 }
 
-export function labelsForResource(labels: IssueLabel[], resourceType: 'issue' | 'project') {
+export function labelsForResource(labels: IssueLabel[], resourceType: LabelResourceType) {
   return labels.filter(label => labelResourceType(label) === resourceType && !label.archivedAt)
 }
 

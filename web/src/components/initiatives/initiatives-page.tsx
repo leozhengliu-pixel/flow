@@ -27,6 +27,7 @@ type Props = {
   onViewChange: (view: InitiativesRouteView) => void
   onOpen: (initiative: Initiative, tab?: InitiativeRouteTab) => void
   onCreate: (input: InitiativeMutationInput & { name: string }) => Promise<Initiative>
+  onCreateLabel: (name: string) => Promise<IssueLabel>
   onCreateUpdate: (id: string, input: { body: string; health?: Project['health'] }) => Promise<InitiativeUpdate>
   onUpdate: (id: string, input: InitiativeMutationInput) => Promise<Initiative>
   onDelete: (id: string) => Promise<void>
@@ -44,7 +45,7 @@ type Grouping = 'none'|'contributingTeam'|'leadTeam'|'owner'|'health'|'status'|'
 type FilterState = { status?: InitiativeStatus; priority?: number; ownerId?: string; creatorId?: string; leadTeamId?: string; teamId?: string; health?: Project['health']; labelId?: string; date?: 'created7'|'updated7'|'targetMonth'|'completed' }
 
 export function InitiativesPage(props: Props) {
-  const { initiatives, initiativeUpdates, projects, projectUpdates, users, teams, labels, viewer, view, onViewChange, onOpen, onCreate, onCreateUpdate, onUpdate, onDelete, onCreateReminder, onOpenSidebar, createOnMount = false } = props
+  const { initiatives, initiativeUpdates, projects, projectUpdates, users, teams, labels, viewer, view, onViewChange, onOpen, onCreate, onCreateLabel, onCreateUpdate, onUpdate, onDelete, onCreateReminder, onOpenSidebar, createOnMount = false } = props
   const [creating, setCreating] = useState(false)
   const [filters, setFilters] = useState<FilterState>({})
   const [filterMode, setFilterMode] = useState<'all'|'any'>('all')
@@ -129,8 +130,8 @@ export function InitiativesPage(props: Props) {
     <div className="li-list-body">
       <div className="li-table" style={{ '--li-extra-columns': columns.length } as React.CSSProperties}>
         {visible.length > 0 && <div className="li-columns" style={{ gridTemplateColumns: columnGrid }}><button onClick={() => setSort('name')} type="button">Name</button>{columns.map(property => <ColumnHeader key={property} property={property} onSort={setSort}/>)}</div>}
-        {creating && <InitiativeCreateRow labels={labels} teams={teams} users={users} viewer={viewer} view={view} onCancel={() => setCreating(false)} onCreate={async input => { await onCreate(input); setCreating(false) }}/>}
-        {grouped.map(group => <Fragment key={group.key}>{grouping !== 'none' && <div className="li-group-heading"><span>{group.label}</span><small>{group.items.length}</small></div>}{group.items.map(initiative => <InitiativeRow columns={columns} initiative={initiative} initiativeUpdates={initiativeUpdates[initiative.id] ?? []} key={initiative.id} labels={labels} projects={projects} projectUpdates={projectUpdates} properties={properties} selected={selected.has(initiative.id)} teams={teams} users={users} onCreateReminder={remindAt => onCreateReminder(initiative.id, remindAt)} onDelete={onDelete} onOpen={onOpen} onOpenUpdates={() => setUpdatesInitiative(initiative)} onSelect={() => toggleSelected(initiative.id)} onUpdate={input => onUpdate(initiative.id, input)}/>)}</Fragment>)}
+        {creating && <InitiativeCreateRow labels={labels} teams={teams} users={users} viewer={viewer} view={view} onCancel={() => setCreating(false)} onCreate={async input => { await onCreate(input); setCreating(false) }} onCreateLabel={onCreateLabel}/>}
+        {grouped.map(group => <Fragment key={group.key}>{grouping !== 'none' && <div className="li-group-heading"><span>{group.label}</span><small>{group.items.length}</small></div>}{group.items.map(initiative => <InitiativeRow columns={columns} initiative={initiative} initiativeUpdates={initiativeUpdates[initiative.id] ?? []} key={initiative.id} labels={labels} projects={projects} projectUpdates={projectUpdates} properties={properties} selected={selected.has(initiative.id)} teams={teams} users={users} onCreateLabel={onCreateLabel} onCreateReminder={remindAt => onCreateReminder(initiative.id, remindAt)} onDelete={onDelete} onOpen={onOpen} onOpenUpdates={() => setUpdatesInitiative(initiative)} onSelect={() => toggleSelected(initiative.id)} onUpdate={input => onUpdate(initiative.id, input)}/>)}</Fragment>)}
         {!creating && !visible.length && <InitiativesEmpty filtered={Object.keys(filters).length > 0} onCreate={() => setCreating(true)} view={view}/>} 
       </div>
       {detailsOpen && <InitiativesListSidebar initiatives={visible} teams={teams} users={users} view={view}/>}
@@ -160,9 +161,9 @@ function InitiativesBulkBar({ initiatives, users, labels, onClear, onDelete, onU
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root><button aria-label="Ask Flow" aria-disabled="true" disabled title="Flow AI is not configured for this workspace" type="button"><MousePointer2 size={14}/></button><button aria-label="Clear selected" onClick={onClear} type="button"><X size={14}/></button></div>
 }
 
-function InitiativeRow({ initiative, initiativeUpdates, projects, projectUpdates, properties, columns, selected, users, teams, labels, onCreateReminder, onDelete, onOpen, onOpenUpdates, onSelect, onUpdate }: {
+function InitiativeRow({ initiative, initiativeUpdates, projects, projectUpdates, properties, columns, selected, users, teams, labels, onCreateLabel, onCreateReminder, onDelete, onOpen, onOpenUpdates, onSelect, onUpdate }: {
   initiative: Initiative; initiativeUpdates: InitiativeUpdate[]; projects: Project[]; projectUpdates: Record<string, ProjectUpdate[]>; properties: Set<Property>; columns: Property[]; selected: boolean; users: User[]; teams: Team[]; labels: IssueLabel[]
-  onCreateReminder: (remindAt: string) => Promise<unknown>; onDelete: (id: string) => Promise<void>; onOpen: (initiative: Initiative, tab?: InitiativeRouteTab) => void; onOpenUpdates: () => void; onSelect: () => void; onUpdate: (input: InitiativeMutationInput) => void | Promise<unknown>
+  onCreateLabel: (name: string) => Promise<IssueLabel>; onCreateReminder: (remindAt: string) => Promise<unknown>; onDelete: (id: string) => Promise<void>; onOpen: (initiative: Initiative, tab?: InitiativeRouteTab) => void; onOpenUpdates: () => void; onSelect: () => void; onUpdate: (input: InitiativeMutationInput) => void | Promise<unknown>
 }) {
   const linked = projects.filter(project => initiative.projectIds.includes(project.id))
   const completed = linked.filter(project => project.status.type === 'completed').length
@@ -185,7 +186,7 @@ function InitiativeRow({ initiative, initiativeUpdates, projects, projectUpdates
     if (property === 'projects') return <button aria-label={`${completed} of ${linked.length} project completed. Click to view projects.`} className="li-project-count" onClick={() => onOpen(initiative, 'projects')} type="button"><span>{completed} /</span> {linked.length}</button>
     if (property === 'health') return <button className={`li-health is-${initiative.health}`} onClick={onOpenUpdates} type="button"><i/><span>{initiativeUpdates.length ? healthLabel(initiative.health) : 'No updates'}</span></button>
     if (property === 'activeProjects') return <button className="li-active-projects" onClick={onOpenUpdates} type="button"><i/>{needingUpdate}</button>
-    if (property === 'labels') return <InitiativeLabelsPicker compact initiative={initiative} labels={labels} onUpdate={onUpdate}/>
+    if (property === 'labels') return <InitiativeLabelsPicker compact initiative={initiative} labels={labels} onCreateLabel={onCreateLabel} onUpdate={onUpdate}/>
     if (property === 'created' || property === 'updated') return <time>{new Date(property === 'created' ? initiative.createdAt : initiative.updatedAt).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</time>
     if (property === 'completed') return <span>{initiative.status === 'completed' ? new Date(initiative.updatedAt).toLocaleDateString('en', { month: 'short', day: 'numeric' }) : '–'}</span>
     if (property === 'teams') { const names = teams.filter(team => initiative.contributingTeamIds.includes(team.id)).map(team => team.name); return <span className="li-muted" data-i18n-ignore>{names.join(', ') || '—'}</span> }
@@ -221,7 +222,7 @@ function InitiativeRowContextMenu({ initiative, users, teams, labels, onCreateRe
   </ContextMenu.Content>
 }
 
-function InitiativeCreateRow({ labels, users, teams, viewer, view, onCancel, onCreate }: { labels: IssueLabel[]; users: User[]; teams: Team[]; viewer: User; view: InitiativesRouteView; onCancel: () => void; onCreate: (input: InitiativeMutationInput & { name: string }) => Promise<void> }) {
+function InitiativeCreateRow({ labels, users, teams, viewer, view, onCancel, onCreate, onCreateLabel }: { labels: IssueLabel[]; users: User[]; teams: Team[]; viewer: User; view: InitiativesRouteView; onCancel: () => void; onCreate: (input: InitiativeMutationInput & { name: string }) => Promise<void>; onCreateLabel: (name: string) => Promise<IssueLabel> }) {
   const initialStatus: InitiativeStatus = view === 'planned' ? 'planned' : 'active'
   const [draft, setDraft] = useState<Initiative>({ id: 'draft', name: '', slugId: '', summary: '', description: '', icon: 'Initiative', color: '#8a8f98', status: initialStatus, priority: 0, priorityLabel: 'No priority', health: 'noUpdate', creator: viewer, contributingTeamIds: [], labelIds: [], projectIds: [], resources: [], comments: [], favorite: false, subscribed: false, notificationRules: { descriptionChanges: true, newUpdate: true, allProjectUpdates: false }, updateSchedule: { cadence: 'none', weekday: 1, timeRange: '09:00-12:00' }, descriptionHistory: [], createdAt: '', updatedAt: '' })
   const [saving, setSaving] = useState(false)
@@ -233,7 +234,7 @@ function InitiativeCreateRow({ labels, users, teams, viewer, view, onCancel, onC
   }
   return <section className="li-create-row" onKeyDown={event => { if (event.key === 'Escape') onCancel(); if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') void submit() }}>
     <ViewIconPicker color={draft.color} icon={draft.icon} onChange={update}/>
-    <div className="li-create-fields"><input autoFocus aria-label="Initiative name" placeholder="New initiative" value={draft.name} onChange={event => update({ name: event.target.value })}/><input aria-label="Initiative summary" placeholder="Add a short summary…" value={draft.summary} onChange={event => update({ summary: event.target.value })}/><div className="li-create-properties"><InitiativeProperties compact initiative={draft} teams={teams} users={users} onUpdate={update}/><InitiativeLabelsPicker compact initiative={draft} labels={labels} onUpdate={update}/></div></div>
+    <div className="li-create-fields"><input autoFocus aria-label="Initiative name" placeholder="New initiative" value={draft.name} onChange={event => update({ name: event.target.value })}/><input aria-label="Initiative summary" placeholder="Add a short summary…" value={draft.summary} onChange={event => update({ summary: event.target.value })}/><div className="li-create-properties"><InitiativeProperties compact initiative={draft} teams={teams} users={users} onUpdate={update}/><InitiativeLabelsPicker compact initiative={draft} labels={labels} onCreateLabel={onCreateLabel} onUpdate={update}/></div></div>
     <footer><button onClick={onCancel} type="button">Cancel</button><button disabled={!draft.name.trim() || saving} onClick={() => void submit()} type="button">{saving ? 'Creating…' : 'Create'}</button></footer>
   </section>
 }
