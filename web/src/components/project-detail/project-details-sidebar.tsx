@@ -2,7 +2,7 @@ import { Component, useEffect, useMemo, useState, type DragEvent, type ErrorInfo
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Line, type LineCustomSvgLayerProps, type SliceTooltipProps } from '@nivo/line'
-import { Blocks, Check, ChevronDown, ChevronRight, OctagonMinus, Plus, Trash2 } from 'lucide-react'
+import { Blocks, ChevronDown, ChevronRight, OctagonMinus, Plus, Trash2 } from 'lucide-react'
 import { addDays, differenceInCalendarDays, format, formatDistanceToNowStrict, startOfDay } from 'date-fns'
 import { toast } from 'sonner'
 import { Avatar } from '@/components/issue/issue-row'
@@ -12,6 +12,7 @@ import { ProjectDatePicker } from '@/components/projects-page/project-target-dat
 import type { Issue, IssueLabel, LabelGroup, Project, ProjectMilestone, ProjectStatus, ProjectUpdate, Team, User } from '@/types/flow'
 import type { ProjectMutationInput } from '@/components/projects-page/projects-page'
 import type { ProjectDetailTab, ProjectDetailProps } from './project-detail-types'
+import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import { PRIORITY_LABELS } from './project-detail-types'
 
 export function ProjectDetailsSidebar({ labelGroups, labels, onConvertMilestone, onCreateMilestone, onDeleteMilestone, onMoveMilestone, onOpenIssueFilter, onOpenMilestoneIssues, onReorderMilestones, onTabChange, onUpdate, onUpdateProject, onUpdateMilestone, project, projectIssues, projects, projectStatuses, projectUpdates, teams, users, viewer }: {
@@ -236,7 +237,7 @@ function DependencyProjectPicker({ direction, onUpdate, onUpdateProject, project
   const rows = (items: Project[], label: string) => items.length ? <DropdownMenu.Group>
     <DropdownMenu.Label className="project-dependency-projects__group-label">{label}</DropdownMenu.Label>
     {items.map(candidate => <DropdownMenu.CheckboxItem checked={checked(candidate)} className="project-dependency-projects__item" key={candidate.id} onCheckedChange={() => void toggle(candidate)} onSelect={event => event.preventDefault()}>
-      <span className="project-dependency-menu__item-background"/><span className="project-dependency-projects__checkbox">{checked(candidate) && <Check size={10}/>}</span><span className="project-dependency-projects__label"><ProjectIcon size={16} style={{ color: candidate.color }}/><span data-i18n-ignore>{candidate.name}</span></span>
+      <span className="project-dependency-menu__item-background"/><span className="project-dependency-projects__checkbox">{checked(candidate) && <CheckboxMark/>}</span><span className="project-dependency-projects__label"><ProjectIcon size={16} style={{ color: candidate.color }}/><span data-i18n-ignore>{candidate.name}</span></span>
     </DropdownMenu.CheckboxItem>)}
   </DropdownMenu.Group> : null
 

@@ -280,7 +280,10 @@ Reference: the same Issue and desktop viewport.
   states are explicit rather than silent failures.
 - [x] Frontend lint/build, Go tests, and `git diff --check` pass.
 - [ ] Favorite persistence requires the real separate Favorite entity.
-- [ ] True concurrent Yjs sync/provider and inline-comment anchoring remain.
+- [x] Concurrent Yjs sync, Awareness presence, remote cursors, reconnect,
+  durable incremental updates, guarded snapshots, and Redis multi-instance
+  forwarding are implemented for Issue descriptions.
+- [ ] Inline-comment anchoring remains.
 # Issue editor implementation map
 
 The Issue description editor is split by behavior rather than by visual container:
@@ -308,4 +311,7 @@ The Issue description editor is split by behavior rather than by visual containe
 | Slash inside a list item | Remains regular text; no root block menu opens |
 | Click a command | Preserves editor focus and applies the same command path as Enter |
 
-Flow persists the observed storage layers (`description`, ProseMirror `descriptionData`, and Yjs `contentState`). It does not claim live multi-user collaboration because no collaboration provider is connected yet.
+Flow persists the observed storage layers (`description`, ProseMirror
+`descriptionData`, and Yjs `contentState`). The Issue editor connects them to a
+custom Yjs provider over `/api/realtime/socket`; the existing SSE stream remains
+the lower-frequency workspace/entity event channel.
