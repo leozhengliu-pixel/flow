@@ -2,6 +2,7 @@ import { Check, ChevronDown } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Toggle } from '@/components/ui/toggle'
 
 export function SettingsPageTitle({ action, children, className = '', description }: { action?: ReactNode; children: ReactNode; className?: string; description?: ReactNode }) {
   return <header className={`settings-page-header${className ? ` ${className}` : ''}`}><div><h1>{children}</h1>{description && <p>{description}</p>}</div>{action}</header>
@@ -16,7 +17,7 @@ export function SettingsRow({ children, className = '', control = true, danger =
 }
 
 export function SettingsToggle({ checked, disabled, label, onChange }: { checked: boolean; disabled?: boolean; label: string; onChange: (value: boolean) => void | Promise<void> }) {
-  return <input aria-label={label} checked={checked} className="settings-toggle-control" disabled={disabled} onChange={event => void onChange(event.target.checked)} type="checkbox"/>
+  return <Toggle checked={checked} disabled={disabled} label={label} onChange={onChange} size="regular"/>
 }
 
 export function SettingsSelect({ className = '', entityName, label, menuClassName = '', onChange, options, value }: { className?: string; entityName?: (value: string) => boolean; label: string; menuClassName?: string; onChange: (value: string) => void; options: string[]; value: string }) {

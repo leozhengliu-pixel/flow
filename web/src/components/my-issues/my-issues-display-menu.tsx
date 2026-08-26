@@ -3,6 +3,7 @@ import * as Select from '@radix-ui/react-select'
 import { ArrowDownUp, Check, ChevronDown, LayoutGrid, List } from 'lucide-react'
 import { DisplayIcon } from './my-issues-icons'
 import { useI18n } from '@/i18n/i18n'
+import { Toggle } from '@/components/ui/toggle'
 import type { MyIssuesDisplayOptions, MyIssuesGrouping, MyIssuesProperty } from './my-issues-surface'
 import styles from './my-issues-display-menu.module.css'
 
@@ -168,6 +169,6 @@ function SwitchRow({ checked, label, onChange }: { checked: boolean; label: stri
   const { t } = useI18n()
   return <div className={styles.switchRow}>
     <span>{t(label)}</span>
-    <button type="button" role="checkbox" aria-label={t(label)} aria-checked={checked} data-checked={checked} onClick={() => onChange(!checked)}><i /></button>
+    <Toggle checked={checked} label={t(label)} onChange={onChange}/>
   </div>
 }

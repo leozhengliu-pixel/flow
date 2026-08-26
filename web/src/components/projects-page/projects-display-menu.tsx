@@ -4,6 +4,7 @@ import { usePropertyCommand, type PropertyCommandOption } from '@/components/pro
 import { CheckIcon } from './projects-page-icons'
 import type { ProjectsDisplaySettings } from './projects-display-model'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
+import { Toggle } from '@/components/ui/toggle'
 
 const PROJECT_DISPLAY_PROPERTIES = [
   'Milestones', 'Summary', 'Priority', 'Status', 'Health', 'Teams', 'Lead', 'Members', 'Dependencies', 'Start date', 'Target date', 'Issues', 'Created', 'Updated', 'Completed', 'Customers', 'Customer revenue', 'Labels',
@@ -95,14 +96,7 @@ export function ProjectsDisplayMenu({ onChange, onReset, onSetDefault, rootRef, 
       <h2>{settings.layout === 'board' ? 'Board options' : 'List options'}</h2>
       <div className="lp-projects-display__check">
         <span>Show empty groups</span>
-        <button
-          aria-checked={settings.showEmptyGroups}
-          aria-label="Show empty groups"
-          className="lp-projects-display__check-control"
-          onClick={() => set('showEmptyGroups', !settings.showEmptyGroups)}
-          role="checkbox"
-          type="button"
-        ><i aria-hidden="true" /></button>
+        <Toggle checked={settings.showEmptyGroups} label="Show empty groups" onChange={showEmptyGroups => set('showEmptyGroups', showEmptyGroups)}/>
       </div>
     </section>}
 
