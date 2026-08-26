@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode, type RefObject } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import type { Editor } from '@tiptap/react'
@@ -14,6 +14,7 @@ import { DueDateCommand } from '@/components/issue/due-date-picker'
 import styles from './create-issue-dialog.module.css'
 import { createDraft, deleteDraft, updateDraft } from '@/lib/api'
 import { labelsForResource } from '@/lib/labels'
+import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
 
 export interface CreateIssueInput {
   title: string
@@ -281,7 +282,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
             <MoreActions active={open && !linkOpen} dueDate={dueDate} onDueDateChange={setDueDate} onInsertLink={() => setLinkOpen(true)}/>
           </div>
 
-          {files.length > 0 && <div className={styles.attachments}>{files.map((file, index) => <span key={`${file.name}-${index}`}><Paperclip/><span>{file.name}</span><button type="button" aria-label={`Remove ${file.name}`} onClick={() => setFiles(current => current.filter((_, item) => item !== index))}><X/></button></span>)}</div>}
+          {files.length > 0 && <div className={styles.attachments}>{files.map((file, index) => <span key={`${file.name}-${index}`}><Paperclip/><span>{file.name}</span><AttachmentRemoveButton label={`Remove ${file.name}`} onClick={() => setFiles(current => current.filter((_, item) => item !== index))}/></span>)}</div>}
           {error && <div className={styles.error} role="alert">{error}</div>}
 
           <footer className={styles.footer}>
@@ -305,7 +306,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
 
 function ExistingDraftDiscardDialog({ onCancel, onDiscard, open, saving }: { onCancel: () => void; onDiscard: () => void; open: boolean; saving: boolean }) {
   const discardRef = useRef<HTMLButtonElement>(null)
-  return <Dialog.Root open={open} onOpenChange={next => { if (!next) onCancel() }}><Dialog.Portal><Dialog.Overlay className={styles.confirmOverlay}/><Dialog.Content className={styles.confirmDialog} aria-describedby="existing-draft-discard-description" onOpenAutoFocus={event => { event.preventDefault(); discardRef.current?.focus() }} onPointerDownOutside={event => event.preventDefault()}><Dialog.Title>Discard this draft?</Dialog.Title><Dialog.Description id="existing-draft-discard-description">Your draft will be deleted.</Dialog.Description><div className={styles.confirmActions}><span/><span/><button type="button" disabled={saving} onClick={onCancel}>Cancel</button><button ref={discardRef} type="button" className={styles.confirmDiscard} disabled={saving} onClick={onDiscard}>Discard</button></div></Dialog.Content></Dialog.Portal></Dialog.Root>
+  return <DraftDialogFrame description="Your draft will be deleted." descriptionId="existing-draft-discard-description" focusRef={discardRef} onCancel={onCancel} open={open} title="Discard this draft?"><div className={styles.confirmActions}><span/><span/><button type="button" disabled={saving} onClick={onCancel}>Cancel</button><button ref={discardRef} type="button" className={styles.confirmDiscard} disabled={saving} onClick={onDiscard}>Discard</button></div></DraftDialogFrame>
 }
 
 function MiniProperty(props: React.ComponentProps<typeof PropertyMenu>) { return <PropertyMenu compact {...props}/> }
@@ -372,21 +373,11 @@ function AddLinkDialog({ issueLabel, onAdd, onOpenChange, open }: { issueLabel: 
 
 function DraftConfirmDialog({ onCancel, onDiscard, onSave, open, saving }: { onCancel: () => void; onDiscard: () => void; onSave: () => void; open: boolean; saving: boolean }) {
   const saveRef = useRef<HTMLButtonElement>(null)
-  return <Dialog.Root open={open} onOpenChange={next => { if (!next) onCancel() }}>
-    <Dialog.Portal>
-      <Dialog.Overlay className={styles.confirmOverlay}/>
-      <Dialog.Content className={styles.confirmDialog} aria-describedby="draft-confirm-description" onOpenAutoFocus={event => { event.preventDefault(); saveRef.current?.focus() }} onEscapeKeyDown={event => { event.preventDefault(); onCancel() }} onPointerDownOutside={event => event.preventDefault()}>
-        <Dialog.Title>Save to drafts?</Dialog.Title>
-        <Dialog.Description id="draft-confirm-description">You can finish this issue later from your drafts.</Dialog.Description>
-        <div className={styles.confirmActions}>
-          <button type="button" disabled={saving} onClick={onDiscard}>Discard</button>
-          <span/>
-          <button type="button" disabled={saving} onClick={onCancel}>Cancel</button>
-          <button ref={saveRef} type="button" className={styles.confirmSave} disabled={saving} onClick={onSave}>{saving ? 'Saving...' : 'Save'}</button>
-        </div>
-      </Dialog.Content>
-    </Dialog.Portal>
-  </Dialog.Root>
+  return <DraftDialogFrame description="You can finish this issue later from your drafts." descriptionId="draft-confirm-description" escapeLocked focusRef={saveRef} onCancel={onCancel} open={open} title="Save to drafts?"><div className={styles.confirmActions}><button type="button" disabled={saving} onClick={onDiscard}>Discard</button><span/><button type="button" disabled={saving} onClick={onCancel}>Cancel</button><button ref={saveRef} type="button" className={styles.confirmSave} disabled={saving} onClick={onSave}>{saving ? 'Saving...' : 'Save'}</button></div></DraftDialogFrame>
+}
+
+function DraftDialogFrame({ children, description, descriptionId, escapeLocked = false, focusRef, onCancel, open, title }: { children: ReactNode; description: string; descriptionId: string; escapeLocked?: boolean; focusRef: RefObject<HTMLButtonElement | null>; onCancel: () => void; open: boolean; title: string }) {
+  return <Dialog.Root open={open} onOpenChange={next => { if (!next) onCancel() }}><Dialog.Portal><Dialog.Overlay className={styles.confirmOverlay}/><Dialog.Content className={styles.confirmDialog} aria-describedby={descriptionId} onOpenAutoFocus={event => { event.preventDefault(); focusRef.current?.focus() }} onEscapeKeyDown={escapeLocked ? event => { event.preventDefault(); onCancel() } : undefined} onPointerDownOutside={event => event.preventDefault()}><Dialog.Title>{title}</Dialog.Title><Dialog.Description id={descriptionId}>{description}</Dialog.Description>{children}</Dialog.Content></Dialog.Portal></Dialog.Root>
 }
 
 function readStoredDraft(key: string): StoredIssueDraft | null {

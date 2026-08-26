@@ -7,6 +7,7 @@ import { clearSearchHistory, searchWorkspace } from '@/lib/api'
 import type { SearchHistoryEntry, SearchResourceType, SearchResponse, SearchResult } from '@/types/flow'
 
 import './workspace-search-page.css'
+import { FilterIcon } from '@/components/ui/view-action-icons'
 
 type SearchTab = 'all' | SearchResourceType
 
@@ -135,10 +136,6 @@ function SearchResultIcon({ result }: { result: SearchResult }) {
 
 function SearchLoading() {
   return <div className="workspace-search-loading">{Array.from({ length: 5 }, (_, index) => <span key={index}/>)}</div>
-}
-
-function FilterIcon() {
-  return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.25h11M4.5 8h7M6.5 11.75h3" fill="none" stroke="currentColor" strokeLinecap="round"/></svg>
 }
 
 function relativeTime(value?: string) {

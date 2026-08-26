@@ -5,6 +5,7 @@ import { useId, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { LabelIcon, NoAssigneeIcon, ProjectIcon, PriorityIcon } from '@/components/issue/issue-icons'
 import { LabelHoverPreview } from './label-hover-preview'
 import { usePropertyCommand } from './use-property-command'
+import { groupOptionSections } from '@/lib/group-options'
 
 export interface PropertyOption {
   id: string
@@ -65,7 +66,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
     onSelect: option => onChange?.(option.id),
   })
   const labelMenu = groupLabelOptions(command.filteredOptions)
-  const standardSections = groupStandardOptions(command.filteredOptions)
+  const standardSections = groupOptionSections(command.filteredOptions)
   const noProject = command.filteredOptions.filter(option => !option.id)
   const projects = command.filteredOptions.filter(option => option.id)
   const createName = command.query.trim()
@@ -111,22 +112,6 @@ function groupLabelOptions(options: PropertyOption[]) {
     groups.set(option.groupId, group)
   }
   return { options: direct, groups: [...groups.values()] }
-}
-
-function groupStandardOptions(options: PropertyOption[]) {
-  const sections: Array<{ id: string; label?: string; options: PropertyOption[] }> = []
-  const indexes = new Map<string, number>()
-  for (const option of options) {
-    const id = option.groupId ?? option.groupLabel ?? 'ungrouped'
-    let index = indexes.get(id)
-    if (index === undefined) {
-      index = sections.length
-      indexes.set(id, index)
-      sections.push({ id, label: id === 'ungrouped' ? undefined : option.groupLabel, options: [] })
-    }
-    sections[index].options.push(option)
-  }
-  return sections
 }
 
 function LabelGroupOption({ group, selectedIds, listboxId, activeId, onChoose, onActive }: { group: { id: string; label: string; options: PropertyOption[] }; selectedIds: Set<string>; listboxId: string; activeId?: string; onChoose: (option: PropertyOption) => void; onActive: (id: string) => void }) {

@@ -10,6 +10,7 @@ import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { useI18n } from '@/i18n/i18n'
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import styles from './saved-view-panels.module.css'
+import { UserAvatar } from '@/components/ui/user-avatar'
 
 export type SavedViewInsightMeasure = 'issueCount' | 'cycleTime' | 'leadTime' | 'issueAge' | 'timeInStatus'
 export type SavedViewInsightDimension =
@@ -69,7 +70,7 @@ export function SavedViewDetailsPanel({ favorite, menu, onClose, onSummaryItemSe
     </section>
     <section className={styles.metadataCard}>
       <div><span>Visibility</span><strong>{view.scope === 'personal' ? <LockKeyhole/> : view.scope === 'team' ? <TeamIcon/> : <Building2/>}<span data-i18n-ignore={view.scope === 'personal' ? undefined : true}>{scopeLabel}</span></strong></div>
-      <div><span>Owner</span><strong data-i18n-ignore><Avatar user={owner}/>{owner?.displayName ?? 'Unknown'}</strong></div>
+      <div><span>Owner</span><strong data-i18n-ignore><InsightOwnerAvatar user={owner}/>{owner?.displayName ?? 'Unknown'}</strong></div>
     </section>
     <section className={styles.summaryCard}>
       <div aria-label="View summary" className={styles.tabs} role="tablist">
@@ -356,4 +357,4 @@ function exportInsightsCsv(insight: InsightData, config: SavedViewInsightsConfig
 }
 function dimensionLabelFallback(value: SavedViewInsightDimension) { const match = value.match(/^[^:]+/); return titleCase(match?.[0] ?? value) }
 function SummaryMark({ color, kind }: { color?: string; kind: string }) { return kind === 'assignee' ? <span className={styles.avatarMark} style={{ backgroundColor: color }}>•</span> : kind === 'project' ? <span className={styles.projectMark}>◇</span> : <i className={styles.dot} style={{ backgroundColor: color }}/>}
-function Avatar({ user }: { user?: User }) { return <span className={styles.avatar} data-i18n-ignore>{user ? user.displayName.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() : '?'}</span> }
+function InsightOwnerAvatar({ user }: { user?: User }) { return <UserAvatar avatarUrl={user?.avatarUrl} className={styles.avatar} name={user?.displayName ?? 'Unknown user'}/> }

@@ -3,6 +3,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import StarterKit from '@tiptap/starter-kit'
 import { useEffect, useRef } from 'react'
 import { useI18n } from '@/i18n/i18n'
+import { handleEditorSubmit } from './editor/editor-keyboard'
 
 interface IssueTitleEditorProps {
   value: string
@@ -43,11 +44,7 @@ export function IssueTitleEditor({ value, onChange, onBlur, onEnter, onSubmit, a
         'aria-label': titleLabel,
       },
       handleKeyDown: (view, event) => {
-        if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-          event.preventDefault()
-          submitRef.current?.()
-          return true
-        }
+        if (handleEditorSubmit(event, submitRef.current)) return true
         if (event.key === 'Enter') {
           event.preventDefault()
           enterRef.current?.()
