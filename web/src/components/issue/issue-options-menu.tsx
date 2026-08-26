@@ -315,25 +315,25 @@ export function IssueOptionsMenu({
     <ActionDialog open={dialog === 'link'} title={`Add link to ${issue.identifier}`} onOpenChange={value => !value && setDialog(null)}>
       <label>URL<input autoFocus type="url" placeholder="https://..." value={linkUrl} onChange={event => setLinkUrl(event.target.value)}/></label>
       <label>Title <small>(optional)</small><input value={linkTitle} onChange={event => setLinkTitle(event.target.value)}/></label>
-      <DialogFooter busy={busy} disabled={!linkUrl.trim()} action="Add link" onCancel={() => setDialog(null)} onSubmit={() => actions && void perform(() => actions.addLink({ url: linkUrl.trim(), title: linkTitle.trim() || undefined }), 'Link added')}/>
+      <IssueOptionsDialogFooter busy={busy} disabled={!linkUrl.trim()} action="Add link" onCancel={() => setDialog(null)} onSubmit={() => actions && void perform(() => actions.addLink({ url: linkUrl.trim(), title: linkTitle.trim() || undefined }), 'Link added')}/>
     </ActionDialog>
     <ActionDialog open={dialog === 'customer'} title={`Add customer request to ${issue.identifier}`} onOpenChange={value => !value && setDialog(null)}>
       {data?.customers.length ? <label>Customer<select value={customerId} onChange={event => setCustomerId(event.target.value)}>{data.customers.map(customer => <option value={customer.id} key={customer.id}>{customer.name}</option>)}<option value="">Create new customer...</option></select></label> : null}
       {!customerId && <label>Customer name<input autoFocus value={customerName} onChange={event => setCustomerName(event.target.value)}/></label>}
       <label>Request<textarea value={customerBody} onChange={event => setCustomerBody(event.target.value)}/></label>
-      <DialogFooter busy={busy} disabled={!customerBody.trim() || (!customerId && !customerName.trim())} action="Add request" onCancel={() => setDialog(null)} onSubmit={() => actions && void perform(() => actions.addCustomerRequest({ customerId: customerId || undefined, customerName: customerName.trim() || undefined, body: customerBody.trim() }), 'Customer request added')}/>
+      <IssueOptionsDialogFooter busy={busy} disabled={!customerBody.trim() || (!customerId && !customerName.trim())} action="Add request" onCancel={() => setDialog(null)} onSubmit={() => actions && void perform(() => actions.addCustomerRequest({ customerId: customerId || undefined, customerName: customerName.trim() || undefined, body: customerBody.trim() }), 'Customer request added')}/>
     </ActionDialog>
     <ActionDialog open={dialog === 'related'} title={`Create ${relatedLabel(relatedKind)} for ${issue.identifier}`} onOpenChange={value => !value && setDialog(null)}>
       <label>Issue title<input autoFocus value={relatedTitle} onChange={event => setRelatedTitle(event.target.value)}/></label>
-      <DialogFooter busy={busy} disabled={!relatedTitle.trim()} action="Create issue" onCancel={() => setDialog(null)} onSubmit={() => actions && void perform(() => actions.createRelated(relatedKind, relatedTitle.trim()), 'Related issue created')}/>
+      <IssueOptionsDialogFooter busy={busy} disabled={!relatedTitle.trim()} action="Create issue" onCancel={() => setDialog(null)} onSubmit={() => actions && void perform(() => actions.createRelated(relatedKind, relatedTitle.trim()), 'Related issue created')}/>
     </ActionDialog>
     <ActionDialog open={dialog === 'reminder'} title={`Remind me about ${issue.identifier}`} onOpenChange={value => !value && setDialog(null)}>
       <label>Date and time<input autoFocus type="datetime-local" value={customReminder} onChange={event => setCustomReminder(event.target.value)}/></label>
-      <DialogFooter busy={busy} disabled={!customReminder || new Date(customReminder).getTime() <= Date.now()} action="Set reminder" onCancel={() => setDialog(null)} onSubmit={() => remindAt(new Date(customReminder))}/>
+      <IssueOptionsDialogFooter busy={busy} disabled={!customReminder || new Date(customReminder).getTime() <= Date.now()} action="Set reminder" onCancel={() => setDialog(null)} onSubmit={() => remindAt(new Date(customReminder))}/>
     </ActionDialog>
     <ActionDialog open={dialog === 'loop'} title={`Run loop on ${issue.identifier}`} onOpenChange={value => !value && setDialog(null)}>
       <label>Instructions<textarea autoFocus placeholder="What should the loop do?" value={loopPrompt} onChange={event => setLoopPrompt(event.target.value)}/></label>
-      <DialogFooter busy={busy} disabled={!loopPrompt.trim()} action="Run loop" onCancel={() => setDialog(null)} onSubmit={() => actions && void perform(() => actions.runLoop(loopPrompt.trim()), 'Loop run created')}/>
+      <IssueOptionsDialogFooter busy={busy} disabled={!loopPrompt.trim()} action="Run loop" onCancel={() => setDialog(null)} onSubmit={() => actions && void perform(() => actions.runLoop(loopPrompt.trim()), 'Loop run created')}/>
     </ActionDialog>
     <Dialog.Root open={dialog === 'history'} onOpenChange={value => !value && setDialog(null)}>
       <Dialog.Portal>
@@ -371,7 +371,7 @@ function ActionDialog({ open, title, onOpenChange, children }: { open: boolean; 
   return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="dialog-overlay"/><Dialog.Content className="issue-action-dialog" aria-label={title}><Dialog.Title>{title}</Dialog.Title>{children}</Dialog.Content></Dialog.Portal></Dialog.Root>
 }
 
-function DialogFooter({ busy, disabled, action, onCancel, onSubmit }: { busy: boolean; disabled: boolean; action: string; onCancel: () => void; onSubmit: () => void }) {
+function IssueOptionsDialogFooter({ busy, disabled, action, onCancel, onSubmit }: { busy: boolean; disabled: boolean; action: string; onCancel: () => void; onSubmit: () => void }) {
   return <footer><button type="button" onClick={onCancel}>Cancel</button><button type="button" className="primary" disabled={disabled || busy} onClick={onSubmit}>{busy ? 'Working...' : action}</button></footer>
 }
 
@@ -380,12 +380,12 @@ function Option({ icon, label, detail, shortcut, nested, danger, onSelect }: { i
     <span className="issue-options-icon" aria-hidden="true">{icon}</span>
     <span className="issue-options-label">{label}</span>
     {detail && <small className="issue-options-detail">{detail}</small>}
-    {shortcut && <Shortcut value={shortcut}/>}
+    {shortcut && <IssueOptionsShortcut value={shortcut}/>}
     {nested && <ChevronRight className="issue-options-chevron" size={12}/>}
   </Command.Item>
 }
 
-function Shortcut({ value }: { value: string }) {
+function IssueOptionsShortcut({ value }: { value: string }) {
   const keys = value === 'Shift D' ? ['⇧', 'D'] : value === 'Option R' ? ['⌥', 'R'] : value === 'Ctrl L' ? ['Ctrl', 'L'] : value === 'Ctrl R' ? ['Ctrl', 'R'] : value === 'Option F' ? ['⌥', 'F'] : value === 'Shift H' ? ['⇧', 'H'] : value === 'Command Shift O' ? ['⌘', '⇧', 'O'] : value === 'Command Shift P' ? ['⌘', '⇧', 'P'] : value === 'M, then R' ? ['M', 'then', 'R'] : value === 'M, then B' ? ['M', 'then', 'B'] : value === 'M, then X' ? ['M', 'then', 'X'] : value === 'M, then M' ? ['M', 'then', 'M'] : ['⌘', '⌫']
   return <span className="issue-options-shortcut"><span className="sr-only">{value}</span>{keys.map((key,index) => <kbd key={`${key}-${index}`}>{key}</kbd>)}</span>
 }

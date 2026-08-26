@@ -8,7 +8,7 @@ import { batchNotifications, updateInboxNotification } from '@/lib/api'
 
 import type { InboxFilterCondition, InboxFilterOptions } from './inbox-filter-builder'
 import { InboxPage, type InboxPageAdapter } from './inbox-page'
-import type { InboxDisplayOptions, InboxFilterKind } from './inbox-page-shell'
+import type { InboxDisplayOptions } from './inbox-page-shell'
 import type { InboxNotificationKind, InboxNotificationRowData, InboxSnoozePreset } from './notification-row'
 
 const initialDisplayOptions: InboxDisplayOptions = {
@@ -153,12 +153,10 @@ export function InboxAppPage({ data, onOpenIssue, onOpenProject, onSubscriberCha
     adapter={adapter}
     displayOptions={displayOptions}
     onDisplayOptionsChange={setDisplayOptions}
-    filterCount={filters.length}
     filters={filters}
     filterOptions={filterOptions}
     filterHiddenCount={filterHiddenCount}
     onFiltersChange={setFilters}
-    onAddFilter={addLegacyFilter}
     onOpenSidebar={onOpenSidebar}
     onRetryLoad={() => undefined}
     onOpenIssue={notification => {
@@ -225,12 +223,6 @@ export function InboxAppPage({ data, onOpenIssue, onOpenProject, onSubscriberCha
   />
 }
 
-function addLegacyFilter(filter: InboxFilterKind) {
-  // The shell is fully controlled by the structured builder. This fallback is
-  // retained for the story surface while callers migrate to value conditions.
-  void filter
-}
-
 function readInboxDisplayOptions(): InboxDisplayOptions {
   if (typeof window === 'undefined') return initialDisplayOptions
   try {
@@ -284,7 +276,7 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
       issueId: issue.id,
       sourceType,
       sourceId,
-      notificationType: comment ? 'comment' : event ? notificationTypeFromActivity(event) : notification.type,
+      notificationType: comment ? 'comment' : event ? activityKind(event) : notification.type,
       actorId: notification.actor.id,
       actor: notification.actor.displayName,
       actorAvatarUrl: notification.actor.avatarUrl,
@@ -309,13 +301,6 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
 function withOccurrence(body: string, count: number) { return count > 1 ? `${body} · ${count} updates` : body }
 
 function activityKind(event: ActivityEvent): InboxNotificationKind {
-  if (event.type.startsWith('comment.')) return 'comment'
-  if (event.type === 'issue.updated' && 'assigneeId' in event.metadata) return 'assignment'
-  if (event.type.startsWith('project.')) return 'project'
-  return 'status'
-}
-
-function notificationTypeFromActivity(event: ActivityEvent) {
   if (event.type.startsWith('comment.')) return 'comment'
   if (event.type === 'issue.updated' && 'assigneeId' in event.metadata) return 'assignment'
   if (event.type.startsWith('project.')) return 'project'

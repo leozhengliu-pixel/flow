@@ -380,30 +380,12 @@ function ValuePicker({
         }}
         onKeyDown={command.onKeyDown}
       >
-        {showSearch ? <div className={styles.valueSearch}>
-          <input
-            ref={command.inputRef}
-            role="searchbox"
-            aria-label={property.label}
-            placeholder={showUnmatched && property.id === 'notificationType' ? property.label : 'Filter...'}
-            value={command.query}
-            onChange={event => command.onQueryChange(event.target.value)}
-          />
-        </div> : null}
-        <div className={styles.valueList} role="listbox" aria-label={property.label} aria-multiselectable="true">
-          {!matchingOptions.length && !unmatchedCount ? <div className={styles.empty}>No results</div> : null}
-          {matchingOptions.map(option => {
-            const checked = command.isSelected(option.id)
-            const active = command.activeId === option.id
-            return <FilterValueOption active={active} checked={checked} key={option.id} onActive={() => command.setActiveId(option.id)} onChoose={() => command.choose(option)} option={option} property={property.id}/>
-          })}
-          {unmatchedCount ? <>
+        <FilterValueList activeId={command.activeId} inputRef={command.inputRef} isSelected={command.isSelected} onActive={command.setActiveId} onChoose={command.choose} onQuery={command.onQueryChange} options={matchingOptions} placeholder={showUnmatched && property.id === 'notificationType' ? property.label : 'Filter...'} property={property} query={command.query} showSearch={showSearch} footer={unmatchedCount ? <>
             <div className={styles.valueSeparator} role="separator" />
             <button className={styles.unmatchedItem} type="button" role="option" aria-selected="false" onClick={() => setShowUnmatched(true)}>
               <span>{unmatchedCount} options not matching any notifications</span>
             </button>
-          </> : null}
-        </div>
+          </> : undefined}/>
       </Popover.Content>
     </Popover.Portal>
   )
@@ -502,23 +484,7 @@ function AppliedCondition({
           onOpenAutoFocus={event => event.preventDefault()}
           onKeyDown={command.onKeyDown}
         >
-          <div className={styles.valueSearch}>
-            <input
-              ref={command.inputRef}
-              role="searchbox"
-              aria-label={property.label}
-              placeholder="Filter..."
-              value={command.query}
-              onChange={event => command.onQueryChange(event.target.value)}
-            />
-          </div>
-          <div className={styles.valueList} role="listbox" aria-label={property.label} aria-multiselectable="true">
-            {!command.filteredOptions.length ? <div className={styles.empty}>No results</div> : null}
-            {command.filteredOptions.map(option => {
-              const checked = command.isSelected(option.id)
-              return <FilterValueOption active={command.activeId === option.id} checked={checked} key={option.id} onActive={() => command.setActiveId(option.id)} onChoose={() => command.choose(option)} option={option} property={property.id}/>
-            })}
-          </div>
+          <FilterValueList activeId={command.activeId} inputRef={command.inputRef} isSelected={command.isSelected} onActive={command.setActiveId} onChoose={command.choose} onQuery={command.onQueryChange} options={command.filteredOptions} placeholder="Filter..." property={property} query={command.query}/>
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
@@ -526,6 +492,10 @@ function AppliedCondition({
       <X aria-hidden="true" />
     </button>
   </div>
+}
+
+function FilterValueList({ activeId, footer, inputRef, isSelected, onActive, onChoose, onQuery, options, placeholder, property, query, showSearch = true }: { activeId?: string; footer?: ReactElement; inputRef: RefObject<HTMLInputElement | null>; isSelected: (id:string)=>boolean; onActive:(id:string)=>void; onChoose:(option:InboxFilterOption)=>void; onQuery:(value:string)=>void; options:InboxFilterOption[]; placeholder:string; property:{id:InboxFilterProperty;label:string}; query:string; showSearch?:boolean }) {
+  return <>{showSearch&&<div className={styles.valueSearch}><input ref={inputRef} role="searchbox" aria-label={property.label} placeholder={placeholder} value={query} onChange={event=>onQuery(event.target.value)}/></div>}<div className={styles.valueList} role="listbox" aria-label={property.label} aria-multiselectable="true">{!options.length&&!footer?<div className={styles.empty}>No results</div>:null}{options.map(option=><FilterValueOption active={activeId===option.id} checked={isSelected(option.id)} key={option.id} onActive={()=>onActive(option.id)} onChoose={()=>onChoose(option)} option={option} property={property.id}/>)}{footer}</div></>
 }
 
 function FilterValueOption({ active, checked, option, property, onActive, onChoose }: { active: boolean; checked: boolean; option: InboxFilterOption; property: InboxFilterProperty; onActive: () => void; onChoose: () => void }) {
@@ -653,7 +623,7 @@ function FilterValueSummary({ values }: { values: InboxFilterCondition['values']
 
 function DefaultTrigger({ count, ariaLabel }: { count: number; ariaLabel: string }) {
   return <button className={styles.defaultTrigger} type="button" aria-label={ariaLabel}>
-    <FilterGlyph />
+    <InboxFilterGlyph />
     {count ? <span>{count}</span> : null}
   </button>
 }
@@ -674,6 +644,6 @@ function OptionVisual({ option, property }: { option: InboxFilterOption; propert
   return <span className={styles.optionIcon}><PropertyIcon property={property} /></span>
 }
 
-function FilterGlyph() {
+function InboxFilterGlyph() {
   return <svg viewBox="0 0 16 16" aria-hidden="true"><path fillRule="evenodd" clipRule="evenodd" d="M14.25 3a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5h12.5ZM4 8a.75.75 0 0 1 .75-.75h6.5a.75.75 0 0 1 0 1.5h-6.5A.75.75 0 0 1 4 8Zm2.75 3.5a.75.75 0 0 0 0 1.5h2.5a.75.75 0 0 0 0-1.5h-2.5Z" /></svg>
 }

@@ -12,7 +12,6 @@ import type { InitiativeRouteTab, InitiativesRouteView } from '@/lib/app-routes'
 import { InitiativeLabelsPicker, InitiativeProperties, InitiativeStatusIcon } from './initiative-shared'
 import { titleCase } from './initiative-model'
 import './initiatives.css'
-import './initiatives-audit.css'
 
 type Props = {
   initiatives: Initiative[]
@@ -121,8 +120,8 @@ export function InitiativesPage(props: Props) {
     <div className="li-toolbar">
       <nav>{(['active', 'planned', 'all'] as InitiativesRouteView[]).map(item => <button aria-current={view === item ? 'page' : undefined} key={item} onClick={() => onViewChange(item)} type="button">{item === 'all' ? 'All initiatives' : titleCase(item)}</button>)}</nav>
       <div className="li-toolbar-actions">
-        <FilterMenu filters={filters} initiatives={initiatives} labels={labels} onAdvanced={() => { setAdvancedFilterEnabled(true); setAdvancedFilterOpen(true) }} onChange={setFilters} teams={teams} users={users}/>
-        <DisplayMenu grouping={grouping} properties={properties} showTeamInitiatives={showTeamInitiatives} sort={sort} onGrouping={setGrouping} onProperty={toggleProperty} onShowTeamInitiatives={setShowTeamInitiatives} onSort={setSort}/>
+        <InitiativeFilterMenu filters={filters} initiatives={initiatives} labels={labels} onAdvanced={() => { setAdvancedFilterEnabled(true); setAdvancedFilterOpen(true) }} onChange={setFilters} teams={teams} users={users}/>
+        <InitiativeDisplayMenu grouping={grouping} properties={properties} showTeamInitiatives={showTeamInitiatives} sort={sort} onGrouping={setGrouping} onProperty={toggleProperty} onShowTeamInitiatives={setShowTeamInitiatives} onSort={setSort}/>
         <button aria-expanded={detailsOpen} aria-label={detailsOpen ? 'Close sidebar' : 'Open sidebar'} className="li-icon-button" onClick={toggleDetails} type="button">{detailsOpen ? <PanelRightClose size={14}/> : <PanelRightOpen size={14}/>}</button>
       </div>
     </div>
@@ -251,7 +250,7 @@ function ColumnHeader({ property, onSort }: { property: Property; onSort: (sort:
   return sortable[property] ? <button onClick={() => onSort(sortable[property]!)} type="button">{label}</button> : <span>{label}</span>
 }
 
-function DisplayMenu({ grouping, properties, showTeamInitiatives, sort, onGrouping, onProperty, onShowTeamInitiatives, onSort }: { grouping: Grouping; properties: Set<Property>; showTeamInitiatives: boolean; sort: Sort; onGrouping: (grouping: Grouping) => void; onProperty: (property: Property) => void; onShowTeamInitiatives: (show: boolean) => void; onSort: (sort: Sort) => void }) {
+function InitiativeDisplayMenu({ grouping, properties, showTeamInitiatives, sort, onGrouping, onProperty, onShowTeamInitiatives, onSort }: { grouping: Grouping; properties: Set<Property>; showTeamInitiatives: boolean; sort: Sort; onGrouping: (grouping: Grouping) => void; onProperty: (property: Property) => void; onShowTeamInitiatives: (show: boolean) => void; onSort: (sort: Sort) => void }) {
   return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Display options" className="li-icon-button" type="button"><SlidersHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className="li-menu li-display-menu" sideOffset={4}>
     <div className="li-display-row"><span>Grouping</span><DropdownMenu.Sub><DropdownMenu.SubTrigger>{groupingLabel(grouping)} <ChevronRight size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="li-menu">{(['none','contributingTeam','leadTeam','owner','health','status','priority','label'] as Grouping[]).map(item => <DropdownMenu.Item key={item} onSelect={() => onGrouping(item)}>{groupingLabel(item)}{grouping === item && <Check className="li-menu-end" size={13}/>}</DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub></div>
     <div className="li-display-row"><span>Ordering</span><DropdownMenu.Sub><DropdownMenu.SubTrigger>{titleCase(sort)} <ChevronRight size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="li-menu">{(['manual', 'name', 'priority', 'target', 'health', 'created', 'updated'] as Sort[]).map(item => <DropdownMenu.Item key={item} onSelect={() => onSort(item)}>{titleCase(item)}{sort === item && <Check className="li-menu-end" size={13}/>}</DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub></div>
@@ -259,7 +258,7 @@ function DisplayMenu({ grouping, properties, showTeamInitiatives, sort, onGroupi
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 
-function FilterMenu({ filters, initiatives, users, teams, labels, onChange, onAdvanced }: { filters: FilterState; initiatives: Initiative[]; users: User[]; teams: Team[]; labels: IssueLabel[]; onChange: (filters: FilterState) => void; onAdvanced: () => void }) {
+function InitiativeFilterMenu({ filters, initiatives, users, teams, labels, onChange, onAdvanced }: { filters: FilterState; initiatives: Initiative[]; users: User[]; teams: Team[]; labels: IssueLabel[]; onChange: (filters: FilterState) => void; onAdvanced: () => void }) {
   const [query, setQuery] = useState('')
   const entries = [
     { id: 'status', label: 'Status' }, { id: 'priority', label: 'Priority' }, { id: 'ownerId', label: 'Owner' }, { id: 'creatorId', label: 'Creator' },

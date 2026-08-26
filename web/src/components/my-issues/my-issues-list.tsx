@@ -8,6 +8,7 @@ import { PropertyMenu, type PropertyMenuKind } from '@/components/property/prope
 import { LabelHoverPreview } from '@/components/property/label-hover-preview'
 import { DueDatePicker } from '@/components/issue/due-date-picker'
 import styles from './my-issues-list.module.css'
+import { UserAvatar } from '@/components/ui/user-avatar'
 import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
 import type { IssueSLA } from '@/types/flow'
 
@@ -177,7 +178,7 @@ export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAU
             {displayProperties.has('project') && issue.project ? <RowCommandPicker propertyLabel="Project" kind="project" label={`Change project. Current project is ${issue.project.name}`} searchLabel="Set project..." selectedIds={[issue.project.id]} options={propertyOptions.project} onSelect={value => change('project', value)} trigger={<PropertyBadge color={issue.project.color}>{issue.project.name}</PropertyBadge>}/> : null}
             {displayProperties.has('dueDate') && issue.dueDate ? <DueDatePicker value={issue.dueDate} onChange={value => change('dueDate', value)} ariaLabel={`Change due date. Current due date is ${formatDueDate(issue.dueDate)}`} triggerClassName={styles.propertyTrigger} trigger={<time className={styles.dueDate} dateTime={issue.dueDate}><CalendarIcon size={13}/>{formatDueDate(issue.dueDate)}</time>}/> : null}
             {issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
-            {displayProperties.has('assignee') && issue.assignee ? <RowCommandPicker propertyLabel="Assignee" label={`Assign to. Current assignee is ${issue.assignee.name}`} searchLabel="Assign to..." selectedIds={[issue.assignee.id]} options={propertyOptions.assignee} onSelect={value => change('assignee', value)} trigger={<Avatar assignee={issue.assignee}/>}/> : null}
+            {displayProperties.has('assignee') && issue.assignee ? <RowCommandPicker propertyLabel="Assignee" label={`Assign to. Current assignee is ${issue.assignee.name}`} searchLabel="Assign to..." selectedIds={[issue.assignee.id]} options={propertyOptions.assignee} onSelect={value => change('assignee', value)} trigger={<MyIssuesAssigneeAvatar assignee={issue.assignee}/>}/> : null}
             {mutationError && <button type="button" className={styles.rowError} title={mutationError} onClick={() => onRetryMutation?.(issue)}>Retry</button>}
           </span>
         </div>
@@ -199,7 +200,7 @@ export function SubIssueProgress({progress,subIssues,onOpenSubIssue}:{progress:N
 }
 
 export function RowCommandPicker({ propertyLabel, label, multi = false, onSelect, options, searchLabel, searchShortcut, selectedIds, trigger, triggerClassName, kind = 'standard' }: { propertyLabel: string; label: string; multi?: boolean; onSelect: (id: string) => void | Promise<void>; options: MyIssuesContextOption[]; searchLabel: string; searchShortcut?: string; selectedIds: string[]; trigger: ReactNode; triggerClassName?: string; kind?: PropertyMenuKind }) {
-  const commandOptions = options.map((option, index) => ({ ...option, icon: <OptionIcon option={option}/>, shortcut: option.kind === 'priority' ? option.id : option.kind === 'status' ? String(index + 1) : option.shortcut }))
+  const commandOptions = options.map((option, index) => ({ ...option, icon: <MyIssuesOptionIcon option={option}/>, shortcut: option.kind === 'priority' ? option.id : option.kind === 'status' ? String(index + 1) : option.shortcut }))
   return <PropertyMenu label={propertyLabel} value={options.find(option => selectedIds.includes(option.id))?.label} multiple={multi} selectedId={selectedIds[0]} selectedIds={selectedIds} options={commandOptions} kind={kind} searchPlaceholder={searchLabel} searchShortcut={searchShortcut} ariaLabel={label} triggerClassName={triggerClassName ?? styles.propertyTrigger} trigger={trigger} onChange={onSelect}/>
 }
 
@@ -216,7 +217,7 @@ function IssueContextMenu({ editable, issue, options, onPropertyChange, onAction
     <ContextPropertySub label="Due date" shortcut="⇧ D" options={options.dueDate} selectedIds={[issue.dueDate ?? '']} onSelect={id => onPropertyChange('dueDate', id)}/>
     <ContextPropertySub multi label="Labels" shortcut="L" options={options.labels} selectedIds={issue.labels?.map(label => label.id) ?? []} onSelect={id => onPropertyChange('labels', toggleId(issue.labels?.map(label => label.id) ?? [], id))}/>
     <ContextPropertySub label="Project" shortcut="⇧ P" options={options.project} selectedIds={[issue.project?.id ?? '']} onSelect={id => onPropertyChange('project', id)}/></>}
-    {onAction&&<>{editable&&<ContextMenu.Separator className={styles.menuSeparator}/>}<MenuItem action="copy" label="Copy" onAction={onAction} submenu={false}/><ContextMenu.Separator className={styles.menuSeparator}/><MenuItem action="delete" label="Delete" shortcut="⌘ ⌫" danger onAction={onAction} submenu={false}/></>}
+    {onAction&&<>{editable&&<ContextMenu.Separator className={styles.menuSeparator}/>}<MyIssuesMenuItem action="copy" label="Copy" onAction={onAction} submenu={false}/><ContextMenu.Separator className={styles.menuSeparator}/><MyIssuesMenuItem action="delete" label="Delete" shortcut="⌘ ⌫" danger onAction={onAction} submenu={false}/></>}
   </ContextMenu.Content>
 }
 
@@ -224,15 +225,15 @@ function ContextPropertySub({ label, multi = false, onSelect, options, selectedI
   const selected = new Set(selectedIds)
   const sections = multi && label === 'Labels' ? groupContextOptions(options) : [{ id: 'all', options }]
   return <ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}>
-    {sections.map(section => <ContextMenu.Group key={section.id}>{section.label && <ContextMenu.Label className={styles.groupLabel}>{section.label}</ContextMenu.Label>}{section.options.map(option => multi ? <ContextMenu.CheckboxItem className={styles.submenuItem} key={option.id} checked={selected.has(option.id)} onSelect={event => event.preventDefault()} onCheckedChange={() => void onSelect(option.id)}><span className={styles.optionCheckbox}>{selected.has(option.id) && <Check size={11}/>}</span><OptionIcon option={option}/><span>{option.label}</span></ContextMenu.CheckboxItem> : <ContextMenu.Item className={styles.submenuItem} key={option.id || 'none'} onSelect={() => void onSelect(option.id)}><OptionIcon option={option}/><span>{option.label}</span>{selected.has(option.id) && <Check className={styles.optionCheck} size={13}/>}</ContextMenu.Item>)}</ContextMenu.Group>)}
+    {sections.map(section => <ContextMenu.Group key={section.id}>{section.label && <ContextMenu.Label className={styles.groupLabel}>{section.label}</ContextMenu.Label>}{section.options.map(option => multi ? <ContextMenu.CheckboxItem className={styles.submenuItem} key={option.id} checked={selected.has(option.id)} onSelect={event => event.preventDefault()} onCheckedChange={() => void onSelect(option.id)}><span className={styles.optionCheckbox}>{selected.has(option.id) && <Check size={11}/>}</span><MyIssuesOptionIcon option={option}/><span>{option.label}</span></ContextMenu.CheckboxItem> : <ContextMenu.Item className={styles.submenuItem} key={option.id || 'none'} onSelect={() => void onSelect(option.id)}><MyIssuesOptionIcon option={option}/><span>{option.label}</span>{selected.has(option.id) && <Check className={styles.optionCheck} size={13}/>}</ContextMenu.Item>)}</ContextMenu.Group>)}
   </ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
 }
 
-function MenuItem({ action, danger, label, onAction, shortcut, submenu = true }: { action: MyIssuesContextAction; danger?: boolean; label: string; onAction: (action: MyIssuesContextAction) => void; shortcut?: string; submenu?: boolean }) {
+function MyIssuesMenuItem({ action, danger, label, onAction, shortcut, submenu = true }: { action: MyIssuesContextAction; danger?: boolean; label: string; onAction: (action: MyIssuesContextAction) => void; shortcut?: string; submenu?: boolean }) {
   return <ContextMenu.Item className={styles.menuItem} data-danger={danger} onSelect={() => onAction(action)}><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}{submenu && <ChevronRight size={12}/>}</ContextMenu.Item>
 }
 
-function OptionIcon({ option }: { option: MyIssuesContextOption }) {
+function MyIssuesOptionIcon({ option }: { option: MyIssuesContextOption }) {
   if (option.kind === 'priority' && option.priority !== undefined) return <PriorityIcon priority={option.priority}/>
   if (option.kind === 'status' && option.stateType && option.color) return <StatusIcon state={{ id: option.id, name: option.label, type: option.stateType, color: option.color }} size={14}/>
   if (option.avatarUrl) return <img className={styles.optionAvatar} src={option.avatarUrl} alt=""/>
@@ -250,7 +251,7 @@ function PropertyBadge(props:{label:NonNullable<MyIssuesRowData['labels']>[numbe
   if('label'in props){const{label}=props;return <LabelHoverPreview label={label} side="bottom" align="start"><span className={styles.badge}><i style={{backgroundColor:label.color}}/><span data-i18n-ignore>{label.name}</span></span></LabelHoverPreview>}
   return <span className={styles.badge}><i style={{backgroundColor:props.color}}/><span data-i18n-ignore>{props.children}</span></span>
 }
-function Avatar({ assignee }: { assignee: NonNullable<MyIssuesRowData['assignee']> }) { const initials = assignee.name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase(); return <span className={styles.avatar} aria-label={assignee.name} style={{ '--avatar': assignee.color ?? 'var(--avatar-fallback)' } as CSSProperties}>{assignee.avatarUrl ? <img src={assignee.avatarUrl} alt=""/> : initials}</span> }
+function MyIssuesAssigneeAvatar({ assignee }: { assignee: NonNullable<MyIssuesRowData['assignee']> }) { return <UserAvatar avatarUrl={assignee.avatarUrl} className={styles.avatar} color={assignee.color ?? 'var(--avatar-fallback)'} name={assignee.name}/> }
 
 export function MyIssuesListSkeleton({ rows = 6 }: { rows?: number }) { return <div className={styles.skeleton} aria-label="Loading issues" aria-busy="true"><div className={styles.skeletonHeader}/>{Array.from({ length: rows }, (_, index) => <div className={styles.skeletonRow} key={index}><i/><i/><i/><i/></div>)}</div> }
 export function MyIssuesListEmpty() { return <div className={styles.state} role="status"><span className={styles.emptyIcon}><Check size={15}/></span><strong>No issues</strong><p>No issues match this view.</p></div> }

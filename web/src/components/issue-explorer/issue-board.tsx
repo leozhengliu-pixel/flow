@@ -7,6 +7,7 @@ import { CalendarIcon, NoAssigneeIcon, PriorityIcon, ProjectIcon, StatusIcon } f
 import { DueDatePicker } from '@/components/issue/due-date-picker'
 import { useI18n } from '@/i18n/i18n'
 import styles from './issue-board.module.css'
+import { UserAvatar } from '@/components/ui/user-avatar'
 
 const EMPTY_OPTIONS: MyIssuesRowPropertyOptions = { status: [], priority: [], assignee: [], dueDate: [], labels: [], project: [] }
 
@@ -80,7 +81,7 @@ function IssueBoardCard({ issue, properties, propertyOptions, selected, dragging
       {properties.has('assignee') && <RowCommandPicker
         propertyLabel="Assignee" label={issue.assignee ? `Assign to. Current assignee is ${issue.assignee.name}` : 'Assign issue'} searchLabel="Assign to..."
         selectedIds={[issue.assignee?.id ?? '']} options={propertyOptions.assignee} onSelect={value => change('assignee', value)} triggerClassName={styles.assigneeTrigger}
-        trigger={issue.assignee ? <Avatar assignee={issue.assignee}/> : <span className={styles.noAssignee}><NoAssigneeIcon size={18}/></span>}
+        trigger={issue.assignee ? <BoardAssigneeAvatar assignee={issue.assignee}/> : <span className={styles.noAssignee}><NoAssigneeIcon size={18}/></span>}
       />}
     </div>
     <div className={styles.titleRow}>
@@ -109,7 +110,7 @@ function CardProperties({ issue, properties, propertyOptions, onPropertyChange }
 }
 
 function Badge({ children, color }: { children: string; color: string }) { return <span className={styles.badge}><i className={styles.labelDot} style={{ backgroundColor: color }}/><span data-i18n-ignore>{children}</span></span> }
-function Avatar({ assignee }: { assignee: NonNullable<MyIssuesRowData['assignee']> }) { const initials = assignee.name.split(/\s+/).filter(Boolean).slice(0,2).map(part => part[0]).join('').toUpperCase(); return <span className={styles.avatar} style={{ '--avatar': assignee.color ?? 'var(--avatar-fallback)' } as CSSProperties}>{assignee.avatarUrl ? <img src={assignee.avatarUrl} alt=""/> : initials}</span> }
+function BoardAssigneeAvatar({ assignee }: { assignee: NonNullable<MyIssuesRowData['assignee']> }) { return <UserAvatar avatarUrl={assignee.avatarUrl} className={styles.avatar} color={assignee.color ?? 'var(--avatar-fallback)'} name={assignee.name}/> }
 function formatDate(value: string) { return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value.length === 10 ? `${value}T00:00:00` : value)) }
 function priorityName(priority: number) { return ['No', 'Urgent', 'High', 'Medium', 'Low'][priority] ?? 'No' }
 function toggleId(ids: string[], id: string) { return ids.includes(id) ? ids.filter(value => value !== id) : [...ids, id] }

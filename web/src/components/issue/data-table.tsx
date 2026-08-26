@@ -1,5 +1,0 @@
-import { ChevronDown, Plus } from 'lucide-react'
-import { IssueRow } from './issue-row'
-import { StatusIcon } from './issue-icons'
-import type { Issue } from '@/types/flow'
-export function IssueDataTable({issues,selected,onSelect,onOpen}:{issues:Issue[];selected:Set<string>;onSelect:(id:string)=>void;onOpen:(issue:Issue)=>void}){const groups=Array.from(new Map(issues.map(i=>[i.state.id,i.state])).values());if(!issues.length)return null;return <div className="issue-table">{groups.map(state=>{const rows=issues.filter(i=>i.state.id===state.id);return <section className="issue-group" key={state.id}><div className="group-header"><ChevronDown size={12}/><StatusIcon size={14} state={state}/><strong>{state.type==='started'?'Other active':state.name}</strong><span>{rows.length}</span><button aria-label="Create issue"><Plus size={13}/></button></div>{rows.map(issue=><IssueRow key={issue.id} issue={issue} selected={selected.has(issue.id)} onSelect={onSelect} onOpen={onOpen}/>)}</section>})}</div>}
