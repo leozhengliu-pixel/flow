@@ -31,7 +31,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
   const [milestoneScopeId, setMilestoneScopeId] = useState<string>(() => new URLSearchParams(location.search).get('projectMilestoneId') ?? '')
   const projectIssues = useMemo(() => issues.filter(issue => issue.project?.id === project.id), [issues, project.id])
   const scopedProjectIssues = useMemo(() => milestoneScopeId ? projectIssues.filter(issue => issue.projectMilestoneId === milestoneScopeId) : projectIssues, [milestoneScopeId, projectIssues])
-  const milestoneScope = project.milestones.find(milestone => milestone.id === milestoneScopeId)
+  const milestoneScope = (project.milestones ?? []).find(milestone => milestone.id === milestoneScopeId)
   const issueLabels = useMemo(() => labelsForResource(labels, 'issue'), [labels])
   const projectLabels = useMemo(() => labelsForResource(labels, 'project'), [labels])
   const projectSavedViews = useMemo(() => props.savedViews.filter(view => view.resource === 'issues' && JSON.stringify(view.filters).includes(project.id)), [project.id, props.savedViews])

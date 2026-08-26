@@ -3,7 +3,6 @@ export {
   InboxNoSelection,
   InboxPageShell,
   type InboxDisplayOptions,
-  type InboxFilterKind,
   type InboxOrdering,
   type InboxPageShellProps,
 } from './inbox-page-shell'

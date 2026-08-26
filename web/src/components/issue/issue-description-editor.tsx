@@ -11,6 +11,7 @@ import { SlashCommandMenu, type EditorCommand } from './editor/slash-command-men
 import { filterEditorCommands } from './editor/editor-commands'
 import { SelectionToolbar } from './editor/selection-toolbar'
 import { useI18n } from '@/i18n/i18n'
+import { handleEditorSubmit } from './editor/editor-keyboard'
 
 interface DescriptionEditorProps {
   value: string
@@ -59,11 +60,7 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
         translate: 'no',
       },
       handleKeyDown: (view, event) => {
-        if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-          event.preventDefault()
-          submitRef.current?.()
-          return true
-        }
+        if (handleEditorSubmit(event, submitRef.current)) return true
         const current = getSlashCommandState(view.state)
         if (!current.active || current.range?.from === dismissedRef.current) return false
         const filtered = filterEditorCommands(commandsRef.current, current.query)

@@ -29,7 +29,7 @@ export function WorkspaceMenu({ account, data, onSettings, onSwitch, onCreate, o
         <WorkspaceAvatar workspace={workspace}/><strong>{workspace.name}</strong><ChevronDown size={12}/>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" sideOffset={4} className="workspace-primary-menu">
-        <DropdownMenuItem onSelect={() => onSettings('workspace')}>Settings<Shortcut>G then S</Shortcut></DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onSettings('workspace')}>Settings<WorkspaceMenuShortcut>G then S</WorkspaceMenuShortcut></DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onSettings('members')}>Invite and manage members</DropdownMenuItem>
         <DropdownMenuSeparator/>
         <DropdownMenuItem onSelect={() => window.open('https://flow.app/download','_blank')}>Download desktop app</DropdownMenuItem>
@@ -42,7 +42,7 @@ export function WorkspaceMenu({ account, data, onSettings, onSwitch, onCreate, o
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger data-workspace-switch-trigger>Switch workspace<Shortcut>O then W</Shortcut></DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger data-workspace-switch-trigger>Switch workspace<WorkspaceMenuShortcut>O then W</WorkspaceMenuShortcut></DropdownMenuSubTrigger>
           <DropdownMenuSubContent sideOffset={5} alignOffset={-5} className="workspace-switch-menu">
             <DropdownMenuLabel>{account.viewer.email}</DropdownMenuLabel>
             {account.workspaces.map(membership => <DropdownMenuItem key={membership.workspace.id} onSelect={() => onSwitch(membership.workspace)}>
@@ -54,13 +54,13 @@ export function WorkspaceMenu({ account, data, onSettings, onSwitch, onCreate, o
             <DropdownMenuItem onSelect={() => undefined}>Add an account…</DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
-        <DropdownMenuItem onSelect={() => void onLogout()}>Log out<Shortcut>⌥ ⇧ Q</Shortcut></DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void onLogout()}>Log out<WorkspaceMenuShortcut>⌥ ⇧ Q</WorkspaceMenuShortcut></DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   </>
 }
 
 export function WorkspaceAvatar({ workspace }: { workspace: Workspace }) { return <span className="workspace-avatar" style={{ background: workspace.color || '#b89b38' }}>{workspace.icon || initials(workspace.name)}</span> }
-function Shortcut({children}:{children:React.ReactNode}) { return <kbd className="workspace-shortcut">{children}</kbd> }
+function WorkspaceMenuShortcut({children}:{children:React.ReactNode}) { return <kbd className="workspace-shortcut">{children}</kbd> }
 function initials(value:string){const parts=value.split(/\s+/).filter(Boolean);const result=parts.length>1?parts.map(part=>part[0]).join(''):(parts[0]??'').slice(0,2);return result.slice(0,2).toUpperCase()||'W'}
 function isEditable(target: EventTarget | null){return target instanceof HTMLElement && (target.isContentEditable || ['INPUT','TEXTAREA','SELECT'].includes(target.tagName))}

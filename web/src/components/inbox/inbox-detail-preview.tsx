@@ -8,7 +8,7 @@ import { RelationPicker } from '@/components/issue/relation-picker'
 import type { Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 
 import { InboxCustomSnoozeForm, type InboxNotificationRowData, type InboxSnoozePreset } from './notification-row'
-import './inbox-detail-preview.css'
+import './inbox.css'
 
 export interface InboxDetailPreviewProps {
   notification: InboxNotificationRowData
@@ -83,7 +83,7 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
         {props.pending ? <div className="flow-inbox-detail__pending" role="status" aria-label="Updating notification"><i /></div> : null}
       </div>
       {relationType && props.issue && props.issues && props.onCreateRelation ? <RelationPicker open onOpenChange={open => { if (!open) setRelationType(null) }} type={relationType} issueId={props.issue.id} issues={props.issues} onSelect={relatedIssueId => props.onCreateRelation?.(relationType, relatedIssueId)}/>: null}
-      <DescriptionHistoryDialog issue={props.issue} open={historyOpen} onOpenChange={setHistoryOpen}/>
+      <InboxDescriptionHistoryDialog issue={props.issue} open={historyOpen} onOpenChange={setHistoryOpen}/>
     </article>
   )
 }
@@ -117,7 +117,7 @@ function DetailSnoozeMenu({ notification, onSnooze, pending, open, onOpenChange 
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 
-function DescriptionHistoryDialog({ issue, open, onOpenChange }: { issue?: Issue; open: boolean; onOpenChange: (open: boolean) => void }) {
+function InboxDescriptionHistoryDialog({ issue, open, onOpenChange }: { issue?: Issue; open: boolean; onOpenChange: (open: boolean) => void }) {
   if (!issue) return null
   return <Dialog.Root open={open} onOpenChange={onOpenChange}>
     <Dialog.Portal>

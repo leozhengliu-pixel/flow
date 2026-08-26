@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { ChartNoAxesColumn, ChevronRight, Link2, Plus, Star } from 'lucide-react'
 import { DetailsIcon, FilterIcon } from '@/components/my-issues/my-issues-icons'
 import { MyIssuesDisplayMenu } from '@/components/my-issues/my-issues-display-menu'
@@ -9,6 +9,7 @@ import type { TeamIssuesRouteView } from '@/lib/app-routes'
 import type { SavedView } from '@/types/flow'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import styles from './issue-explorer.module.css'
+import { useIssueSurfaceControls } from '@/components/my-issues/use-issue-surface-controls'
 
 const VIEWS: { id: TeamIssuesRouteView; label: string }[] = [
   { id: 'active', label: 'Active' },
@@ -51,22 +52,7 @@ export function IssueExplorerSurface({
   onToggleFavorite?: () => void
   onOpenSidebar?: () => void
 }) {
-  const [filterOpen, setFilterOpen] = useState(false)
-  const [displayOpen, setDisplayOpen] = useState(false)
-  const changeFilterOpen = (open: boolean) => { setFilterOpen(open); if (open) setDisplayOpen(false) }
-  const changeDisplayOpen = (open: boolean) => { setDisplayOpen(open); if (open) setFilterOpen(false) }
-
-  useEffect(() => { if (filterOpenSignal > 0) { setDisplayOpen(false); setFilterOpen(true) } }, [filterOpenSignal])
-
-  useEffect(() => {
-    const toggleDetails = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'i') return
-      if ((event.target as HTMLElement | null)?.closest('input,textarea,[contenteditable="true"],[role="textbox"]')) return
-      event.preventDefault(); onDetailsOpenChange(!detailsOpen)
-    }
-    window.addEventListener('keydown', toggleDetails)
-    return () => window.removeEventListener('keydown', toggleDetails)
-  }, [detailsOpen, onDetailsOpenChange])
+  const {changeDisplayOpen,changeFilterOpen,displayOpen,filterOpen}=useIssueSurfaceControls(filterOpenSignal,detailsOpen,onDetailsOpenChange)
 
   const toolbar = <div className={styles.toolbar}>
     {creatingView ? <nav className={styles.tabs} aria-label="View resource"><a className={styles.tab} data-active="true" href="#" onClick={event => event.preventDefault()}>Issues</a><a className={styles.tab} href="#" onClick={event => { event.preventDefault(); onNewViewResourceChange?.('projects') }}>Projects</a></nav> : savedView ? <span className={styles.viewCount}>{itemCount} {itemCount === 1 ? 'issue' : 'issues'}</span> : <nav className={styles.tabs} aria-label={`${scopeName} issue views`}>

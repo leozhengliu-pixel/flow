@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  Activity, AppWindow, ArrowLeft, Bell, Bot, Braces, Building2, Check, ChevronDown,
+  Activity, AppWindow, ArrowLeft, Bell, Bot, Braces, Building2, ChevronDown,
   CircleDot, Code2, CreditCard, FileText, Flame, Gauge,
   Import, KeyRound, LayoutTemplate, Link2, ListFilter, MessageCircleQuestion,
   MoreHorizontal, PanelTop, Plug, Plus, Radio, Rocket, Search, ShieldCheck,
@@ -21,6 +21,7 @@ import { TeamWorkflowSettings } from "./team-workflow-settings";
 import { ImportExportSettings, ProjectUpdateSettings, SLASettings, TemplateSettings } from "./advanced-settings";
 import { DomainLabelsSettings, ProjectStatusesSettings } from "./domain-settings";
 import { FeatureSettingsPage } from "./feature-settings";
+import { SettingsPageTitle as PageTitle, SettingsRow as Row, SettingsSection as Section, SettingsSelect as Select, SettingsToggle as Toggle } from "./settings-primitives";
 
 import "./settings.css";
 import "./workflow-settings.css";
@@ -196,14 +197,7 @@ function SettingsBody(props: SettingsPageProps & { settings: StoredSettings; set
   return <FeaturePage page={page} data={props.data} onReload={props.onReload}/>;
 }
 
-function PageTitle({ children, description, action }: { children: ReactNode; description?: ReactNode; action?: ReactNode }) {
-  return <header className="settings-page-header"><div><h1>{children}</h1>{description && <p>{description}</p>}</div>{action}</header>;
-}
 function AgentSkillEditor({data,id,mode,onCancel,onReload}:{data:BootstrapData;id?:string;mode:'new'|'edit';onCancel:()=>void;onReload:()=>Promise<void>}){const existing=mode==='edit'?data.agentSkills.find(item=>item.id===id):undefined;const[name,setName]=useState(existing?.name??''),[instructions,setInstructions]=useState(existing?.instructions??''),[saving,setSaving]=useState(false);const save=async()=>{if(!name.trim()||!instructions.trim()||saving)return;setSaving(true);try{if(existing)await updateAgentSkill(existing.id,{name:name.trim(),instructions:instructions.trim()});else await createAgentSkill({name:name.trim(),instructions:instructions.trim()});await onReload();onCancel()}finally{setSaving(false)}};return <div className="agent-skill-editor-page"><nav><button onClick={onCancel}>Agent personalization</button><span>›</span><span>{existing?existing.name:'New skill'}</span></nav><div className="agent-skill-name" contentEditable suppressContentEditableWarning role="textbox" aria-label="Skill name" data-placeholder="Skill name" onInput={event=>setName(event.currentTarget.textContent??'')}>{name}</div><div className="agent-skill-instructions" contentEditable suppressContentEditableWarning role="textbox" aria-label="Skill instructions" data-placeholder="Add instructions…" onInput={event=>setInstructions(event.currentTarget.textContent??'')}>{instructions}</div><footer><button onClick={onCancel}>Cancel</button><button className="primary" disabled={!name.trim()||!instructions.trim()||saving} onClick={()=>void save()}>{saving?'Creating…':existing?'Save':'Create'}</button></footer></div>}
-function Section({ title, children }: { title?: string; children: ReactNode }) { return <section className="settings-section">{title && <h3>{title}</h3>}<div className="settings-card">{children}</div></section>; }
-function Row({ title, description, children, danger }: { title: string; description?: ReactNode; children?: ReactNode; danger?: boolean }) { return <div className={`settings-row${danger ? " danger" : ""}`}><div><strong>{title}</strong>{description && <span>{description}</span>}</div>{children && <div className="settings-control">{children}</div>}</div>; }
-function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (value: boolean) => void; label: string }) { return <button type="button" role="switch" aria-label={label} aria-checked={checked} className="settings-toggle" onClick={() => onChange(!checked)}><span/></button>; }
-function Select({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) { return <DropdownMenu><DropdownMenuTrigger asChild><button className="settings-select" aria-label={label}>{value}<ChevronDown size={13}/></button></DropdownMenuTrigger><DropdownMenuContent align="end" className="settings-select-menu">{options.map(option => <DropdownMenuItem key={option} onSelect={() => onChange(option)}>{option}<Check size={13} className={option === value ? "selected-check" : "hidden-check"}/></DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>; }
 function ActionButton({ children, onClick, danger, primary, disabled }: { children: ReactNode; onClick?: () => void; danger?: boolean; primary?: boolean; disabled?: boolean }) { return <button disabled={disabled} className={`settings-action${danger ? " danger" : ""}${primary ? " primary" : ""}`} onClick={onClick}>{children}</button>; }
 
 function FieldRow({ title, description, value, onCommit }: { title: string; description?: string; value: string; onCommit: (value: string) => void }) { const [draft, setDraft] = useState(value); useEffect(() => setDraft(value), [value]); return <Row title={title} description={description}><input className="settings-input" aria-label={title} value={draft} onChange={event => setDraft(event.target.value)} onBlur={() => onCommit(draft)}/></Row>; }

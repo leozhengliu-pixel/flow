@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import { inviteMembers } from "@/lib/api";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { CustomerDialog } from "@/components/customer-detail/customer-dialog";
 import type {
   BootstrapData,
@@ -285,19 +286,19 @@ function MembersDirectory({ data }: { data: BootstrapData }) {
   return (
     <div className="workspace-directory__table workspace-members-table">
       <div className="workspace-members-columns">
-        <SortHeader
+        <DirectorySortHeader
           active={sort === "name"}
           direction={direction}
           label="Name"
           onClick={() => changeSort("name")}
         />
-        <SortHeader
+        <DirectorySortHeader
           active={sort === "status"}
           direction={direction}
           label="Status"
           onClick={() => changeSort("status")}
         />
-        <SortHeader
+        <DirectorySortHeader
           active={sort === "joined"}
           direction={direction}
           label="Joined"
@@ -322,7 +323,7 @@ function MembersDirectory({ data }: { data: BootstrapData }) {
           }}
         >
           <div className="workspace-member-identity">
-            <Avatar user={user} />
+            <DirectoryUserAvatar user={user} />
             <span>
               <strong>{user.displayName}</strong>
               <small>{user.name || user.email.split("@")[0]}</small>
@@ -365,7 +366,7 @@ function MembersDirectory({ data }: { data: BootstrapData }) {
   );
 }
 
-function SortHeader({
+function DirectorySortHeader({
   label,
   active,
   direction,
@@ -449,7 +450,7 @@ function CustomersDirectory({
       choices: users.map((user) => ({
         id: user.id,
         label: user.displayName,
-        icon: <Avatar user={user} />,
+        icon: <DirectoryUserAvatar user={user} />,
       })),
     },
     {
@@ -806,7 +807,7 @@ function TeamsDirectory({
         id: user.id,
         label: user.displayName,
         meta: "1 team",
-        icon: <Avatar user={user} />,
+        icon: <DirectoryUserAvatar user={user} />,
       })),
     },
     {
@@ -816,7 +817,7 @@ function TeamsDirectory({
       choices: data.users.map((user) => ({
         id: user.id,
         label: user.displayName,
-        icon: <Avatar user={user} />,
+        icon: <DirectoryUserAvatar user={user} />,
       })),
     },
     {
@@ -1000,7 +1001,7 @@ function TeamsDirectory({
                 )}
                 {columns.has("owners") && (
                   <span className="workspace-team-owner">
-                    <Avatar user={data.viewer} />
+                    <DirectoryUserAvatar user={data.viewer} />
                     {data.viewer.displayName}
                   </span>
                 )}
@@ -1015,7 +1016,7 @@ function TeamsDirectory({
                     }}
                   >
                     {data.users.slice(0, 3).map((user) => (
-                      <Avatar key={user.id} user={user} />
+                      <DirectoryUserAvatar key={user.id} user={user} />
                     ))}
                   </button>
                 )}
@@ -1307,21 +1308,8 @@ function InviteMembersDialog({
   );
 }
 
-function Avatar({ user }: { user: User }) {
-  return user.avatarUrl ? (
-    <img
-      className="workspace-directory-avatar"
-      src={user.avatarUrl}
-      alt={user.email}
-    />
-  ) : (
-    <span
-      className="workspace-directory-avatar"
-      style={{ background: avatarColor(user.id) }}
-    >
-      {initials(user.displayName)}
-    </span>
-  );
+function DirectoryUserAvatar({ user }: { user: User }) {
+  return <UserAvatar avatarUrl={user.avatarUrl} className="workspace-directory-avatar" color={avatarColor(user.id)} name={user.displayName} title={user.email}/>;
 }
 function CustomerMark({ customer }: { customer: Customer }) {
   return customer.logoUrl ? (
