@@ -11,6 +11,6 @@ export default defineConfig({
   resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
   server: {
     port: 5173,
-    proxy: { '/api': apiProxyTarget, '/uploads': apiProxyTarget },
+    proxy: { '/api': { target: apiProxyTarget, ws: true }, '/uploads': apiProxyTarget },
   },
 })

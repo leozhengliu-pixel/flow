@@ -62,6 +62,11 @@ file is not a horizontally scalable source of truth.
 | `FLOW_REDIS_PASSWORD` | empty | Redis password; `_FILE` is supported. |
 | `FLOW_REDIS_DB` | `0` | Logical DB for standalone mode. Must remain `0` for cluster mode. |
 | `FLOW_REDIS_TLS` | `false` | Enable TLS when address-based configuration is used. Prefer `rediss://` with URL configuration. |
+
+The HTTP endpoint must allow WebSocket upgrades on `/api/realtime/socket`.
+Document collaboration works on one API instance without Redis. Enable Redis
+standalone or cluster mode when multiple API instances must share Yjs updates,
+Awareness messages, and workspace entity events.
 | `FLOW_REDIS_PREFIX` | `flow` | Namespace for keys and channels. Use a unique value per environment. |
 | `FLOW_REDIS_POOL_SIZE` | `40` | Maximum connections per process and cluster node. |
 | `FLOW_REDIS_MIN_IDLE_CONNS` | `5` | Warm idle connections per process and cluster node. |

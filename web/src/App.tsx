@@ -457,9 +457,16 @@ function App() {
     workspaceKey: data?.workspace.urlKey,
     issueId: selectedIssue?.id,
     route: location.pathname,
-    onRemoteSync: async () => {
+    onRemoteSync: async (event) => {
       const workspace = data?.workspace.urlKey;
       if (!workspace) return;
+      if (event.type === "issue.updated" && event.payload?.issue) {
+        const issue = event.payload.issue;
+        setData((current) => current?.workspace.urlKey === workspace
+          ? { ...current, issues: current.issues.map(item => item.id === issue.id ? issue : item) }
+          : current);
+        return;
+      }
       const next = await fetchBootstrap(workspace);
       setData((current) => current?.workspace.urlKey === workspace ? next : current);
     },
@@ -734,7 +741,9 @@ function App() {
     } catch (error) {
       const conflict = error instanceof ApiError && error.code === "VERSION_CONFLICT" ? error.current as Issue | undefined : undefined;
       replaceIssue(conflict ?? current);
-      toast.error(conflict ? "Issue changed in another session" : "Could not update issue", { description: error instanceof Error ? error.message : undefined });
+      if (!(conflict && input.expectedDocumentVersion !== undefined)) {
+        toast.error(conflict ? "Issue changed in another session" : "Could not update issue", { description: error instanceof Error ? error.message : undefined });
+      }
       throw error;
     }
   };
@@ -4110,7 +4119,8 @@ function applyOptimisticIssue(issue: Issue, input: IssueUpdateInput, data: Boots
   if (input.archived !== undefined) next.archivedAt = input.archived ? new Date().toISOString() : undefined;
   if (input.descriptionData !== undefined) {
     next.documentContent = {
-      id: issue.documentContent?.id ?? `document_${issue.id}`,
+      id: issue.documentContent?.id ?? `document_content_${issue.id}`,
+      version: (issue.documentContent?.version ?? 0) + 1,
       content: input.description ?? issue.description,
       contentState: input.contentState ?? issue.documentContent?.contentState ?? "",
       contentData: input.descriptionData,

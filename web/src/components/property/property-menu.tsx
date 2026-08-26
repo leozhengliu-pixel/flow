@@ -6,6 +6,7 @@ import { LabelIcon, NoAssigneeIcon, ProjectIcon, PriorityIcon } from '@/componen
 import { LabelHoverPreview } from './label-hover-preview'
 import { usePropertyCommand } from './use-property-command'
 import { groupOptionSections } from '@/lib/group-options'
+import { CheckboxMark } from '@/components/ui/checkbox-mark'
 
 export interface PropertyOption {
   id: string
@@ -123,7 +124,7 @@ function LabelGroupOption({ group, selectedIds, listboxId, activeId, onChoose, o
 
 function CommandOption({ option, active, checked, icon, listboxId, multi = false, onChoose, onActive }: { option: PropertyOption; active: boolean; checked: boolean; icon: ReactNode; listboxId: string; multi?: boolean; onChoose: () => void; onActive: () => void }) {
   const row = <button type="button" id={`${listboxId}-${option.id || 'none'}`} role="option" aria-selected={active} aria-checked={checked} onPointerMove={onActive} onFocus={onActive} onClick={onChoose}>
-    <span className="property-command-option-background"/>{multi && <span className="property-command-checkbox">{checked && <Check size={12}/>}</span>}<span className="property-command-icon">{option.icon ?? (option.color ? <i className="option-dot" style={{ background: option.color }}/> : icon)}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.label}</span>{!multi && checked && <span className="property-command-check"><Check size={14}/></span>}{option.shortcut && <kbd>{option.shortcut}</kbd>}
+    <span className="property-command-option-background"/>{multi && <span className="property-command-checkbox">{checked && <CheckboxMark/>}</span>}<span className="property-command-icon">{option.icon ?? (option.color ? <i className="option-dot" style={{ background: option.color }}/> : icon)}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.label}</span>{!multi && checked && <span className="property-command-check"><Check size={14}/></span>}{option.shortcut && <kbd>{option.shortcut}</kbd>}
   </button>
   return multi && option.color ? <LabelHoverPreview label={{ name: option.label, color: option.color, description: option.description, issueCount: option.issueCount, scope: option.scope }}>{row}</LabelHoverPreview> : row
 }

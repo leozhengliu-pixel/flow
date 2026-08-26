@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import styles from './applied-filter-bar.module.css'
+import { CheckboxMark } from '@/components/ui/checkbox-mark'
 
 export type AppliedFilterOperator = 'is' | 'isNot'
 export type AppliedFilterOption = { id: string; label: string; color?: string; count?: number }
@@ -50,7 +51,7 @@ function ValueMenu<TOption extends AppliedFilterOption>({ countLabel, filter, on
   const command=usePropertyCommand({closeOnSelect:false,onOpenChange:setOpen,open,options,selectedIds,onSelect:option=>onChange(selectedIds.includes(option.id)?filter.values.filter(value=>value.id!==option.id):[...filter.values,option])})
   return <Popover.Root open={open} onOpenChange={setOpen}><Popover.Trigger asChild><button aria-label={`${filter.fieldLabel} values`} className={styles.value} type="button"><ValueSummary values={filter.values}/></button></Popover.Trigger><Popover.Portal><Popover.Content align="start" className={styles.valueMenu} collisionPadding={8} onKeyDown={command.onKeyDown} onOpenAutoFocus={event=>event.preventDefault()} sideOffset={4}>
     <div className={styles.search}><input aria-label="Filter values" onChange={event=>command.onQueryChange(event.target.value)} placeholder="Filter..." ref={command.inputRef} value={command.query}/></div>
-    <div className={styles.options} role="listbox" aria-multiselectable="true">{command.filteredOptions.map(option=><button aria-checked={command.isSelected(option.id)} aria-selected={command.activeId===option.id} key={option.id||'none'} onClick={()=>command.choose(option)} onMouseMove={()=>command.setActiveId(option.id)} role="option" type="button"><span className={styles.checkbox}>{command.isSelected(option.id)&&<Check size={11}/>}</span><i style={{background:option.color??'var(--theme-text-secondary)'}}/><span data-i18n-ignore>{option.label}</span>{option.count!==undefined&&<small>{option.count} {countLabel?.(option.count)}</small>}</button>)}{!command.filteredOptions.length&&<span className={styles.empty}>No results</span>}</div>
+    <div className={styles.options} role="listbox" aria-multiselectable="true">{command.filteredOptions.map(option=><button aria-checked={command.isSelected(option.id)} aria-selected={command.activeId===option.id} key={option.id||'none'} onClick={()=>command.choose(option)} onMouseMove={()=>command.setActiveId(option.id)} role="option" type="button"><span className={styles.checkbox}>{command.isSelected(option.id)&&<CheckboxMark/>}</span><i style={{background:option.color??'var(--theme-text-secondary)'}}/><span data-i18n-ignore>{option.label}</span>{option.count!==undefined&&<small>{option.count} {countLabel?.(option.count)}</small>}</button>)}{!command.filteredOptions.length&&<span className={styles.empty}>No results</span>}</div>
   </Popover.Content></Popover.Portal></Popover.Root>
 }
 

@@ -232,6 +232,7 @@ func databaseMigrations(dialect string) []string {
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS workspace_invitations (id %s PRIMARY KEY, workspace_id %s NOT NULL, email %s NOT NULL, role VARCHAR(32) NOT NULL, team_ids %s NOT NULL, token_hash %s NOT NULL UNIQUE, inviter_id %s NOT NULL REFERENCES auth_users(id), status VARCHAR(32) NOT NULL DEFAULT 'pending', expires_at VARCHAR(40) NOT NULL, created_at VARCHAR(40) NOT NULL, accepted_at VARCHAR(40))`, idType, idType, emailType, blobType, idType, idType),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS search_history (user_id %s NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, workspace_id %s NOT NULL, query %s NOT NULL, use_count INTEGER NOT NULL DEFAULT 1, last_used_at VARCHAR(40) NOT NULL, PRIMARY KEY(user_id,workspace_id,query))`, idType, idType, queryType),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS recently_viewed (user_id %s NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, workspace_id %s NOT NULL, resource_type VARCHAR(64) NOT NULL, resource_id %s NOT NULL, last_viewed_at VARCHAR(40) NOT NULL, PRIMARY KEY(user_id,workspace_id,resource_type,resource_id))`, idType, idType, idType),
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS document_collaboration_updates (update_id %s PRIMARY KEY, workspace_key %s NOT NULL, document_id %s NOT NULL, client_id %s NOT NULL, update_data %s NOT NULL, created_at VARCHAR(40) NOT NULL)`, idType, idType, idType, idType, blobType),
 	}
 	indexes := []string{
 		"domain_events_aggregate_idx ON domain_events(aggregate_id,created_at)",
@@ -240,6 +241,7 @@ func databaseMigrations(dialect string) []string {
 		"workspace_invitations_email_idx ON workspace_invitations(email,status)",
 		"search_history_recent_idx ON search_history(user_id,workspace_id,last_used_at)",
 		"recently_viewed_recent_idx ON recently_viewed(user_id,workspace_id,last_viewed_at)",
+		"document_collaboration_updates_document_idx ON document_collaboration_updates(workspace_key,document_id,created_at)",
 	}
 	for _, index := range indexes {
 		prefix := "CREATE INDEX IF NOT EXISTS "

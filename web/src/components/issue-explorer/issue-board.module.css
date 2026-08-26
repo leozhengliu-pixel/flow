@@ -168,7 +168,7 @@
 }
 .card:hover .checkbox,.checkbox[data-checked=true]{opacity:1}
 .titleRow:has(.checkbox:hover) .status,.titleRow:has(.checkbox[data-checked=true]) .status{opacity:0}
-.checkbox[data-checked=true]{border-color:var(--accent-primary);background:var(--accent-primary)}
+.checkbox[data-checked=true]{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}
 .title{
   min-width:0;
   display:-webkit-box;

@@ -170,6 +170,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/account/sessions/others", s.revokeOtherSessions)
 	mux.HandleFunc("POST /api/account/change-password", s.changeAccountPassword)
 	mux.HandleFunc("GET /api/realtime/events", s.realtimeEvents)
+	mux.HandleFunc("GET /api/realtime/socket", s.realtimeSocket)
 	mux.HandleFunc("POST /api/realtime/presence", s.updatePresence)
 	mux.HandleFunc("GET /api/search", s.searchWorkspace)
 	mux.HandleFunc("DELETE /api/search/history", s.clearSearchHistory)
@@ -2542,16 +2543,34 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	if len(input.DocumentUpdateIDs) > 10_000 || slices.ContainsFunc(input.DocumentUpdateIDs, func(id string) bool { return len(id) > 191 }) {
+		writeError(w, http.StatusBadRequest, "Too many document updates")
+		return
+	}
 	id := r.PathValue("id")
+	workspace := workspaceKey(r)
+	if workspace == "" {
+		workspace = s.store.Bootstrap().Workspace.URLKey
+	}
 	var updated, current domain.Issue
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.updated", id, input, func(data *domain.Bootstrap) error {
+	payload := struct {
+		Changes domain.IssueUpdateInput `json:"changes"`
+		Issue   domain.Issue            `json:"issue"`
+	}{Changes: input}
+	err := s.store.MutateWorkspace(r.Context(), workspace, "issue.updated", id, &payload, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, id)
 		if err != nil {
 			return err
 		}
-		if input.ExpectedVersion != nil && issue.Version != *input.ExpectedVersion {
-			current = *issue
-			return errConflict
+		if input.DescriptionData != nil && input.ExpectedDocumentVersion != nil {
+			documentVersion := int64(0)
+			if issue.DocumentContent != nil {
+				documentVersion = issue.DocumentContent.Version
+			}
+			if documentVersion != *input.ExpectedDocumentVersion {
+				current = *issue
+				return errConflict
+			}
 		}
 		changes, err := applyUpdate(data, issue, input)
 		if err != nil {
@@ -2561,6 +2580,7 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 		applySLARules(data, issue, issue.UpdatedAt)
 		issue.Version++
 		updated = *issue
+		payload.Issue = updated
 		activity := appendActivity(data, id, "issue.updated", data.Viewer, changes)
 		appendIssueNotifications(data, *issue, activity, nil)
 		return nil
@@ -2570,19 +2590,34 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err == nil {
-		s.dispatchNotificationEmails(r.Context(), workspaceKey(r))
+		if updated.DocumentContent != nil && len(input.DocumentUpdateIDs) > 0 {
+			// Persisting the new base before pruning is crash-safe: replaying an
+			// already included Yjs update is idempotent.
+			if deleteErr := s.store.DeleteDocumentCollaborationUpdates(r.Context(), workspace, updated.DocumentContent.ID, input.DocumentUpdateIDs); deleteErr != nil {
+				log.Printf("compact collaboration updates document=%s: %v", updated.DocumentContent.ID, deleteErr)
+			}
+		}
+		s.dispatchNotificationEmails(r.Context(), workspace)
 	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
 func (s *server) deleteIssue(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.deleted", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
+	workspace := workspaceKey(r)
+	if workspace == "" {
+		workspace = s.store.Bootstrap().Workspace.URLKey
+	}
+	documentID := "document_content_" + id
+	err := s.store.MutateWorkspace(r.Context(), workspace, "issue.deleted", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == id })
 		if index < 0 {
 			return errNotFound
 		}
 		removed := data.Issues[index]
+		if removed.DocumentContent != nil && removed.DocumentContent.ID != "" {
+			documentID = removed.DocumentContent.ID
+		}
 		if err := appendTrash(data, "issue", removed.ID, removed.Identifier+" "+removed.Title, deletedIssuePayload{Issue: removed, Comments: data.Comments[id], Activities: data.Activities[id]}); err != nil {
 			return err
 		}
@@ -2638,6 +2673,11 @@ func (s *server) deleteIssue(w http.ResponseWriter, r *http.Request) {
 		}
 		return nil
 	})
+	if err == nil {
+		if deleteErr := s.store.DeleteDocumentCollaborationDocument(r.Context(), workspace, documentID); deleteErr != nil {
+			log.Printf("delete collaboration document=%s: %v", documentID, deleteErr)
+		}
+	}
 	if err != nil {
 		respondMutation(w, err, http.StatusOK, nil)
 		return
@@ -3325,6 +3365,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		if issue.DocumentContent == nil {
 			issue.DocumentContent = &domain.DocumentContent{ID: "document_content_" + issue.ID}
 		}
+		issue.DocumentContent.Version++
 		issue.DocumentContent.Content = content
 		issue.DocumentContent.ContentData = input.DescriptionData
 		issue.DocumentContent.ContentState = contentState

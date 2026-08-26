@@ -24,7 +24,7 @@ export type LabelResourceType = 'issue'|'project'|'initiative'
 export interface IssueLabel { id: UUID; name: string; color: string; description?: string; issueCount?: number; scope?: string; resourceType?: LabelResourceType; groupId?: UUID; creatorId?: UUID; createdAt?: string; lastAppliedAt?: string; archivedAt?: string }
 export interface LabelGroup { id: UUID; name: string; color: string; description?: string; scope?: string; resourceType: 'issue'|'project'; createdAt: string; archivedAt?: string }
 export interface ProjectSummary { id: UUID; name: string; icon?: string; color: string }
-export interface DocumentContent { id: UUID; content: string; contentState: string; contentData: Record<string, unknown>; updatedAt: string }
+export interface DocumentContent { id: UUID; version: number; content: string; contentState: string; contentData: Record<string, unknown>; updatedAt: string }
 export interface DocumentRevision { id: UUID; documentId: UUID; title: string; content: string; contentState?: string; contentData?: Record<string, unknown>; author: User; createdAt: string }
 export interface FlowDocument { id: UUID; slugId: string; title: string; icon?: string; content: string; contentState?: string; contentData?: Record<string, unknown>; creator: User; projectIds: UUID[]; teamIds: UUID[]; issueId?: UUID; subscriberIds: UUID[]; favorite: boolean; archivedAt?: string; createdAt: string; updatedAt: string; revisions: DocumentRevision[] }
 export interface DocumentTemplate { id: UUID; teamId: UUID; name: string; description?: string; title?: string; icon?: string; content?: string; contentState?: string; contentData?: Record<string,unknown>; creator: User; createdAt: string; updatedAt: string }
@@ -186,6 +186,8 @@ export interface FilterCondition { id: string; field: FilterField; operator: 'is
 export interface IssueUpdateInput {
   expectedVersion?: number
   title?: string; description?: string; descriptionState?: string; descriptionData?: Record<string, unknown>; contentState?: string; stateId?: string; priority?: number; assigneeId?: string
+  documentUpdateIds?: string[]
+  expectedDocumentVersion?: number
   projectId?: string; projectMilestoneId?: string; cycleId?: string; dueDate?: string; labelIds?: string[]; subscriberIds?: string[]; archived?: boolean
   recurrence?: ''|'daily'|'weekly'|'monthly'; nextOccurrenceAt?: string
   parentId?: string; sortOrder?: number
@@ -206,4 +208,4 @@ export interface AgentChatResponse { message: string; model: string }
 export interface RecentResource { resourceType: SearchResourceType; resourceId: UUID; lastViewedAt: string }
 export interface SearchResponse { results: SearchResult[]; history: SearchHistoryEntry[]; recent: RecentResource[] }
 export interface Presence { clientId: string; user: User; issueId?: UUID; route?: string; lastSeenAt: string }
-export interface RealtimeEvent { id: string; type: string; aggregateId?: UUID; actorId?: UUID; clientId?: string; payload?: { presence?: Presence[] }; createdAt: string }
+export interface RealtimeEvent { id: string; type: string; aggregateId?: UUID; actorId?: UUID; clientId?: string; payload?: { presence?: Presence[]; issue?: Issue; changes?: IssueUpdateInput }; createdAt: string }

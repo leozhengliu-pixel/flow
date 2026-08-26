@@ -182,6 +182,7 @@ type ProjectSummary struct {
 
 type DocumentContent struct {
 	ID           string         `json:"id"`
+	Version      int64          `json:"version"`
 	Content      string         `json:"content"`
 	ContentState string         `json:"contentState"`
 	ContentData  map[string]any `json:"contentData"`
@@ -1416,29 +1417,31 @@ type ReactionInput struct {
 }
 
 type IssueUpdateInput struct {
-	ExpectedVersion    *int64         `json:"expectedVersion,omitempty"`
-	Title              *string        `json:"title,omitempty"`
-	Description        *string        `json:"description,omitempty"`
-	DescriptionState   *string        `json:"descriptionState,omitempty"`
-	DescriptionData    map[string]any `json:"descriptionData,omitempty"`
-	ContentState       *string        `json:"contentState,omitempty"`
-	StateID            *string        `json:"stateId,omitempty"`
-	Priority           *int           `json:"priority,omitempty"`
-	AssigneeID         *string        `json:"assigneeId,omitempty"`
-	DelegateID         *string        `json:"delegateId,omitempty"`
-	ProjectID          *string        `json:"projectId,omitempty"`
-	ProjectMilestoneID *string        `json:"projectMilestoneId,omitempty"`
-	CycleID            *string        `json:"cycleId,omitempty"`
-	DueDate            *string        `json:"dueDate,omitempty"`
-	SLABreachesAt      *string        `json:"slaBreachesAt,omitempty"`
-	SLAType            *string        `json:"slaType,omitempty"`
-	LabelIDs           *[]string      `json:"labelIds,omitempty"`
-	SubscriberIDs      *[]string      `json:"subscriberIds,omitempty"`
-	Archived           *bool          `json:"archived,omitempty"`
-	ParentID           *string        `json:"parentId,omitempty"`
-	SortOrder          *float64       `json:"sortOrder,omitempty"`
-	Recurrence         *string        `json:"recurrence,omitempty"`
-	NextOccurrenceAt   *string        `json:"nextOccurrenceAt,omitempty"`
+	ExpectedVersion         *int64         `json:"expectedVersion,omitempty"`
+	Title                   *string        `json:"title,omitempty"`
+	Description             *string        `json:"description,omitempty"`
+	DescriptionState        *string        `json:"descriptionState,omitempty"`
+	DescriptionData         map[string]any `json:"descriptionData,omitempty"`
+	ContentState            *string        `json:"contentState,omitempty"`
+	ExpectedDocumentVersion *int64         `json:"expectedDocumentVersion,omitempty"`
+	DocumentUpdateIDs       []string       `json:"documentUpdateIds,omitempty"`
+	StateID                 *string        `json:"stateId,omitempty"`
+	Priority                *int           `json:"priority,omitempty"`
+	AssigneeID              *string        `json:"assigneeId,omitempty"`
+	DelegateID              *string        `json:"delegateId,omitempty"`
+	ProjectID               *string        `json:"projectId,omitempty"`
+	ProjectMilestoneID      *string        `json:"projectMilestoneId,omitempty"`
+	CycleID                 *string        `json:"cycleId,omitempty"`
+	DueDate                 *string        `json:"dueDate,omitempty"`
+	SLABreachesAt           *string        `json:"slaBreachesAt,omitempty"`
+	SLAType                 *string        `json:"slaType,omitempty"`
+	LabelIDs                *[]string      `json:"labelIds,omitempty"`
+	SubscriberIDs           *[]string      `json:"subscriberIds,omitempty"`
+	Archived                *bool          `json:"archived,omitempty"`
+	ParentID                *string        `json:"parentId,omitempty"`
+	SortOrder               *float64       `json:"sortOrder,omitempty"`
+	Recurrence              *string        `json:"recurrence,omitempty"`
+	NextOccurrenceAt        *string        `json:"nextOccurrenceAt,omitempty"`
 }
 
 type IssueLinkInput struct {

@@ -166,11 +166,10 @@ export class ApiError<T = unknown> extends Error {
 }
 
 export function realtimeClientId() {
-  const key = 'flow.realtime-client-id'
-  let value = sessionStorage.getItem(key)
-  if (!value) { value = crypto.randomUUID(); sessionStorage.setItem(key, value) }
-  return value
+  return pageRealtimeClientId
 }
+
+const pageRealtimeClientId = crypto.randomUUID()
 
 export function searchWorkspace(query: string, types: SearchResourceType[] = [], limit = 40): Promise<SearchResponse> {
   const params = new URLSearchParams({ q: query, limit: String(limit) })
