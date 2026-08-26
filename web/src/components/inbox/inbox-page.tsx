@@ -5,7 +5,7 @@ import type { Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 import { InboxDetailError, InboxDetailLoading, InboxDetailPreview } from './inbox-detail-preview'
 import { InboxListBoundary } from './inbox-list-state'
 import { InboxNotificationList } from './notification-list'
-import { InboxPageShell, type InboxDisplayOptions, type InboxFilterKind } from './inbox-page-shell'
+import { InboxPageShell, type InboxDisplayOptions } from './inbox-page-shell'
 import { useInboxController, type InboxPersistenceAdapter } from './inbox-controller'
 import type { InboxFilterCondition, InboxFilterOptions } from './inbox-filter-builder'
 import type { InboxNotificationRowData } from './notification-row'
@@ -37,12 +37,10 @@ export interface InboxPageProps {
   adapter: InboxPageAdapter
   displayOptions: InboxDisplayOptions
   onDisplayOptionsChange: (options: InboxDisplayOptions) => void
-  filterCount?: number
   filters?: InboxFilterCondition[]
   filterOptions?: InboxFilterOptions
   filterHiddenCount?: number
   onFiltersChange?: (filters: InboxFilterCondition[]) => void
-  onAddFilter: (filter: InboxFilterKind) => void
   renderDetail: (notification: InboxNotificationRowData) => InboxDetailRenderResult
   onOpenIssue: (notification: InboxNotificationRowData) => void
   onOpenSidebar?: () => void
@@ -124,14 +122,12 @@ export function InboxPage(props: InboxPageProps) {
       <InboxPageShell
         detail={preview}
         displayOptions={props.displayOptions}
-        filterCount={props.filterCount}
         filters={props.filters}
         filterOptions={props.filterOptions}
         filterHiddenCount={props.filterHiddenCount}
         bulkPending={Boolean(bulkPending)}
         onFiltersChange={props.onFiltersChange}
         onDisplayOptionsChange={props.onDisplayOptionsChange}
-        onAddFilter={props.onAddFilter}
         onOpenSidebar={props.onOpenSidebar}
         onDeleteAll={() => void runPageAction('all', props.adapter.deleteAll)}
         onDeleteAllRead={() => void runPageAction('read', props.adapter.deleteAllRead)}

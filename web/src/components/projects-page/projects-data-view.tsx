@@ -278,19 +278,19 @@ function ProjectGroupHeader({ collapsed, color = '#d6b326', count, name, onCreat
   </div>
 }
 
-function ProjectListRow({ project, selected, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, onSelect, propertyOptions, visible }: {
+type ProjectItemActions = {
   project: ProjectPageItem
-  selected: boolean
   onOpen?: (project: ProjectPageItem) => void
   onOpenIssues?: (project: ProjectPageItem) => void
   onOpenUpdates?: (project: ProjectPageItem) => void
   onProjectAction?: (project: ProjectPageItem, action: ProjectAction) => void
   onProjectVisualChange?: (project: ProjectPageItem, icon: string, color: string) => void
   onPropertyChange?: (project: ProjectPageItem, property: ProjectProperty, value: string) => void
-  onSelect: (id: string, range?: boolean) => void
   propertyOptions?: ProjectPropertyOptions
   visible: Set<string>
-}) {
+}
+
+function ProjectListRow({ project, selected, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, onSelect, propertyOptions, visible }: ProjectItemActions & { selected: boolean; onSelect: (id: string, range?: boolean) => void }) {
   const [menuPoint, setMenuPoint] = useState<{ x: number, y: number } | null>(null)
   const rowKey = (event: KeyboardEvent<HTMLAnchorElement>) => {
     if (event.target !== event.currentTarget) return
@@ -306,7 +306,7 @@ function ProjectListRow({ project, selected, onOpen, onOpenIssues, onOpenUpdates
       aria-selected={selected}
       className={`lp-project-row ${selected ? 'is-selected' : ''}`}
       href={project.href}
-      onClick={event => { if ((event.target as Element).closest('button,input,label')) { event.preventDefault(); return } if (onOpen && !event.metaKey && !event.ctrlKey && !event.shiftKey && event.button === 0) { event.preventDefault(); onOpen(project) } }}
+      onClick={event => openProjectLink(event, project, onOpen)}
       onContextMenu={event => {
         event.preventDefault()
         setMenuPoint({ x: event.clientX, y: event.clientY })
@@ -325,17 +325,14 @@ function ProjectListRow({ project, selected, onOpen, onOpenIssues, onOpenUpdates
         <div><strong>{project.name}</strong>{project.summary && <small>{project.summary}</small>}</div>
       </div>
       <div hidden={!visible.has('Health')} role="gridcell"><button aria-label={project.healthLabel ?? `${healthText(project.health)}. Click to open updates.`} className="lp-project-row__health" onClick={event => { stopPropagation(event); onOpenUpdates?.(project) }} type="button"><HealthIcon value={project.health} /><span>{healthText(project.health)}</span>{project.health !== 'no-update' && <small>· {compactAge(project.updatedAt)}</small>}</button></div>
-      <div hidden={!visible.has('Priority')} role="gridcell"><ProjectPropertyPicker label={`${priorityText(project.priority)} Priority`} onChange={value => onPropertyChange?.(project, 'priority', value)} options={propertyOptions?.priority ?? PROPERTY_OPTIONS.priority} property="priority" value={project.priority}><PriorityIcon value={project.priority} /></ProjectPropertyPicker></div>
+      <div hidden={!visible.has('Priority')} role="gridcell"><ProjectPropertyPicker label={`${priorityText(project.priority)} Priority`} onChange={value => onPropertyChange?.(project, 'priority', value)} options={propertyOptions?.priority ?? PROPERTY_OPTIONS.priority} property="priority" value={project.priority}><DataViewPriorityIcon value={project.priority} /></ProjectPropertyPicker></div>
       <div className={`lp-project-row__lead ${project.lead ? '' : 'is-empty'}`} hidden={!visible.has('Lead')} role="gridcell"><LeadPropertyButton lead={project.lead} onChange={value => onPropertyChange?.(project, 'lead', value)} options={propertyOptions?.lead} /></div>
       <div hidden={!visible.has('Target date')} role="gridcell"><ProjectTargetDatePicker buttonClassName="lp-project-row__date" displayValue={project.targetDate} onChange={value => onPropertyChange?.(project, 'targetDate', value)} value={project.rawTargetDate}>{project.targetDate || <span className="lp-project-row__date-placeholder">Set date</span>}</ProjectTargetDatePicker></div>
       <div hidden={!visible.has('Issues')} role="gridcell"><button aria-label={`Open ${project.name} issues`} className="lp-project-row__issues" onClick={event => { stopPropagation(event); onOpenIssues?.(project) }} type="button">{project.issueCount}</button></div>
       <div hidden={!visible.has('Status')} role="gridcell"><ProjectPropertyPicker buttonClassName="lp-project-row__progress" label={`${project.progress}%`} onChange={value => onPropertyChange?.(project, 'status', value)} options={propertyOptions?.status ?? PROPERTY_OPTIONS.status} property="status" value={project.status}><ProgressIcon progress={project.progress} /><span>{project.progress}%</span><ProgressBar progress={project.progress} /></ProjectPropertyPicker></div>
       <span />
     </a>
-    {menuPoint && <ProjectContextMenu options={propertyOptions} project={project} onPropertyChange={(property, value) => onPropertyChange?.(project, property, value)} onAction={action => {
-      setMenuPoint(null)
-      onProjectAction?.(project, action)
-    }} onClose={() => setMenuPoint(null)} point={menuPoint} />}
+    <ProjectItemMenu onProjectAction={onProjectAction} onPropertyChange={onPropertyChange} options={propertyOptions} point={menuPoint} project={project} setPoint={setMenuPoint}/>
   </>
 }
 
@@ -361,24 +358,14 @@ function ProjectBoardColumn({ group, onCreateProject, onOpenProject, onOpenProje
   </section>
 }
 
-function ProjectBoardCard({ project, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, propertyOptions, visible }: {
-  project: ProjectPageItem
-  onOpen?: (project: ProjectPageItem) => void
-  onOpenIssues?: (project: ProjectPageItem) => void
-  onOpenUpdates?: (project: ProjectPageItem) => void
-  onProjectAction?: (project: ProjectPageItem, action: ProjectAction) => void
-  onProjectVisualChange?: (project: ProjectPageItem, icon: string, color: string) => void
-  onPropertyChange?: (project: ProjectPageItem, property: ProjectProperty, value: string) => void
-  propertyOptions?: ProjectPropertyOptions
-  visible: Set<string>
-}) {
+function ProjectBoardCard({ project, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, propertyOptions, visible }: ProjectItemActions) {
   const [menuPoint, setMenuPoint] = useState<{ x: number, y: number } | null>(null)
   return <>
     <a
       aria-label={project.name}
       className="lp-project-card"
       href={project.href}
-      onClick={event => { if ((event.target as Element).closest('button,input,label')) { event.preventDefault(); return } if (onOpen && !event.metaKey && !event.ctrlKey && !event.shiftKey && event.button === 0) { event.preventDefault(); onOpen(project) } }}
+      onClick={event => openProjectLink(event, project, onOpen)}
       onContextMenu={event => {
         event.preventDefault()
         setMenuPoint({ x: event.clientX, y: event.clientY })
@@ -389,7 +376,7 @@ function ProjectBoardCard({ project, onOpen, onOpenIssues, onOpenUpdates, onProj
     >
       <div className="lp-project-card__top"><span className="lp-project-card__identity"><ViewIconPicker color={project.color} icon={project.icon || 'Project'} onChange={visual => onProjectVisualChange?.(project, visual.icon, visual.color)} triggerClassName="lp-project-row__project-icon"/><strong>{project.name}</strong></span><span className="lp-project-card__properties">
         {visible.has('Health') && <button aria-label={project.healthLabel ?? `${healthText(project.health)}. Click to open updates.`} className="lp-project-property-trigger" onClick={event => { stopPropagation(event); onOpenUpdates?.(project) }} type="button"><HealthIcon value={project.health} /></button>}
-        {visible.has('Priority') && <ProjectPropertyPicker label={`${priorityText(project.priority)} Priority`} onChange={value => onPropertyChange?.(project, 'priority', value)} options={propertyOptions?.priority ?? PROPERTY_OPTIONS.priority} property="priority" value={project.priority}><PriorityIcon value={project.priority} /></ProjectPropertyPicker>}
+        {visible.has('Priority') && <ProjectPropertyPicker label={`${priorityText(project.priority)} Priority`} onChange={value => onPropertyChange?.(project, 'priority', value)} options={propertyOptions?.priority ?? PROPERTY_OPTIONS.priority} property="priority" value={project.priority}><DataViewPriorityIcon value={project.priority} /></ProjectPropertyPicker>}
         {visible.has('Lead') && <span className={`lp-project-card__lead ${project.lead ? '' : 'is-empty'}`}><LeadPropertyButton lead={project.lead} onChange={value => onPropertyChange?.(project, 'lead', value)} options={propertyOptions?.lead} /></span>}
       </span></div>
       {visible.has('Summary') && project.summary && <p>{project.summary}</p>}
@@ -399,11 +386,17 @@ function ProjectBoardCard({ project, onOpen, onOpenIssues, onOpenUpdates, onProj
         {visible.has('Issues') && <button className="lp-project-card__issues" onClick={event => { stopPropagation(event); onOpenIssues?.(project) }} type="button">{project.issueCount} issues</button>}
       </div>
     </a>
-    {menuPoint && <ProjectContextMenu options={propertyOptions} project={project} onPropertyChange={(property, value) => onPropertyChange?.(project, property, value)} onAction={action => {
-      setMenuPoint(null)
-      onProjectAction?.(project, action)
-    }} onClose={() => setMenuPoint(null)} point={menuPoint} />}
+    <ProjectItemMenu onProjectAction={onProjectAction} onPropertyChange={onPropertyChange} options={propertyOptions} point={menuPoint} project={project} setPoint={setMenuPoint}/>
   </>
+}
+
+function openProjectLink(event: MouseEvent<HTMLAnchorElement>, project: ProjectPageItem, onOpen?: (project: ProjectPageItem) => void) {
+  if ((event.target as Element).closest('button,input,label')) { event.preventDefault(); return }
+  if (onOpen && !event.metaKey && !event.ctrlKey && !event.shiftKey && event.button === 0) { event.preventDefault(); onOpen(project) }
+}
+
+function ProjectItemMenu({ onProjectAction, onPropertyChange, options, point, project, setPoint }: Pick<ProjectItemActions,'onProjectAction'|'onPropertyChange'|'project'> & { options?: ProjectPropertyOptions; point: {x:number;y:number}|null; setPoint: (point:{x:number;y:number}|null)=>void }) {
+  return point ? <ProjectContextMenu options={options} project={project} onPropertyChange={(property,value)=>onPropertyChange?.(project,property,value)} onAction={action=>{setPoint(null);onProjectAction?.(project,action)}} onClose={()=>setPoint(null)} point={point}/> : null
 }
 
 function LeadPropertyButton({ lead, onChange, options }: {
@@ -584,7 +577,7 @@ function SimpleSubmenu({ items, onChoose, query, searchable, setQuery }: { items
 }
 
 function ContextOptionIcon({ option, property }: { option: ProjectPropertyOption; property: ProjectProperty }) {
-  if (property === 'priority') return <PriorityIcon value={option.value as ProjectPageItem['priority']}/>
+  if (property === 'priority') return <DataViewPriorityIcon value={option.value as ProjectPageItem['priority']}/>
   if (property === 'lead' || property === 'members') {
     if (!option.value) return <NoAssigneeIcon size={15}/>
     if (option.avatarUrl) return <img alt="" className="lp-project-avatar" src={option.avatarUrl}/>
@@ -666,7 +659,7 @@ async function copyProjectValue(project: ProjectPageItem, label: string) {
   await navigator.clipboard?.writeText(value)
 }
 
-function ProjectIcon({ color = '#8b8b90', icon }: { color?: string, icon?: string }) {
+function DataViewProjectIcon({ color = '#8b8b90', icon }: { color?: string, icon?: string }) {
   return <span aria-hidden="true" className="lp-project-symbol"><ViewGlyph color={color} icon={icon || 'Project'}/></span>
 }
 
@@ -674,7 +667,7 @@ function HealthIcon({ value }: { value: ProjectPageItem['health'] }) {
   return <span aria-hidden="true" className={`lp-project-health is-${value}`}><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeDasharray={value === 'no-update' ? '2 2' : undefined} /><path d="m4.2 9 2.2-2.4 2.1 1.8 3.1-3.1" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
 }
 
-function PriorityIcon({ value }: { value: ProjectPageItem['priority'] }) {
+function DataViewPriorityIcon({ value }: { value: ProjectPageItem['priority'] }) {
   const bars = value === 'none' ? 0 : value === 'low' ? 1 : value === 'medium' ? 2 : 3
   return <span aria-hidden="true" className={`lp-project-priority is-${value}`}><svg viewBox="0 0 16 16">{[0, 1, 2].map(index => <rect fill={index < bars ? 'currentColor' : 'currentColor'} opacity={index < bars ? 1 : .25} height={[6, 9, 12][index]} key={index} rx="1" width="3" x={1.5 + index * 5} y={[9, 6, 3][index]} />)}</svg></span>
 }
@@ -720,7 +713,7 @@ function ProjectsLoadingState({ layout }: { layout: 'list' | 'board' | 'timeline
 }
 
 function ProjectsEmptyState({ onCreate }: { onCreate: () => void }) {
-  return <div className="lp-project-state lp-project-state--message"><ProjectIcon /><h2>No projects</h2><button onClick={onCreate} type="button"><PlusIcon /> New project</button></div>
+  return <div className="lp-project-state lp-project-state--message"><DataViewProjectIcon /><h2>No projects</h2><button onClick={onCreate} type="button"><PlusIcon /> New project</button></div>
 }
 
 function ProjectsErrorState({ error, onRetry }: { error: string, onRetry?: () => void }) {

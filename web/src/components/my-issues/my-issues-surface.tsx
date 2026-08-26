@@ -1,7 +1,8 @@
-import { forwardRef, useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { ChartNoAxesColumn } from 'lucide-react'
 import { DetailsIcon, FilterIcon } from './my-issues-icons'
 import { defaultMyIssuesDisplayOptions } from './my-issues-display-defaults'
+import { useIssueSurfaceControls } from './use-issue-surface-controls'
 import { MyIssuesDisplayMenu } from './my-issues-display-menu'
 import { MyIssuesFilterMenu } from './my-issues-filter-menu'
 import type { MyIssuesAppliedFilter } from './my-issues-filter-types'
@@ -83,22 +84,7 @@ export function MyIssuesSurface({
   activeView = 'assigned', children, filterBar, detailsOpen = false, insightsOpen = false, displayOptions = defaultMyIssuesDisplayOptions, filterOpenSignal = 0, filters = [], viewCounts, viewHref,
   filterOptions, onDetailsOpenChange, onInsightsOpenChange, onDisplayOptionsChange, onFilterSelect, onFilterToggle, onViewChange, onOpenSidebar,
 }: MyIssuesSurfaceProps) {
-  const [filterOpen, setFilterOpen] = useState(false)
-  const [displayOpen, setDisplayOpen] = useState(false)
-  const changeFilterOpen = (open: boolean) => { setFilterOpen(open); if (open) setDisplayOpen(false) }
-  const changeDisplayOpen = (open: boolean) => { setDisplayOpen(open); if (open) setFilterOpen(false) }
-  useEffect(() => { if (filterOpenSignal > 0) { setDisplayOpen(false); setFilterOpen(true) } }, [filterOpenSignal])
-  useEffect(() => {
-    const toggleDetails = (event: globalThis.KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'i') return
-      const target = event.target as HTMLElement | null
-      if (target?.closest('input, textarea, [contenteditable="true"], [role="textbox"]')) return
-      event.preventDefault()
-      onDetailsOpenChange?.(!detailsOpen)
-    }
-    window.addEventListener('keydown', toggleDetails)
-    return () => window.removeEventListener('keydown', toggleDetails)
-  }, [detailsOpen, onDetailsOpenChange])
+  const {changeDisplayOpen,changeFilterOpen,displayOpen,filterOpen}=useIssueSurfaceControls(filterOpenSignal,detailsOpen,onDetailsOpenChange)
   return <main className={styles.surface} data-my-issues-surface="true">
     <header className={styles.header}>
       <button className={styles.mobileSidebarButton} aria-label="Open sidebar" onClick={onOpenSidebar}><span/><span/><span/></button>

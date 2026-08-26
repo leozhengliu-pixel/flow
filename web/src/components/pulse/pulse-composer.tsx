@@ -38,7 +38,7 @@ export function PulseComposer({ initiatives, onCreateInitiative, onCreateProject
   return <Dialog.Root onOpenChange={onOpenChange} open={open}><Dialog.Portal><Dialog.Overlay className="pulse-dialog-overlay"/><Dialog.Content aria-describedby={undefined} aria-label={`Create ${source?.kind ?? ''} update`} className="pulse-composer">
     <header>
       <SourceMenu initiatives={initiatives} projects={projects} source={source} onChange={setSource}/>
-      <HealthMenu health={health} onChange={setHealth}/>
+      <PulseHealthMenu health={health} onChange={setHealth}/>
       <Dialog.Close asChild><button aria-label="Close dialog" className="pulse-composer-close" type="button"><X size={15}/></button></Dialog.Close>
     </header>
     <textarea aria-label={source?.kind === 'initiative' ? 'Initiative update' : 'Project update'} autoFocus onChange={event => setBody(event.target.value)} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); void submit() } }} placeholder={source?.kind === 'initiative' ? 'Write an initiative update…' : 'Write a project update…'} value={body}/>
@@ -62,7 +62,7 @@ function SourceMenu({ initiatives, onChange, projects, source }: { initiatives: 
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 
-function HealthMenu({ health, onChange }: { health: Project['health']; onChange: (health: Project['health']) => void }) {
+function PulseHealthMenu({ health, onChange }: { health: Project['health']; onChange: (health: Project['health']) => void }) {
   const values: Project['health'][] = ['onTrack', 'atRisk', 'offTrack']
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')

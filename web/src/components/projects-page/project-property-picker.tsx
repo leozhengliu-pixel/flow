@@ -39,7 +39,7 @@ export function ProjectPropertyPicker({ buttonClassName = '', children, label, o
     shortcut: option.shortcut,
     groupId: option.group,
     groupLabel: option.group,
-    icon: <OptionIcon option={option} property={property}/>,
+    icon: <ProjectPropertyOptionIcon option={option} property={property}/>,
     i18nIgnore: property === 'lead',
   }))
   return <PropertyMenu
@@ -59,7 +59,7 @@ export function ProjectPropertyPicker({ buttonClassName = '', children, label, o
   />
 }
 
-function OptionIcon({ option, property }: { option: ProjectPropertyOption; property: ProjectPickerProperty }) {
+function ProjectPropertyOptionIcon({ option, property }: { option: ProjectPropertyOption; property: ProjectPickerProperty }) {
   if (property === 'priority') return <PriorityIcon priority={priorityNumber(option.value)} size={15}/>
   if (property === 'lead') {
     if (!option.value) return <NoAssigneeIcon className={styles.optionIcon} size={15}/>

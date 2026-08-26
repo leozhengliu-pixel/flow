@@ -8,6 +8,7 @@ import { NoAssigneeIcon, PriorityIcon } from '@/components/issue/issue-icons'
 import { EmojiPicker } from '@/components/reactions/emoji-picker'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
+import { useCommentComposer } from '@/hooks/use-comment-composer'
 import type { Project, ProjectUpdate, User } from '@/types/flow'
 
 const HEALTHS: { id: Project['health']; label: string }[] = [{ id: 'onTrack', label: 'On track' }, { id: 'atRisk', label: 'At risk' }, { id: 'offTrack', label: 'Off track' }]
@@ -144,26 +145,13 @@ function ProjectUpdateComposer({ body, health, mode, onCancel, onSubmit, saving,
 function ProjectUpdateArticle({ active, dataIndex, menuRef, onComment, onDelete, onEdit, onReact, project, reactionRef, update, viewer }: { active: boolean; dataIndex: number; menuRef: RefObject<HTMLDivElement | null>; onComment?: (projectId: string, updateId: string, body: string) => Promise<ProjectUpdate>; onDelete: () => void; onEdit: () => void; onReact?: (projectId: string, updateId: string, emoji: string) => Promise<ProjectUpdate>; project: Project; reactionRef: RefObject<HTMLDivElement | null>; update: ProjectUpdate; viewer?: User }) {
   const canModify = !viewer || viewer.id === update.user.id
   const [commentsOpen, setCommentsOpen] = useState(false)
-  const [comment, setComment] = useState('')
-  const [posting, setPosting] = useState(false)
+  const {comment,posting,setComment,submitComment}=useCommentComposer(body=>onComment ? onComment(project.id,update.id,body) : Promise.reject(new Error('Comments are unavailable')))
   const comments = update.comments ?? []
   const reactions = update.reactions ?? {}
-  const submitComment = async () => {
-    if (!comment.trim() || !onComment || posting) return
-    setPosting(true)
-    try {
-      await onComment(project.id, update.id, comment.trim())
-      setComment('')
-    } catch (error) {
-      toast.error('Could not post comment', { description: error instanceof Error ? error.message : undefined })
-    } finally {
-      setPosting(false)
-    }
-  }
   return <article className={`lp-project-updates-preview__item ${active ? 'is-active' : ''}`} data-update-index={dataIndex}>
     <header>
       <span className={`lp-project-updates-preview__health is-${update.health}`}><i/>{healthLabel(update.health)}</span>
-      <UserAvatar user={update.user}/><strong>{update.user.displayName}</strong><time title={new Date(update.createdAt).toLocaleString()}>{formatRelative(update.createdAt)}{update.editedAt ? ' · edited' : ''}</time>
+      <UpdateAuthorAvatar user={update.user}/><strong>{update.user.displayName}</strong><time title={new Date(update.createdAt).toLocaleString()}>{formatRelative(update.createdAt)}{update.editedAt ? ' · edited' : ''}</time>
       <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open menu" className="lp-project-updates-preview__item-menu" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className="lp-project-update-menu" ref={menuRef} sideOffset={4}>
         <DropdownMenu.Item onSelect={() => void copyUpdateLink(project, update)}><Copy size={14}/><span>Copy link</span></DropdownMenu.Item>
         <DropdownMenu.Item onSelect={() => void navigator.clipboard?.writeText(`**${healthLabel(update.health)}** — ${update.body}`)}><Copy size={14}/><span>Copy as markdown</span></DropdownMenu.Item>
@@ -175,8 +163,8 @@ function ProjectUpdateArticle({ active, dataIndex, menuRef, onComment, onDelete,
     <div className="lp-project-update-reactions">{Object.entries(reactions).map(([emoji, userIds]) => <button aria-pressed={Boolean(viewer && userIds.includes(viewer.id))} key={emoji} onClick={() => onReact && void onReact(project.id, update.id, emoji)} type="button"><span>{emoji}</span>{userIds.length}</button>)}</div>
     <footer><button aria-expanded={commentsOpen} aria-label={`${comments.length} comments`} onClick={() => setCommentsOpen(value => !value)} type="button"><MessageCircle size={14}/>{comments.length > 0 && <span>{comments.length}</span>}</button><EmojiPicker align="start" contentRef={reactionRef} onSelect={async emoji => { await onReact?.(project.id, update.id, emoji) }}><button aria-label="Add reaction" type="button"><SmilePlus size={14}/></button></EmojiPicker></footer>
     {commentsOpen && <section className="lp-project-update-comments">
-      {comments.map(item => <article key={item.id}><UserAvatar user={item.user}/><div><header><strong>{item.user.displayName}</strong><time>{formatRelative(item.createdAt)}</time></header><p>{item.body}</p></div></article>)}
-      <div className="lp-project-update-comment-box"><UserAvatar user={viewer ?? update.user}/><textarea aria-label="Add comment" onChange={event => setComment(event.target.value)} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); void submitComment() } }} placeholder="Leave a comment…" value={comment}/><button disabled={!comment.trim() || posting || !onComment} onClick={() => void submitComment()} type="button">{posting ? 'Sending…' : 'Comment'}</button></div>
+      {comments.map(item => <article key={item.id}><UpdateAuthorAvatar user={item.user}/><div><header><strong>{item.user.displayName}</strong><time>{formatRelative(item.createdAt)}</time></header><p>{item.body}</p></div></article>)}
+      <div className="lp-project-update-comment-box"><UpdateAuthorAvatar user={viewer ?? update.user}/><textarea aria-label="Add comment" onChange={event => setComment(event.target.value)} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); void submitComment() } }} placeholder="Leave a comment…" value={comment}/><button disabled={!comment.trim() || posting || !onComment} onClick={() => void submitComment()} type="button">{posting ? 'Sending…' : 'Comment'}</button></div>
     </section>}
   </article>
 }
@@ -184,7 +172,7 @@ function ProjectUpdateArticle({ active, dataIndex, menuRef, onComment, onDelete,
 function ProjectUpdateMetadata({ project }: { project: Project }) {
   return <div className="lp-project-updates-preview__metadata">
     <div><span>Priority</span><PriorityIcon priority={project.priority} size={14}/><strong>{project.priorityLabel}</strong></div>
-    <div><span>Lead</span>{project.lead ? <><UserAvatar user={project.lead}/><strong>{project.lead.displayName} assigned</strong></> : <><NoAssigneeIcon size={14}/><strong>No lead</strong></>}</div>
+    <div><span>Lead</span>{project.lead ? <><UpdateAuthorAvatar user={project.lead}/><strong>{project.lead.displayName} assigned</strong></> : <><NoAssigneeIcon size={14}/><strong>No lead</strong></>}</div>
     {project.startDate && <div><span>Start date</span><strong>set to {formatLongDate(project.startDate)}</strong></div>}
   </div>
 }
@@ -193,7 +181,7 @@ function NoProjectUpdatesIllustration() {
   return <svg aria-label="No project updates illustration" className="lp-project-updates-preview__illustration" fill="none" viewBox="0 0 119 68"><path d="M108.141 43.127 22.635 66.453c-2.237.61-4.906.435-7.408-.379-2.503-.813-4.763-2.242-6.212-4.051l-5.96-7.443c-.881-1.099-1.305-2.224-1.305-3.233v-3.773c0-.093.053-.3.49-.418l89.608-24.289c1.878-.509 4.116-.392 6.25.253 2.131.644 4.095 1.797 5.44 3.287l8.212 9.097v3.782c0 1.699-1.227 3.19-3.609 3.84Z"/><path d="M3.107 50.575C.34 47.14 1.55 43.428 5.812 42.28l85.212-22.939c4.333-1.166 10.137.766 12.86 4.281l6.546 8.45c2.639 3.406 1.395 7.03-2.799 8.164L22.687 63.18c-4.27 1.154-9.99-.706-12.766-4.15l-6.814-8.456Z"/><path d="M6.054 45.578c-.88-1.099-1.304-2.224-1.304-3.233v-3.773c0-.094.053-.3.49-.418l89.608-24.289c1.878-.509 4.116-.392 6.249.253 2.132.644 4.096 1.797 5.441 3.287l8.212 9.097V30.284c0 1.699-1.227 3.19-3.609 3.84L25.635 57.452c-2.237.61-4.906.435-7.409-.378-2.502-.814-4.762-2.243-6.212-4.052l-5.96-7.443Z"/><path d="M6.108 41.573c-2.769-3.435-1.558-7.147 2.704-8.295L94.024 10.34c4.333-1.166 10.137.766 12.861 4.281l6.546 8.45c2.638 3.406 1.395 7.03-2.8 8.164L25.687 54.179c-4.27 1.154-9.99-.706-12.766-4.15l-6.813-8.456Z"/><path d="M9.054 36.58c-.88-1.1-1.304-2.225-1.304-3.234v-3.773c0-.093.053-.3.49-.418L97.848 4.866c1.878-.509 4.116-.392 6.249.253 2.132.644 4.095 1.797 5.441 3.287l8.212 9.097V21.285c0 1.699-1.227 3.19-3.609 3.84L28.635 48.453c-2.238.61-4.907.435-7.409-.378-2.502-.814-4.763-2.243-6.212-4.052l-5.96-7.443Z"/><path d="M9.107 32.574c-2.768-3.435-1.558-7.147 2.705-8.295L97.023 1.34c4.333-1.166 10.138.766 12.861 4.282l6.546 8.45c2.638 3.405 1.395 7.03-2.8 8.163L28.686 45.18c-4.27 1.154-9.99-.706-12.765-4.15l-6.814-8.456Z"/><path className="is-detail" d="m17.204 29.843.24-.436.48-.872 1.999.64.48-.872.24-.436"/><path className="is-detail" d="M14.215 28.705c-.108-.51.191-.943.72-1.227a8.89 8.89 0 0 1 2.07-.79c.881-.217 1.792-.3 2.482-.328.752-.03 1.574.127 2.247.498.449.249.947.582 1.305.986.357.404.522.82.594 1.16.109.51-.19.943-.72 1.227a8.89 8.89 0 0 1-2.07.79c-.881.217-1.791.3-2.482.328-.752.03-1.574-.127-2.247-.498-.449-.248-.947-.582-1.305-.986a2.532 2.532 0 0 1-.594-1.16Z"/><rect height="1.592" rx=".796" transform="matrix(.96562 -.25994 .62836 .77792 17.712 35.129)" width="91.639"/><rect height="1.592" rx=".796" transform="matrix(.96562 -.25994 .62836 .77792 21.713 40.082)" width="22.771"/></svg>
 }
 
-function UserAvatar({ user }: { user: User }) {
+function UpdateAuthorAvatar({ user }: { user: User }) {
   if (user.avatarUrl) return <img alt="" className="lp-project-updates-preview__avatar" src={user.avatarUrl}/>
   if (!user.displayName) return <NoAssigneeIcon size={16}/>
   return <span className="lp-project-updates-preview__avatar">{user.displayName.split(/\s|@/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('')}</span>

@@ -1,2 +1,0 @@
-import type { ReactNode } from 'react'
-export function PageShell({title,tabs,actions,children,className=''}:{title:string;tabs?:ReactNode;actions?:ReactNode;children:ReactNode;className?:string}){return <main className={`main-panel ${className}`}><header className="page-header"><h1>{title}</h1></header>{(tabs||actions)&&<div className="page-toolbar"><div>{tabs}</div><div className="toolbar-actions">{actions}</div></div>}<div className="page-content">{children}</div></main>}

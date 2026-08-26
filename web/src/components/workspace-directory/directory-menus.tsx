@@ -83,18 +83,7 @@ export function DirectoryFilterMenu({
           className="workspace-directory-filter-menu"
           sideOffset={3.5}
         >
-          <label className="workspace-directory-filter-menu__search">
-            <Search />
-            <input
-              aria-label="Add Filter…"
-              autoFocus
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => event.stopPropagation()}
-              placeholder="Add Filter…"
-              value={query}
-            />
-            <kbd>F</kbd>
-          </label>
+          <DirectoryFilterSearch autoFocus label="Add Filter…" query={query} shortcut="F" onQuery={setQuery}/>
           <div className="workspace-directory-filter-menu__items">
             {!query && (
               <>
@@ -175,16 +164,7 @@ function FilterGroup({
               className="workspace-directory-filter-submenu"
               sideOffset={5}
             >
-              <label className="workspace-directory-filter-menu__search is-submenu">
-                <Search />
-                <input
-                  aria-label="Filter…"
-                  onChange={(event) => setQuery(event.target.value)}
-                  onKeyDown={(event) => event.stopPropagation()}
-                  placeholder="Filter…"
-                  value={query}
-                />
-              </label>
+              <DirectoryFilterSearch label="Filter…" query={query} submenu onQuery={setQuery}/>
               <div className="workspace-directory-filter-menu__items">
                 {choices.map((choice) =>
                   group.selectionMode === "single" ? (
@@ -193,11 +173,7 @@ function FilterGroup({
                       key={choice.id}
                       onSelect={() => onChoice(group.id, choice.id, true)}
                     >
-                      {choice.icon}
-                      <span className="workspace-directory-filter-menu__choice-label">
-                        {choice.label}
-                      </span>
-                      {choice.meta && <small>{choice.meta}</small>}
+                      <DirectoryChoiceContent choice={choice}/>
                     </DropdownMenu.Item>
                   ) : (
                     <DropdownMenu.CheckboxItem
@@ -212,11 +188,7 @@ function FilterGroup({
                       <span className="workspace-directory-filter-menu__checkbox">
                         {selected.has(choice.id) && <Check />}
                       </span>
-                      {choice.icon}
-                      <span className="workspace-directory-filter-menu__choice-label">
-                        {choice.label}
-                      </span>
-                      {choice.meta && <small>{choice.meta}</small>}
+                      <DirectoryChoiceContent choice={choice}/>
                     </DropdownMenu.CheckboxItem>
                   ),
                 )}
@@ -236,6 +208,14 @@ function FilterGroup({
       )}
     </>
   );
+}
+
+function DirectoryFilterSearch({ autoFocus = false, label, onQuery, query, shortcut, submenu = false }: { autoFocus?: boolean; label: string; onQuery: (value: string) => void; query: string; shortcut?: string; submenu?: boolean }) {
+  return <label className={`workspace-directory-filter-menu__search${submenu ? ' is-submenu' : ''}`}><Search/><input aria-label={label} autoFocus={autoFocus} onChange={event => onQuery(event.target.value)} onKeyDown={event => event.stopPropagation()} placeholder={label} value={query}/>{shortcut && <kbd>{shortcut}</kbd>}</label>
+}
+
+function DirectoryChoiceContent({ choice }: { choice: DirectoryFilterChoice }) {
+  return <>{choice.icon}<span className="workspace-directory-filter-menu__choice-label">{choice.label}</span>{choice.meta && <small>{choice.meta}</small>}</>
 }
 
 export interface DirectoryPropertyOption<T extends string> {

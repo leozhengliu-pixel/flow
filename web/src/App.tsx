@@ -2035,19 +2035,6 @@ function App() {
     const created = await run(() => addFavorite("view", view.id), "Could not add favorite");
     setData((state) => state ? { ...state, favorites: [created, ...state.favorites.filter((item) => item.id !== created.id)] } : state);
   };
-  const toggleSavedViewSubscription = async (view: SavedView) => {
-    const current = data?.subscriptions.find(
-      (item) => item.userId === data.viewer.id && item.resourceType === "view" && item.resourceId === view.id,
-    );
-    if (current || view.subscribed) {
-      if (current) await run(() => removeSubscription("view", view.id), "Could not unsubscribe from view");
-      if (view.subscribed) await changeSavedView(view.id, { subscribed: false });
-      setData((state) => state ? { ...state, subscriptions: state.subscriptions.filter((item) => !(item.userId === state.viewer.id && item.resourceType === "view" && item.resourceId === view.id)) } : state);
-      return;
-    }
-    const created = await run(() => addSubscription("view", view.id, ["issue-added", "issue-completed"]), "Could not subscribe to view");
-    setData((state) => state ? { ...state, subscriptions: [created, ...state.subscriptions.filter((item) => item.id !== created.id)] } : state);
-  };
   const setSavedViewSubscriptionEvents = async (view: SavedView, events: string[]) => {
     const current = data?.subscriptions.find(
       (item) => item.userId === data.viewer.id && item.resourceType === "view" && item.resourceId === view.id,

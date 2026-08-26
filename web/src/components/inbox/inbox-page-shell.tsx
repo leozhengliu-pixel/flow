@@ -3,10 +3,9 @@ import * as Select from '@radix-ui/react-select'
 import type { ButtonHTMLAttributes, CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent, ReactNode } from 'react'
 import { forwardRef, useEffect, useRef, useState } from 'react'
 
-import { InboxFilterBuilder, type InboxFilterCondition, type InboxFilterOptions, type InboxFilterProperty } from './inbox-filter-builder'
+import { InboxFilterBuilder, type InboxFilterCondition, type InboxFilterOptions } from './inbox-filter-builder'
 import './inbox.css'
-
-export type InboxFilterKind = InboxFilterProperty
+import { CheckIcon, DisplayIcon, FilterIcon, SidebarIcon } from '@/components/ui/view-action-icons'
 
 export type InboxOrdering = 'newest' | 'oldest' | 'priority'
 
@@ -20,16 +19,12 @@ export interface InboxDisplayOptions {
 export interface InboxPageShellProps {
   children: ReactNode
   detail?: ReactNode
-  /** @deprecated Replaced by `filters`; retained while callers migrate. */
-  filterCount?: number
   filters?: InboxFilterCondition[]
   filterOptions?: InboxFilterOptions
   filterHiddenCount?: number
   bulkPending?: boolean
   onFiltersChange?: (filters: InboxFilterCondition[]) => void
   displayOptions: InboxDisplayOptions
-  /** @deprecated Replaced by `onFiltersChange`; retained while callers migrate. */
-  onAddFilter?: (filter: InboxFilterKind) => void
   onDisplayOptionsChange: (options: InboxDisplayOptions) => void
   onDeleteAll: () => void
   onDeleteAllRead: () => void
@@ -45,14 +40,12 @@ const MIN_DETAIL_WIDTH = 608
 export function InboxPageShell({
   children,
   detail,
-  filterCount = 0,
   filters,
   filterOptions,
   filterHiddenCount = 0,
   bulkPending = false,
   onFiltersChange,
   displayOptions,
-  onAddFilter,
   onDisplayOptionsChange,
   onDeleteAll,
   onDeleteAllRead,
@@ -131,13 +124,11 @@ export function InboxPageShell({
     >
       <section className="flow-inbox__list-pane">
         <InboxHeader
-          filterCount={filterCount}
           filters={filters}
           filterOptions={filterOptions}
           bulkPending={bulkPending}
           onFiltersChange={onFiltersChange}
           displayOptions={displayOptions}
-          onAddFilter={onAddFilter}
           onDisplayOptionsChange={onDisplayOptionsChange}
           onDeleteAll={onDeleteAll}
           onDeleteAllRead={onDeleteAllRead}
@@ -198,13 +189,11 @@ function clamp(value: number, minimum: number, maximum: number) {
 interface InboxHeaderProps extends Omit<InboxPageShellProps, 'children' | 'detail'> {}
 
 export function InboxHeader({
-  filterCount = 0,
   filters,
   filterOptions,
   bulkPending = false,
   onFiltersChange,
   displayOptions,
-  onAddFilter,
   onDisplayOptionsChange,
   onDeleteAll,
   onDeleteAllRead,
@@ -235,16 +224,10 @@ export function InboxHeader({
       <div className="flow-inbox__header-spacer" />
       <div className="flow-inbox__header-controls">
         <InboxFilterBuilder
-          trigger={<IconButton label="Add filter" count={filters?.length ?? filterCount}><FilterIcon /></IconButton>}
+          trigger={<IconButton label="Add filter" count={filters?.length ?? 0}><FilterIcon /></IconButton>}
           filters={filters ?? []}
           options={filterOptions}
-          onFiltersChange={nextFilters => {
-            if (onFiltersChange) {
-              onFiltersChange(nextFilters)
-              return
-            }
-            nextFilters.forEach(filter => onAddFilter?.(filter.property))
-          }}
+          onFiltersChange={nextFilters => onFiltersChange?.(nextFilters)}
         />
         <DisplayOptionsMenu value={displayOptions} onChange={onDisplayOptionsChange} />
       </div>
@@ -281,15 +264,15 @@ function NotificationActionsMenu({
           align="start"
           sideOffset={4}
         >
-          <MenuItem disabled={pending} icon={<DeleteInboxIcon />} onSelect={onDeleteAll}>
+          <InboxMenuItem disabled={pending} icon={<DeleteInboxIcon />} onSelect={onDeleteAll}>
             Delete all
-          </MenuItem>
-          <MenuItem disabled={pending} icon={<DeleteInboxIcon />} shortcut="⇧⌫" onSelect={onDeleteAllRead}>
+          </InboxMenuItem>
+          <InboxMenuItem disabled={pending} icon={<DeleteInboxIcon />} shortcut="⇧⌫" onSelect={onDeleteAllRead}>
             Delete all read
-          </MenuItem>
-          <MenuItem disabled={pending} icon={<DeleteInboxIcon />} onSelect={onDeleteAllReadCompleted}>
+          </InboxMenuItem>
+          <InboxMenuItem disabled={pending} icon={<DeleteInboxIcon />} onSelect={onDeleteAllReadCompleted}>
             Delete all read for completed issues
-          </MenuItem>
+          </InboxMenuItem>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
@@ -373,7 +356,7 @@ function OrderingSelect({ value, onChange }: { value: InboxOrdering; onChange: (
   )
 }
 
-function MenuItem({
+function InboxMenuItem({
   children,
   icon,
   shortcut,
@@ -468,17 +451,6 @@ function MoreIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z" /></svg>
 }
 
-function FilterIcon() {
-  return <svg viewBox="0 0 16 16" aria-hidden="true"><path fillRule="evenodd" clipRule="evenodd" d="M14.25 3a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5h12.5ZM4 8a.75.75 0 0 1 .75-.75h6.5a.75.75 0 0 1 0 1.5h-6.5A.75.75 0 0 1 4 8Zm2.75 3.5a.75.75 0 0 0 0 1.5h2.5a.75.75 0 0 0 0-1.5h-2.5Z" /></svg>
-}
-
-function DisplayIcon() {
-  return <svg viewBox="0 0 16 16" aria-hidden="true"><path fillRule="evenodd" clipRule="evenodd" d="M7 2.5A2.5 2.5 0 0 1 9.385 4.25h5.365a.75.75 0 0 1 0 1.5H9.385a2.501 2.501 0 0 1-4.77 0H2.25a.75.75 0 0 1 0-1.5h2.365A2.5 2.5 0 0 1 7 2.5ZM7 4a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm3 9.5a2.5 2.5 0 0 1-2.385-1.75H2.25a.75.75 0 0 1 0-1.5h5.365a2.501 2.501 0 0 1 4.77 0h2.365a.75.75 0 0 1 0 1.5h-2.365A2.5 2.5 0 0 1 10 13.5Zm0-4.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm0 1.5a.5.5 0 1 0 0 1 .5.5 0 0 0 0-1Z" /></svg>
-}
-
-function SidebarIcon() {
-  return <svg viewBox="0 0 16 16" aria-hidden="true"><path fillRule="evenodd" clipRule="evenodd" d="M3.5 2.5h9A1.5 1.5 0 0 1 14 4v8a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12V4a1.5 1.5 0 0 1 1.5-1.5ZM6 4H3.5v8H6V4Zm1.5 0v8h5V4h-5Z" /></svg>
-}
 
 function DeleteInboxIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true"><path fillRule="evenodd" clipRule="evenodd" d="M7.25 1a.75.75 0 0 1 0 1.5H5.18a1 1 0 0 0-.956.706L2.75 8h1.623c.955 0 1.846.477 2.376 1.272a.51.51 0 0 0 .427.228h1.648a.51.51 0 0 0 .427-.228A2.856 2.856 0 0 1 11.627 8H14.5l.323.009c.117.38.177.777.177 1.176V11.5a3.5 3.5 0 0 1-3.5 3.5h-7A3.5 3.5 0 0 1 1 11.5V9.185c0-.299.033-.597.1-.888l.077-.288L2.79 2.765A2.5 2.5 0 0 1 5.18 1h2.07ZM2.5 9.5v2a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-2h-1.873c-.397 0-.77.174-1.025.47l-.103.134A2.014 2.014 0 0 1 8.824 11H7.176a2.014 2.014 0 0 1-1.675-.896l-.103-.134a1.356 1.356 0 0 0-1.025-.47H2.5Zm11.22-8.28a.75.75 0 0 1 1.06 1.06L13.561 3.5l1.22 1.22a.75.75 0 1 1-1.061 1.06L12.5 4.561l-1.22 1.22a.75.75 0 1 1-1.06-1.061l1.219-1.22-1.22-1.22a.75.75 0 1 1 1.061-1.06l1.22 1.219 1.22-1.22Z" /></svg>
@@ -486,10 +458,6 @@ function DeleteInboxIcon() {
 
 function ChevronDownIcon() {
   return <svg viewBox="0 0 9 5" aria-hidden="true"><path d="M1.1.8 4.5 4.2 7.9.8" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" /></svg>
-}
-
-function CheckIcon() {
-  return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.2 2.7 2.7 6.3-6.3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
 }
 
 function InboxTrayIllustration() {
