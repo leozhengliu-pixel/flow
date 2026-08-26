@@ -395,24 +395,7 @@ function ValuePicker({
           {matchingOptions.map(option => {
             const checked = command.isSelected(option.id)
             const active = command.activeId === option.id
-            return (
-              <button
-                className={styles.valueItem}
-                type="button"
-                key={option.id}
-                role="option"
-                aria-selected={active}
-                aria-checked={checked}
-                disabled={option.disabled}
-                onMouseMove={() => command.setActiveId(option.id)}
-                onClick={() => command.choose(option)}
-              >
-                <span className={styles.checkbox}>{checked ? <Check size={11} aria-hidden="true" /> : null}</span>
-                <OptionVisual option={option} property={property.id} />
-                <span className={styles.valueLabel}>{option.label}</span>
-                {option.count != null ? <span className={styles.valueCount}>{option.count} {option.count === 1 ? 'notification' : 'notifications'}</span> : null}
-              </button>
-            )
+            return <FilterValueOption active={active} checked={checked} key={option.id} onActive={() => command.setActiveId(option.id)} onChoose={() => command.choose(option)} option={option} property={property.id}/>
           })}
           {unmatchedCount ? <>
             <div className={styles.valueSeparator} role="separator" />
@@ -533,22 +516,7 @@ function AppliedCondition({
             {!command.filteredOptions.length ? <div className={styles.empty}>No results</div> : null}
             {command.filteredOptions.map(option => {
               const checked = command.isSelected(option.id)
-              return <button
-                className={styles.valueItem}
-                type="button"
-                key={option.id}
-                role="option"
-                aria-selected={command.activeId === option.id}
-                aria-checked={checked}
-                disabled={option.disabled}
-                onMouseMove={() => command.setActiveId(option.id)}
-                onClick={() => command.choose(option)}
-              >
-                <span className={styles.checkbox}>{checked ? <Check size={11} aria-hidden="true" /> : null}</span>
-                <OptionVisual option={option} property={property.id} />
-                <span className={styles.valueLabel}>{option.label}</span>
-                {option.count != null ? <span className={styles.valueCount}>{option.count} {option.count === 1 ? 'notification' : 'notifications'}</span> : null}
-              </button>
+              return <FilterValueOption active={command.activeId === option.id} checked={checked} key={option.id} onActive={() => command.setActiveId(option.id)} onChoose={() => command.choose(option)} option={option} property={property.id}/>
             })}
           </div>
         </Popover.Content>
@@ -558,6 +526,15 @@ function AppliedCondition({
       <X aria-hidden="true" />
     </button>
   </div>
+}
+
+function FilterValueOption({ active, checked, option, property, onActive, onChoose }: { active: boolean; checked: boolean; option: InboxFilterOption; property: InboxFilterProperty; onActive: () => void; onChoose: () => void }) {
+  return <button className={styles.valueItem} type="button" role="option" aria-selected={active} aria-checked={checked} disabled={option.disabled} onMouseMove={onActive} onClick={onChoose}>
+    <span className={styles.checkbox}>{checked ? <Check size={11} aria-hidden="true"/> : null}</span>
+    <OptionVisual option={option} property={property}/>
+    <span className={styles.valueLabel}>{option.label}</span>
+    {option.count != null ? <span className={styles.valueCount}>{option.count} {option.count === 1 ? 'notification' : 'notifications'}</span> : null}
+  </button>
 }
 
 function OperatorMenu({

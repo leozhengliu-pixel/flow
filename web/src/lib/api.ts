@@ -35,7 +35,7 @@ export function fetchAccountSessions(): Promise<AccountSessionInfo[]> { return r
 export function revokeOtherAccountSessions(): Promise<void> { return request('/api/account/sessions/others', { method: 'DELETE' }) }
 export function changeAccountPassword(currentPassword: string, newPassword: string): Promise<{changed:boolean}> { return request('/api/account/change-password', jsonRequest('POST', { currentPassword, newPassword })) }
 export function updateWorkspacePreferences(input: WorkspaceSettings): Promise<WorkspaceSettings> { return request('/api/workspace/preferences', jsonRequest('PATCH', input)) }
-export function createWorkspaceLabel(input: { name: string; description?: string; color?: string; resourceType: 'issue'|'project'; groupId?: string }): Promise<IssueLabel> { return request('/api/labels', jsonRequest('POST', input)) }
+export function createWorkspaceLabel(input: { name: string; description?: string; color?: string; resourceType: IssueLabel['resourceType']; groupId?: string }): Promise<IssueLabel> { return request('/api/labels', jsonRequest('POST', input)) }
 export function updateWorkspaceLabel(id: string, input: Partial<Pick<IssueLabel,'name'|'description'|'color'|'groupId'|'archivedAt'>>): Promise<IssueLabel> { return request(`/api/labels/${id}`, jsonRequest('PATCH', input)) }
 export function deleteWorkspaceLabel(id: string): Promise<void> { return request(`/api/labels/${id}`, { method: 'DELETE' }) }
 export function createLabelGroup(input: { name: string; color?: string; description?: string; resourceType: 'issue'|'project' }): Promise<LabelGroup> { return request('/api/label-groups', jsonRequest('POST', input)) }
