@@ -415,9 +415,9 @@ func canonicalWorkflowStates() []domain.WorkflowState {
 		{ID: "state_backlog", Name: "Backlog", Color: "#6B6F76", Type: "backlog", Position: 0, Default: true},
 		{ID: "state_todo", Name: "Todo", Color: "#E2E2E2", Type: "unstarted", Position: 1},
 		{ID: "state_progress", Name: "In Progress", Color: "#F2C94C", Type: "started", Position: 2},
-		{ID: "state_done", Name: "Done", Color: "#5E6AD2", Type: "completed", Position: 3},
-		{ID: "state_canceled", Name: "Canceled", Color: "#A8B2C1", Type: "canceled", Position: 4},
-		{ID: "state_duplicate", Name: "Duplicate", Color: "#A8B2C1", Type: "canceled", Position: 5, Reserved: true},
+		{ID: "state_done", Name: "Done", Color: "lch(48% 59.31 288.43)", Type: "completed", Position: 3},
+		{ID: "state_canceled", Name: "Canceled", Color: "#95A2B3", Type: "canceled", Position: 4},
+		{ID: "state_duplicate", Name: "Duplicate", Color: "#95A2B3", Type: "canceled", Position: 5, Reserved: true},
 	}
 }
 
