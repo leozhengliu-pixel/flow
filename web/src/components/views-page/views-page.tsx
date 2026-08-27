@@ -89,7 +89,7 @@ export function ViewsPage({ data, resource, scope, views, onCreate, onDelete, on
     </header>
     <div className={styles.toolbar}>
       <nav aria-label="View resources" className={styles.tabs}>
-        {(['issues', 'projects'] as const).map(item => <a aria-current={resource === item ? 'page' : undefined} href={resourceHref(item)} key={item} onClick={event => { event.preventDefault(); onResourceChange(item) }}>{item === 'issues' ? 'Issues' : 'Projects'}</a>)}
+        {(['issues', 'projects'] as const).map(item => <a className="ui-pill" aria-current={resource === item ? 'page' : undefined} href={resourceHref(item)} key={item} onClick={event => { event.preventDefault(); onResourceChange(item) }}>{item === 'issues' ? 'Issues' : 'Projects'}</a>)}
       </nav>
       <ViewsDisplayMenu direction={direction} ordering={ordering} properties={properties} onDirection={changeDirection} onOrdering={next => { setOrdering(next); writePreference(`${storageKey}:ordering`, next) }} onToggleProperty={toggleProperty}/>
     </div>
@@ -148,7 +148,7 @@ function ViewRow({ data, favorite, href, onCopy, onDelete, onDuplicate, onEdit, 
 
 function ViewsDisplayMenu({ direction, ordering, properties, onDirection, onOrdering, onToggleProperty }: { direction: Direction; ordering: Ordering; properties: Set<DisplayProperty>; onDirection: () => void; onOrdering: (ordering: Ordering) => void; onToggleProperty: (property: DisplayProperty) => void }) {
   return <Popover.Root>
-    <Popover.Trigger asChild><button aria-label="Display options" className={styles.displayTrigger} type="button"><DisplayOptionsIcon/></button></Popover.Trigger>
+    <Popover.Trigger asChild><button aria-label="Display options" className={`${styles.displayTrigger} ui-pill`} type="button"><DisplayOptionsIcon/></button></Popover.Trigger>
     <Popover.Portal><Popover.Content align="end" className={styles.displayPopover} collisionPadding={11} onCloseAutoFocus={event => event.preventDefault()} onOpenAutoFocus={event => event.preventDefault()} sideOffset={4}>
       <div className={styles.displayOrderingSection}>
         <div className={styles.displayOrderingRow}>

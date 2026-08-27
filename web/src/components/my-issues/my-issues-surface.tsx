@@ -92,7 +92,7 @@ export function MyIssuesSurface({
     </header>
     <div className={styles.toolbar}>
       <nav className={styles.tabs} aria-label="My issues views">
-        {views.map(view => <a key={view.id} href={viewHref?.(view.id) ?? `#${view.id}`} className={styles.tab} data-active={activeView === view.id} data-disabled={activeView === view.id} aria-current={activeView === view.id ? 'page' : undefined} aria-label={viewCounts?.[view.id] == null ? view.label : `${view.label}, ${viewCounts[view.id]} issues`} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onViewChange?.(view.id) }}>{view.label}</a>)}
+        {views.map(view => <a key={view.id} href={viewHref?.(view.id) ?? `#${view.id}`} className={`${styles.tab} ui-pill`} data-active={activeView === view.id} data-disabled={activeView === view.id} aria-current={activeView === view.id ? 'page' : undefined} aria-label={viewCounts?.[view.id] == null ? view.label : `${view.label}, ${viewCounts[view.id]} issues`} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onViewChange?.(view.id) }}>{view.label}</a>)}
       </nav>
       <div className={styles.actions}>
         <MyIssuesFilterMenu open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onToggle={(field, option) => { if (onFilterToggle) onFilterToggle(field, option); else onFilterSelect?.(field, option) }} trigger={<ToolbarButton label="Add filter"><FilterIcon/></ToolbarButton>}/>
@@ -106,5 +106,5 @@ export function MyIssuesSurface({
 }
 
 const ToolbarButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { label: string; pressed?: boolean }>(function ToolbarButton({ children, label, pressed, ...props }, ref) {
-  return <button ref={ref} type="button" className={styles.iconButton} aria-label={label} aria-pressed={pressed} {...props}>{children}</button>
+  return <button ref={ref} type="button" className={`${styles.iconButton} ui-pill`} aria-label={label} aria-pressed={pressed} {...props}>{children}</button>
 })

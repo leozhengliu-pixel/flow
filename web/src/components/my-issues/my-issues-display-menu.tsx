@@ -74,7 +74,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
 
   return <Popover.Root open={open} onOpenChange={onOpenChange}>
     <Popover.Trigger asChild>
-      <button type="button" className={styles.trigger} aria-label={t('Display options')} aria-pressed={open}>
+      <button type="button" className={`${styles.trigger} ui-pill`} aria-label={t('Display options')} aria-pressed={open}>
         <DisplayIcon />
       </button>
     </Popover.Trigger>
