@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Command } from 'cmdk'
 import {
-  Building2, Clipboard, FilePlus2, FileText, Filter, FolderKanban, Inbox, Layers3, Lightbulb,
+  Building2, Clipboard, FilePlus2, FileText, FolderKanban, Inbox, Layers3, Lightbulb,
   ListFilter, Plus, Search, SquareDot, UserRound, UsersRound,
 } from 'lucide-react'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { FilterIcon as Filter } from '@/components/ui/view-action-icons'
 import { ReleasesIcon } from '@/components/releases/release-icons'
 import { searchWorkspace } from '@/lib/api'
 import type { SearchResult } from '@/types/flow'

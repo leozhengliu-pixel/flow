@@ -223,7 +223,7 @@ function ProjectSubgroup({ group, onOpen, onOpenIssues, onOpenUpdates, onProject
   visible: Set<string>
 }) {
   return <div className="lp-project-subgroup">
-    <div className="lp-project-subgroup__header"><span className="lp-project-group__status" style={{ '--project-status-color': group.color ?? '#77777c' } as CSSProperties} /><span>{group.name}</span><small>{projectCount(group)}</small></div>
+    <div className="lp-project-subgroup__header"><span className="lp-project-group__status" style={{ '--project-status-color': group.color ?? '#77777c' } as CSSProperties} /><span data-i18n-ignore>{group.name}</span><small>{projectCount(group)}</small></div>
     {group.projects.map(project => <ProjectListRow
       key={project.id}
       onOpen={onOpen}
@@ -243,11 +243,11 @@ function ProjectSubgroup({ group, onOpen, onOpenIssues, onOpenUpdates, onProject
 
 function ProjectTableHeader({ sort, onSort, visible }: { sort: { column: ProjectSortColumn, direction: 'asc' | 'desc' }, onSort: (column: ProjectSortColumn) => void, visible: Set<string> }) {
   const header = (column: ProjectSortColumn, label: string) => <button
-    aria-label={`${sort.column === column ? sort.direction === 'asc' ? 'Z–A' : 'A–Z' : 'Order by'} ${label}`}
+    aria-label={`${sort.column === column ? sort.direction === 'asc' ? 'A–Z' : 'Z–A' : 'Order by'} ${label}`}
     className={sort.column === column ? 'is-sorted' : ''}
     onClick={() => onSort(column)}
     type="button"
-  ><span>{label}</span>{sort.column === column && <span aria-hidden="true">{sort.direction === 'asc' ? '↑' : '↓'}</span>}</button>
+  ><span>{label}</span><span aria-hidden="true" className="lp-project-table__sort-icon"><ProjectSortIcon/></span></button>
   return <div className="lp-project-table__header" role="row">
     <span />
     <span />
@@ -273,7 +273,7 @@ function ProjectGroupHeader({ collapsed, color = '#d6b326', count, name, onCreat
   return <div className="lp-project-group__header" role="row">
     <span />
     <button aria-expanded={!collapsed} aria-label={collapsed ? 'Expand group' : 'Collapse group'} className="lp-project-group__toggle" onClick={onToggle} type="button"><ChevronRightIcon /></button>
-    <span className="lp-project-group__title"><span className="lp-project-group__status" style={{ '--project-status-color': color } as CSSProperties} /><strong>{name}</strong><span aria-label="Project count" className="lp-project-group__count">{count}</span></span>
+    <span className="lp-project-group__title"><span className="lp-project-group__status" style={{ '--project-status-color': color } as CSSProperties} /><strong data-i18n-ignore>{name}</strong><span aria-label="Project count" className="lp-project-group__count">{count}</span></span>
     <button aria-label="Create new project" className="lp-project-group__create" onClick={onCreate} type="button"><PlusIcon /></button>
   </div>
 }
@@ -292,6 +292,7 @@ type ProjectItemActions = {
 
 function ProjectListRow({ project, selected, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, onSelect, propertyOptions, visible }: ProjectItemActions & { selected: boolean; onSelect: (id: string, range?: boolean) => void }) {
   const [menuPoint, setMenuPoint] = useState<{ x: number, y: number } | null>(null)
+  const statusOption = (propertyOptions?.status ?? PROPERTY_OPTIONS.status).find(option => option.value === project.status)
   const rowKey = (event: KeyboardEvent<HTMLAnchorElement>) => {
     if (event.target !== event.currentTarget) return
     if (event.key === 'Enter') onOpen?.(project)
@@ -329,7 +330,7 @@ function ProjectListRow({ project, selected, onOpen, onOpenIssues, onOpenUpdates
       <div className={`lp-project-row__lead ${project.lead ? '' : 'is-empty'}`} hidden={!visible.has('Lead')} role="gridcell"><LeadPropertyButton lead={project.lead} onChange={value => onPropertyChange?.(project, 'lead', value)} options={propertyOptions?.lead} /></div>
       <div hidden={!visible.has('Target date')} role="gridcell"><ProjectTargetDatePicker buttonClassName="lp-project-row__date" displayValue={project.targetDate} onChange={value => onPropertyChange?.(project, 'targetDate', value)} value={project.rawTargetDate}>{project.targetDate || <span className="lp-project-row__date-placeholder">Set date</span>}</ProjectTargetDatePicker></div>
       <div hidden={!visible.has('Issues')} role="gridcell"><button aria-label={`Open ${project.name} issues`} className="lp-project-row__issues" onClick={event => { stopPropagation(event); onOpenIssues?.(project) }} type="button">{project.issueCount}</button></div>
-      <div hidden={!visible.has('Status')} role="gridcell"><ProjectPropertyPicker buttonClassName="lp-project-row__progress" label={`${project.progress}%`} onChange={value => onPropertyChange?.(project, 'status', value)} options={propertyOptions?.status ?? PROPERTY_OPTIONS.status} property="status" value={project.status}><ProgressIcon progress={project.progress} /><span>{project.progress}%</span><ProgressBar progress={project.progress} /></ProjectPropertyPicker></div>
+      <div className="lp-project-row__status" hidden={!visible.has('Status')} role="gridcell"><ProjectPropertyPicker buttonClassName="lp-project-row__progress" label={`${project.progress}%`} onChange={value => onPropertyChange?.(project, 'status', value)} options={propertyOptions?.status ?? PROPERTY_OPTIONS.status} property="status" value={project.status}><ProjectStatusGlyph color={statusOption?.color} name={project.status} type={statusOption?.statusType}/><span>{project.progress}%</span></ProjectPropertyPicker><ProjectProgressSparkline createdAt={project.createdAt} progress={project.progress} startDate={project.rawStartDate} targetDate={project.rawTargetDate}/></div>
       <span />
     </a>
     <ProjectItemMenu onProjectAction={onProjectAction} onPropertyChange={onPropertyChange} options={propertyOptions} point={menuPoint} project={project} setPoint={setMenuPoint}/>
@@ -349,9 +350,9 @@ function ProjectBoardColumn({ group, onCreateProject, onOpenProject, onOpenProje
   visible: Set<string>
 }) {
   return <section aria-label={group.name} className="lp-project-board__column">
-    <header><span className="lp-project-group__status" style={{ '--project-status-color': group.color ?? '#d6b326' } as CSSProperties} /><strong>{group.name}</strong><span>{projectCount(group)}</span><button aria-label="Open menu" type="button">...</button><button aria-label="Create new project" onClick={() => onCreateProject?.(projectCreateStatus(group.name))} type="button"><PlusIcon /></button></header>
+    <header><span className="lp-project-group__status" style={{ '--project-status-color': group.color ?? '#d6b326' } as CSSProperties} /><strong data-i18n-ignore>{group.name}</strong><span>{projectCount(group)}</span><button aria-label="Open menu" type="button">...</button><button aria-label="Create new project" onClick={() => onCreateProject?.(projectCreateStatus(group.name))} type="button"><PlusIcon /></button></header>
     <div className="lp-project-board__cards">
-      {group.subgroups?.map(subgroup => <section className="lp-project-board__subgroup" key={subgroup.id}><header><span>{subgroup.name}</span><small>{projectCount(subgroup)}</small></header>{subgroup.projects.map(project => <ProjectBoardCard key={project.id} onOpen={onOpenProject} onOpenIssues={onOpenProjectIssues} onOpenUpdates={onOpenProjectUpdates} onProjectAction={onProjectAction} onProjectVisualChange={onProjectVisualChange} onPropertyChange={onPropertyChange} project={project} propertyOptions={propertyOptions} visible={visible} />)}</section>)}
+      {group.subgroups?.map(subgroup => <section className="lp-project-board__subgroup" key={subgroup.id}><header><span data-i18n-ignore>{subgroup.name}</span><small>{projectCount(subgroup)}</small></header>{subgroup.projects.map(project => <ProjectBoardCard key={project.id} onOpen={onOpenProject} onOpenIssues={onOpenProjectIssues} onOpenUpdates={onOpenProjectUpdates} onProjectAction={onProjectAction} onProjectVisualChange={onProjectVisualChange} onPropertyChange={onPropertyChange} project={project} propertyOptions={propertyOptions} visible={visible} />)}</section>)}
       {!group.subgroups?.length && group.projects.map(project => <ProjectBoardCard key={project.id} onOpen={onOpenProject} onOpenIssues={onOpenProjectIssues} onOpenUpdates={onOpenProjectUpdates} onProjectAction={onProjectAction} onProjectVisualChange={onProjectVisualChange} onPropertyChange={onPropertyChange} project={project} propertyOptions={propertyOptions} visible={visible} />)}
       <button className="lp-project-board__add" onClick={() => onCreateProject?.(projectCreateStatus(group.name))} type="button"><PlusIcon /> Add new project</button>
     </div>
@@ -678,12 +679,28 @@ function ProjectAvatar({ lead }: { lead?: ProjectPageItem['lead'] }) {
   return <span aria-label={lead.name} className="lp-project-avatar" style={{ backgroundColor: lead.color ?? '#c65b5b' }}>{lead.initials ?? initials(lead.name)}</span>
 }
 
-function ProgressIcon({ progress }: { progress: number }) {
-  return <svg aria-hidden="true" className="lp-project-progress-icon" viewBox="0 0 16 16"><circle cx="8" cy="8" fill="none" r="5.5" stroke="currentColor" strokeOpacity=".3" strokeWidth="1.5" /><circle cx="8" cy="8" fill="none" r="5.5" stroke="currentColor" strokeDasharray={`${Math.min(100, Math.max(0, progress))} 100`} strokeLinecap="round" strokeWidth="1.5" pathLength="100" transform="rotate(-90 8 8)" /></svg>
+function ProjectSortIcon() {
+  return <svg viewBox="0 0 16 16"><path d="M11.5361 10.2745C11.8024 10.0029 11.8249 9.56807 11.5762 9.26961C11.3275 8.97139 10.8961 8.91526 10.5811 9.12801L10.5195 9.17391L8.00001 11.2735L5.48048 9.17391L5.41895 9.12801C5.10388 8.91526 4.67252 8.97139 4.42384 9.26961C4.17512 9.56807 4.19758 10.0029 4.46387 10.2745L4.51954 10.3263L7.51954 12.8263C7.79767 13.058 8.20234 13.058 8.48048 12.8263L11.4805 10.3263L11.5361 10.2745Z"/><path d="M8.75 12.25C8.75 12.6642 8.41421 13 8 13C7.58579 13 7.25 12.6642 7.25 12.25L7.25 3.75C7.25 3.33579 7.58579 3 8 3C8.41421 3 8.75 3.33579 8.75 3.75V12.25Z"/></svg>
 }
 
-function ProgressBar({ progress }: { progress: number }) {
-  return <span aria-hidden="true" className="lp-project-progress-bar"><span style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} /></span>
+function ProjectProgressSparkline({ createdAt, progress, startDate, targetDate }: { createdAt?: string, progress: number, startDate?: string, targetDate?: string }) {
+  if (!targetDate) return null
+  const start = new Date(startDate ?? createdAt ?? targetDate).getTime()
+  const target = new Date(targetDate).getTime()
+  const now = Date.now()
+  const timeline = target > start ? Math.min(1, Math.max(.12, (now - start) / (target - start))) : 1
+  const elbow = Math.round(timeline * 32 * 1000) / 1000
+  const completionY = Math.round((16 - Math.min(100, Math.max(0, progress)) * .16) * 10) / 10
+  const expectedY = Math.round((16 - timeline * 16) * 10) / 10
+  const currentMidY = Math.round((16 + completionY) / 2 * 10) / 10
+  const expectedMidY = Math.round((16 + expectedY) / 2 * 10) / 10
+  const currentControl = Math.round(elbow / 3 * 1000) / 1000
+  const currentControlTwo = Math.round(elbow * 2 / 3 * 1000) / 1000
+  const remainingControl = Math.round((elbow + (32 - elbow) / 3) * 1000) / 1000
+  const remainingControlTwo = Math.round((elbow + (32 - elbow) * 2 / 3) * 1000) / 1000
+  const currentPath = `M0,16C${currentControl},${currentMidY},${currentControlTwo},${completionY},${elbow},${completionY}C${remainingControl},${completionY},${remainingControlTwo},${completionY},32,${completionY}`
+  const targetPath = `M0,16C${currentControl},${expectedMidY},${currentControlTwo},${expectedY},${elbow},${expectedY}C${remainingControl},${expectedY},${remainingControlTwo},0,32,0`
+  return <svg aria-label="Project progress trend" className="lp-project-progress-sparkline" focusable="false" height="16" role="img" viewBox="0 0 32 16" width="32"><rect fill="transparent" height="16" width="32"/><path d={currentPath} fill="none" stroke="var(--project-progress-value)" strokeWidth="1.25"/><path d={targetPath} fill="none" stroke="var(--project-progress-target)" strokeWidth="1.25"/></svg>
 }
 
 function ProjectTimeline({ groups, onOpenProject }: { groups: ProjectDataGroup[], onOpenProject?: (project: ProjectPageItem) => void }) {
@@ -692,7 +709,7 @@ function ProjectTimeline({ groups, onOpenProject }: { groups: ProjectDataGroup[]
   return <div aria-label="Project timeline" className="lp-project-timeline" role="grid">
     <header><span>Projects</span><div>{months.map(month => <span key={month}>{month}</span>)}</div></header>
     <div className="lp-project-timeline__body">{rows.map(group => <section key={group.id}>
-      <h2><span className="lp-project-group__status" style={{ '--project-status-color': group.color ?? '#77777c' } as CSSProperties} />{group.name}<small>{projectCount(group)}</small></h2>
+      <h2><span className="lp-project-group__status" style={{ '--project-status-color': group.color ?? '#77777c' } as CSSProperties} /><span data-i18n-ignore>{group.name}</span><small>{projectCount(group)}</small></h2>
       <div className="lp-project-timeline__tracks">{group.projects.map((project, index) => <button key={project.id} onClick={() => onOpenProject?.(project)} style={{ '--timeline-start': `${(index * 17 + project.name.length * 5) % 67}%`, '--timeline-width': `${Math.max(19, Math.min(47, 28 + project.name.length))}%` } as CSSProperties} type="button"><span>{project.name}</span></button>)}</div>
     </section>)}</div>
   </div>

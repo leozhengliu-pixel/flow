@@ -1,4 +1,4 @@
-import { Layers3, Menu, Sparkles, SquarePen } from 'lucide-react'
+import { Menu, Sparkles, SquarePen } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { pulsePath, pulseViewPath, type PulseRouteView } from '@/lib/app-routes'
@@ -8,6 +8,7 @@ import { PulseNewViewEditor, PulseSubscriptionMenu, type PulseCadence, type Puls
 import { PulseFilterChips, PulseFilterMenu, PulseMatchSummary } from './pulse-filters'
 import { buildPulseFeed, pulseConfigFromView, pulseViewMutation, type PulseViewConfig } from './pulse-model'
 import { PulseUpdateCard } from './pulse-update-card'
+import { AddViewIcon } from '@/components/ui/view-action-icons'
 import './pulse.css'
 
 type Props = {
@@ -64,7 +65,7 @@ export function PulsePage(props: Props) {
       <nav aria-label="Pulse views">
         {([['following', 'For me'], ['popular', 'Popular'], ['all', 'Recent']] as const).map(([id, label]) => <a className="ui-pill" aria-current={!activeSavedView && view === id ? 'page' : undefined} href={pulsePath(data.workspace.urlKey, id)} key={id} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); navigate(id) }}>{label}</a>)}
         {pulseViews.map(saved => <div aria-current={activeSavedView?.id===saved.id?'page':undefined} className="pulse-saved-tab ui-pill" key={saved.id}><a href={pulseViewPath(data.workspace.urlKey,saved.id)} onClick={event=>{if(event.metaKey||event.ctrlKey||event.shiftKey)return;event.preventDefault();props.onNavigateSavedView(saved.id)}}><ViewGlyph color={saved.color??'#8a8f98'} icon={saved.icon??'CustomView'}/><span>{saved.name}</span></a><button aria-label={`Delete view ${saved.name}`} onClick={()=>{void props.onDeleteSavedView(saved);if(activeSavedView?.id===saved.id)navigate('following')}} type="button">×</button></div>)}
-        {!creatingView && <button aria-label="Add new view" className="pulse-add-view" onClick={() => setCreatingView(true)} type="button"><Layers3 size={13}/></button>}
+        {!creatingView && <button aria-label="Add new view" className="pulse-add-view" onClick={() => setCreatingView(true)} type="button"><AddViewIcon/></button>}
       </nav>
       {creatingView && <PulseNewViewEditor data={data} draft={draft} onCancel={()=>{setCreatingView(false);setDraft(blankDraft())}} onChange={setDraft} onSave={()=>void saveView()}/>}
       {activeSavedView&&!creatingView&&<div className="pulse-active-filters"><PulseFilterMenu data={data} filters={activeConfig.filters} match={activeConfig.match} onChange={filters=>updateActiveConfig({...activeConfig,filters})} onMatchChange={match=>updateActiveConfig({...activeConfig,match})}/><PulseMatchSummary count={activeConfig.filters.length} match={activeConfig.match}/><PulseFilterChips data={data} filters={activeConfig.filters} onChange={filters=>updateActiveConfig({...activeConfig,filters})}/></div>}

@@ -1,6 +1,8 @@
 import * as Tooltip from '@radix-ui/react-tooltip'
 import { Building2, Copy } from 'lucide-react'
 import type { ReactElement } from 'react'
+import { useI18n } from '@/i18n/i18n'
+import type { LabelResourceType } from '@/types/flow'
 
 export interface LabelHoverPreviewData {
   name: string
@@ -8,11 +10,14 @@ export interface LabelHoverPreviewData {
   description?: string
   issueCount?: number
   scope?: string
+  resourceType?: LabelResourceType
 }
 
 export function LabelHoverPreview({ label, children, side='left', align='start' }: { label: LabelHoverPreviewData; children: ReactElement; side?:'top'|'right'|'bottom'|'left'; align?:'start'|'center'|'end' }) {
+  const { t } = useI18n()
   const issueCount = label.issueCount ?? 0
-  const issueCountLabel = `${issueCount} labeled issue${issueCount === 1 ? '' : 's'}`
+  const resource = label.resourceType === 'project' ? 'project' : label.resourceType === 'initiative' ? 'initiative' : 'issue'
+  const issueCountLabel = t(`${issueCount} labeled ${resource}${issueCount === 1 ? '' : 's'}`)
   return <Tooltip.Provider delayDuration={500} skipDelayDuration={0}>
     <Tooltip.Root>
       <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>

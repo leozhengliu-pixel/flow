@@ -1,6 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Popover from '@radix-ui/react-popover'
-import { BarChart3, ChevronRight, FilePlus2, Filter, Link2, Menu, PanelRight, Plus, Search, Star, Trash2 } from 'lucide-react'
+import { ChevronRight, FilePlus2, Link2, Menu, Plus, Search, Star, Trash2 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
@@ -9,6 +9,7 @@ import { applyExplorerFilters, explorerFilterOptions, explorerPropertyOptions, i
 import { defaultMyIssuesDisplayOptions } from '@/components/my-issues/my-issues-display-defaults'
 import { MyIssuesDisplayMenu } from '@/components/my-issues/my-issues-display-menu'
 import { MyIssuesFilterMenu } from '@/components/my-issues/my-issues-filter-menu'
+import { FilterIcon as Filter, InsightsIcon as BarChart3, SidebarIcon as PanelRight } from '@/components/ui/view-action-icons'
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { toggleFilterOption, type MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-types'
 import { MyIssuesList, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData, type MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
@@ -44,7 +45,7 @@ function CycleResources({cycle,onReload}:{cycle:Cycle;onReload:()=>Promise<void>
 
 function CycleInsights({cycle,issues,onUpdate}:{cycle:Cycle;issues:Issue[];onUpdate:(input:CycleMutationInput)=>Promise<unknown>}){const{t}=useI18n(),[measure,setMeasure]=useState(cycle.insight?.measure??'Issue count'),[slice,setSlice]=useState(cycle.insight?.slice??'Status'),[segment,setSegment]=useState(cycle.insight?.segment??'Priority');return <aside className="linear-cycle-panel insights"><header><strong>{cycleStats(cycle,issues).scope}</strong><span>{t('issues')}</span></header><CycleGraph cycle={cycle} issues={issues}/><div className="cycle-insight-controls"><label>{t('Measure')}<select value={measure} onChange={event=>setMeasure(event.target.value)}><option>Issue count</option><option>Estimate</option></select></label><label>{t('Slice')}<select value={slice} onChange={event=>setSlice(event.target.value)}><option>Status</option><option>Assignee</option></select></label><label>{t('Segment')}<select value={segment} onChange={event=>setSegment(event.target.value)}><option>Priority</option><option>Project</option></select></label></div>{!cycleStats(cycle,issues).scope&&<p>{t('No matching issues')}</p>}<button className="cycle-insight-save" onClick={()=>void onUpdate({insight:{measure,slice,segment}})}>{t('Set default for everyone')}</button></aside>}
 
-function CycleFilter({filters,issues,data,onChange}:{filters:MyIssuesAppliedFilter[];issues:Issue[];data:BootstrapData;onChange:(value:MyIssuesAppliedFilter[])=>void}){const{t}=useI18n(),[open,setOpen]=useState(false),options=explorerPropertyOptions(data,issues),fields:MyIssuesFilterKey[]=['status','assignee','creator','priority','labels','relations','dates','project','subscribers','links'];return <MyIssuesFilterMenu availableFields={fields} open={open} onOpenChange={setOpen} filters={filters} options={field=>explorerFilterOptions(field,options)} onToggle={(field,option)=>onChange(toggleFilterOption(filters,field,ISSUE_FILTER_LABELS[field]??field,option))} trigger={<button aria-label={t('Add filter')}><Filter/></button>}/>}
+function CycleFilter({filters,issues,data,onChange}:{filters:MyIssuesAppliedFilter[];issues:Issue[];data:BootstrapData;onChange:(value:MyIssuesAppliedFilter[])=>void}){const{t}=useI18n(),[open,setOpen]=useState(false),options=explorerPropertyOptions(data,issues),fields:MyIssuesFilterKey[]=['status','assignee','creator','priority','labels','relations','dates','project','subscribers','links'];return <MyIssuesFilterMenu availableFields={fields} open={open} onOpenChange={setOpen} filters={filters} options={field=>explorerFilterOptions(field,options)} onToggle={(field,option)=>onChange(toggleFilterOption(filters,field,ISSUE_FILTER_LABELS[field]??field,option))} trigger={<button className="ui-pill" aria-label={t('Add filter')}><Filter/></button>}/>}
 
 function CycleDisplay({display,onChange}:{display:MyIssuesDisplayOptions;onChange:(value:MyIssuesDisplayOptions)=>void}){const[open,setOpen]=useState(false);return <MyIssuesDisplayMenu open={open} onOpenChange={setOpen} options={display} onChange={onChange} hiddenProperties={['milestone','customers','customerRevenue','timeInStatus']}/>}
 

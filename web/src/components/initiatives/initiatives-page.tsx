@@ -1,7 +1,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { Bell, Check, ChevronRight, Clock3, Copy, Edit3, Filter, MessageSquare, MoreHorizontal, MousePointer2, PanelRightClose, PanelRightOpen, Plus, Search, Send, SlidersHorizontal, Star, Trash2, X } from 'lucide-react'
+import { Bell, Check, ChevronRight, Clock3, Copy, Edit3, MessageSquare, MoreHorizontal, MousePointer2, Plus, Search, Send, Star, Trash2, X } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Avatar } from '@/components/issue/issue-row'
 import { PriorityIcon } from '@/components/issue/issue-icons'
@@ -10,6 +10,7 @@ import { useI18n } from '@/i18n/i18n'
 import type { Initiative, InitiativeMutationInput, InitiativeStatus, InitiativeUpdate, IssueLabel, Project, ProjectUpdate, Team, User } from '@/types/flow'
 import type { InitiativeRouteTab, InitiativesRouteView } from '@/lib/app-routes'
 import { InitiativeLabelsPicker, InitiativeProperties, InitiativeStatusIcon } from './initiative-shared'
+import { DisplayIcon, FilterIcon as Filter, PlusIcon, SidebarIcon } from '@/components/ui/view-action-icons'
 import { titleCase } from './initiative-model'
 import './initiatives.css'
 
@@ -115,14 +116,14 @@ export function InitiativesPage(props: Props) {
     <header className="li-page-header">
       <button className="li-mobile-menu" onClick={onOpenSidebar} type="button">☰</button>
       <h1>Initiatives</h1>
-      <button aria-label="New initiative" className="li-icon-button ui-pill" onClick={() => setCreating(true)} type="button"><Plus size={15}/></button>
+      <button aria-label="New initiative" className="li-new-initiative" onClick={() => setCreating(true)} type="button"><PlusIcon/><span>New initiative</span></button>
     </header>
     <div className="li-toolbar">
       <nav>{(['active', 'planned', 'all'] as InitiativesRouteView[]).map(item => <button className="ui-pill" aria-current={view === item ? 'page' : undefined} key={item} onClick={() => onViewChange(item)} type="button">{item === 'all' ? 'All initiatives' : titleCase(item)}</button>)}</nav>
       <div className="li-toolbar-actions">
         <InitiativeFilterMenu filters={filters} initiatives={initiatives} labels={labels} onAdvanced={() => { setAdvancedFilterEnabled(true); setAdvancedFilterOpen(true) }} onChange={setFilters} teams={teams} users={users}/>
         <InitiativeDisplayMenu grouping={grouping} properties={properties} showTeamInitiatives={showTeamInitiatives} sort={sort} onGrouping={setGrouping} onProperty={toggleProperty} onShowTeamInitiatives={setShowTeamInitiatives} onSort={setSort}/>
-        <button aria-expanded={detailsOpen} aria-label={detailsOpen ? 'Close sidebar' : 'Open sidebar'} className="li-icon-button ui-pill" onClick={toggleDetails} type="button">{detailsOpen ? <PanelRightClose size={14}/> : <PanelRightOpen size={14}/>}</button>
+        <button aria-expanded={detailsOpen} aria-label={detailsOpen ? 'Close sidebar' : 'Open sidebar'} className="li-icon-button ui-pill" onClick={toggleDetails} type="button"><SidebarIcon/></button>
       </div>
     </div>
     {advancedFilterEnabled ? <AdvancedFilterBar filters={filters} initiatives={initiatives} labels={labels} mode={filterMode} open={advancedFilterOpen} teams={teams} users={users} onChange={setFilters} onMode={setFilterMode} onOpenChange={setAdvancedFilterOpen} onRemove={() => { setFilters({}); setAdvancedFilterEnabled(false); setAdvancedFilterOpen(false) }}/> : Object.keys(filters).length > 0 && <div className="li-filter-chips">{Object.entries(filters).map(([key, value]) => <button key={key} onClick={() => setFilters(current => { const next = { ...current }; delete next[key as keyof FilterState]; return next })} type="button"><span>{filterLabel(key, value, users, teams, labels)}</span><X size={11}/></button>)}<button onClick={() => setFilters({})} type="button">Clear all</button></div>}
@@ -251,7 +252,7 @@ function ColumnHeader({ property, onSort }: { property: Property; onSort: (sort:
 }
 
 function InitiativeDisplayMenu({ grouping, properties, showTeamInitiatives, sort, onGrouping, onProperty, onShowTeamInitiatives, onSort }: { grouping: Grouping; properties: Set<Property>; showTeamInitiatives: boolean; sort: Sort; onGrouping: (grouping: Grouping) => void; onProperty: (property: Property) => void; onShowTeamInitiatives: (show: boolean) => void; onSort: (sort: Sort) => void }) {
-  return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Display options" className="li-icon-button ui-pill" type="button"><SlidersHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className="li-menu li-display-menu" sideOffset={4}>
+  return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Display options" className="li-icon-button ui-pill" type="button"><DisplayIcon/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className="li-menu li-display-menu" sideOffset={4}>
     <div className="li-display-row"><span>Grouping</span><DropdownMenu.Sub><DropdownMenu.SubTrigger>{groupingLabel(grouping)} <ChevronRight size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="li-menu">{(['none','contributingTeam','leadTeam','owner','health','status','priority','label'] as Grouping[]).map(item => <DropdownMenu.Item key={item} onSelect={() => onGrouping(item)}>{groupingLabel(item)}{grouping === item && <Check className="li-menu-end" size={13}/>}</DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub></div>
     <div className="li-display-row"><span>Ordering</span><DropdownMenu.Sub><DropdownMenu.SubTrigger>{titleCase(sort)} <ChevronRight size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="li-menu">{(['manual', 'name', 'priority', 'target', 'health', 'created', 'updated'] as Sort[]).map(item => <DropdownMenu.Item key={item} onSelect={() => onSort(item)}>{titleCase(item)}{sort === item && <Check className="li-menu-end" size={13}/>}</DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub></div>
     <DropdownMenu.Separator/><DropdownMenu.CheckboxItem checked={showTeamInitiatives} className="li-display-team-toggle" onCheckedChange={value => onShowTeamInitiatives(value === true)}>{showTeamInitiatives ? <Check size={12}/> : <span/>}Show team initiatives</DropdownMenu.CheckboxItem><DropdownMenu.Separator/><DropdownMenu.Label>Display properties</DropdownMenu.Label><div className="li-display-properties">{PROPERTY_ORDER.map(property => <button aria-pressed={properties.has(property)} className={properties.has(property) ? 'is-active' : ''} key={property} onClick={event => { event.preventDefault(); onProperty(property) }} type="button"><span>{properties.has(property) && <Check size={10}/>}</span>{columnLabel(property)}</button>)}</div>

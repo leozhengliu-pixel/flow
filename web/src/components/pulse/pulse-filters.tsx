@@ -1,9 +1,10 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Dialog from '@radix-ui/react-dialog'
-import { Check, ChevronRight, Filter, SlidersHorizontal, X } from 'lucide-react'
+import { Check, ChevronRight, SlidersHorizontal, X } from 'lucide-react'
 import { useState } from 'react'
 import type { BootstrapData } from '@/types/flow'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
+import { FilterIcon } from '@/components/ui/view-action-icons'
 import { filterValues, pulseFilterLabels, type PulseFilter, type PulseFilterField, type PulseFilterMatch } from './pulse-model'
 
 const groups: PulseFilterField[][] = [
@@ -12,6 +13,8 @@ const groups: PulseFilterField[][] = [
   ['initiative'],
   ['project','projectMember','projectStatus','projectLabel'],
 ]
+
+function Filter({size=16}:{size?:number}){return <FilterIcon width={size} height={size}/>}
 
 export function PulseFilterMenu({ data, filters, match, onChange, onMatchChange }: { data:BootstrapData;filters:PulseFilter[];match:PulseFilterMatch;onChange:(filters:PulseFilter[])=>void;onMatchChange:(match:PulseFilterMatch)=>void }) {
   const [query,setQuery]=useState('')
