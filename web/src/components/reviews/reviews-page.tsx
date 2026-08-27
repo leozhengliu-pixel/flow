@@ -1,11 +1,12 @@
 import * as Popover from '@radix-ui/react-popover'
-import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Copy, ExternalLink, FileCode2, Filter, GitBranch, GitMerge, GitPullRequest, Link2, MoreHorizontal, PanelRightClose, Plus, Search, Settings2, Sparkles, Star, Users, X } from 'lucide-react'
+import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Copy, ExternalLink, FileCode2, GitBranch, GitMerge, GitPullRequest, Link2, MoreHorizontal, PanelRightClose, Plus, Search, Sparkles, Star, Users, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Avatar } from '@/components/issue/issue-row'
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { DisplayIcon as Settings2, FilterIcon as Filter } from '@/components/ui/view-action-icons'
 import { Toggle } from '@/components/ui/toggle'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import { useI18n } from '@/i18n/i18n'

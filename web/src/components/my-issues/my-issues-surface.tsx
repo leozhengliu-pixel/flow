@@ -1,6 +1,6 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
-import { ChartNoAxesColumn } from 'lucide-react'
 import { DetailsIcon, FilterIcon } from './my-issues-icons'
+import { InsightsIcon } from '@/components/ui/view-action-icons'
 import { defaultMyIssuesDisplayOptions } from './my-issues-display-defaults'
 import { useIssueSurfaceControls } from './use-issue-surface-controls'
 import { MyIssuesDisplayMenu } from './my-issues-display-menu'
@@ -97,7 +97,7 @@ export function MyIssuesSurface({
       <div className={styles.actions}>
         <MyIssuesFilterMenu open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onToggle={(field, option) => { if (onFilterToggle) onFilterToggle(field, option); else onFilterSelect?.(field, option) }} trigger={<ToolbarButton label="Add filter"><FilterIcon/></ToolbarButton>}/>
         <MyIssuesDisplayMenu open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={options => onDisplayOptionsChange?.(options)}/>
-        <ToolbarButton label={insightsOpen ? 'Close insights' : 'Open insights'} pressed={insightsOpen} aria-expanded={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}><ChartNoAxesColumn size={15}/></ToolbarButton>
+        <ToolbarButton label={insightsOpen ? 'Close insights' : 'Open insights'} pressed={insightsOpen} aria-expanded={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}><InsightsIcon/></ToolbarButton>
         <ToolbarButton label={detailsOpen ? 'Close details' : 'Open details'} title={`${detailsOpen ? 'Close' : 'Open'} details (⌘I)`} pressed={detailsOpen} aria-expanded={detailsOpen} onClick={() => onDetailsOpenChange?.(!detailsOpen)}><DetailsIcon open={detailsOpen}/></ToolbarButton>
       </div>
     </div>
