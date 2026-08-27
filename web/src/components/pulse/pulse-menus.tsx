@@ -1,10 +1,13 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Bell, Check, Filter, X } from 'lucide-react'
+import { Bell, Check } from 'lucide-react'
 import { useState } from 'react'
 import { ViewIconPicker, type ViewVisual } from '@/components/views/view-icon-picker'
-import type { PulseSavedView, PulseSourceFilter } from './pulse-model'
+import type { BootstrapData } from '@/types/flow'
+import { PulseFilterChips, PulseFilterMenu, PulseMatchSummary } from './pulse-filters'
+import type { PulseFilter, PulseFilterMatch } from './pulse-model'
 
 export type PulseCadence = 'daily' | 'weekly' | 'never'
+export type PulseViewDraft = { name:string;icon:string;color:string;filters:PulseFilter[];match:PulseFilterMatch }
 
 export function PulseSubscriptionMenu({ cadence, onChange }: { cadence: PulseCadence; onChange: (cadence: PulseCadence) => void }) {
   const [query, setQuery] = useState('')
@@ -16,21 +19,14 @@ export function PulseSubscriptionMenu({ cadence, onChange }: { cadence: PulseCad
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 
-export function PulseNewViewEditor({ draft, onCancel, onChange, onSave }: { draft: Omit<PulseSavedView, 'id'>; onCancel: () => void; onChange: (draft: Omit<PulseSavedView, 'id'>) => void; onSave: () => void }) {
+export function PulseNewViewEditor({ data,draft,onCancel,onChange,onSave }: { data:BootstrapData;draft:PulseViewDraft;onCancel:()=>void;onChange:(draft:PulseViewDraft)=>void;onSave:()=>void }) {
   return <div className="pulse-new-view">
     <ViewIconPicker color={draft.color} icon={draft.icon} onChange={(visual: ViewVisual) => onChange({ ...draft, ...visual })}/>
     <input aria-label="View name" autoFocus placeholder="All updates" value={draft.name} onChange={event => onChange({ ...draft, name: event.target.value })} onKeyDown={event => { if (event.key === 'Escape') onCancel(); if (event.key === 'Enter' && draft.name.trim()) onSave() }}/>
     <button className="pulse-text-button" onClick={onCancel} type="button">Cancel</button>
     <button className="pulse-text-button is-primary" disabled={!draft.name.trim()} onClick={onSave} type="button">Save</button>
-    <PulseSourceMenu source={draft.source} onChange={source => onChange({ ...draft, source })}/>
+    <div className="pulse-new-view-filters"><PulseFilterMenu data={data} filters={draft.filters} match={draft.match} onChange={filters=>onChange({...draft,filters})} onMatchChange={match=>onChange({...draft,match})}/><PulseMatchSummary count={draft.filters.length} match={draft.match}/><PulseFilterChips data={data} filters={draft.filters} onChange={filters=>onChange({...draft,filters})}/></div>
   </div>
-}
-
-export function PulseSourceMenu({ source, onChange }: { source: PulseSourceFilter; onChange: (source: PulseSourceFilter) => void }) {
-  return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className="pulse-filter-button" type="button"><Filter size={13}/>{source === 'all' ? 'Add filter' : source === 'projects' ? 'Projects' : 'Initiatives'}{source !== 'all' && <X size={11}/>}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="start" className="pulse-menu pulse-filter-menu" sideOffset={5}>
-    <DropdownMenu.Label>Update source</DropdownMenu.Label>
-    {(['all', 'projects', 'initiatives'] as PulseSourceFilter[]).map(value => <DropdownMenu.Item key={value} onSelect={() => onChange(value)}><span>{value === 'all' ? 'All updates' : title(value)}</span>{source === value && <Check className="pulse-menu-end" size={13}/>}</DropdownMenu.Item>)}
-  </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 
 function title(value: string) { return value[0].toUpperCase() + value.slice(1) }

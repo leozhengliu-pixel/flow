@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   Activity, AppWindow, ArrowLeft, Bell, Bot, Braces, Building2, ChevronDown,
   CircleDot, Code2, CreditCard, FileText, Flame, Gauge,
-  Import, KeyRound, LayoutTemplate, Link2, ListFilter, MessageCircleQuestion,
+  FileClock, Import, KeyRound, LayoutTemplate, Link2, ListFilter, MessageCircleQuestion,
   MoreHorizontal, PanelTop, Plug, Plus, Radio, Rocket, Search, ShieldCheck,
   SlidersHorizontal, Smile, Sparkles, Tag, UserRound, UsersRound,
   X, Zap, type LucideIcon,
@@ -30,6 +30,7 @@ import { applyTheme } from "@/lib/theme";
 import { PersonalSettings } from "./personal-settings";
 import { PipelineEditorPage } from "@/components/releases/pipeline-editor-page";
 import { CodeIntegrationSettings } from "./code-integration-settings";
+import { AuditLogSettings } from "./audit-log-settings";
 
 type StoredSettings = {
   values: Record<string, string | boolean>;
@@ -107,6 +108,7 @@ const NAV: { title: string; items: NavItem[] }[] = [
     { id: "teams", label: "Teams", icon: UsersRound },
     { id: "members", label: "Members", icon: UserRound },
     { id: "security", label: "Security", icon: ShieldCheck },
+    { id: "audit-log", label: "Audit log", icon: FileClock },
     { id: "api", label: "API", icon: Braces },
     { id: "applications", label: "Applications", icon: AppWindow },
     { id: "billing", label: "Billing", icon: CreditCard },
@@ -138,7 +140,7 @@ export function SettingsPage(props: SettingsPageProps) {
   const isAdmin = props.data.viewerRole === "admin";
   const visible = useMemo(() => NAV.map(section => ({
     ...section,
-    items: section.items.filter(item => (isAdmin || section.title === "Personal" || memberCanManage(item.id, props.data.workspaceSettings)) && item.label.toLowerCase().includes(query.toLowerCase())),
+    items: section.items.filter(item => (item.id!=="audit-log"||isAdmin&&props.data.workspaceSettings.plan==="enterprise")&&(isAdmin || section.title === "Personal" || memberCanManage(item.id, props.data.workspaceSettings)) && item.label.toLowerCase().includes(query.toLowerCase())),
   })).filter(section => section.items.length), [isAdmin, props.data.workspaceSettings, query]);
   const setValue = (key: string, value: string | boolean) =>
     setSettings(current => ({ ...current, values: { ...current.values, [key]: value } }));
@@ -172,6 +174,7 @@ function SettingsBody(props: SettingsPageProps & { settings: StoredSettings; set
   const personal = ["preferences","profile","notifications","code-and-reviews","account-security","connections","agents"].includes(page);
   const teamOwner = page === "team" && props.data.teams.some(team => team.key.toLowerCase() === props.teamKey?.toLowerCase() && props.data.teamMembers.some(member => member.teamId === team.id && member.userId === props.data.viewer.id && member.role === "owner"));
   if (!personal && props.data.viewerRole !== "admin" && !teamOwner && !memberCanManage(page,props.data.workspaceSettings)) return <div className="settings-empty"><ShieldCheck size={28}/><h3>Admin access required</h3><p>You don't have permission to manage this workspace setting.</p></div>;
+  if(page==="audit-log"&&(props.data.viewerRole!=="admin"||props.data.workspaceSettings.plan!=="enterprise"))return <div className="settings-not-found"><strong>{t('Not found')}</strong><span>{t('We could not find the page you were looking for')}</span></div>;
   if (props.agentSkillMode) return <AgentSkillEditor data={props.data} id={props.agentSkillId} mode={props.agentSkillMode} onCancel={()=>props.onNavigate('agents')} onReload={props.onReload}/>;
   if (personal) return <PersonalSettings page={page} data={props.data} values={props.settings.values} setValue={props.setValue} onNavigate={props.onNavigate} onReload={props.onReload} onBack={props.onBack}/>;
   if (page === "issue-labels") return <DomainLabelsSettings data={props.data} resourceType="issue" onReload={props.onReload}/>;
@@ -184,6 +187,7 @@ function SettingsBody(props: SettingsPageProps & { settings: StoredSettings; set
   if (page === "workspace") return <WorkspacePage {...props}/>;
   if (page === "teams") return <TeamsPage data={props.data} onCreate={props.onCreateTeam} onOpen={team => props.onNavigate("team", team.key)}/>;
   if (page === "members") return <MembersPage data={props.data} onReload={props.onReload}/>;
+  if (page === "audit-log") return <AuditLogSettings data={props.data}/>;
   if (page === "api") return <ApiPage data={props.data} onReload={props.onReload}/>;
   if (page === "applications") return <ApplicationsPage data={props.data} onReload={props.onReload}/>;
   if (page === "billing") return <BillingPage data={props.data} onReload={props.onReload}/>;

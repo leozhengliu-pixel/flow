@@ -484,6 +484,7 @@ type Project struct {
 	TargetDate           *string                      `json:"targetDate,omitempty"`
 	TargetDateResolution string                       `json:"targetDateResolution,omitempty"`
 	IssueCount           int                          `json:"issueCount"`
+	ArchivedAt           *time.Time                   `json:"archivedAt,omitempty"`
 	CreatedAt            time.Time                    `json:"createdAt"`
 	UpdatedAt            time.Time                    `json:"updatedAt"`
 }
@@ -519,17 +520,19 @@ type ProjectMilestone struct {
 // ProjectUpdate mirrors the update stream shown on a Flow project. Updates
 // belong to the project aggregate so they persist alongside project metadata.
 type ProjectUpdate struct {
-	ID        string              `json:"id"`
-	ProjectID string              `json:"projectId"`
-	Body      string              `json:"body"`
-	Health    string              `json:"health"`
-	CreatedAt time.Time           `json:"createdAt"`
-	EditedAt  *time.Time          `json:"editedAt,omitempty"`
-	User      User                `json:"user"`
-	Comments  []Comment           `json:"comments"`
-	Reactions map[string][]string `json:"reactions"`
-	DueAt     *time.Time          `json:"dueAt,omitempty"`
-	Missing   bool                `json:"missing,omitempty"`
+	ID          string              `json:"id"`
+	ProjectID   string              `json:"projectId"`
+	Body        string              `json:"body"`
+	BodyData    map[string]any      `json:"bodyData,omitempty"`
+	Health      string              `json:"health"`
+	CreatedAt   time.Time           `json:"createdAt"`
+	EditedAt    *time.Time          `json:"editedAt,omitempty"`
+	User        User                `json:"user"`
+	Comments    []Comment           `json:"comments"`
+	Reactions   map[string][]string `json:"reactions"`
+	Attachments []Attachment        `json:"attachments"`
+	DueAt       *time.Time          `json:"dueAt,omitempty"`
+	Missing     bool                `json:"missing,omitempty"`
 }
 
 type CustomerRequest struct {
@@ -679,6 +682,7 @@ type UserSettings struct {
 	DPAUpdates               bool      `json:"dpaUpdates"`
 	AgentEnabled             bool      `json:"agentEnabled"`
 	AgentInstructions        string    `json:"agentInstructions"`
+	PulseSchedule            string    `json:"pulseSchedule"`
 	JobTitle                 string    `json:"jobTitle,omitempty"`
 	Username                 string    `json:"username,omitempty"`
 	UpdatedAt                time.Time `json:"updatedAt"`
@@ -1014,6 +1018,7 @@ type TrashEntry struct {
 	ResourceID   string          `json:"resourceId"`
 	Title        string          `json:"title"`
 	Payload      json.RawMessage `json:"payload"`
+	TeamIDs      []string        `json:"teamIds,omitempty"`
 	DeletedBy    User            `json:"deletedBy"`
 	DeletedAt    time.Time       `json:"deletedAt"`
 	ExpiresAt    time.Time       `json:"expiresAt"`
@@ -1113,12 +1118,14 @@ type InitiativeUpdate struct {
 	ID           string              `json:"id"`
 	InitiativeID string              `json:"initiativeId"`
 	Body         string              `json:"body"`
+	BodyData     map[string]any      `json:"bodyData,omitempty"`
 	Health       string              `json:"health"`
 	CreatedAt    time.Time           `json:"createdAt"`
 	EditedAt     *time.Time          `json:"editedAt,omitempty"`
 	User         User                `json:"user"`
 	Comments     []Comment           `json:"comments"`
 	Reactions    map[string][]string `json:"reactions"`
+	Attachments  []Attachment        `json:"attachments"`
 }
 
 type Comment struct {
@@ -1348,6 +1355,7 @@ type ProjectMutationInput struct {
 	TargetDate           *string  `json:"targetDate,omitempty"`
 	TargetDateResolution *string  `json:"targetDateResolution,omitempty"`
 	UpdateCadence        *string  `json:"updateCadence,omitempty"`
+	Archived             *bool    `json:"archived,omitempty"`
 	TemplateID           string   `json:"templateId,omitempty"`
 }
 
@@ -1374,8 +1382,9 @@ type InitiativeMutationInput struct {
 }
 
 type InitiativeUpdateCreateInput struct {
-	Body   string `json:"body"`
-	Health string `json:"health"`
+	Body     string         `json:"body"`
+	BodyData map[string]any `json:"bodyData,omitempty"`
+	Health   string         `json:"health"`
 }
 
 type ProjectResourceMutationInput struct {
@@ -1392,13 +1401,15 @@ type ProjectMilestoneMutationInput struct {
 }
 
 type ProjectUpdateCreateInput struct {
-	Body   string `json:"body"`
-	Health string `json:"health"`
+	Body     string         `json:"body"`
+	BodyData map[string]any `json:"bodyData,omitempty"`
+	Health   string         `json:"health"`
 }
 
 type ProjectUpdateMutationInput struct {
-	Body   *string `json:"body,omitempty"`
-	Health *string `json:"health,omitempty"`
+	Body     *string        `json:"body,omitempty"`
+	BodyData map[string]any `json:"bodyData,omitempty"`
+	Health   *string        `json:"health,omitempty"`
 }
 
 type CommentCreateInput struct {
@@ -1464,6 +1475,7 @@ type CycleMutationInput struct {
 	EndsAt      *string           `json:"endsAt,omitempty"`
 	Capacity    *int              `json:"capacity,omitempty"`
 	Favorite    *bool             `json:"favorite,omitempty"`
+	Status      *string           `json:"status,omitempty"`
 	Insight     map[string]string `json:"insight,omitempty"`
 }
 
