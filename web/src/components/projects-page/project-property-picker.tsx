@@ -40,7 +40,7 @@ export function ProjectPropertyPicker({ buttonClassName = '', children, label, o
     groupId: option.group,
     groupLabel: option.group,
     icon: <ProjectPropertyOptionIcon option={option} property={property}/>,
-    i18nIgnore: property === 'lead',
+    i18nIgnore: property === 'lead' || property === 'status',
   }))
   return <PropertyMenu
     align={property === 'status' ? 'end' : 'start'}
@@ -55,7 +55,7 @@ export function ProjectPropertyPicker({ buttonClassName = '', children, label, o
     trigger={children}
     triggerClassName={`lp-project-property-trigger ${buttonClassName}`}
     value={options.find(option => option.value === value)?.label}
-    valueIsEntityName={property === 'lead' && Boolean(value)}
+    valueIsEntityName={(property === 'lead' || property === 'status') && Boolean(value)}
   />
 }
 

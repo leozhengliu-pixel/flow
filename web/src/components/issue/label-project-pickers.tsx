@@ -7,7 +7,7 @@ import { PropertyShortcutTooltip } from '@/components/property/issue-property-ho
 
 export function LabelPicker({ value, labels, labelGroups = [], onToggle, onCreate, inline = false }: { value: IssueLabel[]; labels: IssueLabel[]; labelGroups?: LabelGroup[]; onToggle: (id: string) => void | Promise<void>; onCreate?: (name: string) => void | Promise<void>; inline?: boolean }) {
   const groupNames = new Map(labelGroups.map(group => [group.id, group.name]))
-  const options = labels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, groupId: label.groupId, groupLabel: label.groupId ? groupNames.get(label.groupId) : undefined }))
+  const options = labels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel: label.groupId ? groupNames.get(label.groupId) : undefined }))
   return <div className={`label-project-picker labels-picker${inline?' labels-picker--inline':''}`}>
     <PropertyMenu
       label="Labels"
