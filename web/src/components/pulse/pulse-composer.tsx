@@ -6,13 +6,17 @@ import { Avatar } from '@/components/issue/issue-row'
 import { NoAssigneeIcon, PriorityIcon } from '@/components/issue/issue-icons'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import type { Initiative, InitiativeUpdate, Project, ProjectUpdate } from '@/types/flow'
+import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
+import type { DescriptionSnapshot } from '@/components/issue/editor/editor-content'
 
 type Source = { kind: 'project'; entity: Project } | { kind: 'initiative'; entity: Initiative }
 
-export function PulseComposer({ initiatives, onCreateInitiative, onCreateProject, onOpenChange, open, projects }: {
+export function PulseComposer({ initiatives, onCreateInitiative, onCreateProject, onUploadInitiativeAttachment, onUploadProjectAttachment, onOpenChange, open, projects }: {
   initiatives: Initiative[]
-  onCreateInitiative: (id: string, input: { body: string; health?: Project['health'] }) => Promise<InitiativeUpdate>
-  onCreateProject: (id: string, input: { body: string; health?: Project['health'] }) => Promise<ProjectUpdate>
+  onCreateInitiative: (id: string, input: { body: string;bodyData?:Record<string,unknown>;health?: Project['health'] }) => Promise<InitiativeUpdate>
+  onCreateProject: (id: string, input: { body: string;bodyData?:Record<string,unknown>;health?: Project['health'] }) => Promise<ProjectUpdate>
+  onUploadInitiativeAttachment:(id:string,updateId:string,file:File)=>Promise<InitiativeUpdate>
+  onUploadProjectAttachment:(id:string,updateId:string,file:File)=>Promise<ProjectUpdate>
   onOpenChange: (open: boolean) => void
   open: boolean
   projects: Project[]
@@ -20,18 +24,19 @@ export function PulseComposer({ initiatives, onCreateInitiative, onCreateProject
   const sources: Source[] = useMemo(() => [...projects.map(entity => ({ kind: 'project' as const, entity })), ...initiatives.map(entity => ({ kind: 'initiative' as const, entity }))], [initiatives, projects])
   const [source, setSource] = useState<Source | undefined>(sources[0])
   const [health, setHealth] = useState<Project['health']>('onTrack')
-  const [body, setBody] = useState('')
-  const [files, setFiles] = useState<File[]>([])
+  const [body, setBody] = useState<DescriptionSnapshot>()
+  const [files,setFiles]=useState<File[]>([])
   const [saving, setSaving] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
+  const fileRef=useRef<HTMLInputElement>(null)
   useEffect(() => { if (open && !source) setSource(sources[0]) }, [open, source, sources])
-  useEffect(() => { if (!open) { setBody(''); setFiles([]); setSaving(false) } }, [open])
+  useEffect(() => { if (!open) { setBody(undefined);setFiles([]);setSaving(false) } }, [open])
   const submit = async () => {
-    if (!source || !body.trim() || saving) return
+    if (!source || !body?.markdown.trim() || saving) return
     setSaving(true)
     try {
-      if (source.kind === 'project') await onCreateProject(source.entity.id, { body: body.trim(), health })
-      else await onCreateInitiative(source.entity.id, { body: body.trim(), health })
+      const input={body:body.markdown.trim(),bodyData:body.document as Record<string,unknown>,health}
+      if (source.kind === 'project') { const update=await onCreateProject(source.entity.id,input);for(const file of files)await onUploadProjectAttachment(source.entity.id,update.id,file) }
+      else { const update=await onCreateInitiative(source.entity.id,input);for(const file of files)await onUploadInitiativeAttachment(source.entity.id,update.id,file) }
       onOpenChange(false)
     } finally { setSaving(false) }
   }
@@ -41,10 +46,10 @@ export function PulseComposer({ initiatives, onCreateInitiative, onCreateProject
       <PulseHealthMenu health={health} onChange={setHealth}/>
       <Dialog.Close asChild><button aria-label="Close dialog" className="pulse-composer-close" type="button"><X size={15}/></button></Dialog.Close>
     </header>
-    <textarea aria-label={source?.kind === 'initiative' ? 'Initiative update' : 'Project update'} autoFocus onChange={event => setBody(event.target.value)} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); void submit() } }} placeholder={source?.kind === 'initiative' ? 'Write an initiative update…' : 'Write a project update…'} value={body}/>
+    <IssueDescriptionEditor ariaLabel={source?.kind==='initiative'?'Initiative update':'Project update'} className="pulse-composer-editor" placeholder={source?.kind==='initiative'?'Write an initiative update…':'Write a project update…'} value={body?.markdown??''} state={body?.documentJSON} onChange={setBody} onSubmit={()=>void submit()}/>
     {source && <ChangeSummary source={source}/>} 
-    {files.length > 0 && <div className="pulse-composer-files">{files.map((file, index) => <span key={`${file.name}:${index}`}>{file.name}<button aria-label={`Remove ${file.name}`} onClick={() => setFiles(current => current.filter((_, itemIndex) => itemIndex !== index))} type="button"><X size={11}/></button></span>)}</div>}
-    <footer><button aria-label="Attach images, files, or videos" onClick={() => fileRef.current?.click()} type="button"><Paperclip size={15}/></button><input hidden multiple onChange={event => setFiles(Array.from(event.target.files ?? []))} ref={fileRef} type="file"/><button className="pulse-post-button" disabled={!body.trim() || !source || saving} onClick={() => void submit()} type="button">{saving ? 'Posting…' : 'Post update'}</button></footer>
+    {files.length>0&&<div className="pulse-composer-files">{files.map((file,index)=><span key={`${file.name}:${index}`}>{file.name}<button aria-label={`Remove ${file.name}`} onClick={()=>setFiles(current=>current.filter((_,itemIndex)=>itemIndex!==index))}><X size={11}/></button></span>)}</div>}
+    <footer><button aria-label="Attach images, files, or videos" onClick={()=>fileRef.current?.click()} type="button"><Paperclip size={15}/></button><input ref={fileRef} type="file" hidden multiple onChange={event=>{setFiles(Array.from(event.target.files??[]));event.target.value=''}}/><span/><button className="pulse-post-button" disabled={!body?.markdown.trim() || !source || saving} onClick={() => void submit()} type="button">{saving ? 'Posting…' : 'Post update'}</button></footer>
   </Dialog.Content></Dialog.Portal></Dialog.Root>
 }
 

@@ -426,6 +426,9 @@ func (s *SQLiteStore) BootstrapForUser(ctx context.Context, workspaceKey, userID
 		return domain.Bootstrap{}, false, err
 	}
 	data.Viewer, data.ViewerRole = user, role
+	if role != "admin" || data.WorkspaceSettings.Plan != "enterprise" {
+		data.AuditLog = []domain.AuditLogEntry{}
+	}
 	data.Members, _ = s.ListMembers(ctx, data.Workspace.ID)
 	data.TeamMembers, _ = s.ListTeamMembers(ctx, data.Workspace.ID)
 	if role == "admin" {
@@ -884,7 +887,7 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 		}
 	}
 	data.SavedViews = slices.DeleteFunc(data.SavedViews, func(view domain.SavedView) bool {
-		return view.Scope == "team" && !allowed[view.TeamID]
+		return view.Scope == "team" && !allowed[view.TeamID] || view.Scope == "personal" && view.OwnerID != data.Viewer.ID
 	})
 	data.Notifications = slices.DeleteFunc(data.Notifications, func(item domain.Notification) bool { return item.RecipientID != data.Viewer.ID })
 	if !guest {

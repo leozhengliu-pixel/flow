@@ -35,6 +35,7 @@ export type ProjectMutationInput = {
   startDate?: string
   targetDate?: string
   updateCadence?: Project['updateCadence']
+  archived?: boolean
 }
 
 export type ProjectCreateInput = Required<Pick<ProjectMutationInput, 'name'>> & ProjectMutationInput

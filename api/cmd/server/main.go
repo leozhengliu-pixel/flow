@@ -354,6 +354,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/projects/{id}/updates/{updateId}", s.deleteProjectUpdate)
 	mux.HandleFunc("POST /api/projects/{id}/updates/{updateId}/comments", s.createProjectUpdateComment)
 	mux.HandleFunc("POST /api/projects/{id}/updates/{updateId}/reactions", s.toggleProjectUpdateReaction)
+	mux.HandleFunc("POST /api/projects/{id}/updates/{updateId}/attachments", s.createPulseUpdateAttachment("project"))
+	mux.HandleFunc("DELETE /api/projects/{id}/updates/{updateId}/attachments/{attachmentId}", s.deletePulseUpdateAttachment("project"))
 	mux.HandleFunc("POST /api/initiatives", s.createInitiative)
 	mux.HandleFunc("PATCH /api/initiatives/{id}", s.updateInitiative)
 	mux.HandleFunc("DELETE /api/initiatives/{id}", s.deleteInitiative)
@@ -370,6 +372,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/initiatives/{id}/updates/{updateId}", s.deleteInitiativeUpdate)
 	mux.HandleFunc("POST /api/initiatives/{id}/updates/{updateId}/comments", s.createInitiativeUpdateComment)
 	mux.HandleFunc("POST /api/initiatives/{id}/updates/{updateId}/reactions", s.toggleInitiativeUpdateReaction)
+	mux.HandleFunc("POST /api/initiatives/{id}/updates/{updateId}/attachments", s.createPulseUpdateAttachment("initiative"))
+	mux.HandleFunc("DELETE /api/initiatives/{id}/updates/{updateId}/attachments/{attachmentId}", s.deletePulseUpdateAttachment("initiative"))
 	mux.HandleFunc("PATCH /api/issues/{id}", s.updateIssue)
 	mux.HandleFunc("PUT /api/issues/{id}/releases", s.setIssueReleases)
 	mux.HandleFunc("DELETE /api/issues/{id}", s.deleteIssue)
@@ -962,6 +966,10 @@ func (s *server) createSavedView(w http.ResponseWriter, r *http.Request) {
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "view.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
 		created = domain.SavedView{ID: fmt.Sprintf("view_%d", time.Now().UnixNano()), CreatedAt: now, UpdatedAt: now}
+		if input.Resource != nil && *input.Resource == "pulse" {
+			scope, ownerID := "personal", data.Viewer.ID
+			input.Scope, input.OwnerID = &scope, &ownerID
+		}
 		if err := applySavedViewUpdate(data, &created, input); err != nil {
 			return "", err
 		}
@@ -1145,6 +1153,12 @@ func (s *server) updateCycle(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Favorite != nil {
 			cycle.Favorite = *input.Favorite
+		}
+		if input.Status != nil {
+			if !slices.Contains([]string{"upcoming", "current", "completed"}, *input.Status) {
+				return errInvalid
+			}
+			cycle.Status = *input.Status
 		}
 		if input.Insight != nil {
 			measure, slice, segment := input.Insight["measure"], input.Insight["slice"], input.Insight["segment"]
@@ -1952,7 +1966,7 @@ func (s *server) createInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 		if health == "noUpdate" {
 			health = "onTrack"
 		}
-		created = domain.InitiativeUpdate{ID: fmt.Sprintf("initiative_update_%d", time.Now().UnixNano()), InitiativeID: id, Body: strings.TrimSpace(input.Body), Health: health, CreatedAt: time.Now().UTC(), User: data.Viewer, Comments: []domain.Comment{}, Reactions: map[string][]string{}}
+		created = domain.InitiativeUpdate{ID: fmt.Sprintf("initiative_update_%d", time.Now().UnixNano()), InitiativeID: id, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, Health: health, CreatedAt: time.Now().UTC(), User: data.Viewer, Comments: []domain.Comment{}, Reactions: map[string][]string{}, Attachments: []domain.Attachment{}}
 		data.InitiativeUpdates[id] = append([]domain.InitiativeUpdate{created}, data.InitiativeUpdates[id]...)
 		initiative.Health = health
 		initiative.UpdatedAt = created.CreatedAt
@@ -1984,6 +1998,9 @@ func (s *server) updateInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 			}
 			updates[index].Body = strings.TrimSpace(*input.Body)
 		}
+		if input.BodyData != nil {
+			updates[index].BodyData = input.BodyData
+		}
 		if input.Health != nil {
 			if !slices.Contains([]string{"onTrack", "atRisk", "offTrack"}, *input.Health) {
 				return errInvalid
@@ -2005,6 +2022,7 @@ func (s *server) updateInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 
 func (s *server) deleteInitiativeUpdate(w http.ResponseWriter, r *http.Request) {
 	id, updateID := r.PathValue("id"), r.PathValue("updateId")
+	var objectKeys []string
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.update_deleted", id, map[string]string{"id": updateID}, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
@@ -2014,6 +2032,9 @@ func (s *server) deleteInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 		index := slices.IndexFunc(updates, func(item domain.InitiativeUpdate) bool { return item.ID == updateID })
 		if index < 0 {
 			return errNotFound
+		}
+		for _, attachment := range updates[index].Attachments {
+			objectKeys = append(objectKeys, filepath.Base(attachment.URL))
 		}
 		updates = slices.Delete(updates, index, index+1)
 		data.InitiativeUpdates[id] = updates
@@ -2027,6 +2048,11 @@ func (s *server) deleteInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		respondMutation(w, err, http.StatusOK, nil)
 		return
+	}
+	if storage, storageErr := s.storage(); storageErr == nil {
+		for _, key := range objectKeys {
+			_ = storage.Delete(r.Context(), key)
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -2376,7 +2402,7 @@ func (s *server) createProjectUpdate(w http.ResponseWriter, r *http.Request) {
 				health = "onTrack"
 			}
 		}
-		created = domain.ProjectUpdate{ID: fmt.Sprintf("project_update_%d", time.Now().UnixNano()), ProjectID: id, Body: strings.TrimSpace(input.Body), Health: health, CreatedAt: now, User: data.Viewer, Comments: []domain.Comment{}, Reactions: map[string][]string{}}
+		created = domain.ProjectUpdate{ID: fmt.Sprintf("project_update_%d", time.Now().UnixNano()), ProjectID: id, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, Health: health, CreatedAt: now, User: data.Viewer, Comments: []domain.Comment{}, Reactions: map[string][]string{}, Attachments: []domain.Attachment{}}
 		if settings, ok := data.Settings["projectUpdates"].(map[string]any); ok {
 			if cadence := intFromAny(settings["cadenceDays"]); cadence > 0 {
 				dueAt := now.AddDate(0, 0, cadence)
@@ -2404,6 +2430,7 @@ func (s *server) createProjectUpdate(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	projectID, updateID := r.PathValue("id"), r.PathValue("updateId")
+	var objectKeys []string
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.update_deleted", projectID, map[string]string{"id": updateID}, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
@@ -2413,6 +2440,9 @@ func (s *server) deleteProjectUpdate(w http.ResponseWriter, r *http.Request) {
 		index := slices.IndexFunc(updates, func(update domain.ProjectUpdate) bool { return update.ID == updateID })
 		if index < 0 {
 			return errNotFound
+		}
+		for _, attachment := range updates[index].Attachments {
+			objectKeys = append(objectKeys, filepath.Base(attachment.URL))
 		}
 		remaining := slices.Delete(updates, index, index+1)
 		data.ProjectUpdates[projectID] = remaining
@@ -2430,6 +2460,11 @@ func (s *server) deleteProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		respondMutation(w, err, http.StatusOK, nil)
 		return
+	}
+	if storage, storageErr := s.storage(); storageErr == nil {
+		for _, key := range objectKeys {
+			_ = storage.Delete(r.Context(), key)
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -2461,6 +2496,9 @@ func (s *server) updateProjectUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Body != nil {
 			updates[index].Body = strings.TrimSpace(*input.Body)
+		}
+		if input.BodyData != nil {
+			updates[index].BodyData = input.BodyData
 		}
 		if input.Health != nil {
 			updates[index].Health = *input.Health
@@ -3200,6 +3238,20 @@ func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBo
 				return true
 			}
 		}
+		for _, updates := range data.ProjectUpdates {
+			for _, update := range updates {
+				if slices.ContainsFunc(update.Attachments, func(attachment domain.Attachment) bool { return attachment.URL == url }) {
+					return true
+				}
+			}
+		}
+		for _, updates := range data.InitiativeUpdates {
+			for _, update := range updates {
+				if slices.ContainsFunc(update.Attachments, func(attachment domain.Attachment) bool { return attachment.URL == url }) {
+					return true
+				}
+			}
+		}
 	}
 	return false
 }
@@ -3586,7 +3638,7 @@ func applySavedViewUpdate(data *domain.Bootstrap, view *domain.SavedView, input 
 		view.Color = color
 	}
 	if input.Resource != nil {
-		if !slices.Contains([]string{"issues", "projects", "initiativeProjects"}, *input.Resource) {
+		if !slices.Contains([]string{"issues", "projects", "initiativeProjects", "pulse"}, *input.Resource) {
 			return errInvalid
 		}
 		view.Resource = *input.Resource
@@ -3807,6 +3859,14 @@ func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input d
 			return errInvalid
 		}
 		project.UpdateCadence = *input.UpdateCadence
+	}
+	if input.Archived != nil {
+		if *input.Archived {
+			now := time.Now().UTC()
+			project.ArchivedAt = &now
+		} else {
+			project.ArchivedAt = nil
+		}
 	}
 	if input.Icon != nil {
 		project.Icon = *input.Icon
