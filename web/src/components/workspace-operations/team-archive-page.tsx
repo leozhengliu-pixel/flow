@@ -54,9 +54,16 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
     <div className="archive-toolbar">
       <nav className="archive-tabs" aria-label={t('Archive sections')}>{tabs.map(item=>{
         const href=teamArchivePath(data.workspace.urlKey,team.key,item.id)
-        return <a aria-current={tab.id===item.id?'page':undefined} className={tab.id===item.id?'active':''} href={href} key={item.id} onClick={event=>{event.preventDefault();onNavigate(href)}}>{t(item.label)}</a>
+        return <a aria-current={tab.id===item.id?'page':undefined} className={`ui-pill ui-pill--strong-light ${tab.id===item.id?'active':''}`} href={href} key={item.id} onClick={event=>{event.preventDefault();onNavigate(href)}}>{t(item.label)}</a>
       })}</nav>
-      {tab.id==='issues'&&<MyIssuesFilterMenu open={filterOpen} onOpenChange={setFilterOpen} filters={filters} options={field=>explorerFilterOptions(field,issueOptions)} onToggle={toggleFilter} trigger={<button className="archive-filter-trigger" aria-label={t('Add filter')}><Filter/></button>}/>} 
+      {tab.id==='issues'&&<MyIssuesFilterMenu
+        open={filterOpen}
+        onOpenChange={setFilterOpen}
+        filters={filters}
+        options={field=>explorerFilterOptions(field,issueOptions)}
+        onToggle={toggleFilter}
+        trigger={<button className="archive-filter-trigger ui-pill" aria-label={t('Add filter')}><Filter/></button>}
+      />}
     </div>
     {tab.id==='issues'&&filters.length>0&&<div className="archive-applied-filters"><MyIssuesFilterBar filters={filters} filterOptions={filter=>explorerFilterOptions(filter.field,issueOptions)} onAdd={()=>setFilterOpen(true)} onClear={()=>setFilters([])} onOperatorChange={(id,operator)=>setFilters(current=>updateFilterOperator(current,id,operator))} onRemove={id=>setFilters(current=>current.filter(filter=>filter.id!==id))} onValuesChange={(id,options)=>setFilters(current=>updateFilterValues(current,id,options))}/></div>}
     {count>0&&<div className="archive-list">

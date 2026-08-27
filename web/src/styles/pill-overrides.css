@@ -1,0 +1,12 @@
+.li-toolbar nav {
+  gap: 8px;
+}
+
+.li-toolbar nav button.ui-pill {
+  height: 28px;
+  padding: 0 10px;
+}
+
+:root[data-theme="light"] .li-toolbar nav button.ui-pill[aria-current="page"] {
+  background: var(--ui-pill-active-bg);
+}

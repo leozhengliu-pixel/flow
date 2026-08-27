@@ -55,9 +55,9 @@ export function IssueExplorerSurface({
   const {changeDisplayOpen,changeFilterOpen,displayOpen,filterOpen}=useIssueSurfaceControls(filterOpenSignal,detailsOpen,onDetailsOpenChange)
 
   const toolbar = <div className={styles.toolbar}>
-    {creatingView ? <nav className={styles.tabs} aria-label="View resource"><a className={styles.tab} data-active="true" href="#" onClick={event => event.preventDefault()}>Issues</a><a className={styles.tab} href="#" onClick={event => { event.preventDefault(); onNewViewResourceChange?.('projects') }}>Projects</a></nav> : savedView ? <span className={styles.viewCount}>{itemCount} {itemCount === 1 ? 'issue' : 'issues'}</span> : <nav className={styles.tabs} aria-label={`${scopeName} issue views`}>
-      {VIEWS.map(view => <a key={view.id} href={viewHref(view.id)} className={styles.tab} data-active={activeView === view.id} aria-current={activeView === view.id ? 'page' : undefined} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onNavigateView(view.id) }}>{view.label}</a>)}
-      {savedViews.map(item => <a key={item.id} href={savedViewHref?.(item) ?? '#'} className={styles.savedTab} onClick={event => { event.preventDefault(); onSavedViewSelect?.(item) }}><ViewGlyph color={item.color} icon={item.icon}/><span data-i18n-ignore>{item.name}</span></a>)}
+    {creatingView ? <nav className={styles.tabs} aria-label="View resource"><a className={`${styles.tab} ui-pill`} data-active="true" href="#" onClick={event => event.preventDefault()}>Issues</a><a className={`${styles.tab} ui-pill`} href="#" onClick={event => { event.preventDefault(); onNewViewResourceChange?.('projects') }}>Projects</a></nav> : savedView ? <span className={styles.viewCount}>{itemCount} {itemCount === 1 ? 'issue' : 'issues'}</span> : <nav className={styles.tabs} aria-label={`${scopeName} issue views`}>
+      {VIEWS.map(view => <a key={view.id} href={viewHref(view.id)} className={`${styles.tab} ui-pill`} data-active={activeView === view.id} aria-current={activeView === view.id ? 'page' : undefined} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onNavigateView(view.id) }}>{view.label}</a>)}
+      {savedViews.map(item => <a key={item.id} href={savedViewHref?.(item) ?? '#'} className={`${styles.savedTab} ui-pill`} onClick={event => { event.preventDefault(); onSavedViewSelect?.(item) }}><ViewGlyph color={item.color} icon={item.icon}/><span data-i18n-ignore>{item.name}</span></a>)}
       <button className={styles.addView} type="button" aria-label="Add new view" title="Add new view" onClick={onAddView}><Plus size={14}/></button>
     </nav>}
     <div className={styles.actions}>
@@ -82,5 +82,5 @@ export function IssueExplorerSurface({
 }
 
 function ToolbarButton({ children, label, onClick, pressed, title }: { children: ReactNode; label: string; onClick?: () => void; pressed?: boolean; title?: string }) {
-  return <button type="button" className={styles.iconButton} aria-label={label} aria-pressed={pressed} title={title} onClick={onClick}>{children}</button>
+  return <button type="button" className={`${styles.iconButton} ui-pill`} aria-label={label} aria-pressed={pressed} title={title} onClick={onClick}>{children}</button>
 }

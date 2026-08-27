@@ -140,10 +140,10 @@ export function ProjectsPageSurface({
     </header>
     {creatingView && viewEditor?.(editorActions)}
     <div className="lp-projects__toolbar">
-      {creatingView ? <nav aria-label="View resource" className="lp-projects__views"><a className="lp-projects__view" href="#" onClick={event => { event.preventDefault(); onNewViewResourceChange?.('issues') }}>Issues</a><a aria-current="page" className="lp-projects__view" href="#" onClick={event => event.preventDefault()}>Projects</a></nav> : <nav aria-label="Project views" className="lp-projects__views">
+      {creatingView ? <nav aria-label="View resource" className="lp-projects__views"><a className="lp-projects__view ui-pill" href="#" onClick={event => { event.preventDefault(); onNewViewResourceChange?.('issues') }}>Issues</a><a aria-current="page" className="lp-projects__view ui-pill" href="#" onClick={event => event.preventDefault()}>Projects</a></nav> : <nav aria-label="Project views" className="lp-projects__views">
         {views.map(view => <a
           aria-current={view.id === activeViewId ? 'page' : undefined}
-          className="lp-projects__view"
+          className="lp-projects__view ui-pill"
           href={view.href ?? '#'}
           key={view.id}
           onClick={event => {
@@ -196,7 +196,7 @@ function IconButton({ active = false, badge = false, buttonRef, children, classN
   return <button
     aria-label={label}
     aria-pressed={active}
-    className={`lp-projects__icon-button ${active ? 'is-active' : ''} ${className}`}
+    className={`lp-projects__icon-button ui-pill ${active ? 'is-active' : ''} ${className}`}
     onClick={onClick}
     ref={buttonRef}
     title={label}
