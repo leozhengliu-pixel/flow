@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Building2, FileText, FolderKanban, Layers3, Lightbulb, Search, SlidersHorizontal, UserRound, X } from 'lucide-react'
+import { Building2, FileText, FolderKanban, Layers3, Lightbulb, Search, UserRound, X } from 'lucide-react'
 
 import { ReleasesIcon } from '@/components/releases/release-icons'
 
@@ -7,7 +7,7 @@ import { clearSearchHistory, searchWorkspace } from '@/lib/api'
 import type { SearchHistoryEntry, SearchResourceType, SearchResponse, SearchResult } from '@/types/flow'
 
 import './workspace-search-page.css'
-import { FilterIcon } from '@/components/ui/view-action-icons'
+import { DisplayIcon, FilterIcon } from '@/components/ui/view-action-icons'
 
 type SearchTab = 'all' | SearchResourceType
 
@@ -80,11 +80,11 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult }: {
     </header>
     <div className="workspace-search-toolbar">
       <nav aria-label="Search resource type">
-        {tabs.map(item => <button key={item.id} type="button" className={item.id === tab ? 'active' : ''} onClick={() => setTab(item.id)}>{item.label}</button>)}
+        {tabs.map(item => <button key={item.id} type="button" className={`ui-pill ${item.id === tab ? 'active' : ''}`} onClick={() => setTab(item.id)}>{item.label}</button>)}
       </nav>
       <div className="workspace-search-tools">
-        <button type="button" aria-label="Add filter" title="Add filter"><FilterIcon/></button>
-        <button type="button" aria-label="Display options" title="Display options"><SlidersHorizontal size={14}/></button>
+        <button className="ui-pill" type="button" aria-label="Add filter" title="Add filter"><FilterIcon/></button>
+        <button className="ui-pill" type="button" aria-label="Display options" title="Display options"><DisplayIcon/></button>
       </div>
     </div>
     <section className="workspace-search-content" aria-live="polite">

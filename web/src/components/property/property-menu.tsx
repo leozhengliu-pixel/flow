@@ -7,6 +7,7 @@ import { LabelHoverPreview } from './label-hover-preview'
 import { usePropertyCommand } from './use-property-command'
 import { groupOptionSections } from '@/lib/group-options'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
+import type { LabelResourceType } from '@/types/flow'
 
 export interface PropertyOption {
   id: string
@@ -15,6 +16,7 @@ export interface PropertyOption {
   description?: string
   issueCount?: number
   scope?: string
+  resourceType?: LabelResourceType
   groupId?: string
   groupLabel?: string
   keywords?: string
@@ -162,7 +164,7 @@ function CommandOption({ option, active, checked, icon, listboxId, multi = false
   const row = <button type="button" id={`${listboxId}-${option.id || 'none'}`} role="option" aria-selected={active} aria-checked={checked} onPointerMove={onActive} onFocus={onActive} onClick={onChoose}>
     <span className="property-command-option-background"/>{multi && <span className="property-command-checkbox">{checked && <CheckboxMark/>}</span>}<span className="property-command-icon">{option.icon ?? (option.color ? <i className="option-dot" style={{ background: option.color }}/> : icon)}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.label}</span>{!multi && checked && <span className="property-command-check"><Check size={14}/></span>}{option.shortcut && <kbd>{option.shortcut}</kbd>}
   </button>
-  return multi && option.color ? <LabelHoverPreview label={{ name: option.label, color: option.color, description: option.description, issueCount: option.issueCount, scope: option.scope }}>{row}</LabelHoverPreview> : row
+  return multi && option.color ? <LabelHoverPreview label={{ name: option.label, color: option.color, description: option.description, issueCount: option.issueCount, scope: option.scope, resourceType: option.resourceType }}>{row}</LabelHoverPreview> : row
 }
 
 function iconFor(label: string) {

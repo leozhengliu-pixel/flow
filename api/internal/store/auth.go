@@ -513,6 +513,7 @@ func (s *SQLiteStore) BootstrapForUser(ctx context.Context, workspaceKey, userID
 		data.Users = slices.DeleteFunc(data.Users, func(member domain.User) bool { return !visibleUsers[member.ID] })
 	}
 	data.TeamMembers = slices.DeleteFunc(data.TeamMembers, func(member domain.TeamMember) bool { return !allowed[member.TeamID] })
+	refreshResourceCounts(&data)
 	return data, true, nil
 }
 

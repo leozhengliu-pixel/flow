@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as ContextMenu from '@radix-ui/react-context-menu'
-import { BarChart3, Layers2, Link2, PanelRightClose, PanelRightOpen, Pencil, Star, Trash2 } from 'lucide-react'
+import { Layers2, Link2, Pencil, Star, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { ProjectOverview } from './project-overview'
@@ -13,6 +13,7 @@ import { ProjectInsights } from './project-insights'
 import { ProjectActionsMenu, ProjectDescriptionHistoryDialog, ProjectNotificationMenu } from './project-header-menus'
 import type { ProjectDetailProps, ProjectDetailTab } from './project-detail-types'
 import { labelsForResource } from '@/lib/labels'
+import { AddViewIcon, InsightsIcon, SidebarIcon } from '@/components/ui/view-action-icons'
 import './project-detail-page.css'
 
 export type { ProjectDetailTab } from './project-detail-types'
@@ -97,12 +98,12 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
         <ProjectTab active={tab === 'activity'} id="activity" onChange={onTabChange}>Activity</ProjectTab>
         <ProjectTab active={tab === 'issues'} id="issues" onChange={onTabChange}>Issues</ProjectTab>
         {projectSavedViews.map(view => <ContextMenu.Root key={view.id}><ContextMenu.Trigger asChild><button aria-current={tab === 'issues' && activeSavedViewId === view.id ? 'page' : undefined} className="project-detail-page__saved-view-tab" data-active={tab === 'issues' && activeSavedViewId === view.id} onClick={() => openSavedView(view)} title={`${view.description || view.name} · Right-click for view actions`} type="button"><ViewGlyph color={view.color || '#8a8f98'} icon={view.icon || 'CustomView'}/><span>{view.name}</span></button></ContextMenu.Trigger><ContextMenu.Portal><ContextMenu.Content className="project-detail-page__menu"><ContextMenu.Item onSelect={() => { const name = window.prompt('Rename view', view.name)?.trim(); if (name && name !== view.name) void props.onUpdateSavedView(view.id, { name }) }}><Pencil size={13}/><span>Rename view…</span></ContextMenu.Item><ContextMenu.Separator/><ContextMenu.Item className="is-danger" onSelect={() => { if (window.confirm(`Delete view “${view.name}”?`)) void props.onDeleteSavedView(view).then(() => { if (activeSavedViewId === view.id) setActiveSavedViewId(undefined) }) }}><Trash2 size={13}/><span>Delete view</span></ContextMenu.Item></ContextMenu.Content></ContextMenu.Portal></ContextMenu.Root>)}
-        {tab === 'new' ? <button aria-current="page" className="project-detail-page__new-view-tab" type="button"><Layers2 size={13}/><span>New view</span><Pencil size={10}/></button> : <button aria-label="Add new view" className="project-detail-page__add-view" onClick={() => onTabChange('new')} type="button"><Layers2 size={13}/></button>}
+        {tab === 'new' ? <button aria-current="page" className="project-detail-page__new-view-tab" type="button"><Layers2 size={13}/><span>New view</span><Pencil size={10}/></button> : <button aria-label="Add new view" className="project-detail-page__add-view" onClick={() => onTabChange('new')} type="button"><AddViewIcon/></button>}
       </nav>
       <div className="project-detail-page__toolbar-actions">
         {tab === 'issues' && <><ProjectIssueFilterMenu filters={issueFilters} issues={projectIssues} onChange={changeIssueFilters}/><ProjectIssueDisplayMenu display={issueDisplay} onChange={changeIssueDisplay}/></>}
-        <button aria-label={insightsOpen ? 'Close project insights' : 'Open project insights'} aria-pressed={insightsOpen} className="project-detail-page__toolbar-button" onClick={() => { setInsightsOpen(value => !value); setDetailsOpen(false) }} type="button"><BarChart3 size={15}/></button>
-        <button aria-label={detailsOpen ? 'Close project details' : 'Open project details'} aria-pressed={detailsOpen} className="project-detail-page__toolbar-button" onClick={() => { setDetailsOpen(value => !value); setInsightsOpen(false) }} title={`${detailsOpen ? 'Close' : 'Open'} project details (⌘I)`} type="button">{detailsOpen ? <PanelRightClose size={15}/> : <PanelRightOpen size={15}/>}</button>
+        <button aria-label={insightsOpen ? 'Close project insights' : 'Open project insights'} aria-pressed={insightsOpen} className="project-detail-page__toolbar-button ui-pill" onClick={() => { setInsightsOpen(value => !value); setDetailsOpen(false) }} type="button"><InsightsIcon/></button>
+        <button aria-label={detailsOpen ? 'Close project details' : 'Open project details'} aria-pressed={detailsOpen} className="project-detail-page__toolbar-button ui-pill" onClick={() => { setDetailsOpen(value => !value); setInsightsOpen(false) }} title={`${detailsOpen ? 'Close' : 'Open'} project details (⌘I)`} type="button"><SidebarIcon/></button>
       </div>
     </div>
 

@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Check, Expand, MoreHorizontal, Settings2, Shrink } from 'lucide-react'
+import { Check, Expand, MoreHorizontal, Shrink } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Issue, IssueLabel, User } from '@/types/flow'
+import { DisplayIcon as Settings2 } from '@/components/ui/view-action-icons'
 
 type Dimension = 'status'|'priority'|'assignee'|'label'
 type SegmentDimension = Dimension|'none'

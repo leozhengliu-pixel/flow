@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
-import { Diamond, Filter, Plus, Trash2, X } from 'lucide-react'
+import { Diamond, Plus, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { MyIssuesDisplayMenu } from '@/components/my-issues/my-issues-display-menu'
 import { MyIssuesFilterMenu } from '@/components/my-issues/my-issues-filter-menu'
+import { FilterIcon as Filter } from '@/components/ui/view-action-icons'
 import { MyIssuesFilterBar } from '@/components/my-issues/my-issues-filter-bar'
 import { filterValues, toggleFilterOption, updateFilterOperator, updateFilterValues, type MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-types'
 import { MyIssuesList, type MyIssuesContextAction, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData, type MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
@@ -25,7 +26,7 @@ export function ProjectIssueFilterMenu({ filters, issues, onChange }: { filters:
     const label = FILTER_LABELS[field]
     if (label) onChange(toggleFilterOption(filters, field, label, option))
   }
-  return <MyIssuesFilterMenu availableFields={['status','assignee','priority','labels']} filters={filters} onOpenChange={setOpen} onToggle={toggle} open={open} options={field => options[field]} trigger={<button aria-label="Add filter" className="project-detail-page__toolbar-button" data-active={filters.length > 0} type="button"><Filter size={14}/>{filters.length > 0 && <i>{filters.length}</i>}</button>}/>
+  return <MyIssuesFilterMenu availableFields={['status','assignee','priority','labels']} filters={filters} onOpenChange={setOpen} onToggle={toggle} open={open} options={field => options[field]} trigger={<button aria-label="Add filter" className="project-detail-page__toolbar-button ui-pill" data-active={filters.length > 0} type="button"><Filter size={14}/>{filters.length > 0 && <i>{filters.length}</i>}</button>}/>
 }
 
 export function ProjectIssueDisplayMenu({ display, onChange }: { display: MyIssuesDisplayOptions; onChange: (display: MyIssuesDisplayOptions) => void }) {
@@ -72,7 +73,7 @@ export function ProjectIssues({ display, filters, issues, labels, labelGroups, m
     status: allStates.map(state => ({ id: state.id, label: state.name, kind: 'status', stateType: state.type, color: state.color })),
     priority: [0,1,2,3,4].map(priority => ({ id: String(priority), label: PRIORITY_LABELS[priority], kind: 'priority' as const, priority: priority as 0|1|2|3|4 })),
     assignee: [{ id: '', label: 'No assignee', kind: 'assignee' as const }, ...users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, kind: 'assignee' as const }))],
-    dueDate: dueDateOptions(), labels: labels.map(label => ({ id: label.id, label: label.name, kind: 'labels' as const, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined })),
+    dueDate: dueDateOptions(), labels: labels.map(label => ({ id: label.id, label: label.name, kind: 'labels' as const, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined })),
     project: [{ id: '', label: 'No project', kind: 'project' as const }, ...projects.map(item => ({ id: item.id, label: item.name, kind: 'project' as const, color: item.color }))],
   }), [allStates, labelGroupNames, labels, projects, users])
   const changeProperty = async (row: MyIssuesRowData, property: MyIssuesEditableProperty, value: string | string[]) => {
