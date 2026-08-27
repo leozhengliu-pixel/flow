@@ -467,6 +467,10 @@ func TestIssueOptionsPersistence(t *testing.T) {
 		!slices.ContainsFunc(bootstrap.Documents, func(item domain.Document) bool { return item.ID == "document-delete-test" && item.IssueID == "" }) {
 		t.Fatal("deleting an issue did not preserve and unlink related content")
 	}
+	trashIndex := slices.IndexFunc(bootstrap.Trash, func(item domain.TrashEntry) bool { return item.ResourceType == "issue" && item.ResourceID == issue.ID })
+	if trashIndex < 0 || !slices.Contains(bootstrap.Trash[trashIndex].TeamIDs, issue.Team.ID) {
+		t.Fatalf("deleted issue was not scoped to its team archive: %#v", bootstrap.Trash)
+	}
 }
 
 func TestSearchHistoryRecentResourcesAndConcurrentIssuePatches(t *testing.T) {
@@ -581,6 +585,75 @@ func TestRealtimeHubWorkspaceIsolationAndPresence(t *testing.T) {
 	if got := hub.removePresence("cleantrack", "client_1"); len(got) != 0 {
 		t.Fatalf("presence was not removed: %#v", got)
 	}
+}
+
+func TestPulsePreferencesViewsAndUpdateAttachments(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	settings := bootstrap.UserSettings[bootstrap.Viewer.ID]
+	settings.PulseSchedule = "weekly"
+	updatedSettings := requestJSON[domain.UserSettings](t, handler, http.MethodPatch, "/api/account/settings", settings, http.StatusOK)
+	if updatedSettings.PulseSchedule != "weekly" {
+		t.Fatalf("pulse schedule=%q", updatedSettings.PulseSchedule)
+	}
+
+	name, resource, scope, ownerID, view := "Project health", "pulse", "workspace", "usr_other", "all"
+	saved := requestJSON[domain.SavedView](t, handler, http.MethodPost, "/api/views", domain.SavedViewMutationInput{Name: &name, Resource: &resource, Scope: &scope, OwnerID: &ownerID, View: &view, Filters: json.RawMessage(`[{"id":"health","field":"health","operator":"is","values":["atRisk"]}]`), Display: json.RawMessage(`{"match":"all"}`)}, http.StatusCreated)
+	if saved.Resource != "pulse" || saved.Scope != "personal" || saved.OwnerID != bootstrap.Viewer.ID {
+		t.Fatalf("pulse view ownership=%#v", saved)
+	}
+
+	project := bootstrap.Projects[0]
+	update := requestJSON[domain.ProjectUpdate](t, handler, http.MethodPost, "/api/projects/"+project.ID+"/updates", map[string]any{"body": "Structured Pulse update", "bodyData": map[string]any{"type": "doc", "content": []any{map[string]any{"type": "paragraph"}}}, "health": "atRisk"}, http.StatusCreated)
+	if update.BodyData["type"] != "doc" {
+		t.Fatalf("update body data=%#v", update.BodyData)
+	}
+	update = uploadPulseAttachmentForTest(t, handler, "/api/projects/"+project.ID+"/updates/"+update.ID+"/attachments", "pulse.txt", "pulse attachment")
+	if len(update.Attachments) != 1 || update.Attachments[0].Title != "pulse.txt" {
+		t.Fatalf("update attachments=%#v", update.Attachments)
+	}
+	update = requestJSON[domain.ProjectUpdate](t, handler, http.MethodDelete, "/api/projects/"+project.ID+"/updates/"+update.ID+"/attachments/"+update.Attachments[0].ID, nil, http.StatusOK)
+	if len(update.Attachments) != 0 {
+		t.Fatalf("attachment was not deleted: %#v", update.Attachments)
+	}
+
+	persisted := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if persisted.UserSettings[persisted.Viewer.ID].PulseSchedule != "weekly" || !slices.ContainsFunc(persisted.SavedViews, func(item domain.SavedView) bool { return item.ID == saved.ID }) {
+		t.Fatal("Pulse preferences or view did not persist")
+	}
+}
+
+func uploadPulseAttachmentForTest(t *testing.T, handler http.Handler, path, name, contents string) domain.ProjectUpdate {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("file", name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = part.Write([]byte(contents)); err != nil {
+		t.Fatal(err)
+	}
+	if err = writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, path, &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("POST %s status %d: %s", path, recorder.Code, recorder.Body.String())
+	}
+	var update domain.ProjectUpdate
+	if err = json.Unmarshal(recorder.Body.Bytes(), &update); err != nil {
+		t.Fatal(err)
+	}
+	return update
 }
 
 func TestCyclePlanningAndRollover(t *testing.T) {
