@@ -163,9 +163,37 @@ func appendTrash(data *domain.Bootstrap, resourceType, resourceID, title string,
 		return err
 	}
 	now := time.Now().UTC()
-	data.Trash = append([]domain.TrashEntry{{ID: fmt.Sprintf("trash_%d", now.UnixNano()), ResourceType: resourceType, ResourceID: resourceID, Title: title, Payload: payload, DeletedBy: data.Viewer, DeletedAt: now, ExpiresAt: now.AddDate(0, 0, 30)}}, data.Trash...)
+	data.Trash = append([]domain.TrashEntry{{ID: fmt.Sprintf("trash_%d", now.UnixNano()), ResourceType: resourceType, ResourceID: resourceID, Title: title, Payload: payload, TeamIDs: trashTeamIDs(data, value), DeletedBy: data.Viewer, DeletedAt: now, ExpiresAt: now.AddDate(0, 0, 30)}}, data.Trash...)
 	appendAudit(data, "deleted", resourceType, resourceID, map[string]any{"title": title})
 	return nil
+}
+
+func trashTeamIDs(data *domain.Bootstrap, value any) []string {
+	var ids []string
+	switch item := value.(type) {
+	case deletedIssuePayload:
+		ids = []string{item.Issue.Team.ID}
+	case deletedProjectPayload:
+		ids = slices.Clone(item.Project.TeamIDs)
+	case deletedInitiativePayload:
+		ids = append([]string{item.Initiative.LeadTeamID}, item.Initiative.ContributingTeamIDs...)
+		for _, projectID := range item.Initiative.ProjectIDs {
+			if project, err := fullProjectByID(data, projectID); err == nil {
+				ids = append(ids, project.TeamIDs...)
+			}
+		}
+	case domain.Document:
+		ids = slices.Clone(item.TeamIDs)
+	case domain.Release:
+		for _, projectID := range item.ProjectIDs {
+			if project, err := fullProjectByID(data, projectID); err == nil {
+				ids = append(ids, project.TeamIDs...)
+			}
+		}
+	case domain.ReleasePipeline:
+		ids = slices.Clone(item.TeamIDs)
+	}
+	return normalizedStrings(ids)
 }
 
 func validateResourceIDs(data *domain.Bootstrap, resourceType string, ids []string) bool {

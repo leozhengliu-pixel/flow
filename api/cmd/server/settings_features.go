@@ -69,6 +69,12 @@ func (s *server) updateUserSettings(w http.ResponseWriter, r *http.Request) {
 		if input.GitAttachmentFormat == "" {
 			input.GitAttachmentFormat = current.GitAttachmentFormat
 		}
+		if input.PulseSchedule == "" {
+			input.PulseSchedule = current.PulseSchedule
+		}
+		if !slices.Contains([]string{"daily", "weekly", "never"}, input.PulseSchedule) {
+			return errInvalid
+		}
 		data.UserSettings[actor.ID] = input
 		updated = input
 		return nil

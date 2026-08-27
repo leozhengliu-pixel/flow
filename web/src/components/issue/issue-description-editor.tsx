@@ -28,6 +28,8 @@ interface DescriptionEditorProps {
   onSubmit?: () => void
   editorRef?: (editor: Editor | null) => void
   className?: string
+  placeholder?: string
+  ariaLabel?: string
   collaboration?: {
     workspaceKey: string
     issueId: string
@@ -40,9 +42,9 @@ interface DescriptionEditorProps {
 
 const closedSlash: SlashCommandState = { active: false, query: '', range: null }
 
-export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmit, editorRef, className, collaboration }: DescriptionEditorProps) {
+export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmit, editorRef, className, collaboration, placeholder = 'Add description...', ariaLabel }: DescriptionEditorProps) {
   const { t } = useI18n()
-  const descriptionLabel = t('Issue description')
+  const descriptionLabel = ariaLabel ?? t('Issue description')
   const initial = useMemo(() => parseDescriptionContent(value, state), []) // eslint-disable-line react-hooks/exhaustive-deps
   const rootRef = useRef<HTMLDivElement>(null)
   const commandsRef = useRef<EditorCommand[]>([])
@@ -98,7 +100,7 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
     immediatelyRender: false,
     extensions: [
       StarterKit.configure({ heading: { levels: [2, 3] }, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: collaborationSession ? false : undefined }),
-      Placeholder.configure({ placeholder: 'Add description...' }),
+      Placeholder.configure({ placeholder }),
       Markdown,
       SlashCommandExtension,
       ...(collaborationSession ? [
@@ -111,6 +113,7 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
     editorProps: {
       attributes: {
         class: 'flow-prosemirror description-editor',
+        role: 'textbox',
         'aria-label': descriptionLabel,
         'aria-multiline': 'true',
         'aria-readonly': 'false',

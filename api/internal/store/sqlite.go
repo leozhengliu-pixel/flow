@@ -960,6 +960,10 @@ func normalize(data *domain.Bootstrap) {
 		}
 	}
 	for userID, settings := range data.UserSettings {
+		if settings.PulseSchedule == "" {
+			settings.PulseSchedule = "never"
+			data.UserSettings[userID] = settings
+		}
 		if settings.PersonalSettingsVersion < 1 {
 			settings.PersonalSettingsVersion = 1
 			settings.CodeReviewsEnabled = true
@@ -982,6 +986,7 @@ func normalize(data *domain.Bootstrap) {
 	if data.WorkspaceSettings.SessionDurationDays == 0 {
 		data.WorkspaceSettings = defaultWorkspaceSettings(data)
 	}
+	delete(data.WorkspaceSettings.FeatureFlags, "library")
 	if data.WorkspaceSettings.AllowedDomains == nil {
 		data.WorkspaceSettings.AllowedDomains = []string{}
 	}
@@ -1397,11 +1402,11 @@ func defaultCodeReviews(data *domain.Bootstrap) []domain.CodeReview {
 }
 
 func defaultUserSettings(userID string) domain.UserSettings {
-	return domain.UserSettings{UserID: userID, Language: "en-US", HomeView: "Flow Agent (default)", DisplayNames: "Full name", FirstDay: "Monday", Emoticons: true, SendComments: "Enter", FontSize: "Default", InterfaceTheme: "System preference", LightTheme: "Light", DarkTheme: "Dark", ReviewAutoAssign: true, BranchFormat: "{identifier}-{title}", PersonalSettingsVersion: 1, CodeReviewsEnabled: true, MergeStrategy: "Squash and merge", CodeTheme: "Flow Light", CodeFont: "12px, Regular, Default", ReviewCommentsFilter: "Exclude Bots", ReviewRequests: true, GithubTeamReviewRequests: true, ChecksMergeQueue: true, GitAttachmentFormat: "Title", GitBranchMoveStarted: true, CodingToolMoveStarted: true, ChangelogUpdates: true, InviteAcceptedUpdates: true, PrivacyUpdates: true, AgentEnabled: true, UpdatedAt: time.Now().UTC()}
+	return domain.UserSettings{UserID: userID, Language: "en-US", HomeView: "Flow Agent (default)", DisplayNames: "Full name", FirstDay: "Monday", Emoticons: true, SendComments: "Enter", FontSize: "Default", InterfaceTheme: "System preference", LightTheme: "Light", DarkTheme: "Dark", ReviewAutoAssign: true, BranchFormat: "{identifier}-{title}", PersonalSettingsVersion: 1, CodeReviewsEnabled: true, MergeStrategy: "Squash and merge", CodeTheme: "Flow Light", CodeFont: "12px, Regular, Default", ReviewCommentsFilter: "Exclude Bots", ReviewRequests: true, GithubTeamReviewRequests: true, ChecksMergeQueue: true, GitAttachmentFormat: "Title", GitBranchMoveStarted: true, CodingToolMoveStarted: true, ChangelogUpdates: true, InviteAcceptedUpdates: true, PrivacyUpdates: true, AgentEnabled: true, PulseSchedule: "never", UpdatedAt: time.Now().UTC()}
 }
 
 func defaultWorkspaceSettings(data *domain.Bootstrap) domain.WorkspaceSettings {
-	return domain.WorkspaceSettings{FiscalMonth: "January", GuestsAllowed: true, SessionDurationDays: 30, InvitePermission: "admins", TeamCreatePermission: "members", LabelPermission: "members", TemplatePermission: "members", APIKeyPermission: "members", FeatureFlags: map[string]bool{"ai": true, "initiatives": true, "documents": true, "customer-requests": true, "releases": true, "pulse": true, "asks": true, "library": true, "sidebar-teams": true, "sidebar-try": true, "recently-deleted": true, "audit-log": true, "emojis": true}, FeatureSettings: domain.FeatureSettings{InitiativeUpdateSchedule: "none", CustomerRevenueFormat: "annual", CustomerRevenueCurrency: "USD", CustomerManualEdits: true, CustomerStatuses: []domain.FeatureOption{{ID: "active", Name: "Active", Color: "#4cb782"}, {ID: "prospect", Name: "Prospect", Color: "#5e6ad2"}, {ID: "churned", Name: "Churned", Color: "#f2c94c"}, {ID: "lost", Name: "Lost", Color: "#eb5757"}}, CustomerTiers: []domain.FeatureOption{}, CustomerExcludedDomains: []string{}, CustomerGenericDomains: []string{}, PulseWorkspaceSchedule: "daily", AsksEmailAddresses: []string{}}, BillingEmail: data.Viewer.Email, Plan: "free", GoogleAuthEnabled: true, EmailAuthEnabled: true, InitiativePermission: "members", LoopPermission: "members", AgentGuidancePermission: "admins", AICreditReloadThresholdCents: 500, AICreditReloadAmountCents: 2000, UpdatedAt: time.Now().UTC()}
+	return domain.WorkspaceSettings{FiscalMonth: "January", GuestsAllowed: true, SessionDurationDays: 30, InvitePermission: "admins", TeamCreatePermission: "members", LabelPermission: "members", TemplatePermission: "members", APIKeyPermission: "members", FeatureFlags: map[string]bool{"ai": true, "initiatives": true, "documents": true, "customer-requests": true, "releases": true, "pulse": true, "asks": true, "sidebar-teams": true, "sidebar-try": true, "recently-deleted": true, "audit-log": true, "emojis": true}, FeatureSettings: domain.FeatureSettings{InitiativeUpdateSchedule: "none", CustomerRevenueFormat: "annual", CustomerRevenueCurrency: "USD", CustomerManualEdits: true, CustomerStatuses: []domain.FeatureOption{{ID: "active", Name: "Active", Color: "#4cb782"}, {ID: "prospect", Name: "Prospect", Color: "#5e6ad2"}, {ID: "churned", Name: "Churned", Color: "#f2c94c"}, {ID: "lost", Name: "Lost", Color: "#eb5757"}}, CustomerTiers: []domain.FeatureOption{}, CustomerExcludedDomains: []string{}, CustomerGenericDomains: []string{}, PulseWorkspaceSchedule: "daily", AsksEmailAddresses: []string{}}, BillingEmail: data.Viewer.Email, Plan: "free", GoogleAuthEnabled: true, EmailAuthEnabled: true, InitiativePermission: "members", LoopPermission: "members", AgentGuidancePermission: "admins", AICreditReloadThresholdCents: 500, AICreditReloadAmountCents: 2000, UpdatedAt: time.Now().UTC()}
 }
 
 func defaultStateID(data *domain.Bootstrap, teamID string) string {

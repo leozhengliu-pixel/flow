@@ -112,11 +112,11 @@ Open `http://127.0.0.1:5173`.
 
 ### Docker
 
-For a local Docker run, build the frontend and API artifacts first, then start
-the single-container Compose service:
+For a local Docker run, start the single-container Compose service. The
+multi-stage Dockerfile builds the frontend and API for the selected target
+architecture:
 
 ```bash
-./scripts/build-local-docker-assets.sh
 docker compose up -d --build
 ```
 

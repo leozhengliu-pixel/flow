@@ -83,6 +83,11 @@ import {
   updateTeam,
   updateWorkspace,
   updateWorkspaceSettings,
+  updateUserSettings,
+  uploadProjectUpdateAttachment,
+  deleteProjectUpdateAttachment,
+  uploadInitiativeUpdateAttachment,
+  deleteInitiativeUpdateAttachment,
   uploadAttachment,
   ApiError,
 } from "@/lib/api";
@@ -114,6 +119,7 @@ import type {
   WorkspaceMutationInput,
   SearchResult,
   SearchResourceType,
+  UserSettings,
 } from "@/types/flow";
 import { Sidebar, type PageId } from "@/components/layout/sidebar";
 import { DetailPane } from "@/components/detail/detail-pane";
@@ -137,6 +143,7 @@ import { InitiativeDetailPage } from "@/components/initiatives/initiative-detail
 import { CyclesPage } from "@/components/cycles/cycles-page";
 import { CycleDetailPage } from "@/components/cycles/cycle-detail-page";
 import { PulsePage } from "@/components/pulse/pulse-page";
+import { TeamArchivePage } from "@/components/workspace-operations/team-archive-page";
 import { ReviewsPage } from "@/components/reviews/reviews-page";
 import { AgentPage } from "@/components/agent/agent-page";
 import { AgentChatPanel } from "@/components/agent/agent-chat-panel";
@@ -151,6 +158,7 @@ import {
   inboxPath,
   initiativePath,
   initiativesPath,
+  teamInitiativesPath,
   issuePath,
   issueTemplateEditPath,
   integrationSettingsPath,
@@ -168,6 +176,7 @@ import {
   projectsSavedViewPath,
   projectsSavedViewEditPath,
   pulsePath,
+  pulseViewPath,
   releasePipelinesPath,
   releasePath,
   releasePipelineSettingsPath,
@@ -414,7 +423,9 @@ function App() {
         ) || null
       : null;
   const selectedCycle = route.kind === "cycle"
-    ? data?.cycles.find(cycle=>String(cycle.number)===route.cycleId)||null
+    ? route.cycleId==='active'
+      ? [...(data?.cycles??[])].filter(cycle=>cycle.status==='current'&&data?.teams.find(team=>team.key.toLowerCase()===route.teamKey.toLowerCase())?.id===cycle.teamId).sort((a,b)=>a.startsAt.localeCompare(b.startsAt))[0]??null
+      : data?.cycles.find(cycle=>String(cycle.number)===route.cycleId)||null
     : route.kind==="cycle-upcoming"
       ? [...(data?.cycles??[])].filter(cycle=>cycle.status==='upcoming'&&data?.teams.find(team=>team.key.toLowerCase()===route.teamKey.toLowerCase())?.id===cycle.teamId).sort((a,b)=>a.startsAt.localeCompare(b.startsAt))[0]??null
       : null;
@@ -1208,7 +1219,7 @@ function App() {
   };
   const addInitiativeUpdate = async (
     id: string,
-    input: { body: string; health?: Project["health"] },
+    input: { body: string; bodyData?:Record<string,unknown>;health?: Project["health"] },
   ) => {
     const update = await run(
       () => createInitiativeUpdate(id, input),
@@ -1430,7 +1441,7 @@ function App() {
   const changeInitiativeUpdate = async (
     id: string,
     updateId: string,
-    input: { body?: string; health?: Project["health"] },
+    input: { body?: string;bodyData?:Record<string,unknown>;health?: Project["health"] },
   ) => {
     const update = await run(
       () => updateInitiativeUpdate(id, updateId, input),
@@ -1498,9 +1509,11 @@ function App() {
     replaceInitiativeUpdate(initiativeId, update);
     return update;
   };
+  const addInitiativeUpdateAttachment = async (initiativeId:string,updateId:string,file:File) => { const update=await run(()=>uploadInitiativeUpdateAttachment(initiativeId,updateId,file),"Could not upload update attachment");replaceInitiativeUpdate(initiativeId,update);return update };
+  const removeInitiativeUpdateAttachment = async (initiativeId:string,updateId:string,attachmentId:string) => { const update=await run(()=>deleteInitiativeUpdateAttachment(initiativeId,updateId,attachmentId),"Could not delete update attachment");replaceInitiativeUpdate(initiativeId,update);return update };
   const addProjectUpdate = async (
     id: string,
-    input: { body: string; health?: Project["health"] },
+    input: { body: string;bodyData?:Record<string,unknown>;health?: Project["health"] },
   ) => {
     const update = await run(
       () => createProjectUpdate(id, input),
@@ -1531,7 +1544,7 @@ function App() {
   const changeProjectUpdate = async (
     projectId: string,
     updateId: string,
-    input: { body?: string; health?: Project["health"] },
+    input: { body?: string;bodyData?:Record<string,unknown>;health?: Project["health"] },
   ) => {
     const update = await run(
       () => updateProjectUpdate(projectId, updateId, input),
@@ -1628,6 +1641,8 @@ function App() {
     replaceProjectUpdate(projectId, update);
     return update;
   };
+  const addProjectUpdateAttachment = async (projectId:string,updateId:string,file:File) => { const update=await run(()=>uploadProjectUpdateAttachment(projectId,updateId,file),"Could not upload update attachment");replaceProjectUpdate(projectId,update);return update };
+  const removeProjectUpdateAttachment = async (projectId:string,updateId:string,attachmentId:string) => { const update=await run(()=>deleteProjectUpdateAttachment(projectId,updateId,attachmentId),"Could not delete update attachment");replaceProjectUpdate(projectId,update);return update };
   const addProjectResource = async (
     projectId: string,
     input: { type?: "link" | "document"; title?: string; url: string },
@@ -2031,6 +2046,11 @@ function App() {
     );
     return view;
   };
+  const changeCurrentUserSettings = async (input: UserSettings) => {
+    const settings = await run(() => updateUserSettings(input), "Could not update preferences");
+    setData(current => current ? { ...current, userSettings: { ...current.userSettings, [current.viewer.id]: settings } } : current);
+    return settings;
+  };
   const toggleSavedViewFavorite = async (view: SavedView) => {
     const current = data?.favorites.find(
       (item) => item.userId === data.viewer.id && item.resourceType === "view" && item.resourceId === view.id,
@@ -2399,9 +2419,9 @@ function App() {
       navigateTo(searchPath(workspace), { replace: true });
     if (
       route.kind === "pulse" &&
-      location.pathname !== pulsePath(workspace, route.view)
+      location.pathname !== (route.viewId ? pulseViewPath(workspace, route.viewId) : pulsePath(workspace, route.view))
     )
-      navigateTo(pulsePath(workspace, route.view), { replace: true });
+      navigateTo(route.viewId ? pulseViewPath(workspace, route.viewId) : pulsePath(workspace, route.view), { replace: true });
     if (
       route.kind === "my-issues" &&
       location.pathname !== myIssuesPath(workspace, route.view)
@@ -2518,6 +2538,7 @@ function App() {
       location.pathname !== initiativesPath(workspace, route.view)
     )
       navigateTo(initiativesPath(workspace, route.view), { replace: true });
+    if(route.kind==='team-initiatives'&&location.pathname!==teamInitiativesPath(workspace,route.teamKey,route.view))navigateTo(teamInitiativesPath(workspace,route.teamKey,route.view),{replace:true});
     if (
       route.kind === "team-projects" &&
       location.pathname !== teamProjectsPath(workspace, route.teamKey)
@@ -2572,7 +2593,7 @@ function App() {
       if (location.pathname !== canonical)
         navigateTo(canonical, { replace: true });
     }
-    if (route.kind === "cycle" && selectedCycle) {
+    if (route.kind === "cycle" && route.cycleId!=="active" && selectedCycle) {
       const canonical = cyclePath(workspace, route.teamKey, selectedCycle);
       if (location.pathname !== canonical)
         navigateTo(canonical, { replace: true });
@@ -2922,10 +2943,10 @@ function App() {
       )}
       {page === "agent" && route.kind === "agent" && <AgentPage chatSlug={route.chatSlug} data={data} onNavigate={navigateTo} onOpenSidebar={()=>setMobileSidebarOpen(true)} onReload={async()=>setData(await fetchBootstrap(data.workspace.urlKey))}/>}
       {page==="reviews"&&(route.kind==="reviews"||route.kind==="review")&&<ReviewsPage data={data} view={route.kind==="reviews"?route.view:"for-you"} review={route.kind==="review"?selectedReview??undefined:undefined} tab={route.kind==="review"?route.tab:undefined} onNavigate={navigateTo} onReload={async()=>setData(await fetchBootstrap(data.workspace.urlKey))} onOpenSidebar={()=>setMobileSidebarOpen(true)}/>}
-      {(page === "drafts" || page === "releases" || page === "asks" || page === "library") && (
+      {(page === "drafts" || page === "releases" || page === "asks") && (
         <WorkspaceOperationsPage
           data={data}
-          view={route.kind === "workspace-library" ? route.view : route.kind === "release-pipeline" || route.kind === "release" ? "releases" : route.kind as "drafts"|"releases"|"asks"}
+          view={route.kind === "release-pipeline" || route.kind === "release" ? "releases" : route.kind as "drafts"|"releases"|"asks"}
           pipelineSlug={route.kind === "release-pipeline" || route.kind === "release" ? route.pipelineSlug : undefined}
           releaseSlug={route.kind === "release" ? route.releaseSlug : undefined}
           pipelineTab={route.kind === "release-pipeline" ? route.tab : undefined}
@@ -2939,6 +2960,7 @@ function App() {
           }}
         />
       )}
+      {page==='team-archive'&&route.kind==='team-archive'&&data.teams.find(team=>team.key.toLowerCase()===route.teamKey.toLowerCase())&&<TeamArchivePage data={data} team={data.teams.find(team=>team.key.toLowerCase()===route.teamKey.toLowerCase())!} tab={route.tab} onNavigate={navigateTo} onOpenSidebar={()=>setMobileSidebarOpen(true)} onReload={async()=>setData(await fetchBootstrap(data.workspace.urlKey))}/>}
       {page === "document-detail" && selectedDocument && (
         <DocumentPage
           data={data}
@@ -3023,20 +3045,30 @@ function App() {
         <PulsePage
           data={data}
           view={route.view}
+          viewId={route.viewId}
           onNavigateView={(view) =>
             navigateTo(pulsePath(data.workspace.urlKey, view))
           }
+          onNavigateSavedView={(viewId)=>navigateTo(pulseViewPath(data.workspace.urlKey,viewId))}
           onOpenSidebar={() => setMobileSidebarOpen(true)}
+          onCreateSavedView={addSavedView}
+          onUpdateSavedView={changeSavedView}
+          onDeleteSavedView={removeSavedViewOnly}
+          onUpdateUserSettings={changeCurrentUserSettings}
           onCreateProject={addProjectUpdate}
           onUpdateProject={changeProjectUpdate}
           onDeleteProject={removeProjectUpdate}
           onCommentProject={commentOnProjectUpdate}
           onReactProject={reactToProjectUpdate}
+          onUploadProjectAttachment={addProjectUpdateAttachment}
+          onDeleteProjectAttachment={removeProjectUpdateAttachment}
           onCreateInitiative={addInitiativeUpdate}
           onUpdateInitiative={changeInitiativeUpdate}
           onDeleteInitiative={removeInitiativeUpdate}
           onCommentInitiative={commentOnInitiativeUpdate}
           onReactInitiative={reactToInitiativeUpdate}
+          onUploadInitiativeAttachment={addInitiativeUpdateAttachment}
+          onDeleteInitiativeAttachment={removeInitiativeUpdateAttachment}
         />
       )}
       {page === "cycles" && route.kind === "team-cycles" && cycleTeam && (
@@ -3084,10 +3116,10 @@ function App() {
             onNavigate={navigateTo}
           />
         )}
-      {page === "initiatives" && route.kind === "initiatives" && (
+      {page === "initiatives" && (route.kind === "initiatives"||route.kind==='team-initiatives') && (
         <InitiativesPage
           createOnMount={new URLSearchParams(location.search).get("create") === "1"}
-          initiatives={data.initiatives}
+          initiatives={route.kind==='team-initiatives'?data.initiatives.filter(item=>{const team=data.teams.find(team=>team.key.toLowerCase()===route.teamKey.toLowerCase());return Boolean(team&&(item.leadTeamId===team.id||item.contributingTeamIds.includes(team.id)))}):data.initiatives}
           initiativeUpdates={data.initiativeUpdates}
           projects={data.projects}
           projectUpdates={data.projectUpdates}
@@ -3097,10 +3129,10 @@ function App() {
           viewer={data.viewer}
           view={route.view}
           onViewChange={(view) =>
-            navigateTo(initiativesPath(data.workspace.urlKey, view))
+            navigateTo(route.kind==='team-initiatives'?teamInitiativesPath(data.workspace.urlKey,route.teamKey,view):initiativesPath(data.workspace.urlKey, view))
           }
           onOpen={openInitiative}
-          onCreate={addInitiative}
+          onCreate={input=>route.kind==='team-initiatives'?addInitiative({...input,leadTeamId:input.leadTeamId??data.teams.find(team=>team.key.toLowerCase()===route.teamKey.toLowerCase())?.id}):addInitiative(input)}
           onCreateLabel={addInitiativeLabel}
           onCreateUpdate={addInitiativeUpdate}
           onUpdate={changeInitiative}
@@ -4014,7 +4046,7 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
   if (route.kind === "agent") return "agent";
   if (route.kind === "releases" || route.kind === "release-pipeline" || route.kind === "release") return "releases";
   if (route.kind === "asks") return "asks";
-  if (route.kind === "workspace-library") return "library";
+  if (route.kind === "team-archive") return "team-archive";
   if (route.kind === "workspace-teams") return "teams";
   if (route.kind === "new-team") return "new-team";
   if (route.kind === "team-saved-view") return "team-issues";
@@ -4035,7 +4067,7 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
     route.kind === "team-projects-saved-view"
   )
     return "projects";
-  if (route.kind === "initiatives") return "initiatives";
+  if (route.kind === "initiatives"||route.kind==='team-initiatives') return "initiatives";
   if (route.kind === "initiative") return "initiative-detail";
   if (route.kind === "project") return "project-detail";
   if (route.kind === "issue") return "issue-detail";
