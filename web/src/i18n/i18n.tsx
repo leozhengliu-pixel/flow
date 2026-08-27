@@ -73,11 +73,23 @@ export function translateToChinese(source: string): string {
   const patterns: Array<[RegExp, (...groups: string[]) => string]> = [
     [/^(\d+) issues?$/, count => `${count} 个事项`],
     [/^(\d+) projects?$/, count => `${count} 个项目`],
+    [/^(\d+) initiatives?$/, count => `${count} 个目标`],
+    [/^(\d+) labeled (issues?|projects?|initiatives?)$/, (count, resource) => `${count} 个带此标签的${countNoun(resource)}`],
+    [/^(\d+) selected (issues?|projects?|labels?|members?|teams?|files?)$/, (count, resource) => `已选择 ${count} ${countResource(resource)}`],
     [/^(\d+) members?$/, count => `${count} 位成员`],
     [/^(\d+) teams?$/, count => `${count} 个团队`],
     [/^(\d+) requests?$/, count => `${count} 条需求`],
     [/^(\d+) comments?$/, count => `${count} 条评论`],
     [/^(\d+) updates?$/, count => `${count} 条更新`],
+    [/^(\d+) notifications?$/, count => `${count} 条通知`],
+    [/^(\d+) pull requests?$/, count => `${count} 个合并请求`],
+    [/^(\d+) reactions?$/, count => `${count} 个反应`],
+    [/^(\d+) release pipelines?$/, count => `${count} 个发布流水线`],
+    [/^(\d+) reviews?$/, count => `${count} 个评审`],
+    [/^(\d+) filters?$/, count => `${count} 个筛选条件`],
+    [/^(\d+) files? selected$/, count => `已选择 ${count} 个文件`],
+    [/^(\d+) invitations? sent$/, count => `已发送 ${count} 份邀请`],
+    [/^(\d+) other (?:person|people) viewing$/, count => `其他 ${count} 人正在查看`],
     [/^(\d+) drafts?$/, count => `${count} 份草稿`],
     [/^(\d+) releases?$/, count => `${count} 个发布版本`],
     [/^(\d+) views?$/, count => `${count} 个视图`],
@@ -91,6 +103,13 @@ export function translateToChinese(source: string): string {
     [/^(\d+)% success$/, count => `${count}% 完成率`],
     [/^(\d+) scope$/, count => `${count} 个范围项`],
     [/^(\d+) completed$/, count => `已完成 ${count} 项`],
+    [/^Assigned, (\d+) issues?$/, count => `分配给我，${count} 个事项`],
+    [/^(\d+) of (\d+) sub-issues completed$/, (completed, total) => `已完成 ${completed}/${total} 个子事项`],
+    [/^(\d+)% project progress$/, count => `项目进度 ${count}%`],
+    [/^(\d+)% of$/, count => `已完成 ${count}%，共`],
+    [/^No milestone (\d+) issues?$/, count => `无里程碑，${count} 个事项`],
+    [/^View (\d+) issues in (.+)$/, (count, milestone) => `查看 ${milestone} 中的 ${count} 个事项`],
+    [/^Delete (\d+) selected projects?\?$/, count => `删除已选择的 ${count} 个项目吗？`],
     [/^Import (\d+) issues?$/, count => `导入 ${count} 个事项`],
     [/^(\d+) unmatched values$/, count => `${count} 个未匹配值`],
     [/^and (\d+) more$/, count => `以及另外 ${count} 项`],
@@ -196,6 +215,24 @@ function durationUnit(value: string) {
   if (value.startsWith('week')) return ' 周'
   if (value.startsWith('month')) return ' 个月'
   return ' 年'
+}
+
+function countResource(value: string) {
+  const resource = value.replace(/s$/, '')
+  if (resource === 'issue') return '个事项'
+  if (resource === 'project') return '个项目'
+  if (resource === 'initiative') return '个目标'
+  if (resource === 'label') return '个标签'
+  if (resource === 'member') return '位成员'
+  if (resource === 'team') return '个团队'
+  return '个文件'
+}
+
+function countNoun(value: string) {
+  const resource = value.replace(/s$/, '')
+  if (resource === 'issue') return '事项'
+  if (resource === 'project') return '项目'
+  return '目标'
 }
 
 function translateAuditAction(value: string) {

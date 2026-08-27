@@ -1372,6 +1372,7 @@ func normalize(data *domain.Bootstrap) {
 			data.Issues[parentIndex].SubIssueIDs = append(data.Issues[parentIndex].SubIssueIDs, data.Issues[i].ID)
 		}
 	}
+	refreshResourceCounts(data)
 }
 
 func defaultCodeReviews(data *domain.Bootstrap) []domain.CodeReview {
@@ -1466,6 +1467,7 @@ func (s *SQLiteStore) BootstrapFor(workspaceKey string) (domain.Bootstrap, bool)
 	raw, _ := json.Marshal(data)
 	var clone domain.Bootstrap
 	_ = json.Unmarshal(raw, &clone)
+	refreshResourceCounts(&clone)
 	return clone, true
 }
 
@@ -1553,6 +1555,7 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 		if err != nil {
 			return err
 		}
+		refreshResourceCounts(&next)
 		payloadRaw, err := json.Marshal(payload)
 		if err != nil {
 			return err

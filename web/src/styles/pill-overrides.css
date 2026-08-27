@@ -10,3 +10,30 @@
 :root[data-theme="light"] .li-toolbar nav button.ui-pill[aria-current="page"] {
   background: var(--ui-pill-active-bg);
 }
+
+.lp-projects__new-project,
+.li-new-initiative {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 0 10px;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--ui-pill-fg);
+  font: 500 12px/normal var(--font);
+}
+
+.lp-projects__new-project:hover,
+.li-new-initiative:hover {
+  background: var(--ui-pill-hover-bg);
+  color: var(--ui-pill-hover-fg);
+}
+
+.lp-projects__new-project svg,
+.li-new-initiative svg {
+  width: 14px;
+  height: 14px;
+}

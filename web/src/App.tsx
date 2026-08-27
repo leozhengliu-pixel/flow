@@ -121,6 +121,7 @@ import type {
   SearchResourceType,
   UserSettings,
 } from "@/types/flow";
+import { deriveResourceCounts } from "@/lib/resource-counts";
 import { Sidebar, type PageId } from "@/components/layout/sidebar";
 import { DetailPane } from "@/components/detail/detail-pane";
 import type { IssueOptionsActions, IssueConversionKind, RelatedIssueCreationKind } from "@/components/issue/issue-options-menu";
@@ -474,7 +475,7 @@ function App() {
       if (event.type === "issue.updated" && event.payload?.issue) {
         const issue = event.payload.issue;
         setData((current) => current?.workspace.urlKey === workspace
-          ? { ...current, issues: current.issues.map(item => item.id === issue.id ? issue : item) }
+          ? deriveResourceCounts({ ...current, issues: current.issues.map(item => item.id === issue.id ? issue : item) })
           : current);
         return;
       }
@@ -486,10 +487,10 @@ function App() {
   const replaceIssue = (issue: Issue) =>
     setData((current) =>
       current
-        ? {
+        ? deriveResourceCounts({
             ...current,
             issues: current.issues.map((i) => (i.id === issue.id ? issue : i)),
-          }
+          })
         : current,
     );
   const updateIssueComments = (issueId: string, updater: (comments: Comment[]) => Comment[]) =>
@@ -603,10 +604,10 @@ function App() {
     await run(() => deleteIssue(selectedIssue.id), "Could not delete issue");
     setData((current) =>
       current
-        ? {
+        ? deriveResourceCounts({
             ...current,
             issues: current.issues.filter((i) => i.id !== selectedIssue.id),
-          }
+          })
         : current,
     );
     navigateTo(myIssuesPath(data.workspace.urlKey), { replace: true });
@@ -651,16 +652,11 @@ function App() {
     );
     setData((current) =>
       current
-        ? {
+        ? deriveResourceCounts({
             ...current,
             issues: [issue, ...current.issues],
-            projects: current.projects.map((project) =>
-              project.id === issue.project?.id
-                ? { ...project, issueCount: project.issueCount + 1 }
-                : project,
-            ),
             activities: { ...current.activities, [issue.id]: [] },
-          }
+          })
         : current,
     );
     if (!input.createMore) navigateTo(issuePath(data.workspace.urlKey, issue));
@@ -691,7 +687,7 @@ function App() {
     const complete = { ...child, attachments: uploaded };
     setData((current) =>
       current
-        ? {
+        ? deriveResourceCounts({
             ...current,
             issues: [
               complete,
@@ -702,7 +698,7 @@ function App() {
               ),
             ],
             activities: { ...current.activities, [child.id]: [] },
-          }
+          })
         : current,
     );
   };

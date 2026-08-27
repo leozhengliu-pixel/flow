@@ -136,7 +136,7 @@ export function ProjectsPageSurface({
   return <div className="lp-projects">
     <header className="lp-projects__header">
       <IconButton className="lp-projects__mobile-menu" label="Open workspace sidebar" onClick={onOpenAppSidebar}><span aria-hidden="true">☰</span></IconButton>
-      {creatingView ? <><span className="lp-projects__new-view-parent">Views</span><ChevronRight size={13}/><h1>All projects</h1><IconButton className="lp-projects__copy-url" label="Copy URL" onClick={() => void navigator.clipboard.writeText(window.location.href)}><Link2 size={14}/></IconButton></> : <><h1>Projects</h1><IconButton label="New project" onClick={onCreateProject}><PlusIcon /></IconButton></>}
+      {creatingView ? <><span className="lp-projects__new-view-parent">Views</span><ChevronRight size={13}/><h1>All projects</h1><IconButton className="lp-projects__copy-url" label="Copy URL" onClick={() => void navigator.clipboard.writeText(window.location.href)}><Link2 size={14}/></IconButton></> : <><h1>Projects</h1><button aria-label="New project" className="lp-projects__new-project" onClick={onCreateProject} type="button"><PlusIcon/><span>New project</span></button></>}
     </header>
     {creatingView && viewEditor?.(editorActions)}
     <div className="lp-projects__toolbar">

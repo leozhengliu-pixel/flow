@@ -1,4 +1,4 @@
-import { Archive, ArchiveRestore, CircleDashed, FilePenLine, Filter, Menu, MoreHorizontal, Rocket, Trash2 } from 'lucide-react'
+import { Archive, ArchiveRestore, CircleDashed, FilePenLine, Menu, MoreHorizontal, Rocket, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import type { BootstrapData, Team, TrashEntry } from '@/types/flow'
@@ -9,6 +9,7 @@ import { MyIssuesFilterBar } from '@/components/my-issues/my-issues-filter-bar'
 import { toggleFilterOption, updateFilterOperator, updateFilterValues, type MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-types'
 import { applyExplorerFilters, explorerFilterOptions, explorerPropertyOptions, ISSUE_FILTER_LABELS } from '@/components/issue-explorer/issue-explorer-model'
 import { teamArchivePath, type TeamArchiveTab } from '@/lib/app-routes'
+import { FilterIcon } from '@/components/ui/view-action-icons'
 import './workspace-operations.css'
 
 type ArchiveTabDefinition = { id: TeamArchiveTab; label: string; title: string; empty: string; resource?: string }
@@ -62,7 +63,7 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
         filters={filters}
         options={field=>explorerFilterOptions(field,issueOptions)}
         onToggle={toggleFilter}
-        trigger={<button className="archive-filter-trigger ui-pill" aria-label={t('Add filter')}><Filter/></button>}
+        trigger={<button className="archive-filter-trigger ui-pill" aria-label={t('Add filter')}><FilterIcon/></button>}
       />}
     </div>
     {tab.id==='issues'&&filters.length>0&&<div className="archive-applied-filters"><MyIssuesFilterBar filters={filters} filterOptions={filter=>explorerFilterOptions(filter.field,issueOptions)} onAdd={()=>setFilterOpen(true)} onClear={()=>setFilters([])} onOperatorChange={(id,operator)=>setFilters(current=>updateFilterOperator(current,id,operator))} onRemove={id=>setFilters(current=>current.filter(filter=>filter.id!==id))} onValuesChange={(id,options)=>setFilters(current=>updateFilterValues(current,id,options))}/></div>}

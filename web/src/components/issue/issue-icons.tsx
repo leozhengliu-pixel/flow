@@ -73,7 +73,7 @@ export function ProjectStatusIcon({ color, name, type, size = 16, ...props }: Fl
   const maskId = `project-status-${useId().replaceAll(':', '')}-${kind}`
   const standard = ({ backlog: 'Backlog', planned: 'Planned', started: 'In Progress', completed: 'Completed', canceled: 'Canceled' } as const)[kind]
   const stroke = name === standard || !color ? projectStatusColors[kind] : color
-  const progress = kind === 'started' ? 12.56 : kind === 'completed' || kind === 'canceled' ? 25.12 : 0
+  const progress = kind === 'started' ? 7.536 : kind === 'completed' || kind === 'canceled' ? 25.12 : 0
   const finished = kind === 'completed' || kind === 'canceled'
   const label = props['aria-label'] ?? (name ? `${name} status` : undefined)
   return <svg aria-hidden={label ? undefined : true} fill="none" focusable="false" height={size} role={label ? props.role ?? 'img' : undefined} viewBox="-1 -1 16 16" width={size} {...props} aria-label={label}>
