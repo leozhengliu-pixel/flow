@@ -49,7 +49,7 @@ export function DetailPane({issue,data,comments,activities,presence=[],full=fals
   const linkedDocuments=data.documents.filter(document=>document.issueId===issue.id&&!document.archivedAt)
   const customerRequests=data.customerRequests.filter(request=>request.issueId===issue.id)
   const releasesEnabled=data.workspaceSettings.featureFlags.releases??true
-  const toggleLabel=async(id:string)=>{const ids=issue.labels.map(x=>x.id);await onUpdate({labelIds:ids.includes(id)?ids.filter(x=>x!==id):[...ids,id]})}
+  const toggleLabel=async(id:string)=>{const ids=issue.labels.map(x=>x.id);if(ids.includes(id)){await onUpdate({labelIds:ids.filter(x=>x!==id)});return}const target=availableLabels.find(label=>label.id===id);const next=target?.groupId?ids.filter(selectedId=>availableLabels.find(label=>label.id===selectedId)?.groupId!==target.groupId):ids;await onUpdate({labelIds:[...next,id]})}
   const toggleSubscriber=async(id:string)=>onUpdate({subscriberIds:issue.subscriberIds.includes(id)?issue.subscriberIds.filter(x=>x!==id):[...issue.subscriberIds,id]})
   const upload=async(file:File)=>{setUploadState({name:file.name,progress:20,file});try{setUploadState({name:file.name,progress:70,file});await onUpload(file);setUploadState(undefined)}catch(error){setUploadState({name:file.name,progress:100,file,error:error instanceof Error?error.message:'Upload failed'})}}
   return <section className={`issue-view ${full?'full':''} ${embedded?'issue-view--embedded':''}`}>

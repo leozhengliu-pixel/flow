@@ -3,7 +3,7 @@
 ## Route and projection
 
 - `/cleantrack/pulse/following` renders updates for projects where the viewer is lead, member, or subscribed, plus owned or subscribed initiatives.
-- `/cleantrack/pulse/popular` ranks updates by reactions and comments and hides updates without engagement.
+- `/cleantrack/pulse/popular` prioritizes recent updates with reactions and comments while retaining a useful recent fallback when engagement is sparse.
 - `/cleantrack/pulse/all` renders the complete workspace update stream in reverse chronological order.
 - `/cleantrack/pulse` canonicalizes to the `following` route.
 - The feed is a projection over the existing `projectUpdates` and `initiativeUpdates` bootstrap collections. It does not duplicate update records.
@@ -19,22 +19,26 @@
 - The add-view button switches the tab strip into the inline Flow editor.
 - Icon and color use the shared `ViewIconPicker`.
 - Source filters support all updates, project updates, or initiative updates.
-- Saved views are workspace-scoped and persisted in local storage until a server-side Pulse-view entity is introduced.
+- Saved Pulse views reuse the persisted `SavedView` aggregate with `resource=pulse`, forced personal scope, viewer ownership, and an independent `/pulse/view/:id` route.
+- Personal views are removed from other users' bootstrap projections and cannot be promoted to team/workspace scope through the Pulse creation API.
+- Filters support Author, Team, Created date, Update type, Update health, Initiative, Project, Project members, Project status, and Project labels. Advanced mode controls all/any matching and positive/negative operators.
 
 ## Update composer
 
 - `pulse-composer.tsx` shares one dialog for project and initiative updates.
-- Source, health, body, attachment selection, keyboard submit, outside click, and Escape are functional.
+- Source, health, rich-text body, attachment upload, keyboard submit, outside click, and Escape are functional.
 - The change summary is derived from the selected project or initiative.
-- Attachments are retained in the local draft UI only because update attachments do not yet exist in the Go domain model.
+- Update attachments persist through object storage, remain authorization-checked under `/uploads`, render on Pulse cards, and are deleted with their update.
 
 ## Feed cards
 
 - `pulse-update-card.tsx` renders source, health, author, timestamp, body, comments, reactions, and author actions.
 - Project and initiative update cards use identical edit, delete, comment, reaction, copy-link, and copy-markdown interactions.
+- Cards lead with a one-sentence takeaway when an update contains additional detail, and render persisted rich-text bodies and attachments.
 - Initiative update comments and reactions have dedicated Go endpoints and domain events so both update types persist consistently.
 
 ## Menus and dismissal
 
 - `pulse-menus.tsx` owns subscription cadence, source filter, and inline new-view controls.
 - Dialogs and menus use Radix primitives, so outside click, Escape, focus return, and keyboard menu navigation are shared with the rest of the application.
+- Personal Pulse summary cadence is persisted in `UserSettings` rather than browser storage.

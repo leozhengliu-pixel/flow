@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, Languages } from 'lucide-react'
+import { Check } from 'lucide-react'
 import type { AccountBootstrap, BootstrapData, Workspace } from '@/types/flow'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { useI18n } from '@/i18n/i18n'
 
 export function WorkspaceMenu({ account, data, onSettings, onSwitch, onCreate, onLogout }: {
   account: AccountBootstrap; data: BootstrapData; onSwitch: (workspace: Workspace) => void; onCreate: () => void
@@ -10,7 +9,6 @@ export function WorkspaceMenu({ account, data, onSettings, onSwitch, onCreate, o
   onLogout: () => Promise<void>
 }) {
   const [open, setOpen] = useState(false)
-  const { locale, setLocale } = useI18n()
   const sequence = useRef<{ key: string; at: number }>({ key: '', at: 0 })
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
@@ -26,21 +24,15 @@ export function WorkspaceMenu({ account, data, onSettings, onSwitch, onCreate, o
   return <>
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger className="workspace-menu-trigger" aria-label={`${workspace.name} Workspace Menu`}>
-        <WorkspaceAvatar workspace={workspace}/><strong>{workspace.name}</strong><ChevronDown size={12}/>
+        <WorkspaceAvatar workspace={workspace}/><strong>{workspace.name}</strong><WorkspaceChevronIcon/>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" sideOffset={4} className="workspace-primary-menu">
+        <div className="workspace-menu-list">
         <DropdownMenuItem onSelect={() => onSettings('workspace')}>Settings<WorkspaceMenuShortcut>G then S</WorkspaceMenuShortcut></DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onSettings('members')}>Invite and manage members</DropdownMenuItem>
         <DropdownMenuSeparator/>
         <DropdownMenuItem onSelect={() => window.open('https://flow.app/download','_blank')}>Download desktop app</DropdownMenuItem>
         <DropdownMenuSeparator/>
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger><Languages size={14}/>Language</DropdownMenuSubTrigger>
-          <DropdownMenuSubContent sideOffset={5} alignOffset={-5}>
-            <DropdownMenuItem onSelect={() => setLocale('en-US')}>English{locale === 'en-US' && <Check size={14}/>}</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setLocale('zh-CN')}>简体中文{locale === 'zh-CN' && <Check size={14}/>}</DropdownMenuItem>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger data-workspace-switch-trigger>Switch workspace<WorkspaceMenuShortcut>O then W</WorkspaceMenuShortcut></DropdownMenuSubTrigger>
           <DropdownMenuSubContent sideOffset={5} alignOffset={-5} className="workspace-switch-menu">
@@ -55,6 +47,7 @@ export function WorkspaceMenu({ account, data, onSettings, onSwitch, onCreate, o
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuItem onSelect={() => void onLogout()}>Log out<WorkspaceMenuShortcut>⌥ ⇧ Q</WorkspaceMenuShortcut></DropdownMenuItem>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   </>
@@ -63,4 +56,5 @@ export function WorkspaceMenu({ account, data, onSettings, onSwitch, onCreate, o
 export function WorkspaceAvatar({ workspace }: { workspace: Workspace }) { return <span className="workspace-avatar" style={{ background: workspace.color || '#b89b38' }}>{workspace.icon || initials(workspace.name)}</span> }
 function WorkspaceMenuShortcut({children}:{children:React.ReactNode}) { return <kbd className="workspace-shortcut">{children}</kbd> }
 function initials(value:string){const parts=value.split(/\s+/).filter(Boolean);const result=parts.length>1?parts.map(part=>part[0]).join(''):(parts[0]??'').slice(0,2);return result.slice(0,2).toUpperCase()||'W'}
+function WorkspaceChevronIcon(){return <svg viewBox="0 0 13 9" aria-hidden="true"><path d="M10.1611 .314 5.9946 4.4805 1.8282 .314A1.0707 1.0707 0 0 0 .314 1.8282l4.929 4.9289a1.0707 1.0707 0 0 0 1.5141 0L11.686 1.8282A1.0707 1.0707 0 0 0 10.1611 .314Z"/></svg>}
 function isEditable(target: EventTarget | null){return target instanceof HTMLElement && (target.isContentEditable || ['INPUT','TEXTAREA','SELECT'].includes(target.tagName))}
