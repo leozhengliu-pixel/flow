@@ -89,13 +89,31 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 	maxIdle := config.MaxIdleConns
 	if maxIdle < 0 {
 		maxIdle = 0
-	} else if maxIdle == 0 && driver != "sqlite" {
-		maxIdle = 5
+	} else if maxIdle == 0 {
+		// Keep one idle SQLite connection so connection-scoped PRAGMAs
+		// (busy_timeout, synchronous, temp_store) remain in effect between
+		// requests. A zero idle pool would reopen a fresh connection for each
+		// statement and silently lose those settings.
+		if driver == "sqlite" {
+			maxIdle = 1
+		} else {
+			maxIdle = 5
+		}
 	}
 	db.SetMaxOpenConns(maxOpen)
 	db.SetMaxIdleConns(min(maxIdle, maxOpen))
 	if config.ConnMaxLifetime > 0 {
 		db.SetConnMaxLifetime(config.ConnMaxLifetime)
+	}
+	// SQLite defaults to a rollback journal and a zero busy timeout. WAL keeps
+	// readers moving while a write commits, and NORMAL sync avoids an fsync for
+	// every full workspace snapshot without disabling durability. Configure it
+	// after pool sizing so the first connection is retained in the pool.
+	if driver == "sqlite" {
+		if err := configureSQLite(db, dsn); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("configure sqlite: %w", err)
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -117,6 +135,29 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		return nil, err
 	}
 	return s, nil
+}
+
+func configureSQLite(db *sql.DB, dsn string) error {
+	// Set the timeout before changing the journal so startup also tolerates a
+	// short-lived lock held by another process (for example a backup job).
+	if _, err := db.Exec(`PRAGMA busy_timeout=5000`); err != nil {
+		return err
+	}
+	// SQLite cannot enable WAL for an anonymous in-memory database. The other
+	// pragmas are safe and useful for both file-backed and named in-memory DBs.
+	if !strings.HasPrefix(strings.TrimSpace(dsn), ":memory:") {
+		if _, err := db.Exec(`PRAGMA journal_mode=WAL`); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`PRAGMA synchronous=NORMAL`); err != nil {
+			return err
+		}
+	}
+	if _, err := db.Exec(`PRAGMA foreign_keys=ON`); err != nil {
+		return err
+	}
+	_, err := db.Exec(`PRAGMA temp_store=MEMORY`)
+	return err
 }
 
 func mysqlDSN(raw string) (string, error) {
@@ -237,11 +278,14 @@ func databaseMigrations(dialect string) []string {
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS document_collaboration_updates (update_id %s PRIMARY KEY, workspace_key %s NOT NULL, document_id %s NOT NULL, client_id %s NOT NULL, update_data %s NOT NULL, created_at VARCHAR(40) NOT NULL)`, idType, idType, idType, idType, blobType),
 	}
 	indexes := []string{
+		"workspace_states_updated_idx ON workspace_states(updated_at)",
 		"domain_events_aggregate_idx ON domain_events(aggregate_id,created_at)",
+		"domain_events_created_idx ON domain_events(created_at)",
 		"auth_sessions_user_idx ON auth_sessions(user_id,expires_at)",
 		"auth_identities_user_idx ON auth_identities(user_id)",
 		"workspace_memberships_user_idx ON workspace_memberships(user_id,status)",
 		"workspace_invitations_email_idx ON workspace_invitations(email,status)",
+		"workspace_invitations_workspace_created_idx ON workspace_invitations(workspace_id,created_at)",
 		"search_history_recent_idx ON search_history(user_id,workspace_id,last_used_at)",
 		"recently_viewed_recent_idx ON recently_viewed(user_id,workspace_id,last_viewed_at)",
 		"document_collaboration_updates_document_idx ON document_collaboration_updates(workspace_key,document_id,created_at)",

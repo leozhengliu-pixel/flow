@@ -6,6 +6,22 @@ selected backend with missing required values causes a clear startup error.
 Secrets may be supplied as `VARIABLE_FILE=/run/secrets/name`; the file value
 takes precedence over `VARIABLE`.
 
+## Logging
+
+The API writes startup, request, integration, and error logs to stdout so
+container runtimes and Kubernetes can collect them with `kubectl logs`. The
+legacy `log.Printf` calls are also redirected to stdout during the migration to
+structured logging.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FLOW_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
+| `FLOW_LOG_FORMAT` | `text` | `text` for human-readable logs or `json` for log collectors. |
+
+Every HTTP request receives an `X-Request-ID` response header. Clients may send
+their own `X-Request-ID`; otherwise Flow generates one and includes it in the
+request log record.
+
 This follows the deployment model used by [Plane](https://developers.plane.so/self-hosting/govern/environment-variables),
 [Outline](https://docs.getoutline.com/s/hosting/doc/docker-7pfeLP5a8t), and
 [authentik](https://docs.goauthentik.io/install-config/configuration/). OTLP
@@ -22,7 +38,7 @@ automatically at startup for all three drivers.
 | `FLOW_DATABASE_PATH` | `data/flow.db` | SQLite file path. |
 | `FLOW_DATABASE_URL` | empty | Required for PostgreSQL and MySQL. |
 | `FLOW_DATABASE_MAX_OPEN_CONNS` | driver default | `1` for SQLite, `20` otherwise. |
-| `FLOW_DATABASE_MAX_IDLE_CONNS` | driver default | `0` for SQLite, `5` otherwise. |
+| `FLOW_DATABASE_MAX_IDLE_CONNS` | driver default | `1` for SQLite, `5` otherwise. |
 | `FLOW_DATABASE_CONN_MAX_LIFETIME` | `30m` | Go duration for pooled connections. |
 
 Examples:
@@ -214,6 +230,22 @@ OTEL_EXPORTER_OTLP_HEADERS=authorization=Bearer%20secret
 
 Set `OTEL_SDK_DISABLED=true` or `FLOW_TELEMETRY_ENABLED=false` for a no-op SDK.
 No default Flow or vendor endpoint is configured.
+
+## GitHub/GitLab review webhooks
+
+Code review events can be delivered to the public endpoints below. Include the
+workspace key as a query parameter (or `X-Workspace-Key` header), and configure
+the same `webhookSecret` on the provider connection:
+
+```text
+POST /api/integrations/github/webhook?workspace=cleantrack
+POST /api/integrations/gitlab/webhook?workspace=cleantrack
+```
+
+GitHub uses `X-Hub-Signature-256`; GitLab uses `X-Gitlab-Token`. Flow verifies
+the secret before persisting the pull/merge request and creating Inbox
+notifications. The delivery ID is used for idempotency, so provider retries do
+not duplicate notifications.
 
 ## Compose profiles
 
