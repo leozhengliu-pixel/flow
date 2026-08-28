@@ -42,6 +42,12 @@ export function LabelIcon(props: FlowIconProps) {
   return <AssetIcon asset="Label" source="core" {...props}/>
 }
 
+export function LabelGroupIcon({ size = 16, color = 'currentColor', ...props }: FlowIconProps & { color?: string }) {
+  return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 16 16" fill={color} focusable="false" {...props}>
+    <path fillRule="evenodd" clipRule="evenodd" d="M7.95021 6C8.91671 6 9.70021 5.2165 9.70021 4.25C9.70021 3.2835 8.91671 2.5 7.95021 2.5C6.98371 2.5 6.20021 3.2835 6.20021 4.25C6.20021 5.2165 6.98371 6 7.95021 6ZM4.4502 9.5C5.41669 9.5 6.2002 8.7165 6.2002 7.75C6.2002 6.7835 5.41669 6 4.4502 6C3.4837 6 2.7002 6.7835 2.7002 7.75C2.7002 8.7165 3.48369 9.5 4.4502 9.5ZM7.95018 13C8.91668 13 9.70018 12.2165 9.70018 11.25C9.70018 10.2835 8.91668 9.5 7.95018 9.5C6.98369 9.5 6.20018 10.2835 6.20018 11.25C6.20018 12.2165 6.98369 13 7.95018 13ZM13.2002 7.75C13.2002 8.7165 12.4167 9.5 11.4502 9.5C10.4837 9.5 9.7002 8.7165 9.7002 7.75C9.7002 6.7835 10.4837 6 11.4502 6C12.4167 6 13.2002 6.7835 13.2002 7.75Z"/>
+  </svg>
+}
+
 export function TeamIcon(props: FlowIconProps) {
   return <AssetIcon asset="Team" source="core" {...props}/>
 }
