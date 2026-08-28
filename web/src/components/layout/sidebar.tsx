@@ -8,25 +8,25 @@ import { addFavorite, addSubscription, removeFavorite, removeSubscription, setTe
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { MembersIcon as FlowMembersIcon, SlackIcon as FlowSlackIcon } from '@/components/issue/issue-icons'
 import { WorkspaceMenu } from '@/components/workspace/workspace-menu'
-import { agentPath, asksPath, currentCyclePath, customersPath, draftsPath, inboxPath, initiativesPath, membersPath, myIssuesPath, projectsPath, pulsePath, releasePipelinesPath, reviewsPath, settingsPath, teamArchivePath, teamCyclesPath, teamHomePath, teamInitiativesPath, teamIssuesPath, teamProjectsPath, teamsPath, teamViewsPath, upcomingCyclePath, workspaceViewsPath, loopsPath } from '@/lib/app-routes'
+import { agentPath, asksPath, currentCyclePath, customersPath, documentsPath, draftsPath, inboxPath, initiativesPath, membersPath, myIssuesPath, projectsPath, pulsePath, releasePipelinesPath, reviewsPath, settingsPath, teamArchivePath, teamCyclesPath, teamHomePath, teamInitiativesPath, teamIssuesPath, teamProjectsPath, teamsPath, teamViewsPath, upcomingCyclePath, workspaceViewsPath, loopsPath } from '@/lib/app-routes'
 import type { AccountBootstrap, BootstrapData, Team, Workspace } from '@/types/flow'
 
 import './sidebar.css'
 
-export type PageId = 'inbox' | 'search' | 'pulse' | 'reviews' | 'my-issues' | 'workspace-issues' | 'team-issues' | 'team-archive' | 'cycles' | 'cycle-detail' | 'projects' | 'views' | 'project-detail' | 'issue-detail' | 'initiatives' | 'initiative-detail' | 'members' | 'customers' | 'teams' | 'new-team' | 'drafts' | 'agent' | 'loops' | 'releases' | 'asks' | 'document-detail' | 'customer-detail'
+export type PageId = 'inbox' | 'search' | 'pulse' | 'reviews' | 'my-issues' | 'workspace-issues' | 'team-issues' | 'team-archive' | 'cycles' | 'cycle-detail' | 'projects' | 'views' | 'project-detail' | 'issue-detail' | 'initiatives' | 'initiative-detail' | 'members' | 'customers' | 'teams' | 'new-team' | 'drafts' | 'agent' | 'loops' | 'releases' | 'asks' | 'documents' | 'analytics' | 'document-detail' | 'customer-detail'
 
-type SidebarEntry = 'inbox' | 'reviews' | 'myIssues' | 'pulse' | 'drafts' | 'agent' | 'initiatives' | 'projects' | 'views' | 'members' | 'customers' | 'teams' | 'releases' | 'loops'
+type SidebarEntry = 'inbox' | 'reviews' | 'myIssues' | 'pulse' | 'drafts' | 'agent' | 'initiatives' | 'projects' | 'documents' | 'views' | 'members' | 'customers' | 'teams' | 'releases' | 'loops'
 type SidebarVisibility = 'always' | 'badged' | 'never'
 type SidebarPreferences = Record<SidebarEntry, SidebarVisibility>
 type SidebarGroup = 'personal' | 'workspace'
 type SidebarOrder = Record<SidebarGroup, SidebarEntry[]>
 
 const defaultPersonalOrder: SidebarEntry[] = ['inbox', 'reviews', 'myIssues', 'pulse', 'drafts', 'agent']
-const defaultWorkspaceOrder: SidebarEntry[] = ['members', 'initiatives', 'projects', 'teams', 'views', 'releases', 'loops', 'customers']
+const defaultWorkspaceOrder: SidebarEntry[] = ['members', 'initiatives', 'projects', 'documents', 'teams', 'views', 'releases', 'loops', 'customers']
 
 const defaultPreferences: SidebarPreferences = {
   inbox: 'always', reviews: 'always', myIssues: 'always', pulse: 'always', drafts: 'always', agent: 'always',
-  initiatives: 'always', projects: 'always', views: 'always', members: 'always', customers: 'never', teams: 'always', releases: 'always', loops: 'always',
+  initiatives: 'always', projects: 'always', documents: 'always', views: 'always', members: 'always', customers: 'never', teams: 'always', releases: 'always', loops: 'always',
 }
 
 export function Sidebar({ account, data, page, open = false, onOpenChange, onSearch, onCreate, onOpenSettings, onSwitchWorkspace, onCreateWorkspace, onLogout }: {
@@ -63,7 +63,7 @@ export function Sidebar({ account, data, page, open = false, onOpenChange, onSea
   const inboxUnread = data.notifications.filter(item => item.recipientId === data.viewer.id && !item.readAt && !item.archivedAt && !item.deletedAt && (!item.snoozedUntil || new Date(item.snoozedUntil) <= new Date())).length
   const reviewCount=data.reviews.filter(item=>item.status!=='merged'&&item.status!=='closed'&&item.reviewerIds.includes(data.viewer.id)).length
   const badgeCount=(entry:SidebarEntry)=>entry==='inbox'?inboxUnread:entry==='reviews'?reviewCount:entry==='drafts'?data.drafts.length:0
-  const activeWorkspaceEntry: SidebarEntry | undefined = page === 'members' ? 'members' : page === 'customers' || page === 'customer-detail' ? 'customers' : page === 'teams' || page === 'new-team' ? 'teams' : page==='releases'?'releases':page==='loops'?'loops':undefined
+  const activeWorkspaceEntry: SidebarEntry | undefined = page === 'members' ? 'members' : page === 'customers' || page === 'customer-detail' ? 'customers' : page === 'teams' || page === 'new-team' ? 'teams' : page === 'documents' || page === 'document-detail' ? 'documents' : page==='releases'?'releases':page==='loops'?'loops':undefined
   const show = (entry: SidebarEntry) => preferences[entry] === 'always' || preferences[entry]==='badged'&&badgeCount(entry)>0 || entry === activeWorkspaceEntry
   const available = (entry: SidebarEntry) => (entry !== 'initiatives' || featureEnabled('initiatives'))
     && (entry !== 'customers' || featureEnabled('customer-requests'))
@@ -81,11 +81,12 @@ export function Sidebar({ account, data, page, open = false, onOpenChange, onSea
     pulse: featureEnabled('pulse') ? <Nav icon={<PulseIcon/>} label="Pulse" to={pulsePath(workspaceSlug)} onClick={close}/> : null,
     drafts: <Nav badge={data.drafts.length} active={page === 'drafts'} icon={<DraftIcon/>} label="Drafts" to={draftsPath(workspaceSlug)} onClick={close}/>,
     agent: featureEnabled('ai') ? <Nav icon={<AgentIcon/>} label="Agent" to={agentPath(workspaceSlug)} onClick={close}/> : null,
-    initiatives: null, projects: null, views: null, members: null, customers: null, teams: null, releases:null, loops:null,
+    initiatives: null, projects: null, documents: null, views: null, members: null, customers: null, teams: null, releases:null, loops:null,
   }
   const workspaceNavigation: Record<SidebarEntry, ReactNode> = {
     initiatives: data.viewerRole === 'guest' || !featureEnabled('initiatives') ? null : <Nav active={page === 'initiative-detail'} icon={<InitiativeIcon/>} label="Initiatives" to={initiativesPath(workspaceSlug)} onClick={close}/>,
     projects: <Nav active={page === 'project-detail'} icon={<FlowIcon name="Project"/>} label="Projects" to={projectsPath(workspaceSlug)} onClick={close}/>,
+    documents: <Nav active={page === 'documents' || page === 'document-detail'} icon={<BookOpen/>} label="Documents" to={documentsPath(workspaceSlug)} onClick={close}/>,
     views: data.viewerRole === 'guest' ? null : <Nav icon={<FlowIcon name="CustomView"/>} label="Views" to={workspaceViewsPath(workspaceSlug)} onClick={close}/>,
     members: <Nav active={page === 'members'} icon={<SidebarMembersIcon/>} label="Members" to={membersPath(workspaceSlug)} onClick={close}/>,
     customers: data.viewerRole === 'guest' || !featureEnabled('customer-requests') ? null : <Nav active={page === 'customers'} icon={<CustomersIcon/>} label="Customers" to={customersPath(workspaceSlug)} onClick={close}/>,
@@ -211,6 +212,7 @@ function MoreMenu({ entries, onCustomize, workspaceSlug, asks }: { entries: Side
     teams: { label: 'Teams', icon: <FlowIcon name="Team"/>, to: teamsPath(workspaceSlug) },
     releases:{label:'Releases',icon:<Rocket/>,to:releasePipelinesPath(workspaceSlug)},
     loops:{label:'Loops',icon:<Repeat2/>,to:loopsPath(workspaceSlug)},
+    documents:{label:'Documents',icon:<BookOpen/>,to:documentsPath(workspaceSlug)},
   }
   return <DropdownMenu.Root>
     <DropdownMenu.Trigger asChild><button className="nav-item sidebar-more-trigger" type="button" aria-label="Show more links"><MoreHorizontal/><span>More</span></button></DropdownMenu.Trigger>
@@ -245,8 +247,8 @@ function Nav({ icon, label, badge, active, onClick, to }: { icon: ReactElement; 
 function SubNav({label,to,onClick}:{label:string;to:string;onClick?:()=>void}){return <NavLink end={false} className={({isActive})=>`nav-item team-sub-link ${isActive?'active':''}`} to={to} onClick={onClick}><span className="nav-label">{label}</span></NavLink>}
 
 function SidebarCustomization({ open, onOpenChange, preferences, order, onChange, onReorder }: { open: boolean; onOpenChange: (open: boolean) => void; preferences: SidebarPreferences; order: SidebarOrder; onChange: (preferences: SidebarPreferences) => void; onReorder: (group: SidebarGroup, active: SidebarEntry, target: SidebarEntry) => void }) {
-  const personal: Record<SidebarEntry, [string, ReactElement]> = { inbox: ['Inbox', <FlowIcon key="inbox" name="Inbox"/>], reviews: ['Reviews', <ReviewsIcon key="reviews"/>], myIssues: ['My issues', <MyIssuesIcon key="my-issues"/>], pulse: ['Pulse', <PulseIcon key="pulse"/>], drafts: ['Drafts', <DraftIcon key="drafts"/>], agent: ['Agent', <AgentIcon key="agent"/>], initiatives: ['', <></>], projects: ['', <></>], views: ['', <></>], members: ['', <></>], customers: ['', <></>], teams: ['', <></>],releases:['',<></>],loops:['',<></>] }
-  const workspace: Record<SidebarEntry, [string, ReactElement]> = { initiatives: ['Initiatives', <InitiativeIcon key="initiatives"/>], projects: ['Projects', <FlowIcon key="projects" name="Project"/>], views: ['Views', <FlowIcon key="views" name="CustomView"/>], members: ['Members', <SidebarMembersIcon key="members"/>], customers: ['Customers', <CustomersIcon key="customers"/>], teams: ['Teams', <FlowIcon key="teams" name="Team"/>],releases:['Releases',<Rocket key="releases"/>],loops:['Loops',<Repeat2 key="loops"/>], inbox: ['', <></>], reviews: ['', <></>], myIssues: ['', <></>], pulse: ['', <></>], drafts: ['', <></>], agent: ['', <></>] }
+  const personal: Record<SidebarEntry, [string, ReactElement]> = { inbox: ['Inbox', <FlowIcon key="inbox" name="Inbox"/>], reviews: ['Reviews', <ReviewsIcon key="reviews"/>], myIssues: ['My issues', <MyIssuesIcon key="my-issues"/>], pulse: ['Pulse', <PulseIcon key="pulse"/>], drafts: ['Drafts', <DraftIcon key="drafts"/>], agent: ['Agent', <AgentIcon key="agent"/>], initiatives: ['', <></>], projects: ['', <></>], documents: ['', <></>], views: ['', <></>], members: ['', <></>], customers: ['', <></>], teams: ['', <></>],releases:['',<></>],loops:['',<></>] }
+  const workspace: Record<SidebarEntry, [string, ReactElement]> = { initiatives: ['Initiatives', <InitiativeIcon key="initiatives"/>], projects: ['Projects', <FlowIcon key="projects" name="Project"/>], documents: ['Documents', <BookOpen key="documents"/>], views: ['Views', <FlowIcon key="views" name="CustomView"/>], members: ['Members', <SidebarMembersIcon key="members"/>], customers: ['Customers', <CustomersIcon key="customers"/>], teams: ['Teams', <FlowIcon key="teams" name="Team"/>],releases:['Releases',<Rocket key="releases"/>],loops:['Loops',<Repeat2 key="loops"/>], inbox: ['', <></>], reviews: ['', <></>], myIssues: ['', <></>], pulse: ['', <></>], drafts: ['', <></>], agent: ['', <></>] }
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="sidebar-customize-dialog">
     <DialogTitle>Customize sidebar</DialogTitle>
     <label className="sidebar-badge-style"><span>Default badge style</span><span className="badge-preview">1</span><select aria-label="Default badge style" defaultValue="count"><option value="count">Count</option><option value="dot">Dot</option></select></label>

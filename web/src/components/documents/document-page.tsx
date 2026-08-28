@@ -1,12 +1,12 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Bell, Check, ChevronDown, Clock3, Copy, FileText, History, MoreHorizontal, Star, Trash2, X } from 'lucide-react'
+import { Bell, Check, ChevronDown, Clock3, Copy, FileText, History, MessageCircle, MoreHorizontal, Send, Star, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
-import { addFavorite, addSubscription, deleteDocument, removeFavorite, removeSubscription, restoreDocumentRevision, updateDocument } from '@/lib/api'
-import type { BootstrapData, FlowDocument } from '@/types/flow'
+import { addFavorite, addSubscription, createDocumentComment, deleteDocument, deleteDocumentComment, removeFavorite, removeSubscription, restoreDocumentRevision, updateDocument } from '@/lib/api'
+import type { BootstrapData, FlowDocument, User } from '@/types/flow'
 
 import './document-page.css'
 
@@ -19,6 +19,9 @@ export function DocumentPage({ data, document, onReload, onBack }: { data: Boots
   const [selectedRevisionId,setSelectedRevisionId]=useState(document.revisions[0]?.id??'')
   const [deleteOpen,setDeleteOpen]=useState(false)
   const [editorVersion,setEditorVersion]=useState(0)
+  const [commentBody,setCommentBody]=useState('')
+  const [replyTo,setReplyTo]=useState<string>()
+  const [presence,setPresence]=useState<User[]>([])
   const pending=useRef<number | undefined>(undefined)
   const favorite=data.favorites.some(item=>item.resourceType==='document'&&item.resourceId===document.id) || document.favorite
   const subscribed=data.subscriptions.some(item=>item.resourceType==='document'&&item.resourceId===document.id) || document.subscriberIds.includes(data.viewer.id)
@@ -29,6 +32,8 @@ export function DocumentPage({ data, document, onReload, onBack }: { data: Boots
   const project=data.projects.find(item=>document.projectIds.includes(item.id))
   const issue=data.issues.find(item=>item.id===document.issueId)
   const selectedRevision=document.revisions.find(item=>item.id===selectedRevisionId)
+  const comments=data.comments[document.id] ?? []
+  const submitComment=async(parentId?:string)=>{const body=commentBody.trim();if(!body)return;await createDocumentComment(document.id,{body,parentId});setCommentBody('');setReplyTo(undefined);await onReload()}
   const openHistory=async()=>{await onReload();setSelectedRevisionId(document.revisions[0]?.id??'');setHistoryOpen(true)}
   const restoreRevision=async()=>{if(!selectedRevision)return;const restored=await restoreDocumentRevision(document.id,selectedRevision.id);setTitle(restored.title);setBody({value:restored.content,state:restored.contentData?JSON.stringify(restored.contentData):restored.contentState});setEditorVersion(value=>value+1);setHistoryOpen(false);await onReload()}
   const toggleProject=async(id:string)=>{const next=document.projectIds.includes(id)?document.projectIds.filter(value=>value!==id):[...document.projectIds,id];await updateDocument(document.id,{projectIds:next});await onReload()}
@@ -46,7 +51,8 @@ export function DocumentPage({ data, document, onReload, onBack }: { data: Boots
     <article className="document-canvas">
       <button className="document-icon" aria-label="Document icon"><FileText size={28}/></button>
       <input className="document-title" aria-label="Document title" value={title} onChange={event=>{setTitle(event.target.value);schedule({title:event.target.value})}} onBlur={()=>{if(title.trim()&&title!==document.title)void updateDocument(document.id,{title:title.trim()}).then(onReload)}}/>
-      <IssueDescriptionEditor key={`${document.id}:${editorVersion}`} className="document-editor" value={body.value} state={body.state} onChange={snapshot=>{setBody({value:snapshot.markdown,state:snapshot.documentJSON});schedule({content:snapshot.markdown,contentState:snapshot.contentState,contentData:snapshot.document as Record<string,unknown>})}}/>
+      <div className="document-presence" aria-label={`${presence.length} people editing`}><span className="document-presence__status"><i/>Live</span>{presence.filter(user => user.id !== data.viewer.id).slice(0,4).map(user=><span className="document-presence__avatar" key={user.id} title={`${user.displayName} is editing`}>{user.displayName.slice(0,2).toUpperCase()}</span>)}</div><IssueDescriptionEditor key={`${document.id}:${editorVersion}`} className="document-editor" value={body.value} state={body.state} collaboration={{workspaceKey:data.workspace.urlKey,documentId:document.id,viewer:data.viewer,onPresence:setPresence,onPersist:async snapshot=>{await updateDocument(document.id,{content:snapshot.markdown,contentState:snapshot.contentState,contentData:snapshot.document as Record<string,unknown>});await onReload()}}} onChange={snapshot=>{setBody({value:snapshot.markdown,state:snapshot.documentJSON});schedule({content:snapshot.markdown,contentState:snapshot.contentState,contentData:snapshot.document as Record<string,unknown>})}}/>
+      <section className="document-comments" aria-label="Comments"><header><MessageCircle size={16}/><strong>Comments</strong><span>{comments.filter(item=>!item.parentId).length}</span></header><div className="document-comment-list">{comments.filter(item=>!item.parentId).map(comment=><article className="document-comment-thread" key={comment.id}><div className="document-comment"><strong>{comment.user.displayName}</strong><small>{new Date(comment.createdAt).toLocaleString()}</small><p>{comment.body}</p><button type="button" onClick={()=>setReplyTo(replyTo===comment.id?undefined:comment.id)}>Reply</button><button type="button" onClick={()=>void deleteDocumentComment(document.id,comment.id).then(onReload)}>Delete</button></div>{comments.filter(item=>item.parentId===comment.id).map(reply=><div className="document-comment document-comment-reply" key={reply.id}><strong>{reply.user.displayName}</strong><small>{new Date(reply.createdAt).toLocaleString()}</small><p>{reply.body}</p></div>)}{replyTo===comment.id&&<div className="document-comment-composer is-reply"><textarea aria-label="Reply" value={commentBody} onChange={event=>setCommentBody(event.target.value)} /><button type="button" disabled={!commentBody.trim()} onClick={()=>void submitComment(comment.id)}><Send size={13}/>Reply</button></div>}</article>)}</div><div className="document-comment-composer"><textarea aria-label="Add comment" placeholder="Add a comment…" value={replyTo?"":commentBody} onChange={event=>{setReplyTo(undefined);setCommentBody(event.target.value)}} /><button type="button" disabled={!commentBody.trim()||!!replyTo} onClick={()=>void submitComment()}><Send size={13}/>Comment</button></div></section>
     </article>
     <Dialog open={historyOpen} onOpenChange={setHistoryOpen}><DialogContent className="document-history"><DialogTitle>Version history for <strong>{document.title}</strong></DialogTitle><button className="document-dialog-close" aria-label="Close modal dialog" onClick={()=>setHistoryOpen(false)}><X size={15}/></button>{document.revisions.length?<div className="document-history-body"><nav className="document-history-list">{document.revisions.map(revision=><button className={revision.id===selectedRevisionId?'selected':''} key={revision.id} onClick={()=>setSelectedRevisionId(revision.id)}><span><strong>{revision.title}</strong><small>{revision.author.displayName} · {new Date(revision.createdAt).toLocaleString()}</small></span><History size={14}/></button>)}</nav>{selectedRevision&&<section className="document-history-preview"><header><div><strong>{new Date(selectedRevision.createdAt).toLocaleString()}</strong><small>Saved by {selectedRevision.author.displayName}</small></div><button onClick={()=>void restoreRevision()}><History size={13}/>Restore this version</button></header><div><article><h3>Current</h3><strong>{document.title}</strong><pre>{document.content||'Empty document'}</pre></article><article><h3>Selected version</h3><strong>{selectedRevision.title}</strong><pre>{selectedRevision.content||'Empty document'}</pre></article></div></section>}</div>:<div className="document-history-empty">There is no history yet.</div>}</DialogContent></Dialog>
     <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}><DialogContent className="document-delete"><DialogTitle>Delete "{document.title}"?</DialogTitle><p>Deleted documents are available in the "Recently deleted" view for 30 days, before they are permanently deleted.</p><footer><button onClick={()=>setDeleteOpen(false)}>Cancel</button><button className="danger" onClick={()=>void deleteDocument(document.id).then(onBack).catch(error=>toast.error(error instanceof Error?error.message:'Could not delete'))}>Delete</button></footer></DialogContent></Dialog>

@@ -28,6 +28,7 @@ import {
   createProjectUpdateComment,
   createRelation,
   createSavedView,
+  shareSavedView,
   createTeam,
   createWorkspace,
   createWorkspaceLabel,
@@ -46,6 +47,7 @@ import {
   deleteProjectUpdate,
   deleteRelation,
   deleteSavedView,
+  unshareSavedView,
   deleteTeam,
   deleteWorkspace,
   fetchAccountBootstrap,
@@ -206,6 +208,8 @@ import { useDesktopNotifications } from "@/hooks/use-desktop-notifications";
 const WorkspaceSearchPage = lazyPage(() => import("@/components/search/workspace-search-page"), "WorkspaceSearchPage");
 const WorkspaceOperationsPage = lazyPage(() => import("@/components/workspace-operations/workspace-operations-page"), "WorkspaceOperationsPage");
 const DocumentPage = lazyPage(() => import("@/components/documents/document-page"), "DocumentPage");
+const DocumentsIndexPage = lazyPage(() => import("@/components/documents/documents-index-page"), "DocumentsIndexPage");
+const AnalyticsDashboardPage = lazyPage(() => import("@/components/analytics/analytics-dashboard-page"), "AnalyticsDashboardPage");
 const CustomerDetailPage = lazyPage(() => import("@/components/customer-detail/customer-detail-page"), "CustomerDetailPage");
 const InboxAppPage = lazyPage(() => import("@/components/inbox/inbox-app-page"), "InboxAppPage");
 const ProjectsPage = lazyPage(() => import("@/components/projects-page/projects-page"), "ProjectsPage");
@@ -1372,7 +1376,7 @@ function App() {
   };
   const addInitiativeResource = async (
     id: string,
-    input: { type?: "link" | "document"; title?: string; url: string },
+    input: { type?: "link" | "document"; title?: string; url?: string; documentId?: string },
   ) => {
     const resource = await run(
       () => createInitiativeResource(id, input),
@@ -2050,6 +2054,16 @@ function App() {
         : current,
     );
     return view;
+  };
+  const shareView = async (view: SavedView) => {
+    if (view.shareToken) {
+      await run(() => unshareSavedView(view.id), "Could not disable view sharing");
+      setData((current) => current ? { ...current, savedViews: (current.savedViews ?? []).map(item => item.id === view.id ? { ...item, shareToken: undefined, sharedAt: undefined } : item) } : current);
+      return undefined;
+    }
+    const shared = await run(() => shareSavedView(view.id), "Could not share view");
+    setData((current) => current ? { ...current, savedViews: (current.savedViews ?? []).map(item => item.id === view.id ? shared.view : item) } : current);
+    return shared.url;
   };
   const changeCurrentUserSettings = async (input: UserSettings) => {
     const settings = await run(() => updateUserSettings(input), "Could not update preferences");
@@ -2947,6 +2961,8 @@ function App() {
           onOpenResult={openSearchResult}
         />
       )}
+      {page === "documents" && route.kind === "documents" && <DocumentsIndexPage data={data} onNavigate={navigateTo} onReload={async () => setData(await fetchBootstrap(data.workspace.urlKey))} />}
+      {page === "analytics" && route.kind === "analytics" && <AnalyticsDashboardPage />}
       {page === "agent" && route.kind === "agent" && <AgentPage chatSlug={route.chatSlug} data={data} onNavigate={navigateTo} onOpenSidebar={()=>setMobileSidebarOpen(true)} onReload={async()=>setData(await fetchBootstrap(data.workspace.urlKey))}/>}
       {page === "loops" && (route.kind === "loops" || route.kind === "loop-editor") && <LoopsPage data={data} loopId={route.kind === "loop-editor" ? route.loopId : undefined} editing={route.kind === "loop-editor"} onOpenSidebar={() => setMobileSidebarOpen(true)} onNavigate={navigateTo} onReload={async()=>setData(await fetchBootstrap(data.workspace.urlKey))} />}
       {page==="reviews"&&(route.kind==="reviews"||route.kind==="review")&&<ReviewsPage data={data} view={route.kind==="reviews"?route.view:"for-you"} review={route.kind==="review"?selectedReview??undefined:undefined} tab={route.kind==="review"?route.tab:undefined} onNavigate={navigateTo} onReload={async()=>setData(await fetchBootstrap(data.workspace.urlKey))} onOpenSidebar={()=>setMobileSidebarOpen(true)}/>}
@@ -3554,6 +3570,7 @@ function App() {
               onUpdate={changeSavedView}
               onToggleFavorite={toggleSavedViewFavorite}
               onSetSubscriptionEvents={setSavedViewSubscriptionEvents}
+              onShare={shareView}
             />
           </main>
         )}
@@ -4046,6 +4063,8 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
   if (route.kind === "workspace-members") return "members";
   if (route.kind === "workspace-customers") return "customers";
   if (route.kind === "customer") return "customer-detail";
+  if (route.kind === "documents") return "documents";
+  if (route.kind === "analytics") return "analytics";
   if (route.kind === "document") return "document-detail";
   if (route.kind === "drafts") return "drafts";
   if (route.kind === "agent") return "agent";

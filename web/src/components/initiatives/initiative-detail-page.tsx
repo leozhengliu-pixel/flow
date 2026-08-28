@@ -61,8 +61,8 @@ type Props = {
   onUpdateComment: (id: string, commentId: string, body: string) => Promise<unknown>
   onDeleteComment: (id: string, commentId: string) => Promise<void>
   onReactComment: (id: string, commentId: string, emoji: string) => Promise<unknown>
-  onCreateResource: (id: string, input: { type?: 'link' | 'document'; title?: string; url: string }) => Promise<InitiativeResource>
-  onUpdateResource: (id: string, resourceId: string, input: { type?: 'link' | 'document'; title?: string; url?: string }) => Promise<InitiativeResource>
+  onCreateResource: (id: string, input: { type?: 'link' | 'document'; title?: string; url?: string; documentId?: string }) => Promise<InitiativeResource>
+  onUpdateResource: (id: string, resourceId: string, input: { type?: 'link' | 'document'; title?: string; url?: string; documentId?: string }) => Promise<InitiativeResource>
   onDeleteResource: (id: string, resourceId: string) => Promise<void>
   savedViews: SavedView[]
   onCreateSavedView: (input: SavedViewMutationInput) => Promise<SavedView>

@@ -355,6 +355,15 @@
 .project-details-sidebar__dependencies > div small { color: var(--pd-label); font-size: 10px; white-space: nowrap; }
 .project-details-sidebar__dependencies > div span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-details-sidebar__dependency-icon { color: #d05250; }
+.project-details-sidebar__property-actions { display:flex; align-items:center; gap:4px; }
+.project-details-sidebar__dependency-graph { width:24px; height:24px; display:grid; place-items:center; padding:0; border:0; border-radius:6px; background:transparent; color:var(--theme-text-secondary); }
+.project-details-sidebar__dependency-graph:hover { background:var(--theme-surface-hover); color:var(--theme-text-primary); }
+.project-dependency-graph__overlay { position:fixed; inset:0; z-index:700; background:lch(0 0 0/.2); }
+.project-dependency-graph { position:fixed; z-index:701; left:50%; top:50%; width:min(560px,calc(100vw - 32px)); transform:translate(-50%,-50%); box-sizing:border-box; padding:18px; border:.5px solid var(--theme-border); border-radius:12px; outline:0; background:var(--theme-surface-2); color:var(--theme-text-primary); box-shadow:0 14px 48px rgb(0 0 0 / 22%); }
+.project-dependency-graph h2 { margin:0 0 4px; font-size:15px; font-weight:600; }
+.project-dependency-graph p { margin:0 0 14px; color:var(--theme-text-secondary); font-size:12px; }
+.project-dependency-graph__canvas { width:100%; height:auto; min-height:180px; display:block; border:.5px solid var(--theme-border); border-radius:8px; background:var(--theme-background); }
+.project-dependency-graph__close { display:block; margin:14px 0 0 auto; height:30px; padding:0 12px; border:.5px solid var(--theme-border); border-radius:7px; background:var(--theme-surface-1); color:var(--theme-text-primary); font:500 12px inherit; }
 .project-details-sidebar__dependencies button { width: 22px; height: 22px; display: grid; place-items: center; border: 0; border-radius: 4px; background: transparent; color: #77777c; }
 .project-details-sidebar__dependencies p { margin: 0; color: #77777d; font-size: 11px; line-height: 16px; }
 .project-details-sidebar__milestone-empty p { margin: 0; color: #77777d; font-size: 11px; line-height: 16px; }

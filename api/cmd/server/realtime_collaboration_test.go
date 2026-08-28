@@ -76,6 +76,31 @@ func TestCollaborationFrameRoundTrip(t *testing.T) {
 	}
 }
 
+func TestCollaborationSocketStandaloneDocumentJoin(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if len(bootstrap.Documents) == 0 {
+		t.Skip("seed workspace has no standalone documents")
+	}
+	connection := dialCollaborationSocket(t, server.URL, "standalone")
+	defer connection.CloseNow()
+	raw, _ := json.Marshal(map[string]string{"type": "document.join", "documentId": bootstrap.Documents[0].ID})
+	writeSocket(t, connection, websocket.MessageText, raw)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	messageType, message, err := connection.Read(ctx)
+	if err != nil || messageType != websocket.MessageText || !strings.Contains(string(message), `"type":"document.sync"`) {
+		t.Fatalf("standalone join response type=%v message=%s err=%v", messageType, message, err)
+	}
+}
+
 func dialCollaborationSocket(t *testing.T, serverURL, clientID string) *websocket.Conn {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)

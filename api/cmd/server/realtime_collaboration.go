@@ -189,26 +189,44 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 		return errors.New("unsupported collaboration command")
 	}
 	data := s.workspaceData(r)
-	issueIndex := slices.IndexFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == command.IssueID })
-	if issueIndex < 0 {
-		return errors.New("issue is outside your teams")
-	}
-	issue := data.Issues[issueIndex]
-	expectedDocumentID := "document_content_" + issue.ID
-	if issue.DocumentContent != nil && issue.DocumentContent.ID != "" {
-		expectedDocumentID = issue.DocumentContent.ID
-	}
-	if command.DocumentID != expectedDocumentID {
-		return errors.New("document does not belong to issue")
+	var contentState string
+	if command.IssueID != "" {
+		issueIndex := slices.IndexFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == command.IssueID })
+		if issueIndex < 0 {
+			return errors.New("issue is outside your teams")
+		}
+		issue := data.Issues[issueIndex]
+		expectedDocumentID := "document_content_" + issue.ID
+		if issue.DocumentContent != nil && issue.DocumentContent.ID != "" {
+			expectedDocumentID = issue.DocumentContent.ID
+			contentState = issue.DocumentContent.ContentState
+		}
+		if command.DocumentID != expectedDocumentID {
+			return errors.New("document does not belong to issue")
+		}
+	} else {
+		// Standalone workspace documents use the same collaboration protocol as
+		// issue descriptions, but are authorized by the document's team scope.
+		index := slices.IndexFunc(data.Documents, func(document domain.Document) bool {
+			return document.ID == command.DocumentID || document.SlugID == command.DocumentID
+		})
+		if index < 0 {
+			return errors.New("document is outside your teams")
+		}
+		document := data.Documents[index]
+		if !s.authDisabled && len(document.TeamIDs) > 0 && !slices.ContainsFunc(data.TeamMembers, func(member domain.TeamMember) bool {
+			return member.UserID == data.Viewer.ID && slices.Contains(document.TeamIDs, member.TeamID)
+		}) {
+			return errors.New("document is outside your teams")
+		}
+		contentState = document.ContentState
 	}
 	updates, err := s.store.DocumentCollaborationUpdates(r.Context(), client.workspace, command.DocumentID)
 	if err != nil {
 		return fmt.Errorf("load collaboration updates: %w", err)
 	}
 	message := collaborationSyncMessage{Type: "document.sync", DocumentID: command.DocumentID, Updates: make([]collaborationSyncUpdate, 0, len(updates))}
-	if issue.DocumentContent != nil {
-		message.ContentState = issue.DocumentContent.ContentState
-	}
+	message.ContentState = contentState
 	for _, update := range updates {
 		message.Updates = append(message.Updates, collaborationSyncUpdate{ID: update.ID, Data: base64.StdEncoding.EncodeToString(update.Data)})
 	}
