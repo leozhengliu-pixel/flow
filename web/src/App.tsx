@@ -3632,6 +3632,7 @@ function App() {
               projectUpdates={data.projectUpdates}
               projectStatuses={data.projectStatuses}
               projectTemplates={data.projectTemplates}
+              initiatives={data.initiatives}
               users={data.users}
               teams={data.teams}
               labels={data.labels}
@@ -3726,6 +3727,7 @@ function App() {
               projectUpdates={data.projectUpdates}
               projectStatuses={data.projectStatuses}
               projectTemplates={data.projectTemplates}
+              initiatives={data.initiatives}
               users={data.users}
               teams={data.teams}
               labels={data.labels}
