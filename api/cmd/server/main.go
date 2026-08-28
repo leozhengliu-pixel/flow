@@ -211,9 +211,14 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/customer-requests/{id}", s.deleteCustomerRequest)
 	mux.HandleFunc("POST /api/customer-requests/{id}/attachments", s.createCustomerRequestAttachment)
 	mux.HandleFunc("DELETE /api/customer-requests/{id}/attachments/{attachmentId}", s.deleteCustomerRequestAttachment)
+	mux.HandleFunc("GET /api/documents", s.listDocuments)
 	mux.HandleFunc("POST /api/documents", s.createDocument)
 	mux.HandleFunc("PATCH /api/documents/{id}", s.updateDocument)
 	mux.HandleFunc("DELETE /api/documents/{id}", s.deleteDocument)
+	mux.HandleFunc("POST /api/documents/{id}/comments", s.createDocumentComment)
+	mux.HandleFunc("PATCH /api/documents/{id}/comments/{commentId}", s.updateDocumentComment)
+	mux.HandleFunc("DELETE /api/documents/{id}/comments/{commentId}", s.deleteDocumentComment)
+	mux.HandleFunc("POST /api/documents/{id}/comments/{commentId}/reactions", s.toggleDocumentCommentReaction)
 	mux.HandleFunc("POST /api/documents/{id}/restore/{revisionId}", s.restoreDocumentRevision)
 	mux.HandleFunc("POST /api/releases", s.createRelease)
 	mux.HandleFunc("GET /api/releases", s.listReleases)
@@ -278,8 +283,13 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/oauth/token", s.exchangeOAuthToken)
 	mux.HandleFunc("GET /api/integrations", s.listIntegrations)
 	mux.HandleFunc("PUT /api/integrations/{provider}", s.connectIntegration)
+	mux.HandleFunc("POST /api/integrations/{provider}/oauth/start", s.startIntegrationOAuth)
+	mux.HandleFunc("GET /api/integrations/{provider}/oauth/callback", s.finishIntegrationOAuth)
+	mux.HandleFunc("POST /api/integrations/{provider}/{id}/oauth/refresh", s.refreshIntegrationOAuth)
+	mux.HandleFunc("DELETE /api/integrations/{provider}/{id}/oauth/token", s.revokeIntegrationOAuth)
 	mux.HandleFunc("DELETE /api/integrations/{provider}", s.disconnectIntegration)
 	mux.HandleFunc("POST /api/integrations/{provider}/webhook", s.codeWebhook)
+	mux.HandleFunc("POST /api/integrations/{provider}/{id}/test", s.testIntegrationWebhook)
 	mux.HandleFunc("PATCH /api/integrations/{provider}/{id}", s.updateIntegration)
 	mux.HandleFunc("DELETE /api/integrations/{provider}/{id}", s.disconnectIntegrationConnection)
 	mux.HandleFunc("GET /api/reviews", s.listReviews)
@@ -305,8 +315,16 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/trash/{id}", s.purgeTrashEntry)
 	mux.HandleFunc("POST /api/imports/preview", s.previewImport)
 	mux.HandleFunc("POST /api/imports/{id}/commit", s.commitImport)
+	mux.HandleFunc("GET /api/imports", s.listImports)
+	mux.HandleFunc("GET /api/imports/{id}", s.getImport)
+	mux.HandleFunc("POST /api/imports/{id}/cancel", s.cancelImport)
+	mux.HandleFunc("POST /api/imports/{id}/retry", s.retryImport)
 	mux.HandleFunc("POST /api/exports", s.createExport)
+	mux.HandleFunc("GET /api/exports", s.listExports)
+	mux.HandleFunc("GET /api/exports/{id}", s.getExport)
+	mux.HandleFunc("POST /api/exports/{id}/retry", s.retryExport)
 	mux.HandleFunc("GET /api/exports/{id}/download", s.downloadExport)
+	mux.HandleFunc("GET /api/analytics/overview", s.workspaceAnalytics)
 	mux.HandleFunc("GET /api/bootstrap", s.bootstrap)
 	mux.HandleFunc("PUT /api/workspace/project-display-default", s.updateProjectDisplayDefault)
 	mux.HandleFunc("PUT /api/workspace/settings", s.updateWorkspaceSettings)
@@ -321,6 +339,9 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/views", s.createSavedView)
 	mux.HandleFunc("PATCH /api/views/{id}", s.updateSavedView)
 	mux.HandleFunc("DELETE /api/views/{id}", s.deleteSavedView)
+	mux.HandleFunc("POST /api/views/{id}/share", s.shareSavedView)
+	mux.HandleFunc("DELETE /api/views/{id}/share", s.unshareSavedView)
+	mux.HandleFunc("GET /api/shared/views/{token}", s.getSharedView)
 	mux.HandleFunc("POST /api/issues", s.createIssue)
 	mux.HandleFunc("PATCH /api/teams/{id}/cycle-settings", s.updateCycleSettings)
 	mux.HandleFunc("GET /api/teams/{id}/states", s.listWorkflowStates)
@@ -484,6 +505,11 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	for index := range data.OAuthApplications {
 		data.OAuthApplications[index].ClientSecret = ""
 	}
+	for index := range data.IntegrationConnections {
+		data.IntegrationConnections[index].OAuthState = ""
+		data.IntegrationConnections[index].OAuthAccessToken = ""
+		data.IntegrationConnections[index].OAuthRefreshToken = ""
+	}
 }
 
 func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
@@ -510,6 +536,11 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	})
 	data.DocumentTemplates = slices.DeleteFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return !allowed(item.TeamID) })
 	data.Documents = slices.DeleteFunc(data.Documents, func(item domain.Document) bool { return !slices.ContainsFunc(item.TeamIDs, allowed) })
+	for id := range data.Comments {
+		if !visibleIssue(id) && !visibleProject(id) && !slices.ContainsFunc(data.Documents, func(item domain.Document) bool { return item.ID == id || item.SlugID == id }) {
+			delete(data.Comments, id)
+		}
+	}
 	data.TeamMembers = slices.DeleteFunc(data.TeamMembers, func(item domain.TeamMember) bool { return !allowed(item.TeamID) })
 	for id := range data.TeamSettings {
 		if !allowed(id) {
@@ -1033,6 +1064,73 @@ func (s *server) deleteSavedView(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// shareSavedView issues a revocable, opaque token. Unlike an authenticated view
+// URL, the token can be opened by collaborators without a Flow session while
+// still exposing only the saved-view definition (not workspace bootstrap data).
+func (s *server) shareSavedView(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var view domain.SavedView
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "view.shared", id, nil, func(data *domain.Bootstrap) error {
+		item, err := savedViewByID(data, id)
+		if err != nil {
+			return err
+		}
+		if item.ShareToken == "" {
+			token, tokenErr := randomSecret("view_share_")
+			if tokenErr != nil {
+				return tokenErr
+			}
+			now := time.Now().UTC()
+			item.ShareToken, item.SharedAt = token, &now
+		}
+		view = *item
+		return nil
+	})
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"view": view, "token": view.ShareToken, "url": "/shared/views/" + url.PathEscape(view.ShareToken) + "?workspace=" + url.QueryEscape(workspaceKey(r))})
+}
+
+func (s *server) unshareSavedView(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "view.unshared", id, nil, func(data *domain.Bootstrap) error {
+		item, err := savedViewByID(data, id)
+		if err != nil {
+			return err
+		}
+		item.ShareToken, item.SharedAt = "", nil
+		return nil
+	})
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *server) getSharedView(w http.ResponseWriter, r *http.Request) {
+	workspace := strings.TrimSpace(r.URL.Query().Get("workspace"))
+	if workspace == "" {
+		writeError(w, http.StatusBadRequest, "workspace is required")
+		return
+	}
+	data, ok := s.store.BootstrapFor(workspace)
+	if !ok {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+	token := r.PathValue("token")
+	for _, item := range data.SavedViews {
+		if item.ShareToken == token {
+			writeJSON(w, http.StatusOK, map[string]any{"view": item, "workspace": data.Workspace})
+			return
+		}
+	}
+	writeError(w, http.StatusNotFound, "shared view not found")
+}
+
 func (s *server) updateCycleSettings(w http.ResponseWriter, r *http.Request) {
 	var input domain.CycleSettingsMutationInput
 	if !decodeJSON(w, r, &input) {
@@ -1159,6 +1257,19 @@ func (s *server) updateCycle(w http.ResponseWriter, r *http.Request) {
 				return errInvalid
 			}
 			cycle.Capacity = *input.Capacity
+		}
+		if input.CapacityByMember != nil {
+			for memberID, days := range input.CapacityByMember {
+				if !slices.ContainsFunc(data.TeamMembers, func(member domain.TeamMember) bool { return member.TeamID == cycle.TeamID && member.UserID == memberID }) {
+					return errInvalid
+				}
+				for day, value := range days {
+					if value < 0 || value > 24 || !slices.Contains([]string{"mon", "tue", "wed", "thu", "fri", "sat", "sun"}, strings.ToLower(day)) {
+						return errInvalid
+					}
+				}
+			}
+			cycle.CapacityByMember = input.CapacityByMember
 		}
 		if input.Favorite != nil {
 			cycle.Favorite = *input.Favorite
@@ -1750,8 +1861,7 @@ func (s *server) createInitiativeReminder(w http.ResponseWriter, r *http.Request
 
 func (s *server) createInitiativeResource(w http.ResponseWriter, r *http.Request) {
 	var input domain.ProjectResourceMutationInput
-	if !decodeJSON(w, r, &input) || input.URL == nil || strings.TrimSpace(*input.URL) == "" {
-		writeError(w, http.StatusBadRequest, "resource URL is required")
+	if !decodeJSON(w, r, &input) {
 		return
 	}
 	id := r.PathValue("id")
@@ -1768,11 +1878,34 @@ func (s *server) createInitiativeResource(w http.ResponseWriter, r *http.Request
 		if !slices.Contains([]string{"link", "document"}, resourceType) {
 			return errInvalid
 		}
-		title := strings.TrimSpace(*input.URL)
+		documentID := ""
+		resourceURL := ""
+		if input.DocumentID != nil {
+			documentID = strings.TrimSpace(*input.DocumentID)
+		}
+		if resourceType == "document" {
+			if documentID == "" {
+				return errInvalid
+			}
+			document, documentErr := documentByID(data, documentID)
+			if documentErr != nil {
+				return documentErr
+			}
+			resourceURL = "/" + data.Workspace.URLKey + "/document/" + document.SlugID
+			if input.Title == nil || strings.TrimSpace(*input.Title) == "" {
+				input.Title = &document.Title
+			}
+		} else {
+			if input.URL == nil || strings.TrimSpace(*input.URL) == "" {
+				return errInvalid
+			}
+			resourceURL = strings.TrimSpace(*input.URL)
+		}
+		title := resourceURL
 		if input.Title != nil && strings.TrimSpace(*input.Title) != "" {
 			title = strings.TrimSpace(*input.Title)
 		}
-		created = domain.InitiativeResource{ID: fmt.Sprintf("initiative_resource_%d", time.Now().UnixNano()), InitiativeID: id, Type: resourceType, Title: title, URL: strings.TrimSpace(*input.URL), CreatedAt: time.Now().UTC()}
+		created = domain.InitiativeResource{ID: fmt.Sprintf("initiative_resource_%d", time.Now().UnixNano()), InitiativeID: id, Type: resourceType, Title: title, URL: resourceURL, DocumentID: documentID, CreatedAt: time.Now().UTC()}
 		initiative.Resources = append(initiative.Resources, created)
 		initiative.UpdatedAt = created.CreatedAt
 		return nil
@@ -1811,6 +1944,18 @@ func (s *server) updateInitiativeResource(w http.ResponseWriter, r *http.Request
 				return errInvalid
 			}
 			resource.URL = strings.TrimSpace(*input.URL)
+		}
+		if input.DocumentID != nil {
+			document, documentErr := documentByID(data, strings.TrimSpace(*input.DocumentID))
+			if documentErr != nil {
+				return documentErr
+			}
+			resource.Type = "document"
+			resource.DocumentID = document.ID
+			resource.URL = "/" + data.Workspace.URLKey + "/document/" + document.SlugID
+			if resource.Title == "" {
+				resource.Title = document.Title
+			}
 		}
 		initiative.UpdatedAt = time.Now().UTC()
 		updated = *resource

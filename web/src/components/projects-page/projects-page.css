@@ -748,7 +748,8 @@
 .lp-project-timeline__body h2 { align-items: center; border-right: .5px solid var(--theme-control-hover); color: var(--theme-text-primary); display: flex; font-size: 12px; font-weight: 500; gap: 7px; margin: 0; padding: 0 16px; }
 .lp-project-timeline__body h2 small { color: #77777c; font-size: 12px; font-weight: 400; }
 .lp-project-timeline__tracks { display: grid; gap: 4px; padding: 8px 0; }
-.lp-project-timeline__tracks > button { background: #2d3f62; border: .5px solid #5578ad; border-radius: 4px; color: #e7edf8; font-size: 12px; height: 26px; justify-self: start; overflow: hidden; padding: 0 8px; text-align: left; text-overflow: ellipsis; transform: translateX(var(--timeline-start)); white-space: nowrap; width: var(--timeline-width); }
+.lp-project-timeline__tracks > button { background: #2d3f62; border: .5px solid #5578ad; border-radius: 4px; color: #e7edf8; cursor: grab; font-size: 12px; height: 26px; justify-self: start; margin-left: calc(var(--timeline-start) + var(--timeline-drag-offset, 0%)); overflow: hidden; padding: 0 8px; text-align: left; text-overflow: ellipsis; transition: margin-left 120ms ease-out, box-shadow 120ms ease-out; user-select: none; white-space: nowrap; width: var(--timeline-width); }
+.lp-project-timeline__tracks > button[data-dragging=true] { cursor: grabbing; box-shadow: 0 4px 12px rgb(0 0 0 / 24%); }
 .lp-project-timeline__tracks > button:hover { background: #394f78; }
 .lp-project-timeline__tracks > button:focus-visible { box-shadow: 0 0 0 2px #90c0f7; outline: 0; }
 

@@ -7,6 +7,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -115,6 +116,85 @@ func TestDocumentHistoryProjectAssociationAndTrashRestore(t *testing.T) {
 	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	if !slices.ContainsFunc(bootstrap.Documents, func(item domain.Document) bool { return item.ID == document.ID }) || !projectHasResource(bootstrap.Projects, project.ID, document.ID) {
 		t.Fatal("restoring a document did not restore the document and project resource")
+	}
+}
+
+func TestInitiativeDocumentResourceCreatesRealDocumentBinding(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	var initiative domain.Initiative
+	if len(bootstrap.Initiatives) > 0 {
+		initiative = bootstrap.Initiatives[0]
+	} else {
+		initiative = requestJSON[domain.Initiative](t, handler, http.MethodPost, "/api/initiatives", map[string]any{"name": "Resource initiative"}, http.StatusCreated)
+	}
+	document := requestJSON[domain.Document](t, handler, http.MethodPost, "/api/documents", map[string]any{"title": "Initiative brief"}, http.StatusCreated)
+	resource := requestJSON[domain.InitiativeResource](t, handler, http.MethodPost, "/api/initiatives/"+initiative.ID+"/resources", map[string]any{"type": "document", "documentId": document.ID}, http.StatusCreated)
+	if resource.DocumentID != document.ID || resource.URL != "/"+bootstrap.Workspace.URLKey+"/document/"+document.SlugID || resource.Title != document.Title {
+		t.Fatalf("document resource was not bound to the document: %#v", resource)
+	}
+}
+
+func TestDocumentCommentThreads(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	document := requestJSON[domain.Document](t, handler, http.MethodPost, "/api/documents", map[string]any{"title": "Commented doc"}, http.StatusCreated)
+	comment := requestJSON[domain.Comment](t, handler, http.MethodPost, "/api/documents/"+document.ID+"/comments", map[string]any{"body": "Top-level"}, http.StatusCreated)
+	if comment.ParentID != nil || comment.Version != 1 {
+		t.Fatalf("unexpected root comment: %#v", comment)
+	}
+	reply := requestJSON[domain.Comment](t, handler, http.MethodPost, "/api/documents/"+document.ID+"/comments", map[string]any{"body": "Reply", "parentId": comment.ID}, http.StatusCreated)
+	if reply.ParentID == nil || *reply.ParentID != comment.ID {
+		t.Fatalf("reply parent = %#v", reply.ParentID)
+	}
+	edited := requestJSON[domain.Comment](t, handler, http.MethodPatch, "/api/documents/"+document.ID+"/comments/"+comment.ID, map[string]any{"body": "Edited", "expectedVersion": comment.Version}, http.StatusOK)
+	if edited.Body != "Edited" || edited.Version != comment.Version+1 {
+		t.Fatalf("edited comment = %#v", edited)
+	}
+	reacted := requestJSON[domain.Comment](t, handler, http.MethodPost, "/api/documents/"+document.ID+"/comments/"+comment.ID+"/reactions", map[string]string{"emoji": "👍"}, http.StatusOK)
+	if len(reacted.Reactions["👍"]) != 1 {
+		t.Fatalf("reaction missing: %#v", reacted.Reactions)
+	}
+	requestJSON[any](t, handler, http.MethodDelete, "/api/documents/"+document.ID+"/comments/"+comment.ID, nil, http.StatusNoContent)
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if len(bootstrap.Comments[document.ID]) != 0 {
+		t.Fatalf("deleting root did not delete thread: %#v", bootstrap.Comments[document.ID])
+	}
+}
+
+func TestDocumentIndexFiltersAndTeamBinding(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	team := bootstrap.Teams[0]
+	visible := requestJSON[domain.Document](t, handler, http.MethodPost, "/api/documents", map[string]any{"title": "Team handbook", "teamIds": []string{team.ID}}, http.StatusCreated)
+	requestJSON[domain.Document](t, handler, http.MethodPost, "/api/documents", map[string]any{"title": "Workspace notes"}, http.StatusCreated)
+	requestJSON[domain.Document](t, handler, http.MethodPatch, "/api/documents/"+visible.ID, map[string]any{"archived": true}, http.StatusOK)
+	var current []domain.Document
+	current = requestJSON[[]domain.Document](t, handler, http.MethodGet, "/api/documents?teamId="+team.ID, nil, http.StatusOK)
+	if len(current) != 0 {
+		t.Fatalf("archived document leaked into default team index: %#v", current)
+	}
+	current = requestJSON[[]domain.Document](t, handler, http.MethodGet, "/api/documents?teamId="+team.ID+"&archived=all", nil, http.StatusOK)
+	if len(current) != 1 || current[0].ID != visible.ID {
+		t.Fatalf("team document archive filter = %#v", current)
+	}
+	current = requestJSON[[]domain.Document](t, handler, http.MethodGet, "/api/documents?q=workspace", nil, http.StatusOK)
+	if len(current) != 1 || current[0].Title != "Workspace notes" {
+		t.Fatalf("document search index = %#v", current)
 	}
 }
 
@@ -245,10 +325,11 @@ func TestImportMappingAndBackgroundExport(t *testing.T) {
 	state := statesForTeam(&bootstrap, team.ID)[0]
 	csvBody := "Title,Description,Priority,Status,Assignee,Labels,Project,Due Date\nImported workflow,Imported body,High," + state.Name + "," + user.Email + "," + label.Name + "," + project.Name + ",2026-09-30\n"
 	job := previewImportRequest(t, handler, "issues.csv", csvBody)
-	job = requestJSON[domain.ImportJob](t, handler, http.MethodPost, "/api/imports/"+job.ID+"/commit", map[string]any{
+	requestJSON[domain.ImportJob](t, handler, http.MethodPost, "/api/imports/"+job.ID+"/commit", map[string]any{
 		"teamId":  team.ID,
 		"mapping": map[string]string{"title": "Title", "description": "Description", "priority": "Priority", "status": "Status", "assignee": "Assignee", "labels": "Labels", "project": "Project", "dueDate": "Due Date"},
-	}, http.StatusOK)
+	}, http.StatusAccepted)
+	job = waitForImport(t, handler, job.ID)
 	if job.Status != "completed" || job.Imported != 1 || len(job.Errors) != 0 {
 		t.Fatalf("import did not complete: %#v", job)
 	}
@@ -262,10 +343,11 @@ func TestImportMappingAndBackgroundExport(t *testing.T) {
 		t.Fatalf("mapped import fields were not applied: %#v", imported)
 	}
 	invalidJob := previewImportRequest(t, handler, "invalid.csv", "Title,Priority,Status,Assignee,Labels,Project,Due Date\nNeeds review,Maximum,Unknown state,nobody@example.com,Unknown label,Unknown project,09/30/2026\n")
-	invalidJob = requestJSON[domain.ImportJob](t, handler, http.MethodPost, "/api/imports/"+invalidJob.ID+"/commit", map[string]any{
+	requestJSON[domain.ImportJob](t, handler, http.MethodPost, "/api/imports/"+invalidJob.ID+"/commit", map[string]any{
 		"teamId":  team.ID,
 		"mapping": map[string]string{"title": "Title", "priority": "Priority", "status": "Status", "assignee": "Assignee", "labels": "Labels", "project": "Project", "dueDate": "Due Date"},
-	}, http.StatusOK)
+	}, http.StatusAccepted)
+	invalidJob = waitForImport(t, handler, invalidJob.ID)
 	if invalidJob.Imported != 1 || len(invalidJob.Errors) != 6 {
 		t.Fatalf("unmatched import values were not reported: %#v", invalidJob)
 	}
@@ -295,6 +377,42 @@ func TestImportMappingAndBackgroundExport(t *testing.T) {
 	}
 }
 
+func TestImportRetryAndIntegrationOAuthLifecycle(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	team := bootstrap.Teams[0]
+	job := previewImportRequest(t, handler, "retry.csv", "Title,Description\n,missing title\n")
+	requestJSON[domain.ImportJob](t, handler, http.MethodPost, "/api/imports/"+job.ID+"/commit", map[string]any{
+		"teamId": team.ID, "mapping": map[string]string{"title": "Title"},
+	}, http.StatusAccepted)
+	job = waitForImport(t, handler, job.ID)
+	if job.Status != "failed" || job.Progress != 100 || job.Error == "" {
+		t.Fatalf("failed import did not expose recoverable state: %#v", job)
+	}
+	job = requestJSON[domain.ImportJob](t, handler, http.MethodPost, "/api/imports/"+job.ID+"/retry", nil, http.StatusOK)
+	if job.Status != "mapping" || job.RetryCount != 1 || job.Progress != 0 {
+		t.Fatalf("retry did not reset import state: %#v", job)
+	}
+	connection := requestJSON[domain.IntegrationConnection](t, handler, http.MethodPut, "/api/integrations/slack", map[string]any{
+		"config": map[string]string{"authorizationURL": "https://idp.example.test/authorize", "clientID": "flow-client", "redirectURI": "https://flow.example.test/api/integrations/slack/oauth/callback"},
+	}, http.StatusOK)
+	started := requestJSON[map[string]string](t, handler, http.MethodPost, "/api/integrations/slack/oauth/start", nil, http.StatusOK)
+	if started["state"] == "" || !strings.Contains(started["authorizationURL"], "client_id=flow-client") {
+		t.Fatalf("OAuth start URL/state missing: %#v", started)
+	}
+	completed := requestJSON[map[string]string](t, handler, http.MethodGet, "/api/integrations/slack/oauth/callback?workspace="+url.QueryEscape(bootstrap.Workspace.URLKey)+"&state="+url.QueryEscape(started["state"])+"&code=test-code", nil, http.StatusOK)
+	if completed["status"] != "configured" || completed["connectionId"] != connection.ID {
+		t.Fatalf("OAuth callback did not complete: %#v", completed)
+	}
+	replayed := requestJSON[map[string]any](t, handler, http.MethodGet, "/api/integrations/slack/oauth/callback?workspace="+url.QueryEscape(bootstrap.Workspace.URLKey)+"&state="+url.QueryEscape(started["state"])+"&code=test-code", nil, http.StatusNotFound)
+	_ = replayed
+}
+
 func previewImportRequest(t *testing.T, handler http.Handler, filename, content string) domain.ImportJob {
 	t.Helper()
 	var body bytes.Buffer
@@ -320,6 +438,21 @@ func previewImportRequest(t *testing.T, handler http.Handler, filename, content 
 	if err := json.Unmarshal(recorder.Body.Bytes(), &job); err != nil {
 		t.Fatal(err)
 	}
+	return job
+}
+
+func waitForImport(t *testing.T, handler http.Handler, id string) domain.ImportJob {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	var job domain.ImportJob
+	for time.Now().Before(deadline) {
+		job = requestJSON[domain.ImportJob](t, handler, http.MethodGet, "/api/imports/"+id, nil, http.StatusOK)
+		if job.Status == "completed" || job.Status == "failed" || job.Status == "cancelled" {
+			return job
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("import job %s did not finish: %#v", id, job)
 	return job
 }
 

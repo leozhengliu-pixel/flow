@@ -46,6 +46,8 @@ export type AppRoute =
   | { kind: 'workspace-members'; workspaceSlug: string }
   | { kind: 'workspace-customers'; workspaceSlug: string }
   | { kind: 'customer'; workspaceSlug: string; customerSlugId: string }
+  | { kind: 'documents'; workspaceSlug: string }
+  | { kind: 'analytics'; workspaceSlug: string }
   | { kind: 'document'; workspaceSlug: string; documentSlugId: string }
   | { kind: 'drafts'; workspaceSlug: string }
   | { kind: 'agent'; workspaceSlug: string; chatSlug?: string }
@@ -102,6 +104,8 @@ export function parseAppRoute(pathname: string): AppRoute {
   if (section === 'members' && segments.length === 2) return { kind: 'workspace-members', workspaceSlug }
   if (section === 'customers' && segments.length === 2) return { kind: 'workspace-customers', workspaceSlug }
   if (section === 'customer' && third && segments.length === 3) return { kind: 'customer', workspaceSlug, customerSlugId: third }
+  if (section === 'documents' && segments.length === 2) return { kind: 'documents', workspaceSlug }
+  if (section === 'analytics' && segments.length === 2) return { kind: 'analytics', workspaceSlug }
   if (section === 'document' && third && segments.length === 3) return { kind: 'document', workspaceSlug, documentSlugId: third }
   if (section === 'drafts' && segments.length === 2) return { kind: 'drafts', workspaceSlug }
   if (section === 'agent' && segments.length <= 3) return { kind: 'agent', workspaceSlug, chatSlug: third }
@@ -183,6 +187,8 @@ export function reviewPath(workspaceSlug:string,review:Pick<CodeReview,'slugId'>
 export function workspaceIssuesPath(workspaceSlug: string, view: TeamIssuesRouteView = 'all') { return `${workspaceRootPath(workspaceSlug)}/issues/${view}` }
 export function membersPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/members` }
 export function customersPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/customers` }
+export function documentsPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/documents` }
+export function analyticsPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/analytics` }
 export function customerPath(workspaceSlug: string, customer: { id: string; name: string }) { return `${workspaceRootPath(workspaceSlug)}/customer/${slug(customer.name)}-${customer.id.slice(-12)}` }
 export function documentPath(workspaceSlug: string, document: { slugId: string }) { return `${workspaceRootPath(workspaceSlug)}/document/${encode(document.slugId)}` }
 export function draftsPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/drafts` }

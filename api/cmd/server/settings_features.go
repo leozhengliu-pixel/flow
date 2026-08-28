@@ -6,9 +6,12 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -954,7 +957,13 @@ func (s *server) exchangeOAuthToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listIntegrations(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.workspaceData(r).IntegrationConnections)
+	connections := s.workspaceData(r).IntegrationConnections
+	for index := range connections {
+		connections[index].OAuthState = ""
+		connections[index].OAuthAccessToken = ""
+		connections[index].OAuthRefreshToken = ""
+	}
+	writeJSON(w, http.StatusOK, connections)
 }
 
 func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
@@ -1017,6 +1026,243 @@ func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
+}
+
+// startIntegrationOAuth creates a short-lived, single-use state value and
+// returns the provider authorization URL. Provider-specific token exchange is
+// intentionally delegated to the configured callback endpoint; no provider
+// credential is ever returned to the browser or persisted in Config.
+func (s *server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
+	provider := strings.ToLower(r.PathValue("provider"))
+	if !slices.Contains([]string{"github", "gitlab", "slack", "figma", "google"}, provider) {
+		writeError(w, http.StatusBadRequest, "unsupported integration")
+		return
+	}
+	var result map[string]string
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_started", provider, nil, func(data *domain.Bootstrap) error {
+		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.Provider == provider })
+		if index < 0 {
+			return errNotFound
+		}
+		connection := &data.IntegrationConnections[index]
+		authorizationURL := strings.TrimSpace(connection.Config["authorizationURL"])
+		clientID := strings.TrimSpace(connection.Config["clientID"])
+		redirectURI := strings.TrimSpace(connection.Config["redirectURI"])
+		if authorizationURL == "" || clientID == "" || redirectURI == "" {
+			connection.LastError = "OAuth authorizationURL, clientID, and redirectURI are required"
+			connection.Status = "error"
+			connection.UpdatedAt = time.Now().UTC()
+			return errInvalid
+		}
+		state, err := randomSecret("flow_oauth_state_")
+		if err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		connection.OAuthState, connection.OAuthStartedAt, connection.LastError = state, &now, ""
+		connection.Status, connection.UpdatedAt = "oauth_pending", now
+		u, err := url.Parse(authorizationURL)
+		if err != nil {
+			return errInvalid
+		}
+		query := u.Query()
+		query.Set("client_id", clientID)
+		query.Set("redirect_uri", redirectURI)
+		query.Set("response_type", "code")
+		query.Set("state", state)
+		u.RawQuery = query.Encode()
+		result = map[string]string{"provider": provider, "connectionId": connection.ID, "state": state, "authorizationURL": u.String()}
+		return nil
+	})
+	if err != nil {
+		if err == errInvalid {
+			writeError(w, http.StatusUnprocessableEntity, "OAuth configuration is incomplete")
+			return
+		}
+		respondMutation(w, err, http.StatusNotFound, nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+// finishIntegrationOAuth validates state and records the provider callback.
+// A provider token exchange is deliberately not faked: deployments that need
+// one should run their provider-specific exchange worker and then PATCH the
+// connection status. This endpoint still gives operators durable pending,
+// completed, and error states with replay protection.
+func (s *server) finishIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
+	provider := strings.ToLower(r.PathValue("provider"))
+	state, code := strings.TrimSpace(r.URL.Query().Get("state")), strings.TrimSpace(r.URL.Query().Get("code"))
+	if state == "" {
+		writeError(w, http.StatusBadRequest, "OAuth state is required")
+		return
+	}
+	var result map[string]string
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_completed", provider, nil, func(data *domain.Bootstrap) error {
+		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool {
+			return item.Provider == provider && item.OAuthState == state
+		})
+		if index < 0 {
+			return errNotFound
+		}
+		connection := &data.IntegrationConnections[index]
+		if connection.Status != "oauth_pending" {
+			return errInvalid
+		}
+		now := time.Now().UTC()
+		if strings.TrimSpace(r.URL.Query().Get("error")) != "" {
+			connection.Status = "error"
+			connection.LastError = strings.TrimSpace(r.URL.Query().Get("error"))
+		} else if code == "" {
+			connection.Status = "error"
+			connection.LastError = "OAuth provider did not return a code"
+		} else {
+			if tokenURL := strings.TrimSpace(connection.Config["tokenURL"]); tokenURL != "" {
+				access, refresh, expiresIn, exchangeErr := exchangeIntegrationToken(tokenURL, connection.Config, code)
+				if exchangeErr != nil {
+					connection.Status = "error"
+					connection.LastError = exchangeErr.Error()
+				} else {
+					connection.OAuthAccessToken, connection.OAuthRefreshToken = access, refresh
+					if expiresIn > 0 {
+						expiry := now.Add(time.Duration(expiresIn) * time.Second)
+						connection.OAuthExpiresAt = &expiry
+					}
+					connection.Status, connection.OAuthCompletedAt, connection.LastError = "configured", &now, ""
+				}
+			} else {
+				connection.Status = "configured"
+				connection.OAuthCompletedAt = &now
+				connection.LastError = ""
+			}
+		}
+		connection.OAuthState, connection.UpdatedAt = "", now
+		result = map[string]string{"provider": provider, "connectionId": connection.ID, "status": connection.Status}
+		return nil
+	})
+	if err != nil {
+		respondMutation(w, err, http.StatusBadRequest, nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func exchangeIntegrationToken(tokenURL string, config map[string]string, code string) (string, string, int64, error) {
+	values := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {config["clientID"]}, "redirect_uri": {config["redirectURI"]}}
+	if secret := config["clientSecret"]; secret != "" {
+		values.Set("client_secret", secret)
+	}
+	response, err := http.PostForm(tokenURL, values)
+	if err != nil {
+		return "", "", 0, fmt.Errorf("OAuth token exchange failed: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return "", "", 0, fmt.Errorf("OAuth token exchange returned HTTP %d", response.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	if err != nil {
+		return "", "", 0, err
+	}
+	var payload struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int64  `json:"expires_in"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil || payload.AccessToken == "" {
+		return "", "", 0, errors.New("OAuth token response did not include access_token")
+	}
+	return payload.AccessToken, payload.RefreshToken, payload.ExpiresIn, nil
+}
+
+func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
+	provider, id := strings.ToLower(r.PathValue("provider")), r.PathValue("id")
+	var result domain.IntegrationConnection
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_refreshed", id, nil, func(data *domain.Bootstrap) error {
+		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
+		if index < 0 {
+			return errNotFound
+		}
+		connection := &data.IntegrationConnections[index]
+		if connection.OAuthRefreshToken == "" || strings.TrimSpace(connection.Config["tokenURL"]) == "" {
+			return errInvalid
+		}
+		values := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {connection.OAuthRefreshToken}, "client_id": {connection.Config["clientID"]}}
+		if secret := connection.Config["clientSecret"]; secret != "" {
+			values.Set("client_secret", secret)
+		}
+		response, exchangeErr := http.PostForm(connection.Config["tokenURL"], values)
+		if exchangeErr != nil {
+			connection.Status, connection.LastError = "error", exchangeErr.Error()
+			return exchangeErr
+		}
+		defer response.Body.Close()
+		body, readErr := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+		if readErr != nil {
+			return readErr
+		}
+		if response.StatusCode < 200 || response.StatusCode >= 300 {
+			connection.Status, connection.LastError = "error", fmt.Sprintf("OAuth refresh returned HTTP %d", response.StatusCode)
+			return errInvalid
+		}
+		var payload struct {
+			AccessToken  string `json:"access_token"`
+			RefreshToken string `json:"refresh_token"`
+			ExpiresIn    int64  `json:"expires_in"`
+		}
+		if json.Unmarshal(body, &payload) != nil || payload.AccessToken == "" {
+			return errInvalid
+		}
+		connection.OAuthAccessToken = payload.AccessToken
+		if payload.RefreshToken != "" {
+			connection.OAuthRefreshToken = payload.RefreshToken
+		}
+		if payload.ExpiresIn > 0 {
+			expiry := time.Now().UTC().Add(time.Duration(payload.ExpiresIn) * time.Second)
+			connection.OAuthExpiresAt = &expiry
+		}
+		connection.Status, connection.LastError, connection.UpdatedAt = "configured", "", time.Now().UTC()
+		result = *connection
+		return nil
+	})
+	if err != nil {
+		respondMutation(w, err, http.StatusBadRequest, nil)
+		return
+	}
+	result.OAuthAccessToken, result.OAuthRefreshToken = "", ""
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *server) revokeIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
+	provider, id := strings.ToLower(r.PathValue("provider")), r.PathValue("id")
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_revoked", id, nil, func(data *domain.Bootstrap) error {
+		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
+		if index < 0 {
+			return errNotFound
+		}
+		connection := &data.IntegrationConnections[index]
+		if revokeURL := strings.TrimSpace(connection.Config["revokeURL"]); revokeURL != "" && connection.OAuthAccessToken != "" {
+			if request, requestErr := http.NewRequestWithContext(r.Context(), http.MethodPost, revokeURL, strings.NewReader(url.Values{"token": {connection.OAuthAccessToken}}.Encode())); requestErr == nil {
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				if response, callErr := http.DefaultClient.Do(request); callErr != nil || response.StatusCode < 200 || response.StatusCode >= 300 {
+					if response != nil {
+						response.Body.Close()
+					}
+					return errInvalid
+				} else {
+					response.Body.Close()
+				}
+			}
+		}
+		connection.OAuthAccessToken, connection.OAuthRefreshToken, connection.OAuthState, connection.OAuthExpiresAt = "", "", "", nil
+		connection.Status, connection.LastError, connection.UpdatedAt = "disconnected", "", time.Now().UTC()
+		return nil
+	})
+	if err != nil {
+		respondMutation(w, err, http.StatusBadRequest, nil)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *server) updateIntegration(w http.ResponseWriter, r *http.Request) {
