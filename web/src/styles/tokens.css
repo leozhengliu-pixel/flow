@@ -310,3 +310,7 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 :root .property-command-label-group-option{grid-template-columns:16px 16px minmax(0,auto) minmax(0,1fr) 14px;gap:8px;padding:0 15px}
 :root .property-command-label-group-option .property-command-group-selected{min-width:0;overflow:hidden;color:var(--theme-text-secondary);text-overflow:ellipsis;white-space:nowrap}
 :root .property-command-labels .property-command-options .property-command-label-group-option{grid-template-columns:16px 16px minmax(0,auto) minmax(0,1fr) 14px;gap:8px;padding:0 15px;border-radius:6px}
+:root .property-command-labels .property-command-options .property-command-label-group-option{grid-template-columns:16px minmax(0,1fr) 14px}
+:root .property-command-labels .property-command-options .property-command-label-group-option .property-command-checkbox{position:absolute;left:14px;top:9px}
+:root .property-command-labels .property-command-options .property-command-label-group-option .property-command-icon{margin-left:22px}
+:root .property-command-labels .property-command-options .property-command-label-group-option .property-command-group-copy{min-width:0;display:flex;align-items:center;gap:8px;overflow:hidden}
