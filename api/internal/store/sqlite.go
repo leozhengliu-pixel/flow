@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -33,11 +32,7 @@ type WorkspaceCoordinator interface {
 }
 
 func OpenSQLite(path string) (*SQLiteStore, error) {
-	profile := strings.TrimSpace(os.Getenv("FLOW_SEED_PROFILE"))
-	if profile == "" {
-		profile = "base"
-	}
-	return OpenDatabase(DatabaseConfig{Driver: "sqlite", Path: path, SeedProfile: profile, MaxOpenConns: 1})
+	return OpenDatabase(DatabaseConfig{Driver: "sqlite", Path: path, SeedProfile: "test", MaxOpenConns: 1})
 }
 
 func (s *SQLiteStore) Close() error { return s.db.Close() }
@@ -256,18 +251,18 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	var raw []byte
 	err = s.db.QueryRowContext(ctx, `SELECT data FROM workspace_state WHERE id = 1`).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
-		if isEmptySeedProfile(s.seedProfile) {
-			s.viewer = bootstrapViewer()
-			s.lastWorkspaceKey = ""
-			return nil
+		if strings.EqualFold(s.seedProfile, "test") {
+			data := localSQLiteFixture()
+			ensureSavedViewSlugIDs(&data)
+			normalize(&data)
+			s.workspaces[data.Workspace.URLKey] = data
+			s.lastWorkspaceKey = data.Workspace.URLKey
+			s.viewer = data.Viewer
+			return s.persistWorkspace(ctx, data.Workspace.URLKey, data, nil)
 		}
-		data := seedForProfile(s.seedProfile)
-		ensureSavedViewSlugIDs(&data)
-		normalize(&data)
-		s.workspaces[data.Workspace.URLKey] = data
-		s.lastWorkspaceKey = data.Workspace.URLKey
-		s.viewer = data.Viewer
-		return s.persistWorkspace(ctx, data.Workspace.URLKey, data, nil)
+		s.viewer = bootstrapViewer()
+		s.lastWorkspaceKey = ""
+		return nil
 	}
 	if err != nil {
 		return err
@@ -293,15 +288,6 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	s.lastWorkspaceKey = data.Workspace.URLKey
 	s.viewer = data.Viewer
 	return s.persistWorkspace(ctx, data.Workspace.URLKey, data, nil)
-}
-
-func isEmptySeedProfile(profile string) bool {
-	switch strings.ToLower(strings.TrimSpace(profile)) {
-	case "none", "empty", "off", "false":
-		return true
-	default:
-		return false
-	}
 }
 
 func bootstrapViewer() domain.User {

@@ -14,6 +14,18 @@ import (
 	"github.com/alicebob/miniredis/v2"
 )
 
+// Migration tests use a synthetic fixture that is never loaded by production.
+func zentaoDemoSeed() domain.Bootstrap {
+	data := localSQLiteFixture()
+	now := time.Now().UTC()
+	data.SavedViews = []domain.SavedView{
+		{ID: "view_strategy", Name: "IT需求池", Resource: "issues", Scope: "workspace", OwnerID: data.Viewer.ID, View: "all", Filters: json.RawMessage(`[{"field":"labels","operator":"is","value":"label_type_requirement","valueLabel":"IT需求","values":[{"value":"label_type_requirement","valueLabel":"IT需求","color":"#5E6AD2"}]}]`), Display: json.RawMessage(`{"layout":"list"}`), CreatedAt: now, UpdatedAt: now},
+		{ID: "view_custom", Name: "Custom view", Resource: "issues", Scope: "workspace", OwnerID: data.Viewer.ID, View: "all", Filters: json.RawMessage(`[]`), Display: json.RawMessage(`{"layout":"list"}`), CreatedAt: now, UpdatedAt: now},
+	}
+	data.Releases = []domain.Release{{ID: "release_car_phase2", Name: "Test release 3", PipelineID: "", Stage: "", Position: 0, ProjectIDs: []string{"project_aut"}, CreatedAt: now, UpdatedAt: now}}
+	return data
+}
+
 func TestSQLiteStorePersistsStateAndDomainEvents(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "flow.db")
 	store, err := OpenSQLite(path)
@@ -221,7 +233,7 @@ func TestSQLiteStoreAddsAndPersistsCanonicalWorkflowStates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacy := Seed()
+	legacy := localSQLiteFixture()
 	legacy.States = legacy.States[:4]
 	raw, err := json.Marshal(legacy)
 	if err != nil {
@@ -405,7 +417,7 @@ func TestEnsureCanonicalSavedViewFiltersMigratesCompactValues(t *testing.T) {
 	if err := json.Unmarshal(data.SavedViews[0].Filters, &filters); err != nil {
 		t.Fatal(err)
 	}
-	if got := filters[0]["valueLabel"]; got != "[Flow 对比演示] 汽车之家车商城项目 2026" {
+	if got := filters[0]["valueLabel"]; got != "Test project" {
 		t.Fatalf("unexpected project label: %v", got)
 	}
 	values, ok := filters[1]["values"].([]any)
@@ -554,7 +566,7 @@ func TestSQLiteStoreProjectsLegacyInboxNotifications(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacy := Seed()
+	legacy := localSQLiteFixture()
 	legacy.Notifications = nil
 	raw, err := json.Marshal(legacy)
 	if err != nil {
@@ -595,7 +607,7 @@ func TestSQLiteStoreAddsCyclesToLegacyWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacy := Seed()
+	legacy := localSQLiteFixture()
 	legacy.Cycles = nil
 	legacy.CycleSettings = nil
 	for index := range legacy.Issues {
