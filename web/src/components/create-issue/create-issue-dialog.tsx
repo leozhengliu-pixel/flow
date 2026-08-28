@@ -67,7 +67,19 @@ interface StoredIssueDraft {
 }
 
 export function CreateIssueDialog({ data, draftId, initialProjectId, initialProjectMilestoneId, initialStateId, initialTemplateId, onCreate, onDraftDeleted, onDraftSaved, onOpenChange, onUpload, open }: CreateIssueDialogProps) {
-  const availableStates = useMemo(() => { const teamId=data.teams[0]?.id; const specific=data.states.some(state=>state.teamId===teamId); return data.states.filter(state=>specific?state.teamId===teamId:!state.teamId) }, [data.states,data.teams])
+  const availableStates = useMemo(() => {
+    const teamId = data.teams[0]?.id
+    const specific = data.states.some(state => state.teamId === teamId)
+    const states = data.states.filter(state => specific ? state.teamId === teamId : !state.teamId)
+    // A grouped create action may target a workspace state that is not in the
+    // team's custom state set. Keep that state available so the preset is both
+    // visible in the picker and sent with the create request.
+    if (initialStateId && !states.some(state => state.id === initialStateId)) {
+      const requested = data.states.find(state => state.id === initialStateId)
+      if (requested) return [...states, requested].sort((left, right) => left.position - right.position)
+    }
+    return states
+  }, [data.states, data.teams, initialStateId])
   const defaultState = useMemo(() => [...availableStates].sort((a, b) => a.position - b.position).find(state => state.type === 'unstarted') ?? availableStates[0], [availableStates])
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState<DescriptionSnapshot | null>(null)
@@ -130,6 +142,11 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
     const frame = requestAnimationFrame(() => requestAnimationFrame(() => titleEditorRef.current?.commands.focus('end')))
     return () => cancelAnimationFrame(frame)
   }, [availableStates, data.drafts, data.projects, data.teams, data.viewer.id, defaultState.id, draftId, draftKey, initialProjectId, initialProjectMilestoneId, initialStateId, open])
+
+  useEffect(() => {
+    if (!open || draftId || initialTemplateId || !initialStateId) return
+    if (availableStates.some(state => state.id === initialStateId)) setStateId(initialStateId)
+  }, [availableStates, draftId, initialStateId, initialTemplateId, open])
 
   const state = availableStates.find(item => item.id === stateId) ?? defaultState
   const assignee = data.users.find(user => user.id === assigneeId)

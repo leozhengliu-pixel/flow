@@ -421,7 +421,10 @@ function projectPropertyFilterOptions(data:BootstrapData,issues:Issue[]):MyIssue
 function projectStatusTypeLabel(type:string){return({backlog:'Backlog',planned:'Planned',started:'In Progress',completed:'Completed',canceled:'Canceled'} as Record<string,string>)[type]??type}
 
 export function stateIdForExplorerGroup(group: MyIssuesGroupData, data: BootstrapData) {
-  return group.id === 'other-active' ? data.states.find(state => state.type === 'started')?.id : data.states.find(state => state.id === group.id)?.id
+  if (group.state?.id && data.states.some(state => state.id === group.state?.id)) return group.state.id
+  if (group.id === 'other-active') return data.states.find(state => state.type === 'started')?.id
+  if (group.stateType === 'backlog' || group.label === 'Backlog' || group.label === '待规划') return data.states.find(state => state.type === 'backlog' || state.id === 'state_backlog')?.id
+  return data.states.find(state => state.id === group.id)?.id ?? data.states.find(state => state.name === group.label)?.id
 }
 
 export function withoutMapKey(map: Map<string, string>, key: string) { const next = new Map(map); next.delete(key); return next }
