@@ -38,9 +38,6 @@ services:
       FLOW_S3_VALIDATE_ON_START: ${FLOW_S3_VALIDATE_ON_START:-true}
       FLOW_APP_URL: ${FLOW_APP_URL:-http://127.0.0.1:5173}
       FLOW_STATIC_PATH: /app/web
-      # New deployments start with no workspace and go through onboarding.
-      # Set FLOW_SEED_PROFILE=zentao-demo only when demo data is intentional.
-      FLOW_SEED_PROFILE: ${FLOW_SEED_PROFILE:-none}
       FLOW_AUTH_EMAIL_ENABLED: ${FLOW_AUTH_EMAIL_ENABLED:-true}
       FLOW_AUTH_AUTO_PROVISION: ${FLOW_AUTH_AUTO_PROVISION:-true}
       FLOW_AUTH_ALLOWED_DOMAINS: ${FLOW_AUTH_ALLOWED_DOMAINS:-}
