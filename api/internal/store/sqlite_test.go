@@ -54,6 +54,29 @@ func TestSQLiteStorePersistsStateAndDomainEvents(t *testing.T) {
 	}
 }
 
+func TestDatabaseWithEmptySeedStartsWithoutWorkspace(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "flow.db")
+	repository, err := OpenDatabase(DatabaseConfig{Driver: "sqlite", Path: path, SeedProfile: "none", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	account := repository.Account()
+	if len(account.Workspaces) != 0 {
+		t.Fatalf("empty seed created workspaces: %#v", account.Workspaces)
+	}
+	if account.Viewer.ID == "" {
+		t.Fatal("empty seed did not provide a local viewer")
+	}
+	created, err := repository.CreateWorkspace(context.Background(), "First workspace", "first-workspace", "us")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Workspace.URLKey != "first-workspace" || created.Viewer.ID != account.Viewer.ID {
+		t.Fatalf("workspace created from empty seed = %#v", created)
+	}
+}
+
 func TestCoordinatedStoresReloadBeforeMutation(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "coordinated.db")
 	first, err := OpenSQLite(path)
