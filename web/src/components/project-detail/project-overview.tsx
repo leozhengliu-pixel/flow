@@ -8,6 +8,7 @@ import { PropertyMenu } from '@/components/property/property-menu'
 import { Avatar } from '@/components/issue/issue-row'
 import { CalendarIcon, LabelIcon, MembersIcon, NoAssigneeIcon, PriorityIcon, ProjectStatusIcon, SlackIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { ViewIconPicker } from '@/components/views/view-icon-picker'
+import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { ProjectDatePicker } from '@/components/projects-page/project-target-date-picker'
 import { groupOptionSections } from '@/lib/group-options'
 import { useI18n } from '@/i18n/i18n'
@@ -26,7 +27,7 @@ export function ProjectOverview({ project, projects, initiatives, projectStatuse
 
   return <div className="project-overview">
     <section className="project-overview__intro">
-      <ViewIconPicker color={project.color} icon={project.icon || 'Project'} onChange={visual => void save(visual)} triggerClassName="project-overview__icon"/>
+      <ViewIconPicker color={project.color} icon={normalizeProjectIcon(project.icon)} onChange={visual => void save(visual)} triggerClassName="project-overview__icon"/>
       <ProjectEditableText ariaLabel="Project name" className="project-overview__name" placeholder="Project name" value={project.name} onCommit={name => save({ name })}/>
       <ProjectEditableText ariaLabel="Project summary" className="project-overview__summary" placeholder="Add a short summary…" value={project.summary} onCommit={summary => save({ summary })}/>
       <div className="project-overview__property-section">

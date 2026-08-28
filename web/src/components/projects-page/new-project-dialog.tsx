@@ -1,7 +1,12 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { LayoutTemplate, Link2, X } from 'lucide-react'
 import { PlusIcon } from './projects-page-icons'
 import { PropertyMenu, type PropertyOption } from '@/components/property/property-menu'
-import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
+import { ViewIconPicker } from '@/components/views/view-icon-picker'
+import { normalizeProjectIcon } from '@/components/views/project-icon'
+import { CalendarIcon, LabelIcon, MembersIcon, NoAssigneeIcon, PriorityIcon } from '@/components/issue/issue-icons'
+import { ProjectStatusGlyph } from './project-property-picker'
+import { ProjectDatePicker } from './project-target-date-picker'
 import './projects-page.css'
 
 export type NewProjectDraft = {
@@ -18,12 +23,13 @@ export type NewProjectDraft = {
   teamIds: string[]
   startDate?: string
   targetDate?: string
+  initiativeIds: string[]
   labelIds: string[]
   dependencyIds: string[]
   milestones: string[]
 }
 
-export type NewProjectChoice = { id: string, label: string, color?: string, groupId?: string, groupLabel?: string, initials?: string }
+export type NewProjectChoice = { id: string, label: string, color?: string, groupId?: string, groupLabel?: string, icon?: ReactNode, initials?: string }
 export type NewProjectTemplateChoice = {
   id: string
   label: string
@@ -35,6 +41,7 @@ export type NewProjectTemplateChoice = {
   status?: string
   priority?: string
   teamIds?: string[]
+  initiativeIds?: string[]
   labelIds?: string[]
 }
 
@@ -46,6 +53,7 @@ export type NewProjectDialogProps = {
   teams?: NewProjectChoice[]
   leads?: NewProjectChoice[]
   members?: NewProjectChoice[]
+  initiatives?: NewProjectChoice[]
   labels?: NewProjectChoice[]
   dependencies?: NewProjectChoice[]
   templates?: NewProjectTemplateChoice[]
@@ -55,9 +63,9 @@ export type NewProjectDialogProps = {
 
 const STATUS = ['Backlog', 'Planned', 'In Progress', 'Completed', 'Canceled']
 const PRIORITY = ['No priority', 'Urgent', 'High', 'Medium', 'Low']
-const COLORS = ['#5e6ad2', '#d15f5f', '#d09b42', '#4c9a67', '#4f8cc9', '#a36bc5', '#808087']
 const DEFAULT_TEAMS: NewProjectChoice[] = [{ id: 'cle', label: 'Cleantrack' }]
 const EMPTY_CHOICES: NewProjectChoice[] = []
+const EMPTY_TEMPLATES: NewProjectTemplateChoice[] = []
 
 export function NewProjectDialog({
   open,
@@ -67,9 +75,10 @@ export function NewProjectDialog({
   teams = DEFAULT_TEAMS,
   leads = EMPTY_CHOICES,
   members = EMPTY_CHOICES,
+  initiatives = EMPTY_CHOICES,
   labels = EMPTY_CHOICES,
   dependencies = EMPTY_CHOICES,
-  templates = EMPTY_CHOICES,
+  templates = EMPTY_TEMPLATES,
   onClose,
   onCreate,
 }: NewProjectDialogProps) {
@@ -92,6 +101,8 @@ export function NewProjectDialog({
   useEffect(() => {
     if (!open) return
     const keydown = (event: globalThis.KeyboardEvent) => {
+      if (event.defaultPrevented) return
+      if (event.key === 'Escape' && document.querySelector('[data-radix-popper-content-wrapper]')) return
       if (event.key === 'Escape' && !submitting) onClose()
     }
     document.addEventListener('keydown', keydown)
@@ -128,9 +139,9 @@ export function NewProjectDialog({
     <div className="lp-new-project__backdrop" />
     <form className="lp-new-project__panel" onSubmit={submit} ref={panelRef}>
       <header className="lp-new-project__header">
-        <button aria-label="Change project teams" className="lp-new-project__team" disabled={teams.length < 2} type="button">{teamLabel}</button>
+        <button aria-label="Change project teams" className="lp-new-project__team" disabled={teams.length < 2} type="button"><ViewIconPickerGlyph color={teams[0]?.color} icon="Team"/><span>{teamLabel}</span></button>
         <span>›</span><span>New project</span>
-        <button aria-label="Discard project" className="lp-new-project__discard" disabled={submitting} onClick={onClose} type="button">×</button>
+        <button aria-label="Discard project" className="lp-new-project__discard" disabled={submitting} onClick={onClose} type="button"><X size={16}/></button>
       </header>
       <div className="lp-new-project__scroll">
         <div className="lp-new-project__identity">
@@ -152,15 +163,16 @@ export function NewProjectDialog({
           </div>
         </div>
         <div className="lp-new-project__properties">
-          {templates.length > 0 && <ProjectDraftProperty label="Apply project template" options={[{ id: '', label: 'No template' }, ...templates]} placeholder="Template" value={draft.templateId ?? ''} onChange={applyTemplate} />}
-          <ProjectDraftProperty label="Change project status" options={STATUS.map(value => ({ id: value, label: value }))} value={draft.status} onChange={value => set('status', value)} />
-          <ProjectDraftProperty label="Change project priority" options={PRIORITY.map(value => ({ id: value, label: value }))} value={draft.priority} onChange={value => set('priority', value)} />
-          <ProjectDraftProperty label="Set project lead" options={[{ id: '', label: 'Lead' }, ...leads]} value={draft.leadId ?? ''} onChange={value => set('leadId', value)} />
-          <ProjectDraftProperty label="Change project members" multiple options={members} placeholder="Members" value={draft.memberIds} onChange={value => set('memberIds', value)} />
-          <DateChip label="Change project start date" placeholder="Start" value={draft.startDate} onChange={value => set('startDate', value)} />
-          <DateChip label="Change project target date" placeholder="Target" value={draft.targetDate} onChange={value => set('targetDate', value)} />
-          <ProjectDraftProperty label="Change labels" multiple options={labels} placeholder="Labels" value={draft.labelIds} onChange={value => set('labelIds', value)} />
-          <ProjectDraftProperty label="Add dependencies" multiple options={dependencies} placeholder="Dependencies" value={draft.dependencyIds} onChange={value => set('dependencyIds', value)} />
+          {templates.length > 0 && <ProjectDraftProperty icon={<LayoutTemplate size={14}/>} label="Apply project template" options={[{ id: '', label: 'No template' }, ...templates]} placeholder="Template" value={draft.templateId ?? ''} onChange={applyTemplate} />}
+          <ProjectDraftProperty icon={<ProjectStatusGlyph name={draft.status} type={projectStatusType(draft.status)}/>} label="Change project status" options={STATUS.map(value => ({ id: value, icon: <ProjectStatusGlyph name={value} type={projectStatusType(value)}/>, label: value }))} value={draft.status} onChange={value => set('status', value)} />
+          <ProjectDraftProperty icon={<PriorityIcon priority={Math.max(0, PRIORITY.indexOf(draft.priority))} size={14}/>} label="Change project priority" options={PRIORITY.map((value, priority) => ({ id: value, icon: <PriorityIcon priority={priority} size={14}/>, label: value }))} value={draft.priority} onChange={value => set('priority', value)} />
+          <ProjectDraftProperty icon={<NoAssigneeIcon size={14}/>} label="Set project lead" options={[{ id: '', icon: <NoAssigneeIcon size={14}/>, label: 'Lead' }, ...leads]} value={draft.leadId ?? ''} onChange={value => set('leadId', value)} />
+          <ProjectDraftProperty icon={<MembersIcon size={14}/>} label="Change project members" multiple options={members} placeholder="Members" value={draft.memberIds} onChange={value => set('memberIds', value)} />
+          <DateChip kind="start" placeholder="Start" value={draft.startDate} onChange={value => set('startDate', value)} />
+          <DateChip kind="target" placeholder="Target" value={draft.targetDate} onChange={value => set('targetDate', value)} />
+          <ProjectDraftProperty icon={<LayoutTemplate size={14}/>} label="Change project initiatives" multiple options={initiatives} placeholder="Initiatives" value={draft.initiativeIds} onChange={value => set('initiativeIds', value)} />
+          <ProjectDraftProperty icon={<LabelIcon size={14}/>} label="Change labels" multiple options={labels} placeholder="Labels" value={draft.labelIds} onChange={value => set('labelIds', value)} />
+          <ProjectDraftProperty icon={<Link2 size={14}/>} label="Add dependencies" multiple options={dependencies} placeholder="Dependencies" value={draft.dependencyIds} onChange={value => set('dependencyIds', value)} />
         </div>
         <textarea aria-label="Project description" className="lp-new-project__description" onChange={event => set('description', event.target.value)} placeholder="Write a description, a project brief, or collect ideas…" value={draft.description} />
         <MilestonesEditor milestones={draft.milestones} onChange={value => set('milestones', value)} />
@@ -175,6 +187,7 @@ export function NewProjectDialog({
 }
 
 function ProjectDraftProperty(props: {
+  icon?: ReactNode
   label: string
   multiple?: false
   onChange: (value: string) => void
@@ -182,6 +195,7 @@ function ProjectDraftProperty(props: {
   placeholder?: string
   value: string
 } | {
+  icon?: ReactNode
   label: string
   multiple: true
   onChange: (value: string[]) => void
@@ -189,12 +203,12 @@ function ProjectDraftProperty(props: {
   placeholder: string
   value: string[]
 }) {
-  const { label, options, placeholder, value } = props
+  const { icon, label, options, placeholder, value } = props
   const multiple = props.multiple === true
   const selected = Array.isArray(value) ? options.filter(option => value.includes(option.id)) : options.find(option => option.id === value)
   const selectedIds = Array.isArray(value) ? value : [value]
   const display = Array.isArray(selected) ? selected.length ? `${placeholder} · ${selected.length}` : placeholder : selected?.label ?? placeholder ?? label
-  const propertyOptions: PropertyOption[] = options.map(option => ({ id: option.id, label: option.label, color: option.color, groupId: option.groupId, groupLabel: option.groupLabel, i18nIgnore: Boolean(option.id) }))
+  const propertyOptions: PropertyOption[] = options.map(option => ({ id: option.id, label: option.label, color: option.color, groupId: option.groupId, groupLabel: option.groupLabel, icon: option.icon, i18nIgnore: Boolean(option.id) }))
   const choose = (id: string) => {
     if (Array.isArray(value)) {
       if (props.multiple) props.onChange(value.includes(id) ? value.filter(item => item !== id) : [...value, id])
@@ -211,26 +225,24 @@ function ProjectDraftProperty(props: {
     selectedId={Array.isArray(value) ? undefined : value}
     selectedIds={selectedIds}
     surfaceClassName="lp-new-project-picker__surface"
-    trigger={<><span className="lp-new-project-picker__dot" style={{ background: Array.isArray(selected) ? selected[0]?.color : selected?.color }}/><span data-i18n-ignore={Boolean(Array.isArray(selected) ? selected.length : selected) || undefined}>{display}</span></>}
+    trigger={<>{icon ?? <span className="lp-new-project-picker__dot" style={{ background: Array.isArray(selected) ? selected[0]?.color : selected?.color }}/>}<span data-i18n-ignore={Boolean(Array.isArray(selected) ? selected.length : selected) || undefined}>{display}</span></>}
     triggerClassName="lp-new-project-picker__trigger"
     value={display}
     valueIsEntityName={Boolean(Array.isArray(selected) ? selected.length : selected)}
   />
 }
 
-function DateChip({ label, onChange, placeholder, value }: { label: string, onChange: (value: string) => void, placeholder: string, value?: string }) {
-  return <label className="lp-new-project-date"><span>{value || placeholder}</span><input aria-label={label} onChange={event => onChange(event.target.value)} type="date" value={value ?? ''} /></label>
+function DateChip({ kind, onChange, placeholder, value }: { kind: 'start' | 'target', onChange: (value: string) => void, placeholder: string, value?: string }) {
+  const label = kind === 'start' ? 'Start date' : 'Target date'
+  return <ProjectDatePicker align="start" buttonClassName="lp-new-project-date" contentClassName="lp-new-project-date__surface" label={label} onChange={onChange} value={value}><CalendarIcon size={14} variant={kind}/><span>{value || placeholder}</span></ProjectDatePicker>
 }
 
-function ProjectIconPicker({ color = COLORS[0], icon = '◇', onChange }: { color?: string, icon?: string, onChange: (icon: string, color: string) => void }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLSpanElement>(null)
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  useDismissibleLayer({ open, refs: [ref], onDismiss: () => setOpen(false), restoreFocusRef: triggerRef })
-  return <span className="lp-new-project-icon" ref={ref}>
-    <button ref={triggerRef} aria-label="Choose icon" onClick={() => setOpen(current => !current)} style={{ color }} type="button">{icon}</button>
-    {open && <div className="lp-new-project-icon__menu" role="dialog"><div>{['◇', '□', '○', '△', '✦', '⌁'].map(value => <button className={value === icon ? 'is-active' : ''} key={value} onClick={() => onChange(value, color)} type="button">{value}</button>)}</div><div>{COLORS.map(value => <button aria-label={`Use color ${value}`} className={value === color ? 'is-active' : ''} key={value} onClick={() => onChange(icon, value)} style={{ background: value }} type="button" />)}</div></div>}
-  </span>
+function ProjectIconPicker({ color = '#5e6ad2', icon = 'Project', onChange }: { color?: string, icon?: string, onChange: (icon: string, color: string) => void }) {
+  return <ViewIconPicker color={color} icon={normalizeProjectIcon(icon)} onChange={visual => onChange(visual.icon, visual.color)} triggerClassName="lp-new-project-icon-trigger"/>
+}
+
+function ViewIconPickerGlyph({ color = '#8a8f98', icon }: { color?: string, icon: string }) {
+  return <svg aria-hidden="true" className="lp-new-project-team-icon" fill="currentColor" style={{ color }} viewBox="0 0 16 16"><use href={`/flow-core-icons.svg#${icon}`}/></svg>
 }
 
 function MilestonesEditor({ milestones, onChange }: { milestones: string[], onChange: (value: string[]) => void }) {
@@ -241,7 +253,7 @@ function MilestonesEditor({ milestones, onChange }: { milestones: string[], onCh
     setValue('')
     setAdding(false)
   }
-  return <section className="lp-new-project__milestones"><header><span>◇</span><strong>Milestones</strong><button aria-label="Add" onClick={() => setAdding(true)} type="button"><PlusIcon /></button></header>{milestones.map((item, index) => <div key={`${item}-${index}`}><span>◇</span><span>{item}</span><button aria-label={`Remove ${item}`} onClick={() => onChange(milestones.filter((_, itemIndex) => itemIndex !== index))} type="button">×</button></div>)}{adding && <div><span>◇</span><input autoFocus onChange={event => setValue(event.target.value)} onKeyDown={event => {
+  return <section className="lp-new-project__milestones"><header><ViewIconPickerGlyph icon="MilestoneNone"/><strong>Milestones</strong><button aria-label="Add" onClick={() => setAdding(true)} type="button"><PlusIcon /></button></header>{milestones.map((item, index) => <div key={`${item}-${index}`}><ViewIconPickerGlyph icon="MilestoneNone"/><span>{item}</span><button aria-label={`Remove ${item}`} onClick={() => onChange(milestones.filter((_, itemIndex) => itemIndex !== index))} type="button"><X size={13}/></button></div>)}{adding && <div><ViewIconPickerGlyph icon="MilestoneNone"/><input autoFocus onChange={event => setValue(event.target.value)} onKeyDown={event => {
     if (event.key === 'Enter') add()
     if (event.key === 'Escape') setAdding(false)
   }} placeholder="Milestone name" value={value} /><button onClick={add} type="button">Add</button></div>}</section>
@@ -262,7 +274,7 @@ function trapFocus(event: KeyboardEvent<HTMLDivElement>) {
 }
 
 function emptyDraft(status: string, teamId?: string): NewProjectDraft {
-  return { name: '', summary: '', description: '', status, priority: 'No priority', memberIds: [], teamIds: teamId ? [teamId] : [], labelIds: [], dependencyIds: [], milestones: [] }
+  return { name: '', icon: 'Project', color: '#eb5757', summary: '', description: '', status, priority: 'No priority', memberIds: [], teamIds: teamId ? [teamId] : [], initiativeIds: [], labelIds: [], dependencyIds: [], milestones: [] }
 }
 
 function applyProjectTemplateDraft(current:NewProjectDraft,templateId:string|undefined,templates:NewProjectTemplateChoice[],labels:NewProjectChoice[]):NewProjectDraft{
@@ -270,5 +282,7 @@ function applyProjectTemplateDraft(current:NewProjectDraft,templateId:string|und
   const template=templates.find(item=>item.id===templateId)
   if(!template)return current
   const labelOptionIds=new Set(labels.map(label=>label.id))
-  return {...current,templateId,name:template.name??template.label,summary:template.summary??'',description:template.description??'',icon:template.icon,color:template.color,status:template.status??current.status,priority:template.priority??current.priority,teamIds:template.teamIds?.length?[...template.teamIds]:current.teamIds,labelIds:template.labelIds?template.labelIds.filter(id=>labelOptionIds.has(id)):current.labelIds}
+  return {...current,templateId,name:template.name??template.label,summary:template.summary??'',description:template.description??'',icon:normalizeProjectIcon(template.icon),color:template.color??current.color,status:template.status??current.status,priority:template.priority??current.priority,teamIds:template.teamIds?.length?[...template.teamIds]:current.teamIds,initiativeIds:template.initiativeIds?[...template.initiativeIds]:current.initiativeIds,labelIds:template.labelIds?template.labelIds.filter(id=>labelOptionIds.has(id)):current.labelIds}
 }
+
+function projectStatusType(status: string) { return status === 'Backlog' ? 'backlog' : status === 'In Progress' ? 'started' : status === 'Completed' ? 'completed' : status === 'Canceled' ? 'canceled' : 'planned' }

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -34,6 +35,7 @@ type externalAuth struct {
 
 type oidcClient struct {
 	name     string
+	issuer   string
 	oauth    oauth2.Config
 	verifier *oidc.IDTokenVerifier
 }
@@ -78,7 +80,7 @@ func discoverOIDC(ctx context.Context, name, issuer, clientID, clientSecret, red
 	if !slices.Contains(scopes, oidc.ScopeOpenID) {
 		scopes = append([]string{oidc.ScopeOpenID}, scopes...)
 	}
-	return &oidcClient{name: name, oauth: oauth2.Config{ClientID: clientID, ClientSecret: clientSecret, RedirectURL: redirectURL, Endpoint: provider.Endpoint(), Scopes: scopes}, verifier: provider.Verifier(&oidc.Config{ClientID: clientID})}, nil
+	return &oidcClient{name: name, issuer: strings.TrimRight(issuer, "/"), oauth: oauth2.Config{ClientID: clientID, ClientSecret: clientSecret, RedirectURL: redirectURL, Endpoint: provider.Endpoint(), Scopes: scopes}, verifier: provider.Verifier(&oidc.Config{ClientID: clientID})}, nil
 }
 
 func configureSAML(ctx context.Context, provider config.SAMLProvider, appURL string) (*samlsp.Middleware, error) {
@@ -197,18 +199,47 @@ func (s *server) finishOIDC(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "invalid identity token")
 		return
 	}
-	var claims struct {
-		Nonce         string `json:"nonce"`
-		Email         string `json:"email"`
-		EmailVerified bool   `json:"email_verified"`
-		Name          string `json:"name"`
-		Picture       string `json:"picture"`
-	}
-	if idToken.Claims(&claims) != nil || claims.Nonce != state.Nonce || claims.Email == "" || !claims.EmailVerified || !allowedExternalEmail(claims.Email, s.externalAuth.config.AllowedDomains) {
+	var claims map[string]any
+	if idToken.Claims(&claims) != nil {
 		writeError(w, http.StatusForbidden, "identity is not allowed")
 		return
 	}
-	session, sessionToken, err := s.store.LoginExternal(r.Context(), claims.Email, claims.Name, claims.Picture, s.externalAuth.config.AutoProvision)
+	nonce := stringClaim(claims, "nonce")
+	identityClaim := strings.TrimSpace(s.externalAuth.config.OIDC.IdentityClaim)
+	if identityClaim == "" {
+		identityClaim = "sub"
+	}
+	subject := stringClaim(claims, identityClaim)
+	if subject == "" && identityClaim != "sub" {
+		subject = stringClaim(claims, "sub")
+	}
+	email := stringClaim(claims, "email")
+	if email != "" {
+		if verified, present := claims["email_verified"]; present {
+			if verifiedValue, ok := verified.(bool); ok && !verifiedValue {
+				email = ""
+			}
+		}
+	}
+	name := stringClaim(claims, "name")
+	if name == "" {
+		name = stringClaim(claims, "preferred_username")
+	}
+	picture := stringClaim(claims, "picture")
+	if subject == "" || nonce != state.Nonce || (email != "" && !allowedExternalEmail(email, s.externalAuth.config.AllowedDomains)) {
+		writeError(w, http.StatusForbidden, "identity is not allowed")
+		return
+	}
+	username := stringClaim(claims, "preferred_username")
+	if identityClaim != "sub" {
+		username = subject
+	}
+	claimsJSON, _ := json.Marshal(claims)
+	issuer := strings.TrimRight(idToken.Issuer, "/")
+	if issuer == "" {
+		issuer = client.issuer
+	}
+	session, sessionToken, err := s.store.LoginExternalIdentity(r.Context(), providerID, issuer, subject, username, email, name, picture, string(claimsJSON), s.externalAuth.config.AutoProvision)
 	if err != nil {
 		writeError(w, http.StatusForbidden, "could not create Flow session")
 		return
@@ -216,6 +247,15 @@ func (s *server) finishOIDC(w http.ResponseWriter, r *http.Request) {
 	clearExternalState(w, r)
 	setSessionCookie(w, r, sessionToken, session.ExpiresAt)
 	http.Redirect(w, r, s.externalAuth.appURL, http.StatusFound)
+}
+
+func stringClaim(claims map[string]any, name string) string {
+	value, ok := claims[name]
+	if !ok {
+		return ""
+	}
+	stringValue, _ := value.(string)
+	return strings.TrimSpace(stringValue)
 }
 
 func (s *server) startSAML(w http.ResponseWriter, r *http.Request) {
