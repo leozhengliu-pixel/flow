@@ -273,7 +273,7 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
         nestedSubIssues={display.nestedSubIssues}
         propertyOptions={rowOptions}
         mutationErrors={mutationErrors}
-        onCreateIssue={group => onCreateIssue?.(stateIdForExplorerGroup(group, data))}
+        onCreateIssue={group => { const stateId = stateIdForExplorerGroup(group, data) ?? data.states.find(state => state.name === group.label)?.id ?? (group.stateType === 'backlog' || group.label === 'Backlog' || group.label === '待规划' ? 'state_backlog' : undefined); onCreateIssue?.(stateId) }}
         onGroupCollapsedChange={(id, collapsed) => setCollapsedGroups(current => { const next = new Set(current); if (collapsed) next.add(id); else next.delete(id); return next })}
         onOpenIssue={openIssueFromExplorer}
         onPropertyChange={changeProperty}
@@ -286,7 +286,7 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
         properties={display.properties}
         propertyOptions={rowOptions}
         selectedIds={selection.selectedIds}
-        onCreateIssue={group => onCreateIssue?.(stateIdForExplorerGroup(group, data))}
+        onCreateIssue={group => { const stateId = stateIdForExplorerGroup(group, data) ?? data.states.find(state => state.name === group.label)?.id ?? (group.stateType === 'backlog' || group.label === 'Backlog' || group.label === '待规划' ? 'state_backlog' : undefined); onCreateIssue?.(stateId) }}
         onHideGroup={groupId => changeDisplay({ ...display, hiddenGroupIds: [...new Set([...display.hiddenGroupIds, groupId])] })}
         onShowGroup={groupId => changeDisplay({ ...display, hiddenGroupIds: display.hiddenGroupIds.filter(id => id !== groupId) })}
         onMove={moveIssue}

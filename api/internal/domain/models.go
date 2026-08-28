@@ -1196,6 +1196,7 @@ type Notification struct {
 	ProjectID       string     `json:"projectId,omitempty"`
 	CommentID       string     `json:"commentId,omitempty"`
 	ActivityID      string     `json:"activityId,omitempty"`
+	ReviewID        string     `json:"reviewId,omitempty"`
 	Actor           User       `json:"actor"`
 	Category        string     `json:"category"`
 	GroupKey        string     `json:"groupKey"`

@@ -89,6 +89,42 @@ func TestDatabaseWithEmptySeedStartsWithoutWorkspace(t *testing.T) {
 	}
 }
 
+func TestSQLitePerformancePragmasAndIndexes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "perf.db")
+	repository, err := OpenDatabase(DatabaseConfig{Driver: "sqlite", Path: path, SeedProfile: "none", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	var journalMode string
+	if err := repository.db.QueryRowContext(t.Context(), `PRAGMA journal_mode`).Scan(&journalMode); err != nil {
+		t.Fatal(err)
+	}
+	if journalMode != "wal" {
+		t.Fatalf("journal mode = %q, want wal", journalMode)
+	}
+	var synchronous int
+	if err := repository.db.QueryRowContext(t.Context(), `PRAGMA synchronous`).Scan(&synchronous); err != nil {
+		t.Fatal(err)
+	}
+	if synchronous != 1 { // NORMAL is SQLite value 1.
+		t.Fatalf("synchronous = %d, want NORMAL (1)", synchronous)
+	}
+	for _, name := range []string{
+		"workspace_states_updated_idx",
+		"domain_events_created_idx",
+		"workspace_invitations_workspace_created_idx",
+	} {
+		var count int
+		if err := repository.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?`, name).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("index %s missing", name)
+		}
+	}
+}
+
 func TestCoordinatedStoresReloadBeforeMutation(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "coordinated.db")
 	first, err := OpenSQLite(path)
