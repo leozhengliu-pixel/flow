@@ -86,7 +86,24 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 			review.ReviewerIDs = reviewerIDs(data, event)
 			data.Reviews[index] = review
 		}
+		// Keep a durable event trail so review details and notification retries can
+		// distinguish successive deliveries for the same PR/MR.
+		if index >= 0 {
+			review := data.Reviews[index]
+			review.Events = append(review.Events, domain.ReviewEvent{ID: eventID, Type: event.Action, Body: provider, Actor: data.Viewer, CreatedAt: now})
+			if len(review.Events) > 100 {
+				review.Events = review.Events[len(review.Events)-100:]
+			}
+			data.Reviews[index] = review
+			updated = review
+		}
 		updated = data.Reviews[index]
+		for connectionIndex := range data.IntegrationConnections {
+			if data.IntegrationConnections[connectionIndex].Provider == provider {
+				data.IntegrationConnections[connectionIndex].LastWebhookAt = &now
+				data.IntegrationConnections[connectionIndex].LastError = ""
+			}
+		}
 		if !slices.ContainsFunc(data.Notifications, func(item domain.Notification) bool { return item.SourceID == eventID }) {
 			data.Notifications = appendCodeReviewNotifications(data, updated, event, eventID, now)
 		}
@@ -97,6 +114,45 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"reviewId": updated.ID, "eventId": eventID})
+}
+
+// testIntegrationWebhook lets operators verify a configured connection and
+// records the result. It intentionally does not call a provider API or emit a
+// fake review event; delivery still has to come from GitHub/GitLab.
+func (s *server) testIntegrationWebhook(w http.ResponseWriter, r *http.Request) {
+	provider, id := strings.ToLower(r.PathValue("provider")), r.PathValue("id")
+	if provider != "github" && provider != "gitlab" {
+		writeError(w, http.StatusNotFound, "unsupported provider")
+		return
+	}
+	var result map[string]any
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.webhook_tested", id, nil, func(data *domain.Bootstrap) error {
+		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
+		if index < 0 {
+			return errNotFound
+		}
+		connection := &data.IntegrationConnections[index]
+		if strings.TrimSpace(connection.Config["webhookSecret"]) == "" {
+			connection.LastError = "webhook secret is not configured"
+			connection.UpdatedAt = time.Now().UTC()
+			return errInvalid
+		}
+		now := time.Now().UTC()
+		connection.LastWebhookAt = &now
+		connection.LastError = ""
+		connection.UpdatedAt = now
+		result = map[string]any{"provider": provider, "connectionId": id, "status": "ready", "testedAt": now}
+		return nil
+	})
+	if err != nil {
+		if err == errInvalid {
+			writeError(w, http.StatusUnprocessableEntity, "webhook secret is not configured")
+			return
+		}
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *server) webhookConnection(r *http.Request, provider string) *domain.IntegrationConnection {
@@ -140,6 +196,10 @@ type externalCodeReviewEvent struct {
 		FullName string `json:"full_name"`
 		Path     string `json:"path_with_namespace"`
 	} `json:"repository"`
+	Project struct {
+		PathWithNamespace string `json:"path_with_namespace"`
+		WebURL            string `json:"web_url"`
+	} `json:"project"`
 	PullRequest struct {
 		Number  int    `json:"number"`
 		ID      int64  `json:"id"`
@@ -235,6 +295,11 @@ func (e externalCodeReviewEvent) applyToReview(r *domain.CodeReview, now time.Ti
 		}
 	} else if e.Repository.Path != "" {
 		parts := strings.SplitN(e.Repository.Path, "/", 2)
+		if len(parts) == 2 {
+			r.RepositoryOwner, r.RepositoryName = parts[0], parts[1]
+		}
+	} else if e.Project.PathWithNamespace != "" {
+		parts := strings.SplitN(e.Project.PathWithNamespace, "/", 2)
 		if len(parts) == 2 {
 			r.RepositoryOwner, r.RepositoryName = parts[0], parts[1]
 		}

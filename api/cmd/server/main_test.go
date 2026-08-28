@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -1111,6 +1112,29 @@ func TestIssueBoardOrderAndSavedViewLifecycle(t *testing.T) {
 	if len(events) != 5 || events[0].Type != "view.created" || events[1].Type != "view.updated" || events[2].Type != "favorite.added" || events[3].Type != "subscription.added" || events[4].Type != "view.deleted" {
 		t.Fatalf("saved view events = %#v", events)
 	}
+}
+
+func TestSavedViewShareLifecycle(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	name := "Shared roadmap"
+	view := requestJSON[domain.SavedView](t, handler, http.MethodPost, "/api/views", map[string]any{"name": name, "resource": "projects", "scope": "workspace"}, http.StatusCreated)
+	shared := requestJSON[map[string]any](t, handler, http.MethodPost, "/api/views/"+view.ID+"/share", nil, http.StatusOK)
+	token, _ := shared["token"].(string)
+	if token == "" {
+		t.Fatal("share token missing")
+	}
+	public := requestJSON[map[string]any](t, handler, http.MethodGet, "/api/shared/views/"+url.PathEscape(token)+"?workspace=cleantrack", nil, http.StatusOK)
+	publicView, _ := public["view"].(map[string]any)
+	if publicView["id"] != view.ID {
+		t.Fatalf("public view id = %#v", publicView["id"])
+	}
+	requestJSON[any](t, handler, http.MethodDelete, "/api/views/"+view.ID+"/share", nil, http.StatusNoContent)
+	requestJSON[any](t, handler, http.MethodGet, "/api/shared/views/"+url.PathEscape(token)+"?workspace=cleantrack", nil, http.StatusNotFound)
 }
 
 func TestInboxNotificationLifecycle(t *testing.T) {
