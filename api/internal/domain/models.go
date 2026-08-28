@@ -15,6 +15,21 @@ type User struct {
 	EmailVerified bool   `json:"emailVerified"`
 }
 
+// AuthIdentity binds a user to a stable identifier issued by an external provider.
+// The provider and issuer are part of the key because OIDC subject values are
+// only guaranteed to be unique within an issuer.
+type AuthIdentity struct {
+	ID          string    `json:"id"`
+	UserID      string    `json:"userId"`
+	Provider    string    `json:"provider"`
+	Issuer      string    `json:"issuer"`
+	Subject     string    `json:"subject"`
+	Username    string    `json:"username,omitempty"`
+	ClaimsJSON  string    `json:"claimsJson,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+	LastLoginAt time.Time `json:"lastLoginAt"`
+}
+
 type WorkspaceMember struct {
 	User       User       `json:"user"`
 	Role       string     `json:"role"`

@@ -13,7 +13,7 @@ func TestLoadDefaultsAndBackendValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Database.Driver != "sqlite" || loaded.Storage.Driver != "local" || loaded.Agent.Enabled || loaded.Telemetry.Enabled {
+	if loaded.Database.Driver != "sqlite" || loaded.Storage.Driver != "local" || loaded.Agent.Enabled || loaded.Telemetry.Enabled || loaded.Auth.OIDC.IdentityClaim != "sub" {
 		t.Fatalf("unexpected defaults: %#v", loaded)
 	}
 	t.Setenv("FLOW_DATABASE_DRIVER", "postgres")
@@ -21,6 +21,10 @@ func TestLoadDefaultsAndBackendValidation(t *testing.T) {
 		t.Fatalf("postgres without URL error = %v", err)
 	}
 	t.Setenv("FLOW_DATABASE_DRIVER", "sqlite")
+	t.Setenv("FLOW_OIDC_IDENTITY_CLAIM", "employeeNumber")
+	if loaded, err := Load(); err != nil || loaded.Auth.OIDC.IdentityClaim != "employeeNumber" {
+		t.Fatalf("OIDC identity claim config = %#v, %v", loaded.Auth.OIDC.IdentityClaim, err)
+	}
 	t.Setenv("FLOW_STORAGE_DRIVER", "s3")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_S3_BUCKET") {
 		t.Fatalf("S3 without bucket error = %v", err)

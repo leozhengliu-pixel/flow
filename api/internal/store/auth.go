@@ -180,6 +180,152 @@ func (s *SQLiteStore) LoginExternal(ctx context.Context, email, name, avatarURL 
 	return s.createSession(ctx, user)
 }
 
+// LoginExternalIdentity authenticates an IdP identity independently of email.
+// Email remains the compatibility lookup used by LoginExternal, but is optional
+// here so enterprise providers may identify users with an employee number.
+func (s *SQLiteStore) LoginExternalIdentity(ctx context.Context, provider, issuer, subject, username, email, name, avatarURL, claimsJSON string, autoProvision bool) (domain.AuthSession, string, error) {
+	provider, issuer, subject = strings.TrimSpace(provider), strings.TrimSpace(issuer), strings.TrimSpace(subject)
+	if provider == "" || issuer == "" || subject == "" {
+		return domain.AuthSession{}, "", ErrAuthInvalid
+	}
+	email = normalizeEmail(email)
+	name, username, avatarURL = strings.TrimSpace(name), strings.TrimSpace(username), strings.TrimSpace(avatarURL)
+	if strings.TrimSpace(claimsJSON) == "" {
+		claimsJSON = "{}"
+	}
+	var user domain.User
+	var identityID string
+	var storedUsername string
+	var verified sql.NullString
+	var nullableEmail sql.NullString
+	var active int
+	err := s.db.QueryRowContext(ctx, `SELECT i.id,i.username,u.id,u.email,u.name,u.display_name,u.avatar_url,u.email_verified_at,u.active FROM auth_identities i JOIN auth_users u ON u.id=i.user_id WHERE i.identity_key=?`, externalIdentityKey(provider, issuer, subject)).Scan(&identityID, &storedUsername, &user.ID, &nullableEmail, &user.Name, &user.DisplayName, &user.AvatarURL, &verified, &active)
+	if err == nil {
+		if active == 0 {
+			return domain.AuthSession{}, "", ErrAuthInvalid
+		}
+		user.Email, user.Active, user.EmailVerified = nullableEmail.String, true, verified.Valid
+		if name == "" {
+			name = user.Name
+		}
+		if username == "" {
+			username = storedUsername
+		}
+		if name != user.Name || (avatarURL != "" && avatarURL != user.AvatarURL) {
+			if avatarURL == "" {
+				avatarURL = user.AvatarURL
+			}
+			_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET name=?,display_name=?,avatar_url=?,updated_at=? WHERE id=?`, name, name, avatarURL, time.Now().UTC().Format(time.RFC3339Nano), user.ID)
+			if err != nil {
+				return domain.AuthSession{}, "", err
+			}
+			user.Name, user.DisplayName, user.AvatarURL = name, name, avatarURL
+		}
+		if email != "" && user.Email == "" {
+			now := time.Now().UTC().Format(time.RFC3339Nano)
+			_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET email=?,email_verified_at=?,updated_at=? WHERE id=? AND (email IS NULL OR email='')`, email, now, now, user.ID)
+			if err == nil {
+				user.Email, user.EmailVerified = email, true
+			}
+		}
+		if err == nil {
+			_, err = s.db.ExecContext(ctx, `UPDATE auth_identities SET username=?,claims_json=?,last_login_at=? WHERE id=?`, username, claimsJSON, time.Now().UTC().Format(time.RFC3339Nano), identityID)
+		}
+		if err != nil {
+			return domain.AuthSession{}, "", err
+		}
+		return s.createSession(ctx, user)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return domain.AuthSession{}, "", err
+	}
+	if email != "" {
+		if existing, _, lookupErr := s.authUserByEmail(ctx, email); lookupErr == nil {
+			if !existing.Active {
+				return domain.AuthSession{}, "", ErrAuthInvalid
+			}
+			user = existing
+			if name != "" || avatarURL != "" {
+				if name == "" {
+					name = user.Name
+				}
+				if avatarURL == "" {
+					avatarURL = user.AvatarURL
+				}
+				now := time.Now().UTC().Format(time.RFC3339Nano)
+				_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET name=?,display_name=?,avatar_url=?,email_verified_at=?,updated_at=? WHERE id=?`, name, name, avatarURL, now, now, user.ID)
+				if err != nil {
+					return domain.AuthSession{}, "", err
+				}
+				user.Name, user.DisplayName, user.AvatarURL, user.EmailVerified = name, name, avatarURL, true
+			}
+			if autoProvision {
+				if err = s.provisionExternalMemberships(ctx, user.ID, time.Now().UTC()); err != nil {
+					return domain.AuthSession{}, "", err
+				}
+			}
+		} else {
+			if !autoProvision {
+				return domain.AuthSession{}, "", ErrAuthInvalid
+			}
+			now := time.Now().UTC()
+			if name == "" {
+				name = strings.Split(email, "@")[0]
+			}
+			user = domain.User{ID: fmt.Sprintf("usr_%d", now.UnixNano()), Name: name, DisplayName: name, Email: email, AvatarURL: avatarURL, Active: true, EmailVerified: true}
+			_, err = s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, user.ID, user.Email, user.Name, user.DisplayName, user.AvatarURL, "", now.Format(time.RFC3339Nano), 1, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+			if err != nil {
+				return domain.AuthSession{}, "", err
+			}
+			if err = s.provisionExternalMemberships(ctx, user.ID, now); err != nil {
+				return domain.AuthSession{}, "", err
+			}
+		}
+	} else {
+		if !autoProvision || name == "" {
+			return domain.AuthSession{}, "", ErrAuthInvalid
+		}
+		now := time.Now().UTC()
+		user = domain.User{ID: fmt.Sprintf("usr_%d", now.UnixNano()), Name: name, DisplayName: name, Active: true}
+		_, err = s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, user.ID, nil, user.Name, user.DisplayName, avatarURL, "", nil, 1, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+		if err != nil {
+			return domain.AuthSession{}, "", err
+		}
+		if err = s.provisionExternalMemberships(ctx, user.ID, now); err != nil {
+			return domain.AuthSession{}, "", err
+		}
+	}
+	now := time.Now().UTC()
+	_, err = s.db.ExecContext(ctx, `INSERT INTO auth_identities(id,user_id,provider,issuer,subject,identity_key,username,claims_json,created_at,last_login_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, fmt.Sprintf("identity_%d", now.UnixNano()), user.ID, provider, issuer, subject, externalIdentityKey(provider, issuer, subject), username, claimsJSON, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	if err != nil {
+		return domain.AuthSession{}, "", err
+	}
+	return s.createSession(ctx, user)
+}
+
+func externalIdentityKey(provider, issuer, subject string) string {
+	digest := sha256.Sum256([]byte(provider + "\x00" + issuer + "\x00" + subject))
+	return fmt.Sprintf("%x", digest[:])
+}
+
+func (s *SQLiteStore) provisionExternalMemberships(ctx context.Context, userID string, now time.Time) error {
+	s.mu.RLock()
+	workspaceKey := s.lastWorkspaceKey
+	if workspaceKey == "" {
+		workspaceKey = firstWorkspaceKey(s.workspaces)
+	}
+	workspace := s.workspaces[workspaceKey]
+	s.mu.RUnlock()
+	if workspace.Workspace.ID == "" {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING`, workspace.Workspace.ID, userID, "member", "active", now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	if err == nil && len(workspace.Teams) > 0 {
+		_, err = s.db.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`, workspace.Workspace.ID, workspace.Teams[0].ID, userID, "member", now.Format(time.RFC3339Nano))
+	}
+	return err
+}
+
 func (s *SQLiteStore) createSession(ctx context.Context, user domain.User) (domain.AuthSession, string, error) {
 	token, err := randomToken()
 	if err != nil {
@@ -526,12 +672,13 @@ func (s *SQLiteStore) ListMembers(ctx context.Context, workspaceID string) ([]do
 	result := []domain.WorkspaceMember{}
 	for rows.Next() {
 		var user domain.User
-		var verified, lastSeen sql.NullString
+		var nullableEmail, verified, lastSeen sql.NullString
 		var active int
 		var role, status, joinedRaw string
-		if err := rows.Scan(&user.ID, &user.Email, &user.Name, &user.DisplayName, &user.AvatarURL, &verified, &active, &role, &status, &joinedRaw, &lastSeen); err != nil {
+		if err := rows.Scan(&user.ID, &nullableEmail, &user.Name, &user.DisplayName, &user.AvatarURL, &verified, &active, &role, &status, &joinedRaw, &lastSeen); err != nil {
 			return nil, err
 		}
+		user.Email = nullableEmail.String
 		user.Active, user.EmailVerified = active == 1, verified.Valid
 		joined, _ := time.Parse(time.RFC3339Nano, joinedRaw)
 		var last *time.Time
@@ -799,9 +946,11 @@ func (s *SQLiteStore) authUserByEmail(ctx context.Context, email string) (domain
 
 func (s *SQLiteStore) authUserByID(ctx context.Context, id string) (domain.User, error) {
 	var user domain.User
+	var nullableEmail sql.NullString
 	var verified sql.NullString
 	var active int
-	err := s.db.QueryRowContext(ctx, `SELECT id,email,name,display_name,avatar_url,email_verified_at,active FROM auth_users WHERE id=?`, id).Scan(&user.ID, &user.Email, &user.Name, &user.DisplayName, &user.AvatarURL, &verified, &active)
+	err := s.db.QueryRowContext(ctx, `SELECT id,email,name,display_name,avatar_url,email_verified_at,active FROM auth_users WHERE id=?`, id).Scan(&user.ID, &nullableEmail, &user.Name, &user.DisplayName, &user.AvatarURL, &verified, &active)
+	user.Email = nullableEmail.String
 	user.Active, user.EmailVerified = active == 1, verified.Valid
 	return user, err
 }
