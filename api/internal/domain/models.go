@@ -624,6 +624,26 @@ type AskApproval struct {
 	DecidedAt *time.Time `json:"decidedAt,omitempty"`
 }
 
+type Loop struct {
+	ID                         string         `json:"id"`
+	Name                       string         `json:"name"`
+	Icon                       string         `json:"icon,omitempty"`
+	Level                      string         `json:"level"`
+	TriggerType                string         `json:"triggerType"`
+	TriggerConfig              map[string]any `json:"triggerConfig,omitempty"`
+	Instructions               string         `json:"instructions"`
+	ConnectorIDs               []string       `json:"connectorIds"`
+	TeamAccess                 string         `json:"teamAccess"`
+	AllowChangesOutsideTrigger bool           `json:"allowChangesOutsideTrigger"`
+	AllowExternalSync          bool           `json:"allowExternalSync"`
+	Enabled                    bool           `json:"enabled"`
+	Creator                    User           `json:"creator"`
+	LastRunAt                  *time.Time     `json:"lastRunAt,omitempty"`
+	NextRunAt                  *time.Time     `json:"nextRunAt,omitempty"`
+	CreatedAt                  time.Time      `json:"createdAt"`
+	UpdatedAt                  time.Time      `json:"updatedAt"`
+}
+
 type ProjectTemplate struct {
 	ID                  string              `json:"id"`
 	Name                string              `json:"name"`
@@ -1251,6 +1271,7 @@ type Bootstrap struct {
 	ReleasePipelines        []ReleasePipeline                  `json:"releasePipelines"`
 	CustomEmojis            []CustomEmoji                      `json:"customEmojis"`
 	Asks                    []Ask                              `json:"asks"`
+	Loops                   []Loop                             `json:"loops"`
 	SLARules                []SLARule                          `json:"slaRules"`
 	IssueSLAs               []IssueSLA                         `json:"issueSlas"`
 	SLAEvents               []SLAEvent                         `json:"slaEvents"`
@@ -1292,6 +1313,7 @@ type Bootstrap struct {
 
 type SavedView struct {
 	ID          string          `json:"id"`
+	SlugID      string          `json:"slugId,omitempty"`
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	Icon        string          `json:"icon,omitempty"`
