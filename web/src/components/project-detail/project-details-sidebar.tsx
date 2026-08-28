@@ -2,7 +2,7 @@ import { Component, useEffect, useMemo, useState, type DragEvent, type ErrorInfo
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Line, type LineCustomSvgLayerProps, type SliceTooltipProps } from '@nivo/line'
-import { Blocks, ChevronDown, ChevronRight, OctagonMinus, Plus, Trash2 } from 'lucide-react'
+import { Blocks, ChevronDown, ChevronRight, Network, OctagonMinus, Plus, Trash2 } from 'lucide-react'
 import { addDays, differenceInCalendarDays, format, formatDistanceToNowStrict, startOfDay } from 'date-fns'
 import { toast } from 'sonner'
 import { Avatar } from '@/components/issue/issue-row'
@@ -65,7 +65,7 @@ export function ProjectDetailsSidebar({ labelGroups, labels, onConvertMilestone,
   }
 
   return <aside aria-label="Project sidebar" className="project-details-sidebar">
-    <SidebarSection compact onToggle={() => setPropertiesOpen(value => !value)} open={propertiesOpen} title="Properties" action={<ProjectDependencyMenu onUpdate={onUpdate} onUpdateProject={onUpdateProject} project={project} projects={projects} viewer={viewer}/> }>
+    <SidebarSection compact onToggle={() => setPropertiesOpen(value => !value)} open={propertiesOpen} title="Properties" action={<span className="project-details-sidebar__property-actions"><DependencyGraphButton project={project} projects={projects}/><ProjectDependencyMenu onUpdate={onUpdate} onUpdateProject={onUpdateProject} project={project} projects={projects} viewer={viewer}/></span> }>
       <SidebarPropertiesBoundary><SidebarProperties labelGroups={labelGroups} labels={labels} onUpdate={onUpdate} project={project} projects={projects} projectStatuses={projectStatuses} teams={teams} users={users}/></SidebarPropertiesBoundary>
       {(blockedByProjects.length > 0 || blockingProjects.length > 0) && <div className="project-details-sidebar__dependencies">
         {blockedByProjects.map(item => <div key={`blocked-by-${item.id}`}><OctagonMinus className="project-details-sidebar__dependency-icon" size={14}/><small>Blocked by</small><span data-i18n-ignore>{item.name}</span><button aria-label={`Remove ${item.name}`} onClick={() => void onUpdate({ dependencyIds: (project.dependencyIds ?? []).filter(id => id !== item.id) })} type="button"><Trash2 size={11}/></button></div>)}
@@ -105,6 +105,17 @@ export function ProjectDetailsSidebar({ labelGroups, labels, onConvertMilestone,
     <div className="project-details-sidebar__activity">{events.slice(0, 6).map(event => <div key={event.id}><Avatar name={event.actor}/><p><strong data-i18n-ignore>{event.actor}</strong> {event.text} <time>· {event.date}</time></p></div>)}</div>
     </SidebarSection>
   </aside>
+}
+
+function DependencyGraphButton({ project, projects }: { project: Project; projects: Project[] }) {
+  const [open, setOpen] = useState(false)
+  const related = projects.filter(item => item.id === project.id || (project.dependencyIds ?? []).includes(item.id) || (item.dependencyIds ?? []).includes(project.id))
+  if (related.length < 2) return null
+  const width = 520, height = Math.max(180, related.length * 64)
+  const currentIndex = related.findIndex(item => item.id === project.id)
+  const positions = related.map((item, index) => ({ item, x: index === currentIndex ? 260 : index < currentIndex ? 130 : 390, y: 40 + (index === currentIndex ? 0 : (index < currentIndex ? index : index - 1)) * 54 }))
+  const pos = new Map(positions.map(value => [value.item.id, value]))
+  return <Dialog.Root onOpenChange={setOpen} open={open}><Dialog.Trigger asChild><button aria-label="Open dependency graph" className="project-details-sidebar__dependency-graph" title="Open dependency graph" type="button"><Network size={13}/></button></Dialog.Trigger><Dialog.Portal><Dialog.Overlay className="project-dependency-graph__overlay"/><Dialog.Content aria-label="Project dependency graph" className="project-dependency-graph"><Dialog.Title>Dependency graph</Dialog.Title><Dialog.Description>Dependencies for <span data-i18n-ignore>{project.name}</span></Dialog.Description><svg aria-label="Dependency graph" className="project-dependency-graph__canvas" role="img" viewBox={`0 0 ${width} ${height}`}>{related.flatMap(item => (item.dependencyIds ?? []).filter(id => pos.has(id)).map(id => { const from = pos.get(id)!; const to = pos.get(item.id)!; return <line key={`${id}-${item.id}`} markerEnd="url(#dependency-arrow)" stroke="var(--theme-border-strong)" strokeWidth="1.5" x1={from.x} x2={to.x} y1={from.y} y2={to.y}/> }))}<defs><marker id="dependency-arrow" markerHeight="6" markerWidth="6" orient="auto" refX="5" refY="3"><path d="M0,0 L6,3 L0,6 z" fill="var(--theme-text-tertiary)"/></marker></defs>{positions.map(({ item, x, y }) => <g key={item.id}><rect fill={item.id === project.id ? 'var(--theme-surface-active)' : 'var(--theme-surface-1)'} height="30" rx="7" stroke="var(--theme-border-strong)" width="150" x={x - 75} y={y - 15}/><text dominantBaseline="middle" fill="var(--theme-text-primary)" fontSize="12" textAnchor="middle" x={x} y={y}>{item.name.slice(0, 22)}</text></g>)}</svg><Dialog.Close asChild><button className="project-dependency-graph__close" type="button">Close</button></Dialog.Close></Dialog.Content></Dialog.Portal></Dialog.Root>
 }
 
 function MilestoneRow({ disabled, dragging, dropEdge, milestone, onConvert, onDelete, onDragEnd, onDragOver, onDragStart, onDrop, onEdit, onMove, onOpenIssues, onUpdateDate, projects, stats }: {

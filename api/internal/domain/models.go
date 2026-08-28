@@ -302,21 +302,22 @@ type Issue struct {
 }
 
 type Cycle struct {
-	ID            string            `json:"id"`
-	Number        int               `json:"number"`
-	Name          string            `json:"name"`
-	Description   string            `json:"description"`
-	TeamID        string            `json:"teamId"`
-	StartsAt      time.Time         `json:"startsAt"`
-	EndsAt        time.Time         `json:"endsAt"`
-	Status        string            `json:"status"`
-	Capacity      int               `json:"capacity"`
-	Favorite      bool              `json:"favorite"`
-	Resources     []CycleResource   `json:"resources"`
-	CalendarToken string            `json:"calendarToken,omitempty"`
-	Insight       map[string]string `json:"insight,omitempty"`
-	CreatedAt     time.Time         `json:"createdAt"`
-	UpdatedAt     time.Time         `json:"updatedAt"`
+	ID               string                    `json:"id"`
+	Number           int                       `json:"number"`
+	Name             string                    `json:"name"`
+	Description      string                    `json:"description"`
+	TeamID           string                    `json:"teamId"`
+	StartsAt         time.Time                 `json:"startsAt"`
+	EndsAt           time.Time                 `json:"endsAt"`
+	Status           string                    `json:"status"`
+	Capacity         int                       `json:"capacity"`
+	CapacityByMember map[string]map[string]int `json:"capacityByMember,omitempty"`
+	Favorite         bool                      `json:"favorite"`
+	Resources        []CycleResource           `json:"resources"`
+	CalendarToken    string                    `json:"calendarToken,omitempty"`
+	Insight          map[string]string         `json:"insight,omitempty"`
+	CreatedAt        time.Time                 `json:"createdAt"`
+	UpdatedAt        time.Time                 `json:"updatedAt"`
 }
 
 type CycleResource struct {
@@ -895,15 +896,23 @@ type Webhook struct {
 }
 
 type IntegrationConnection struct {
-	ID          string            `json:"id"`
-	Provider    string            `json:"provider"`
-	Name        string            `json:"name"`
-	Status      string            `json:"status"`
-	Config      map[string]string `json:"config,omitempty"`
-	SecretHash  string            `json:"-"`
-	ConnectedBy string            `json:"connectedBy"`
-	CreatedAt   time.Time         `json:"createdAt"`
-	UpdatedAt   time.Time         `json:"updatedAt"`
+	ID                string            `json:"id"`
+	Provider          string            `json:"provider"`
+	Name              string            `json:"name"`
+	Status            string            `json:"status"`
+	Config            map[string]string `json:"config,omitempty"`
+	SecretHash        string            `json:"-"`
+	ConnectedBy       string            `json:"connectedBy"`
+	CreatedAt         time.Time         `json:"createdAt"`
+	UpdatedAt         time.Time         `json:"updatedAt"`
+	LastWebhookAt     *time.Time        `json:"lastWebhookAt,omitempty"`
+	LastError         string            `json:"lastError,omitempty"`
+	OAuthState        string            `json:"oauthState,omitempty"`
+	OAuthStartedAt    *time.Time        `json:"oauthStartedAt,omitempty"`
+	OAuthCompletedAt  *time.Time        `json:"oauthCompletedAt,omitempty"`
+	OAuthAccessToken  string            `json:"oauthAccessToken,omitempty"`
+	OAuthRefreshToken string            `json:"oauthRefreshToken,omitempty"`
+	OAuthExpiresAt    *time.Time        `json:"oauthExpiresAt,omitempty"`
 }
 
 type ReviewCheck struct {
@@ -1060,18 +1069,22 @@ type TrashEntry struct {
 }
 
 type ImportJob struct {
-	ID        string              `json:"id"`
-	UserID    string              `json:"userId"`
-	Filename  string              `json:"filename"`
-	Format    string              `json:"format"`
-	Status    string              `json:"status"`
-	Headers   []string            `json:"headers"`
-	Rows      []map[string]string `json:"rows,omitempty"`
-	Mapping   map[string]string   `json:"mapping,omitempty"`
-	Imported  int                 `json:"imported"`
-	Errors    []string            `json:"errors"`
-	CreatedAt time.Time           `json:"createdAt"`
-	UpdatedAt time.Time           `json:"updatedAt"`
+	ID         string              `json:"id"`
+	UserID     string              `json:"userId"`
+	Filename   string              `json:"filename"`
+	Format     string              `json:"format"`
+	Status     string              `json:"status"`
+	Headers    []string            `json:"headers"`
+	Rows       []map[string]string `json:"rows,omitempty"`
+	Mapping    map[string]string   `json:"mapping,omitempty"`
+	Imported   int                 `json:"imported"`
+	Errors     []string            `json:"errors"`
+	CreatedAt  time.Time           `json:"createdAt"`
+	UpdatedAt  time.Time           `json:"updatedAt"`
+	Progress   int                 `json:"progress"`
+	Error      string              `json:"error,omitempty"`
+	RetryCount int                 `json:"retryCount,omitempty"`
+	TeamID     string              `json:"teamId,omitempty"`
 }
 
 type ExportJob struct {
@@ -1146,6 +1159,7 @@ type InitiativeResource struct {
 	Type         string    `json:"type"`
 	Title        string    `json:"title"`
 	URL          string    `json:"url"`
+	DocumentID   string    `json:"documentId,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
@@ -1329,6 +1343,8 @@ type SavedView struct {
 	Filters     json.RawMessage `json:"filters"`
 	Display     json.RawMessage `json:"display"`
 	Insights    json.RawMessage `json:"insights"`
+	ShareToken  string          `json:"shareToken,omitempty"`
+	SharedAt    *time.Time      `json:"sharedAt,omitempty"`
 	CreatedAt   time.Time       `json:"createdAt"`
 	UpdatedAt   time.Time       `json:"updatedAt"`
 }
@@ -1429,6 +1445,7 @@ type ProjectResourceMutationInput struct {
 	Type          *string   `json:"type,omitempty"`
 	Title         *string   `json:"title,omitempty"`
 	URL           *string   `json:"url,omitempty"`
+	DocumentID    *string   `json:"documentId,omitempty"`
 	PinnedTeamIDs *[]string `json:"pinnedTeamIds,omitempty"`
 }
 
@@ -1507,14 +1524,15 @@ type IssueLoopRunInput struct {
 }
 
 type CycleMutationInput struct {
-	Name        *string           `json:"name,omitempty"`
-	Description *string           `json:"description,omitempty"`
-	StartsAt    *string           `json:"startsAt,omitempty"`
-	EndsAt      *string           `json:"endsAt,omitempty"`
-	Capacity    *int              `json:"capacity,omitempty"`
-	Favorite    *bool             `json:"favorite,omitempty"`
-	Status      *string           `json:"status,omitempty"`
-	Insight     map[string]string `json:"insight,omitempty"`
+	Name             *string                   `json:"name,omitempty"`
+	Description      *string                   `json:"description,omitempty"`
+	StartsAt         *string                   `json:"startsAt,omitempty"`
+	EndsAt           *string                   `json:"endsAt,omitempty"`
+	Capacity         *int                      `json:"capacity,omitempty"`
+	CapacityByMember map[string]map[string]int `json:"capacityByMember,omitempty"`
+	Favorite         *bool                     `json:"favorite,omitempty"`
+	Status           *string                   `json:"status,omitempty"`
+	Insight          map[string]string         `json:"insight,omitempty"`
 }
 
 type CycleSettingsMutationInput struct {

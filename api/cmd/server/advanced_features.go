@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -31,6 +33,43 @@ type documentInput struct {
 	SubscriberIDs *[]string      `json:"subscriberIds,omitempty"`
 	Favorite      *bool          `json:"favorite,omitempty"`
 	Archived      *bool          `json:"archived,omitempty"`
+}
+
+// documentVisibleToViewer mirrors Linear's document access rule: an unscoped
+// document is workspace-visible, while a team document is visible only to a
+// member of one of its teams (admins retain workspace access).
+func documentVisibleToViewer(s *server, data domain.Bootstrap, document domain.Document) bool {
+	if s.authDisabled || data.ViewerRole == "admin" || len(document.TeamIDs) == 0 {
+		return true
+	}
+	return slices.ContainsFunc(document.TeamIDs, func(teamID string) bool {
+		return slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID })
+	})
+}
+
+func (s *server) listDocuments(w http.ResponseWriter, r *http.Request) {
+	data := s.workspaceData(r)
+	query := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("q")))
+	teamID := strings.TrimSpace(r.URL.Query().Get("teamId"))
+	archived := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("archived")))
+	result := make([]domain.Document, 0, len(data.Documents))
+	for _, document := range data.Documents {
+		if !documentVisibleToViewer(s, data, document) {
+			continue
+		}
+		if teamID != "" && !slices.Contains(document.TeamIDs, teamID) {
+			continue
+		}
+		if archived != "all" && (archived == "true") != (document.ArchivedAt != nil) {
+			continue
+		}
+		if query != "" && !strings.Contains(strings.ToLower(document.Title+" "+document.Content), query) {
+			continue
+		}
+		result = append(result, document)
+	}
+	slices.SortStableFunc(result, func(a, b domain.Document) int { return b.UpdatedAt.Compare(a.UpdatedAt) })
+	writeJSON(w, http.StatusOK, result)
 }
 
 type customerRequestInput struct {
@@ -462,6 +501,126 @@ func (s *server) deleteDocument(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	respondMutation(w, err, http.StatusNoContent, nil)
+}
+
+// Documents keep their comment threads in the same workspace comment index as
+// issues. This gives standalone docs the same threaded comment semantics
+// (replies, edits, reactions and deletion) without introducing a second model.
+func (s *server) createDocumentComment(w http.ResponseWriter, r *http.Request) {
+	var input domain.CommentCreateInput
+	if !decodeJSON(w, r, &input) || strings.TrimSpace(input.Body) == "" {
+		writeError(w, http.StatusBadRequest, "body is required")
+		return
+	}
+	id := r.PathValue("id")
+	var created domain.Comment
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.comment_created", id, input, func(data *domain.Bootstrap) error {
+		if _, err := documentByID(data, id); err != nil {
+			return err
+		}
+		if input.ParentID != nil && slices.IndexFunc(data.Comments[id], func(item domain.Comment) bool { return item.ID == *input.ParentID }) < 0 {
+			return errNotFound
+		}
+		now := time.Now().UTC()
+		created = domain.Comment{ID: fmt.Sprintf("document_comment_%d", now.UnixNano()), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: now, User: data.Viewer}
+		data.Comments[id] = append(data.Comments[id], created)
+		return nil
+	})
+	respondMutation(w, err, http.StatusCreated, created)
+}
+
+func (s *server) updateDocumentComment(w http.ResponseWriter, r *http.Request) {
+	var input domain.CommentUpdateInput
+	if !decodeJSON(w, r, &input) || strings.TrimSpace(input.Body) == "" {
+		writeError(w, http.StatusBadRequest, "body is required")
+		return
+	}
+	id, commentID := r.PathValue("id"), r.PathValue("commentId")
+	var updated, current domain.Comment
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.comment_updated", id, input, func(data *domain.Bootstrap) error {
+		if _, err := documentByID(data, id); err != nil {
+			return err
+		}
+		index := slices.IndexFunc(data.Comments[id], func(item domain.Comment) bool { return item.ID == commentID })
+		if index < 0 {
+			return errNotFound
+		}
+		if input.ExpectedVersion != nil && data.Comments[id][index].Version != *input.ExpectedVersion {
+			current = data.Comments[id][index]
+			return errConflict
+		}
+		now := time.Now().UTC()
+		data.Comments[id][index].Body = strings.TrimSpace(input.Body)
+		data.Comments[id][index].BodyData = input.BodyData
+		data.Comments[id][index].EditedAt = &now
+		data.Comments[id][index].Version++
+		updated = data.Comments[id][index]
+		return nil
+	})
+	if errors.Is(err, errConflict) {
+		writeVersionConflict(w, current)
+		return
+	}
+	respondMutation(w, err, http.StatusOK, updated)
+}
+
+func (s *server) deleteDocumentComment(w http.ResponseWriter, r *http.Request) {
+	id, commentID := r.PathValue("id"), r.PathValue("commentId")
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.comment_deleted", id, map[string]string{"commentId": commentID}, func(data *domain.Bootstrap) error {
+		if _, err := documentByID(data, id); err != nil {
+			return err
+		}
+		before := len(data.Comments[id])
+		data.Comments[id] = slices.DeleteFunc(data.Comments[id], func(item domain.Comment) bool {
+			return item.ID == commentID || item.ParentID != nil && *item.ParentID == commentID
+		})
+		if len(data.Comments[id]) == before {
+			return errNotFound
+		}
+		return nil
+	})
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *server) toggleDocumentCommentReaction(w http.ResponseWriter, r *http.Request) {
+	var input domain.ReactionInput
+	if !decodeJSON(w, r, &input) || strings.TrimSpace(input.Emoji) == "" {
+		writeError(w, http.StatusBadRequest, "emoji is required")
+		return
+	}
+	id, commentID := r.PathValue("id"), r.PathValue("commentId")
+	var updated domain.Comment
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.comment_reaction_toggled", id, input, func(data *domain.Bootstrap) error {
+		if _, err := documentByID(data, id); err != nil {
+			return err
+		}
+		index := slices.IndexFunc(data.Comments[id], func(item domain.Comment) bool { return item.ID == commentID })
+		if index < 0 {
+			return errNotFound
+		}
+		comment := &data.Comments[id][index]
+		if comment.Reactions == nil {
+			comment.Reactions = map[string][]string{}
+		}
+		users := comment.Reactions[input.Emoji]
+		if slices.Contains(users, data.Viewer.ID) {
+			users = removeString(users, data.Viewer.ID)
+		} else {
+			users = append(users, data.Viewer.ID)
+		}
+		if len(users) == 0 {
+			delete(comment.Reactions, input.Emoji)
+		} else {
+			comment.Reactions[input.Emoji] = users
+		}
+		updated = *comment
+		return nil
+	})
+	respondMutation(w, err, http.StatusOK, updated)
 }
 
 func (s *server) createCustomerRequest(w http.ResponseWriter, r *http.Request) {
@@ -1835,7 +1994,60 @@ func (s *server) previewImport(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusCreated, created)
 }
 
+// commitImport acknowledges quickly and processes rows in a background worker.
+// The worker uses a detached context so a browser closing the mapping dialog
+// cannot abort a job that was already accepted.
 func (s *server) commitImport(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid import request")
+		return
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	var input struct {
+		Mapping map[string]string `json:"mapping"`
+		TeamID  string            `json:"teamId"`
+	}
+	if json.Unmarshal(body, &input) != nil || input.Mapping["title"] == "" || strings.TrimSpace(input.TeamID) == "" {
+		writeError(w, http.StatusBadRequest, "title mapping and teamId are required")
+		return
+	}
+	id := r.PathValue("id")
+	var job domain.ImportJob
+	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "import.queued", id, input, func(data *domain.Bootstrap) error {
+		index := slices.IndexFunc(data.ImportJobs, func(item domain.ImportJob) bool { return item.ID == id && item.UserID == data.Viewer.ID })
+		if index < 0 {
+			return errNotFound
+		}
+		if !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == input.TeamID }) {
+			return errInvalid
+		}
+		if data.ImportJobs[index].Status == "completed" || data.ImportJobs[index].Status == "running" {
+			return errInvalid
+		}
+		data.ImportJobs[index].Status = "running"
+		data.ImportJobs[index].Mapping = input.Mapping
+		data.ImportJobs[index].TeamID = input.TeamID
+		data.ImportJobs[index].Progress = 0
+		data.ImportJobs[index].Error = ""
+		data.ImportJobs[index].UpdatedAt = time.Now().UTC()
+		job = data.ImportJobs[index]
+		return nil
+	})
+	if err != nil {
+		respondMutation(w, err, http.StatusBadRequest, nil)
+		return
+	}
+	go func() {
+		request := r.Clone(context.Background())
+		request.Body = io.NopCloser(bytes.NewReader(body))
+		request = request.WithContext(context.Background())
+		s.commitImportSync(httptest.NewRecorder(), request)
+	}()
+	writeJSON(w, http.StatusAccepted, job)
+}
+
+func (s *server) commitImportSync(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Mapping map[string]string `json:"mapping"`
 		TeamID  string            `json:"teamId"`
@@ -1866,7 +2078,14 @@ func (s *server) commitImport(w http.ResponseWriter, r *http.Request) {
 			}
 			state = &values[0]
 		}
-		job.Status, job.Mapping, job.Errors = "running", input.Mapping, []string{}
+		// A commit is idempotent at the job level: completed jobs must be
+		// explicitly reset through /retry before they can be replayed. This
+		// prevents an accidental double-click from creating duplicate issues.
+		if job.Status == "completed" {
+			return errInvalid
+		}
+		job.Status, job.Mapping, job.Errors, job.TeamID = "running", input.Mapping, []string{}, input.TeamID
+		job.Imported, job.Progress, job.Error = 0, 0, ""
 		for rowIndex, row := range job.Rows {
 			title := strings.TrimSpace(row[input.Mapping["title"]])
 			if title == "" {
@@ -1934,8 +2153,14 @@ func (s *server) commitImport(w http.ResponseWriter, r *http.Request) {
 			appendActivity(data, issue.ID, "issue.imported", data.Viewer, map[string]string{"importId": id})
 			applySLARules(data, &data.Issues[0], now)
 			job.Imported++
+			job.Progress = int(float64(rowIndex+1) / float64(max(1, len(job.Rows))) * 100)
 		}
 		job.Status = "completed"
+		if job.Imported == 0 && len(job.Errors) > 0 {
+			job.Status = "failed"
+			job.Error = "no rows could be imported"
+		}
+		job.Progress = 100
 		job.UpdatedAt = time.Now().UTC()
 		job.Rows = nil
 		updated = *job

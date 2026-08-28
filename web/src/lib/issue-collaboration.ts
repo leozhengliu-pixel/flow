@@ -20,7 +20,7 @@ export class IssueCollaborationProvider {
   readonly awareness: Awareness
   readonly document: Doc
   private readonly workspaceKey: string
-  private readonly issueId: string
+  private readonly issueId?: string
   private readonly documentId: string
   private readonly seededWithoutServerState: boolean
   private readonly appliedUpdateIds = new Set<string>()
@@ -37,7 +37,7 @@ export class IssueCollaborationProvider {
   constructor({ document, workspaceKey, issueId, documentId, viewer, seededWithoutServerState }: {
     document: Doc
     workspaceKey: string
-    issueId: string
+    issueId?: string
     documentId: string
     viewer: User
     seededWithoutServerState: boolean
@@ -118,7 +118,7 @@ export class IssueCollaborationProvider {
     this.socket = socket
     socket.onopen = () => {
       this.retry = 0
-      socket.send(JSON.stringify({ type: 'document.join', issueId: this.issueId, documentId: this.documentId }))
+      socket.send(JSON.stringify({ type: 'document.join', ...(this.issueId ? { issueId: this.issueId } : {}), documentId: this.documentId }))
       this.emit('connected')
     }
     socket.onmessage = event => {
