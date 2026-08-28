@@ -69,14 +69,7 @@ docker compose up -d --build
 打开 `http://127.0.0.1:5173`。API 健康检查也暴露在
 `http://127.0.0.1:8080/api/health`。
 
-### 开发账户
-
-```text
-邮箱：leo.zheng.liu@example.com
-密码：flow-demo
-```
-
-该账户仅用于本地开发。首次启动 API 前可通过 `FLOW_SEED_PASSWORD` 修改种子密码，生产环境不得使用默认凭据。
+首次部署不会创建演示工作区。注册或登录后会进入创建工作区流程。
 
 ## 常用配置
 
@@ -89,7 +82,6 @@ docker compose up -d --build
 | `FLOW_REDIS_URL` | 未设置 | Redis 连接 URL；也可使用 `FLOW_REDIS_ADDRS`。 |
 | `FLOW_STORAGE_DRIVER` | `local` | `local` 或 `s3`。 |
 | `FLOW_STORAGE_LOCAL_PATH` | `data/uploads` | 本地附件存储目录。 |
-| `FLOW_SEED_PASSWORD` | `flow-demo` | 本地管理员初始密码。 |
 | `FLOW_APP_URL` | 未设置 | 账户邮件中使用的 Web 地址。 |
 | `FLOW_SMTP_HOST` | 未设置 | SMTP 主机。 |
 | `FLOW_SMTP_PORT` | `587` | SMTP 端口。 |
