@@ -39,7 +39,7 @@ export interface Issue {
 export type CycleStatus = 'upcoming'|'current'|'completed'
 export interface Cycle {
   id: UUID; number: number; name: string; description: string; teamId: UUID; startsAt: string; endsAt: string
-  status: CycleStatus; capacity: number; favorite: boolean; resources: CycleResource[]; insight?: Record<string,string>; createdAt: string; updatedAt: string
+  status: CycleStatus; capacity: number; capacityByMember?: Record<UUID, Record<string, number>>; favorite: boolean; resources: CycleResource[]; insight?: Record<string,string>; createdAt: string; updatedAt: string
 }
 export interface CycleResource { id: UUID; type: 'link'|'document'; title: string; url: string; documentId?: UUID; createdAt: string }
 export interface CycleSettings {
@@ -48,7 +48,7 @@ export interface CycleSettings {
   autoAddStarted: boolean; autoAddCompleted: boolean; autoMigrate: boolean
   favoriteView: boolean
 }
-export interface CycleMutationInput { name?: string; description?: string; startsAt?: string; endsAt?: string; capacity?: number; favorite?: boolean;status?:CycleStatus; insight?: Record<string,string> }
+export interface CycleMutationInput { name?: string; description?: string; startsAt?: string; endsAt?: string; capacity?: number; capacityByMember?: Record<UUID, Record<string, number>>; favorite?: boolean;status?:CycleStatus; insight?: Record<string,string> }
 export type CycleSettingsMutationInput = Partial<CycleSettings>
 export type IssueRelationType = 'related'|'blocks'|'blocked_by'|'duplicate'|'parent_of'|'sub_issue_of'
 export interface IssueRelation { id: UUID; type: IssueRelationType; issueId: UUID; relatedIssueId: UUID }
@@ -114,7 +114,7 @@ export interface CustomEmoji { id: UUID; name: string; imageUrl: string; creator
 export interface APIKey { id: UUID; name: string; prefix: string; creatorId: UUID; scopes: string[]; teamIds: UUID[]; createdAt: string; lastUsedAt?: string; revokedAt?: string; expiresAt?: string; oauthClientId?: string; authorizationId?: string }
 export interface OAuthApplication { id: UUID; name: string; description?: string; clientId: string; clientSecret?: string; redirectUris: string[]; scopes: string[]; creatorId: UUID; createdAt: string; updatedAt: string }
 export interface OAuthAuthorization { id: UUID; clientId: string; clientName: string; userId: UUID; scopes: string[]; createdAt: string; lastUsedAt?: string; revokedAt?: string }
-export interface IntegrationConnection { id: UUID; provider: string; name: string; status: string; config?: Record<string,string>; connectedBy: UUID; createdAt: string; updatedAt: string }
+export interface IntegrationConnection { id: UUID; provider: string; name: string; status: string; config?: Record<string,string>; connectedBy: UUID; createdAt: string; updatedAt: string; lastWebhookAt?: string; lastError?: string; oauthStartedAt?: string; oauthCompletedAt?: string }
 export interface ReviewCheck { id: UUID; name: string; status: 'pending'|'running'|'passed'|'failed'|'skipped'; url?: string }
 export interface ReviewFile { path: string; status: 'added'|'modified'|'deleted'|'renamed'; additions: number; deletions: number; patch: string }
 export interface ReviewEvent { id: UUID; type: string; body?: string; actor: User; createdAt: string }
@@ -137,7 +137,7 @@ export interface Favorite { id: UUID; userId: UUID; resourceType: string; resour
 export interface Subscription { id: UUID; userId: UUID; resourceType: string; resourceId: UUID; events?: string[]; createdAt: string }
 export interface AuditLogEntry { id: UUID; actor: User; action: string; resourceType: string; resourceId: UUID; metadata?: Record<string, unknown>; createdAt: string }
 export interface TrashEntry { id: UUID; resourceType: string; resourceId: UUID; title: string; teamIds?:UUID[];deletedBy: User; deletedAt: string; expiresAt: string }
-export interface ImportJob { id: UUID; userId: UUID; filename: string; format: 'csv'|'json'; status: 'mapping'|'running'|'completed'|'failed'; headers: string[]; rows?: Record<string,string>[]; mapping?: Record<string,string>; imported: number; errors: string[]; createdAt: string; updatedAt: string }
+export interface ImportJob { id: UUID; userId: UUID; filename: string; format: 'csv'|'json'; status: 'mapping'|'running'|'completed'|'failed'|'cancelled'; headers: string[]; rows?: Record<string,string>[]; mapping?: Record<string,string>; imported: number; errors: string[]; createdAt: string; updatedAt: string; progress?: number; error?: string; retryCount?: number; teamId?: UUID }
 export interface ExportJob { id: UUID; userId: UUID; format: 'csv'|'json'; includePrivate: boolean; status: 'queued'|'completed'|'failed'; filename?: string; error?: string; createdAt: string; completedAt?: string }
 export type InitiativeStatus = 'proposed'|'planned'|'active'|'completed'|'canceled'
 export interface Initiative {
@@ -149,7 +149,7 @@ export interface Initiative {
 export interface InitiativeNotificationRules { descriptionChanges: boolean; newUpdate: boolean; allProjectUpdates: boolean }
 export interface InitiativeUpdateSchedule { cadence: 'none'|'weekly'|'biweekly'|'monthly'|'custom'|'never'; weekday: number; timeRange: string }
 export interface InitiativeDescriptionRevision { id: UUID; description: string; editedAt: string; editor: User }
-export interface InitiativeResource { id: UUID; initiativeId: UUID; type: 'link'|'document'; title: string; url: string; createdAt: string }
+export interface InitiativeResource { id: UUID; initiativeId: UUID; type: 'link'|'document'; title: string; url: string; documentId?: UUID; createdAt: string }
 export interface InitiativeUpdate {
   id: UUID; initiativeId: UUID; body: string; bodyData?: Record<string,unknown>; health: Project['health']; createdAt: string; editedAt?: string; user: User
   comments: Comment[]; reactions: Record<string, UUID[]>;attachments:Attachment[]
@@ -179,7 +179,7 @@ export interface TeamSettingsMutationInput extends Partial<Omit<TeamSettings,'te
 export interface IssueTemplate { id: UUID; teamId?: UUID; scope?: 'workspace'|'team'; visibilityTeamId?:UUID; icon?: string; color?: string; templateType?: 'standard'|'customForm'; formFields?: TemplateFormField[]; subIssues?: TemplateSubIssue[]; name: string; title?: string; description?: string; body?: string; stateId?: UUID; priority: number; assigneeId?: UUID; projectId?: UUID; labelIds: UUID[]; creator: User; createdAt: string; updatedAt: string }
 export type IssueTemplateMutationInput = Partial<Pick<IssueTemplate,'teamId'|'visibilityTeamId'|'icon'|'color'|'templateType'|'formFields'|'subIssues'|'name'|'title'|'description'|'body'|'stateId'|'priority'|'assigneeId'|'projectId'|'labelIds'>>
 export type SavedViewResource = 'issues'|'projects'|'initiativeProjects'|'pulse'
-export interface SavedView { id: UUID; slugId?: string; name: string; description: string; icon?: string; color?: string; resource?: SavedViewResource; scope: 'personal'|'team'|'workspace'; teamId?: UUID; ownerId?: UUID; favorite?: boolean; subscribed?: boolean; view: 'active'|'backlog'|'all'; filters: unknown[]; display: Record<string, unknown>; insights?: Record<string, unknown>; createdAt: string; updatedAt: string }
+export interface SavedView { id: UUID; slugId?: string; name: string; description: string; icon?: string; color?: string; resource?: SavedViewResource; scope: 'personal'|'team'|'workspace'; teamId?: UUID; ownerId?: UUID; favorite?: boolean; subscribed?: boolean; shareToken?: string; sharedAt?: string; view: 'active'|'backlog'|'all'; filters: unknown[]; display: Record<string, unknown>; insights?: Record<string, unknown>; createdAt: string; updatedAt: string }
 export interface SavedViewMutationInput { name?: string; description?: string; icon?: string; color?: string; resource?: SavedViewResource; scope?: 'personal'|'team'|'workspace'; teamId?: string; ownerId?: string; favorite?: boolean; subscribed?: boolean; view?: 'active'|'backlog'|'all'; filters?: unknown[]; display?: Record<string, unknown>; insights?: Record<string, unknown> }
 export type FilterField = 'status'|'priority'|'assignee'|'label'|'project'
 export interface FilterCondition { id: string; field: FilterField; operator: 'is'|'isNot'; value: string }

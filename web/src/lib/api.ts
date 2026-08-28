@@ -61,6 +61,7 @@ export function decideOAuthAuthorization(input: { clientId: string; redirectUri:
 export function revokeOAuthAuthorization(id: string): Promise<void> { return request(`/api/oauth/authorizations/${id}`, { method: 'DELETE' }) }
 export function fetchIntegrations(): Promise<IntegrationConnection[]> { return request('/api/integrations') }
 export function connectIntegration(provider: string, input: {name?:string;config?:Record<string,string>}): Promise<IntegrationConnection> { return request(`/api/integrations/${provider}`, jsonRequest('PUT', input)) }
+export function startIntegrationOAuth(provider: string): Promise<{provider:string;connectionId:string;state:string;authorizationURL:string}> { return request(`/api/integrations/${provider}/oauth/start`, jsonRequest('POST', {})) }
 export function disconnectIntegration(provider: string): Promise<void> { return request(`/api/integrations/${provider}`, { method: 'DELETE' }) }
 export function updateIntegrationConnection(provider:string,id:string,input:{name?:string;status?:string;config?:Record<string,string>}):Promise<IntegrationConnection>{return request(`/api/integrations/${provider}/${id}`,jsonRequest('PATCH',input))}
 export function disconnectIntegrationConnection(provider:string,id:string):Promise<void>{return request(`/api/integrations/${provider}/${id}`,{method:'DELETE'})}
@@ -86,6 +87,7 @@ export function deleteCustomerRequest(id: string): Promise<void> { return reques
 export function uploadCustomerRequestAttachment(id: string, file: File): Promise<Attachment> { const body = new FormData(); body.append('file', file); return request(`/api/customer-requests/${id}/attachments`, { method: 'POST', body }) }
 export function deleteCustomerRequestAttachment(id: string, attachmentId: string): Promise<void> { return request(`/api/customer-requests/${id}/attachments/${attachmentId}`, { method: 'DELETE' }) }
 export function createDocument(input: Partial<Pick<FlowDocument,'title'|'icon'|'content'|'contentState'|'contentData'|'projectIds'|'teamIds'|'issueId'|'subscriberIds'|'favorite'>> & {templateId?:string}): Promise<FlowDocument> { return request('/api/documents', jsonRequest('POST', input)) }
+export function listDocuments(filters: { q?: string; teamId?: string; archived?: 'true'|'false'|'all' } = {}): Promise<FlowDocument[]> { const query = new URLSearchParams(); if (filters.q) query.set('q', filters.q); if (filters.teamId) query.set('teamId', filters.teamId); if (filters.archived) query.set('archived', filters.archived); return request(`/api/documents${query.size ? `?${query}` : ''}`) }
 type DocumentTemplateMutation = Partial<Pick<DocumentTemplate,'teamId'|'name'|'description'|'title'|'icon'|'content'|'contentState'|'contentData'>>
 export function createDocumentTemplate(input: DocumentTemplateMutation & {teamId:string;name:string}):Promise<DocumentTemplate>{return request('/api/document-templates',jsonRequest('POST',input))}
 export function updateDocumentTemplate(id:string,input:DocumentTemplateMutation):Promise<DocumentTemplate>{return request(`/api/document-templates/${id}`,jsonRequest('PATCH',input))}
@@ -93,6 +95,10 @@ export function deleteDocumentTemplate(id:string):Promise<void>{return request(`
 export function updateDocument(id: string, input: Partial<Pick<FlowDocument,'title'|'icon'|'content'|'contentState'|'contentData'|'projectIds'|'teamIds'|'issueId'|'subscriberIds'|'favorite'>> & { archived?: boolean }): Promise<FlowDocument> { return request(`/api/documents/${id}`, jsonRequest('PATCH', input)) }
 export function deleteDocument(id: string): Promise<void> { return request(`/api/documents/${id}`, { method: 'DELETE' }) }
 export function restoreDocumentRevision(id: string, revisionId: string): Promise<FlowDocument> { return request(`/api/documents/${id}/restore/${revisionId}`, { method: 'POST' }) }
+export function createDocumentComment(id: string, input: Pick<Comment, 'body'|'bodyData'|'parentId'>): Promise<Comment> { return request(`/api/documents/${id}/comments`, jsonRequest('POST', input)) }
+export function updateDocumentComment(documentId: string, commentId: string, input: Pick<Comment, 'body'|'bodyData'> & { expectedVersion?: number }): Promise<Comment> { return request(`/api/documents/${documentId}/comments/${commentId}`, jsonRequest('PATCH', input)) }
+export function deleteDocumentComment(documentId: string, commentId: string): Promise<void> { return request(`/api/documents/${documentId}/comments/${commentId}`, { method: 'DELETE' }) }
+export function toggleDocumentCommentReaction(documentId: string, commentId: string, emoji: string): Promise<Comment> { return request(`/api/documents/${documentId}/comments/${commentId}/reactions`, jsonRequest('POST', { emoji })) }
 type ReleaseMutation=Partial<Pick<Release,'name'|'version'|'description'|'status'|'pipelineId'|'stage'|'commitSha'|'releaseNotes'|'targetDate'|'projectIds'|'issueIds'|'subscriberIds'|'resources'>>
 export function createRelease(input: ReleaseMutation & {name:string}): Promise<Release> { return request('/api/releases', jsonRequest('POST', input)) }
 export function listReleases(filters: {pipelineId?:string;status?:Release['status'];archived?:boolean|'all'} = {}): Promise<Release[]> { const query=new URLSearchParams(); if(filters.pipelineId)query.set('pipelineId',filters.pipelineId);if(filters.status)query.set('status',filters.status);if(filters.archived!==undefined)query.set('archived',String(filters.archived));return request(`/api/releases${query.size?`?${query}`:''}`) }
@@ -135,7 +141,15 @@ export function restoreTrashEntry(id: string): Promise<unknown> { return request
 export function purgeTrashEntry(id: string): Promise<void> { return request(`/api/trash/${id}`, { method: 'DELETE' }) }
 export function previewImport(file: File): Promise<ImportJob> { const body = new FormData(); body.append('file', file); return request('/api/imports/preview', { method: 'POST', body }) }
 export function commitImport(id: string, mapping: Record<string,string>, teamId: string): Promise<ImportJob> { return request(`/api/imports/${id}/commit`, jsonRequest('POST', { mapping, teamId })) }
+export function listImports(): Promise<ImportJob[]> { return request('/api/imports') }
+export function getImport(id: string): Promise<ImportJob> { return request(`/api/imports/${id}`) }
+export function cancelImport(id: string): Promise<ImportJob> { return request(`/api/imports/${id}/cancel`, { method: 'POST' }) }
+export function retryImport(id: string): Promise<ImportJob> { return request(`/api/imports/${id}/retry`, { method: 'POST' }) }
 export function createExport(format: 'json'|'csv', includePrivate: boolean): Promise<ExportJob> { return request('/api/exports', jsonRequest('POST', { format, includePrivate })) }
+export function listExports(): Promise<ExportJob[]> { return request('/api/exports') }
+export function getExport(id: string): Promise<ExportJob> { return request(`/api/exports/${id}`) }
+export function retryExport(id: string): Promise<ExportJob> { return request(`/api/exports/${id}/retry`, { method: 'POST' }) }
+export function getAnalyticsOverview(since?: string): Promise<Record<string, unknown>> { return request(`/api/analytics/overview${since ? `?since=${encodeURIComponent(since)}` : ''}`) }
 export function exportDownloadUrl(id: string) { return `/api/exports/${id}/download` }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -301,8 +315,8 @@ export function createInitiative(input: InitiativeMutationInput & { name: string
 export function updateInitiative(id: string, input: InitiativeMutationInput): Promise<Initiative> { return request(`/api/initiatives/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }) }
 export function deleteInitiative(id: string): Promise<void> { return request(`/api/initiatives/${id}`, { method: 'DELETE' }) }
 export function createInitiativeReminder(id: string, remindAt: string): Promise<Notification> { return request(`/api/initiatives/${id}/reminders`, jsonRequest('POST', { remindAt })) }
-export function createInitiativeResource(id: string, input: { type?: 'link'|'document'; title?: string; url: string }): Promise<InitiativeResource> { return request(`/api/initiatives/${id}/resources`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }) }
-export function updateInitiativeResource(id: string, resourceId: string, input: { type?: 'link'|'document'; title?: string; url?: string }): Promise<InitiativeResource> { return request(`/api/initiatives/${id}/resources/${resourceId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }) }
+export function createInitiativeResource(id: string, input: { type?: 'link'|'document'; title?: string; url?: string; documentId?: string }): Promise<InitiativeResource> { return request(`/api/initiatives/${id}/resources`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }) }
+export function updateInitiativeResource(id: string, resourceId: string, input: { type?: 'link'|'document'; title?: string; url?: string; documentId?: string }): Promise<InitiativeResource> { return request(`/api/initiatives/${id}/resources/${resourceId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }) }
 export function deleteInitiativeResource(id: string, resourceId: string): Promise<void> { return request(`/api/initiatives/${id}/resources/${resourceId}`, { method: 'DELETE' }) }
 export function createInitiativeComment(id: string, body: string): Promise<Comment> { return request(`/api/initiatives/${id}/comments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body }) }) }
 export function updateInitiativeComment(id: string, commentId: string, body: string): Promise<Comment> { return request(`/api/initiatives/${id}/comments/${commentId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body }) }) }
@@ -317,4 +331,6 @@ export function uploadInitiativeUpdateAttachment(id:string,updateId:string,file:
 export function deleteInitiativeUpdateAttachment(id:string,updateId:string,attachmentId:string):Promise<InitiativeUpdate>{return request(`/api/initiatives/${id}/updates/${updateId}/attachments/${attachmentId}`,{method:'DELETE'})}
 export function createSavedView(input: SavedViewMutationInput): Promise<SavedView> { return request('/api/views', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }) }
 export function updateSavedView(viewId: string, input: SavedViewMutationInput): Promise<SavedView> { return request(`/api/views/${viewId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }) }
+export function shareSavedView(viewId: string): Promise<{ view: SavedView; token: string; url: string }> { return request(`/api/views/${viewId}/share`, jsonRequest('POST', {})) }
+export function unshareSavedView(viewId: string): Promise<void> { return request(`/api/views/${viewId}/share`, { method: 'DELETE' }) }
 export function deleteSavedView(viewId: string): Promise<void> { return request(`/api/views/${viewId}`, { method: 'DELETE' }) }

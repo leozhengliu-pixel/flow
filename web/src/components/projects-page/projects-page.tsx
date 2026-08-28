@@ -416,6 +416,7 @@ export function ProjectsPage({
         }}
         onPropertyChange={updateProperty}
         onRetry={onRetry}
+        onUpdateProject={onUpdateProject ? async (projectId, input) => { await onUpdateProject(projectId, input) } : undefined}
         propertyOptions={propertyOptions}
       /></div>
       {sidebarOpen && <ProjectsInsightsSidebar activeFilter={insightFilter} mode={insightMode} onChangeFilter={setInsightFilter} onChangeMode={setInsightMode} projects={items} />}

@@ -596,6 +596,8 @@ export const zhCN: Record<string, string> = {
   'week': '周',
   'weekdays left': '个工作日剩余',
   'of capacity': '容量占用',
+  'Cycle capacity': '周期容量',
+  'Capacity by member and day': '按成员和工作日设置容量',
   'scope': '范围',
   'success': '完成率',
   'completed': '已完成',

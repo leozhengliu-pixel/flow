@@ -35,10 +35,11 @@ export type ViewsPageProps = {
   onUpdate: (viewId: string, input: SavedViewMutationInput) => Promise<SavedView>
   onToggleFavorite: (view: SavedView) => Promise<void>
   onSetSubscriptionEvents: (view: SavedView, events: string[]) => Promise<void>
+  onShare?: (view: SavedView) => Promise<string | undefined>
   viewHref: (view: SavedView) => string
 }
 
-export function ViewsPage({ data, resource, scope, views, onCreate, onDelete, onDuplicate, onEdit, onOpen, onOpenSidebar, onResourceChange, resourceHref, onUpdate, onToggleFavorite, onSetSubscriptionEvents, viewHref }: ViewsPageProps) {
+export function ViewsPage({ data, resource, scope, views, onCreate, onDelete, onDuplicate, onEdit, onOpen, onOpenSidebar, onResourceChange, resourceHref, onUpdate, onToggleFavorite, onSetSubscriptionEvents, onShare, viewHref }: ViewsPageProps) {
   const storageKey = `${data.workspace.urlKey}:views-directory:${scope.kind === 'team' ? scope.team.id : 'workspace'}:${resource}`
   const [ordering, setOrdering] = useState<Ordering>(() => readPreference(`${storageKey}:ordering`, scope.kind === 'team' ? 'owner' : 'name') as Ordering)
   const [direction, setDirection] = useState<Direction>(() => readPreference(`${storageKey}:direction`, 'asc') as Direction)
@@ -95,9 +96,9 @@ export function ViewsPage({ data, resource, scope, views, onCreate, onDelete, on
     </div>
     {orderedViews.length > 0 && <div className={styles.columns} style={{ '--views-columns': columnTemplate(properties) } as React.CSSProperties}>
       <SortButton active={ordering === 'name'} direction={direction} label="Name" onClick={() => updateOrdering('name')}/>
-      {properties.has('created') && <SortButton active={ordering === 'created'} direction={direction} label="Created" onClick={() => updateOrdering('created')}/>} 
-      {properties.has('updated') && <SortButton active={ordering === 'updated'} direction={direction} label="Updated" onClick={() => updateOrdering('updated')}/>} 
-      {properties.has('owner') && <SortButton active={ordering === 'owner'} direction={direction} label="Owner" onClick={() => updateOrdering('owner')}/>} 
+      {properties.has('created') && <SortButton active={ordering === 'created'} direction={direction} label="Created" onClick={() => updateOrdering('created')}/>}
+      {properties.has('updated') && <SortButton active={ordering === 'updated'} direction={direction} label="Updated" onClick={() => updateOrdering('updated')}/>}
+      {properties.has('owner') && <SortButton active={ordering === 'owner'} direction={direction} label="Owner" onClick={() => updateOrdering('owner')}/>}
     </div>}
     <section className={`${styles.content} ${!orderedViews.length ? styles.contentEmpty : ''}`}>
       {orderedViews.length > 0 && groups.map(group => <div className={styles.group} key={group.id}>
@@ -107,14 +108,14 @@ export function ViewsPage({ data, resource, scope, views, onCreate, onDelete, on
           <span>{group.kind === 'personal' ? '· Only visible to you' : '· Workspace'}</span>
           <button aria-label={`Create ${resource === 'issues' ? 'issue' : 'project'} view in ${group.label}`} onClick={onCreate} type="button"><FlowPlusIcon/></button>
         </div>}
-        {group.views.map(view => <ViewRow data={data} favorite={view.favorite || data.favorites.some(item => item.userId === data.viewer.id && item.resourceType === 'view' && item.resourceId === view.id)} href={viewHref(view)} key={view.id} onCopy={() => { void copyLink(view) }} onDelete={() => { void deleteView(view) }} onDuplicate={() => onDuplicate(view)} onEdit={() => onEdit(view)} onMove={destination => { void moveView(view, destination) }} onOpen={() => onOpen(view)} onSetSubscriptionEvents={events => { void onSetSubscriptionEvents(view, events) }} onToggleFavorite={() => { void onToggleFavorite(view) }} onUpdate={input => { void onUpdate(view.id, input) }} properties={properties} resource={resource} subscribed={view.subscribed || data.subscriptions.some(item => item.userId === data.viewer.id && item.resourceType === 'view' && item.resourceId === view.id)} subscription={data.subscriptions.find(item => item.userId === data.viewer.id && item.resourceType === 'view' && item.resourceId === view.id)} usersById={usersById} view={view}/>) }
+        {group.views.map(view => <ViewRow data={data} favorite={view.favorite || data.favorites.some(item => item.userId === data.viewer.id && item.resourceType === 'view' && item.resourceId === view.id)} href={viewHref(view)} key={view.id} onCopy={() => { void copyLink(view) }} onDelete={() => { void deleteView(view) }} onDuplicate={() => onDuplicate(view)} onEdit={() => onEdit(view)} onMove={destination => { void moveView(view, destination) }} onOpen={() => onOpen(view)} onSetSubscriptionEvents={events => { void onSetSubscriptionEvents(view, events) }} onShare={onShare ? async () => { const sharedURL = await onShare(view); if (sharedURL) { await navigator.clipboard.writeText(`${window.location.origin}${sharedURL}`); toast.success('Shared view link copied') } } : undefined} onToggleFavorite={() => { void onToggleFavorite(view) }} onUpdate={input => { void onUpdate(view.id, input) }} properties={properties} resource={resource} subscribed={view.subscribed || data.subscriptions.some(item => item.userId === data.viewer.id && item.resourceType === 'view' && item.resourceId === view.id)} subscription={data.subscriptions.find(item => item.userId === data.viewer.id && item.resourceType === 'view' && item.resourceId === view.id)} usersById={usersById} view={view}/>) }
       </div>)}
-      {!orderedViews.length && <ViewsEmptyState onCreate={onCreate} resource={resource}/>} 
+      {!orderedViews.length && <ViewsEmptyState onCreate={onCreate} resource={resource}/>}
     </section>
   </div>
 }
 
-function ViewRow({ data, favorite, href, onCopy, onDelete, onDuplicate, onEdit, onMove, onOpen, onSetSubscriptionEvents, onToggleFavorite, onUpdate, properties, resource, subscribed, subscription, usersById, view }: { data: BootstrapData; favorite: boolean; href: string; onCopy: () => void; onDelete: () => void; onDuplicate: () => void; onEdit: () => void; onMove: (input: SavedViewMutationInput) => void; onOpen: () => void; onSetSubscriptionEvents: (events: string[]) => void; onToggleFavorite: () => void; onUpdate: (input: SavedViewMutationInput) => void; properties: Set<DisplayProperty>; resource: ViewsResource; subscribed: boolean; subscription?: Subscription; usersById: Map<string, User>; view: SavedView }) {
+function ViewRow({ data, favorite, href, onCopy, onDelete, onDuplicate, onEdit, onMove, onOpen, onSetSubscriptionEvents, onShare, onToggleFavorite, onUpdate, properties, resource, subscribed, subscription, usersById, view }: { data: BootstrapData; favorite: boolean; href: string; onCopy: () => void; onDelete: () => void; onDuplicate: () => void; onEdit: () => void; onMove: (input: SavedViewMutationInput) => void; onOpen: () => void; onSetSubscriptionEvents: (events: string[]) => void; onShare?: () => Promise<void>; onToggleFavorite: () => void; onUpdate: (input: SavedViewMutationInput) => void; properties: Set<DisplayProperty>; resource: ViewsResource; subscribed: boolean; subscription?: Subscription; usersById: Map<string, User>; view: SavedView }) {
   const owner = usersById.get(view.ownerId ?? '') ?? data.viewer
   const subscriptionEvents = new Set(subscription?.events?.length ? subscription.events : subscribed ? ['issue-added', 'issue-completed'] : [])
   const toggleSubscriptionEvent = (event: string) => {
@@ -126,7 +127,7 @@ function ViewRow({ data, favorite, href, onCopy, onDelete, onDuplicate, onEdit, 
     <div className={styles.identity}><ViewGlyph className={styles.viewIcon} color={view.color} icon={view.icon}/><span data-i18n-ignore><strong>{view.name}</strong><small>{viewDescription(view, resource)}</small></span>{favorite && <Star className={styles.rowFavorite} fill="currentColor" size={11}/>}</div>
     {properties.has('created') && <time>{formatDate(view.createdAt)}</time>}
     {properties.has('updated') && <time>{formatDate(view.updatedAt)}</time>}
-    {properties.has('owner') && <OwnerMenu owner={owner} users={data.users} onChange={ownerId => onUpdate({ ownerId })}/>} 
+    {properties.has('owner') && <OwnerMenu owner={owner} users={data.users} onChange={ownerId => onUpdate({ ownerId })}/>}
     <button aria-label="View actions" className={styles.more} onClick={event => { event.preventDefault(); event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); event.currentTarget.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: event.clientX || rect.right, clientY: event.clientY || rect.bottom })) }} type="button"><Ellipsis size={15}/></button>
   </a>
   return <ContextMenu.Root><ContextMenu.Trigger asChild>{row}</ContextMenu.Trigger><ContextMenu.Portal><ContextMenu.Content className={styles.contextMenu} onKeyDown={event => { if (event.altKey && event.key.toLowerCase() === 'f') { event.preventDefault(); onToggleFavorite() } }}>
@@ -141,6 +142,7 @@ function ViewRow({ data, favorite, href, onCopy, onDelete, onDuplicate, onEdit, 
       <SubscriptionEventItem checked={subscriptionEvents.has('issue-completed')} label={`${resource === 'issues' ? 'An issue is' : 'A project is'} marked completed or canceled`} onSelect={() => toggleSubscriptionEvent('issue-completed')}/>
     </ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
     <ViewMenuItem icon={<Copy/>} label="Copy link" onSelect={onCopy}/>
+    {onShare && <ViewMenuItem icon={view.shareToken ? <LockKeyhole/> : <Copy/>} label={view.shareToken ? 'Disable public link' : 'Share view'} onSelect={() => { void onShare() }}/>}
     <ContextMenu.Separator className={styles.separator}/>
     <ViewMenuItem danger icon={<Trash2/>} label="Delete" onSelect={onDelete}/>
   </ContextMenu.Content></ContextMenu.Portal></ContextMenu.Root>

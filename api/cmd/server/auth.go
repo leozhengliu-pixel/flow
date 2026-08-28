@@ -178,7 +178,7 @@ func publicAuthPath(path string) bool {
 	if path == "/mcp" || path == "/mcp/readonly" || path == "/oauth/register" || path == "/oauth/token" || path == "/oauth/revoke" || strings.HasPrefix(path, "/.well-known/oauth-") || strings.HasPrefix(path, "/api/mcp/uploads/") {
 		return true
 	}
-	return path == "/api/health" || path == "/api/oauth/token" || path == "/api/auth/register" || path == "/api/auth/verify-email" || path == "/api/auth/resend-verification" || path == "/api/auth/login" || path == "/api/auth/logout" || path == "/api/auth/session" || path == "/api/auth/forgot-password" || path == "/api/auth/reset-password" || path == "/api/auth/providers" || strings.HasPrefix(path, "/api/auth/google/") || strings.HasPrefix(path, "/api/auth/oidc/") || strings.HasPrefix(path, "/api/auth/saml/") || strings.HasPrefix(path, "/api/invitations/preview/") || strings.HasPrefix(path, "/api/calendar/cycles/") || strings.HasPrefix(path, "/api/integrations/") && strings.HasSuffix(path, "/webhook")
+	return path == "/api/health" || path == "/api/oauth/token" || path == "/api/auth/register" || path == "/api/auth/verify-email" || path == "/api/auth/resend-verification" || path == "/api/auth/login" || path == "/api/auth/logout" || path == "/api/auth/session" || path == "/api/auth/forgot-password" || path == "/api/auth/reset-password" || path == "/api/auth/providers" || strings.HasPrefix(path, "/api/auth/google/") || strings.HasPrefix(path, "/api/auth/oidc/") || strings.HasPrefix(path, "/api/auth/saml/") || strings.HasPrefix(path, "/api/invitations/preview/") || strings.HasPrefix(path, "/api/calendar/cycles/") || strings.HasPrefix(path, "/api/integrations/") && (strings.HasSuffix(path, "/webhook") || strings.HasSuffix(path, "/oauth/callback")) || strings.HasPrefix(path, "/api/shared/views/")
 }
 
 func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Request, user domain.User) bool {
@@ -490,6 +490,53 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		if r.Method == http.MethodPatch {
 			var input domain.ProjectMutationInput
 			return peekRequestJSON(r, &input) && projectMutationAllowed(input)
+		}
+		return true
+	case "documents":
+		// Documents inherit visibility from their team scope. Keep both the
+		// document itself and any team/project bindings inside the viewer's
+		// allowed projection; this also protects comment and restore routes.
+		documentAllowed := func(id string) bool {
+			return slices.ContainsFunc(data.Documents, func(item domain.Document) bool {
+				if item.ID != id && item.SlugID != id {
+					return false
+				}
+				return len(item.TeamIDs) == 0 || slices.ContainsFunc(item.TeamIDs, teamAllowed)
+			})
+		}
+		if len(parts) == 2 && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+			return true
+		}
+		if len(parts) == 2 && r.Method == http.MethodPost {
+			var input documentInput
+			if !peekRequestJSON(r, &input) {
+				return false
+			}
+			if input.TeamIDs != nil && slices.ContainsFunc(*input.TeamIDs, func(id string) bool { return !teamAllowed(strings.TrimSpace(id)) }) {
+				return false
+			}
+			if input.ProjectIDs != nil && slices.ContainsFunc(*input.ProjectIDs, func(id string) bool { return !projectAllowed(strings.TrimSpace(id)) }) {
+				return false
+			}
+			if input.IssueID != nil && strings.TrimSpace(*input.IssueID) != "" && !issueAllowed(strings.TrimSpace(*input.IssueID)) {
+				return false
+			}
+			return true
+		}
+		if len(parts) < 3 || !documentAllowed(parts[2]) {
+			return false
+		}
+		if r.Method == http.MethodPatch {
+			var input documentInput
+			if !peekRequestJSON(r, &input) {
+				return false
+			}
+			if input.TeamIDs != nil && slices.ContainsFunc(*input.TeamIDs, func(id string) bool { return !teamAllowed(strings.TrimSpace(id)) }) {
+				return false
+			}
+			if input.ProjectIDs != nil && slices.ContainsFunc(*input.ProjectIDs, func(id string) bool { return !projectAllowed(strings.TrimSpace(id)) }) {
+				return false
+			}
 		}
 		return true
 	case "releases":

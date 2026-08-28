@@ -32,11 +32,12 @@ interface DescriptionEditorProps {
   ariaLabel?: string
   collaboration?: {
     workspaceKey: string
-    issueId: string
+    issueId?: string
     documentId: string
     contentState?: string
     viewer: User
     onPersist: (snapshot: DescriptionSnapshot, updateIds: string[]) => Promise<void>
+    onPresence?: (users: User[]) => void
   }
 }
 
@@ -58,7 +59,9 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
   const persistRef = useRef<() => Promise<void>>(async () => undefined)
   const persistChainRef = useRef<Promise<void>>(Promise.resolve())
   const persistRetryRef = useRef(0)
+  const presenceRef = useRef(collaboration?.onPresence)
   submitRef.current = onSubmit
+  presenceRef.current = collaboration?.onPresence
   const [slash, setSlash] = useState<SlashCommandState>(closedSlash)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [menuPosition, setMenuPosition] = useState({ left: 14, top: 44 })
@@ -213,12 +216,22 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
   }, [collaborationSession, editor, state, value])
   useEffect(() => {
     if (!collaborationSession) return
+    const syncPresence = () => {
+      const users = [...collaborationSession.provider.awareness.getStates().values()]
+        .map(state => state.user as User | undefined)
+        .filter((user): user is User => Boolean(user))
+      presenceRef.current?.(users)
+    }
+    collaborationSession.provider.awareness.on('change', syncPresence)
+    syncPresence()
     window.clearTimeout(destroyTimerRef.current)
     startTimerRef.current = window.setTimeout(() => collaborationSession.provider.start(), 0)
     return () => {
       window.clearTimeout(startTimerRef.current)
       window.clearTimeout(persistTimerRef.current)
       collaborationSession.provider.stop()
+      collaborationSession.provider.awareness.off('change', syncPresence)
+      presenceRef.current?.([])
       destroyTimerRef.current = window.setTimeout(() => {
         collaborationSession.provider.destroy()
         collaborationSession.document.destroy()
