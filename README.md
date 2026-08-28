@@ -134,20 +134,6 @@ The workflow builds `linux/amd64`, `linux/arm64`, `linux/arm/v7`,
 `linux/ppc64le`, and `linux/s390x`, then verifies that the `latest` package can
 be inspected without registry credentials.
 
-### Development seed (optional)
-
-Fresh deployments start without a workspace and open the workspace creation
-flow. To load the local demo dataset instead, set `FLOW_SEED_PROFILE=zentao-demo`
-before the first API start. The demo account is intended only for development:
-
-```text
-Email:    leo.zheng.liu@example.com
-Password: flow-demo
-```
-
-Set `FLOW_SEED_PASSWORD` before the first API start to use a different seed
-password. Never deploy the demo profile with the default credential.
-
 ## Configuration
 
 Flow reads configuration from environment variables passed to the API process.
@@ -157,12 +143,10 @@ Flow reads configuration from environment variables passed to the API process.
 | `FLOW_DATABASE_DRIVER` | `sqlite` | `sqlite`, `postgres`, or `mysql`. |
 | `FLOW_DATABASE_PATH` | `data/flow.db` | SQLite database path. |
 | `FLOW_DATABASE_URL` | unset | PostgreSQL/MySQL connection URL. |
-| `FLOW_SEED_PROFILE` | `none` | `none` for first-run workspace onboarding, `zentao-demo` for optional demo data, or `base` for the small legacy seed. |
 | `FLOW_REDIS_MODE` | `disabled` | `disabled`, `standalone`, or `cluster`; PostgreSQL/MySQL is required when enabled. |
 | `FLOW_REDIS_URL` | unset | Redis connection URL; alternatively use `FLOW_REDIS_ADDRS`. |
 | `FLOW_STORAGE_DRIVER` | `local` | `local` or `s3`. |
 | `FLOW_STORAGE_LOCAL_PATH` | `data/uploads` | Local attachment storage directory. |
-| `FLOW_SEED_PASSWORD` | `flow-demo` | Password for the optional seeded demo account. |
 | `FLOW_APP_URL` | unset | Public web origin used in account emails. |
 | `FLOW_SMTP_HOST` | unset | SMTP server hostname. |
 | `FLOW_SMTP_PORT` | `587` | SMTP server port. |

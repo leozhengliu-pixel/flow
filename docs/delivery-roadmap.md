@@ -27,7 +27,7 @@ Deliverables:
 - Workspace and team navigation
 - Light and dark themes
 - Shared dialogs, menus, property pickers, and toasts
-- Local seed data and API conventions
+- Local test fixtures and API conventions
 - Screenshot-based visual regression harness
 
 Exit criteria:

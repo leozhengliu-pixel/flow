@@ -91,7 +91,6 @@ func Load() (Config, error) {
 			Driver:          value("FLOW_DATABASE_DRIVER", "sqlite"),
 			URL:             secret("FLOW_DATABASE_URL"),
 			Path:            value("FLOW_DATABASE_PATH", value("FLOW_DB_PATH", "data/flow.db")),
-			SeedProfile:     value("FLOW_SEED_PROFILE", "none"),
 			MaxOpenConns:    integer("FLOW_DATABASE_MAX_OPEN_CONNS", 0),
 			MaxIdleConns:    integer("FLOW_DATABASE_MAX_IDLE_CONNS", 0),
 			ConnMaxLifetime: duration("FLOW_DATABASE_CONN_MAX_LIFETIME", 30*time.Minute),
