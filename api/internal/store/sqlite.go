@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -24,6 +25,7 @@ type SQLiteStore struct {
 	viewer           domain.User
 	realtimeSink     func(string, domain.RealtimeEvent)
 	coordinator      WorkspaceCoordinator
+	seedProfile      string
 }
 
 type WorkspaceCoordinator interface {
@@ -31,7 +33,11 @@ type WorkspaceCoordinator interface {
 }
 
 func OpenSQLite(path string) (*SQLiteStore, error) {
-	return OpenDatabase(DatabaseConfig{Driver: "sqlite", Path: path, MaxOpenConns: 1})
+	profile := strings.TrimSpace(os.Getenv("FLOW_SEED_PROFILE"))
+	if profile == "" {
+		profile = "base"
+	}
+	return OpenDatabase(DatabaseConfig{Driver: "sqlite", Path: path, SeedProfile: profile, MaxOpenConns: 1})
 }
 
 func (s *SQLiteStore) Close() error { return s.db.Close() }
@@ -250,7 +256,12 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	var raw []byte
 	err = s.db.QueryRowContext(ctx, `SELECT data FROM workspace_state WHERE id = 1`).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
-		data := Seed()
+		if isEmptySeedProfile(s.seedProfile) {
+			s.viewer = bootstrapViewer()
+			s.lastWorkspaceKey = ""
+			return nil
+		}
+		data := seedForProfile(s.seedProfile)
 		ensureSavedViewSlugIDs(&data)
 		normalize(&data)
 		s.workspaces[data.Workspace.URLKey] = data
@@ -282,6 +293,19 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	s.lastWorkspaceKey = data.Workspace.URLKey
 	s.viewer = data.Viewer
 	return s.persistWorkspace(ctx, data.Workspace.URLKey, data, nil)
+}
+
+func isEmptySeedProfile(profile string) bool {
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "none", "empty", "off", "false":
+		return true
+	default:
+		return false
+	}
+}
+
+func bootstrapViewer() domain.User {
+	return domain.User{ID: "usr_local", Name: "Flow user", DisplayName: "Flow user", Active: true, EmailVerified: true}
 }
 
 func ensureProjectMilestoneFields(data *domain.Bootstrap) bool {

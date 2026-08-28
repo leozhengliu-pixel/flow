@@ -24,6 +24,7 @@ automatically at startup for all three drivers.
 | `FLOW_DATABASE_MAX_OPEN_CONNS` | driver default | `1` for SQLite, `20` otherwise. |
 | `FLOW_DATABASE_MAX_IDLE_CONNS` | driver default | `0` for SQLite, `5` otherwise. |
 | `FLOW_DATABASE_CONN_MAX_LIFETIME` | `30m` | Go duration for pooled connections. |
+| `FLOW_SEED_PROFILE` | `none` | Fresh deployments use `none` and ask the first user to create a workspace. Set `zentao-demo` only for an intentional demo dataset. |
 
 Examples:
 
