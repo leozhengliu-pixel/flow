@@ -581,3 +581,10 @@
     gap: 4px;
   }
 }
+.flow-inbox-review-detail{padding:28px;max-width:680px;color:var(--theme-text-primary)}
+.flow-inbox-review-detail header{display:flex;align-items:flex-start;gap:12px;padding-bottom:18px;border-bottom:.5px solid var(--theme-border)}
+.flow-inbox-review-detail header h2{margin:4px 0 0;font-size:20px;line-height:26px}
+.flow-inbox-review-detail header small,.flow-inbox-review-detail>p,.flow-inbox-review-detail dt{color:var(--theme-text-secondary);font-size:12px}
+.flow-inbox-review-provider{width:30px;height:30px;display:grid;place-items:center;border-radius:7px;background:var(--theme-surface-active);font-size:10px;font-weight:600}
+.flow-inbox-review-provider.github{color:var(--theme-text-primary)}.flow-inbox-review-provider.gitlab{color:#e86a3a}
+.flow-inbox-review-detail dl{display:grid;grid-template-columns:100px 1fr;gap:10px;margin:22px 0}.flow-inbox-review-detail dl div{display:contents}.flow-inbox-review-detail dt{margin:0}.flow-inbox-review-detail dd{margin:0;font-size:12px}.flow-inbox-review-detail>button{height:30px;padding:0 12px;border:0;border-radius:7px;background:var(--accent-primary);color:#fff;font:500 12px inherit}

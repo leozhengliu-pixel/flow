@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import type { ActivityEvent, BootstrapData, Issue, IssueRelationType, IssueUpdateInput, Notification, Project, User } from '@/types/flow'
+import type { ActivityEvent, BootstrapData, CodeReview, Issue, IssueRelationType, IssueUpdateInput, Notification, Project, User } from '@/types/flow'
 import { DetailPane } from '@/components/detail/detail-pane'
 import { NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import type { SubIssueInput } from '@/components/issue/sub-issue-editor'
@@ -29,12 +29,14 @@ interface InboxProjection extends InboxNotificationRowData {
   initiativeIds: string[]
   issuePriority: number
   issueStatusType: Issue['state']['type']
+  reviewId?: string
 }
 
 export interface InboxAppPageProps {
   data: BootstrapData
   onOpenIssue: (issue: Issue) => void
   onOpenProject?: (project: Project) => void
+  onOpenReview?: (review: CodeReview) => void
   onSubscriberChange?: (issue: Issue, subscribed: boolean) => Promise<void> | void
   onUpdateIssue?: (issue: Issue, input: IssueUpdateInput) => Promise<void>
   onDeleteIssue?: (issue: Issue) => Promise<void>
@@ -52,7 +54,7 @@ export interface InboxAppPageProps {
   onOpenSidebar?: () => void
 }
 
-export function InboxAppPage({ data, onOpenIssue, onOpenProject, onSubscriberChange, onUpdateIssue, onDeleteIssue, onCreateRelation, onDeleteRelation, onCreateSubIssue, onReactIssue, onCreateComment, onEditComment, onDeleteComment, onReactComment, onUploadAttachment, onDeleteAttachment, onCopyIssueLink, onOpenSidebar }: InboxAppPageProps) {
+export function InboxAppPage({ data, onOpenIssue, onOpenProject, onOpenReview, onSubscriberChange, onUpdateIssue, onDeleteIssue, onCreateRelation, onDeleteRelation, onCreateSubIssue, onReactIssue, onCreateComment, onEditComment, onDeleteComment, onReactComment, onUploadAttachment, onDeleteAttachment, onCopyIssueLink, onOpenSidebar }: InboxAppPageProps) {
   const source = useMemo(() => projectInbox(data), [data])
   const issueById = useMemo(() => new Map(data.issues.map(issue => [issue.id, issue])), [data.issues])
   const [notifications, setNotifications] = useState<InboxProjection[]>(source)
@@ -165,6 +167,10 @@ export function InboxAppPage({ data, onOpenIssue, onOpenProject, onSubscriberCha
       const project = projection?.projectId ? data.projects.find(item => item.id === projection.projectId) : undefined
       if (issue) onOpenIssue(issue)
       else if (project) onOpenProject?.(project)
+      else if (projection?.reviewId) {
+        const review = data.reviews.find(item => item.id === projection.reviewId)
+        if (review) onOpenReview?.(review)
+      }
     }}
     onCopyIdentifier={notification => void copyText(notification.identifier)}
     onCopyLink={onCopyIssueLink ? notification => {
@@ -187,6 +193,8 @@ export function InboxAppPage({ data, onOpenIssue, onOpenProject, onSubscriberCha
       const projection = notifications.find(item => item.id === notification.id)
       const issue = projection ? issueById.get(projection.issueId) : undefined
       const project = projection?.projectId ? data.projects.find(item => item.id === projection.projectId) : undefined
+      const review = projection?.reviewId ? data.reviews.find(item => item.id === projection.reviewId) : undefined
+      if (projection && review && !issue) return { content: <InboxReviewDetail review={review} onOpen={() => onOpenReview?.(review)} /> }
       if (projection && project && !issue) return { content: <ProjectReminderDetail overdue={project.health==='noUpdate'} project={project} onOpen={() => onOpenProject?.(project)}/> }
       if (!projection || !issue) return { content: <InboxMissingIssue /> }
       return {
@@ -239,6 +247,11 @@ function readInboxDisplayOptions(): InboxDisplayOptions {
 function projectInbox(data: BootstrapData): InboxProjection[] {
   const issues = new Map(data.issues.map(issue => [issue.id, issue]))
   return data.notifications.flatMap<InboxProjection>(notification => {
+    if (notification.reviewId) {
+      const review = data.reviews.find(item => item.id === notification.reviewId)
+      if (!review || notification.deletedAt || notification.archivedAt) return []
+      return [{ id: notification.id, href: `/${data.workspace.urlKey}/review/${review.slugId}`, issueId: '', sourceType: 'activity' as const, sourceId: notification.sourceId, notificationType: 'codeReview', actorId: notification.actor.id, actor: notification.actor.displayName, actorAvatarUrl: notification.actor.avatarUrl, kind: 'generic' as const, identifier: `${review.provider}#${review.number}`, title: review.title, body: `${notification.actor.displayName} requested your review`, timeLabel: relativeTime(notification.updatedAt), timestamp: notification.updatedAt, read: Boolean(notification.readAt), favorite: notification.favorite, initiativeIds: [], issuePriority: 0, issueStatusType: 'started' as const, reviewId: review.id }]
+    }
     const issue = notification.issueId ? issues.get(notification.issueId) : undefined
     const reminderProject = notification.projectId ? data.projects.find(project => project.id === notification.projectId) : undefined
     if (!issue && reminderProject && (notification.type === 'projectUpdateReminder' || notification.type === 'projectUpdateDueReminder') && !notification.deletedAt && !notification.archivedAt) {
@@ -339,6 +352,10 @@ function describeActivity(event: ActivityEvent, issue: Issue, viewer: User) {
 
 function InboxMissingIssue() {
   return <div className="flow-inbox-detail-state flow-inbox-detail-state--error" role="alert"><strong>Issue is no longer available</strong></div>
+}
+
+function InboxReviewDetail({ review, onOpen }: { review: CodeReview; onOpen: () => void }) {
+  return <div className="flow-inbox-review-detail"><header><span className={`flow-inbox-review-provider ${review.provider}`}>{review.provider === 'github' ? 'GH' : 'GL'}</span><div><small>{review.provider === 'github' ? 'GitHub pull request' : 'GitLab merge request'}</small><h2>{review.title}</h2></div></header><p>{review.author.displayName} · {review.repositoryName || 'External repository'} #{review.number}</p><dl><div><dt>Status</dt><dd>{review.status}</dd></div><div><dt>Reviewers</dt><dd>{review.reviewerIds.length || 'None'}</dd></div><div><dt>Checks</dt><dd>{review.checks.length ? review.checks.map(check => check.status).join(', ') : 'No checks reported'}</dd></div></dl><button type="button" onClick={onOpen}>Open review</button></div>
 }
 
 function ProjectReminderDetail({ project, onOpen, overdue }: { project: Project; onOpen: () => void; overdue: boolean }) {

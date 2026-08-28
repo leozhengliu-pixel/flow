@@ -56,7 +56,7 @@ export interface Attachment { id: UUID; issueId: UUID; title: string; url: strin
 export interface Comment { id: UUID; version: number; body: string; bodyData?: Record<string, unknown>; parentId?: UUID; reactions: Record<string, UUID[]>; createdAt: string; editedAt?: string; user: User }
 export interface ActivityEvent { id: UUID; type: string; createdAt: string; actor: User; metadata: Record<string, string> }
 export interface Notification {
-  id: UUID; recipientId: UUID; type: string; sourceType: string; sourceId: UUID; issueId?: UUID; projectId?: UUID
+  id: UUID; recipientId: UUID; type: string; sourceType: string; sourceId: UUID; issueId?: UUID; projectId?: UUID; reviewId?: UUID
   commentId?: UUID; activityId?: UUID; actor: User; category: NotificationCategory; groupKey: string; occurrenceCount: number; latestActorIds: UUID[]
   readAt?: string; favoritedAt?: string; archivedAt?: string; deletedAt?: string; snoozedUntil?: string
   favorite: boolean; createdAt: string; updatedAt: string

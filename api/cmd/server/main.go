@@ -53,6 +53,7 @@ type server struct {
 }
 
 func main() {
+	initLogging()
 	applicationConfig, err := appconfig.Load()
 	if err != nil {
 		log.Fatal(err)
@@ -278,6 +279,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/integrations", s.listIntegrations)
 	mux.HandleFunc("PUT /api/integrations/{provider}", s.connectIntegration)
 	mux.HandleFunc("DELETE /api/integrations/{provider}", s.disconnectIntegration)
+	mux.HandleFunc("POST /api/integrations/{provider}/webhook", s.codeWebhook)
 	mux.HandleFunc("PATCH /api/integrations/{provider}/{id}", s.updateIntegration)
 	mux.HandleFunc("DELETE /api/integrations/{provider}/{id}", s.disconnectIntegrationConnection)
 	mux.HandleFunc("GET /api/reviews", s.listReviews)
@@ -4296,12 +4298,5 @@ func (s *server) cors(next http.Handler) http.Handler {
 			return
 		}
 		next.ServeHTTP(w, r)
-	})
-}
-func requestLog(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		started := time.Now()
-		next.ServeHTTP(w, r)
-		log.Printf("%s %s %s", r.Method, r.URL.Path, time.Since(started).Round(time.Millisecond))
 	})
 }
