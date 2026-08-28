@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CircleHelp } from "lucide-react";
 import {
   addFavorite,
@@ -129,26 +129,8 @@ import { CommandMenu } from "@/components/command/command-menu";
 import { ErrorState, SkeletonRows } from "@/components/state/state-view";
 import { BulkActionBar } from "@/components/issue/bulk-action-bar";
 import { toast } from "sonner";
-import { InboxAppPage } from "@/components/inbox/inbox-app-page";
-import {
-  ProjectsPage,
-  type ProjectCreateInput,
-  type ProjectMutationInput,
-} from "@/components/projects-page/projects-page";
-import { ProjectDetailPage } from "@/components/project-detail/project-detail-page";
-import { MyIssuesPage } from "@/components/my-issues";
-import { IssueExplorerPage } from "@/components/issue-explorer";
-import { ViewsPage } from "@/components/views-page";
-import { InitiativesPage } from "@/components/initiatives/initiatives-page";
-import { InitiativeDetailPage } from "@/components/initiatives/initiative-detail-page";
-import { CyclesPage } from "@/components/cycles/cycles-page";
-import { CycleDetailPage } from "@/components/cycles/cycle-detail-page";
-import { PulsePage } from "@/components/pulse/pulse-page";
-import { TeamArchivePage } from "@/components/workspace-operations/team-archive-page";
-import { ReviewsPage } from "@/components/reviews/reviews-page";
-import { AgentPage } from "@/components/agent/agent-page";
-import { AgentChatPanel } from "@/components/agent/agent-chat-panel";
-import { LoopsPage } from "@/components/loops/loops-page";
+import type { ProjectCreateInput, ProjectMutationInput } from "@/components/projects-page/projects-page";
+import { lazyPage } from "@/lib/lazy-page";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -217,14 +199,30 @@ import { WorkspaceOnboarding } from "@/components/workspace/workspace-onboarding
 import { WorkspaceDirectoryPage } from "@/components/workspace-directory/workspace-directory-page";
 import { TeamCreatePage } from "@/components/workspace-directory/team-create-page";
 import { SettingsPage } from "@/components/settings/settings-page";
-import { AuthPage } from "@/components/auth/auth-page";
-import { OAuthAuthorizePage } from "@/components/auth/oauth-authorize-page";
+const AuthPage = lazyPage(() => import("@/components/auth/auth-page"), "AuthPage");
+const OAuthAuthorizePage = lazyPage(() => import("@/components/auth/oauth-authorize-page"), "OAuthAuthorizePage");
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { useDesktopNotifications } from "@/hooks/use-desktop-notifications";
-import { WorkspaceSearchPage } from "@/components/search/workspace-search-page";
-import { WorkspaceOperationsPage } from "@/components/workspace-operations/workspace-operations-page";
-import { DocumentPage } from "@/components/documents/document-page";
-import { CustomerDetailPage } from "@/components/customer-detail/customer-detail-page";
+const WorkspaceSearchPage = lazyPage(() => import("@/components/search/workspace-search-page"), "WorkspaceSearchPage");
+const WorkspaceOperationsPage = lazyPage(() => import("@/components/workspace-operations/workspace-operations-page"), "WorkspaceOperationsPage");
+const DocumentPage = lazyPage(() => import("@/components/documents/document-page"), "DocumentPage");
+const CustomerDetailPage = lazyPage(() => import("@/components/customer-detail/customer-detail-page"), "CustomerDetailPage");
+const InboxAppPage = lazyPage(() => import("@/components/inbox/inbox-app-page"), "InboxAppPage");
+const ProjectsPage = lazyPage(() => import("@/components/projects-page/projects-page"), "ProjectsPage");
+const ProjectDetailPage = lazyPage(() => import("@/components/project-detail/project-detail-page"), "ProjectDetailPage");
+const MyIssuesPage = lazyPage(() => import("@/components/my-issues"), "MyIssuesPage");
+const IssueExplorerPage = lazyPage(() => import("@/components/issue-explorer"), "IssueExplorerPage");
+const ViewsPage = lazyPage(() => import("@/components/views-page/views-page"), "ViewsPage");
+const InitiativesPage = lazyPage(() => import("@/components/initiatives/initiatives-page"), "InitiativesPage");
+const InitiativeDetailPage = lazyPage(() => import("@/components/initiatives/initiative-detail-page"), "InitiativeDetailPage");
+const CyclesPage = lazyPage(() => import("@/components/cycles/cycles-page"), "CyclesPage");
+const CycleDetailPage = lazyPage(() => import("@/components/cycles/cycle-detail-page"), "CycleDetailPage");
+const PulsePage = lazyPage(() => import("@/components/pulse/pulse-page"), "PulsePage");
+const TeamArchivePage = lazyPage(() => import("@/components/workspace-operations/team-archive-page"), "TeamArchivePage");
+const ReviewsPage = lazyPage(() => import("@/components/reviews/reviews-page"), "ReviewsPage");
+const AgentPage = lazyPage(() => import("@/components/agent/agent-page"), "AgentPage");
+const AgentChatPanel = lazyPage(() => import("@/components/agent/agent-chat-panel"), "AgentChatPanel");
+const LoopsPage = lazyPage(() => import("@/components/loops/loops-page"), "LoopsPage");
 import { labelsForResource } from "@/lib/labels";
 import { applyTheme } from "@/lib/theme";
 
@@ -249,6 +247,15 @@ function App() {
     [createStateId, setCreateStateId] = useState<string>(),
     [createProjectId, setCreateProjectId] = useState<string>(),
     [createProjectMilestoneId, setCreateProjectMilestoneId] = useState<string>();
+  const createStateRef = useRef<string | undefined>(undefined);
+  const openCreateIssue = useCallback((stateId?: string, preferBacklog = false) => {
+    const next = stateId || (preferBacklog
+      ? data?.states.find(state => state.id === "state_backlog" || state.type === "backlog")?.id || "state_backlog"
+      : data?.states.find(state => state.type === "unstarted")?.id);
+    createStateRef.current = next;
+    setCreateStateId(next);
+    setCreateOpen(true);
+  }, [data]);
   const shortcutSequence = useRef<{ key: string; at: number }>({ key: "", at: 0 });
   const recordedResource = useRef("");
   const requestedWorkspaceKey =
@@ -388,12 +395,12 @@ function App() {
       shortcutSequence.current = { key: "", at: 0 };
       if (pressed === "q" || pressed === "c") {
         e.preventDefault();
-        setCreateOpen(true);
+        openCreateIssue();
       }
     };
     addEventListener("keydown", key);
     return () => removeEventListener("keydown", key);
-  }, [data, navigateTo]);
+  }, [data, navigateTo, openCreateIssue]);
   useEffect(()=>{const params=new URLSearchParams(location.search);if(location.pathname.includes('/issues/')&&params.get('create')==='1'&&params.get('template'))setCreateOpen(true)},[location.pathname,location.search])
   const selectedIssue =
     route.kind === "issue"
@@ -2919,7 +2926,7 @@ function App() {
         open={mobileSidebarOpen}
         onOpenChange={setMobileSidebarOpen}
         onSearch={() => navigateTo(searchPath(data.workspace.urlKey))}
-        onCreate={() => setCreateOpen(true)}
+        onCreate={() => openCreateIssue()}
         onOpenSettings={(page = "workspace") =>
           navigateTo(settingsPath(data.workspace.urlKey, data.viewerRole === "admin" ? page : "preferences"))
         }
@@ -2933,6 +2940,7 @@ function App() {
           navigateTo("/login", { replace: true });
         }}
       />
+      <Suspense fallback={<main className="main-panel"><SkeletonRows /></main>}>
       {page === "search" && route.kind === "search" && (
         <WorkspaceSearchPage
           onOpenSidebar={() => setMobileSidebarOpen(true)}
@@ -3110,7 +3118,7 @@ function App() {
             onUpdateIssue={updateIssueById}
             renderIssuePreview={renderIssuePreview}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
-            onCreateIssue={()=>setCreateOpen(true)}
+            onCreateIssue={()=>openCreateIssue()}
             onReload={refreshActivity}
             onNavigate={navigateTo}
           />
@@ -3212,6 +3220,7 @@ function App() {
           onOpenSidebar={() => setMobileSidebarOpen(true)}
           onOpenIssue={openIssue}
           onOpenProject={openProject}
+          onOpenReview={review => navigateTo(reviewPath(data.workspace.urlKey, review))}
           onSubscriberChange={async (issue, subscribed) => {
             await updateIssueById(issue, {
               subscriberIds: subscribed
@@ -3246,7 +3255,7 @@ function App() {
           onNavigateView={(_view, href) => navigateTo(href)}
           onOpenSidebar={() => setMobileSidebarOpen(true)}
           onOpenIssue={openIssue}
-          onCreateIssue={() => setCreateOpen(true)}
+          onCreateIssue={() => openCreateIssue()}
           onUpdateIssue={updateIssueFromPage}
           onUpdateIssues={updateIssuesFromPage}
           onDeleteIssues={deleteIssuesFromPage}
@@ -3277,8 +3286,7 @@ function App() {
           onOpenIssue={openIssue}
           renderIssuePreview={renderIssuePreview}
           onCreateIssue={(stateId) => {
-            setCreateStateId(stateId);
-            setCreateOpen(true);
+            openCreateIssue(stateId, true);
           }}
           onUpdateIssue={updateIssueFromPage}
           onUpdateIssues={updateIssuesFromPage}
@@ -3328,8 +3336,7 @@ function App() {
           onOpenIssue={openIssue}
           renderIssuePreview={renderIssuePreview}
           onCreateIssue={(stateId) => {
-            setCreateStateId(stateId);
-            setCreateOpen(true);
+            openCreateIssue(stateId, true);
           }}
           onUpdateIssue={updateIssueFromPage}
           onUpdateIssues={updateIssuesFromPage}
@@ -3390,8 +3397,7 @@ function App() {
             onOpenIssue={openIssue}
             renderIssuePreview={renderIssuePreview}
             onCreateIssue={(stateId) => {
-              setCreateStateId(stateId);
-              setCreateOpen(true);
+              openCreateIssue(stateId, true);
             }}
             onUpdateIssue={updateIssueFromPage}
             onUpdateIssues={updateIssuesFromPage}
@@ -3476,8 +3482,7 @@ function App() {
             onOpenIssue={openIssue}
             renderIssuePreview={renderIssuePreview}
             onCreateIssue={(stateId) => {
-              setCreateStateId(stateId);
-              setCreateOpen(true);
+              openCreateIssue(stateId, true);
             }}
             onUpdateIssue={updateIssueFromPage}
             onUpdateIssues={updateIssuesFromPage}
@@ -3616,8 +3621,7 @@ function App() {
             onOpenIssue={openIssue}
             renderIssuePreview={renderIssuePreview}
             onCreateIssue={(stateId) => {
-              setCreateStateId(stateId);
-              setCreateOpen(true);
+              openCreateIssue(stateId, true);
             }}
             onUpdateIssue={updateIssueFromPage}
             onUpdateIssues={updateIssuesFromPage}
@@ -3877,7 +3881,7 @@ function App() {
             onCreateIssue={(projectId, projectMilestoneId) => {
               setCreateProjectId(projectId);
               setCreateProjectMilestoneId(projectMilestoneId);
-              setCreateOpen(true);
+              openCreateIssue();
             }}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
           />
@@ -3954,6 +3958,7 @@ function App() {
           description="This project view does not exist or is no longer available."
         />
       )}
+      </Suspense>
       <BulkActionBar
         count={selected.size}
         data={data}
@@ -3964,7 +3969,7 @@ function App() {
       <CommandMenu
         open={commandOpen}
         onOpenChange={setCommandOpen}
-        onCreateIssue={() => setCreateOpen(true)}
+        onCreateIssue={() => openCreateIssue()}
         onCreateLabel={() => navigateTo(settingsPath(data.workspace.urlKey, "issue-labels"))}
         onCreateProject={() => navigateTo(`${projectsPath(data.workspace.urlKey)}?create=1`)}
         onCreateView={() => navigateTo(workspaceViewsNewPath(data.workspace.urlKey, "issues"))}
@@ -3984,13 +3989,12 @@ function App() {
         draftId={createDraftId}
         initialProjectId={createProjectId}
         initialProjectMilestoneId={createProjectMilestoneId}
-        initialStateId={createStateId}
+        initialStateId={createStateId ?? createStateRef.current}
         initialTemplateId={new URLSearchParams(location.search).get('template')??undefined}
         onOpenChange={(open) => {
           setCreateOpen(open);
           if (!open) {
             setCreateDraftId(undefined);
-            setCreateStateId(undefined);
             setCreateProjectId(undefined);
             setCreateProjectMilestoneId(undefined);
           }

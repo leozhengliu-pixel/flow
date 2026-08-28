@@ -3,6 +3,8 @@ services:
     build:
       context: .
     environment:
+      FLOW_LOG_LEVEL: ${FLOW_LOG_LEVEL:-info}
+      FLOW_LOG_FORMAT: ${FLOW_LOG_FORMAT:-text}
       FLOW_DATABASE_DRIVER: ${FLOW_DATABASE_DRIVER:-sqlite}
       FLOW_DATABASE_URL: ${FLOW_DATABASE_URL:-}
       FLOW_DATABASE_PATH: ${FLOW_DATABASE_PATH:-/app/data/flow.db}

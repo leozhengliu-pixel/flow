@@ -43,6 +43,12 @@ func (s *SQLiteStore) SetRealtimeSink(sink func(string, domain.RealtimeEvent)) {
 	s.mu.Unlock()
 }
 
+func (s *SQLiteStore) realtime() func(string, domain.RealtimeEvent) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.realtimeSink
+}
+
 func (s *SQLiteStore) SetWorkspaceCoordinator(coordinator WorkspaceCoordinator) {
 	s.mu.Lock()
 	s.coordinator = coordinator
@@ -1595,14 +1601,17 @@ func (s *SQLiteStore) Bootstrap() domain.Bootstrap {
 
 func (s *SQLiteStore) BootstrapFor(workspaceKey string) (domain.Bootstrap, bool) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
 	if workspaceKey == "" {
 		workspaceKey = s.lastWorkspaceKey
 	}
 	data, ok := s.workspaces[workspaceKey]
+	s.mu.RUnlock()
 	if !ok {
 		return domain.Bootstrap{}, false
 	}
+	// Workspace snapshots are replaced atomically by MutateWorkspace; they are
+	// never edited in place. Clone after releasing the lock so JSON encoding and
+	// resource-count derivation do not block writers or other readers.
 	raw, _ := json.Marshal(data)
 	var clone domain.Bootstrap
 	_ = json.Unmarshal(raw, &clone)
@@ -1716,9 +1725,9 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 	if err != nil {
 		return err
 	}
-	if s.realtimeSink != nil {
+	if sink := s.realtime(); sink != nil {
 		actor, _ := actorFromContext(ctx)
-		s.realtimeSink(workspaceKey, domain.RealtimeEvent{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, ActorID: actor.ID, ClientID: realtimeClientFromContext(ctx), Payload: event.Payload, CreatedAt: event.CreatedAt})
+		sink(workspaceKey, domain.RealtimeEvent{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, ActorID: actor.ID, ClientID: realtimeClientFromContext(ctx), Payload: event.Payload, CreatedAt: event.CreatedAt})
 	}
 	return nil
 }
@@ -1852,6 +1861,9 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 	data.Workspace = workspace
 	for index := range data.Teams {
 		if len(data.Teams) == 1 && strings.EqualFold(data.Teams[index].Name, s.workspaces[workspaceKey].Workspace.Name) {
+			// Do not mutate the slice shared by the immutable snapshot while
+			// readers may be cloning it outside the store lock.
+			data.Teams = slices.Clone(data.Teams)
 			data.Teams[index].Name = workspace.Name
 		}
 	}
@@ -1949,12 +1961,13 @@ func (s *SQLiteStore) deleteWorkspace(ctx context.Context, workspaceKey string) 
 }
 
 func (s *SQLiteStore) publishWorkspaceEvent(ctx context.Context, workspaceKey, eventType, aggregateID string, payload any) {
-	if s.realtimeSink == nil {
+	sink := s.realtime()
+	if sink == nil {
 		return
 	}
 	raw, _ := json.Marshal(payload)
 	actor, _ := actorFromContext(ctx)
-	s.realtimeSink(workspaceKey, domain.RealtimeEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: aggregateID, ActorID: actor.ID, ClientID: realtimeClientFromContext(ctx), Payload: raw, CreatedAt: time.Now().UTC()})
+	sink(workspaceKey, domain.RealtimeEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: aggregateID, ActorID: actor.ID, ClientID: realtimeClientFromContext(ctx), Payload: raw, CreatedAt: time.Now().UTC()})
 }
 
 func (s *SQLiteStore) Events(ctx context.Context, aggregateID string) ([]domain.DomainEvent, error) {
