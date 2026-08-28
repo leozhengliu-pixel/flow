@@ -35,7 +35,7 @@ disclosure.
 
 - Never commit credentials, session tokens, databases, uploads, or private user data.
 - Disable `FLOW_DEV_AUTH_TOKENS` outside local development.
-- Replace `FLOW_SEED_PASSWORD` before the first production start.
+- Create the first administrator account through the onboarding flow before inviting other users.
 - Enable `FLOW_COOKIE_SECURE` behind HTTPS.
 - Trust forwarded headers only from a controlled proxy that overwrites client-supplied values.
 - Restrict filesystem permissions for the SQLite database and upload directory.
