@@ -148,6 +148,7 @@ import { TeamArchivePage } from "@/components/workspace-operations/team-archive-
 import { ReviewsPage } from "@/components/reviews/reviews-page";
 import { AgentPage } from "@/components/agent/agent-page";
 import { AgentChatPanel } from "@/components/agent/agent-chat-panel";
+import { LoopsPage } from "@/components/loops/loops-page";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -185,6 +186,7 @@ import {
   reviewsPath,
   searchPath,
   routeBelongsToWorkspace,
+  savedViewPathId,
   teamCyclesPath,
   teamHomePath,
   teamIssuesPath,
@@ -440,12 +442,12 @@ function App() {
   );
   const selectedSavedView =
     route.kind === "workspace-saved-view" || route.kind === "team-saved-view"
-      ? issueSavedViews.find((view) => view.id === route.viewId) || null
+      ? issueSavedViews.find((view) => view.id === route.viewId || view.slugId === route.viewId) || null
       : null;
   const selectedProjectSavedView =
     route.kind === "projects-saved-view" ||
     route.kind === "team-projects-saved-view"
-      ? projectSavedViews.find((view) => view.id === route.viewId) || null
+      ? projectSavedViews.find((view) => view.id === route.viewId || view.slugId === route.viewId) || null
       : null;
   const viewedResourceType: SearchResourceType | undefined = selectedIssue ? "issue"
     : selectedProject ? "project"
@@ -2471,13 +2473,13 @@ function App() {
       selectedSavedView &&
       location.pathname !==
         (route.editing
-          ? workspaceSavedViewEditPath(workspace, selectedSavedView.id)
-          : workspaceSavedViewPath(workspace, selectedSavedView.id))
+          ? workspaceSavedViewEditPath(workspace, savedViewPathId(selectedSavedView))
+          : workspaceSavedViewPath(workspace, savedViewPathId(selectedSavedView)))
     )
       navigateTo(
         route.editing
-          ? workspaceSavedViewEditPath(workspace, selectedSavedView.id)
-          : workspaceSavedViewPath(workspace, selectedSavedView.id),
+          ? workspaceSavedViewEditPath(workspace, savedViewPathId(selectedSavedView))
+          : workspaceSavedViewPath(workspace, savedViewPathId(selectedSavedView)),
         { replace: true },
       );
     if (
@@ -2485,13 +2487,13 @@ function App() {
       selectedSavedView &&
       location.pathname !==
         (route.editing
-          ? teamSavedViewEditPath(workspace, route.teamKey, selectedSavedView.id)
-          : teamSavedViewPath(workspace, route.teamKey, selectedSavedView.id))
+          ? teamSavedViewEditPath(workspace, route.teamKey, savedViewPathId(selectedSavedView))
+          : teamSavedViewPath(workspace, route.teamKey, savedViewPathId(selectedSavedView)))
     )
       navigateTo(
         route.editing
-          ? teamSavedViewEditPath(workspace, route.teamKey, selectedSavedView.id)
-          : teamSavedViewPath(workspace, route.teamKey, selectedSavedView.id),
+          ? teamSavedViewEditPath(workspace, route.teamKey, savedViewPathId(selectedSavedView))
+          : teamSavedViewPath(workspace, route.teamKey, savedViewPathId(selectedSavedView)),
         { replace: true },
       );
     if (
@@ -2545,13 +2547,13 @@ function App() {
       selectedProjectSavedView &&
       location.pathname !==
         (route.editing
-          ? projectsSavedViewEditPath(workspace, selectedProjectSavedView.id)
-          : projectsSavedViewPath(workspace, selectedProjectSavedView.id))
+          ? projectsSavedViewEditPath(workspace, savedViewPathId(selectedProjectSavedView))
+          : projectsSavedViewPath(workspace, savedViewPathId(selectedProjectSavedView)))
     )
       navigateTo(
         route.editing
-          ? projectsSavedViewEditPath(workspace, selectedProjectSavedView.id)
-          : projectsSavedViewPath(workspace, selectedProjectSavedView.id),
+          ? projectsSavedViewEditPath(workspace, savedViewPathId(selectedProjectSavedView))
+          : projectsSavedViewPath(workspace, savedViewPathId(selectedProjectSavedView)),
         { replace: true },
       );
     if (
@@ -2562,12 +2564,12 @@ function App() {
           ? teamProjectsSavedViewEditPath(
               workspace,
               route.teamKey,
-              selectedProjectSavedView.id,
+              savedViewPathId(selectedProjectSavedView),
             )
           : teamProjectsSavedViewPath(
               workspace,
               route.teamKey,
-              selectedProjectSavedView.id,
+              savedViewPathId(selectedProjectSavedView),
             ))
     )
       navigateTo(
@@ -2575,12 +2577,12 @@ function App() {
           ? teamProjectsSavedViewEditPath(
               workspace,
               route.teamKey,
-              selectedProjectSavedView.id,
+              savedViewPathId(selectedProjectSavedView),
             )
           : teamProjectsSavedViewPath(
               workspace,
               route.teamKey,
-              selectedProjectSavedView.id,
+              savedViewPathId(selectedProjectSavedView),
             ),
         { replace: true },
       );
@@ -2803,12 +2805,12 @@ function App() {
       const team = view.scope === "team" ? data.teams.find(item => item.id === view.teamId) : undefined;
       if ((view.resource ?? "issues") === "projects") {
         navigateTo(team
-          ? teamProjectsSavedViewPath(data.workspace.urlKey, team.key, view.id)
-          : projectsSavedViewPath(data.workspace.urlKey, view.id));
+          ? teamProjectsSavedViewPath(data.workspace.urlKey, team.key, savedViewPathId(view))
+          : projectsSavedViewPath(data.workspace.urlKey, savedViewPathId(view)));
       } else {
         navigateTo(team
-          ? teamSavedViewPath(data.workspace.urlKey, team.key, view.id)
-          : workspaceSavedViewPath(data.workspace.urlKey, view.id));
+          ? teamSavedViewPath(data.workspace.urlKey, team.key, savedViewPathId(view))
+          : workspaceSavedViewPath(data.workspace.urlKey, savedViewPathId(view)));
       }
       return;
     }
@@ -2884,8 +2886,8 @@ function App() {
         ? data.teams.find((item) => item.id === view.teamId)
         : undefined;
     return team
-      ? teamSavedViewPath(data.workspace.urlKey, team.key, view.id)
-      : workspaceSavedViewPath(data.workspace.urlKey, view.id);
+      ? teamSavedViewPath(data.workspace.urlKey, team.key, savedViewPathId(view))
+      : workspaceSavedViewPath(data.workspace.urlKey, savedViewPathId(view));
   };
   const savedProjectPathFor = (view: SavedView) => {
     const team =
@@ -2893,20 +2895,20 @@ function App() {
         ? data.teams.find((item) => item.id === view.teamId)
         : undefined;
     return team
-      ? teamProjectsSavedViewPath(data.workspace.urlKey, team.key, view.id)
-      : projectsSavedViewPath(data.workspace.urlKey, view.id);
+      ? teamProjectsSavedViewPath(data.workspace.urlKey, team.key, savedViewPathId(view))
+      : projectsSavedViewPath(data.workspace.urlKey, savedViewPathId(view));
   };
   const savedIssueEditPathFor = (view: SavedView) => {
     const team = view.scope === "team" ? data.teams.find((item) => item.id === view.teamId) : undefined;
     return team
-      ? teamSavedViewEditPath(data.workspace.urlKey, team.key, view.id)
-      : workspaceSavedViewEditPath(data.workspace.urlKey, view.id);
+      ? teamSavedViewEditPath(data.workspace.urlKey, team.key, savedViewPathId(view))
+      : workspaceSavedViewEditPath(data.workspace.urlKey, savedViewPathId(view));
   };
   const savedProjectEditPathFor = (view: SavedView) => {
     const team = view.scope === "team" ? data.teams.find((item) => item.id === view.teamId) : undefined;
     return team
-      ? teamProjectsSavedViewEditPath(data.workspace.urlKey, team.key, view.id)
-      : projectsSavedViewEditPath(data.workspace.urlKey, view.id);
+      ? teamProjectsSavedViewEditPath(data.workspace.urlKey, team.key, savedViewPathId(view))
+      : projectsSavedViewEditPath(data.workspace.urlKey, savedViewPathId(view));
   };
   return (
     <div className="app">
@@ -2938,6 +2940,7 @@ function App() {
         />
       )}
       {page === "agent" && route.kind === "agent" && <AgentPage chatSlug={route.chatSlug} data={data} onNavigate={navigateTo} onOpenSidebar={()=>setMobileSidebarOpen(true)} onReload={async()=>setData(await fetchBootstrap(data.workspace.urlKey))}/>}
+      {page === "loops" && (route.kind === "loops" || route.kind === "loop-editor") && <LoopsPage data={data} loopId={route.kind === "loop-editor" ? route.loopId : undefined} editing={route.kind === "loop-editor"} onOpenSidebar={() => setMobileSidebarOpen(true)} onNavigate={navigateTo} onReload={async()=>setData(await fetchBootstrap(data.workspace.urlKey))} />}
       {page==="reviews"&&(route.kind==="reviews"||route.kind==="review")&&<ReviewsPage data={data} view={route.kind==="reviews"?route.view:"for-you"} review={route.kind==="review"?selectedReview??undefined:undefined} tab={route.kind==="review"?route.tab:undefined} onNavigate={navigateTo} onReload={async()=>setData(await fetchBootstrap(data.workspace.urlKey))} onOpenSidebar={()=>setMobileSidebarOpen(true)}/>}
       {(page === "drafts" || page === "releases" || page === "asks") && (
         <WorkspaceOperationsPage
@@ -3259,13 +3262,13 @@ function App() {
           viewHref={(view) => workspaceIssuesPath(data.workspace.urlKey, view)}
           savedViews={issueSavedViews.filter((view) => view.scope !== "team")}
           savedViewHref={(view) =>
-            workspaceSavedViewPath(data.workspace.urlKey, view.id)
+            workspaceSavedViewPath(data.workspace.urlKey, savedViewPathId(view))
           }
           onNavigateView={(view) =>
             navigateTo(workspaceIssuesPath(data.workspace.urlKey, view))
           }
           onNavigateSavedView={(view) =>
-            navigateTo(workspaceSavedViewPath(data.workspace.urlKey, view.id))
+            navigateTo(workspaceSavedViewPath(data.workspace.urlKey, savedViewPathId(view)))
           }
           onCreateSavedView={addSavedView}
           onUpdateSavedView={changeSavedView}
@@ -3306,7 +3309,7 @@ function App() {
                 )!.id,
           )}
           savedViewHref={(view) =>
-            teamSavedViewPath(data.workspace.urlKey, route.teamKey, view.id)
+            teamSavedViewPath(data.workspace.urlKey, route.teamKey, savedViewPathId(view))
           }
           onNavigateView={(view) =>
             navigateTo(
@@ -3315,7 +3318,7 @@ function App() {
           }
           onNavigateSavedView={(view) =>
             navigateTo(
-              teamSavedViewPath(data.workspace.urlKey, route.teamKey, view.id),
+              teamSavedViewPath(data.workspace.urlKey, route.teamKey, savedViewPathId(view)),
             )
           }
           onCreateSavedView={addSavedView}
@@ -3349,13 +3352,13 @@ function App() {
             }
             savedViews={issueSavedViews.filter((view) => view.scope !== "team")}
             savedViewHref={(view) =>
-              workspaceSavedViewPath(data.workspace.urlKey, view.id)
+              workspaceSavedViewPath(data.workspace.urlKey, savedViewPathId(view))
             }
             onNavigateView={(view) =>
               navigateTo(workspaceIssuesPath(data.workspace.urlKey, view))
             }
             onNavigateSavedView={(view) =>
-              navigateTo(workspaceSavedViewPath(data.workspace.urlKey, view.id))
+              navigateTo(workspaceSavedViewPath(data.workspace.urlKey, savedViewPathId(view)))
             }
             onCreateSavedView={addSavedView}
             onUpdateSavedView={changeSavedView}
@@ -3371,7 +3374,7 @@ function App() {
               navigateTo(
                 workspaceSavedViewEditPath(
                   data.workspace.urlKey,
-                  selectedSavedView.id,
+                  savedViewPathId(selectedSavedView),
                 ),
               )
             }
@@ -3379,7 +3382,7 @@ function App() {
               navigateTo(
                 workspaceSavedViewPath(
                   data.workspace.urlKey,
-                  selectedSavedView.id,
+                  savedViewPathId(selectedSavedView),
                 ),
               )
             }
@@ -3425,7 +3428,7 @@ function App() {
                 view.teamId === selectedSavedView.teamId,
             )}
             savedViewHref={(view) =>
-              teamSavedViewPath(data.workspace.urlKey, route.teamKey, view.id)
+              teamSavedViewPath(data.workspace.urlKey, route.teamKey, savedViewPathId(view))
             }
             onNavigateView={(view) =>
               navigateTo(
@@ -3437,7 +3440,7 @@ function App() {
                 teamSavedViewPath(
                   data.workspace.urlKey,
                   route.teamKey,
-                  view.id,
+                  savedViewPathId(view),
                 ),
               )
             }
@@ -3456,7 +3459,7 @@ function App() {
                 teamSavedViewEditPath(
                   data.workspace.urlKey,
                   route.teamKey,
-                  selectedSavedView.id,
+                  savedViewPathId(selectedSavedView),
                 ),
               )
             }
@@ -3465,7 +3468,7 @@ function App() {
                 teamSavedViewPath(
                   data.workspace.urlKey,
                   route.teamKey,
-                  selectedSavedView.id,
+                  savedViewPathId(selectedSavedView),
                 ),
               )
             }
@@ -3811,9 +3814,9 @@ function App() {
                     ? teamProjectsSavedViewPath(
                         data.workspace.urlKey,
                         projectTeamKey,
-                        view.id,
+                        savedViewPathId(view),
                       )
-                    : projectsSavedViewPath(data.workspace.urlKey, view.id),
+                    : projectsSavedViewPath(data.workspace.urlKey, savedViewPathId(view)),
                 )
               }
             />
@@ -4042,6 +4045,7 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
   if (route.kind === "document") return "document-detail";
   if (route.kind === "drafts") return "drafts";
   if (route.kind === "agent") return "agent";
+  if (route.kind === "loops" || route.kind === "loop-editor") return "loops";
   if (route.kind === "releases" || route.kind === "release-pipeline" || route.kind === "release") return "releases";
   if (route.kind === "asks") return "asks";
   if (route.kind === "team-archive") return "team-archive";

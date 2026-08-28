@@ -18,6 +18,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	appconfig "flow/api/internal/config"
 	"flow/api/internal/coordination"
@@ -232,6 +233,11 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/asks/{id}", s.updateAsk)
 	mux.HandleFunc("POST /api/asks/{id}/decision", s.decideAsk)
 	mux.HandleFunc("DELETE /api/asks/{id}", s.deleteAsk)
+	mux.HandleFunc("GET /api/loops", s.listLoops)
+	mux.HandleFunc("POST /api/loops", s.createLoop)
+	mux.HandleFunc("GET /api/loops/{id}", s.getLoop)
+	mux.HandleFunc("PATCH /api/loops/{id}", s.updateLoop)
+	mux.HandleFunc("DELETE /api/loops/{id}", s.deleteLoop)
 	mux.HandleFunc("GET /api/project-templates", s.listProjectTemplates)
 	mux.HandleFunc("POST /api/project-templates", s.createProjectTemplate)
 	mux.HandleFunc("PATCH /api/project-templates/{id}", s.updateProjectTemplate)
@@ -965,7 +971,8 @@ func (s *server) createSavedView(w http.ResponseWriter, r *http.Request) {
 	var created domain.SavedView
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "view.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
-		created = domain.SavedView{ID: fmt.Sprintf("view_%d", time.Now().UnixNano()), CreatedAt: now, UpdatedAt: now}
+		createdID := fmt.Sprintf("view_%d", time.Now().UnixNano())
+		created = domain.SavedView{ID: createdID, SlugID: savedViewSlugID(*input.Name, createdID), CreatedAt: now, UpdatedAt: now}
 		if input.Resource != nil && *input.Resource == "pulse" {
 			scope, ownerID := "personal", data.Viewer.ID
 			input.Scope, input.OwnerID = &scope, &ownerID
@@ -1004,7 +1011,7 @@ func (s *server) updateSavedView(w http.ResponseWriter, r *http.Request) {
 func (s *server) deleteSavedView(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "view.deleted", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.SavedViews, func(view domain.SavedView) bool { return view.ID == id })
+		index := slices.IndexFunc(data.SavedViews, func(view domain.SavedView) bool { return view.ID == id || view.SlugID == id })
 		if index < 0 {
 			return errNotFound
 		}
@@ -3729,11 +3736,23 @@ func validHexColor(value string) bool {
 
 func savedViewByID(data *domain.Bootstrap, id string) (*domain.SavedView, error) {
 	for i := range data.SavedViews {
-		if data.SavedViews[i].ID == id {
+		if data.SavedViews[i].ID == id || data.SavedViews[i].SlugID == id {
 			return &data.SavedViews[i], nil
 		}
 	}
 	return nil, errNotFound
+}
+
+func savedViewSlugID(name, id string) string {
+	base := slug(name)
+	if base == "" {
+		base = "view"
+	}
+	suffix := slug(id)
+	if suffix == "" {
+		return base
+	}
+	return base + "-" + suffix
 }
 
 func setParent(data *domain.Bootstrap, issue *domain.Issue, parentID string) {
@@ -4098,12 +4117,18 @@ func optionalString(value string) *string {
 }
 func slug(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
-	return strings.Trim(strings.Map(func(r rune) rune {
-		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
-			return r
+	var builder strings.Builder
+	lastDash := false
+	for _, character := range value {
+		if unicode.IsLetter(character) || unicode.IsDigit(character) {
+			builder.WriteRune(character)
+			lastDash = false
+		} else if builder.Len() > 0 && !lastDash {
+			builder.WriteByte('-')
+			lastDash = true
 		}
-		return '-'
-	}, value), "-")
+	}
+	return strings.Trim(builder.String(), "-")
 }
 func labelsByID(data *domain.Bootstrap, ids []string) []domain.IssueLabel {
 	return labelsByIDForResource(data, ids, "issue")
