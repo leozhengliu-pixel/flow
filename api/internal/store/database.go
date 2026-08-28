@@ -55,7 +55,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return nil, err
 		}
-		sqlDriver, dsn = "sqlite", path
+		sqlDriver, dsn = "sqlite", sqliteDSN(path)
 	case "postgres":
 		if strings.TrimSpace(config.URL) == "" {
 			return nil, fmt.Errorf("database URL is required for postgres")
@@ -158,6 +158,22 @@ func configureSQLite(db *sql.DB, dsn string) error {
 	}
 	_, err := db.Exec(`PRAGMA temp_store=MEMORY`)
 	return err
+}
+
+// sqliteDSN applies connection-scoped settings to every connection opened by
+// database/sql, not just the first connection used during startup. This keeps
+// busy_timeout/foreign_keys enabled when an operator opts into a larger pool.
+func sqliteDSN(path string) string {
+	trimmed := strings.TrimSpace(path)
+	separator := "?"
+	if strings.Contains(trimmed, "?") {
+		separator = "&"
+	}
+	pragmas := []string{"_pragma=busy_timeout(5000)", "_pragma=foreign_keys(1)", "_pragma=temp_store(MEMORY)"}
+	if !strings.Contains(trimmed, ":memory:") {
+		pragmas = append(pragmas, "_pragma=journal_mode(WAL)", "_pragma=synchronous(NORMAL)")
+	}
+	return trimmed + separator + strings.Join(pragmas, "&")
 }
 
 func mysqlDSN(raw string) (string, error) {
