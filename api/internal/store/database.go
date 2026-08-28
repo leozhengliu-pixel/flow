@@ -21,6 +21,7 @@ type DatabaseConfig struct {
 	Driver          string
 	URL             string
 	Path            string
+	SeedProfile     string
 	MaxOpenConns    int
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
@@ -102,7 +103,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		db.Close()
 		return nil, fmt.Errorf("connect to %s database: %w", driver, err)
 	}
-	s := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: driver}, dialect: driver}
+	s := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: driver}, dialect: driver, seedProfile: strings.TrimSpace(config.SeedProfile)}
 	if err := s.migrate(context.Background()); err != nil {
 		db.Close()
 		return nil, err
