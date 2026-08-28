@@ -43,8 +43,21 @@
   width: 14px;
 }
 .workspace-directory__create {
+  width: auto;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 0 8px;
   margin-left: auto;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  background: var(--ui-pill-bg);
+  color: var(--ui-pill-fg);
+  font-size: 12px;
+  font-weight: 500;
 }
+.workspace-directory__create:hover { background: var(--ui-pill-hover-bg); color: var(--ui-pill-hover-fg); }
 .workspace-directory__icon-button {
   width: 28px;
   height: 28px;
@@ -663,10 +676,12 @@
 .workspace-members-columns,
 .workspace-directory-member-row {
   display: grid;
-  grid-template-columns: minmax(360px, 1fr) 98px 94px 70px 89px;
+  grid-template-columns: 8px minmax(360px, 1fr) 109px 82px 60px 82px 12px;
   align-items: center;
-  padding: 0 18px 0 20px;
+  column-gap: 12px;
 }
+.workspace-members-indent,
+.workspace-members-end { display: block; }
 .workspace-members-columns {
   height: 34px;
   color: #818186;
@@ -699,6 +714,7 @@
 }
 .workspace-directory-member-row:hover {
   background: var(--theme-surface-1);
+  border-radius: 8px;
 }
 .workspace-member-identity {
   min-width: 0;
@@ -738,9 +754,9 @@
 }
 .workspace-member-role {
   width: max-content;
-  padding: 1px 5px;
+  padding: 2px 6px;
   color: #aeb2ed;
-  background: #202139;
+  background: rgb(94 106 210 / 8%);
   border-radius: 3px;
 }
 .workspace-directory-member-row time {
