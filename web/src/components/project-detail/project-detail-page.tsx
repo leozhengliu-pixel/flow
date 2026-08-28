@@ -4,6 +4,7 @@ import * as ContextMenu from '@radix-ui/react-context-menu'
 import { Layers2, Link2, Pencil, Star, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
+import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { ProjectOverview } from './project-overview'
 import { ProjectActivity } from './project-activity'
 import { ProjectIssueDisplayMenu, ProjectIssueFilterMenu, ProjectIssues, ProjectNewView, type ProjectIssueFilters } from './project-issues'
@@ -84,7 +85,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
       <button aria-label="Open workspace sidebar" className="project-detail-page__mobile-menu" onClick={onOpenSidebar} type="button"><span/><span/><span/></button>
       <a className="project-detail-page__all-projects" href={`/${location.pathname.split('/')[1]}/projects/all`}>Projects</a>
       <span aria-hidden="true" className="project-detail-page__crumb-separator">›</span>
-      <a className="project-detail-page__crumb" href={`/${location.pathname.split('/')[1]}/project/${project.slugId}/overview`} onClick={event => { event.preventDefault(); onTabChange('overview') }}><ViewGlyph color={project.color} icon={project.icon || 'Project'}/><span data-i18n-ignore>{project.name}</span></a>
+      <a className="project-detail-page__crumb" href={`/${location.pathname.split('/')[1]}/project/${project.slugId}/overview`} onClick={event => { event.preventDefault(); onTabChange('overview') }}><ViewGlyph color={project.color} icon={normalizeProjectIcon(project.icon)}/><span data-i18n-ignore>{project.name}</span></a>
       <button aria-checked={favorited} aria-label={favorited ? 'Remove from favorites' : 'Add to favorites'} className="project-detail-page__header-action" data-active={favorited} onClick={() => void toggleFavorite()} role="switch" type="button"><Star fill={favorited ? 'currentColor' : 'none'} size={14}/></button>
       <ProjectActionsMenu favorited={favorited} onDelete={() => setDeleteOpen(true)} onFavorite={() => void toggleFavorite()} onRemind={remindAt => props.onCreateReminder(project.id, remindAt).then(() => undefined)} onSetEvents={setEvents} onShowActivity={() => onTabChange('activity')} onShowHistory={() => setHistoryOpen(true)} onShowNotifications={() => setNotificationOpen(true)} project={project} subscription={props.subscription}/>
       <div className="project-detail-page__header-spacer"/>

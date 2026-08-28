@@ -732,7 +732,7 @@ func TestProjectLifecycle(t *testing.T) {
 		"name": "Project API test", "summary": "Initial", "priority": 2, "health": "onTrack",
 		"leadId": "usr_zheng", "teamIds": []string{"team_cleantrack"},
 	}, http.StatusCreated)
-	if created.ID == "" || created.Name != "Project API test" || created.Priority != 2 || created.Lead == nil {
+	if created.ID == "" || created.Name != "Project API test" || created.Icon != "Project" || created.Priority != 2 || created.Lead == nil {
 		t.Fatalf("project create failed: %#v", created)
 	}
 

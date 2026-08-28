@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import type { IssueLabel, LabelGroup, Project, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
+import type { Initiative, IssueLabel, LabelGroup, Project, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
 import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from '@/components/issue-explorer/saved-view-editor'
 import { NewProjectDialog, type NewProjectDraft } from './new-project-dialog'
 import { ProjectsDataView, type ProjectAction, type ProjectPageItem, type ProjectProperty, type ProjectPropertyOptions } from './projects-data-view'
@@ -12,6 +12,7 @@ import { ProjectsFilterBar } from './projects-filter-bar'
 import { createProjectFilter, isProjectFilter, type ProjectFilter, type ProjectFilterField, type ProjectFilterOption } from './projects-filter-model'
 import { ProjectsBulkActionBar, type ProjectBulkAction } from './projects-bulk-action-bar'
 import type { ViewVisual } from '@/components/views/view-icon-picker'
+import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { ProjectUpdatesPreview } from './project-updates-preview'
 import { labelsForResource } from '@/lib/labels'
 
@@ -45,6 +46,7 @@ export type ProjectsPageProps = {
   projectUpdates?: Record<string, ProjectUpdate[]>
   projectStatuses?: ProjectStatus[]
   projectTemplates?: ProjectTemplate[]
+  initiatives?: Initiative[]
   users: User[]
   teams: Team[]
   labels?: IssueLabel[]
@@ -97,6 +99,7 @@ export function ProjectsPage({
   projectUpdates = {},
   projectStatuses = [],
   projectTemplates = [],
+  initiatives = [],
   users,
   teams,
   labels = [],
@@ -433,6 +436,7 @@ export function ProjectsPage({
       initialTemplateId={initialTemplateId}
       defaultStatus={createStatus}
       dependencies={projects.map(project => ({ id: project.id, label: project.name, color: project.color }))}
+      initiatives={initiatives.map(initiative => ({ id: initiative.id, label: initiative.name, color: initiative.color }))}
       labels={projectLabels.map(label => ({ id: label.id, label: label.name, color: label.color, groupId: label.groupId, groupLabel: label.groupId ? projectLabelGroupNames.get(label.groupId) : undefined }))}
       leads={users.map(user => ({ id: user.id, label: user.displayName }))}
       members={users.map(user => ({ id: user.id, label: user.displayName }))}
@@ -447,6 +451,7 @@ export function ProjectsPage({
         status: availableProjectStatuses.find(status => status.id === template.statusId)?.name,
         priority: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][template.priority] ?? 'No priority',
         teamIds: template.teamIds,
+        initiativeIds: template.initiativeIds,
         labelIds: template.labelIds.filter(id => projectLabels.some(label => label.id === id)),
       }))}
       onClose={() => setCreateOpen(false)}
@@ -469,7 +474,7 @@ function toPageItem(project: Project, href?: string, teams: Team[] = [], latestU
   return {
     color: project.color,
     health: ({ onTrack: 'on-track', atRisk: 'at-risk', offTrack: 'off-track', noUpdate: 'no-update' } as const)[project.health],
-    icon: project.icon && !/^[a-z0-9]$/i.test(project.icon) ? project.icon : undefined,
+    icon: normalizeProjectIcon(project.icon),
     id: project.id,
     href,
     issueCount: project.issueCount,
@@ -514,6 +519,7 @@ function draftMutation(projects: Project[], draft: NewProjectDraft, projectStatu
     memberIds: draft.memberIds,
     labelIds: draft.labelIds,
     dependencyIds: draft.dependencyIds,
+    initiatives: draft.initiativeIds,
     name: draft.name,
     priority: Math.max(0, ['No priority', 'Urgent', 'High', 'Medium', 'Low'].indexOf(draft.priority)),
     startDate: draft.startDate,

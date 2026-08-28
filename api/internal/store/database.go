@@ -208,19 +208,20 @@ func rewriteSQL(query, dialect string) string {
 }
 
 func databaseMigrations(dialect string) []string {
-	idType, emailType, queryType, blobType := "TEXT", "TEXT", "TEXT", "BLOB"
+	idType, emailType, queryType, blobType, claimsType := "TEXT", "TEXT", "TEXT", "BLOB", "TEXT"
 	if dialect == "postgres" {
 		blobType = "BYTEA"
 	}
 	if dialect == "mysql" {
-		idType, emailType, queryType, blobType = "VARCHAR(191)", "VARCHAR(320)", "VARCHAR(300)", "LONGBLOB"
+		idType, emailType, queryType, blobType, claimsType = "VARCHAR(191)", "VARCHAR(320)", "VARCHAR(300)", "LONGBLOB", "TEXT"
 	}
 	statements := []string{
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS workspace_state (id INTEGER PRIMARY KEY, data %s NOT NULL, updated_at VARCHAR(40) NOT NULL)`, blobType),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS workspace_states (workspace_key %s PRIMARY KEY, workspace_id %s NOT NULL UNIQUE, data %s NOT NULL, updated_at VARCHAR(40) NOT NULL)`, idType, idType, blobType),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS account_state (id INTEGER PRIMARY KEY, last_workspace_key %s NOT NULL, viewer %s NOT NULL, updated_at VARCHAR(40) NOT NULL)`, idType, blobType),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS domain_events (id %s PRIMARY KEY, event_type VARCHAR(191) NOT NULL, aggregate_id %s NOT NULL, payload %s NOT NULL, created_at VARCHAR(40) NOT NULL)`, idType, idType, blobType),
-		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS auth_users (id %s PRIMARY KEY, email %s NOT NULL UNIQUE, name VARCHAR(320) NOT NULL, display_name VARCHAR(320) NOT NULL, avatar_url VARCHAR(2048) NOT NULL DEFAULT '', password_hash VARCHAR(255) NOT NULL, email_verified_at VARCHAR(40), active INTEGER NOT NULL DEFAULT 1, created_at VARCHAR(40) NOT NULL, updated_at VARCHAR(40) NOT NULL)`, idType, emailType),
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS auth_users (id %s PRIMARY KEY, email %s UNIQUE, name VARCHAR(320) NOT NULL, display_name VARCHAR(320) NOT NULL, avatar_url VARCHAR(2048) NOT NULL DEFAULT '', password_hash VARCHAR(255) NOT NULL, email_verified_at VARCHAR(40), active INTEGER NOT NULL DEFAULT 1, created_at VARCHAR(40) NOT NULL, updated_at VARCHAR(40) NOT NULL)`, idType, emailType),
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS auth_identities (id %s PRIMARY KEY, user_id %s NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, provider VARCHAR(191) NOT NULL, issuer VARCHAR(2048) NOT NULL, subject VARCHAR(320) NOT NULL, identity_key VARCHAR(64) NOT NULL UNIQUE, username VARCHAR(320) NOT NULL DEFAULT '', claims_json %s NOT NULL, created_at VARCHAR(40) NOT NULL, last_login_at VARCHAR(40) NOT NULL)`, idType, idType, claimsType),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS auth_sessions (token_hash %s PRIMARY KEY, user_id %s NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, expires_at VARCHAR(40) NOT NULL, created_at VARCHAR(40) NOT NULL, last_seen_at VARCHAR(40) NOT NULL)`, idType, idType),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS auth_account_state (user_id %s PRIMARY KEY REFERENCES auth_users(id) ON DELETE CASCADE, last_workspace_key %s NOT NULL, updated_at VARCHAR(40) NOT NULL)`, idType, idType),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS auth_tokens (token_hash %s PRIMARY KEY, user_id %s NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, kind VARCHAR(64) NOT NULL, expires_at VARCHAR(40) NOT NULL, used_at VARCHAR(40), created_at VARCHAR(40) NOT NULL)`, idType, idType),
@@ -237,6 +238,7 @@ func databaseMigrations(dialect string) []string {
 	indexes := []string{
 		"domain_events_aggregate_idx ON domain_events(aggregate_id,created_at)",
 		"auth_sessions_user_idx ON auth_sessions(user_id,expires_at)",
+		"auth_identities_user_idx ON auth_identities(user_id)",
 		"workspace_memberships_user_idx ON workspace_memberships(user_id,status)",
 		"workspace_invitations_email_idx ON workspace_invitations(email,status)",
 		"search_history_recent_idx ON search_history(user_id,workspace_id,last_used_at)",
