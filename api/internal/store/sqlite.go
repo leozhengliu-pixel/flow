@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"flow/api/internal/domain"
 )
@@ -210,6 +211,9 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 		if ensureCanonicalSavedViewFilters(&data) {
 			changed = true
 		}
+		if ensureSavedViewSlugIDs(&data) {
+			changed = true
+		}
 		if ensureProjectMilestoneFields(&data) {
 			changed = true
 		}
@@ -247,6 +251,7 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	err = s.db.QueryRowContext(ctx, `SELECT data FROM workspace_state WHERE id = 1`).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
 		data := Seed()
+		ensureSavedViewSlugIDs(&data)
 		normalize(&data)
 		s.workspaces[data.Workspace.URLKey] = data
 		s.lastWorkspaceKey = data.Workspace.URLKey
@@ -266,6 +271,7 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	ensureCanonicalSavedViewNames(&data)
 	ensureCanonicalSavedViewDisplays(&data)
 	ensureCanonicalSavedViewFilters(&data)
+	ensureSavedViewSlugIDs(&data)
 	ensureProjectMilestoneFields(&data)
 	ensureCarMallReleaseManagement(&data)
 	ensureCanonicalNotifications(&data)
@@ -1178,6 +1184,9 @@ func normalize(data *domain.Bootstrap) {
 	if data.Asks == nil {
 		data.Asks = []domain.Ask{}
 	}
+	if data.Loops == nil {
+		data.Loops = []domain.Loop{}
+	}
 	if data.SLARules == nil {
 		data.SLARules = []domain.SLARule{}
 	}
@@ -1436,6 +1445,63 @@ func normalize(data *domain.Bootstrap) {
 		}
 	}
 	refreshResourceCounts(data)
+}
+
+// Saved view URLs use a stable, human-readable slug instead of the storage key.
+// Keep old records addressable by deriving one once when they are loaded.
+func ensureSavedViewSlugIDs(data *domain.Bootstrap) bool {
+	seen := make(map[string]struct{}, len(data.SavedViews))
+	changed := false
+	for index := range data.SavedViews {
+		view := &data.SavedViews[index]
+		desired := savedViewSlugID(view.Name, view.ID)
+		if view.SlugID == "" || strings.HasPrefix(view.SlugID, "view-") {
+			if view.SlugID != desired {
+				view.SlugID = desired
+				changed = true
+			}
+		}
+		candidate := view.SlugID
+		for suffix := 2; ; suffix++ {
+			if _, exists := seen[candidate]; !exists {
+				break
+			}
+			candidate = fmt.Sprintf("%s-%d", view.SlugID, suffix)
+		}
+		if candidate != view.SlugID {
+			view.SlugID = candidate
+			changed = true
+		}
+		seen[view.SlugID] = struct{}{}
+	}
+	return changed
+}
+
+func savedViewSlugID(name, id string) string {
+	base := slugUnicode(name)
+	if base == "" {
+		base = "view"
+	}
+	suffix := slugUnicode(strings.TrimPrefix(id, "view_"))
+	if suffix == "" {
+		return base
+	}
+	return base + "-" + suffix
+}
+
+func slugUnicode(value string) string {
+	var builder strings.Builder
+	lastDash := false
+	for _, character := range strings.ToLower(strings.TrimSpace(value)) {
+		if unicode.IsLetter(character) || unicode.IsDigit(character) {
+			builder.WriteRune(character)
+			lastDash = false
+		} else if builder.Len() > 0 && !lastDash {
+			builder.WriteByte('-')
+			lastDash = true
+		}
+	}
+	return strings.Trim(builder.String(), "-")
 }
 
 func defaultCodeReviews(data *domain.Bootstrap) []domain.CodeReview {

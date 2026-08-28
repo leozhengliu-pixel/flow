@@ -79,6 +79,24 @@
   height: 14px;
   stroke-width: 1.6;
 }
+.workspace-directory__header .workspace-directory__create.workspace-directory__icon-button {
+  width: auto;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 0 8px;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  background: var(--ui-pill-bg);
+  color: var(--ui-pill-fg);
+  font-size: 12px;
+  font-weight: 500;
+}
+.workspace-directory__header .workspace-directory__create.workspace-directory__icon-button:hover {
+  background: var(--ui-pill-hover-bg);
+  color: var(--ui-pill-hover-fg);
+}
 .workspace-directory__create svg {
   width: 15px;
   height: 15px;
@@ -747,11 +765,14 @@
   display: grid;
   flex: 0 0 24px;
   place-items: center;
+  overflow: hidden;
   object-fit: cover;
   border-radius: 50%;
-  color: var(--theme-text-primary);
+  background: var(--avatar, var(--avatar-fallback));
+  color: #fff;
   font-size: 9px;
 }
+.workspace-directory-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .workspace-member-role {
   width: max-content;
   padding: 2px 6px;
@@ -771,6 +792,7 @@
   border: 0;
   background: transparent;
   color: var(--theme-text-secondary);
+  white-space: nowrap;
 }
 .workspace-member-teams svg {
   width: 15px;
@@ -1677,9 +1699,19 @@
   .workspace-members-columns,
   .workspace-directory-member-row {
     grid-template-columns: minmax(210px, 1fr) 85px;
+    padding-right: 12px;
+    padding-left: 12px;
   }
-  .workspace-members-columns > *:nth-child(n + 3),
-  .workspace-directory-member-row > *:nth-child(n + 3) {
+  .workspace-members-columns > :nth-child(1),
+  .workspace-members-columns > :nth-child(4),
+  .workspace-members-columns > :nth-child(5),
+  .workspace-members-columns > :nth-child(6),
+  .workspace-members-columns > :nth-child(7),
+  .workspace-directory-member-row > :nth-child(1),
+  .workspace-directory-member-row > :nth-child(4),
+  .workspace-directory-member-row > :nth-child(5),
+  .workspace-directory-member-row > :nth-child(6),
+  .workspace-directory-member-row > :nth-child(7) {
     display: none;
   }
   .workspace-team-columns,
