@@ -112,6 +112,69 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 			return fmt.Errorf("database migration: %w", err)
 		}
 	}
+	if err := s.makeAuthEmailNullable(ctx); err != nil {
+		return fmt.Errorf("database migration: make auth email nullable: %w", err)
+	}
+	return nil
+}
+
+func (s *SQLiteStore) makeAuthEmailNullable(ctx context.Context) error {
+	switch s.dialect {
+	case "postgres":
+		_, err := s.db.ExecContext(ctx, `ALTER TABLE auth_users ALTER COLUMN email DROP NOT NULL`)
+		if err != nil && !strings.Contains(strings.ToLower(err.Error()), "does not exist") && !strings.Contains(strings.ToLower(err.Error()), "already allows null") {
+			return err
+		}
+		return nil
+	case "mysql":
+		_, err := s.db.ExecContext(ctx, `ALTER TABLE auth_users MODIFY COLUMN email VARCHAR(320) NULL`)
+		if err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate") {
+			return err
+		}
+		return nil
+	case "sqlite":
+		rows, err := s.db.QueryContext(ctx, `PRAGMA table_info(auth_users)`)
+		if err != nil {
+			return err
+		}
+		notNull := false
+		for rows.Next() {
+			var cid int
+			var name, columnType string
+			var required, primaryKey int
+			var defaultValue sql.NullString
+			if err := rows.Scan(&cid, &name, &columnType, &required, &defaultValue, &primaryKey); err != nil {
+				return err
+			}
+			if name == "email" {
+				notNull = required == 1
+			}
+		}
+		rowErr := rows.Err()
+		rows.Close()
+		if rowErr != nil {
+			return rowErr
+		}
+		if !notNull {
+			return nil
+		}
+		_, err = s.db.ExecContext(ctx, `PRAGMA foreign_keys=OFF`)
+		if err != nil {
+			return err
+		}
+		defer s.db.ExecContext(ctx, `PRAGMA foreign_keys=ON`)
+		statements := []string{
+			`CREATE TABLE auth_users_new (id TEXT PRIMARY KEY, email TEXT UNIQUE, name VARCHAR(320) NOT NULL, display_name VARCHAR(320) NOT NULL, avatar_url VARCHAR(2048) NOT NULL DEFAULT '', password_hash VARCHAR(255) NOT NULL, email_verified_at VARCHAR(40), active INTEGER NOT NULL DEFAULT 1, created_at VARCHAR(40) NOT NULL, updated_at VARCHAR(40) NOT NULL)`,
+			`INSERT INTO auth_users_new(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) SELECT id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at FROM auth_users`,
+			`DROP TABLE auth_users`,
+			`ALTER TABLE auth_users_new RENAME TO auth_users`,
+		}
+		for _, statement := range statements {
+			if _, err := s.db.ExecContext(ctx, statement); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 

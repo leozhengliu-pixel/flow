@@ -1557,7 +1557,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 		if len(teamIDs) == 0 {
 			teamIDs = []string{data.Teams[0].ID}
 		}
-		created = domain.Project{ID: id, Name: strings.TrimSpace(*input.Name), SlugID: slug(strings.TrimSpace(*input.Name)), Color: "#5e6ad2", PriorityLabel: "No priority", Health: "noUpdate", Status: status, MemberIDs: []string{}, TeamIDs: teamIDs, DependencyIDs: []string{}, Initiatives: []string{}, Customers: []string{}, Resources: []domain.ProjectResource{}, Milestones: []domain.ProjectMilestone{}, Comments: []domain.Comment{}, DescriptionRevisions: []domain.ProjectDescriptionRevision{}, UpdateCadence: "none", CreatedAt: now, UpdatedAt: now}
+		created = domain.Project{ID: id, Name: strings.TrimSpace(*input.Name), SlugID: slug(strings.TrimSpace(*input.Name)), Icon: "Project", Color: "#eb5757", PriorityLabel: "No priority", Health: "noUpdate", Status: status, MemberIDs: []string{}, TeamIDs: teamIDs, DependencyIDs: []string{}, Initiatives: []string{}, Customers: []string{}, Resources: []domain.ProjectResource{}, Milestones: []domain.ProjectMilestone{}, Comments: []domain.Comment{}, DescriptionRevisions: []domain.ProjectDescriptionRevision{}, UpdateCadence: "none", CreatedAt: now, UpdatedAt: now}
 		if err := applyProjectUpdate(data, &created, input); err != nil {
 			return "", err
 		}

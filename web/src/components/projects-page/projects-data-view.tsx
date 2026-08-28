@@ -162,7 +162,7 @@ export function ProjectsDataView({
     />)}
   </div>
 
-  if (layout === 'timeline') return <ProjectTimeline groups={groups} onOpenProject={onOpenProject} />
+  if (layout === 'timeline') return <ProjectTimeline groups={groups} onOpenProject={onOpenProject} propertyOptions={propertyOptions}/>
 
   return <div className="lp-project-table" role="grid" style={{ '--lp-project-grid': projectGrid(visible) } as CSSProperties}>
     <ProjectTableHeader sort={sort} onSort={changeSort} visible={visible} />
@@ -176,6 +176,7 @@ export function ProjectsDataView({
           name={group.name}
           onCreate={() => onCreateProject?.(projectCreateStatus(group.name))}
           onToggle={() => setCollapsed(current => current.includes(group.id) ? current.filter(id => id !== group.id) : [...current, group.id])}
+          propertyOptions={propertyOptions}
         />
         {!isCollapsed && (group.subgroups?.length ? group.subgroups.map(subgroup => <ProjectSubgroup
           group={subgroup}
@@ -223,7 +224,7 @@ function ProjectSubgroup({ group, onOpen, onOpenIssues, onOpenUpdates, onProject
   visible: Set<string>
 }) {
   return <div className="lp-project-subgroup">
-    <div className="lp-project-subgroup__header"><span className="lp-project-group__status" style={{ '--project-status-color': group.color ?? '#77777c' } as CSSProperties} /><span data-i18n-ignore>{group.name}</span><small>{projectCount(group)}</small></div>
+    <div className="lp-project-subgroup__header"><ProjectGroupStatus color={group.color} compact name={group.name} propertyOptions={propertyOptions}/><span data-i18n-ignore>{group.name}</span><small>{projectCount(group)}</small></div>
     {group.projects.map(project => <ProjectListRow
       key={project.id}
       onOpen={onOpen}
@@ -262,18 +263,19 @@ function ProjectTableHeader({ sort, onSort, visible }: { sort: { column: Project
   </div>
 }
 
-function ProjectGroupHeader({ collapsed, color = '#d6b326', count, name, onCreate, onToggle }: {
+function ProjectGroupHeader({ collapsed, color = '#d6b326', count, name, onCreate, onToggle, propertyOptions }: {
   collapsed: boolean
   color?: string
   count: number
   name: string
   onCreate: () => void
   onToggle: () => void
+  propertyOptions?: ProjectPropertyOptions
 }) {
   return <div className="lp-project-group__header" role="row">
     <span />
     <button aria-expanded={!collapsed} aria-label={collapsed ? 'Expand group' : 'Collapse group'} className="lp-project-group__toggle" onClick={onToggle} type="button"><ChevronRightIcon /></button>
-    <span className="lp-project-group__title"><span className="lp-project-group__status" style={{ '--project-status-color': color } as CSSProperties} /><strong data-i18n-ignore>{name}</strong><span aria-label="Project count" className="lp-project-group__count">{count}</span></span>
+    <span className="lp-project-group__title"><ProjectGroupStatus color={color} name={name} propertyOptions={propertyOptions}/><strong data-i18n-ignore>{name}</strong><span aria-label="Project count" className="lp-project-group__count">{count}</span></span>
     <button aria-label="Create new project" className="lp-project-group__create" onClick={onCreate} type="button"><PlusIcon /></button>
   </div>
 }
@@ -350,9 +352,9 @@ function ProjectBoardColumn({ group, onCreateProject, onOpenProject, onOpenProje
   visible: Set<string>
 }) {
   return <section aria-label={group.name} className="lp-project-board__column">
-    <header><span className="lp-project-group__status" style={{ '--project-status-color': group.color ?? '#d6b326' } as CSSProperties} /><strong data-i18n-ignore>{group.name}</strong><span>{projectCount(group)}</span><button aria-label="Open menu" type="button">...</button><button aria-label="Create new project" onClick={() => onCreateProject?.(projectCreateStatus(group.name))} type="button"><PlusIcon /></button></header>
+    <header><ProjectGroupStatus color={group.color} name={group.name} propertyOptions={propertyOptions}/><strong data-i18n-ignore>{group.name}</strong><span>{projectCount(group)}</span><button aria-label="Open menu" type="button">...</button><button aria-label="Create new project" onClick={() => onCreateProject?.(projectCreateStatus(group.name))} type="button"><PlusIcon /></button></header>
     <div className="lp-project-board__cards">
-      {group.subgroups?.map(subgroup => <section className="lp-project-board__subgroup" key={subgroup.id}><header><span data-i18n-ignore>{subgroup.name}</span><small>{projectCount(subgroup)}</small></header>{subgroup.projects.map(project => <ProjectBoardCard key={project.id} onOpen={onOpenProject} onOpenIssues={onOpenProjectIssues} onOpenUpdates={onOpenProjectUpdates} onProjectAction={onProjectAction} onProjectVisualChange={onProjectVisualChange} onPropertyChange={onPropertyChange} project={project} propertyOptions={propertyOptions} visible={visible} />)}</section>)}
+      {group.subgroups?.map(subgroup => <section className="lp-project-board__subgroup" key={subgroup.id}><header><ProjectGroupStatus color={subgroup.color} compact name={subgroup.name} propertyOptions={propertyOptions}/><span data-i18n-ignore>{subgroup.name}</span><small>{projectCount(subgroup)}</small></header>{subgroup.projects.map(project => <ProjectBoardCard key={project.id} onOpen={onOpenProject} onOpenIssues={onOpenProjectIssues} onOpenUpdates={onOpenProjectUpdates} onProjectAction={onProjectAction} onProjectVisualChange={onProjectVisualChange} onPropertyChange={onPropertyChange} project={project} propertyOptions={propertyOptions} visible={visible} />)}</section>)}
       {!group.subgroups?.length && group.projects.map(project => <ProjectBoardCard key={project.id} onOpen={onOpenProject} onOpenIssues={onOpenProjectIssues} onOpenUpdates={onOpenProjectUpdates} onProjectAction={onProjectAction} onProjectVisualChange={onProjectVisualChange} onPropertyChange={onPropertyChange} project={project} propertyOptions={propertyOptions} visible={visible} />)}
       <button className="lp-project-board__add" onClick={() => onCreateProject?.(projectCreateStatus(group.name))} type="button"><PlusIcon /> Add new project</button>
     </div>
@@ -703,16 +705,22 @@ function ProjectProgressSparkline({ createdAt, progress, startDate, targetDate }
   return <svg aria-label="Project progress trend" className="lp-project-progress-sparkline" focusable="false" height="16" role="img" viewBox="0 0 32 16" width="32"><rect fill="transparent" height="16" width="32"/><path d={currentPath} fill="none" stroke="var(--project-progress-value)" strokeWidth="1.25"/><path d={targetPath} fill="none" stroke="var(--project-progress-target)" strokeWidth="1.25"/></svg>
 }
 
-function ProjectTimeline({ groups, onOpenProject }: { groups: ProjectDataGroup[], onOpenProject?: (project: ProjectPageItem) => void }) {
+function ProjectTimeline({ groups, onOpenProject, propertyOptions }: { groups: ProjectDataGroup[], onOpenProject?: (project: ProjectPageItem) => void, propertyOptions?: ProjectPropertyOptions }) {
   const months = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   const rows = groups.flatMap(group => group.subgroups?.length ? group.subgroups.map(subgroup => ({ ...subgroup, name: `${group.name} / ${subgroup.name}` })) : [group])
   return <div aria-label="Project timeline" className="lp-project-timeline" role="grid">
     <header><span>Projects</span><div>{months.map(month => <span key={month}>{month}</span>)}</div></header>
     <div className="lp-project-timeline__body">{rows.map(group => <section key={group.id}>
-      <h2><span className="lp-project-group__status" style={{ '--project-status-color': group.color ?? '#77777c' } as CSSProperties} /><span data-i18n-ignore>{group.name}</span><small>{projectCount(group)}</small></h2>
+      <h2><ProjectGroupStatus color={group.color} compact name={group.name} propertyOptions={propertyOptions}/><span data-i18n-ignore>{group.name}</span><small>{projectCount(group)}</small></h2>
       <div className="lp-project-timeline__tracks">{group.projects.map((project, index) => <button key={project.id} onClick={() => onOpenProject?.(project)} style={{ '--timeline-start': `${(index * 17 + project.name.length * 5) % 67}%`, '--timeline-width': `${Math.max(19, Math.min(47, 28 + project.name.length))}%` } as CSSProperties} type="button"><span>{project.name}</span></button>)}</div>
     </section>)}</div>
   </div>
+}
+
+function ProjectGroupStatus({ color = '#77777c', compact = false, name, propertyOptions }: { color?: string, compact?: boolean, name: string, propertyOptions?: ProjectPropertyOptions }) {
+  const status = (propertyOptions?.status ?? PROPERTY_OPTIONS.status).find(option => option.value.toLocaleLowerCase() === name.toLocaleLowerCase())
+  if (status) return <span aria-hidden="true" className={`lp-project-group__status-icon${compact ? ' is-compact' : ''}`}><ProjectStatusGlyph color={status.color ?? color} name={status.label} type={status.statusType}/></span>
+  return <span aria-hidden="true" className={`lp-project-group__status${compact ? ' is-compact' : ''}`} style={{ '--project-status-color': color } as CSSProperties}/>
 }
 
 function projectCount(group: ProjectDataGroup): number {

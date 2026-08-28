@@ -147,6 +147,7 @@ domain.
 | `FLOW_OIDC_CLIENT_SECRET` | empty | Required OIDC secret. |
 | `FLOW_OIDC_SCOPES` | `openid profile email` | Space-separated scopes. |
 | `FLOW_OIDC_DISPLAY_NAME` | `OpenID Connect` | Login button label. |
+| `FLOW_OIDC_IDENTITY_CLAIM` | `sub` | Stable claim used to bind the IdP identity. Use an employee-number claim only when the IdP guarantees it is unique, immutable, and never reused. |
 | `FLOW_AUTH_SAML_ENABLED` | `false` | Enable SAML 2.0 SP endpoints. |
 | `FLOW_SAML_METADATA_URL` | empty | IdP metadata URL; alternatively use metadata XML. |
 | `FLOW_SAML_METADATA_XML` | empty | Inline/file IdP metadata. |
@@ -157,8 +158,23 @@ domain.
 | `FLOW_SAML_DISPLAY_NAME` | `SAML` | Login button label. |
 
 Google and generic OIDC use authorization code, state, nonce, PKCE, discovery,
-and signed ID-token verification. SAML assertions are validated against IdP
-metadata and mapped from standard email/name attributes.
+and signed ID-token verification. OIDC identities are stored separately from
+`auth_users.email`: `issuer + subject` (or the configured identity claim) is the
+login key, while email is optional profile data. `LoginExternal` remains the
+email-based compatibility API for email/password and existing integrations.
+SAML assertions are validated against IdP metadata and mapped from standard
+email/name attributes.
+
+For an enterprise IdP that exposes an immutable employee number instead of an
+email address, configure for example:
+
+```dotenv
+FLOW_OIDC_SCOPES=openid profile
+FLOW_OIDC_IDENTITY_CLAIM=employeeNumber
+```
+
+The token must still contain a stable `sub` fallback or the configured claim;
+Flow never derives an email address from the employee number.
 
 ## Flow Agent
 

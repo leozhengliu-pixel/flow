@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { NoAssigneeIcon, PriorityIcon } from '@/components/issue/issue-icons'
 import { EmojiPicker } from '@/components/reactions/emoji-picker'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
+import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
 import { useCommentComposer } from '@/hooks/use-comment-composer'
 import type { Project, ProjectUpdate, User } from '@/types/flow'
@@ -93,7 +94,7 @@ export function ProjectUpdatesPreview({ onClose, onComment, onCreate, onDelete, 
   return createPortal(<>
     <div aria-label={`${project.name} project updates`} className="lp-project-updates-preview" onKeyDown={navigateUpdates} ref={ref} role="dialog" tabIndex={-1}>
       <header>
-        <button className="lp-project-updates-preview__title" onClick={() => onOpenProject?.(project)} type="button"><ViewGlyph color={project.color} icon={normalizedIcon(project.icon)}/><strong>{project.name}</strong></button>
+        <button className="lp-project-updates-preview__title" onClick={() => onOpenProject?.(project)} type="button"><ViewGlyph color={project.color} icon={normalizeProjectIcon(project.icon)}/><strong>{project.name}</strong></button>
         <button className="lp-project-updates-preview__subscribe" onClick={() => setSubscribed(value => !value)} type="button">{subscribed && <Check size={13}/>}<span>{subscribed ? 'Subscribed' : 'Subscribe'}</span></button>
         <button aria-label="Write project update" className="lp-project-updates-preview__new" onClick={beginCreate} type="button"><SquarePen size={13}/><span>New update</span></button>
       </header>
@@ -189,7 +190,6 @@ function UpdateAuthorAvatar({ user }: { user: User }) {
 function healthLabel(value: Project['health']) { return ({ onTrack: 'On track', atRisk: 'At risk', offTrack: 'Off track', noUpdate: 'No update' })[value] }
 function formatRelative(value: string) { const seconds = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 1000)); if (seconds < 60) return 'just now'; if (seconds < 3600) return `${Math.floor(seconds / 60)}m`; if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`; return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(new Date(value)) }
 function formatLongDate(value: string) { return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(new Date(`${value}T00:00:00`)) }
-function normalizedIcon(icon?: string) { return icon && !/^[a-z0-9]$/i.test(icon) ? icon : 'Project' }
 function copyUpdateLink(project: Project, update: ProjectUpdate) { const workspace = location.pathname.split('/')[1] || 'cleantrack'; return navigator.clipboard?.writeText(`${location.origin}/${workspace}/project/${project.slugId}/activity#${update.id}`) }
 function useStoredBoolean(key: string, fallback: boolean) {
   const [value, setValue] = useState(() => localStorage.getItem(key) === null ? fallback : localStorage.getItem(key) === 'true')
