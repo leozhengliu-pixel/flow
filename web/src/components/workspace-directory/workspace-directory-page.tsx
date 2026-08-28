@@ -217,6 +217,7 @@ function DirectoryHeader({
         onClick={onCreate}
       >
         <Plus />
+        <span>{createLabel}</span>
       </button>
     </header>
   );
@@ -286,6 +287,7 @@ function MembersDirectory({ data }: { data: BootstrapData }) {
   return (
     <div className="workspace-directory__table workspace-members-table">
       <div className="workspace-members-columns">
+        <span className="workspace-members-indent" />
         <DirectorySortHeader
           active={sort === "name"}
           direction={direction}
@@ -306,6 +308,7 @@ function MembersDirectory({ data }: { data: BootstrapData }) {
         />
         <span>Teams</span>
         <span>Last seen</span>
+        <span className="workspace-members-end" />
       </div>
       {members.map((member) => {
         const user = member.user;
@@ -322,6 +325,7 @@ function MembersDirectory({ data }: { data: BootstrapData }) {
               toast.info(`${user.displayName}'s profile`);
           }}
         >
+          <span className="workspace-members-indent" aria-hidden="true" />
           <div className="workspace-member-identity">
             <DirectoryUserAvatar user={user} />
             <span>
@@ -360,6 +364,7 @@ function MembersDirectory({ data }: { data: BootstrapData }) {
               member.status === "suspended" ? "Suspended" : member.lastSeenAt ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(member.lastSeenAt)) : "Never"
             )}
           </span>
+          <span className="workspace-members-end" aria-hidden="true" />
         </div>
       )})}
     </div>
