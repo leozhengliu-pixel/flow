@@ -13,16 +13,18 @@ import (
 )
 
 type Config struct {
-	HTTPAddr     string
-	StaticPath   string
-	AppURL       string
-	AuthDisabled bool
-	Database     store.DatabaseConfig
-	Redis        coordination.Config
-	Storage      objectstore.Config
-	Auth         AuthConfig
-	Agent        AgentConfig
-	Telemetry    TelemetryConfig
+	HTTPAddr                       string
+	StaticPath                     string
+	AppURL                         string
+	AuthDisabled                   bool
+	WorkspaceRegionSelectorEnabled bool
+	WorkspaceDefaultRegion         string
+	Database                       store.DatabaseConfig
+	Redis                          coordination.Config
+	Storage                        objectstore.Config
+	Auth                           AuthConfig
+	Agent                          AgentConfig
+	Telemetry                      TelemetryConfig
 }
 
 type AgentConfig struct {
@@ -83,10 +85,12 @@ type TelemetryConfig struct {
 func Load() (Config, error) {
 	appURL := strings.TrimRight(value("FLOW_APP_URL", "http://localhost:5173"), "/")
 	config := Config{
-		HTTPAddr:     value("FLOW_HTTP_ADDR", ":8080"),
-		StaticPath:   value("FLOW_STATIC_PATH", ""),
-		AppURL:       appURL,
-		AuthDisabled: boolean("FLOW_AUTH_DISABLED", false),
+		HTTPAddr:                       value("FLOW_HTTP_ADDR", ":8080"),
+		StaticPath:                     value("FLOW_STATIC_PATH", ""),
+		AppURL:                         appURL,
+		AuthDisabled:                   boolean("FLOW_AUTH_DISABLED", false),
+		WorkspaceRegionSelectorEnabled: boolean("FLOW_WORKSPACE_REGION_SELECTOR_ENABLED", true),
+		WorkspaceDefaultRegion:         strings.ToLower(value("FLOW_WORKSPACE_DEFAULT_REGION", "us")),
 		Database: store.DatabaseConfig{
 			Driver:          value("FLOW_DATABASE_DRIVER", "sqlite"),
 			URL:             secret("FLOW_DATABASE_URL"),
@@ -129,6 +133,9 @@ func Load() (Config, error) {
 }
 
 func (c Config) Validate() error {
+	if !validWorkspaceRegion(c.WorkspaceDefaultRegion) {
+		return fmt.Errorf("FLOW_WORKSPACE_DEFAULT_REGION must be one of us, eu, uk, ca, cn, asia, jp, sg, in, au, br")
+	}
 	driver := strings.ToLower(c.Database.Driver)
 	if driver != "sqlite" && driver != "postgres" && driver != "postgresql" && driver != "mysql" {
 		return fmt.Errorf("FLOW_DATABASE_DRIVER must be sqlite, postgres, or mysql")
@@ -184,6 +191,15 @@ func (c Config) Validate() error {
 		return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT or both signal-specific trace and metric endpoints are required when telemetry is enabled")
 	}
 	return nil
+}
+
+func validWorkspaceRegion(region string) bool {
+	switch strings.ToLower(strings.TrimSpace(region)) {
+	case "us", "eu", "uk", "ca", "cn", "asia", "jp", "sg", "in", "au", "br":
+		return true
+	default:
+		return false
+	}
 }
 
 func value(name, fallback string) string {

@@ -207,8 +207,8 @@ export function IssueOptionsMenu({
             <Command.Input ref={parentFilterRef} className="issue-options-filter" aria-label="Filter..." placeholder="Filter..." autoFocus/>
             <Command.List>
               <Command.Empty className="issue-options-empty">No results found.</Command.Empty>
-              <Option icon={<CalendarIcon/>} label="Due date" shortcut="Shift D" nested onSelect={() => { setSubmenu(null); setDatePickerOpen(true) }}/>
-              <Option icon={<ReleasesIcon/>} label="Release" shortcut="Option R" nested onSelect={() => setSubmenu('release')}/>
+              <Option icon={<CalendarIcon/>} label="Due date" shortcut="Shift D" nested onHover={() => { setSubmenu(null); setDatePickerOpen(true) }} onSelect={() => { setSubmenu(null); setDatePickerOpen(true) }}/>
+              <Option icon={<ReleasesIcon/>} label="Release" shortcut="Option R" nested onHover={() => { setDatePickerOpen(false); setSubmenu('release') }} onSelect={() => setSubmenu('release')}/>
               <Option icon={<Link/>} label="Add link..." shortcut="Ctrl L" onSelect={beginAddLink}/>
               <Option icon={<UserRoundPlus/>} label="Add customer request..." shortcut="Ctrl R" onSelect={() => {
                 setCustomerId(data?.customers[0]?.id ?? '')
@@ -218,11 +218,11 @@ export function IssueOptionsMenu({
               }}/>
               <Option icon={<FilePlus2/>} label="Add document..." onSelect={() => actions && void perform(actions.addDocument, 'Document created')}/>
               <Separator/>
-              <Option icon={<Repeat2/>} label="Create related" nested onSelect={() => setSubmenu('create')}/>
-              <Option icon={<Link2/>} label="Mark as" nested onSelect={() => setSubmenu('mark')}/>
+              <Option icon={<Repeat2/>} label="Create related" nested onHover={() => { setDatePickerOpen(false); setSubmenu('create') }} onSelect={() => setSubmenu('create')}/>
+              <Option icon={<Link2/>} label="Mark as" nested onHover={() => { setDatePickerOpen(false); setSubmenu('mark') }} onSelect={() => setSubmenu('mark')}/>
               <Separator/>
-              <Option icon={<Copy/>} label="Copy" nested onSelect={() => setSubmenu('copy')}/>
-              <Option icon={<RefreshCw/>} label="Convert to" nested onSelect={() => setSubmenu('convert')}/>
+              <Option icon={<Copy/>} label="Copy" nested onHover={() => { setDatePickerOpen(false); setSubmenu('copy') }} onSelect={() => setSubmenu('copy')}/>
+              <Option icon={<RefreshCw/>} label="Convert to" nested onHover={() => { setDatePickerOpen(false); setSubmenu('convert') }} onSelect={() => setSubmenu('convert')}/>
               <Separator/>
               <Option icon={<Star fill={favorited ? 'currentColor' : 'none'}/>} label={favorited ? 'Unfavorite' : 'Favorite'} shortcut="Option F" onSelect={() => {
                 if (actions) void perform(actions.toggleFavorite)
@@ -231,7 +231,7 @@ export function IssueOptionsMenu({
                   onFavoriteChange?.()
                 }
               }}/>
-              <Option icon={<Bell/>} label="Remind me" shortcut="Shift H" nested onSelect={() => actions ? setSubmenu('remind') : (closeMenu(), onRemind?.())}/>
+              <Option icon={<Bell/>} label="Remind me" shortcut="Shift H" nested onHover={() => { if (actions) { setDatePickerOpen(false); setSubmenu('remind') } }} onSelect={() => actions ? setSubmenu('remind') : (closeMenu(), onRemind?.())}/>
               <Separator/>
               <Option icon={<Repeat2/>} label={`Run loop on ${issue.identifier}...`} onSelect={() => {
                 setLoopPrompt(issue.description)
@@ -285,7 +285,7 @@ export function IssueOptionsMenu({
               if (actions && window.confirm(`Convert ${issue.identifier} to a project? The original issue will be deleted.`)) void perform(() => actions.convert('project'), 'Converted to project')
             }}/>
             <Option icon={<RefreshCw/>} label="Template..." onSelect={() => actions && void perform(() => actions.convert('template'), 'Issue template created')}/>
-            <Option icon={<Repeat2/>} label="Recurring issue..." onSelect={() => setSubmenu('recurrence')}/>
+            <Option icon={<Repeat2/>} label="Recurring issue..." nested onHover={() => setSubmenu('recurrence')} onSelect={() => setSubmenu('recurrence')}/>
           </SubmenuSurface>}
           {submenu === 'recurrence' && <SubmenuSurface label="Recurring issue" top={282} innerRef={nestedSurfaceRef}>
             <Option icon={<Repeat2/>} label="Daily" detail={issue.recurrence === 'daily' ? 'Selected' : undefined} onSelect={() => setRecurrence('daily')}/>
@@ -375,8 +375,8 @@ function IssueOptionsDialogFooter({ busy, disabled, action, onCancel, onSubmit }
   return <footer><button type="button" onClick={onCancel}>Cancel</button><button type="button" className="primary" disabled={disabled || busy} onClick={onSubmit}>{busy ? 'Working...' : action}</button></footer>
 }
 
-function Option({ icon, label, detail, shortcut, nested, danger, onSelect }: { icon: ReactNode; label: string; detail?: string; shortcut?: string; nested?: boolean; danger?: boolean; onSelect?: () => void }) {
-  return <Command.Item className={`issue-options-item${danger ? ' danger' : ''}`} value={`${label} ${detail ?? ''}`} onSelect={onSelect}>
+function Option({ icon, label, detail, shortcut, nested, danger, onHover, onSelect }: { icon: ReactNode; label: string; detail?: string; shortcut?: string; nested?: boolean; danger?: boolean; onHover?: () => void; onSelect?: () => void }) {
+  return <Command.Item className={`issue-options-item${danger ? ' danger' : ''}`} value={`${label} ${detail ?? ''}`} onFocus={onHover} onPointerMove={onHover} onSelect={onSelect}>
     <span className="issue-options-icon" aria-hidden="true">{icon}</span>
     <span className="issue-options-label">{label}</span>
     {detail && <small className="issue-options-detail">{detail}</small>}

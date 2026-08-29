@@ -27,6 +27,19 @@ type SQLiteStore struct {
 	seedProfile      string
 }
 
+// WorkspaceKeys returns a stable snapshot for background workers. Callers do
+// not hold the store mutex while processing a workspace.
+func (s *SQLiteStore) WorkspaceKeys() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	keys := make([]string, 0, len(s.workspaces))
+	for key := range s.workspaces {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
 type WorkspaceCoordinator interface {
 	WithWorkspaceLock(context.Context, string, func() error) error
 }
@@ -1096,6 +1109,35 @@ func normalize(data *domain.Bootstrap) {
 	if data.IntegrationConnections == nil {
 		data.IntegrationConnections = []domain.IntegrationConnection{}
 	}
+	if data.IdentityProviders == nil {
+		data.IdentityProviders = []domain.IdentityProvider{}
+	}
+	if data.IntegrationDeliveries == nil {
+		data.IntegrationDeliveries = []domain.IntegrationDelivery{}
+	}
+	if data.GitAutomationStates == nil {
+		data.GitAutomationStates = []domain.GitAutomationState{}
+	}
+	if data.TargetBranches == nil {
+		data.TargetBranches = []domain.TargetBranch{}
+	}
+	for i := range data.IntegrationConnections {
+		if data.IntegrationConnections[i].Scopes == nil {
+			data.IntegrationConnections[i].Scopes = []string{}
+		}
+		if data.IntegrationConnections[i].Channels == nil {
+			data.IntegrationConnections[i].Channels = []string{}
+		}
+	}
+	if data.CustomEmojis == nil {
+		data.CustomEmojis = []domain.CustomEmoji{}
+	}
+	if data.AgentSessions == nil {
+		data.AgentSessions = []domain.AgentSession{}
+	}
+	if data.AgentSkills == nil {
+		data.AgentSkills = []domain.PersonalAgentSkill{}
+	}
 	if data.Reviews == nil {
 		data.Reviews = defaultCodeReviews(data)
 	}
@@ -1233,6 +1275,10 @@ func normalize(data *domain.Bootstrap) {
 	if data.ExportJobs == nil {
 		data.ExportJobs = []domain.ExportJob{}
 	}
+	if data.MigrationJobs == nil {
+		data.MigrationJobs = []domain.MigrationJob{}
+	}
+	normalizeParity(data)
 	if data.Webhooks == nil {
 		data.Webhooks = []domain.Webhook{}
 	}
@@ -1338,6 +1384,30 @@ func normalize(data *domain.Bootstrap) {
 	}
 	if data.NotificationDeliveries == nil {
 		data.NotificationDeliveries = []domain.NotificationDelivery{}
+	}
+	if data.PushSubscriptions == nil {
+		data.PushSubscriptions = []domain.PushSubscription{}
+	}
+	if data.TriageResponsibilities == nil {
+		data.TriageResponsibilities = []domain.TriageResponsibility{}
+	}
+	if data.TriageRoutingRules == nil {
+		data.TriageRoutingRules = []domain.TriageRoutingRule{}
+	}
+	if data.TriageAssignments == nil {
+		data.TriageAssignments = []domain.TriageAssignment{}
+	}
+	if data.WorkflowDefinitions == nil {
+		data.WorkflowDefinitions = []domain.WorkflowDefinition{}
+	}
+	if data.WorkflowRuns == nil {
+		data.WorkflowRuns = []domain.WorkflowRun{}
+	}
+	if data.EmailIntakeAddresses == nil {
+		data.EmailIntakeAddresses = []domain.EmailIntakeAddress{}
+	}
+	if data.EmailIntakeMessages == nil {
+		data.EmailIntakeMessages = []domain.EmailIntakeMessage{}
 	}
 	for _, user := range data.Users {
 		if _, ok := data.NotificationPreferences[user.ID]; !ok {
