@@ -31,6 +31,19 @@ func TestLoadDefaultsAndBackendValidation(t *testing.T) {
 	}
 }
 
+func TestWorkspaceRegionSelectorConfig(t *testing.T) {
+	t.Setenv("FLOW_WORKSPACE_REGION_SELECTOR_ENABLED", "false")
+	t.Setenv("FLOW_WORKSPACE_DEFAULT_REGION", "eu")
+	loaded, err := Load()
+	if err != nil || loaded.WorkspaceRegionSelectorEnabled || loaded.WorkspaceDefaultRegion != "eu" {
+		t.Fatalf("workspace region config = enabled=%v region=%q err=%v", loaded.WorkspaceRegionSelectorEnabled, loaded.WorkspaceDefaultRegion, err)
+	}
+	t.Setenv("FLOW_WORKSPACE_DEFAULT_REGION", "invalid")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_WORKSPACE_DEFAULT_REGION") {
+		t.Fatalf("invalid default region error = %v", err)
+	}
+}
+
 func TestLoadRedisClusterValidation(t *testing.T) {
 	t.Setenv("FLOW_REDIS_MODE", "cluster")
 	t.Setenv("FLOW_REDIS_ADDRS", "redis-1:6379, redis-2:6379,redis-3:6379")

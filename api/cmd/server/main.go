@@ -34,22 +34,25 @@ var (
 )
 
 type server struct {
-	store               *store.SQLiteStore
-	uploadPath          string
-	objectStore         objectstore.Store
-	staticPath          string
-	authDisabled        bool
-	mailer              *smtpMailer
-	authLimiter         authRateLimitBackend
-	realtime            *realtimeHub
-	coordinator         *coordination.Redis
-	coordinationStarted atomic.Bool
-	externalAuth        *externalAuth
-	agent               appconfig.AgentConfig
-	agentClient         *http.Client
-	allowedOrigin       string
-	mcpUploadMu         sync.Mutex
-	mcpUploads          map[string]*mcpPendingUpload
+	store                          *store.SQLiteStore
+	uploadPath                     string
+	objectStore                    objectstore.Store
+	staticPath                     string
+	authDisabled                   bool
+	mailer                         *smtpMailer
+	authLimiter                    authRateLimitBackend
+	realtime                       *realtimeHub
+	coordinator                    *coordination.Redis
+	coordinationStarted            atomic.Bool
+	workflowSchedulerStarted       atomic.Bool
+	externalAuth                   *externalAuth
+	agent                          appconfig.AgentConfig
+	agentClient                    *http.Client
+	allowedOrigin                  string
+	workspaceRegionSelectorEnabled bool
+	workspaceDefaultRegion         string
+	mcpUploadMu                    sync.Mutex
+	mcpUploads                     map[string]*mcpPendingUpload
 }
 
 func main() {
@@ -85,17 +88,19 @@ func main() {
 	}
 	defer shutdownTelemetry(context.Background())
 	s := &server{
-		store:         repository,
-		uploadPath:    applicationConfig.Storage.LocalPath,
-		objectStore:   objects,
-		staticPath:    applicationConfig.StaticPath,
-		authDisabled:  applicationConfig.AuthDisabled,
-		coordinator:   redisCoordinator,
-		mailer:        smtpMailerFromEnv(),
-		externalAuth:  external,
-		agent:         applicationConfig.Agent,
-		agentClient:   &http.Client{Timeout: applicationConfig.Agent.Timeout},
-		allowedOrigin: applicationConfig.AppURL,
+		store:                          repository,
+		uploadPath:                     applicationConfig.Storage.LocalPath,
+		objectStore:                    objects,
+		staticPath:                     applicationConfig.StaticPath,
+		authDisabled:                   applicationConfig.AuthDisabled,
+		coordinator:                    redisCoordinator,
+		mailer:                         smtpMailerFromEnv(),
+		externalAuth:                   external,
+		agent:                          applicationConfig.Agent,
+		agentClient:                    &http.Client{Timeout: applicationConfig.Agent.Timeout},
+		allowedOrigin:                  applicationConfig.AppURL,
+		workspaceRegionSelectorEnabled: applicationConfig.WorkspaceRegionSelectorEnabled,
+		workspaceDefaultRegion:         applicationConfig.WorkspaceDefaultRegion,
 	}
 
 	httpServer := &http.Server{Addr: applicationConfig.HTTPAddr, Handler: telemetryHandler(newHandler(s), applicationConfig.Telemetry.Enabled), ReadHeaderTimeout: 5 * time.Second}
@@ -118,6 +123,7 @@ func newHandler(s *server) http.Handler {
 	}
 	s.store.SetRealtimeSink(s.publishRealtime)
 	s.startCoordination()
+	s.startWorkflowScheduler()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]string{"status": "ok", "redis": "disabled"}
@@ -131,6 +137,7 @@ func newHandler(s *server) http.Handler {
 		}
 		writeJSON(w, http.StatusOK, response)
 	})
+	mux.HandleFunc("POST /api/email-intake/{token}/receive", s.receiveEmailIntake)
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource", s.oauthProtectedResource)
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", s.oauthProtectedResource)
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp/readonly", s.oauthProtectedResource)
@@ -153,6 +160,9 @@ func newHandler(s *server) http.Handler {
 	mux.Handle("POST /api/auth/forgot-password", s.requireEmailAuth(s.limitAuth("forgot-password", 5, 15*time.Minute, http.HandlerFunc(s.forgotPassword))))
 	mux.Handle("POST /api/auth/reset-password", s.requireEmailAuth(s.limitAuth("reset-password", 8, 15*time.Minute, http.HandlerFunc(s.resetPassword))))
 	mux.HandleFunc("GET /api/auth/providers", s.authProviders)
+	mux.HandleFunc("GET /api/auth/discovery", s.discoverWorkspaceSSO)
+	mux.HandleFunc("GET /api/auth/enterprise/{id}/start", s.startEnterpriseOIDC)
+	mux.HandleFunc("GET /api/auth/enterprise/{id}/callback", s.finishEnterpriseOIDC)
 	mux.HandleFunc("GET /api/auth/{provider}/start", s.startOIDC)
 	mux.HandleFunc("GET /api/auth/{provider}/callback", s.finishOIDC)
 	mux.HandleFunc("GET /api/auth/saml/start", s.startSAML)
@@ -170,6 +180,9 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/account/profile", s.updateAccountProfile)
 	mux.HandleFunc("GET /api/account/sessions", s.listAccountSessions)
 	mux.HandleFunc("DELETE /api/account/sessions/others", s.revokeOtherSessions)
+	mux.HandleFunc("DELETE /api/account/sessions/{id}", s.revokeAccountSession)
+	mux.HandleFunc("GET /api/account/identities", s.listAccountIdentities)
+	mux.HandleFunc("DELETE /api/account/identities/{id}", s.unlinkAccountIdentity)
 	mux.HandleFunc("POST /api/account/change-password", s.changeAccountPassword)
 	mux.HandleFunc("GET /api/realtime/events", s.realtimeEvents)
 	mux.HandleFunc("GET /api/realtime/socket", s.realtimeSocket)
@@ -282,6 +295,11 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/webhooks/{id}", s.deleteWebhook)
 	mux.HandleFunc("POST /api/oauth/token", s.exchangeOAuthToken)
 	mux.HandleFunc("GET /api/integrations", s.listIntegrations)
+	mux.HandleFunc("GET /api/identity-providers", s.listIdentityProviders)
+	mux.HandleFunc("POST /api/identity-providers", s.createIdentityProvider)
+	mux.HandleFunc("PATCH /api/identity-providers/{id}", s.updateIdentityProvider)
+	mux.HandleFunc("DELETE /api/identity-providers/{id}", s.deleteIdentityProvider)
+	mux.HandleFunc("POST /api/identity-providers/{id}/verify", s.verifyIdentityProvider)
 	mux.HandleFunc("PUT /api/integrations/{provider}", s.connectIntegration)
 	mux.HandleFunc("POST /api/integrations/{provider}/oauth/start", s.startIntegrationOAuth)
 	mux.HandleFunc("GET /api/integrations/{provider}/oauth/callback", s.finishIntegrationOAuth)
@@ -292,6 +310,15 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/integrations/{provider}/{id}/test", s.testIntegrationWebhook)
 	mux.HandleFunc("PATCH /api/integrations/{provider}/{id}", s.updateIntegration)
 	mux.HandleFunc("DELETE /api/integrations/{provider}/{id}", s.disconnectIntegrationConnection)
+	mux.HandleFunc("POST /api/integration-deliveries", s.createIntegrationDelivery)
+	mux.HandleFunc("POST /api/integration-deliveries/{id}/retry", s.retryIntegrationDelivery)
+	mux.HandleFunc("POST /api/git-automations", s.upsertGitAutomation)
+	mux.HandleFunc("PUT /api/git-automations/{id}", s.upsertGitAutomation)
+	mux.HandleFunc("DELETE /api/git-automations/{id}", s.deleteGitAutomation)
+	mux.HandleFunc("POST /api/target-branches", s.upsertTargetBranch)
+	mux.HandleFunc("PUT /api/target-branches/{id}", s.upsertTargetBranch)
+	mux.HandleFunc("DELETE /api/target-branches/{id}", s.deleteTargetBranch)
+	mux.HandleFunc("GET /api/attachments/by-url", s.findAttachmentsByURL)
 	mux.HandleFunc("GET /api/reviews", s.listReviews)
 	mux.HandleFunc("GET /api/reviews/{id}", s.getReview)
 	mux.HandleFunc("PATCH /api/reviews/{id}", s.updateReview)
@@ -324,13 +351,100 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/exports/{id}", s.getExport)
 	mux.HandleFunc("POST /api/exports/{id}/retry", s.retryExport)
 	mux.HandleFunc("GET /api/exports/{id}/download", s.downloadExport)
+	mux.HandleFunc("GET /api/migrations", s.listMigrations)
+	mux.HandleFunc("POST /api/migrations/preview", s.previewMigration)
+	mux.HandleFunc("GET /api/migrations/{id}", s.getMigration)
+	mux.HandleFunc("GET /api/migrations/{id}/manifest", s.downloadMigrationManifest)
+	mux.HandleFunc("PATCH /api/migrations/{id}/mappings", s.updateMigrationMappings)
+	mux.HandleFunc("POST /api/migrations/{id}/invite-users", s.inviteMigrationUsers)
+	mux.HandleFunc("POST /api/migrations/{id}/linear/scan", s.scanLinearMigrationTarget)
+	mux.HandleFunc("POST /api/migrations/{id}/execute", s.executeMigration)
+	mux.HandleFunc("POST /api/migrations/{id}/rollback", s.rollbackMigration)
+	mux.HandleFunc("GET /api/migrations/bundle", s.downloadMigrationBundle)
 	mux.HandleFunc("GET /api/analytics/overview", s.workspaceAnalytics)
+	mux.HandleFunc("GET /api/dashboards", s.listDashboards)
+	mux.HandleFunc("POST /api/dashboards", s.createDashboard)
+	mux.HandleFunc("PATCH /api/dashboards/{id}", s.updateDashboard)
+	mux.HandleFunc("DELETE /api/dashboards/{id}", s.deleteDashboard)
+	mux.HandleFunc("GET /api/dashboards/{id}/results", s.dashboardResults)
+	mux.HandleFunc("GET /api/dashboards/{id}/export", s.exportDashboard)
+	mux.HandleFunc("PUT /api/dashboards/{id}/subscription", s.subscribeDashboard)
+	mux.HandleFunc("DELETE /api/dashboards/{id}/subscription", s.subscribeDashboard)
+	mux.HandleFunc("POST /api/dashboards/{id}/share", s.shareDashboard)
+	mux.HandleFunc("DELETE /api/dashboards/{id}/share", s.shareDashboard)
+	mux.HandleFunc("GET /api/shared/dashboards/{token}", s.getSharedDashboard)
+	mux.HandleFunc("GET /api/posts", s.listPosts)
+	mux.HandleFunc("POST /api/posts", s.createPost)
+	mux.HandleFunc("PATCH /api/posts/{id}", s.updatePost)
+	mux.HandleFunc("DELETE /api/posts/{id}", s.deletePost)
+	mux.HandleFunc("GET /api/feed", s.listFeedItems)
+	mux.HandleFunc("GET /api/meetings", s.listMeetings)
+	mux.HandleFunc("POST /api/meetings", s.createMeeting)
+	mux.HandleFunc("PATCH /api/meetings/{id}", s.updateMeeting)
+	mux.HandleFunc("DELETE /api/meetings/{id}", s.deleteMeeting)
+	mux.HandleFunc("GET /api/search/semantic", s.semanticSearch)
+	mux.HandleFunc("GET /api/search/filter-suggestions", s.filterSuggestions)
+	mux.HandleFunc("GET /api/projects/{id}/relations", s.listProjectRelations)
+	mux.HandleFunc("POST /api/projects/{id}/relations", s.createProjectRelation)
+	mux.HandleFunc("PATCH /api/projects/{id}/relations/{relationId}", s.updateProjectRelation)
+	mux.HandleFunc("DELETE /api/projects/{id}/relations/{relationId}", s.deleteProjectRelation)
+	mux.HandleFunc("GET /api/projects/{id}/history", s.projectHistory)
+	mux.HandleFunc("GET /api/initiatives/{id}/relations", s.listInitiativeRelations)
+	mux.HandleFunc("POST /api/initiatives/{id}/relations", s.createInitiativeRelation)
+	mux.HandleFunc("PATCH /api/initiatives/{id}/relations/{relationId}", s.updateInitiativeRelation)
+	mux.HandleFunc("DELETE /api/initiatives/{id}/relations/{relationId}", s.deleteInitiativeRelation)
+	mux.HandleFunc("GET /api/initiatives/{id}/history", s.initiativeHistory)
+	mux.HandleFunc("GET /api/documents/{id}/drafts", s.listDocumentDrafts)
+	mux.HandleFunc("POST /api/documents/{id}/drafts", s.createDocumentDraft)
+	mux.HandleFunc("PATCH /api/documents/{id}/drafts/{draftId}", s.updateDocumentDraft)
+	mux.HandleFunc("DELETE /api/documents/{id}/drafts/{draftId}", s.deleteDocumentDraft)
+	mux.HandleFunc("POST /api/documents/{id}/drafts/{draftId}/publish", s.publishDocumentDraft)
+	mux.HandleFunc("GET /api/documents/{id}/history", s.documentContentHistory)
+	mux.HandleFunc("GET /api/customer-taxonomy", s.listCustomerTaxonomy)
+	mux.HandleFunc("POST /api/customer-statuses", s.createCustomerTaxonomy)
+	mux.HandleFunc("PATCH /api/customer-statuses/{id}", s.updateCustomerTaxonomy)
+	mux.HandleFunc("DELETE /api/customer-statuses/{id}", s.deleteCustomerTaxonomy)
+	mux.HandleFunc("POST /api/customer-tiers", s.createCustomerTaxonomy)
+	mux.HandleFunc("PATCH /api/customer-tiers/{id}", s.updateCustomerTaxonomy)
+	mux.HandleFunc("DELETE /api/customer-tiers/{id}", s.deleteCustomerTaxonomy)
+	mux.HandleFunc("POST /api/customer-requests/{id}/archive", s.archiveCustomerNeed)
+	mux.HandleFunc("DELETE /api/customer-requests/{id}/archive", s.archiveCustomerNeed)
+	mux.HandleFunc("GET /api/releases/{id}/notes", s.listReleaseNotes)
+	mux.HandleFunc("POST /api/releases/{id}/notes", s.createReleaseNote)
+	mux.HandleFunc("PATCH /api/releases/{id}/notes/{noteId}", s.updateReleaseNote)
+	mux.HandleFunc("DELETE /api/releases/{id}/notes/{noteId}", s.deleteReleaseNote)
+	mux.HandleFunc("GET /api/releases/{id}/history", s.releaseHistory)
+	mux.HandleFunc("GET /api/teams/{id}/resources", s.listTeamResources)
+	mux.HandleFunc("POST /api/teams/{id}/resource-sections", s.createTeamResourceSection)
+	mux.HandleFunc("POST /api/teams/{id}/resources", s.createTeamPinnedResource)
+	mux.HandleFunc("PATCH /api/teams/{id}/resources/{resourceId}", s.updateTeamResource)
+	mux.HandleFunc("DELETE /api/teams/{id}/resources/{resourceId}", s.deleteTeamResource)
+	mux.HandleFunc("GET /api/agent/activities", s.listAgentActivities)
+	mux.HandleFunc("POST /api/agent/activities", s.createAgentActivity)
+	mux.HandleFunc("PATCH /api/agent/activities/{id}", s.updateAgentActivity)
+	mux.HandleFunc("GET /api/ai/conversations", s.listAIConversations)
+	mux.HandleFunc("POST /api/ai/conversations", s.createAIConversation)
+	mux.HandleFunc("PATCH /api/ai/conversations/{id}", s.updateAIConversation)
+	mux.HandleFunc("POST /api/ai/prompt-progress", s.createAIPromptProgress)
+	mux.HandleFunc("GET /api/usage-alerts", s.listUsageAlerts)
+	mux.HandleFunc("PUT /api/usage-alerts", s.upsertUsageAlert)
+	mux.HandleFunc("GET /api/paid-subscription", s.paidSubscription)
 	mux.HandleFunc("GET /api/bootstrap", s.bootstrap)
 	mux.HandleFunc("PUT /api/workspace/project-display-default", s.updateProjectDisplayDefault)
 	mux.HandleFunc("PUT /api/workspace/settings", s.updateWorkspaceSettings)
 	mux.HandleFunc("GET /api/notifications", s.listNotifications)
 	mux.HandleFunc("PATCH /api/notifications/{id}", s.updateNotification)
 	mux.HandleFunc("POST /api/notifications/batch", s.batchNotifications)
+	mux.HandleFunc("GET /api/push-subscriptions", s.listPushSubscriptions)
+	mux.HandleFunc("POST /api/push-subscriptions", s.createPushSubscription)
+	mux.HandleFunc("DELETE /api/push-subscriptions/{id}", s.deletePushSubscription)
+	mux.HandleFunc("GET /api/workflows", s.listWorkflowDefinitions)
+	mux.HandleFunc("POST /api/workflows", s.createWorkflowDefinition)
+	mux.HandleFunc("PATCH /api/workflows/{id}", s.updateWorkflowDefinition)
+	mux.HandleFunc("DELETE /api/workflows/{id}", s.deleteWorkflowDefinition)
+	mux.HandleFunc("POST /api/workflows/{id}/run", s.runWorkflowDefinition)
+	mux.HandleFunc("GET /api/workflow-runs", s.listWorkflowRuns)
+	mux.HandleFunc("POST /api/workflow-runs/{runId}/retry", s.retryWorkflowRun)
 	mux.HandleFunc("GET /api/notification-preferences", s.getNotificationPreferences)
 	mux.HandleFunc("PATCH /api/notification-preferences", s.updateNotificationPreferences)
 	mux.HandleFunc("GET /api/notification-deliveries", s.listNotificationDeliveries)
@@ -350,6 +464,19 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/teams/{id}/states/{stateId}", s.deleteWorkflowState)
 	mux.HandleFunc("POST /api/teams/{id}/states/reorder", s.reorderWorkflowStates)
 	mux.HandleFunc("GET /api/teams/{id}/settings", s.getTeamSettings)
+	mux.HandleFunc("GET /api/teams/{id}/triage-responsibilities", s.listTriageResponsibilities)
+	mux.HandleFunc("POST /api/teams/{id}/triage-responsibilities", s.createTriageResponsibility)
+	mux.HandleFunc("PATCH /api/teams/{id}/triage-responsibilities/{responsibilityId}", s.updateTriageResponsibility)
+	mux.HandleFunc("DELETE /api/teams/{id}/triage-responsibilities/{responsibilityId}", s.deleteTriageResponsibility)
+	mux.HandleFunc("GET /api/teams/{id}/triage-rules", s.listTriageRules)
+	mux.HandleFunc("POST /api/teams/{id}/triage-rules", s.createTriageRule)
+	mux.HandleFunc("PATCH /api/teams/{id}/triage-rules/{ruleId}", s.updateTriageRule)
+	mux.HandleFunc("DELETE /api/teams/{id}/triage-rules/{ruleId}", s.deleteTriageRule)
+	mux.HandleFunc("GET /api/teams/{id}/email-intake-addresses", s.listEmailIntakeAddresses)
+	mux.HandleFunc("POST /api/teams/{id}/email-intake-addresses", s.createEmailIntakeAddress)
+	mux.HandleFunc("POST /api/teams/{id}/email-intake-addresses/{addressId}/verify", s.verifyEmailIntakeAddress)
+	mux.HandleFunc("POST /api/teams/{id}/email-intake-addresses/{addressId}/rotate", s.rotateEmailIntakeAddress)
+	mux.HandleFunc("DELETE /api/teams/{id}/email-intake-addresses/{addressId}", s.deleteEmailIntakeAddress)
 	mux.HandleFunc("PATCH /api/teams/{id}/settings", s.updateStructuredTeamSettings)
 	mux.HandleFunc("GET /api/teams/{id}/templates", s.listIssueTemplates)
 	mux.HandleFunc("POST /api/teams/{id}/templates", s.createIssueTemplate)
@@ -455,11 +582,26 @@ func (s *server) withStaticFiles(next http.Handler) http.Handler {
 
 func (s *server) accountBootstrap(w http.ResponseWriter, r *http.Request) {
 	if s.authDisabled {
-		writeJSON(w, http.StatusOK, s.store.Account())
+		account := s.store.Account()
+		account.WorkspaceRegionSelectorEnabled = s.regionSelectorEnabled()
+		account.WorkspaceDefaultRegion = s.defaultWorkspaceRegion()
+		writeJSON(w, http.StatusOK, account)
 		return
 	}
 	account, err := s.store.AccountForUser(r.Context(), authUser(r).ID)
+	account.WorkspaceRegionSelectorEnabled = s.regionSelectorEnabled()
+	account.WorkspaceDefaultRegion = s.defaultWorkspaceRegion()
 	respondMutation(w, err, http.StatusOK, account)
+}
+
+func (s *server) regionSelectorEnabled() bool {
+	return s.workspaceDefaultRegion == "" || s.workspaceRegionSelectorEnabled
+}
+func (s *server) defaultWorkspaceRegion() string {
+	if s.workspaceDefaultRegion == "" {
+		return "us"
+	}
+	return s.workspaceDefaultRegion
 }
 
 func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
@@ -491,6 +633,15 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 }
 
 func sanitizeBootstrap(data *domain.Bootstrap) {
+	// These collections have per-resource visibility rules and are served only
+	// through their paginated endpoints. Keeping them in the persisted settings
+	// envelope avoids a second transaction, but they must never leak through the
+	// workspace bootstrap response.
+	delete(data.Settings, dashboardsSettingsKey)
+	delete(data.Settings, postsSettingsKey)
+	delete(data.Settings, feedSettingsKey)
+	delete(data.Settings, meetingsSettingsKey)
+	data.DocumentContentDrafts = slices.DeleteFunc(data.DocumentContentDrafts, func(item domain.DocumentContentDraft) bool { return item.UserID != data.Viewer.ID })
 	data.AgentSessions = slices.DeleteFunc(data.AgentSessions, func(item domain.AgentSession) bool { return item.UserID != data.Viewer.ID })
 	data.AgentSkills = slices.DeleteFunc(data.AgentSkills, func(item domain.PersonalAgentSkill) bool { return item.UserID != data.Viewer.ID })
 	for index := range data.Cycles {
@@ -506,9 +657,34 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 		data.OAuthApplications[index].ClientSecret = ""
 	}
 	for index := range data.IntegrationConnections {
-		data.IntegrationConnections[index].OAuthState = ""
-		data.IntegrationConnections[index].OAuthAccessToken = ""
-		data.IntegrationConnections[index].OAuthRefreshToken = ""
+		data.IntegrationConnections[index] = redactIntegrationConnection(data.IntegrationConnections[index])
+	}
+	if data.ViewerRole != "admin" {
+		data.IdentityProviders = []domain.IdentityProvider{}
+		data.IntegrationDeliveries = []domain.IntegrationDelivery{}
+		data.GitAutomationStates = []domain.GitAutomationState{}
+		data.TargetBranches = []domain.TargetBranch{}
+	} else {
+		if len(data.IntegrationDeliveries) > 100 {
+			data.IntegrationDeliveries = data.IntegrationDeliveries[len(data.IntegrationDeliveries)-100:]
+		}
+		for index := range data.IntegrationDeliveries {
+			data.IntegrationDeliveries[index].Payload = nil
+		}
+	}
+	for index := range data.MigrationJobs {
+		data.MigrationJobs[index].Bundle = nil
+	}
+	for index := range data.EmailIntakeAddresses {
+		data.EmailIntakeAddresses[index].InboundTokenHash = ""
+		for aliasIndex := range data.EmailIntakeAddresses[index].Aliases {
+			data.EmailIntakeAddresses[index].Aliases[aliasIndex].TokenHash = ""
+		}
+	}
+	data.PushSubscriptions = slices.DeleteFunc(data.PushSubscriptions, func(item domain.PushSubscription) bool { return item.UserID != data.Viewer.ID })
+	for index := range data.PushSubscriptions {
+		data.PushSubscriptions[index].P256DH = ""
+		data.PushSubscriptions[index].Auth = ""
 	}
 }
 
@@ -592,11 +768,27 @@ func (s *server) createWorkspace(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "name and URL are required")
 		return
 	}
+	if !s.regionSelectorEnabled() {
+		input.Region = s.defaultWorkspaceRegion()
+	}
 	if input.Region == "" {
-		input.Region = "us"
+		input.Region = s.defaultWorkspaceRegion()
+	}
+	if !workspaceRegionAllowed(input.Region) {
+		writeError(w, http.StatusBadRequest, "unsupported workspace region")
+		return
 	}
 	data, err := s.store.CreateWorkspace(r.Context(), input.Name, input.URLKey, input.Region)
 	respondMutation(w, err, http.StatusCreated, data)
+}
+
+func workspaceRegionAllowed(region string) bool {
+	switch strings.ToLower(strings.TrimSpace(region)) {
+	case "us", "eu", "uk", "ca", "cn", "asia", "jp", "sg", "in", "au", "br":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *server) updateWorkspace(w http.ResponseWriter, r *http.Request) {
@@ -1555,6 +1747,7 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		}
 		applyCycleAutomation(data, &created)
 		applySLARules(data, &created, now)
+		applyTriageRouting(data, &created, now)
 		if input.ParentID != nil {
 			parent, err := issueByID(data, *input.ParentID)
 			if err != nil {
@@ -1590,6 +1783,7 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 			children = append(children, child)
 		}
 		data.Issues = append([]domain.Issue{created}, append(children, data.Issues...)...)
+		applyTriggeredWorkflows(data, "issueCreated", "issue", created.ID)
 		appendActivity(data, created.ID, "issue.created", data.Viewer, map[string]string{})
 		for _, child := range children {
 			appendActivity(data, child.ID, "issue.created", data.Viewer, map[string]string{})
@@ -4097,6 +4291,23 @@ func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input d
 			}
 		}
 		project.DependencyIDs = slices.Clone(input.DependencyIDs)
+		existing := map[string]domain.ProjectRelation{}
+		for _, relation := range data.ProjectRelations {
+			if relation.ProjectID == project.ID && relation.Type == "blocked_by" {
+				existing[relation.RelatedProjectID] = relation
+			}
+		}
+		data.ProjectRelations = slices.DeleteFunc(data.ProjectRelations, func(relation domain.ProjectRelation) bool {
+			return relation.ProjectID == project.ID && relation.Type == "blocked_by"
+		})
+		for _, dependencyID := range project.DependencyIDs {
+			if relation, ok := existing[dependencyID]; ok {
+				data.ProjectRelations = append(data.ProjectRelations, relation)
+			} else {
+				now := time.Now().UTC()
+				data.ProjectRelations = append(data.ProjectRelations, domain.ProjectRelation{ID: fmt.Sprintf("project_relation_%d", now.UnixNano()), ProjectID: project.ID, RelatedProjectID: dependencyID, Type: "blocked_by", CreatedAt: now, UpdatedAt: now})
+			}
+		}
 	}
 	if input.Initiatives != nil {
 		project.Initiatives = normalizedStrings(input.Initiatives)
@@ -4207,6 +4418,25 @@ func applyInitiativeUpdate(data *domain.Bootstrap, initiative *domain.Initiative
 			}
 		}
 		initiative.ParentInitiativeIDs = normalizedStrings(*input.ParentInitiativeIDs)
+		existing := map[string]domain.InitiativeRelation{}
+		for _, relation := range data.InitiativeRelations {
+			if relation.InitiativeID == initiative.ID && relation.Type == "parent" {
+				existing[relation.RelatedInitiativeID] = relation
+			}
+		}
+		data.InitiativeRelations = slices.DeleteFunc(data.InitiativeRelations, func(relation domain.InitiativeRelation) bool {
+			return relation.InitiativeID == initiative.ID && relation.Type == "parent"
+		})
+		for index, parentID := range initiative.ParentInitiativeIDs {
+			if relation, ok := existing[parentID]; ok {
+				relation.SortOrder = float64(index)
+				relation.UpdatedAt = time.Now().UTC()
+				data.InitiativeRelations = append(data.InitiativeRelations, relation)
+			} else {
+				now := time.Now().UTC()
+				data.InitiativeRelations = append(data.InitiativeRelations, domain.InitiativeRelation{ID: fmt.Sprintf("initiative_relation_%d", now.UnixNano()), InitiativeID: initiative.ID, RelatedInitiativeID: parentID, Type: "parent", SortOrder: float64(index), CreatedAt: now, UpdatedAt: now})
+			}
+		}
 	}
 	if input.ProjectIDs != nil {
 		for _, id := range *input.ProjectIDs {

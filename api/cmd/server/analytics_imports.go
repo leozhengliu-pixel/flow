@@ -1,14 +1,41 @@
 package main
 
 import (
+	"encoding/base64"
 	"net/http"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"flow/api/internal/domain"
 )
+
+// writeArrayPage preserves the legacy array response while bounding job-list
+// payloads. Clients can continue with X-Next-Cursor without downloading the
+// complete workspace job history on every poll.
+func writeArrayPage[T any](w http.ResponseWriter, r *http.Request, values []T) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit < 1 || limit > 100 {
+		limit = 50
+	}
+	offset := 0
+	if raw := r.URL.Query().Get("cursor"); raw != "" {
+		if decoded, err := base64.RawURLEncoding.DecodeString(raw); err == nil {
+			offset, _ = strconv.Atoi(string(decoded))
+		}
+	}
+	if offset < 0 || offset > len(values) {
+		offset = 0
+	}
+	end := min(len(values), offset+limit)
+	w.Header().Set("X-Total-Count", strconv.Itoa(len(values)))
+	if end < len(values) {
+		w.Header().Set("X-Next-Cursor", base64.RawURLEncoding.EncodeToString([]byte(strconv.Itoa(end))))
+	}
+	writeJSON(w, http.StatusOK, values[offset:end])
+}
 
 // listImports and listExports provide a lightweight job monitor instead of
 // forcing clients to repeatedly download the complete bootstrap payload.
@@ -20,7 +47,7 @@ func (s *server) listImports(w http.ResponseWriter, r *http.Request) {
 			jobs = append(jobs, job)
 		}
 	}
-	writeJSON(w, http.StatusOK, jobs)
+	writeArrayPage(w, r, jobs)
 }
 
 func (s *server) getImport(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +124,7 @@ func (s *server) listExports(w http.ResponseWriter, r *http.Request) {
 			jobs = append(jobs, job)
 		}
 	}
-	writeJSON(w, http.StatusOK, jobs)
+	writeArrayPage(w, r, jobs)
 }
 
 func (s *server) getExport(w http.ResponseWriter, r *http.Request) {
