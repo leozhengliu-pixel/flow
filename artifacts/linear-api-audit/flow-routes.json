@@ -1,0 +1,2007 @@
+[
+  {
+    "method": "GET",
+    "path": "/api/health",
+    "handler": "func"
+  },
+  {
+    "method": "POST",
+    "path": "/api/email-intake/{token}/receive",
+    "handler": "receiveEmailIntake"
+  },
+  {
+    "method": "GET",
+    "path": "/.well-known/oauth-protected-resource",
+    "handler": "oauthProtectedResource"
+  },
+  {
+    "method": "GET",
+    "path": "/.well-known/oauth-protected-resource/mcp",
+    "handler": "oauthProtectedResource"
+  },
+  {
+    "method": "GET",
+    "path": "/.well-known/oauth-protected-resource/mcp/readonly",
+    "handler": "oauthProtectedResource"
+  },
+  {
+    "method": "GET",
+    "path": "/.well-known/oauth-authorization-server",
+    "handler": "oauthAuthorizationServer"
+  },
+  {
+    "method": "POST",
+    "path": "/oauth/register",
+    "handler": "registerOAuthClient"
+  },
+  {
+    "method": "POST",
+    "path": "/oauth/token",
+    "handler": "exchangeMCPToken"
+  },
+  {
+    "method": "POST",
+    "path": "/oauth/revoke",
+    "handler": "revokeOAuthToken"
+  },
+  {
+    "method": "POST",
+    "path": "/mcp",
+    "handler": "mcpHTTP"
+  },
+  {
+    "method": "POST",
+    "path": "/mcp/readonly",
+    "handler": "mcpHTTP"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/mcp/uploads/{token}",
+    "handler": "putMCPUpload"
+  },
+  {
+    "method": "GET",
+    "path": "/api/oauth/authorization-request",
+    "handler": "getOAuthAuthorizationRequest"
+  },
+  {
+    "method": "POST",
+    "path": "/api/oauth/authorization-request",
+    "handler": "decideOAuthAuthorization"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/oauth/authorizations/{id}",
+    "handler": "revokeOAuthAuthorization"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/logout",
+    "handler": "logout"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/session",
+    "handler": "authSession"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/providers",
+    "handler": "authProviders"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/discovery",
+    "handler": "discoverWorkspaceSSO"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/enterprise/{id}/start",
+    "handler": "startEnterpriseOIDC"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/enterprise/{id}/callback",
+    "handler": "finishEnterpriseOIDC"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/{provider}/start",
+    "handler": "startOIDC"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/{provider}/callback",
+    "handler": "finishOIDC"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/saml/start",
+    "handler": "startSAML"
+  },
+  {
+    "method": "POST",
+    "path": "/api/invitations/accept",
+    "handler": "acceptInvitation"
+  },
+  {
+    "method": "GET",
+    "path": "/api/invitations/preview/{token}",
+    "handler": "invitationPreview"
+  },
+  {
+    "method": "GET",
+    "path": "/api/account/bootstrap",
+    "handler": "accountBootstrap"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/account/last-workspace",
+    "handler": "setLastWorkspace"
+  },
+  {
+    "method": "GET",
+    "path": "/api/account/settings",
+    "handler": "getUserSettings"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/account/settings",
+    "handler": "updateUserSettings"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/account/profile",
+    "handler": "updateAccountProfile"
+  },
+  {
+    "method": "GET",
+    "path": "/api/account/sessions",
+    "handler": "listAccountSessions"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/account/sessions/others",
+    "handler": "revokeOtherSessions"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/account/sessions/{id}",
+    "handler": "revokeAccountSession"
+  },
+  {
+    "method": "GET",
+    "path": "/api/account/identities",
+    "handler": "listAccountIdentities"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/account/identities/{id}",
+    "handler": "unlinkAccountIdentity"
+  },
+  {
+    "method": "POST",
+    "path": "/api/account/change-password",
+    "handler": "changeAccountPassword"
+  },
+  {
+    "method": "GET",
+    "path": "/api/realtime/events",
+    "handler": "realtimeEvents"
+  },
+  {
+    "method": "GET",
+    "path": "/api/realtime/socket",
+    "handler": "realtimeSocket"
+  },
+  {
+    "method": "POST",
+    "path": "/api/realtime/presence",
+    "handler": "updatePresence"
+  },
+  {
+    "method": "GET",
+    "path": "/api/search",
+    "handler": "searchWorkspace"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/search/history",
+    "handler": "clearSearchHistory"
+  },
+  {
+    "method": "POST",
+    "path": "/api/recent",
+    "handler": "recordRecentResource"
+  },
+  {
+    "method": "GET",
+    "path": "/api/agent/status",
+    "handler": "agentStatus"
+  },
+  {
+    "method": "POST",
+    "path": "/api/agent/chat",
+    "handler": "agentChat"
+  },
+  {
+    "method": "GET",
+    "path": "/api/agent/sessions",
+    "handler": "listAgentSessions"
+  },
+  {
+    "method": "POST",
+    "path": "/api/agent/sessions",
+    "handler": "createAgentSession"
+  },
+  {
+    "method": "GET",
+    "path": "/api/agent/sessions/{id}",
+    "handler": "getAgentSession"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/agent/sessions/{id}",
+    "handler": "updateAgentSession"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/agent/sessions/{id}",
+    "handler": "deleteAgentSession"
+  },
+  {
+    "method": "POST",
+    "path": "/api/agent/sessions/{id}/messages",
+    "handler": "createAgentSessionMessage"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/agent/sessions/{id}/messages/{messageId}",
+    "handler": "updateAgentSessionMessage"
+  },
+  {
+    "method": "GET",
+    "path": "/api/agent/skills",
+    "handler": "listAgentSkillsHTTP"
+  },
+  {
+    "method": "POST",
+    "path": "/api/agent/skills",
+    "handler": "createAgentSkill"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/agent/skills/{id}",
+    "handler": "updateAgentSkill"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/agent/skills/{id}",
+    "handler": "deleteAgentSkill"
+  },
+  {
+    "method": "POST",
+    "path": "/api/workspaces",
+    "handler": "createWorkspace"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/workspaces/{workspaceKey}",
+    "handler": "updateWorkspace"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/workspaces/{workspaceKey}",
+    "handler": "deleteWorkspace"
+  },
+  {
+    "method": "POST",
+    "path": "/api/workspaces/{workspaceKey}/teams",
+    "handler": "createTeam"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/workspaces/{workspaceKey}/teams/{teamId}",
+    "handler": "updateTeam"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/workspaces/{workspaceKey}/teams/{teamId}",
+    "handler": "deleteTeam"
+  },
+  {
+    "method": "POST",
+    "path": "/api/workspaces/{workspaceKey}/invitations",
+    "handler": "createInvitation"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/workspaces/{workspaceKey}/invitations/{invitationId}",
+    "handler": "revokeInvitation"
+  },
+  {
+    "method": "POST",
+    "path": "/api/workspaces/{workspaceKey}/invitations/{invitationId}/resend",
+    "handler": "resendInvitation"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/workspaces/{workspaceKey}/members/{userId}",
+    "handler": "updateMemberRole"
+  },
+  {
+    "method": "POST",
+    "path": "/api/workspaces/{workspaceKey}/members/{userId}/suspend",
+    "handler": "suspendMember"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/workspaces/{workspaceKey}/members/{userId}",
+    "handler": "removeMember"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/workspaces/{workspaceKey}/teams/{teamId}/members/{userId}",
+    "handler": "updateTeamMember"
+  },
+  {
+    "method": "POST",
+    "path": "/api/customers",
+    "handler": "createCustomer"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/customers/{id}",
+    "handler": "updateCustomer"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/customers/{id}",
+    "handler": "deleteCustomer"
+  },
+  {
+    "method": "POST",
+    "path": "/api/customer-requests",
+    "handler": "createCustomerRequest"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/customer-requests/{id}",
+    "handler": "updateCustomerRequest"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/customer-requests/{id}",
+    "handler": "deleteCustomerRequest"
+  },
+  {
+    "method": "POST",
+    "path": "/api/customer-requests/{id}/attachments",
+    "handler": "createCustomerRequestAttachment"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/customer-requests/{id}/attachments/{attachmentId}",
+    "handler": "deleteCustomerRequestAttachment"
+  },
+  {
+    "method": "GET",
+    "path": "/api/documents",
+    "handler": "listDocuments"
+  },
+  {
+    "method": "POST",
+    "path": "/api/documents",
+    "handler": "createDocument"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/documents/{id}",
+    "handler": "updateDocument"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/documents/{id}",
+    "handler": "deleteDocument"
+  },
+  {
+    "method": "POST",
+    "path": "/api/documents/{id}/comments",
+    "handler": "createDocumentComment"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/documents/{id}/comments/{commentId}",
+    "handler": "updateDocumentComment"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/documents/{id}/comments/{commentId}",
+    "handler": "deleteDocumentComment"
+  },
+  {
+    "method": "POST",
+    "path": "/api/documents/{id}/comments/{commentId}/reactions",
+    "handler": "toggleDocumentCommentReaction"
+  },
+  {
+    "method": "POST",
+    "path": "/api/documents/{id}/restore/{revisionId}",
+    "handler": "restoreDocumentRevision"
+  },
+  {
+    "method": "POST",
+    "path": "/api/releases",
+    "handler": "createRelease"
+  },
+  {
+    "method": "GET",
+    "path": "/api/releases",
+    "handler": "listReleases"
+  },
+  {
+    "method": "GET",
+    "path": "/api/releases/{id}",
+    "handler": "getRelease"
+  },
+  {
+    "method": "POST",
+    "path": "/api/releases/reorder",
+    "handler": "reorderReleases"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/releases/{id}",
+    "handler": "updateRelease"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/releases/{id}",
+    "handler": "deleteRelease"
+  },
+  {
+    "method": "POST",
+    "path": "/api/release-pipelines",
+    "handler": "createReleasePipeline"
+  },
+  {
+    "method": "GET",
+    "path": "/api/release-pipelines",
+    "handler": "listReleasePipelines"
+  },
+  {
+    "method": "GET",
+    "path": "/api/release-pipelines/{id}",
+    "handler": "getReleasePipeline"
+  },
+  {
+    "method": "POST",
+    "path": "/api/release-pipelines/reorder",
+    "handler": "reorderReleasePipelines"
+  },
+  {
+    "method": "POST",
+    "path": "/api/release-pipelines/{id}/access-key",
+    "handler": "rotateReleasePipelineAccessKey"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/release-pipelines/{id}",
+    "handler": "updateReleasePipeline"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/release-pipelines/{id}",
+    "handler": "deleteReleasePipeline"
+  },
+  {
+    "method": "POST",
+    "path": "/api/custom-emojis",
+    "handler": "createCustomEmoji"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/custom-emojis/{id}",
+    "handler": "updateCustomEmoji"
+  },
+  {
+    "method": "POST",
+    "path": "/api/asks",
+    "handler": "createAsk"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/asks/{id}",
+    "handler": "updateAsk"
+  },
+  {
+    "method": "POST",
+    "path": "/api/asks/{id}/decision",
+    "handler": "decideAsk"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/asks/{id}",
+    "handler": "deleteAsk"
+  },
+  {
+    "method": "GET",
+    "path": "/api/loops",
+    "handler": "listLoops"
+  },
+  {
+    "method": "POST",
+    "path": "/api/loops",
+    "handler": "createLoop"
+  },
+  {
+    "method": "GET",
+    "path": "/api/loops/{id}",
+    "handler": "getLoop"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/loops/{id}",
+    "handler": "updateLoop"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/loops/{id}",
+    "handler": "deleteLoop"
+  },
+  {
+    "method": "GET",
+    "path": "/api/project-templates",
+    "handler": "listProjectTemplates"
+  },
+  {
+    "method": "POST",
+    "path": "/api/project-templates",
+    "handler": "createProjectTemplate"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/project-templates/{id}",
+    "handler": "updateProjectTemplate"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/project-templates/{id}",
+    "handler": "deleteProjectTemplate"
+  },
+  {
+    "method": "GET",
+    "path": "/api/issue-templates",
+    "handler": "listWorkspaceIssueTemplates"
+  },
+  {
+    "method": "POST",
+    "path": "/api/issue-templates",
+    "handler": "createWorkspaceIssueTemplate"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/issue-templates/{id}",
+    "handler": "updateWorkspaceIssueTemplate"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/issue-templates/{id}",
+    "handler": "deleteWorkspaceIssueTemplate"
+  },
+  {
+    "method": "POST",
+    "path": "/api/document-templates",
+    "handler": "createDocumentTemplate"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/document-templates/{id}",
+    "handler": "updateDocumentTemplate"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/document-templates/{id}",
+    "handler": "deleteDocumentTemplate"
+  },
+  {
+    "method": "GET",
+    "path": "/api/labels",
+    "handler": "listWorkspaceLabels"
+  },
+  {
+    "method": "POST",
+    "path": "/api/labels",
+    "handler": "createWorkspaceLabel"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/labels/{id}",
+    "handler": "updateWorkspaceLabel"
+  },
+  {
+    "method": "POST",
+    "path": "/api/labels/{id}/move-to-teams",
+    "handler": "moveWorkspaceLabelToTeams"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/labels/{id}",
+    "handler": "deleteWorkspaceLabel"
+  },
+  {
+    "method": "POST",
+    "path": "/api/label-groups",
+    "handler": "createLabelGroup"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/label-groups/{id}",
+    "handler": "updateLabelGroup"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/label-groups/{id}",
+    "handler": "deleteLabelGroup"
+  },
+  {
+    "method": "POST",
+    "path": "/api/project-statuses",
+    "handler": "createProjectStatus"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/project-statuses/{id}",
+    "handler": "updateProjectStatus"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/project-statuses/{id}",
+    "handler": "deleteProjectStatus"
+  },
+  {
+    "method": "POST",
+    "path": "/api/project-statuses/reorder",
+    "handler": "reorderProjectStatuses"
+  },
+  {
+    "method": "GET",
+    "path": "/api/workspace/preferences",
+    "handler": "getWorkspacePreferences"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/workspace/preferences",
+    "handler": "updateWorkspacePreferences"
+  },
+  {
+    "method": "GET",
+    "path": "/api/api-keys",
+    "handler": "listAPIKeys"
+  },
+  {
+    "method": "POST",
+    "path": "/api/api-keys",
+    "handler": "createAPIKey"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/api-keys/{id}",
+    "handler": "revokeAPIKey"
+  },
+  {
+    "method": "GET",
+    "path": "/api/oauth-applications",
+    "handler": "listOAuthApplications"
+  },
+  {
+    "method": "POST",
+    "path": "/api/oauth-applications",
+    "handler": "createOAuthApplication"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/oauth-applications/{id}",
+    "handler": "updateOAuthApplication"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/oauth-applications/{id}",
+    "handler": "deleteOAuthApplication"
+  },
+  {
+    "method": "GET",
+    "path": "/api/webhooks",
+    "handler": "listWebhooks"
+  },
+  {
+    "method": "POST",
+    "path": "/api/webhooks",
+    "handler": "createWebhook"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/webhooks/{id}",
+    "handler": "updateWebhook"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/webhooks/{id}",
+    "handler": "deleteWebhook"
+  },
+  {
+    "method": "POST",
+    "path": "/api/oauth/token",
+    "handler": "exchangeOAuthToken"
+  },
+  {
+    "method": "GET",
+    "path": "/api/integrations",
+    "handler": "listIntegrations"
+  },
+  {
+    "method": "GET",
+    "path": "/api/identity-providers",
+    "handler": "listIdentityProviders"
+  },
+  {
+    "method": "POST",
+    "path": "/api/identity-providers",
+    "handler": "createIdentityProvider"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/identity-providers/{id}",
+    "handler": "updateIdentityProvider"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/identity-providers/{id}",
+    "handler": "deleteIdentityProvider"
+  },
+  {
+    "method": "POST",
+    "path": "/api/identity-providers/{id}/verify",
+    "handler": "verifyIdentityProvider"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/integrations/{provider}",
+    "handler": "connectIntegration"
+  },
+  {
+    "method": "POST",
+    "path": "/api/integrations/{provider}/oauth/start",
+    "handler": "startIntegrationOAuth"
+  },
+  {
+    "method": "GET",
+    "path": "/api/integrations/{provider}/oauth/callback",
+    "handler": "finishIntegrationOAuth"
+  },
+  {
+    "method": "POST",
+    "path": "/api/integrations/{provider}/{id}/oauth/refresh",
+    "handler": "refreshIntegrationOAuth"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/integrations/{provider}/{id}/oauth/token",
+    "handler": "revokeIntegrationOAuth"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/integrations/{provider}",
+    "handler": "disconnectIntegration"
+  },
+  {
+    "method": "POST",
+    "path": "/api/integrations/{provider}/webhook",
+    "handler": "codeWebhook"
+  },
+  {
+    "method": "POST",
+    "path": "/api/integrations/{provider}/{id}/test",
+    "handler": "testIntegrationWebhook"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/integrations/{provider}/{id}",
+    "handler": "updateIntegration"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/integrations/{provider}/{id}",
+    "handler": "disconnectIntegrationConnection"
+  },
+  {
+    "method": "POST",
+    "path": "/api/integration-deliveries",
+    "handler": "createIntegrationDelivery"
+  },
+  {
+    "method": "POST",
+    "path": "/api/integration-deliveries/{id}/retry",
+    "handler": "retryIntegrationDelivery"
+  },
+  {
+    "method": "POST",
+    "path": "/api/git-automations",
+    "handler": "upsertGitAutomation"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/git-automations/{id}",
+    "handler": "upsertGitAutomation"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/git-automations/{id}",
+    "handler": "deleteGitAutomation"
+  },
+  {
+    "method": "POST",
+    "path": "/api/target-branches",
+    "handler": "upsertTargetBranch"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/target-branches/{id}",
+    "handler": "upsertTargetBranch"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/target-branches/{id}",
+    "handler": "deleteTargetBranch"
+  },
+  {
+    "method": "GET",
+    "path": "/api/attachments/by-url",
+    "handler": "findAttachmentsByURL"
+  },
+  {
+    "method": "GET",
+    "path": "/api/reviews",
+    "handler": "listReviews"
+  },
+  {
+    "method": "GET",
+    "path": "/api/reviews/{id}",
+    "handler": "getReview"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/reviews/{id}",
+    "handler": "updateReview"
+  },
+  {
+    "method": "POST",
+    "path": "/api/reviews/{id}/submit",
+    "handler": "submitReview"
+  },
+  {
+    "method": "POST",
+    "path": "/api/reviews/{id}/comments",
+    "handler": "commentOnReview"
+  },
+  {
+    "method": "GET",
+    "path": "/api/usage",
+    "handler": "getWorkspaceUsage"
+  },
+  {
+    "method": "POST",
+    "path": "/api/sla-rules",
+    "handler": "createSLARule"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/sla-rules/{id}",
+    "handler": "updateSLARule"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/sla-rules/{id}",
+    "handler": "deleteSLARule"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/sla-settings",
+    "handler": "updateSLASettings"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/project-update-settings",
+    "handler": "updateProjectUpdateSettings"
+  },
+  {
+    "method": "POST",
+    "path": "/api/drafts",
+    "handler": "createDraft"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/drafts",
+    "handler": "deleteAllDrafts"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/drafts/{id}",
+    "handler": "updateDraft"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/drafts/{id}",
+    "handler": "deleteDraft"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/favorites/{type}/{id}",
+    "handler": "addFavorite"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/favorites/{type}/{id}",
+    "handler": "removeFavorite"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/subscriptions/{type}/{id}",
+    "handler": "addSubscription"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/subscriptions/{type}/{id}",
+    "handler": "removeSubscription"
+  },
+  {
+    "method": "POST",
+    "path": "/api/trash/{id}/restore",
+    "handler": "restoreTrashEntry"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/trash/{id}",
+    "handler": "purgeTrashEntry"
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/preview",
+    "handler": "previewImport"
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/{id}/commit",
+    "handler": "commitImport"
+  },
+  {
+    "method": "GET",
+    "path": "/api/imports",
+    "handler": "listImports"
+  },
+  {
+    "method": "GET",
+    "path": "/api/imports/{id}",
+    "handler": "getImport"
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/{id}/cancel",
+    "handler": "cancelImport"
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/{id}/retry",
+    "handler": "retryImport"
+  },
+  {
+    "method": "POST",
+    "path": "/api/exports",
+    "handler": "createExport"
+  },
+  {
+    "method": "GET",
+    "path": "/api/exports",
+    "handler": "listExports"
+  },
+  {
+    "method": "GET",
+    "path": "/api/exports/{id}",
+    "handler": "getExport"
+  },
+  {
+    "method": "POST",
+    "path": "/api/exports/{id}/retry",
+    "handler": "retryExport"
+  },
+  {
+    "method": "GET",
+    "path": "/api/exports/{id}/download",
+    "handler": "downloadExport"
+  },
+  {
+    "method": "GET",
+    "path": "/api/migrations",
+    "handler": "listMigrations"
+  },
+  {
+    "method": "POST",
+    "path": "/api/migrations/preview",
+    "handler": "previewMigration"
+  },
+  {
+    "method": "GET",
+    "path": "/api/migrations/{id}",
+    "handler": "getMigration"
+  },
+  {
+    "method": "GET",
+    "path": "/api/migrations/{id}/manifest",
+    "handler": "downloadMigrationManifest"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/migrations/{id}/mappings",
+    "handler": "updateMigrationMappings"
+  },
+  {
+    "method": "POST",
+    "path": "/api/migrations/{id}/invite-users",
+    "handler": "inviteMigrationUsers"
+  },
+  {
+    "method": "POST",
+    "path": "/api/migrations/{id}/linear/scan",
+    "handler": "scanLinearMigrationTarget"
+  },
+  {
+    "method": "POST",
+    "path": "/api/migrations/{id}/execute",
+    "handler": "executeMigration"
+  },
+  {
+    "method": "POST",
+    "path": "/api/migrations/{id}/rollback",
+    "handler": "rollbackMigration"
+  },
+  {
+    "method": "GET",
+    "path": "/api/migrations/bundle",
+    "handler": "downloadMigrationBundle"
+  },
+  {
+    "method": "GET",
+    "path": "/api/analytics/overview",
+    "handler": "workspaceAnalytics"
+  },
+  {
+    "method": "GET",
+    "path": "/api/dashboards",
+    "handler": "listDashboards"
+  },
+  {
+    "method": "POST",
+    "path": "/api/dashboards",
+    "handler": "createDashboard"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/dashboards/{id}",
+    "handler": "updateDashboard"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/dashboards/{id}",
+    "handler": "deleteDashboard"
+  },
+  {
+    "method": "GET",
+    "path": "/api/dashboards/{id}/results",
+    "handler": "dashboardResults"
+  },
+  {
+    "method": "GET",
+    "path": "/api/dashboards/{id}/export",
+    "handler": "exportDashboard"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/dashboards/{id}/subscription",
+    "handler": "subscribeDashboard"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/dashboards/{id}/subscription",
+    "handler": "subscribeDashboard"
+  },
+  {
+    "method": "POST",
+    "path": "/api/dashboards/{id}/share",
+    "handler": "shareDashboard"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/dashboards/{id}/share",
+    "handler": "shareDashboard"
+  },
+  {
+    "method": "GET",
+    "path": "/api/shared/dashboards/{token}",
+    "handler": "getSharedDashboard"
+  },
+  {
+    "method": "GET",
+    "path": "/api/posts",
+    "handler": "listPosts"
+  },
+  {
+    "method": "POST",
+    "path": "/api/posts",
+    "handler": "createPost"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/posts/{id}",
+    "handler": "updatePost"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/posts/{id}",
+    "handler": "deletePost"
+  },
+  {
+    "method": "GET",
+    "path": "/api/feed",
+    "handler": "listFeedItems"
+  },
+  {
+    "method": "GET",
+    "path": "/api/meetings",
+    "handler": "listMeetings"
+  },
+  {
+    "method": "POST",
+    "path": "/api/meetings",
+    "handler": "createMeeting"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/meetings/{id}",
+    "handler": "updateMeeting"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/meetings/{id}",
+    "handler": "deleteMeeting"
+  },
+  {
+    "method": "GET",
+    "path": "/api/search/semantic",
+    "handler": "semanticSearch"
+  },
+  {
+    "method": "GET",
+    "path": "/api/search/filter-suggestions",
+    "handler": "filterSuggestions"
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/{id}/relations",
+    "handler": "listProjectRelations"
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/{id}/relations",
+    "handler": "createProjectRelation"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/projects/{id}/relations/{relationId}",
+    "handler": "updateProjectRelation"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/projects/{id}/relations/{relationId}",
+    "handler": "deleteProjectRelation"
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/{id}/history",
+    "handler": "projectHistory"
+  },
+  {
+    "method": "GET",
+    "path": "/api/initiatives/{id}/relations",
+    "handler": "listInitiativeRelations"
+  },
+  {
+    "method": "POST",
+    "path": "/api/initiatives/{id}/relations",
+    "handler": "createInitiativeRelation"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/initiatives/{id}/relations/{relationId}",
+    "handler": "updateInitiativeRelation"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/initiatives/{id}/relations/{relationId}",
+    "handler": "deleteInitiativeRelation"
+  },
+  {
+    "method": "GET",
+    "path": "/api/initiatives/{id}/history",
+    "handler": "initiativeHistory"
+  },
+  {
+    "method": "GET",
+    "path": "/api/documents/{id}/drafts",
+    "handler": "listDocumentDrafts"
+  },
+  {
+    "method": "POST",
+    "path": "/api/documents/{id}/drafts",
+    "handler": "createDocumentDraft"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/documents/{id}/drafts/{draftId}",
+    "handler": "updateDocumentDraft"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/documents/{id}/drafts/{draftId}",
+    "handler": "deleteDocumentDraft"
+  },
+  {
+    "method": "POST",
+    "path": "/api/documents/{id}/drafts/{draftId}/publish",
+    "handler": "publishDocumentDraft"
+  },
+  {
+    "method": "GET",
+    "path": "/api/documents/{id}/history",
+    "handler": "documentContentHistory"
+  },
+  {
+    "method": "GET",
+    "path": "/api/customer-taxonomy",
+    "handler": "listCustomerTaxonomy"
+  },
+  {
+    "method": "POST",
+    "path": "/api/customer-statuses",
+    "handler": "createCustomerTaxonomy"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/customer-statuses/{id}",
+    "handler": "updateCustomerTaxonomy"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/customer-statuses/{id}",
+    "handler": "deleteCustomerTaxonomy"
+  },
+  {
+    "method": "POST",
+    "path": "/api/customer-tiers",
+    "handler": "createCustomerTaxonomy"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/customer-tiers/{id}",
+    "handler": "updateCustomerTaxonomy"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/customer-tiers/{id}",
+    "handler": "deleteCustomerTaxonomy"
+  },
+  {
+    "method": "POST",
+    "path": "/api/customer-requests/{id}/archive",
+    "handler": "archiveCustomerNeed"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/customer-requests/{id}/archive",
+    "handler": "archiveCustomerNeed"
+  },
+  {
+    "method": "GET",
+    "path": "/api/releases/{id}/notes",
+    "handler": "listReleaseNotes"
+  },
+  {
+    "method": "POST",
+    "path": "/api/releases/{id}/notes",
+    "handler": "createReleaseNote"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/releases/{id}/notes/{noteId}",
+    "handler": "updateReleaseNote"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/releases/{id}/notes/{noteId}",
+    "handler": "deleteReleaseNote"
+  },
+  {
+    "method": "GET",
+    "path": "/api/releases/{id}/history",
+    "handler": "releaseHistory"
+  },
+  {
+    "method": "GET",
+    "path": "/api/teams/{id}/resources",
+    "handler": "listTeamResources"
+  },
+  {
+    "method": "POST",
+    "path": "/api/teams/{id}/resource-sections",
+    "handler": "createTeamResourceSection"
+  },
+  {
+    "method": "POST",
+    "path": "/api/teams/{id}/resources",
+    "handler": "createTeamPinnedResource"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/teams/{id}/resources/{resourceId}",
+    "handler": "updateTeamResource"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/teams/{id}/resources/{resourceId}",
+    "handler": "deleteTeamResource"
+  },
+  {
+    "method": "GET",
+    "path": "/api/agent/activities",
+    "handler": "listAgentActivities"
+  },
+  {
+    "method": "POST",
+    "path": "/api/agent/activities",
+    "handler": "createAgentActivity"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/agent/activities/{id}",
+    "handler": "updateAgentActivity"
+  },
+  {
+    "method": "GET",
+    "path": "/api/ai/conversations",
+    "handler": "listAIConversations"
+  },
+  {
+    "method": "POST",
+    "path": "/api/ai/conversations",
+    "handler": "createAIConversation"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/ai/conversations/{id}",
+    "handler": "updateAIConversation"
+  },
+  {
+    "method": "POST",
+    "path": "/api/ai/prompt-progress",
+    "handler": "createAIPromptProgress"
+  },
+  {
+    "method": "GET",
+    "path": "/api/usage-alerts",
+    "handler": "listUsageAlerts"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/usage-alerts",
+    "handler": "upsertUsageAlert"
+  },
+  {
+    "method": "GET",
+    "path": "/api/paid-subscription",
+    "handler": "paidSubscription"
+  },
+  {
+    "method": "GET",
+    "path": "/api/bootstrap",
+    "handler": "bootstrap"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/workspace/project-display-default",
+    "handler": "updateProjectDisplayDefault"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/workspace/settings",
+    "handler": "updateWorkspaceSettings"
+  },
+  {
+    "method": "GET",
+    "path": "/api/notifications",
+    "handler": "listNotifications"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/notifications/{id}",
+    "handler": "updateNotification"
+  },
+  {
+    "method": "POST",
+    "path": "/api/notifications/batch",
+    "handler": "batchNotifications"
+  },
+  {
+    "method": "GET",
+    "path": "/api/push-subscriptions",
+    "handler": "listPushSubscriptions"
+  },
+  {
+    "method": "POST",
+    "path": "/api/push-subscriptions",
+    "handler": "createPushSubscription"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/push-subscriptions/{id}",
+    "handler": "deletePushSubscription"
+  },
+  {
+    "method": "GET",
+    "path": "/api/workflows",
+    "handler": "listWorkflowDefinitions"
+  },
+  {
+    "method": "POST",
+    "path": "/api/workflows",
+    "handler": "createWorkflowDefinition"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/workflows/{id}",
+    "handler": "updateWorkflowDefinition"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/workflows/{id}",
+    "handler": "deleteWorkflowDefinition"
+  },
+  {
+    "method": "POST",
+    "path": "/api/workflows/{id}/run",
+    "handler": "runWorkflowDefinition"
+  },
+  {
+    "method": "GET",
+    "path": "/api/workflow-runs",
+    "handler": "listWorkflowRuns"
+  },
+  {
+    "method": "POST",
+    "path": "/api/workflow-runs/{runId}/retry",
+    "handler": "retryWorkflowRun"
+  },
+  {
+    "method": "GET",
+    "path": "/api/notification-preferences",
+    "handler": "getNotificationPreferences"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/notification-preferences",
+    "handler": "updateNotificationPreferences"
+  },
+  {
+    "method": "GET",
+    "path": "/api/notification-deliveries",
+    "handler": "listNotificationDeliveries"
+  },
+  {
+    "method": "POST",
+    "path": "/api/notification-deliveries/{id}/retry",
+    "handler": "retryNotificationDelivery"
+  },
+  {
+    "method": "POST",
+    "path": "/api/desktop-notifications/ack",
+    "handler": "acknowledgeDesktopNotifications"
+  },
+  {
+    "method": "POST",
+    "path": "/api/views",
+    "handler": "createSavedView"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/views/{id}",
+    "handler": "updateSavedView"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/views/{id}",
+    "handler": "deleteSavedView"
+  },
+  {
+    "method": "POST",
+    "path": "/api/views/{id}/share",
+    "handler": "shareSavedView"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/views/{id}/share",
+    "handler": "unshareSavedView"
+  },
+  {
+    "method": "GET",
+    "path": "/api/shared/views/{token}",
+    "handler": "getSharedView"
+  },
+  {
+    "method": "POST",
+    "path": "/api/issues",
+    "handler": "createIssue"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/teams/{id}/cycle-settings",
+    "handler": "updateCycleSettings"
+  },
+  {
+    "method": "GET",
+    "path": "/api/teams/{id}/states",
+    "handler": "listWorkflowStates"
+  },
+  {
+    "method": "POST",
+    "path": "/api/teams/{id}/states",
+    "handler": "createWorkflowState"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/teams/{id}/states/{stateId}",
+    "handler": "updateWorkflowState"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/teams/{id}/states/{stateId}",
+    "handler": "deleteWorkflowState"
+  },
+  {
+    "method": "POST",
+    "path": "/api/teams/{id}/states/reorder",
+    "handler": "reorderWorkflowStates"
+  },
+  {
+    "method": "GET",
+    "path": "/api/teams/{id}/settings",
+    "handler": "getTeamSettings"
+  },
+  {
+    "method": "GET",
+    "path": "/api/teams/{id}/triage-responsibilities",
+    "handler": "listTriageResponsibilities"
+  },
+  {
+    "method": "POST",
+    "path": "/api/teams/{id}/triage-responsibilities",
+    "handler": "createTriageResponsibility"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/teams/{id}/triage-responsibilities/{responsibilityId}",
+    "handler": "updateTriageResponsibility"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/teams/{id}/triage-responsibilities/{responsibilityId}",
+    "handler": "deleteTriageResponsibility"
+  },
+  {
+    "method": "GET",
+    "path": "/api/teams/{id}/triage-rules",
+    "handler": "listTriageRules"
+  },
+  {
+    "method": "POST",
+    "path": "/api/teams/{id}/triage-rules",
+    "handler": "createTriageRule"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/teams/{id}/triage-rules/{ruleId}",
+    "handler": "updateTriageRule"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/teams/{id}/triage-rules/{ruleId}",
+    "handler": "deleteTriageRule"
+  },
+  {
+    "method": "GET",
+    "path": "/api/teams/{id}/email-intake-addresses",
+    "handler": "listEmailIntakeAddresses"
+  },
+  {
+    "method": "POST",
+    "path": "/api/teams/{id}/email-intake-addresses",
+    "handler": "createEmailIntakeAddress"
+  },
+  {
+    "method": "POST",
+    "path": "/api/teams/{id}/email-intake-addresses/{addressId}/verify",
+    "handler": "verifyEmailIntakeAddress"
+  },
+  {
+    "method": "POST",
+    "path": "/api/teams/{id}/email-intake-addresses/{addressId}/rotate",
+    "handler": "rotateEmailIntakeAddress"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/teams/{id}/email-intake-addresses/{addressId}",
+    "handler": "deleteEmailIntakeAddress"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/teams/{id}/settings",
+    "handler": "updateStructuredTeamSettings"
+  },
+  {
+    "method": "GET",
+    "path": "/api/teams/{id}/templates",
+    "handler": "listIssueTemplates"
+  },
+  {
+    "method": "POST",
+    "path": "/api/teams/{id}/templates",
+    "handler": "createIssueTemplate"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/teams/{id}/templates/{templateId}",
+    "handler": "updateIssueTemplate"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/teams/{id}/templates/{templateId}",
+    "handler": "deleteIssueTemplate"
+  },
+  {
+    "method": "GET",
+    "path": "/api/teams/{id}/labels",
+    "handler": "listTeamLabels"
+  },
+  {
+    "method": "POST",
+    "path": "/api/teams/{id}/labels",
+    "handler": "createTeamLabel"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/teams/{id}/labels/{labelId}",
+    "handler": "updateTeamLabel"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/teams/{id}/labels/{labelId}",
+    "handler": "deleteTeamLabel"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/cycles/{id}",
+    "handler": "updateCycle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/cycles/{id}/start",
+    "handler": "startCycle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/cycles/{id}/complete",
+    "handler": "completeCycle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/cycles/{id}/resources",
+    "handler": "createCycleResource"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/cycles/{id}/resources/{resourceId}",
+    "handler": "deleteCycleResource"
+  },
+  {
+    "method": "POST",
+    "path": "/api/cycles/{id}/calendar-token",
+    "handler": "cycleCalendarToken"
+  },
+  {
+    "method": "GET",
+    "path": "/api/calendar/cycles/{id}",
+    "handler": "cycleCalendar"
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects",
+    "handler": "createProject"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/projects/{id}",
+    "handler": "updateProject"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/projects/{id}",
+    "handler": "deleteProject"
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/{id}/reminders",
+    "handler": "createProjectReminder"
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/{id}/resources",
+    "handler": "createProjectResource"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/projects/{id}/resources/{resourceId}",
+    "handler": "updateProjectResource"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/projects/{id}/resources/{resourceId}",
+    "handler": "deleteProjectResource"
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/{id}/milestones",
+    "handler": "createProjectMilestone"
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/{id}/milestones/reorder",
+    "handler": "reorderProjectMilestones"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/projects/{id}/milestones/{milestoneId}",
+    "handler": "updateProjectMilestone"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/projects/{id}/milestones/{milestoneId}",
+    "handler": "deleteProjectMilestone"
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/{id}/comments",
+    "handler": "createProjectComment"
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/{id}/updates",
+    "handler": "createProjectUpdate"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/projects/{id}/updates/{updateId}",
+    "handler": "updateProjectUpdate"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/projects/{id}/updates/{updateId}",
+    "handler": "deleteProjectUpdate"
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/{id}/updates/{updateId}/comments",
+    "handler": "createProjectUpdateComment"
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/{id}/updates/{updateId}/reactions",
+    "handler": "toggleProjectUpdateReaction"
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/{id}/updates/{updateId}/attachments",
+    "handler": "createPulseUpdateAttachment"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/projects/{id}/updates/{updateId}/attachments/{attachmentId}",
+    "handler": "deletePulseUpdateAttachment"
+  },
+  {
+    "method": "POST",
+    "path": "/api/initiatives",
+    "handler": "createInitiative"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/initiatives/{id}",
+    "handler": "updateInitiative"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/initiatives/{id}",
+    "handler": "deleteInitiative"
+  },
+  {
+    "method": "POST",
+    "path": "/api/initiatives/{id}/reminders",
+    "handler": "createInitiativeReminder"
+  },
+  {
+    "method": "POST",
+    "path": "/api/initiatives/{id}/resources",
+    "handler": "createInitiativeResource"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/initiatives/{id}/resources/{resourceId}",
+    "handler": "updateInitiativeResource"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/initiatives/{id}/resources/{resourceId}",
+    "handler": "deleteInitiativeResource"
+  },
+  {
+    "method": "POST",
+    "path": "/api/initiatives/{id}/comments",
+    "handler": "createInitiativeComment"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/initiatives/{id}/comments/{commentId}",
+    "handler": "updateInitiativeComment"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/initiatives/{id}/comments/{commentId}",
+    "handler": "deleteInitiativeComment"
+  },
+  {
+    "method": "POST",
+    "path": "/api/initiatives/{id}/comments/{commentId}/reactions",
+    "handler": "toggleInitiativeCommentReaction"
+  },
+  {
+    "method": "POST",
+    "path": "/api/initiatives/{id}/updates",
+    "handler": "createInitiativeUpdate"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/initiatives/{id}/updates/{updateId}",
+    "handler": "updateInitiativeUpdate"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/initiatives/{id}/updates/{updateId}",
+    "handler": "deleteInitiativeUpdate"
+  },
+  {
+    "method": "POST",
+    "path": "/api/initiatives/{id}/updates/{updateId}/comments",
+    "handler": "createInitiativeUpdateComment"
+  },
+  {
+    "method": "POST",
+    "path": "/api/initiatives/{id}/updates/{updateId}/reactions",
+    "handler": "toggleInitiativeUpdateReaction"
+  },
+  {
+    "method": "POST",
+    "path": "/api/initiatives/{id}/updates/{updateId}/attachments",
+    "handler": "createPulseUpdateAttachment"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/initiatives/{id}/updates/{updateId}/attachments/{attachmentId}",
+    "handler": "deletePulseUpdateAttachment"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/issues/{id}",
+    "handler": "updateIssue"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/issues/{id}/releases",
+    "handler": "setIssueReleases"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/issues/{id}",
+    "handler": "deleteIssue"
+  },
+  {
+    "method": "POST",
+    "path": "/api/issues/{id}/reactions",
+    "handler": "toggleIssueReaction"
+  },
+  {
+    "method": "POST",
+    "path": "/api/issues/batch",
+    "handler": "batchUpdate"
+  },
+  {
+    "method": "POST",
+    "path": "/api/issues/{id}/comments",
+    "handler": "createComment"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/issues/{id}/comments/{commentId}",
+    "handler": "updateComment"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/issues/{id}/comments/{commentId}",
+    "handler": "deleteComment"
+  },
+  {
+    "method": "POST",
+    "path": "/api/issues/{id}/comments/{commentId}/reactions",
+    "handler": "toggleCommentReaction"
+  },
+  {
+    "method": "POST",
+    "path": "/api/issues/{id}/relations",
+    "handler": "createRelation"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/issues/{id}/relations/{relationId}",
+    "handler": "deleteRelation"
+  },
+  {
+    "method": "POST",
+    "path": "/api/issues/{id}/attachments",
+    "handler": "createAttachment"
+  },
+  {
+    "method": "POST",
+    "path": "/api/issues/{id}/links",
+    "handler": "createIssueLink"
+  },
+  {
+    "method": "POST",
+    "path": "/api/issues/{id}/reminders",
+    "handler": "createIssueReminder"
+  },
+  {
+    "method": "POST",
+    "path": "/api/issues/{id}/loop-runs",
+    "handler": "createIssueLoopRun"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/issues/{id}/attachments/{attachmentId}",
+    "handler": "deleteAttachment"
+  },
+  {
+    "method": "GET",
+    "path": "/api/events",
+    "handler": "events"
+  },
+  {
+    "method": "GET",
+    "path": "/uploads/{name}",
+    "handler": "serveUpload"
+  }
+]

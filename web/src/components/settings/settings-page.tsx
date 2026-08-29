@@ -1,42 +1,146 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  Activity, AppWindow, ArrowLeft, Bell, Bot, Braces, Building2, ChevronDown,
-  CircleDot, Code2, CreditCard, FileText, Flame, Gauge,
-  FileClock, Import, KeyRound, LayoutTemplate, Link2, ListFilter, MessageCircleQuestion,
-  MoreHorizontal, PanelTop, Plug, Plus, Radio, Rocket, Search, ShieldCheck,
-  SlidersHorizontal, Smile, Sparkles, Tag, UserRound, UsersRound,
-  X, Zap, type LucideIcon,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  Activity,
+  AppWindow,
+  ArrowLeft,
+  Bell,
+  Bot,
+  Braces,
+  Building2,
+  ChevronDown,
+  CircleDot,
+  Code2,
+  CreditCard,
+  FileText,
+  Flame,
+  Gauge,
+  FileClock,
+  Import,
+  KeyRound,
+  LayoutTemplate,
+  Link2,
+  ListFilter,
+  MessageCircleQuestion,
+  MoreHorizontal,
+  PanelTop,
+  Plug,
+  Plus,
+  Radio,
+  Rocket,
+  Search,
+  ShieldCheck,
+  SlidersHorizontal,
+  Smile,
+  Sparkles,
+  Tag,
+  UserRound,
+  UsersRound,
+  X,
+  Zap,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/i18n/i18n";
 
 import {
-  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { connectIntegration, createAgentSkill, createAPIKey, createOAuthApplication, createWebhook, deleteOAuthApplication, deleteWebhook, disconnectIntegration, fetchWorkspaceUsage, revokeAPIKey, revokeOAuthAuthorization, inviteMembers, removeMember, resendInvitation, revokeInvitation, setTeamMembership, suspendMember, updateAgentSkill, updateMemberRole, updateOAuthApplication, updateUserSettings, updateWebhook, updateWorkspacePreferences } from "@/lib/api";
+import {
+  connectIntegration,
+  createAgentSkill,
+  createAPIKey,
+  createIdentityProvider,
+  createOAuthApplication,
+  createWebhook,
+  deleteIdentityProvider,
+  deleteOAuthApplication,
+  deleteWebhook,
+  disconnectIntegration,
+  fetchWorkspaceUsage,
+  revokeAPIKey,
+  revokeOAuthAuthorization,
+  inviteMembers,
+  removeMember,
+  resendInvitation,
+  revokeInvitation,
+  setTeamMembership,
+  suspendMember,
+  updateAgentSkill,
+  updateIdentityProvider,
+  updateMemberRole,
+  updateOAuthApplication,
+  updateUserSettings,
+  updateWebhook,
+  updateWorkspacePreferences,
+  verifyIdentityProvider,
+} from "@/lib/api";
 import type { SettingsPageId, TeamSettingsSection } from "@/lib/app-routes";
-import type { BootstrapData, IssueTemplate, OAuthApplication, ProjectTemplate, ReleasePipeline, Team, UserSettings, Webhook, WorkspaceMutationInput, WorkspaceSettings } from "@/types/flow";
-import { TeamWorkflowSettings } from "./team-workflow-settings";
-import { ImportExportSettings, ProjectUpdateSettings, SLASettings, TemplateSettings } from "./advanced-settings";
-import { DomainLabelsSettings, ProjectStatusesSettings } from "./domain-settings";
-import { FeatureSettingsPage } from "./feature-settings";
-import { SettingsPageTitle as PageTitle, SettingsRow as Row, SettingsSection as Section, SettingsSelect as Select, SettingsToggle as Toggle } from "./settings-primitives";
+import type {
+  BootstrapData,
+  IdentityProvider,
+  IssueTemplate,
+  OAuthApplication,
+  ProjectTemplate,
+  ReleasePipeline,
+  Team,
+  UserSettings,
+  Webhook,
+  WorkspaceMutationInput,
+  WorkspaceSettings,
+} from "@/types/flow";
+import { lazyPage } from "@/lib/lazy-page";
+import {
+  SettingsPageTitle as PageTitle,
+  SettingsRow as Row,
+  SettingsSection as Section,
+  SettingsSelect as Select,
+  SettingsToggle as Toggle,
+} from "./settings-primitives";
 
 import "./settings.css";
 import "./workflow-settings.css";
 import "./advanced-settings.css";
 import { applyTheme } from "@/lib/theme";
-import { PersonalSettings } from "./personal-settings";
-import { PipelineEditorPage } from "@/components/releases/pipeline-editor-page";
-import { CodeIntegrationSettings } from "./code-integration-settings";
-import { AuditLogSettings } from "./audit-log-settings";
+import { workspaceRegionLabel } from "@/components/workspace/workspace-regions";
+
+const TeamWorkflowSettings = lazyPage(() => import("./team-workflow-settings"), "TeamWorkflowSettings");
+const ImportExportSettings = lazyPage(() => import("./advanced-settings"), "ImportExportSettings");
+const ProjectUpdateSettings = lazyPage(() => import("./issues-projects-settings"), "ProjectUpdateSettings");
+const SLASettings = lazyPage(() => import("./issues-projects-settings"), "SLASettings");
+const TemplateSettings = lazyPage(() => import("./issues-projects-settings"), "TemplateSettings");
+const DomainLabelsSettings = lazyPage(() => import("./domain-settings"), "DomainLabelsSettings");
+const ProjectStatusesSettings = lazyPage(() => import("./domain-settings"), "ProjectStatusesSettings");
+const FeatureSettingsPage = lazyPage(() => import("./feature-settings"), "FeatureSettingsPage");
+const PersonalSettings = lazyPage(() => import("./personal-settings"), "PersonalSettings");
+const PipelineEditorPage = lazyPage(() => import("@/components/releases/pipeline-editor-page"), "PipelineEditorPage");
+const CodeIntegrationSettings = lazyPage(() => import("./code-integration-settings"), "CodeIntegrationSettings");
+const AuditLogSettings = lazyPage(() => import("./audit-log-settings"), "AuditLogSettings");
+const WorkflowAutomationSettings = lazyPage(() => import("./workflow-automation-settings"), "WorkflowAutomationSettings");
 
 type StoredSettings = {
   values: Record<string, string | boolean>;
   lists: Record<string, SettingListItem[]>;
 };
-type SettingListItem = { id: string; name: string; description?: string; color?: string };
+type SettingListItem = {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
+};
 
 type SettingsPageProps = {
   data: BootstrapData;
@@ -53,7 +157,11 @@ type SettingsPageProps = {
   agentSkillMode?: "new"|"edit";
   agentSkillId?: string;
   onBack: () => void;
-  onNavigate: (page: SettingsPageId, teamKey?: string, teamSection?: TeamSettingsSection) => void;
+  onNavigate: (
+    page: SettingsPageId,
+    teamKey?: string,
+    teamSection?: TeamSettingsSection,
+  ) => void;
   onCreateReleasePipeline: () => void;
   onOpenReleasePipeline: (pipeline: ReleasePipeline) => void;
   onOpenIntegration: (provider:"github"|"gitlab") => void;
@@ -66,13 +174,17 @@ type SettingsPageProps = {
   onCreateTeam: () => void;
   onWorkspaceUpdate: (input: WorkspaceMutationInput) => Promise<void>;
   onWorkspaceDelete: () => Promise<void>;
-  onSettingsUpdate: (settings: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  onSettingsUpdate: (
+    settings: Record<string, unknown>,
+  ) => Promise<Record<string, unknown>>;
   onReload: () => Promise<void>;
 };
 
 type NavItem = { id: SettingsPageId; label: string; icon: LucideIcon };
 const NAV: { title: string; items: NavItem[] }[] = [
-  { title: "Personal", items: [
+  {
+    title: "Personal",
+    items: [
     { id: "preferences", label: "Preferences", icon: SlidersHorizontal },
     { id: "profile", label: "Profile", icon: UserRound },
     { id: "notifications", label: "Notifications", icon: Bell },
@@ -102,8 +214,11 @@ const NAV: { title: string; items: NavItem[] }[] = [
     { id: "asks", label: "Asks", icon: MessageCircleQuestion },
     { id: "emojis", label: "Emojis", icon: Smile },
     { id: "integrations", label: "Integrations", icon: Plug },
-  ]},
-  { title: "Administration", items: [
+    ],
+  },
+  {
+    title: "Administration",
+    items: [
     { id: "workspace", label: "Workspace", icon: Building2 },
     { id: "teams", label: "Teams", icon: UsersRound },
     { id: "members", label: "Members", icon: UserRound },
@@ -114,23 +229,54 @@ const NAV: { title: string; items: NavItem[] }[] = [
     { id: "billing", label: "Billing", icon: CreditCard },
     { id: "usage", label: "Usage & limits", icon: Gauge },
     { id: "import-export", label: "Import & export", icon: Import },
-  ]},
+      { id: "workflows", label: "Workflows", icon: Zap },
+    ],
+  },
 ];
 
 const DEFAULT_VALUES: StoredSettings["values"] = {
-  homeView: "Flow Agent (default)", displayNames: "Full name", firstDay: "Monday",
-  emoticons: true, sendComments: "Enter", fontSize: "Default", pointerCursor: false,
-  underlineLinks: false, interfaceTheme: "System preference", lightTheme: "Light",
-  darkTheme: "Dark", desktopLinks: false, autoAssign: false, assignStarted: false,
-  notificationEmail: true, notificationDesktop: true, notificationSound: true,
-  notificationDigest: "Daily", reviewAutoAssign: true, branchFormat: "{identifier}-{title}",
-  codeReviewsEnabled: true, autoConvertDrafts: false, mergeStrategy: "Squash and merge",
-  codeTheme: "Flow Light", codeFont: "12px, Regular, Default", reviewCommentsFilter: "Exclude Bots",
-  reviewRequests: true, githubTeamReviewRequests: true, checksMergeQueue: true,
-  requireSignedCommits: false, gitAttachmentFormat: "Title", gitBranchMoveStarted: true,
-  codingToolMoveStarted: true, changelogUpdates: true, changelogNewsletter: false,
-  marketingUpdates: false, inviteAcceptedUpdates: true, privacyUpdates: true, dpaUpdates: false,
-  passkeys: false, agentEnabled: true, agentInstructions: "",
+  homeView: "Flow Agent (default)",
+  displayNames: "Full name",
+  firstDay: "Monday",
+  emoticons: true,
+  sendComments: "Enter",
+  fontSize: "Default",
+  pointerCursor: false,
+  underlineLinks: false,
+  interfaceTheme: "System preference",
+  lightTheme: "Light",
+  darkTheme: "Dark",
+  desktopLinks: false,
+  autoAssign: false,
+  assignStarted: false,
+  notificationEmail: true,
+  notificationDesktop: true,
+  notificationSound: true,
+  notificationDigest: "Daily",
+  reviewAutoAssign: true,
+  branchFormat: "{identifier}-{title}",
+  codeReviewsEnabled: true,
+  autoConvertDrafts: false,
+  mergeStrategy: "Squash and merge",
+  codeTheme: "Flow Light",
+  codeFont: "12px, Regular, Default",
+  reviewCommentsFilter: "Exclude Bots",
+  reviewRequests: true,
+  githubTeamReviewRequests: true,
+  checksMergeQueue: true,
+  requireSignedCommits: false,
+  gitAttachmentFormat: "Title",
+  gitBranchMoveStarted: true,
+  codingToolMoveStarted: true,
+  changelogUpdates: true,
+  changelogNewsletter: false,
+  marketingUpdates: false,
+  inviteAcceptedUpdates: true,
+  privacyUpdates: true,
+  dpaUpdates: false,
+  passkeys: false,
+  agentEnabled: true,
+  agentInstructions: "",
 };
 
 export function SettingsPage(props: SettingsPageProps) {
@@ -157,10 +303,16 @@ export function SettingsPage(props: SettingsPageProps) {
     <main className="settings-main">
       <button className="settings-mobile-menu" onClick={() => setMobileNav(true)}><ListFilter size={15}/></button>
       <div className="settings-content">
-        <SettingsBody {...props} settings={settings} setSettings={setSettings} setValue={setValue}/>
+        <Suspense fallback={<SettingsPageFallback/>}>
+          <SettingsBody {...props} settings={settings} setSettings={setSettings} setValue={setValue}/>
+        </Suspense>
       </div>
     </main>
   </div>;
+}
+
+function SettingsPageFallback() {
+  return <div className="settings-loading" aria-label="Loading settings"><span/><span/><span/></div>;
 }
 
 function SettingsNavButton({ item, active, onClick }: { item: NavItem; active: boolean; onClick: () => void }) {
@@ -193,6 +345,7 @@ function SettingsBody(props: SettingsPageProps & { settings: StoredSettings; set
   if (page === "billing") return <BillingPage data={props.data} onReload={props.onReload}/>;
   if (page === "usage") return <UsagePage data={props.data}/>;
   if (page === "import-export") return <ImportExportSettings data={props.data} onReload={props.onReload}/>;
+  if (page === "workflows") return <WorkflowAutomationSettings data={props.data}/>;
   if (page === "releases" && props.releasePipelineMode) { const pipeline=props.releasePipelineMode==='edit'?props.data.releasePipelines.find(item=>item.slugId===props.releasePipelineSlug):undefined; if(props.releasePipelineMode==='edit'&&!pipeline)return <div className="settings-empty"><h3>{t('Release pipeline not found')}</h3></div>; return <PipelineEditorPage data={props.data} pipeline={pipeline} onCancel={() => props.onNavigate("releases")} onSaved={async () => { await props.onReload(); props.onNavigate("releases"); }}/> }
   if(page==="integrations"&&props.integrationProvider)return <CodeIntegrationSettings provider={props.integrationProvider} data={props.data} onBack={()=>props.onNavigate("integrations")} onReload={props.onReload}/>
   if (page === "team") { const team = props.data.teams.find(team => team.key.toLowerCase() === props.teamKey?.toLowerCase()); return team ? <TeamWorkflowSettings data={props.data} team={team} section={props.teamSection ?? "overview"} onNavigate={section => props.onNavigate("team", team.key, section)} onReload={props.onReload}/> : <div className="settings-empty"><h3>Team not found</h3></div> }
@@ -206,7 +359,7 @@ function ActionButton({ children, onClick, danger, primary, disabled }: { childr
 
 function FieldRow({ title, description, value, onCommit }: { title: string; description?: string; value: string; onCommit: (value: string) => void }) { const [draft, setDraft] = useState(value); useEffect(() => setDraft(value), [value]); return <Row title={title} description={description}><input className="settings-input" aria-label={title} value={draft} onChange={event => setDraft(event.target.value)} onBlur={() => onCommit(draft)}/></Row>; }
 
-function WorkspacePage(props: SettingsPageProps & { settings: StoredSettings; setSettings: React.Dispatch<React.SetStateAction<StoredSettings>>; setValue: (key: string, value: string | boolean) => void }) { const [name, setName] = useState(props.data.workspace.name); const [urlKey, setUrlKey] = useState(props.data.workspace.urlKey);const[icon,setIcon]=useState(props.data.workspace.icon??''); const [confirm, setConfirm] = useState(false); const save = async () => { await props.onWorkspaceUpdate({ name, urlKey,icon }); toast.success("Workspace saved"); };const saveFiscal=async(value:string)=>{await updateWorkspacePreferences({...props.data.workspaceSettings,fiscalMonth:value});await props.onReload()}; return <><PageTitle>Workspace</PageTitle><Section><Row title="Icon" description="Emoji or short text shown throughout the app"><input className="settings-input short" aria-label="Workspace icon" value={icon} maxLength={4} onChange={event=>setIcon(event.target.value)} onBlur={()=>void save()}/></Row><Row title="Name"><input className="settings-input" aria-label="Name" value={name} onChange={event => setName(event.target.value)} onBlur={save}/></Row><Row title="URL"><div className="settings-url"><span>flow.app/</span><input aria-label="URL" value={urlKey} onChange={event => setUrlKey(slug(event.target.value))} onBlur={save}/></div></Row></Section><Section title="Time & region"><Row title="First month of the fiscal year" description="Used when grouping projects and issues quarterly, half-yearly, and yearly"><Select label="First month of the fiscal year" value={props.data.workspaceSettings.fiscalMonth} options={["January","February","March","April","May","June","July","August","September","October","November","December"]} onChange={value => void saveFiscal(value)}/></Row><Row title="Region" description="Set when a workspace is created and cannot be changed."><span className="settings-static">{props.data.workspace.region === "eu" ? "European Union" : "United States"}</span></Row></Section><Section title="Danger zone"><Row danger title="Delete workspace" description="Schedule workspace to be permanently deleted"><ActionButton danger onClick={() => setConfirm(true)}>Delete workspace</ActionButton></Row></Section><ConfirmDialog open={confirm} title="Delete workspace?" description={`This permanently deletes ${props.data.workspace.name} and all of its data.`} confirm="Delete workspace" onCancel={() => setConfirm(false)} onConfirm={async () => { setConfirm(false); await props.onWorkspaceDelete(); }}/></>; }
+function WorkspacePage(props: SettingsPageProps & { settings: StoredSettings; setSettings: React.Dispatch<React.SetStateAction<StoredSettings>>; setValue: (key: string, value: string | boolean) => void }) { const [name, setName] = useState(props.data.workspace.name); const [urlKey, setUrlKey] = useState(props.data.workspace.urlKey);const[icon,setIcon]=useState(props.data.workspace.icon??''); const [confirm, setConfirm] = useState(false); const save = async () => { await props.onWorkspaceUpdate({ name, urlKey,icon }); toast.success("Workspace saved"); };const saveFiscal=async(value:string)=>{await updateWorkspacePreferences({...props.data.workspaceSettings,fiscalMonth:value});await props.onReload()}; return <><PageTitle>Workspace</PageTitle><Section><Row title="Icon" description="Emoji or short text shown throughout the app"><input className="settings-input short" aria-label="Workspace icon" value={icon} maxLength={4} onChange={event=>setIcon(event.target.value)} onBlur={()=>void save()}/></Row><Row title="Name"><input className="settings-input" aria-label="Name" value={name} onChange={event => setName(event.target.value)} onBlur={save}/></Row><Row title="URL"><div className="settings-url"><span>flow.app/</span><input aria-label="URL" value={urlKey} onChange={event => setUrlKey(slug(event.target.value))} onBlur={save}/></div></Row></Section><Section title="Time & region"><Row title="First month of the fiscal year" description="Used when grouping projects and issues quarterly, half-yearly, and yearly"><Select label="First month of the fiscal year" value={props.data.workspaceSettings.fiscalMonth} options={["January","February","March","April","May","June","July","August","September","October","November","December"]} onChange={value => void saveFiscal(value)}/></Row><Row title="Region" description="Set when a workspace is created and cannot be changed."><span className="settings-static">{workspaceRegionLabel(props.data.workspace.region)}</span></Row></Section><Section title="Danger zone"><Row danger title="Delete workspace" description="Schedule workspace to be permanently deleted"><ActionButton danger onClick={() => setConfirm(true)}>Delete workspace</ActionButton></Row></Section><ConfirmDialog open={confirm} title="Delete workspace?" description={`This permanently deletes ${props.data.workspace.name} and all of its data.`} confirm="Delete workspace" onCancel={() => setConfirm(false)} onConfirm={async () => { setConfirm(false); await props.onWorkspaceDelete(); }}/></>; }
 function ConfirmDialog({ open, title, description, confirm, onCancel, onConfirm }: { open: boolean; title: string; description: string; confirm: string; onCancel: () => void; onConfirm: () => void }) { return <Dialog open={open} onOpenChange={value => !value && onCancel()}><DialogContent className="settings-confirm"><DialogTitle>{title}</DialogTitle><p>{description}</p><footer><ActionButton onClick={onCancel}>Cancel</ActionButton><ActionButton danger onClick={onConfirm}>{confirm}</ActionButton></footer></DialogContent></Dialog>; }
 
 function download(filename: string, content: string, type: string) {
@@ -291,7 +444,20 @@ const FEATURE_COPY: Partial<Record<SettingsPageId, { title: string; description:
   integrations: { title: "Integrations", description: "Connect Flow with the tools your team uses.", rows: [["GitHub","Link pull requests and commits to issues"],["Slack","Create and update issues from Slack"],["Figma","Preview design links in issues"]] },
 };
 function FeaturePage({page,data,onReload}:{page:SettingsPageId;data:BootstrapData;onReload:()=>Promise<void>}){const copy=FEATURE_COPY[page]??{title:page,description:'Workspace feature settings.',rows:[["Enable feature","Make this feature available to workspace members"]] as [string,string][]};if(page==='integrations')return <IntegrationsSettings data={data} onReload={onReload}/>;const enabled=data.workspaceSettings.featureFlags[page]??false;const save=async(value:boolean)=>{try{await updateWorkspacePreferences({...data.workspaceSettings,featureFlags:{...data.workspaceSettings.featureFlags,[page]:value}});await onReload()}catch(error){toast.error(error instanceof Error?error.message:'Could not update feature')}};return <><PageTitle description={copy.description}>{copy.title}</PageTitle><Section><Row title={`Enable ${copy.title}`} description={copy.rows[0]?.[1]}><Toggle label={`Enable ${copy.title}`} checked={enabled} onChange={value=>void save(value)}/></Row></Section></>}
-function IntegrationsSettings({data,onReload}:{data:BootstrapData;onReload:()=>Promise<void>}){const update=async(provider:string,configured:boolean)=>{try{if(configured)await disconnectIntegration(provider);else await connectIntegration(provider,{name:title(provider),config:{mode:'workspace-reference'}});await onReload()}catch(error){toast.error(error instanceof Error?error.message:'Could not update integration')}};return <><PageTitle description="Configure provider records. Live OAuth and webhooks require provider credentials.">Integrations</PageTitle><Section>{[['github','Link pull requests and commits to issues'],['slack','Create and update issues from Slack'],['figma','Preview design links in issues']].map(([provider,description])=>{const item=data.integrationConnections.find(connection=>connection.provider===provider);return <Row key={provider} title={title(provider)} description={`${description}. ${item?'Configuration stored':'Provider credentials not configured'}`}><ActionButton danger={Boolean(item)} onClick={()=>void update(provider,Boolean(item))}>{item?'Remove configuration':'Configure reference'}</ActionButton></Row>})}</Section></>}
+function IntegrationsSettings({data,onReload}:{data:BootstrapData;onReload:()=>Promise<void>}){
+  const update=async(provider:string,configured:boolean)=>{try{if(configured)await disconnectIntegration(provider);else await connectIntegration(provider,{name:title(provider),config:{mode:'workspace-reference'}});await onReload()}catch(error){toast.error(error instanceof Error?error.message:'Could not update integration')}};
+  return <><PageTitle description="Configure provider records, enterprise sign-in, scopes, channels, and delivery lifecycle.">Integrations</PageTitle><Section>{[['github','Link pull requests and commits to issues'],['slack','Create and update issues from Slack'],['figma','Preview design links in issues']].map(([provider,description])=>{const item=data.integrationConnections.find(connection=>connection.provider===provider);return <Row key={provider} title={title(provider)} description={`${description}. ${item?'Configuration stored':'Provider credentials not configured'}`}><ActionButton danger={Boolean(item)} onClick={()=>void update(provider,Boolean(item))}>{item?'Remove configuration':'Configure reference'}</ActionButton></Row>})}</Section><EnterpriseIdentityProviders data={data} onReload={onReload}/></>
+}
+function EnterpriseIdentityProviders({data,onReload}:{data:BootstrapData;onReload:()=>Promise<void>}){
+  const[editing,setEditing]=useState<IdentityProvider|null|undefined>(undefined),[busy,setBusy]=useState('');
+  const mutate=async(id:string,action:()=>Promise<unknown>,message:string)=>{setBusy(id);try{await action();await onReload();toast.success(message)}catch(error){toast.error(error instanceof Error?error.message:'Identity provider operation failed')}finally{setBusy('')}};
+  return <Section title="Identity providers">{data.identityProviders.map(item=><Row key={item.id} title={item.name} description={`${item.type.toUpperCase()} · ${item.domains.join(', ')||'No discovery domains'} · ${item.discoveryStatus}`}><div className="settings-inline-actions"><Toggle label={`${item.name} enabled`} checked={item.enabled} onChange={enabled=>void mutate(item.id,()=>updateIdentityProvider(item.id,{enabled}),'Identity provider updated')}/><ActionButton disabled={busy===item.id} onClick={()=>void mutate(item.id,()=>verifyIdentityProvider(item.id),'Provider verified')}>Verify</ActionButton><ActionButton onClick={()=>setEditing(item)}>Configure</ActionButton><ActionButton danger onClick={()=>void mutate(item.id,()=>deleteIdentityProvider(item.id),'Provider removed')}>Remove</ActionButton></div></Row>)}{!data.identityProviders.length&&<div className="settings-empty compact"><ShieldCheck size={24}/><h3>No identity providers</h3><p>Configure OIDC or SAML for domain-based enterprise sign-in.</p></div>}<div className="settings-section-action"><ActionButton onClick={()=>setEditing(null)}><Plus size={14}/>Add identity provider</ActionButton></div>{editing!==undefined&&<IdentityProviderEditor provider={editing} onClose={()=>setEditing(undefined)} onSaved={async()=>{setEditing(undefined);await onReload()}}/>}</Section>
+}
+function IdentityProviderEditor({provider,onClose,onSaved}:{provider:IdentityProvider|null;onClose:()=>void;onSaved:()=>Promise<void>}){
+  const[type,setType]=useState<'oidc'|'saml'>(provider?.type??'oidc'),[name,setName]=useState(provider?.name??''),[issuer,setIssuer]=useState(provider?.issuer??''),[clientId,setClientId]=useState(provider?.clientId??''),[secretEnv,setSecretEnv]=useState(provider?.clientSecretEnv??''),[domains,setDomains]=useState((provider?.domains??[]).join(', ')),[enabled,setEnabled]=useState(provider?.enabled??true),[enforced,setEnforced]=useState(provider?.enforced??false),[busy,setBusy]=useState(false);
+  const submit=async()=>{setBusy(true);const input={type,name,issuer,clientId,clientSecretEnv:secretEnv,domains:domains.split(',').map(v=>v.trim()).filter(Boolean),scopes:type==='oidc'?['openid','profile','email']:[],enabled,enforced};try{if(provider)await updateIdentityProvider(provider.id,input);else await createIdentityProvider(input);await onSaved();toast.success('Identity provider saved')}catch(error){toast.error(error instanceof Error?error.message:'Could not save identity provider')}finally{setBusy(false)}};
+  return <Dialog open onOpenChange={open=>!open&&onClose()}><DialogContent className="settings-confirm"><DialogTitle>{provider?'Configure identity provider':'Add identity provider'}</DialogTitle><label>Protocol<Select label="Identity protocol" value={type.toUpperCase()} options={['OIDC','SAML']} onChange={value=>setType(value.toLowerCase() as 'oidc'|'saml')}/></label><label>Name<input className="settings-input" value={name} onChange={e=>setName(e.target.value)}/></label><label>{type==='oidc'?'Issuer URL':'Metadata URL'}<input className="settings-input" value={issuer} onChange={e=>setIssuer(e.target.value)}/></label>{type==='oidc'&&<><label>Client ID<input className="settings-input" value={clientId} onChange={e=>setClientId(e.target.value)}/></label><label>Client secret environment variable<input className="settings-input" value={secretEnv} onChange={e=>setSecretEnv(e.target.value)} placeholder="FLOW_IDP_CLIENT_SECRET"/></label></>}<label>Discovery domains<input className="settings-input" value={domains} onChange={e=>setDomains(e.target.value)} placeholder="example.com"/></label><Row title="Enabled"><Toggle label="Identity provider enabled" checked={enabled} onChange={setEnabled}/></Row><Row title="Require this provider"><Toggle label="Require this provider" checked={enforced} onChange={setEnforced}/></Row><footer><ActionButton onClick={onClose}>Cancel</ActionButton><ActionButton primary disabled={busy||!name.trim()||!issuer.trim()||(type==='oidc'&&!clientId.trim())} onClick={()=>void submit()}>Save</ActionButton></footer></DialogContent></Dialog>
+}
 
 function storedUserValues(source?:UserSettings):StoredSettings['values']{const values=Object.fromEntries(Object.entries(source??{}).filter(([key])=>!['userId','updatedAt','personalSettingsVersion'].includes(key)));return{...DEFAULT_VALUES,...values} as StoredSettings['values']}
 function sameStoredValues(left:StoredSettings['values'],right:StoredSettings['values']){const keys=Object.keys(left);return keys.length===Object.keys(right).length&&keys.every(key=>Object.is(left[key],right[key]))}

@@ -217,6 +217,9 @@ func TestSQLiteStoreWorkspaceLifecycleAndIsolation(t *testing.T) {
 	if created.Workspace.URLKey != "design-systems" || created.Workspace.Region != "eu" || len(created.Issues) != 0 || len(created.Teams) != 1 {
 		t.Fatalf("new workspace bootstrap = %#v", created)
 	}
+	if created.UserSettings == nil || created.NotificationPreferences == nil || created.Reviews == nil || created.Drafts == nil || created.AgentSkills == nil || created.CustomEmojis == nil {
+		t.Fatalf("new workspace returned nullable frontend collections: %#v", created)
+	}
 	err = repository.MutateWorkspace(context.Background(), "design-systems", "issue.created", "workspace_test_issue", nil, func(data *domain.Bootstrap) error {
 		issue := domain.Issue{ID: "workspace_test_issue", Identifier: data.Teams[0].Key + "-1", Number: 1, Title: "Isolated issue", Team: data.Teams[0], State: data.States[1], Creator: data.Viewer}
 		data.Issues = append(data.Issues, issue)

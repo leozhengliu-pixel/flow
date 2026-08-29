@@ -16,7 +16,7 @@ export type SettingsPageId =
   | 'issue-labels' | 'issue-templates' | 'sla'
   | 'project-labels' | 'project-templates' | 'project-statuses' | 'project-updates'
   | 'ai' | 'initiatives' | 'documents' | 'customer-requests' | 'releases' | 'pulse' | 'asks' | 'emojis' | 'integrations'
-  | 'workspace' | 'teams' | 'members' | 'security' | 'audit-log' | 'api' | 'applications' | 'billing' | 'usage' | 'import-export' | 'team'
+  | 'workspace' | 'teams' | 'members' | 'security' | 'audit-log' | 'api' | 'applications' | 'billing' | 'usage' | 'import-export' | 'workflows' | 'team'
 export type TeamSettingsSection =
   | 'overview' | 'general' | 'security' | 'members' | 'notifications'
   | 'issue-labels' | 'templates' | 'recurring-issues' | 'statuses'
@@ -48,6 +48,7 @@ export type AppRoute =
   | { kind: 'customer'; workspaceSlug: string; customerSlugId: string }
   | { kind: 'documents'; workspaceSlug: string }
   | { kind: 'analytics'; workspaceSlug: string }
+  | { kind: 'dashboards'; workspaceSlug: string }
   | { kind: 'document'; workspaceSlug: string; documentSlugId: string }
   | { kind: 'drafts'; workspaceSlug: string }
   | { kind: 'agent'; workspaceSlug: string; chatSlug?: string }
@@ -106,6 +107,7 @@ export function parseAppRoute(pathname: string): AppRoute {
   if (section === 'customer' && third && segments.length === 3) return { kind: 'customer', workspaceSlug, customerSlugId: third }
   if (section === 'documents' && segments.length === 2) return { kind: 'documents', workspaceSlug }
   if (section === 'analytics' && segments.length === 2) return { kind: 'analytics', workspaceSlug }
+  if (section === 'dashboards' && segments.length === 2) return { kind: 'dashboards', workspaceSlug }
   if (section === 'document' && third && segments.length === 3) return { kind: 'document', workspaceSlug, documentSlugId: third }
   if (section === 'drafts' && segments.length === 2) return { kind: 'drafts', workspaceSlug }
   if (section === 'agent' && segments.length <= 3) return { kind: 'agent', workspaceSlug, chatSlug: third }
@@ -189,6 +191,7 @@ export function membersPath(workspaceSlug: string) { return `${workspaceRootPath
 export function customersPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/customers` }
 export function documentsPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/documents` }
 export function analyticsPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/analytics` }
+export function dashboardsPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/dashboards` }
 export function customerPath(workspaceSlug: string, customer: { id: string; name: string }) { return `${workspaceRootPath(workspaceSlug)}/customer/${slug(customer.name)}-${customer.id.slice(-12)}` }
 export function documentPath(workspaceSlug: string, document: { slugId: string }) { return `${workspaceRootPath(workspaceSlug)}/document/${encode(document.slugId)}` }
 export function draftsPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/drafts` }
@@ -208,7 +211,7 @@ export function teamArchivePath(workspaceSlug: string, teamKey: string, tab?: Te
 export function teamsPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/teams` }
 export function newTeamPath(workspaceSlug: string) { return `${workspaceRootPath(workspaceSlug)}/settings/new-team` }
 const ACCOUNT_SETTINGS = new Set<SettingsPageId>(['preferences','profile','notifications','code-and-reviews','account-security','connections','agents'])
-const SETTINGS_PAGES = new Set<SettingsPageId>(['issue-labels','issue-templates','sla','project-labels','project-templates','project-statuses','project-updates','ai','initiatives','documents','customer-requests','releases','pulse','asks','emojis','integrations','workspace','teams','members','security','audit-log','api','applications','billing','usage','import-export'])
+const SETTINGS_PAGES = new Set<SettingsPageId>(['issue-labels','issue-templates','sla','project-labels','project-templates','project-statuses','project-updates','ai','initiatives','documents','customer-requests','releases','pulse','asks','emojis','integrations','workspace','teams','members','security','audit-log','api','applications','billing','usage','import-export','workflows'])
 const TEAM_SETTINGS_SECTIONS = new Set<TeamSettingsSection>([
   'overview','general','security','members','notifications','issue-labels','templates',
   'recurring-issues','statuses','workflow','triage','cycles','agents','agent-skills',

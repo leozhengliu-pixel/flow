@@ -9,8 +9,9 @@ import { NavLink } from "react-router-dom";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
-  fetchAccountSessions, removeMember, revokeOtherAccountSessions,
+  fetchAccountIdentities, fetchAccountSessions, removeMember, revokeAccountSession, revokeOtherAccountSessions,
   revokeOAuthAuthorization, updateAccountProfile, updateNotificationPreferences,
+  unlinkAccountIdentity,
 } from "@/lib/api";
 import type { SettingsPageId } from "@/lib/app-routes";
 import { agentSkillPath, newAgentSkillPath } from "@/lib/app-routes";
@@ -184,13 +185,15 @@ function CodeReviews({ values, setValue, text }: PersonalProps) {
 function Security({ data, onNavigate, onReload, text }: PersonalProps) {
   const { formatDate } = useI18n();
   const [sessions,setSessions]=useState<Awaited<ReturnType<typeof fetchAccountSessions>>>([]);
+  const [identities,setIdentities]=useState<Awaited<ReturnType<typeof fetchAccountIdentities>>>([]);
   const [confirmOpen,setConfirmOpen]=useState(false);
-  useEffect(()=>{void fetchAccountSessions().then(setSessions).catch(error=>toast.error(error instanceof Error?error.message:"Could not load sessions"));},[]);
+  useEffect(()=>{void Promise.all([fetchAccountSessions().then(setSessions),fetchAccountIdentities().then(setIdentities)]).catch(error=>toast.error(error instanceof Error?error.message:"Could not load security information"));},[]);
   const other=sessions.filter(item=>!item.current);
   const revoke=async()=>{try{await revokeOtherAccountSessions();setSessions(await fetchAccountSessions());setConfirmOpen(false);toast.success("Other sessions revoked");}catch(error){toast.error(error instanceof Error?error.message:"Could not revoke sessions");}};
   return <><PersonalPageTitle>{text.security}</PersonalPageTitle>
     <PersonalSection title="Sessions" description="Devices logged into your account">{sessions.filter(item=>item.current).map(item=><PersonalRow key={item.id} icon={<Globe/>} title="Current session" description={`Last active ${formatDate(item.lastSeenAt,{dateStyle:"medium",timeStyle:"short"})} · expires ${formatDate(item.expiresAt,{dateStyle:"medium",timeStyle:"short"})}`}/>)}</PersonalSection>
-    {other.length>0 && <PersonalSection title={`${other.length} other session${other.length===1?"":"s"}`}><div className="personal-section-action"><Action danger onClick={()=>setConfirmOpen(true)}>Revoke all</Action></div>{other.map(item=><PersonalRow key={item.id} icon={<Laptop/>} title="Signed-in session" description={`Last active ${formatDate(item.lastSeenAt,{dateStyle:"medium",timeStyle:"short"})}`}/>)}</PersonalSection>}
+    {other.length>0 && <PersonalSection title={`${other.length} other session${other.length===1?"":"s"}`}><div className="personal-section-action"><Action danger onClick={()=>setConfirmOpen(true)}>Revoke all</Action></div>{other.map(item=><PersonalRow key={item.id} icon={<Laptop/>} title="Signed-in session" description={`Last active ${formatDate(item.lastSeenAt,{dateStyle:"medium",timeStyle:"short"})}`}><Action danger onClick={()=>void revokeAccountSession(item.id).then(()=>fetchAccountSessions().then(setSessions))}>Revoke</Action></PersonalRow>)}</PersonalSection>}
+    <PersonalSection title="External identities" description="Accounts that can sign in to your Flow profile">{identities.map(item=><PersonalRow key={item.id} icon={<ShieldCheck/>} title={item.username||item.subject} description={`${item.provider.toUpperCase()} · ${item.issuer} · last used ${formatDate(item.lastLoginAt,{dateStyle:'medium'})}`}><Action danger onClick={()=>void unlinkAccountIdentity(item.id).then(()=>fetchAccountIdentities().then(setIdentities)).catch(error=>toast.error(error instanceof Error?error.message:'Could not unlink identity'))}>Unlink</Action></PersonalRow>)}{!identities.length&&<div className="personal-empty"><ShieldCheck/><h3>No external identities</h3></div>}</PersonalSection>
     <PersonalSection title="Passkeys" description="Passkeys are a secure way to sign in to your Flow account"><div className="personal-empty"><KeyRound/><h3>No passkeys registered</h3><span>Passkey enrollment is not available on this server.</span></div></PersonalSection>
     <PersonalSection title="Personal API keys" description="Use Flow’s API to build your own integrations"><div className="personal-empty"><Code2/><h3>{data.apiKeys.filter(k=>k.creatorId===data.viewer.id&&!k.revokedAt).length ? `${data.apiKeys.filter(k=>k.creatorId===data.viewer.id&&!k.revokedAt).length} active API key` : "No API keys created"}</h3><Action onClick={()=>onNavigate("api")}>Manage API keys</Action></div></PersonalSection>
     <PersonalSection title="Commit signing key" description="Coding sessions use this key to sign your commits"><PersonalRow title="No signing key added"><Action disabled>Add key</Action></PersonalRow></PersonalSection>

@@ -1,0 +1,6 @@
+TypeError: Cannot read properties of undefined (reading 'replace')
+at stripLeadingSingleQuote (LinearCsvImporter.ts:108)
+
+Cause: Flow exports lowercase/snake_case headers, while LinearCsvImporter requires
+Title, Description, Priority, Status, Assignee, Labels, Estimate, Created,
+Completed, Started and Archived.
