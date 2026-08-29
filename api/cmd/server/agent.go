@@ -218,6 +218,7 @@ func (s *server) createAgentSessionMessage(w http.ResponseWriter, r *http.Reques
 			return err
 		}
 		session.Messages = append(session.Messages, domain.AgentMessage{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: message, CreatedAt: now})
+		data.AgentActivities = append(data.AgentActivities, domain.AgentActivity{ID: fmt.Sprintf("agent_activity_%d", now.UnixNano()), SessionID: id, Type: "message", Status: "completed", Body: message, CreatedAt: now, UpdatedAt: now})
 		session.UpdatedAt = now
 		return nil
 	})
@@ -290,6 +291,7 @@ func (s *server) completeAgentSession(r *http.Request, id string) (domain.AgentS
 			return err
 		}
 		current.Messages = append(current.Messages, domain.AgentMessage{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "assistant", Content: reply, DurationMS: duration, CreatedAt: now})
+		next.AgentActivities = append(next.AgentActivities, domain.AgentActivity{ID: fmt.Sprintf("agent_activity_%d", now.UnixNano()), SessionID: session.ID, Type: "response", Status: "completed", Body: reply, Metadata: map[string]any{"durationMs": duration}, CreatedAt: now, UpdatedAt: now})
 		current.UpdatedAt = now
 		completed = *current
 		return nil

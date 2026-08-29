@@ -3,8 +3,8 @@ import { Building2, FileText, FolderKanban, Layers3, Lightbulb, Search, UserRoun
 
 import { ReleasesIcon } from '@/components/releases/release-icons'
 
-import { clearSearchHistory, searchWorkspace } from '@/lib/api'
-import type { SearchHistoryEntry, SearchResourceType, SearchResponse, SearchResult } from '@/types/flow'
+import { clearSearchHistory, searchWorkspace, semanticSearch } from '@/lib/api'
+import type { SearchHistoryEntry, SearchResourceType, SearchResponse, SearchResult, SemanticSearchFacet } from '@/types/flow'
 
 import './workspace-search-page.css'
 import { DisplayIcon, FilterIcon } from '@/components/ui/view-action-icons'
@@ -31,6 +31,7 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult }: {
   const [query, setQuery] = useState('')
   const [tab, setTab] = useState<SearchTab>('all')
   const [response, setResponse] = useState<SearchResponse>({ results: [], history: [], recent: [] })
+  const [facets,setFacets]=useState<Record<string,SemanticSearchFacet[]>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
   const [activeIndex, setActiveIndex] = useState(0)
@@ -42,8 +43,9 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult }: {
     const request = ++requestRef.current
     setLoading(true)
     setError(undefined)
-    searchWorkspace(query, types)
-      .then(result => { if (request === requestRef.current) { setResponse(result); setActiveIndex(0) } })
+    const operation=query ? semanticSearch(query,types).then(result=>({results:result.results,history:[],recent:[],facets:result.facets})) : searchWorkspace(query, types).then(result=>({...result,facets:{}}))
+    operation
+      .then(result => { if (request === requestRef.current) { setResponse(result);setFacets(result.facets); setActiveIndex(0) } })
       .catch(reason => { if (request === requestRef.current) setError(reason instanceof Error ? reason.message : 'Search failed') })
       .finally(() => { if (request === requestRef.current) setLoading(false) })
   }, [query, retry, types])
@@ -88,6 +90,7 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult }: {
       </div>
     </div>
     <section className="workspace-search-content" aria-live="polite">
+      {query&&Object.values(facets).some(values=>values.length>0)&&<div className="workspace-search-facets" aria-label="Search facets">{Object.entries(facets).flatMap(([key,values])=>values.slice(0,3).map(value=><span key={`${key}-${value.value}`}>{value.label}<small>{value.count}</small></span>))}</div>}
       {!query && !loading && <RecentSearches history={response.history} onSearch={runSearch} onClear={async () => { await clearSearchHistory(); setResponse(current => ({ ...current, history: [] })) }}/>} 
       {loading && <SearchLoading/>}
       {error && <div className="workspace-search-state"><strong>Search unavailable</strong><span>{error}</span><button type="button" onClick={() => setRetry(value => value + 1)}>Try again</button></div>}

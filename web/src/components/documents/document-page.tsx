@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
-import { addFavorite, addSubscription, createDocumentComment, deleteDocument, deleteDocumentComment, removeFavorite, removeSubscription, restoreDocumentRevision, updateDocument } from '@/lib/api'
+import { addFavorite, addSubscription, createDocumentComment, deleteDocument, deleteDocumentComment, deleteDocumentDraft, publishDocumentDraft, removeFavorite, removeSubscription, restoreDocumentRevision, saveDocumentDraft, updateDocument } from '@/lib/api'
 import type { BootstrapData, FlowDocument, User } from '@/types/flow'
 
 import './document-page.css'
@@ -25,6 +25,7 @@ export function DocumentPage({ data, document, onReload, onBack }: { data: Boots
   const pending=useRef<number | undefined>(undefined)
   const favorite=data.favorites.some(item=>item.resourceType==='document'&&item.resourceId===document.id) || document.favorite
   const subscribed=data.subscriptions.some(item=>item.resourceType==='document'&&item.resourceId===document.id) || document.subscriberIds.includes(data.viewer.id)
+  const draft=data.documentContentDrafts?.find(item=>item.documentId===document.id&&item.userId===data.viewer.id)
   useEffect(()=>{setTitle(document.title);setBody({value:document.content,state:document.contentData?JSON.stringify(document.contentData):document.contentState})},[document])
   useEffect(()=>{if(historyOpen&&!document.revisions.some(item=>item.id===selectedRevisionId))setSelectedRevisionId(document.revisions[0]?.id??'')},[document.revisions,historyOpen,selectedRevisionId])
   useEffect(()=>()=>window.clearTimeout(pending.current),[])
@@ -42,6 +43,9 @@ export function DocumentPage({ data, document, onReload, onBack }: { data: Boots
       <button className="document-breadcrumb" onClick={onBack}>{issue?.identifier??project?.name??'Documents'}</button><span>›</span><strong>{document.title}</strong>
       <div className="document-header-actions">
         {saveState!=='idle'&&<span className={`document-save-state ${saveState}`}>{saveState==='saving'?'Saving…':saveState==='saved'?<><Check size={12}/>Saved</>:'Could not save'}</span>}
+        <button aria-label="Save document draft" onClick={()=>void saveDocumentDraft(document.id,{content:body.value,contentState:body.state,contentData:draftData(body.state??'')}).then(onReload)}>{draft?'Update draft':'Save draft'}</button>
+        {draft&&<button aria-label="Publish document draft" onClick={()=>void publishDocumentDraft(document.id,draft.id).then(onReload)}>Publish draft</button>}
+        {draft&&<button aria-label="Discard document draft" onClick={()=>void deleteDocumentDraft(document.id,draft.id).then(onReload)}><X size={14}/></button>}
         <button aria-label={favorite?'Remove from favorites':'Add to favorites'} onClick={()=>void (favorite?removeFavorite('document',document.id):addFavorite('document',document.id)).then(onReload)}><Star size={15} fill={favorite?'currentColor':'none'}/></button>
         <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Document options"><MoreHorizontal size={16}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="document-menu" align="end" sideOffset={5}><DropdownMenu.Sub><DropdownMenu.SubTrigger><FileText size={14}/>Move to<ChevronDown size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="document-menu" sideOffset={6}>{data.projects.map(item=><DropdownMenu.CheckboxItem checked={document.projectIds.includes(item.id)} key={item.id} onCheckedChange={()=>void toggleProject(item.id)} onSelect={event=>event.preventDefault()}><i style={{background:item.color}}/>{item.name}{document.projectIds.includes(item.id)&&<Check size={13}/>}</DropdownMenu.CheckboxItem>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub><DropdownMenu.Item onSelect={()=>navigator.clipboard.writeText(location.href)}><Copy size={14}/>Copy link</DropdownMenu.Item><DropdownMenu.Item onSelect={()=>void openHistory()}><History size={14}/>Show document history</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item className="danger" onSelect={()=>setDeleteOpen(true)}><Trash2 size={14}/>Delete</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
         <button aria-label={subscribed?'Unsubscribe':'Subscribe'} onClick={()=>void (subscribed?removeSubscription('document',document.id):addSubscription('document',document.id)).then(onReload)}><Bell size={15} fill={subscribed?'currentColor':'none'}/></button>
@@ -58,3 +62,4 @@ export function DocumentPage({ data, document, onReload, onBack }: { data: Boots
     <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}><DialogContent className="document-delete"><DialogTitle>Delete "{document.title}"?</DialogTitle><p>Deleted documents are available in the "Recently deleted" view for 30 days, before they are permanently deleted.</p><footer><button onClick={()=>setDeleteOpen(false)}>Cancel</button><button className="danger" onClick={()=>void deleteDocument(document.id).then(onBack).catch(error=>toast.error(error instanceof Error?error.message:'Could not delete'))}>Delete</button></footer></DialogContent></Dialog>
   </main>
 }
+function draftData(value:string){try{return JSON.parse(value) as Record<string,unknown>}catch{return undefined}}
