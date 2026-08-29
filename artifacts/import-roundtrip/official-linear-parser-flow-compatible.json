@@ -1,0 +1,20 @@
+{
+  "file": "/Users/liuzheng/Documents/ChatGPT/Flow/artifacts/import-roundtrip/flow-export-linear-compatible.csv",
+  "issues": [
+    {
+      "title": "test",
+      "description": "test",
+      "priority": 2,
+      "status": "In Progress",
+      "assigneeId": "Flow user",
+      "createdAt": "2026-08-29T06:44:31.237Z",
+      "labels": []
+    }
+  ],
+  "labels": {},
+  "users": {
+    "Flow user": {
+      "name": "Flow user"
+    }
+  }
+}
