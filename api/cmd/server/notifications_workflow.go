@@ -111,9 +111,22 @@ func (s *server) batchNotifications(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	if !slices.Contains([]string{"delete", "deleteAll", "deleteRead", "deleteReadCompleted", "markRead", "markUnread", "unsnooze"}, input.Action) {
+	if !slices.Contains([]string{"delete", "deleteAll", "deleteRead", "deleteReadCompleted", "markRead", "markAllRead", "markUnread", "archive", "archiveAll", "unarchive", "snooze", "snoozeAll", "unsnooze"}, input.Action) {
 		writeError(w, http.StatusBadRequest, "invalid notification batch action")
 		return
+	}
+	var snoozedUntil *time.Time
+	if input.Action == "snooze" || input.Action == "snoozeAll" {
+		if input.SnoozedUntil == nil {
+			writeError(w, http.StatusBadRequest, "snoozedUntil is required")
+			return
+		}
+		parsed, err := time.Parse(time.RFC3339, *input.SnoozedUntil)
+		if err != nil || !parsed.After(time.Now()) {
+			writeError(w, http.StatusBadRequest, "snoozedUntil must be a future RFC3339 timestamp")
+			return
+		}
+		snoozedUntil = &parsed
 	}
 	viewerID := s.workspaceData(r).Viewer.ID
 	var updated int
@@ -158,8 +171,20 @@ func (s *server) batchNotifications(w http.ResponseWriter, r *http.Request) {
 			case "markRead":
 				notification.ReadAt = &now
 				updated++
+			case "markAllRead":
+				notification.ReadAt = &now
+				updated++
 			case "markUnread":
 				notification.ReadAt = nil
+				updated++
+			case "archive", "archiveAll":
+				notification.ArchivedAt = &now
+				updated++
+			case "unarchive":
+				notification.ArchivedAt = nil
+				updated++
+			case "snooze", "snoozeAll":
+				notification.SnoozedUntil = snoozedUntil
 				updated++
 			case "unsnooze":
 				notification.SnoozedUntil = nil
@@ -1291,6 +1316,11 @@ func enqueueNotificationDeliveries(data *domain.Bootstrap, notification domain.N
 	}
 	if preferences.Desktop.Enabled && categoryEnabled(preferences.Desktop, notification.Category) {
 		appendDelivery("desktop", "pending")
+	}
+	if slices.ContainsFunc(data.PushSubscriptions, func(item domain.PushSubscription) bool {
+		return item.UserID == notification.RecipientID && item.Enabled
+	}) && preferences.Desktop.Enabled && categoryEnabled(preferences.Desktop, notification.Category) {
+		appendDelivery("push", "pending")
 	}
 }
 

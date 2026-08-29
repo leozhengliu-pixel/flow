@@ -30,6 +30,26 @@ type AuthIdentity struct {
 	LastLoginAt time.Time `json:"lastLoginAt"`
 }
 
+// IdentityProvider is a workspace-owned enterprise login configuration. Secrets
+// are referenced by environment variable rather than stored in workspace JSON.
+type IdentityProvider struct {
+	ID              string     `json:"id"`
+	WorkspaceID     string     `json:"workspaceId"`
+	Type            string     `json:"type"`
+	Name            string     `json:"name"`
+	Issuer          string     `json:"issuer"`
+	ClientID        string     `json:"clientId,omitempty"`
+	ClientSecretEnv string     `json:"clientSecretEnv,omitempty"`
+	Scopes          []string   `json:"scopes"`
+	Domains         []string   `json:"domains"`
+	Enabled         bool       `json:"enabled"`
+	Enforced        bool       `json:"enforced"`
+	DiscoveryStatus string     `json:"discoveryStatus"`
+	LastVerifiedAt  *time.Time `json:"lastVerifiedAt,omitempty"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	UpdatedAt       time.Time  `json:"updatedAt"`
+}
+
 type WorkspaceMember struct {
 	User       User       `json:"user"`
 	Role       string     `json:"role"`
@@ -122,9 +142,11 @@ type WorkspaceMembership struct {
 }
 
 type AccountBootstrap struct {
-	Viewer           User                  `json:"viewer"`
-	Workspaces       []WorkspaceMembership `json:"workspaces"`
-	LastWorkspaceKey string                `json:"lastWorkspaceKey,omitempty"`
+	Viewer                         User                  `json:"viewer"`
+	Workspaces                     []WorkspaceMembership `json:"workspaces"`
+	LastWorkspaceKey               string                `json:"lastWorkspaceKey,omitempty"`
+	WorkspaceRegionSelectorEnabled bool                  `json:"workspaceRegionSelectorEnabled"`
+	WorkspaceDefaultRegion         string                `json:"workspaceDefaultRegion"`
 }
 
 type Team struct {
@@ -459,6 +481,11 @@ type Attachment struct {
 	Size        int64     `json:"size"`
 	CreatedAt   time.Time `json:"createdAt"`
 	Creator     User      `json:"creator"`
+	Provider    string    `json:"provider,omitempty"`
+	ProviderID  string    `json:"providerId,omitempty"`
+	ProviderURL string    `json:"providerUrl,omitempty"`
+	LinkbackURL string    `json:"linkbackUrl,omitempty"`
+	SyncStatus  string    `json:"syncStatus,omitempty"`
 }
 
 type ProjectStatus struct {
@@ -561,6 +588,8 @@ type CustomerRequest struct {
 	IssueID     string       `json:"issueId,omitempty"`
 	ProjectID   string       `json:"projectId,omitempty"`
 	Attachments []Attachment `json:"attachments"`
+	Priority    float64      `json:"priority,omitempty"`
+	ArchivedAt  *time.Time   `json:"archivedAt,omitempty"`
 	CreatedAt   time.Time    `json:"createdAt"`
 	UpdatedAt   time.Time    `json:"updatedAt"`
 }
@@ -913,6 +942,51 @@ type IntegrationConnection struct {
 	OAuthAccessToken  string            `json:"oauthAccessToken,omitempty"`
 	OAuthRefreshToken string            `json:"oauthRefreshToken,omitempty"`
 	OAuthExpiresAt    *time.Time        `json:"oauthExpiresAt,omitempty"`
+	Scopes            []string          `json:"scopes"`
+	Channels          []string          `json:"channels"`
+	LinkbackEnabled   bool              `json:"linkbackEnabled"`
+	DeliveryAttempts  int               `json:"deliveryAttempts"`
+	LastDeliveryAt    *time.Time        `json:"lastDeliveryAt,omitempty"`
+}
+
+type IntegrationDelivery struct {
+	ID             string          `json:"id"`
+	IdempotencyKey string          `json:"idempotencyKey,omitempty"`
+	ConnectionID   string          `json:"connectionId"`
+	EventType      string          `json:"eventType"`
+	ResourceID     string          `json:"resourceId"`
+	Channel        string          `json:"channel,omitempty"`
+	Payload        json.RawMessage `json:"payload"`
+	Status         string          `json:"status"`
+	Attempts       int             `json:"attempts"`
+	NextAttemptAt  *time.Time      `json:"nextAttemptAt,omitempty"`
+	LastError      string          `json:"lastError,omitempty"`
+	CreatedAt      time.Time       `json:"createdAt"`
+	UpdatedAt      time.Time       `json:"updatedAt"`
+}
+
+type GitAutomationState struct {
+	ID              string    `json:"id"`
+	TeamID          string    `json:"teamId"`
+	Repository      string    `json:"repository"`
+	Event           string    `json:"event"`
+	WorkflowStateID string    `json:"workflowStateId"`
+	SyncComments    bool      `json:"syncComments"`
+	SyncLabels      bool      `json:"syncLabels"`
+	SyncAssignees   bool      `json:"syncAssignees"`
+	Enabled         bool      `json:"enabled"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
+}
+
+type TargetBranch struct {
+	ID         string    `json:"id"`
+	TeamID     string    `json:"teamId"`
+	Repository string    `json:"repository"`
+	Branch     string    `json:"branch"`
+	Default    bool      `json:"default"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
 type ReviewCheck struct {
@@ -1098,6 +1172,66 @@ type ExportJob struct {
 	Error          string     `json:"error,omitempty"`
 	CreatedAt      time.Time  `json:"createdAt"`
 	CompletedAt    *time.Time `json:"completedAt,omitempty"`
+}
+
+type MigrationEntityMapping struct {
+	ID         string         `json:"id"`
+	EntityType string         `json:"entityType"`
+	SourceID   string         `json:"sourceId"`
+	SourceName string         `json:"sourceName,omitempty"`
+	TargetID   string         `json:"targetId,omitempty"`
+	TargetName string         `json:"targetName,omitempty"`
+	Action     string         `json:"action"`
+	Status     string         `json:"status"`
+	Error      string         `json:"error,omitempty"`
+	Metadata   map[string]any `json:"metadata,omitempty"`
+}
+
+type MigrationJob struct {
+	ID           string                   `json:"id"`
+	UserID       string                   `json:"userId"`
+	Filename     string                   `json:"filename"`
+	Source       string                   `json:"source"`
+	Target       string                   `json:"target"`
+	TargetTeamID string                   `json:"targetTeamId,omitempty"`
+	Status       string                   `json:"status"`
+	Phase        string                   `json:"phase"`
+	Progress     int                      `json:"progress"`
+	Counts       map[string]int           `json:"counts"`
+	Mappings     []MigrationEntityMapping `json:"mappings"`
+	Errors       []string                 `json:"errors"`
+	Bundle       json.RawMessage          `json:"bundle,omitempty"`
+	CreatedAt    time.Time                `json:"createdAt"`
+	UpdatedAt    time.Time                `json:"updatedAt"`
+	CompletedAt  *time.Time               `json:"completedAt,omitempty"`
+}
+
+type MigrationBundle struct {
+	Version           int                           `json:"version"`
+	Source            string                        `json:"source"`
+	ExportedAt        time.Time                     `json:"exportedAt"`
+	Workspace         Workspace                     `json:"workspace"`
+	Users             []User                        `json:"users"`
+	Teams             []Team                        `json:"teams"`
+	States            []WorkflowState               `json:"workflowStates"`
+	Labels            []IssueLabel                  `json:"labels"`
+	LabelGroups       []LabelGroup                  `json:"labelGroups"`
+	Projects          []Project                     `json:"projects"`
+	ProjectUpdates    map[string][]ProjectUpdate    `json:"projectUpdates"`
+	Cycles            []Cycle                       `json:"cycles"`
+	Initiatives       []Initiative                  `json:"initiatives"`
+	InitiativeUpdates map[string][]InitiativeUpdate `json:"initiativeUpdates"`
+	Issues            []Issue                       `json:"issues"`
+	Comments          map[string][]Comment          `json:"comments"`
+	Activities        map[string][]ActivityEvent    `json:"activities"`
+	Releases          []Release                     `json:"releases"`
+	ReleasePipelines  []ReleasePipeline             `json:"releasePipelines"`
+	Customers         []Customer                    `json:"customers"`
+	CustomerRequests  []CustomerRequest             `json:"customerRequests"`
+	SLARules          []SLARule                     `json:"slaRules"`
+	IssueSLAs         []IssueSLA                    `json:"issueSlas"`
+	SLAEvents         []SLAEvent                    `json:"slaEvents"`
+	Subscriptions     []Subscription                `json:"subscriptions"`
 }
 
 // Initiative is the workspace-level planning aggregate above projects.
@@ -1297,6 +1431,21 @@ type Bootstrap struct {
 	Trash                   []TrashEntry                       `json:"trash"`
 	ImportJobs              []ImportJob                        `json:"importJobs"`
 	ExportJobs              []ExportJob                        `json:"exportJobs"`
+	MigrationJobs           []MigrationJob                     `json:"migrationJobs"`
+	ProjectRelations        []ProjectRelation                  `json:"projectRelations"`
+	InitiativeRelations     []InitiativeRelation               `json:"initiativeRelations"`
+	DocumentContentDrafts   []DocumentContentDraft             `json:"documentContentDrafts"`
+	CustomerStatuses        []CustomerStatus                   `json:"customerStatuses"`
+	CustomerTiers           []CustomerTier                     `json:"customerTiers"`
+	ReleaseNotes            []ReleaseNote                      `json:"releaseNotes"`
+	ReleaseHistory          []ReleaseHistory                   `json:"releaseHistory"`
+	TeamResourceSections    []TeamResourceSection              `json:"teamResourceSections"`
+	TeamPinnedResources     []TeamPinnedResource               `json:"teamPinnedResources"`
+	AgentActivities         []AgentActivity                    `json:"agentActivities"`
+	AIConversations         []AIConversation                   `json:"aiConversations"`
+	AIPromptProgress        []AIPromptProgress                 `json:"aiPromptProgress"`
+	UsageAlerts             []UsageAlert                       `json:"usageAlerts"`
+	PaidSubscriptions       []PaidSubscription                 `json:"paidSubscriptions"`
 	Projects                []Project                          `json:"projects"`
 	ProjectStatuses         []ProjectStatus                    `json:"projectStatuses"`
 	ProjectDisplayDefault   json.RawMessage                    `json:"projectDisplayDefault,omitempty"`
@@ -1309,6 +1458,14 @@ type Bootstrap struct {
 	Notifications           []Notification                     `json:"notifications"`
 	NotificationPreferences map[string]NotificationPreferences `json:"notificationPreferences"`
 	NotificationDeliveries  []NotificationDelivery             `json:"notificationDeliveries"`
+	PushSubscriptions       []PushSubscription                 `json:"pushSubscriptions"`
+	TriageResponsibilities  []TriageResponsibility             `json:"triageResponsibilities"`
+	TriageRoutingRules      []TriageRoutingRule                `json:"triageRoutingRules"`
+	TriageAssignments       []TriageAssignment                 `json:"triageAssignments"`
+	WorkflowDefinitions     []WorkflowDefinition               `json:"workflowDefinitions"`
+	WorkflowRuns            []WorkflowRun                      `json:"workflowRuns"`
+	EmailIntakeAddresses    []EmailIntakeAddress               `json:"emailIntakeAddresses"`
+	EmailIntakeMessages     []EmailIntakeMessage               `json:"emailIntakeMessages"`
 	UserSettings            map[string]UserSettings            `json:"userSettings"`
 	WorkspaceSettings       WorkspaceSettings                  `json:"workspaceSettings"`
 	APIKeys                 []APIKey                           `json:"apiKeys"`
@@ -1316,6 +1473,10 @@ type Bootstrap struct {
 	OAuthAuthorizations     []OAuthAuthorization               `json:"oauthAuthorizations"`
 	Webhooks                []Webhook                          `json:"webhooks"`
 	IntegrationConnections  []IntegrationConnection            `json:"integrationConnections"`
+	IdentityProviders       []IdentityProvider                 `json:"identityProviders"`
+	IntegrationDeliveries   []IntegrationDelivery              `json:"integrationDeliveries"`
+	GitAutomationStates     []GitAutomationState               `json:"gitAutomationStates"`
+	TargetBranches          []TargetBranch                     `json:"targetBranches"`
 	Reviews                 []CodeReview                       `json:"reviews"`
 	AgentSessions           []AgentSession                     `json:"agentSessions"`
 	AgentSkills             []PersonalAgentSkill               `json:"agentSkills"`
@@ -1552,8 +1713,9 @@ type CycleSettingsMutationInput struct {
 }
 
 type NotificationBatchInput struct {
-	Action string   `json:"action"`
-	IDs    []string `json:"ids,omitempty"`
+	Action       string   `json:"action"`
+	IDs          []string `json:"ids,omitempty"`
+	SnoozedUntil *string  `json:"snoozedUntil,omitempty"`
 }
 
 type WorkflowStateMutationInput struct {

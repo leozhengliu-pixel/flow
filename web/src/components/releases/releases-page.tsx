@@ -16,7 +16,7 @@ import type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption } 
 import { toggleFilterOption, updateFilterOperator, updateFilterValues } from '@/components/my-issues/my-issues-filter-types'
 import { DisplayIcon as SlidersHorizontal, FilterIcon as Filter } from '@/components/ui/view-action-icons'
 import { ISSUE_FILTER_LABELS, applyExplorerFilters, buildExplorerIssueGroups, explorerFilterOptions, explorerPropertyOptions, explorerUpdateForProperty, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
-import { addFavorite, deleteRelease, recordRecentResource, removeFavorite, updateIssue, updateRelease } from '@/lib/api'
+import { addFavorite, createReleaseNote, deleteRelease, recordRecentResource, removeFavorite, updateIssue, updateRelease, updateReleaseNote } from '@/lib/api'
 import { useI18n } from '@/i18n/i18n'
 import { newReleasePipelinePath, releasePath, releasePipelinePath, releasePipelineSettingsPath, teamArchivePath, type ReleasePipelineTab, type ReleaseRouteTab } from '@/lib/app-routes'
 import type { BootstrapData, Release, ReleasePipeline, ReleaseResource } from '@/types/flow'
@@ -173,8 +173,10 @@ function ReleaseChangelog({pipeline,releases,onOpen}:{pipeline:ReleasePipeline;r
 
 function ReleaseDetailPage({data,pipeline,release,tab,onNavigate,onOpenSidebar,onDelete,onEdit,onReload}:{data:BootstrapData;pipeline:ReleasePipeline;release:Release;tab:ReleaseRouteTab;onNavigate:(path:string)=>void;onOpenSidebar:()=>void;onDelete:()=>void;onEdit:()=>void;onReload:()=>Promise<void>}) {
   const {t,formatDate}=useI18n()
-  const [notes,setNotes]=useState(release.releaseNotes??'')
-  const [savedNotes,setSavedNotes]=useState(release.releaseNotes??'')
+  const releaseNote=data.releaseNotes?.find(item=>item.releaseId===release.id)
+  const initialNotes=releaseNote?.body??release.releaseNotes??''
+  const [notes,setNotes]=useState(initialNotes)
+  const [savedNotes,setSavedNotes]=useState(initialNotes)
   const [savingNotes,setSavingNotes]=useState(false)
   const [stage,setStage]=useState(release.stage??'')
   const [detailsOpen,setDetailsOpen]=useState(true)
@@ -198,7 +200,7 @@ function ReleaseDetailPage({data,pipeline,release,tab,onNavigate,onOpenSidebar,o
   const toggleFavorite=async()=>{try{if(favorite)await removeFavorite('release',release.id);else await addFavorite('release',release.id);await onReload()}catch(error){toast.error(error instanceof Error?error.message:t('Could not update favorite'))}}
   const copyUrl=async()=>{try{await navigator.clipboard.writeText(window.location.href);toast.success(t('URL copied'))}catch{toast.error(t('Could not copy URL'))}}
   const updateStage=async(value:string)=>{try{setStage(value);await updateRelease(release.id,{stage:value,status:releaseStatusForStage(pipeline,value,release.status)});await onReload()}catch(error){setStage(release.stage??'');toast.error(error instanceof Error?error.message:t('Could not save release'))}}
-  const saveNotes=async()=>{setSavingNotes(true);try{await updateRelease(release.id,{releaseNotes:notes});setSavedNotes(notes);await onReload();toast.success(t('Release notes saved'))}catch(error){toast.error(error instanceof Error?error.message:t('Could not save release notes'))}finally{setSavingNotes(false)}}
+  const saveNotes=async()=>{setSavingNotes(true);try{if(releaseNote)await updateReleaseNote(release.id,releaseNote.id,{body:notes});else await createReleaseNote(release.id,{title:release.name,body:notes});await updateRelease(release.id,{releaseNotes:notes});setSavedNotes(notes);await onReload();toast.success(t('Release notes saved'))}catch(error){toast.error(error instanceof Error?error.message:t('Could not save release notes'))}finally{setSavingNotes(false)}}
   const route=(next:ReleaseRouteTab)=>onNavigate(releasePath(data.workspace.urlKey,pipeline.slugId,release.slugId,next))
   const resources=release.resources??[]
   const detailValues=detailTab==='assignees'?[...new Map(issues.filter(issue=>issue.assignee).map(issue=>[issue.assignee!.id,{id:issue.assignee!.id,label:issue.assignee!.displayName,count:issues.filter(item=>item.assignee?.id===issue.assignee!.id).length}])).values()]:detailTab==='labels'?[...new Map(issues.flatMap(issue=>issue.labels).map(label=>[label.id,{id:label.id,label:label.name,count:issues.filter(issue=>issue.labels.some(item=>item.id===label.id)).length}])).values()]:detailTab==='priority'?[...new Map(issues.map(issue=>[String(issue.priority),{id:String(issue.priority),label:issue.priorityLabel,count:issues.filter(item=>item.priority===issue.priority).length}])).values()]:[...new Map(issues.filter(issue=>issue.project).map(issue=>[issue.project!.id,{id:issue.project!.id,label:issue.project!.name,count:issues.filter(item=>item.project?.id===issue.project!.id).length}])).values()]

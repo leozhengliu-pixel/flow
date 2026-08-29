@@ -959,6 +959,7 @@ func (s *server) createRelease(w http.ResponseWriter, r *http.Request) {
 			return "", err
 		}
 		data.Releases = append([]domain.Release{created}, data.Releases...)
+		data.ReleaseHistory = append(data.ReleaseHistory, domain.ReleaseHistory{ID: fmt.Sprintf("release_history_%d", now.UnixNano()), ReleaseID: created.ID, Actor: data.Viewer, Action: "created", Metadata: map[string]any{"name": created.Name}, CreatedAt: now})
 		appendAudit(data, "created", "release", created.ID, map[string]any{"name": created.Name})
 		return created.ID, nil
 	})
@@ -992,9 +993,11 @@ func (s *server) updateRelease(w http.ResponseWriter, r *http.Request) {
 		if data.Releases[index].PipelineID != previousPipelineID {
 			data.Releases[index].Position = targetPosition
 		}
-		data.Releases[index].UpdatedAt = time.Now().UTC()
+		now := time.Now().UTC()
+		data.Releases[index].UpdatedAt = now
 		updated = data.Releases[index]
 		appendAudit(data, "updated", "release", id, nil)
+		data.ReleaseHistory = append(data.ReleaseHistory, domain.ReleaseHistory{ID: fmt.Sprintf("release_history_%d", now.UnixNano()), ReleaseID: id, Actor: data.Viewer, Action: "updated", Metadata: map[string]any{}, CreatedAt: now})
 		return nil
 	})
 	if errors.Is(err, errConflict) {
@@ -2086,20 +2089,49 @@ func (s *server) commitImportSync(w http.ResponseWriter, r *http.Request) {
 		}
 		job.Status, job.Mapping, job.Errors, job.TeamID = "running", input.Mapping, []string{}, input.TeamID
 		job.Imported, job.Progress, job.Error = 0, 0, ""
+		sourceToIssueID, pendingParents := map[string]string{}, map[string]string{}
+		nextNumber := nextIssueNumber(data.Issues)
+		newIssues := make([]domain.Issue, 0, len(job.Rows))
+		for _, existing := range data.Issues {
+			if existing.ExternalSource != "" {
+				sourceToIssueID[strings.TrimPrefix(existing.ExternalSource, "csv:")] = existing.ID
+			}
+		}
 		for rowIndex, row := range job.Rows {
 			title := strings.TrimSpace(row[input.Mapping["title"]])
 			if title == "" {
 				job.Errors = append(job.Errors, fmt.Sprintf("Row %d: title is empty", rowIndex+2))
 				continue
 			}
-			number := nextIssueNumber(data.Issues)
+			sourceID := strings.TrimSpace(row[input.Mapping["sourceId"]])
+			if sourceID != "" {
+				if _, exists := sourceToIssueID[sourceID]; exists {
+					job.Errors = append(job.Errors, fmt.Sprintf("Row %d: source issue %q was already imported", rowIndex+2, sourceID))
+					continue
+				}
+			}
+			number := nextNumber
+			nextNumber++
 			now := time.Now().UTC()
+			createdAt := importedTime(row[input.Mapping["createdAt"]], now)
+			updatedAt := importedTime(row[input.Mapping["updatedAt"]], createdAt)
+			startedAt, triagedAt := importedOptionalTime(row[input.Mapping["startedAt"]]), importedOptionalTime(row[input.Mapping["triagedAt"]])
+			completedAt, canceledAt := importedOptionalTime(row[input.Mapping["completedAt"]]), importedOptionalTime(row[input.Mapping["canceledAt"]])
 			issueState := *state
 			if value := strings.TrimSpace(row[input.Mapping["status"]]); value != "" {
 				if matched := slices.IndexFunc(statesForTeam(data, team.ID), func(item domain.WorkflowState) bool { return item.ID == value || strings.EqualFold(item.Name, value) }); matched >= 0 {
 					issueState = statesForTeam(data, team.ID)[matched]
 				} else {
-					job.Errors = append(job.Errors, fmt.Sprintf("Row %d: status %q was not found; used %s", rowIndex+2, value, issueState.Name))
+					stateType := "unstarted"
+					if completedAt != nil {
+						stateType = "completed"
+					} else if canceledAt != nil {
+						stateType = "canceled"
+					} else if startedAt != nil {
+						stateType = "started"
+					}
+					issueState = domain.WorkflowState{ID: fmt.Sprintf("state_import_%d", time.Now().UnixNano()), TeamID: team.ID, Name: value, Color: map[string]string{"completed": "#5e6ad2", "canceled": "#95a2b3", "started": "#f2c94c", "unstarted": "#bec2c8"}[stateType], Type: stateType, Position: float64(len(statesForTeam(data, team.ID)) + 1)}
+					data.States = append(data.States, issueState)
 				}
 			}
 			assignee := &data.Viewer
@@ -2112,7 +2144,25 @@ func (s *server) commitImportSync(w http.ResponseWriter, r *http.Request) {
 					job.Errors = append(job.Errors, fmt.Sprintf("Row %d: assignee %q was not found; used %s", rowIndex+2, value, data.Viewer.DisplayName))
 				}
 			}
-			issue := domain.Issue{ID: fmt.Sprintf("issue_%d", number), Version: 1, Identifier: fmt.Sprintf("%s-%d", team.Key, number), Number: number, Title: title, Description: row[input.Mapping["description"]], Priority: settings.DefaultPriority, PriorityLabel: priorityLabel(settings.DefaultPriority), SortOrder: float64(number), CreatedAt: now, UpdatedAt: now, Team: team, State: issueState, Assignee: assignee, Creator: data.Viewer, Labels: []domain.IssueLabel{}, SubscriberIDs: []string{data.Viewer.ID}, Reactions: map[string][]string{}, SubIssueIDs: []string{}, Relations: []domain.IssueRelation{}, Attachments: []domain.Attachment{}}
+			issue := domain.Issue{ID: fmt.Sprintf("issue_%d", number), Version: 1, Identifier: fmt.Sprintf("%s-%d", team.Key, number), Number: number, Title: stripSpreadsheetQuote(title), Description: stripSpreadsheetQuote(row[input.Mapping["description"]]), Priority: settings.DefaultPriority, PriorityLabel: priorityLabel(settings.DefaultPriority), SortOrder: float64(number), CreatedAt: createdAt, UpdatedAt: updatedAt, StartedAt: startedAt, TriagedAt: triagedAt, CompletedAt: completedAt, CanceledAt: canceledAt, Team: team, State: issueState, Assignee: assignee, Creator: data.Viewer, Labels: []domain.IssueLabel{}, SubscriberIDs: []string{data.Viewer.ID}, Reactions: map[string][]string{}, SubIssueIDs: []string{}, Relations: []domain.IssueRelation{}, Attachments: []domain.Attachment{}}
+			if sourceID != "" {
+				issue.ExternalSource = "csv:" + sourceID
+			}
+			if value := strings.TrimSpace(row[input.Mapping["estimate"]]); value != "" {
+				if parsed, parseErr := strconv.ParseFloat(value, 64); parseErr == nil {
+					issue.Estimate = &parsed
+				} else {
+					job.Errors = append(job.Errors, fmt.Sprintf("Row %d: estimate %q was not recognized", rowIndex+2, value))
+				}
+			}
+			if value := strings.TrimSpace(row[input.Mapping["archivedAt"]]); value != "" {
+				if parsed := importedOptionalTime(value); parsed != nil {
+					issue.ArchivedAt = parsed
+				} else {
+					archivedAt := now
+					issue.ArchivedAt = &archivedAt
+				}
+			}
 			if value := row[input.Mapping["priority"]]; value != "" {
 				if parsed, ok := importedPriority(value); ok {
 					issue.Priority, issue.PriorityLabel = parsed, priorityLabel(parsed)
@@ -2138,7 +2188,22 @@ func (s *server) commitImportSync(w http.ResponseWriter, r *http.Request) {
 					}); matched >= 0 && !slices.ContainsFunc(issue.Labels, func(item domain.IssueLabel) bool { return item.ID == data.Labels[matched].ID }) {
 						issue.Labels = append(issue.Labels, data.Labels[matched])
 					} else if matched < 0 {
-						job.Errors = append(job.Errors, fmt.Sprintf("Row %d: label %q was not found", rowIndex+2, labelValue))
+						groupID, labelName := "", labelValue
+						if separator := strings.LastIndex(labelValue, "/"); separator > 0 && separator < len(labelValue)-1 {
+							groupName := strings.TrimSpace(labelValue[:separator])
+							labelName = strings.TrimSpace(labelValue[separator+1:])
+							if groupIndex := slices.IndexFunc(data.LabelGroups, func(item domain.LabelGroup) bool {
+								return item.ResourceType == "issue" && strings.EqualFold(item.Name, groupName)
+							}); groupIndex >= 0 {
+								groupID = data.LabelGroups[groupIndex].ID
+							} else {
+								groupID = fmt.Sprintf("label_group_import_%d", time.Now().UnixNano())
+								data.LabelGroups = append(data.LabelGroups, domain.LabelGroup{ID: groupID, Name: groupName, Color: "#5e6ad2", Scope: team.ID, ResourceType: "issue", CreatedAt: now})
+							}
+						}
+						createdLabel := domain.IssueLabel{ID: fmt.Sprintf("label_import_%d", time.Now().UnixNano()), Name: labelName, Color: "#5e6ad2", Scope: team.ID, ResourceType: "issue", GroupID: groupID, CreatorID: data.Viewer.ID, CreatedAt: now}
+						data.Labels = append(data.Labels, createdLabel)
+						issue.Labels = append(issue.Labels, createdLabel)
 					}
 				}
 			}
@@ -2149,11 +2214,38 @@ func (s *server) commitImportSync(w http.ResponseWriter, r *http.Request) {
 					job.Errors = append(job.Errors, fmt.Sprintf("Row %d: due date %q must use YYYY-MM-DD", rowIndex+2, value))
 				}
 			}
-			data.Issues = append([]domain.Issue{issue}, data.Issues...)
+			if sourceID != "" {
+				sourceToIssueID[sourceID] = issue.ID
+			}
+			if parentSource := strings.TrimSpace(row[input.Mapping["parentId"]]); parentSource != "" {
+				pendingParents[issue.ID] = parentSource
+			}
 			appendActivity(data, issue.ID, "issue.imported", data.Viewer, map[string]string{"importId": id})
-			applySLARules(data, &data.Issues[0], now)
+			applySLARules(data, &issue, now)
+			newIssues = append(newIssues, issue)
 			job.Imported++
 			job.Progress = int(float64(rowIndex+1) / float64(max(1, len(job.Rows))) * 100)
+		}
+		// Preserve the previous newest-first import ordering, but grow the issue
+		// slice once instead of copying the complete workspace for every row.
+		slices.Reverse(newIssues)
+		data.Issues = append(newIssues, data.Issues...)
+		issueIndexByID := make(map[string]int, len(data.Issues))
+		for issueIndex := range data.Issues {
+			issueIndexByID[data.Issues[issueIndex].ID] = issueIndex
+		}
+		for issueID, parentSource := range pendingParents {
+			parentID := sourceToIssueID[parentSource]
+			if parentID == "" {
+				job.Errors = append(job.Errors, fmt.Sprintf("Parent issue %q was not found", parentSource))
+				continue
+			}
+			if issueIndex, ok := issueIndexByID[issueID]; ok {
+				data.Issues[issueIndex].ParentID = &parentID
+			}
+			if parentIndex, ok := issueIndexByID[parentID]; ok && !slices.Contains(data.Issues[parentIndex].SubIssueIDs, issueID) {
+				data.Issues[parentIndex].SubIssueIDs = append(data.Issues[parentIndex].SubIssueIDs, issueID)
+			}
 		}
 		job.Status = "completed"
 		if job.Imported == 0 && len(job.Errors) > 0 {
@@ -2178,6 +2270,35 @@ func importedPriority(value string) (int, bool) {
 	priorities := map[string]int{"no priority": 0, "none": 0, "urgent": 1, "high": 2, "medium": 3, "low": 4}
 	priority, ok := priorities[value]
 	return priority, ok
+}
+
+func importedOptionalTime(value string) *time.Time {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02 15:04:05", "2006-01-02"} {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			parsed = parsed.UTC()
+			return &parsed
+		}
+	}
+	return nil
+}
+
+func importedTime(value string, fallback time.Time) time.Time {
+	if parsed := importedOptionalTime(value); parsed != nil {
+		return *parsed
+	}
+	return fallback
+}
+
+func stripSpreadsheetQuote(value string) string {
+	runes := []rune(value)
+	if len(runes) > 1 && runes[0] == '\'' && strings.ContainsRune("+-=@∑√∏<>＜＞≤≥＝≠±÷×", runes[1]) {
+		return string(runes[1:])
+	}
+	return value
 }
 
 func (s *server) createExport(w http.ResponseWriter, r *http.Request) {
@@ -2250,20 +2371,61 @@ func (s *server) downloadExport(w http.ResponseWriter, r *http.Request) {
 	if job.Format == "csv" {
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 		writer := csv.NewWriter(w)
-		_ = writer.Write([]string{"identifier", "title", "description", "status", "priority", "assignee", "project", "due_date", "created_at", "updated_at"})
+		_ = writer.Write([]string{"ID", "Team", "Title", "Description", "Status", "Estimate", "Priority", "Project ID", "Project", "Creator", "Assignee", "Labels", "Cycle Number", "Cycle Name", "Cycle Start", "Cycle End", "Created", "Updated", "Started", "Triaged", "Completed", "Canceled", "Archived", "Due Date", "Parent issue", "Initiatives", "Project Milestone ID", "Project Milestone", "SLA Status"})
 		for _, issue := range data.Issues {
-			assignee, project := "", ""
+			assignee, projectID, projectName := "", "", ""
 			if issue.Assignee != nil {
-				assignee = issue.Assignee.Email
+				assignee = issue.Assignee.DisplayName
 			}
 			if issue.Project != nil {
-				project = issue.Project.Name
+				projectID, projectName = issue.Project.ID, issue.Project.Name
 			}
-			dueDate := ""
-			if issue.DueDate != nil {
-				dueDate = *issue.DueDate
+			estimate := ""
+			if issue.Estimate != nil {
+				estimate = strconv.FormatFloat(*issue.Estimate, 'f', -1, 64)
 			}
-			_ = writer.Write([]string{issue.Identifier, issue.Title, issue.Description, issue.State.Name, issue.PriorityLabel, assignee, project, dueDate, issue.CreatedAt.Format(time.RFC3339), issue.UpdatedAt.Format(time.RFC3339)})
+			labels := make([]string, 0, len(issue.Labels))
+			for _, label := range issue.Labels {
+				labels = append(labels, label.Name)
+			}
+			cycleNumber, cycleName, cycleStart, cycleEnd := "", "", "", ""
+			if issue.CycleID != nil {
+				if cycleIndex := slices.IndexFunc(data.Cycles, func(item domain.Cycle) bool { return item.ID == *issue.CycleID }); cycleIndex >= 0 {
+					cycle := data.Cycles[cycleIndex]
+					cycleNumber, cycleName = strconv.Itoa(cycle.Number), cycle.Name
+					cycleStart, cycleEnd = cycle.StartsAt.Format(time.RFC3339), cycle.EndsAt.Format(time.RFC3339)
+				}
+			}
+			parent := ""
+			if issue.ParentID != nil {
+				if parentIndex := slices.IndexFunc(data.Issues, func(item domain.Issue) bool { return item.ID == *issue.ParentID }); parentIndex >= 0 {
+					parent = data.Issues[parentIndex].Identifier
+				}
+			}
+			milestoneID, milestoneName, initiativeNames := "", "", []string{}
+			if issue.ProjectMilestoneID != nil {
+				milestoneID = *issue.ProjectMilestoneID
+			}
+			if projectID != "" {
+				if projectIndex := slices.IndexFunc(data.Projects, func(item domain.Project) bool { return item.ID == projectID }); projectIndex >= 0 {
+					project := data.Projects[projectIndex]
+					if milestoneID != "" {
+						if milestoneIndex := slices.IndexFunc(project.Milestones, func(item domain.ProjectMilestone) bool { return item.ID == milestoneID }); milestoneIndex >= 0 {
+							milestoneName = project.Milestones[milestoneIndex].Name
+						}
+					}
+					for _, initiativeID := range project.Initiatives {
+						if initiativeIndex := slices.IndexFunc(data.Initiatives, func(item domain.Initiative) bool { return item.ID == initiativeID }); initiativeIndex >= 0 {
+							initiativeNames = append(initiativeNames, data.Initiatives[initiativeIndex].Name)
+						}
+					}
+				}
+			}
+			slaStatus := ""
+			if slaIndex := slices.IndexFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return item.IssueID == issue.ID }); slaIndex >= 0 {
+				slaStatus = data.IssueSLAs[slaIndex].Status
+			}
+			_ = writer.Write([]string{issue.Identifier, issue.Team.Name, linearCSVText(issue.Title), linearCSVText(issue.Description), issue.State.Name, estimate, issue.PriorityLabel, projectID, projectName, issue.Creator.DisplayName, assignee, strings.Join(labels, ", "), cycleNumber, cycleName, cycleStart, cycleEnd, formatExportTime(&issue.CreatedAt), formatExportTime(&issue.UpdatedAt), formatExportTime(issue.StartedAt), formatExportTime(issue.TriagedAt), formatExportTime(issue.CompletedAt), formatExportTime(issue.CanceledAt), formatExportTime(issue.ArchivedAt), stringValue(issue.DueDate), parent, strings.Join(initiativeNames, ", "), milestoneID, milestoneName, slaStatus})
 		}
 		writer.Flush()
 		return
@@ -2271,6 +2433,20 @@ func (s *server) downloadExport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	packageData := map[string]any{"workspace": data.Workspace, "teams": data.Teams, "users": data.Users, "issues": data.Issues, "projects": data.Projects, "documents": data.Documents, "customers": data.Customers, "customerRequests": data.CustomerRequests, "releases": data.Releases, "asks": data.Asks, "comments": data.Comments, "activities": data.Activities, "labels": data.Labels, "workflowStates": data.States, "cycles": data.Cycles, "templates": map[string]any{"issues": data.IssueTemplates, "projects": data.ProjectTemplates}, "exportedAt": time.Now().UTC()}
 	_ = json.NewEncoder(w).Encode(packageData)
+}
+
+func formatExportTime(value *time.Time) string {
+	if value == nil || value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339Nano)
+}
+func linearCSVText(value string) string {
+	trimmed := strings.TrimLeft(value, " \t\r\n")
+	if trimmed != "" && strings.ContainsRune("+-=@∑√∏<>＜＞≤≥＝≠±÷×", []rune(trimmed)[0]) {
+		return "'" + value
+	}
+	return value
 }
 
 func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
