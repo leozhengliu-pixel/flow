@@ -18,7 +18,7 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 		limit = 30
 	}
 	types := searchTypes(r.URL.Query().Get("types"))
-	results := buildSearchResults(data, query, types)
+	results := buildSearchResultsLimited(data, query, types, limit)
 	userID := authUser(r).ID
 	if s.authDisabled {
 		userID = data.Viewer.ID
@@ -68,11 +68,29 @@ func (s *server) recordRecentResource(w http.ResponseWriter, r *http.Request) {
 }
 
 func buildSearchResults(data domain.Bootstrap, query string, types map[string]bool) []domain.SearchResult {
+	return buildSearchResultsLimited(data, query, types, 0)
+}
+
+func buildSearchResultsLimited(data domain.Bootstrap, query string, types map[string]bool, limit int) []domain.SearchResult {
 	results := []domain.SearchResult{}
+	sortAndTrim := func() {
+		slices.SortStableFunc(results, func(left, right domain.SearchResult) int {
+			if left.Score != right.Score {
+				return right.Score - left.Score
+			}
+			return right.UpdatedAt.Compare(left.UpdatedAt)
+		})
+		if limit > 0 && len(results) > limit {
+			results = results[:limit]
+		}
+	}
 	add := func(item domain.SearchResult, fields ...string) {
 		item.Score = fuzzyScore(query, fields...)
 		if item.Score > 0 {
 			results = append(results, item)
+			if limit > 0 && len(results) >= limit*2 {
+				sortAndTrim()
+			}
 		}
 	}
 	if types["issue"] {
@@ -156,12 +174,7 @@ func buildSearchResults(data domain.Bootstrap, query string, types map[string]bo
 			add(domain.SearchResult{ID: view.ID, Type: "view", Title: view.Name, Subtitle: subtitle, Icon: view.Icon, Color: view.Color, UpdatedAt: view.UpdatedAt}, view.Name, view.Description, view.Scope, view.Resource)
 		}
 	}
-	slices.SortStableFunc(results, func(left, right domain.SearchResult) int {
-		if left.Score != right.Score {
-			return right.Score - left.Score
-		}
-		return right.UpdatedAt.Compare(left.UpdatedAt)
-	})
+	sortAndTrim()
 	return results
 }
 

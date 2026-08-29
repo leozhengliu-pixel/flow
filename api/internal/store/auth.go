@@ -448,6 +448,71 @@ func (s *SQLiteStore) RevokeOtherSessions(ctx context.Context, userID, currentTo
 	return err
 }
 
+func (s *SQLiteStore) RevokeSession(ctx context.Context, userID, sessionID, currentToken string) error {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return ErrAuthInvalid
+	}
+	currentHash := tokenHash(currentToken)
+	result, err := s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE user_id=? AND token_hash LIKE ? AND token_hash<>?`, userID, sessionID+"%", currentHash)
+	if err != nil {
+		return err
+	}
+	if count, _ := result.RowsAffected(); count != 1 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (s *SQLiteStore) ListAuthIdentities(ctx context.Context, userID string) ([]domain.AuthIdentity, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,user_id,provider,issuer,subject,username,claims_json,created_at,last_login_at FROM auth_identities WHERE user_id=? ORDER BY last_login_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []domain.AuthIdentity{}
+	for rows.Next() {
+		var item domain.AuthIdentity
+		var created, lastLogin string
+		if err := rows.Scan(&item.ID, &item.UserID, &item.Provider, &item.Issuer, &item.Subject, &item.Username, &item.ClaimsJSON, &created, &lastLogin); err != nil {
+			return nil, err
+		}
+		item.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+		item.LastLoginAt, _ = time.Parse(time.RFC3339Nano, lastLogin)
+		item.ClaimsJSON = "" // claims can contain sensitive IdP attributes
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *SQLiteStore) UnlinkAuthIdentity(ctx context.Context, userID, identityID string) error {
+	var passwordHash string
+	if err := s.db.QueryRowContext(ctx, `SELECT password_hash FROM auth_users WHERE id=?`, userID).Scan(&passwordHash); err != nil {
+		return err
+	}
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM auth_identities WHERE user_id=?`, userID).Scan(&count); err != nil {
+		return err
+	}
+	if count <= 1 && passwordHash == "" {
+		return errors.New("cannot unlink the only sign-in method")
+	}
+	result, err := s.db.ExecContext(ctx, `DELETE FROM auth_identities WHERE id=? AND user_id=?`, identityID, userID)
+	if err != nil {
+		return err
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (s *SQLiteStore) EnsureWorkspaceMembership(ctx context.Context, workspaceID, userID string) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET status='active',last_seen_at=excluded.last_seen_at`, workspaceID, userID, "member", "active", now, now)
+	return err
+}
+
 func (s *SQLiteStore) VerifyEmail(ctx context.Context, token string) error {
 	userID, err := s.consumeAuthToken(ctx, token, "verify")
 	if err != nil {

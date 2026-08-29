@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -22,7 +23,8 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "unsupported provider")
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, 5<<20))
+	r.Body = http.MaxBytesReader(w, r.Body, 5<<20)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "could not read webhook")
 		return
@@ -71,6 +73,12 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	var updated domain.CodeReview
 	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "code_review.webhook", eventID, map[string]any{"provider": provider, "action": event.Action}, func(data *domain.Bootstrap) error {
+		if existing := slices.IndexFunc(data.Reviews, func(item domain.CodeReview) bool {
+			return slices.ContainsFunc(item.Events, func(reviewEvent domain.ReviewEvent) bool { return reviewEvent.ID == eventID })
+		}); existing >= 0 {
+			updated = data.Reviews[existing]
+			return nil
+		}
 		index := slices.IndexFunc(data.Reviews, func(item domain.CodeReview) bool {
 			return item.Provider == provider && item.ExternalID == event.ExternalID()
 		})
@@ -102,6 +110,16 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 			if data.IntegrationConnections[connectionIndex].Provider == provider {
 				data.IntegrationConnections[connectionIndex].LastWebhookAt = &now
 				data.IntegrationConnections[connectionIndex].LastError = ""
+				if data.IntegrationConnections[connectionIndex].LinkbackEnabled && updated.URL != "" {
+					for issueIndex := range data.Issues {
+						if !slices.Contains(updated.IssueIDs, data.Issues[issueIndex].ID) || slices.ContainsFunc(data.Issues[issueIndex].Attachments, func(item domain.Attachment) bool {
+							return item.Provider == provider && item.ProviderID == updated.ExternalID
+						}) {
+							continue
+						}
+						data.Issues[issueIndex].Attachments = append(data.Issues[issueIndex].Attachments, domain.Attachment{ID: fmt.Sprintf("attachment_%s_%d", provider, now.UnixNano()), IssueID: data.Issues[issueIndex].ID, Title: updated.Title, URL: updated.URL, ContentType: "text/uri-list", CreatedAt: now, Creator: data.Viewer, Provider: provider, ProviderID: updated.ExternalID, ProviderURL: updated.URL, LinkbackURL: updated.URL, SyncStatus: "synced"})
+					}
+				}
 			}
 		}
 		if !slices.ContainsFunc(data.Notifications, func(item domain.Notification) bool { return item.SourceID == eventID }) {
@@ -132,7 +150,11 @@ func (s *server) testIntegrationWebhook(w http.ResponseWriter, r *http.Request) 
 			return errNotFound
 		}
 		connection := &data.IntegrationConnections[index]
-		if strings.TrimSpace(connection.Config["webhookSecret"]) == "" {
+		secret := strings.TrimSpace(connection.Config["webhookSecret"])
+		if envName := strings.TrimSpace(connection.Config["webhookSecretEnv"]); strings.HasPrefix(envName, "FLOW_INTEGRATION_") {
+			secret = os.Getenv(envName)
+		}
+		if secret == "" {
 			connection.LastError = "webhook secret is not configured"
 			connection.UpdatedAt = time.Now().UTC()
 			return errInvalid
@@ -170,6 +192,9 @@ func (s *server) webhookConnection(r *http.Request, provider string) *domain.Int
 
 func verifyCodeWebhook(provider string, connection *domain.IntegrationConnection, r *http.Request, body []byte) bool {
 	secret := connection.Config["webhookSecret"]
+	if envName := strings.TrimSpace(connection.Config["webhookSecretEnv"]); strings.HasPrefix(envName, "FLOW_INTEGRATION_") {
+		secret = os.Getenv(envName)
+	}
 	if secret == "" {
 		return false
 	}

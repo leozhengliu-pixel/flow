@@ -37,6 +37,23 @@ func TestWorkspaceSettingsPersistence(t *testing.T) {
 	}
 }
 
+func TestWorkspaceRegionSelectorCanBeDisabled(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true, workspaceRegionSelectorEnabled: false, workspaceDefaultRegion: "eu"})
+	account := requestJSON[domain.AccountBootstrap](t, handler, http.MethodGet, "/api/account/bootstrap", nil, http.StatusOK)
+	if account.WorkspaceRegionSelectorEnabled || account.WorkspaceDefaultRegion != "eu" {
+		t.Fatalf("account region config = %#v", account)
+	}
+	created := requestJSON[domain.Bootstrap](t, handler, http.MethodPost, "/api/workspaces", map[string]string{"name": "Configured region", "urlKey": "configured-region", "region": "us"}, http.StatusCreated)
+	if created.Workspace.Region != "eu" {
+		t.Fatalf("client bypassed configured region: %#v", created.Workspace)
+	}
+}
+
 func TestIssueStateTransitionsPersistInsightTimestamps(t *testing.T) {
 	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {

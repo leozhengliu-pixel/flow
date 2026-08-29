@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -12,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -959,9 +961,7 @@ func (s *server) exchangeOAuthToken(w http.ResponseWriter, r *http.Request) {
 func (s *server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	connections := s.workspaceData(r).IntegrationConnections
 	for index := range connections {
-		connections[index].OAuthState = ""
-		connections[index].OAuthAccessToken = ""
-		connections[index].OAuthRefreshToken = ""
+		connections[index] = redactIntegrationConnection(connections[index])
 	}
 	writeJSON(w, http.StatusOK, connections)
 }
@@ -973,8 +973,11 @@ func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Name   string            `json:"name"`
-		Config map[string]string `json:"config"`
+		Name            string            `json:"name"`
+		Config          map[string]string `json:"config"`
+		Scopes          []string          `json:"scopes"`
+		Channels        []string          `json:"channels"`
+		LinkbackEnabled bool              `json:"linkbackEnabled"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
@@ -1006,7 +1009,7 @@ func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 			return item.Provider == provider && (scope == "" || item.Config["organization"] == scope || item.Config["host"] == scope)
 		})
 		now := time.Now().UTC()
-		updated = domain.IntegrationConnection{ID: fmt.Sprintf("integration_%s_%d", provider, now.UnixNano()), Provider: provider, Name: strings.TrimSpace(input.Name), Status: "configured", Config: input.Config, ConnectedBy: actor.ID, CreatedAt: now, UpdatedAt: now}
+		updated = domain.IntegrationConnection{ID: fmt.Sprintf("integration_%s_%d", provider, now.UnixNano()), Provider: provider, Name: strings.TrimSpace(input.Name), Status: "configured", Config: input.Config, ConnectedBy: actor.ID, CreatedAt: now, UpdatedAt: now, Scopes: uniqueLower(input.Scopes), Channels: uniqueTrimmed(input.Channels), LinkbackEnabled: input.LinkbackEnabled}
 		if secret != "" {
 			updated.SecretHash = secretHash(secret)
 		}
@@ -1025,7 +1028,7 @@ func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 		}
 		return nil
 	})
-	respondMutation(w, err, http.StatusOK, updated)
+	respondMutation(w, err, http.StatusOK, redactIntegrationConnection(updated))
 }
 
 // startIntegrationOAuth creates a short-lived, single-use state value and
@@ -1070,6 +1073,9 @@ func (s *server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		query.Set("redirect_uri", redirectURI)
 		query.Set("response_type", "code")
 		query.Set("state", state)
+		if len(connection.Scopes) > 0 {
+			query.Set("scope", strings.Join(connection.Scopes, " "))
+		}
 		u.RawQuery = query.Encode()
 		result = map[string]string{"provider": provider, "connectionId": connection.ID, "state": state, "authorizationURL": u.String()}
 		return nil
@@ -1097,44 +1103,49 @@ func (s *server) finishIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "OAuth state is required")
 		return
 	}
-	var result map[string]string
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_completed", provider, nil, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool {
-			return item.Provider == provider && item.OAuthState == state
-		})
-		if index < 0 {
-			return errNotFound
+	// Snapshot the credentials before the provider call. Network I/O must never
+	// execute while MutateWorkspace holds the workspace write lock.
+	data := s.workspaceData(r)
+	index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool {
+		return item.Provider == provider && item.OAuthState == state
+	})
+	if index < 0 || data.IntegrationConnections[index].Status != "oauth_pending" {
+		writeError(w, http.StatusNotFound, "resource not found")
+		return
+	}
+	snapshot := data.IntegrationConnections[index]
+	providerError := strings.TrimSpace(r.URL.Query().Get("error"))
+	access, refresh, expiresIn := "", "", int64(0)
+	if providerError == "" && code != "" {
+		if tokenURL := strings.TrimSpace(snapshot.Config["tokenURL"]); tokenURL != "" {
+			var exchangeErr error
+			access, refresh, expiresIn, exchangeErr = exchangeIntegrationToken(r.Context(), tokenURL, snapshot.Config, code, s.authDisabled)
+			if exchangeErr != nil {
+				providerError = exchangeErr.Error()
+			}
 		}
-		connection := &data.IntegrationConnections[index]
-		if connection.Status != "oauth_pending" {
+	} else if providerError == "" {
+		providerError = "OAuth provider did not return a code"
+	}
+	var result map[string]string
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_completed", provider, nil, func(next *domain.Bootstrap) error {
+		currentIndex := slices.IndexFunc(next.IntegrationConnections, func(item domain.IntegrationConnection) bool {
+			return item.ID == snapshot.ID && item.OAuthState == state && item.Status == "oauth_pending"
+		})
+		if currentIndex < 0 {
 			return errInvalid
 		}
+		connection := &next.IntegrationConnections[currentIndex]
 		now := time.Now().UTC()
-		if strings.TrimSpace(r.URL.Query().Get("error")) != "" {
-			connection.Status = "error"
-			connection.LastError = strings.TrimSpace(r.URL.Query().Get("error"))
-		} else if code == "" {
-			connection.Status = "error"
-			connection.LastError = "OAuth provider did not return a code"
+		if providerError != "" {
+			connection.Status, connection.LastError = "error", providerError
 		} else {
-			if tokenURL := strings.TrimSpace(connection.Config["tokenURL"]); tokenURL != "" {
-				access, refresh, expiresIn, exchangeErr := exchangeIntegrationToken(tokenURL, connection.Config, code)
-				if exchangeErr != nil {
-					connection.Status = "error"
-					connection.LastError = exchangeErr.Error()
-				} else {
-					connection.OAuthAccessToken, connection.OAuthRefreshToken = access, refresh
-					if expiresIn > 0 {
-						expiry := now.Add(time.Duration(expiresIn) * time.Second)
-						connection.OAuthExpiresAt = &expiry
-					}
-					connection.Status, connection.OAuthCompletedAt, connection.LastError = "configured", &now, ""
-				}
-			} else {
-				connection.Status = "configured"
-				connection.OAuthCompletedAt = &now
-				connection.LastError = ""
+			connection.OAuthAccessToken, connection.OAuthRefreshToken = access, refresh
+			if expiresIn > 0 {
+				expiry := now.Add(time.Duration(expiresIn) * time.Second)
+				connection.OAuthExpiresAt = &expiry
 			}
+			connection.Status, connection.OAuthCompletedAt, connection.LastError = "configured", &now, ""
 		}
 		connection.OAuthState, connection.UpdatedAt = "", now
 		result = map[string]string{"provider": provider, "connectionId": connection.ID, "status": connection.Status}
@@ -1147,12 +1158,29 @@ func (s *server) finishIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, result)
 }
 
-func exchangeIntegrationToken(tokenURL string, config map[string]string, code string) (string, string, int64, error) {
+func exchangeIntegrationToken(ctx context.Context, tokenURL string, config map[string]string, code string, allowLocal bool) (string, string, int64, error) {
+	local := allowLocal && safeLocalDevelopmentURL(tokenURL)
+	if !local && !safeOutboundHTTPS(ctx, tokenURL) {
+		return "", "", 0, errors.New("unsafe OAuth token endpoint")
+	}
 	values := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {config["clientID"]}, "redirect_uri": {config["redirectURI"]}}
-	if secret := config["clientSecret"]; secret != "" {
+	secret := config["clientSecret"]
+	if envName := config["clientSecretEnv"]; strings.HasPrefix(envName, "FLOW_INTEGRATION_") {
+		secret = os.Getenv(envName)
+	}
+	if secret != "" {
 		values.Set("client_secret", secret)
 	}
-	response, err := http.PostForm(tokenURL, values)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(values.Encode()))
+	if err != nil {
+		return "", "", 0, fmt.Errorf("OAuth token exchange failed: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	client := secureOutboundClient(15 * time.Second)
+	if local {
+		client = &http.Client{Timeout: 15 * time.Second}
+	}
+	response, err := client.Do(request)
 	if err != nil {
 		return "", "", 0, fmt.Errorf("OAuth token exchange failed: %w", err)
 	}
@@ -1177,42 +1205,64 @@ func exchangeIntegrationToken(tokenURL string, config map[string]string, code st
 
 func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	provider, id := strings.ToLower(r.PathValue("provider")), r.PathValue("id")
+	data := s.workspaceData(r)
+	index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
+	if index < 0 {
+		writeError(w, http.StatusNotFound, "resource not found")
+		return
+	}
+	snapshot := data.IntegrationConnections[index]
+	if snapshot.OAuthRefreshToken == "" || strings.TrimSpace(snapshot.Config["tokenURL"]) == "" {
+		writeError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	if !safeOutboundHTTPS(r.Context(), snapshot.Config["tokenURL"]) {
+		writeError(w, http.StatusUnprocessableEntity, "unsafe OAuth token endpoint")
+		return
+	}
+	values := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {snapshot.OAuthRefreshToken}, "client_id": {snapshot.Config["clientID"]}}
+	secret := snapshot.Config["clientSecret"]
+	if envName := snapshot.Config["clientSecretEnv"]; strings.HasPrefix(envName, "FLOW_INTEGRATION_") {
+		secret = os.Getenv(envName)
+	}
+	if secret != "" {
+		values.Set("client_secret", secret)
+	}
+	request, requestErr := http.NewRequestWithContext(r.Context(), http.MethodPost, snapshot.Config["tokenURL"], strings.NewReader(values.Encode()))
+	if requestErr != nil {
+		writeError(w, http.StatusBadGateway, requestErr.Error())
+		return
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response, exchangeErr := secureOutboundClient(15 * time.Second).Do(request)
+	if exchangeErr != nil {
+		writeError(w, http.StatusBadGateway, exchangeErr.Error())
+		return
+	}
+	defer response.Body.Close()
+	body, readErr := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	if readErr != nil || response.StatusCode < 200 || response.StatusCode >= 300 {
+		writeError(w, http.StatusBadGateway, fmt.Sprintf("OAuth refresh returned HTTP %d", response.StatusCode))
+		return
+	}
+	var payload struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int64  `json:"expires_in"`
+	}
+	if json.Unmarshal(body, &payload) != nil || payload.AccessToken == "" {
+		writeError(w, http.StatusBadGateway, "OAuth refresh response did not include access_token")
+		return
+	}
 	var result domain.IntegrationConnection
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_refreshed", id, nil, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
-		if index < 0 {
+		currentIndex := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool {
+			return item.ID == id && item.Provider == provider && item.OAuthRefreshToken == snapshot.OAuthRefreshToken
+		})
+		if currentIndex < 0 {
 			return errNotFound
 		}
-		connection := &data.IntegrationConnections[index]
-		if connection.OAuthRefreshToken == "" || strings.TrimSpace(connection.Config["tokenURL"]) == "" {
-			return errInvalid
-		}
-		values := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {connection.OAuthRefreshToken}, "client_id": {connection.Config["clientID"]}}
-		if secret := connection.Config["clientSecret"]; secret != "" {
-			values.Set("client_secret", secret)
-		}
-		response, exchangeErr := http.PostForm(connection.Config["tokenURL"], values)
-		if exchangeErr != nil {
-			connection.Status, connection.LastError = "error", exchangeErr.Error()
-			return exchangeErr
-		}
-		defer response.Body.Close()
-		body, readErr := io.ReadAll(io.LimitReader(response.Body, 1<<20))
-		if readErr != nil {
-			return readErr
-		}
-		if response.StatusCode < 200 || response.StatusCode >= 300 {
-			connection.Status, connection.LastError = "error", fmt.Sprintf("OAuth refresh returned HTTP %d", response.StatusCode)
-			return errInvalid
-		}
-		var payload struct {
-			AccessToken  string `json:"access_token"`
-			RefreshToken string `json:"refresh_token"`
-			ExpiresIn    int64  `json:"expires_in"`
-		}
-		if json.Unmarshal(body, &payload) != nil || payload.AccessToken == "" {
-			return errInvalid
-		}
+		connection := &data.IntegrationConnections[currentIndex]
 		connection.OAuthAccessToken = payload.AccessToken
 		if payload.RefreshToken != "" {
 			connection.OAuthRefreshToken = payload.RefreshToken
@@ -1235,25 +1285,42 @@ func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request)
 
 func (s *server) revokeIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	provider, id := strings.ToLower(r.PathValue("provider")), r.PathValue("id")
+	data := s.workspaceData(r)
+	index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
+	if index < 0 {
+		writeError(w, http.StatusNotFound, "resource not found")
+		return
+	}
+	snapshot := data.IntegrationConnections[index]
+	if revokeURL := strings.TrimSpace(snapshot.Config["revokeURL"]); revokeURL != "" && snapshot.OAuthAccessToken != "" {
+		if !safeOutboundHTTPS(r.Context(), revokeURL) {
+			writeError(w, http.StatusUnprocessableEntity, "unsafe OAuth revocation endpoint")
+			return
+		}
+		request, requestErr := http.NewRequestWithContext(r.Context(), http.MethodPost, revokeURL, strings.NewReader(url.Values{"token": {snapshot.OAuthAccessToken}}.Encode()))
+		if requestErr != nil {
+			writeError(w, http.StatusBadGateway, requestErr.Error())
+			return
+		}
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		response, callErr := secureOutboundClient(15 * time.Second).Do(request)
+		if callErr != nil || response.StatusCode < 200 || response.StatusCode >= 300 {
+			if response != nil {
+				response.Body.Close()
+			}
+			writeError(w, http.StatusBadGateway, "OAuth provider rejected token revocation")
+			return
+		}
+		response.Body.Close()
+	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_revoked", id, nil, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
-		if index < 0 {
+		currentIndex := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool {
+			return item.ID == id && item.Provider == provider && item.OAuthAccessToken == snapshot.OAuthAccessToken
+		})
+		if currentIndex < 0 {
 			return errNotFound
 		}
-		connection := &data.IntegrationConnections[index]
-		if revokeURL := strings.TrimSpace(connection.Config["revokeURL"]); revokeURL != "" && connection.OAuthAccessToken != "" {
-			if request, requestErr := http.NewRequestWithContext(r.Context(), http.MethodPost, revokeURL, strings.NewReader(url.Values{"token": {connection.OAuthAccessToken}}.Encode())); requestErr == nil {
-				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-				if response, callErr := http.DefaultClient.Do(request); callErr != nil || response.StatusCode < 200 || response.StatusCode >= 300 {
-					if response != nil {
-						response.Body.Close()
-					}
-					return errInvalid
-				} else {
-					response.Body.Close()
-				}
-			}
-		}
+		connection := &data.IntegrationConnections[currentIndex]
 		connection.OAuthAccessToken, connection.OAuthRefreshToken, connection.OAuthState, connection.OAuthExpiresAt = "", "", "", nil
 		connection.Status, connection.LastError, connection.UpdatedAt = "disconnected", "", time.Now().UTC()
 		return nil
@@ -1268,9 +1335,12 @@ func (s *server) revokeIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 func (s *server) updateIntegration(w http.ResponseWriter, r *http.Request) {
 	provider, id := strings.ToLower(r.PathValue("provider")), r.PathValue("id")
 	var input struct {
-		Name   *string           `json:"name"`
-		Config map[string]string `json:"config"`
-		Status *string           `json:"status"`
+		Name            *string           `json:"name"`
+		Config          map[string]string `json:"config"`
+		Status          *string           `json:"status"`
+		Scopes          *[]string         `json:"scopes"`
+		Channels        *[]string         `json:"channels"`
+		LinkbackEnabled *bool             `json:"linkbackEnabled"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
@@ -1296,11 +1366,20 @@ func (s *server) updateIntegration(w http.ResponseWriter, r *http.Request) {
 		if input.Status != nil && slices.Contains([]string{"configured", "paused"}, *input.Status) {
 			updated.Status = *input.Status
 		}
+		if input.Scopes != nil {
+			updated.Scopes = uniqueLower(*input.Scopes)
+		}
+		if input.Channels != nil {
+			updated.Channels = uniqueTrimmed(*input.Channels)
+		}
+		if input.LinkbackEnabled != nil {
+			updated.LinkbackEnabled = *input.LinkbackEnabled
+		}
 		updated.UpdatedAt = time.Now().UTC()
 		data.IntegrationConnections[index] = updated
 		return nil
 	})
-	respondMutation(w, err, http.StatusOK, updated)
+	respondMutation(w, err, http.StatusOK, redactIntegrationConnection(updated))
 }
 
 func (s *server) disconnectIntegrationConnection(w http.ResponseWriter, r *http.Request) {
@@ -1345,6 +1424,8 @@ func (s *server) getWorkspaceUsage(w http.ResponseWriter, r *http.Request) {
 	if data.WorkspaceSettings.Plan == "business" {
 		limits = map[string]int64{"members": 1000, "issues": 100000, "storageBytes": 100 * 1024 * 1024 * 1024}
 	}
+	s.syncUsageAlerts(r, data, storage, limits)
+	data = s.workspaceData(r)
 	events := make([]map[string]any, 0)
 	for _, event := range data.AuditLog {
 		feature := ""

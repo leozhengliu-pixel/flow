@@ -125,11 +125,8 @@ import type {
 } from "@/types/flow";
 import { deriveResourceCounts } from "@/lib/resource-counts";
 import { Sidebar, type PageId } from "@/components/layout/sidebar";
-import { DetailPane } from "@/components/detail/detail-pane";
 import type { IssueOptionsActions, IssueConversionKind, RelatedIssueCreationKind } from "@/components/issue/issue-options-menu";
-import { CommandMenu } from "@/components/command/command-menu";
 import { ErrorState, SkeletonRows } from "@/components/state/state-view";
-import { BulkActionBar } from "@/components/issue/bulk-action-bar";
 import { toast } from "sonner";
 import type { ProjectCreateInput, ProjectMutationInput } from "@/components/projects-page/projects-page";
 import { lazyPage } from "@/lib/lazy-page";
@@ -193,14 +190,11 @@ import {
   settingsPath,
   type AppRoute,
 } from "@/lib/app-routes";
-import {
-  CreateIssueDialog,
-  type CreateIssueInput,
-} from "@/components/create-issue/create-issue-dialog";
-import { WorkspaceOnboarding } from "@/components/workspace/workspace-onboarding";
-import { WorkspaceDirectoryPage } from "@/components/workspace-directory/workspace-directory-page";
-import { TeamCreatePage } from "@/components/workspace-directory/team-create-page";
-import { SettingsPage } from "@/components/settings/settings-page";
+import type { CreateIssueInput } from "@/components/create-issue/create-issue-dialog";
+const WorkspaceOnboarding = lazyPage(() => import("@/components/workspace/workspace-onboarding"), "WorkspaceOnboarding");
+const WorkspaceDirectoryPage = lazyPage(() => import("@/components/workspace-directory/workspace-directory-page"), "WorkspaceDirectoryPage");
+const TeamCreatePage = lazyPage(() => import("@/components/workspace-directory/team-create-page"), "TeamCreatePage");
+const SettingsPage = lazyPage(() => import("@/components/settings/settings-page"), "SettingsPage");
 const AuthPage = lazyPage(() => import("@/components/auth/auth-page"), "AuthPage");
 const OAuthAuthorizePage = lazyPage(() => import("@/components/auth/oauth-authorize-page"), "OAuthAuthorizePage");
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
@@ -210,6 +204,7 @@ const WorkspaceOperationsPage = lazyPage(() => import("@/components/workspace-op
 const DocumentPage = lazyPage(() => import("@/components/documents/document-page"), "DocumentPage");
 const DocumentsIndexPage = lazyPage(() => import("@/components/documents/documents-index-page"), "DocumentsIndexPage");
 const AnalyticsDashboardPage = lazyPage(() => import("@/components/analytics/analytics-dashboard-page"), "AnalyticsDashboardPage");
+const DashboardsPage = lazyPage(() => import("@/components/dashboards/dashboards-page"), "DashboardsPage");
 const CustomerDetailPage = lazyPage(() => import("@/components/customer-detail/customer-detail-page"), "CustomerDetailPage");
 const InboxAppPage = lazyPage(() => import("@/components/inbox/inbox-app-page"), "InboxAppPage");
 const ProjectsPage = lazyPage(() => import("@/components/projects-page/projects-page"), "ProjectsPage");
@@ -227,6 +222,10 @@ const ReviewsPage = lazyPage(() => import("@/components/reviews/reviews-page"), 
 const AgentPage = lazyPage(() => import("@/components/agent/agent-page"), "AgentPage");
 const AgentChatPanel = lazyPage(() => import("@/components/agent/agent-chat-panel"), "AgentChatPanel");
 const LoopsPage = lazyPage(() => import("@/components/loops/loops-page"), "LoopsPage");
+const DetailPane = lazyPage(() => import("@/components/detail/detail-pane"), "DetailPane");
+const CommandMenu = lazyPage(() => import("@/components/command/command-menu"), "CommandMenu");
+const BulkActionBar = lazyPage(() => import("@/components/issue/bulk-action-bar"), "BulkActionBar");
+const CreateIssueDialog = lazyPage(() => import("@/components/create-issue/create-issue-dialog"), "CreateIssueDialog");
 import { labelsForResource } from "@/lib/labels";
 import { applyTheme } from "@/lib/theme";
 
@@ -2692,17 +2691,19 @@ function App() {
     return <OAuthAuthorizePage account={account}/>;
   if (route.kind === "workspace-onboarding" || account.workspaces.length === 0)
     return (
-      <WorkspaceOnboarding
-        account={account}
-        onCreate={addWorkspace}
-        onBack={() => {
-          const workspace =
-            account.workspaces.find(
-              (item) => item.workspace.urlKey === account.lastWorkspaceKey,
-            )?.workspace ?? account.workspaces[0]?.workspace;
-          navigateTo(workspace ? myIssuesPath(workspace.urlKey) : "/");
-        }}
-      />
+      <Suspense fallback={<main className="main-panel"><SkeletonRows count={7}/></main>}>
+        <WorkspaceOnboarding
+          account={account}
+          onCreate={addWorkspace}
+          onBack={() => {
+            const workspace =
+              account.workspaces.find(
+                (item) => item.workspace.urlKey === account.lastWorkspaceKey,
+              )?.workspace ?? account.workspaces[0]?.workspace;
+            navigateTo(workspace ? myIssuesPath(workspace.urlKey) : "/");
+          }}
+        />
+      </Suspense>
     );
   if (!data)
     return (
@@ -2715,7 +2716,8 @@ function App() {
     );
   if (route.kind === "settings")
     return (
-      <SettingsPage
+      <Suspense fallback={<div className="app loading-app"><aside className="sidebar"/><main className="main-panel"><SkeletonRows count={9}/></main></div>}>
+        <SettingsPage
         data={data}
         page={route.page}
         teamKey={route.teamKey}
@@ -2749,7 +2751,8 @@ function App() {
         onReload={async () => {
           setData(await fetchBootstrap(data.workspace.urlKey));
         }}
-      />
+        />
+      </Suspense>
     );
   const workspaceValid = routeBelongsToWorkspace(route, data.workspace.urlKey);
   const teamValid =
@@ -2963,6 +2966,7 @@ function App() {
       )}
       {page === "documents" && route.kind === "documents" && <DocumentsIndexPage data={data} onNavigate={navigateTo} onReload={async () => setData(await fetchBootstrap(data.workspace.urlKey))} />}
       {page === "analytics" && route.kind === "analytics" && <AnalyticsDashboardPage />}
+      {page === "analytics" && route.kind === "dashboards" && <DashboardsPage data={data} onOpenSidebar={() => setMobileSidebarOpen(true)} />}
       {page === "agent" && route.kind === "agent" && <AgentPage chatSlug={route.chatSlug} data={data} onNavigate={navigateTo} onOpenSidebar={()=>setMobileSidebarOpen(true)} onReload={async()=>setData(await fetchBootstrap(data.workspace.urlKey))}/>}
       {page === "loops" && (route.kind === "loops" || route.kind === "loop-editor") && <LoopsPage data={data} loopId={route.kind === "loop-editor" ? route.loopId : undefined} editing={route.kind === "loop-editor"} onOpenSidebar={() => setMobileSidebarOpen(true)} onNavigate={navigateTo} onReload={async()=>setData(await fetchBootstrap(data.workspace.urlKey))} />}
       {page==="reviews"&&(route.kind==="reviews"||route.kind==="review")&&<ReviewsPage data={data} view={route.kind==="reviews"?route.view:"for-you"} review={route.kind==="review"?selectedReview??undefined:undefined} tab={route.kind==="review"?route.tab:undefined} onNavigate={navigateTo} onReload={async()=>setData(await fetchBootstrap(data.workspace.urlKey))} onOpenSidebar={()=>setMobileSidebarOpen(true)}/>}
@@ -3976,14 +3980,14 @@ function App() {
         />
       )}
       </Suspense>
-      <BulkActionBar
+      <Suspense fallback={null}>{selected.size > 0 && <BulkActionBar
         count={selected.size}
         data={data}
         onUpdate={batchUpdate}
         onDelete={batchDelete}
         onClear={() => setSelected(new Set())}
-      />
-      <CommandMenu
+      />}</Suspense>
+      <Suspense fallback={null}>{commandOpen && <CommandMenu
         open={commandOpen}
         onOpenChange={setCommandOpen}
         onCreateIssue={() => openCreateIssue()}
@@ -4000,8 +4004,8 @@ function App() {
         onNavigateMembers={() => navigateTo(membersPath(data.workspace.urlKey))}
         onNavigateCustomers={() => navigateTo(`${customersPath(data.workspace.urlKey)}?create=1`)}
         onOpenResult={openSearchResult}
-      />
-      <CreateIssueDialog
+      />}</Suspense>
+      <Suspense fallback={null}>{createOpen && <CreateIssueDialog
         open={createOpen}
         draftId={createDraftId}
         initialProjectId={createProjectId}
@@ -4041,7 +4045,7 @@ function App() {
               : current,
           );
         }}
-      />
+      />}</Suspense>
       {toolbarAgentSession&&<AgentChatPanel initialSession={toolbarAgentSession} issues={toolbarAgentIssues} open onClose={()=>setClosedAgentSessionIds(current=>new Set(current).add(toolbarAgentSession.id))} onSessionChange={next=>setData(current=>current?{...current,agentSessions:current.agentSessions.map(item=>item.id===next.id?next:item)}:current)} onOpenFullPage={session=>{if(!session){navigateTo(agentPath(data.workspace.urlKey));return}void updateAgentSessionRequest(session.id,{location:"page"}).then(next=>{setData(current=>current?{...current,agentSessions:current.agentSessions.map(item=>item.id===next.id?next:item)}:current);navigateTo(agentPath(data.workspace.urlKey,next.slugId))})}}/>}
       <button className="bottom-agent" aria-label="Agent" onClick={()=>navigateTo(agentPath(data.workspace.urlKey))} type="button">
         <span>⌁</span> Agent <CircleHelp size={14} />
@@ -4065,6 +4069,7 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
   if (route.kind === "customer") return "customer-detail";
   if (route.kind === "documents") return "documents";
   if (route.kind === "analytics") return "analytics";
+  if (route.kind === "dashboards") return "analytics";
   if (route.kind === "document") return "document-detail";
   if (route.kind === "drafts") return "drafts";
   if (route.kind === "agent") return "agent";
