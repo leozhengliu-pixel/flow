@@ -22,14 +22,16 @@ func EmptyWorkspace(name, urlKey, region string, viewer domain.User) domain.Boot
 	}
 	workspaceID := fmt.Sprintf("workspace_%d", now.UnixNano())
 	team := domain.Team{ID: fmt.Sprintf("team_%d", now.UnixNano()), Name: name, Key: key, Color: "#5E6AD2"}
-	return domain.Bootstrap{
+	data := domain.Bootstrap{
 		Workspace: domain.Workspace{ID: workspaceID, Name: name, URLKey: urlKey, Color: "#5E6AD2", Region: region, CreatedAt: now},
 		Viewer:    viewer, Users: []domain.User{viewer}, Teams: []domain.Team{team}, Customers: []domain.Customer{}, States: canonicalWorkflowStates(), Labels: canonicalLabels(), LabelGroups: canonicalLabelGroups(),
 		Issues: []domain.Issue{}, Cycles: []domain.Cycle{}, CycleSettings: map[string]domain.CycleSettings{}, Projects: []domain.Project{},
 		ProjectStatuses: canonicalProjectStatuses(), ProjectUpdates: map[string][]domain.ProjectUpdate{}, Initiatives: []domain.Initiative{},
 		InitiativeUpdates: map[string][]domain.InitiativeUpdate{}, Comments: map[string][]domain.Comment{}, Activities: map[string][]domain.ActivityEvent{},
-		SavedViews: []domain.SavedView{}, Notifications: []domain.Notification{}, Loops: []domain.Loop{},
+		SavedViews: []domain.SavedView{}, Notifications: []domain.Notification{}, Loops: []domain.Loop{}, CustomEmojis: []domain.CustomEmoji{}, AgentSessions: []domain.AgentSession{}, AgentSkills: []domain.PersonalAgentSkill{},
 	}
+	normalize(&data)
+	return data
 }
 
 func localSQLiteFixture() domain.Bootstrap {

@@ -7,7 +7,8 @@ import { PropertyShortcutTooltip } from '@/components/property/issue-property-ho
 
 export function LabelPicker({ value, labels, labelGroups = [], onToggle, onCreate, inline = false }: { value: IssueLabel[]; labels: IssueLabel[]; labelGroups?: LabelGroup[]; onToggle: (id: string) => void | Promise<void>; onCreate?: (name: string) => void | Promise<void>; inline?: boolean }) {
   const groupNames = new Map(labelGroups.map(group => [group.id, group.name]))
-  const options = labels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel: label.groupId ? groupNames.get(label.groupId) : undefined }))
+  const groupColors = new Map(labelGroups.map(group => [group.id, group.color]))
+  const options = labels.map(label => { const groupLabel = label.groupId ? groupNames.get(label.groupId) : undefined; return { id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel, groupColor: label.groupId ? groupColors.get(label.groupId) : undefined, keywords: groupLabel } })
   return <div className={`label-project-picker labels-picker${inline?' labels-picker--inline':''}`}>
     <PropertyMenu
       label="Labels"
@@ -16,7 +17,7 @@ export function LabelPicker({ value, labels, labelGroups = [], onToggle, onCreat
       selectedIds={value.map(label => label.id)}
       options={options}
       kind="labels"
-      searchPlaceholder="Change or add labels…"
+      searchPlaceholder={value.length ? 'Change or add labels…' : 'Add labels…'}
       ariaLabel="Add labels"
       customTrigger={({open,activeTrigger,openMenu})=><div className="labels-picker-trigger" aria-label="Change or add labels">
         <div className="issue-label-chips" aria-label="Selected labels">{value.map(label => <LabelHoverPreview label={label} key={label.id}><button type="button" className="issue-label-chip" aria-label={`Change or add labels. ${label.name} selected`} aria-haspopup="dialog" aria-expanded={open&&activeTrigger===`label:${label.id}`} onClick={()=>openMenu(`label:${label.id}`)}><i style={{ background: label.color }}/><span data-i18n-ignore>{label.name}</span></button></LabelHoverPreview>)}</div>

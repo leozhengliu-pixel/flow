@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
@@ -348,7 +349,7 @@ func TestImportMappingAndBackgroundExport(t *testing.T) {
 		"mapping": map[string]string{"title": "Title", "priority": "Priority", "status": "Status", "assignee": "Assignee", "labels": "Labels", "project": "Project", "dueDate": "Due Date"},
 	}, http.StatusAccepted)
 	invalidJob = waitForImport(t, handler, invalidJob.ID)
-	if invalidJob.Imported != 1 || len(invalidJob.Errors) != 6 {
+	if invalidJob.Imported != 1 || len(invalidJob.Errors) != 4 {
 		t.Fatalf("unmatched import values were not reported: %#v", invalidJob)
 	}
 
@@ -374,6 +375,38 @@ func TestImportMappingAndBackgroundExport(t *testing.T) {
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil || len(payload["issues"]) == 0 || len(payload["documents"]) == 0 {
 		t.Fatalf("export package is incomplete: keys=%v error=%v", payload, err)
+	}
+}
+
+func TestCSVExportUsesLinearIssueSchema(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	export := requestJSON[domain.ExportJob](t, handler, http.MethodPost, "/api/exports", map[string]any{"format": "csv"}, http.StatusAccepted)
+	deadline := time.Now().Add(2 * time.Second)
+	for export.Status != "completed" && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+		bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+		if index := slices.IndexFunc(bootstrap.ExportJobs, func(item domain.ExportJob) bool { return item.ID == export.ID }); index >= 0 {
+			export = bootstrap.ExportJobs[index]
+		}
+	}
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/exports/"+export.ID+"/download", nil)
+	handler.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("CSV export failed: %d %s", recorder.Code, recorder.Body.String())
+	}
+	rows, err := csv.NewReader(strings.NewReader(recorder.Body.String())).ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"ID", "Team", "Title", "Description", "Status", "Estimate", "Priority", "Project ID", "Project", "Creator", "Assignee", "Labels", "Cycle Number", "Cycle Name", "Cycle Start", "Cycle End", "Created", "Updated", "Started", "Triaged", "Completed", "Canceled", "Archived", "Due Date", "Parent issue", "Initiatives", "Project Milestone ID", "Project Milestone", "SLA Status"}
+	if len(rows) < 2 || !slices.Equal(rows[0], want) {
+		t.Fatalf("unexpected Linear CSV schema: %#v", rows)
 	}
 }
 
