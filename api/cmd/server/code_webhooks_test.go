@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -24,7 +25,11 @@ func TestGitHubPullRequestWebhookCreatesReviewAndInboxNotification(t *testing.T)
 	defer repository.Close()
 	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
 	requestJSON[domain.IntegrationConnection](t, handler, http.MethodPut, "/api/integrations/github?workspace=cleantrack", map[string]any{"name": "acme", "config": map[string]string{"organization": "acme", "webhookSecret": "secret"}}, http.StatusOK)
-	payload := []byte(`{"action":"review_requested","number":15,"pull_request":{"id":9915,"title":"Fix checkout","body":"Please review","html_url":"https://github.com/acme/store/pull/15","state":"open","user":{"login":"dependabot"},"base":{"ref":"main"},"head":{"ref":"dependabot/fix","sha":"abc"}},"repository":{"full_name":"acme/store"}}`)
+	seed := repository.Bootstrap()
+	if len(seed.Issues) == 0 {
+		t.Fatal("seed must include an issue")
+	}
+	payload := []byte(fmt.Sprintf(`{"action":"review_requested","number":15,"pull_request":{"id":9915,"title":"Fix checkout %s","body":"Please review","html_url":"https://github.com/acme/store/pull/15","state":"open","user":{"login":"dependabot"},"base":{"ref":"main"},"head":{"ref":"dependabot/fix","sha":"abc"}},"repository":{"full_name":"acme/store"}}`, seed.Issues[0].Identifier))
 	mac := hmac.New(sha256.New, []byte("secret"))
 	_, _ = mac.Write(payload)
 	request := func() *http.Request {
@@ -45,6 +50,9 @@ func TestGitHubPullRequestWebhookCreatesReviewAndInboxNotification(t *testing.T)
 	bootstrap := repository.Bootstrap()
 	if len(bootstrap.Reviews) == 0 || bootstrap.Reviews[0].ExternalID != "9915" || !slices.ContainsFunc(bootstrap.Notifications, func(item domain.Notification) bool { return item.ReviewID == bootstrap.Reviews[0].ID }) {
 		t.Fatalf("webhook projection incomplete: reviews=%#v notifications=%#v", bootstrap.Reviews, bootstrap.Notifications)
+	}
+	if !slices.Contains(bootstrap.Reviews[0].IssueIDs, seed.Issues[0].ID) || !slices.ContainsFunc(bootstrap.Activities[seed.Issues[0].ID], func(item domain.ActivityEvent) bool { return item.Type == "issue.review_linked" }) {
+		t.Fatalf("webhook did not associate the referenced issue: review=%#v activities=%#v", bootstrap.Reviews[0], bootstrap.Activities[seed.Issues[0].ID])
 	}
 	notificationCount := len(bootstrap.Notifications)
 	// GitHub retries the same delivery; the event must not create another notification.

@@ -598,35 +598,68 @@ func (s *server) createIntegrationDelivery(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *server) retryIntegrationDelivery(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	data := s.workspaceData(r)
+	result, err := s.processIntegrationDelivery(r.Context(), workspaceKey(r), r.PathValue("id"))
+	if errors.Is(err, errConflict) {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	if errors.Is(err, errInvalid) {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	respondMutation(w, err, http.StatusOK, result)
+}
+
+func (s *server) processIntegrationDelivery(ctx context.Context, workspace, id string) (domain.IntegrationDelivery, error) {
+	data, ok := s.store.BootstrapFor(workspace)
+	if !ok {
+		return domain.IntegrationDelivery{}, errNotFound
+	}
 	deliveryIndex := slices.IndexFunc(data.IntegrationDeliveries, func(v domain.IntegrationDelivery) bool { return v.ID == id })
 	if deliveryIndex < 0 {
-		writeError(w, http.StatusNotFound, "delivery not found")
-		return
+		return domain.IntegrationDelivery{}, errNotFound
 	}
 	snapshot := data.IntegrationDeliveries[deliveryIndex]
 	if snapshot.Attempts >= 8 {
-		writeError(w, http.StatusConflict, "delivery retry limit reached")
-		return
+		return domain.IntegrationDelivery{}, fmt.Errorf("%w: delivery retry limit reached", errConflict)
 	}
 	connectionIndex := slices.IndexFunc(data.IntegrationConnections, func(v domain.IntegrationConnection) bool { return v.ID == snapshot.ConnectionID })
 	if connectionIndex < 0 {
-		writeError(w, http.StatusNotFound, "integration connection not found")
-		return
+		return domain.IntegrationDelivery{}, errNotFound
 	}
 	connectionSnapshot := data.IntegrationConnections[connectionIndex]
 	endpoint := strings.TrimSpace(connectionSnapshot.Config["deliveryURL"])
-	if !safeOutboundHTTPS(r.Context(), endpoint) {
-		writeError(w, http.StatusUnprocessableEntity, "delivery URL must be a public HTTPS endpoint")
-		return
+	if !safeOutboundHTTPS(ctx, endpoint) {
+		return domain.IntegrationDelivery{}, fmt.Errorf("%w: delivery URL must be a public HTTPS endpoint", errInvalid)
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	claimErr := s.store.MutateWorkspace(ctx, workspace, "integration_delivery.claimed", id, nil, func(current *domain.Bootstrap) error {
+		i := slices.IndexFunc(current.IntegrationDeliveries, func(v domain.IntegrationDelivery) bool { return v.ID == id })
+		if i < 0 {
+			return errNotFound
+		}
+		if current.IntegrationDeliveries[i].Attempts >= 8 {
+			return errConflict
+		}
+		if current.IntegrationDeliveries[i].Status == "delivering" {
+			return errConflict
+		}
+		snapshot = current.IntegrationDeliveries[i]
+		connectionIndex := slices.IndexFunc(current.IntegrationConnections, func(v domain.IntegrationConnection) bool { return v.ID == snapshot.ConnectionID })
+		if connectionIndex < 0 {
+			return errNotFound
+		}
+		current.IntegrationDeliveries[i].Status = "delivering"
+		current.IntegrationDeliveries[i].UpdatedAt = time.Now().UTC()
+		return nil
+	})
+	if claimErr != nil {
+		return domain.IntegrationDelivery{}, claimErr
+	}
+	callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	req, requestErr := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(snapshot.Payload)))
+	req, requestErr := http.NewRequestWithContext(callCtx, http.MethodPost, endpoint, strings.NewReader(string(snapshot.Payload)))
 	if requestErr != nil {
-		writeError(w, http.StatusUnprocessableEntity, "invalid delivery request")
-		return
+		return domain.IntegrationDelivery{}, fmt.Errorf("%w: invalid delivery request", errInvalid)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if envName := connectionSnapshot.Config["deliveryTokenEnv"]; strings.HasPrefix(envName, "FLOW_INTEGRATION_") {
@@ -645,13 +678,15 @@ func (s *server) retryIntegrationDelivery(w http.ResponseWriter, r *http.Request
 		}
 	}
 	var result domain.IntegrationDelivery
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration_delivery.retry", id, nil, func(data *domain.Bootstrap) error {
+	persistCtx, persistCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer persistCancel()
+	err := s.store.MutateWorkspace(persistCtx, workspace, "integration_delivery.retry", id, nil, func(data *domain.Bootstrap) error {
 		i := slices.IndexFunc(data.IntegrationDeliveries, func(v domain.IntegrationDelivery) bool { return v.ID == id })
 		if i < 0 {
 			return errNotFound
 		}
 		d := &data.IntegrationDeliveries[i]
-		if d.Attempts != snapshot.Attempts {
+		if d.Attempts != snapshot.Attempts || d.Status != "delivering" {
 			return errors.New("delivery changed while retrying")
 		}
 		connectionIndex := slices.IndexFunc(data.IntegrationConnections, func(v domain.IntegrationConnection) bool { return v.ID == d.ConnectionID })
@@ -676,7 +711,7 @@ func (s *server) retryIntegrationDelivery(w http.ResponseWriter, r *http.Request
 		result = *d
 		return nil
 	})
-	respondMutation(w, err, http.StatusOK, result)
+	return result, err
 }
 
 func truncateSecurityError(value string) string {

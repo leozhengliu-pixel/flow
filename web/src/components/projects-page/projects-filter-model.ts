@@ -1,4 +1,4 @@
-export type ProjectFilterField = 'status' | 'priority' | 'lead' | 'members' | 'health' | 'dates' | 'milestones' | 'project'
+export type ProjectFilterField = 'status' | 'priority' | 'lead' | 'members' | 'health' | 'dates' | 'milestones' | 'labels' | 'teams' | 'project'
 export type ProjectFilterOperator = 'is' | 'isNot'
 export type ProjectFilterOption = { id: string; label: string; color?: string; count?: number }
 export type ProjectFilter = {

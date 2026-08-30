@@ -254,6 +254,9 @@ func validateResourceIDs(data *domain.Bootstrap, resourceType string, ids []stri
 		case "document":
 			_, err := documentByID(data, id)
 			valid = err == nil
+		case "initiative":
+			_, err := initiativeByID(data, id)
+			valid = err == nil
 		}
 		if !valid {
 			return false
@@ -1272,7 +1275,8 @@ func applyProjectTemplateInput(data *domain.Bootstrap, template *domain.ProjectT
 	}
 	if input.LabelIDs != nil {
 		values := normalizedStrings(*input.LabelIDs)
-		if !validateResourceIDs(data, "project-label", values) {
+		labels := labelsByIDForResource(data, values, "project")
+		if len(labels) != len(values) || !validLabelGroupSelection(labels) {
 			return errInvalid
 		}
 		template.LabelIDs = values
@@ -1630,6 +1634,7 @@ func (s *server) updateSLASettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) createDraft(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
 	var input draftInput
 	if !decodeJSON(w, r, &input) {
 		return
@@ -1642,14 +1647,9 @@ func (s *server) createDraft(w http.ResponseWriter, r *http.Request) {
 			kind = *input.Type
 		}
 		created = domain.Draft{ID: fmt.Sprintf("draft_%d", now.UnixNano()), UserID: data.Viewer.ID, Type: kind, ContentData: input.ContentData, Metadata: input.Metadata, CreatedAt: now, UpdatedAt: now}
-		if input.ResourceID != nil {
-			created.ResourceID = *input.ResourceID
-		}
-		if input.Title != nil {
-			created.Title = *input.Title
-		}
-		if input.Body != nil {
-			created.Body = *input.Body
+		applyDraftInput(&created, input)
+		if err := validateDraft(data, created); err != nil {
+			return "", err
 		}
 		data.Drafts = append([]domain.Draft{created}, data.Drafts...)
 		return created.ID, nil
@@ -1658,6 +1658,7 @@ func (s *server) createDraft(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) updateDraft(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
 	var input draftInput
 	if !decodeJSON(w, r, &input) {
 		return
@@ -1669,30 +1670,53 @@ func (s *server) updateDraft(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
-		item := &data.Drafts[index]
-		if input.Type != nil {
-			item.Type = *input.Type
+		candidate := data.Drafts[index]
+		applyDraftInput(&candidate, input)
+		if err := validateDraft(data, candidate); err != nil {
+			return err
 		}
-		if input.ResourceID != nil {
-			item.ResourceID = *input.ResourceID
-		}
-		if input.Title != nil {
-			item.Title = *input.Title
-		}
-		if input.Body != nil {
-			item.Body = *input.Body
-		}
-		if input.ContentData != nil {
-			item.ContentData = input.ContentData
-		}
-		if input.Metadata != nil {
-			item.Metadata = input.Metadata
-		}
-		item.UpdatedAt = time.Now().UTC()
-		updated = *item
+		candidate.UpdatedAt = time.Now().UTC()
+		data.Drafts[index], updated = candidate, candidate
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
+}
+
+func applyDraftInput(item *domain.Draft, input draftInput) {
+	if input.Type != nil {
+		item.Type = strings.TrimSpace(*input.Type)
+	}
+	if input.ResourceID != nil {
+		item.ResourceID = strings.TrimSpace(*input.ResourceID)
+	}
+	if input.Title != nil {
+		item.Title = *input.Title
+	}
+	if input.Body != nil {
+		item.Body = *input.Body
+	}
+	if input.ContentData != nil {
+		item.ContentData = input.ContentData
+	}
+	if input.Metadata != nil {
+		item.Metadata = input.Metadata
+	}
+}
+
+func validateDraft(data *domain.Bootstrap, item domain.Draft) error {
+	if !slices.Contains([]string{"issue", "comment", "document"}, item.Type) {
+		return fmt.Errorf("%w: unsupported draft type", errInvalid)
+	}
+	if len(item.Title) > 512 || len(item.Body) > 1<<20 {
+		return fmt.Errorf("%w: draft content is too large", errInvalid)
+	}
+	if item.Type == "comment" && (item.ResourceID == "" || !resourceExists(data, "issue", item.ResourceID)) {
+		return fmt.Errorf("%w: comment draft requires an issue", errInvalid)
+	}
+	if item.ResourceID != "" && item.Type != "comment" && !resourceExists(data, item.Type, item.ResourceID) {
+		return fmt.Errorf("%w: draft resource does not exist", errInvalid)
+	}
+	return nil
 }
 
 func (s *server) deleteDraft(w http.ResponseWriter, r *http.Request) {
@@ -1735,6 +1759,8 @@ func resourceExists(data *domain.Bootstrap, kind, id string) bool {
 		return slices.ContainsFunc(data.Initiatives, func(item domain.Initiative) bool { return item.ID == id })
 	case "view":
 		return slices.ContainsFunc(data.SavedViews, func(item domain.SavedView) bool { return item.ID == id })
+	case "dashboard":
+		return slices.ContainsFunc(settingCollection[domain.Dashboard](*data, dashboardsSettingsKey), func(item domain.Dashboard) bool { return item.ID == id })
 	}
 	return false
 }
@@ -1967,9 +1993,13 @@ func parseImportFile(filename string, reader io.Reader) (string, []string, []map
 }
 
 func (s *server) previewImport(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 21<<20)
 	if err := r.ParseMultipartForm(21 << 20); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid import file")
 		return
+	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
 	}
 	file, header, err := r.FormFile("file")
 	if err != nil {
@@ -2314,6 +2344,10 @@ func (s *server) createExport(w http.ResponseWriter, r *http.Request) {
 	}
 	if !slices.Contains([]string{"json", "csv"}, input.Format) {
 		writeError(w, http.StatusBadRequest, "format must be json or csv")
+		return
+	}
+	if input.IncludePrivate && !s.authDisabled && s.workspaceData(r).ViewerRole != "admin" {
+		writeError(w, http.StatusForbidden, "Only workspace admins can export private data")
 		return
 	}
 	var created domain.ExportJob

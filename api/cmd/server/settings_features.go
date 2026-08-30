@@ -414,15 +414,7 @@ func (s *server) deleteWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 		if before == len(data.Labels) {
 			return errNotFound
 		}
-		for index := range data.Issues {
-			data.Issues[index].Labels = slices.DeleteFunc(data.Issues[index].Labels, func(label domain.IssueLabel) bool { return label.ID == id })
-		}
-		for index := range data.Projects {
-			data.Projects[index].LabelIDs = removeString(data.Projects[index].LabelIDs, id)
-		}
-		for index := range data.Initiatives {
-			data.Initiatives[index].LabelIDs = removeString(data.Initiatives[index].LabelIDs, id)
-		}
+		removeLabelReferences(data, map[string]struct{}{id: {}})
 		return nil
 	})
 	if err != nil {
@@ -522,11 +514,18 @@ func (s *server) deleteLabelGroup(w http.ResponseWriter, r *http.Request) {
 		if before == len(data.LabelGroups) {
 			return errNotFound
 		}
-		for index := range data.Labels {
-			if data.Labels[index].GroupID == id {
-				data.Labels[index].GroupID = ""
-				cascadeLabel(data, data.Labels[index])
+		childIDs := map[string]struct{}{}
+		for _, label := range data.Labels {
+			if label.GroupID == id {
+				childIDs[label.ID] = struct{}{}
 			}
+		}
+		if len(childIDs) > 0 {
+			data.Labels = slices.DeleteFunc(data.Labels, func(label domain.IssueLabel) bool {
+				_, remove := childIDs[label.ID]
+				return remove
+			})
+			removeLabelReferences(data, childIDs)
 		}
 		return nil
 	})
@@ -535,6 +534,106 @@ func (s *server) deleteLabelGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func removeLabelReferences(data *domain.Bootstrap, ids map[string]struct{}) {
+	removeIDs := func(values []string) []string {
+		return slices.DeleteFunc(values, func(id string) bool {
+			_, remove := ids[id]
+			return remove
+		})
+	}
+	for index := range data.Issues {
+		data.Issues[index].Labels = slices.DeleteFunc(data.Issues[index].Labels, func(label domain.IssueLabel) bool {
+			_, remove := ids[label.ID]
+			return remove
+		})
+		data.Issues[index].SuggestedLabelIDs = removeIDs(data.Issues[index].SuggestedLabelIDs)
+	}
+	for index := range data.Projects {
+		data.Projects[index].LabelIDs = removeIDs(data.Projects[index].LabelIDs)
+	}
+	for index := range data.Initiatives {
+		data.Initiatives[index].LabelIDs = removeIDs(data.Initiatives[index].LabelIDs)
+	}
+	for index := range data.IssueTemplates {
+		data.IssueTemplates[index].LabelIDs = removeIDs(data.IssueTemplates[index].LabelIDs)
+		for childIndex := range data.IssueTemplates[index].SubIssues {
+			data.IssueTemplates[index].SubIssues[childIndex].LabelIDs = removeIDs(data.IssueTemplates[index].SubIssues[childIndex].LabelIDs)
+		}
+	}
+	for index := range data.ProjectTemplates {
+		data.ProjectTemplates[index].LabelIDs = removeIDs(data.ProjectTemplates[index].LabelIDs)
+	}
+	for index := range data.TriageRoutingRules {
+		data.TriageRoutingRules[index].LabelIDs = removeIDs(data.TriageRoutingRules[index].LabelIDs)
+	}
+	for index := range data.SavedViews {
+		data.SavedViews[index].Filters = removeLabelReferencesFromJSON(data.SavedViews[index].Filters, ids)
+	}
+}
+
+func removeLabelReferencesFromJSON(raw json.RawMessage, ids map[string]struct{}) json.RawMessage {
+	if len(raw) == 0 {
+		return raw
+	}
+	var value any
+	if json.Unmarshal(raw, &value) != nil {
+		return raw
+	}
+	cleaned, remove := cleanLabelReferenceValue(value, ids)
+	if remove {
+		cleaned = []any{}
+	}
+	encoded, err := json.Marshal(cleaned)
+	if err != nil {
+		return raw
+	}
+	return encoded
+}
+
+func cleanLabelReferenceValue(value any, ids map[string]struct{}) (any, bool) {
+	if text, ok := value.(string); ok {
+		return value, deletedLabelReference(text, ids)
+	}
+	if values, ok := value.([]any); ok {
+		cleaned := make([]any, 0, len(values))
+		for _, item := range values {
+			next, remove := cleanLabelReferenceValue(item, ids)
+			if !remove {
+				cleaned = append(cleaned, next)
+			}
+		}
+		return cleaned, false
+	}
+	if object, ok := value.(map[string]any); ok {
+		for _, key := range []string{"id", "value"} {
+			if text, stringValue := object[key].(string); stringValue && deletedLabelReference(text, ids) {
+				return nil, true
+			}
+		}
+		cleaned := make(map[string]any, len(object))
+		for key, item := range object {
+			next, remove := cleanLabelReferenceValue(item, ids)
+			if !remove {
+				cleaned[key] = next
+			}
+		}
+		return cleaned, false
+	}
+	return value, false
+}
+
+func deletedLabelReference(value string, ids map[string]struct{}) bool {
+	if _, remove := ids[value]; remove {
+		return true
+	}
+	for _, prefix := range []string{"label:", "labels:", "project-label:"} {
+		if _, remove := ids[strings.TrimPrefix(value, prefix)]; strings.HasPrefix(value, prefix) && remove {
+			return true
+		}
+	}
+	return false
 }
 
 type projectStatusInput struct {
@@ -567,6 +666,10 @@ func (s *server) createProjectStatus(w http.ResponseWriter, r *http.Request) {
 			created.Color = *input.Color
 		}
 		data.ProjectStatuses = append(data.ProjectStatuses, created)
+		normalizeProjectStatusPositions(data)
+		if index := slices.IndexFunc(data.ProjectStatuses, func(status domain.ProjectStatus) bool { return status.ID == created.ID }); index >= 0 {
+			created = data.ProjectStatuses[index]
+		}
 		return created.ID, nil
 	})
 	respondMutation(w, err, http.StatusCreated, created)
@@ -652,23 +755,56 @@ func (s *server) reorderProjectStatuses(w http.ResponseWriter, r *http.Request) 
 	}
 	var updated []domain.ProjectStatus
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project_status.reordered", "workspace", input, func(data *domain.Bootstrap) error {
-		if len(input.IDs) != len(data.ProjectStatuses) {
+		if len(input.IDs) != len(data.ProjectStatuses) || !allUniqueStrings(input.IDs) {
 			return errInvalid
 		}
 		ordered := make([]domain.ProjectStatus, 0, len(input.IDs))
+		lastRank := -1
 		for position, id := range input.IDs {
 			index := slices.IndexFunc(data.ProjectStatuses, func(status domain.ProjectStatus) bool { return status.ID == id })
 			if index < 0 {
 				return errInvalid
 			}
 			status := data.ProjectStatuses[index]
+			rank := projectStatusTypeRank(status.Type)
+			if rank < lastRank {
+				return errInvalid
+			}
+			lastRank = rank
 			status.Position = float64(position)
 			ordered = append(ordered, status)
 		}
 		data.ProjectStatuses, updated = ordered, ordered
+		for projectIndex := range data.Projects {
+			if statusIndex := slices.IndexFunc(ordered, func(status domain.ProjectStatus) bool { return status.ID == data.Projects[projectIndex].Status.ID }); statusIndex >= 0 {
+				data.Projects[projectIndex].Status = ordered[statusIndex]
+			}
+		}
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
+}
+
+func projectStatusTypeRank(statusType string) int {
+	return map[string]int{"backlog": 0, "planned": 1, "started": 2, "completed": 3, "canceled": 4}[statusType]
+}
+
+func normalizeProjectStatusPositions(data *domain.Bootstrap) {
+	slices.SortStableFunc(data.ProjectStatuses, func(left, right domain.ProjectStatus) int {
+		if rank := projectStatusTypeRank(left.Type) - projectStatusTypeRank(right.Type); rank != 0 {
+			return rank
+		}
+		if left.Position < right.Position {
+			return -1
+		}
+		if left.Position > right.Position {
+			return 1
+		}
+		return strings.Compare(left.Name, right.Name)
+	})
+	for index := range data.ProjectStatuses {
+		data.ProjectStatuses[index].Position = float64(index)
+	}
 }
 
 func (s *server) listWorkspaceIssueTemplates(w http.ResponseWriter, r *http.Request) {

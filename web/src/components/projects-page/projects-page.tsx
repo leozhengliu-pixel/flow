@@ -15,6 +15,8 @@ import type { ViewVisual } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { ProjectUpdatesPreview } from './project-updates-preview'
 import { labelsForResource } from '@/lib/labels'
+import { ProjectStatusGlyph } from './project-property-picker'
+import { confirmAction, promptAction } from '@/components/ui/action-dialog-service'
 
 export type ProjectMutationInput = {
   templateId?: string
@@ -25,6 +27,7 @@ export type ProjectMutationInput = {
   color?: string
   statusId?: string
   priority?: number
+  position?: number
   health?: Project['health']
   leadId?: string
   memberIds?: string[]
@@ -34,7 +37,11 @@ export type ProjectMutationInput = {
   initiatives?: string[]
   customers?: string[]
   startDate?: string
+  startDateResolution?: Project['startDateResolution'] | ''
   targetDate?: string
+  targetDateResolution?: Project['targetDateResolution'] | ''
+  slackChannelId?: string
+  slackChannelName?: string
   updateCadence?: Project['updateCadence']
   archived?: boolean
 }
@@ -78,6 +85,7 @@ export type ProjectsPageProps = {
   onDeleteSavedView?: (view: SavedView) => Promise<void>
   savedViewSubscription?: Subscription
   onSetSavedViewSubscriptionEvents?: (view: SavedView, events: string[]) => Promise<void>
+  onShareSavedView?: (view: SavedView) => Promise<string | undefined>
   onDuplicateSavedView?: (view: SavedView) => void
   onBeginEditSavedView?: () => void
   onFinishEditSavedView?: () => void
@@ -131,6 +139,7 @@ export function ProjectsPage({
   onDeleteSavedView,
   savedViewSubscription,
   onSetSavedViewSubscriptionEvents,
+  onShareSavedView,
   onDuplicateSavedView,
   onBeginEditSavedView,
   onFinishEditSavedView,
@@ -153,7 +162,7 @@ export function ProjectsPage({
   const [insightMode, setInsightMode] = useState<ProjectInsightMode>('health')
   const [insightFilter, setInsightFilter] = useState<ProjectInsightFilter>(() => projectFilterFromSavedView(sourceView))
   const draftFiltersKey = `flow:projects:draft-filters:${workspaceKey}:${scopeTeamId ?? 'workspace'}`
-  const [projectFilters, setProjectFilters] = useState<ProjectFilter[]>(() => projectFiltersFromSavedView(sourceView, creatingView ? readDraftFilters(draftFiltersKey) : []))
+  const [projectFilters, setProjectFilters] = useState<ProjectFilter[]>(() => { const params=new URLSearchParams(location.search),fallback:ProjectFilter[]=[];const label=labelsForResource(labels,'project',labelGroups).find(item=>item.id===params.get('label'));if(label)fallback.push({id:`labels-url-${label.id}`,field:'labels',fieldLabel:'Labels',operator:'is',values:[{id:label.id,label:label.name,color:label.color}]});const status=projectStatuses.find(item=>item.id===params.get('status'));if(status)fallback.push({id:`status-url-${status.id}`,field:'status',fieldLabel:'Status',operator:'is',values:[{id:status.name,label:status.name,color:status.color}]});return projectFiltersFromSavedView(sourceView,fallback.length?fallback:creatingView?readDraftFilters(draftFiltersKey):[]) })
   const visibleItems = useMemo(() => {
     let result = items.filter(item => projectFilters.every(filter => matchesProjectFilter(item, filter)))
     if (!insightFilter) return result
@@ -169,8 +178,9 @@ export function ProjectsPage({
   const [updatesProjectId, setUpdatesProjectId] = useState<string>()
   const [viewEditor, setViewEditor] = useState<'create' | 'edit' | undefined>(creatingView ? 'create' : editingView ? 'edit' : undefined)
   const [viewSaving, setViewSaving] = useState(false)
+  useEffect(() => { const onKey = (event: KeyboardEvent) => { if (!event.altKey || event.metaKey || event.ctrlKey || event.key.toLowerCase() !== 'v' || savedView || creatingView || viewEditor || (event.target as HTMLElement | null)?.closest('input,textarea,[contenteditable=true],[role=textbox]')) return; event.preventDefault(); setViewEditor('create') }; addEventListener('keydown', onKey); return () => removeEventListener('keydown', onKey) }, [creatingView, savedView, viewEditor])
   const projectById = useMemo(() => new Map(projects.map(project => [project.id, project])), [projects])
-  const projectLabels = useMemo(() => labelsForResource(labels, 'project'), [labels])
+  const projectLabels = useMemo(() => labelsForResource(labels, 'project', labelGroups), [labelGroups, labels])
   const projectLabelGroupNames = useMemo(() => new Map(labelGroups.filter(group => group.resourceType === 'project').map(group => [group.id, group.name])), [labelGroups])
   const availableProjectStatuses = useMemo(() => projectStatuses.length ? projectStatuses : uniqueStatuses(projects.map(project => project.status)), [projectStatuses, projects])
   const statusOptions = useMemo(() => availableProjectStatuses.map((status, index) => ({ color: status.color, label: status.name, shortcut: String(index + 1), statusType: status.type, value: status.name })), [availableProjectStatuses])
@@ -181,7 +191,7 @@ export function ProjectsPage({
     status: statusOptions,
     targetDate: targetDateOptions(),
   }), [projectLabelGroupNames, projectLabels, statusOptions, users])
-  const filterOptions = useMemo(() => projectFilterOptions(items, users, availableProjectStatuses), [availableProjectStatuses, items, users])
+  const filterOptions = useMemo(() => projectFilterOptions(items, users, availableProjectStatuses, projectLabels, teams), [availableProjectStatuses, items, projectLabels, teams, users])
   const saveTargets = useMemo<SavedViewTarget[]>(() => [
     { scope: 'personal', label: 'Personal' },
     { scope: 'workspace', label: 'Workspace' },
@@ -209,19 +219,28 @@ export function ProjectsPage({
   const projectAction = async (item: ProjectPageItem, action: ProjectAction) => {
     const project = projectById.get(item.id)
     if (!project) return
-    if (action === 'delete' && onDeleteProject && window.confirm(`Delete ${project.name}?`)) await onDeleteProject(project.id)
+    if (action === 'delete' && onDeleteProject && await confirmAction(`Delete ${project.name}?`,{confirmLabel:'Delete project'})) await onDeleteProject(project.id)
     if (action === 'copy') await navigator.clipboard?.writeText(project.name)
     if (action === 'comment') setUpdatesProjectId(project.id)
     if (action === 'rename' && onUpdateProject) {
-      const name = window.prompt('Rename project', project.name)?.trim()
+      const name = (await promptAction('Rename project', project.name))?.trim()
       if (name && name !== project.name) await onUpdateProject(project.id, { name })
     }
-    if (action === 'schedule') {
-      const schedule = window.prompt('Project update schedule', localStorage.getItem(`flow:project:${project.id}:update-schedule`) ?? 'Weekly')?.trim()
-      if (schedule) localStorage.setItem(`flow:project:${project.id}:update-schedule`, schedule)
+    if ((action === 'moveDown' || action === 'moveBottom') && onUpdateProject) {
+      const group = view.groups.flatMap(value => value.subgroups?.length ? value.subgroups : [value]).find(value => value.projects.some(candidate => candidate.id === item.id))
+      const ordered = [...(group?.projects ?? [])].sort((left, right) => (left.position ?? 0) - (right.position ?? 0))
+      const index = ordered.findIndex(candidate => candidate.id === item.id)
+      if (index >= 0) {
+        const [moved] = ordered.splice(index, 1)
+        ordered.splice(action === 'moveBottom' ? ordered.length : Math.min(index + 1, ordered.length), 0, moved)
+        await Promise.all(ordered.map((candidate, position) => candidate.position === position ? Promise.resolve() : onUpdateProject(candidate.id, { position })))
+      }
     }
-    if (action === 'initiatives' || action === 'dependencies') toast.info(`${action === 'initiatives' ? 'Initiatives' : 'Dependencies'} are managed from the project overview.`)
-    if (action === 'customerRequest') toast.info('Customer requests require the Flow integration.')
+    if (action === 'schedule' && onUpdateProject) {
+      const schedule = (await promptAction('Project update schedule', project.updateCadence,{description:'Use none, weekly, biweekly, or monthly.'}))?.trim().toLowerCase()
+      if (schedule && ['none', 'weekly', 'biweekly', 'monthly'].includes(schedule)) await onUpdateProject(project.id, { updateCadence: schedule as Project['updateCadence'] })
+    }
+    if (action === 'initiatives' || action === 'dependencies' || action === 'customerRequest') onOpenProject?.(project)
   }
 
   const create = async (draft: NewProjectDraft) => {
@@ -301,7 +320,7 @@ export function ProjectsPage({
       return
     }
     if (action === 'delete') {
-      if (!onDeleteProject || !window.confirm(`Delete ${selectedProjects.length} selected ${selectedProjects.length === 1 ? 'project' : 'projects'}?`)) return
+      if (!onDeleteProject || !await confirmAction(`Delete ${selectedProjects.length} selected ${selectedProjects.length === 1 ? 'project' : 'projects'}?`,{confirmLabel:'Delete'})) return
       await Promise.all(selectedProjects.map(project => onDeleteProject(project.id)))
       view.setSelectedIds([])
       return
@@ -366,9 +385,10 @@ export function ProjectsPage({
       onDuplicate={onDuplicateSavedView ? () => onDuplicateSavedView(savedView) : undefined}
       onUpdate={onUpdateSavedView ? input => { void onUpdateSavedView(savedView.id, input) } : undefined}
       onSetSubscriptionEvents={onSetSavedViewSubscriptionEvents ? events => { void onSetSavedViewSubscriptionEvents(savedView, events) } : undefined}
+      onShare={onShareSavedView ? () => { void onShareSavedView(savedView).then(path => { if (path) void navigator.clipboard.writeText(`${location.origin}${path}`) }) } : undefined}
       onCopy={() => { void navigator.clipboard.writeText(window.location.href) }}
       onExport={() => exportProjectsCsv(visibleItems, savedView.name)}
-      onDelete={() => { if (onDeleteSavedView && window.confirm(`Delete view "${savedView.name}"?`)) void onDeleteSavedView(savedView) }}
+      onDelete={() => { if (onDeleteSavedView) void confirmAction(`Delete view “${savedView.name}”?`,{confirmLabel:'Delete view'}).then(confirmed=>{if(confirmed)return onDeleteSavedView(savedView)}) }}
     />}
     viewEditor={viewEditor ? actions => <SavedViewEditor
       actions={creatingView ? undefined : actions}
@@ -441,6 +461,7 @@ export function ProjectsPage({
       labels={projectLabels.map(label => ({ id: label.id, label: label.name, color: label.color, groupId: label.groupId, groupLabel: label.groupId ? projectLabelGroupNames.get(label.groupId) : undefined }))}
       leads={users.map(user => ({ id: user.id, label: user.displayName }))}
       members={users.map(user => ({ id: user.id, label: user.displayName }))}
+      statuses={availableProjectStatuses.map(status=>({id:status.name,label:status.name,color:status.color,icon:<ProjectStatusGlyph color={status.color} name={status.name} type={status.type}/> }))}
       templates={projectTemplates.map(template => ({
         id: template.id,
         label: template.name,
@@ -483,6 +504,7 @@ function toPageItem(project: Project, href?: string, teams: Team[] = [], latestU
     milestone: project.summary && !project.description ? project.summary : undefined,
     name: project.name,
     priority: ({ 0: 'none', 1: 'urgent', 2: 'high', 3: 'medium', 4: 'low' } as const)[project.priority as 0 | 1 | 2 | 3 | 4] ?? 'none',
+    position: project.position,
     progress: Math.round(project.progress * 100),
     status: project.status.name,
     startDate: project.startDate ? formatMonth(project.startDate) : undefined,
@@ -578,14 +600,14 @@ function projectFilterFromSavedView(view?: SavedView): ProjectInsightFilter {
 }
 
 const PROJECT_FILTER_FIELDS: Record<string, ProjectFilterField> = {
-  Status: 'status', Priority: 'priority', Lead: 'lead', Members: 'members', Health: 'health', Dates: 'dates', Milestones: 'milestones', 'Specific project': 'project',
+  Status: 'status', Priority: 'priority', Lead: 'lead', Members: 'members', Health: 'health', Dates: 'dates', Milestones: 'milestones', Labels: 'labels', Teams: 'teams', 'Specific project': 'project',
 }
 
-function projectFilterOptions(items: ProjectPageItem[], users: User[], projectStatuses: ProjectStatus[]): Partial<Record<ProjectFilterField, ProjectFilterOption[]>> {
+function projectFilterOptions(items: ProjectPageItem[], users: User[], projectStatuses: ProjectStatus[], labels: IssueLabel[], teams: Team[]): Partial<Record<ProjectFilterField, ProjectFilterOption[]>> {
   const count = (field: ProjectFilterField, id: string) => items.filter(item => projectValueMatches(item, field, id)).length
   const values = (field: ProjectFilterField, definitions: ProjectFilterOption[]) => definitions.map(option => ({ ...option, count: count(field, option.id) }))
   return {
-    status: values('status', (projectStatuses.length ? projectStatuses.map(status => ({ id: status.name, label: status.name, color: status.color })) : uniqueFilterOptions(items.map(item => ({ id: item.status, label: item.status, color: statusColor(item.status) })))).sort(statusOptionOrder)),
+    status: values('status', projectStatuses.length ? projectStatuses.map(status => ({ id: status.name, label: status.name, color: status.color })) : uniqueFilterOptions(items.map(item => ({ id: item.status, label: item.status, color: statusColor(item.status) }))).sort(statusOptionOrder)),
     priority: values('priority', [
       { id: 'urgent', label: 'Urgent', color: '#e56a68' }, { id: 'high', label: 'High', color: '#c8c8cb' }, { id: 'medium', label: 'Medium', color: '#a7a7ac' }, { id: 'low', label: 'Low', color: '#77777c' }, { id: 'none', label: 'No priority', color: '#68686d' },
     ]),
@@ -594,6 +616,8 @@ function projectFilterOptions(items: ProjectPageItem[], users: User[], projectSt
     health: values('health', [{ id: 'on-track', label: 'On track', color: '#4d9b5d' }, { id: 'at-risk', label: 'At risk', color: '#d3a036' }, { id: 'off-track', label: 'Off track', color: '#d8605f' }, { id: 'no-update', label: 'No update', color: '#57575c' }]),
     dates: values('dates', [{ id: 'has-target', label: 'Has target date' }, { id: 'no-target', label: 'No target date' }, { id: 'overdue', label: 'Target date is overdue', color: '#d8605f' }]),
     milestones: values('milestones', uniqueFilterOptions(items.filter(item => item.milestone).map(item => ({ id: item.milestone!, label: item.milestone! })))),
+    labels: values('labels', labels.map(label => ({ id: label.id, label: label.name, color: label.color }))),
+    teams: values('teams', teams.map(team => ({ id: team.id, label: team.name, color: team.color }))),
     project: items.map(item => ({ id: item.id, label: item.name, color: item.color, count: 1 })),
   }
 }
@@ -616,6 +640,8 @@ function projectValueMatches(item: ProjectPageItem, field: ProjectFilterField, v
   if (field === 'health') return item.health === value
   if (field === 'project') return item.id === value
   if (field === 'milestones') return item.milestone === value
+  if (field === 'labels') return item.labelIds?.includes(value) ?? false
+  if (field === 'teams') return item.teamIds?.includes(value) ?? false
   if (field === 'dates') {
     if (value === 'has-target') return Boolean(item.rawTargetDate)
     if (value === 'no-target') return !item.rawTargetDate

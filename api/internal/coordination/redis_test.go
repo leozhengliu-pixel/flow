@@ -121,6 +121,29 @@ func TestRedisWorkspaceLockSerializesClients(t *testing.T) {
 	}
 }
 
+func TestRedisLeaderLockElectsSingleClient(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	first, second := openTestRedis(t, redisServer.Addr()), openTestRedis(t, redisServer.Addr())
+	defer first.Close()
+	defer second.Close()
+	entered, release := make(chan struct{}), make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		_, err := first.WithLeaderLock(t.Context(), "deliveries", func() error { close(entered); <-release; return nil })
+		done <- err
+	}()
+	<-entered
+	secondRan := false
+	acquired, err := second.WithLeaderLock(t.Context(), "deliveries", func() error { secondRan = true; return nil })
+	if err != nil || acquired || secondRan {
+		t.Fatalf("second leader = acquired %v ran %v err %v", acquired, secondRan, err)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestClusterModeBuildsClusterClient(t *testing.T) {
 	client, err := newClient(Config{Mode: "cluster", Addrs: []string{"redis-1:6379", "redis-2:6379"}})
 	if err != nil {

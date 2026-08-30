@@ -2,20 +2,26 @@ import { Component, useEffect, useMemo, useState, type DragEvent, type ErrorInfo
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Line, type LineCustomSvgLayerProps, type SliceTooltipProps } from '@nivo/line'
-import { Blocks, ChevronDown, ChevronRight, Network, OctagonMinus, Plus, Trash2 } from 'lucide-react'
+import { Blocks, ChevronDown, ChevronRight, Flag, MoreHorizontal, OctagonMinus, Plus, X } from 'lucide-react'
 import { addDays, differenceInCalendarDays, format, formatDistanceToNowStrict, startOfDay } from 'date-fns'
 import { toast } from 'sonner'
 import { Avatar } from '@/components/issue/issue-row'
 import { CalendarIcon, LabelIcon, MembersIcon, NoAssigneeIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, SlackIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { PropertyMenu } from '@/components/property/property-menu'
+import { confirmAction } from '@/components/ui/action-dialog-service'
 import { ProjectDatePicker } from '@/components/projects-page/project-target-date-picker'
-import type { Issue, IssueLabel, LabelGroup, Project, ProjectMilestone, ProjectStatus, ProjectUpdate, Team, User } from '@/types/flow'
+import type { Initiative, IntegrationConnection, Issue, IssueLabel, LabelGroup, Project, ProjectMilestone, ProjectStatus, ProjectUpdate, Team, User } from '@/types/flow'
 import type { ProjectMutationInput } from '@/components/projects-page/projects-page'
 import type { ProjectDetailTab, ProjectDetailProps } from './project-detail-types'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import { PRIORITY_LABELS } from './project-detail-types'
+import { toggleGroupedLabelIds } from '@/lib/labels'
+import { useI18n } from '@/i18n/i18n'
+import { formatProjectPropertyDate, initiativeStatusLabel, inviteProjectMember } from './project-detail-helpers'
 
-export function ProjectDetailsSidebar({ labelGroups, labels, onConvertMilestone, onCreateMilestone, onDeleteMilestone, onMoveMilestone, onOpenIssueFilter, onOpenMilestoneIssues, onReorderMilestones, onTabChange, onUpdate, onUpdateProject, onUpdateMilestone, project, projectIssues, projects, projectStatuses, projectUpdates, teams, users, viewer }: {
+export function ProjectDetailsSidebar({ initiatives, integrationConnections, labelGroups, labels, onConvertMilestone, onCreateMilestone, onDeleteMilestone, onMoveMilestone, onOpenIssueFilter, onOpenMilestoneIssues, onReorderMilestones, onTabChange, onUpdate, onUpdateProject, onUpdateMilestone, project, projectIssues, projects, projectStatuses, projectUpdates, teams, users, viewer }: {
+  initiatives: Initiative[]
+  integrationConnections: IntegrationConnection[]
   labelGroups: LabelGroup[]
   labels: IssueLabel[]
   onConvertMilestone: ProjectDetailProps['onConvertMilestone']
@@ -65,15 +71,12 @@ export function ProjectDetailsSidebar({ labelGroups, labels, onConvertMilestone,
   }
 
   return <aside aria-label="Project sidebar" className="project-details-sidebar">
-    <SidebarSection compact onToggle={() => setPropertiesOpen(value => !value)} open={propertiesOpen} title="Properties" action={<span className="project-details-sidebar__property-actions"><DependencyGraphButton project={project} projects={projects}/><ProjectDependencyMenu onUpdate={onUpdate} onUpdateProject={onUpdateProject} project={project} projects={projects} viewer={viewer}/></span> }>
-      <SidebarPropertiesBoundary><SidebarProperties labelGroups={labelGroups} labels={labels} onUpdate={onUpdate} project={project} projects={projects} projectStatuses={projectStatuses} teams={teams} users={users}/></SidebarPropertiesBoundary>
-      {(blockedByProjects.length > 0 || blockingProjects.length > 0) && <div className="project-details-sidebar__dependencies">
-        {blockedByProjects.map(item => <div key={`blocked-by-${item.id}`}><OctagonMinus className="project-details-sidebar__dependency-icon" size={14}/><small>Blocked by</small><span data-i18n-ignore>{item.name}</span><button aria-label={`Remove ${item.name}`} onClick={() => void onUpdate({ dependencyIds: (project.dependencyIds ?? []).filter(id => id !== item.id) })} type="button"><Trash2 size={11}/></button></div>)}
-        {blockingProjects.map(item => <div key={`blocking-${item.id}`}><Blocks className="project-details-sidebar__dependency-icon" size={14}/><small>Blocking</small><span data-i18n-ignore>{item.name}</span><button aria-label={`Remove ${item.name}`} onClick={() => void onUpdateProject(item.id, { dependencyIds: (item.dependencyIds ?? []).filter(id => id !== project.id) })} type="button"><Trash2 size={11}/></button></div>)}
-      </div>}
+    <SidebarSection compact onToggle={() => setPropertiesOpen(value => !value)} open={propertiesOpen} title="Properties" action={<ProjectDependencyMenu onUpdate={onUpdate} onUpdateProject={onUpdateProject} project={project} projects={projects} viewer={viewer}/> }>
+      <SidebarPropertiesBoundary><SidebarProperties initiatives={initiatives} integrationConnections={integrationConnections} labelGroups={labelGroups} labels={labels} onUpdate={onUpdate} project={project} projects={projects} projectStatuses={projectStatuses} teams={teams} users={users}/></SidebarPropertiesBoundary>
+      <ProjectDependencyRows blockedBy={blockedByProjects} blocking={blockingProjects} onUpdate={onUpdate} onUpdateProject={onUpdateProject} project={project}/>
     </SidebarSection>
 
-    <SidebarSection onToggle={() => setMilestonesOpen(value => !value)} open={milestonesOpen} title="Milestones" action={<button aria-label="Add milestone" data-project-milestone-add onClick={() => { setMilestonesOpen(true); setMilestoneEditor('new') }} type="button"><svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16"><use href="/flow-milestone-icons.svg?v=3#plus"/></svg></button>}>
+    <SidebarSection onToggle={() => setMilestonesOpen(value => !value)} open={milestonesOpen} title="Milestones" action={<button aria-label="Add milestone" data-project-milestone-add onClick={() => { setMilestonesOpen(true); setMilestoneEditor('new') }} type="button"><svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16"><use href="#plus"/></svg></button>}>
       <div className="project-details-sidebar__milestones">
         {(project.milestones ?? []).map((milestone) => {
           const stats = milestoneStats(projectIssues, milestone.id)
@@ -107,15 +110,43 @@ export function ProjectDetailsSidebar({ labelGroups, labels, onConvertMilestone,
   </aside>
 }
 
-function DependencyGraphButton({ project, projects }: { project: Project; projects: Project[] }) {
-  const [open, setOpen] = useState(false)
-  const related = projects.filter(item => item.id === project.id || (project.dependencyIds ?? []).includes(item.id) || (item.dependencyIds ?? []).includes(project.id))
-  if (related.length < 2) return null
-  const width = 520, height = Math.max(180, related.length * 64)
-  const currentIndex = related.findIndex(item => item.id === project.id)
-  const positions = related.map((item, index) => ({ item, x: index === currentIndex ? 260 : index < currentIndex ? 130 : 390, y: 40 + (index === currentIndex ? 0 : (index < currentIndex ? index : index - 1)) * 54 }))
-  const pos = new Map(positions.map(value => [value.item.id, value]))
-  return <Dialog.Root onOpenChange={setOpen} open={open}><Dialog.Trigger asChild><button aria-label="Open dependency graph" className="project-details-sidebar__dependency-graph" title="Open dependency graph" type="button"><Network size={13}/></button></Dialog.Trigger><Dialog.Portal><Dialog.Overlay className="project-dependency-graph__overlay"/><Dialog.Content aria-label="Project dependency graph" className="project-dependency-graph"><Dialog.Title>Dependency graph</Dialog.Title><Dialog.Description>Dependencies for <span data-i18n-ignore>{project.name}</span></Dialog.Description><svg aria-label="Dependency graph" className="project-dependency-graph__canvas" role="img" viewBox={`0 0 ${width} ${height}`}>{related.flatMap(item => (item.dependencyIds ?? []).filter(id => pos.has(id)).map(id => { const from = pos.get(id)!; const to = pos.get(item.id)!; return <line key={`${id}-${item.id}`} markerEnd="url(#dependency-arrow)" stroke="var(--theme-border-strong)" strokeWidth="1.5" x1={from.x} x2={to.x} y1={from.y} y2={to.y}/> }))}<defs><marker id="dependency-arrow" markerHeight="6" markerWidth="6" orient="auto" refX="5" refY="3"><path d="M0,0 L6,3 L0,6 z" fill="var(--theme-text-tertiary)"/></marker></defs>{positions.map(({ item, x, y }) => <g key={item.id}><rect fill={item.id === project.id ? 'var(--theme-surface-active)' : 'var(--theme-surface-1)'} height="30" rx="7" stroke="var(--theme-border-strong)" width="150" x={x - 75} y={y - 15}/><text dominantBaseline="middle" fill="var(--theme-text-primary)" fontSize="12" textAnchor="middle" x={x} y={y}>{item.name.slice(0, 22)}</text></g>)}</svg><Dialog.Close asChild><button className="project-dependency-graph__close" type="button">Close</button></Dialog.Close></Dialog.Content></Dialog.Portal></Dialog.Root>
+function ProjectDependencyRows({ blockedBy, blocking, onUpdate, onUpdateProject, project }: {
+  blockedBy: Project[]
+  blocking: Project[]
+  onUpdate: (input: ProjectMutationInput) => Promise<void>
+  onUpdateProject: ProjectDetailProps['onUpdate']
+  project: Project
+}) {
+  if (!blockedBy.length && !blocking.length) return null
+  const workspaceKey = window.location.pathname.split('/').filter(Boolean)[0] ?? ''
+  const remove = async (item: Project, direction: ProjectDependencyDirection) => {
+    if (direction === 'blockedBy') await onUpdate({ dependencyIds: (project.dependencyIds ?? []).filter(id => id !== item.id) })
+    else await onUpdateProject(item.id, { dependencyIds: (item.dependencyIds ?? []).filter(id => id !== project.id) })
+  }
+  const changeDirection = async (item: Project, direction: ProjectDependencyDirection) => {
+    try {
+      if (direction === 'blockedBy') {
+        await onUpdateProject(item.id, { dependencyIds: [...new Set([...(item.dependencyIds ?? []), project.id])] })
+        await onUpdate({ dependencyIds: (project.dependencyIds ?? []).filter(id => id !== item.id) })
+      } else {
+        await onUpdate({ dependencyIds: [...new Set([...(project.dependencyIds ?? []), item.id])] })
+        await onUpdateProject(item.id, { dependencyIds: (item.dependencyIds ?? []).filter(id => id !== project.id) })
+      }
+    } catch (error) {
+      toast.error('Could not update project dependency', { description: error instanceof Error ? error.message : undefined })
+    }
+  }
+  const group = (label: 'Blocked by'|'Blocking', items: Project[], direction: ProjectDependencyDirection) => items.length ? <section className="project-dependency-group">
+    <h4>{label}</h4>
+    {items.map(item => <div className="project-dependency-row" key={`${direction}-${item.id}`}>
+      <a aria-label={item.name} href={`/${workspaceKey}/project/${item.slugId}/overview`}><ProjectIcon size={16} style={{ color: item.color }}/><span data-i18n-ignore>{item.name}</span></a>
+      <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Menu" className="project-dependency-row__menu-trigger" type="button"><MoreHorizontal size={12}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className="project-detail-page__menu project-dependency-row__menu" collisionPadding={10} onCloseAutoFocus={event => event.preventDefault()} sideOffset={-2}>
+        <DropdownMenu.Item onSelect={() => void changeDirection(item, direction)}><ProjectIcon size={16}/><span>{direction === 'blockedBy' ? 'Change to blocking' : 'Change to blocked by'}</span></DropdownMenu.Item>
+        <DropdownMenu.Item onSelect={() => void remove(item, direction)}><X size={16}/><span>Remove dependency</span></DropdownMenu.Item>
+      </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+    </div>)}
+  </section> : null
+  return <div className="project-details-sidebar__dependencies">{group('Blocked by', blockedBy, 'blockedBy')}{group('Blocking', blocking, 'blocking')}</div>
 }
 
 function MilestoneRow({ disabled, dragging, dropEdge, milestone, onConvert, onDelete, onDragEnd, onDragOver, onDragStart, onDrop, onEdit, onMove, onOpenIssues, onUpdateDate, projects, stats }: {
@@ -157,7 +188,7 @@ function MilestoneRow({ disabled, dragging, dropEdge, milestone, onConvert, onDe
       </DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
       <MilestoneMenuItem icon="project" label="Convert to project" onSelect={() => void onConvert()}/>
       <DropdownMenu.Separator/>
-      <MilestoneMenuItem className="is-danger" end="⌘ ⌫" icon="trash" label="Delete…" onSelect={() => { if (window.confirm(`Delete “${milestone.name}”?`)) void onDelete() }}/>
+      <MilestoneMenuItem className="is-danger" end="⌘ ⌫" icon="trash" label="Delete…" onSelect={() => { void confirmAction(`Delete “${milestone.name}”?`,{confirmLabel:'Delete milestone'}).then(confirmed=>{if(confirmed)return onDelete()}) }}/>
     </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
     <MilestoneDateDialog milestone={milestone} onOpenChange={setDateDialogOpen} onSubmit={onUpdateDate} open={dateDialogOpen}/>
   </div>
@@ -166,7 +197,7 @@ function MilestoneRow({ disabled, dragging, dropEdge, milestone, onConvert, onDe
 type MilestoneMenuIconName = 'calendar'|'chevron-right'|'close'|'copy'|'edit'|'issues'|'link'|'link-name'|'milestone'|'more-horizontal'|'project'|'trash'
 
 function MilestoneMenuIcon({ name }: { name: MilestoneMenuIconName }) {
-  return <svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16"><use href={`/flow-milestone-icons.svg?v=3#${name}`}/></svg>
+  return <svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16"><use href={`#${name}`}/></svg>
 }
 
 function MilestoneMenuItem({ className = '', end, icon, label, onSelect }: { className?: string; end?: string; icon: MilestoneMenuIconName; label: string; onSelect: () => void }) {
@@ -181,9 +212,9 @@ function MilestoneProgressIcon({ progress = 0, unassigned = false }: { progress?
   const clamped = Math.max(0, Math.min(100, progress))
   const pathLength = 31
   const completedLength = pathLength * clamped / 100
-  if (unassigned || clamped === 0) return <svg aria-hidden="true" className="project-details-sidebar__milestone-icon is-unassigned" height="16" viewBox="0 0 16 16" width="16"><use href="/flow-milestone-icons.svg?v=3#milestone-shape"/></svg>
-  if (clamped === 100) return <svg aria-hidden="true" className="project-details-sidebar__milestone-icon is-complete" height="16" viewBox="0 0 16 16" width="16"><use href="/flow-milestone-icons.svg?v=3#milestone-shape"/></svg>
-  return <svg aria-hidden="true" className="project-details-sidebar__milestone-icon is-progress" height="16" viewBox="0 0 16 16" width="16"><use className="is-track" href="/flow-milestone-icons.svg?v=3#milestone-shape"/><use className="is-value" href="/flow-milestone-icons.svg?v=3#milestone-shape" strokeDasharray={`${completedLength} ${pathLength - completedLength}`}/></svg>
+  if (unassigned || clamped === 0) return <svg aria-hidden="true" className="project-details-sidebar__milestone-icon is-unassigned" height="16" viewBox="0 0 16 16" width="16"><use href="#milestone-shape"/></svg>
+  if (clamped === 100) return <svg aria-hidden="true" className="project-details-sidebar__milestone-icon is-complete" height="16" viewBox="0 0 16 16" width="16"><use href="#milestone-shape"/></svg>
+  return <svg aria-hidden="true" className="project-details-sidebar__milestone-icon is-progress" height="16" viewBox="0 0 16 16" width="16"><use className="is-track" href="#milestone-shape"/><use className="is-value" href="#milestone-shape" strokeDasharray={`${completedLength} ${pathLength - completedLength}`}/></svg>
 }
 
 function SidebarSection({ action, children, compact, onToggle, open, title }: { action?: ReactNode; children: ReactNode; compact?: boolean; onToggle: () => void; open: boolean; title: string }) {
@@ -258,25 +289,43 @@ function DependencyProjectPicker({ direction, onUpdate, onUpdateProject, project
   </>
 }
 
-function SidebarProperties({ labelGroups, labels, onUpdate, project, projects, projectStatuses, teams, users }: { labelGroups: LabelGroup[]; labels: IssueLabel[]; onUpdate: (input: ProjectMutationInput) => Promise<void>; project: Project; projects: Project[]; projectStatuses: ProjectStatus[]; teams: Team[]; users: User[] }) {
+function SidebarProperties({ initiatives, integrationConnections, labelGroups, labels, onUpdate, project, projects, projectStatuses, teams, users }: { initiatives: Initiative[]; integrationConnections: IntegrationConnection[]; labelGroups: LabelGroup[]; labels: IssueLabel[]; onUpdate: (input: ProjectMutationInput) => Promise<void>; project: Project; projects: Project[]; projectStatuses: ProjectStatus[]; teams: Team[]; users: User[] }) {
+  const { formatDate, locale } = useI18n()
   const statuses = uniqueById(projectStatuses.length ? projectStatuses : projects.map(item => item.status))
   const groupNames = new Map(labelGroups.filter(group => group.resourceType === 'project').map(group => [group.id, group.name]))
   const memberIds = project.memberIds ?? []
   const teamIds = project.teamIds ?? []
   const labelIds = (project.labelIds ?? []).filter(id => labels.some(label => label.id === id))
   const members = users.filter(user => memberIds.includes(user.id))
+  const selectedMemberIds = [...new Set([...memberIds, ...(project.lead?.id ? [project.lead.id] : [])])]
   const selectedTeams = teams.filter(team => teamIds.includes(team.id))
   const selectedLabels = labels.filter(label => labelIds.includes(label.id))
+  const selectedInitiatives = project.initiatives ?? []
+  const toggleLabel = (id: string) => { void onUpdate({ labelIds: toggleGroupedLabelIds(labelIds, id, labels) }) }
   return <div className="project-details-sidebar__properties">
-    <div className="project-details-sidebar__property"><span className="project-details-sidebar__property-label">Status</span><PropertyMenu label="Status" value={project.status.name} selectedId={project.status.id} triggerClassName="project-details-sidebar__property-trigger is-status" surfaceClassName="project-details-sidebar__property-menu is-standard" side="left" alignOffset={-4} trigger={<><ProjectStatusIcon color={project.status.color} name={project.status.name} size={16} type={project.status.type}/><span>{project.status.name}</span></>} icon={<ProjectStatusIcon color={project.status.color} name={project.status.name} size={14} type={project.status.type}/>} options={statuses.map((status, index) => ({ id: status.id, label: status.name, icon: <ProjectStatusIcon color={status.color} name={status.name} size={16} type={status.type}/>, shortcut: String(index + 1) }))} onChange={statusId => void onUpdate({ statusId })}/></div>
-    <div className="project-details-sidebar__property"><span className="project-details-sidebar__property-label">Priority</span><PropertyMenu label="Priority" value={project.priorityLabel} selectedId={String(project.priority)} triggerClassName="project-details-sidebar__property-trigger" surfaceClassName="project-details-sidebar__property-menu is-standard" side="left" alignOffset={-4} trigger={<><PriorityIcon priority={project.priority} size={16}/><span>{project.priorityLabel}</span></>} icon={<PriorityIcon priority={project.priority} size={14}/>} options={[0,1,2,3,4].map(priority => ({ id: String(priority), label: PRIORITY_LABELS[priority], icon: <PriorityIcon priority={priority} size={16}/>, shortcut: String(priority) }))} onChange={priority => void onUpdate({ priority: Number(priority) })}/></div>
-    <div className="project-details-sidebar__property"><span className="project-details-sidebar__property-label">Lead</span><PropertyMenu label="Lead" value={project.lead?.displayName ?? 'Lead'} valueIsEntityName={Boolean(project.lead)} selectedId={project.lead?.id ?? ''} triggerClassName="project-details-sidebar__property-trigger" surfaceClassName="project-details-sidebar__property-menu is-standard" side="left" alignOffset={-4} trigger={<>{project.lead ? <Avatar name={project.lead.displayName}/> : <NoAssigneeIcon size={16}/>}<span data-i18n-ignore={project.lead ? true : undefined}>{project.lead?.displayName ?? 'Lead'}</span></>} icon={project.lead ? <Avatar name={project.lead.displayName}/> : <NoAssigneeIcon size={14}/>} options={[{ id: '', label: 'No lead', icon: <NoAssigneeIcon size={16}/> }, ...users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, icon: <Avatar name={user.displayName}/>, i18nIgnore: true }))]} onChange={leadId => void onUpdate({ leadId })}/></div>
-    <div className="project-details-sidebar__property"><span className="project-details-sidebar__property-label">Members</span><PropertyMenu multiple label="Members" value={members.length === 1 ? members[0].displayName : members.length ? `${members.length} members` : 'Add member'} valueIsEntityName={members.length === 1} selectedIds={memberIds} triggerClassName="project-details-sidebar__property-trigger is-members" surfaceClassName="project-details-sidebar__property-menu is-members" side="left" alignOffset={-4} trigger={<>{members[0] ? <Avatar name={members[0].displayName}/> : <MembersIcon size={16}/>}<span data-i18n-ignore={members.length === 1 ? true : undefined}>{members.length === 1 ? members[0].displayName : members.length ? `${members.length} members` : 'Add member'}</span></>} icon={members[0] ? <Avatar name={members[0].displayName}/> : <MembersIcon size={14}/>} options={users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, icon: <Avatar name={user.displayName}/>, i18nIgnore: true }))} onChange={memberId => void onUpdate({ memberIds: toggleId(memberIds, memberId) })}/></div>
-    <div className="project-details-sidebar__property-dates"><span>Dates</span><div><ProjectDatePicker align="start" contentClassName="project-details-sidebar__date-menu" label="Start date" onChange={startDate => void onUpdate({ startDate })} side="left" value={project.startDate}><CalendarIcon size={14} variant="start"/><span>{formatProjectDate(project.startDate, 'Start')}</span></ProjectDatePicker><span>→</span><ProjectDatePicker align="start" contentClassName="project-details-sidebar__date-menu" label="Target date" onChange={targetDate => void onUpdate({ targetDate })} side="left" value={project.targetDate}><CalendarIcon size={14}/><span>{formatProjectDate(project.targetDate, 'Target')}</span></ProjectDatePicker></div></div>
-    <div className="project-details-sidebar__property"><span className="project-details-sidebar__property-label">Teams</span><PropertyMenu multiple label="Teams" value={selectedTeams.map(team => team.name).join(', ') || 'Add team'} valueIsEntityName={selectedTeams.length > 0} selectedIds={teamIds} triggerClassName="project-details-sidebar__property-trigger" surfaceClassName="project-details-sidebar__property-menu is-members" side="left" alignOffset={-4} trigger={<><TeamIcon size={16}/><span data-i18n-ignore={selectedTeams.length ? true : undefined}>{selectedTeams.map(team => team.name).join(', ') || 'Add team'}</span></>} icon={<TeamIcon size={14}/>} options={teams.map(team => ({ id: team.id, label: team.name, color: team.color, icon: <TeamIcon size={16}/>, i18nIgnore: true }))} onChange={teamId => void onUpdate({ teamIds: toggleId(teamIds, teamId) })}/></div>
-    <div className="project-details-sidebar__property"><span className="project-details-sidebar__property-label">Slack</span><button aria-disabled="true" className="project-details-sidebar__property-trigger" disabled title="Connect Slack in workspace settings first" type="button"><SlackIcon size={16}/><span>Slack channel</span></button></div>
-    <div className="project-details-sidebar__property"><span className="project-details-sidebar__property-label">Labels</span><PropertyMenu multiple label="Labels" value={selectedLabels.map(label => label.name).join(', ') || 'Add label'} valueIsEntityName={selectedLabels.length > 0} selectedIds={labelIds} triggerClassName="project-details-sidebar__property-trigger is-labels" surfaceClassName="project-details-sidebar__property-menu is-labels" side="left" alignOffset={-4} trigger={<><LabelIcon size={16}/><span data-i18n-ignore={selectedLabels.length ? true : undefined}>{selectedLabels.map(label => label.name).join(', ') || 'Add label'}</span></>} icon={<LabelIcon size={14}/>} options={labels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel: label.groupId ? groupNames.get(label.groupId) : undefined, i18nIgnore: true }))} onChange={labelId => void onUpdate({ labelIds: toggleId(labelIds, labelId) })}/></div>
+    <div className="project-details-sidebar__property"><span className="project-details-sidebar__property-label">Status</span><PropertyMenu label="Status" value={project.status.name} selectedId={project.status.id} triggerClassName="project-details-sidebar__property-trigger is-status" surfaceClassName="project-details-sidebar__property-menu is-standard" side="left" alignOffset={-4} searchPlaceholder="Change status…" searchShortcut="P, then S" trigger={<><ProjectStatusIcon color={project.status.color} name={project.status.name} size={16} type={project.status.type}/><span>{project.status.name}</span></>} icon={<ProjectStatusIcon color={project.status.color} name={project.status.name} size={14} type={project.status.type}/>} options={statuses.map((status, index) => ({ id: status.id, label: status.name, icon: <ProjectStatusIcon color={status.color} name={status.name} size={16} type={status.type}/>, shortcut: String(index + 1) }))} onChange={statusId => void onUpdate({ statusId })}/></div>
+    <div className="project-details-sidebar__property"><span className="project-details-sidebar__property-label">Priority</span><PropertyMenu label="Priority" value={project.priorityLabel} selectedId={String(project.priority)} triggerClassName="project-details-sidebar__property-trigger" surfaceClassName="project-details-sidebar__property-menu is-standard" side="left" alignOffset={-4} searchPlaceholder="Change priority…" searchShortcut="P, then P" trigger={<><PriorityIcon priority={project.priority} size={16}/><span>{project.priorityLabel}</span></>} icon={<PriorityIcon priority={project.priority} size={14}/>} options={[0,1,2,3,4].map(priority => ({ id: String(priority), label: PRIORITY_LABELS[priority], icon: <PriorityIcon priority={priority} size={16}/>, shortcut: String(priority) }))} onChange={priority => void onUpdate({ priority: Number(priority) })}/></div>
+    <div className="project-details-sidebar__property"><span className="project-details-sidebar__property-label">Lead</span><PropertyMenu label="Lead" value={project.lead?.displayName ?? 'Lead'} valueIsEntityName={Boolean(project.lead)} selectedId={project.lead?.id ?? ''} triggerClassName="project-details-sidebar__property-trigger" surfaceClassName="project-details-sidebar__property-menu is-standard" side="left" alignOffset={-4} searchPlaceholder="Change lead…" searchShortcut="P, then A" trigger={<>{project.lead ? <Avatar name={project.lead.displayName}/> : <NoAssigneeIcon size={16}/>}<span data-i18n-ignore={project.lead ? true : undefined}>{project.lead?.displayName ?? 'Lead'}</span></>} icon={project.lead ? <Avatar name={project.lead.displayName}/> : <NoAssigneeIcon size={14}/>} options={[{ id: '', label: 'No lead', icon: <NoAssigneeIcon size={16}/>, shortcut: '0' }, ...users.map(user => ({ id: user.id, label: user.displayName, icon: <Avatar name={user.displayName}/>, groupLabel: user.id === project.lead?.id ? undefined : 'Users from the project team', end: user.active ? undefined : 'Invited', i18nIgnore: true })), { id: '__invite-project-member__', label: 'Invite and add…', icon: <Plus size={14}/>, groupLabel: 'New user' }]} onChange={leadId => leadId === '__invite-project-member__' ? inviteProjectMember() : void onUpdate({ leadId })}/></div>
+    <div className="project-details-sidebar__property"><span className="project-details-sidebar__property-label">Members</span><PropertyMenu multiple label="Members" value={members.length === 1 ? members[0].displayName : members.length ? `${members.length} members` : 'Add member'} valueIsEntityName={members.length === 1} selectedIds={selectedMemberIds} triggerClassName="project-details-sidebar__property-trigger is-members" surfaceClassName="project-details-sidebar__property-menu is-members" side="left" alignOffset={-4} searchPlaceholder="Change members…" searchShortcut="P, then M" trigger={<>{members[0] ? <Avatar name={members[0].displayName}/> : <MembersIcon size={16}/>}<span data-i18n-ignore={members.length === 1 ? true : undefined}>{members.length === 1 ? members[0].displayName : members.length ? `${members.length} members` : 'Add member'}</span></>} icon={members[0] ? <Avatar name={members[0].displayName}/> : <MembersIcon size={14}/>} options={[...users.map(user => ({ id: user.id, label: user.displayName, icon: <Avatar name={user.displayName}/>, groupLabel: selectedMemberIds.includes(user.id) ? undefined : 'Users from the project team', end: project.lead?.id === user.id ? 'Project lead' : user.active ? undefined : 'Invited', i18nIgnore: true })), { id: '__invite-project-member__', label: 'Invite and add…', icon: <Plus size={14}/>, groupLabel: 'New user' }]} onChange={memberId => { if (memberId === '__invite-project-member__') { inviteProjectMember(); return } if (memberId === project.lead?.id) return; void onUpdate({ memberIds: toggleId(memberIds, memberId) }) }}/></div>
+    <div className="project-details-sidebar__property-dates"><span>Dates</span><div><ProjectDatePicker align="start" contentClassName="project-details-sidebar__date-menu" label="Start date" max={project.targetDate} onChange={(startDate, startDateResolution) => void onUpdate({ startDate, startDateResolution: startDateResolution ?? '' })} resolution={project.startDateResolution} side="left" value={project.startDate}><CalendarIcon size={14} variant="start"/><span>{formatProjectDate(project.startDate, project.startDateResolution, 'Start', locale, formatDate)}</span></ProjectDatePicker><span>→</span><ProjectDatePicker align="start" contentClassName="project-details-sidebar__date-menu" label="Target date" min={project.startDate} onChange={(targetDate, targetDateResolution) => void onUpdate({ targetDate, targetDateResolution: targetDateResolution ?? '' })} resolution={project.targetDateResolution} side="left" value={project.targetDate}><CalendarIcon size={14}/><span>{formatProjectDate(project.targetDate, project.targetDateResolution, 'Target', locale, formatDate)}</span></ProjectDatePicker></div></div>
+    <div className="project-details-sidebar__property"><span className="project-details-sidebar__property-label">Teams</span>{teams.length===1?<button className="project-details-sidebar__property-trigger" disabled type="button"><TeamIcon size={16}/><span data-i18n-ignore>{selectedTeams[0]?.name??teams[0].name}</span></button>:<PropertyMenu multiple label="Teams" value={selectedTeams.map(team => team.name).join(', ') || 'Add team'} valueIsEntityName={selectedTeams.length > 0} selectedIds={teamIds} triggerClassName="project-details-sidebar__property-trigger" surfaceClassName="project-details-sidebar__property-menu is-members" side="left" alignOffset={-4} searchPlaceholder="Change teams…" trigger={<><TeamIcon size={16}/><span data-i18n-ignore={selectedTeams.length ? true : undefined}>{selectedTeams.map(team => team.name).join(', ') || 'Add team'}</span></>} icon={<TeamIcon size={14}/>} options={teams.map(team => ({ id: team.id, label: team.name, color: team.color, icon: <TeamIcon size={16}/>, i18nIgnore: true }))} onChange={teamId => { if (teamIds.includes(teamId)&&teamIds.length===1)return; void onUpdate({ teamIds: toggleId(teamIds, teamId) }) }}/>}</div>
+    <ProjectSlackMenu integrationConnections={integrationConnections} onUpdate={onUpdate} project={project}/>
+    <div className="project-details-sidebar__property"><span className="project-details-sidebar__property-label">Initiatives</span><PropertyMenu hideSearch multiple label="Initiatives" value={selectedInitiatives.length===1?initiatives.find(item=>item.id===selectedInitiatives[0])?.name??'No initiative':selectedInitiatives.length?`${selectedInitiatives.length} initiatives`:'No initiative'} valueIsEntityName={selectedInitiatives.length===1} selectedIds={selectedInitiatives} triggerClassName="project-details-sidebar__property-trigger" surfaceClassName="project-details-sidebar__property-menu is-members is-initiatives" side="left" alignOffset={-4} searchPlaceholder="Change initiatives…" searchShortcut="P, then N" trigger={<><Flag size={16}/><span data-i18n-ignore={selectedInitiatives.length===1||undefined}>{selectedInitiatives.length===1?initiatives.find(item=>item.id===selectedInitiatives[0])?.name??'No initiative':selectedInitiatives.length?`${selectedInitiatives.length} initiatives`:'No initiative'}</span></>} icon={<Flag size={14}/>} options={initiatives.map(item=>({id:item.id,label:item.name,icon:<Flag size={16}/>,groupLabel:initiativeStatusLabel(item.status),i18nIgnore:true}))} onChange={initiativeId=>void onUpdate({initiatives:toggleId(selectedInitiatives,initiativeId)})}/></div>
+    <div className="project-details-sidebar__property"><span className="project-details-sidebar__property-label">Labels</span><PropertyMenu multiple label="Labels" value={selectedLabels.map(label => label.name).join(', ') || 'Add label'} valueIsEntityName={selectedLabels.length > 0} selectedIds={labelIds} triggerClassName="project-details-sidebar__property-trigger is-labels" surfaceClassName="project-details-sidebar__property-menu is-labels" side="left" alignOffset={-4} searchPlaceholder="Change labels…" searchShortcut="P, then L" showGroupHeadings={false} trigger={<><LabelIcon size={16}/><span data-i18n-ignore={selectedLabels.length ? true : undefined}>{selectedLabels.map(label => label.name).join(', ') || 'Add label'}</span></>} icon={<LabelIcon size={14}/>} options={labels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel: label.groupId ? groupNames.get(label.groupId) : undefined, i18nIgnore: true }))} onChange={toggleLabel}/></div>
   </div>
+}
+
+function ProjectSlackMenu({ integrationConnections, onUpdate, project }: { integrationConnections: IntegrationConnection[]; onUpdate: (input: ProjectMutationInput) => Promise<void>; project: Project }) {
+  const channels = [...new Set(integrationConnections.filter(connection => connection.provider.toLowerCase() === 'slack' && connection.status === 'connected').flatMap(connection => connection.channels))]
+  const openIntegrations = () => {
+    const workspace = location.pathname.split('/').filter(Boolean)[0]
+    if (workspace) location.assign(`/${workspace}/settings/integrations`)
+  }
+  return <div className="project-details-sidebar__property"><span className="project-details-sidebar__property-label">Slack</span><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Slack channel" className="project-details-sidebar__property-trigger" type="button"><SlackIcon size={16}/><span data-i18n-ignore={project.slackChannelName ? true : undefined}>{project.slackChannelName ? `#${project.slackChannelName}` : 'Slack channel'}</span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="start" alignOffset={-4} className="project-detail-page__menu project-details-sidebar__slack-menu" side="left" sideOffset={4}>
+    {channels.length ? channels.map(channel => <DropdownMenu.CheckboxItem checked={project.slackChannelId === channel} key={channel} onCheckedChange={() => void onUpdate({ slackChannelId: channel, slackChannelName: channel })}><SlackIcon size={16}/><span data-i18n-ignore>{channel}</span>{project.slackChannelId === channel && <CheckboxMark/>}</DropdownMenu.CheckboxItem>) : <DropdownMenu.Item onSelect={openIntegrations}><SlackIcon size={16}/><span>Connect channel</span></DropdownMenu.Item>}
+    {project.slackChannelId && <DropdownMenu.Item onSelect={() => void onUpdate({ slackChannelId: '', slackChannelName: '' })}><X size={16}/><span>Disconnect channel</span></DropdownMenu.Item>}
+    <DropdownMenu.Separator/><DropdownMenu.Item onSelect={openIntegrations}><SlackIcon size={16}/><span>Manage Slack settings…</span></DropdownMenu.Item>
+  </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></div>
 }
 
 class SidebarPropertiesBoundary extends Component<{ children: ReactNode }, { error?: Error }> {
@@ -527,7 +576,7 @@ function projectEvents(project: Project, updates: ProjectUpdate[], viewer: User)
   return events
 }
 
-function formatProjectDate(value: string | undefined, fallback: string) { return value ? format(new Date(`${value}T00:00:00`), 'MMM do') : fallback }
+const formatProjectDate = formatProjectPropertyDate
 function milestoneStats(issues: Issue[], milestoneId?: string) { const items = issues.filter(issue => (issue.projectMilestoneId ?? '') === (milestoneId ?? '')); const completed = items.filter(issue => issue.state.type === 'completed').length; return { count: items.length, progress: items.length ? Math.round(completed / items.length * 100) : 0 } }
 function toggleId(values: string[], value: string) { return values.includes(value) ? values.filter(item => item !== value) : [...values, value] }
 function uniqueById<T extends { id: string }>(values: T[]) { return [...new Map(values.map(value => [value.id, value])).values()] }

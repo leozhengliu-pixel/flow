@@ -56,9 +56,8 @@ func (h *realtimeHub) publish(workspace string, event domain.RealtimeEvent) {
 		select {
 		case channel <- event:
 		default:
-			select {
-			case <-channel:
-			default:
+			for len(channel) > 0 {
+				<-channel
 			}
 			select {
 			case channel <- domain.RealtimeEvent{ID: event.ID, Type: "workspace.resync_required", CreatedAt: event.CreatedAt}:

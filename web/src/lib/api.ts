@@ -84,6 +84,7 @@ import type { DocumentTemplate } from "@/types/flow";
 import type {
   CursorPage,
   Dashboard,
+  DashboardWidget,
   DashboardWidgetResult,
   FeedItem,
   FilterSuggestion,
@@ -223,12 +224,31 @@ export function updateMemberRole(
     jsonRequest("PATCH", { role }),
   );
 }
+export function updateMemberIdentity(
+  workspaceKey: string,
+  userId: string,
+  input: { displayName?: string; username?: string; email?: string },
+): Promise<WorkspaceMember> {
+  return request(
+    `/api/workspaces/${encodeURIComponent(workspaceKey)}/members/${encodeURIComponent(userId)}`,
+    jsonRequest("PATCH", input),
+  );
+}
 export function suspendMember(
   workspaceKey: string,
   userId: string,
 ): Promise<void> {
   return request(
     `/api/workspaces/${encodeURIComponent(workspaceKey)}/members/${encodeURIComponent(userId)}/suspend`,
+    { method: "POST" },
+  );
+}
+export function resumeMember(
+  workspaceKey: string,
+  userId: string,
+): Promise<void> {
+  return request(
+    `/api/workspaces/${encodeURIComponent(workspaceKey)}/members/${encodeURIComponent(userId)}/resume`,
     { method: "POST" },
   );
 }
@@ -330,9 +350,7 @@ export function unlinkAccountIdentity(id: string): Promise<void> {
     method: "DELETE",
   });
 }
-export function discoverWorkspaceSSO(
-  email: string,
-): Promise<
+export function discoverWorkspaceSSO(email: string): Promise<
   Array<{
     id: string;
     name: string;
@@ -593,9 +611,7 @@ export function connectIntegration(
 ): Promise<IntegrationConnection> {
   return request(`/api/integrations/${provider}`, jsonRequest("PUT", input));
 }
-export function startIntegrationOAuth(
-  provider: string,
-): Promise<{
+export function startIntegrationOAuth(provider: string): Promise<{
   provider: string;
   connectionId: string;
   state: string;
@@ -690,6 +706,9 @@ export function createTeam(
     color?: string;
     icon?: string;
     private?: boolean;
+    parentTeamId?: string;
+    copyFromTeamId?: string;
+    timezone?: string;
   },
 ): Promise<Team> {
   return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}/teams`, {
@@ -701,7 +720,7 @@ export function createTeam(
 export function updateTeam(
   workspaceKey: string,
   teamId: string,
-  input: Partial<Pick<Team, "name" | "key" | "color" | "icon" | "private">>,
+  input: Partial<Pick<Team, "name" | "key" | "color" | "icon" | "private">> & { retired?: boolean },
 ): Promise<Team> {
   return request(
     `/api/workspaces/${encodeURIComponent(workspaceKey)}/teams/${teamId}`,
@@ -1431,9 +1450,7 @@ export function updateReleaseNote(
     jsonRequest("PATCH", input),
   );
 }
-export function fetchTeamResources(
-  id: string,
-): Promise<{
+export function fetchTeamResources(id: string): Promise<{
   sections: import("@/types/flow").TeamResourceSection[];
   resources: import("@/types/flow").TeamPinnedResource[];
 }> {
@@ -1448,11 +1465,47 @@ export function createTeamResourceSection(
     jsonRequest("POST", { name }),
   );
 }
+export function updateTeamResourceSection(
+  id: string,
+  sectionId: string,
+  input: { name?: string; position?: number },
+): Promise<import("@/types/flow").TeamResourceSection> {
+  return request(
+    `/api/teams/${id}/resource-sections/${sectionId}`,
+    jsonRequest("PATCH", input),
+  );
+}
+export function deleteTeamResourceSection(
+  id: string,
+  sectionId: string,
+): Promise<void> {
+  return request(`/api/teams/${id}/resource-sections/${sectionId}`, {
+    method: "DELETE",
+  });
+}
 export function pinTeamResource(
   id: string,
   input: Partial<import("@/types/flow").TeamPinnedResource>,
 ): Promise<import("@/types/flow").TeamPinnedResource> {
   return request(`/api/teams/${id}/resources`, jsonRequest("POST", input));
+}
+export function updateTeamResource(
+  id: string,
+  resourceId: string,
+  input: { title?: string; sectionId?: string; position?: number },
+): Promise<import("@/types/flow").TeamPinnedResource> {
+  return request(
+    `/api/teams/${id}/resources/${resourceId}`,
+    jsonRequest("PATCH", input),
+  );
+}
+export function deleteTeamResource(
+  id: string,
+  resourceId: string,
+): Promise<void> {
+  return request(`/api/teams/${id}/resources/${resourceId}`, {
+    method: "DELETE",
+  });
 }
 export function listAgentActivities(
   sessionId?: string,
@@ -1485,6 +1538,11 @@ export function listUsageAlerts(): Promise<
   PageResult<import("@/types/flow").UsageAlert>
 > {
   return request("/api/usage-alerts");
+}
+export function getPaidSubscription(): Promise<
+  import("@/types/flow").PaidSubscription | null
+> {
+  return request("/api/paid-subscription");
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -1666,6 +1724,7 @@ export async function createIssue(input: {
   parentId?: string;
   stateId?: string;
   priority?: number;
+  estimate?: number;
   assigneeId?: string;
   projectId?: string;
   projectMilestoneId?: string;
@@ -1673,6 +1732,8 @@ export async function createIssue(input: {
   dueDate?: string;
   labelIds?: string[];
   templateId?: string;
+  recurrence?: "" | "daily" | "weekly" | "monthly";
+  nextOccurrenceAt?: string;
 }): Promise<Issue> {
   return request("/api/issues", {
     method: "POST",
@@ -2722,7 +2783,7 @@ export function fetchDashboards(cursor = ""): Promise<CursorPage<Dashboard>> {
 }
 export function createDashboard(
   input: Pick<Dashboard, "name" | "visibility"> &
-    Partial<Pick<Dashboard, "description" | "teamIds" | "widgets">>,
+    Partial<Pick<Dashboard, "description" | "teamIds" | "filters" | "hideFilters" | "widgets">>,
 ): Promise<Dashboard> {
   return request("/api/dashboards", jsonRequest("POST", input));
 }
@@ -2731,7 +2792,7 @@ export function updateDashboard(
   input: Partial<
     Pick<
       Dashboard,
-      "name" | "description" | "visibility" | "teamIds" | "widgets"
+      "name" | "description" | "ownerId" | "visibility" | "teamIds" | "filters" | "hideFilters" | "widgets"
     >
   >,
 ): Promise<Dashboard> {
@@ -2744,6 +2805,12 @@ export function fetchDashboardResults(
   id: string,
 ): Promise<{ dashboard: Dashboard; results: DashboardWidgetResult[] }> {
   return request(`/api/dashboards/${id}/results`);
+}
+export function previewDashboardWidget(
+  id: string,
+  widget: DashboardWidget,
+): Promise<DashboardWidgetResult> {
+  return request(`/api/dashboards/${id}/preview`, jsonRequest("POST", widget));
 }
 export function subscribeDashboard(
   id: string,

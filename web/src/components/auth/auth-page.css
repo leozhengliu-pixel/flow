@@ -15,3 +15,4 @@
 :root[data-theme="light"] .auth-success{border-color:#a8d5b5;background:#effaf2;color:#287a43}
 :root[data-theme="light"] .auth-mail-icon{border-color:var(--border);background:var(--theme-surface-2)}
 .auth-provider{text-decoration:none}.auth-provider b{font-weight:600}
+.auth-page>footer{display:flex;justify-content:center;gap:9px}.auth-page>footer a{color:inherit;text-decoration:none}.auth-page>footer a:hover{text-decoration:underline}.auth-continue{margin-top:12px}

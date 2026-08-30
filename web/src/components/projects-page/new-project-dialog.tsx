@@ -56,6 +56,7 @@ export type NewProjectDialogProps = {
   initiatives?: NewProjectChoice[]
   labels?: NewProjectChoice[]
   dependencies?: NewProjectChoice[]
+  statuses?: NewProjectChoice[]
   templates?: NewProjectTemplateChoice[]
   onClose: () => void
   onCreate: (draft: NewProjectDraft) => Promise<void> | void
@@ -66,6 +67,7 @@ const PRIORITY = ['No priority', 'Urgent', 'High', 'Medium', 'Low']
 const DEFAULT_TEAMS: NewProjectChoice[] = [{ id: 'cle', label: 'Cleantrack' }]
 const EMPTY_CHOICES: NewProjectChoice[] = []
 const EMPTY_TEMPLATES: NewProjectTemplateChoice[] = []
+const DEFAULT_STATUSES: NewProjectChoice[] = STATUS.map(value => ({ id: value, icon: <ProjectStatusGlyph name={value} type={projectStatusType(value)}/>, label: value }))
 
 export function NewProjectDialog({
   open,
@@ -78,6 +80,7 @@ export function NewProjectDialog({
   initiatives = EMPTY_CHOICES,
   labels = EMPTY_CHOICES,
   dependencies = EMPTY_CHOICES,
+  statuses = DEFAULT_STATUSES,
   templates = EMPTY_TEMPLATES,
   onClose,
   onCreate,
@@ -139,7 +142,7 @@ export function NewProjectDialog({
     <div className="lp-new-project__backdrop" />
     <form className="lp-new-project__panel" onSubmit={submit} ref={panelRef}>
       <header className="lp-new-project__header">
-        <button aria-label="Change project teams" className="lp-new-project__team" disabled={teams.length < 2} type="button"><ViewIconPickerGlyph color={teams[0]?.color} icon="Team"/><span>{teamLabel}</span></button>
+        {teams.length<2?<button aria-label="Change project teams" className="lp-new-project__team" disabled type="button"><ViewIconPickerGlyph color={teams[0]?.color} icon="Team"/><span>{teamLabel}</span></button>:<PropertyMenu compact multiple label="Teams" value={draft.teamIds.length===1?teams.find(team=>team.id===draft.teamIds[0])?.label??teamLabel:`${draft.teamIds.length} teams`} selectedIds={draft.teamIds} options={teams.map(team=>({id:team.id,label:team.label,color:team.color,i18nIgnore:true}))} trigger={<><ViewIconPickerGlyph color={teams.find(team=>draft.teamIds.includes(team.id))?.color??teams[0]?.color} icon="Team"/><span data-i18n-ignore>{draft.teamIds.length===1?teams.find(team=>team.id===draft.teamIds[0])?.label??teamLabel:`${draft.teamIds.length} teams`}</span></>} triggerClassName="lp-new-project__team" ariaLabel="Change project teams" onChange={id=>{if(draft.teamIds.includes(id)&&draft.teamIds.length===1)return;set('teamIds',draft.teamIds.includes(id)?draft.teamIds.filter(value=>value!==id):[...draft.teamIds,id])}}/>}
         <span>›</span><span>New project</span>
         <button aria-label="Discard project" className="lp-new-project__discard" disabled={submitting} onClick={onClose} type="button"><X size={16}/></button>
       </header>
@@ -164,7 +167,7 @@ export function NewProjectDialog({
         </div>
         <div className="lp-new-project__properties">
           {templates.length > 0 && <ProjectDraftProperty icon={<LayoutTemplate size={14}/>} label="Apply project template" options={[{ id: '', label: 'No template' }, ...templates]} placeholder="Template" value={draft.templateId ?? ''} onChange={applyTemplate} />}
-          <ProjectDraftProperty icon={<ProjectStatusGlyph name={draft.status} type={projectStatusType(draft.status)}/>} label="Change project status" options={STATUS.map(value => ({ id: value, icon: <ProjectStatusGlyph name={value} type={projectStatusType(value)}/>, label: value }))} value={draft.status} onChange={value => set('status', value)} />
+          <ProjectDraftProperty icon={statuses.find(status=>status.id===draft.status)?.icon??<ProjectStatusGlyph name={draft.status} type={projectStatusType(draft.status)}/>} label="Change project status" options={statuses} value={draft.status} onChange={value => set('status', value)} />
           <ProjectDraftProperty icon={<PriorityIcon priority={Math.max(0, PRIORITY.indexOf(draft.priority))} size={14}/>} label="Change project priority" options={PRIORITY.map((value, priority) => ({ id: value, icon: <PriorityIcon priority={priority} size={14}/>, label: value }))} value={draft.priority} onChange={value => set('priority', value)} />
           <ProjectDraftProperty icon={<NoAssigneeIcon size={14}/>} label="Set project lead" options={[{ id: '', icon: <NoAssigneeIcon size={14}/>, label: 'Lead' }, ...leads]} value={draft.leadId ?? ''} onChange={value => set('leadId', value)} />
           <ProjectDraftProperty icon={<MembersIcon size={14}/>} label="Change project members" multiple options={members} placeholder="Members" value={draft.memberIds} onChange={value => set('memberIds', value)} />
@@ -211,7 +214,7 @@ function ProjectDraftProperty(props: {
   const propertyOptions: PropertyOption[] = options.map(option => ({ id: option.id, label: option.label, color: option.color, groupId: option.groupId, groupLabel: option.groupLabel, icon: option.icon, i18nIgnore: Boolean(option.id) }))
   const choose = (id: string) => {
     if (Array.isArray(value)) {
-      if (props.multiple) props.onChange(value.includes(id) ? value.filter(item => item !== id) : [...value, id])
+      if (props.multiple) { const target = options.find(option => option.id === id); const next = target?.groupId ? value.filter(selectedId => options.find(option => option.id === selectedId)?.groupId !== target.groupId) : value; props.onChange(value.includes(id) ? value.filter(item => item !== id) : [...next, id]) }
     } else if (!props.multiple) props.onChange(id)
   }
   return <PropertyMenu
@@ -242,21 +245,22 @@ function ProjectIconPicker({ color = '#5e6ad2', icon = 'Project', onChange }: { 
 }
 
 function ViewIconPickerGlyph({ color = '#8a8f98', icon }: { color?: string, icon: string }) {
-  return <svg aria-hidden="true" className="lp-new-project-team-icon" fill="currentColor" style={{ color }} viewBox="0 0 16 16"><use href={`/flow-core-icons.svg#${icon}`}/></svg>
+  return <svg aria-hidden="true" className="lp-new-project-team-icon" fill="currentColor" style={{ color }} viewBox="0 0 16 16"><use href={`#${icon}`}/></svg>
 }
 
 function MilestonesEditor({ milestones, onChange }: { milestones: string[], onChange: (value: string[]) => void }) {
   const [adding, setAdding] = useState(false)
+  const [open, setOpen] = useState(true)
   const [value, setValue] = useState('')
   const add = () => {
     if (value.trim()) onChange([...milestones, value.trim()])
     setValue('')
     setAdding(false)
   }
-  return <section className="lp-new-project__milestones"><header><ViewIconPickerGlyph icon="MilestoneNone"/><strong>Milestones</strong><button aria-label="Add" onClick={() => setAdding(true)} type="button"><PlusIcon /></button></header>{milestones.map((item, index) => <div key={`${item}-${index}`}><ViewIconPickerGlyph icon="MilestoneNone"/><span>{item}</span><button aria-label={`Remove ${item}`} onClick={() => onChange(milestones.filter((_, itemIndex) => itemIndex !== index))} type="button"><X size={13}/></button></div>)}{adding && <div><ViewIconPickerGlyph icon="MilestoneNone"/><input autoFocus onChange={event => setValue(event.target.value)} onKeyDown={event => {
+  return <section className="lp-new-project__milestones"><header><button aria-expanded={open} className="lp-new-project__milestone-toggle" onClick={() => setOpen(value => !value)} type="button"><ViewIconPickerGlyph icon="MilestoneNone"/><strong>Milestones</strong></button><button aria-label="Add" onClick={() => { setOpen(true); setAdding(true) }} type="button"><PlusIcon /></button></header>{open&&<>{milestones.map((item, index) => <div key={`${item}-${index}`}><ViewIconPickerGlyph icon="MilestoneNone"/><span>{item}</span><button aria-label={`Remove ${item}`} onClick={() => onChange(milestones.filter((_, itemIndex) => itemIndex !== index))} type="button"><X size={13}/></button></div>)}{adding && <div><ViewIconPickerGlyph icon="MilestoneNone"/><input autoFocus onChange={event => setValue(event.target.value)} onKeyDown={event => {
     if (event.key === 'Enter') add()
     if (event.key === 'Escape') setAdding(false)
-  }} placeholder="Milestone name" value={value} /><button onClick={add} type="button">Add</button></div>}</section>
+  }} placeholder="Milestone name" value={value} /><button onClick={add} type="button">Add</button></div>}</>}</section>
 }
 
 function trapFocus(event: KeyboardEvent<HTMLDivElement>) {
