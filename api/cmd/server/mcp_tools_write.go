@@ -35,7 +35,7 @@ type mcpPendingUpload struct {
 	ExpiresAt    time.Time
 }
 
-func (s *server) callLinearCompatibleWriteTool(ctx context.Context, actor mcpActor, data domain.Bootstrap, name string, args map[string]any) (any, error) {
+func (s *server) callFlowWriteTool(ctx context.Context, actor mcpActor, data domain.Bootstrap, name string, args map[string]any) (any, error) {
 	switch name {
 	case "create_issue_label", "create_initiative_label":
 		return s.createMCPLabel(ctx, actor, data, name, args)

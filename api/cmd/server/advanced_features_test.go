@@ -20,7 +20,7 @@ import (
 )
 
 func TestProjectUpdateReminderLifecycle(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestProjectUpdateReminderLifecycle(t *testing.T) {
 }
 
 func TestDocumentHistoryProjectAssociationAndTrashRestore(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestDocumentHistoryProjectAssociationAndTrashRestore(t *testing.T) {
 }
 
 func TestInitiativeDocumentResourceCreatesRealDocumentBinding(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestInitiativeDocumentResourceCreatesRealDocumentBinding(t *testing.T) {
 }
 
 func TestDocumentCommentThreads(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +173,7 @@ func TestDocumentCommentThreads(t *testing.T) {
 }
 
 func TestDocumentIndexFiltersAndTeamBinding(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestDocumentIndexFiltersAndTeamBinding(t *testing.T) {
 }
 
 func TestDocumentTemplateCRUDAndApplication(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func TestDocumentTemplateCRUDAndApplication(t *testing.T) {
 }
 
 func TestTemplatesAskApprovalSLAAndUnifiedUserState(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +317,7 @@ func TestTemplatesAskApprovalSLAAndUnifiedUserState(t *testing.T) {
 }
 
 func TestImportMappingAndBackgroundExport(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -380,8 +380,8 @@ func TestImportMappingAndBackgroundExport(t *testing.T) {
 	}
 }
 
-func TestCSVExportUsesLinearIssueSchema(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+func TestCSVExportUsesIssueSchema(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,12 +408,12 @@ func TestCSVExportUsesLinearIssueSchema(t *testing.T) {
 	}
 	want := []string{"ID", "Team", "Title", "Description", "Status", "Estimate", "Priority", "Project ID", "Project", "Creator", "Assignee", "Labels", "Cycle Number", "Cycle Name", "Cycle Start", "Cycle End", "Created", "Updated", "Started", "Triaged", "Completed", "Canceled", "Archived", "Due Date", "Parent issue", "Initiatives", "Project Milestone ID", "Project Milestone", "SLA Status"}
 	if len(rows) < 2 || !slices.Equal(rows[0], want) {
-		t.Fatalf("unexpected Linear CSV schema: %#v", rows)
+		t.Fatalf("unexpected CSV schema: %#v", rows)
 	}
 }
 
 func TestImportRetryAndIntegrationOAuthLifecycle(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

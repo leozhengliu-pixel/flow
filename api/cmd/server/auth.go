@@ -176,6 +176,9 @@ func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKe
 }
 
 func publicAuthPath(path string) bool {
+	if strings.HasPrefix(path, "/api/release-pipelines/") && strings.HasSuffix(path, "/events") {
+		return true
+	}
 	if path == "/mcp" || path == "/mcp/readonly" || path == "/oauth/register" || path == "/oauth/token" || path == "/oauth/revoke" || strings.HasPrefix(path, "/.well-known/oauth-") || strings.HasPrefix(path, "/api/mcp/uploads/") {
 		return true
 	}
@@ -1378,7 +1381,9 @@ func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: "", Path: "/", HttpOnly: true, Secure: secureCookie(r), SameSite: http.SameSiteLaxMode, Expires: time.Unix(1, 0), MaxAge: -1})
 }
 
-func devAuthTokens() bool { return os.Getenv("FLOW_DEV_AUTH_TOKENS") != "false" }
+func devAuthTokens() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("FLOW_DEV_AUTH_TOKENS")), "true")
+}
 func secureCookie(r *http.Request) bool {
 	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") || strings.EqualFold(os.Getenv("FLOW_COOKIE_SECURE"), "true")
 }

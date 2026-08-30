@@ -22,10 +22,10 @@ jobs:
         working-directory: web
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v6
         with:
           node-version: 24.19.0
           cache: npm
@@ -40,6 +40,16 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Unit tests and coverage
+        run: npm run test:coverage
+
+      - name: Record whole-source coverage baseline
+        run: npm run test:coverage:all
+
+      - name: Verify API route inventory
+        working-directory: ${{ github.workspace }}
+        run: node scripts/generate-openapi.mjs --check
+
       - name: Build
         run: npm run build
 
@@ -51,10 +61,10 @@ jobs:
         working-directory: web
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v6
         with:
           node-version: 26.7.0
           cache: npm
@@ -72,6 +82,41 @@ jobs:
       - name: Build
         run: npm run build
 
+  e2e:
+    name: Browser E2E
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Use project npm version
+        run: npm install --global npm@10.9.2
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser tests
+        working-directory: web
+        run: npm run test:e2e
+
   api:
     name: API
     runs-on: ubuntu-latest
@@ -80,7 +125,7 @@ jobs:
         working-directory: api
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v7
@@ -88,5 +133,90 @@ jobs:
           go-version-file: api/go.mod
           cache-dependency-path: api/go.sum
 
-      - name: Test
-        run: go test ./...
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test with race detector and coverage
+        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+
+      - name: Enforce coverage floor
+        run: ../scripts/check-go-coverage.sh coverage.out
+
+  infrastructure:
+    name: Infrastructure integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: flow
+          POSTGRES_PASSWORD: flow
+          POSTGRES_DB: flow
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U flow -d flow"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_USER: flow
+          MYSQL_PASSWORD: flow
+          MYSQL_DATABASE: flow
+          MYSQL_ROOT_PASSWORD: root
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+      redis:
+        image: redis:8.2-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+
+      - name: PostgreSQL round trip
+        working-directory: api
+        env:
+          FLOW_TEST_DATABASE_DRIVER: postgres
+          FLOW_TEST_DATABASE_URL: postgres://flow:flow@127.0.0.1:5432/flow?sslmode=disable
+        run: go test -tags=integration ./internal/store -run TestExternalDatabaseWorkspaceRoundTrip
+
+      - name: MySQL round trip
+        working-directory: api
+        env:
+          FLOW_TEST_DATABASE_DRIVER: mysql
+          FLOW_TEST_DATABASE_URL: mysql://flow:flow@127.0.0.1:3306/flow
+        run: go test -tags=integration ./internal/store -run TestExternalDatabaseWorkspaceRoundTrip
+
+      - name: Redis coordination round trip
+        working-directory: api
+        env:
+          FLOW_TEST_REDIS_ADDR: 127.0.0.1:6379
+        run: go test -tags=integration ./internal/coordination -run TestExternalRedisCoordinationRoundTrip
+
+      - name: Start MinIO
+        run: |
+          docker run -d --name flow-minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=flow -e MINIO_ROOT_PASSWORD=flow-development-secret \
+            minio/minio:RELEASE.2025-07-23T15-54-02Z server /data
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9000/minio/health/live; then break; fi
+            sleep 2
+          done
+          docker run --rm --network host minio/mc:RELEASE.2025-07-21T05-28-08Z \
+            sh -c 'mc alias set flow http://127.0.0.1:9000 flow flow-development-secret && mc mb --ignore-existing flow/flow-integration'
+
+      - name: S3 round trip
+        working-directory: api
+        env:
+          FLOW_TEST_S3_ENDPOINT: http://127.0.0.1:9000
+          FLOW_TEST_S3_BUCKET: flow-integration
+          FLOW_TEST_S3_ACCESS_KEY: flow
+          FLOW_TEST_S3_SECRET_KEY: flow-development-secret
+        run: go test -tags=integration ./internal/objectstore -run TestExternalS3RoundTrip

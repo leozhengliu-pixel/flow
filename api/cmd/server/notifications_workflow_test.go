@@ -12,7 +12,7 @@ import (
 )
 
 func TestNotificationRoutingMentionsAggregationAndPreferences(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestNotificationRoutingMentionsAggregationAndPreferences(t *testing.T) {
 }
 
 func TestNotificationPreferencesAndBatchCleanupAPI(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,35 +104,35 @@ func TestNotificationPreferencesAndBatchCleanupAPI(t *testing.T) {
 }
 
 func TestWorkflowStateConstraintsAndTeamDefaults(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer repository.Close()
 	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
-	created := requestJSON[domain.WorkflowState](t, handler, http.MethodPost, "/api/teams/team_cleantrack/states", map[string]any{"name": "Ready for review", "type": "started", "color": "#4f8cff", "default": true}, http.StatusCreated)
-	if created.TeamID != "team_cleantrack" || !created.Default {
+	created := requestJSON[domain.WorkflowState](t, handler, http.MethodPost, "/api/teams/team_test/states", map[string]any{"name": "Ready for review", "type": "started", "color": "#4f8cff", "default": true}, http.StatusCreated)
+	if created.TeamID != "team_test" || !created.Default {
 		t.Fatalf("custom team state = %#v", created)
 	}
-	settings := requestJSON[domain.TeamSettings](t, handler, http.MethodGet, "/api/teams/team_cleantrack/settings", nil, http.StatusOK)
+	settings := requestJSON[domain.TeamSettings](t, handler, http.MethodGet, "/api/teams/team_test/settings", nil, http.StatusOK)
 	if settings.DefaultStateID != created.ID {
 		t.Fatalf("default state = %q, want %q", settings.DefaultStateID, created.ID)
 	}
-	issue := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Uses team default", "teamId": "team_cleantrack"}, http.StatusCreated)
+	issue := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Uses team default", "teamId": "team_test"}, http.StatusCreated)
 	if issue.State.ID != created.ID {
 		t.Fatalf("new issue state = %q, want default %q", issue.State.ID, created.ID)
 	}
 
-	states := requestJSON[[]domain.WorkflowState](t, handler, http.MethodGet, "/api/teams/team_cleantrack/states", nil, http.StatusOK)
+	states := requestJSON[[]domain.WorkflowState](t, handler, http.MethodGet, "/api/teams/team_test/states", nil, http.StatusOK)
 	reserved := states[slices.IndexFunc(states, func(item domain.WorkflowState) bool { return item.Reserved })]
-	requestJSON[any](t, handler, http.MethodDelete, "/api/teams/team_cleantrack/states/"+reserved.ID, map[string]any{}, http.StatusBadRequest)
-	requestJSON[any](t, handler, http.MethodDelete, "/api/teams/team_cleantrack/states/"+created.ID, map[string]any{}, http.StatusBadRequest)
+	requestJSON[any](t, handler, http.MethodDelete, "/api/teams/team_test/states/"+reserved.ID, map[string]any{}, http.StatusBadRequest)
+	requestJSON[any](t, handler, http.MethodDelete, "/api/teams/team_test/states/"+created.ID, map[string]any{}, http.StatusBadRequest)
 
-	patched := requestJSON[domain.TeamSettings](t, handler, http.MethodPatch, "/api/teams/team_cleantrack/settings", map[string]any{"identifier": "OPS", "defaultPriority": 2}, http.StatusOK)
+	patched := requestJSON[domain.TeamSettings](t, handler, http.MethodPatch, "/api/teams/team_test/settings", map[string]any{"identifier": "OPS", "defaultPriority": 2}, http.StatusOK)
 	if patched.DefaultPriority != 2 {
 		t.Fatalf("default priority = %d", patched.DefaultPriority)
 	}
-	newIssue := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Uses identifier", "teamId": "team_cleantrack"}, http.StatusCreated)
+	newIssue := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Uses identifier", "teamId": "team_test"}, http.StatusCreated)
 	if newIssue.Identifier[:4] != "OPS-" || newIssue.Priority != 2 {
 		t.Fatalf("new issue did not use team defaults: %#v", newIssue)
 	}
@@ -142,7 +142,7 @@ func TestWorkflowStateConstraintsAndTeamDefaults(t *testing.T) {
 }
 
 func TestStatusWorkflowAutomationsAndOrdering(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

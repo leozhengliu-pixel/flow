@@ -14,10 +14,10 @@ import (
 	"flow/api/internal/store"
 )
 
-//go:embed linear_mcp_tools.json
-var linearMCPToolInventory []byte
+//go:embed flow_mcp_tools.json
+var flowMCPToolInventory []byte
 
-type linearMCPTool struct {
+type flowMCPTool struct {
 	Name        string          `json:"name"`
 	Access      string          `json:"access"`
 	Description string          `json:"description"`
@@ -51,12 +51,12 @@ type mcpActor struct {
 }
 
 func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
-	var tools []linearMCPTool
-	if err := json.Unmarshal(linearMCPToolInventory, &tools); err != nil {
-		panic(fmt.Sprintf("parse Linear MCP tool inventory: %v", err))
+	var tools []flowMCPTool
+	if err := json.Unmarshal(flowMCPToolInventory, &tools); err != nil {
+		panic(fmt.Sprintf("parse Flow MCP tool inventory: %v", err))
 	}
 	for index := range tools {
-		tools[index].Name = strings.TrimPrefix(tools[index].Name, "mcp__linear.")
+		tools[index].Name = strings.TrimPrefix(tools[index].Name, "mcp__flow.")
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		actor, ok := s.authenticateMCP(w, r)
@@ -80,7 +80,7 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 		}
 		switch request.Method {
 		case "initialize":
-			writeJSON(w, http.StatusOK, mcpRPCResponse{JSONRPC: "2.0", ID: request.ID, Result: map[string]any{"protocolVersion": "2025-11-25", "capabilities": map[string]any{"tools": map[string]any{"listChanged": false}}, "serverInfo": map[string]string{"name": "Flow", "version": "1.0.0"}, "instructions": "Manage Flow issues, projects, initiatives, documents, releases, reviews, teams, and comments."}})
+			writeJSON(w, http.StatusOK, mcpRPCResponse{JSONRPC: "2.0", ID: request.ID, Result: map[string]any{"protocolVersion": "2025-11-25", "capabilities": map[string]any{"tools": map[string]any{"listChanged": false}}, "serverInfo": map[string]string{"name": "Flow", "version": version}, "instructions": "Manage Flow issues, projects, initiatives, documents, releases, reviews, teams, and comments."}})
 		case "notifications/initialized":
 			w.WriteHeader(http.StatusAccepted)
 		case "ping":
@@ -106,7 +106,7 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 			if params.Arguments == nil {
 				params.Arguments = map[string]any{}
 			}
-			index := slices.IndexFunc(tools, func(tool linearMCPTool) bool { return tool.Name == params.Name })
+			index := slices.IndexFunc(tools, func(tool flowMCPTool) bool { return tool.Name == params.Name })
 			if index < 0 {
 				s.writeMCPError(w, request.ID, -32602, "Unknown tool", map[string]string{"name": params.Name})
 				return
@@ -121,7 +121,7 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 			ctx = context.WithValue(ctx, workspaceKeyContextKey{}, actor.WorkspaceKey)
 			ctx = store.ContextWithActor(ctx, actor.User)
 			params.Arguments["__flowBaseURL"] = externalBaseURL(r)
-			result, err := s.callLinearCompatibleTool(ctx, actor, tool.Name, params.Arguments)
+			result, err := s.callFlowTool(ctx, actor, tool.Name, params.Arguments)
 			s.writeMCPToolResult(w, request.ID, result, err)
 		default:
 			s.writeMCPError(w, request.ID, -32601, "Method not found", nil)

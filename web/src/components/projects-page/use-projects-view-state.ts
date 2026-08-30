@@ -38,7 +38,7 @@ const STATUS_COLORS: Record<string, string> = {
   Canceled: '#77777c',
 }
 
-export function useProjectsViewState(projects: ProjectPageItem[], { initial, storageKey = 'cleantrack:all', workspaceDefault }: ProjectsViewStateOptions = {}) {
+export function useProjectsViewState(projects: ProjectPageItem[], { initial, storageKey = 'workspace:all', workspaceDefault }: ProjectsViewStateOptions = {}) {
   const personalKey = `flow:projects:view:${storageKey}`
   const workspaceDefaultKey = `flow:projects:view-default:${storageKey}`
   const [state, setState] = useState<ProjectsViewState>(() => createInitialState(initial, personalKey, workspaceDefaultKey, workspaceDefault))

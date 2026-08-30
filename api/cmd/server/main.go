@@ -63,6 +63,9 @@ type server struct {
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "healthcheck" {
+		os.Exit(runHealthcheck())
+	}
 	initLogging()
 	applicationConfig, err := appconfig.Load()
 	if err != nil {
@@ -131,6 +134,25 @@ func main() {
 	}
 }
 
+func runHealthcheck() int {
+	endpoint := strings.TrimSpace(os.Getenv("FLOW_HEALTHCHECK_URL"))
+	if endpoint == "" {
+		endpoint = "http://127.0.0.1:8080/api/health"
+	}
+	client := &http.Client{Timeout: 3 * time.Second}
+	response, err := client.Get(endpoint)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		fmt.Fprintf(os.Stderr, "health endpoint returned %s\n", response.Status)
+		return 1
+	}
+	return 0
+}
+
 func newHandler(s *server) http.Handler {
 	if s.authLimiter == nil {
 		if s.coordinator != nil {
@@ -148,7 +170,7 @@ func newHandler(s *server) http.Handler {
 	s.startDeliveryScheduler()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
-		response := map[string]string{"status": "ok", "redis": "disabled"}
+		response := map[string]string{"status": "ok", "redis": "disabled", "version": version, "commit": commit}
 		if s.coordinator != nil {
 			response["redis"] = s.coordinator.Mode()
 			if err := s.coordinator.Ping(r.Context()); err != nil {
@@ -267,6 +289,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/release-pipelines/{id}", s.getReleasePipeline)
 	mux.HandleFunc("POST /api/release-pipelines/reorder", s.reorderReleasePipelines)
 	mux.HandleFunc("POST /api/release-pipelines/{id}/access-key", s.rotateReleasePipelineAccessKey)
+	mux.HandleFunc("POST /api/release-pipelines/{id}/events", s.receiveReleasePipelineEvent)
 	mux.HandleFunc("PATCH /api/release-pipelines/{id}", s.updateReleasePipeline)
 	mux.HandleFunc("DELETE /api/release-pipelines/{id}", s.deleteReleasePipeline)
 	mux.HandleFunc("POST /api/custom-emojis", s.createCustomEmoji)
@@ -5002,7 +5025,7 @@ func (s *server) cors(next http.Handler) http.Handler {
 		}
 		w.Header().Set("Access-Control-Allow-Origin", strings.TrimRight(origin, "/"))
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Workspace-Key, X-Client-ID")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Workspace-Key, X-Client-ID")
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
