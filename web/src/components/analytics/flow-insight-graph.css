@@ -16,7 +16,7 @@
     sans-serif;
   letter-spacing: 0;
 }
-.linear-insight-tooltip {
+.flow-insight-tooltip {
   min-width: 120px;
   display: grid;
   grid-template-columns: 8px minmax(0, 1fr) auto;
@@ -24,17 +24,17 @@
   gap: 8px;
   padding: 7px 9px;
 }
-.linear-insight-tooltip i {
+.flow-insight-tooltip i {
   width: 7px;
   height: 7px;
   border-radius: 2px;
 }
-.linear-insight-tooltip span {
+.flow-insight-tooltip span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.linear-insight-tooltip strong {
+.flow-insight-tooltip strong {
   font-weight: 550;
   font-variant-numeric: tabular-nums;
 }

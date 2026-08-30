@@ -1,0 +1,29 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  github-release:
+    name: Publish release notes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.19.0
+      - name: Verify tag matches web version
+        run: |
+          expected="v$(node -p "require('./web/package.json').version")"
+          test "${GITHUB_REF_NAME}" = "${expected}" || { echo "Tag ${GITHUB_REF_NAME} does not match ${expected}"; exit 1; }
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true

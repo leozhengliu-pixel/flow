@@ -34,7 +34,7 @@ disclosure.
 ## Security Expectations
 
 - Never commit credentials, session tokens, databases, uploads, or private user data.
-- Disable `FLOW_DEV_AUTH_TOKENS` outside local development.
+- Keep the default `FLOW_DEV_AUTH_TOKENS=false`; enable it only in isolated local development.
 - Create the first administrator account through the onboarding flow before inviting other users.
 - Enable `FLOW_COOKIE_SECURE` behind HTTPS.
 - Trust forwarded headers only from a controlled proxy that overwrites client-supplied values.

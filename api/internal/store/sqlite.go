@@ -24,7 +24,9 @@ type SQLiteStore struct {
 	viewer           domain.User
 	realtimeSink     func(string, domain.RealtimeEvent)
 	coordinator      WorkspaceCoordinator
-	seedProfile      string
+	fixtureProfile   string
+	fixturePassword  string
+	maxStateBytes    int
 }
 
 // WorkspaceKeys returns a stable snapshot for background workers. Callers do
@@ -45,7 +47,13 @@ type WorkspaceCoordinator interface {
 }
 
 func OpenSQLite(path string) (*SQLiteStore, error) {
-	return OpenDatabase(DatabaseConfig{Driver: "sqlite", Path: path, SeedProfile: "test", MaxOpenConns: 1})
+	return OpenDatabase(DatabaseConfig{Driver: "sqlite", Path: path, MaxOpenConns: 1})
+}
+
+// OpenSQLiteTestFixture is reserved for automated tests. Production callers
+// must use OpenSQLite or OpenDatabase so a fresh installation remains empty.
+func OpenSQLiteTestFixture(path string) (*SQLiteStore, error) {
+	return OpenDatabase(DatabaseConfig{Driver: "sqlite", Path: path, FixtureProfile: "test", FixturePassword: "test-password", MaxOpenConns: 1})
 }
 
 func (s *SQLiteStore) Close() error { return s.db.Close() }
@@ -92,6 +100,9 @@ func (s *SQLiteStore) ReloadAllWorkspaces(ctx context.Context) error {
 		if err := rows.Scan(&key, &raw); err != nil {
 			return err
 		}
+		if len(raw) > s.maxStateBytes {
+			return fmt.Errorf("workspace %q state exceeds %d bytes", key, s.maxStateBytes)
+		}
 		var data domain.Bootstrap
 		if err := json.Unmarshal(raw, &data); err != nil {
 			return err
@@ -116,6 +127,9 @@ func (s *SQLiteStore) loadWorkspaceState(ctx context.Context, workspaceKey strin
 	if err := s.db.QueryRowContext(ctx, `SELECT data FROM workspace_states WHERE workspace_key=?`, workspaceKey).Scan(&raw); err != nil {
 		return domain.Bootstrap{}, err
 	}
+	if len(raw) > s.maxStateBytes {
+		return domain.Bootstrap{}, fmt.Errorf("workspace state exceeds %d bytes", s.maxStateBytes)
+	}
 	var data domain.Bootstrap
 	if err := json.Unmarshal(raw, &data); err != nil {
 		return data, err
@@ -125,16 +139,56 @@ func (s *SQLiteStore) loadWorkspaceState(ctx context.Context, workspaceKey strin
 }
 
 func (s *SQLiteStore) migrate(ctx context.Context) error {
-	for _, statement := range databaseMigrations(s.dialect) {
-		if _, err := s.db.ExecContext(ctx, statement); err != nil {
-			if s.dialect == "mysql" && strings.Contains(strings.ToLower(err.Error()), "duplicate key name") {
-				continue
-			}
-			return fmt.Errorf("database migration: %w", err)
+	if _, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name VARCHAR(191) NOT NULL, applied_at VARCHAR(40) NOT NULL)`); err != nil {
+		return fmt.Errorf("create schema migrations table: %w", err)
+	}
+	applied := map[int]bool{}
+	rows, err := s.db.QueryContext(ctx, `SELECT version FROM schema_migrations`)
+	if err != nil {
+		return fmt.Errorf("read schema migrations: %w", err)
+	}
+	for rows.Next() {
+		var version int
+		if err := rows.Scan(&version); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan schema migration: %w", err)
+		}
+		applied[version] = true
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close schema migration rows: %w", err)
+	}
+	migrations := []struct {
+		version int
+		name    string
+		apply   func(context.Context) error
+	}{
+		{version: 1, name: "base schema", apply: func(ctx context.Context) error { return s.applyMigrationStatements(ctx, databaseMigrations(s.dialect)) }},
+		{version: 2, name: "nullable external identity email", apply: s.makeAuthEmailNullable},
+	}
+	for _, migration := range migrations {
+		if applied[migration.version] {
+			continue
+		}
+		if err := migration.apply(ctx); err != nil {
+			return fmt.Errorf("database migration %d (%s): %w", migration.version, migration.name, err)
+		}
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?)`, migration.version, migration.name, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			return fmt.Errorf("record database migration %d: %w", migration.version, err)
 		}
 	}
-	if err := s.makeAuthEmailNullable(ctx); err != nil {
-		return fmt.Errorf("database migration: make auth email nullable: %w", err)
+	return nil
+}
+
+func (s *SQLiteStore) applyMigrationStatements(ctx context.Context, statements []string) error {
+	for _, statement := range statements {
+		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+			message := strings.ToLower(err.Error())
+			if s.dialect == "mysql" && (strings.Contains(message, "duplicate key name") || strings.Contains(message, "already exists")) {
+				continue
+			}
+			return err
+		}
 	}
 	return nil
 }
@@ -205,7 +259,6 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	changedWorkspaces := map[string]domain.Bootstrap{}
 	for rows.Next() {
 		var key string
 		var raw []byte
@@ -213,46 +266,20 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 			rows.Close()
 			return err
 		}
+		if len(raw) > s.maxStateBytes {
+			rows.Close()
+			return fmt.Errorf("workspace %q state exceeds %d bytes", key, s.maxStateBytes)
+		}
 		var data domain.Bootstrap
 		if err := json.Unmarshal(raw, &data); err != nil {
 			rows.Close()
 			return err
 		}
-		changed := ensureCanonicalLabelGroups(&data)
-		if ensureCanonicalLabels(&data) {
-			changed = true
-		}
-		if ensureCanonicalSavedViewNames(&data) {
-			changed = true
-		}
-		if ensureCanonicalSavedViewDisplays(&data) {
-			changed = true
-		}
-		if ensureCanonicalSavedViewFilters(&data) {
-			changed = true
-		}
-		if ensureSavedViewSlugIDs(&data) {
-			changed = true
-		}
-		if ensureProjectMilestoneFields(&data) {
-			changed = true
-		}
-		if ensureCarMallReleaseManagement(&data) {
-			changed = true
-		}
 		normalize(&data)
 		s.workspaces[key] = data
-		if changed {
-			changedWorkspaces[key] = data
-		}
 	}
 	if err := rows.Close(); err != nil {
 		return err
-	}
-	for key, data := range changedWorkspaces {
-		if err := s.persistWorkspace(ctx, key, data, nil); err != nil {
-			return err
-		}
 	}
 	if len(s.workspaces) > 0 {
 		var viewerRaw []byte
@@ -270,9 +297,8 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	var raw []byte
 	err = s.db.QueryRowContext(ctx, `SELECT data FROM workspace_state WHERE id = 1`).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
-		if strings.EqualFold(s.seedProfile, "test") {
+		if strings.EqualFold(s.fixtureProfile, "test") {
 			data := localSQLiteFixture()
-			ensureSavedViewSlugIDs(&data)
 			normalize(&data)
 			s.workspaces[data.Workspace.URLKey] = data
 			s.lastWorkspaceKey = data.Workspace.URLKey
@@ -290,18 +316,6 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	if err := json.Unmarshal(raw, &data); err != nil {
 		return err
 	}
-	ensureCanonicalWorkflowStates(&data)
-	ensureCanonicalLabelGroups(&data)
-	ensureCanonicalLabels(&data)
-	ensureCanonicalSavedViewNames(&data)
-	ensureCanonicalSavedViewDisplays(&data)
-	ensureCanonicalSavedViewFilters(&data)
-	ensureSavedViewSlugIDs(&data)
-	ensureProjectMilestoneFields(&data)
-	ensureCarMallReleaseManagement(&data)
-	ensureCanonicalNotifications(&data)
-	ensureCanonicalInitiatives(&data)
-	ensureCanonicalCycles(&data)
 	normalize(&data)
 	s.workspaces[data.Workspace.URLKey] = data
 	s.lastWorkspaceKey = data.Workspace.URLKey
@@ -311,700 +325,6 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 
 func bootstrapViewer() domain.User {
 	return domain.User{ID: "usr_local", Name: "Flow user", DisplayName: "Flow user", Active: true, EmailVerified: true}
-}
-
-func ensureProjectMilestoneFields(data *domain.Bootstrap) bool {
-	changed := false
-	validMilestones := map[string]bool{}
-	descriptions := map[string]string{
-		"milestone_seal_test":   "完成高关联测试用例并补齐执行结果。",
-		"milestone_seal_review": "测试报告、回滚方案和代码证据满足上线门禁。",
-	}
-	for projectIndex := range data.Projects {
-		if data.Projects[projectIndex].ID == "project_aut" && data.Projects[projectIndex].Name == "汽车之家车商城项目2026" {
-			data.Projects[projectIndex].Name = "[Flow 对比演示] 汽车之家车商城项目 2026"
-			changed = true
-		}
-		for milestoneIndex := range data.Projects[projectIndex].Milestones {
-			milestone := &data.Projects[projectIndex].Milestones[milestoneIndex]
-			validMilestones[milestone.ID] = true
-			if milestone.Description == "" && descriptions[milestone.ID] != "" {
-				milestone.Description = descriptions[milestone.ID]
-				changed = true
-			}
-		}
-	}
-	assignments := map[string]string{
-		"issue_49219": "milestone_seal_test", "issue_49216": "milestone_seal_test", "issue_49215": "milestone_seal_test", "issue_test_plan": "milestone_seal_test", "issue_test_report": "milestone_seal_test",
-		"issue_release_review": "milestone_seal_review", "issue_audit_gate": "milestone_seal_review",
-	}
-	for issueIndex := range data.Issues {
-		milestoneID := assignments[data.Issues[issueIndex].ID]
-		if validMilestones[milestoneID] && data.Issues[issueIndex].ProjectMilestoneID == nil {
-			data.Issues[issueIndex].ProjectMilestoneID = stringPointer(milestoneID)
-			changed = true
-		}
-	}
-	return changed
-}
-
-func ensureCarMallReleaseManagement(data *domain.Bootstrap) bool {
-	projectIndex := slices.IndexFunc(data.Projects, func(project domain.Project) bool { return project.ID == "project_aut" })
-	if projectIndex < 0 {
-		return false
-	}
-
-	const pipelineID = "release_pipeline_car_mall"
-	versionMilestones := map[string]bool{"milestone_car_phase1": true, "milestone_car_316": true}
-	issueIDsByMilestone := map[string][]string{}
-	changed := false
-	for issueIndex := range data.Issues {
-		milestoneID := ""
-		if data.Issues[issueIndex].ProjectMilestoneID != nil {
-			milestoneID = *data.Issues[issueIndex].ProjectMilestoneID
-		}
-		if !versionMilestones[milestoneID] {
-			continue
-		}
-		issueIDsByMilestone[milestoneID] = append(issueIDsByMilestone[milestoneID], data.Issues[issueIndex].ID)
-		data.Issues[issueIndex].ProjectMilestoneID = nil
-		changed = true
-	}
-
-	project := &data.Projects[projectIndex]
-	milestones := project.Milestones[:0]
-	for _, milestone := range project.Milestones {
-		if versionMilestones[milestone.ID] {
-			changed = true
-			continue
-		}
-		milestones = append(milestones, milestone)
-	}
-	project.Milestones = milestones
-
-	now := time.Now().UTC()
-	pipelineIndex := slices.IndexFunc(data.ReleasePipelines, func(pipeline domain.ReleasePipeline) bool { return pipeline.ID == pipelineID })
-	if pipelineIndex < 0 {
-		data.ReleasePipelines = append(data.ReleasePipelines, domain.ReleasePipeline{
-			ID: pipelineID, Name: "车商城交付发布管线", TeamIDs: slices.Clone(project.TeamIDs), Type: "scheduled", Production: true,
-			Stages: []string{"待规划", "进行中", "已发布", "已取消"}, StageStatuses: map[string]string{"待规划": "planned", "进行中": "inProgress", "已发布": "released", "已取消": "canceled"},
-			Position: float64(len(data.ReleasePipelines)), PathFilters: []string{}, CreatedAt: now, UpdatedAt: now,
-		})
-		changed = true
-	} else {
-		pipeline := &data.ReleasePipelines[pipelineIndex]
-		if pipeline.Name != "车商城交付发布管线" || !slices.Equal(pipeline.TeamIDs, project.TeamIDs) {
-			pipeline.Name = "车商城交付发布管线"
-			pipeline.TeamIDs = slices.Clone(project.TeamIDs)
-			pipeline.UpdatedAt = now
-			changed = true
-		}
-	}
-
-	creator := data.Viewer
-	if project.Lead != nil {
-		creator = *project.Lead
-	}
-	phaseOneTarget, phase316Target := "2026-07-10", "2026-08-01"
-	phaseOneReleasedAt := time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC)
-	phase316ReleasedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
-	changed = ensureCarMallRelease(data, domain.Release{
-		ID: "release_car_phase1", Name: "车商城一期迭代", Version: "一期", Description: "由车商城一期版本里程碑迁移，覆盖订单流程交付与缺陷收敛。",
-		Status: "released", PipelineID: pipelineID, Stage: "已发布", Position: 0, TargetDate: &phaseOneTarget, ProjectIDs: []string{project.ID},
-		IssueIDs: issueIDsByMilestone["milestone_car_phase1"], SubscriberIDs: slices.Clone(project.MemberIDs), Creator: creator, ReleasedAt: &phaseOneReleasedAt, CreatedAt: phaseOneReleasedAt, UpdatedAt: now,
-	}) || changed
-	changed = ensureCarMallRelease(data, domain.Release{
-		ID: "release_car_316", Name: "车商城 316 迭代", Version: "316", Description: "由车商城 316 版本里程碑迁移，覆盖 316 版本范围和估算偏差复盘。",
-		Status: "released", PipelineID: pipelineID, Stage: "已发布", Position: 1, TargetDate: &phase316Target, ProjectIDs: []string{project.ID},
-		IssueIDs: issueIDsByMilestone["milestone_car_316"], SubscriberIDs: slices.Clone(project.MemberIDs), Creator: creator, ReleasedAt: &phase316ReleasedAt, CreatedAt: phase316ReleasedAt, UpdatedAt: now,
-	}) || changed
-
-	if releaseIndex := slices.IndexFunc(data.Releases, func(release domain.Release) bool { return release.ID == "release_car_phase2" }); releaseIndex >= 0 {
-		release := &data.Releases[releaseIndex]
-		if release.PipelineID != pipelineID || release.Stage != "待规划" || release.Position != 2 {
-			release.PipelineID, release.Stage, release.Position, release.UpdatedAt = pipelineID, "待规划", 2, now
-			changed = true
-		}
-	}
-	return changed
-}
-
-func ensureCarMallRelease(data *domain.Bootstrap, canonical domain.Release) bool {
-	index := slices.IndexFunc(data.Releases, func(release domain.Release) bool { return release.ID == canonical.ID })
-	if index < 0 {
-		canonical.IssueIDs = uniqueStrings(canonical.IssueIDs)
-		data.Releases = append(data.Releases, canonical)
-		return true
-	}
-	release := &data.Releases[index]
-	issueIDs := uniqueStrings(append(append([]string{}, release.IssueIDs...), canonical.IssueIDs...))
-	if release.PipelineID == canonical.PipelineID && release.Stage == canonical.Stage && release.Position == canonical.Position && slices.Equal(release.ProjectIDs, canonical.ProjectIDs) && slices.Equal(release.IssueIDs, issueIDs) {
-		return false
-	}
-	release.PipelineID, release.Stage, release.Position = canonical.PipelineID, canonical.Stage, canonical.Position
-	release.ProjectIDs, release.IssueIDs, release.UpdatedAt = slices.Clone(canonical.ProjectIDs), issueIDs, time.Now().UTC()
-	return true
-}
-
-func uniqueStrings(values []string) []string {
-	seen := map[string]bool{}
-	result := make([]string, 0, len(values))
-	for _, value := range values {
-		if value == "" || seen[value] {
-			continue
-		}
-		seen[value] = true
-		result = append(result, value)
-	}
-	return result
-}
-
-func ensureCanonicalCycles(data *domain.Bootstrap) bool {
-	if len(data.Cycles) > 0 || len(data.Teams) == 0 || len(data.Issues) == 0 {
-		return false
-	}
-	now := time.Now().UTC()
-	start := cycleWeekStart(now)
-	teamID := data.Teams[0].ID
-	data.Cycles = []domain.Cycle{
-		{ID: "cycle_47", Number: 47, Name: "Cycle 47", TeamID: teamID, StartsAt: start.AddDate(0, 0, -14), EndsAt: start.AddDate(0, 0, -1), Status: "completed", Capacity: 4, CreatedAt: start.AddDate(0, 0, -42), UpdatedAt: now},
-		{ID: "cycle_48", Number: 48, Name: "Cycle 48", TeamID: teamID, StartsAt: start, EndsAt: start.AddDate(0, 0, 13), Status: "current", Capacity: 4, Favorite: true, CreatedAt: start.AddDate(0, 0, -28), UpdatedAt: now},
-		{ID: "cycle_49", Number: 49, Name: "Cycle 49", TeamID: teamID, StartsAt: start.AddDate(0, 0, 14), EndsAt: start.AddDate(0, 0, 27), Status: "upcoming", Capacity: 4, CreatedAt: start.AddDate(0, 0, -14), UpdatedAt: now},
-		{ID: "cycle_50", Number: 50, Name: "Cycle 50", TeamID: teamID, StartsAt: start.AddDate(0, 0, 28), EndsAt: start.AddDate(0, 0, 41), Status: "upcoming", Capacity: 4, CreatedAt: now, UpdatedAt: now},
-	}
-	data.CycleSettings = map[string]domain.CycleSettings{teamID: {Enabled: true, DurationWeeks: 2, StartsOn: 1, UpcomingCount: 2}}
-	assignments := []string{"cycle_48", "cycle_48", "cycle_48", "cycle_47", "cycle_49"}
-	for index := range data.Issues {
-		if index >= len(assignments) {
-			break
-		}
-		if data.Issues[index].CycleID == nil {
-			data.Issues[index].CycleID = stringPointer(assignments[index])
-		}
-	}
-	return true
-}
-
-func ensureCanonicalInitiatives(data *domain.Bootstrap) bool {
-	if len(data.Initiatives) > 0 || len(data.Projects) == 0 {
-		return false
-	}
-	now := time.Now().UTC()
-	target := now.AddDate(0, 2, 0).Format("2006-01-02")
-	project := &data.Projects[0]
-	initiative := domain.Initiative{
-		ID: "initiative_operational_excellence", Name: "Operational excellence", SlugID: "operational-excellence",
-		Summary: "Make core workflows dependable at production scale", Description: "Coordinate the active reliability projects and keep their outcomes visible across the workspace.",
-		Icon: "Initiative", Color: "#d15f64", Status: "active", Priority: 2, PriorityLabel: "High", Health: "onTrack",
-		Owner: &data.Viewer, ProjectIDs: []string{project.ID}, LabelIDs: []string{}, Resources: []domain.InitiativeResource{}, Comments: []domain.Comment{},
-		TargetDate: &target, CreatedAt: now.AddDate(0, -2, 0), UpdatedAt: now,
-	}
-	data.Initiatives = []domain.Initiative{initiative}
-	project.Initiatives = append(project.Initiatives, initiative.ID)
-	if data.InitiativeUpdates == nil {
-		data.InitiativeUpdates = map[string][]domain.InitiativeUpdate{}
-	}
-	data.InitiativeUpdates[initiative.ID] = []domain.InitiativeUpdate{{
-		ID: "initiative_update_operational_excellence_1", InitiativeID: initiative.ID,
-		Body: "The reliability program is moving forward with the current project scope and target intact.", Health: "onTrack",
-		CreatedAt: now.AddDate(0, 0, -3), User: data.Viewer, Comments: []domain.Comment{}, Reactions: map[string][]string{},
-	}}
-	return true
-}
-
-func ensureCanonicalWorkflowStates(data *domain.Bootstrap) bool {
-	existing := make(map[string]struct{}, len(data.States))
-	for _, state := range data.States {
-		existing[state.ID] = struct{}{}
-	}
-	changed := false
-	for _, state := range canonicalWorkflowStates() {
-		if _, ok := existing[state.ID]; ok {
-			continue
-		}
-		data.States = append(data.States, state)
-		changed = true
-	}
-	return changed
-}
-
-func ensureCanonicalLabels(data *domain.Bootstrap) bool {
-	hadObsolete := slices.ContainsFunc(data.Labels, func(label domain.IssueLabel) bool { return obsoleteDeliveryLabelIDs[label.ID] }) ||
-		slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool {
-			return slices.ContainsFunc(issue.Labels, func(label domain.IssueLabel) bool { return obsoleteDeliveryLabelIDs[label.ID] })
-		})
-	if hadObsolete {
-		applyDeliveryLabelTaxonomy(data.Issues, canonicalLabels())
-		data.Labels = slices.DeleteFunc(data.Labels, func(label domain.IssueLabel) bool { return obsoleteDeliveryLabelIDs[label.ID] })
-		migrateDeliverySavedViews(data)
-	}
-	existing := make(map[string]domain.IssueLabel, len(data.Labels))
-	for _, label := range data.Labels {
-		existing[label.ID] = label
-	}
-	changed := hadObsolete
-	canonical := canonicalLabels()
-	for _, label := range canonical {
-		current, ok := existing[label.ID]
-		if !ok {
-			data.Labels = append(data.Labels, label)
-			existing[label.ID] = label
-			changed = true
-			continue
-		}
-		if label.ID == "label_type_requirement" && current.Name == "原始需求" {
-			for i := range data.Labels {
-				if data.Labels[i].ID == label.ID {
-					data.Labels[i].Name = label.Name
-					cascadeBootstrapLabel(data, data.Labels[i])
-				}
-			}
-			renameSavedViewLabelReferences(data, label.ID, current.Name, label.Name)
-			current.Name = label.Name
-			changed = true
-		}
-		if current.Description == "" || current.IssueCount == 0 || current.Scope == "" || current.GroupID == "" || current.ResourceType == "" || current.CreatedAt.IsZero() || current.LastAppliedAt == nil {
-			for i := range data.Labels {
-				if data.Labels[i].ID == label.ID {
-					data.Labels[i].Description = label.Description
-					data.Labels[i].IssueCount = label.IssueCount
-					data.Labels[i].Scope = label.Scope
-					if data.Labels[i].GroupID == "" {
-						data.Labels[i].GroupID = label.GroupID
-					}
-					if data.Labels[i].ResourceType == "" {
-						data.Labels[i].ResourceType = canonicalLabelResourceType(label)
-					}
-					if data.Labels[i].CreatedAt.IsZero() {
-						data.Labels[i].CreatedAt = label.CreatedAt
-					}
-					if data.Labels[i].LastAppliedAt == nil && data.Labels[i].IssueCount > 0 {
-						data.Labels[i].LastAppliedAt = label.LastAppliedAt
-					}
-					cascadeBootstrapLabel(data, data.Labels[i])
-				}
-			}
-			changed = true
-		}
-	}
-	return changed
-}
-
-func renameSavedViewLabelReferences(data *domain.Bootstrap, labelID, oldName, newName string) {
-	for viewIndex := range data.SavedViews {
-		var filters []map[string]any
-		if len(data.SavedViews[viewIndex].Filters) == 0 || json.Unmarshal(data.SavedViews[viewIndex].Filters, &filters) != nil {
-			continue
-		}
-		changed := false
-		for _, filter := range filters {
-			if field, _ := filter["field"].(string); field != "labels" {
-				continue
-			}
-			if value, _ := filter["value"].(string); value == labelID {
-				if valueLabel, _ := filter["valueLabel"].(string); valueLabel == oldName {
-					filter["valueLabel"] = newName
-					changed = true
-				}
-			}
-			values, _ := filter["values"].([]any)
-			for _, rawValue := range values {
-				value, _ := rawValue.(map[string]any)
-				if id, _ := value["value"].(string); id != labelID {
-					continue
-				}
-				if valueLabel, _ := value["valueLabel"].(string); valueLabel == oldName {
-					value["valueLabel"] = newName
-					changed = true
-				}
-			}
-		}
-		if !changed {
-			continue
-		}
-		encoded, err := json.Marshal(filters)
-		if err == nil {
-			data.SavedViews[viewIndex].Filters = encoded
-		}
-	}
-}
-
-func migrateDeliverySavedViews(data *domain.Bootstrap) {
-	display := json.RawMessage(`{"layout":"list","grouping":"status","groupOrder":"asc","subGrouping":"none","ordering":"priority","completedWindow":"all","orderCompletedByRecency":false,"showSubIssues":true,"showEmptyGroups":false,"nestedSubIssues":false,"properties":["id","status","priority","assignee","labels","project","created"]}`)
-	filter := func(ids ...string) json.RawMessage {
-		labels := make(map[string]domain.IssueLabel, len(data.Labels)+len(canonicalLabels()))
-		for _, label := range append(append([]domain.IssueLabel{}, data.Labels...), canonicalLabels()...) {
-			labels[label.ID] = label
-		}
-		values := make([]map[string]string, 0, len(ids))
-		for _, id := range ids {
-			label := labels[id]
-			values = append(values, map[string]string{"value": id, "valueLabel": label.Name, "color": label.Color})
-		}
-		encoded, _ := json.Marshal([]map[string]any{{
-			"id": "labels-delivery-taxonomy", "field": "labels", "fieldLabel": "Labels", "operator": "is",
-			"value": ids[0], "valueLabel": labels[ids[0]].Name, "color": labels[ids[0]].Color, "values": values,
-		}})
-		return encoded
-	}
-	data.SavedViews = slices.DeleteFunc(data.SavedViews, func(view domain.SavedView) bool {
-		return view.ID == "view_release_gate" || view.ID == "view_audit"
-	})
-	for index := range data.SavedViews {
-		switch data.SavedViews[index].ID {
-		case "view_strategy", "view_business", "view_product":
-			data.SavedViews[index].Filters = filter("label_type_requirement")
-			data.SavedViews[index].Display = slices.Clone(display)
-		case "view_development", "view_testing", "view_operations":
-			data.SavedViews[index].Filters = filter("label_type_development")
-			data.SavedViews[index].Display = slices.Clone(display)
-		}
-	}
-}
-
-func ensureCanonicalSavedViewNames(data *domain.Bootstrap) bool {
-	changed := false
-	for index := range data.SavedViews {
-		if data.SavedViews[index].Name == "原始需求" && savedViewFiltersByLabel(data.SavedViews[index], "label_type_requirement") {
-			data.SavedViews[index].Name = "IT需求池"
-			changed = true
-		}
-	}
-	return changed
-}
-
-func savedViewFiltersByLabel(view domain.SavedView, labelID string) bool {
-	var filters []map[string]any
-	if len(view.Filters) == 0 || json.Unmarshal(view.Filters, &filters) != nil {
-		return false
-	}
-	for _, filter := range filters {
-		if field, _ := filter["field"].(string); field != "labels" {
-			continue
-		}
-		if value, _ := filter["value"].(string); value == labelID {
-			return true
-		}
-		values, _ := filter["values"].([]any)
-		for _, rawValue := range values {
-			value, _ := rawValue.(map[string]any)
-			if id, _ := value["value"].(string); id == labelID {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func ensureCanonicalSavedViewDisplays(data *domain.Bootstrap) bool {
-	display := json.RawMessage(`{"layout":"list","grouping":"status","groupOrder":"asc","subGrouping":"none","ordering":"priority","completedWindow":"all","orderCompletedByRecency":false,"showSubIssues":true,"showEmptyGroups":false,"nestedSubIssues":false,"properties":["id","status","priority","assignee","labels","project","created"]}`)
-	builtIn := map[string]bool{
-		"view_strategy": true, "view_business": true, "view_product": true,
-		"view_development": true, "view_testing": true, "view_operations": true,
-	}
-	changed := false
-	for index := range data.SavedViews {
-		if !builtIn[data.SavedViews[index].ID] {
-			continue
-		}
-		var current map[string]any
-		if json.Unmarshal(data.SavedViews[index].Display, &current) != nil {
-			continue
-		}
-		if _, legacy := current["direction"]; !legacy {
-			continue
-		}
-		data.SavedViews[index].Display = slices.Clone(display)
-		changed = true
-	}
-	return changed
-}
-
-func ensureCanonicalSavedViewFilters(data *domain.Bootstrap) bool {
-	changed := false
-	for viewIndex := range data.SavedViews {
-		var filters []map[string]any
-		if len(data.SavedViews[viewIndex].Filters) == 0 || json.Unmarshal(data.SavedViews[viewIndex].Filters, &filters) != nil {
-			continue
-		}
-		viewChanged := false
-		for _, filter := range filters {
-			field, _ := filter["field"].(string)
-			rawValues, _ := filter["values"].([]any)
-			values := make([]map[string]string, 0, len(rawValues))
-			for _, rawValue := range rawValues {
-				switch value := rawValue.(type) {
-				case string:
-					values = append(values, savedViewFilterValue(data, field, value))
-					viewChanged = true
-				case map[string]any:
-					id, _ := value["value"].(string)
-					if id == "" {
-						continue
-					}
-					canonical := savedViewFilterValue(data, field, id)
-					for _, key := range []string{"valueLabel", "color"} {
-						if current, ok := value[key].(string); ok && current != "" {
-							canonical[key] = current
-						} else if canonical[key] != "" {
-							viewChanged = true
-						}
-					}
-					values = append(values, canonical)
-				}
-			}
-			if len(values) == 0 {
-				if value, ok := filter["value"].(string); ok && value != "" {
-					values = append(values, savedViewFilterValue(data, field, value))
-					viewChanged = true
-				} else {
-					continue
-				}
-			}
-			filter["values"] = values
-			first := values[0]
-			for key, value := range map[string]string{
-				"id":         firstNonEmptyString(filter["id"], field+"-"+first["value"]),
-				"fieldLabel": firstNonEmptyString(filter["fieldLabel"], savedViewFilterFieldLabel(field)),
-				"value":      firstNonEmptyString(filter["value"], first["value"]),
-				"valueLabel": firstNonEmptyString(filter["valueLabel"], first["valueLabel"]),
-			} {
-				if current, _ := filter[key].(string); current != value {
-					filter[key] = value
-					viewChanged = true
-				}
-			}
-			if _, ok := filter["color"].(string); !ok && first["color"] != "" {
-				filter["color"] = first["color"]
-				viewChanged = true
-			}
-		}
-		if !viewChanged {
-			continue
-		}
-		encoded, err := json.Marshal(filters)
-		if err != nil {
-			continue
-		}
-		data.SavedViews[viewIndex].Filters = encoded
-		changed = true
-	}
-	return changed
-}
-
-func savedViewFilterValue(data *domain.Bootstrap, field, id string) map[string]string {
-	value := map[string]string{"value": id, "valueLabel": id}
-	switch field {
-	case "labels":
-		if labelIndex := slices.IndexFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id }); labelIndex >= 0 {
-			value["valueLabel"] = data.Labels[labelIndex].Name
-			value["color"] = data.Labels[labelIndex].Color
-		}
-	case "project":
-		if projectIndex := slices.IndexFunc(data.Projects, func(project domain.Project) bool { return project.ID == id }); projectIndex >= 0 {
-			value["valueLabel"] = data.Projects[projectIndex].Name
-			value["color"] = data.Projects[projectIndex].Color
-		}
-	case "status":
-		if stateIndex := slices.IndexFunc(data.States, func(state domain.WorkflowState) bool { return state.ID == id }); stateIndex >= 0 {
-			value["valueLabel"] = data.States[stateIndex].Name
-			value["color"] = data.States[stateIndex].Color
-		}
-	case "assignee", "creator", "subscribers":
-		if userIndex := slices.IndexFunc(data.Users, func(user domain.User) bool { return user.ID == id }); userIndex >= 0 {
-			value["valueLabel"] = data.Users[userIndex].DisplayName
-		}
-	case "priority":
-		priorities := map[string]string{"0": "No priority", "1": "Urgent", "2": "High", "3": "Medium", "4": "Low"}
-		if label := priorities[id]; label != "" {
-			value["valueLabel"] = label
-		}
-	}
-	return value
-}
-
-func savedViewFilterFieldLabel(field string) string {
-	labels := map[string]string{"status": "Status", "priority": "Priority", "assignee": "Assignee", "creator": "Creator", "labels": "Labels", "project": "Project", "dates": "Dates", "subscribers": "Subscribers", "relations": "Relations", "links": "Links"}
-	if label := labels[field]; label != "" {
-		return label
-	}
-	return field
-}
-
-func firstNonEmptyString(value any, fallback string) string {
-	if current, ok := value.(string); ok && current != "" {
-		return current
-	}
-	return fallback
-}
-
-func canonicalLabelResourceType(label domain.IssueLabel) string {
-	if label.ResourceType != "" {
-		return label.ResourceType
-	}
-	return "issue"
-}
-
-func cascadeBootstrapLabel(data *domain.Bootstrap, label domain.IssueLabel) {
-	for issueIndex := range data.Issues {
-		for labelIndex := range data.Issues[issueIndex].Labels {
-			if data.Issues[issueIndex].Labels[labelIndex].ID == label.ID {
-				data.Issues[issueIndex].Labels[labelIndex] = label
-			}
-		}
-	}
-}
-
-func ensureCanonicalLabelGroups(data *domain.Bootstrap) bool {
-	legacyGroups := map[string]bool{
-		"label_group_requirement": true, "label_group_delivery": true, "label_group_quality": true, "label_group_release": true, "label_group_value": true,
-		"label_group_original_requirement": true, "label_group_development_task": true, "label_group_version": true, "label_group_defect": true,
-	}
-	before := len(data.LabelGroups)
-	data.LabelGroups = slices.DeleteFunc(data.LabelGroups, func(group domain.LabelGroup) bool { return legacyGroups[group.ID] })
-	existing := make(map[string]int, len(data.LabelGroups))
-	for index, group := range data.LabelGroups {
-		existing[group.ID] = index
-	}
-	changed := len(data.LabelGroups) != before
-	for _, group := range canonicalLabelGroups() {
-		index, ok := existing[group.ID]
-		if !ok {
-			data.LabelGroups = append(data.LabelGroups, group)
-			changed = true
-			continue
-		}
-		if data.LabelGroups[index].Scope == "" || data.LabelGroups[index].ResourceType == "" || data.LabelGroups[index].Description == "" {
-			if data.LabelGroups[index].Scope == "" {
-				data.LabelGroups[index].Scope = group.Scope
-			}
-			if data.LabelGroups[index].ResourceType == "" {
-				data.LabelGroups[index].ResourceType = group.ResourceType
-			}
-			if data.LabelGroups[index].Description == "" {
-				data.LabelGroups[index].Description = group.Description
-			}
-			changed = true
-		}
-	}
-	return changed
-}
-
-// ensureCanonicalNotifications provides the one-time Inbox projection for
-// persisted workspaces created before Notification existed. IDs are derived
-// from a real source record, so subsequent application starts are idempotent
-// and never overwrite a user's notification lifecycle state.
-func ensureCanonicalNotifications(data *domain.Bootstrap) bool {
-	canonical := projectNotifications(data)
-	existing := make(map[string]int, len(data.Notifications))
-	for i, notification := range data.Notifications {
-		existing[notification.ID] = i
-	}
-
-	changed := false
-	for _, expected := range canonical {
-		index, ok := existing[expected.ID]
-		if !ok {
-			data.Notifications = append(data.Notifications, expected)
-			changed = true
-			continue
-		}
-		if reconcileNotification(&data.Notifications[index], expected) {
-			changed = true
-		}
-	}
-	return changed
-}
-
-func reconcileNotification(current *domain.Notification, expected domain.Notification) bool {
-	changed := false
-	setString := func(target *string, value string) {
-		if *target == "" && value != "" {
-			*target = value
-			changed = true
-		}
-	}
-	setString(&current.RecipientID, expected.RecipientID)
-	setString(&current.Type, expected.Type)
-	setString(&current.SourceType, expected.SourceType)
-	setString(&current.SourceID, expected.SourceID)
-	setString(&current.IssueID, expected.IssueID)
-	setString(&current.CommentID, expected.CommentID)
-	setString(&current.ActivityID, expected.ActivityID)
-	if current.Actor.ID == "" && expected.Actor.ID != "" {
-		current.Actor = expected.Actor
-		changed = true
-	}
-	if current.CreatedAt.IsZero() {
-		current.CreatedAt = expected.CreatedAt
-		changed = true
-	}
-	if current.UpdatedAt.IsZero() {
-		current.UpdatedAt = expected.UpdatedAt
-		changed = true
-	}
-	return changed
-}
-
-func projectNotifications(data *domain.Bootstrap) []domain.Notification {
-	notifications := make([]domain.Notification, 0)
-	for _, issue := range data.Issues {
-		if issue.ArchivedAt != nil {
-			continue
-		}
-		comments := data.Comments[issue.ID]
-		for _, comment := range comments {
-			notifications = append(notifications, domain.Notification{
-				ID:          "notification_comment_" + comment.ID,
-				RecipientID: data.Viewer.ID,
-				Type:        "comment",
-				SourceType:  "comment",
-				SourceID:    comment.ID,
-				IssueID:     issue.ID,
-				CommentID:   comment.ID,
-				Actor:       comment.User,
-				CreatedAt:   comment.CreatedAt,
-				UpdatedAt:   comment.CreatedAt,
-			})
-		}
-		for _, activity := range data.Activities[issue.ID] {
-			if activity.Type == "comment.created" && hasComment(comments, activity.Metadata["commentId"]) {
-				continue
-			}
-			notifications = append(notifications, domain.Notification{
-				ID:          "notification_activity_" + activity.ID,
-				RecipientID: data.Viewer.ID,
-				Type:        activityNotificationType(activity),
-				SourceType:  "activity",
-				SourceID:    activity.ID,
-				IssueID:     issue.ID,
-				ActivityID:  activity.ID,
-				Actor:       activity.Actor,
-				CreatedAt:   activity.CreatedAt,
-				UpdatedAt:   activity.CreatedAt,
-			})
-		}
-	}
-	return notifications
-}
-
-func hasComment(comments []domain.Comment, id string) bool {
-	for _, comment := range comments {
-		if comment.ID == id {
-			return true
-		}
-	}
-	return false
-}
-
-func activityNotificationType(activity domain.ActivityEvent) string {
-	if activity.Type == "comment.created" {
-		return "comment"
-	}
-	if activity.Type == "issue.updated" && activity.Metadata["assignee"] != "" {
-		return "assignment"
-	}
-	return "activity"
 }
 
 func legacyReleaseStageStatus(stage string) string {
@@ -1139,7 +459,7 @@ func normalize(data *domain.Bootstrap) {
 		data.AgentSkills = []domain.PersonalAgentSkill{}
 	}
 	if data.Reviews == nil {
-		data.Reviews = defaultCodeReviews(data)
+		data.Reviews = []domain.CodeReview{}
 	}
 	for index := range data.Initiatives {
 		if data.Initiatives[index].ParentInitiativeIDs == nil {
@@ -1590,33 +910,6 @@ func slugUnicode(value string) string {
 	return strings.Trim(builder.String(), "-")
 }
 
-func defaultCodeReviews(data *domain.Bootstrap) []domain.CodeReview {
-	if len(data.Users) == 0 {
-		return []domain.CodeReview{}
-	}
-	now := time.Now().UTC()
-	author := data.Users[0]
-	if len(data.Users) > 1 {
-		author = data.Users[1]
-	}
-	issueIDs := []string{}
-	if len(data.Issues) > 0 {
-		issueIDs = []string{data.Issues[0].ID}
-	}
-	opened := now.AddDate(0, 0, -5)
-	return []domain.CodeReview{{
-		ID: "review_flow_keyboard", SlugID: "improve-release-keyboard-navigation-a81f2c9d", Provider: "github", ExternalID: "flow-pr-42", Number: 42,
-		Title: "Improve release association keyboard navigation", Description: "Align the release picker keyboard flow with the rest of the application and add regression coverage.", Status: "open",
-		RepositoryOwner: "heliumlabz", RepositoryName: "flow", URL: "https://github.com/heliumlabz/flow/pull/42", Author: author,
-		ReviewerIDs: []string{data.Viewer.ID}, TeamReviewers: []string{"frontend"}, IssueIDs: issueIDs, BaseBranch: "main", HeadBranch: "reviews/release-keyboard", BranchState: "behind",
-		Additions: 184, Deletions: 37, CommitCount: 3, Favorite: false, Draft: false, QuickToReview: true,
-		Checks:    []domain.ReviewCheck{{ID: "check_review_build", Name: "Web build", Status: "passed"}, {ID: "check_review_api", Name: "API tests", Status: "passed"}, {ID: "check_review_lint", Name: "Lint", Status: "passed"}},
-		Files:     []domain.ReviewFile{{Path: "web/src/components/issue/issue-release-picker.tsx", Status: "modified", Additions: 121, Deletions: 21, Patch: "@@ Release picker keyboard handling\n+ Support nested Escape navigation\n+ Keep checkbox focus stable"}, {Path: "api/cmd/server/releases_model_api_test.go", Status: "modified", Additions: 63, Deletions: 16, Patch: "@@ Release association tests\n+ Verify add and remove round trip\n+ Reject frozen release stages"}},
-		Events:    []domain.ReviewEvent{{ID: "review_event_opened", Type: "opened", Actor: author, CreatedAt: opened}, {ID: "review_event_requested", Type: "review_requested", Actor: author, Body: data.Viewer.DisplayName, CreatedAt: opened.Add(time.Second)}},
-		CreatedAt: opened, UpdatedAt: now.Add(-2 * time.Hour),
-	}}
-}
-
 func defaultUserSettings(userID string) domain.UserSettings {
 	return domain.UserSettings{UserID: userID, Language: "en-US", HomeView: "Flow Agent (default)", DisplayNames: "Full name", FirstDay: "Monday", Emoticons: true, SendComments: "Enter", FontSize: "Default", InterfaceTheme: "System preference", LightTheme: "Light", DarkTheme: "Dark", ReviewAutoAssign: true, BranchFormat: "{identifier}-{title}", PersonalSettingsVersion: 1, CodeReviewsEnabled: true, MergeStrategy: "Squash and merge", CodeTheme: "Flow Light", CodeFont: "12px, Regular, Default", ReviewCommentsFilter: "Exclude Bots", ReviewRequests: true, GithubTeamReviewRequests: true, ChecksMergeQueue: true, GitAttachmentFormat: "Title", GitBranchMoveStarted: true, CodingToolMoveStarted: true, ChangelogUpdates: true, InviteAcceptedUpdates: true, PrivacyUpdates: true, AgentEnabled: true, PulseSchedule: "never", UpdatedAt: time.Now().UTC()}
 }
@@ -1810,6 +1103,9 @@ func (s *SQLiteStore) persistWorkspace(ctx context.Context, workspaceKey string,
 	raw, err := json.Marshal(data)
 	if err != nil {
 		return err
+	}
+	if len(raw) > s.maxStateBytes {
+		return fmt.Errorf("workspace state exceeds %d bytes", s.maxStateBytes)
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

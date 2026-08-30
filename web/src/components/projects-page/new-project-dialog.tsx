@@ -64,7 +64,7 @@ export type NewProjectDialogProps = {
 
 const STATUS = ['Backlog', 'Planned', 'In Progress', 'Completed', 'Canceled']
 const PRIORITY = ['No priority', 'Urgent', 'High', 'Medium', 'Low']
-const DEFAULT_TEAMS: NewProjectChoice[] = [{ id: 'cle', label: 'Cleantrack' }]
+const DEFAULT_TEAMS: NewProjectChoice[] = []
 const EMPTY_CHOICES: NewProjectChoice[] = []
 const EMPTY_TEMPLATES: NewProjectTemplateChoice[] = []
 const DEFAULT_STATUSES: NewProjectChoice[] = STATUS.map(value => ({ id: value, icon: <ProjectStatusGlyph name={value} type={projectStatusType(value)}/>, label: value }))
@@ -72,7 +72,7 @@ const DEFAULT_STATUSES: NewProjectChoice[] = STATUS.map(value => ({ id: value, i
 export function NewProjectDialog({
   open,
   initialTemplateId,
-  teamLabel = 'CLE',
+  teamLabel = 'Team',
   defaultStatus = 'Backlog',
   teams = DEFAULT_TEAMS,
   leads = EMPTY_CHOICES,

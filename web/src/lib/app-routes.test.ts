@@ -1,0 +1,25 @@
+import { describe, expect, it } from 'vitest'
+import { initiativePath, issuePath, parseAppRoute, projectPath, routeBelongsToWorkspace, teamViewsNewPath, workspaceViewsNewPath } from './app-routes'
+import type { Initiative, Issue, Project } from '@/types/flow'
+
+describe('application routes', () => {
+  it('parses workspace, team, detail, and settings routes', () => {
+    expect(parseAppRoute('/acme/projects/all')).toMatchObject({ kind: 'projects', workspaceSlug: 'acme' })
+    expect(parseAppRoute('/acme/team/ENG/backlog')).toEqual({ kind: 'team-issues', workspaceSlug: 'acme', teamKey: 'ENG', view: 'backlog' })
+    expect(parseAppRoute('/acme/settings/account/preferences')).toEqual({ kind: 'settings', workspaceSlug: 'acme', page: 'preferences' })
+    expect(parseAppRoute('/')).toEqual({ kind: 'root' })
+  })
+
+  it('generates encoded entity and view paths', () => {
+    expect(issuePath('acme', { identifier: 'ENG-42', title: 'Repair login flow' } as Issue)).toBe('/acme/issue/ENG-42/repair-login-flow')
+    expect(projectPath('acme', { slugId: 'platform migration' } as Project)).toBe('/acme/project/platform%20migration/overview')
+    expect(initiativePath('acme', { slugId: 'north-star' } as Initiative, 'projects')).toBe('/acme/initiative/north-star/projects')
+    expect(workspaceViewsNewPath('acme', 'projects')).toBe('/acme/views/projects/new')
+    expect(teamViewsNewPath('acme', 'ENG', 'issues')).toBe('/acme/team/ENG/views/issues/new')
+  })
+
+  it('rejects routes from another workspace', () => {
+    expect(routeBelongsToWorkspace(parseAppRoute('/acme/inbox'), 'acme')).toBe(true)
+    expect(routeBelongsToWorkspace(parseAppRoute('/other/inbox'), 'acme')).toBe(false)
+  })
+})
