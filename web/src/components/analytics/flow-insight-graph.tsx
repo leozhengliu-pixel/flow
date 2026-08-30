@@ -4,7 +4,7 @@ import { useMemo } from "react";
 
 import "./flow-insight-graph.css";
 
-export type FlowInsightPoint = {
+export type InsightPoint = {
   id: string;
   label: string;
   value: number;
@@ -48,12 +48,12 @@ const theme = {
   },
 } as const;
 
-export function FlowInsightBar({
+export function InsightBar({
   points,
   onSelect,
 }: {
-  points: FlowInsightPoint[];
-  onSelect?: (point: FlowInsightPoint) => void;
+  points: InsightPoint[];
+  onSelect?: (point: InsightPoint) => void;
 }) {
   const data = useMemo(
     () =>
@@ -90,7 +90,7 @@ export function FlowInsightBar({
         role="img"
         theme={theme}
         tooltip={({ indexValue, value, color }) => (
-          <div className="linear-insight-tooltip">
+          <div className="flow-insight-tooltip">
             <i style={{ background: color }} />
             <span>{String(indexValue)}</span>
             <strong>{value}</strong>
@@ -107,12 +107,12 @@ export function FlowInsightBar({
   );
 }
 
-export function FlowInsightLine({
+export function InsightLine({
   points,
   onSelect,
 }: {
-  points: FlowInsightPoint[];
-  onSelect?: (point: FlowInsightPoint) => void;
+  points: InsightPoint[];
+  onSelect?: (point: InsightPoint) => void;
 }) {
   const data = useMemo(
     () => [
@@ -157,7 +157,7 @@ export function FlowInsightLine({
         useMesh
         onClick={(point) => {
           if (!("data" in point)) return;
-          const source = (point.data as { source?: FlowInsightPoint }).source;
+          const source = (point.data as { source?: InsightPoint }).source;
           if (source) onSelect?.(source);
         }}
       />

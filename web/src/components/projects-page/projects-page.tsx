@@ -70,7 +70,7 @@ export type ProjectsPageProps = {
   onSetDisplayDefault?: (display: ProjectsDisplaySettings) => Promise<void>
   projectDisplayDefault?: Record<string, unknown>
   projectHref?: (project: Project) => string
-  workspaceKey?: string
+  workspaceKey: string
   creatingView?: boolean
   savedView?: SavedView
   duplicateFrom?: SavedView
@@ -124,7 +124,7 @@ export function ProjectsPage({
   onSetDisplayDefault,
   projectDisplayDefault,
   projectHref,
-  workspaceKey = 'cleantrack',
+  workspaceKey,
   creatingView = false,
   savedView,
   duplicateFrom,

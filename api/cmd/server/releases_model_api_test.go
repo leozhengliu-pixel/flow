@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -12,7 +14,7 @@ import (
 )
 
 func TestReleasePipelineAndReleaseAPILifecycle(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,6 +82,30 @@ func TestReleasePipelineAndReleaseAPILifecycle(t *testing.T) {
 	if publicPipeline.AccessKeyHash != "" || publicPipeline.StageStatuses["Planning"] != "planned" || publicPipeline.StageStatuses["Deploy"] != "released" {
 		t.Fatalf("bootstrap leaked a key or lost stage statuses: %#v", publicPipeline)
 	}
+	invalidEvent := httptest.NewRequest(http.MethodPost, "/api/release-pipelines/"+pipeline.ID+"/events", strings.NewReader(`{"version":"1.2.3","stage":"Deploy"}`))
+	invalidEvent.Header.Set("Authorization", "Bearer "+firstKey.Secret)
+	invalidEvent.Header.Set("Content-Type", "application/json")
+	invalidResponse := httptest.NewRecorder()
+	handler.ServeHTTP(invalidResponse, invalidEvent)
+	if invalidResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("rotated access key status=%d body=%s", invalidResponse.Code, invalidResponse.Body.String())
+	}
+	ciEvent := httptest.NewRequest(http.MethodPost, "/api/release-pipelines/"+pipeline.ID+"/events", strings.NewReader(`{"version":"1.2.3","commitSha":"abc123","stage":"Deploy"}`))
+	ciEvent.Header.Set("Authorization", "Bearer "+secondKey.Secret)
+	ciEvent.Header.Set("Content-Type", "application/json")
+	ciResponse := httptest.NewRecorder()
+	handler.ServeHTTP(ciResponse, ciEvent)
+	if ciResponse.Code != http.StatusCreated {
+		t.Fatalf("CI release status=%d body=%s", ciResponse.Code, ciResponse.Body.String())
+	}
+	var ciRelease domain.Release
+	if err := json.NewDecoder(ciResponse.Body).Decode(&ciRelease); err != nil {
+		t.Fatal(err)
+	}
+	if ciRelease.PipelineID != pipeline.ID || ciRelease.Version != "1.2.3" || ciRelease.Status != "released" || ciRelease.ReleasedAt == nil || ciRelease.CommitSHA != "abc123" {
+		t.Fatalf("CI release=%#v", ciRelease)
+	}
+	requestJSON[any](t, handler, http.MethodDelete, "/api/releases/"+ciRelease.ID, nil, http.StatusNoContent)
 	requestJSON[any](t, handler, http.MethodPost, "/api/release-pipelines", map[string]any{
 		"name": "Invalid statuses", "stages": []string{"准备", "上线"}, "stageStatuses": map[string]string{"准备": "planned", "上线": "done"},
 	}, http.StatusBadRequest)

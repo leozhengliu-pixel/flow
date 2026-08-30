@@ -50,10 +50,10 @@ export function MyIssuesVisualFixture() {
   const selection = useMyIssuesSelection(groups)
   const visibleGroups = filters.length ? groups.map(group => ({ ...group, issues: group.issues.filter(issue => filters.every(filter => filter.field === 'status' ? issue.state.id === filter.value : filter.field === 'priority' ? String(issue.priority) === filter.value : true)) })).filter(group => group.issues.length) : groups
   return <div className={styles.app}>
-    <aside className={styles.sidebar}><div className={styles.workspace}><i>CL</i><strong>cleantrack</strong></div>{['Inbox', 'My issues', 'Pulse', 'Agent'].map(label => <span key={label} data-active={label === 'My issues'}>{label}</span>)}<small>Workspace</small>{['Initiatives', 'Projects', 'Views', 'More'].map(label => <span key={label}>{label}</span>)}</aside>
+    <aside className={styles.sidebar}><div className={styles.workspace}><i>AC</i><strong>acme</strong></div>{['Inbox', 'My issues', 'Pulse', 'Agent'].map(label => <span key={label} data-active={label === 'My issues'}>{label}</span>)}<small>Workspace</small>{['Initiatives', 'Projects', 'Views', 'More'].map(label => <span key={label}>{label}</span>)}</aside>
     <MyIssuesSurface
       activeView={view}
-      viewHref={next => `/cleantrack/my-issues/${next}`}
+      viewHref={next => `/acme/my-issues/${next}`}
       onViewChange={setView}
       detailsOpen={detailsOpen}
       onDetailsOpenChange={setDetailsOpen}

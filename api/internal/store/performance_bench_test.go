@@ -6,7 +6,7 @@ import "testing"
 // every initial page load. Keep this benchmark small and deterministic so it
 // can be run before and after database/storage changes.
 func BenchmarkBootstrapFor(b *testing.B) {
-	repository, err := OpenSQLite(b.TempDir() + "/flow.db")
+	repository, err := OpenSQLiteTestFixture(b.TempDir() + "/flow.db")
 	if err != nil {
 		b.Fatal(err)
 	}

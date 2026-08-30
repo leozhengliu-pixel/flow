@@ -18,13 +18,13 @@ import (
 )
 
 func TestGitHubPullRequestWebhookCreatesReviewAndInboxNotification(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer repository.Close()
 	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
-	requestJSON[domain.IntegrationConnection](t, handler, http.MethodPut, "/api/integrations/github?workspace=cleantrack", map[string]any{"name": "acme", "config": map[string]string{"organization": "acme", "webhookSecret": "secret"}}, http.StatusOK)
+	requestJSON[domain.IntegrationConnection](t, handler, http.MethodPut, "/api/integrations/github?workspace=test-workspace", map[string]any{"name": "acme", "config": map[string]string{"organization": "acme", "webhookSecret": "secret"}}, http.StatusOK)
 	seed := repository.Bootstrap()
 	if len(seed.Issues) == 0 {
 		t.Fatal("seed must include an issue")
@@ -33,7 +33,7 @@ func TestGitHubPullRequestWebhookCreatesReviewAndInboxNotification(t *testing.T)
 	mac := hmac.New(sha256.New, []byte("secret"))
 	_, _ = mac.Write(payload)
 	request := func() *http.Request {
-		req := httptest.NewRequest(http.MethodPost, "/api/integrations/github/webhook?workspace=cleantrack", bytes.NewReader(payload))
+		req := httptest.NewRequest(http.MethodPost, "/api/integrations/github/webhook?workspace=test-workspace", bytes.NewReader(payload))
 		req.Header.Set("X-Hub-Signature-256", "sha256="+hex.EncodeToString(mac.Sum(nil)))
 		req.Header.Set("X-GitHub-Delivery", "delivery-9915")
 		return req

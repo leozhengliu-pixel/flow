@@ -31,7 +31,7 @@ func TestAgentChatUsesSelectedIssueContext(t *testing.T) {
 	}))
 	defer provider.Close()
 
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestAgentChatUsesSelectedIssueContext(t *testing.T) {
 }
 
 func TestAgentChatRejectsUnconfiguredProvider(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestAgentSessionAndSkillLifecycle(t *testing.T) {
 		writeJSON(w, http.StatusOK, map[string]any{"choices": []any{map[string]any{"message": map[string]string{"role": "assistant", "content": "Agent reply"}}}})
 	}))
 	defer provider.Close()
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

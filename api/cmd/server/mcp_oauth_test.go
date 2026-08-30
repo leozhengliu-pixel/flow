@@ -19,7 +19,7 @@ import (
 )
 
 func TestMCPOAuthPKCEAndToolLifecycle(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "mcp.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "mcp.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func TestMCPOAuthPKCEAndToolLifecycle(t *testing.T) {
 	server := httptest.NewServer(newHandler(&server{store: repository, uploadPath: t.TempDir()}))
 	defer server.Close()
 	client := authClient(t)
-	authRequest[domain.AuthSession](t, client, http.MethodPost, server.URL+"/api/auth/login", map[string]string{"email": "leo.zheng.liu@example.com", "password": "flow-demo"}, "", http.StatusOK)
+	authRequest[domain.AuthSession](t, client, http.MethodPost, server.URL+"/api/auth/login", map[string]string{"email": "admin@example.test", "password": "test-password"}, "", http.StatusOK)
 
 	registered := authRequest[domain.OAuthClient](t, client, http.MethodPost, server.URL+"/oauth/register", map[string]any{
 		"client_name": "Codex test", "redirect_uris": []string{"http://127.0.0.1:43119/callback"}, "token_endpoint_auth_method": "none",
@@ -45,7 +45,7 @@ func TestMCPOAuthPKCEAndToolLifecycle(t *testing.T) {
 		t.Fatalf("authorization request = %#v", details)
 	}
 	decision := authRequest[map[string]string](t, client, http.MethodPost, server.URL+"/api/oauth/authorization-request", map[string]any{
-		"clientId": registered.ClientID, "redirectUri": registered.RedirectURIs[0], "responseType": "code", "scope": "read write openid email", "state": "test-state", "codeChallenge": challenge, "codeChallengeMethod": "S256", "workspaceKey": "cleantrack", "approve": true,
+		"clientId": registered.ClientID, "redirectUri": registered.RedirectURIs[0], "responseType": "code", "scope": "read write openid email", "state": "test-state", "codeChallenge": challenge, "codeChallengeMethod": "S256", "workspaceKey": "test-workspace", "approve": true,
 	}, "", http.StatusOK)
 	redirect, err := url.Parse(decision["redirect"])
 	if err != nil || redirect.Query().Get("code") == "" || redirect.Query().Get("state") != "test-state" {
@@ -80,7 +80,7 @@ func TestMCPOAuthPKCEAndToolLifecycle(t *testing.T) {
 	if created.Result.(map[string]any)["isError"] == true {
 		t.Fatalf("save_issue response = %#v", created)
 	}
-	bootstrap, ok := repository.BootstrapFor("cleantrack")
+	bootstrap, ok := repository.BootstrapFor("test-workspace")
 	if !ok || !slices.ContainsFunc(bootstrap.Issues, func(item domain.Issue) bool { return item.Title == "MCP lifecycle issue" && item.Priority == 2 }) {
 		t.Fatal("save_issue did not persist the created issue")
 	}
@@ -88,7 +88,7 @@ func TestMCPOAuthPKCEAndToolLifecycle(t *testing.T) {
 	if createdLabel.Result.(map[string]any)["isError"] == true {
 		t.Fatalf("create_initiative_label response = %#v", createdLabel)
 	}
-	bootstrap, _ = repository.BootstrapFor("cleantrack")
+	bootstrap, _ = repository.BootstrapFor("test-workspace")
 	if !slices.ContainsFunc(bootstrap.Labels, func(item domain.IssueLabel) bool {
 		return item.Name == "MCP initiative label" && item.ResourceType == "initiative" && labelScopeIsWorkspace(item.Scope) && item.GroupID == ""
 	}) {
