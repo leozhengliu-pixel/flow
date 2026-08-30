@@ -2,9 +2,9 @@ import { ResponsiveBar } from "@nivo/bar";
 import { ResponsiveLine } from "@nivo/line";
 import { useMemo } from "react";
 
-import "./linear-insight-graph.css";
+import "./flow-insight-graph.css";
 
-export type LinearInsightPoint = {
+export type InsightPoint = {
   id: string;
   label: string;
   value: number;
@@ -48,12 +48,12 @@ const theme = {
   },
 } as const;
 
-export function LinearInsightBar({
+export function InsightBar({
   points,
   onSelect,
 }: {
-  points: LinearInsightPoint[];
-  onSelect?: (point: LinearInsightPoint) => void;
+  points: InsightPoint[];
+  onSelect?: (point: InsightPoint) => void;
 }) {
   const data = useMemo(
     () =>
@@ -67,7 +67,7 @@ export function LinearInsightBar({
   );
   return (
     <div
-      className="linear-insight-graph"
+      className="flow-insight-graph"
       role="img"
       aria-label="Insight bar chart"
     >
@@ -90,7 +90,7 @@ export function LinearInsightBar({
         role="img"
         theme={theme}
         tooltip={({ indexValue, value, color }) => (
-          <div className="linear-insight-tooltip">
+          <div className="flow-insight-tooltip">
             <i style={{ background: color }} />
             <span>{String(indexValue)}</span>
             <strong>{value}</strong>
@@ -107,12 +107,12 @@ export function LinearInsightBar({
   );
 }
 
-export function LinearInsightLine({
+export function InsightLine({
   points,
   onSelect,
 }: {
-  points: LinearInsightPoint[];
-  onSelect?: (point: LinearInsightPoint) => void;
+  points: InsightPoint[];
+  onSelect?: (point: InsightPoint) => void;
 }) {
   const data = useMemo(
     () => [
@@ -130,7 +130,7 @@ export function LinearInsightLine({
   );
   return (
     <div
-      className="linear-insight-graph"
+      className="flow-insight-graph"
       role="img"
       aria-label="Insight line chart"
     >
@@ -157,7 +157,7 @@ export function LinearInsightLine({
         useMesh
         onClick={(point) => {
           if (!("data" in point)) return;
-          const source = (point.data as { source?: LinearInsightPoint }).source;
+          const source = (point.data as { source?: InsightPoint }).source;
           if (source) onSelect?.(source);
         }}
       />

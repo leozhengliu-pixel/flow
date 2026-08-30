@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -48,7 +47,7 @@ func actorFromContext(ctx context.Context) (domain.User, bool) {
 	return user, ok && user.ID != ""
 }
 
-func (s *SQLiteStore) ensureAuthSeed(ctx context.Context) error {
+func (s *SQLiteStore) ensureAuthTestFixture(ctx context.Context) error {
 	var count int
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM auth_users`).Scan(&count); err != nil {
 		return err
@@ -56,9 +55,9 @@ func (s *SQLiteStore) ensureAuthSeed(ctx context.Context) error {
 	if count > 0 {
 		return nil
 	}
-	password := os.Getenv("FLOW_SEED_PASSWORD")
+	password := s.fixturePassword
 	if password == "" {
-		password = "flow-demo"
+		return errors.New("test fixture password is required")
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {

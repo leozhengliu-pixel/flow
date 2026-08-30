@@ -39,7 +39,7 @@
 @media(prefers-reduced-motion:reduce){.flow-release-editor{transition-duration:1ms}}
 .flow-releases-menu [role=label]{padding:5px 8px;color:var(--faint);font-size:11px}.flow-release-notes-create{margin-top:7px;padding:0;border:0;background:transparent;color:#5e6ad2;font-size:12px}.flow-release-detail-meta{display:flex;gap:10px;padding:14px 16px 0;color:var(--theme-text-secondary);font-size:11px}.flow-release-detail-description{margin:12px 16px 0;font-size:13px;line-height:19px;white-space:pre-wrap}.flow-release-detail-notes{min-height:0;flex:1;overflow:auto;padding:10px}.flow-release-detail-notes>p{margin:8px;font-size:13px;line-height:20px;white-space:pre-wrap}
 
-/* Linear Releases measured geometry and interaction states. */
+/* Measured release geometry and interaction states. */
 .flow-pipeline-row {
   height: 44px;
   border-radius: 8px;

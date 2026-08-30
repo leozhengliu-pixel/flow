@@ -17,7 +17,7 @@ import (
 )
 
 func TestFlowMigrationBundleExecuteAndRollback(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestFlowMigrationBundleExecuteAndRollback(t *testing.T) {
 }
 
 func TestLinearMigrationScanBuildsInteractiveMappings(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestLinearMigrationScanBuildsInteractiveMappings(t *testing.T) {
 	var job domain.MigrationJob
 	_ = json.Unmarshal(recorder.Body.Bytes(), &job)
 	fakeLinear := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"viewer": map[string]any{"id": "linear_viewer"}, "team": map[string]any{"id": "linear_team", "name": "Linear team", "key": "LIN", "members": map[string]any{"nodes": []map[string]any{{"id": "linear_user", "name": "zheng liu", "email": "leo.zheng.liu@example.com"}}}, "states": map[string]any{"nodes": []any{}}, "labels": map[string]any{"nodes": []any{}}, "projects": map[string]any{"nodes": []map[string]any{{"id": "linear_project", "name": "Test project"}}}}}})
+		writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"viewer": map[string]any{"id": "linear_viewer"}, "team": map[string]any{"id": "linear_team", "name": "Linear team", "key": "LIN", "members": map[string]any{"nodes": []map[string]any{{"id": "linear_user", "name": "Test admin", "email": "admin@example.test"}}}, "states": map[string]any{"nodes": []any{}}, "labels": map[string]any{"nodes": []any{}}, "projects": map[string]any{"nodes": []map[string]any{{"id": "linear_project", "name": "Test project"}}}}}})
 	}))
 	defer fakeLinear.Close()
 	t.Setenv("FLOW_LINEAR_API_URL", fakeLinear.URL)
@@ -105,7 +105,7 @@ func TestLinearMigrationScanBuildsInteractiveMappings(t *testing.T) {
 }
 
 func TestLinearMigrationExecutesIssueAndMetadataPhases(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

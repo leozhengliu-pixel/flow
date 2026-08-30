@@ -80,10 +80,16 @@ Run all checks before submitting a pull request:
 cd web
 npm ci
 npm run lint
+npm run test:coverage
+npm run test:coverage:all
+npm audit --audit-level=high
 npm run build
+npm run test:e2e
 
 cd ../api
-go test ./...
+go vet ./...
+go test -race -covermode=atomic -coverprofile=coverage.out ./...
+../scripts/check-go-coverage.sh coverage.out
 
 cd ..
 git diff --check

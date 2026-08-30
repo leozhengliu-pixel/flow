@@ -1,8 +1,8 @@
 [
   {
-    "name": "mcp__linear.list_comments",
+    "name": "mcp__flow.list_comments",
     "access": "read",
-    "description": "List comments on a Linear issue, project, initiative, document, project milestone, or project/initiative status update. Provide exactly one of `issueId`, `projectId`, `initiativeId`, `documentId`, `milestoneId`, or `statusUpdateId`. For issues, projects, and initiatives this returns both top-level discussion threads and inline description comments. Inline (anchored) comments carry a non-null `quotedText` set to the snippet of description text they reference. Returned comments include `author` and nullable `onBehalfOf`; when set, `onBehalfOf` identifies the user the agent author acted for.",
+    "description": "List comments on a Flow issue, project, initiative, document, project milestone, or project/initiative status update. Provide exactly one of `issueId`, `projectId`, `initiativeId`, `documentId`, `milestoneId`, or `statusUpdateId`. For issues, projects, and initiatives this returns both top-level discussion threads and inline description comments. Inline (anchored) comments carry a non-null `quotedText` set to the snippet of description text they reference. Returned comments include `author` and nullable `onBehalfOf`; when set, `onBehalfOf` identifies the user the agent author acted for.",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -21,9 +21,9 @@
     }
   },
   {
-    "name": "mcp__linear.save_initiative",
+    "name": "mcp__flow.save_initiative",
     "access": "write",
-    "description": "Create or update a Linear initiative. If `id` is provided, updates the existing initiative; otherwise creates a new one. When creating, `name` is required. To change parts of the description without resending all of it, pass `patch` instead of `description`.",
+    "description": "Create or update a Flow initiative. If `id` is provided, updates the existing initiative; otherwise creates a new one. When creating, `name` is required. To change parts of the description without resending all of it, pass `patch` instead of `description`.",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -58,9 +58,9 @@
     }
   },
   {
-    "name": "mcp__linear.create_initiative_label",
+    "name": "mcp__flow.create_initiative_label",
     "access": "write",
-    "description": "Create a new Linear initiative label",
+    "description": "Create a new Flow initiative label",
     "input_schema": {
       "type": "object",
       "required": ["name"],
@@ -74,9 +74,9 @@
     }
   },
   {
-    "name": "mcp__linear.create_issue_label",
+    "name": "mcp__flow.create_issue_label",
     "access": "write",
-    "description": "Create a new Linear issue label",
+    "description": "Create a new Flow issue label",
     "input_schema": {
       "type": "object",
       "required": ["name"],
@@ -91,9 +91,9 @@
     }
   },
   {
-    "name": "mcp__linear.list_milestones",
+    "name": "mcp__flow.list_milestones",
     "access": "read",
-    "description": "List all milestones in a Linear project",
+    "description": "List all milestones in a Flow project",
     "input_schema": {
       "type": "object",
       "required": ["project"],
@@ -103,9 +103,9 @@
     }
   },
   {
-    "name": "mcp__linear.save_project",
+    "name": "mcp__flow.save_project",
     "access": "write",
-    "description": "Create or update a Linear project. If `id` is provided, updates the existing project; otherwise creates a new one. When creating, `name` and at least one team (via `addTeams` or `setTeams`) are required. To change parts of the description without resending all of it, pass `patch` instead of `description`.",
+    "description": "Create or update a Flow project. If `id` is provided, updates the existing project; otherwise creates a new one. When creating, `name` and at least one team (via `addTeams` or `setTeams`) are required. To change parts of the description without resending all of it, pass `patch` instead of `description`.",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -136,15 +136,15 @@
     }
   },
   {
-    "name": "mcp__linear.list_issue_statuses",
+    "name": "mcp__flow.list_issue_statuses",
     "access": "read",
-    "description": "List available issue statuses in a Linear team",
+    "description": "List available issue statuses in a Flow team",
     "input_schema": { "type": "object", "required": ["team"], "properties": { "team": { "type": "string", "description": "Team name or ID" } } }
   },
   {
-    "name": "mcp__linear.list_project_labels",
+    "name": "mcp__flow.list_project_labels",
     "access": "read",
-    "description": "List available project labels in the Linear workspace",
+    "description": "List available project labels in the Flow workspace",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -157,9 +157,9 @@
     }
   },
   {
-    "name": "mcp__linear.list_initiative_labels",
+    "name": "mcp__flow.list_initiative_labels",
     "access": "read",
-    "description": "List available initiative labels in the Linear workspace",
+    "description": "List available initiative labels in the Flow workspace",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -172,9 +172,9 @@
     }
   },
   {
-    "name": "mcp__linear.list_agent_skills",
+    "name": "mcp__flow.list_agent_skills",
     "access": "read",
-    "description": "List Linear Agent skills available to the authenticated user.",
+    "description": "List Flow Agent skills available to the authenticated user.",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -186,9 +186,9 @@
     }
   },
   {
-    "name": "mcp__linear.list_teams",
+    "name": "mcp__flow.list_teams",
     "access": "read",
-    "description": "List teams in the user's Linear workspace",
+    "description": "List teams in the user's Flow workspace",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -204,9 +204,9 @@
     }
   },
   {
-    "name": "mcp__linear.list_issue_labels",
+    "name": "mcp__flow.list_issue_labels",
     "access": "read",
-    "description": "List available issue labels in a Linear workspace or team",
+    "description": "List available issue labels in a Flow workspace or team",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -220,9 +220,9 @@
     }
   },
   {
-    "name": "mcp__linear.list_documents",
+    "name": "mcp__flow.list_documents",
     "access": "read",
-    "description": "List documents in the user's Linear workspace",
+    "description": "List documents in the user's Flow workspace",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -243,9 +243,9 @@
     }
   },
   {
-    "name": "mcp__linear.save_milestone",
+    "name": "mcp__flow.save_milestone",
     "access": "write",
-    "description": "Create or update a milestone in a Linear project. If `id` is provided, updates the existing milestone; otherwise creates a new one. When creating, `name` is required.",
+    "description": "Create or update a milestone in a Flow project. If `id` is provided, updates the existing milestone; otherwise creates a new one. When creating, `name` is required.",
     "input_schema": {
       "type": "object",
       "required": ["project"],
@@ -259,15 +259,15 @@
     }
   },
   {
-    "name": "mcp__linear.delete_comment",
+    "name": "mcp__flow.delete_comment",
     "access": "write",
-    "description": "Delete a Linear comment. Inline description comments (those with non-null `quotedText`) anchor a mark in the editor, so their root cannot be deleted — delete the replies individually or resolve the thread instead.",
+    "description": "Delete a Flow comment. Inline description comments (those with non-null `quotedText`) anchor a mark in the editor, so their root cannot be deleted — delete the replies individually or resolve the thread instead.",
     "input_schema": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "description": "Comment ID" } } }
   },
   {
-    "name": "mcp__linear.list_diffs",
+    "name": "mcp__flow.list_diffs",
     "access": "read",
-    "description": "List Linear diff pull requests visible to the authenticated user",
+    "description": "List Flow diff pull requests visible to the authenticated user",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -286,9 +286,9 @@
     }
   },
   {
-    "name": "mcp__linear.list_initiatives",
+    "name": "mcp__flow.list_initiatives",
     "access": "read",
-    "description": "List initiatives in the user's Linear workspace",
+    "description": "List initiatives in the user's Flow workspace",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -312,9 +312,9 @@
     }
   },
   {
-    "name": "mcp__linear.list_projects",
+    "name": "mcp__flow.list_projects",
     "access": "read",
-    "description": "List projects in the user's Linear workspace",
+    "description": "List projects in the user's Flow workspace",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -338,15 +338,15 @@
     }
   },
   {
-    "name": "mcp__linear.extract_images",
+    "name": "mcp__flow.extract_images",
     "access": "read",
-    "description": "Extract and fetch images from markdown content. Use this to view screenshots, diagrams, or other images embedded in Linear issues, comments, or documents. Pass the markdown content (e.g., issue description) and receive the images as viewable data.",
+    "description": "Extract and fetch images from markdown content. Use this to view screenshots, diagrams, or other images embedded in Flow issues, comments, or documents. Pass the markdown content (e.g., issue description) and receive the images as viewable data.",
     "input_schema": { "type": "object", "required": ["markdown"], "properties": { "markdown": { "type": "string", "description": "Markdown content containing image references (e.g., issue description, comment body)" } } }
   },
   {
-    "name": "mcp__linear.list_cycles",
+    "name": "mcp__flow.list_cycles",
     "access": "read",
-    "description": "Retrieve cycles for a specific Linear team",
+    "description": "Retrieve cycles for a specific Flow team",
     "input_schema": {
       "type": "object",
       "required": ["teamId"],
@@ -357,9 +357,9 @@
     }
   },
   {
-    "name": "mcp__linear.list_users",
+    "name": "mcp__flow.list_users",
     "access": "read",
-    "description": "Retrieve users in the Linear workspace",
+    "description": "Retrieve users in the Flow workspace",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -373,7 +373,7 @@
     }
   },
   {
-    "name": "mcp__linear.list_release_pipelines",
+    "name": "mcp__flow.list_release_pipelines",
     "access": "read",
     "description": "List release pipelines in the workspace.",
     "input_schema": {
@@ -396,9 +396,9 @@
     }
   },
   {
-    "name": "mcp__linear.list_issues",
+    "name": "mcp__flow.list_issues",
     "access": "read",
-    "description": "List issues in the user's Linear workspace, including active Triage Intelligence suggestions for issues in triage. For my issues, use \"me\" as the assignee. Use \"null\" for no assignee.",
+    "description": "List issues in the user's Flow workspace, including active Triage Intelligence suggestions for issues in triage. For my issues, use \"me\" as the assignee. Use \"null\" for no assignee.",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -407,7 +407,7 @@
         "createdAt": { "type": "string", "description": "Created after: ISO-8601 date/duration (e.g., -P1D)" },
         "cursor": { "type": "string", "description": "Next page cursor" },
         "cycle": { "type": "string", "description": "Cycle name, number, or ID" },
-        "delegate": { "type": "string", "description": "Agent name or ID. When the user asks to delegate to \"Linear\" or \"the Linear agent\", this refers to the \"Linear\" app user specifically" },
+        "delegate": { "type": "string", "description": "Agent name or ID. When the user asks to delegate to \"Flow\" or \"the Flow agent\", this refers to the \"Flow\" app user specifically" },
         "fields": { "type": "array", "description": "Fields to include in each result. `id` is always included. Omit or pass an empty array for the default response.", "items": { "type": "string", "enum": ["id", "title", "description", "projectMilestone", "priority", "estimate", "url", "gitBranchName", "createdAt", "updatedAt", "archivedAt", "completedAt", "startedAt", "canceledAt", "dueDate", "slaStartedAt", "slaMediumRiskAt", "slaHighRiskAt", "slaBreachesAt", "slaType", "status", "statusType", "labels", "triageIntel", "createdBy", "createdById", "assignee", "assigneeId", "delegate", "delegateId", "project", "projectId", "parentId", "team", "teamId", "cycleId"] } },
         "includeArchived": { "type": "boolean", "description": "Include archived items" },
         "label": { "type": "string", "description": "Label name or ID" },
@@ -425,7 +425,7 @@
     }
   },
   {
-    "name": "mcp__linear.list_release_notes",
+    "name": "mcp__flow.list_release_notes",
     "access": "read",
     "description": "List release notes in the workspace, optionally filtered by pipeline or covered release.",
     "input_schema": {
@@ -447,7 +447,7 @@
     }
   },
   {
-    "name": "mcp__linear.list_releases",
+    "name": "mcp__flow.list_releases",
     "access": "read",
     "description": "List releases in the workspace, with optional filtering by pipeline, stage, version, and text.",
     "input_schema": {
@@ -471,7 +471,7 @@
     }
   },
   {
-    "name": "mcp__linear.get_status_updates",
+    "name": "mcp__flow.get_status_updates",
     "access": "read",
     "description": "List or get project/initiative status updates. Pass `id` to get a specific update, or filter to list.",
     "input_schema": {
@@ -493,7 +493,7 @@
     }
   },
   {
-    "name": "mcp__linear.save_release",
+    "name": "mcp__flow.save_release",
     "access": "write",
     "description": "Create or update a release. If `id` is provided, updates the existing release; otherwise creates a new one. When creating, `name` and `pipeline` are required. Release status is modeled as the release pipeline stage.",
     "input_schema": {
@@ -516,9 +516,9 @@
     }
   },
   {
-    "name": "mcp__linear.prepare_attachment_upload",
+    "name": "mcp__flow.prepare_attachment_upload",
     "access": "write",
-    "description": "Prepare a direct Linear file upload for an existing issue.",
+    "description": "Prepare a direct Flow file upload for an existing issue.",
     "input_schema": {
       "type": "object",
       "required": ["contentType", "filename", "issue", "size"],
@@ -533,9 +533,9 @@
     }
   },
   {
-    "name": "mcp__linear.save_issue",
+    "name": "mcp__flow.save_issue",
     "access": "write",
-    "description": "Create or update a Linear issue. If `id` is provided, updates the existing issue; otherwise creates a new one. When creating, `title` and `team` are required. Note: use `assignee` (not `assigneeId`) to set the assignee — it accepts a user ID, name, email, or \"me\".",
+    "description": "Create or update a Flow issue. If `id` is provided, updates the existing issue; otherwise creates a new one. When creating, `title` and `team` are required. Note: use `assignee` (not `assigneeId`) to set the assignee — it accepts a user ID, name, email, or \"me\".",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -573,7 +573,7 @@
     }
   },
   {
-    "name": "mcp__linear.create_attachment",
+    "name": "mcp__flow.create_attachment",
     "access": "write",
     "description": "Deprecated fallback for tiny files only. Accepts base64 file content, verifies SHA-256 checksum, and uploads it through the MCP worker. Prefer `prepare_attachment_upload` plus direct PUT plus `create_attachment_from_upload`.",
     "input_schema": {
@@ -592,15 +592,15 @@
     }
   },
   {
-    "name": "mcp__linear.get_workspace",
+    "name": "mcp__flow.get_workspace",
     "access": "read",
-    "description": "Retrieve the connected Linear workspace",
+    "description": "Retrieve the connected Flow workspace",
     "input_schema": { "type": "object", "required": [], "properties": {} }
   },
   {
-    "name": "mcp__linear.save_comment",
+    "name": "mcp__flow.save_comment",
     "access": "write",
-    "description": "Create or update a comment on a Linear issue, project, initiative, document, project milestone, or project/initiative status update. If `id` is provided, updates the existing comment; otherwise creates a new one. To start a new thread, pass `body` and exactly one of `issueId`, `projectId`, `initiativeId`, `documentId`, `milestoneId`, or `statusUpdateId` — comments on issues/projects/initiatives become top-level discussion threads; comments on documents/milestones become description comments. A status update holds a single thread, so a comment on an update that already has one is added to it as a reply. To reply to an existing thread, pass `parentId` and `body`; the reply inherits the parent's thread type, so no entity reference is needed. Parent reference fields are ignored when `id` or `parentId` is provided (`statusUpdateType` is rejected instead).",
+    "description": "Create or update a comment on a Flow issue, project, initiative, document, project milestone, or project/initiative status update. If `id` is provided, updates the existing comment; otherwise creates a new one. To start a new thread, pass `body` and exactly one of `issueId`, `projectId`, `initiativeId`, `documentId`, `milestoneId`, or `statusUpdateId` — comments on issues/projects/initiatives become top-level discussion threads; comments on documents/milestones become description comments. A status update holds a single thread, so a comment on an update that already has one is added to it as a reply. To reply to an existing thread, pass `parentId` and `body`; the reply inherits the parent's thread type, so no entity reference is needed. Parent reference fields are ignored when `id` or `parentId` is provided (`statusUpdateType` is rejected instead).",
     "input_schema": {
       "type": "object",
       "required": ["body"],
@@ -619,38 +619,38 @@
     }
   },
   {
-    "name": "mcp__linear.get_diff",
+    "name": "mcp__flow.get_diff",
     "access": "read",
-    "description": "Exact lookup for a Linear diff. Use with review URLs, GitHub PR URLs, Linear full identifiers, UUIDs, or slugs.",
-    "input_schema": { "type": "object", "required": ["urlOrId"], "properties": { "urlOrId": { "type": "string", "description": "Linear review URL, diff slug, pull request ID, Linear full identifier, or GitHub PR URL" } } }
+    "description": "Exact lookup for a Flow diff. Use with review URLs, GitHub PR URLs, Flow full identifiers, UUIDs, or slugs.",
+    "input_schema": { "type": "object", "required": ["urlOrId"], "properties": { "urlOrId": { "type": "string", "description": "Flow review URL, diff slug, pull request ID, Flow full identifier, or GitHub PR URL" } } }
   },
   {
-    "name": "mcp__linear.get_team",
+    "name": "mcp__flow.get_team",
     "access": "read",
-    "description": "Retrieve details of a specific Linear team",
+    "description": "Retrieve details of a specific Flow team",
     "input_schema": { "type": "object", "required": ["query"], "properties": { "query": { "type": "string", "description": "Team UUID, key, or name" } } }
   },
   {
-    "name": "mcp__linear.get_user",
+    "name": "mcp__flow.get_user",
     "access": "read",
-    "description": "Retrieve details of a specific Linear user",
+    "description": "Retrieve details of a specific Flow user",
     "input_schema": { "type": "object", "required": ["query"], "properties": { "query": { "type": "string", "description": "User ID, name, email, or \"me\"" } } }
   },
   {
-    "name": "mcp__linear.get_document",
+    "name": "mcp__flow.get_document",
     "access": "read",
-    "description": "Retrieve a Linear document by ID or slug",
+    "description": "Retrieve a Flow document by ID or slug",
     "input_schema": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "description": "Document ID or slug" } } }
   },
   {
-    "name": "mcp__linear.create_attachment_from_upload",
+    "name": "mcp__flow.create_attachment_from_upload",
     "access": "write",
-    "description": "Link an already-uploaded Linear assetUrl to an existing issue as an attachment.",
+    "description": "Link an already-uploaded Flow assetUrl to an existing issue as an attachment.",
     "input_schema": {
       "type": "object",
       "required": ["assetUrl", "issue"],
       "properties": {
-        "assetUrl": { "type": "string", "description": "Linear upload assetUrl returned by prepare_attachment_upload" },
+        "assetUrl": { "type": "string", "description": "Flow upload assetUrl returned by prepare_attachment_upload" },
         "issue": { "type": "string", "description": "Issue ID or identifier (e.g., LIN-123)" },
         "subtitle": { "type": "string", "description": "Optional attachment subtitle" },
         "title": { "type": "string", "description": "Attachment title. Defaults to filename or asset URL" }
@@ -658,9 +658,9 @@
     }
   },
   {
-    "name": "mcp__linear.search_documentation",
+    "name": "mcp__flow.search_documentation",
     "access": "read",
-    "description": "Search Linear's documentation to learn about features and usage",
+    "description": "Search Flow's documentation to learn about features and usage",
     "input_schema": {
       "type": "object",
       "required": ["query"],
@@ -671,9 +671,9 @@
     }
   },
   {
-    "name": "mcp__linear.delete_diff_comment",
+    "name": "mcp__flow.delete_diff_comment",
     "access": "write",
-    "description": "Delete a comment or persisted draft from a Linear diff",
+    "description": "Delete a comment or persisted draft from a Flow diff",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -684,9 +684,9 @@
     }
   },
   {
-    "name": "mcp__linear.get_initiative",
+    "name": "mcp__flow.get_initiative",
     "access": "read",
-    "description": "Retrieve detailed information about a specific initiative in Linear",
+    "description": "Retrieve detailed information about a specific initiative in Flow",
     "input_schema": {
       "type": "object",
       "required": ["query"],
@@ -698,22 +698,22 @@
     }
   },
   {
-    "name": "mcp__linear.merge_diff",
+    "name": "mcp__flow.merge_diff",
     "access": "write",
-    "description": "Merge a Linear diff or add it to the repository's merge queue",
+    "description": "Merge a Flow diff or add it to the repository's merge queue",
     "input_schema": {
       "type": "object",
       "required": ["urlOrId"],
       "properties": {
         "mergeMethod": { "type": "string", "description": "Merge method; omit to use the repository default", "enum": ["MERGE", "REBASE", "SQUASH"] },
-        "urlOrId": { "type": "string", "description": "Linear review URL, diff slug, pull request ID, Linear full identifier, or GitHub PR URL" }
+        "urlOrId": { "type": "string", "description": "Flow review URL, diff slug, pull request ID, Flow full identifier, or GitHub PR URL" }
       }
     }
   },
   {
-    "name": "mcp__linear.get_project",
+    "name": "mcp__flow.get_project",
     "access": "read",
-    "description": "Retrieve details of a specific project in Linear",
+    "description": "Retrieve details of a specific project in Flow",
     "input_schema": {
       "type": "object",
       "required": ["query"],
@@ -726,15 +726,15 @@
     }
   },
   {
-    "name": "mcp__linear.get_agent_skill",
+    "name": "mcp__flow.get_agent_skill",
     "access": "read",
-    "description": "Retrieve a Linear Agent skill by ID, including its full markdown instructions.",
+    "description": "Retrieve a Flow Agent skill by ID, including its full markdown instructions.",
     "input_schema": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "description": "Agent skill ID" } } }
   },
   {
-    "name": "mcp__linear.resolve_diff_thread",
+    "name": "mcp__flow.resolve_diff_thread",
     "access": "write",
-    "description": "Resolve or reopen a top-level comment thread on a Linear diff",
+    "description": "Resolve or reopen a top-level comment thread on a Flow diff",
     "input_schema": {
       "type": "object",
       "required": ["threadId"],
@@ -745,9 +745,9 @@
     }
   },
   {
-    "name": "mcp__linear.get_issue_status",
+    "name": "mcp__flow.get_issue_status",
     "access": "read",
-    "description": "Retrieve detailed information about an issue status in Linear by name or ID",
+    "description": "Retrieve detailed information about an issue status in Flow by name or ID",
     "input_schema": {
       "type": "object",
       "required": ["id", "name", "team"],
@@ -759,36 +759,36 @@
     }
   },
   {
-    "name": "mcp__linear.submit_diff_review",
+    "name": "mcp__flow.submit_diff_review",
     "access": "write",
-    "description": "Approve a Linear diff, request changes, or submit a review comment",
+    "description": "Approve a Flow diff, request changes, or submit a review comment",
     "input_schema": {
       "type": "object",
       "required": ["decision", "urlOrId"],
       "properties": {
         "body": { "type": "string", "description": "Optional review body; required when requesting changes or commenting" },
         "decision": { "type": "string", "description": "Review decision: approved, changesRequested, or commented", "enum": ["approved", "changesRequested", "commented"] },
-        "urlOrId": { "type": "string", "description": "Linear review URL, diff slug, pull request ID, Linear full identifier, or GitHub PR URL" }
+        "urlOrId": { "type": "string", "description": "Flow review URL, diff slug, pull request ID, Flow full identifier, or GitHub PR URL" }
       }
     }
   },
   {
-    "name": "mcp__linear.get_diff_threads",
+    "name": "mcp__flow.get_diff_threads",
     "access": "read",
-    "description": "Exact lookup for diff threads and the authenticated user's drafts. Use with review URLs, GitHub PR URLs, Linear full identifiers, UUIDs, or slugs.",
+    "description": "Exact lookup for diff threads and the authenticated user's drafts. Use with review URLs, GitHub PR URLs, Flow full identifiers, UUIDs, or slugs.",
     "input_schema": {
       "type": "object",
       "required": ["urlOrId"],
       "properties": {
         "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
         "resolved": { "type": "boolean", "description": "Filter returned threads by resolved state" },
-        "threadId": { "type": "string", "description": "Optional Linear comment UUID of any comment in the thread (not its `externalThreadId`); a reply's UUID resolves to its thread root" },
-        "urlOrId": { "type": "string", "description": "Linear review URL, diff slug, pull request ID, Linear full identifier, or GitHub PR URL" }
+        "threadId": { "type": "string", "description": "Optional Flow comment UUID of any comment in the thread (not its `externalThreadId`); a reply's UUID resolves to its thread root" },
+        "urlOrId": { "type": "string", "description": "Flow review URL, diff slug, pull request ID, Flow full identifier, or GitHub PR URL" }
       }
     }
   },
   {
-    "name": "mcp__linear.delete_attachment",
+    "name": "mcp__flow.delete_attachment",
     "access": "write",
     "description": "Delete an attachment by ID",
     "input_schema": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "description": "Attachment ID" } } }

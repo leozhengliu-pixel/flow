@@ -7,7 +7,7 @@ import (
 )
 
 func TestLoginExternalIdentityWithoutEmailUsesStableProviderIdentity(t *testing.T) {
-	repository, err := OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,10 +36,33 @@ func TestLoginExternalIdentityWithoutEmailUsesStableProviderIdentity(t *testing.
 	if count != 1 {
 		t.Fatalf("identity rows=%d, want 1", count)
 	}
+	linked, _, err := repository.LoginExternalIdentity(t.Context(), "saml", "https://idp.example/saml", "employee-10042", "A-10042", "zhang.san@example.com", "Zhang San Updated", "", `{"department":"engineering"}`, true)
+	if err != nil || linked.User.ID != first.User.ID {
+		t.Fatalf("second provider did not link the existing account: linked=%#v err=%v", linked.User, err)
+	}
+	identities, err := repository.ListAuthIdentities(t.Context(), first.User.ID)
+	if err != nil || len(identities) != 2 {
+		t.Fatalf("identities=%#v err=%v", identities, err)
+	}
+	for _, identity := range identities {
+		if identity.ClaimsJSON != "" {
+			t.Fatal("identity claims leaked through the account API")
+		}
+	}
+	if err := repository.UnlinkAuthIdentity(t.Context(), first.User.ID, identities[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	identities, err = repository.ListAuthIdentities(t.Context(), first.User.ID)
+	if err != nil || len(identities) != 1 {
+		t.Fatalf("identities after unlink=%#v err=%v", identities, err)
+	}
+	if err := repository.UnlinkAuthIdentity(t.Context(), first.User.ID, identities[0].ID); err == nil {
+		t.Fatal("the only sign-in method was unlinked")
+	}
 }
 
 func TestLoginExternalRemainsEmailBased(t *testing.T) {
-	repository, err := OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +87,7 @@ func TestOpenSQLiteMigratesLegacyRequiredEmailColumn(t *testing.T) {
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	repository, err := OpenSQLite(path)
+	repository, err := OpenSQLiteTestFixture(path)
 	if err != nil {
 		t.Fatal(err)
 	}

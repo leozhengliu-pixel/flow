@@ -190,7 +190,7 @@ function UpdateAuthorAvatar({ user }: { user: User }) {
 function healthLabel(value: Project['health']) { return ({ onTrack: 'On track', atRisk: 'At risk', offTrack: 'Off track', noUpdate: 'No update' })[value] }
 function formatRelative(value: string) { const seconds = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 1000)); if (seconds < 60) return 'just now'; if (seconds < 3600) return `${Math.floor(seconds / 60)}m`; if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`; return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(new Date(value)) }
 function formatLongDate(value: string) { return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(new Date(`${value}T00:00:00`)) }
-function copyUpdateLink(project: Project, update: ProjectUpdate) { const workspace = location.pathname.split('/')[1] || 'cleantrack'; return navigator.clipboard?.writeText(`${location.origin}/${workspace}/project/${project.slugId}/activity#${update.id}`) }
+function copyUpdateLink(project: Project, update: ProjectUpdate) { const workspace = location.pathname.split('/')[1] || 'workspace'; return navigator.clipboard?.writeText(`${location.origin}/${workspace}/project/${project.slugId}/activity#${update.id}`) }
 function useStoredBoolean(key: string, fallback: boolean) {
   const [value, setValue] = useState(() => localStorage.getItem(key) === null ? fallback : localStorage.getItem(key) === 'true')
   const update = (next: boolean | ((current: boolean) => boolean)) => setValue(current => { const resolved = typeof next === 'function' ? next(current) : next; localStorage.setItem(key, String(resolved)); return resolved })
