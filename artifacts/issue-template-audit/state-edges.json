@@ -1,7 +1,0 @@
-{
-  "list": ["empty", "populated", "row-hover", "menu-open", "menu-focus", "menu-close"],
-  "chooser": ["closed", "open", "standard-hover", "form-hover", "escape", "outside-click", "focus-return"],
-  "standardEditor": ["empty", "dirty", "icon-open", "property-open", "sub-issue-open", "sub-issue-saved", "save", "discard", "delete"],
-  "formEditor": ["empty", "field-menu-open", "single-field", "multi-field", "dragging", "drop", "keyboard-sort", "required", "options", "remove", "save"],
-  "editorMenu": ["duplicate", "visibility-open", "visibility-selected", "convert", "copy-url", "delete"]
-}

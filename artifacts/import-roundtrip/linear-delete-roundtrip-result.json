@@ -1,1 +1,0 @@
-{"errors":[{"message":"Invalid scope: `write` required","extensions":{"type":"forbidden","code":"FORBIDDEN","statusCode":403,"userError":true,"http":{"status":400}}}]}

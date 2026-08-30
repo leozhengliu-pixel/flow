@@ -15,7 +15,7 @@ type parityPage[T any] struct {
 }
 
 func TestParityCoreEntityLifecycles(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

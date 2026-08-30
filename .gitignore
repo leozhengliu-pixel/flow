@@ -7,9 +7,13 @@
 .coverage/
 coverage/
 .playwright-cli/
+artifacts/
+docs-audit/
 output/
 api/data/
 api/bin/
 api/flow
 web/node_modules/
 web/dist/
+web/playwright-report/
+web/test-results/

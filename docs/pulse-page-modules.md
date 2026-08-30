@@ -2,10 +2,10 @@
 
 ## Route and projection
 
-- `/cleantrack/pulse/following` renders updates for projects where the viewer is lead, member, or subscribed, plus owned or subscribed initiatives.
-- `/cleantrack/pulse/popular` prioritizes recent updates with reactions and comments while retaining a useful recent fallback when engagement is sparse.
-- `/cleantrack/pulse/all` renders the complete workspace update stream in reverse chronological order.
-- `/cleantrack/pulse` canonicalizes to the `following` route.
+- `/acme/pulse/following` renders updates for projects where the viewer is lead, member, or subscribed, plus owned or subscribed initiatives.
+- `/acme/pulse/popular` prioritizes recent updates with reactions and comments while retaining a useful recent fallback when engagement is sparse.
+- `/acme/pulse/all` renders the complete workspace update stream in reverse chronological order.
+- `/acme/pulse` canonicalizes to the `following` route.
 - The feed is a projection over the existing `projectUpdates` and `initiativeUpdates` bootstrap collections. It does not duplicate update records.
 
 ## Page shell

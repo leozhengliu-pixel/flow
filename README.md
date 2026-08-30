@@ -143,6 +143,7 @@ Flow reads configuration from environment variables passed to the API process.
 | `FLOW_DATABASE_DRIVER` | `sqlite` | `sqlite`, `postgres`, or `mysql`. |
 | `FLOW_DATABASE_PATH` | `data/flow.db` | SQLite database path. |
 | `FLOW_DATABASE_URL` | unset | PostgreSQL/MySQL connection URL. |
+| `FLOW_WORKSPACE_STATE_MAX_BYTES` | `67108864` | Maximum serialized state size for one workspace. |
 | `FLOW_REDIS_MODE` | `disabled` | `disabled`, `standalone`, or `cluster`; PostgreSQL/MySQL is required when enabled. |
 | `FLOW_REDIS_URL` | unset | Redis connection URL; alternatively use `FLOW_REDIS_ADDRS`. |
 | `FLOW_STORAGE_DRIVER` | `local` | `local` or `s3`. |
@@ -154,7 +155,7 @@ Flow reads configuration from environment variables passed to the API process.
 | `FLOW_SMTP_PASSWORD` | unset | SMTP authentication password. |
 | `FLOW_SMTP_FROM` | unset | Sender address for account emails. |
 | `FLOW_COOKIE_SECURE` | `false` | Force secure authentication cookies. Set to `true` in production. |
-| `FLOW_DEV_AUTH_TOKENS` | `true` | Include account action tokens in development responses. Disable in production. |
+| `FLOW_DEV_AUTH_TOKENS` | `false` | Include account action tokens in development responses. Enable only for isolated local development. |
 | `FLOW_TRUST_PROXY_HEADERS` | `false` | Trust forwarded client information from a controlled reverse proxy. |
 
 Example production-oriented environment:
@@ -190,20 +191,29 @@ Run the same checks used by CI before opening a pull request:
 cd web
 npm ci
 npm run lint
+npm run test:coverage
 npm run build
+npm run test:e2e
 
 cd ../api
-go test ./...
+go vet ./...
+go test -race -covermode=atomic -coverprofile=coverage.out ./...
+../scripts/check-go-coverage.sh coverage.out
+go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 ```
 
-The default Web job runs on Node.js 24 LTS. A separate required compatibility
-job repeats install, lint, and build on Node.js 26.
+The default Web job runs on Node.js 24 LTS. A separate compatibility job repeats
+lint and build on Node.js 26. CI also runs Chromium desktop/mobile flows and
+round-trip tests against PostgreSQL, MySQL, Redis, and S3-compatible storage.
 
 ## Documentation
 
 - [Product modules](docs/product-modules.md)
 - [Delivery roadmap](docs/delivery-roadmap.md)
 - [Domain model](docs/domain-model.md)
+- [OpenAPI route inventory](docs/openapi.json)
+- [Testing](docs/testing.md)
+- [Operations and backup](docs/operations.md)
 - [Routing system](docs/routing-system.md)
 - [Issue modules](docs/issue-page-modules.md)
 - [Project modules](docs/projects-page-modules.md)
@@ -225,5 +235,3 @@ Project decisions and maintainer responsibilities are documented in
 
 Licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for
 attribution information.
-
-Flow takes product interaction inspiration from Linear and is an independent, unaffiliated project.

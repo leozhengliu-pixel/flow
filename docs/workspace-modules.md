@@ -13,11 +13,11 @@
 - `GET /api/account/bootstrap` returns the viewer, memberships, counts, and last active workspace.
 - `/` restores the last workspace, or redirects to `/join` when the account has no workspace.
 - Every existing mutation sends `X-Workspace-Key`; Issues, Projects, Views, Cycles, Inbox, Pulse, and preferences are isolated by workspace.
-- Existing `cleantrack` SQLite data migrates from `workspace_state` into `workspace_states` without being reseeded.
+- Existing workspace records are loaded without product-specific rewrites or sample-data injection.
 
 ## Workspace lifecycle
 
-- Create an empty workspace with canonical issue and project states plus its initial team.
+- Create an empty workspace with canonical issue and project states plus its initial team; labels and business data remain empty.
 - Switch between workspaces from the nested menu or `O` then `W`.
 - Rename, change URL, and delete from workspace settings.
 - Deleting the final workspace returns the account to `/join`.
@@ -40,4 +40,6 @@
 
 - `workspace_states` stores one serialized `domain.Bootstrap` aggregate per URL key.
 - `account_state` stores the viewer and last active workspace key.
-- The store exposes workspace-specific bootstrap and mutation operations while retaining legacy single-workspace methods for compatibility.
+- `schema_migrations` records each forward database migration exactly once.
+- Serialized state is bounded by `FLOW_WORKSPACE_STATE_MAX_BYTES`; the default is 64 MiB.
+- The store exposes workspace-specific bootstrap and mutation operations, with Redis locks coordinating multi-instance PostgreSQL/MySQL deployments.

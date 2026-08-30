@@ -1,6 +1,0 @@
-{
-  "list": ["empty", "populated", "row-hover", "menu-open", "menu-focus", "menu-close"],
-  "editor": ["empty", "dirty", "icon-open", "property-open", "milestone-open", "milestone-saved", "visibility-open", "save", "discard", "delete"],
-  "milestones": ["empty", "single", "multi", "hover-handle", "dragging", "valid-drop", "keyboard-sort", "remove"],
-  "menuOrder": ["Edit", "Duplicate…", "Copy URL to create project from template", "Delete"]
-}
