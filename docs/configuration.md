@@ -40,6 +40,7 @@ automatically at startup for all three drivers.
 | `FLOW_DATABASE_MAX_OPEN_CONNS` | driver default | `1` for SQLite, `20` otherwise. |
 | `FLOW_DATABASE_MAX_IDLE_CONNS` | driver default | `1` for SQLite, `5` otherwise. |
 | `FLOW_DATABASE_CONN_MAX_LIFETIME` | `30m` | Go duration for pooled connections. |
+| `FLOW_WORKSPACE_STATE_MAX_BYTES` | `67108864` | Maximum serialized workspace state size. Mutations fail before exceeding this limit. |
 
 Examples:
 
@@ -69,6 +70,12 @@ Redis does not replace the primary database. Multi-instance mode requires
 PostgreSQL or MySQL; startup rejects Redis with SQLite because a local SQLite
 file is not a horizontally scalable source of truth.
 
+Flow serializes mutations per workspace and stores one bounded workspace
+aggregate. This keeps single-instance deployment simple and guarantees atomic
+domain updates, but it is intended for small and medium workspaces rather than
+unbounded event ingestion. Monitor database row size and mutation latency before
+raising `FLOW_WORKSPACE_STATE_MAX_BYTES`.
+
 | Variable | Default | Description |
 | --- | --- | --- |
 | `FLOW_REDIS_MODE` | `disabled` | `disabled`, `standalone`, or `cluster`. |
@@ -92,6 +99,21 @@ Awareness messages, and workspace entity events.
 | `FLOW_REDIS_CONNECT_TIMEOUT` | `15s` | Startup probe deadline. |
 | `FLOW_REDIS_LOCK_TTL` | `30s` | Distributed write lease, renewed while a mutation runs. |
 | `FLOW_REDIS_LOCK_WAIT` | `5s` | Maximum wait to acquire a workspace write lock. |
+
+## Container security
+
+The published image runs as numeric UID/GID `65532`, exposes an internal health
+check, and the Compose service uses a read-only root filesystem with all Linux
+capabilities dropped. Only `/app/data` and `/tmp` are writable. When upgrading an
+older named volume that was created by a root-running image, adjust ownership
+once before starting the new image:
+
+```bash
+docker run --rm -v flow_flow-api-data:/data alpine:3.22 chown -R 65532:65532 /data
+```
+
+Development account tokens are disabled by default. Set
+`FLOW_DEV_AUTH_TOKENS=true` only in an isolated local environment.
 
 Standalone example:
 
@@ -238,8 +260,8 @@ workspace key as a query parameter (or `X-Workspace-Key` header), and configure
 the same `webhookSecret` on the provider connection:
 
 ```text
-POST /api/integrations/github/webhook?workspace=cleantrack
-POST /api/integrations/gitlab/webhook?workspace=cleantrack
+POST /api/integrations/github/webhook?workspace=acme
+POST /api/integrations/gitlab/webhook?workspace=acme
 ```
 
 GitHub uses `X-Hub-Signature-256`; GitLab uses `X-Gitlab-Token`. Flow verifies

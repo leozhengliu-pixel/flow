@@ -29,16 +29,16 @@ jobs:
       packages: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: api/go.mod
           cache-dependency-path: api/go.sum
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 24.19.0
           cache: npm
@@ -87,6 +87,10 @@ jobs:
             type=ref,event=tag
             type=sha,format=short
 
+      - name: Read application version
+        id: app-version
+        run: echo "version=$(node -p \"require('./web/package.json').version\")" >> "$GITHUB_OUTPUT"
+
       - name: Build image
         uses: docker/build-push-action@v6
         with:
@@ -96,6 +100,9 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.app-version.outputs.version }}
+            VCS_REF=${{ github.sha }}
           provenance: mode=max
           sbom: true
           cache-from: type=gha,scope=container
