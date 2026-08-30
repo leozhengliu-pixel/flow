@@ -1,0 +1,155 @@
+{
+  "body": {
+    "background": "rgba(0, 0, 0, 0)",
+    "color": "rgb(0, 0, 0)",
+    "font": "16px / 24px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif"
+  },
+  "nodes": [
+    {
+      "ariaLabel": "AI prompt rules",
+      "href": null,
+      "index": 0,
+      "rect": {
+        "height": 46.796875,
+        "width": 636,
+        "x": 535,
+        "y": 222
+      },
+      "role": "textbox",
+      "style": {
+        "background": "rgba(0, 0, 0, 0)",
+        "border": "0px none lch(20 1 282)",
+        "borderRadius": "0px",
+        "boxShadow": "none",
+        "color": "lch(20 1 282)",
+        "display": "block",
+        "font": "",
+        "gap": "normal",
+        "opacity": "1",
+        "padding": "10px 14px 16px",
+        "transition": "all",
+        "zIndex": "auto"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "ariaLabel": "Create skill",
+      "href": null,
+      "index": 1,
+      "rect": {
+        "height": 24,
+        "width": 24,
+        "x": 1133,
+        "y": 515.5
+      },
+      "role": null,
+      "style": {
+        "background": "rgba(0, 0, 0, 0)",
+        "border": "0.5px solid rgba(0, 0, 0, 0)",
+        "borderRadius": "9999px",
+        "boxShadow": "none",
+        "color": "lch(20 1 282)",
+        "display": "flex",
+        "font": "500 12px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+        "gap": "normal",
+        "opacity": "1",
+        "padding": "0px 2px",
+        "transition": "border 0.15s, background-color 0.15s, color 0.15s, opacity 0.15s",
+        "zIndex": "auto"
+      },
+      "tag": "button",
+      "text": ""
+    },
+    {
+      "ariaLabel": null,
+      "href": null,
+      "index": 2,
+      "rect": {
+        "height": 14,
+        "width": 14,
+        "x": 1138,
+        "y": 520.5
+      },
+      "role": "img",
+      "style": {
+        "background": "rgba(0, 0, 0, 0)",
+        "border": "0px none lch(20 1 282)",
+        "borderRadius": "0px",
+        "boxShadow": "none",
+        "color": "lch(20 1 282)",
+        "display": "block",
+        "font": "500 12px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+        "gap": "normal",
+        "opacity": "1",
+        "padding": "0px",
+        "transition": "fill 0.15s",
+        "zIndex": "auto"
+      },
+      "tag": "svg",
+      "text": ""
+    },
+    {
+      "ariaLabel": "Add connector",
+      "href": null,
+      "index": 3,
+      "rect": {
+        "height": 32,
+        "width": 136.9609375,
+        "x": 1020.0390625,
+        "y": 697
+      },
+      "role": null,
+      "style": {
+        "background": "rgba(0, 0, 0, 0)",
+        "border": "0.5px solid rgba(0, 0, 0, 0)",
+        "borderRadius": "9999px",
+        "boxShadow": "none",
+        "color": "lch(20 1 282)",
+        "display": "flex",
+        "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+        "gap": "normal",
+        "opacity": "1",
+        "padding": "0px 12px 0px 10px",
+        "transition": "border 0.15s, background-color 0.15s, color 0.15s, opacity 0.15s",
+        "zIndex": "auto"
+      },
+      "tag": "button",
+      "text": "Add connector"
+    },
+    {
+      "ariaLabel": null,
+      "href": null,
+      "index": 4,
+      "rect": {
+        "height": 16,
+        "width": 16,
+        "x": 1030.5390625,
+        "y": 705
+      },
+      "role": "img",
+      "style": {
+        "background": "rgba(0, 0, 0, 0)",
+        "border": "0px none lch(20 1 282)",
+        "borderRadius": "0px",
+        "boxShadow": "none",
+        "color": "lch(20 1 282)",
+        "display": "block",
+        "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+        "gap": "normal",
+        "opacity": "1",
+        "padding": "0px",
+        "transition": "fill 0.15s",
+        "zIndex": "auto"
+      },
+      "tag": "svg",
+      "text": ""
+    }
+  ],
+  "url": "https://linear.app/leozhengliu/settings/account/agents",
+  "viewport": {
+    "devicePixelRatio": 2,
+    "height": 702,
+    "width": 1470
+  }
+}

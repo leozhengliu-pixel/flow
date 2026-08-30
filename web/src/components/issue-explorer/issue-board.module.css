@@ -146,6 +146,7 @@
   margin-top:6px;
   padding:0 34px 0 4px;
 }
+.titleRow[data-has-status=false]{padding-left:24px}
 .status,.checkbox{
   width:14px;
   height:14px;

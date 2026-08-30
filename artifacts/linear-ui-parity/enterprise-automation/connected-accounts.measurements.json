@@ -1,0 +1,338 @@
+[
+  {
+    "disabled": false,
+    "rect": {
+      "height": 16,
+      "width": 16,
+      "x": 557,
+      "y": 187.5
+    },
+    "role": "img",
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(9.794 0 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(9.794 0 282)",
+      "display": "block",
+      "font": "16px / 24px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "all",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "svg",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 32,
+      "width": 97.5859375,
+      "x": 1065.4140625,
+      "y": 179.5
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0.5px solid rgba(0, 0, 0, 0)",
+      "borderRadius": "9999px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "flex",
+      "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px 12px",
+      "transition": "border 0.15s, background-color 0.15s, color 0.15s, opacity 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "button",
+    "text": "Connect personal Slack account"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 16,
+      "width": 16,
+      "x": 1134.5,
+      "y": 187.5
+    },
+    "role": "img",
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(20 1 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "block",
+      "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "fill 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "svg",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 16,
+      "width": 16,
+      "x": 557,
+      "y": 265.5
+    },
+    "role": "img",
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(9.794 0 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(9.794 0 282)",
+      "display": "block",
+      "font": "16px / 24px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "fill",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "svg",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 32,
+      "width": 97.5859375,
+      "x": 1065.4140625,
+      "y": 257.5
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0.5px solid rgba(0, 0, 0, 0)",
+      "borderRadius": "9999px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "flex",
+      "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px 12px",
+      "transition": "border 0.15s, background-color 0.15s, color 0.15s, opacity 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "button",
+    "text": "Connect Google Calendar integration"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 16,
+      "width": 16,
+      "x": 1134.5,
+      "y": 265.5
+    },
+    "role": "img",
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(20 1 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "block",
+      "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "fill 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "svg",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 16,
+      "width": 16,
+      "x": 557,
+      "y": 343.5
+    },
+    "role": "img",
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(9.794 0 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(9.794 0 282)",
+      "display": "block",
+      "font": "16px / 24px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "all",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "svg",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 32,
+      "width": 97.5859375,
+      "x": 1065.4140625,
+      "y": 335.5
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0.5px solid rgba(0, 0, 0, 0)",
+      "borderRadius": "9999px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "flex",
+      "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px 12px",
+      "transition": "border 0.15s, background-color 0.15s, color 0.15s, opacity 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "button",
+    "text": "Connect personal Notion account"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 16,
+      "width": 16,
+      "x": 1134.5,
+      "y": 343.5
+    },
+    "role": "img",
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(20 1 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "block",
+      "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "fill 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "svg",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 16,
+      "width": 16,
+      "x": 557,
+      "y": 420.5
+    },
+    "role": "img",
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(9.794 0 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(9.794 0 282)",
+      "display": "block",
+      "font": "16px / 24px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "fill",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "svg",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 32,
+      "width": 122.7265625,
+      "x": 1040.2734375,
+      "y": 477.5
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0.5px solid rgba(0, 0, 0, 0)",
+      "borderRadius": "9999px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "flex",
+      "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px 12px",
+      "transition": "border 0.15s, background-color 0.15s, color 0.15s, opacity 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "button",
+    "text": "Manage connection"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 16,
+      "width": 12,
+      "x": 1138.5,
+      "y": 485.5
+    },
+    "role": "img",
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(20 1 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "block",
+      "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "fill 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "svg",
+    "text": ""
+  }
+]

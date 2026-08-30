@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Popover from "@radix-ui/react-popover";
 import {
   Check,
+  Box,
   Copy,
   MoreHorizontal,
   PanelTop,
@@ -10,6 +11,7 @@ import {
   Search,
   Star,
   Trash2,
+  UsersRound,
   X,
 } from "lucide-react";
 import {
@@ -33,12 +35,6 @@ import {
 import styles from "./agent-page.module.css";
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
 
-const examples = [
-  ["Create a new project", "Turn an idea into a well-scoped project"],
-  ["Research a topic", "Research a topic across the issue backlog"],
-  ["Set up new team", "Create a team that matches how your organization works"],
-] as const;
-
 export function AgentPage({
   chatSlug,
   data,
@@ -61,9 +57,9 @@ export function AgentPage({
     [historyOpen, setHistoryOpen] = useState(false),
     [skillsOpen, setSkillsOpen] = useState(false),
     [selectedSkills, setSelectedSkills] = useState<string[]>([]),
-    [examplesOpen, setExamplesOpen] = useState(true),
     [deleteTarget, setDeleteTarget] = useState<AgentSession>(),
     [editingId, setEditingId] = useState<string>(),
+    [examplesVisible, setExamplesVisible] = useState(true),
     [attachments, setAttachments] = useState<File[]>([]);
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -365,41 +361,7 @@ export function AgentPage({
               requestAnimationFrame(() => editorRef.current?.focus());
             }}
           />
-        ) : (
-          <>
-            <img
-              aria-hidden="true"
-              alt=""
-              className={styles.emptyGraphic}
-              src="/flow-filter-empty.svg"
-            />
-            {examplesOpen && sessions.length === 0 && (
-              <section className={styles.examples}>
-                <header>
-                  <span>{t("Get started with some examples")}</span>
-                  <button
-                    aria-label={t("Dismiss")}
-                    onClick={() => setExamplesOpen(false)}
-                    type="button"
-                  >
-                    <X />
-                  </button>
-                </header>
-                {examples.map((example) => (
-                  <button
-                    key={example[0]}
-                    disabled={!status?.enabled}
-                    onClick={() => void send(example[0])}
-                    type="button"
-                  >
-                    <strong>{t(example[0])}</strong>
-                    <span>{t(example[1])}</span>
-                  </button>
-                ))}
-              </section>
-            )}
-          </>
-        )}
+        ) : <AgentBackground />}
         {editingId && (
           <div className={styles.editing}>
             <span>{t("Editing message")}</span>
@@ -554,6 +516,14 @@ export function AgentPage({
             </span>
           )}
         </div>
+        {!current && examplesVisible && <section className={`${styles.examples}${status&&!status.enabled?` ${styles.examplesWithError}`:''}`}>
+          <header><span>{t("Get started with some examples")}</span><button aria-label={t("Dismiss")} onClick={()=>setExamplesVisible(false)} type="button"><X/></button></header>
+          <div>
+            <AgentExample icon={<Box/>} title={t("Create a new project")} description={t("Turn an idea into a well-scoped project")} onClick={()=>{writeInput(t("Help me create a new project"));requestAnimationFrame(()=>editorRef.current?.focus())}}/>
+            <AgentExample icon={<Search/>} title={t("Research a topic")} description={t("Research a topic across the issue backlog")} onClick={()=>{writeInput(t("Research a topic across the issue backlog"));requestAnimationFrame(()=>editorRef.current?.focus())}}/>
+            <AgentExample icon={<UsersRound/>} title={t("Set up new team")} description={t("Create a team that matches how your organization works")} onClick={()=>{writeInput(t("Help me set up a new team"));requestAnimationFrame(()=>editorRef.current?.focus())}}/>
+          </div>
+        </section>}
       </section>
       {deleteTarget && (
         <div className={styles.confirmOverlay} role="presentation">
@@ -586,6 +556,10 @@ export function AgentPage({
     </main>
   );
 }
+
+function AgentExample({description,icon,onClick,title}:{description:string;icon:ReactNode;onClick:()=>void;title:string}){return <button onClick={onClick} type="button">{icon}<span><strong>{title}</strong><small>{description}</small></span></button>}
+
+function AgentBackground(){return <svg aria-hidden="true" className={styles.emptyGraphic} fill="none" viewBox="0 0 336 336"><path d="M6.068 206.256c-.738-3.149 3.013-5.133 5.3-2.846L132.59 324.632c2.287 2.287.303 6.038-2.846 5.3C68.571 315.581 20.419 267.429 6.068 206.256Z"/><path d="M2.006 157.672c-.058.94.295 1.859.962 2.525l172.835 172.835c.666.667 1.585 1.02 2.525.962a166 166 0 0 0 23.115-3.074c2.538-.521 3.42-3.64 1.588-5.472L10.552 132.969c-1.832-1.832-4.951-.95-5.472 1.588a166 166 0 0 0-3.074 23.115Z"/><path d="M15.98 100.622c-.552 1.241-.271 2.691.69 3.652L231.726 319.33c.961.961 2.411 1.242 3.652.69a165 165 0 0 0 17.216-8.911c1.833-1.089 2.116-3.608.608-5.115L30.006 82.798c-1.507-1.508-4.026-1.225-5.115.608a165 165 0 0 0-8.911 17.216Z"/><path d="M44.027 62.006c-1.229-1.229-1.305-3.2-.147-4.496C74.308 23.445 118.57 2 167.84 2 259.608 2 334 76.392 334 168.16c0 49.27-21.445 93.532-55.51 123.96-1.296 1.158-3.267 1.082-4.496-.147L44.027 62.006Z"/></svg>}
 
 function Conversation({
   editingId,

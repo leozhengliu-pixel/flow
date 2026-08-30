@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,6 +35,75 @@ func TestWorkspaceSettingsPersistence(t *testing.T) {
 	values, ok := bootstrap.Settings["values"].(map[string]any)
 	if !ok || values["firstDay"] != "Sunday" || values["emoticons"] != false {
 		t.Fatalf("settings did not survive bootstrap round trip: %#v", bootstrap.Settings)
+	}
+}
+
+func TestDevelopmentMemberLifecycle(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if len(bootstrap.Members) != len(bootstrap.Users) || len(bootstrap.TeamMembers) == 0 {
+		t.Fatalf("development member projection missing: members=%d users=%d teamMembers=%d", len(bootstrap.Members), len(bootstrap.Users), len(bootstrap.TeamMembers))
+	}
+	target := bootstrap.Users[1]
+	updated := requestJSON[domain.WorkspaceMember](t, handler, http.MethodPatch, "/api/workspaces/cleantrack/members/"+target.ID, map[string]any{"role": "admin", "displayName": "Updated member", "username": "updated.member", "email": "updated.member@example.com"}, http.StatusOK)
+	if updated.Role != "admin" || updated.User.DisplayName != "Updated member" || updated.User.Name != "updated.member" || updated.User.Email != "updated.member@example.com" {
+		t.Fatalf("member update failed: %#v", updated)
+	}
+	requestJSON[any](t, handler, http.MethodPut, "/api/workspaces/cleantrack/teams/"+bootstrap.Teams[0].ID+"/members/"+target.ID, map[string]any{"member": false, "role": "member"}, http.StatusNoContent)
+	requestJSON[any](t, handler, http.MethodPost, "/api/workspaces/cleantrack/members/"+target.ID+"/suspend", nil, http.StatusNoContent)
+	requestJSON[any](t, handler, http.MethodPost, "/api/workspaces/cleantrack/members/"+target.ID+"/resume", nil, http.StatusNoContent)
+	invitations := requestJSON[[]domain.Invitation](t, handler, http.MethodPost, "/api/workspaces/cleantrack/invitations", map[string]any{"emails": []string{"new.member@example.com"}, "role": "member", "teamIds": []string{bootstrap.Teams[0].ID}}, http.StatusCreated)
+	if len(invitations) != 1 || invitations[0].Token == "" {
+		t.Fatalf("development invitation failed: %#v", invitations)
+	}
+	preview := requestJSON[map[string]any](t, handler, http.MethodGet, "/api/invitations/preview/"+invitations[0].Token, nil, http.StatusOK)
+	if preview["email"] != "new.member@example.com" {
+		t.Fatalf("invitation preview = %#v", preview)
+	}
+	resent := requestJSON[domain.Invitation](t, handler, http.MethodPost, "/api/workspaces/cleantrack/invitations/"+invitations[0].ID+"/resend", nil, http.StatusOK)
+	if resent.Token == "" || resent.Token == invitations[0].Token {
+		t.Fatalf("invitation token was not rotated: %#v", resent)
+	}
+	requestJSON[any](t, handler, http.MethodDelete, "/api/workspaces/cleantrack/invitations/"+invitations[0].ID, nil, http.StatusNoContent)
+}
+
+func TestTeamCreationHierarchyCopyAndDelete(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	source := bootstrap.Teams[0]
+	requestJSON[domain.TeamSettings](t, handler, http.MethodPatch, "/api/teams/"+source.ID+"/settings", map[string]any{"timezone": "Asia/Shanghai", "progressOrder": "last"}, http.StatusOK)
+	parent := requestJSON[domain.Team](t, handler, http.MethodPost, "/api/workspaces/cleantrack/teams", map[string]any{"name": "Platform", "key": "PLT", "private": true, "copyFromTeamId": source.ID, "timezone": "Europe/London"}, http.StatusCreated)
+	child := requestJSON[domain.Team](t, handler, http.MethodPost, "/api/workspaces/cleantrack/teams", map[string]any{"name": "Runtime", "key": "RUN", "parentTeamId": parent.ID}, http.StatusCreated)
+	afterCreate := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if afterCreate.TeamSettings[parent.ID].Timezone != "Europe/London" || afterCreate.TeamSettings[parent.ID].ProgressOrder != "last" || afterCreate.TeamSettings[child.ID].ParentTeamID != parent.ID {
+		t.Fatalf("team settings were not copied: parent=%#v child=%#v", afterCreate.TeamSettings[parent.ID], afterCreate.TeamSettings[child.ID])
+	}
+	if !slices.ContainsFunc(afterCreate.States, func(state domain.WorkflowState) bool { return state.TeamID == child.ID }) || !slices.ContainsFunc(afterCreate.TeamMembers, func(member domain.TeamMember) bool {
+		return member.TeamID == child.ID && member.UserID == afterCreate.Viewer.ID && member.Role == "owner"
+	}) {
+		t.Fatal("team workflow or owner membership was not copied")
+	}
+	parentIssue := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Retirement coverage", "teamId": parent.ID}, http.StatusCreated)
+	requestJSON[domain.Team](t, handler, http.MethodPatch, "/api/workspaces/cleantrack/teams/"+parent.ID, map[string]any{"retired": true}, http.StatusOK)
+	requestJSON[any](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Blocked on retired team", "teamId": parent.ID}, http.StatusBadRequest)
+	requestJSON[any](t, handler, http.MethodPatch, "/api/issues/"+parentIssue.ID, map[string]any{"priority": 2}, http.StatusBadRequest)
+	requestJSON[domain.Team](t, handler, http.MethodPatch, "/api/workspaces/cleantrack/teams/"+parent.ID, map[string]any{"retired": false}, http.StatusOK)
+	requestJSON[any](t, handler, http.MethodPatch, "/api/teams/"+parent.ID+"/settings", map[string]any{"parentTeamId": child.ID}, http.StatusBadRequest)
+	issue := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Deleted with team", "teamId": child.ID}, http.StatusCreated)
+	requestJSON[any](t, handler, http.MethodDelete, "/api/workspaces/cleantrack/teams/"+child.ID, nil, http.StatusNoContent)
+	afterDelete := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if slices.ContainsFunc(afterDelete.Teams, func(team domain.Team) bool { return team.ID == child.ID }) || slices.ContainsFunc(afterDelete.Issues, func(item domain.Issue) bool { return item.ID == issue.ID }) || slices.ContainsFunc(afterDelete.TeamMembers, func(member domain.TeamMember) bool { return member.TeamID == child.ID }) {
+		t.Fatal("team deletion left owned resources behind")
 	}
 }
 
@@ -179,6 +249,55 @@ func TestWorkspaceLabelMovesBetweenGroups(t *testing.T) {
 	}
 }
 
+func TestDeletingLabelGroupDeletesChildrenAndReferences(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+
+	group := requestJSON[domain.LabelGroup](t, handler, http.MethodPost, "/api/label-groups", map[string]any{
+		"name": "Disposable group", "resourceType": "issue",
+	}, http.StatusCreated)
+	first := requestJSON[domain.IssueLabel](t, handler, http.MethodPost, "/api/labels", map[string]any{
+		"name": "First child", "resourceType": "issue", "groupId": group.ID,
+	}, http.StatusCreated)
+	second := requestJSON[domain.IssueLabel](t, handler, http.MethodPost, "/api/labels", map[string]any{
+		"name": "Second child", "resourceType": "issue", "groupId": group.ID,
+	}, http.StatusCreated)
+	requestJSON[any](t, handler, http.MethodPost, "/api/issue-templates", map[string]any{
+		"name": "Invalid grouped defaults", "labelIds": []string{first.ID, second.ID},
+	}, http.StatusBadRequest)
+	issue := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{
+		"title": "Label group deletion coverage", "labelIds": []string{first.ID},
+	}, http.StatusCreated)
+	view := requestJSON[domain.SavedView](t, handler, http.MethodPost, "/api/views", map[string]any{
+		"name": "Disposable label view", "resource": "issues", "scope": "workspace",
+		"filters": []map[string]any{{"id": "label-filter", "field": "labels", "operator": "is", "values": []map[string]any{{"id": first.ID, "label": first.Name}}}},
+	}, http.StatusCreated)
+	requestJSON[any](t, handler, http.MethodDelete, "/api/label-groups/"+group.ID, nil, http.StatusNoContent)
+
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if slices.ContainsFunc(bootstrap.LabelGroups, func(item domain.LabelGroup) bool { return item.ID == group.ID }) {
+		t.Fatal("deleted label group is still present")
+	}
+	if slices.ContainsFunc(bootstrap.Labels, func(item domain.IssueLabel) bool { return item.ID == first.ID || item.ID == second.ID }) {
+		t.Fatalf("group children survived deletion: %#v", bootstrap.Labels)
+	}
+	updatedIssue := findIssue(t, bootstrap.Issues, issue.ID)
+	if slices.ContainsFunc(updatedIssue.Labels, func(item domain.IssueLabel) bool { return item.ID == first.ID }) {
+		t.Fatalf("deleted group label survived on issue: %#v", updatedIssue.Labels)
+	}
+	updatedViewIndex := slices.IndexFunc(bootstrap.SavedViews, func(item domain.SavedView) bool { return item.ID == view.ID })
+	if updatedViewIndex < 0 {
+		t.Fatal("saved view disappeared after label deletion")
+	}
+	if strings.Contains(string(bootstrap.SavedViews[updatedViewIndex].Filters), first.ID) {
+		t.Fatalf("deleted group label survived in saved view filters: %s", bootstrap.SavedViews[updatedViewIndex].Filters)
+	}
+}
+
 func TestMoveWorkspaceLabelToTeamsPreservesIssueAssignments(t *testing.T) {
 	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
@@ -252,14 +371,15 @@ func TestIssueLifecycle(t *testing.T) {
 	handler := newHandler(s)
 
 	created := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{
-		"title": "Issue engine test", "description": "Initial", "stateId": "state_todo", "priority": 2,
+		"title": "Issue engine test", "description": "Initial", "stateId": "state_todo", "priority": 2, "estimate": 5, "recurrence": "weekly", "nextOccurrenceAt": "2026-09-08T00:00:00Z",
 		"assigneeId": "usr_zheng", "projectId": "project_cruise", "dueDate": "2026-09-01", "labelIds": []string{"label_type_defect"},
 		"descriptionState": `{"type":"doc","content":[{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Initial"}]}]}`,
 		"descriptionData":  map[string]any{"type": "doc", "content": []any{map[string]any{"type": "heading", "attrs": map[string]any{"level": 2}}}}, "contentState": "CREATE_STATE",
 	}, http.StatusCreated)
-	if created.ID == "" || created.State.ID != "state_todo" || created.Priority != 2 || created.Project == nil || len(created.Labels) != 1 || created.DescriptionState == "" || created.DocumentContent == nil || created.DocumentContent.ContentState != "CREATE_STATE" || created.DocumentContent.ContentData["type"] != "doc" {
+	if created.ID == "" || created.State.ID != "state_todo" || created.Priority != 2 || created.Estimate == nil || *created.Estimate != 5 || created.Recurrence != "weekly" || created.NextOccurrenceAt == nil || created.Project == nil || len(created.Labels) != 1 || created.DescriptionState == "" || created.DocumentContent == nil || created.DocumentContent.ContentState != "CREATE_STATE" || created.DocumentContent.ContentData["type"] != "doc" {
 		t.Fatalf("create did not persist properties: %#v", created)
 	}
+	requestJSON[any](t, handler, http.MethodPatch, "/api/issues/"+created.ID, map[string]any{"labelIds": []string{"label_type_requirement", "label_type_defect"}}, http.StatusBadRequest)
 	for _, stateID := range []string{"state_canceled", "state_duplicate"} {
 		updatedState := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+created.ID, map[string]any{"stateId": stateID}, http.StatusOK)
 		if updatedState.State.ID != stateID {
@@ -280,12 +400,16 @@ func TestIssueLifecycle(t *testing.T) {
 	}
 
 	updated := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+created.ID, map[string]any{
-		"title": "Autosaved title", "description": "Autosaved description", "subscriberIds": []string{"usr_zheng", "usr_jiaozongben"},
+		"title": "Autosaved title", "description": "Autosaved description", "estimate": 8, "subscriberIds": []string{"usr_zheng", "usr_jiaozongben"},
 		"descriptionState": `{"type":"doc","content":[{"type":"paragraph"}]}`,
 		"descriptionData":  map[string]any{"type": "doc", "content": []any{map[string]any{"type": "paragraph"}}}, "contentState": "AQID",
 	}, http.StatusOK)
-	if updated.Title != "Autosaved title" || updated.DescriptionState == "" || len(updated.SubscriberIDs) != 2 || updated.DocumentContent == nil || updated.DocumentContent.Version != created.DocumentContent.Version+1 || updated.DocumentContent.ContentState != "AQID" || updated.DocumentContent.Content != "Autosaved description" || updated.DocumentContent.ContentData["type"] != "doc" {
+	if updated.Title != "Autosaved title" || updated.Estimate == nil || *updated.Estimate != 8 || updated.DescriptionState == "" || len(updated.SubscriberIDs) != 2 || updated.DocumentContent == nil || updated.DocumentContent.Version != created.DocumentContent.Version+1 || updated.DocumentContent.ContentState != "AQID" || updated.DocumentContent.Content != "Autosaved description" || updated.DocumentContent.ContentData["type"] != "doc" {
 		t.Fatalf("update failed: %#v", updated)
+	}
+	clearedEstimate := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+created.ID, map[string]any{"estimate": 0}, http.StatusOK)
+	if clearedEstimate.Estimate != nil {
+		t.Fatalf("estimate was not cleared: %#v", clearedEstimate.Estimate)
 	}
 	conflict := requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/issues/"+created.ID, map[string]any{
 		"description": "Stale snapshot", "descriptionData": map[string]any{"type": "doc"}, "contentState": "STALE", "expectedDocumentVersion": created.DocumentContent.Version,

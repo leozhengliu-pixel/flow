@@ -1,0 +1,185 @@
+- link "Skip to content":
+  - /url: "#skip-nav"
+- navigation:
+  - link "Back to app":
+    - /url: /leozhengliu
+    - text: Back to app
+  - generic "Search settings":
+    - search "Search…"
+  - heading "Personal" [level=2]:
+    - generic: Personal
+  - link "Preferences":
+    - /url: /leozhengliu/settings/account/preferences
+    - generic: Preferences
+  - link "Profile":
+    - /url: /leozhengliu/settings/account/profile
+    - generic: Profile
+  - link "Notifications":
+    - /url: /leozhengliu/settings/account/notifications
+    - generic: Notifications
+  - link "Code & reviews":
+    - /url: /leozhengliu/settings/account/code-and-reviews
+    - generic: Code & reviews
+  - link "Security & access":
+    - /url: /leozhengliu/settings/account/security
+    - generic: Security & access
+  - link "Connected accounts":
+    - /url: /leozhengliu/settings/account/connections
+    - generic: Connected accounts
+  - link "Agent personalization":
+    - /url: /leozhengliu/settings/account/agents
+    - generic: Agent personalization
+  - heading "Issues" [level=2]:
+    - generic: Issues
+  - link "Labels":
+    - /url: /leozhengliu/settings/issue-labels
+    - generic: Labels
+  - link "Templates":
+    - /url: /leozhengliu/settings/issue-templates
+    - generic: Templates
+  - link "SLAs":
+    - /url: /leozhengliu/settings/sla
+    - generic: SLAs
+  - heading "Projects" [level=2]:
+    - generic: Projects
+  - link "Labels":
+    - /url: /leozhengliu/settings/project-labels
+    - generic: Labels
+  - link "Templates":
+    - /url: /leozhengliu/settings/project-templates
+    - generic: Templates
+  - link "Statuses":
+    - /url: /leozhengliu/settings/project-statuses
+    - generic: Statuses
+  - link "Updates":
+    - /url: /leozhengliu/settings/project-updates
+    - generic: Updates
+  - heading "Features" [level=2]:
+    - generic: Features
+  - link "AI & Agents":
+    - /url: /leozhengliu/settings/ai
+    - generic: AI & Agents
+  - link "Initiatives":
+    - /url: /leozhengliu/settings/initiatives
+    - generic: Initiatives
+  - link "Documents":
+    - /url: /leozhengliu/settings/documents
+    - generic: Documents
+  - link "Customer requests":
+    - /url: /leozhengliu/settings/customer-requests
+    - generic: Customer requests
+  - link "Releases":
+    - /url: /leozhengliu/settings/releases
+    - generic: Releases
+  - link "Pulse":
+    - /url: /leozhengliu/settings/pulse
+    - generic: Pulse
+  - link "Asks":
+    - /url: /leozhengliu/settings/asks
+    - generic: Asks
+  - link "Emojis":
+    - /url: /leozhengliu/settings/emojis
+    - generic: Emojis
+  - link "Integrations":
+    - /url: /leozhengliu/settings/integrations
+    - generic: Integrations
+  - heading "Administration" [level=2]:
+    - generic: Administration
+  - link "Workspace":
+    - /url: /leozhengliu/settings/workspace
+    - generic: Workspace
+  - link "Teams":
+    - /url: /leozhengliu/settings/teams
+    - generic: Teams
+  - link "Members":
+    - /url: /leozhengliu/settings/members
+    - generic: Members
+  - link "Security":
+    - /url: /leozhengliu/settings/security
+    - generic: Security
+  - link "API":
+    - /url: /leozhengliu/settings/api
+    - generic: API
+  - link "Applications":
+    - /url: /leozhengliu/settings/applications
+    - generic: Applications
+  - link "Billing":
+    - /url: /leozhengliu/settings/billing
+    - generic: Billing
+  - link "Usage & limits":
+    - /url: /leozhengliu/settings/usage
+    - generic: Usage & limits
+  - link "Import & export":
+    - /url: /leozhengliu/settings/import-export
+    - generic: Import & export
+  - heading "Your teams" [level=2]:
+    - generic: Your teams
+  - link "Leozhengliu":
+    - /url: /leozhengliu/settings/teams/LEO
+    - generic: Leozhengliu
+  - generic "Create a team":
+    - text: Create a team
+- button "Open Help menu":
+- generic "There are 19 days remaining in your workspace’s Business trial.":
+  - link "Business trial ends":
+    - /url: /leozhengliu/settings/billing/plans
+  - generic: Business trial ends
+  - generic: 19d
+- main:
+  - generic: Notifications
+  - heading "Push notifications" [level=3]
+  - generic: Choose which notifications are pushed to your devices. All notifications will still appear in your inbox.
+  - list:
+    - link "Desktop settings":
+      - /url: /leozhengliu/settings/account/notifications/desktop
+    - figure:
+    - generic: Desktop
+    - generic: Disabled
+    - link "Mobile settings":
+      - /url: /leozhengliu/settings/account/notifications/mobile
+    - figure:
+    - generic: Mobile
+    - generic: Enabled for assignments, status changes, 13 others
+    - link "Email settings":
+      - /url: /leozhengliu/settings/account/notifications/email
+    - figure:
+    - generic: Email
+    - generic: Enabled for all notifications
+    - link "Slack settings":
+      - /url: /leozhengliu/settings/account/notifications/slack
+    - figure:
+    - generic: Slack
+    - generic: Disabled
+  - heading "Updates from Linear" [level=3]
+  - generic: Subscribe to product announcements and important changes from the Linear team
+  - generic: Changelog
+  - list:
+    - generic: Show updates in sidebar
+    - generic: Highlight new features and improvements in the app sidebar
+    - checkbox "Show updates in sidebar"
+    - generic: Changelog newsletter
+    - generic: Receive an email twice a month highlighting new features and improvements
+    - checkbox "Changelog newsletter"
+  - generic: Marketing
+  - list:
+    - generic: Marketing and onboarding
+    - generic: Occasional updates to help you get the most of out of Linear
+    - checkbox "Marketing and onboarding"
+  - generic: Other updates
+  - list:
+    - generic: Invite accepted
+    - generic: Email when invitees accept an invite
+    - checkbox "Invite accepted" [checked]
+    - generic: Privacy and legal updates
+    - generic: Email when privacy policies or terms of service change
+    - checkbox "Privacy and legal updates" [checked]
+    - generic: Data processing agreement (DPA)
+    - generic: Email when our DPA changes
+    - checkbox "Data processing agreement (DPA)"
+- button "Update loop":
+  - generic "Update loop"
+- button "Agent":
+  - generic: Agent
+- button "Chat history":
+- region "Notifications alt+T"
+- status

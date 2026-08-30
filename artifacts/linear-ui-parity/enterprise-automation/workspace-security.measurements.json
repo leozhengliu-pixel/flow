@@ -1,0 +1,1066 @@
+[
+  {
+    "disabled": false,
+    "rect": {
+      "height": 20,
+      "width": 30,
+      "x": 1121,
+      "y": 249
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "lch(82.484 0.054 281.837)",
+      "border": "0px none rgb(0, 0, 0)",
+      "borderRadius": "72px",
+      "boxShadow": "none",
+      "color": "rgb(0, 0, 0)",
+      "display": "block",
+      "font": "13.3333px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "background-color 0.15s ease-out, opacity 0.15s ease-out",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "input",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 17.5,
+      "width": 53.7109375,
+      "x": 1094.609375,
+      "y": 334.5
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(9.794 0 282)",
+      "borderRadius": "8px",
+      "boxShadow": "none",
+      "color": "lch(9.794 0 282)",
+      "display": "inline",
+      "font": "450 13px / 22px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "1px 4px",
+      "transition": "color 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "a",
+    "text": "Docs"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 32,
+      "width": 119.5703125,
+      "x": 1043.4296875,
+      "y": 382.5
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0.5px solid rgba(0, 0, 0, 0)",
+      "borderRadius": "9999px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "flex",
+      "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px 12px 0px 10px",
+      "transition": "border 0.15s, background-color 0.15s, color 0.15s, opacity 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "button",
+    "text": "Add domain"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 16,
+      "width": 16,
+      "x": 1053.9296875,
+      "y": 390.5
+    },
+    "role": "img",
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(20 1 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "block",
+      "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "fill 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "svg",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 20,
+      "width": 30,
+      "x": 1121,
+      "y": 552.5
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "lch(53 52.26 286.91)",
+      "border": "0px none rgb(0, 0, 0)",
+      "borderRadius": "72px",
+      "boxShadow": "none",
+      "color": "rgb(0, 0, 0)",
+      "display": "block",
+      "font": "13.3333px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "background-color 0.15s ease-out, opacity 0.15s ease-out",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "input",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 20,
+      "width": 30,
+      "x": 1121,
+      "y": 617.5
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "lch(53 52.26 286.91)",
+      "border": "0px none rgb(0, 0, 0)",
+      "borderRadius": "72px",
+      "boxShadow": "none",
+      "color": "rgb(0, 0, 0)",
+      "display": "block",
+      "font": "13.3333px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "background-color 0.15s ease-out, opacity 0.15s ease-out",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "input",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 32,
+      "width": 167.4453125,
+      "x": 989.5546875,
+      "y": 676
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0.5px solid rgba(0, 0, 0, 0)",
+      "borderRadius": "9999px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "flex",
+      "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "0.6",
+      "padding": "0px 12px",
+      "transition": "border 0.15s, background-color 0.15s, color 0.15s, opacity 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "a",
+    "text": "Available on Enterprise"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 20,
+      "width": 30,
+      "x": 1121,
+      "y": 758.5
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "lch(82.484 0.054 281.837)",
+      "border": "0px none rgb(0, 0, 0)",
+      "borderRadius": "72px",
+      "boxShadow": "none",
+      "color": "rgb(0, 0, 0)",
+      "display": "block",
+      "font": "13.3333px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "background-color 0.15s ease-out, opacity 0.15s ease-out",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "input",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 30,
+      "width": 115.140625,
+      "x": 1041.859375,
+      "y": 905.5
+    },
+    "role": "combobox",
+    "state": "closed",
+    "style": {
+      "background": "lch(100 0 282)",
+      "border": "0.5px solid rgba(0, 0, 0, 0)",
+      "borderRadius": "8px",
+      "boxShadow": "lch(0 0 0 / 0.088) 0px 0px 0px 0.5px, lch(0 0 0 / 0.02) 0px 3px 6px -2px, lch(0 0 0 / 0.04) 0px 1px 1px 0px",
+      "color": "lch(20 1 282)",
+      "display": "flex",
+      "font": "13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "1px 28px 1px 10px",
+      "transition": "background-color 0.15s, border 0.15s, color 0.15s, box-shadow 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "button",
+    "text": "Only admins"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 5,
+      "width": 10,
+      "x": 1136.5,
+      "y": 918
+    },
+    "role": "img",
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(20 1 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "block",
+      "font": "13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "fill",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "svg",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 30,
+      "width": 115.578125,
+      "x": 1041.421875,
+      "y": 970.5
+    },
+    "role": "combobox",
+    "state": "closed",
+    "style": {
+      "background": "lch(100 0 282)",
+      "border": "0.5px solid rgba(0, 0, 0, 0)",
+      "borderRadius": "8px",
+      "boxShadow": "lch(0 0 0 / 0.088) 0px 0px 0px 0.5px, lch(0 0 0 / 0.02) 0px 3px 6px -2px, lch(0 0 0 / 0.04) 0px 1px 1px 0px",
+      "color": "lch(20 1 282)",
+      "display": "flex",
+      "font": "13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "1px 28px 1px 10px",
+      "transition": "background-color 0.15s, border 0.15s, color 0.15s, box-shadow 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "button",
+    "text": "All members"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 5,
+      "width": 10,
+      "x": 1136.5,
+      "y": 983
+    },
+    "role": "img",
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(20 1 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "block",
+      "font": "13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "fill",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "svg",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 30,
+      "width": 115.578125,
+      "x": 1041.421875,
+      "y": 1035.5
+    },
+    "role": "combobox",
+    "state": "closed",
+    "style": {
+      "background": "lch(100 0 282)",
+      "border": "0.5px solid rgba(0, 0, 0, 0)",
+      "borderRadius": "8px",
+      "boxShadow": "lch(0 0 0 / 0.088) 0px 0px 0px 0.5px, lch(0 0 0 / 0.02) 0px 3px 6px -2px, lch(0 0 0 / 0.04) 0px 1px 1px 0px",
+      "color": "lch(20 1 282)",
+      "display": "flex",
+      "font": "13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "1px 28px 1px 10px",
+      "transition": "background-color 0.15s, border 0.15s, color 0.15s, box-shadow 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "button",
+    "text": "All members"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 5,
+      "width": 10,
+      "x": 1136.5,
+      "y": 1048
+    },
+    "role": "img",
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(20 1 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "block",
+      "font": "13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "fill",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "svg",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 30,
+      "width": 115.578125,
+      "x": 1041.421875,
+      "y": 1100.5
+    },
+    "role": "combobox",
+    "state": "closed",
+    "style": {
+      "background": "lch(100 0 282)",
+      "border": "0.5px solid rgba(0, 0, 0, 0)",
+      "borderRadius": "8px",
+      "boxShadow": "lch(0 0 0 / 0.088) 0px 0px 0px 0.5px, lch(0 0 0 / 0.02) 0px 3px 6px -2px, lch(0 0 0 / 0.04) 0px 1px 1px 0px",
+      "color": "lch(20 1 282)",
+      "display": "flex",
+      "font": "13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "1px 28px 1px 10px",
+      "transition": "background-color 0.15s, border 0.15s, color 0.15s, box-shadow 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "button",
+    "text": "All members"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 5,
+      "width": 10,
+      "x": 1136.5,
+      "y": 1113
+    },
+    "role": "img",
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(20 1 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "block",
+      "font": "13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "fill",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "svg",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 30,
+      "width": 115.578125,
+      "x": 1041.421875,
+      "y": 1165.5
+    },
+    "role": "combobox",
+    "state": "closed",
+    "style": {
+      "background": "lch(100 0 282)",
+      "border": "0.5px solid rgba(0, 0, 0, 0)",
+      "borderRadius": "8px",
+      "boxShadow": "lch(0 0 0 / 0.088) 0px 0px 0px 0.5px, lch(0 0 0 / 0.02) 0px 3px 6px -2px, lch(0 0 0 / 0.04) 0px 1px 1px 0px",
+      "color": "lch(20 1 282)",
+      "display": "flex",
+      "font": "13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "1px 28px 1px 10px",
+      "transition": "background-color 0.15s, border 0.15s, color 0.15s, box-shadow 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "button",
+    "text": "All members"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 5,
+      "width": 10,
+      "x": 1136.5,
+      "y": 1178
+    },
+    "role": "img",
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(20 1 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "block",
+      "font": "13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "fill",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "svg",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 30,
+      "width": 115.578125,
+      "x": 1041.421875,
+      "y": 1230.5
+    },
+    "role": "combobox",
+    "state": "closed",
+    "style": {
+      "background": "lch(100 0 282)",
+      "border": "0.5px solid rgba(0, 0, 0, 0)",
+      "borderRadius": "8px",
+      "boxShadow": "lch(0 0 0 / 0.088) 0px 0px 0px 0.5px, lch(0 0 0 / 0.02) 0px 3px 6px -2px, lch(0 0 0 / 0.04) 0px 1px 1px 0px",
+      "color": "lch(20 1 282)",
+      "display": "flex",
+      "font": "13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "1px 28px 1px 10px",
+      "transition": "background-color 0.15s, border 0.15s, color 0.15s, box-shadow 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "button",
+    "text": "All members"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 5,
+      "width": 10,
+      "x": 1136.5,
+      "y": 1243
+    },
+    "role": "img",
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(20 1 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "block",
+      "font": "13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "fill",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "svg",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 30,
+      "width": 115.578125,
+      "x": 1041.421875,
+      "y": 1295.5
+    },
+    "role": "combobox",
+    "state": "closed",
+    "style": {
+      "background": "lch(100 0 282)",
+      "border": "0.5px solid rgba(0, 0, 0, 0)",
+      "borderRadius": "8px",
+      "boxShadow": "lch(0 0 0 / 0.088) 0px 0px 0px 0.5px, lch(0 0 0 / 0.02) 0px 3px 6px -2px, lch(0 0 0 / 0.04) 0px 1px 1px 0px",
+      "color": "lch(20 1 282)",
+      "display": "flex",
+      "font": "13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "1px 28px 1px 10px",
+      "transition": "background-color 0.15s, border 0.15s, color 0.15s, box-shadow 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "button",
+    "text": "All members"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 5,
+      "width": 10,
+      "x": 1136.5,
+      "y": 1308
+    },
+    "role": "img",
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(20 1 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "block",
+      "font": "13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "fill",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "svg",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 30,
+      "width": 115.140625,
+      "x": 1041.859375,
+      "y": 1360.5
+    },
+    "role": "combobox",
+    "state": "closed",
+    "style": {
+      "background": "lch(100 0 282)",
+      "border": "0.5px solid rgba(0, 0, 0, 0)",
+      "borderRadius": "8px",
+      "boxShadow": "lch(0 0 0 / 0.088) 0px 0px 0px 0.5px, lch(0 0 0 / 0.02) 0px 3px 6px -2px, lch(0 0 0 / 0.04) 0px 1px 1px 0px",
+      "color": "lch(20 1 282)",
+      "display": "flex",
+      "font": "13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "1px 28px 1px 10px",
+      "transition": "background-color 0.15s, border 0.15s, color 0.15s, box-shadow 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "button",
+    "text": "Only admins"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 5,
+      "width": 10,
+      "x": 1136.5,
+      "y": 1373
+    },
+    "role": "img",
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(20 1 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "block",
+      "font": "13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "fill",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "svg",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 32,
+      "width": 167.4453125,
+      "x": 989.5546875,
+      "y": 1501.5
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0.5px solid rgba(0, 0, 0, 0)",
+      "borderRadius": "9999px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "flex",
+      "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "0.6",
+      "padding": "0px 12px",
+      "transition": "border 0.15s, background-color 0.15s, color 0.15s, opacity 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "a",
+    "text": "Available on Enterprise"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 16.5,
+      "width": 50.5,
+      "x": 906.4296875,
+      "y": 1670
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(9.794 0 282)",
+      "borderRadius": "8px",
+      "boxShadow": "none",
+      "color": "lch(9.794 0 282)",
+      "display": "inline",
+      "font": "450 12px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "1px 4px",
+      "transition": "color 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "a",
+    "text": "Docs"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 20,
+      "width": 30,
+      "x": 1121,
+      "y": 1659
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "lch(82.484 0.054 281.837)",
+      "border": "0px none rgb(0, 0, 0)",
+      "borderRadius": "72px",
+      "boxShadow": "none",
+      "color": "rgb(0, 0, 0)",
+      "display": "block",
+      "font": "13.3333px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "background-color 0.15s ease-out, opacity 0.15s ease-out",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "input",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 32,
+      "width": 167.4453125,
+      "x": 989.5546875,
+      "y": 1717.5
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0.5px solid rgba(0, 0, 0, 0)",
+      "borderRadius": "9999px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "flex",
+      "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "0.6",
+      "padding": "0px 12px",
+      "transition": "border 0.15s, background-color 0.15s, color 0.15s, opacity 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "a",
+    "text": "Available on Enterprise"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 20,
+      "width": 30,
+      "x": 1121,
+      "y": 1788
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "lch(82.484 0.054 281.837)",
+      "border": "0px none rgb(0, 0, 0)",
+      "borderRadius": "72px",
+      "boxShadow": "none",
+      "color": "rgb(0, 0, 0)",
+      "display": "block",
+      "font": "13.3333px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "background-color 0.15s ease-out, opacity 0.15s ease-out",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "input",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 20,
+      "width": 30,
+      "x": 1121,
+      "y": 1928.5
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "lch(82.484 0.054 281.837)",
+      "border": "0px none rgb(0, 0, 0)",
+      "borderRadius": "72px",
+      "boxShadow": "none",
+      "color": "rgb(0, 0, 0)",
+      "display": "block",
+      "font": "13.3333px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "background-color 0.15s ease-out, opacity 0.15s ease-out",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "input",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 20,
+      "width": 30,
+      "x": 1121,
+      "y": 1993.5
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "lch(82.484 0.054 281.837)",
+      "border": "0px none rgb(0, 0, 0)",
+      "borderRadius": "72px",
+      "boxShadow": "none",
+      "color": "rgb(0, 0, 0)",
+      "display": "block",
+      "font": "13.3333px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "background-color 0.15s ease-out, opacity 0.15s ease-out",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "input",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 20,
+      "width": 30,
+      "x": 1121,
+      "y": 2134
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "lch(82.484 0.054 281.837)",
+      "border": "0px none rgb(0, 0, 0)",
+      "borderRadius": "72px",
+      "boxShadow": "none",
+      "color": "rgb(0, 0, 0)",
+      "display": "block",
+      "font": "13.3333px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "0.989065",
+      "padding": "0px",
+      "transition": "background-color 0.15s ease-out, opacity 0.15s ease-out",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "input",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 20,
+      "width": 30,
+      "x": 1121,
+      "y": 2274.5
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "lch(53 52.26 286.91)",
+      "border": "0px none rgb(0, 0, 0)",
+      "borderRadius": "72px",
+      "boxShadow": "none",
+      "color": "rgb(0, 0, 0)",
+      "display": "block",
+      "font": "13.3333px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "background-color 0.15s ease-out, opacity 0.15s ease-out",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "input",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 65,
+      "width": 640,
+      "x": 533,
+      "y": 2317
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(9.794 0 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(9.794 0 282)",
+      "display": "block",
+      "font": "16px / 24px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "color 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "a",
+    "text": "Active MCP connections settings"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 16,
+      "width": 16,
+      "x": 1141,
+      "y": 2341.5
+    },
+    "role": "img",
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(9.794 0 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(9.794 0 282)",
+      "display": "block",
+      "font": "16px / 24px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "fill",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "svg",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 30,
+      "width": 127.1953125,
+      "x": 1029.8046875,
+      "y": 2399.5
+    },
+    "role": "combobox",
+    "state": "closed",
+    "style": {
+      "background": "lch(100 0 282)",
+      "border": "0.5px solid rgba(0, 0, 0, 0)",
+      "borderRadius": "8px",
+      "boxShadow": "lch(0 0 0 / 0.088) 0px 0px 0px 0.5px, lch(0 0 0 / 0.02) 0px 3px 6px -2px, lch(0 0 0 / 0.04) 0px 1px 1px 0px",
+      "color": "lch(20 1 282)",
+      "display": "flex",
+      "font": "13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "1px 28px 1px 10px",
+      "transition": "background-color 0.15s, border 0.15s, color 0.15s, box-shadow 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "button",
+    "text": "All connectors"
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 5,
+      "width": 10,
+      "x": 1136.5,
+      "y": 2412
+    },
+    "role": "img",
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0px none lch(20 1 282)",
+      "borderRadius": "0px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "block",
+      "font": "13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "1",
+      "padding": "0px",
+      "transition": "fill",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "svg",
+    "text": ""
+  },
+  {
+    "disabled": false,
+    "rect": {
+      "height": 32,
+      "width": 167.4453125,
+      "x": 989.5546875,
+      "y": 2545.75
+    },
+    "role": null,
+    "state": null,
+    "style": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "0.5px solid rgba(0, 0, 0, 0)",
+      "borderRadius": "9999px",
+      "boxShadow": "none",
+      "color": "lch(20 1 282)",
+      "display": "flex",
+      "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+      "gap": "normal",
+      "opacity": "0.6",
+      "padding": "0px 12px",
+      "transition": "border 0.15s, background-color 0.15s, color 0.15s, opacity 0.15s",
+      "visibility": "visible",
+      "zIndex": "auto"
+    },
+    "tag": "a",
+    "text": "Available on Enterprise"
+  }
+]

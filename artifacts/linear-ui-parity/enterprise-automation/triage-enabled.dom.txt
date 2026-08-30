@@ -1,0 +1,187 @@
+- link "Skip to content":
+  - /url: "#skip-nav"
+- navigation:
+  - link "Back to app":
+    - /url: /leozhengliu
+    - text: Back to app
+  - generic "Search settings":
+    - search "Search…"
+  - heading "Personal" [level=2]:
+    - generic: Personal
+  - link "Preferences":
+    - /url: /leozhengliu/settings/account/preferences
+    - generic: Preferences
+  - link "Profile":
+    - /url: /leozhengliu/settings/account/profile
+    - generic: Profile
+  - link "Notifications":
+    - /url: /leozhengliu/settings/account/notifications
+    - generic: Notifications
+  - link "Code & reviews":
+    - /url: /leozhengliu/settings/account/code-and-reviews
+    - generic: Code & reviews
+  - link "Security & access":
+    - /url: /leozhengliu/settings/account/security
+    - generic: Security & access
+  - link "Connected accounts":
+    - /url: /leozhengliu/settings/account/connections
+    - generic: Connected accounts
+  - link "Agent personalization":
+    - /url: /leozhengliu/settings/account/agents
+    - generic: Agent personalization
+  - heading "Issues" [level=2]:
+    - generic: Issues
+  - link "Labels":
+    - /url: /leozhengliu/settings/issue-labels
+    - generic: Labels
+  - link "Templates":
+    - /url: /leozhengliu/settings/issue-templates
+    - generic: Templates
+  - link "SLAs":
+    - /url: /leozhengliu/settings/sla
+    - generic: SLAs
+  - heading "Projects" [level=2]:
+    - generic: Projects
+  - link "Labels":
+    - /url: /leozhengliu/settings/project-labels
+    - generic: Labels
+  - link "Templates":
+    - /url: /leozhengliu/settings/project-templates
+    - generic: Templates
+  - link "Statuses":
+    - /url: /leozhengliu/settings/project-statuses
+    - generic: Statuses
+  - link "Updates":
+    - /url: /leozhengliu/settings/project-updates
+    - generic: Updates
+  - heading "Features" [level=2]:
+    - generic: Features
+  - link "AI & Agents":
+    - /url: /leozhengliu/settings/ai
+    - generic: AI & Agents
+  - link "Initiatives":
+    - /url: /leozhengliu/settings/initiatives
+    - generic: Initiatives
+  - link "Documents":
+    - /url: /leozhengliu/settings/documents
+    - generic: Documents
+  - link "Customer requests":
+    - /url: /leozhengliu/settings/customer-requests
+    - generic: Customer requests
+  - link "Releases":
+    - /url: /leozhengliu/settings/releases
+    - generic: Releases
+  - link "Pulse":
+    - /url: /leozhengliu/settings/pulse
+    - generic: Pulse
+  - link "Asks":
+    - /url: /leozhengliu/settings/asks
+    - generic: Asks
+  - link "Emojis":
+    - /url: /leozhengliu/settings/emojis
+    - generic: Emojis
+  - link "Integrations":
+    - /url: /leozhengliu/settings/integrations
+    - generic: Integrations
+  - heading "Administration" [level=2]:
+    - generic: Administration
+  - link "Workspace":
+    - /url: /leozhengliu/settings/workspace
+    - generic: Workspace
+  - link "Teams":
+    - /url: /leozhengliu/settings/teams
+    - generic: Teams
+  - link "Members":
+    - /url: /leozhengliu/settings/members
+    - generic: Members
+  - link "Security":
+    - /url: /leozhengliu/settings/security
+    - generic: Security
+  - link "API":
+    - /url: /leozhengliu/settings/api
+    - generic: API
+  - link "Applications":
+    - /url: /leozhengliu/settings/applications
+    - generic: Applications
+  - link "Billing":
+    - /url: /leozhengliu/settings/billing
+    - generic: Billing
+  - link "Usage & limits":
+    - /url: /leozhengliu/settings/usage
+    - generic: Usage & limits
+  - link "Import & export":
+    - /url: /leozhengliu/settings/import-export
+    - generic: Import & export
+  - heading "Your teams" [level=2]:
+    - generic: Your teams
+  - link "Leozhengliu":
+    - /url: /leozhengliu/settings/teams/LEO
+    - generic: Leozhengliu
+  - generic "Create a team":
+    - text: Create a team
+- button "Open Help menu":
+- generic "There are 19 days remaining in your workspace’s Business trial.":
+  - link "Business trial ends":
+    - /url: /leozhengliu/settings/billing/plans
+  - generic: Business trial ends
+  - generic: 19d
+- main:
+  - link "Leozhengliu":
+    - /url: /leozhengliu/settings/teams/LEO
+    - text: Leozhengliu
+  - text: Leozhengliu
+  - generic: Triage
+  - text: Triage is a special inbox for managing issues created by integrations and members outside of this team. You’ll have a chance to review, accept or reject, and prioritize issues before they’re added to your team’s workflow.
+  - link "Docs↗":
+    - /url: https://linear.app/docs/triage
+  - list:
+    - generic: Enable triage for this team
+    - generic: Issues added to this team by outside members are sent to the triage inbox first
+    - generic "Only workspace owners, admins, and team members can modify triage settings":
+      - checkbox "Enable triage for this team" [checked] [active]
+    - generic: Require explicit prioritization
+    - generic: Require that a priority has to be set when moving issues out of triage
+    - generic "Only workspace owners, admins, and team members can modify triage settings":
+      - checkbox "Require explicit prioritization"
+  - heading "Triage responsibility" [level=3]
+  - generic: Define how incoming issues and requests are handled in triage
+  - generic: Action
+  - generic: When a new issue is added to triage, take the following action
+  - combobox "Action":
+    - generic: No action
+  - list
+  - heading "Triage rules" [level=3]
+  - generic: Use rules to automatically process and route triage issues
+  - list:
+    - heading "No triage rules yet" [level=3]
+    - button "Only workspace owners, admins, and team members can add triage rules": Add rule
+  - status
+  - heading "Agent automations" [level=3]
+  - generic: Automations have been renamed to Loops and moved to the team page
+  - list:
+    - link "Loops settings":
+      - /url: /leozhengliu/team/LEO/loops
+    - figure:
+    - generic: Loops
+    - generic: Loops acting on issues in triage for this team
+    - generic: 0 loops
+  - heading "Triage Intelligence" [level=3]
+  - text: Linear uses agentic AI to automatically find related issues & duplicates, and infer properties like team, project, labels, and assignee.
+  - link "Docs↗":
+    - /url: https://linear.app/docs/triage-intelligence
+  - list:
+    - generic: Triage Intelligence is not enabled in this workspace
+    - link "View settings":
+      - /url: /leozhengliu/settings/ai/triage
+- button "Update loop":
+  - generic "Update loop"
+- button "Agent":
+  - generic: Agent
+- button "Chat history":
+- region "Notifications alt+T":
+  - list:
+    - status:
+      - generic: Triage enabled
+      - button:
+      - generic: Triage is now available for Leozhengliu.
+- status

@@ -1,0 +1,249 @@
+- link "Skip to content":
+  - /url: "#skip-nav"
+- navigation:
+  - link "Back to app":
+    - /url: /leozhengliu
+    - text: Back to app
+  - generic "Search settings":
+    - search "Search…"
+  - heading "Personal" [level=2]:
+    - generic: Personal
+  - link "Preferences":
+    - /url: /leozhengliu/settings/account/preferences
+    - generic: Preferences
+  - link "Profile":
+    - /url: /leozhengliu/settings/account/profile
+    - generic: Profile
+  - link "Notifications":
+    - /url: /leozhengliu/settings/account/notifications
+    - generic: Notifications
+  - link "Code & reviews":
+    - /url: /leozhengliu/settings/account/code-and-reviews
+    - generic: Code & reviews
+  - link "Security & access":
+    - /url: /leozhengliu/settings/account/security
+    - generic: Security & access
+  - link "Connected accounts":
+    - /url: /leozhengliu/settings/account/connections
+    - generic: Connected accounts
+  - link "Agent personalization":
+    - /url: /leozhengliu/settings/account/agents
+    - generic: Agent personalization
+  - heading "Issues" [level=2]:
+    - generic: Issues
+  - link "Labels":
+    - /url: /leozhengliu/settings/issue-labels
+    - generic: Labels
+  - link "Templates":
+    - /url: /leozhengliu/settings/issue-templates
+    - generic: Templates
+  - link "SLAs":
+    - /url: /leozhengliu/settings/sla
+    - generic: SLAs
+  - heading "Projects" [level=2]:
+    - generic: Projects
+  - link "Labels":
+    - /url: /leozhengliu/settings/project-labels
+    - generic: Labels
+  - link "Templates":
+    - /url: /leozhengliu/settings/project-templates
+    - generic: Templates
+  - link "Statuses":
+    - /url: /leozhengliu/settings/project-statuses
+    - generic: Statuses
+  - link "Updates":
+    - /url: /leozhengliu/settings/project-updates
+    - generic: Updates
+  - heading "Features" [level=2]:
+    - generic: Features
+  - link "AI & Agents":
+    - /url: /leozhengliu/settings/ai
+    - generic: AI & Agents
+  - link "Initiatives":
+    - /url: /leozhengliu/settings/initiatives
+    - generic: Initiatives
+  - link "Documents":
+    - /url: /leozhengliu/settings/documents
+    - generic: Documents
+  - link "Customer requests":
+    - /url: /leozhengliu/settings/customer-requests
+    - generic: Customer requests
+  - link "Releases":
+    - /url: /leozhengliu/settings/releases
+    - generic: Releases
+  - link "Pulse":
+    - /url: /leozhengliu/settings/pulse
+    - generic: Pulse
+  - link "Asks":
+    - /url: /leozhengliu/settings/asks
+    - generic: Asks
+  - link "Emojis":
+    - /url: /leozhengliu/settings/emojis
+    - generic: Emojis
+  - link "Integrations":
+    - /url: /leozhengliu/settings/integrations
+    - generic: Integrations
+  - heading "Administration" [level=2]:
+    - generic: Administration
+  - link "Workspace":
+    - /url: /leozhengliu/settings/workspace
+    - generic: Workspace
+  - link "Teams":
+    - /url: /leozhengliu/settings/teams
+    - generic: Teams
+  - link "Members":
+    - /url: /leozhengliu/settings/members
+    - generic: Members
+  - link "Security":
+    - /url: /leozhengliu/settings/security
+    - generic: Security
+  - link "API":
+    - /url: /leozhengliu/settings/api
+    - generic: API
+  - link "Applications":
+    - /url: /leozhengliu/settings/applications
+    - generic: Applications
+  - link "Billing":
+    - /url: /leozhengliu/settings/billing
+    - generic: Billing
+  - link "Usage & limits":
+    - /url: /leozhengliu/settings/usage
+    - generic: Usage & limits
+  - link "Import & export":
+    - /url: /leozhengliu/settings/import-export
+    - generic: Import & export
+  - heading "Your teams" [level=2]:
+    - generic: Your teams
+  - link "Leozhengliu":
+    - /url: /leozhengliu/settings/teams/LEO
+    - generic: Leozhengliu
+  - generic "Create a team":
+    - text: Create a team
+- button "Open Help menu":
+- generic "There are 19 days remaining in your workspace’s Business trial.":
+  - link "Business trial ends":
+    - /url: /leozhengliu/settings/billing/plans
+  - generic: Business trial ends
+  - generic: 19d
+- main:
+  - generic: Security
+  - heading "Workspace access" [level=3]
+  - generic: Invite links
+  - generic: A uniquely generated invite link allows anyone with the link to join your workspace
+  - generic: Enable invite links
+  - checkbox "Enable invite links"
+  - generic: Workspace login and restrictions
+  - text: Anyone with an email address at these domains is allowed to sign up for this workspace.
+  - link "Docs↗":
+    - /url: https://linear.app/docs/invite-members#approved-email-domains
+  - generic: No approved email domains
+  - button "Add domain":
+    - text: Add domain
+  - generic: Authentication methods
+  - generic: Admins and guests can always authenticate via Google and email/passkeys — even when disabled for members
+  - list:
+    - generic: Google authentication
+    - generic: When enabled, this is available to all workspace members and guests
+    - checkbox "Google authentication" [checked]
+    - generic: Email & passkey authentication
+    - generic: When enabled, this is available to all workspace members and guests
+    - checkbox "Email & passkey authentication" [checked]
+    - generic: SAML & SCIM
+    - generic: Manage logins via an identity provider’s SSO
+    - link "Available on Enterprise":
+      - /url: /leozhengliu/settings/billing/plans
+  - list:
+    - generic: Disable authentication bypass for admins
+    - generic: When enabled, admins are restricted to the enabled authentication methods
+    - checkbox "Disable authentication bypass for admins"
+  - heading "Workspace management" [level=3]
+  - list:
+    - generic: New user invitations
+    - generic: Who can invite new members to the workspace
+    - combobox "New user invitations":
+      - generic: Only admins
+    - generic: Team creation
+    - generic: Who can create new teams
+    - combobox "Team creation":
+      - generic: All members
+    - generic: Workspace initiatives
+    - generic: Who can create workspace level initiatives
+    - combobox "Workspace initiatives":
+      - generic: All members
+    - generic: Manage workspace labels
+    - generic: Who can create, update, and delete workspace labels
+    - combobox "Manage workspace labels":
+      - generic: All members
+    - generic: Manage workspace templates
+    - generic: Who can manage workspace templates
+    - combobox "Manage workspace templates":
+      - generic: All members
+    - generic: Manage loops
+    - generic: Who can create, update, and delete workspace loops
+    - combobox "Manage loops":
+      - generic: All members
+    - generic: API key creation
+    - generic: Who can create API keys to interact with the Linear API on their behalf
+    - combobox "API key creation":
+      - generic: All members
+    - generic: Modify agent guidance
+    - generic: Who can modify workspace-level agent guidance prompts
+    - combobox "Modify agent guidance":
+      - generic: Only admins
+  - generic: File uploads
+  - generic: Restrict the file types users are allowed to uploads. Image and video files are always allowed.
+  - generic: Restrict file uploads
+  - link "Available on Enterprise":
+    - /url: /leozhengliu/settings/billing/plans
+  - heading "Integrations & applications" [level=3]
+  - list:
+    - generic: Review third-party applications
+    - text: Control which applications can be installed to your workspace.
+    - link "Docs↗":
+      - /url: https://linear.app/docs/third-party-application-approvals
+    - checkbox "Review third-party applications"
+    - generic: Reduce personal information from support integrations
+    - generic: Personal information from support integrations won’t be stored
+    - link "Available on Enterprise":
+      - /url: /leozhengliu/settings/billing/plans
+    - generic: Prevent guests from interacting with agents in the workspace
+    - generic: Restrict agent invocation to full workspace members only
+    - checkbox "Prevent guests from interacting with agents in the workspace"
+  - generic: AI & Agents
+  - list:
+    - generic: Improve AI features by sharing usage data
+    - generic: Feedback on AI results is used to enhance functionality and will not be used to train models
+    - checkbox "Improve AI features by sharing usage data"
+    - generic: Enable Linear Agent web search
+    - generic: Allow Linear Agent to search the public web for current information and cite sources
+    - checkbox "Enable Linear Agent web search"
+  - generic: Trusted external sources
+  - generic: Allow external sources to trigger loops
+  - generic: Select which external sources can trigger loops
+  - checkbox "Allow external sources to trigger loops"
+  - generic: MCP connectors
+  - list:
+    - generic: Enable Linear Agent MCP connectors
+    - generic: Allow Linear Agent to use MCP connectors
+    - checkbox "Enable Linear Agent MCP connectors" [checked]
+    - link "Active MCP connections settings":
+      - /url: /leozhengliu/settings/security/mcp-servers
+    - generic: Active MCP connections
+    - generic: Review MCP connections from all workspace members
+    - generic: Allowed MCP connectors
+    - generic: Choose which MCP connectors Linear Agent can use
+    - combobox "Allowed MCP connectors":
+      - generic: All connectors
+  - generic: Compliance
+  - list:
+    - generic: HIPAA compliance
+    - generic: Enable privacy and security measures to ensure that Protected Health Information (PHI) is appropriately safeguarded
+    - link "Available on Enterprise":
+      - /url: /leozhengliu/settings/billing/plans
+- button "Update loop":
+  - generic "Update loop"
+- button "Agent":
+  - generic: Agent
+- button "Chat history":
+- region "Notifications alt+T"
+- status
