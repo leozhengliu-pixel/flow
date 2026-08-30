@@ -9,7 +9,7 @@ RUN --mount=type=cache,target=/root/.npm \
 COPY web/ ./
 RUN npm run build
 
-FROM --platform=$BUILDPLATFORM golang:1.26.6-alpine AS api-build
+FROM --platform=$BUILDPLATFORM golang:1.27.0-alpine AS api-build
 ARG TARGETOS
 ARG TARGETARCH
 ARG TARGETVARIANT
