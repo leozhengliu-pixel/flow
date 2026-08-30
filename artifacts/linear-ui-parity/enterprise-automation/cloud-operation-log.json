@@ -1,0 +1,33 @@
+{
+  "executedAt": "2026-08-30",
+  "prefix": "Flow parity audit 2026-08-30",
+  "workspace": "leozhengliu",
+  "team": "LEO",
+  "operations": [
+    {"capability":"targetBranch","action":"create","value":"Flow parity audit 2026-08-30-main","result":"persisted"},
+    {"capability":"targetBranch","action":"update","field":"onPrOpen","value":"In Review","result":"persisted after reload"},
+    {"capability":"targetBranch","action":"delete","value":"Flow parity audit 2026-08-30-main","result":"removed"},
+    {"capability":"releaseAutomation","action":"create","pipeline":"TEST","state":"Done","result":"persisted"},
+    {"capability":"releaseAutomation","action":"update","state":"In Review","result":"persisted"},
+    {"capability":"releaseAutomation","action":"delete","pipeline":"TEST","result":"removed"},
+    {"capability":"triage","action":"enable","result":"enabled"},
+    {"capability":"triageResponsibility","action":"set","value":"Assign: zheng liu","result":"persisted"},
+    {"capability":"triageRule","action":"create","value":"Flow parity audit 2026-08-30 triage","then":"Set priority: Low","result":"persisted after reload"},
+    {"capability":"triageRule","action":"delete","value":"Flow parity audit 2026-08-30 triage","result":"removed"},
+    {"capability":"triageResponsibility","action":"restore","value":"No action","result":"persisted"},
+    {"capability":"triage","action":"restore","value":"disabled","result":"original configuration restored"},
+    {"capability":"emailIntake","action":"enable","value":"leozhengliu-5ea3cb28b490@intake.linear.app","result":"generated"},
+    {"capability":"emailIntake","action":"copy","result":"success toast observed"},
+    {"capability":"emailIntake","action":"reset","value":"leozhengliu-9229ea4909ca@intake.linear.app","result":"old address permanently disabled, new address generated"},
+    {"capability":"emailIntake","action":"restore","value":"disabled","result":"original configuration restored"}
+  ],
+  "cleanup": {
+    "temporaryTargetBranches": 0,
+    "temporaryReleaseAutomations": 0,
+    "temporaryTriageRules": 0,
+    "triageEnabled": false,
+    "triageAction": "No action",
+    "emailIntakeEnabled": false,
+    "restored": true
+  }
+}

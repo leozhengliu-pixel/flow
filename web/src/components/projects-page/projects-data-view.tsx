@@ -1,5 +1,6 @@
 import * as Tooltip from '@radix-ui/react-tooltip'
-import { Bell, Box, CalendarPlus, Clipboard, FileText, LayoutGrid, Link2, MessageCirclePlus, Move, Package, Search, Star, Tag, Trash2, UserRound } from 'lucide-react'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { Bell, Box, CalendarPlus, Clipboard, FileText, LayoutGrid, Link2, MessageCirclePlus, MoreHorizontal, Move, Package, Search, Star, Tag, Trash2, UserRound } from 'lucide-react'
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { MembersIcon, NoAssigneeIcon } from '@/components/issue/issue-icons'
 import { ViewGlyph, ViewIconPicker } from '@/components/views/view-icon-picker'
@@ -20,6 +21,7 @@ export type ProjectPageItem = {
   health: 'on-track' | 'off-track' | 'at-risk' | 'no-update'
   healthLabel?: string
   priority: 'urgent' | 'high' | 'medium' | 'low' | 'none'
+  position?: number
   lead?: { id: string, name: string, initials?: string, avatarUrl?: string, color?: string }
   targetDate?: string
   issueCount: number
@@ -51,6 +53,7 @@ export type ProjectsDataViewProps = {
   error?: string | null
   selectedIds?: string[]
   visibleProperties?: string[]
+  manualOrdering?: boolean
   propertyOptions?: ProjectPropertyOptions
   onCreateProject?: (status: string) => void
   onOpenProject?: (project: ProjectPageItem) => void
@@ -68,7 +71,7 @@ export type ProjectsDataViewProps = {
 
 export type ProjectProperty = 'health' | 'priority' | 'lead' | 'members' | 'labels' | 'startDate' | 'targetDate' | 'status'
 export type ProjectSortColumn = 'name' | 'health' | 'priority' | 'targetDate' | 'status'
-export type ProjectAction = 'copy' | 'move' | 'favorite' | 'subscribe' | 'comment' | 'delete' | 'rename' | 'initiatives' | 'dependencies' | 'schedule' | 'customerRequest'
+export type ProjectAction = 'copy' | 'move' | 'moveDown' | 'moveBottom' | 'favorite' | 'subscribe' | 'comment' | 'delete' | 'rename' | 'initiatives' | 'dependencies' | 'schedule' | 'customerRequest'
 export type ProjectPropertyOptions = Partial<Record<ProjectProperty, ProjectPropertyOption[]>>
 
 const PROPERTY_OPTIONS: Record<ProjectProperty, ProjectPropertyOption[]> = {
@@ -111,6 +114,7 @@ export function ProjectsDataView({
   error = null,
   selectedIds = [],
   visibleProperties = ['Summary', 'Priority', 'Health', 'Lead', 'Target date', 'Issues', 'Status'],
+  manualOrdering = false,
   propertyOptions,
   onCreateProject,
   onOpenProject,
@@ -149,9 +153,10 @@ export function ProjectsDataView({
 
   const visible = new Set(visibleProperties)
   if (layout === 'board') return <div className="lp-project-board" role="list">
-    {groups.map(group => <ProjectBoardColumn
+    {groups.map((group, groupIndex) => <ProjectBoardColumn
       group={group}
       key={group.id}
+      manualOrdering={manualOrdering}
       onCreateProject={onCreateProject}
       onOpenProject={onOpenProject}
       onOpenProjectIssues={onOpenProjectIssues}
@@ -159,6 +164,19 @@ export function ProjectsDataView({
       onProjectAction={onProjectAction}
       onProjectVisualChange={onProjectVisualChange}
       onPropertyChange={onPropertyChange}
+      onDropProject={projectId => {
+        const project = findProject(groups, projectId)
+        const destination = projectGroupProperty(group)
+        if (!project || !destination || !onPropertyChange) return false
+        onPropertyChange(project, destination.property, destination.value)
+        return true
+      }}
+      onKeyboardMove={(project, direction) => {
+        const destinationGroup = groups[groupIndex + direction]
+        const destination = destinationGroup && projectGroupProperty(destinationGroup)
+        if (!destination || !onPropertyChange) return
+        onPropertyChange(project, destination.property, destination.value)
+      }}
       propertyOptions={propertyOptions}
       visible={visible}
     />)}
@@ -187,6 +205,7 @@ export function ProjectsDataView({
           onOpenIssues={onOpenProjectIssues}
           onOpenUpdates={onOpenProjectUpdates}
           onProjectAction={onProjectAction}
+          manualOrdering={manualOrdering}
           onProjectVisualChange={onProjectVisualChange}
           onPropertyChange={onPropertyChange}
           onSelect={toggleSelection}
@@ -199,6 +218,7 @@ export function ProjectsDataView({
           onOpenIssues={onOpenProjectIssues}
           onOpenUpdates={onOpenProjectUpdates}
           onProjectAction={onProjectAction}
+          manualOrdering={manualOrdering}
           onProjectVisualChange={onProjectVisualChange}
           onPropertyChange={onPropertyChange}
           onSelect={toggleSelection}
@@ -212,12 +232,13 @@ export function ProjectsDataView({
   </div>
 }
 
-function ProjectSubgroup({ group, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, onSelect, propertyOptions, selectedIds, visible }: {
+function ProjectSubgroup({ group, manualOrdering, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, onSelect, propertyOptions, selectedIds, visible }: {
   group: ProjectDataGroup
   onOpen?: (project: ProjectPageItem) => void
   onOpenIssues?: (project: ProjectPageItem) => void
   onOpenUpdates?: (project: ProjectPageItem) => void
   onProjectAction?: (project: ProjectPageItem, action: ProjectAction) => void
+  manualOrdering?: boolean
   onProjectVisualChange?: (project: ProjectPageItem, icon: string, color: string) => void
   onPropertyChange?: (project: ProjectPageItem, property: ProjectProperty, value: string) => void
   onSelect: (id: string, range?: boolean) => void
@@ -233,6 +254,7 @@ function ProjectSubgroup({ group, onOpen, onOpenIssues, onOpenUpdates, onProject
       onOpenIssues={onOpenIssues}
       onOpenUpdates={onOpenUpdates}
       onProjectAction={onProjectAction}
+      manualOrdering={manualOrdering}
       onProjectVisualChange={onProjectVisualChange}
       onPropertyChange={onPropertyChange}
       onSelect={onSelect}
@@ -288,13 +310,14 @@ type ProjectItemActions = {
   onOpenIssues?: (project: ProjectPageItem) => void
   onOpenUpdates?: (project: ProjectPageItem) => void
   onProjectAction?: (project: ProjectPageItem, action: ProjectAction) => void
+  manualOrdering?: boolean
   onProjectVisualChange?: (project: ProjectPageItem, icon: string, color: string) => void
   onPropertyChange?: (project: ProjectPageItem, property: ProjectProperty, value: string) => void
   propertyOptions?: ProjectPropertyOptions
   visible: Set<string>
 }
 
-function ProjectListRow({ project, selected, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, onSelect, propertyOptions, visible }: ProjectItemActions & { selected: boolean; onSelect: (id: string, range?: boolean) => void }) {
+function ProjectListRow({ project, selected, manualOrdering, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, onSelect, propertyOptions, visible }: ProjectItemActions & { selected: boolean; onSelect: (id: string, range?: boolean) => void }) {
   const [menuPoint, setMenuPoint] = useState<{ x: number, y: number } | null>(null)
   const statusOption = (propertyOptions?.status ?? PROPERTY_OPTIONS.status).find(option => option.value === project.status)
   const rowKey = (event: KeyboardEvent<HTMLAnchorElement>) => {
@@ -334,15 +357,16 @@ function ProjectListRow({ project, selected, onOpen, onOpenIssues, onOpenUpdates
       <div className={`lp-project-row__lead ${project.lead ? '' : 'is-empty'}`} hidden={!visible.has('Lead')} role="gridcell"><LeadPropertyButton lead={project.lead} onChange={value => onPropertyChange?.(project, 'lead', value)} options={propertyOptions?.lead} /></div>
       <div hidden={!visible.has('Target date')} role="gridcell"><ProjectTargetDatePicker buttonClassName="lp-project-row__date" displayValue={project.targetDate} onChange={value => onPropertyChange?.(project, 'targetDate', value)} value={project.rawTargetDate}>{project.targetDate || <span className="lp-project-row__date-placeholder">Set date</span>}</ProjectTargetDatePicker></div>
       <div hidden={!visible.has('Issues')} role="gridcell"><button aria-label={`Open ${project.name} issues`} className="lp-project-row__issues" onClick={event => { stopPropagation(event); onOpenIssues?.(project) }} type="button">{project.issueCount}</button></div>
-      <div className="lp-project-row__status" hidden={!visible.has('Status')} role="gridcell"><ProjectPropertyPicker buttonClassName="lp-project-row__progress" label={`${project.progress}%`} onChange={value => onPropertyChange?.(project, 'status', value)} options={propertyOptions?.status ?? PROPERTY_OPTIONS.status} property="status" value={project.status}><ProjectStatusGlyph color={statusOption?.color} name={project.status} type={statusOption?.statusType}/><span>{project.progress}%</span></ProjectPropertyPicker><ProjectProgressSparkline createdAt={project.createdAt} progress={project.progress} startDate={project.rawStartDate} targetDate={project.rawTargetDate}/></div>
+      <div className="lp-project-row__status" hidden={!visible.has('Status')} role="gridcell"><ProjectPropertyPicker buttonClassName="lp-project-row__progress" label={`${project.progress}%`} onChange={value => onPropertyChange?.(project, 'status', value)} options={propertyOptions?.status ?? PROPERTY_OPTIONS.status} property="status" value={project.status}><ProjectStatusGlyph color={statusOption?.color} name={project.status} progress={project.progress / 100} type={statusOption?.statusType}/><span>{project.progress}%</span></ProjectPropertyPicker><ProjectProgressSparkline createdAt={project.createdAt} progress={project.progress} startDate={project.rawStartDate} targetDate={project.rawTargetDate}/></div>
       <span />
     </a>
-    <ProjectItemMenu onProjectAction={onProjectAction} onPropertyChange={onPropertyChange} options={propertyOptions} point={menuPoint} project={project} setPoint={setMenuPoint}/>
+    <ProjectItemMenu manualOrdering={manualOrdering} onProjectAction={onProjectAction} onPropertyChange={onPropertyChange} options={propertyOptions} point={menuPoint} project={project} setPoint={setMenuPoint}/>
   </>
 }
 
-function ProjectBoardColumn({ group, onCreateProject, onOpenProject, onOpenProjectIssues, onOpenProjectUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, propertyOptions, visible }: {
+function ProjectBoardColumn({ group, manualOrdering, onCreateProject, onDropProject, onKeyboardMove, onOpenProject, onOpenProjectIssues, onOpenProjectUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, propertyOptions, visible }: {
   group: ProjectsDataViewProps['groups'][number]
+  manualOrdering?: boolean
   onCreateProject?: (status: string) => void
   onOpenProject?: (project: ProjectPageItem) => void
   onOpenProjectIssues?: (project: ProjectPageItem) => void
@@ -350,32 +374,40 @@ function ProjectBoardColumn({ group, onCreateProject, onOpenProject, onOpenProje
   onProjectAction?: (project: ProjectPageItem, action: ProjectAction) => void
   onProjectVisualChange?: (project: ProjectPageItem, icon: string, color: string) => void
   onPropertyChange?: (project: ProjectPageItem, property: ProjectProperty, value: string) => void
+  onDropProject: (projectId: string) => boolean
+  onKeyboardMove: (project: ProjectPageItem, direction: -1 | 1) => void
   propertyOptions?: ProjectPropertyOptions
   visible: Set<string>
 }) {
-  return <section aria-label={group.name} className="lp-project-board__column">
-    <header><ProjectGroupStatus color={group.color} name={group.name} propertyOptions={propertyOptions}/><strong data-i18n-ignore>{group.name}</strong><span>{projectCount(group)}</span><button aria-label="Open menu" type="button">...</button><button aria-label="Create new project" onClick={() => onCreateProject?.(projectCreateStatus(group.name))} type="button"><PlusIcon /></button></header>
-    <div className="lp-project-board__cards">
-      {group.subgroups?.map(subgroup => <section className="lp-project-board__subgroup" key={subgroup.id}><header><ProjectGroupStatus color={subgroup.color} compact name={subgroup.name} propertyOptions={propertyOptions}/><span data-i18n-ignore>{subgroup.name}</span><small>{projectCount(subgroup)}</small></header>{subgroup.projects.map(project => <ProjectBoardCard key={project.id} onOpen={onOpenProject} onOpenIssues={onOpenProjectIssues} onOpenUpdates={onOpenProjectUpdates} onProjectAction={onProjectAction} onProjectVisualChange={onProjectVisualChange} onPropertyChange={onPropertyChange} project={project} propertyOptions={propertyOptions} visible={visible} />)}</section>)}
-      {!group.subgroups?.length && group.projects.map(project => <ProjectBoardCard key={project.id} onOpen={onOpenProject} onOpenIssues={onOpenProjectIssues} onOpenUpdates={onOpenProjectUpdates} onProjectAction={onProjectAction} onProjectVisualChange={onProjectVisualChange} onPropertyChange={onPropertyChange} project={project} propertyOptions={propertyOptions} visible={visible} />)}
+  const [collapsed, setCollapsed] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const card = (project: ProjectPageItem) => <ProjectBoardCard key={project.id} manualOrdering={manualOrdering} onKeyboardMove={direction => onKeyboardMove(project, direction)} onOpen={onOpenProject} onOpenIssues={onOpenProjectIssues} onOpenUpdates={onOpenProjectUpdates} onProjectAction={onProjectAction} onProjectVisualChange={onProjectVisualChange} onPropertyChange={onPropertyChange} project={project} propertyOptions={propertyOptions} visible={visible} />
+  return <section aria-label={group.name} className="lp-project-board__column" data-collapsed={collapsed || undefined} data-drop-target={dragOver || undefined} onDragEnter={event => { if (event.dataTransfer.types.includes(PROJECT_DRAG_TYPE)) setDragOver(true) }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragOver(false) }} onDragOver={event => { if (event.dataTransfer.types.includes(PROJECT_DRAG_TYPE)) { event.preventDefault(); event.dataTransfer.dropEffect = 'move' } }} onDrop={event => { const projectId = event.dataTransfer.getData(PROJECT_DRAG_TYPE); if (projectId) { event.preventDefault(); onDropProject(projectId) } setDragOver(false) }}>
+    <header><ProjectGroupStatus color={group.color} name={group.name} propertyOptions={propertyOptions}/><strong data-i18n-ignore>{group.name}</strong><span>{projectCount(group)}</span><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open group menu" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className="lp-project-board__group-menu" sideOffset={4}><DropdownMenu.Item onSelect={() => setCollapsed(value => !value)}>{collapsed ? 'Expand group' : 'Collapse group'}</DropdownMenu.Item><DropdownMenu.Item onSelect={() => onCreateProject?.(projectCreateStatus(group.name))}>Create new project</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root><button aria-label="Create new project" onClick={() => onCreateProject?.(projectCreateStatus(group.name))} type="button"><PlusIcon /></button></header>
+    {!collapsed && <div className="lp-project-board__cards">
+      {group.subgroups?.map(subgroup => <section className="lp-project-board__subgroup" key={subgroup.id}><header><ProjectGroupStatus color={subgroup.color} compact name={subgroup.name} propertyOptions={propertyOptions}/><span data-i18n-ignore>{subgroup.name}</span><small>{projectCount(subgroup)}</small></header>{subgroup.projects.map(card)}</section>)}
+      {!group.subgroups?.length && group.projects.map(card)}
       <button className="lp-project-board__add" onClick={() => onCreateProject?.(projectCreateStatus(group.name))} type="button"><PlusIcon /> Add new project</button>
-    </div>
+    </div>}
   </section>
 }
 
-function ProjectBoardCard({ project, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, propertyOptions, visible }: ProjectItemActions) {
+function ProjectBoardCard({ project, manualOrdering, onKeyboardMove, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, propertyOptions, visible }: ProjectItemActions & { onKeyboardMove: (direction: -1 | 1) => void }) {
   const [menuPoint, setMenuPoint] = useState<{ x: number, y: number } | null>(null)
   return <>
     <a
       aria-label={project.name}
       className="lp-project-card"
+      draggable={Boolean(onPropertyChange)}
       href={project.href}
       onClick={event => openProjectLink(event, project, onOpen)}
       onContextMenu={event => {
         event.preventDefault()
         setMenuPoint({ x: event.clientX, y: event.clientY })
       }}
-      onKeyDown={event => event.target === event.currentTarget && event.key === 'Enter' && onOpen?.(project)}
+      onDragEnd={event => { event.currentTarget.removeAttribute('data-dragging') }}
+      onDragStart={event => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData(PROJECT_DRAG_TYPE, project.id); event.currentTarget.setAttribute('data-dragging', 'true') }}
+      onKeyDown={event => { if (event.target !== event.currentTarget) return; if (event.key === 'Enter') onOpen?.(project); if (event.altKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) { event.preventDefault(); onKeyboardMove(event.key === 'ArrowLeft' ? -1 : 1) } }}
       role="button"
       tabIndex={0}
     >
@@ -391,8 +423,27 @@ function ProjectBoardCard({ project, onOpen, onOpenIssues, onOpenUpdates, onProj
         {visible.has('Issues') && <button className="lp-project-card__issues" onClick={event => { stopPropagation(event); onOpenIssues?.(project) }} type="button">{project.issueCount} issues</button>}
       </div>
     </a>
-    <ProjectItemMenu onProjectAction={onProjectAction} onPropertyChange={onPropertyChange} options={propertyOptions} point={menuPoint} project={project} setPoint={setMenuPoint}/>
+    <ProjectItemMenu manualOrdering={manualOrdering} onProjectAction={onProjectAction} onPropertyChange={onPropertyChange} options={propertyOptions} point={menuPoint} project={project} setPoint={setMenuPoint}/>
   </>
+}
+
+const PROJECT_DRAG_TYPE = 'application/x-flow-project-id'
+
+function findProject(groups: ProjectDataGroup[], projectId: string): ProjectPageItem | undefined {
+  for (const group of groups) {
+    const project = group.projects.find(item => item.id === projectId) ?? group.subgroups?.flatMap(item => item.projects).find(item => item.id === projectId)
+    if (project) return project
+  }
+  return undefined
+}
+
+function projectGroupProperty(group: ProjectDataGroup): { property: ProjectProperty; value: string } | undefined {
+  if (group.id.startsWith('status-')) return { property: 'status', value: group.name }
+  if (group.id.startsWith('priority-')) return { property: 'priority', value: group.id.slice('priority-'.length) }
+  if (group.id.startsWith('health-')) return { property: 'health', value: group.id.slice('health-'.length) }
+  if (group.id === 'lead-none') return { property: 'lead', value: '' }
+  if (group.id.startsWith('lead-')) return { property: 'lead', value: group.id.slice('lead-'.length) }
+  return undefined
 }
 
 function openProjectLink(event: MouseEvent<HTMLAnchorElement>, project: ProjectPageItem, onOpen?: (project: ProjectPageItem) => void) {
@@ -400,8 +451,8 @@ function openProjectLink(event: MouseEvent<HTMLAnchorElement>, project: ProjectP
   if (onOpen && !event.metaKey && !event.ctrlKey && !event.shiftKey && event.button === 0) { event.preventDefault(); onOpen(project) }
 }
 
-function ProjectItemMenu({ onProjectAction, onPropertyChange, options, point, project, setPoint }: Pick<ProjectItemActions,'onProjectAction'|'onPropertyChange'|'project'> & { options?: ProjectPropertyOptions; point: {x:number;y:number}|null; setPoint: (point:{x:number;y:number}|null)=>void }) {
-  return point ? <ProjectContextMenu options={options} project={project} onPropertyChange={(property,value)=>onPropertyChange?.(project,property,value)} onAction={action=>{setPoint(null);onProjectAction?.(project,action)}} onClose={()=>setPoint(null)} point={point}/> : null
+function ProjectItemMenu({ manualOrdering, onProjectAction, onPropertyChange, options, point, project, setPoint }: Pick<ProjectItemActions,'manualOrdering'|'onProjectAction'|'onPropertyChange'|'project'> & { options?: ProjectPropertyOptions; point: {x:number;y:number}|null; setPoint: (point:{x:number;y:number}|null)=>void }) {
+  return point ? <ProjectContextMenu manualOrdering={manualOrdering} options={options} project={project} onPropertyChange={(property,value)=>onPropertyChange?.(project,property,value)} onAction={action=>{setPoint(null);onProjectAction?.(project,action)}} onClose={()=>setPoint(null)} point={point}/> : null
 }
 
 function LeadPropertyButton({ lead, onChange, options }: {
@@ -426,7 +477,7 @@ function LeadPropertyButton({ lead, onChange, options }: {
 type ProjectContextKind = ProjectProperty | 'copy-menu' | 'move-menu' | 'subscribe-menu' | 'remind-menu' | 'more-menu'
 type ProjectContextItem = { label: string; icon: ReactNode; action?: ProjectAction; kind?: ProjectContextKind; shortcut?: string; danger?: boolean; date?: 'startDate' | 'targetDate' }
 
-function ProjectContextMenu({ point, onAction, onClose, onPropertyChange, options, project }: { point: { x: number, y: number }, onAction: (action: ProjectAction) => void, onClose: () => void, onPropertyChange: (property: ProjectProperty, value: string) => void, options?: ProjectPropertyOptions, project: ProjectPageItem }) {
+function ProjectContextMenu({ manualOrdering = false, point, onAction, onClose, onPropertyChange, options, project }: { manualOrdering?: boolean; point: { x: number, y: number }, onAction: (action: ProjectAction) => void, onClose: () => void, onPropertyChange: (property: ProjectProperty, value: string) => void, options?: ProjectPropertyOptions, project: ProjectPageItem }) {
   const ref = useRef<HTMLDivElement>(null)
   const nestedRef = useRef<HTMLDivElement>(null)
   const [nested, setNested] = useState<ProjectContextKind | null>(null)
@@ -497,6 +548,7 @@ function ProjectContextMenu({ point, onAction, onClose, onPropertyChange, option
     {nested && <div className="lp-project-context__nested" onKeyDown={event => menuKeyboard(event, () => setNested(null))} ref={nestedRef} role="menu">
       <ProjectContextSubmenu
         kind={nested}
+        manualOrdering={manualOrdering}
         onAction={onAction}
         onClose={onClose}
         onPropertyChange={onPropertyChange}
@@ -515,8 +567,9 @@ function ContextItemContent({ item }: { item: ProjectContextItem }) {
   return <><span className="lp-project-context__icon">{item.icon}</span><span className="lp-project-context__label">{item.label}</span>{item.shortcut && <kbd>{item.shortcut}</kbd>}{(item.kind || item.date) && <ChevronRightIcon />}</>
 }
 
-function ProjectContextSubmenu({ kind, onAction, onClose, onPropertyChange, options, project, query, setQuery, setSubscriptions, subscriptions }: {
+function ProjectContextSubmenu({ kind, manualOrdering, onAction, onClose, onPropertyChange, options, project, query, setQuery, setSubscriptions, subscriptions }: {
   kind: ProjectContextKind
+  manualOrdering: boolean
   onAction: (action: ProjectAction) => void
   onClose: () => void
   onPropertyChange: (property: ProjectProperty, value: string) => void
@@ -535,7 +588,7 @@ function ProjectContextSubmenu({ kind, onAction, onClose, onPropertyChange, opti
     { icon: <MessageCirclePlus/>, label: 'Copy latest project update' },
   ]} onChoose={label => { void copyProjectValue(project, label); onClose() }} query={query} setQuery={setQuery}/>
 
-  if (kind === 'move-menu') return <SimpleSubmenu searchable items={[{ icon: <Move/>, label: 'Move down', shortcut: '⌥ ↓', disabled: true }, { icon: <Move/>, label: 'Move to bottom', shortcut: '⌥ ⇧ ↓', disabled: true }]} onChoose={() => undefined} query={query} setQuery={setQuery}/>
+  if (kind === 'move-menu') return <SimpleSubmenu searchable items={[{ icon: <Move/>, label: 'Move down', shortcut: '⌥ ↓', disabled: !manualOrdering }, { icon: <Move/>, label: 'Move to bottom', shortcut: '⌥ ⇧ ↓', disabled: !manualOrdering }]} onChoose={label => { onAction(label === 'Move down' ? 'moveDown' : 'moveBottom'); onClose() }} query={query} setQuery={setQuery}/>
 
   if (kind === 'subscribe-menu') return <SimpleSubmenu searchable items={Object.entries(SUBSCRIPTION_LABELS).map(([id, label]) => ({ checked: subscriptions[id], id, label }))} onChoose={(_label, id) => setSubscriptions({ ...subscriptions, [id]: !subscriptions[id] })} query={query} setQuery={setQuery}/>
 
@@ -708,30 +761,40 @@ function ProjectProgressSparkline({ createdAt, progress, startDate, targetDate }
 }
 
 function ProjectTimeline({ groups, onOpenProject, onUpdateProject, propertyOptions }: { groups: ProjectDataGroup[], onOpenProject?: (project: ProjectPageItem) => void, onUpdateProject?: (projectId: string, input: { startDate?: string; targetDate?: string }) => Promise<unknown>, propertyOptions?: ProjectPropertyOptions }) {
-  const months = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   const [drag, setDrag] = useState<{ id: string; startX: number; originalStart?: string; originalTarget?: string }>()
   const draggedRef = useRef(false)
-  const trackRef = useRef<HTMLDivElement>(null)
   const rows = groups.flatMap(group => group.subgroups?.length ? group.subgroups.map(subgroup => ({ ...subgroup, name: `${group.name} / ${subgroup.name}` })) : [group])
+  const allProjects = rows.flatMap(group => group.projects)
+  const today = new Date()
+  const datedValues = allProjects.flatMap(project => [project.rawStartDate, project.rawTargetDate]).filter((value): value is string => Boolean(value)).map(value => new Date(`${value}T00:00:00`)).filter(date => Number.isFinite(date.getTime()))
+  const timelineStart = startOfTimeline(datedValues.length ? new Date(Math.min(today.getTime(), ...datedValues.map(Number))) : today)
+  const furthestDate = datedValues.length ? new Date(Math.max(today.getTime(), ...datedValues.map(Number))) : today
+  const timelineEnd = new Date(Math.max(addTimelineMonths(timelineStart, 6).getTime(), addTimelineMonths(startOfTimeline(furthestDate), 2).getTime()))
+  const months = timelineMonths(timelineStart, timelineEnd)
+  const rangeMs = Math.max(86400000, timelineEnd.getTime() - timelineStart.getTime())
+  const rangeDays = Math.max(1, Math.round(rangeMs / 86400000))
   return <div aria-label="Project timeline" className="lp-project-timeline" role="grid">
-    <header><span>Projects</span><div>{months.map(month => <span key={month}>{month}</span>)}</div></header>
+    <header><span>Projects</span><div style={{ gridTemplateColumns: `repeat(${months.length}, minmax(88px, 1fr))` }}>{months.map(month => <span key={month.toISOString()}>{month.toLocaleDateString(undefined, { month: 'short', year: month.getMonth() === 0 ? 'numeric' : undefined })}</span>)}</div></header>
     <div className="lp-project-timeline__body">{rows.map(group => <section key={group.id}>
       <h2><ProjectGroupStatus color={group.color} compact name={group.name} propertyOptions={propertyOptions}/><span data-i18n-ignore>{group.name}</span><small>{projectCount(group)}</small></h2>
-      <div className="lp-project-timeline__tracks" ref={trackRef}>{group.projects.map((project, index) => {
+      <div className="lp-project-timeline__tracks">{group.projects.map((project, index) => {
         const start = project.rawStartDate ?? project.startDate
         const target = project.rawTargetDate ?? project.targetDate
-        const fallbackStart = new Date(); fallbackStart.setDate(fallbackStart.getDate() + index * 14)
+        const fallbackStart = new Date(timelineStart); fallbackStart.setDate(fallbackStart.getDate() + index * 14)
         const startDate = start ? new Date(start) : fallbackStart
         const endDate = target ? new Date(target) : new Date(startDate.getTime() + 21 * 86400000)
-        const total = 184 * 86400000
-        const startPct = Math.max(0, Math.min(88, (startDate.getTime() - Date.now()) / total * 100 + 20))
-        const widthPct = Math.max(12, Math.min(55, (endDate.getTime() - startDate.getTime()) / total * 100))
+        const startPct = Math.max(0, Math.min(96, (startDate.getTime() - timelineStart.getTime()) / rangeMs * 100))
+        const widthPct = Math.max(4, Math.min(100 - startPct, (endDate.getTime() - startDate.getTime()) / rangeMs * 100))
         const isDragging = drag?.id === project.id
-        return <button aria-label={`${project.name} timeline bar`} data-dragging={isDragging || undefined} key={project.id} onClick={() => { if (!draggedRef.current) onOpenProject?.(project); draggedRef.current = false }} onKeyDown={async event => { if (!onUpdateProject || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return; event.preventDefault(); const days = event.key === 'ArrowLeft' ? -1 : 1; const nextStart = new Date(startDate); const nextTarget = new Date(endDate); nextStart.setDate(nextStart.getDate() + days); nextTarget.setDate(nextTarget.getDate() + days); await onUpdateProject(project.id, { startDate: nextStart.toISOString().slice(0, 10), targetDate: nextTarget.toISOString().slice(0, 10) }) }} onPointerDown={event => { if (!onUpdateProject) return; event.preventDefault(); draggedRef.current = false; event.currentTarget.setPointerCapture(event.pointerId); setDrag({ id: project.id, startX: event.clientX, originalStart: start, originalTarget: target }) }} onPointerMove={event => { if (drag?.id !== project.id || !trackRef.current) return; if (Math.abs(event.clientX - drag.startX) > 3) draggedRef.current = true; const width = trackRef.current.getBoundingClientRect().width; const rawDays = Math.round((event.clientX - drag.startX) / Math.max(width, 1) * 184); const durationDays = Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / 86400000)); const maxDays = Math.max(0, 184 - durationDays); const days = Math.max(-184, Math.min(maxDays, rawDays)); event.currentTarget.style.setProperty('--timeline-drag-offset', `${days / 184 * 100}%`) }} onPointerCancel={event => { if (drag?.id !== project.id) return; draggedRef.current = false; setDrag(undefined); event.currentTarget.style.removeProperty('--timeline-drag-offset') }} onPointerUp={async event => { if (drag?.id !== project.id) return; const width = trackRef.current?.getBoundingClientRect().width ?? 1; const rawDays = Math.round((event.clientX - drag.startX) / Math.max(width, 1) * 184); const baseStart = drag.originalStart ? new Date(drag.originalStart) : startDate; const baseTarget = drag.originalTarget ? new Date(drag.originalTarget) : endDate; const durationDays = Math.max(1, Math.round((baseTarget.getTime() - baseStart.getTime()) / 86400000)); const days = Math.max(-184, Math.min(Math.max(0, 184 - durationDays), rawDays)); baseStart.setDate(baseStart.getDate() + days); baseTarget.setDate(baseTarget.getDate() + days); setDrag(undefined); event.currentTarget.style.removeProperty('--timeline-drag-offset'); if (days !== 0) await onUpdateProject?.(project.id, { startDate: baseStart.toISOString().slice(0, 10), targetDate: baseTarget.toISOString().slice(0, 10) }) }} style={{ '--timeline-start': `${startPct}%`, '--timeline-width': `${widthPct}%` } as CSSProperties} type="button"><span>{project.name}</span></button>
+        return <button aria-label={`${project.name} timeline bar`} data-dragging={isDragging || undefined} key={project.id} onClick={() => { if (!draggedRef.current) onOpenProject?.(project); draggedRef.current = false }} onKeyDown={async event => { if (!onUpdateProject || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return; event.preventDefault(); const days = event.key === 'ArrowLeft' ? -1 : 1; const nextStart = new Date(startDate); const nextTarget = new Date(endDate); nextStart.setDate(nextStart.getDate() + days); nextTarget.setDate(nextTarget.getDate() + days); await onUpdateProject(project.id, { startDate: nextStart.toISOString().slice(0, 10), targetDate: nextTarget.toISOString().slice(0, 10) }) }} onPointerDown={event => { if (!onUpdateProject) return; event.preventDefault(); draggedRef.current = false; event.currentTarget.setPointerCapture(event.pointerId); setDrag({ id: project.id, startX: event.clientX, originalStart: start, originalTarget: target }) }} onPointerMove={event => { if (drag?.id !== project.id) return; if (Math.abs(event.clientX - drag.startX) > 3) draggedRef.current = true; const width = event.currentTarget.parentElement?.getBoundingClientRect().width ?? 1; const days = Math.round((event.clientX - drag.startX) / Math.max(width, 1) * rangeDays); event.currentTarget.style.setProperty('--timeline-drag-offset', `${days / rangeDays * 100}%`) }} onPointerCancel={event => { if (drag?.id !== project.id) return; draggedRef.current = false; setDrag(undefined); event.currentTarget.style.removeProperty('--timeline-drag-offset') }} onPointerUp={async event => { if (drag?.id !== project.id) return; const width = event.currentTarget.parentElement?.getBoundingClientRect().width ?? 1; const days = Math.round((event.clientX - drag.startX) / Math.max(width, 1) * rangeDays); const baseStart = drag.originalStart ? new Date(drag.originalStart) : startDate; const baseTarget = drag.originalTarget ? new Date(drag.originalTarget) : endDate; baseStart.setDate(baseStart.getDate() + days); baseTarget.setDate(baseTarget.getDate() + days); setDrag(undefined); event.currentTarget.style.removeProperty('--timeline-drag-offset'); if (days !== 0) await onUpdateProject?.(project.id, { startDate: baseStart.toISOString().slice(0, 10), targetDate: baseTarget.toISOString().slice(0, 10) }) }} style={{ '--timeline-start': `${startPct}%`, '--timeline-width': `${widthPct}%` } as CSSProperties} type="button"><span>{project.name}</span></button>
       })}</div>
     </section>)}</div>
   </div>
 }
+
+function startOfTimeline(value: Date) { return new Date(value.getFullYear(), value.getMonth(), 1) }
+function addTimelineMonths(value: Date, count: number) { return new Date(value.getFullYear(), value.getMonth() + count, 1) }
+function timelineMonths(start: Date, end: Date) { const values: Date[] = []; for (let cursor = new Date(start); cursor < end && values.length < 24; cursor = addTimelineMonths(cursor, 1)) values.push(cursor); return values }
 
 function ProjectGroupStatus({ color = '#77777c', compact = false, name, propertyOptions }: { color?: string, compact?: boolean, name: string, propertyOptions?: ProjectPropertyOptions }) {
   const status = (propertyOptions?.status ?? PROPERTY_OPTIONS.status).find(option => option.value.toLocaleLowerCase() === name.toLocaleLowerCase())

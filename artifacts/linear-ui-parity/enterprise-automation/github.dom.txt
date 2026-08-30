@@ -1,0 +1,219 @@
+- link "Skip to content":
+  - /url: "#skip-nav"
+- navigation:
+  - link "Back to app":
+    - /url: /leozhengliu
+    - text: Back to app
+  - generic "Search settings":
+    - search "Search…"
+  - heading "Personal" [level=2]:
+    - generic: Personal
+  - link "Preferences":
+    - /url: /leozhengliu/settings/account/preferences
+    - generic: Preferences
+  - link "Profile":
+    - /url: /leozhengliu/settings/account/profile
+    - generic: Profile
+  - link "Notifications":
+    - /url: /leozhengliu/settings/account/notifications
+    - generic: Notifications
+  - link "Code & reviews":
+    - /url: /leozhengliu/settings/account/code-and-reviews
+    - generic: Code & reviews
+  - link "Security & access":
+    - /url: /leozhengliu/settings/account/security
+    - generic: Security & access
+  - link "Connected accounts":
+    - /url: /leozhengliu/settings/account/connections
+    - generic: Connected accounts
+  - link "Agent personalization":
+    - /url: /leozhengliu/settings/account/agents
+    - generic: Agent personalization
+  - heading "Issues" [level=2]:
+    - generic: Issues
+  - link "Labels":
+    - /url: /leozhengliu/settings/issue-labels
+    - generic: Labels
+  - link "Templates":
+    - /url: /leozhengliu/settings/issue-templates
+    - generic: Templates
+  - link "SLAs":
+    - /url: /leozhengliu/settings/sla
+    - generic: SLAs
+  - heading "Projects" [level=2]:
+    - generic: Projects
+  - link "Labels":
+    - /url: /leozhengliu/settings/project-labels
+    - generic: Labels
+  - link "Templates":
+    - /url: /leozhengliu/settings/project-templates
+    - generic: Templates
+  - link "Statuses":
+    - /url: /leozhengliu/settings/project-statuses
+    - generic: Statuses
+  - link "Updates":
+    - /url: /leozhengliu/settings/project-updates
+    - generic: Updates
+  - heading "Features" [level=2]:
+    - generic: Features
+  - link "AI & Agents":
+    - /url: /leozhengliu/settings/ai
+    - generic: AI & Agents
+  - link "Initiatives":
+    - /url: /leozhengliu/settings/initiatives
+    - generic: Initiatives
+  - link "Documents":
+    - /url: /leozhengliu/settings/documents
+    - generic: Documents
+  - link "Customer requests":
+    - /url: /leozhengliu/settings/customer-requests
+    - generic: Customer requests
+  - link "Releases":
+    - /url: /leozhengliu/settings/releases
+    - generic: Releases
+  - link "Pulse":
+    - /url: /leozhengliu/settings/pulse
+    - generic: Pulse
+  - link "Asks":
+    - /url: /leozhengliu/settings/asks
+    - generic: Asks
+  - link "Emojis":
+    - /url: /leozhengliu/settings/emojis
+    - generic: Emojis
+  - link "Integrations":
+    - /url: /leozhengliu/settings/integrations
+    - generic: Integrations
+  - heading "Administration" [level=2]:
+    - generic: Administration
+  - link "Workspace":
+    - /url: /leozhengliu/settings/workspace
+    - generic: Workspace
+  - link "Teams":
+    - /url: /leozhengliu/settings/teams
+    - generic: Teams
+  - link "Members":
+    - /url: /leozhengliu/settings/members
+    - generic: Members
+  - link "Security":
+    - /url: /leozhengliu/settings/security
+    - generic: Security
+  - link "API":
+    - /url: /leozhengliu/settings/api
+    - generic: API
+  - link "Applications":
+    - /url: /leozhengliu/settings/applications
+    - generic: Applications
+  - link "Billing":
+    - /url: /leozhengliu/settings/billing
+    - generic: Billing
+  - link "Usage & limits":
+    - /url: /leozhengliu/settings/usage
+    - generic: Usage & limits
+  - link "Import & export":
+    - /url: /leozhengliu/settings/import-export
+    - generic: Import & export
+  - heading "Your teams" [level=2]:
+    - generic: Your teams
+  - link "Leozhengliu":
+    - /url: /leozhengliu/settings/teams/LEO
+    - generic: Leozhengliu
+  - generic "Create a team":
+    - text: Create a team
+- button "Open Help menu":
+- generic "There are 19 days remaining in your workspace’s Business trial.":
+  - link "Business trial ends":
+    - /url: /leozhengliu/settings/billing/plans
+  - generic: Business trial ends
+  - generic: 19d
+- main:
+  - link "Integrations":
+    - /url: /leozhengliu/settings/integrations
+    - generic: Integrations
+  - text: Integrations
+  - heading "GitHub" [level=2]
+  - heading "Connect GitHub to automate PR workflows, review code in Linear, sync issues and understand your codebase with Linear Agent" [level=3]
+  - complementary:
+    - list:
+      - link "zheng liu":
+        - /url: /leozhengliu/profiles/leo.zheng.liu
+        - generic "zheng liu": ZL
+      - generic: Enabled by
+      - link "zheng liu":
+        - /url: /leozhengliu/profiles/leo.zheng.liu
+      - generic: Aug 18
+      - generic: Support
+      - link "Linear":
+        - /url: mailto:support@linear.app
+        - text: Linear
+      - generic: Docs
+      - link "Docs":
+        - /url: https://linear.app/docs/github-integration
+        - text: Docs
+  - button "Show more information": About integration
+  - heading "Connected organizations" [level=3]
+  - button "Connect a new organization":
+  - list:
+    - figure:
+      - img "Avatar of leozhengliu-pixel"
+    - generic: leozhengliu-pixel
+    - generic: Enabled by zheng liu Aug 18, 2026
+    - button "Manage connection":
+      - generic: Connected
+  - list:
+    - link "Personal GitHub account connected settings":
+      - /url: /leozhengliu/settings/account/connections#connection-github
+    - generic: Personal GitHub account connected
+    - generic: Connected accounts
+  - heading "GitHub Issues" [level=3]
+  - generic: Automatically create issues and sync properties from GitHub repositories into Linear teams
+  - button "Add new link…":
+  - heading "Branch format" [level=3]
+  - text: Linear helps you keep your git branch names aligned across your entire organization. Users can copy a git branch name for their issue using the Copy git branch name action
+  - text: (
+  - generic: Command Shift .
+  - generic: ⌘
+  - generic: ⇧
+  - generic: .
+  - text: )
+  - list:
+    - generic: Format
+    - combobox "Format":
+      - generic: username/identifier-title
+  - heading "Linkbacks" [level=3]
+  - generic: Automatically comment in GitHub with a link to the Linear issue. Private team issue titles will not be included in the comment.
+  - list:
+    - generic: Private repositories
+    - checkbox "Private repositories" [checked]
+    - generic: Public repositories
+    - checkbox "Public repositories"
+    - generic: Include issue descriptions in linkbacks
+    - checkbox "Include issue descriptions in linkbacks" [checked]
+  - heading "External tool for reviews" [level=3]
+  - generic: Pull requests are reviewed in Linear by default. If your organization also uses an external review tool, you can configure it here. A link to the external tool will be shown on the review page.
+  - list:
+    - generic: Open PRs in…
+    - combobox "Open PRs in…":
+      - generic: GitHub
+  - list:
+    - generic: Link commits to issues with magic words
+    - text: "Include magic words in your commit messages to link GitHub commits to Linear issues. For example: 'Fixes ID-123' or 'Part of ID-123'."
+    - link "Read more↗":
+      - /url: https://linear.app/docs/github#link-through-pull-requests
+    - checkbox "Link commits to issues with magic words"
+  - heading "Pull requests" [level=3]
+  - list:
+    - figure:
+    - generic: Generate Pull Request guides
+    - generic: Generate guided reviews for new pull requests
+    - checkbox "Generate Pull Request guides" [checked]
+    - figure:
+    - generic: Automatically link Linear issues
+    - generic: Link a matching issue automatically, or generate one on merge when none is linked.
+    - checkbox "Automatically link Linear issues"
+- button "Update loop":
+  - generic "Update loop"
+- button "Agent":
+  - generic: Agent
+- button "Chat history":
+- region "Notifications alt+T"
+- status

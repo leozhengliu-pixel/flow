@@ -1,12 +1,12 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { ChevronDown, ExternalLink, GitMerge, GitPullRequest, Plus, Unplug, X } from 'lucide-react'
+import { AlertCircle, CheckCircle2, ChevronDown, Clock, ExternalLink, GitMerge, GitPullRequest, Plus, RefreshCw, Unplug, X } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Toggle } from '@/components/ui/toggle'
 import { useI18n } from '@/i18n/i18n'
-import { connectIntegration, disconnectIntegrationConnection, updateIntegrationConnection } from '@/lib/api'
+import { connectIntegration, disconnectIntegrationConnection, retryIntegrationDelivery, updateIntegrationConnection } from '@/lib/api'
 import type { BootstrapData, IntegrationConnection } from '@/types/flow'
 
 import './code-integration-settings.css'
@@ -28,9 +28,16 @@ export function CodeIntegrationSettings({provider,data,onBack,onReload}:{provide
       {connections.map(connection=><div className="code-connection-row" key={connection.id}><div className={`code-provider-avatar ${provider}`}><Icon/></div><div><strong data-i18n-ignore>{connection.config?.organization||connection.config?.host||connection.name}</strong><span>{t('Enabled by')} <b data-i18n-ignore>{data.users.find(user=>user.id===connection.connectedBy)?.displayName??data.viewer.displayName}</b> · {formatDate(connection.createdAt,{month:'short',day:'numeric',year:'numeric'})}</span></div><DropdownMenu.Root><DropdownMenu.Trigger asChild><button className="code-manage" aria-label={t('Manage connection')}>{t('Connected')}<ChevronDown/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="code-manage-menu" sideOffset={5} align="end"><DropdownMenu.Item onSelect={()=>window.open(connection.config?.host||`https://${provider}.com`,'_blank')}><ExternalLink/>{t(`Configure in ${title}`)}</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item className="danger" onSelect={()=>setDisconnecting(connection)}><Unplug/>{t('Disconnect…')}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></div>)}
       {(editing||!connections.length)&&<div className="code-connect-form"><div className="code-form-heading"><Icon/><strong>{t(provider==='github'?'Connect a GitHub organization':'Setting up GitLab…')}</strong>{connections.length>0&&<button aria-label={t('Cancel')} onClick={()=>setEditing(false)}><X/></button>}</div>{provider==='github'?<label>{t('GitHub organization')}<input autoFocus aria-label={t('GitHub organization')} placeholder="e.g. heliumlabz" value={organization} onChange={event=>setOrganization(event.target.value)}/></label>:<><label>{t('API access token')}<input autoFocus aria-label={t('API access token')} type="password" placeholder="••••••••••••••••••••" value={token} onChange={event=>setToken(event.target.value)}/></label><label>{t('Custom GitLab URL (optional, self-hosted only)')}<input aria-label={t('Custom GitLab URL (optional, self-hosted only)')} placeholder="https://gitlab.your-company.com" value={host} onChange={event=>setHost(event.target.value)}/></label></>}<footer><button onClick={()=>{setEditing(false);setOrganization('');setToken('');setHost('')}}>{t('Cancel')}</button><button className="code-primary" disabled={busy||(provider==='github'?!organization.trim():!token.trim())} onClick={()=>void connect()}>{busy?t('Connecting…'):t('Connect')}</button></footer></div>}
     </section>
-    {connections[0]&&<><IntegrationOptions provider={provider} connection={connections[0]} onChange={setting}/></>}
+    {connections[0]&&<><IntegrationOptions provider={provider} connection={connections[0]} onChange={setting}/><IntegrationDeliveryHistory data={data} connection={connections[0]} onReload={onReload}/></>}
     <Dialog open={Boolean(disconnecting)} onOpenChange={open=>!open&&setDisconnecting(undefined)}><DialogContent className="code-disconnect-dialog"><DialogTitle>{t(`Disconnect ${title}?`)}</DialogTitle><p>{t('Reviews remain in Flow, but new pull and merge request updates will stop syncing.')}</p><footer><button onClick={()=>setDisconnecting(undefined)}>{t('Cancel')}</button><button className="danger" disabled={busy} onClick={()=>void disconnect()}>{t('Disconnect')}</button></footer></DialogContent></Dialog>
   </div>
+}
+
+function IntegrationDeliveryHistory({data,connection,onReload}:{data:BootstrapData;connection:IntegrationConnection;onReload:()=>Promise<void>}) {
+  const {t,formatDate}=useI18n()
+  const deliveries=data.integrationDeliveries.filter(item=>item.connectionId===connection.id).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,50)
+  const retry=async(id:string)=>{try{await retryIntegrationDelivery(id);await onReload();toast.success(t('Delivery queued for retry'))}catch(error){toast.error(error instanceof Error?error.message:t('Could not retry delivery'))}}
+  return <section className="code-integration-section"><div className="code-section-title"><div><h2>{t('Delivery history')}</h2><p>{t('Webhook delivery attempts and provider responses')}</p></div></div>{deliveries.map(item=>{const StatusIcon=item.status==='delivered'?CheckCircle2:item.status==='failed'?AlertCircle:Clock;return <div className="code-delivery-row" key={item.id}><StatusIcon data-status={item.status}/><div><strong>{item.eventType}</strong><span>{item.status} · {item.attempts} attempt{item.attempts===1?'':'s'} · {formatDate(item.updatedAt,{dateStyle:'medium',timeStyle:'short'})}</span>{item.lastError&&<small>{item.lastError}</small>}</div>{item.status==='failed'&&<button className="code-manage" onClick={()=>void retry(item.id)}><RefreshCw/>{t('Retry')}</button>}</div>})}{!deliveries.length&&<div className="code-delivery-empty"><Clock/><strong>{t('No deliveries yet')}</strong><span>{t('Incoming webhook activity will appear here.')}</span></div>}</section>
 }
 
 function IntegrationOptions({provider,connection,onChange}:{provider:'github'|'gitlab';connection:IntegrationConnection;onChange:(connection:IntegrationConnection,key:string,value:string)=>Promise<void>}){

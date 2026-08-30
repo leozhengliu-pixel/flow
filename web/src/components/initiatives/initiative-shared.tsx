@@ -2,10 +2,10 @@ import * as Popover from '@radix-ui/react-popover'
 import { FolderKanban, Search, UsersRound } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { Avatar } from '@/components/issue/issue-row'
-import { PriorityIcon } from '@/components/issue/issue-icons'
-import { NoAssigneeIcon } from '@/components/issue/issue-icons'
-import { ProjectPropertyPicker, ProjectStatusGlyph, type ProjectPropertyOption } from '@/components/projects-page/project-property-picker'
+import { NoAssigneeIcon, PriorityIcon, TeamIcon } from '@/components/issue/issue-icons'
+import type { ProjectPropertyOption } from '@/components/projects-page/project-property-picker'
 import { ProjectTargetDatePicker } from '@/components/projects-page/project-target-date-picker'
+import { PropertyMenu } from '@/components/property/property-menu'
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { LabelPicker } from '@/components/issue/label-project-pickers'
 import type { Initiative, InitiativeMutationInput, IssueLabel, LabelGroup, Project, Team, User } from '@/types/flow'
@@ -25,32 +25,28 @@ const PRIORITY_OPTIONS: ProjectPropertyOption[] = [
 ]
 
 export function InitiativeStatusIcon({ status }: { status: Initiative['status'] }) {
-  const option = INITIATIVE_STATUS_OPTIONS.find(item => item.value === status)!
-  return <ProjectStatusGlyph name={option.label} type={option.statusType}/>
+  if (status === 'proposed') return <svg aria-hidden="true" fill="#BEC2C8" height="16" viewBox="0 0 16 16" width="16"><path fillRule="evenodd" d="M4.402 12.156a5.49 5.49 0 0 0 2.847 1.29v1.512a6.98 6.98 0 0 1-3.91-1.738l1.063-1.064Zm8.259 1.064a6.98 6.98 0 0 1-3.911 1.738v-1.512a5.49 5.49 0 0 0 2.848-1.29l1.063 1.064ZM2.506 8.247c.045 1.025.372 1.976.903 2.78l-1.077 1.079a6.97 6.97 0 0 1-1.326-3.86h1.5Zm12.488 0a6.97 6.97 0 0 1-1.326 3.857l-1.078-1.077c.532-.804.859-1.755.904-2.78h1.5ZM7.487 4.79a.6.6 0 0 1 1.026 0l2.896 4.788c.318.525-.256 1.137-.795.848L8.094 9.072a.2.2 0 0 0-.188 0l-2.52 1.354c-.539.289-1.113-.323-.795-.848L7.487 4.79ZM3.842 4.401a5.47 5.47 0 0 0-1.197 2.346h-1.53A6.97 6.97 0 0 1 2.778 3.338l1.064 1.063Zm9.379-1.064a6.97 6.97 0 0 1 1.665 3.41h-1.531a5.47 5.47 0 0 0-1.198-2.347l1.064-1.063ZM7.249 2.551a5.47 5.47 0 0 0-2.278.857L3.893 2.331A6.96 6.96 0 0 1 7.249 1.04V2.55ZM8.75 1.039a6.96 6.96 0 0 1 3.355 1.291l-1.078 1.078a5.47 5.47 0 0 0-2.277-.857V1.04Z"/></svg>
+  if (status === 'planned') return <svg aria-hidden="true" fill="#949698" height="16" viewBox="0 0 16 16" width="16"><path d="M9 8.002a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/><path fillRule="evenodd" d="M8 12.002a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0-1.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path fillRule="evenodd" d="M15 8.002a7 7 0 1 1-14 0 7 7 0 0 1 14 0Zm-1.5 0a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Z"/></svg>
+  if (status === 'active') return <svg aria-hidden="true" fill="lch(80% 90 85)" height="16" viewBox="0 0 16 16" width="16"><path d="m4.591 9.581 2.897-4.79a.6.6 0 0 1 1.024 0l2.897 4.79c.318.524-.256 1.136-.795.846L8.094 9.074a.2.2 0 0 0-.188 0l-2.52 1.353c-.539.29-1.112-.322-.795-.846Z"/><path fillRule="evenodd" d="M15 8.002a7 7 0 1 1-14 0 7 7 0 0 1 14 0Zm-1.5 0a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Z"/></svg>
+  if (status === 'completed') return <svg aria-hidden="true" fill="#5E68D0" height="16" viewBox="0 0 16 16" width="16"><path d="M11.28 6.782a.75.75 0 0 0-1.06-1.06L7.25 8.69 5.78 7.222a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.06 0l3.5-3.5Z"/><path fillRule="evenodd" d="M15 8.002a7 7 0 1 1-14 0 7 7 0 0 1 14 0Zm-1.5 0a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Z"/></svg>
+  return <svg aria-hidden="true" fill="#95A2B3" height="16" viewBox="0 0 16 16" width="16"><path fillRule="evenodd" d="M9.47 5.47a.75.75 0 1 1 1.06 1.06L9.061 8l1.47 1.47a.75.75 0 0 1-1.061 1.06L8 9.061l-1.47 1.47a.75.75 0 0 1-1.06-1.061L6.939 8 5.47 6.53a.75.75 0 0 1 1.06-1.06L8 6.939l1.47-1.47Z"/><path fillRule="evenodd" d="M8 1a7 7 0 1 1 0 14A7 7 0 0 1 8 1Zm0 1.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z"/></svg>
 }
 
 export function InitiativeProperties({ initiative, users, teams = [], onUpdate, compact = false, only }: {
 	initiative: Initiative; users: User[]; teams?: Team[]; compact?: boolean; only?: 'status'|'priority'|'owner'|'leadTeam'|'contributingTeams'|'target'; onUpdate: (input: InitiativeMutationInput) => void | Promise<unknown>
 }) {
-  const ownerOptions = useMemo<ProjectPropertyOption[]>(() => [{ value: '', label: 'No owner', group: 'Users' }, ...users.map(user => ({ value: user.id, label: user.displayName || user.name, avatarUrl: user.avatarUrl, group: 'Users' }))], [users])
-  const teamOptions = useMemo<ProjectPropertyOption[]>(() => [{ value: '', label: 'No lead team', group: 'Teams' }, ...teams.map(team => ({ value: team.id, label: team.name, color: team.color, group: 'Teams' }))], [teams])
+  const ownerOptions = useMemo(() => [{ id: '', label: 'No owner', icon: <NoAssigneeIcon size={15}/>, shortcut: '0' }, ...users.map((user, index) => ({ id: user.id, label: user.displayName || user.name, icon: <Avatar name={user.displayName || user.name}/>, shortcut: index === 0 ? '1' : undefined, end: user.active ? undefined : 'Invited', i18nIgnore: true }))], [users])
+  const teamOptions = useMemo(() => [{ id: '', label: 'No lead team', icon: <TeamIcon size={15}/>, shortcut: '0' }, ...teams.map(team => ({ id: team.id, label: team.name, icon: <TeamIcon size={15}/>, groupLabel: 'Your teams', end: team.key, i18nIgnore: true }))], [teams])
   const leadTeam = teams.find(team => team.id === initiative.leadTeamId)
+  const creating = initiative.id === 'draft'
   const controls = {
-    status: <ProjectPropertyPicker label="Change status" onChange={value => onUpdate({ status: value as Initiative['status'] })} options={INITIATIVE_STATUS_OPTIONS} property="status" value={initiative.status}>
-      <InitiativeStatusIcon status={initiative.status}/><span>{titleCase(initiative.status)}</span>
-    </ProjectPropertyPicker>,
-    priority: <ProjectPropertyPicker label="Change priority" onChange={value => onUpdate({ priority: priorityNumber(value) })} options={PRIORITY_OPTIONS} property="priority" value={priorityValue(initiative.priority)}>
-      <PriorityIcon priority={initiative.priority} size={15}/><span>{initiative.priorityLabel}</span>
-    </ProjectPropertyPicker>,
-    owner: <ProjectPropertyPicker label="Change initiative owner" onChange={value => onUpdate({ ownerId: value })} options={ownerOptions} property="lead" value={initiative.owner?.id ?? ''}>
-      {initiative.owner ? <Avatar name={initiative.owner.displayName || initiative.owner.name}/> : <NoAssigneeIcon size={15}/>}<span>{initiative.owner?.displayName || initiative.owner?.name || 'Owner'}</span>
-    </ProjectPropertyPicker>,
-    leadTeam: <ProjectPropertyPicker label="Change lead team" onChange={value => onUpdate({ leadTeamId: value })} options={teamOptions} property="lead" value={initiative.leadTeamId ?? ''}>
-      <span className="li-team-mark" style={{ background: leadTeam?.color }}>{leadTeam?.key?.slice(0, 2) || '+'}</span><span data-i18n-ignore={leadTeam ? '' : undefined}>{leadTeam?.name || 'Lead team'}</span>
-    </ProjectPropertyPicker>,
+    status: <PropertyMenu ariaLabel={creating ? 'Change status' : titleCase(initiative.status)} label="Status" onChange={value => onUpdate({ status: value as Initiative['status'] })} options={INITIATIVE_STATUS_OPTIONS.map(option => ({ id: option.value, label: option.label, shortcut: option.shortcut, icon: <InitiativeStatusIcon status={option.value as Initiative['status']}/> }))} searchPlaceholder="Change status…" searchShortcut="S" selectedId={initiative.status} surfaceClassName="li-initiative-command li-initiative-command--status" trigger={<><InitiativeStatusIcon status={initiative.status}/><span>{titleCase(initiative.status)}</span></>} triggerClassName="lp-project-property-trigger" triggerRole={creating ? 'combobox' : 'button'} value={initiative.status}/>,
+    priority: <PropertyMenu ariaLabel={creating ? 'Change priority' : initiative.priorityLabel} label="Priority" onChange={value => onUpdate({ priority: priorityNumber(value) })} options={PRIORITY_OPTIONS.map(option => ({ id: option.value, label: option.label, shortcut: option.shortcut, icon: <PriorityIcon priority={priorityNumber(option.value)} size={15}/> }))} searchPlaceholder="Change priority…" selectedId={priorityValue(initiative.priority)} surfaceClassName="li-initiative-command li-initiative-command--priority" trigger={<><PriorityIcon priority={initiative.priority} size={15}/><span>{initiative.priorityLabel}</span></>} triggerClassName="lp-project-property-trigger" triggerRole={creating ? 'combobox' : 'button'} value={initiative.priorityLabel}/>,
+    owner: <PropertyMenu ariaLabel={creating ? 'Change initiative owner' : initiative.owner?.displayName || initiative.owner?.name || 'Owner'} label="Owner" onChange={value => onUpdate({ ownerId: value })} options={ownerOptions} searchPlaceholder="Set owner…" searchShortcut="N, then O" selectedId={initiative.owner?.id ?? ''} surfaceClassName="li-initiative-command li-initiative-command--owner" trigger={<>{initiative.owner ? <Avatar name={initiative.owner.displayName || initiative.owner.name}/> : <NoAssigneeIcon size={15}/>}<span data-i18n-ignore={initiative.owner ? true : undefined}>{initiative.owner?.displayName || initiative.owner?.name || 'Owner'}</span></>} triggerClassName="lp-project-property-trigger" triggerRole={creating ? 'combobox' : 'button'} value={initiative.owner?.displayName || initiative.owner?.name || 'Owner'} valueIsEntityName={Boolean(initiative.owner)}/>,
+    leadTeam: <PropertyMenu ariaLabel={creating ? 'Change lead team' : leadTeam?.key || 'Lead team'} label="Lead team" onChange={value => onUpdate({ leadTeamId: value })} options={teamOptions} searchPlaceholder="Set lead team…" selectedId={initiative.leadTeamId ?? ''} surfaceClassName="li-initiative-command li-initiative-command--team" trigger={<><TeamIcon size={15}/><span data-i18n-ignore={leadTeam ? true : undefined}>{leadTeam?.key || 'Lead team'}</span></>} triggerClassName="lp-project-property-trigger" triggerRole={creating ? 'combobox' : 'button'} value={leadTeam?.name || 'Lead team'} valueIsEntityName={Boolean(leadTeam)}/>,
     contributingTeams: <InitiativeTeamsPicker initiative={initiative} teams={teams} onUpdate={onUpdate}/>,
-    target: <ProjectTargetDatePicker displayValue={formatTarget(initiative.targetDate)} onChange={value => onUpdate({ targetDate: value })} value={initiative.targetDate}>
-      <span className={`li-target-glyph ${initiative.targetDate ? '' : 'is-empty'}`} aria-hidden="true"/><span>{formatTarget(initiative.targetDate) || 'Target date'}</span>
+    target: <ProjectTargetDatePicker ariaLabel={creating ? 'Set initiative target date' : 'Change initiative target date'} compactPeriods defaultMode="quarter" displayValue={formatTarget(initiative.targetDate, initiative.targetDateResolution)} onChange={(value, targetDateResolution) => onUpdate({ targetDate: value, targetDateResolution: targetDateResolution ?? '' })} resolution={initiative.targetDateResolution} triggerRole={creating ? 'combobox' : 'button'} value={initiative.targetDate}>
+      <span className={`li-target-glyph ${initiative.targetDate ? '' : 'is-empty'}`} aria-hidden="true"/><span>{formatTarget(initiative.targetDate, initiative.targetDateResolution) || 'Target date'}</span>
     </ProjectTargetDatePicker>,
   }
   return <div className={`${compact ? 'li-properties li-properties--compact' : 'li-properties'} ${only ? `li-properties--${only}` : ''}`}>{only ? controls[only] : <>{controls.status}{controls.priority}{controls.owner}{controls.leadTeam}{controls.contributingTeams}{controls.target}</>}</div>
@@ -72,7 +68,7 @@ export function InitiativeLabelsPicker({ initiative, labels, labelGroups = [], o
 }) {
   const selected = labels.filter(label => initiative.labelIds.includes(label.id))
   return <div className={compact ? 'li-label-picker li-label-picker--compact' : 'li-label-picker'}>
-    <LabelPicker labels={labels} labelGroups={labelGroups} value={selected} onToggle={labelId => { void onUpdate({ labelIds: initiative.labelIds.includes(labelId) ? initiative.labelIds.filter(id => id !== labelId) : [...initiative.labelIds, labelId] }) }} onCreate={onCreateLabel ? async name => { const label = await onCreateLabel(name); await onUpdate({ labelIds: [...new Set([...initiative.labelIds, label.id])] }) } : undefined}/>
+    <LabelPicker emptyLabel="Start typing to create a new label" labels={labels} labelGroups={labelGroups} searchShortcut="N, then L" showGroupHeadings={false} surfaceClassName="li-initiative-label-command" value={selected} onToggle={labelId => { void onUpdate({ labelIds: initiative.labelIds.includes(labelId) ? initiative.labelIds.filter(id => id !== labelId) : [...initiative.labelIds, labelId] }) }} onCreate={onCreateLabel ? async name => { const label = await onCreateLabel(name); await onUpdate({ labelIds: [...new Set([...initiative.labelIds, label.id])] }) } : undefined}/>
   </div>
 }
 

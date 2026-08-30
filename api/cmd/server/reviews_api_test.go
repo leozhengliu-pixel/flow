@@ -27,6 +27,18 @@ func TestReviewLifecycleAndCodeConnections(t *testing.T) {
 	if len(updated.ReviewerIDs) != 1 || updated.ReviewerIDs[0] != bootstrap.Users[1].ID || len(updated.IssueIDs) != 1 || !updated.Favorite || updated.BranchState != "upToDate" {
 		t.Fatalf("review properties did not persist: %#v", updated)
 	}
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	linkedActivities := bootstrap.Activities[bootstrap.Issues[1].ID]
+	if len(linkedActivities) == 0 || linkedActivities[len(linkedActivities)-1].Type != "issue.review_linked" || linkedActivities[len(linkedActivities)-1].Metadata["reviewId"] != review.ID {
+		t.Fatalf("review link activity missing: %#v", linkedActivities)
+	}
+	updated = requestJSON[domain.CodeReview](t, handler, http.MethodPatch, "/api/reviews/"+review.ID, map[string]any{"issueIds": []string{}}, http.StatusOK)
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	unlinkedActivities := bootstrap.Activities[bootstrap.Issues[1].ID]
+	if len(unlinkedActivities) == 0 || unlinkedActivities[len(unlinkedActivities)-1].Type != "issue.review_unlinked" {
+		t.Fatalf("review unlink activity missing: %#v", unlinkedActivities)
+	}
+	updated = requestJSON[domain.CodeReview](t, handler, http.MethodPatch, "/api/reviews/"+review.ID, map[string]any{"issueIds": []string{bootstrap.Issues[1].ID}}, http.StatusOK)
 	updated = requestJSON[domain.CodeReview](t, handler, http.MethodPost, "/api/reviews/"+review.ID+"/submit", map[string]string{"decision": "approve", "body": "Ready to merge"}, http.StatusOK)
 	if updated.Status != "approved" || len(updated.Events) < 3 || updated.Events[len(updated.Events)-1].Type != "approved" {
 		t.Fatalf("review approval did not persist: %#v", updated)

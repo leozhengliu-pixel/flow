@@ -1,0 +1,18 @@
+{
+  "auditDate": "2026-08-30",
+  "linearWorkspace": "leozhengliu",
+  "routes": [
+    {"capability":"insights","linear":"/leozhengliu/view/all-issues-4084658ef443 + Open view insights","flow":"/:workspace/analytics","evidence":"linear-insights-default.png"},
+    {"capability":"dashboard-index","linear":"Views > Dashboards (Enterprise)","flow":"/:workspace/dashboards","status":"blocked_on_linear_plan"},
+    {"capability":"usage","linear":"/leozhengliu/settings/usage","flow":"/:workspace/settings/usage","evidence":"linear-usage.png"},
+    {"capability":"usage-history","linear":"/leozhengliu/settings/usage/history","flow":"/:workspace/settings/usage"},
+    {"capability":"spend-limits","linear":"/leozhengliu/settings/usage/spend-limits","flow":"/:workspace/settings/usage"}
+  ],
+  "functionalEdges": [
+    "dashboard.create", "dashboard.rename", "dashboard.visibility", "dashboard.subscribe", "dashboard.share.enable", "dashboard.share.disable", "dashboard.export.csv", "dashboard.refresh", "dashboard.delete", "widget.add", "widget.remove", "insights.slice.change", "insights.copyLink", "insights.export", "insights.refresh", "usage.period.previous", "usage.period.next", "usage.autoReload.toggle", "usage.limit.persist"
+  ],
+  "unmappedLinearNodes": [
+    {"node":"Dashboard Enterprise create/detail DOM","reason":"authenticated workspace is Business; route returns View not found"},
+    {"node":"Add credits checkout","reason":"Flow has no configured payment provider or checkout API; no inert UI rendered"}
+  ]
+}

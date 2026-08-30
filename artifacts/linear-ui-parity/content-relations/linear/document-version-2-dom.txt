@@ -1,0 +1,143 @@
+- link "Skip to content":
+  - /url: "#skip-nav"
+- navigation:
+  - button "leozhengliu Workspace Menu":
+    - generic: LE
+    - generic: leozhengliu
+  - button "Search workspace":
+  - button "Create new issue":
+  - button "Inbox":
+    - link "Inbox":
+      - /url: /leozhengliu/inbox
+      - generic: Inbox
+  - button "Reviews":
+    - link "Reviews":
+      - /url: /leozhengliu/reviews
+      - generic: Reviews
+  - button "My issues":
+    - link "My issues":
+      - /url: /leozhengliu/my-issues/assigned
+      - text: My issues
+  - button "Pulse":
+    - link "Pulse":
+      - /url: /leozhengliu/pulse/following
+      - generic: Pulse
+  - button "Drafts":
+    - link "Drafts":
+      - /url: /leozhengliu/drafts
+      - generic: Drafts
+  - button "Agent":
+    - link "Agent":
+      - /url: /leozhengliu/agent
+      - generic: Agent
+  - status
+  - button "Workspace" [expanded]:
+    - generic: Workspace
+  - button "Members":
+    - link "Members":
+      - /url: /leozhengliu/members
+      - text: Members
+  - button "Initiatives":
+    - link "Initiatives":
+      - /url: /leozhengliu/initiatives
+      - text: Initiatives
+  - button "Projects":
+    - link "Projects":
+      - /url: /leozhengliu/projects/all
+      - text: Projects
+  - button "Teams":
+    - link "Teams":
+      - /url: /leozhengliu/teams
+      - text: Teams
+  - button "Views":
+    - link "Views":
+      - /url: /leozhengliu/views/issues
+      - text: Views
+  - button "Releases":
+    - link "Releases":
+      - /url: /leozhengliu/release-pipelines
+      - text: Releases
+  - button "Loops":
+    - link "Loops":
+      - /url: /leozhengliu/loops
+      - text: Loops
+  - button
+  - status
+  - button "Show more links":
+    - text: More
+  - button "Your teams" [expanded]:
+    - generic: Your teams
+  - button "Join a team":
+  - list:
+    - button "Leozhengliu Team menu Home Issues Cycles Current Upcoming Initiatives Projects Views":
+      - button "Leozhengliu" [expanded]:
+        - generic "Leozhengliu"
+      - generic "Team menu":
+      - link "Home":
+        - /url: /leozhengliu/team/LEO/documents
+        - text: Home
+      - link "Issues":
+        - /url: /leozhengliu/team/LEO/active
+        - text: Issues
+      - link "Cycles":
+        - /url: /leozhengliu/team/LEO/cycles
+        - text: Cycles
+      - link "Current":
+        - /url: /leozhengliu/team/LEO/cycle/active
+        - generic: Current
+      - link "Upcoming":
+        - /url: /leozhengliu/team/LEO/cycle/upcoming
+        - generic: Upcoming
+      - link "Initiatives":
+        - /url: /leozhengliu/team/LEO/initiatives/active
+        - text: Initiatives
+      - link "Projects":
+        - /url: /leozhengliu/team/LEO/projects/all
+        - text: Projects
+      - link "Views":
+        - /url: /leozhengliu/team/LEO/views/issues
+        - text: Views
+      - list:
+        - status
+    - status
+  - button "Try" [expanded]:
+    - generic: Try
+  - link "Import issues":
+    - /url: /leozhengliu/settings/import-export
+    - text: Import issues
+  - button "Dismiss":
+    - img "Dismiss"
+- button "Open Help menu":
+- generic "There are 19 days remaining in your workspace’s Business trial.":
+  - link "Business trial ends":
+    - /url: /leozhengliu/settings/billing/plans
+  - generic: Business trial ends
+  - generic: 19d
+- main:
+  - link "Leozhengliu":
+    - /url: /leozhengliu/team/LEO/overview
+    - generic "Leozhengliu"
+  - generic: ›
+  - link "Documents":
+    - /url: /leozhengliu/team/LEO/documents
+    - generic: Documents
+  - generic: ›
+  - generic: Flow parity audit 2026-08-30 document
+  - switch "Add to favorites":
+  - button "Document options":
+  - button "Copy document URL":
+  - button "Unsubscribe":
+  - button "Edited Aug 30":
+    - text: Edited Aug 30
+  - button "Document icon":
+  - textbox "Document title":
+    - paragraph: Flow parity audit 2026-08-30 document
+  - textbox "Document content" [active]:
+    - paragraph: "Version two: customer request archive, restore, and document history."
+- button "Update loop":
+  - generic "Update loop"
+- button "Agent":
+  - generic: Agent
+- button "Chat history":
+- region "Notifications alt+T"
+- status: Navigated to Flow parity audit 2026-08-30 document

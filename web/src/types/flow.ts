@@ -86,13 +86,14 @@ export interface Team {
   color: string;
   icon?: string;
   private?: boolean;
+  retiredAt?: string;
 }
 export interface Customer {
   id: UUID;
   name: string;
   logoUrl?: string;
   ownerId?: UUID;
-  status: "active" | "inactive";
+  status: string;
   tier?: string;
   annualRevenue?: number;
   size?: number;
@@ -570,6 +571,7 @@ export interface Project {
   icon?: string;
   color: string;
   priority: number;
+  position?: number;
   priorityLabel: string;
   progress: number;
   health: "onTrack" | "atRisk" | "offTrack" | "noUpdate";
@@ -590,6 +592,8 @@ export interface Project {
   startDateResolution?: "halfYear" | "month" | "quarter" | "year";
   targetDate?: string;
   targetDateResolution?: "halfYear" | "month" | "quarter" | "year";
+  slackChannelId?: string;
+  slackChannelName?: string;
   archivedAt?: string;
   issueCount: number;
   createdAt: string;
@@ -659,6 +663,8 @@ export interface CustomerRequest {
   issueId?: UUID;
   projectId?: UUID;
   attachments: Attachment[];
+  priority?: number;
+  archivedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -807,6 +813,7 @@ export interface UserSettings {
   fontSize: string;
   pointerCursor: boolean;
   underlineLinks: boolean;
+  disableAnimatedImages?: boolean;
   interfaceTheme: string;
   lightTheme: string;
   darkTheme: string;
@@ -889,6 +896,11 @@ export interface WorkspaceSettings {
   agentWebSearch?: boolean;
   externalLoopTriggers?: boolean;
   mcpConnectorsEnabled?: boolean;
+  reviewThirdPartyApplications?: boolean;
+  allowedMcpConnectors?: "all" | "approved";
+  restrictFileUploads?: boolean;
+  reduceSupportPersonalInfo?: boolean;
+  hipaaCompliance?: boolean;
   aiCreditBalanceCents?: number;
   aiCreditAutoReload?: boolean;
   aiCreditReloadThresholdCents?: number;
@@ -1288,6 +1300,7 @@ export interface Initiative {
   color: string;
   status: InitiativeStatus;
   priority: number;
+  position?: number;
   priorityLabel: string;
   health: Project["health"];
   owner?: User;
@@ -1300,6 +1313,7 @@ export interface Initiative {
   resources: InitiativeResource[];
   comments: Comment[];
   targetDate?: string;
+  targetDateResolution?: "halfYear" | "month" | "quarter" | "year";
   favorite: boolean;
   subscribed: boolean;
   notificationRules: InitiativeNotificationRules;
@@ -1472,6 +1486,7 @@ export interface InitiativeMutationInput {
   color?: string;
   status?: InitiativeStatus;
   priority?: number;
+  position?: number;
   health?: Project["health"];
   ownerId?: string;
   leadTeamId?: string;
@@ -1479,6 +1494,7 @@ export interface InitiativeMutationInput {
   labelIds?: string[];
   projectIds?: string[];
   targetDate?: string;
+  targetDateResolution?: "halfYear" | "month" | "quarter" | "year" | "";
   favorite?: boolean;
   subscribed?: boolean;
   notificationRules?: InitiativeNotificationRules;
@@ -1677,6 +1693,7 @@ export type SavedViewResource =
   "issues" | "projects" | "initiativeProjects" | "pulse";
 
 export type DashboardWidgetType =
+  | "insight"
   | "issue_count"
   | "status_breakdown"
   | "assignee_workload"
@@ -1688,9 +1705,23 @@ export interface DashboardWidget {
   id: string;
   type: DashboardWidgetType;
   title: string;
+  description?: string;
   position: number;
   width: 1 | 2;
-  config: Record<string, unknown>;
+  config: DashboardInsightConfig & Record<string, unknown>;
+}
+export interface DashboardInsightConfig {
+  display?: "chart" | "table" | "metric";
+  measure?: "issue_count" | "estimate" | "cycle_time" | "lead_time" | "sla_breaches";
+  aggregation?: "count" | "sum" | "average" | "minimum" | "maximum";
+  slice?: "none" | "status" | "team" | "assignee" | "label" | "project" | "cycle" | "priority" | "created_at" | "completed_at";
+  segment?: "none" | "status" | "team" | "assignee" | "project" | "priority";
+  dateAggregation?: "day" | "week" | "month" | "quarter" | "year";
+  teamIds?: string[];
+  stateIds?: string[];
+  assigneeIds?: string[];
+  labelIds?: string[];
+  sinceDays?: number;
 }
 export interface Dashboard {
   id: string;
@@ -1699,6 +1730,13 @@ export interface Dashboard {
   ownerId: string;
   visibility: "workspace" | "team" | "private";
   teamIds: string[];
+  filters?: {
+    teamIds?: string[];
+    stateIds?: string[];
+    assigneeIds?: string[];
+    labelIds?: string[];
+  };
+  hideFilters?: boolean;
   widgets: DashboardWidget[];
   subscriberIds: string[];
   shareToken?: string;
@@ -1838,6 +1876,7 @@ export interface IssueUpdateInput {
   contentState?: string;
   stateId?: string;
   priority?: number;
+  estimate?: number;
   assigneeId?: string;
   documentUpdateIds?: string[];
   expectedDocumentVersion?: number;

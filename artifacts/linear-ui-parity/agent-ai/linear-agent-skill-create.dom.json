@@ -1,0 +1,137 @@
+{
+  "nodes": [
+    {
+      "ariaLabel": null,
+      "index": 0,
+      "rect": {
+        "height": 14,
+        "width": 14,
+        "x": 204.578125,
+        "y": 25.5
+      },
+      "role": "img",
+      "style": {
+        "background": "rgba(0, 0, 0, 0)",
+        "border": "0px none lch(39.176 1.25 282)",
+        "borderRadius": "0px",
+        "boxShadow": "none",
+        "color": "lch(39.176 1.25 282)",
+        "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+        "padding": "0px"
+      },
+      "tag": "svg",
+      "text": ""
+    },
+    {
+      "ariaLabel": null,
+      "index": 1,
+      "rect": {
+        "height": 16,
+        "width": 16,
+        "x": 196.078125,
+        "y": 18.5
+      },
+      "role": "img",
+      "style": {
+        "background": "rgba(0, 0, 0, 0)",
+        "border": "0px none lch(9.794 0 282)",
+        "borderRadius": "0px",
+        "boxShadow": "none",
+        "color": "lch(9.794 0 282)",
+        "font": "16px / 24px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+        "padding": "0px"
+      },
+      "tag": "svg",
+      "text": ""
+    },
+    {
+      "ariaLabel": "Skill name",
+      "index": 2,
+      "rect": {
+        "height": 32,
+        "width": 109.6328125,
+        "x": 518.7890625,
+        "y": 72.5
+      },
+      "role": "textbox",
+      "style": {
+        "background": "rgba(0, 0, 0, 0)",
+        "border": "0px none lch(9.794 0 282)",
+        "borderRadius": "0px",
+        "boxShadow": "none",
+        "color": "lch(9.794 0 282)",
+        "font": "",
+        "padding": "0px"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "ariaLabel": "Skill instructions",
+      "index": 3,
+      "rect": {
+        "height": 24,
+        "width": 608,
+        "x": 520.7890625,
+        "y": 144.5
+      },
+      "role": "textbox",
+      "style": {
+        "background": "rgba(0, 0, 0, 0)",
+        "border": "0px none lch(20 1 282)",
+        "borderRadius": "0px",
+        "boxShadow": "none",
+        "color": "lch(20 1 282)",
+        "font": "",
+        "padding": "0px"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "ariaLabel": null,
+      "index": 4,
+      "rect": {
+        "height": 32,
+        "width": 68.1484375,
+        "x": 1002.25,
+        "y": 424.5
+      },
+      "role": null,
+      "style": {
+        "background": "lch(99.997 0.5 282)",
+        "border": "0.5px solid rgba(0, 0, 0, 0)",
+        "borderRadius": "9999px",
+        "boxShadow": "none",
+        "color": "lch(19.588 1.25 282)",
+        "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+        "padding": "0px 12px"
+      },
+      "tag": "button",
+      "text": "Cancel"
+    },
+    {
+      "ariaLabel": "Create",
+      "index": 5,
+      "rect": {
+        "height": 32,
+        "width": 66.390625,
+        "x": 1078.3984375,
+        "y": 424.5
+      },
+      "role": null,
+      "style": {
+        "background": "lch(53 52.26 286.91)",
+        "border": "0.5px solid rgba(0, 0, 0, 0)",
+        "borderRadius": "9999px",
+        "boxShadow": "lch(0 0 0 / 0.02) 0px 3px 6px -2px, lch(0 0 0 / 0.04) 0px 1px 1px 0px",
+        "color": "lch(100 5 286.91)",
+        "font": "500 13px \"Inter Variable\", \"SF Pro Display\", -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", \"Linear Thai\", sans-serif",
+        "padding": "0px 12px"
+      },
+      "tag": "button",
+      "text": "Create"
+    }
+  ],
+  "url": "https://linear.app/leozhengliu/settings/skill/new"
+}

@@ -1,0 +1,20 @@
+{
+  "prefix": "Flow parity audit 2026-08-30",
+  "operations": [
+    {"entity":"document","action":"create","url":"https://linear.app/leozhengliu/document/untitled-101e94a57580","result":"created"},
+    {"entity":"document","action":"rename","value":"Flow parity audit 2026-08-30 document","result":"saved"},
+    {"entity":"document","action":"edit","sessions":2,"versionsObserved":2,"result":"history populated"},
+    {"entity":"document","action":"restore","value":"older version","result":"Content has been restored"},
+    {"entity":"document","action":"delete","url":"https://linear.app/leozhengliu/document/flow-parity-audit-2026-08-30-document-101e94a57580","result":"Recently deleted; Deleted and Document deleted visible"},
+    {"entity":"customer","action":"create","idSuffix":"6ed8777eb7ef","name":"Flow parity audit 2026-08-30 customer","result":"created"},
+    {"entity":"customerRequest","action":"create","idSuffix":"958dee67","linkedIssue":"LEO-5","result":"created"},
+    {"entity":"customerRequest","action":"delete","result":"deleted after confirmation"},
+    {"entity":"customer","action":"delete","result":"deleted after confirmation; customer count 2 -> 1 after reload"}
+  ],
+  "remainingCloudState": {
+    "customer": "absent",
+    "customerRequest": "absent",
+    "document": "Recently deleted for 30-day retention",
+    "linkedIssue": "LEO-5 preserved"
+  }
+}
