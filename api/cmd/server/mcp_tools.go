@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func (s *server) callLinearCompatibleTool(ctx context.Context, actor mcpActor, name string, args map[string]any) (any, error) {
+func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, args map[string]any) (any, error) {
 	data, err := s.mcpWorkspaceData(ctx, actor)
 	if err != nil {
 		return nil, err
@@ -217,7 +217,7 @@ func (s *server) callLinearCompatibleTool(ctx context.Context, actor mcpActor, n
 	case "search_documentation":
 		return searchFlowDocumentation(stringArg(args, "query"), intArg(args, "page", 1)), nil
 	default:
-		return s.callLinearCompatibleWriteTool(ctx, actor, data, name, args)
+		return s.callFlowWriteTool(ctx, actor, data, name, args)
 	}
 }
 

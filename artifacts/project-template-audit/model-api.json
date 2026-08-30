@@ -1,6 +1,0 @@
-{
-  "entity": "ProjectTemplate",
-  "fields": ["name", "projectName", "summary", "description", "icon", "color", "statusId", "priority", "leadId", "memberIds", "teamIds", "initiativeIds", "labelIds", "dependencyIds", "issueIds", "milestones", "visibilityTeamId"],
-  "apis": ["POST /api/project-templates", "PATCH /api/project-templates/{id}", "DELETE /api/project-templates/{id}", "POST /api/projects"],
-  "routes": ["/settings/project-templates", "/settings/templates/project/new", "/settings/templates/project/{id}/edit"]
-}

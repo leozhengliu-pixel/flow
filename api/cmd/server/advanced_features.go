@@ -35,7 +35,7 @@ type documentInput struct {
 	Archived      *bool          `json:"archived,omitempty"`
 }
 
-// documentVisibleToViewer mirrors Linear's document access rule: an unscoped
+// documentVisibleToViewer mirrors Flow's document access rule: an unscoped
 // document is workspace-visible, while a team document is visible only to a
 // member of one of its teams (admins retain workspace access).
 func documentVisibleToViewer(s *server, data domain.Bootstrap, document domain.Document) bool {
@@ -2459,7 +2459,7 @@ func (s *server) downloadExport(w http.ResponseWriter, r *http.Request) {
 			if slaIndex := slices.IndexFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return item.IssueID == issue.ID }); slaIndex >= 0 {
 				slaStatus = data.IssueSLAs[slaIndex].Status
 			}
-			_ = writer.Write([]string{issue.Identifier, issue.Team.Name, linearCSVText(issue.Title), linearCSVText(issue.Description), issue.State.Name, estimate, issue.PriorityLabel, projectID, projectName, issue.Creator.DisplayName, assignee, strings.Join(labels, ", "), cycleNumber, cycleName, cycleStart, cycleEnd, formatExportTime(&issue.CreatedAt), formatExportTime(&issue.UpdatedAt), formatExportTime(issue.StartedAt), formatExportTime(issue.TriagedAt), formatExportTime(issue.CompletedAt), formatExportTime(issue.CanceledAt), formatExportTime(issue.ArchivedAt), stringValue(issue.DueDate), parent, strings.Join(initiativeNames, ", "), milestoneID, milestoneName, slaStatus})
+			_ = writer.Write([]string{issue.Identifier, issue.Team.Name, csvText(issue.Title), csvText(issue.Description), issue.State.Name, estimate, issue.PriorityLabel, projectID, projectName, issue.Creator.DisplayName, assignee, strings.Join(labels, ", "), cycleNumber, cycleName, cycleStart, cycleEnd, formatExportTime(&issue.CreatedAt), formatExportTime(&issue.UpdatedAt), formatExportTime(issue.StartedAt), formatExportTime(issue.TriagedAt), formatExportTime(issue.CompletedAt), formatExportTime(issue.CanceledAt), formatExportTime(issue.ArchivedAt), stringValue(issue.DueDate), parent, strings.Join(initiativeNames, ", "), milestoneID, milestoneName, slaStatus})
 		}
 		writer.Flush()
 		return
@@ -2475,7 +2475,7 @@ func formatExportTime(value *time.Time) string {
 	}
 	return value.UTC().Format(time.RFC3339Nano)
 }
-func linearCSVText(value string) string {
+func csvText(value string) string {
 	trimmed := strings.TrimLeft(value, " \t\r\n")
 	if trimmed != "" && strings.ContainsRune("+-=@∑√∏<>＜＞≤≥＝≠±÷×", []rune(trimmed)[0]) {
 		return "'" + value

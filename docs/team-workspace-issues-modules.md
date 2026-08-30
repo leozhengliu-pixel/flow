@@ -1,6 +1,6 @@
 # Team Issues / Workspace Issues modules
 
-Status: first list-view milestone implemented. The Team Issues measurements and interaction inventory come from the signed-in Flow workspace at `/cleantrack/team/CLE/all`. Workspace Issues uses the same explorer with workspace scope because the current local domain supports multiple teams even though the reference workspace currently exposes one team.
+Status: first list-view milestone implemented. The Team Issues measurements and interaction inventory come from the signed-in Flow workspace at `/acme/team/ENG/all`. Workspace Issues uses the same explorer with workspace scope because the current local domain supports multiple teams even though the reference workspace currently exposes one team.
 
 ## 1. Shared Issue Explorer shell
 

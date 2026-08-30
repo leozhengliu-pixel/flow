@@ -1,6 +1,6 @@
 # Projects Page Replication Modules
 
-Status: implementation in progress. Measurements below come from the signed-in Flow workspace at `/cleantrack/projects/all`, not from inferred designs.
+Status: implementation in progress. Measurements below come from the signed-in Flow workspace at `/acme/projects/all`, not from inferred designs.
 
 Reference viewport: `1470 x 754`, dark theme, workspace sidebar expanded, Health sidebar expanded.
 

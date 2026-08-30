@@ -1,0 +1,796 @@
+[
+  {
+    "name": "mcp__flow.list_comments",
+    "access": "read",
+    "description": "List comments on a Flow issue, project, initiative, document, project milestone, or project/initiative status update. Provide exactly one of `issueId`, `projectId`, `initiativeId`, `documentId`, `milestoneId`, or `statusUpdateId`. For issues, projects, and initiatives this returns both top-level discussion threads and inline description comments. Inline (anchored) comments carry a non-null `quotedText` set to the snippet of description text they reference. Returned comments include `author` and nullable `onBehalfOf`; when set, `onBehalfOf` identifies the user the agent author acted for.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "documentId": { "type": "string", "description": "Document ID or slug (provide exactly one parent)" },
+        "initiativeId": { "type": "string", "description": "Initiative name, ID, identifier (e.g., INIT-123), or slug (provide exactly one parent)" },
+        "issueId": { "type": "string", "description": "Issue ID or identifier (e.g., LIN-123) (provide exactly one parent)" },
+        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "milestoneId": { "type": "string", "description": "Milestone UUID (provide exactly one parent). Resolve milestone names via `list_milestones` first." },
+        "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
+        "projectId": { "type": "string", "description": "Project name, ID, identifier (e.g., PROJ-123), or slug (provide exactly one parent)" },
+        "statusUpdateId": { "type": "string", "description": "Status update UUID (provide exactly one parent). Resolve status updates via `get_status_updates` first." },
+        "statusUpdateType": { "type": "string", "description": "Type of status update named by `statusUpdateId`, as returned by `get_status_updates`. Only valid together with `statusUpdateId`; omit to check both project and initiative status updates.", "enum": ["project", "initiative"] }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_initiative",
+    "access": "write",
+    "description": "Create or update a Flow initiative. If `id` is provided, updates the existing initiative; otherwise creates a new one. When creating, `name` is required. To change parts of the description without resending all of it, pass `patch` instead of `description`.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "color": { "type": "string" },
+        "description": { "type": "string" },
+        "icon": { "type": "string" },
+        "id": { "type": "string" },
+        "labels": { "type": "array", "items": { "type": "string" } },
+        "leadTeam": { "type": ["string", "null"] },
+        "name": { "type": "string" },
+        "owner": { "type": ["string", "null"] },
+        "parentInitiatives": { "type": "array", "items": { "type": "string" } },
+        "patch": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "type": "object", "required": ["new_string", "old_string", "op"], "properties": { "new_string": { "type": "string" }, "old_string": { "type": "string" }, "op": { "type": "string", "enum": ["replace"] }, "replace_all": { "type": "boolean" } } },
+              { "type": "object", "required": ["anchor", "op", "text"], "properties": { "anchor": { "type": "string" }, "op": { "type": "string", "enum": ["insert_before"] }, "text": { "type": "string" } } },
+              { "type": "object", "required": ["anchor", "op", "text"], "properties": { "anchor": { "type": "string" }, "op": { "type": "string", "enum": ["insert_after"] }, "text": { "type": "string" } } },
+              { "type": "object", "required": ["op", "text"], "properties": { "op": { "type": "string", "enum": ["prepend"] }, "text": { "type": "string" } } },
+              { "type": "object", "required": ["op", "text"], "properties": { "op": { "type": "string", "enum": ["append"] }, "text": { "type": "string" } } },
+              { "type": "object", "required": ["from", "new_string", "op", "to"], "properties": { "from": { "type": "string" }, "new_string": { "type": "string" }, "op": { "type": "string", "enum": ["replace_range"] }, "to": { "type": "string" } } }
+            ]
+          }
+        },
+        "priority": { "type": "integer" },
+        "status": { "type": "string" },
+        "summary": { "type": "string" },
+        "targetDate": { "type": "string" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.create_initiative_label",
+    "access": "write",
+    "description": "Create a new Flow initiative label",
+    "input_schema": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "color": { "type": "string", "description": "Hex color code" },
+        "description": { "type": "string", "description": "Label description" },
+        "isGroup": { "type": "boolean", "description": "Is label group (not directly applicable)" },
+        "name": { "type": "string", "description": "Label name" },
+        "parent": { "type": "string", "description": "Parent label group name" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.create_issue_label",
+    "access": "write",
+    "description": "Create a new Flow issue label",
+    "input_schema": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "color": { "type": "string", "description": "Hex color code" },
+        "description": { "type": "string", "description": "Label description" },
+        "isGroup": { "type": "boolean", "description": "Is label group (not directly applicable)" },
+        "name": { "type": "string", "description": "Label name" },
+        "parent": { "type": "string", "description": "Parent label group name" },
+        "teamId": { "type": "string", "description": "Team UUID (omit for workspace label)" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_milestones",
+    "access": "read",
+    "description": "List all milestones in a Flow project",
+    "input_schema": {
+      "type": "object",
+      "required": ["project"],
+      "properties": {
+        "project": { "type": "string", "description": "Project name, ID, identifier (e.g., PROJ-123), or slug" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_project",
+    "access": "write",
+    "description": "Create or update a Flow project. If `id` is provided, updates the existing project; otherwise creates a new one. When creating, `name` and at least one team (via `addTeams` or `setTeams`) are required. To change parts of the description without resending all of it, pass `patch` instead of `description`.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "addInitiatives": { "type": "array", "items": { "type": "string" } },
+        "addTeams": { "type": "array", "items": { "type": "string" } },
+        "color": { "type": "string" },
+        "description": { "type": "string" },
+        "icon": { "type": "string" },
+        "id": { "type": "string" },
+        "labels": { "type": "array", "items": { "type": "string" } },
+        "lead": { "type": ["string", "null"] },
+        "links": { "type": "array", "items": { "type": "object", "required": ["title", "url"], "properties": { "title": { "type": "string" }, "url": { "type": "string" } } } },
+        "name": { "type": "string" },
+        "patch": { "type": "array", "items": { "description": "One of replace, insert_before, insert_after, prepend, append, replace_range patch objects, same shape as save_initiative.patch." } },
+        "priority": { "type": "integer" },
+        "removeInitiatives": { "type": "array", "items": { "type": "string" } },
+        "removeTeams": { "type": "array", "items": { "type": "string" } },
+        "setInitiatives": { "type": "array", "items": { "type": "string" } },
+        "setTeams": { "type": "array", "items": { "type": "string" } },
+        "startDate": { "type": "string" },
+        "startDateResolution": { "type": "string", "enum": ["halfYear", "month", "quarter", "year"] },
+        "state": { "type": "string" },
+        "summary": { "type": "string" },
+        "targetDate": { "type": "string" },
+        "targetDateResolution": { "type": "string", "enum": ["halfYear", "month", "quarter", "year"] }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_issue_statuses",
+    "access": "read",
+    "description": "List available issue statuses in a Flow team",
+    "input_schema": { "type": "object", "required": ["team"], "properties": { "team": { "type": "string", "description": "Team name or ID" } } }
+  },
+  {
+    "name": "mcp__flow.list_project_labels",
+    "access": "read",
+    "description": "List available project labels in the Flow workspace",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "name": { "type": "string", "description": "Filter by name" },
+        "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_initiative_labels",
+    "access": "read",
+    "description": "List available initiative labels in the Flow workspace",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "name": { "type": "string", "description": "Filter by name" },
+        "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_agent_skills",
+    "access": "read",
+    "description": "List Flow Agent skills available to the authenticated user.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_teams",
+    "access": "read",
+    "description": "List teams in the user's Flow workspace",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "createdAt": { "type": "string", "description": "Created after: ISO-8601 date/duration (e.g., -P1D)" },
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "includeArchived": { "type": "boolean", "description": "Include archived items" },
+        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
+        "query": { "type": "string", "description": "Search query" },
+        "updatedAt": { "type": "string", "description": "Updated after: ISO-8601 date/duration (e.g., -P1D)" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_issue_labels",
+    "access": "read",
+    "description": "List available issue labels in a Flow workspace or team",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "name": { "type": "string", "description": "Filter by name" },
+        "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
+        "team": { "type": "string", "description": "Team name or ID" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_documents",
+    "access": "read",
+    "description": "List documents in the user's Flow workspace",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "createdAt": { "type": "string", "description": "Created after: ISO-8601 date/duration (e.g., -P1D)" },
+        "creatorId": { "type": "string", "description": "Filter by creator ID" },
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "fields": { "type": "array", "description": "Fields to include in each result. `id` is always included. Omit or pass an empty array for the default response.", "items": { "type": "string", "enum": ["id", "title", "content", "url", "createdAt", "updatedAt", "archivedAt", "creator", "updatedBy", "project", "initiative", "team", "issue"] } },
+        "includeArchived": { "type": "boolean", "description": "Include archived items" },
+        "initiativeId": { "type": "string", "description": "Filter by initiative ID" },
+        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
+        "projectId": { "type": "string", "description": "Filter by project ID" },
+        "query": { "type": "string", "description": "Search query" },
+        "teamId": { "type": "string", "description": "Filter by team ID" },
+        "updatedAt": { "type": "string", "description": "Updated after: ISO-8601 date/duration (e.g., -P1D)" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_milestone",
+    "access": "write",
+    "description": "Create or update a milestone in a Flow project. If `id` is provided, updates the existing milestone; otherwise creates a new one. When creating, `name` is required.",
+    "input_schema": {
+      "type": "object",
+      "required": ["project"],
+      "properties": {
+        "description": { "type": "string", "description": "Milestone description" },
+        "id": { "type": "string", "description": "Milestone name or ID" },
+        "name": { "type": "string", "description": "Milestone name (required when creating)" },
+        "project": { "type": "string", "description": "Project name, ID, identifier (e.g., PROJ-123), or slug" },
+        "targetDate": { "type": ["string", "null"], "description": "Target completion date (ISO format, null to remove)" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.delete_comment",
+    "access": "write",
+    "description": "Delete a Flow comment. Inline description comments (those with non-null `quotedText`) anchor a mark in the editor, so their root cannot be deleted — delete the replies individually or resolve the thread instead.",
+    "input_schema": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "description": "Comment ID" } } }
+  },
+  {
+    "name": "mcp__flow.list_diffs",
+    "access": "read",
+    "description": "List Flow diff pull requests visible to the authenticated user",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "author": { "type": "string", "description": "Filter by author ID, name, email, or \"me\"" },
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
+        "owner": { "type": "string", "description": "Filter returned diffs by repository owner" },
+        "query": { "type": "string", "description": "Broad search by title, branch, PR number, or bare slug" },
+        "repo": { "type": "string", "description": "Filter returned diffs by repository name" },
+        "reviewState": { "type": "string", "description": "Reviewer state; requires reviewer and defaults to pending when reviewer is set", "default": "pending", "enum": ["pending", "approved", "changesRequested", "commented", "dismissed"] },
+        "reviewer": { "type": "string", "description": "Filter by reviewer ID, name, email, or \"me\"" },
+        "status": { "type": "string", "description": "Filter returned diffs by pull request status" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_initiatives",
+    "access": "read",
+    "description": "List initiatives in the user's Flow workspace",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "createdAt": { "type": "string", "description": "Created after: ISO-8601 date/duration (e.g., -P1D)" },
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "fields": { "type": "array", "description": "Fields to include in each result. `id` is always included. Omit or pass an empty array for the default response.", "items": { "type": "string", "enum": ["id", "name", "summary", "description", "url", "status", "priority", "targetDate", "health", "createdAt", "updatedAt", "owner", "creator", "leadTeam", "parentInitiatives", "labels", "projects", "subInitiatives"] } },
+        "includeArchived": { "type": "boolean", "description": "Include archived items" },
+        "includeProjects": { "type": "boolean", "description": "Include projects" },
+        "includeSubInitiatives": { "type": "boolean", "description": "Include sub-initiatives" },
+        "label": { "type": "string", "description": "Label name or ID" },
+        "leadTeam": { "type": "string", "description": "Lead team name, key, or ID" },
+        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
+        "owner": { "type": "string", "description": "User ID, name, email, or \"me\"" },
+        "parentInitiative": { "type": "string", "description": "Parent initiative. Initiative name, ID, identifier (e.g., INIT-123), or slug" },
+        "query": { "type": "string", "description": "Search initiative name" },
+        "status": { "type": "string", "description": "Status of the initiative" },
+        "updatedAt": { "type": "string", "description": "Updated after: ISO-8601 date/duration (e.g., -P1D)" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_projects",
+    "access": "read",
+    "description": "List projects in the user's Flow workspace",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "createdAt": { "type": "string", "description": "Created after: ISO-8601 date/duration (e.g., -P1D)" },
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "fields": { "type": "array", "description": "Fields to include in each result. `id` is always included. Omit or pass an empty array for the default response.", "items": { "type": "string", "enum": ["id", "name", "summary", "description", "url", "trashed", "createdAt", "updatedAt", "startedAt", "completedAt", "canceledAt", "startDate", "startDateResolution", "targetDate", "targetDateResolution", "priority", "labels", "initiatives", "lead", "status", "teams", "members", "milestones"] } },
+        "includeArchived": { "type": "boolean", "description": "Include archived items" },
+        "includeMembers": { "type": "boolean", "description": "Include project members" },
+        "includeMilestones": { "type": "boolean", "description": "Include milestones" },
+        "initiative": { "type": "string", "description": "Initiative name, ID, identifier (e.g., INIT-123), or slug" },
+        "label": { "type": "string", "description": "Label name or ID" },
+        "limit": { "type": "number", "description": "Max results (default 50, max 50)", "default": 50, "maximum": 50 },
+        "member": { "type": "string", "description": "User ID, name, email, or \"me\"" },
+        "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
+        "query": { "type": "string", "description": "Search project name" },
+        "state": { "type": "string", "description": "State type, name, or ID" },
+        "team": { "type": "string", "description": "Team name or ID" },
+        "updatedAt": { "type": "string", "description": "Updated after: ISO-8601 date/duration (e.g., -P1D)" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.extract_images",
+    "access": "read",
+    "description": "Extract and fetch images from markdown content. Use this to view screenshots, diagrams, or other images embedded in Flow issues, comments, or documents. Pass the markdown content (e.g., issue description) and receive the images as viewable data.",
+    "input_schema": { "type": "object", "required": ["markdown"], "properties": { "markdown": { "type": "string", "description": "Markdown content containing image references (e.g., issue description, comment body)" } } }
+  },
+  {
+    "name": "mcp__flow.list_cycles",
+    "access": "read",
+    "description": "Retrieve cycles for a specific Flow team",
+    "input_schema": {
+      "type": "object",
+      "required": ["teamId"],
+      "properties": {
+        "teamId": { "type": "string", "description": "Team ID" },
+        "type": { "type": "string", "description": "Filter: current, previous, next, or all", "enum": ["current", "previous", "next"] }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_users",
+    "access": "read",
+    "description": "Retrieve users in the Flow workspace",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
+        "query": { "type": "string", "description": "Filter by name or email" },
+        "team": { "type": "string", "description": "Team name or ID" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_release_pipelines",
+    "access": "read",
+    "description": "List release pipelines in the workspace.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "createdAt": { "type": "string", "description": "Created after: ISO-8601 date/duration (e.g., -P1D)" },
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "includeArchived": { "type": "boolean", "description": "Include archived items" },
+        "includeStages": { "type": "boolean", "description": "Include each pipeline's stages" },
+        "includeTeams": { "type": "boolean", "description": "Include each pipeline's teams" },
+        "isProduction": { "type": "boolean", "description": "Filter by production pipeline flag" },
+        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
+        "query": { "type": "string", "description": "Search pipeline name" },
+        "team": { "type": "string", "description": "Team name or ID" },
+        "type": { "type": "string", "description": "Pipeline type: continuous | scheduled", "enum": ["continuous", "scheduled"] },
+        "updatedAt": { "type": "string", "description": "Updated after: ISO-8601 date/duration (e.g., -P1D)" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_issues",
+    "access": "read",
+    "description": "List issues in the user's Flow workspace, including active Triage Intelligence suggestions for issues in triage. For my issues, use \"me\" as the assignee. Use \"null\" for no assignee.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "assignee": { "type": ["string", "null"], "description": "User ID, name, email, or \"me\"" },
+        "createdAt": { "type": "string", "description": "Created after: ISO-8601 date/duration (e.g., -P1D)" },
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "cycle": { "type": "string", "description": "Cycle name, number, or ID" },
+        "delegate": { "type": "string", "description": "Agent name or ID. When the user asks to delegate to \"Flow\" or \"the Flow agent\", this refers to the \"Flow\" app user specifically" },
+        "fields": { "type": "array", "description": "Fields to include in each result. `id` is always included. Omit or pass an empty array for the default response.", "items": { "type": "string", "enum": ["id", "title", "description", "projectMilestone", "priority", "estimate", "url", "gitBranchName", "createdAt", "updatedAt", "archivedAt", "completedAt", "startedAt", "canceledAt", "dueDate", "slaStartedAt", "slaMediumRiskAt", "slaHighRiskAt", "slaBreachesAt", "slaType", "status", "statusType", "labels", "triageIntel", "createdBy", "createdById", "assignee", "assigneeId", "delegate", "delegateId", "project", "projectId", "parentId", "team", "teamId", "cycleId"] } },
+        "includeArchived": { "type": "boolean", "description": "Include archived items" },
+        "label": { "type": "string", "description": "Label name or ID" },
+        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
+        "parentId": { "type": "string", "description": "Parent issue ID or identifier (e.g., LIN-123)" },
+        "priority": { "type": "number", "description": "0=None, 1=Urgent, 2=High, 3=Medium, 4=Low" },
+        "project": { "type": "string", "description": "Project name, ID, identifier (e.g., PROJ-123), or slug" },
+        "query": { "type": "string", "description": "Search issue title or description" },
+        "release": { "type": "string", "description": "Release ID or slug" },
+        "state": { "type": "string", "description": "State type, name, or ID" },
+        "team": { "type": "string", "description": "Team name or ID" },
+        "updatedAt": { "type": "string", "description": "Updated after: ISO-8601 date/duration (e.g., -P1D)" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_release_notes",
+    "access": "read",
+    "description": "List release notes in the workspace, optionally filtered by pipeline or covered release.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "createdAt": { "type": "string", "description": "Created after: ISO-8601 date/duration (e.g., -P1D)" },
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "includeArchived": { "type": "boolean", "description": "Include archived items" },
+        "includeContent": { "type": "boolean", "description": "Include markdown release notes content" },
+        "includeReleases": { "type": "boolean", "description": "Include associated releases" },
+        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
+        "pipeline": { "type": "string", "description": "Release pipeline ID, slug, or exact name" },
+        "query": { "type": "string", "description": "Search release notes title" },
+        "release": { "type": "string", "description": "Release ID or slug" },
+        "updatedAt": { "type": "string", "description": "Updated after: ISO-8601 date/duration (e.g., -P1D)" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_releases",
+    "access": "read",
+    "description": "List releases in the workspace, with optional filtering by pipeline, stage, version, and text.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "createdAt": { "type": "string", "description": "Created after: ISO-8601 date/duration (e.g., -P1D)" },
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "hasReleaseNotes": { "type": "boolean", "description": "Filter to releases that do (true) or do not (false) have release notes" },
+        "includeArchived": { "type": "boolean", "description": "Include archived items" },
+        "includeReleaseNotes": { "type": "boolean", "description": "Include associated release notes" },
+        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
+        "pipeline": { "type": "string", "description": "Release pipeline ID, slug, or exact name" },
+        "query": { "type": "string", "description": "Search release name or version" },
+        "stage": { "type": "string", "description": "Release stage ID or exact name" },
+        "stageType": { "type": "string", "description": "Filter by stage lifecycle type", "enum": ["planned", "started", "completed", "canceled"] },
+        "updatedAt": { "type": "string", "description": "Updated after: ISO-8601 date/duration (e.g., -P1D)" },
+        "version": { "type": "string", "description": "Exact version match" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.get_status_updates",
+    "access": "read",
+    "description": "List or get project/initiative status updates. Pass `id` to get a specific update, or filter to list.",
+    "input_schema": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "createdAt": { "type": "string", "description": "Created after: ISO-8601 date/duration (e.g., -P1D)" },
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "id": { "type": "string", "description": "Status update ID - if provided, returns this specific update" },
+        "includeArchived": { "type": "boolean", "description": "Include archived items" },
+        "initiative": { "type": "string", "description": "Initiative name, ID, identifier (e.g., INIT-123), or slug" },
+        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
+        "project": { "type": "string", "description": "Project name, ID, identifier (e.g., PROJ-123), or slug" },
+        "type": { "type": "string", "description": "Type of status update", "enum": ["project", "initiative"] },
+        "updatedAt": { "type": "string", "description": "Updated after: ISO-8601 date/duration (e.g., -P1D)" },
+        "user": { "type": "string", "description": "User ID, name, email, or \"me\"" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_release",
+    "access": "write",
+    "description": "Create or update a release. If `id` is provided, updates the existing release; otherwise creates a new one. When creating, `name` and `pipeline` are required. Release status is modeled as the release pipeline stage.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "commitSha": { "type": "string", "description": "Commit SHA associated with the release" },
+        "completedAt": { "type": ["string", "null"], "description": "Completed timestamp (ISO DateTime, null to remove)" },
+        "createdAt": { "type": "string", "description": "Import/create timestamp (ISO DateTime)" },
+        "description": { "type": "string", "description": "Release description" },
+        "id": { "type": "string", "description": "Release ID or slug to update. Omit to create a new release." },
+        "name": { "type": "string", "description": "Release name (required when creating)" },
+        "pipeline": { "type": "string", "description": "Release pipeline ID, slug, or exact name (required when creating)" },
+        "stage": { "type": "string", "description": "Release stage ID, exact name, or lifecycle type within the release pipeline" },
+        "startDate": { "type": ["string", "null"], "description": "Estimated start date (ISO YYYY-MM-DD, null to remove)" },
+        "startedAt": { "type": ["string", "null"], "description": "Started timestamp (ISO DateTime, null to remove)" },
+        "targetDate": { "type": ["string", "null"], "description": "Estimated completion date (ISO YYYY-MM-DD, null to remove)" },
+        "version": { "type": "string", "description": "Version identifier" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.prepare_attachment_upload",
+    "access": "write",
+    "description": "Prepare a direct Flow file upload for an existing issue.",
+    "input_schema": {
+      "type": "object",
+      "required": ["contentType", "filename", "issue", "size"],
+      "properties": {
+        "contentType": { "type": "string", "description": "MIME type, e.g. image/png or application/pdf" },
+        "filename": { "type": "string", "description": "Filename for the upload, e.g. screenshot.png" },
+        "issue": { "type": "string", "description": "Issue ID or identifier (e.g., LIN-123)" },
+        "size": { "type": "integer", "description": "Exact file size in bytes. Must be smaller than 2 GB." },
+        "subtitle": { "type": "string", "description": "Suggested attachment subtitle for the finalize step" },
+        "title": { "type": "string", "description": "Suggested attachment title for the finalize step" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_issue",
+    "access": "write",
+    "description": "Create or update a Flow issue. If `id` is provided, updates the existing issue; otherwise creates a new one. When creating, `title` and `team` are required. Note: use `assignee` (not `assigneeId`) to set the assignee — it accepts a user ID, name, email, or \"me\".",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "addReleases": { "type": "array", "items": { "type": "string" } },
+        "assignee": { "type": ["string", "null"] },
+        "blockedBy": { "type": "array", "items": { "type": "string" } },
+        "blocks": { "type": "array", "items": { "type": "string" } },
+        "cycle": { "type": ["string", "null"] },
+        "delegate": { "type": ["string", "null"] },
+        "description": { "type": "string" },
+        "dueDate": { "type": ["string", "null"] },
+        "duplicateOf": { "type": ["string", "null"] },
+        "estimate": { "type": ["number", "null"] },
+        "id": { "type": "string" },
+        "labels": { "type": "array", "items": { "type": "string" } },
+        "links": { "type": "array", "items": { "type": "object", "required": ["title", "url"], "properties": { "title": { "type": "string" }, "url": { "type": "string" } } } },
+        "milestone": { "type": "string" },
+        "parentId": { "type": ["string", "null"] },
+        "patch": { "type": "array", "items": { "description": "One of replace, insert_before, insert_after, prepend, append, replace_range patch objects, same shape as save_initiative.patch." } },
+        "priority": { "type": "number" },
+        "project": { "type": ["string", "null"] },
+        "relatedTo": { "type": "array", "items": { "type": "string" } },
+        "removeBlockedBy": { "type": "array", "items": { "type": "string" } },
+        "removeBlocks": { "type": "array", "items": { "type": "string" } },
+        "removeRelatedTo": { "type": "array", "items": { "type": "string" } },
+        "removeReleases": { "type": "array", "items": { "type": "string" } },
+        "setReleases": { "type": "array", "items": { "type": "string" } },
+        "slaBreachesAt": { "type": ["string", "null"] },
+        "slaType": { "type": ["string", "null"], "enum": ["all", "onlyBusinessDays", null] },
+        "state": { "type": "string" },
+        "team": { "type": "string" },
+        "title": { "type": "string" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.create_attachment",
+    "access": "write",
+    "description": "Deprecated fallback for tiny files only. Accepts base64 file content, verifies SHA-256 checksum, and uploads it through the MCP worker. Prefer `prepare_attachment_upload` plus direct PUT plus `create_attachment_from_upload`.",
+    "input_schema": {
+      "type": "object",
+      "required": ["base64Content", "contentType", "filename", "issue", "sha256"],
+      "properties": {
+        "base64Content": { "type": "string", "description": "Deprecated base64-encoded file content to upload" },
+        "contentType": { "type": "string", "description": "MIME type for the upload (e.g., 'image/png', 'application/pdf')" },
+        "filename": { "type": "string", "description": "Filename for the upload (e.g., 'screenshot.png')" },
+        "issue": { "type": "string", "description": "Issue ID or identifier (e.g., LIN-123)" },
+        "sha256": { "type": "string", "description": "Expected SHA-256 hex digest of the decoded file bytes." },
+        "size": { "type": "integer", "description": "Optional expected decoded file size in bytes. Rejects the upload if it does not match." },
+        "subtitle": { "type": "string", "description": "Optional subtitle for the attachment" },
+        "title": { "type": "string", "description": "Optional title for the attachment" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.get_workspace",
+    "access": "read",
+    "description": "Retrieve the connected Flow workspace",
+    "input_schema": { "type": "object", "required": [], "properties": {} }
+  },
+  {
+    "name": "mcp__flow.save_comment",
+    "access": "write",
+    "description": "Create or update a comment on a Flow issue, project, initiative, document, project milestone, or project/initiative status update. If `id` is provided, updates the existing comment; otherwise creates a new one. To start a new thread, pass `body` and exactly one of `issueId`, `projectId`, `initiativeId`, `documentId`, `milestoneId`, or `statusUpdateId` — comments on issues/projects/initiatives become top-level discussion threads; comments on documents/milestones become description comments. A status update holds a single thread, so a comment on an update that already has one is added to it as a reply. To reply to an existing thread, pass `parentId` and `body`; the reply inherits the parent's thread type, so no entity reference is needed. Parent reference fields are ignored when `id` or `parentId` is provided (`statusUpdateType` is rejected instead).",
+    "input_schema": {
+      "type": "object",
+      "required": ["body"],
+      "properties": {
+        "body": { "type": "string", "description": "Content as Markdown. Do not escape the string — use literal newlines and special characters, not escape sequences. To mention a user, use @displayName (e.g., @johndoe)" },
+        "documentId": { "type": "string", "description": "Document ID or slug (provide exactly one parent)" },
+        "id": { "type": "string", "description": "Comment ID. If provided, updates the existing comment" },
+        "initiativeId": { "type": "string", "description": "Initiative name, ID, identifier (e.g., INIT-123), or slug (provide exactly one parent)" },
+        "issueId": { "type": "string", "description": "Issue ID or identifier (e.g., LIN-123) (provide exactly one parent)" },
+        "milestoneId": { "type": "string", "description": "Milestone UUID (provide exactly one parent). Resolve milestone names via `list_milestones` first." },
+        "parentId": { "type": "string", "description": "Parent comment ID (for replies, only when creating)" },
+        "projectId": { "type": "string", "description": "Project name, ID, identifier (e.g., PROJ-123), or slug (provide exactly one parent)" },
+        "statusUpdateId": { "type": "string", "description": "Status update UUID (provide exactly one parent). Resolve status updates via `get_status_updates` first." },
+        "statusUpdateType": { "type": "string", "description": "Type of status update named by `statusUpdateId`, as returned by `get_status_updates`. Only valid together with `statusUpdateId`; omit to check both project and initiative status updates.", "enum": ["project", "initiative"] }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.get_diff",
+    "access": "read",
+    "description": "Exact lookup for a Flow diff. Use with review URLs, GitHub PR URLs, Flow full identifiers, UUIDs, or slugs.",
+    "input_schema": { "type": "object", "required": ["urlOrId"], "properties": { "urlOrId": { "type": "string", "description": "Flow review URL, diff slug, pull request ID, Flow full identifier, or GitHub PR URL" } } }
+  },
+  {
+    "name": "mcp__flow.get_team",
+    "access": "read",
+    "description": "Retrieve details of a specific Flow team",
+    "input_schema": { "type": "object", "required": ["query"], "properties": { "query": { "type": "string", "description": "Team UUID, key, or name" } } }
+  },
+  {
+    "name": "mcp__flow.get_user",
+    "access": "read",
+    "description": "Retrieve details of a specific Flow user",
+    "input_schema": { "type": "object", "required": ["query"], "properties": { "query": { "type": "string", "description": "User ID, name, email, or \"me\"" } } }
+  },
+  {
+    "name": "mcp__flow.get_document",
+    "access": "read",
+    "description": "Retrieve a Flow document by ID or slug",
+    "input_schema": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "description": "Document ID or slug" } } }
+  },
+  {
+    "name": "mcp__flow.create_attachment_from_upload",
+    "access": "write",
+    "description": "Link an already-uploaded Flow assetUrl to an existing issue as an attachment.",
+    "input_schema": {
+      "type": "object",
+      "required": ["assetUrl", "issue"],
+      "properties": {
+        "assetUrl": { "type": "string", "description": "Flow upload assetUrl returned by prepare_attachment_upload" },
+        "issue": { "type": "string", "description": "Issue ID or identifier (e.g., LIN-123)" },
+        "subtitle": { "type": "string", "description": "Optional attachment subtitle" },
+        "title": { "type": "string", "description": "Attachment title. Defaults to filename or asset URL" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.search_documentation",
+    "access": "read",
+    "description": "Search Flow's documentation to learn about features and usage",
+    "input_schema": {
+      "type": "object",
+      "required": ["query"],
+      "properties": {
+        "page": { "type": "number", "description": "Page number" },
+        "query": { "type": "string", "description": "Search query" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.delete_diff_comment",
+    "access": "write",
+    "description": "Delete a comment or persisted draft from a Flow diff",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "commentId": { "type": "string", "description": "Submitted diff comment ID to delete" },
+        "draftId": { "type": "string", "description": "Persisted diff comment draft ID to delete" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.get_initiative",
+    "access": "read",
+    "description": "Retrieve detailed information about a specific initiative in Flow",
+    "input_schema": {
+      "type": "object",
+      "required": ["query"],
+      "properties": {
+        "includeProjects": { "type": "boolean", "description": "Include projects" },
+        "includeSubInitiatives": { "type": "boolean", "description": "Include sub-initiatives" },
+        "query": { "type": "string", "description": "Initiative name, ID, identifier (e.g., INIT-123), or slug" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.merge_diff",
+    "access": "write",
+    "description": "Merge a Flow diff or add it to the repository's merge queue",
+    "input_schema": {
+      "type": "object",
+      "required": ["urlOrId"],
+      "properties": {
+        "mergeMethod": { "type": "string", "description": "Merge method; omit to use the repository default", "enum": ["MERGE", "REBASE", "SQUASH"] },
+        "urlOrId": { "type": "string", "description": "Flow review URL, diff slug, pull request ID, Flow full identifier, or GitHub PR URL" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.get_project",
+    "access": "read",
+    "description": "Retrieve details of a specific project in Flow",
+    "input_schema": {
+      "type": "object",
+      "required": ["query"],
+      "properties": {
+        "includeMembers": { "type": "boolean", "description": "Include project members" },
+        "includeMilestones": { "type": "boolean", "description": "Include milestones" },
+        "includeResources": { "type": "boolean", "description": "Include resources (documents, links, attachments)" },
+        "query": { "type": "string", "description": "Project name, ID, identifier (e.g., PROJ-123), or slug" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.get_agent_skill",
+    "access": "read",
+    "description": "Retrieve a Flow Agent skill by ID, including its full markdown instructions.",
+    "input_schema": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "description": "Agent skill ID" } } }
+  },
+  {
+    "name": "mcp__flow.resolve_diff_thread",
+    "access": "write",
+    "description": "Resolve or reopen a top-level comment thread on a Flow diff",
+    "input_schema": {
+      "type": "object",
+      "required": ["threadId"],
+      "properties": {
+        "resolved": { "type": "boolean", "description": "True to resolve the thread; false to reopen it" },
+        "threadId": { "type": "string", "description": "Top-level diff thread/comment ID" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.get_issue_status",
+    "access": "read",
+    "description": "Retrieve detailed information about an issue status in Flow by name or ID",
+    "input_schema": {
+      "type": "object",
+      "required": ["id", "name", "team"],
+      "properties": {
+        "id": { "type": "string", "description": "Status ID" },
+        "name": { "type": "string", "description": "Status name" },
+        "team": { "type": "string", "description": "Team name or ID" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.submit_diff_review",
+    "access": "write",
+    "description": "Approve a Flow diff, request changes, or submit a review comment",
+    "input_schema": {
+      "type": "object",
+      "required": ["decision", "urlOrId"],
+      "properties": {
+        "body": { "type": "string", "description": "Optional review body; required when requesting changes or commenting" },
+        "decision": { "type": "string", "description": "Review decision: approved, changesRequested, or commented", "enum": ["approved", "changesRequested", "commented"] },
+        "urlOrId": { "type": "string", "description": "Flow review URL, diff slug, pull request ID, Flow full identifier, or GitHub PR URL" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.get_diff_threads",
+    "access": "read",
+    "description": "Exact lookup for diff threads and the authenticated user's drafts. Use with review URLs, GitHub PR URLs, Flow full identifiers, UUIDs, or slugs.",
+    "input_schema": {
+      "type": "object",
+      "required": ["urlOrId"],
+      "properties": {
+        "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
+        "resolved": { "type": "boolean", "description": "Filter returned threads by resolved state" },
+        "threadId": { "type": "string", "description": "Optional Flow comment UUID of any comment in the thread (not its `externalThreadId`); a reply's UUID resolves to its thread root" },
+        "urlOrId": { "type": "string", "description": "Flow review URL, diff slug, pull request ID, Flow full identifier, or GitHub PR URL" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.delete_attachment",
+    "access": "write",
+    "description": "Delete an attachment by ID",
+    "input_schema": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "description": "Attachment ID" } } }
+  }
+]

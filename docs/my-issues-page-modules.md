@@ -1,6 +1,6 @@
 # My Issues page module map
 
-Reference: signed-in Flow `cleantrack/my-issues/assigned`, captured at 1470 x 754 and 768 x 754 on 2026-08-13. Measurements come from live DOM rectangles and computed styles. No browser storage or authentication material was read.
+Reference: signed-in Flow `acme/my-issues/assigned`, captured at 1470 x 754 and 768 x 754 on 2026-08-13. Measurements come from live DOM rectangles and computed styles. No browser storage or authentication material was read.
 
 ## Module sequence
 
@@ -236,10 +236,10 @@ Status: standalone page-state contract and reproducible visual fixture implement
 Live Flow renders actual links:
 
 ```text
-/cleantrack/my-issues/assigned
-/cleantrack/my-issues/created
-/cleantrack/my-issues/subscribed
-/cleantrack/my-issues/activity
+/acme/my-issues/assigned
+/acme/my-issues/created
+/acme/my-issues/subscribed
+/acme/my-issues/activity
 ```
 
 The active link uses `data-active=true` and `data-disabled=true`; it does not render a visible issue count. `MyIssuesSurface` now uses anchors with the same active attributes and accepts `viewHref(view)`. Optional counts are included only in the accessible label because adding visible count pills would not match the observed UI. `myIssuesViewHref(workspaceSlug, view)` produces the route and `useMyIssuesController.changeView` invokes the injected navigation adapter.

@@ -22,7 +22,7 @@ import {
   getAnalyticsOverview,
 } from "@/lib/api";
 import { useI18n } from "@/i18n/i18n";
-import { LinearInsightBar, LinearInsightLine } from "./linear-insight-graph";
+import { InsightBar, InsightLine } from "./flow-insight-graph";
 import "./analytics-dashboard-page.css";
 
 type Overview = {
@@ -133,9 +133,9 @@ export function AnalyticsDashboardPage() {
         aria-label={t("Issue count by slice")}
       >
         {slice === "Completed date" ? (
-          <LinearInsightLine points={points} />
+          <InsightLine points={points} />
         ) : (
-          <LinearInsightBar points={points} />
+          <InsightBar points={points} />
         )}
       </section>
       <section className="insights-table">
