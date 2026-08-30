@@ -7,11 +7,13 @@ import {
   ChevronRight,
   Copy,
   FilePlus2,
+  GitPullRequest,
   History,
   Link,
   Link2,
   RefreshCw,
   Repeat2,
+  Search,
   Star,
   Trash2,
   UserRoundPlus,
@@ -24,6 +26,7 @@ import { DueDateCommand } from '@/components/issue/due-date-picker'
 import { FlowOptionsIcon } from '@/components/issue/flow-header-icons'
 import { CalendarIcon } from '@/components/issue/issue-icons'
 import { ReleasesIcon } from '@/components/releases/release-icons'
+import { confirmAction } from '@/components/ui/action-dialog-service'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
 import type { ActivityEvent, BootstrapData, Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 
@@ -34,6 +37,8 @@ export interface IssueOptionsActions {
   addLink: (input: { url: string; title?: string }) => Promise<void>
   addCustomerRequest: (input: { customerId?: string; customerName?: string; body: string }) => Promise<void>
   addDocument: () => Promise<void>
+  linkReview: (reviewId: string) => Promise<void>
+  unlinkReview: (reviewId: string) => Promise<void>
   toggleRelease: (releaseId: string) => Promise<void>
   createRelated: (kind: RelatedIssueCreationKind, title: string) => Promise<void>
   convert: (kind: IssueConversionKind) => Promise<void>
@@ -61,7 +66,7 @@ interface IssueOptionsMenuProps {
 }
 
 type Submenu = 'release' | 'create' | 'mark' | 'copy' | 'convert' | 'recurrence' | 'remind'
-type DialogName = 'link' | 'customer' | 'related' | 'reminder' | 'loop' | 'history' | null
+type DialogName = 'link' | 'customer' | 'review' | 'related' | 'reminder' | 'loop' | 'history' | null
 
 export function IssueOptionsMenu({
   issue,
@@ -87,6 +92,7 @@ export function IssueOptionsMenu({
   const [customerId, setCustomerId] = useState('')
   const [customerName, setCustomerName] = useState('')
   const [customerBody, setCustomerBody] = useState(issue.title)
+  const [reviewQuery, setReviewQuery] = useState('')
   const [relatedKind, setRelatedKind] = useState<RelatedIssueCreationKind>('issue')
   const [relatedTitle, setRelatedTitle] = useState('')
   const [customReminder, setCustomReminder] = useState('')
@@ -98,8 +104,8 @@ export function IssueOptionsMenu({
 
   const history = useMemo(() => descriptionHistory(issue, activities), [activities, issue])
   const selectedHistory = history.find(item => item.id === selectedHistoryId) ?? history[0]
-  const confirmDelete = useCallback(() => {
-    if (window.confirm(`Delete ${issue.identifier}? This cannot be undone.`)) void onDelete()
+  const confirmDelete = useCallback(async () => {
+    if (await confirmAction(`Delete ${issue.identifier}?`,{description:'This cannot be undone.',confirmLabel:'Delete'})) void onDelete()
   }, [issue.identifier, onDelete])
 
   const closeMenu = useCallback(() => {
@@ -129,6 +135,12 @@ export function IssueOptionsMenu({
       setBusy(false)
     }
   }, [busy, closeMenu])
+  const subscribed = Boolean(data?.viewer.id && issue.subscriberIds.includes(data.viewer.id))
+  const toggleSubscription = useCallback(() => {
+    if (!data?.viewer.id) return
+    const next = subscribed ? issue.subscriberIds.filter(id => id !== data.viewer.id) : [...issue.subscriberIds, data.viewer.id]
+    void perform(() => onUpdate({ subscriberIds: next }), subscribed ? 'Unsubscribed from issue' : 'Subscribed to issue')
+  }, [data?.viewer.id, issue.subscriberIds, onUpdate, perform, subscribed])
 
   const beginAddLink = useCallback(() => {
     setLinkUrl('')
@@ -168,6 +180,9 @@ export function IssueOptionsMenu({
           setOpen(true)
           setSubmenu('remind')
         } else onRemind?.()
+      } else if (event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey && key === 's') {
+        event.preventDefault()
+        toggleSubscription()
       } else if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key === 'Backspace') {
         event.preventDefault()
         confirmDelete()
@@ -175,7 +190,7 @@ export function IssueOptionsMenu({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [actions, beginAddLink, confirmDelete, onFavoriteChange, onRemind, perform])
+  }, [actions, beginAddLink, confirmDelete, onFavoriteChange, onRemind, perform, toggleSubscription])
 
   const url = issueUrl ?? `${window.location.origin}/${data?.workspace.urlKey ?? ''}/issue/${issue.identifier}`
   const titleLink = `[${issue.title}](${url})`
@@ -216,6 +231,7 @@ export function IssueOptionsMenu({
                 setCustomerBody(issue.title)
                 openDialog('customer')
               }}/>
+              {Boolean(data?.reviews.length) && <Option icon={<GitPullRequest/>} label="Add pull request..." onSelect={() => { setReviewQuery(''); openDialog('review') }}/>}
               <Option icon={<FilePlus2/>} label="Add document..." onSelect={() => actions && void perform(actions.addDocument, 'Document created')}/>
               <Separator/>
               <Option icon={<Repeat2/>} label="Create related" nested onHover={() => { setDatePickerOpen(false); setSubmenu('create') }} onSelect={() => setSubmenu('create')}/>
@@ -232,6 +248,7 @@ export function IssueOptionsMenu({
                 }
               }}/>
               <Option icon={<Bell/>} label="Remind me" shortcut="Shift H" nested onHover={() => { if (actions) { setDatePickerOpen(false); setSubmenu('remind') } }} onSelect={() => actions ? setSubmenu('remind') : (closeMenu(), onRemind?.())}/>
+              <Option icon={<Bell/>} label={subscribed ? 'Unsubscribe' : 'Subscribe'} shortcut="Shift S" onSelect={toggleSubscription}/>
               <Separator/>
               <Option icon={<Repeat2/>} label={`Run loop on ${issue.identifier}...`} onSelect={() => {
                 setLoopPrompt(issue.description)
@@ -282,7 +299,7 @@ export function IssueOptionsMenu({
           </SubmenuSurface>}
           {submenu === 'convert' && <SubmenuSurface label="Convert to" top={282} innerRef={nestedSurfaceRef}>
             <Option icon={<RefreshCw/>} label="Project..." onSelect={() => {
-              if (actions && window.confirm(`Convert ${issue.identifier} to a project? The original issue will be deleted.`)) void perform(() => actions.convert('project'), 'Converted to project')
+              if (actions) void confirmAction(`Convert ${issue.identifier} to a project?`,{description:'The original issue will be deleted.',confirmLabel:'Convert'}).then(confirmed=>{if(confirmed)return perform(() => actions.convert('project'), 'Converted to project')})
             }}/>
             <Option icon={<RefreshCw/>} label="Template..." onSelect={() => actions && void perform(() => actions.convert('template'), 'Issue template created')}/>
             <Option icon={<Repeat2/>} label="Recurring issue..." nested onHover={() => setSubmenu('recurrence')} onSelect={() => setSubmenu('recurrence')}/>
@@ -322,6 +339,11 @@ export function IssueOptionsMenu({
       {!customerId && <label>Customer name<input autoFocus value={customerName} onChange={event => setCustomerName(event.target.value)}/></label>}
       <label>Request<textarea value={customerBody} onChange={event => setCustomerBody(event.target.value)}/></label>
       <IssueOptionsDialogFooter busy={busy} disabled={!customerBody.trim() || (!customerId && !customerName.trim())} action="Add request" onCancel={() => setDialog(null)} onSubmit={() => actions && void perform(() => actions.addCustomerRequest({ customerId: customerId || undefined, customerName: customerName.trim() || undefined, body: customerBody.trim() }), 'Customer request added')}/>
+    </ActionDialog>
+    <ActionDialog open={dialog === 'review'} title={`Add pull request to ${issue.identifier}`} onOpenChange={value => !value && setDialog(null)}>
+      <label className="issue-review-filter"><Search/><input autoFocus value={reviewQuery} placeholder="Filter pull requests…" onChange={event => setReviewQuery(event.target.value)}/></label>
+      <div className="issue-review-results" role="listbox">{data?.reviews.filter(review => !review.issueIds.includes(issue.id)).filter(review => `${review.title} ${review.repositoryOwner}/${review.repositoryName}`.toLowerCase().includes(reviewQuery.trim().toLowerCase())).map(review => <button type="button" role="option" key={review.id} disabled={busy} onClick={() => actions && void perform(() => actions.linkReview(review.id), 'Pull request linked')}><GitPullRequest/><span><strong>{review.title}</strong><small>{review.repositoryOwner}/{review.repositoryName} · #{review.number}</small></span></button>)}{!data?.reviews.some(review => !review.issueIds.includes(issue.id) && `${review.title} ${review.repositoryOwner}/${review.repositoryName}`.toLowerCase().includes(reviewQuery.trim().toLowerCase())) && <p>No pull requests found</p>}</div>
+      <IssueOptionsDialogFooter busy={busy} disabled={false} action="Close" onCancel={() => setDialog(null)} onSubmit={() => setDialog(null)}/>
     </ActionDialog>
     <ActionDialog open={dialog === 'related'} title={`Create ${relatedLabel(relatedKind)} for ${issue.identifier}`} onOpenChange={value => !value && setDialog(null)}>
       <label>Issue title<input autoFocus value={relatedTitle} onChange={event => setRelatedTitle(event.target.value)}/></label>
@@ -386,7 +408,7 @@ function Option({ icon, label, detail, shortcut, nested, danger, onHover, onSele
 }
 
 function IssueOptionsShortcut({ value }: { value: string }) {
-  const keys = value === 'Shift D' ? ['⇧', 'D'] : value === 'Option R' ? ['⌥', 'R'] : value === 'Ctrl L' ? ['Ctrl', 'L'] : value === 'Ctrl R' ? ['Ctrl', 'R'] : value === 'Option F' ? ['⌥', 'F'] : value === 'Shift H' ? ['⇧', 'H'] : value === 'Command Shift O' ? ['⌘', '⇧', 'O'] : value === 'Command Shift P' ? ['⌘', '⇧', 'P'] : value === 'M, then R' ? ['M', 'then', 'R'] : value === 'M, then B' ? ['M', 'then', 'B'] : value === 'M, then X' ? ['M', 'then', 'X'] : value === 'M, then M' ? ['M', 'then', 'M'] : ['⌘', '⌫']
+  const keys = value === 'Shift D' ? ['⇧', 'D'] : value === 'Option R' ? ['⌥', 'R'] : value === 'Ctrl L' ? ['Ctrl', 'L'] : value === 'Ctrl R' ? ['Ctrl', 'R'] : value === 'Option F' ? ['⌥', 'F'] : value === 'Shift H' ? ['⇧', 'H'] : value === 'Shift S' ? ['⇧', 'S'] : value === 'Command Shift O' ? ['⌘', '⇧', 'O'] : value === 'Command Shift P' ? ['⌘', '⇧', 'P'] : value === 'M, then R' ? ['M', 'then', 'R'] : value === 'M, then B' ? ['M', 'then', 'B'] : value === 'M, then X' ? ['M', 'then', 'X'] : value === 'M, then M' ? ['M', 'then', 'M'] : ['⌘', '⌫']
   return <span className="issue-options-shortcut"><span className="sr-only">{value}</span>{keys.map((key,index) => <kbd key={`${key}-${index}`}>{key}</kbd>)}</span>
 }
 

@@ -9,6 +9,7 @@ import {
   SidebarIcon,
 } from './projects-page-icons'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
+import { InsightsIcon } from '@/components/ui/view-action-icons'
 import { ProjectsDisplayMenu } from './projects-display-menu'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
 import { usePropertyCommand } from '@/components/property/use-property-command'
@@ -140,7 +141,7 @@ export function ProjectsPageSurface({
     </header>
     {creatingView && viewEditor?.(editorActions)}
     <div className="lp-projects__toolbar">
-      {creatingView ? <nav aria-label="View resource" className="lp-projects__views"><a className="lp-projects__view ui-pill" href="#" onClick={event => { event.preventDefault(); onNewViewResourceChange?.('issues') }}>Issues</a><a aria-current="page" className="lp-projects__view ui-pill" href="#" onClick={event => event.preventDefault()}>Projects</a></nav> : <nav aria-label="Project views" className="lp-projects__views">
+      {creatingView ? <nav aria-label="View resource" className="lp-projects__views"><button className="lp-projects__view ui-pill" type="button" onClick={() => onNewViewResourceChange?.('issues')}>Issues</button><button aria-current="page" className="lp-projects__view ui-pill" type="button">Projects</button></nav> : <nav aria-label="Project views" className="lp-projects__views">
         {views.map(view => <a
           aria-current={view.id === activeViewId ? 'page' : undefined}
           className="lp-projects__view ui-pill"
@@ -171,7 +172,7 @@ export function ProjectsPageSurface({
           label="Display options"
           onClick={() => toggleSurface('display', 'toolbar')}
         ><DisplayIcon /></IconButton>
-        {!creatingView && <IconButton active={sidebarOpen} label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'} onClick={onToggleSidebar}><SidebarIcon /></IconButton>}
+        {creatingView ? <IconButton active={sidebarOpen} label={sidebarOpen ? 'Close Insights' : 'Open Insights'} onClick={onToggleSidebar}><InsightsIcon/></IconButton> : <IconButton active={sidebarOpen} label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'} onClick={onToggleSidebar}><SidebarIcon /></IconButton>}
         {!creatingView && viewActions}
       </div>
 

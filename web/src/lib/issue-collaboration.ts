@@ -23,6 +23,7 @@ export class IssueCollaborationProvider {
   private readonly issueId?: string
   private readonly documentId: string
   private readonly seededWithoutServerState: boolean
+  private readonly localUser: { id: string; name: string; color: string }
   private readonly appliedUpdateIds = new Set<string>()
   private readonly pendingUpdates = new Map<string, Uint8Array>()
   private readonly listeners = new Set<Listener>()
@@ -48,11 +49,12 @@ export class IssueCollaborationProvider {
     this.documentId = documentId
     this.seededWithoutServerState = seededWithoutServerState
     this.awareness = new Awareness(document)
-    this.awareness.setLocalStateField('user', {
+    this.localUser = {
       id: viewer.id,
       name: viewer.displayName,
       color: collaborationColor(viewer.id),
-    })
+    }
+    this.awareness.setLocalStateField('user', this.localUser)
     this.document.on('update', this.onDocumentUpdate)
     this.awareness.on('update', this.onAwarenessUpdate)
   }
@@ -60,6 +62,7 @@ export class IssueCollaborationProvider {
   start() {
     if (this.destroyed || this.started) return
     this.started = true
+    if (!this.awareness.getLocalState()) this.awareness.setLocalStateField('user', this.localUser)
     this.connect()
   }
 
@@ -70,6 +73,7 @@ export class IssueCollaborationProvider {
     window.clearTimeout(this.reconnectTimer)
     window.clearInterval(this.heartbeatTimer)
     if (this.socket?.readyState === WebSocket.OPEN) {
+      removeAwarenessStates(this.awareness, [this.document.clientID], this)
       const update = encodeAwarenessUpdate(this.awareness, [this.document.clientID])
       this.socket.send(encodeFrame(awarenessFrame, this.documentId, '', update))
     }

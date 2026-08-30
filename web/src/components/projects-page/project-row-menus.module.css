@@ -2,13 +2,39 @@
 .command{width:252px;border-radius:10px;overflow:hidden}
 .optionIcon,.statusIcon{width:15px;height:15px;flex:0 0 15px;color:var(--theme-text-secondary)}
 .avatar{width:16px;height:16px;flex:0 0 16px;display:grid;place-items:center;border-radius:50%;object-fit:cover;color:white;font-size:8px;line-height:16px}
-.datePicker{z-index:160;width:304px;height:330px;display:flex;flex-direction:column;border-radius:8px;overflow:hidden}
-.dateLabel{display:flex;flex-direction:column;gap:4px;padding:12px 16px 8px;color:var(--theme-text-secondary);font-size:11px}
-.dateLabel input{box-sizing:border-box;width:100%;height:32px;padding:0 10px;border:1px solid #5e6ad2;border-radius:6px;outline:1px solid rgb(94 106 210/.22);background:var(--theme-surface-1);color:var(--theme-text-primary);font-size:12px;letter-spacing:0}
-.dateModes{height:45px;display:flex;align-items:center;gap:4px;padding:0 16px;border-bottom:.5px solid var(--theme-border-strong)}
-.dateModes button{height:28px;padding:0 9px;border:0;border-radius:9999px;background:var(--theme-control-hover);color:var(--theme-text-secondary);font-size:11px;white-space:nowrap}
-.dateModes button[aria-selected=true]{background:#47474b;color:#fff}
-.dayPanel{padding:6px 12px 10px}.dayPanel header{height:30px;display:flex;align-items:center;justify-content:space-between;padding:0 3px}.dayPanel header strong{font-size:12px;font-weight:500}.dayPanel header span{display:flex;gap:2px}.dayPanel header button{width:24px;height:24px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:transparent;color:#8e8e93}.dayPanel header button:hover{background:var(--theme-control-active);color:#fff}
-.weekdays,.days{display:grid;grid-template-columns:repeat(7,1fr)}.weekdays span{height:22px;display:grid;place-items:center;color:#68686d;font-size:10px}.days button{height:27px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--theme-text-secondary);font-size:11px}.days button:hover:not(:disabled){background:var(--theme-control-active)}.days button[data-outside=true]{color:#5f5f64}.days button:disabled{color:#45454a}.days button.selectedDate,.periodGrid button.selectedDate{background:#5e6ad2;color:#fff}
-.periodScroller{flex:1;overflow:auto;padding:0 16px 12px;scrollbar-width:none}.periodScroller::-webkit-scrollbar{display:none}.periodScroller section{padding:6px 0}.periodScroller h3{height:26px;margin:0;display:flex;align-items:center;color:#8d8d92;font-size:11px;font-weight:500}.periodGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.periodGrid[data-mode=quarter]{grid-template-columns:repeat(2,1fr)}.periodGrid[data-mode=half-year]{grid-template-columns:repeat(2,1fr)}.periodGrid[data-mode=year]{grid-template-columns:1fr}.periodGrid button{height:27px;border:.5px solid var(--theme-border-strong);border-radius:9999px;background:transparent;color:var(--theme-text-primary);font-size:11px}.periodGrid button:hover:not(:disabled){background:var(--theme-control-active)}.periodGrid button:disabled{color:#515156}
-.removeDate{height:32px;display:flex;align-items:center;gap:7px;flex:none;padding:0 14px;border:0;border-top:.5px solid var(--theme-border-strong);background:var(--theme-control);color:var(--theme-text-secondary);font-size:11px;text-align:left}.removeDate:hover{background:var(--theme-control-hover)}.removeDate span{margin-left:auto;color:#6f6f74}
+.datePicker{box-sizing:border-box;z-index:1000;width:304px;height:427px;display:flex;flex-direction:column;padding:16px 16px 0;border-radius:8px;overflow:hidden;background:var(--theme-surface-2);box-shadow:0 3px 8px lch(0 0 0/.125),0 2px 5px lch(0 0 0/.125),0 1px 1px lch(0 0 0/.125)}
+.datePicker.compactPeriods{height:330px;background:var(--theme-control-hover)}
+.compactPeriods .dateLabel input,.compactPeriods .dateModes{background:var(--theme-control-hover)}
+.dateLabel{box-sizing:border-box;width:271px;height:55px;flex:0 0 55px;display:flex;flex-direction:column;gap:4px;padding:0;color:var(--theme-text-secondary);font-size:12px;line-height:18px}
+.dateLabel input{box-sizing:border-box;width:271px;height:32px;padding:6px 12px;border:.5px solid var(--theme-border-strong);border-radius:8px;outline:0;background:var(--theme-surface-2);color:var(--theme-text-primary);font-size:13px;letter-spacing:0}
+.dateLabel input:focus{border-color:lch(34.32 1.93 272)}
+.dateModes{box-sizing:border-box;width:271px;height:32px;flex:0 0 32px;display:flex;align-items:center;gap:2px;margin-top:14px;padding:0;border:0;border-radius:5px;background:var(--theme-surface-2)}
+.dateModes button{box-sizing:border-box;height:28px;display:flex;align-items:center;justify-content:center;gap:6px;margin:2px;padding:4px;border:.5px solid transparent;border-radius:9999px;background:var(--theme-control-hover);color:var(--theme-text-secondary);font-size:12px;font-weight:500;white-space:nowrap}
+.dateModes button[aria-selected=true]{background:var(--theme-control-active);color:var(--theme-text-primary)}
+.dayPanel{box-sizing:border-box;width:301px;height:298px;flex:0 0 298px;margin:15px -15px 0;padding:8px 15px 0;border-top:.5px solid var(--theme-border)}
+.dayPanel header{height:36px;display:flex;align-items:center;justify-content:space-between;padding:0}
+.dayPanel header strong{font-size:13px;font-weight:500;line-height:20px}
+.dayPanel header span{display:flex;gap:2px}
+.dayPanel header button{width:26px;height:26px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:transparent;color:var(--theme-text-secondary)}
+.dayPanel header button:hover{background:var(--theme-control-active);color:var(--theme-text-primary)}
+.weekdays{box-sizing:border-box;width:301px;height:43.5px;display:grid;grid-template-columns:repeat(7,33px);column-gap:9px;margin:0 -15px;padding:0 8px}
+.weekdays span{height:43.5px;display:grid;place-items:center;color:var(--theme-text-secondary);font-size:11px;font-weight:450}
+.days{box-sizing:border-box;width:301px;display:grid;grid-template-columns:repeat(7,33px);grid-auto-rows:26px;column-gap:9px;row-gap:8px;margin:0 -15px;padding:0 8px}
+.days button{width:26px;height:26px;justify-self:center;align-self:center;padding:0;border:0;border-radius:50%;background:transparent;color:var(--theme-text-primary);font-size:13px;line-height:20px}
+.days button:hover:not(:disabled){background:var(--theme-control-active)}
+.days button[data-outside=true]{color:var(--theme-text-tertiary)}
+.days button:disabled{color:var(--theme-text-tertiary);opacity:.55}
+.days button.selectedDate,.periodGrid button.selectedDate{background:var(--accent-primary);color:white}
+.periodScroller{width:301px;min-height:0;flex:1;overflow:auto;margin:15px -15px 0;padding:8px 15px 12px;border-top:.5px solid var(--theme-border);scrollbar-width:none}
+.periodScroller::-webkit-scrollbar{display:none}
+.periodScroller section{padding:6px 0}
+.periodScroller h3{height:26px;margin:0;display:flex;align-items:center;color:var(--theme-text-secondary);font-size:12px;font-weight:500}
+.periodGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.periodGrid[data-mode=quarter],.periodGrid[data-mode=half-year]{grid-template-columns:repeat(2,1fr)}
+.periodGrid[data-mode=year]{grid-template-columns:1fr}
+.periodGrid button{height:28px;border:.5px solid transparent;border-radius:9999px;background:var(--theme-control-hover);color:var(--theme-text-primary);font-size:12px}
+.periodGrid button:hover:not(:disabled){background:var(--theme-control-active)}
+.periodGrid button:disabled{color:var(--theme-text-tertiary);opacity:.55}
+:global(:root[data-theme="light"]) .datePicker{box-shadow:0 6px 18px lch(0 0 0/.02),0 3px 9px lch(0 0 0/.04),0 1px 1px lch(0 0 0/.04)}
+:global(:root[data-theme="light"]) .dateLabel input:focus{border-color:var(--theme-border-strong)}
+:global(:root[data-theme="light"]) .datePicker.compactPeriods,:global(:root[data-theme="light"]) .compactPeriods .dateLabel input,:global(:root[data-theme="light"]) .compactPeriods .dateModes{background:lch(100% 0 282)}

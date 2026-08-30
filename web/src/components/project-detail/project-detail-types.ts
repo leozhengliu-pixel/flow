@@ -1,4 +1,4 @@
-import type { ActivityEvent, Comment, Favorite, Initiative, Issue, IssueLabel, IssueUpdateInput, LabelGroup, Notification, Project, ProjectMilestone, ProjectResource, ProjectStatus, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
+import type { ActivityEvent, Comment, Favorite, Initiative, IntegrationConnection, Issue, IssueLabel, IssueUpdateInput, LabelGroup, Notification, Project, ProjectMilestone, ProjectResource, ProjectStatus, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
 import type { ProjectMutationInput } from '@/components/projects-page/projects-page'
 
 export type ProjectDetailTab = 'overview' | 'activity' | 'issues' | 'new'
@@ -7,6 +7,7 @@ export type ProjectDetailProps = {
   project: Project
   projects: Project[]
   initiatives: Initiative[]
+  integrationConnections: IntegrationConnection[]
   projectStatuses: ProjectStatus[]
   projectUpdates: ProjectUpdate[]
   issues: Issue[]
@@ -26,8 +27,10 @@ export type ProjectDetailProps = {
   onDeleteUpdate: (projectId: string, updateId: string) => Promise<void>
   onCommentProjectUpdate: (projectId: string, updateId: string, body: string) => Promise<ProjectUpdate>
   onReactProjectUpdate: (projectId: string, updateId: string, emoji: string) => Promise<ProjectUpdate>
+  onUploadProjectUpdateAttachment: (projectId: string, updateId: string, file: File) => Promise<ProjectUpdate>
+  onDeleteProjectUpdateAttachment: (projectId: string, updateId: string, attachmentId: string) => Promise<ProjectUpdate>
   onCommentProject: (projectId: string, body: string) => Promise<Comment>
-  onCreateResource: (projectId: string, input: { type?: 'link'|'document'; title?: string; url: string }) => Promise<ProjectResource>
+  onCreateResource: (projectId: string, input: { type?: 'link'|'document'; title?: string; url?: string }) => Promise<ProjectResource>
   onUpdateResource: (projectId: string, resourceId: string, input: { type?: 'link'|'document'; title?: string; url?: string; pinnedTeamIds?: string[] }) => Promise<ProjectResource>
   onDeleteResource: (projectId: string, resourceId: string) => Promise<void>
   onCreateMilestone: (projectId: string, input: { name: string; description?: string; targetDate?: string }) => Promise<ProjectMilestone>

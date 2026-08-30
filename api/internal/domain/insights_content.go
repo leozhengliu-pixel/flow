@@ -9,27 +9,30 @@ import (
 // evaluated for every read rather than relying on the bootstrap projection so
 // shared links and private dashboards cannot leak through cached state.
 type Dashboard struct {
-	ID            string            `json:"id"`
-	Name          string            `json:"name"`
-	Description   string            `json:"description,omitempty"`
-	OwnerID       string            `json:"ownerId"`
-	Visibility    string            `json:"visibility"`
-	TeamIDs       []string          `json:"teamIds"`
-	Widgets       []DashboardWidget `json:"widgets"`
-	SubscriberIDs []string          `json:"subscriberIds"`
-	ShareToken    string            `json:"shareToken,omitempty"`
-	SharedAt      *time.Time        `json:"sharedAt,omitempty"`
-	CreatedAt     time.Time         `json:"createdAt"`
-	UpdatedAt     time.Time         `json:"updatedAt"`
+	ID            string              `json:"id"`
+	Name          string              `json:"name"`
+	Description   string              `json:"description,omitempty"`
+	OwnerID       string              `json:"ownerId"`
+	Visibility    string              `json:"visibility"`
+	TeamIDs       []string            `json:"teamIds"`
+	Filters       map[string][]string `json:"filters,omitempty"`
+	HideFilters   bool                `json:"hideFilters"`
+	Widgets       []DashboardWidget   `json:"widgets"`
+	SubscriberIDs []string            `json:"subscriberIds"`
+	ShareToken    string              `json:"shareToken,omitempty"`
+	SharedAt      *time.Time          `json:"sharedAt,omitempty"`
+	CreatedAt     time.Time           `json:"createdAt"`
+	UpdatedAt     time.Time           `json:"updatedAt"`
 }
 
 type DashboardWidget struct {
-	ID       string          `json:"id"`
-	Type     string          `json:"type"`
-	Title    string          `json:"title"`
-	Position int             `json:"position"`
-	Width    int             `json:"width"`
-	Config   json.RawMessage `json:"config"`
+	ID          string          `json:"id"`
+	Type        string          `json:"type"`
+	Title       string          `json:"title"`
+	Description string          `json:"description,omitempty"`
+	Position    int             `json:"position"`
+	Width       int             `json:"width"`
+	Config      json.RawMessage `json:"config"`
 }
 
 type DashboardWidgetResult struct {

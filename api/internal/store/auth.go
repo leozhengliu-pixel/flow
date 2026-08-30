@@ -403,6 +403,21 @@ func (s *SQLiteStore) UpdateProfile(ctx context.Context, userID, displayName, us
 	return s.authUserByID(ctx, userID)
 }
 
+func (s *SQLiteStore) UpdateMemberIdentity(ctx context.Context, userID, displayName, username, email string) (domain.User, error) {
+	displayName, username, email = strings.TrimSpace(displayName), strings.TrimSpace(username), normalizeEmail(email)
+	if displayName == "" || username == "" || !strings.Contains(email, "@") {
+		return domain.User{}, fmt.Errorf("invalid member identity")
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE auth_users SET display_name=?,name=?,email=?,updated_at=? WHERE id=?`, displayName, username, email, time.Now().UTC().Format(time.RFC3339Nano), userID)
+	if err != nil {
+		return domain.User{}, err
+	}
+	if count, _ := result.RowsAffected(); count != 1 {
+		return domain.User{}, ErrAuthForbidden
+	}
+	return s.authUserByID(ctx, userID)
+}
+
 func (s *SQLiteStore) ChangePassword(ctx context.Context, userID, currentPassword, nextPassword string) error {
 	if len(nextPassword) < 8 {
 		return errors.New("password must be at least 8 characters")
@@ -892,6 +907,17 @@ func (s *SQLiteStore) SuspendMember(ctx context.Context, workspaceID, userID str
 		return err
 	}
 	result, err := s.db.ExecContext(ctx, `UPDATE workspace_memberships SET status='suspended' WHERE workspace_id=? AND user_id=?`, workspaceID, userID)
+	if err != nil {
+		return err
+	}
+	if count, _ := result.RowsAffected(); count == 0 {
+		return ErrAuthForbidden
+	}
+	return nil
+}
+
+func (s *SQLiteStore) ResumeMember(ctx context.Context, workspaceID, userID string) error {
+	result, err := s.db.ExecContext(ctx, `UPDATE workspace_memberships SET status='active' WHERE workspace_id=? AND user_id=? AND status='suspended'`, workspaceID, userID)
 	if err != nil {
 		return err
 	}

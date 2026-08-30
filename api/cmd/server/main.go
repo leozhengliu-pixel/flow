@@ -11,12 +11,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 	"unicode"
 
@@ -45,6 +47,11 @@ type server struct {
 	coordinator                    *coordination.Redis
 	coordinationStarted            atomic.Bool
 	workflowSchedulerStarted       atomic.Bool
+	deliverySchedulerStarted       atomic.Bool
+	deliverySchedulerMu            sync.Mutex
+	deliverySchedulerCancel        context.CancelFunc
+	deliverySchedulerDone          chan struct{}
+	deliverySchedulerInterval      time.Duration
 	externalAuth                   *externalAuth
 	agent                          appconfig.AgentConfig
 	agentClient                    *http.Client
@@ -104,6 +111,20 @@ func main() {
 	}
 
 	httpServer := &http.Server{Addr: applicationConfig.HTTPAddr, Handler: telemetryHandler(newHandler(s), applicationConfig.Telemetry.Enabled), ReadHeaderTimeout: 5 * time.Second}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = s.stopDeliveryScheduler(ctx)
+	}()
+	shutdownSignal, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+	go func() {
+		<-shutdownSignal.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		_ = s.stopDeliveryScheduler(shutdownCtx)
+		_ = httpServer.Shutdown(shutdownCtx)
+	}()
 	log.Printf("Flow API listening on %s using database=%s storage=%s redis=%s", httpServer.Addr, applicationConfig.Database.Driver, applicationConfig.Storage.Driver, applicationConfig.Redis.Mode)
 	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
@@ -124,6 +145,7 @@ func newHandler(s *server) http.Handler {
 	s.store.SetRealtimeSink(s.publishRealtime)
 	s.startCoordination()
 	s.startWorkflowScheduler()
+	s.startDeliveryScheduler()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]string{"status": "ok", "redis": "disabled"}
@@ -214,6 +236,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/invitations/{invitationId}/resend", s.resendInvitation)
 	mux.HandleFunc("PATCH /api/workspaces/{workspaceKey}/members/{userId}", s.updateMemberRole)
 	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/members/{userId}/suspend", s.suspendMember)
+	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/members/{userId}/resume", s.resumeMember)
 	mux.HandleFunc("DELETE /api/workspaces/{workspaceKey}/members/{userId}", s.removeMember)
 	mux.HandleFunc("PUT /api/workspaces/{workspaceKey}/teams/{teamId}/members/{userId}", s.updateTeamMember)
 	mux.HandleFunc("POST /api/customers", s.createCustomer)
@@ -367,6 +390,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/dashboards/{id}", s.updateDashboard)
 	mux.HandleFunc("DELETE /api/dashboards/{id}", s.deleteDashboard)
 	mux.HandleFunc("GET /api/dashboards/{id}/results", s.dashboardResults)
+	mux.HandleFunc("POST /api/dashboards/{id}/preview", s.previewDashboardWidget)
 	mux.HandleFunc("GET /api/dashboards/{id}/export", s.exportDashboard)
 	mux.HandleFunc("PUT /api/dashboards/{id}/subscription", s.subscribeDashboard)
 	mux.HandleFunc("DELETE /api/dashboards/{id}/subscription", s.subscribeDashboard)
@@ -416,6 +440,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/releases/{id}/history", s.releaseHistory)
 	mux.HandleFunc("GET /api/teams/{id}/resources", s.listTeamResources)
 	mux.HandleFunc("POST /api/teams/{id}/resource-sections", s.createTeamResourceSection)
+	mux.HandleFunc("PATCH /api/teams/{id}/resource-sections/{sectionId}", s.updateTeamResourceSection)
+	mux.HandleFunc("DELETE /api/teams/{id}/resource-sections/{sectionId}", s.deleteTeamResourceSection)
 	mux.HandleFunc("POST /api/teams/{id}/resources", s.createTeamPinnedResource)
 	mux.HandleFunc("PATCH /api/teams/{id}/resources/{resourceId}", s.updateTeamResource)
 	mux.HandleFunc("DELETE /api/teams/{id}/resources/{resourceId}", s.deleteTeamResource)
@@ -628,6 +654,7 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data.ViewerRole = "admin"
+	materializeDevelopmentMembers(&data)
 	sanitizeBootstrap(&data)
 	writeJSON(w, http.StatusOK, data)
 }
@@ -641,6 +668,9 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	delete(data.Settings, postsSettingsKey)
 	delete(data.Settings, feedSettingsKey)
 	delete(data.Settings, meetingsSettingsKey)
+	for index := range data.Invitations {
+		data.Invitations[index].Token = ""
+	}
 	data.DocumentContentDrafts = slices.DeleteFunc(data.DocumentContentDrafts, func(item domain.DocumentContentDraft) bool { return item.UserID != data.Viewer.ID })
 	data.AgentSessions = slices.DeleteFunc(data.AgentSessions, func(item domain.AgentSession) bool { return item.UserID != data.Viewer.ID })
 	data.AgentSkills = slices.DeleteFunc(data.AgentSkills, func(item domain.PersonalAgentSkill) bool { return item.UserID != data.Viewer.ID })
@@ -840,8 +870,14 @@ func (s *server) deleteWorkspace(w http.ResponseWriter, r *http.Request) {
 func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 	workspaceKey := r.PathValue("workspaceKey")
 	var input struct {
-		Name, Key, Color, Icon string
-		Private                bool `json:"private"`
+		Name           string `json:"name"`
+		Key            string `json:"key"`
+		Color          string `json:"color"`
+		Icon           string `json:"icon"`
+		Private        bool   `json:"private"`
+		ParentTeamID   string `json:"parentTeamId"`
+		CopyFromTeamID string `json:"copyFromTeamId"`
+		Timezone       string `json:"timezone"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
@@ -862,15 +898,66 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 				return errInvalid
 			}
 		}
+		if input.ParentTeamID != "" && !teamExists(data, input.ParentTeamID) || input.CopyFromTeamID != "" && !teamExists(data, input.CopyFromTeamID) {
+			return errInvalid
+		}
 		data.Teams = append(data.Teams, team)
 		if data.TeamSettings == nil {
 			data.TeamSettings = map[string]domain.TeamSettings{}
 		}
-		data.TeamSettings[team.ID] = domain.TeamSettings{TeamID: team.ID, Timezone: "Etc/UTC", EstimateType: "notUsed", DefaultStateID: "state_backlog", Access: "public", MembershipRestriction: "open", SettingsPermission: "allMembers", LabelPermission: "allMembers", TemplatePermission: "allMembers", AgentSkillPermission: "allMembers", LoopPermission: "allMembers", MemberPermission: "allMembers", SlackNotifications: map[string]bool{}, PRAutomations: map[string]string{}, StaleMonths: 6, AutoArchiveMonths: 6, ProgressOrder: "first", TriageAction: "none", ReleaseAutomations: []domain.TeamAutomationRule{}, TriageRules: []domain.TeamAutomationRule{}, AgentSkills: []domain.TeamAgentSkill{}, ResolvedSummaries: true, ShowInitiatives: true}
+		settings := domain.TeamSettings{TeamID: team.ID, Timezone: "Etc/UTC", EstimateType: "notUsed", DefaultStateID: "state_backlog", Access: "public", MembershipRestriction: "open", SettingsPermission: "allMembers", LabelPermission: "allMembers", TemplatePermission: "allMembers", AgentSkillPermission: "allMembers", LoopPermission: "allMembers", MemberPermission: "allMembers", SlackNotifications: map[string]bool{}, PRAutomations: map[string]string{}, StaleMonths: 6, AutoArchiveMonths: 6, ProgressOrder: "first", TriageAction: "none", ReleaseAutomations: []domain.TeamAutomationRule{}, TriageRules: []domain.TeamAutomationRule{}, AgentSkills: []domain.TeamAgentSkill{}, ResolvedSummaries: true, ShowInitiatives: true}
+		sourceTeamID := input.CopyFromTeamID
+		if input.ParentTeamID != "" {
+			sourceTeamID = input.ParentTeamID
+		}
+		if sourceTeamID != "" {
+			if source, exists := data.TeamSettings[sourceTeamID]; exists {
+				settings = source
+				settings.TeamID = team.ID
+				settings.SlackNotifications = map[string]bool{}
+			}
+		}
+		if input.Timezone != "" {
+			settings.Timezone = input.Timezone
+		}
+		if input.Private {
+			settings.Access = "private"
+		} else {
+			settings.Access = "public"
+		}
+		settings.ParentTeamID = input.ParentTeamID
+		data.TeamSettings[team.ID] = settings
 		if data.CycleSettings == nil {
 			data.CycleSettings = map[string]domain.CycleSettings{}
 		}
-		data.CycleSettings[team.ID] = domain.CycleSettings{Enabled: false, DurationWeeks: 2, StartsOn: 1, UpcomingCount: 2, Capacity: 4, AutoCreate: true, AutoMigrate: true}
+		cycleSettings := domain.CycleSettings{Enabled: false, DurationWeeks: 2, StartsOn: 1, UpcomingCount: 2, Capacity: 4, AutoCreate: true, AutoMigrate: true}
+		if sourceTeamID != "" {
+			if source, exists := data.CycleSettings[sourceTeamID]; exists {
+				cycleSettings = source
+			}
+		}
+		data.CycleSettings[team.ID] = cycleSettings
+		if sourceTeamID != "" {
+			stateMap := map[string]string{}
+			for _, source := range statesForTeam(data, sourceTeamID) {
+				clone := source
+				clone.ID, clone.TeamID = fmt.Sprintf("%s_%s", team.ID, source.ID), team.ID
+				stateMap[source.ID] = clone.ID
+				data.States = append(data.States, clone)
+			}
+			if mapped := stateMap[settings.DefaultStateID]; mapped != "" {
+				settings.DefaultStateID = mapped
+				data.TeamSettings[team.ID] = settings
+			}
+		}
+		if s.authDisabled {
+			materializeDevelopmentMembers(data)
+			if !slices.ContainsFunc(data.TeamMembers, func(member domain.TeamMember) bool {
+				return member.TeamID == team.ID && member.UserID == data.Viewer.ID
+			}) {
+				data.TeamMembers = append(data.TeamMembers, domain.TeamMember{TeamID: team.ID, UserID: data.Viewer.ID, Role: "owner", JoinedAt: time.Now().UTC()})
+			}
+		}
 		return nil
 	})
 	if err == nil && !s.authDisabled {
@@ -885,6 +972,7 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Name, Key, Color, Icon *string
 		Private                *bool `json:"private"`
+		Retired                *bool `json:"retired"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
@@ -914,7 +1002,20 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 			if input.Private != nil {
 				data.Teams[index].Private = *input.Private
 			}
+			if input.Retired != nil {
+				if *input.Retired {
+					now := time.Now().UTC()
+					data.Teams[index].RetiredAt = &now
+				} else {
+					data.Teams[index].RetiredAt = nil
+				}
+			}
 			updated = data.Teams[index]
+			for issueIndex := range data.Issues {
+				if data.Issues[issueIndex].Team.ID == teamID {
+					data.Issues[issueIndex].Team = updated
+				}
+			}
 			return nil
 		}
 		return errNotFound
@@ -933,10 +1034,38 @@ func (s *server) deleteTeam(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		data.Teams = slices.Delete(data.Teams, index, index+1)
+		issueIDs := map[string]bool{}
+		for _, issue := range data.Issues {
+			if issue.Team.ID == teamID {
+				issueIDs[issue.ID] = true
+			}
+		}
+		data.Issues = slices.DeleteFunc(data.Issues, func(issue domain.Issue) bool { return issue.Team.ID == teamID })
+		for issueID := range issueIDs {
+			delete(data.Comments, issueID)
+			delete(data.Activities, issueID)
+		}
+		data.Cycles = slices.DeleteFunc(data.Cycles, func(cycle domain.Cycle) bool { return cycle.TeamID == teamID })
+		data.Labels = slices.DeleteFunc(data.Labels, func(label domain.IssueLabel) bool { return label.Scope == teamID })
+		for projectIndex := range data.Projects {
+			data.Projects[projectIndex].TeamIDs = removeString(data.Projects[projectIndex].TeamIDs, teamID)
+		}
+		for pipelineIndex := range data.ReleasePipelines {
+			data.ReleasePipelines[pipelineIndex].TeamIDs = removeString(data.ReleasePipelines[pipelineIndex].TeamIDs, teamID)
+		}
+		data.TeamMembers = slices.DeleteFunc(data.TeamMembers, func(member domain.TeamMember) bool { return member.TeamID == teamID })
+		data.TeamResourceSections = slices.DeleteFunc(data.TeamResourceSections, func(section domain.TeamResourceSection) bool { return section.TeamID == teamID })
+		data.TeamPinnedResources = slices.DeleteFunc(data.TeamPinnedResources, func(resource domain.TeamPinnedResource) bool { return resource.TeamID == teamID })
 		delete(data.TeamSettings, teamID)
 		delete(data.CycleSettings, teamID)
 		data.States = slices.DeleteFunc(data.States, func(state domain.WorkflowState) bool { return state.TeamID == teamID })
 		data.IssueTemplates = slices.DeleteFunc(data.IssueTemplates, func(template domain.IssueTemplate) bool { return template.TeamID == teamID })
+		for childID, settings := range data.TeamSettings {
+			if settings.ParentTeamID == teamID {
+				settings.ParentTeamID = ""
+				data.TeamSettings[childID] = settings
+			}
+		}
 		return nil
 	})
 	if err == nil && !s.authDisabled {
@@ -1179,6 +1308,9 @@ func (s *server) updateNotification(w http.ResponseWriter, r *http.Request) {
 		notification, err := notificationByID(data, id)
 		if err != nil {
 			return err
+		}
+		if notification.RecipientID != data.Viewer.ID {
+			return errNotFound
 		}
 		applyNotificationUpdate(notification, input, snoozeProvided, snoozedUntil)
 		updated = *notification
@@ -1725,6 +1857,9 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 			}
 			team = data.Teams[index]
 		}
+		if team.RetiredAt != nil {
+			return "", fmt.Errorf("%w: team is retired", errInvalid)
+		}
 		settings := teamSettings(data, team.ID)
 		defaultState := stateForTeam(data, team.ID, settings.DefaultStateID)
 		if defaultState == nil {
@@ -1738,7 +1873,7 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		if preferences := data.UserSettings[data.Viewer.ID]; preferences.AutoAssign && input.AssigneeID == nil {
 			input.AssigneeID = &data.Viewer.ID
 		}
-		createUpdate := domain.IssueUpdateInput{DescriptionState: input.DescriptionState, DescriptionData: input.DescriptionData, ContentState: input.ContentState, StateID: input.StateID, Priority: input.Priority, AssigneeID: input.AssigneeID, DelegateID: input.DelegateID, ProjectID: input.ProjectID, ProjectMilestoneID: input.ProjectMilestoneID, CycleID: input.CycleID, DueDate: input.DueDate, SLABreachesAt: input.SLABreachesAt, SLAType: input.SLAType}
+		createUpdate := domain.IssueUpdateInput{DescriptionState: input.DescriptionState, DescriptionData: input.DescriptionData, ContentState: input.ContentState, StateID: input.StateID, Priority: input.Priority, Estimate: input.Estimate, AssigneeID: input.AssigneeID, DelegateID: input.DelegateID, ProjectID: input.ProjectID, ProjectMilestoneID: input.ProjectMilestoneID, CycleID: input.CycleID, DueDate: input.DueDate, SLABreachesAt: input.SLABreachesAt, SLAType: input.SLAType, Recurrence: input.Recurrence, NextOccurrenceAt: input.NextOccurrenceAt}
 		if len(input.LabelIDs) > 0 {
 			createUpdate.LabelIDs = &input.LabelIDs
 		}
@@ -1871,7 +2006,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 		if len(teamIDs) == 0 {
 			teamIDs = []string{data.Teams[0].ID}
 		}
-		created = domain.Project{ID: id, Name: strings.TrimSpace(*input.Name), SlugID: slug(strings.TrimSpace(*input.Name)), Icon: "Project", Color: "#eb5757", PriorityLabel: "No priority", Health: "noUpdate", Status: status, MemberIDs: []string{}, TeamIDs: teamIDs, DependencyIDs: []string{}, Initiatives: []string{}, Customers: []string{}, Resources: []domain.ProjectResource{}, Milestones: []domain.ProjectMilestone{}, Comments: []domain.Comment{}, DescriptionRevisions: []domain.ProjectDescriptionRevision{}, UpdateCadence: "none", CreatedAt: now, UpdatedAt: now}
+		created = domain.Project{ID: id, Name: strings.TrimSpace(*input.Name), SlugID: slug(strings.TrimSpace(*input.Name)), Icon: "Project", Color: "#eb5757", PriorityLabel: "No priority", Position: nextProjectPosition(data.Projects), Health: "noUpdate", Status: status, MemberIDs: []string{}, TeamIDs: teamIDs, DependencyIDs: []string{}, Initiatives: []string{}, Customers: []string{}, Resources: []domain.ProjectResource{}, Milestones: []domain.ProjectMilestone{}, Comments: []domain.Comment{}, DescriptionRevisions: []domain.ProjectDescriptionRevision{}, UpdateCadence: "none", CreatedAt: now, UpdatedAt: now}
 		if err := applyProjectUpdate(data, &created, input); err != nil {
 			return "", err
 		}
@@ -1961,7 +2096,7 @@ func (s *server) createInitiative(w http.ResponseWriter, r *http.Request) {
 	var created domain.Initiative
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "initiative.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
-		created = domain.Initiative{ID: fmt.Sprintf("initiative_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), SlugID: slug(*input.Name), Icon: "Initiative", Color: "#d15f64", Status: "active", PriorityLabel: "No priority", Health: "noUpdate", Creator: data.Viewer, ContributingTeamIDs: []string{}, LabelIDs: []string{}, ParentInitiativeIDs: []string{}, ProjectIDs: []string{}, Resources: []domain.InitiativeResource{}, Comments: []domain.Comment{}, NotificationRules: domain.InitiativeNotificationRules{DescriptionChanges: true, NewUpdate: true}, UpdateSchedule: domain.InitiativeUpdateSchedule{Cadence: "none", Weekday: 1, TimeRange: "09:00-12:00"}, DescriptionHistory: []domain.InitiativeDescriptionRevision{}, CreatedAt: now, UpdatedAt: now}
+		created = domain.Initiative{ID: fmt.Sprintf("initiative_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), SlugID: slug(*input.Name), Icon: "Initiative", Color: "#d15f64", Status: "active", PriorityLabel: "No priority", Position: nextInitiativePosition(data.Initiatives), Health: "noUpdate", Creator: data.Viewer, ContributingTeamIDs: []string{}, LabelIDs: []string{}, ParentInitiativeIDs: []string{}, ProjectIDs: []string{}, Resources: []domain.InitiativeResource{}, Comments: []domain.Comment{}, NotificationRules: domain.InitiativeNotificationRules{DescriptionChanges: true, NewUpdate: true}, UpdateSchedule: domain.InitiativeUpdateSchedule{Cadence: "none", Weekday: 1, TimeRange: "09:00-12:00"}, DescriptionHistory: []domain.InitiativeDescriptionRevision{}, CreatedAt: now, UpdatedAt: now}
 		if err := applyInitiativeUpdate(data, &created, input); err != nil {
 			return "", err
 		}
@@ -3344,6 +3479,9 @@ func (s *server) createAttachment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid attachment")
 		return
 	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
+	}
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "file is required")
@@ -3560,14 +3698,24 @@ func (s *server) serveUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer reader.Close()
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
 	if contentType != "" {
 		w.Header().Set("Content-Type", contentType)
+	}
+	if !safeInlineUploadType(contentType) {
+		w.Header().Set("Content-Disposition", `attachment; filename="download"`)
 	}
 	if size >= 0 {
 		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 	}
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 	_, _ = io.Copy(w, reader)
+}
+
+func safeInlineUploadType(value string) bool {
+	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(value, ";")[0]))
+	return strings.HasPrefix(mediaType, "image/png") || strings.HasPrefix(mediaType, "image/jpeg") || strings.HasPrefix(mediaType, "image/gif") || strings.HasPrefix(mediaType, "image/webp") || strings.HasPrefix(mediaType, "image/avif") || strings.HasPrefix(mediaType, "audio/") || strings.HasPrefix(mediaType, "video/") || mediaType == "application/pdf"
 }
 
 func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBootstrap, userID, url string) bool {
@@ -3728,6 +3876,9 @@ func applyNotificationUpdate(notification *domain.Notification, input domain.Not
 }
 
 func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.IssueUpdateInput) (map[string]string, error) {
+	if index := slices.IndexFunc(data.Teams, func(team domain.Team) bool { return team.ID == issue.Team.ID }); index >= 0 && data.Teams[index].RetiredAt != nil {
+		return nil, fmt.Errorf("%w: team is retired", errInvalid)
+	}
 	changes := map[string]string{}
 	if input.Title != nil {
 		changes["title"] = *input.Title
@@ -3779,6 +3930,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		}
 		if value.ID != issue.State.ID {
 			now := time.Now().UTC()
+			previousState := issue.State
 			changes["stateBefore"] = issue.State.Name
 			changes["stateBeforeId"] = issue.State.ID
 			changes["state"] = value.Name
@@ -3798,6 +3950,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 				issue.CanceledAt = nil
 			}
 			issue.State = *value
+			applyStatusWorkflow(data, issue, previousState, now)
 		}
 		if value.Type == "started" && issue.Assignee == nil && data.UserSettings[data.Viewer.ID].AssignStarted {
 			issue.Assignee = &data.Viewer
@@ -3808,6 +3961,18 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		issue.Priority = *input.Priority
 		issue.PriorityLabel = priorityLabel(*input.Priority)
 		changes["priority"] = issue.PriorityLabel
+	}
+	if input.Estimate != nil {
+		if *input.Estimate < 0 {
+			return nil, fmt.Errorf("%w: invalid estimate", errInvalid)
+		}
+		if *input.Estimate == 0 {
+			issue.Estimate = nil
+		} else {
+			estimate := *input.Estimate
+			issue.Estimate = &estimate
+		}
+		changes["estimate"] = strconv.FormatFloat(*input.Estimate, 'f', -1, 64)
 	}
 	if input.AssigneeID != nil {
 		if issue.Assignee != nil {
@@ -3918,6 +4083,9 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		if len(issue.Labels) != len(*input.LabelIDs) {
 			return nil, fmt.Errorf("%w: unknown label", errInvalid)
 		}
+		if !validLabelGroupSelection(issue.Labels) {
+			return nil, fmt.Errorf("%w: only one label from each group can be selected", errInvalid)
+		}
 		changes["labels"] = strings.Join(*input.LabelIDs, ",")
 	}
 	if input.SubscriberIDs != nil {
@@ -3959,6 +4127,98 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 	}
 	applyCycleAutomation(data, issue)
 	return changes, nil
+}
+
+func applyStatusWorkflow(data *domain.Bootstrap, issue *domain.Issue, previous domain.WorkflowState, now time.Time) {
+	settings := teamSettings(data, issue.Team.ID)
+	if workflowStateRank(issue.State) > workflowStateRank(previous) && settings.ProgressOrder != "noAction" {
+		reorderIssueForStatus(data, issue, settings.ProgressOrder)
+	}
+	closed := issue.State.Type == "completed" || issue.State.Type == "canceled"
+	if closed && settings.AutoCloseSubIssues {
+		for index := range data.Issues {
+			child := &data.Issues[index]
+			if child.ParentID == nil || *child.ParentID != issue.ID || child.State.Type == "completed" || child.State.Type == "canceled" {
+				continue
+			}
+			if target := firstStateOfType(data, child.Team.ID, issue.State.Type); target != nil {
+				transitionRelatedIssue(data, child, *target, now, "parent status")
+			}
+		}
+	}
+	if closed && settings.AutoCloseParents && issue.ParentID != nil {
+		parent, err := issueByID(data, *issue.ParentID)
+		if err != nil || parent.State.Type == "completed" || parent.State.Type == "canceled" {
+			return
+		}
+		allClosed := true
+		for index := range data.Issues {
+			child := &data.Issues[index]
+			if child.ParentID != nil && *child.ParentID == parent.ID && child.ID != issue.ID && child.State.Type != "completed" && child.State.Type != "canceled" {
+				allClosed = false
+				break
+			}
+		}
+		if allClosed {
+			if target := firstStateOfType(data, parent.Team.ID, "completed"); target != nil {
+				transitionRelatedIssue(data, parent, *target, now, "sub-issues completed")
+			}
+		}
+	}
+}
+
+func reorderIssueForStatus(data *domain.Bootstrap, issue *domain.Issue, placement string) {
+	found := false
+	value := issue.SortOrder
+	for index := range data.Issues {
+		other := &data.Issues[index]
+		if other.ID == issue.ID || other.Team.ID != issue.Team.ID || other.State.ID != issue.State.ID {
+			continue
+		}
+		if !found {
+			value = other.SortOrder
+			found = true
+		} else if placement == "last" && other.SortOrder > value || placement != "last" && other.SortOrder < value {
+			value = other.SortOrder
+		}
+	}
+	if found {
+		if placement == "last" {
+			issue.SortOrder = value + 1
+		} else {
+			issue.SortOrder = value - 1
+		}
+	}
+}
+
+func firstStateOfType(data *domain.Bootstrap, teamID, stateType string) *domain.WorkflowState {
+	for _, state := range statesForTeam(data, teamID) {
+		if state.Type == stateType && !state.Reserved {
+			copy := state
+			return &copy
+		}
+	}
+	return nil
+}
+
+func transitionRelatedIssue(data *domain.Bootstrap, issue *domain.Issue, state domain.WorkflowState, now time.Time, reason string) {
+	previous := issue.State
+	issue.State = state
+	issue.StatusChangedAt = &now
+	if state.Type == "started" && issue.StartedAt == nil {
+		issue.StartedAt = &now
+	}
+	if state.Type == "completed" {
+		issue.CompletedAt, issue.CanceledAt = &now, nil
+	} else if state.Type == "canceled" {
+		issue.CanceledAt, issue.CompletedAt = &now, nil
+	} else {
+		issue.CompletedAt, issue.CanceledAt = nil, nil
+	}
+	issue.UpdatedAt = now
+	issue.Version++
+	activity := appendActivity(data, issue.ID, "issue.updated", data.Viewer, map[string]string{"stateBefore": previous.Name, "stateBeforeId": previous.ID, "state": state.Name, "stateId": state.ID, "automation": reason})
+	appendIssueNotifications(data, *issue, activity, nil)
 }
 
 func applySavedViewUpdate(data *domain.Bootstrap, view *domain.SavedView, input domain.SavedViewMutationInput) error {
@@ -4191,6 +4451,24 @@ func initiativeByID(data *domain.Bootstrap, id string) (*domain.Initiative, erro
 	}
 	return nil, errNotFound
 }
+func nextProjectPosition(projects []domain.Project) float64 {
+	position := float64(0)
+	for _, project := range projects {
+		if project.Position >= position {
+			position = project.Position + 1
+		}
+	}
+	return position
+}
+func nextInitiativePosition(initiatives []domain.Initiative) float64 {
+	position := float64(0)
+	for _, initiative := range initiatives {
+		if initiative.Position >= position {
+			position = initiative.Position + 1
+		}
+	}
+	return position
+}
 func defaultProjectStatus(data *domain.Bootstrap) domain.ProjectStatus {
 	if len(data.ProjectStatuses) > 0 {
 		return data.ProjectStatuses[0]
@@ -4248,6 +4526,9 @@ func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input d
 		project.Priority = *input.Priority
 		project.PriorityLabel = priorityLabel(*input.Priority)
 	}
+	if input.Position != nil {
+		project.Position = *input.Position
+	}
 	if input.Health != nil {
 		if !slices.Contains([]string{"onTrack", "atRisk", "offTrack", "noUpdate"}, *input.Health) {
 			return errInvalid
@@ -4269,6 +4550,10 @@ func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input d
 		project.MemberIDs = slices.Clone(input.MemberIDs)
 	}
 	if input.LabelIDs != nil {
+		selectedLabels := labelsByIDForResource(data, input.LabelIDs, "project")
+		if len(selectedLabels) != len(input.LabelIDs) || !validLabelGroupSelection(selectedLabels) {
+			return errInvalid
+		}
 		for _, id := range input.LabelIDs {
 			if !labelExistsForResource(data, id, "project") {
 				return errInvalid
@@ -4317,21 +4602,33 @@ func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input d
 	}
 	if input.StartDate != nil {
 		project.StartDate = optionalString(*input.StartDate)
+		if project.StartDate == nil {
+			project.StartDateResolution = ""
+		}
 	}
 	if input.StartDateResolution != nil {
-		if !slices.Contains([]string{"halfYear", "month", "quarter", "year"}, *input.StartDateResolution) {
+		if *input.StartDateResolution != "" && !slices.Contains([]string{"halfYear", "month", "quarter", "year"}, *input.StartDateResolution) {
 			return errInvalid
 		}
 		project.StartDateResolution = *input.StartDateResolution
 	}
 	if input.TargetDate != nil {
 		project.TargetDate = optionalString(*input.TargetDate)
+		if project.TargetDate == nil {
+			project.TargetDateResolution = ""
+		}
 	}
 	if input.TargetDateResolution != nil {
-		if !slices.Contains([]string{"halfYear", "month", "quarter", "year"}, *input.TargetDateResolution) {
+		if *input.TargetDateResolution != "" && !slices.Contains([]string{"halfYear", "month", "quarter", "year"}, *input.TargetDateResolution) {
 			return errInvalid
 		}
 		project.TargetDateResolution = *input.TargetDateResolution
+	}
+	if input.SlackChannelID != nil {
+		project.SlackChannelID = strings.TrimSpace(*input.SlackChannelID)
+	}
+	if input.SlackChannelName != nil {
+		project.SlackChannelName = strings.TrimSpace(*input.SlackChannelName)
 	}
 	return nil
 }
@@ -4374,6 +4671,9 @@ func applyInitiativeUpdate(data *domain.Bootstrap, initiative *domain.Initiative
 		}
 		initiative.Priority = *input.Priority
 		initiative.PriorityLabel = priorityLabel(*input.Priority)
+	}
+	if input.Position != nil {
+		initiative.Position = *input.Position
 	}
 	if input.Health != nil {
 		if !slices.Contains([]string{"onTrack", "atRisk", "offTrack", "noUpdate"}, *input.Health) {
@@ -4448,6 +4748,15 @@ func applyInitiativeUpdate(data *domain.Bootstrap, initiative *domain.Initiative
 	}
 	if input.TargetDate != nil {
 		initiative.TargetDate = optionalString(*input.TargetDate)
+		if initiative.TargetDate == nil {
+			initiative.TargetDateResolution = ""
+		}
+	}
+	if input.TargetDateResolution != nil {
+		if *input.TargetDateResolution != "" && !slices.Contains([]string{"halfYear", "month", "quarter", "year"}, *input.TargetDateResolution) {
+			return errInvalid
+		}
+		initiative.TargetDateResolution = *input.TargetDateResolution
 	}
 	if input.Favorite != nil {
 		initiative.Favorite = *input.Favorite
@@ -4513,7 +4822,7 @@ func labelsByID(data *domain.Bootstrap, ids []string) []domain.IssueLabel {
 func labelsByIDForResource(data *domain.Bootstrap, ids []string, resourceType string) []domain.IssueLabel {
 	result := []domain.IssueLabel{}
 	for _, label := range data.Labels {
-		if slices.Contains(ids, label.ID) && labelResourceType(label) == resourceType {
+		if slices.Contains(ids, label.ID) && labelAvailableForResource(data, label, resourceType) {
 			result = append(result, label)
 		}
 	}
@@ -4521,14 +4830,37 @@ func labelsByIDForResource(data *domain.Bootstrap, ids []string, resourceType st
 }
 func labelExistsForResource(data *domain.Bootstrap, id string, resourceType string) bool {
 	return slices.ContainsFunc(data.Labels, func(label domain.IssueLabel) bool {
-		return label.ID == id && labelResourceType(label) == resourceType
+		return label.ID == id && labelAvailableForResource(data, label, resourceType)
 	})
+}
+func labelAvailableForResource(data *domain.Bootstrap, label domain.IssueLabel, resourceType string) bool {
+	if labelResourceType(label) != resourceType || label.ArchivedAt != nil {
+		return false
+	}
+	if label.GroupID == "" {
+		return true
+	}
+	groupIndex := slices.IndexFunc(data.LabelGroups, func(group domain.LabelGroup) bool { return group.ID == label.GroupID })
+	return groupIndex >= 0 && data.LabelGroups[groupIndex].ArchivedAt == nil
 }
 func labelResourceType(label domain.IssueLabel) string {
 	if label.ResourceType == "project" || label.ResourceType == "initiative" {
 		return label.ResourceType
 	}
 	return "issue"
+}
+func validLabelGroupSelection(labels []domain.IssueLabel) bool {
+	groups := map[string]struct{}{}
+	for _, label := range labels {
+		if label.GroupID == "" {
+			continue
+		}
+		if _, exists := groups[label.GroupID]; exists {
+			return false
+		}
+		groups[label.GroupID] = struct{}{}
+	}
+	return true
 }
 func appendActivity(data *domain.Bootstrap, issueID, eventType string, actor domain.User, metadata map[string]string) domain.ActivityEvent {
 	activity := domain.ActivityEvent{ID: fmt.Sprintf("activity_%d", time.Now().UnixNano()), Type: eventType, CreatedAt: time.Now().UTC(), Actor: actor, Metadata: metadata}
@@ -4629,6 +4961,10 @@ func respondMutation(w http.ResponseWriter, err error, success int, value any) {
 	}
 	if errors.Is(err, errNotFound) {
 		writeError(w, http.StatusNotFound, "resource not found")
+		return
+	}
+	if errors.Is(err, errConflict) {
+		writeError(w, http.StatusConflict, err.Error())
 		return
 	}
 	if errors.Is(err, errInvalid) {

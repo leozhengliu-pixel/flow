@@ -56,7 +56,7 @@ export function IssueExplorerSurface({
   const {changeDisplayOpen,changeFilterOpen,displayOpen,filterOpen}=useIssueSurfaceControls(filterOpenSignal,detailsOpen,onDetailsOpenChange)
 
   const toolbar = <div className={styles.toolbar}>
-    {creatingView ? <nav className={styles.tabs} aria-label="View resource"><a className={`${styles.tab} ui-pill`} data-active="true" href="#" onClick={event => event.preventDefault()}>Issues</a><a className={`${styles.tab} ui-pill`} href="#" onClick={event => { event.preventDefault(); onNewViewResourceChange?.('projects') }}>Projects</a></nav> : savedView ? <span className={styles.viewCount}>{itemCount} {itemCount === 1 ? 'issue' : 'issues'}</span> : <nav className={styles.tabs} aria-label={`${scopeName} issue views`}>
+    {creatingView ? <nav className={styles.tabs} aria-label="View resource"><button className={`${styles.tab} ui-pill`} data-active="true" type="button">Issues</button><button className={`${styles.tab} ui-pill`} type="button" onClick={() => onNewViewResourceChange?.('projects')}>Projects</button></nav> : savedView ? <span className={styles.viewCount}>{itemCount} {itemCount === 1 ? 'issue' : 'issues'}</span> : <nav className={styles.tabs} aria-label={`${scopeName} issue views`}>
       {VIEWS.map(view => <a key={view.id} href={viewHref(view.id)} className={`${styles.tab} ui-pill`} data-active={activeView === view.id} aria-current={activeView === view.id ? 'page' : undefined} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onNavigateView(view.id) }}>{view.label}</a>)}
       {savedViews.map(item => <a key={item.id} href={savedViewHref?.(item) ?? '#'} className={`${styles.savedTab} ui-pill`} onClick={event => { event.preventDefault(); onSavedViewSelect?.(item) }}><ViewGlyph color={item.color} icon={item.icon}/><span data-i18n-ignore>{item.name}</span></a>)}
       <button className={styles.addView} type="button" aria-label="Add new view" title="Add new view" onClick={onAddView}><AddViewIcon/></button>
@@ -64,7 +64,7 @@ export function IssueExplorerSurface({
     <div className={styles.actions}>
       <MyIssuesFilterMenu open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onToggle={onFilterToggle} trigger={<ToolbarButton label="Add filter"><FilterIcon/></ToolbarButton>}/>
       <MyIssuesDisplayMenu open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={onDisplayOptionsChange}/>
-      {!creatingView && savedView && <ToolbarButton label={insightsOpen ? 'Close view insights' : 'Open view insights'} pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}><InsightsIcon/></ToolbarButton>}
+      {(creatingView || savedView) && <ToolbarButton label={insightsOpen ? 'Close view insights' : 'Open view insights'} pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}><InsightsIcon/></ToolbarButton>}
       {!creatingView && <ToolbarButton label={savedView ? (detailsOpen ? 'Close view details' : 'Open view details') : (detailsOpen ? 'Close details' : 'Open details')} title={`${detailsOpen ? 'Close' : 'Open'} details (⌘I)`} pressed={detailsOpen} onClick={() => onDetailsOpenChange(!detailsOpen)}><DetailsIcon open={detailsOpen}/></ToolbarButton>}
     </div>
   </div>
@@ -78,7 +78,7 @@ export function IssueExplorerSurface({
       </>}
     </header>
     {viewEditor ? <div className={styles.createPanel}>{viewEditor}{toolbar}</div> : toolbar}
-    {filterBar}<div className={styles.body} data-saved-panel-open={Boolean(savedView && (detailsOpen || insightsOpen))}>{children}</div>
+    {filterBar}<div className={styles.body} data-saved-panel-open={Boolean((savedView || creatingView) && (detailsOpen || insightsOpen))}>{children}</div>
   </main>
 }
 

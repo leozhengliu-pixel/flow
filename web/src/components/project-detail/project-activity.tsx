@@ -1,7 +1,7 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Bot, Check, Flag, MessageCircle, MoreHorizontal, Paperclip, SmilePlus, Trash2 } from 'lucide-react'
+import { Check, Flag, MessageCircle, MoreHorizontal, Paperclip, SmilePlus, Trash2, X } from 'lucide-react'
 import { format, formatDistanceToNowStrict } from 'date-fns'
 import { toast } from 'sonner'
 import { Avatar } from '@/components/issue/issue-row'
@@ -11,11 +11,13 @@ import type { Comment, Project, ProjectUpdate } from '@/types/flow'
 import type { ProjectDetailProps } from './project-detail-types'
 import { PROJECT_HEALTHS } from './project-detail-types'
 
-export function ProjectActivity({ activities, project, projectUpdates, viewer, onCommentProject, onCommentProjectUpdate, onCreateUpdate, onDeleteUpdate, onReactProjectUpdate, onUpdateProjectUpdate }: ProjectDetailProps) {
+export function ProjectActivity({ activities, project, projectUpdates, viewer, onCommentProject, onCommentProjectUpdate, onCreateUpdate, onDeleteUpdate, onReactProjectUpdate, onUpdateProjectUpdate, onUploadProjectUpdateAttachment, onDeleteProjectUpdateAttachment }: ProjectDetailProps) {
   const [composerMode, setComposerMode] = useState<'comment'|'update'>('update')
   const [body, setBody] = useState('')
   const [health, setHealth] = useState<Project['health']>(project.health === 'noUpdate' ? 'onTrack' : project.health)
   const [saving, setSaving] = useState(false)
+  const [files, setFiles] = useState<File[]>([])
+  const fileRef = useRef<HTMLInputElement>(null)
   const [deleteTarget, setDeleteTarget] = useState<ProjectUpdate>()
   const [editing, setEditing] = useState<ProjectUpdate>()
   const feed = useMemo(() => [
@@ -29,8 +31,12 @@ export function ProjectActivity({ activities, project, projectUpdates, viewer, o
     setSaving(true)
     try {
       if (composerMode === 'comment') await onCommentProject(project.id, body.trim())
-      else await onCreateUpdate(project.id, { body: body.trim(), health })
+      else {
+        const update = await onCreateUpdate(project.id, { body: body.trim(), health })
+        for (const file of files) await onUploadProjectUpdateAttachment(project.id, update.id, file)
+      }
       setBody('')
+      setFiles([])
     } catch (error) { toast.error('Could not post to project', { description: error instanceof Error ? error.message : undefined }) }
     finally { setSaving(false) }
   }
@@ -44,11 +50,12 @@ export function ProjectActivity({ activities, project, projectUpdates, viewer, o
         {project.lead && <div><span>Lead</span><div><Avatar name={project.lead.displayName}/><strong>{project.lead.displayName} assigned</strong></div></div>}
         {project.startDate && <div><span>Start date</span><div><strong>set to {format(new Date(`${project.startDate}T00:00:00`), 'MMM do')}</strong></div></div>}
       </div>}
-      <footer>{composerMode === 'update' ? <button aria-disabled="true" disabled title="Agent drafting is unavailable in this workspace" type="button"><Bot size={13}/>Write with Agent</button> : <span/>}<div><button aria-disabled="true" aria-label="Attach images, files, or videos" disabled title="Project update attachments are unavailable" type="button"><Paperclip size={13}/></button><button className="is-submit" disabled={!body.trim() || saving} onClick={() => void submit()} type="button">{saving ? 'Posting…' : composerMode === 'update' ? 'Post update' : 'Comment'}</button></div></footer>
+      {files.length>0&&<div className="project-activity__files">{files.map((file,index)=><span key={`${file.name}-${index}`}><Paperclip size={12}/>{file.name}<button aria-label={`Remove ${file.name}`} onClick={()=>setFiles(current=>current.filter((_,item)=>item!==index))}><X size={11}/></button></span>)}</div>}
+      <footer><span/><div>{composerMode==='update'&&<><button aria-label="Attach images, files, or videos" onClick={()=>fileRef.current?.click()} type="button"><Paperclip size={13}/></button><input ref={fileRef} hidden multiple type="file" onChange={event=>{setFiles(current=>[...current,...Array.from(event.target.files??[])]);event.target.value=''}}/></>}<button className="is-submit" disabled={!body.trim() || saving} onClick={() => void submit()} type="button">{saving ? 'Posting…' : composerMode === 'update' ? 'Post update' : 'Comment'}</button></div></footer>
     </section>
 
     <div className="project-activity__feed">
-      {feed.map(item => item.type === 'update' ? <UpdateEntry key={item.update.id} onComment={body => onCommentProjectUpdate(project.id, item.update.id, body)} onDelete={() => setDeleteTarget(item.update)} onEdit={() => setEditing(item.update)} onReact={emoji => onReactProjectUpdate(project.id, item.update.id, emoji)} update={item.update} viewerId={viewer.id}/> : <CommentEntry comment={item.comment} key={item.comment.id}/>)}
+      {feed.map(item => item.type === 'update' ? <UpdateEntry key={item.update.id} onComment={body => onCommentProjectUpdate(project.id, item.update.id, body)} onDelete={() => setDeleteTarget(item.update)} onDeleteAttachment={attachmentId=>onDeleteProjectUpdateAttachment(project.id,item.update.id,attachmentId)} onEdit={() => setEditing(item.update)} onReact={emoji => onReactProjectUpdate(project.id, item.update.id, emoji)} update={item.update} viewerId={viewer.id}/> : <CommentEntry comment={item.comment} key={item.comment.id}/>)}
       <ActivityPropertyTimeline events={propertyEvents}/>
     </div>
 
@@ -57,10 +64,10 @@ export function ProjectActivity({ activities, project, projectUpdates, viewer, o
   </div>
 }
 
-function UpdateEntry({ onComment, onDelete, onEdit, onReact, update, viewerId }: { onComment: (body: string) => Promise<ProjectUpdate>; onDelete: () => void; onEdit: () => void; onReact: (emoji: string) => Promise<ProjectUpdate>; update: ProjectUpdate; viewerId: string }) {
+function UpdateEntry({ onComment, onDelete, onDeleteAttachment, onEdit, onReact, update, viewerId }: { onComment: (body: string) => Promise<ProjectUpdate>; onDelete: () => void; onDeleteAttachment: (attachmentId:string)=>Promise<ProjectUpdate>; onEdit: () => void; onReact: (emoji: string) => Promise<ProjectUpdate>; update: ProjectUpdate; viewerId: string }) {
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [comment, setComment] = useState('')
-  return <article className="project-activity__update"><header><span className={`project-activity__update-health is-${update.health}`}><i/>{healthLabel(update.health)}</span><Avatar name={update.user.displayName}/><strong>{update.user.displayName}</strong><time>{formatDistanceToNowStrict(new Date(update.createdAt), { addSuffix: true })}</time><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open update menu" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className="project-detail-page__menu" sideOffset={4}><DropdownMenu.Item onSelect={onEdit}><span>Edit</span></DropdownMenu.Item><DropdownMenu.Item className="is-danger" onSelect={onDelete}><Trash2 size={14}/><span>Delete</span></DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></header><p>{update.body}</p>
+  return <article className="project-activity__update"><header><span className={`project-activity__update-health is-${update.health}`}><i/>{healthLabel(update.health)}</span><Avatar name={update.user.displayName}/><strong>{update.user.displayName}</strong><time>{formatDistanceToNowStrict(new Date(update.createdAt), { addSuffix: true })}</time><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open update menu" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className="project-detail-page__menu" sideOffset={4}><DropdownMenu.Item onSelect={onEdit}><span>Edit</span></DropdownMenu.Item><DropdownMenu.Item className="is-danger" onSelect={onDelete}><Trash2 size={14}/><span>Delete</span></DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></header><p>{update.body}</p>{update.attachments?.length>0&&<div className="project-activity__attachments">{update.attachments.map(attachment=><span key={attachment.id}><a href={attachment.url} target="_blank" rel="noreferrer"><Paperclip size={12}/>{attachment.title||'Attachment'}</a><button aria-label={`Remove ${attachment.title||'attachment'}`} onClick={()=>void onDeleteAttachment(attachment.id)}><X size={11}/></button></span>)}</div>}
     <div className="project-activity__reactions">{Object.entries(update.reactions ?? {}).map(([emoji, users]) => <button aria-pressed={users.includes(viewerId)} key={emoji} onClick={() => void onReact(emoji)} type="button">{emoji} {users.length}</button>)}</div>
     <footer><button aria-label={`${update.comments?.length ?? 0} comments`} onClick={() => setCommentsOpen(value => !value)} type="button"><MessageCircle size={13}/>{update.comments?.length ? update.comments.length : null}</button><EmojiPicker onSelect={async emoji => { await onReact(emoji) }}><button aria-label="Add reaction" type="button"><SmilePlus size={13}/></button></EmojiPicker></footer>
     {commentsOpen && <div className="project-activity__comments">{(update.comments ?? []).map(item => <CommentEntry comment={item} key={item.id}/>)}<div className="project-activity__comment-box"><Avatar name="You"/><input aria-label="Add comment" onChange={event => setComment(event.target.value)} placeholder="Leave a comment…" value={comment}/><button disabled={!comment.trim()} onClick={() => void onComment(comment.trim()).then(() => setComment(''))} type="button">Comment</button></div></div>}

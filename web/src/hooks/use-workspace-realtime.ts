@@ -12,7 +12,7 @@ export function useWorkspaceRealtime({ workspaceKey, issueId, route, onRemoteSyn
   const [connected, setConnected] = useState(false)
   const syncRef = useRef(onRemoteSync)
   const timerRef = useRef<number | undefined>(undefined)
-  const queuedRef = useRef<RealtimeEvent | undefined>(undefined)
+  const queuedRef = useRef<RealtimeEvent[]>([])
   const syncingRef = useRef(false)
   syncRef.current = onRemoteSync
 
@@ -20,25 +20,40 @@ export function useWorkspaceRealtime({ workspaceKey, issueId, route, onRemoteSyn
     if (!workspaceKey) return
     const clientId = realtimeClientId()
     const stream = new EventSource(`/api/realtime/events?workspace=${encodeURIComponent(workspaceKey)}`)
+    let initialized = false
     const drain = async () => {
-      if (syncingRef.current || !queuedRef.current) return
+      if (syncingRef.current || !queuedRef.current.length) return
       syncingRef.current = true
-      const event = queuedRef.current
-      queuedRef.current = undefined
+      const event = queuedRef.current.shift()!
       try { await syncRef.current(event) }
-      finally { syncingRef.current = false; if (queuedRef.current) void drain() }
+      finally { syncingRef.current = false; if (queuedRef.current.length) void drain() }
     }
     const schedule = (event: RealtimeEvent) => {
-      queuedRef.current = event
+      if (event.type === 'issue.updated' && event.aggregateId && queuedRef.current.every(item => item.type === 'issue.updated')) {
+        const index = queuedRef.current.findIndex(item => item.aggregateId === event.aggregateId)
+        if (index >= 0) queuedRef.current[index] = event
+        else queuedRef.current.push(event)
+      } else {
+        // A bootstrap resync for a broad event also includes any earlier issue
+        // patches, so it safely replaces the pending queue.
+        queuedRef.current = [event]
+      }
       window.clearTimeout(timerRef.current)
       timerRef.current = window.setTimeout(() => void drain(), 80)
     }
     stream.onopen = () => setConnected(true)
     stream.onerror = () => setConnected(false)
     stream.onmessage = message => {
-      const event = JSON.parse(message.data) as RealtimeEvent
+      let event: RealtimeEvent
+      try { event = JSON.parse(message.data) as RealtimeEvent }
+      catch { return }
       if (event.payload?.presence) setPresence(event.payload.presence)
-      if (event.type === 'connected' || event.type === 'presence.updated' || event.clientId === clientId) return
+      if (event.type === 'connected') {
+        if (initialized) schedule(event)
+        else initialized = true
+        return
+      }
+      if (event.type === 'presence.updated' || event.clientId === clientId) return
       schedule(event)
     }
     return () => {

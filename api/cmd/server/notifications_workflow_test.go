@@ -82,6 +82,17 @@ func TestNotificationPreferencesAndBatchCleanupAPI(t *testing.T) {
 	if updated.Email.Enabled || updated.Email.Categories["comments"] {
 		t.Fatalf("preferences did not persist: %#v", updated)
 	}
+	requestJSON[any](t, handler, http.MethodPost, "/api/notifications/batch", map[string]any{"action": "markRead"}, http.StatusBadRequest)
+	bootstrap := repository.Bootstrap()
+	foreignID := "notification_foreign_recipient"
+	if err := repository.MutateWorkspace(t.Context(), bootstrap.Workspace.URLKey, "test.foreign_notification", foreignID, nil, func(data *domain.Bootstrap) error {
+		now := time.Now().UTC()
+		data.Notifications = append(data.Notifications, domain.Notification{ID: foreignID, RecipientID: "user_outside_viewer", Type: "comment", SourceType: "issue", SourceID: data.Issues[0].ID, IssueID: data.Issues[0].ID, Actor: data.Users[0], Category: "comments", CreatedAt: now, UpdatedAt: now})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	requestJSON[any](t, handler, http.MethodPatch, "/api/notifications/"+foreignID, map[string]any{"read": true}, http.StatusNotFound)
 	result := requestJSON[map[string]int](t, handler, http.MethodPost, "/api/notifications/batch", map[string]any{"action": "deleteAll"}, http.StatusOK)
 	if result["updated"] == 0 {
 		t.Fatal("bulk delete did not update any notifications")
@@ -128,4 +139,57 @@ func TestWorkflowStateConstraintsAndTeamDefaults(t *testing.T) {
 	if issue.Identifier[:4] == "OPS-" {
 		t.Fatal("changing team identifier rewrote an existing issue identifier")
 	}
+}
+
+func TestStatusWorkflowAutomationsAndOrdering(t *testing.T) {
+	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	teamID := bootstrap.Teams[0].ID
+	state := func(stateType string, reserved bool) domain.WorkflowState {
+		index := slices.IndexFunc(bootstrap.States, func(item domain.WorkflowState) bool { return item.Type == stateType && item.Reserved == reserved })
+		if index < 0 {
+			t.Fatalf("missing %s state", stateType)
+		}
+		return bootstrap.States[index]
+	}
+	todo, started, done, canceled, duplicate := state("unstarted", false), state("started", false), state("completed", false), state("canceled", false), state("canceled", true)
+
+	requestJSON[domain.TeamSettings](t, handler, http.MethodPatch, "/api/teams/"+teamID+"/settings", map[string]any{"autoCloseParents": true, "autoCloseSubIssues": true, "progressOrder": "first"}, http.StatusOK)
+	parent := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Parent", "teamId": teamID, "stateId": todo.ID}, http.StatusCreated)
+	first := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "First child", "teamId": teamID, "stateId": todo.ID, "parentId": parent.ID}, http.StatusCreated)
+	second := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Second child", "teamId": teamID, "stateId": todo.ID, "parentId": parent.ID}, http.StatusCreated)
+	requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+parent.ID, map[string]any{"stateId": done.ID}, http.StatusOK)
+	afterParent := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if findIssue(t, afterParent.Issues, first.ID).State.Type != "completed" || findIssue(t, afterParent.Issues, second.ID).State.Type != "completed" {
+		t.Fatal("closing a parent did not close its sub-issues")
+	}
+
+	parent = requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Auto-close parent", "teamId": teamID, "stateId": todo.ID}, http.StatusCreated)
+	first = requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Open child", "teamId": teamID, "stateId": todo.ID, "parentId": parent.ID}, http.StatusCreated)
+	second = requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Last child", "teamId": teamID, "stateId": todo.ID, "parentId": parent.ID}, http.StatusCreated)
+	requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+first.ID, map[string]any{"stateId": done.ID}, http.StatusOK)
+	midway := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if findIssue(t, midway.Issues, parent.ID).State.Type == "completed" {
+		t.Fatal("parent closed before its last sub-issue")
+	}
+	requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+second.ID, map[string]any{"stateId": done.ID}, http.StatusOK)
+	afterChildren := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if findIssue(t, afterChildren.Issues, parent.ID).State.Type != "completed" {
+		t.Fatal("parent stayed open after its last sub-issue closed")
+	}
+
+	existing := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Existing started", "teamId": teamID, "stateId": started.ID}, http.StatusCreated)
+	moved := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Move first", "teamId": teamID, "stateId": todo.ID}, http.StatusCreated)
+	moved = requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+moved.ID, map[string]any{"stateId": started.ID}, http.StatusOK)
+	if moved.SortOrder >= existing.SortOrder {
+		t.Fatalf("progressed issue was not moved first: moved=%v existing=%v", moved.SortOrder, existing.SortOrder)
+	}
+
+	requestJSON[any](t, handler, http.MethodDelete, "/api/teams/"+teamID+"/states/"+canceled.ID, map[string]any{}, http.StatusBadRequest)
+	requestJSON[any](t, handler, http.MethodPost, "/api/teams/"+teamID+"/states/reorder", map[string]any{"stateIds": []string{todo.ID, todo.ID, started.ID, done.ID, canceled.ID, duplicate.ID}}, http.StatusBadRequest)
 }

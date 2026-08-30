@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Bot, CalendarDays, ChevronDown, Code2, ExternalLink, GitFork, Globe,
   KeyRound, Laptop, Mail, MessageCircle, MessageSquare, Monitor, ShieldCheck,
-  Smartphone,
+  Plus, Smartphone,
 } from "lucide-react";
 import { toast } from "sonner";
 import { NavLink } from "react-router-dom";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
-  fetchAccountIdentities, fetchAccountSessions, removeMember, revokeAccountSession, revokeOtherAccountSessions,
+  deletePushSubscription, fetchAccountIdentities, fetchAccountSessions, listPushSubscriptions, removeMember, revokeAccountSession, revokeOtherAccountSessions,
   revokeOAuthAuthorization, updateAccountProfile, updateNotificationPreferences,
   unlinkAccountIdentity,
 } from "@/lib/api";
@@ -31,6 +31,7 @@ type Props = {
   onNavigate: (page: SettingsPageId) => void;
   onReload: () => Promise<void>;
   onBack: () => void;
+  onCustomizeSidebar: () => void;
 };
 
 const EN = {
@@ -72,7 +73,7 @@ function Action({ children, onClick, danger, primary, disabled, label }: { child
   return <button aria-label={label} disabled={disabled} className={`personal-action${danger ? " danger" : ""}${primary ? " primary" : ""}`} onClick={onClick}>{children}</button>;
 }
 
-function Preferences({ values, setValue, text }: PersonalProps) {
+function Preferences({ values, setValue, text, onCustomizeSidebar }: PersonalProps) {
   const { locale, setLocale } = useI18n();
   return <><PersonalPageTitle>{text.preferences}</PersonalPageTitle>
     <PersonalSection title={text.general}>
@@ -84,10 +85,11 @@ function Preferences({ values, setValue, text }: PersonalProps) {
       <PersonalRow title="Send comments on…" description="Choose which key press is used to submit comments"><PersonalSelect label="Send comments on…" value={String(values.sendComments)} options={["Enter","⌘ Enter"]} onChange={v=>setValue("sendComments",v)}/></PersonalRow>
     </PersonalSection>
     <PersonalSection title={text.interfaceTheme}>
-      <PersonalRow title="App sidebar" description="Customize sidebar item visibility, ordering, and badge style"><Action disabled>Customize</Action></PersonalRow>
+      <PersonalRow title="App sidebar" description="Customize sidebar item visibility, ordering, and badge style"><Action onClick={onCustomizeSidebar}>Customize</Action></PersonalRow>
       <PersonalRow title="Font size" description="Adjust the size of text across the app"><PersonalSelect label="Font size" value={String(values.fontSize)} options={["Small","Default","Large"]} onChange={v=>setValue("fontSize",v)}/></PersonalRow>
       <PersonalRow title="Use pointer cursors" description="Change the cursor to a pointer when hovering over interactive elements"><SettingsToggle label="Use pointer cursors" checked={Boolean(values.pointerCursor)} onChange={v=>setValue("pointerCursor",v)}/></PersonalRow>
       <PersonalRow title="Underline links" description="Always underline links in text content"><SettingsToggle label="Underline links" checked={Boolean(values.underlineLinks)} onChange={v=>setValue("underlineLinks",v)}/></PersonalRow>
+      <PersonalRow title="Disable animated images & emoji" description="When enabled, GIFs and animated emojis remain static until hovered"><SettingsToggle label="Disable animated images & emoji" checked={Boolean(values.disableAnimatedImages)} onChange={v=>setValue("disableAnimatedImages",v)}/></PersonalRow>
     </PersonalSection>
     <PersonalSection><PersonalRow title="Interface theme" description="Select or customize your interface color scheme"><PersonalSelect label="Interface theme" value={String(values.interfaceTheme)} options={["System preference","Light","Dark"]} onChange={v=>setValue("interfaceTheme",v)}/></PersonalRow></PersonalSection>
     <PersonalSection title={text.desktopApp}><PersonalRow title="Open in desktop app" description="Automatically open links in desktop app when possible"><SettingsToggle label="Open in desktop app" checked={Boolean(values.desktopLinks)} onChange={v=>setValue("desktopLinks",v)}/></PersonalRow></PersonalSection>
@@ -123,8 +125,10 @@ function Profile({ data, onReload, onBack, text }: PersonalProps) {
 function Notifications({ data, values, setValue, onReload, text }: PersonalProps) {
   const initial=useMemo(()=>data.notificationPreferences?.[data.viewer.id] ?? defaultNotificationPreferences(data.viewer.id),[data.notificationPreferences,data.viewer.id]);
   const [preferences,setPreferences]=useState(initial);
+  const [pushSubscriptions,setPushSubscriptions]=useState(data.pushSubscriptions??[]);
   const [channel,setChannel]=useState<"desktop"|"mobile"|"email"|"slack"|null>(null);
   useEffect(()=>setPreferences(initial),[initial]);
+  useEffect(()=>{void listPushSubscriptions().then(setPushSubscriptions).catch(()=>undefined)},[]);
   const save=async(next:NotificationPreferences)=>{const before=preferences;setPreferences(next);try{setPreferences(await updateNotificationPreferences(next));await onReload();}catch(error){setPreferences(before);toast.error(error instanceof Error?error.message:"Could not save notifications");}};
   return <><PersonalPageTitle>{text.notifications}</PersonalPageTitle>
     <PersonalSection title="Push notifications" description="Choose which notifications are pushed to your devices. All notifications will still appear in your inbox.">
@@ -143,7 +147,7 @@ function Notifications({ data, values, setValue, onReload, text }: PersonalProps
       <PersonalRow title="Privacy and legal updates" description="Email when privacy policies or terms of service change"><SettingsToggle label="Privacy and legal updates" checked={Boolean(values.privacyUpdates)} onChange={v=>setValue("privacyUpdates",v)}/></PersonalRow>
       <PersonalRow title="Data processing agreement (DPA)" description="Email when our DPA changes"><SettingsToggle label="Data processing agreement" checked={Boolean(values.dpaUpdates)} onChange={v=>setValue("dpaUpdates",v)}/></PersonalRow>
     </PersonalSection>
-    <Dialog open={channel!==null} onOpenChange={open=>{if(!open)setChannel(null)}}><DialogContent className="personal-dialog notification-dialog"><DialogTitle>{channel === "email" ? "Email notifications" : "Desktop notifications"}</DialogTitle>{channel && channel !== "mobile" && channel !== "slack" && <><PersonalRow title={`Enable ${channel} notifications`}><SettingsToggle label={`Enable ${channel} notifications`} checked={preferences[channel].enabled} onChange={enabled=>void save({...preferences,[channel]:{...preferences[channel],enabled}})}/></PersonalRow>{channel === "desktop" && <PersonalRow title="Notification sounds"><SettingsToggle label="Notification sounds" checked={preferences.soundEnabled} onChange={soundEnabled=>void save({...preferences,soundEnabled})}/></PersonalRow>}<footer><Action onClick={()=>setChannel(null)}>Done</Action></footer></>}</DialogContent></Dialog>
+    <Dialog open={channel!==null} onOpenChange={open=>{if(!open)setChannel(null)}}><DialogContent className="personal-dialog notification-dialog"><DialogTitle>{channel === "email" ? "Email notifications" : "Desktop notifications"}</DialogTitle>{channel && channel !== "mobile" && channel !== "slack" && <><PersonalRow title={`Enable ${channel} notifications`}><SettingsToggle label={`Enable ${channel} notifications`} checked={preferences[channel].enabled} onChange={enabled=>void save({...preferences,[channel]:{...preferences[channel],enabled}})}/></PersonalRow>{channel === "desktop" && <><PersonalRow title="Notification sounds"><SettingsToggle label="Notification sounds" checked={preferences.soundEnabled} onChange={soundEnabled=>void save({...preferences,soundEnabled})}/></PersonalRow>{pushSubscriptions.map(item=><PersonalRow key={item.id} icon={<Monitor/>} title={item.userAgent||'Web browser'} description={`Enabled ${new Date(item.createdAt).toLocaleDateString()}`}><Action danger onClick={()=>void deletePushSubscription(item.id).then(()=>listPushSubscriptions().then(setPushSubscriptions)).catch(error=>toast.error(error instanceof Error?error.message:'Could not remove device'))}>Remove</Action></PersonalRow>)}{!pushSubscriptions.length&&<PersonalRow title="No browser push devices" description="Browser devices appear here after notification permission is granted."/>}</>}<footer><Action onClick={()=>setChannel(null)}>Done</Action></footer></>}</DialogContent></Dialog>
   </>;
 }
 
@@ -185,15 +189,13 @@ function CodeReviews({ values, setValue, text }: PersonalProps) {
 function Security({ data, onNavigate, onReload, text }: PersonalProps) {
   const { formatDate } = useI18n();
   const [sessions,setSessions]=useState<Awaited<ReturnType<typeof fetchAccountSessions>>>([]);
-  const [identities,setIdentities]=useState<Awaited<ReturnType<typeof fetchAccountIdentities>>>([]);
   const [confirmOpen,setConfirmOpen]=useState(false);
-  useEffect(()=>{void Promise.all([fetchAccountSessions().then(setSessions),fetchAccountIdentities().then(setIdentities)]).catch(error=>toast.error(error instanceof Error?error.message:"Could not load security information"));},[]);
+  useEffect(()=>{void fetchAccountSessions().then(setSessions).catch(error=>toast.error(error instanceof Error?error.message:"Could not load security information"));},[]);
   const other=sessions.filter(item=>!item.current);
   const revoke=async()=>{try{await revokeOtherAccountSessions();setSessions(await fetchAccountSessions());setConfirmOpen(false);toast.success("Other sessions revoked");}catch(error){toast.error(error instanceof Error?error.message:"Could not revoke sessions");}};
   return <><PersonalPageTitle>{text.security}</PersonalPageTitle>
     <PersonalSection title="Sessions" description="Devices logged into your account">{sessions.filter(item=>item.current).map(item=><PersonalRow key={item.id} icon={<Globe/>} title="Current session" description={`Last active ${formatDate(item.lastSeenAt,{dateStyle:"medium",timeStyle:"short"})} · expires ${formatDate(item.expiresAt,{dateStyle:"medium",timeStyle:"short"})}`}/>)}</PersonalSection>
     {other.length>0 && <PersonalSection title={`${other.length} other session${other.length===1?"":"s"}`}><div className="personal-section-action"><Action danger onClick={()=>setConfirmOpen(true)}>Revoke all</Action></div>{other.map(item=><PersonalRow key={item.id} icon={<Laptop/>} title="Signed-in session" description={`Last active ${formatDate(item.lastSeenAt,{dateStyle:"medium",timeStyle:"short"})}`}><Action danger onClick={()=>void revokeAccountSession(item.id).then(()=>fetchAccountSessions().then(setSessions))}>Revoke</Action></PersonalRow>)}</PersonalSection>}
-    <PersonalSection title="External identities" description="Accounts that can sign in to your Flow profile">{identities.map(item=><PersonalRow key={item.id} icon={<ShieldCheck/>} title={item.username||item.subject} description={`${item.provider.toUpperCase()} · ${item.issuer} · last used ${formatDate(item.lastLoginAt,{dateStyle:'medium'})}`}><Action danger onClick={()=>void unlinkAccountIdentity(item.id).then(()=>fetchAccountIdentities().then(setIdentities)).catch(error=>toast.error(error instanceof Error?error.message:'Could not unlink identity'))}>Unlink</Action></PersonalRow>)}{!identities.length&&<div className="personal-empty"><ShieldCheck/><h3>No external identities</h3></div>}</PersonalSection>
     <PersonalSection title="Passkeys" description="Passkeys are a secure way to sign in to your Flow account"><div className="personal-empty"><KeyRound/><h3>No passkeys registered</h3><span>Passkey enrollment is not available on this server.</span></div></PersonalSection>
     <PersonalSection title="Personal API keys" description="Use Flow’s API to build your own integrations"><div className="personal-empty"><Code2/><h3>{data.apiKeys.filter(k=>k.creatorId===data.viewer.id&&!k.revokedAt).length ? `${data.apiKeys.filter(k=>k.creatorId===data.viewer.id&&!k.revokedAt).length} active API key` : "No API keys created"}</h3><Action onClick={()=>onNavigate("api")}>Manage API keys</Action></div></PersonalSection>
     <PersonalSection title="Commit signing key" description="Coding sessions use this key to sign your commits"><PersonalRow title="No signing key added"><Action disabled>Add key</Action></PersonalRow></PersonalSection>
@@ -204,22 +206,26 @@ function Security({ data, onNavigate, onReload, text }: PersonalProps) {
 
 function Connections({ data, onNavigate, text }: PersonalProps) {
   const integrations=useMemo(()=>new Map(data.integrationConnections.map(item=>[item.provider,item])),[data.integrationConnections]);
+  const {formatDate}=useI18n();
+  const [identities,setIdentities]=useState<Awaited<ReturnType<typeof fetchAccountIdentities>>>([]);
+  useEffect(()=>{void fetchAccountIdentities().then(setIdentities).catch(error=>toast.error(error instanceof Error?error.message:'Could not load connected accounts'))},[]);
   const entries=[
     {provider:"slack",name:"Slack",description:"Sync your message attribution, and receive notifications in Slack",icon:<MessageCircle/>},
     {provider:"google-calendar",name:"Google Calendar",description:"Sync your calendar out-of-office status to Flow",icon:<CalendarDays/>},
     {provider:"notion",name:"Notion",description:"Preview issues, projects, and views within Notion",icon:<MessageSquare/>},
     {provider:"github",name:"GitHub",description:"Review code in Flow and sync attribution of your git-related actions",icon:<GitFork/>},
   ];
-  return <><PersonalPageTitle description="Connect your user accounts to sync attribution of your actions between apps">{text.connections}</PersonalPageTitle><div className="personal-connection-list">{entries.map(item=>{const connection=integrations.get(item.provider);return <div className="settings-card" key={item.provider}><PersonalRow icon={item.icon} title={<span data-i18n-ignore>{item.name}</span>} description={item.description}>{connection?<Action onClick={()=>onNavigate("integrations")}>Connected</Action>:<Action disabled>Unavailable</Action>}</PersonalRow></div>})}</div></>;
+  return <><PersonalPageTitle description="Connect your user accounts to sync attribution of your actions between apps">{text.connections}</PersonalPageTitle><div className="personal-connection-list">{entries.map(item=>{const connection=integrations.get(item.provider);return <div className="settings-card" key={item.provider}><PersonalRow icon={item.icon} title={<span data-i18n-ignore>{item.name}</span>} description={item.description}><Action onClick={()=>onNavigate("integrations")}>{connection?'Connected':'Connect'}</Action></PersonalRow></div>})}</div><PersonalSection title="Sign-in identities" description="Identity provider accounts connected to your Flow profile">{identities.map(item=><PersonalRow key={item.id} icon={<ShieldCheck/>} title={item.username||item.subject} description={`${item.provider.toUpperCase()} · ${item.issuer} · last used ${formatDate(item.lastLoginAt,{dateStyle:'medium'})}`}><Action danger onClick={()=>void unlinkAccountIdentity(item.id).then(()=>fetchAccountIdentities().then(setIdentities)).catch(error=>toast.error(error instanceof Error?error.message:'Could not unlink identity'))}>Unlink</Action></PersonalRow>)}{!identities.length&&<div className="personal-empty"><ShieldCheck/><h3>No sign-in identities connected</h3></div>}</PersonalSection></>;
 }
 
 function Agents({ data, values, setValue, onNavigate, text }: PersonalProps) {
+  const { t } = useI18n();
   const [draft,setDraft]=useState(String(values.agentInstructions||""));
   const dirty=draft !== String(values.agentInstructions||"");
-  return <><PersonalPageTitle description="Your personal settings for Flow Agent">{text.agents}</PersonalPageTitle>
-    <PersonalSection title="Guidance" description="Provide personal instructions and context for Flow Agent when responding to conversations"><div className="personal-agent-editor"><textarea aria-label="AI prompt rules" placeholder="Enter personal guidance for Flow Agent (optional)…" maxLength={4000} value={draft} onChange={e=>setDraft(e.target.value)}/><footer><span>{draft.length}/4000</span><Action primary disabled={!dirty} onClick={()=>setValue("agentInstructions",draft)}>Save</Action></footer></div></PersonalSection>
-    <PersonalSection title="Skills" description="Reusable prompts auto-selected by the agent or invoked via slash commands"><div className="personal-agent-skills"><header><span>{data.agentSkills.length} skills</span><NavLink className="settings-action" to={newAgentSkillPath(data.workspace.urlKey)}>New skill</NavLink></header>{data.agentSkills.map(skill=><NavLink data-i18n-ignore key={skill.id} to={agentSkillPath(data.workspace.urlKey,skill.id)}><Bot/><span><strong>{skill.name}</strong><small>{skill.instructions}</small></span></NavLink>)}{!data.agentSkills.length&&<div className="personal-empty"><Bot/><h3>No skills created</h3></div>}</div></PersonalSection>
-    <PersonalSection title="MCP connectors" description="Add MCP connectors for use with Flow Agent. Workspace admins can manage available connectors in security settings."><PersonalRow title="Agent MCP access disabled in this workspace"><Action onClick={()=>onNavigate("security")}>Configure</Action></PersonalRow></PersonalSection>
+  return <><PersonalPageTitle description={t("Your personal settings for Flow Agent")}>{text.agents}</PersonalPageTitle>
+    <PersonalSection title={t("Guidance")} description={t("Provide personal instructions and context for Flow Agent when responding to conversations")}><textarea className="personal-agent-guidance" aria-label={t("AI prompt rules")} placeholder={t("Enter personal guidance for Flow Agent (optional)…")} maxLength={4000} value={draft} onChange={e=>setDraft(e.target.value)} onBlur={()=>{if(dirty)setValue("agentInstructions",draft)}}/></PersonalSection>
+    <PersonalSection title={t("Skills")} description={t("Reusable prompts auto-selected by the agent or invoked via slash commands")}><div className="personal-agent-skills">{data.agentSkills.map(skill=><NavLink data-i18n-ignore key={skill.id} to={agentSkillPath(data.workspace.urlKey,skill.id)}><Bot/><span><strong>{skill.name}</strong><small>{skill.instructions}</small></span></NavLink>)}<NavLink className="personal-agent-add-row" to={newAgentSkillPath(data.workspace.urlKey)}><span>{t(data.agentSkills.length?"Create skill":"No skills created")}</span><Plus/></NavLink></div></PersonalSection>
+    <PersonalSection title={t("MCP connectors")} description={t("Add MCP connectors for use with Flow Agent. Workspace admins can manage available connectors in security settings.")}><PersonalRow title={t("Agent MCP access disabled in this workspace")}><Action onClick={()=>onNavigate("security")}>{t("Configure")}</Action></PersonalRow></PersonalSection>
   </>;
 }
 
