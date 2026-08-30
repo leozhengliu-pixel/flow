@@ -7,3 +7,31 @@
 .loops-filter-builder select,.loops-filter-builder input{height:28px;padding:0 8px;border:.5px solid var(--border);border-radius:6px;background:transparent;color:var(--bright);font:12px var(--font)}
 .loops-filter-builder input{min-width:120px}.loops-filter-builder button{width:26px;height:26px;display:grid;place-items:center;border:0;border-radius:50%;background:transparent;color:var(--muted)}.loops-filter-builder button:hover{background:var(--bg-hover);color:var(--bright)}
 .loops-row-main.hide-trigger{grid-template-columns:30px minmax(0,1fr) auto}.loops-row-main.hide-last-run{grid-template-columns:30px minmax(0,1fr) auto}.loops-row-main.hide-trigger.hide-last-run{grid-template-columns:30px minmax(0,1fr)}
+.loops-scope-picker{position:relative;display:inline-flex}.loops-scope-popover{top:calc(100% + 4px);left:0;width:220px;max-height:280px;overflow:auto}.loops-scope-popover>button{width:100%;height:32px;display:flex;align-items:center;gap:8px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--theme-text-primary);text-align:left}.loops-scope-popover>button:hover{background:var(--theme-surface-hover)}
+
+/* Measured list and empty state geometry. */
+.loops-topbar { box-sizing: border-box; height: 44px; gap: 0; padding: 0 8px 0 18px; }
+.loops-title h2 { margin: 0; color: var(--theme-text-primary); font: 500 13px/normal var(--font); }
+.loops-title { gap: 0; }
+.loops-new-button { box-sizing: border-box; height: 28px; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 8px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--theme-text-secondary); font: 500 12px/normal var(--font); }
+.loops-new-button:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
+.loops-new-button svg { width: 14px; height: 14px; flex: 0 0 14px; }
+.loops-toolbar { box-sizing: border-box; height: 44px; padding: 0 8px; justify-content: flex-end; }
+.loops-toolbar-left { margin-left: auto; gap: 6px; }
+.loops-toolbar > .loops-icon-button { margin-left: 6px; }
+.loops-icon-button { padding: 0 2px; background: var(--bg-subtle); }
+.loops-empty { box-sizing: border-box; width: 340px; height: 275.8px; display: flex; flex-direction: column; gap: 24px; margin: 0; text-align: left; top: calc(50% + 22px); transform: translate(-50%, -50%); }
+.loops-empty-illustration { width: 80px; height: 80px; flex: 0 0 80px; display: block; }
+.loops-empty > .loops-empty-body { height: 171.8px; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 24px; }
+.loops-empty-copy { height: 119.8px; display: flex; flex-direction: column; gap: 8px; }
+.loops-empty h2 { height: 23px; margin: 0; color: var(--theme-text-primary); font: 600 15px/23px var(--font); }
+.loops-empty-paragraphs { display: flex; flex-direction: column; gap: 16px; }
+.loops-empty p { width: 340px; max-width: none; margin: 0; color: var(--theme-text-secondary); font: 450 13px/18.2px var(--font); }
+.loops-empty-actions { height: 28px; display: flex; align-items: center; justify-content: flex-start; gap: 8px; }
+.loops-empty-actions .loops-primary-button { min-width: 114.6px; justify-content: center; }
+.loops-editor-scroll{width:min(760px,100%);max-width:none}
+.loops-editor-section{border-bottom:0}
+.loops-editor-section.is-trigger .loops-trigger-row{box-sizing:border-box;min-height:98px;padding:16px;border:.5px solid var(--theme-border);border-radius:12px;background:var(--theme-surface-1)}
+.loops-editor-section.is-instructions>textarea{border:.5px solid var(--theme-border);border-radius:12px;background:var(--theme-surface-1)}
+.loops-editor-section.is-connectors{box-sizing:border-box;min-height:96px;padding:0 16px 16px;border:.5px solid var(--theme-border);border-radius:12px;background:var(--theme-surface-1)}
+.loops-editor-section.is-connectors .loops-section-heading{height:48px}

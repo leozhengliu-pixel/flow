@@ -1,0 +1,110 @@
+- complementary "工作区导航":
+  - button "TEST 工作区菜单":
+    - generic: TE
+    - strong: TEST
+  - button "搜索工作区":
+  - button "创建新事项":
+  - navigation:
+    - link "收件箱 1 unread":
+      - /url: /test/inbox
+      - generic: 收件箱
+      - generic "1 unread": "1"
+    - link "评审 1 unread":
+      - /url: /test/reviews
+      - generic: 评审
+      - generic "1 unread": "1"
+    - link "我的事项":
+      - /url: /test/my-issues/activity
+      - generic: 我的事项
+    - link "动态":
+      - /url: /test/pulse/following
+      - generic: 动态
+    - link "智能助手":
+      - /url: /test/agent
+      - generic: 智能助手
+    - button "工作区" [expanded]:
+      - generic: 工作区
+    - link "目标":
+      - /url: /test/initiatives/active
+      - generic: 目标
+    - link "项目":
+      - /url: /test/projects/all
+      - generic: 项目
+    - link "视图":
+      - /url: /test/views/issues
+      - generic: 视图
+    - link "文档":
+      - /url: /test/documents
+      - generic: 文档
+    - link "发布版本":
+      - /url: /test/release-pipelines
+      - generic: 发布版本
+    - link "Loops":
+      - /url: /test/loops
+      - generic: Loops
+    - button "显示更多链接":
+      - generic: 更多
+    - button "你的团队" [expanded]:
+      - generic: 你的团队
+    - link "加入团队":
+      - /url: /test/teams
+    - button "TEST" [expanded]:
+      - strong: TEST
+    - button "Team menu":
+    - link "主页":
+      - /url: /test/team/TES/overview
+      - generic: 主页
+    - link "事项":
+      - /url: /test/team/TES/all
+      - generic: 事项
+    - link "目标":
+      - /url: /test/team/TES/initiatives/active
+      - generic: 目标
+    - link "项目":
+      - /url: /test/team/TES/projects/all
+      - generic: 项目
+    - link "视图":
+      - /url: /test/team/TES/views/issues
+      - generic: 视图
+    - button "试用" [expanded]:
+      - generic: 试用
+    - link "邀请成员":
+      - /url: /test/members?invite=1
+      - generic: 邀请成员
+    - button "关闭“邀请成员”":
+    - link "周期":
+      - /url: /test/team/TES/cycles
+      - generic: 周期
+    - button "关闭“周期”":
+    - button "连接 GitHub":
+      - generic: 连接 GitHub
+    - button "关闭“连接 GitHub”":
+  - button "打开帮助菜单":
+- main:
+  - generic: T
+  - heading "TEST" [level=1]
+  - button "添加到收藏":
+  - button "Team actions":
+  - navigation "Team views":
+    - link "概览":
+      - /url: /test/team/TES/overview
+    - link "文档":
+      - /url: /test/team/TES/documents
+    - link "事项":
+      - /url: /test/team/TES/all
+  - button "新建文档":
+    - text: 新建文档
+  - textbox "Find documents":
+    - /placeholder: Find documents…
+  - generic: 名称
+  - generic: 已创建
+  - generic: Last edited
+  - generic: 所有者
+  - strong: 没有文档
+  - paragraph: 创建a document for this team to share plans and decisions.
+  - button "新建文档":
+    - text: 新建文档
+- button "智能助手":
+  - generic: ⌁
+  - text: 智能助手
+- region "通知 Alt+T"

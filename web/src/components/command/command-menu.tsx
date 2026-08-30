@@ -2,11 +2,10 @@ import { useEffect, useState } from 'react'
 import { Command } from 'cmdk'
 import {
   Building2, Clipboard, FilePlus2, FileText, FolderKanban, Inbox, Layers3, Lightbulb,
-  ListFilter, Plus, Search, SquareDot, UserRound, UsersRound,
+  Plus, Search, SquareDot, UserRound,
 } from 'lucide-react'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import { FilterIcon as Filter } from '@/components/ui/view-action-icons'
 import { ReleasesIcon } from '@/components/releases/release-icons'
 import { searchWorkspace } from '@/lib/api'
 import type { SearchResult } from '@/types/flow'
@@ -25,7 +24,8 @@ export function CommandMenu({
   open,
   onOpenChange,
   onCreateIssue,
-  onCreateLabel,
+  onCreateDocument,
+  onCreateIssueTemplate,
   onCreateProject,
   onCreateView,
   onCreateInitiative,
@@ -37,12 +37,14 @@ export function CommandMenu({
   onNavigateViews,
   onNavigateMembers,
   onNavigateCustomers,
+  onNavigateAgent,
   onOpenResult,
 }: {
   open: boolean
   onOpenChange: (value: boolean) => void
   onCreateIssue: () => void
-  onCreateLabel: () => void
+  onCreateDocument: () => void
+  onCreateIssueTemplate: () => void
   onCreateProject: () => void
   onCreateView: () => void
   onCreateInitiative: () => void
@@ -54,6 +56,7 @@ export function CommandMenu({
   onNavigateViews: () => void
   onNavigateMembers: () => void
   onNavigateCustomers: () => void
+  onNavigateAgent: () => void
   onOpenResult: (result: SearchResult) => void
 }) {
   const [query, setQuery] = useState('')
@@ -62,18 +65,13 @@ export function CommandMenu({
   const closeAnd = (work: () => void) => () => { onOpenChange(false); work() }
   const actions: CommandAction[] = [
     { id: 'create-issue', group: 'Issues', label: 'Create new issue...', icon: <Plus/>, shortcut: ['C'], keywords: 'new ticket task', run: closeAnd(onCreateIssue) },
-    { id: 'create-issue-fullscreen', group: 'Issues', label: 'Create issue in fullscreen...', icon: <Plus/>, shortcut: ['V'], keywords: 'new ticket full screen', run: closeAnd(onCreateIssue) },
-    { id: 'create-label', group: 'Issues', label: 'Create new label...', icon: <SquareDot/>, run: closeAnd(onCreateLabel) },
     { id: 'create-project', group: 'Projects', label: 'Create new project...', icon: <FolderKanban/>, shortcut: ['N', 'then', 'P'], run: closeAnd(onCreateProject) },
-    { id: 'create-document', group: 'Documents', label: 'Create new document in...', icon: <FilePlus2/>, run: closeAnd(onNavigateProjects) },
+    { id: 'create-document', group: 'Documents', label: 'Create new document...', icon: <FilePlus2/>, run: closeAnd(onCreateDocument) },
     { id: 'create-view', group: 'Views', label: 'Create view...', icon: <Layers3/>, run: closeAnd(onCreateView) },
     { id: 'create-initiative', group: 'Initiatives', label: 'Create new initiative', icon: <Lightbulb/>, shortcut: ['N', 'then', 'I'], run: closeAnd(onCreateInitiative) },
-    { id: 'customer-request', group: 'Customers', label: 'Add customer request...', icon: <UsersRound/>, shortcut: ['Ctrl', 'R'], run: closeAnd(onNavigateCustomers) },
     { id: 'create-customer', group: 'Customers', label: 'Create new customer...', icon: <UserRound/>, run: closeAnd(onNavigateCustomers) },
     { id: 'search-workspace', group: 'Filter', label: 'Search workspace...', icon: <Search/>, run: closeAnd(onSearchWorkspace) },
-    { id: 'find-view', group: 'Filter', label: 'Find in view...', icon: <ListFilter/>, shortcut: ['⌘', 'F'], run: closeAnd(onSearchWorkspace) },
-    { id: 'add-filter', group: 'Filter', label: 'Add filter...', icon: <Filter/>, shortcut: ['F', 'F'], run: closeAnd(onSearchWorkspace) },
-    { id: 'issue-template', group: 'Templates', label: 'Create new issue template...', icon: <FileText/>, run: closeAnd(onCreateIssue) },
+    { id: 'issue-template', group: 'Templates', label: 'Create new issue template...', icon: <FileText/>, run: closeAnd(onCreateIssueTemplate) },
     { id: 'go-inbox', group: 'Navigation', label: 'Go to Inbox', icon: <Inbox/>, shortcut: ['G', 'then', 'I'], run: closeAnd(onNavigateInbox) },
     { id: 'go-my-issues', group: 'Navigation', label: 'Go to My issues', icon: <SquareDot/>, shortcut: ['G', 'then', 'M'], run: closeAnd(onNavigateMyIssues) },
     { id: 'go-projects', group: 'Navigation', label: 'Go to Projects', icon: <FolderKanban/>, run: closeAnd(onNavigateProjects) },
@@ -103,8 +101,8 @@ export function CommandMenu({
       <DialogTitle className="sr-only">Command menu</DialogTitle>
       <Command shouldFilter loop>
         <div className="command-input">
-          <Command.Input aria-label="Command menu" placeholder="Type a command or search..." autoFocus value={query} onValueChange={setQuery}/>
-          <button type="button" tabIndex={-1} onClick={() => setQuery('Ask Flow ')}><span>Ask Flow</span><kbd>Tab</kbd></button>
+          <Command.Input aria-label="Command menu" placeholder="Type a command or search..." autoFocus value={query} onValueChange={setQuery} onKeyDown={event=>{if(event.key==='Tab'){event.preventDefault();closeAnd(onNavigateAgent)()}}}/>
+          <button type="button" onClick={closeAnd(onNavigateAgent)}><span>Ask Flow</span><kbd>Tab</kbd></button>
         </div>
         <Command.List>
           {loading && <div className="command-loading">Searching...</div>}

@@ -1,0 +1,217 @@
+- link "Skip to content":
+  - /url: "#skip-nav"
+- navigation:
+  - link "Back to app":
+    - /url: /leozhengliu
+    - text: Back to app
+  - generic "Search settings":
+    - search "Search…"
+  - heading "Personal" [level=2]:
+    - generic: Personal
+  - link "Preferences":
+    - /url: /leozhengliu/settings/account/preferences
+    - generic: Preferences
+  - link "Profile":
+    - /url: /leozhengliu/settings/account/profile
+    - generic: Profile
+  - link "Notifications":
+    - /url: /leozhengliu/settings/account/notifications
+    - generic: Notifications
+  - link "Code & reviews":
+    - /url: /leozhengliu/settings/account/code-and-reviews
+    - generic: Code & reviews
+  - link "Security & access":
+    - /url: /leozhengliu/settings/account/security
+    - generic: Security & access
+  - link "Connected accounts":
+    - /url: /leozhengliu/settings/account/connections
+    - generic: Connected accounts
+  - link "Agent personalization":
+    - /url: /leozhengliu/settings/account/agents
+    - generic: Agent personalization
+  - heading "Issues" [level=2]:
+    - generic: Issues
+  - link "Labels":
+    - /url: /leozhengliu/settings/issue-labels
+    - generic: Labels
+  - link "Templates":
+    - /url: /leozhengliu/settings/issue-templates
+    - generic: Templates
+  - link "SLAs":
+    - /url: /leozhengliu/settings/sla
+    - generic: SLAs
+  - heading "Projects" [level=2]:
+    - generic: Projects
+  - link "Labels":
+    - /url: /leozhengliu/settings/project-labels
+    - generic: Labels
+  - link "Templates":
+    - /url: /leozhengliu/settings/project-templates
+    - generic: Templates
+  - link "Statuses":
+    - /url: /leozhengliu/settings/project-statuses
+    - generic: Statuses
+  - link "Updates":
+    - /url: /leozhengliu/settings/project-updates
+    - generic: Updates
+  - heading "Features" [level=2]:
+    - generic: Features
+  - link "AI & Agents":
+    - /url: /leozhengliu/settings/ai
+    - generic: AI & Agents
+  - link "Initiatives":
+    - /url: /leozhengliu/settings/initiatives
+    - generic: Initiatives
+  - link "Documents":
+    - /url: /leozhengliu/settings/documents
+    - generic: Documents
+  - link "Customer requests":
+    - /url: /leozhengliu/settings/customer-requests
+    - generic: Customer requests
+  - link "Releases":
+    - /url: /leozhengliu/settings/releases
+    - generic: Releases
+  - link "Pulse":
+    - /url: /leozhengliu/settings/pulse
+    - generic: Pulse
+  - link "Asks":
+    - /url: /leozhengliu/settings/asks
+    - generic: Asks
+  - link "Emojis":
+    - /url: /leozhengliu/settings/emojis
+    - generic: Emojis
+  - link "Integrations":
+    - /url: /leozhengliu/settings/integrations
+    - generic: Integrations
+  - heading "Administration" [level=2]:
+    - generic: Administration
+  - link "Workspace":
+    - /url: /leozhengliu/settings/workspace
+    - generic: Workspace
+  - link "Teams":
+    - /url: /leozhengliu/settings/teams
+    - generic: Teams
+  - link "Members":
+    - /url: /leozhengliu/settings/members
+    - generic: Members
+  - link "Security":
+    - /url: /leozhengliu/settings/security
+    - generic: Security
+  - link "API":
+    - /url: /leozhengliu/settings/api
+    - generic: API
+  - link "Applications":
+    - /url: /leozhengliu/settings/applications
+    - generic: Applications
+  - link "Billing":
+    - /url: /leozhengliu/settings/billing
+    - generic: Billing
+  - link "Usage & limits":
+    - /url: /leozhengliu/settings/usage
+    - generic: Usage & limits
+  - link "Import & export":
+    - /url: /leozhengliu/settings/import-export
+    - generic: Import & export
+  - heading "Your teams" [level=2]:
+    - generic: Your teams
+  - link "Leozhengliu":
+    - /url: /leozhengliu/settings/teams/LEO
+    - generic: Leozhengliu
+  - generic "Create a team":
+    - text: Create a team
+- button "Open Help menu":
+- generic "There are 19 days remaining in your workspace’s Business trial.":
+  - link "Business trial ends":
+    - /url: /leozhengliu/settings/billing/plans
+  - generic: Business trial ends
+  - generic: 19d
+- main:
+  - generic: Customer requests
+  - text: Associate customers with projects and issues to align development efforts with real user needs. Manage and track customer requests across your entire organization.
+  - link "Docs↗":
+    - /url: https://linear.app/docs/customer-requests
+  - list:
+    - generic: Enable Customer requests
+    - generic: Workspace-wide access to create and view customer requests
+    - checkbox "Enable Customer requests" [checked]
+  - list:
+    - link "Manage customers settings":
+      - /url: /leozhengliu/customers
+    - figure:
+    - generic: Manage customers
+    - generic: Manage your list of customers and their requests
+    - generic: 1 customer
+  - heading "Issue routing" [level=3]
+  - generic: When a new issue is created from a customer page, it will be routed to the default team’s triage or backlog. This centralizes customer requests for ease of management and prioritization.
+  - list:
+    - generic: Default team for customer requests
+    - combobox "Default team for customer requests":
+      - generic: No default team
+  - heading "Customer statuses" [level=3]
+  - generic: Define statuses for segmenting customers
+  - list:
+    - list:
+      - generic: 4 customer statuses
+      - button "Create new customer status" [disabled]:
+      - button "Active Open menu":
+        - generic: Active
+        - button "Open menu":
+      - button "Prospect Open menu":
+        - generic: Prospect
+        - button "Open menu":
+      - button "Churned Open menu":
+        - generic: Churned
+        - button "Open menu":
+      - button "Lost Open menu":
+        - generic: Lost
+        - button "Open menu":
+      - button:
+      - textbox "Name" [active]
+      - textbox "Description":
+        - /placeholder: Description…
+      - button "Cancel"
+      - button "Submit": Create
+      - status
+  - heading "Customer tiers" [level=3]
+  - generic: Define tiers for segmenting customers
+  - list:
+    - list:
+      - generic: No customer tiers
+      - button "Create new customer tier":
+  - heading "Display options" [level=3]
+  - list:
+    - generic: Revenue formatting
+    - generic: Data imports must be in annual figures, but can be displayed as monthly or annual
+    - combobox "Revenue formatting":
+      - generic: Annual
+    - generic: Revenue currency
+    - generic: The currency used when displaying customer revenue
+    - combobox "Revenue currency":
+      - generic: USD ($)
+  - heading "Customer attributes data source" [level=3]
+  - generic: Sync customer attributes from an external data source
+  - list:
+    - generic: External data source
+    - generic "Configure a supported integration to sync customer attributes from an external data source": None
+    - generic: Enable manual edits
+    - generic: Attributes can be edited in the Linear UI
+    - checkbox "Enable manual edits" [checked]
+  - generic: Excluded domains and emails
+  - generic: Domains and emails that should never create customer requests
+  - list:
+    - heading "No excluded domains and emails" [level=3]
+    - button "Open menu":
+  - generic: Generic domains and emails
+  - text: Domains and emails that are not associated with a specific customer. Common providers like Gmail, Outlook, etc. are already included.
+  - link "List of generic domains↗":
+    - /url: https://linear.app/docs/customer-requests#collapsible-05932a65c71b
+  - list:
+    - heading "No custom generic domains and emails" [level=3]
+    - button "Open menu":
+- button "Update loop":
+  - generic "Update loop"
+- button "Agent":
+  - generic: Agent
+- button "Chat history":
+- region "Notifications alt+T"
+- status

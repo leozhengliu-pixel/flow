@@ -27,8 +27,11 @@ const (
 type dashboardInput struct {
 	Name        *string                   `json:"name,omitempty"`
 	Description *string                   `json:"description,omitempty"`
+	OwnerID     *string                   `json:"ownerId,omitempty"`
 	Visibility  *string                   `json:"visibility,omitempty"`
 	TeamIDs     *[]string                 `json:"teamIds,omitempty"`
+	Filters     *map[string][]string      `json:"filters,omitempty"`
+	HideFilters *bool                     `json:"hideFilters,omitempty"`
 	Widgets     *[]domain.DashboardWidget `json:"widgets,omitempty"`
 }
 
@@ -163,6 +166,9 @@ func validateDashboard(data domain.Bootstrap, value *domain.Dashboard) error {
 	if !slices.Contains([]string{"workspace", "team", "private"}, value.Visibility) {
 		return fmt.Errorf("%w: invalid dashboard visibility", errInvalid)
 	}
+	if value.OwnerID == "" || userByID(&data, value.OwnerID) == nil {
+		return fmt.Errorf("%w: dashboard owner is required", errInvalid)
+	}
 	value.TeamIDs = normalizedStrings(value.TeamIDs)
 	if value.Visibility == "team" && len(value.TeamIDs) == 0 {
 		return fmt.Errorf("%w: team dashboard requires a team", errInvalid)
@@ -170,15 +176,31 @@ func validateDashboard(data domain.Bootstrap, value *domain.Dashboard) error {
 	if !validateResourceIDs(&data, "team", value.TeamIDs) {
 		return fmt.Errorf("%w: unknown team", errInvalid)
 	}
-	allowedWidgets := []string{"issue_count", "status_breakdown", "assignee_workload", "cycle_progress", "project_progress", "sla_health", "throughput"}
+	value.Filters = normalizedDashboardFilters(value.Filters)
+	if !validateDashboardFilters(data, value.Filters) {
+		return fmt.Errorf("%w: dashboard filter references an unknown resource", errInvalid)
+	}
+	allowedWidgets := []string{"insight", "issue_count", "status_breakdown", "assignee_workload", "cycle_progress", "project_progress", "sla_health", "throughput"}
 	seen := map[string]bool{}
 	for index := range value.Widgets {
 		widget := &value.Widgets[index]
 		if !slices.Contains(allowedWidgets, widget.Type) {
 			return fmt.Errorf("%w: unsupported widget type %q", errInvalid, widget.Type)
 		}
-		if len(widget.Config) > 0 && (!json.Valid(widget.Config) || widget.Config[0] != '{') {
+		if len(widget.Config) == 0 || string(widget.Config) == "null" {
+			widget.Config = json.RawMessage(`{}`)
+		}
+		if !json.Valid(widget.Config) || widget.Config[0] != '{' {
 			return fmt.Errorf("%w: widget config must be an object", errInvalid)
+		}
+		if widget.Type == "insight" {
+			config := dashboardInsightConfig{}
+			if err := json.Unmarshal(widget.Config, &config); err != nil || !config.valid() {
+				return fmt.Errorf("%w: invalid insight configuration", errInvalid)
+			}
+			if !validateDashboardFilters(data, map[string][]string{"teamIds": config.TeamIDs, "stateIds": config.StateIDs, "assigneeIds": config.AssigneeIDs, "labelIds": config.LabelIDs}) {
+				return fmt.Errorf("%w: insight filter references an unknown resource", errInvalid)
+			}
 		}
 		if widget.ID == "" {
 			widget.ID = opaqueID("widget_")
@@ -197,6 +219,85 @@ func validateDashboard(data domain.Bootstrap, value *domain.Dashboard) error {
 		}
 	}
 	return nil
+}
+
+type dashboardInsightConfig struct {
+	Display         string   `json:"display"`
+	Measure         string   `json:"measure"`
+	Aggregation     string   `json:"aggregation"`
+	Slice           string   `json:"slice"`
+	Segment         string   `json:"segment"`
+	DateAggregation string   `json:"dateAggregation"`
+	TeamIDs         []string `json:"teamIds"`
+	StateIDs        []string `json:"stateIds"`
+	AssigneeIDs     []string `json:"assigneeIds"`
+	LabelIDs        []string `json:"labelIds"`
+	SinceDays       int      `json:"sinceDays"`
+}
+
+func (c *dashboardInsightConfig) defaults() {
+	if c.Display == "" {
+		c.Display = "chart"
+	}
+	if c.Measure == "" {
+		c.Measure = "issue_count"
+	}
+	if c.Aggregation == "" {
+		c.Aggregation = "count"
+	}
+	if c.Slice == "" {
+		c.Slice = "status"
+	}
+	if c.Segment == "" {
+		c.Segment = "none"
+	}
+	if c.DateAggregation == "" {
+		c.DateAggregation = "month"
+	}
+}
+
+func (c dashboardInsightConfig) valid() bool {
+	c.defaults()
+	return slices.Contains([]string{"chart", "table", "metric"}, c.Display) &&
+		slices.Contains([]string{"issue_count", "estimate", "cycle_time", "lead_time", "sla_breaches"}, c.Measure) &&
+		slices.Contains([]string{"count", "sum", "average", "minimum", "maximum"}, c.Aggregation) &&
+		slices.Contains([]string{"none", "status", "team", "assignee", "label", "project", "cycle", "priority", "created_at", "completed_at"}, c.Slice) &&
+		slices.Contains([]string{"none", "status", "team", "assignee", "project", "priority"}, c.Segment) &&
+		slices.Contains([]string{"day", "week", "month", "quarter", "year"}, c.DateAggregation)
+}
+
+func normalizedDashboardFilters(filters map[string][]string) map[string][]string {
+	result := map[string][]string{}
+	for _, key := range []string{"teamIds", "stateIds", "assigneeIds", "labelIds"} {
+		if values := normalizedStrings(filters[key]); len(values) > 0 {
+			result[key] = values
+		}
+	}
+	return result
+}
+
+func validateDashboardFilters(data domain.Bootstrap, filters map[string][]string) bool {
+	for _, id := range filters["teamIds"] {
+		if !slices.ContainsFunc(data.Teams, func(item domain.Team) bool { return item.ID == id }) {
+			return false
+		}
+	}
+	for _, id := range filters["stateIds"] {
+		if !slices.ContainsFunc(data.States, func(item domain.WorkflowState) bool { return item.ID == id }) {
+			return false
+		}
+	}
+	for _, id := range filters["assigneeIds"] {
+		if userByID(&data, id) == nil {
+			return false
+		}
+	}
+	for _, id := range filters["labelIds"] {
+		if !labelExistsForResource(&data, id, "issue") {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *server) listDashboards(w http.ResponseWriter, r *http.Request) {
@@ -218,7 +319,7 @@ func (s *server) createDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
-	created := domain.Dashboard{ID: opaqueID("dashboard_"), Name: *input.Name, OwnerID: viewerID(s, data, r), Visibility: "private", TeamIDs: []string{}, Widgets: []domain.DashboardWidget{}, SubscriberIDs: []string{}, CreatedAt: now, UpdatedAt: now}
+	created := domain.Dashboard{ID: opaqueID("dashboard_"), Name: *input.Name, OwnerID: viewerID(s, data, r), Visibility: "private", TeamIDs: []string{}, Filters: map[string][]string{}, Widgets: []domain.DashboardWidget{}, SubscriberIDs: []string{}, CreatedAt: now, UpdatedAt: now}
 	applyDashboardInput(&created, input)
 	if err := validateDashboard(data, &created); err != nil {
 		respondMutation(w, err, http.StatusCreated, nil)
@@ -241,11 +342,20 @@ func applyDashboardInput(value *domain.Dashboard, input dashboardInput) {
 	if input.Description != nil {
 		value.Description = strings.TrimSpace(*input.Description)
 	}
+	if input.OwnerID != nil {
+		value.OwnerID = strings.TrimSpace(*input.OwnerID)
+	}
 	if input.Visibility != nil {
 		value.Visibility = strings.ToLower(strings.TrimSpace(*input.Visibility))
 	}
 	if input.TeamIDs != nil {
 		value.TeamIDs = normalizedStrings(*input.TeamIDs)
+	}
+	if input.Filters != nil {
+		value.Filters = normalizedDashboardFilters(*input.Filters)
+	}
+	if input.HideFilters != nil {
+		value.HideFilters = *input.HideFilters
 	}
 	if input.Widgets != nil {
 		value.Widgets = slices.Clone(*input.Widgets)
@@ -399,11 +509,33 @@ func (s *server) dashboardResults(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"dashboard": items[index], "results": calculateDashboard(data, items[index])})
 }
 
+func (s *server) previewDashboardWidget(w http.ResponseWriter, r *http.Request) {
+	var widget domain.DashboardWidget
+	if !decodeJSON(w, r, &widget) {
+		return
+	}
+	data := s.workspaceData(r)
+	viewer := viewerID(s, data, r)
+	items := settingCollection[domain.Dashboard](data, dashboardsSettingsKey)
+	index := slices.IndexFunc(items, func(item domain.Dashboard) bool {
+		return item.ID == r.PathValue("id") && dashboardVisible(data, viewer, item)
+	})
+	if index < 0 {
+		writeError(w, http.StatusNotFound, "dashboard not found")
+		return
+	}
+	dashboard := items[index]
+	dashboard.Widgets = []domain.DashboardWidget{widget}
+	if err := validateDashboard(data, &dashboard); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	results := calculateDashboard(data, dashboard)
+	writeJSON(w, http.StatusOK, results[0])
+}
+
 func widgetIssueFilter(data domain.Bootstrap, widget domain.DashboardWidget) []*domain.Issue {
-	config := struct {
-		TeamIDs, StateIDs, AssigneeIDs, LabelIDs []string
-		SinceDays                                int `json:"sinceDays"`
-	}{}
+	config := dashboardInsightConfig{}
 	_ = json.Unmarshal(widget.Config, &config)
 	cutoff := time.Time{}
 	if config.SinceDays > 0 {
@@ -449,12 +581,51 @@ func widgetIssueFilter(data domain.Bootstrap, widget domain.DashboardWidget) []*
 	return result
 }
 
+func dashboardIssueFilter(data domain.Bootstrap, dashboard domain.Dashboard, widget domain.DashboardWidget) []*domain.Issue {
+	issues := widgetIssueFilter(data, widget)
+	filters := normalizedDashboardFilters(dashboard.Filters)
+	if len(filters) == 0 {
+		return issues
+	}
+	teamSet, stateSet, assigneeSet, labelSet := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
+	for _, id := range filters["teamIds"] {
+		teamSet[id] = true
+	}
+	for _, id := range filters["stateIds"] {
+		stateSet[id] = true
+	}
+	for _, id := range filters["assigneeIds"] {
+		assigneeSet[id] = true
+	}
+	for _, id := range filters["labelIds"] {
+		labelSet[id] = true
+	}
+	return slices.DeleteFunc(issues, func(issue *domain.Issue) bool {
+		if len(teamSet) > 0 && !teamSet[issue.Team.ID] {
+			return true
+		}
+		if len(stateSet) > 0 && !stateSet[issue.State.ID] {
+			return true
+		}
+		assignee := ""
+		if issue.Assignee != nil {
+			assignee = issue.Assignee.ID
+		}
+		if len(assigneeSet) > 0 && !assigneeSet[assignee] {
+			return true
+		}
+		return len(labelSet) > 0 && !slices.ContainsFunc(issue.Labels, func(label domain.IssueLabel) bool { return labelSet[label.ID] })
+	})
+}
+
 func calculateDashboard(data domain.Bootstrap, dashboard domain.Dashboard) []domain.DashboardWidgetResult {
 	results := make([]domain.DashboardWidgetResult, 0, len(dashboard.Widgets))
 	for _, widget := range dashboard.Widgets {
-		issues := widgetIssueFilter(data, widget)
+		issues := dashboardIssueFilter(data, dashboard, widget)
 		var value any
 		switch widget.Type {
+		case "insight":
+			value = calculateGenericInsight(data, issues, widget)
 		case "issue_count":
 			value = map[string]any{"count": len(issues)}
 		case "status_breakdown":
@@ -519,6 +690,156 @@ func calculateDashboard(data domain.Bootstrap, dashboard domain.Dashboard) []dom
 		results = append(results, domain.DashboardWidgetResult{Widget: widget, Value: value})
 	}
 	return results
+}
+
+func calculateGenericInsight(data domain.Bootstrap, issues []*domain.Issue, widget domain.DashboardWidget) any {
+	config := dashboardInsightConfig{}
+	_ = json.Unmarshal(widget.Config, &config)
+	config.defaults()
+	values := map[string][]float64{}
+	for _, issue := range issues {
+		measure, ok := dashboardMeasureValue(issue, config.Measure)
+		if !ok {
+			continue
+		}
+		slicesForIssue := dashboardDimensionValues(data, issue, config.Slice, config.DateAggregation)
+		segmentsForIssue := dashboardDimensionValues(data, issue, config.Segment, config.DateAggregation)
+		for _, sliceLabel := range slicesForIssue {
+			for _, segmentLabel := range segmentsForIssue {
+				key := sliceLabel
+				if config.Segment != "none" {
+					key += " · " + segmentLabel
+				}
+				values[key] = append(values[key], measure)
+			}
+		}
+	}
+	result := map[string]float64{}
+	for key, samples := range values {
+		result[key] = aggregateDashboardValues(samples, config.Aggregation, config.Measure)
+	}
+	if len(result) == 0 && config.Slice == "none" {
+		result["Total"] = 0
+	}
+	return result
+}
+
+func dashboardMeasureValue(issue *domain.Issue, measure string) (float64, bool) {
+	switch measure {
+	case "estimate":
+		if issue.Estimate == nil {
+			return 0, false
+		}
+		return *issue.Estimate, true
+	case "cycle_time":
+		if issue.StartedAt == nil || issue.CompletedAt == nil {
+			return 0, false
+		}
+		return issue.CompletedAt.Sub(*issue.StartedAt).Hours(), true
+	case "lead_time":
+		if issue.CompletedAt == nil {
+			return 0, false
+		}
+		return issue.CompletedAt.Sub(issue.CreatedAt).Hours(), true
+	case "sla_breaches":
+		if issue.SLABreachesAt != nil && issue.SLABreachesAt.Before(time.Now().UTC()) {
+			return 1, true
+		}
+		return 0, true
+	default:
+		return 1, true
+	}
+}
+
+func dashboardDimensionValues(data domain.Bootstrap, issue *domain.Issue, dimension, dateAggregation string) []string {
+	switch dimension {
+	case "status":
+		return []string{issue.State.Name}
+	case "team":
+		return []string{issue.Team.Name}
+	case "assignee":
+		if issue.Assignee == nil {
+			return []string{"Unassigned"}
+		}
+		return []string{issue.Assignee.DisplayName}
+	case "label":
+		if len(issue.Labels) == 0 {
+			return []string{"No label"}
+		}
+		labels := make([]string, 0, len(issue.Labels))
+		for _, label := range issue.Labels {
+			labels = append(labels, label.Name)
+		}
+		return labels
+	case "project":
+		if issue.Project == nil {
+			return []string{"No project"}
+		}
+		return []string{issue.Project.Name}
+	case "cycle":
+		if issue.CycleID == nil {
+			return []string{"No cycle"}
+		}
+		for _, cycle := range data.Cycles {
+			if cycle.ID == *issue.CycleID {
+				return []string{cycle.Name}
+			}
+		}
+		return []string{"No cycle"}
+	case "priority":
+		return []string{issue.PriorityLabel}
+	case "created_at":
+		return []string{dashboardDateBucket(issue.CreatedAt, dateAggregation)}
+	case "completed_at":
+		if issue.CompletedAt == nil {
+			return []string{"Not completed"}
+		}
+		return []string{dashboardDateBucket(*issue.CompletedAt, dateAggregation)}
+	default:
+		return []string{"Total"}
+	}
+}
+
+func dashboardDateBucket(value time.Time, aggregation string) string {
+	value = value.UTC()
+	switch aggregation {
+	case "day":
+		return value.Format("2006-01-02")
+	case "week":
+		year, week := value.ISOWeek()
+		return fmt.Sprintf("%d-W%02d", year, week)
+	case "quarter":
+		return fmt.Sprintf("%d Q%d", value.Year(), (int(value.Month())-1)/3+1)
+	case "year":
+		return value.Format("2006")
+	default:
+		return value.Format("2006-01")
+	}
+}
+
+func aggregateDashboardValues(values []float64, aggregation, measure string) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	if aggregation == "count" || measure == "issue_count" {
+		return float64(len(values))
+	}
+	total, minimum, maximum := 0.0, values[0], values[0]
+	for _, value := range values {
+		total += value
+		minimum = min(minimum, value)
+		maximum = max(maximum, value)
+	}
+	switch aggregation {
+	case "average":
+		return total / float64(len(values))
+	case "minimum":
+		return minimum
+	case "maximum":
+		return maximum
+	default:
+		return total
+	}
 }
 
 func (s *server) exportDashboard(w http.ResponseWriter, r *http.Request) {

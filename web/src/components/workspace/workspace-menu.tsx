@@ -43,7 +43,6 @@ export function WorkspaceMenu({ account, data, onSettings, onSwitch, onCreate, o
             </DropdownMenuItem>)}
             <DropdownMenuLabel>Account</DropdownMenuLabel>
             <DropdownMenuItem onSelect={onCreate}>Create or join a workspace…</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => undefined}>Add an account…</DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuItem onSelect={() => void onLogout()}>Log out<WorkspaceMenuShortcut>⌥ ⇧ Q</WorkspaceMenuShortcut></DropdownMenuItem>

@@ -1,0 +1,218 @@
+ "LEO-5 test zheng liu High Priority Open project Feature Created Mar 16":
+      - /url: /leozhengliu/issue/LEO-5/test
+      - generic: LEO-5
+      - generic: test
+      - generic "zheng liu": ZL
+      - img "High Priority"
+      - generic "Open project":
+        - generic: AAA
+      - generic: Feature
+      - generic: Created Mar 16
+  - button "LEO-11 ›需求｜车商城二期-订单流程›业务诉求｜车商城 C 端增加无报告车源外展 缺陷｜白名单状态流转缺陷 zheng liu No Priority Open project Bug Created Aug 18":
+    - link "LEO-11 ›需求｜车商城二期-订单流程›业务诉求｜车商城 C 端增加无报告车源外展 缺陷｜白名单状态流转缺陷 zheng liu No Priority Open project Bug Created Aug 18":
+      - /url: /leozhengliu/issue/LEO-11/缺陷白名单状态流转缺陷
+      - generic: LEO-11
+      - generic: ›
+      - text: 需求｜车商城二期-订单流程
+      - generic: ›
+      - text: 业务诉求｜车商城 C 端增加无报告车源外展
+      - generic: 缺陷｜白名单状态流转缺陷
+      - generic "zheng liu": ZL
+      - img "No Priority"
+      - generic "Open project":
+        - generic: "[Flow 对比演示] 汽车之家车商城项目 2026"
+      - generic: Bug
+      - generic: Created Aug 18
+  - button "LEO-12 运营｜收集车商城项目交付过程数据 zheng liu No Priority Open project 开发任务 Created Aug 18":
+    - link "LEO-12 运营｜收集车商城项目交付过程数据 zheng liu No Priority Open project 开发任务 Created Aug 18":
+      - /url: /leozhengliu/issue/LEO-12/运营收集车商城项目交付过程数据
+      - generic: LEO-12
+      - generic: 运营｜收集车商城项目交付过程数据
+      - generic "zheng liu": ZL
+      - img "No Priority"
+      - generic "Open project":
+        - generic: "[Flow 对比演示] 汽车之家车商城项目 2026"
+      - generic: 开发任务
+      - generic: Created Aug 18
+  - button "Add new issue":
+  - button "LEO-17 ›发布候选｜智能印控平台 2026.08 UAT 评审｜智能印控平台 2026.08 上线评审 zheng liu No Priority Open project Release Created Aug 18":
+    - link "LEO-17 ›发布候选｜智能印控平台 2026.08 UAT 评审｜智能印控平台 2026.08 上线评审 zheng liu No Priority Open project Release Created Aug 18":
+      - /url: /leozhengliu/issue/LEO-17/评审智能印控平台-202608-上线评审
+      - generic: LEO-17
+      - generic: ›
+      - text: 发布候选｜智能印控平台 2026.08 UAT
+      - generic: 评审｜智能印控平台 2026.08 上线评审
+      - generic "zheng liu": ZL
+      - img "No Priority"
+      - generic "Open project":
+        - generic: "[Flow 对比演示] 智能印控平台 2026.08 UAT"
+      - generic: Release
+      - generic: Created Aug 18
+  - button "LEO-14 发布候选｜智能印控平台 2026.08 UAT zheng liu No Priority Open project Release Open sub-issue Created Aug 18":
+    - link "LEO-14 发布候选｜智能印控平台 2026.08 UAT zheng liu No Priority Open project Release Open sub-issue Created Aug 18":
+      - /url: /leozhengliu/issue/LEO-14/发布候选智能印控平台-202608-uat
+      - generic: LEO-14
+      - generic: 发布候选｜智能印控平台 2026.08 UAT
+      - generic "zheng liu": ZL
+      - img "No Priority"
+      - generic "Open project":
+        - generic: "[Flow 对比演示] 智能印控平台 2026.08 UAT"
+      - generic: Release
+      - generic "Open sub-issue":
+        - generic: 0/3
+      - generic: Created Aug 18
+  - button "Add new issue":
+  - button "LEO-10 ›需求｜车商城二期-订单流程›业务诉求｜车商城 C 端增加无报告车源外展 缺陷｜销单暂存缺陷 zheng liu No Priority Open project Bug Created Aug 18":
+    - link "LEO-10 ›需求｜车商城二期-订单流程›业务诉求｜车商城 C 端增加无报告车源外展 缺陷｜销单暂存缺陷 zheng liu No Priority Open project Bug Created Aug 18":
+      - /url: /leozhengliu/issue/LEO-10/缺陷销单暂存缺陷
+      - generic: LEO-10
+      - generic: ›
+      - text: 需求｜车商城二期-订单流程
+      - generic: ›
+      - text: 业务诉求｜车商城 C 端增加无报告车源外展
+      - generic: 缺陷｜销单暂存缺陷
+      - generic "zheng liu": ZL
+      - img "No Priority"
+      - generic "Open project":
+        - generic: "[Flow 对比演示] 汽车之家车商城项目 2026"
+      - generic: Bug
+      - generic: Created Aug 18
+  - button "LEO-6 业务诉求｜车商城 C 端增加无报告车源外展 zheng liu No Priority Open project 原始需求 Open sub-issue Created Aug 18":
+    - link "LEO-6 业务诉求｜车商城 C 端增加无报告车源外展 zheng liu No Priority Open project 原始需求 Open sub-issue Created Aug 18":
+      - /url: /leozhengliu/issue/LEO-6/业务诉求车商城-c-端增加无报告车源外展
+      - generic: LEO-6
+      - generic: 业务诉求｜车商城 C 端增加无报告车源外展
+      - generic "zheng liu": ZL
+      - img "No Priority"
+      - generic "Open project":
+        - generic: "[Flow 对比演示] 汽车之家车商城项目 2026"
+      - generic: 原始需求
+      - generic "Open sub-issue":
+        - generic: 1/1
+      - generic: Created Aug 18
+  - button "LEO-8 ›需求｜车商城二期-订单流程›业务诉求｜车商城 C 端增加无报告车源外展 开发｜Image 图片预览组件封装 zheng liu No Priority Open project Development Created Aug 18":
+    - link "LEO-8 ›需求｜车商城二期-订单流程›业务诉求｜车商城 C 端增加无报告车源外展 开发｜Image 图片预览组件封装 zheng liu No Priority Open project Development Created Aug 18":
+      - /url: /leozhengliu/issue/LEO-8/开发image-图片预览组件封装
+      - generic: LEO-8
+      - generic: ›
+      - text: 需求｜车商城二期-订单流程
+      - generic: ›
+      - text: 业务诉求｜车商城 C 端增加无报告车源外展
+      - generic: 开发｜Image 图片预览组件封装
+      - generic "zheng liu": ZL
+      - img "No Priority"
+      - generic "Open project":
+        - generic: "[Flow 对比演示] 汽车之家车商城项目 2026"
+      - generic: Development
+      - generic: Created Aug 18
+  - button "LEO-9 ›需求｜车商城二期-订单流程›业务诉求｜车商城 C 端增加无报告车源外展 测试｜验证门店与固定金融产品关联 zheng liu No Priority Open project Testing Created Aug 18":
+    - link "LEO-9 ›需求｜车商城二期-订单流程›业务诉求｜车商城 C 端增加无报告车源外展 测试｜验证门店与固定金融产品关联 zheng liu No Priority Open project Testing Created Aug 18":
+      - /url: /leozhengliu/issue/LEO-9/测试验证门店与固定金融产品关联
+      - generic: LEO-9
+      - generic: ›
+      - text: 需求｜车商城二期-订单流程
+      - generic: ›
+      - text: 业务诉求｜车商城 C 端增加无报告车源外展
+      - generic: 测试｜验证门店与固定金融产品关联
+      - generic "zheng liu": ZL
+      - img "No Priority"
+      - generic "Open project":
+        - generic: "[Flow 对比演示] 汽车之家车商城项目 2026"
+      - generic: Testing
+      - generic: Created Aug 18
+  - button "LEO-7 ›业务诉求｜车商城 C 端增加无报告车源外展 需求｜车商城二期-订单流程 zheng liu No Priority Open project Feature Requirement Open sub-issue Created Aug 18":
+    - link "LEO-7 ›业务诉求｜车商城 C 端增加无报告车源外展 需求｜车商城二期-订单流程 zheng liu No Priority Open project Feature Requirement Open sub-issue Created Aug 18":
+      - /url: /leozhengliu/issue/LEO-7/需求车商城二期-订单流程
+      - generic: LEO-7
+      - generic: ›
+      - text: 业务诉求｜车商城 C 端增加无报告车源外展
+      - generic: 需求｜车商城二期-订单流程
+      - generic "zheng liu": ZL
+      - img "No Priority"
+      - generic "Open project":
+        - generic: "[Flow 对比演示] 汽车之家车商城项目 2026"
+      - generic: Feature
+      - generic: Requirement
+      - generic "Open sub-issue":
+        - generic: 3/4
+      - generic: Created Aug 18
+  - button "Add new issue":
+  - button "Collapse group":
+    - text: Hidden columns
+  - generic: Backlog
+  - button "1":
+    - generic: "1"
+  - button "Open menu":
+  - generic: Canceled
+  - button "0":
+    - generic: "0"
+  - generic: Duplicate
+  - button "0":
+    - generic: "0"
+  - status
+  - complementary:
+    - generic: "17"
+    - generic: issues
+    - button "Expand to fullscreen":
+    - button "Insights display options":
+    - button "Open menu" [expanded]:
+    - generic: Measure
+    - generic: Slice
+    - generic: Segment
+    - button "Issue count":
+      - generic: Issue count
+    - button "Status":
+      - generic: Status
+    - button "Priority":
+      - generic: Priority
+    - generic: Backlog
+    - generic: Todo
+    - generic: In Progress
+    - generic: In Review
+    - generic: Done
+    - generic: Status
+    - generic: Issue count
+    - img "No Priority"
+    - generic: No priority
+    - img "High Priority"
+    - generic: High
+    - generic: Backlog
+    - generic: "1"
+    - generic: "1"
+    - generic: "0"
+    - generic: Todo
+    - generic: "6"
+    - generic: "6"
+    - generic: "0"
+    - generic: In Progress
+    - generic: "3"
+    - generic: "2"
+    - generic: "1"
+    - generic: In Review
+    - generic: "2"
+    - generic: "2"
+    - generic: "0"
+    - generic: Done
+    - generic: "5"
+    - generic: "5"
+    - generic: "0"
+    - button "Save current insight":
+      - generic: Set default for everyone
+- button "Agent":
+  - generic: Agent
+- button "Chat history":
+- region "Notifications alt+T"
+- status
+- dialog:
+  - status: Showing all items
+  - searchbox "Filter…" [active]
+  - listbox:
+    - option "Copy link":
+      - generic: Copy link
+    - option "Export insights as CSV…":
+      - generic: Export insights as CSV…
+    - option "Insights documentation":
+      - generic: Insights documentation
+    - separator
+    - option "Refresh":
+      - generic: Refresh

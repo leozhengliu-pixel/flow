@@ -39,6 +39,10 @@ func TestDashboardLifecycleResultsShareSubscriptionAndExport(t *testing.T) {
 	if dashboard.OwnerID != bootstrap.Viewer.ID || len(dashboard.Widgets) != 2 || dashboard.Widgets[0].ID == "" {
 		t.Fatalf("invalid dashboard: %#v", dashboard)
 	}
+	favorite := requestJSON[domain.Favorite](t, handler, http.MethodPut, "/api/favorites/dashboard/"+dashboard.ID, nil, http.StatusOK)
+	if favorite.ResourceType != "dashboard" || favorite.ResourceID != dashboard.ID {
+		t.Fatalf("dashboard favorite = %#v", favorite)
+	}
 	sanitized := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	if sanitized.Settings[dashboardsSettingsKey] != nil || sanitized.Settings[feedSettingsKey] != nil {
 		t.Fatal("permission-scoped dashboard data leaked through bootstrap settings")
@@ -52,6 +56,33 @@ func TestDashboardLifecycleResultsShareSubscriptionAndExport(t *testing.T) {
 	}](t, handler, http.MethodGet, "/api/dashboards/"+dashboard.ID+"/results", nil, http.StatusOK)
 	if len(result.Results) != 2 {
 		t.Fatalf("dashboard results = %#v", result)
+	}
+	preview := requestJSON[domain.DashboardWidgetResult](t, handler, http.MethodPost, "/api/dashboards/"+dashboard.ID+"/preview", map[string]any{
+		"type": "insight", "title": "Issues by team", "config": map[string]any{
+			"display": "chart", "measure": "issue_count", "aggregation": "count", "slice": "team", "segment": "none", "dateAggregation": "month",
+		},
+	}, http.StatusOK)
+	if preview.Widget.Type != "insight" || len(preview.Value.(map[string]any)) == 0 {
+		t.Fatalf("generic insight preview = %#v", preview)
+	}
+	otherState := bootstrap.States[0]
+	for _, state := range bootstrap.States {
+		if state.ID != bootstrap.Issues[0].State.ID {
+			otherState = state
+			break
+		}
+	}
+	dashboard = requestJSON[domain.Dashboard](t, handler, http.MethodPatch, "/api/dashboards/"+dashboard.ID, map[string]any{
+		"filters": map[string]any{"stateIds": []string{otherState.ID}}, "hideFilters": true,
+	}, http.StatusOK)
+	if !dashboard.HideFilters || len(dashboard.Filters["stateIds"]) != 1 {
+		t.Fatalf("dashboard filters were not persisted: %#v", dashboard)
+	}
+	filtered := requestJSON[struct {
+		Results []domain.DashboardWidgetResult `json:"results"`
+	}](t, handler, http.MethodGet, "/api/dashboards/"+dashboard.ID+"/results", nil, http.StatusOK)
+	if got := filtered.Results[0].Value.(map[string]any)["count"]; got != float64(0) && got != 0 {
+		t.Fatalf("global dashboard filter count = %#v", got)
 	}
 	dashboard = requestJSON[domain.Dashboard](t, handler, http.MethodPut, "/api/dashboards/"+dashboard.ID+"/subscription", nil, http.StatusOK)
 	if len(dashboard.SubscriberIDs) != 1 || dashboard.SubscriberIDs[0] != bootstrap.Viewer.ID {
@@ -74,6 +105,7 @@ func TestDashboardLifecycleResultsShareSubscriptionAndExport(t *testing.T) {
 		t.Fatalf("dashboard export: status=%d headers=%v body=%q", exportResponse.Code, exportResponse.Header(), exportResponse.Body.String())
 	}
 	requestJSON[domain.Dashboard](t, handler, http.MethodDelete, "/api/dashboards/"+dashboard.ID+"/share", nil, http.StatusOK)
+	requestJSON[any](t, handler, http.MethodDelete, "/api/favorites/dashboard/"+dashboard.ID, nil, http.StatusNoContent)
 	requestJSON[any](t, handler, http.MethodDelete, "/api/dashboards/"+dashboard.ID, nil, http.StatusNoContent)
 }
 

@@ -1,0 +1,194 @@
+- link "Skip to content":
+  - /url: "#skip-nav"
+- navigation:
+  - link "Back to app":
+    - /url: /leozhengliu
+    - text: Back to app
+  - generic "Search settings":
+    - search "Search…"
+  - heading "Personal" [level=2]:
+    - generic: Personal
+  - link "Preferences":
+    - /url: /leozhengliu/settings/account/preferences
+    - generic: Preferences
+  - link "Profile":
+    - /url: /leozhengliu/settings/account/profile
+    - generic: Profile
+  - link "Notifications":
+    - /url: /leozhengliu/settings/account/notifications
+    - generic: Notifications
+  - link "Code & reviews":
+    - /url: /leozhengliu/settings/account/code-and-reviews
+    - generic: Code & reviews
+  - link "Security & access":
+    - /url: /leozhengliu/settings/account/security
+    - generic: Security & access
+  - link "Connected accounts":
+    - /url: /leozhengliu/settings/account/connections
+    - generic: Connected accounts
+  - link "Agent personalization":
+    - /url: /leozhengliu/settings/account/agents
+    - generic: Agent personalization
+  - heading "Issues" [level=2]:
+    - generic: Issues
+  - link "Labels":
+    - /url: /leozhengliu/settings/issue-labels
+    - generic: Labels
+  - link "Templates":
+    - /url: /leozhengliu/settings/issue-templates
+    - generic: Templates
+  - link "SLAs":
+    - /url: /leozhengliu/settings/sla
+    - generic: SLAs
+  - heading "Projects" [level=2]:
+    - generic: Projects
+  - link "Labels":
+    - /url: /leozhengliu/settings/project-labels
+    - generic: Labels
+  - link "Templates":
+    - /url: /leozhengliu/settings/project-templates
+    - generic: Templates
+  - link "Statuses":
+    - /url: /leozhengliu/settings/project-statuses
+    - generic: Statuses
+  - link "Updates":
+    - /url: /leozhengliu/settings/project-updates
+    - generic: Updates
+  - heading "Features" [level=2]:
+    - generic: Features
+  - link "AI & Agents":
+    - /url: /leozhengliu/settings/ai
+    - generic: AI & Agents
+  - link "Initiatives":
+    - /url: /leozhengliu/settings/initiatives
+    - generic: Initiatives
+  - link "Documents":
+    - /url: /leozhengliu/settings/documents
+    - generic: Documents
+  - link "Customer requests":
+    - /url: /leozhengliu/settings/customer-requests
+    - generic: Customer requests
+  - link "Releases":
+    - /url: /leozhengliu/settings/releases
+    - generic: Releases
+  - link "Pulse":
+    - /url: /leozhengliu/settings/pulse
+    - generic: Pulse
+  - link "Asks":
+    - /url: /leozhengliu/settings/asks
+    - generic: Asks
+  - link "Emojis":
+    - /url: /leozhengliu/settings/emojis
+    - generic: Emojis
+  - link "Integrations":
+    - /url: /leozhengliu/settings/integrations
+    - generic: Integrations
+  - heading "Administration" [level=2]:
+    - generic: Administration
+  - link "Workspace":
+    - /url: /leozhengliu/settings/workspace
+    - generic: Workspace
+  - link "Teams":
+    - /url: /leozhengliu/settings/teams
+    - generic: Teams
+  - link "Members":
+    - /url: /leozhengliu/settings/members
+    - generic: Members
+  - link "Security":
+    - /url: /leozhengliu/settings/security
+    - generic: Security
+  - link "API":
+    - /url: /leozhengliu/settings/api
+    - generic: API
+  - link "Applications":
+    - /url: /leozhengliu/settings/applications
+    - generic: Applications
+  - link "Billing":
+    - /url: /leozhengliu/settings/billing
+    - generic: Billing
+  - link "Usage & limits":
+    - /url: /leozhengliu/settings/usage
+    - generic: Usage & limits
+  - link "Import & export":
+    - /url: /leozhengliu/settings/import-export
+    - generic: Import & export
+  - heading "Your teams" [level=2]:
+    - generic: Your teams
+  - link "Leozhengliu":
+    - /url: /leozhengliu/settings/teams/LEO
+    - generic: Leozhengliu
+  - generic "Create a team":
+    - text: Create a team
+- button "Open Help menu":
+- generic "There are 19 days remaining in your workspace’s Business trial.":
+  - link "Business trial ends":
+    - /url: /leozhengliu/settings/billing/plans
+  - generic: Business trial ends
+  - generic: 19d
+- main:
+  - link "Notifications":
+    - /url: /leozhengliu/settings/account/notifications
+    - generic: Notifications
+  - text: Notifications
+  - generic: Desktop
+  - generic: Applies across all your desktop devices with notifications enabled
+  - list:
+    - generic: Desktop notifications require an installation of Linear Desktop
+    - button "Download desktop app":
+      - text: Get Linear Desktop
+  - generic: General notifications
+  - list:
+    - generic: Assignments
+    - generic: Assignments, unassignments, and membership changes
+    - checkbox "Assignments" [checked] [disabled]
+    - generic: Status changes
+    - generic: Changes to the status, priority, and blocking relationships of issues
+    - checkbox "Status changes" [checked] [disabled]
+    - generic: Comments and replies
+    - generic: Comments, replies, and thread resolutions
+    - checkbox "Comments and replies" [checked] [disabled]
+    - generic: Mentions
+    - generic: Mentions in comments or content
+    - checkbox "Mentions" [checked] [disabled]
+    - generic: Reactions
+    - generic: Emoji reactions to your content
+    - checkbox "Reactions" [disabled]
+    - generic: Subscriptions
+    - generic: Issues, projects, initiatives, teams, and views you're subscribed to
+    - checkbox "Subscriptions" [checked] [disabled]
+    - generic: Document changes
+    - generic: Changes to document content, location, and subscriptions
+    - checkbox "Document changes" [checked] [disabled]
+    - generic: Updates
+    - generic: New project & initiative updates and reminders to post an update
+    - checkbox "Updates" [checked] [disabled]
+    - generic: Reminders and deadlines
+    - generic: Reminders, due dates, and SLA updates
+    - checkbox "Reminders and deadlines" [checked] [disabled]
+    - generic: Loops
+    - generic: Messages, responses, and failures from loops
+    - checkbox "Loops" [checked] [disabled]
+    - generic: Apps and integrations
+    - generic: Requests related to OAuth apps and integrations
+    - checkbox "Apps and integrations" [checked] [disabled]
+    - generic: Billing
+    - generic: Usage credit balance alerts
+    - checkbox "Billing" [checked] [disabled]
+  - generic: Feature notifications
+  - list:
+    - generic: Reviews
+    - generic: Activity in reviews, including mentions and comments
+    - checkbox "Reviews" [checked] [disabled]
+    - generic: Customer requests
+    - generic: Requests from your customers
+    - checkbox "Customer requests" [checked] [disabled]
+    - generic: Triage
+    - generic: Issues added to triage
+    - checkbox "Triage" [checked] [disabled]
+- button "Update loop":
+  - generic "Update loop"
+- button "Agent":
+  - generic: Agent
+- button "Chat history":
+- region "Notifications alt+T"
+- status
