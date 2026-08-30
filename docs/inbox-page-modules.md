@@ -1,6 +1,6 @@
 # Flow Inbox page module map
 
-Reference: signed-in `https://flow.app/cleantrack/inbox`, captured on 2026-08-13. The inspection used visible DOM, computed styles, screenshots, and production SVG paths. It did not inspect cookies, Local Storage, authentication headers, or credentials.
+Reference: signed-in `https://flow.app/acme/inbox`, captured on 2026-08-13. The inspection used visible DOM, computed styles, screenshots, and production SVG paths. It did not inspect cookies, Local Storage, authentication headers, or credentials.
 
 ## Module order
 

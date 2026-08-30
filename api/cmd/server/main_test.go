@@ -20,7 +20,7 @@ import (
 )
 
 func TestWorkspaceSettingsPersistence(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestWorkspaceSettingsPersistence(t *testing.T) {
 }
 
 func TestDevelopmentMemberLifecycle(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,14 +50,14 @@ func TestDevelopmentMemberLifecycle(t *testing.T) {
 		t.Fatalf("development member projection missing: members=%d users=%d teamMembers=%d", len(bootstrap.Members), len(bootstrap.Users), len(bootstrap.TeamMembers))
 	}
 	target := bootstrap.Users[1]
-	updated := requestJSON[domain.WorkspaceMember](t, handler, http.MethodPatch, "/api/workspaces/cleantrack/members/"+target.ID, map[string]any{"role": "admin", "displayName": "Updated member", "username": "updated.member", "email": "updated.member@example.com"}, http.StatusOK)
+	updated := requestJSON[domain.WorkspaceMember](t, handler, http.MethodPatch, "/api/workspaces/test-workspace/members/"+target.ID, map[string]any{"role": "admin", "displayName": "Updated member", "username": "updated.member", "email": "updated.member@example.com"}, http.StatusOK)
 	if updated.Role != "admin" || updated.User.DisplayName != "Updated member" || updated.User.Name != "updated.member" || updated.User.Email != "updated.member@example.com" {
 		t.Fatalf("member update failed: %#v", updated)
 	}
-	requestJSON[any](t, handler, http.MethodPut, "/api/workspaces/cleantrack/teams/"+bootstrap.Teams[0].ID+"/members/"+target.ID, map[string]any{"member": false, "role": "member"}, http.StatusNoContent)
-	requestJSON[any](t, handler, http.MethodPost, "/api/workspaces/cleantrack/members/"+target.ID+"/suspend", nil, http.StatusNoContent)
-	requestJSON[any](t, handler, http.MethodPost, "/api/workspaces/cleantrack/members/"+target.ID+"/resume", nil, http.StatusNoContent)
-	invitations := requestJSON[[]domain.Invitation](t, handler, http.MethodPost, "/api/workspaces/cleantrack/invitations", map[string]any{"emails": []string{"new.member@example.com"}, "role": "member", "teamIds": []string{bootstrap.Teams[0].ID}}, http.StatusCreated)
+	requestJSON[any](t, handler, http.MethodPut, "/api/workspaces/test-workspace/teams/"+bootstrap.Teams[0].ID+"/members/"+target.ID, map[string]any{"member": false, "role": "member"}, http.StatusNoContent)
+	requestJSON[any](t, handler, http.MethodPost, "/api/workspaces/test-workspace/members/"+target.ID+"/suspend", nil, http.StatusNoContent)
+	requestJSON[any](t, handler, http.MethodPost, "/api/workspaces/test-workspace/members/"+target.ID+"/resume", nil, http.StatusNoContent)
+	invitations := requestJSON[[]domain.Invitation](t, handler, http.MethodPost, "/api/workspaces/test-workspace/invitations", map[string]any{"emails": []string{"new.member@example.com"}, "role": "member", "teamIds": []string{bootstrap.Teams[0].ID}}, http.StatusCreated)
 	if len(invitations) != 1 || invitations[0].Token == "" {
 		t.Fatalf("development invitation failed: %#v", invitations)
 	}
@@ -65,15 +65,15 @@ func TestDevelopmentMemberLifecycle(t *testing.T) {
 	if preview["email"] != "new.member@example.com" {
 		t.Fatalf("invitation preview = %#v", preview)
 	}
-	resent := requestJSON[domain.Invitation](t, handler, http.MethodPost, "/api/workspaces/cleantrack/invitations/"+invitations[0].ID+"/resend", nil, http.StatusOK)
+	resent := requestJSON[domain.Invitation](t, handler, http.MethodPost, "/api/workspaces/test-workspace/invitations/"+invitations[0].ID+"/resend", nil, http.StatusOK)
 	if resent.Token == "" || resent.Token == invitations[0].Token {
 		t.Fatalf("invitation token was not rotated: %#v", resent)
 	}
-	requestJSON[any](t, handler, http.MethodDelete, "/api/workspaces/cleantrack/invitations/"+invitations[0].ID, nil, http.StatusNoContent)
+	requestJSON[any](t, handler, http.MethodDelete, "/api/workspaces/test-workspace/invitations/"+invitations[0].ID, nil, http.StatusNoContent)
 }
 
 func TestTeamCreationHierarchyCopyAndDelete(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,8 +82,8 @@ func TestTeamCreationHierarchyCopyAndDelete(t *testing.T) {
 	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	source := bootstrap.Teams[0]
 	requestJSON[domain.TeamSettings](t, handler, http.MethodPatch, "/api/teams/"+source.ID+"/settings", map[string]any{"timezone": "Asia/Shanghai", "progressOrder": "last"}, http.StatusOK)
-	parent := requestJSON[domain.Team](t, handler, http.MethodPost, "/api/workspaces/cleantrack/teams", map[string]any{"name": "Platform", "key": "PLT", "private": true, "copyFromTeamId": source.ID, "timezone": "Europe/London"}, http.StatusCreated)
-	child := requestJSON[domain.Team](t, handler, http.MethodPost, "/api/workspaces/cleantrack/teams", map[string]any{"name": "Runtime", "key": "RUN", "parentTeamId": parent.ID}, http.StatusCreated)
+	parent := requestJSON[domain.Team](t, handler, http.MethodPost, "/api/workspaces/test-workspace/teams", map[string]any{"name": "Platform", "key": "PLT", "private": true, "copyFromTeamId": source.ID, "timezone": "Europe/London"}, http.StatusCreated)
+	child := requestJSON[domain.Team](t, handler, http.MethodPost, "/api/workspaces/test-workspace/teams", map[string]any{"name": "Runtime", "key": "RUN", "parentTeamId": parent.ID}, http.StatusCreated)
 	afterCreate := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	if afterCreate.TeamSettings[parent.ID].Timezone != "Europe/London" || afterCreate.TeamSettings[parent.ID].ProgressOrder != "last" || afterCreate.TeamSettings[child.ID].ParentTeamID != parent.ID {
 		t.Fatalf("team settings were not copied: parent=%#v child=%#v", afterCreate.TeamSettings[parent.ID], afterCreate.TeamSettings[child.ID])
@@ -94,13 +94,13 @@ func TestTeamCreationHierarchyCopyAndDelete(t *testing.T) {
 		t.Fatal("team workflow or owner membership was not copied")
 	}
 	parentIssue := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Retirement coverage", "teamId": parent.ID}, http.StatusCreated)
-	requestJSON[domain.Team](t, handler, http.MethodPatch, "/api/workspaces/cleantrack/teams/"+parent.ID, map[string]any{"retired": true}, http.StatusOK)
+	requestJSON[domain.Team](t, handler, http.MethodPatch, "/api/workspaces/test-workspace/teams/"+parent.ID, map[string]any{"retired": true}, http.StatusOK)
 	requestJSON[any](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Blocked on retired team", "teamId": parent.ID}, http.StatusBadRequest)
 	requestJSON[any](t, handler, http.MethodPatch, "/api/issues/"+parentIssue.ID, map[string]any{"priority": 2}, http.StatusBadRequest)
-	requestJSON[domain.Team](t, handler, http.MethodPatch, "/api/workspaces/cleantrack/teams/"+parent.ID, map[string]any{"retired": false}, http.StatusOK)
+	requestJSON[domain.Team](t, handler, http.MethodPatch, "/api/workspaces/test-workspace/teams/"+parent.ID, map[string]any{"retired": false}, http.StatusOK)
 	requestJSON[any](t, handler, http.MethodPatch, "/api/teams/"+parent.ID+"/settings", map[string]any{"parentTeamId": child.ID}, http.StatusBadRequest)
 	issue := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Deleted with team", "teamId": child.ID}, http.StatusCreated)
-	requestJSON[any](t, handler, http.MethodDelete, "/api/workspaces/cleantrack/teams/"+child.ID, nil, http.StatusNoContent)
+	requestJSON[any](t, handler, http.MethodDelete, "/api/workspaces/test-workspace/teams/"+child.ID, nil, http.StatusNoContent)
 	afterDelete := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	if slices.ContainsFunc(afterDelete.Teams, func(team domain.Team) bool { return team.ID == child.ID }) || slices.ContainsFunc(afterDelete.Issues, func(item domain.Issue) bool { return item.ID == issue.ID }) || slices.ContainsFunc(afterDelete.TeamMembers, func(member domain.TeamMember) bool { return member.TeamID == child.ID }) {
 		t.Fatal("team deletion left owned resources behind")
@@ -108,7 +108,7 @@ func TestTeamCreationHierarchyCopyAndDelete(t *testing.T) {
 }
 
 func TestWorkspaceRegionSelectorCanBeDisabled(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func TestWorkspaceRegionSelectorCanBeDisabled(t *testing.T) {
 }
 
 func TestIssueStateTransitionsPersistInsightTimestamps(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestIssueStateTransitionsPersistInsightTimestamps(t *testing.T) {
 }
 
 func TestDeleteAllDraftsOnlyRemovesViewerDrafts(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +177,7 @@ func TestDeleteAllDraftsOnlyRemovesViewerDrafts(t *testing.T) {
 }
 
 func TestLabelGroupArchiveCascadesToChildLabels(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +217,7 @@ func TestLabelGroupArchiveCascadesToChildLabels(t *testing.T) {
 }
 
 func TestWorkspaceLabelMovesBetweenGroups(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +250,7 @@ func TestWorkspaceLabelMovesBetweenGroups(t *testing.T) {
 }
 
 func TestDeletingLabelGroupDeletesChildrenAndReferences(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +299,7 @@ func TestDeletingLabelGroupDeletesChildrenAndReferences(t *testing.T) {
 }
 
 func TestMoveWorkspaceLabelToTeamsPreservesIssueAssignments(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +311,7 @@ func TestMoveWorkspaceLabelToTeamsPreservesIssueAssignments(t *testing.T) {
 		t.Fatal("seed must include issues")
 	}
 	first := before.Issues[0]
-	secondTeam := requestJSON[domain.Team](t, handler, http.MethodPost, "/api/workspaces/cleantrack/teams", map[string]any{"name": "Second team", "key": "SEC"}, http.StatusCreated)
+	secondTeam := requestJSON[domain.Team](t, handler, http.MethodPost, "/api/workspaces/test-workspace/teams", map[string]any{"name": "Second team", "key": "SEC"}, http.StatusCreated)
 	second := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Second team issue", "description": "Move label coverage", "teamId": secondTeam.ID}, http.StatusCreated)
 	label := requestJSON[domain.IssueLabel](t, handler, http.MethodPost, "/api/labels", map[string]any{
 		"name": "Shared test label", "resourceType": "issue",
@@ -362,7 +362,7 @@ func TestMoveWorkspaceLabelToTeamsPreservesIssueAssignments(t *testing.T) {
 }
 
 func TestIssueLifecycle(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -372,7 +372,7 @@ func TestIssueLifecycle(t *testing.T) {
 
 	created := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{
 		"title": "Issue engine test", "description": "Initial", "stateId": "state_todo", "priority": 2, "estimate": 5, "recurrence": "weekly", "nextOccurrenceAt": "2026-09-08T00:00:00Z",
-		"assigneeId": "usr_zheng", "projectId": "project_cruise", "dueDate": "2026-09-01", "labelIds": []string{"label_type_defect"},
+		"assigneeId": "usr_admin", "projectId": "project_cruise", "dueDate": "2026-09-01", "labelIds": []string{"label_type_defect"},
 		"descriptionState": `{"type":"doc","content":[{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Initial"}]}]}`,
 		"descriptionData":  map[string]any{"type": "doc", "content": []any{map[string]any{"type": "heading", "attrs": map[string]any{"level": 2}}}}, "contentState": "CREATE_STATE",
 	}, http.StatusCreated)
@@ -400,7 +400,7 @@ func TestIssueLifecycle(t *testing.T) {
 	}
 
 	updated := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+created.ID, map[string]any{
-		"title": "Autosaved title", "description": "Autosaved description", "estimate": 8, "subscriberIds": []string{"usr_zheng", "usr_jiaozongben"},
+		"title": "Autosaved title", "description": "Autosaved description", "estimate": 8, "subscriberIds": []string{"usr_admin", "usr_member"},
 		"descriptionState": `{"type":"doc","content":[{"type":"paragraph"}]}`,
 		"descriptionData":  map[string]any{"type": "doc", "content": []any{map[string]any{"type": "paragraph"}}}, "contentState": "AQID",
 	}, http.StatusOK)
@@ -498,7 +498,7 @@ func TestIssueLifecycle(t *testing.T) {
 }
 
 func TestIssueOptionsPersistence(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -519,9 +519,9 @@ func TestIssueOptionsPersistence(t *testing.T) {
 	}
 
 	link := requestJSON[domain.Attachment](t, handler, http.MethodPost, "/api/issues/"+issue.ID+"/links", map[string]any{
-		"url": "https://linear.app/docs", "title": "Linear docs",
+		"url": "https://example.test/docs", "title": "Reference docs",
 	}, http.StatusCreated)
-	if link.ContentType != "text/uri-list" || link.Title != "Linear docs" || link.URL != "https://linear.app/docs" {
+	if link.ContentType != "text/uri-list" || link.Title != "Reference docs" || link.URL != "https://example.test/docs" {
 		t.Fatalf("issue link = %#v", link)
 	}
 
@@ -616,7 +616,7 @@ func TestIssueOptionsPersistence(t *testing.T) {
 }
 
 func TestSearchHistoryRecentResourcesAndConcurrentIssuePatches(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -696,14 +696,14 @@ func TestWorkspaceSearchIndexesUnifiedResourceTypes(t *testing.T) {
 
 func TestRealtimeHubWorkspaceIsolationAndPresence(t *testing.T) {
 	hub := newRealtimeHub()
-	cleantrack, unsubscribeCleantrack := hub.subscribe("cleantrack")
-	defer unsubscribeCleantrack()
+	testWorkspace, unsubscribeTestWorkspace := hub.subscribe("test-workspace")
+	defer unsubscribeTestWorkspace()
 	other, unsubscribeOther := hub.subscribe("other")
 	defer unsubscribeOther()
 	event := domain.RealtimeEvent{ID: "event_1", Type: "issue.updated", AggregateID: "issue_1", CreatedAt: time.Now().UTC()}
-	hub.publish("cleantrack", event)
+	hub.publish("test-workspace", event)
 	select {
-	case received := <-cleantrack:
+	case received := <-testWorkspace:
 		if received.ID != event.ID {
 			t.Fatalf("received event = %#v", received)
 		}
@@ -717,20 +717,20 @@ func TestRealtimeHubWorkspaceIsolationAndPresence(t *testing.T) {
 	}
 
 	viewer := domain.User{ID: "user_1", DisplayName: "Viewer"}
-	presence := hub.updatePresence("cleantrack", "client_1", viewer, "issue_1", "/cleantrack/issue/CLE-1")
+	presence := hub.updatePresence("test-workspace", "client_1", viewer, "issue_1", "/test-workspace/issue/TST-1")
 	if len(presence) != 1 || presence[0].ClientID != "client_1" || presence[0].IssueID != "issue_1" {
 		t.Fatalf("presence = %#v", presence)
 	}
 	if got := hub.snapshotPresence("other"); len(got) != 0 {
 		t.Fatalf("presence leaked across workspaces: %#v", got)
 	}
-	if got := hub.removePresence("cleantrack", "client_1"); len(got) != 0 {
+	if got := hub.removePresence("test-workspace", "client_1"); len(got) != 0 {
 		t.Fatalf("presence was not removed: %#v", got)
 	}
 }
 
 func TestPulsePreferencesViewsAndUpdateAttachments(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -799,14 +799,14 @@ func uploadPulseAttachmentForTest(t *testing.T, handler http.Handler, path, name
 }
 
 func TestCyclePlanningAndRollover(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer repository.Close()
 	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
 	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
-	if len(bootstrap.Cycles) < 3 || !bootstrap.CycleSettings["team_cleantrack"].Enabled {
+	if len(bootstrap.Cycles) < 3 || !bootstrap.CycleSettings["team_test"].Enabled {
 		t.Fatalf("cycle bootstrap missing: cycles=%#v settings=%#v", bootstrap.Cycles, bootstrap.CycleSettings)
 	}
 	var current, upcoming domain.Cycle
@@ -838,7 +838,7 @@ func TestCyclePlanningAndRollover(t *testing.T) {
 	if rolled.CycleID == nil || *rolled.CycleID != upcoming.ID {
 		t.Fatalf("issue did not roll over: %#v", rolled.CycleID)
 	}
-	settings := requestJSON[domain.CycleSettings](t, handler, http.MethodPatch, "/api/teams/team_cleantrack/cycle-settings", map[string]any{"durationWeeks": 3, "upcomingCount": 3, "autoAddStarted": true}, http.StatusOK)
+	settings := requestJSON[domain.CycleSettings](t, handler, http.MethodPatch, "/api/teams/team_test/cycle-settings", map[string]any{"durationWeeks": 3, "upcomingCount": 3, "autoAddStarted": true}, http.StatusOK)
 	if settings.DurationWeeks != 3 || settings.UpcomingCount != 3 || !settings.AutoAddStarted {
 		t.Fatalf("cycle settings update failed: %#v", settings)
 	}
@@ -863,7 +863,7 @@ func TestCyclePlanningAndRollover(t *testing.T) {
 }
 
 func TestProjectLifecycle(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -872,7 +872,7 @@ func TestProjectLifecycle(t *testing.T) {
 
 	created := requestJSON[domain.Project](t, handler, http.MethodPost, "/api/projects", map[string]any{
 		"name": "Project API test", "summary": "Initial", "priority": 2, "health": "onTrack",
-		"leadId": "usr_zheng", "teamIds": []string{"team_cleantrack"},
+		"leadId": "usr_admin", "teamIds": []string{"team_test"},
 	}, http.StatusCreated)
 	if created.ID == "" || created.Name != "Project API test" || created.Icon != "Project" || created.Priority != 2 || created.Lead == nil {
 		t.Fatalf("project create failed: %#v", created)
@@ -880,9 +880,9 @@ func TestProjectLifecycle(t *testing.T) {
 
 	updated := requestJSON[domain.Project](t, handler, http.MethodPatch, "/api/projects/"+created.ID, map[string]any{
 		"name": "Updated project", "health": "atRisk", "targetDate": "2026-09-30", "statusId": "ps_planned",
-		"memberIds": []string{"usr_zheng", "usr_jiaozongben"}, "labelIds": []string{"label_delivery"}, "description": "First project description", "updateCadence": "weekly",
+		"memberIds": []string{"usr_admin", "usr_member"}, "labelIds": []string{"label_delivery"}, "description": "First project description", "updateCadence": "weekly",
 	}, http.StatusOK)
-	if updated.Name != "Updated project" || updated.Health != "atRisk" || updated.Status.ID != "ps_planned" || updated.TargetDate == nil || *updated.TargetDate != "2026-09-30" || !slices.Equal(updated.MemberIDs, []string{"usr_zheng", "usr_jiaozongben"}) || !slices.Equal(updated.LabelIDs, []string{"label_delivery"}) {
+	if updated.Name != "Updated project" || updated.Health != "atRisk" || updated.Status.ID != "ps_planned" || updated.TargetDate == nil || *updated.TargetDate != "2026-09-30" || !slices.Equal(updated.MemberIDs, []string{"usr_admin", "usr_member"}) || !slices.Equal(updated.LabelIDs, []string{"label_delivery"}) {
 		t.Fatalf("project update failed: %#v", updated)
 	}
 	updated = requestJSON[domain.Project](t, handler, http.MethodPatch, "/api/projects/"+created.ID, map[string]any{"description": "Second project description"}, http.StatusOK)
@@ -903,9 +903,9 @@ func TestProjectLifecycle(t *testing.T) {
 		t.Fatalf("project resource create failed: %#v", resource)
 	}
 	resource = requestJSON[domain.ProjectResource](t, handler, http.MethodPatch, "/api/projects/"+created.ID+"/resources/"+resource.ID, map[string]any{
-		"title": "Edited brief", "url": "https://example.com/edited", "pinnedTeamIds": []string{"team_cleantrack"},
+		"title": "Edited brief", "url": "https://example.com/edited", "pinnedTeamIds": []string{"team_test"},
 	}, http.StatusOK)
-	if resource.Title != "Edited brief" || resource.URL != "https://example.com/edited" || !slices.Equal(resource.PinnedTeamIDs, []string{"team_cleantrack"}) {
+	if resource.Title != "Edited brief" || resource.URL != "https://example.com/edited" || !slices.Equal(resource.PinnedTeamIDs, []string{"team_test"}) {
 		t.Fatalf("project resource update failed: %#v", resource)
 	}
 	requestJSON[any](t, handler, http.MethodPatch, "/api/projects/"+created.ID+"/resources/"+resource.ID, map[string]any{"pinnedTeamIds": []string{"missing-team"}}, http.StatusBadRequest)
@@ -949,7 +949,7 @@ func TestProjectLifecycle(t *testing.T) {
 	comment := requestJSON[domain.Comment](t, handler, http.MethodPost, "/api/projects/"+created.ID+"/comments", map[string]any{
 		"body": "Project-level discussion persists.",
 	}, http.StatusCreated)
-	if comment.ID == "" || comment.Body != "Project-level discussion persists." || comment.User.ID != "usr_zheng" {
+	if comment.ID == "" || comment.Body != "Project-level discussion persists." || comment.User.ID != "usr_admin" {
 		t.Fatalf("project comment create failed: %#v", comment)
 	}
 	bootstrapAfterDetails := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
@@ -980,7 +980,7 @@ func TestProjectLifecycle(t *testing.T) {
 	projectUpdate = requestJSON[domain.ProjectUpdate](t, handler, http.MethodPost, "/api/projects/"+created.ID+"/updates/"+projectUpdate.ID+"/reactions", map[string]any{
 		"emoji": "👍",
 	}, http.StatusOK)
-	if !slices.Equal(projectUpdate.Reactions["👍"], []string{"usr_zheng"}) {
+	if !slices.Equal(projectUpdate.Reactions["👍"], []string{"usr_admin"}) {
 		t.Fatalf("project update reaction failed: %#v", projectUpdate)
 	}
 	bootstrapAfterUpdate := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
@@ -1030,7 +1030,7 @@ func TestProjectLifecycle(t *testing.T) {
 }
 
 func TestCustomerLifecycle(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1038,10 +1038,10 @@ func TestCustomerLifecycle(t *testing.T) {
 	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
 
 	created := requestJSON[domain.Customer](t, handler, http.MethodPost, "/api/customers", map[string]any{
-		"name": "Customer API test", "ownerId": "usr_zheng", "status": "active", "tier": "Enterprise",
+		"name": "Customer API test", "ownerId": "usr_admin", "status": "active", "tier": "Enterprise",
 		"annualRevenue": 250000, "size": 120, "domains": []string{"example.com", "example.org"},
 	}, http.StatusCreated)
-	if created.ID == "" || created.Name != "Customer API test" || created.OwnerID != "usr_zheng" || created.Status != "active" || created.Tier != "Enterprise" || created.AnnualRevenue != 250000 || created.Size != 120 || !slices.Equal(created.Domains, []string{"example.com", "example.org"}) {
+	if created.ID == "" || created.Name != "Customer API test" || created.OwnerID != "usr_admin" || created.Status != "active" || created.Tier != "Enterprise" || created.AnnualRevenue != 250000 || created.Size != 120 || !slices.Equal(created.Domains, []string{"example.com", "example.org"}) {
 		t.Fatalf("customer create failed: %#v", created)
 	}
 
@@ -1077,7 +1077,7 @@ func TestCustomerLifecycle(t *testing.T) {
 }
 
 func TestInitiativeLifecycle(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1086,9 +1086,9 @@ func TestInitiativeLifecycle(t *testing.T) {
 
 	created := requestJSON[domain.Initiative](t, handler, http.MethodPost, "/api/initiatives", map[string]any{
 		"name": "Initiative API test", "summary": "Initial", "status": "planned", "priority": 2,
-		"ownerId": "usr_zheng", "targetDate": "2026-12-31", "projectIds": []string{"project_cruise"}, "leadTeamId": "team_cleantrack", "contributingTeamIds": []string{"team_cleantrack"},
+		"ownerId": "usr_admin", "targetDate": "2026-12-31", "projectIds": []string{"project_cruise"}, "leadTeamId": "team_test", "contributingTeamIds": []string{"team_test"},
 	}, http.StatusCreated)
-	if created.ID == "" || created.Status != "planned" || created.Priority != 2 || created.Owner == nil || created.LeadTeamID != "team_cleantrack" || !slices.Equal(created.ContributingTeamIDs, []string{"team_cleantrack"}) || !slices.Equal(created.ProjectIDs, []string{"project_cruise"}) {
+	if created.ID == "" || created.Status != "planned" || created.Priority != 2 || created.Owner == nil || created.LeadTeamID != "team_test" || !slices.Equal(created.ContributingTeamIDs, []string{"team_test"}) || !slices.Equal(created.ProjectIDs, []string{"project_cruise"}) {
 		t.Fatalf("initiative create failed: %#v", created)
 	}
 	initiativeLabel := requestJSON[domain.IssueLabel](t, handler, http.MethodPost, "/api/labels", map[string]any{
@@ -1130,7 +1130,7 @@ func TestInitiativeLifecycle(t *testing.T) {
 		t.Fatalf("initiative comment update failed: %#v", comment)
 	}
 	comment = requestJSON[domain.Comment](t, handler, http.MethodPost, "/api/initiatives/"+created.ID+"/comments/"+comment.ID+"/reactions", map[string]string{"emoji": "thumbs-up"}, http.StatusOK)
-	if !slices.Equal(comment.Reactions["thumbs-up"], []string{"usr_zheng"}) {
+	if !slices.Equal(comment.Reactions["thumbs-up"], []string{"usr_admin"}) {
 		t.Fatalf("initiative comment reaction failed: %#v", comment)
 	}
 	requestJSON[any](t, handler, http.MethodDelete, "/api/initiatives/"+created.ID+"/comments/"+comment.ID, nil, http.StatusNoContent)
@@ -1144,11 +1144,11 @@ func TestInitiativeLifecycle(t *testing.T) {
 		t.Fatalf("initiative update comment failed: %#v", initiativeUpdate)
 	}
 	initiativeUpdate = requestJSON[domain.InitiativeUpdate](t, handler, http.MethodPost, "/api/initiatives/"+created.ID+"/updates/"+initiativeUpdate.ID+"/reactions", map[string]string{"emoji": "thumbs-up"}, http.StatusOK)
-	if !slices.Equal(initiativeUpdate.Reactions["thumbs-up"], []string{"usr_zheng"}) {
+	if !slices.Equal(initiativeUpdate.Reactions["thumbs-up"], []string{"usr_admin"}) {
 		t.Fatalf("initiative update reaction failed: %#v", initiativeUpdate)
 	}
 	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
-	if len(bootstrap.InitiativeUpdates[created.ID]) != 1 || len(bootstrap.InitiativeUpdates[created.ID][0].Comments) != 1 || !slices.Equal(bootstrap.InitiativeUpdates[created.ID][0].Reactions["thumbs-up"], []string{"usr_zheng"}) || !slices.ContainsFunc(bootstrap.Projects, func(project domain.Project) bool {
+	if len(bootstrap.InitiativeUpdates[created.ID]) != 1 || len(bootstrap.InitiativeUpdates[created.ID][0].Comments) != 1 || !slices.Equal(bootstrap.InitiativeUpdates[created.ID][0].Reactions["thumbs-up"], []string{"usr_admin"}) || !slices.ContainsFunc(bootstrap.Projects, func(project domain.Project) bool {
 		return project.ID == "project_cruise" && slices.Contains(project.Initiatives, created.ID)
 	}) {
 		t.Fatalf("initiative bootstrap projection failed: %#v", bootstrap.InitiativeUpdates[created.ID])
@@ -1167,7 +1167,7 @@ func TestInitiativeLifecycle(t *testing.T) {
 		t.Fatalf("deleted initiative was not retained in trash: %#v", deletedBootstrap.Trash)
 	}
 	restored := requestJSON[domain.Initiative](t, handler, http.MethodPost, "/api/trash/"+deletedBootstrap.Trash[trashIndex].ID+"/restore", nil, http.StatusOK)
-	if restored.ID != created.ID || restored.LeadTeamID != "team_cleantrack" {
+	if restored.ID != created.ID || restored.LeadTeamID != "team_test" {
 		t.Fatalf("initiative restore failed: %#v", restored)
 	}
 	events := requestJSON[[]domain.DomainEvent](t, handler, http.MethodGet, "/api/events?aggregateId="+created.ID, nil, http.StatusOK)
@@ -1183,7 +1183,7 @@ func TestInitiativeLifecycle(t *testing.T) {
 }
 
 func TestIssueBoardOrderAndSavedViewLifecycle(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1205,7 +1205,7 @@ func TestIssueBoardOrderAndSavedViewLifecycle(t *testing.T) {
 	}
 
 	created := requestJSON[domain.SavedView](t, handler, http.MethodPost, "/api/views", map[string]any{
-		"name": "Board triage", "description": "Urgent work", "resource": "projects", "scope": "team", "teamId": "team_cleantrack", "view": "active",
+		"name": "Board triage", "description": "Urgent work", "resource": "projects", "scope": "team", "teamId": "team_test", "view": "active",
 		"icon": "Rocket", "color": "#26b5ce",
 		"filters":  []any{map[string]any{"field": "priority", "values": []any{map[string]any{"id": "1", "label": "Urgent"}}}},
 		"display":  map[string]any{"layout": "board", "grouping": "status", "properties": []string{"id", "priority"}},
@@ -1224,10 +1224,10 @@ func TestIssueBoardOrderAndSavedViewLifecycle(t *testing.T) {
 	}
 	requestJSON[any](t, handler, http.MethodDelete, "/api/views/"+initiativeView.ID, nil, http.StatusNoContent)
 	updatedView := requestJSON[domain.SavedView](t, handler, http.MethodPatch, "/api/views/"+created.ID, map[string]any{
-		"name": "Board triage updated", "description": "Current urgent work", "scope": "personal", "teamId": "", "ownerId": "usr_jiaozongben", "favorite": true, "subscribed": true,
+		"name": "Board triage updated", "description": "Current urgent work", "scope": "personal", "teamId": "", "ownerId": "usr_member", "favorite": true, "subscribed": true,
 		"icon": "Face", "color": "#eb5757", "insights": map[string]any{"measure": "issueCount", "slice": "project", "segment": "none"},
 	}, http.StatusOK)
-	if updatedView.Name != "Board triage updated" || updatedView.Description != "Current urgent work" || updatedView.Icon != "Face" || updatedView.Color != "#eb5757" || updatedView.Scope != "personal" || updatedView.TeamID != "" || updatedView.OwnerID != "usr_jiaozongben" || !updatedView.Favorite || !updatedView.Subscribed || string(updatedView.Display) != string(created.Display) || string(updatedView.Insights) == string(created.Insights) {
+	if updatedView.Name != "Board triage updated" || updatedView.Description != "Current urgent work" || updatedView.Icon != "Face" || updatedView.Color != "#eb5757" || updatedView.Scope != "personal" || updatedView.TeamID != "" || updatedView.OwnerID != "usr_member" || !updatedView.Favorite || !updatedView.Subscribed || string(updatedView.Display) != string(created.Display) || string(updatedView.Insights) == string(created.Insights) {
 		t.Fatalf("saved view update = %#v", updatedView)
 	}
 	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
@@ -1256,7 +1256,7 @@ func TestIssueBoardOrderAndSavedViewLifecycle(t *testing.T) {
 }
 
 func TestSavedViewShareLifecycle(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1269,17 +1269,17 @@ func TestSavedViewShareLifecycle(t *testing.T) {
 	if token == "" {
 		t.Fatal("share token missing")
 	}
-	public := requestJSON[map[string]any](t, handler, http.MethodGet, "/api/shared/views/"+url.PathEscape(token)+"?workspace=cleantrack", nil, http.StatusOK)
+	public := requestJSON[map[string]any](t, handler, http.MethodGet, "/api/shared/views/"+url.PathEscape(token)+"?workspace=test-workspace", nil, http.StatusOK)
 	publicView, _ := public["view"].(map[string]any)
 	if publicView["id"] != view.ID {
 		t.Fatalf("public view id = %#v", publicView["id"])
 	}
 	requestJSON[any](t, handler, http.MethodDelete, "/api/views/"+view.ID+"/share", nil, http.StatusNoContent)
-	requestJSON[any](t, handler, http.MethodGet, "/api/shared/views/"+url.PathEscape(token)+"?workspace=cleantrack", nil, http.StatusNotFound)
+	requestJSON[any](t, handler, http.MethodGet, "/api/shared/views/"+url.PathEscape(token)+"?workspace=test-workspace", nil, http.StatusNotFound)
 }
 
 func TestInboxNotificationLifecycle(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

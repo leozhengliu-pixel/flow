@@ -98,6 +98,7 @@ func Load() (Config, error) {
 			MaxOpenConns:    integer("FLOW_DATABASE_MAX_OPEN_CONNS", 0),
 			MaxIdleConns:    integer("FLOW_DATABASE_MAX_IDLE_CONNS", 0),
 			ConnMaxLifetime: duration("FLOW_DATABASE_CONN_MAX_LIFETIME", 30*time.Minute),
+			MaxStateBytes:   integer("FLOW_WORKSPACE_STATE_MAX_BYTES", 64<<20),
 		},
 		Redis: coordination.Config{
 			Mode: value("FLOW_REDIS_MODE", "disabled"), URL: secret("FLOW_REDIS_URL"), Addrs: csvRaw(value("FLOW_REDIS_ADDRS", "")),
@@ -142,6 +143,9 @@ func (c Config) Validate() error {
 	}
 	if driver != "sqlite" && c.Database.URL == "" {
 		return fmt.Errorf("FLOW_DATABASE_URL is required when FLOW_DATABASE_DRIVER=%s", driver)
+	}
+	if c.Database.MaxStateBytes < 1<<20 {
+		return fmt.Errorf("FLOW_WORKSPACE_STATE_MAX_BYTES must be at least 1048576")
 	}
 	redisMode := strings.ToLower(strings.TrimSpace(c.Redis.Mode))
 	if redisMode != "disabled" && redisMode != "standalone" && redisMode != "cluster" {

@@ -78,6 +78,7 @@ docker compose up -d --build
 | `FLOW_DATABASE_DRIVER` | `sqlite` | `sqlite`、`postgres` 或 `mysql`。 |
 | `FLOW_DATABASE_PATH` | `data/flow.db` | SQLite 数据库路径。 |
 | `FLOW_DATABASE_URL` | 未设置 | PostgreSQL/MySQL 连接 URL。 |
+| `FLOW_WORKSPACE_STATE_MAX_BYTES` | `67108864` | 单个工作区序列化状态的最大字节数。 |
 | `FLOW_REDIS_MODE` | `disabled` | `disabled`、`standalone` 或 `cluster`；启用时必须使用 PostgreSQL/MySQL。 |
 | `FLOW_REDIS_URL` | 未设置 | Redis 连接 URL；也可使用 `FLOW_REDIS_ADDRS`。 |
 | `FLOW_STORAGE_DRIVER` | `local` | `local` 或 `s3`。 |
@@ -89,7 +90,7 @@ docker compose up -d --build
 | `FLOW_SMTP_PASSWORD` | 未设置 | SMTP 密码。 |
 | `FLOW_SMTP_FROM` | 未设置 | 账户邮件发件地址。 |
 | `FLOW_COOKIE_SECURE` | `false` | 强制使用安全 Cookie，生产环境应启用。 |
-| `FLOW_DEV_AUTH_TOKENS` | `true` | 在开发响应中返回账户操作令牌，生产环境必须关闭。 |
+| `FLOW_DEV_AUTH_TOKENS` | `false` | 在开发响应中返回账户操作令牌，仅可在隔离的本地开发环境中开启。 |
 | `FLOW_TRUST_PROXY_HEADERS` | `false` | 信任受控反向代理传入的转发信息。 |
 
 仅当可信代理会覆盖客户端传入的转发请求头时，才启用 `FLOW_TRUST_PROXY_HEADERS`。

@@ -35,7 +35,7 @@ func TestRealtimeOverflowCollapsesToResync(t *testing.T) {
 }
 
 func TestCollaborationSocketBroadcastsAndPersistsDocumentUpdates(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestCollaborationFrameRoundTrip(t *testing.T) {
 }
 
 func TestCollaborationSocketStandaloneDocumentJoin(t *testing.T) {
-	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func dialCollaborationSocket(t *testing.T, serverURL, clientID string) *websocke
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	url := strings.Replace(serverURL, "http://", "ws://", 1) + "/api/realtime/socket?workspace=cleantrack&clientId=" + clientID
+	url := strings.Replace(serverURL, "http://", "ws://", 1) + "/api/realtime/socket?workspace=test-workspace&clientId=" + clientID
 	connection, _, err := websocket.Dial(ctx, url, nil)
 	if err != nil {
 		t.Fatal(err)

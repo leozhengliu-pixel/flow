@@ -11,14 +11,20 @@ after the first tagged release.
 ### Fixed
 
 - Read authentication values from the submitted form so Chrome-autofilled credentials are handled reliably.
+- Disable development authentication tokens by default.
+- Remove workspace-specific data transformations and product defaults.
+- Upgrade the Go runtime and XML signature dependency to patched releases.
 
 ### Added
 
-- Linear-style Releases, Asks, team archive, and audit log workspace surfaces.
+- Releases, Asks, team archive, and audit log workspace surfaces.
 - Professional open source project documentation and community health files.
 - Apache License 2.0 licensing and attribution notice.
 - Continuous integration for the React and Go applications.
 - Automated dependency update configuration.
+- Frontend unit coverage, browser end-to-end tests, Go race/coverage gates, CodeQL, dependency auditing, and secret scanning.
+- Versioned database migrations and PostgreSQL, MySQL, Redis, and S3 integration tests.
+- Non-root, read-only container runtime with application health checks.
 
 ## 2026-08-17
 

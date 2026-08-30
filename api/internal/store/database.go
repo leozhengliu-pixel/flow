@@ -21,10 +21,12 @@ type DatabaseConfig struct {
 	Driver          string
 	URL             string
 	Path            string
-	SeedProfile     string
+	FixtureProfile  string
+	FixturePassword string
 	MaxOpenConns    int
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
+	MaxStateBytes   int
 }
 
 type sqlDatabase struct {
@@ -121,7 +123,11 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		db.Close()
 		return nil, fmt.Errorf("connect to %s database: %w", driver, err)
 	}
-	s := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: driver}, dialect: driver, seedProfile: strings.TrimSpace(config.SeedProfile)}
+	maxStateBytes := config.MaxStateBytes
+	if maxStateBytes <= 0 {
+		maxStateBytes = 64 << 20
+	}
+	s := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: driver}, dialect: driver, fixtureProfile: strings.TrimSpace(config.FixtureProfile), fixturePassword: config.FixturePassword, maxStateBytes: maxStateBytes}
 	if err := s.migrate(context.Background()); err != nil {
 		db.Close()
 		return nil, err
@@ -130,9 +136,11 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
-	if err := s.ensureAuthSeed(context.Background()); err != nil {
-		db.Close()
-		return nil, err
+	if strings.EqualFold(strings.TrimSpace(config.FixtureProfile), "test") {
+		if err := s.ensureAuthTestFixture(context.Background()); err != nil {
+			db.Close()
+			return nil, err
+		}
 	}
 	return s, nil
 }

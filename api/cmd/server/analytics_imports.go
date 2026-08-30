@@ -86,7 +86,7 @@ func (s *server) cancelImport(w http.ResponseWriter, r *http.Request) {
 
 // retryImport resets a failed or cancelled mapping job without dropping the
 // original uploaded rows. The caller must commit it again with an explicit
-// mapping; this mirrors Linear's recoverable background import workflow and
+// mapping; this mirrors Flow's recoverable background import workflow and
 // avoids silently replaying a partially successful import.
 func (s *server) retryImport(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

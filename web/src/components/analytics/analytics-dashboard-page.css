@@ -120,7 +120,7 @@
   border-radius: 8px;
   background: var(--theme-surface-1);
 }
-.insights-chart .linear-insight-graph {
+.insights-chart .flow-insight-graph {
   height: 270px;
 }
 .insights-table {
@@ -234,7 +234,7 @@
   .insights-chart {
     height: 260px;
   }
-  .insights-chart .linear-insight-graph {
+  .insights-chart .flow-insight-graph {
     height: 230px;
   }
   .insights-header a {

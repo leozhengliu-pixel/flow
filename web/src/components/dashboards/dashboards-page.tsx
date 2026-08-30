@@ -33,10 +33,10 @@ import { PropertyMenu } from "@/components/property/property-menu";
 import { LabelIcon, NoAssigneeIcon, StatusIcon, TeamIcon } from "@/components/issue/issue-icons";
 import { ViewsDirectoryHeader } from "@/components/views-page/views-directory-header";
 import {
-  LinearInsightBar,
-  LinearInsightLine,
-  type LinearInsightPoint,
-} from "@/components/analytics/linear-insight-graph";
+  InsightBar,
+  InsightLine,
+  type InsightPoint,
+} from "@/components/analytics/flow-insight-graph";
 import { useI18n } from "@/i18n/i18n";
 import {
   addFavorite,
@@ -1182,7 +1182,7 @@ function WidgetValue({
   if (Array.isArray(result.value)) {
     const rows = result.value.slice(0, 10);
     if (display === "chart") {
-      const points: LinearInsightPoint[] = rows.map((row, index) => ({
+      const points: InsightPoint[] = rows.map((row, index) => ({
         id: String((row as { id?: string }).id ?? index),
         label: String((row as { name?: string }).name ?? "Item"),
         value:
@@ -1190,7 +1190,7 @@ function WidgetValue({
             ? Math.round(Number((row as { progress: number }).progress) * 100)
             : Number((row as { completed?: number }).completed ?? 0),
       }));
-      return <LinearInsightBar points={points} />;
+      return <InsightBar points={points} />;
     }
     return (
       <div className="metric-list">
@@ -1227,15 +1227,15 @@ function WidgetValue({
         ))}
       </div>
     );
-  const points: LinearInsightPoint[] = entries
+  const points: InsightPoint[] = entries
     .slice(0, 10)
     .map(([label, value]) => ({ id: label, label, value: Number(value) || 0 }));
   return (
     <>
       {result.widget.type === "throughput" ? (
-        <LinearInsightLine points={points} />
+        <InsightLine points={points} />
       ) : (
-        <LinearInsightBar points={points} />
+        <InsightBar points={points} />
       )}
       <div className="metric-chart-table">
         {entries.slice(0, 6).map(([label, value]) => (
