@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
       CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${VCS_REF}" -o /out/flow-api ./cmd/server; \
     fi
 
-FROM --platform=$BUILDPLATFORM alpine:3.22 AS certificates
+FROM --platform=$BUILDPLATFORM alpine:3.24 AS certificates
 RUN apk add --no-cache ca-certificates && \
     mkdir -p /out/data/uploads && \
     chown -R 65532:65532 /out/data
