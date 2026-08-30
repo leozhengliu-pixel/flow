@@ -7,7 +7,7 @@ import type { MyIssuesFilterKey, MyIssuesFilterOption } from '@/components/my-is
 import type { MyIssuesDisplayOptions, MyIssuesGrouping } from '@/components/my-issues/my-issues-surface'
 import type { TeamIssuesRouteView } from '@/lib/app-routes'
 import { filterValues } from '@/components/my-issues/my-issues-filter-types'
-import { labelsForResource } from '@/lib/labels'
+import { labelsForResource, setGroupedLabelSelected } from '@/lib/labels'
 
 export const ISSUE_FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = {
   ai:'AI filter',advanced:'Advanced filter',status:'Status',assignee:'Assignee',agent:'Agent',agentSession:'Agent Session',creator:'Creator',priority:'Priority',labels:'Labels',relations:'Relations',suggestedLabel:'Suggested label',dates:'Dates',project:'Project',projectProperties:'Project properties',initiative:'Initiative',cycle:'Cycle',addedToCycle:'Added to cycle',releases:'Releases',subscribers:'Subscribers',externalSource:'External source',autoClosed:'Auto-closed',content:'Content',links:'Links',template:'Template',
@@ -112,10 +112,12 @@ export function issueHierarchyFields(issue: Issue, issues: Issue[]): Pick<MyIssu
 
 export function explorerPropertyOptions(data: BootstrapData, issues = data.issues) {
   const count = (predicate: (issue: Issue) => boolean) => issues.filter(predicate).length
-  const issueLabels = labelsForResource(data.labels, 'issue')
+  const issueLabels = labelsForResource(data.labels, 'issue', data.labelGroups)
   const labelGroupNames = new Map(data.labelGroups.filter(group => group.resourceType === 'issue').map(group => [group.id, group.name]))
+  const issueTeamIds = [...new Set(issues.map(issue => issue.team.id))]
+  const scopedStates = issueTeamIds.length === 1 && data.states.some(state => state.teamId === issueTeamIds[0]) ? data.states.filter(state => state.teamId === issueTeamIds[0]) : data.states
   return {
-    status: [...data.states].sort((a, b) => a.position - b.position).map(state => ({ id: state.id, label: state.name, color: state.color, count: count(issue => issue.state.id === state.id), kind: 'status' as const, stateType: state.type })),
+    status: [...scopedStates].sort((a, b) => (a.position??0) - (b.position??0)).map(state => ({ id: state.id, label: state.name, color: state.color, count: count(issue => issue.state.id === state.id), kind: 'status' as const, stateType: state.type })),
     priority: PRIORITIES.map(priority => ({ ...priority, count: count(issue => String(issue.priority) === priority.id) })),
     assignee: [{ id: '', label: 'No assignee', count: count(issue => !issue.assignee), kind: 'assignee' as const }, ...data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: count(issue => issue.assignee?.id === user.id), kind: 'assignee' as const }))],
     creator: data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: count(issue => issue.creator.id === user.id), kind: 'creator' as const })),
@@ -175,7 +177,10 @@ export async function executeExplorerBulkAction({ action, ids, value, data, issu
   onUpdateIssues: (ids: string[], input: IssueUpdateInput) => Promise<Issue[]>
 }): Promise<Issue[] | void> {
   if (action.startsWith('copy')) { await copyIssues(action, ids, issuesById, data.workspace.urlKey); return }
-  if (action === 'labels' && value != null) return Promise.all(ids.map(id => { const issue = issuesById.get(id)!; return onUpdateIssue(id, { labelIds: issue.labels.some(label => label.id === value) ? issue.labels.map(label => label.id) : [...issue.labels.map(label => label.id), value] }) }))
+  if (action === 'labels' && value != null) {
+    const selected = !ids.every(id => issuesById.get(id)?.labels.some(label => label.id === value))
+    return Promise.all(ids.map(id => { const issue = issuesById.get(id)!; return onUpdateIssue(id, { labelIds: setGroupedLabelSelected(issue.labels.map(label => label.id), value, data.labels, selected) }) }))
+  }
   if (action === 'subscribers' && value != null) return Promise.all(ids.map(id => { const issue = issuesById.get(id)!; return onUpdateIssue(id, { subscriberIds: issue.subscriberIds.includes(value) ? issue.subscriberIds : [...issue.subscriberIds, value] }) }))
   if (action === 'removeSubscribers') return Promise.all(ids.map(id => onUpdateIssue(id, { subscriberIds: [] })))
   if (action === 'unassignMe') return onUpdateIssues(ids, { assigneeId: '' })
@@ -414,7 +419,7 @@ function projectPropertyFilterOptions(data:BootstrapData,issues:Issue[]):MyIssue
   {id:'project-status',label:'Project status',kind:'projectStatusCategory',children:data.projectStatuses.map(status=>({id:`project-status:${status.id}`,label:status.name,color:status.color,projectType:status.type,kind:'projectStatus',filterLabel:'Project status',count:count(issue=>issueProject(issue)?.status.id===status.id)}))},
   {id:'project-status-type',label:'Project status type',kind:'projectStatusTypeCategory',children:uniqueStrings(projects.map(project=>project.status.type)).map(type=>({id:`project-status-type:${type}`,label:projectStatusTypeLabel(type),projectType:type,kind:'projectStatusType',filterLabel:'Project status type',count:count(issue=>issueProject(issue)?.status.type===type)}))},
   {id:'project-priority',label:'Project priority',kind:'projectPriorityCategory',children:['0','1','2','3','4'].map(value=>{const priority=Number(value) as 0|1|2|3|4;return{id:`project-priority:${value}`,label:['No priority','Urgent','High','Medium','Low'][priority],priority,kind:'projectPriority',filterLabel:'Project priority',count:count(issue=>issueProject(issue)?.priority===priority)}})},
-  {id:'project-labels',label:'Project labels',kind:'projectLabels',children:labelsForResource(data.labels,'project').map(label=>({id:`project-label:${label.id}`,label:label.name,color:label.color,kind:'projectLabels',filterLabel:'Project labels',count:count(issue=>issueProject(issue)?.labelIds?.includes(label.id)??false)}))},
+  {id:'project-labels',label:'Project labels',kind:'projectLabels',children:labelsForResource(data.labels,'project',data.labelGroups).map(label=>({id:`project-label:${label.id}`,label:label.name,color:label.color,kind:'projectLabels',filterLabel:'Project labels',count:count(issue=>issueProject(issue)?.labelIds?.includes(label.id)??false)}))},
   {id:'project-lead',label:'Project lead',kind:'projectLeadCategory',children:[{id:'project-lead:',label:'No lead',kind:'projectLead',filterLabel:'Project lead',count:count(issue=>Boolean(issueProject(issue)&&!issueProject(issue)?.lead))},{id:`project-lead:${data.viewer.id}`,label:'Current user',kind:'projectLead',filterLabel:'Project lead',avatarUrl:data.viewer.avatarUrl,count:count(issue=>issueProject(issue)?.lead?.id===data.viewer.id)},...data.users.filter(user=>user.active&&user.id!==data.viewer.id).map(user=>({id:`project-lead:${user.id}`,label:user.displayName,kind:'projectLead',filterLabel:'Project lead',avatarUrl:user.avatarUrl,count:count(issue=>issueProject(issue)?.lead?.id===user.id)}))]},
   {id:'project-milestone',label:'Project milestone name',kind:'projectMilestoneCategory',children:[{id:'project-milestone-name-contains',label:'Milestone name contains…',kind:'textCondition',filterLabel:'Project milestone name',operatorLabel:'contains',negativeOperatorLabel:'does not contain',textConditionPrefix:'project-milestone-name-contains:'}]},
 ]}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeftRight, Cable, ChevronDown, LoaderCircle, ShieldCheck } from 'lucide-react'
+import { ArrowLeftRight, Cable, ChevronDown, CircleAlert, LoaderCircle, ShieldCheck } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import { decideOAuthAuthorization, fetchOAuthAuthorizationRequest, fetchUserSettings, type OAuthAuthorizationRequest } from '@/lib/api'
@@ -64,7 +64,7 @@ export function OAuthAuthorizePage({ account }: Props) {
   }
 
   if (!request) return <OAuthShell workspaceName={account.workspaces[0]?.workspace.name}>
-    <div className="oauth-loading">{error || <LoaderCircle/>}</div>
+    {error?<section className="oauth-invalid" role="alert"><CircleAlert/><h1>Authorization request unavailable</h1><p>{oauthErrorMessage(error)}</p><button onClick={()=>navigate('/')}>Back to Flow</button></section>:<div aria-label="Loading authorization request" className="oauth-loading"><LoaderCircle/></div>}
   </OAuthShell>
 
   if (selecting) return <OAuthShell workspaceName={account.workspaces.find(item => item.workspace.urlKey === account.lastWorkspaceKey)?.workspace.name}>
@@ -127,3 +127,5 @@ function WorkspaceMark({ name, color }: { name: string; color?: string }) {
   const initials = name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'F'
   return <span className="oauth-workspace-mark" style={color ? { backgroundColor: color } : undefined}>{initials}</span>
 }
+
+function oauthErrorMessage(value:string){if(value==='invalid_request')return'This authorization link is incomplete or has expired.';if(value==='invalid_client')return'This application is not registered or is no longer available.';return value||'This authorization request could not be loaded.'}

@@ -79,10 +79,11 @@ func TestEmailIntakeVerificationRotationAndIdempotency(t *testing.T) {
 	requestJSON[domain.EmailIntakeAddress](t, handler, http.MethodPost, "/api/teams/"+teamID+"/email-intake-addresses/"+created.Address.ID+"/verify", map[string]string{"txtValue": created.DNSRecord["value"]}, http.StatusOK)
 	input := map[string]any{"messageId": "mail-1", "from": "customer@example.test", "subject": "Email issue", "text": "Imported body"}
 	first := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/email-intake/"+created.InboundToken+"/receive", input, http.StatusCreated)
-	second := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/email-intake/"+created.InboundToken+"/receive", input, http.StatusCreated)
+	second := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/email-intake/"+created.InboundToken+"/receive", input, http.StatusOK)
 	if first.ID != second.ID {
 		t.Fatalf("duplicate email created two issues: %s %s", first.ID, second.ID)
 	}
+	requestJSON[any](t, handler, http.MethodPost, "/api/email-intake/"+created.InboundToken+"/receive", map[string]any{"messageId": "mail-2", "from": "customer@example.test", "subject": "Unsafe attachment", "attachments": []string{"javascript:alert(1)"}}, http.StatusBadRequest)
 	type rotateResponse struct {
 		Address      domain.EmailIntakeAddress `json:"address"`
 		InboundToken string                    `json:"inboundToken"`

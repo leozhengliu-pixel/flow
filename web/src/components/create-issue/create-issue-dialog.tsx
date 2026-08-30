@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import type { Editor } from '@tiptap/react'
-import { ChevronRight, Diamond, ExternalLink, FilePlus2, Link2, Maximize2, Minimize2, MoreHorizontal, Paperclip, Repeat2, Trash2, X } from 'lucide-react'
+import { ChevronRight, CircleDashed, Diamond, ExternalLink, FilePlus2, Link2, Maximize2, Minimize2, MoreHorizontal, Paperclip, Repeat2, Trash2, X } from 'lucide-react'
 import type { BootstrapData, Draft, Issue } from '@/types/flow'
 import { PropertyMenu } from '@/components/property/property-menu'
-import { CalendarIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
+import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { Avatar } from '@/components/issue/issue-row'
 import { IssueTitleEditor } from '@/components/issue/issue-title-editor'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
@@ -13,7 +13,7 @@ import type { DescriptionSnapshot } from '@/components/issue/editor/editor-conte
 import { DueDateCommand } from '@/components/issue/due-date-picker'
 import styles from './create-issue-dialog.module.css'
 import { createDraft, deleteDraft, updateDraft } from '@/lib/api'
-import { labelsForResource } from '@/lib/labels'
+import { labelsForResource, toggleGroupedLabelIds } from '@/lib/labels'
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
 import { Toggle } from '@/components/ui/toggle'
 
@@ -25,12 +25,15 @@ export interface CreateIssueInput {
   contentState?: string
   stateId?: string
   priority?: number
+  estimate?: number
   assigneeId?: string
   projectId?: string
   projectMilestoneId?: string
+  cycleId?: string
   dueDate?: string
   labelIds?: string[]
   templateId?: string
+  recurrence?: '' | 'daily' | 'weekly' | 'monthly'
   teamId?: string
   createMore?: boolean
 }
@@ -55,20 +58,24 @@ const draftStoragePrefix = 'flow:create-issue-draft:'
 
 interface StoredIssueDraft {
   title: string
+  teamId: string
   description: DescriptionSnapshot | null
   stateId: string
   priority: number
+  estimate: number
   assigneeId: string
   projectId: string
   projectMilestoneId: string
+  cycleId: string
   dueDate: string
   labelIds: string[]
   templateId?: string
+  recurrence?: '' | 'daily' | 'weekly' | 'monthly'
 }
 
 export function CreateIssueDialog({ data, draftId, initialProjectId, initialProjectMilestoneId, initialStateId, initialTemplateId, onCreate, onDraftDeleted, onDraftSaved, onOpenChange, onUpload, open }: CreateIssueDialogProps) {
+  const [teamId, setTeamId] = useState(data.teams[0]?.id ?? '')
   const availableStates = useMemo(() => {
-    const teamId = data.teams[0]?.id
     const specific = data.states.some(state => state.teamId === teamId)
     const states = data.states.filter(state => specific ? state.teamId === teamId : !state.teamId)
     // A grouped create action may target a workspace state that is not in the
@@ -76,21 +83,30 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
     // visible in the picker and sent with the create request.
     if (initialStateId && !states.some(state => state.id === initialStateId)) {
       const requested = data.states.find(state => state.id === initialStateId)
-      if (requested) return [...states, requested].sort((left, right) => left.position - right.position)
+      if (requested) return [...states, requested].sort((left, right) => (left.position??0) - (right.position??0))
     }
-    return states
-  }, [data.states, data.teams, initialStateId])
-  const defaultState = useMemo(() => [...availableStates].sort((a, b) => a.position - b.position).find(state => state.type === 'unstarted') ?? availableStates[0], [availableStates])
+    return [...states].sort((left, right) => (left.position??0) - (right.position??0))
+  }, [data.states, initialStateId, teamId])
+  const defaultState = useMemo(() => {
+    const configured = data.teamSettings[teamId]?.defaultStateId
+    return availableStates.find(state => state.id === configured)
+      ?? availableStates.find(state => state.default)
+      ?? [...availableStates].sort((a, b) => (a.position??0) - (b.position??0)).find(state => state.type === 'unstarted')
+      ?? availableStates[0]
+  }, [availableStates, data.teamSettings, teamId])
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState<DescriptionSnapshot | null>(null)
   const [stateId, setStateId] = useState(defaultState.id)
   const [priority, setPriority] = useState(0)
+  const [estimate, setEstimate] = useState(0)
   const [assigneeId, setAssigneeId] = useState(data.viewer.id)
   const [projectId, setProjectId] = useState('')
   const [projectMilestoneId, setProjectMilestoneId] = useState('')
+  const [cycleId, setCycleId] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [labelIds, setLabelIds] = useState<string[]>([])
   const [templateId, setTemplateId] = useState('')
+  const [recurrence, setRecurrence] = useState<'' | 'daily' | 'weekly' | 'monthly'>('')
   const [serverDraftId, setServerDraftId] = useState('')
   const [createMore, setCreateMore] = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -103,7 +119,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
   const titleEditorRef = useRef<Editor | null>(null)
   const descriptionEditorRef = useRef<Editor | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
-  const draftKey = `${draftStoragePrefix}${data.teams[0]?.id ?? data.teams[0]?.key ?? 'default'}`
+  const draftKey = `${draftStoragePrefix}${teamId || data.teams[0]?.key || 'default'}`
   useEffect(()=>{if(!open||!initialTemplateId)return;const template=data.issueTemplates.find(item=>item.id===initialTemplateId);if(!template)return;setTemplateId(template.id);setTitle(current=>current||template.title||template.name);setStateId(template.stateId||defaultState.id);setPriority(template.priority);setAssigneeId(template.assigneeId??data.viewer.id);setProjectId(template.projectId??'');setLabelIds(template.labelIds);const templateBody=template.body;if(templateBody)requestAnimationFrame(()=>descriptionEditorRef.current?.commands.setContent(templateBody,{contentType:'markdown'}))},[data.issueTemplates,data.viewer.id,defaultState.id,initialTemplateId,open])
   const hasDraftContent = Boolean(title.trim() || description?.markdown.trim() || files.length)
 
@@ -118,20 +134,24 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
     const requestedMilestone = requestedProject?.milestones.find(milestone => milestone.id === initialProjectMilestoneId)
     if (draft || remote) {
       const restored = draft ?? remote as StoredIssueDraft
+      setTeamId(restored.teamId || (remoteDraft?.metadata?.teamId as string | undefined) || data.teams[0]?.id || '')
       setTitle(restored.title ?? remoteDraft?.title ?? '')
       setDescription(restored.description ?? null)
       setStateId(restored.stateId || defaultState.id)
       setPriority(restored.priority ?? 0)
+      setEstimate(restored.estimate ?? 0)
       setAssigneeId(restored.assigneeId ?? data.viewer.id)
       setProjectId(restored.projectId ?? '')
       setProjectMilestoneId(restored.projectMilestoneId ?? '')
+      setCycleId(restored.cycleId ?? '')
       setDueDate(restored.dueDate ?? '')
       setLabelIds(restored.labelIds ?? [])
       setTemplateId(restored.templateId ?? '')
+      setRecurrence(restored.recurrence ?? '')
       setServerDraftId(remoteDraft?.id ?? '')
     } else {
-      setTitle(''); setDescription(null); setFiles([]); setError(undefined); setServerDraftId('')
-      setStateId(defaultState.id); setPriority(0); setAssigneeId(data.viewer.id); setProjectId(''); setProjectMilestoneId(''); setDueDate(''); setLabelIds([]); setTemplateId(''); setCreateMore(false); setExpanded(false)
+      setTitle(''); setDescription(null); setFiles([]); setError(undefined); setServerDraftId(''); setTeamId(data.teams[0]?.id ?? '')
+      setStateId(defaultState.id); setPriority(0); setEstimate(0); setAssigneeId(data.viewer.id); setProjectId(''); setProjectMilestoneId(''); setCycleId(''); setDueDate(''); setLabelIds([]); setTemplateId(''); setRecurrence(''); setCreateMore(false); setExpanded(false)
       titleEditorRef.current?.commands.clearContent(); descriptionEditorRef.current?.commands.clearContent()
       if (initialStateId && availableStates.some(state => state.id === initialStateId)) setStateId(initialStateId)
     }
@@ -143,20 +163,30 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
     return () => cancelAnimationFrame(frame)
   }, [availableStates, data.drafts, data.projects, data.teams, data.viewer.id, defaultState.id, draftId, draftKey, initialProjectId, initialProjectMilestoneId, initialStateId, open])
 
+  useEffect(() => { if (open && !availableStates.some(state => state.id === stateId)) setStateId(defaultState.id) }, [availableStates, defaultState.id, open, stateId])
+
   useEffect(() => {
     if (!open || draftId || initialTemplateId || !initialStateId) return
     if (availableStates.some(state => state.id === initialStateId)) setStateId(initialStateId)
   }, [availableStates, draftId, initialStateId, initialTemplateId, open])
 
   const state = availableStates.find(item => item.id === stateId) ?? defaultState
+  const team = data.teams.find(item => item.id === teamId) ?? data.teams[0]
   const assignee = data.users.find(user => user.id === assigneeId)
   const project = data.projects.find(item => item.id === projectId)
   const projectMilestone = project?.milestones.find(item => item.id === projectMilestoneId)
-  const issueLabels = useMemo(() => labelsForResource(data.labels, 'issue'), [data.labels])
-  const availableLabels = useMemo(() => issueLabels.filter(label => !label.scope || label.scope === 'Workspace' || label.scope === data.teams[0]?.id), [data.teams, issueLabels])
+  const cycle = data.cycles.find(item => item.id === cycleId)
+  const cycles = data.cycles.filter(item => item.teamId === teamId && item.status !== 'completed')
+  const nextUpcomingCycleId = [...cycles].filter(item => item.status === 'upcoming').sort((left,right)=>left.startsAt.localeCompare(right.startsAt))[0]?.id
+  const estimateType = data.teamSettings[teamId]?.estimateType ?? 'notUsed'
+  const estimateValues = estimateType === 'fibonacci' ? [0,1,2,3,5,8,13,21] : estimateType === 'exponential' ? [0,1,2,4,8,16] : [0,1,2,3,5,8]
+  const issueLabels = useMemo(() => labelsForResource(data.labels, 'issue', data.labelGroups), [data.labelGroups, data.labels])
+  const availableLabels = useMemo(() => issueLabels.filter(label => !label.scope || label.scope === 'Workspace' || label.scope === teamId), [issueLabels, teamId])
   const availableLabelIds = useMemo(() => new Set(availableLabels.map(label => label.id)), [availableLabels])
   const selectedLabels = availableLabels.filter(label => labelIds.includes(label.id))
   const labelGroupNames = useMemo(() => new Map(data.labelGroups.map(group => [group.id, group.name])), [data.labelGroups])
+  const labelGroupColors = useMemo(() => new Map(data.labelGroups.map(group => [group.id, group.color])), [data.labelGroups])
+  const toggleLabel = (id: string) => setLabelIds(current => toggleGroupedLabelIds(current, id, availableLabels))
 
   const resetBody = (focus = true) => {
     setTitle('')
@@ -173,19 +203,22 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
     setServerDraftId('')
     setStateId(defaultState.id)
     setPriority(0)
+    setEstimate(0)
     setAssigneeId(data.viewer.id)
     setProjectId('')
     setProjectMilestoneId('')
+    setCycleId('')
     setDueDate('')
     setLabelIds([])
     setTemplateId('')
+    setRecurrence('')
     setCreateMore(false)
     setExpanded(false)
   }
 
   const saveDraft = async () => {
     if (!hasDraftContent) return
-    const metadata = { title, description, stateId, priority, assigneeId, projectId, projectMilestoneId, dueDate, labelIds, templateId, teamId: data.teams[0]?.id }
+    const metadata = { title, description, stateId, priority, estimate, assigneeId, projectId, projectMilestoneId, cycleId, dueDate, labelIds, templateId, recurrence, teamId }
     setSaving(true)
     setError(undefined)
     try {
@@ -222,18 +255,22 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
     try {
       const issue = await onCreate({
         title: cleanTitle,
+        teamId,
         description: description?.markdown.trim() ?? '',
         descriptionState: description?.documentJSON,
         descriptionData: description?.document as Record<string, unknown> | undefined,
         contentState: description?.contentState,
         stateId,
         priority,
+        estimate,
         assigneeId,
         projectId,
         projectMilestoneId,
+        cycleId,
         dueDate,
         labelIds: labelIds.filter(id => availableLabelIds.has(id)),
         templateId,
+        recurrence,
         createMore,
       })
       const uploads = onUpload ? await Promise.allSettled(files.map(file => onUpload(issue.id, file))) : []
@@ -251,7 +288,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
     } finally {
       setSaving(false)
     }
-  }, [assigneeId, availableLabelIds, createMore, description, draftKey, dueDate, files, labelIds, onCreate, onDraftDeleted, onOpenChange, onUpload, priority, projectId, projectMilestoneId, saving, serverDraftId, stateId, templateId, title])
+  }, [assigneeId, availableLabelIds, createMore, cycleId, description, draftKey, dueDate, estimate, files, labelIds, onCreate, onDraftDeleted, onOpenChange, onUpload, priority, projectId, projectMilestoneId, recurrence, saving, serverDraftId, stateId, teamId, templateId, title])
 
   const changeOpen = (next: boolean) => {
     if (!next && serverDraftId && hasDraftContent) {
@@ -277,7 +314,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
       <Dialog.Content className={styles.dialog} data-expanded={expanded} aria-label="Create issue" onPointerDownOutside={event => event.preventDefault()} onInteractOutside={event => event.preventDefault()} onEscapeKeyDown={event => { if (saving) event.preventDefault() }}>
         <form onSubmit={event => { event.preventDefault(); void submit() }}>
           <header className={styles.header}>
-            <button type="button" className={styles.team} aria-label="Set team" disabled><TeamIcon/><span>{data.teams[0].key}</span></button>
+            <PropertyMenu compact label="Team" value={team?.key ?? 'Team'} selectedId={teamId} options={data.teams.filter(item=>!item.retiredAt).map(item=>({id:item.id,label:item.name,keywords:item.key,icon:<TeamIcon style={{color:item.color}}/>,i18nIgnore:true}))} trigger={<><TeamIcon style={{color:team?.color}}/><span data-i18n-ignore>{team?.key ?? 'Team'}</span></>} triggerClassName={styles.team} ariaLabel="Set team" onChange={id=>{setTeamId(id);setCycleId('');setLabelIds([]);setTemplateId('')}}/>
             <span className={styles.breadcrumb}>›</span><Dialog.Title>New issue</Dialog.Title>
             {serverDraftId ? <button type="button" className={styles.saveDraft} aria-label="Discard draft" disabled={saving} onClick={() => setDiscardConfirmOpen(true)}><Trash2/></button> : hasDraftContent && <button type="button" className={styles.saveDraft} aria-label="Save draft" disabled={saving} onClick={() => void saveDraft()}>{saving ? 'Saving...' : 'Save as draft'}</button>}
             <button type="button" className={`${styles.iconButton} ${styles.expandButton}`} aria-label={expanded ? 'Collapse' : 'Expand'} aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? <Minimize2/> : <Maximize2/>}</button>
@@ -290,14 +327,16 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
           </div>
 
           <div className={styles.properties}>
-            {data.issueTemplates.length > 0 && <MiniProperty label="Template" value={data.issueTemplates.find(item=>item.id===templateId)?.name ?? 'Template'} selectedId={templateId} icon={<FilePlus2/>} options={[{id:'',label:'No template',icon:<FilePlus2/>},...data.issueTemplates.filter(item=>item.teamId===data.teams[0]?.id).map(item=>({id:item.id,label:item.name,description:item.description,icon:<FilePlus2/>}))]} onChange={id=>{setTemplateId(id);const template=data.issueTemplates.find(item=>item.id===id);if(!template)return;setTitle(current=>current||template.name);setStateId(template.stateId||defaultState.id);setPriority(template.priority);setAssigneeId(template.assigneeId??data.viewer.id);setProjectId(template.projectId??'');setLabelIds(template.labelIds);if(template.body)descriptionEditorRef.current?.commands.setContent(template.body,{contentType:'markdown'})}}/>}
-            <MiniProperty label="Status" value={state.name} selectedId={stateId} icon={<StatusIcon state={state}/>} options={[...availableStates].sort((a,b) => a.position-b.position).map((item,index) => ({ id:item.id,label:item.name,color:item.color,icon:<StatusIcon state={item}/>,shortcut:index < 5 ? String(index+1) : undefined }))} onChange={setStateId}/>
+            {data.issueTemplates.some(item=>item.teamId===teamId) && <MiniProperty label="Template" value={data.issueTemplates.find(item=>item.id===templateId)?.name ?? 'Template'} selectedId={templateId} icon={<FilePlus2/>} options={[{id:'',label:'No template',icon:<FilePlus2/>},...data.issueTemplates.filter(item=>item.teamId===teamId).map(item=>({id:item.id,label:item.name,description:item.description,icon:<FilePlus2/>}))]} onChange={id=>{setTemplateId(id);const template=data.issueTemplates.find(item=>item.id===id);if(!template)return;setTitle(current=>current||template.name);setStateId(template.stateId||defaultState.id);setPriority(template.priority);setAssigneeId(template.assigneeId??data.viewer.id);setProjectId(template.projectId??'');setLabelIds(template.labelIds);if(template.body)descriptionEditorRef.current?.commands.setContent(template.body,{contentType:'markdown'})}}/>}
+            <MiniProperty label="Status" value={state.name} selectedId={stateId} icon={<StatusIcon state={state}/>} options={[...availableStates].sort((a,b) => (a.position??0)-(b.position??0)).map((item,index) => ({ id:item.id,label:item.name,color:item.color,icon:<StatusIcon state={item}/>,shortcut:index < 5 ? String(index+1) : undefined }))} onChange={setStateId}/>
             <MiniProperty label="Priority" value={priority ? priorityNames[priority] : 'Priority'} selectedId={String(priority)} icon={<PriorityIcon priority={priority}/>} options={[0,1,2,3,4].map(item => ({ id:String(item),label:priorityNames[item],icon:<PriorityIcon priority={item}/>,shortcut:String(item) }))} onChange={value => setPriority(Number(value))}/>
+            {estimateType!=='notUsed'&&<MiniProperty label="Estimate" value={estimate ? `${estimate} point${estimate===1?'':'s'}` : 'Estimate'} selectedId={String(estimate)} icon={<EstimateGlyph value={estimate}/>} options={estimateValues.map(value=>({id:String(value),label:value?`${value} point${value===1?'':'s'}`:'No estimate',icon:<EstimateGlyph value={value}/>}))} onChange={value=>setEstimate(Number(value))}/>}
             <MiniProperty label="Assignee" value={assignee?.displayName ?? 'Assignee'} selectedId={assigneeId} icon={assignee ? <Avatar name={assignee.displayName}/> : <NoAssigneeIcon/>} options={[{id:'',label:'No assignee',icon:<NoAssigneeIcon/>},...data.users.filter(user => user.active).map(user => ({id:user.id,label:user.displayName,keywords:user.email,icon:<Avatar name={user.displayName}/>}))]} onChange={setAssigneeId}/>
             <MiniProperty label="Project" value={project?.name ?? 'Project'} valueIsEntityName={Boolean(project)} selectedId={projectId} icon={<ProjectIcon/>} options={[{id:'',label:'No project',icon:<NoProjectIcon/>},...data.projects.map(item => ({id:item.id,label:item.name,color:item.color,icon:<ProjectIcon style={{ color: item.color }}/>,i18nIgnore:true }))]} onChange={value => { setProjectId(value); setProjectMilestoneId('') }}/>
             {project && project.milestones.length > 0 && <MiniProperty label="Milestone" value={projectMilestone?.name ?? 'Milestone'} valueIsEntityName={Boolean(projectMilestone)} selectedId={projectMilestoneId} icon={<Diamond size={14}/>} options={[{id:'',label:'No milestone',icon:<Diamond size={14}/>},...project.milestones.map(item => ({id:item.id,label:item.name,icon:<Diamond size={14}/>,i18nIgnore:true}))]} onChange={setProjectMilestoneId}/>}
-            <MiniProperty multiple label="Labels" value={selectedLabels.length ? selectedLabels.map(label => label.name).join(', ') : 'Labels'} selectedIds={labelIds} icon={<LabelIcon/>} options={availableLabels.map(item => ({ id: item.id, label: item.name, color: item.color, description: item.description, issueCount: item.issueCount, scope: item.scope, resourceType: item.resourceType, groupId: item.groupId, groupLabel: item.groupId ? labelGroupNames.get(item.groupId) : undefined }))} onChange={id => setLabelIds(current => current.includes(id) ? current.filter(value => value !== id) : [...current,id])}/>
-            <MoreActions active={open && !linkOpen} dueDate={dueDate} onDueDateChange={setDueDate} onInsertLink={() => setLinkOpen(true)}/>
+            <MiniProperty multiple label="Labels" value={selectedLabels.length ? selectedLabels.map(label => label.name).join(', ') : 'Labels'} selectedIds={labelIds} icon={<LabelIcon/>} options={availableLabels.map(item => ({ id: item.id, label: item.name, color: item.color, description: item.description, issueCount: item.issueCount, scope: item.scope, resourceType: item.resourceType, groupId: item.groupId, groupLabel: item.groupId ? labelGroupNames.get(item.groupId) : undefined, groupColor: item.groupId ? labelGroupColors.get(item.groupId) : undefined }))} onChange={toggleLabel}/>
+            <MiniProperty label="Cycle" value={cycle?.name ?? 'Cycle'} valueIsEntityName={Boolean(cycle)} selectedId={cycleId} icon={<CycleIcon cycle={cycle} nextUpcomingId={nextUpcomingCycleId} progress={cycle?cycleIssueProgress(data.issues,cycle.id):0}/>} options={[{id:'',label:'No cycle',icon:<CycleIcon noCycle/>},...cycles.map(item=>({id:item.id,label:item.name,icon:<CycleIcon cycle={item} nextUpcomingId={nextUpcomingCycleId} progress={cycleIssueProgress(data.issues,item.id)}/>,i18nIgnore:true}))]} onChange={setCycleId} ariaLabel="Add to cycle"/>
+            <MoreActions active={open && !linkOpen} dueDate={dueDate} recurrence={recurrence} onDueDateChange={setDueDate} onRecurrenceChange={setRecurrence} onInsertLink={() => setLinkOpen(true)}/>
           </div>
 
           {files.length > 0 && <div className={styles.attachments}>{files.map((file, index) => <span key={`${file.name}-${index}`}><Paperclip/><span>{file.name}</span><AttachmentRemoveButton label={`Remove ${file.name}`} onClick={() => setFiles(current => current.filter((_, item) => item !== index))}/></span>)}</div>}
@@ -328,8 +367,10 @@ function ExistingDraftDiscardDialog({ onCancel, onDiscard, open, saving }: { onC
 }
 
 function MiniProperty(props: React.ComponentProps<typeof PropertyMenu>) { return <PropertyMenu compact {...props}/> }
+function EstimateGlyph({ value }: { value: number }) { return value ? <span aria-hidden="true" className="estimate-value-icon">{value}</span> : <CircleDashed aria-hidden="true"/> }
+function cycleIssueProgress(issues: Issue[], cycleId: string) { const scoped=issues.filter(issue=>issue.cycleId===cycleId&&!issue.archivedAt);return scoped.length?Math.round(scoped.filter(issue=>issue.state.type==='completed'||issue.state.type==='canceled').length/scoped.length*100):0 }
 
-function MoreActions({ active, dueDate, onDueDateChange, onInsertLink }: { active: boolean; dueDate: string; onDueDateChange: (date: string) => void; onInsertLink: () => void }) {
+function MoreActions({ active, dueDate, recurrence, onDueDateChange, onRecurrenceChange, onInsertLink }: { active: boolean; dueDate: string; recurrence: '' | 'daily' | 'weekly' | 'monthly'; onDueDateChange: (date: string) => void; onRecurrenceChange: (value: '' | 'daily' | 'weekly' | 'monthly') => void; onInsertLink: () => void }) {
   const [open, setOpen] = useState(false)
   const [dateOpen, setDateOpen] = useState(false)
   useEffect(() => {
@@ -356,11 +397,8 @@ function MoreActions({ active, dueDate, onDueDateChange, onInsertLink }: { activ
         <DropdownMenu.SubTrigger className={styles.menuItem}><CalendarIcon/><span>Set due date</span><kbd>⇧ D</kbd><ChevronRight/></DropdownMenu.SubTrigger>
         <DropdownMenu.Portal><DropdownMenu.SubContent className={styles.dateMenu} sideOffset={3} alignOffset={-5}><DueDateCommand value={dueDate} onSelect={async value => onDueDateChange(value)}/></DropdownMenu.SubContent></DropdownMenu.Portal>
       </DropdownMenu.Sub>
-      <DropdownMenu.Item className={styles.menuItem} disabled><Repeat2/><span>Make recurring…</span></DropdownMenu.Item>
+      <DropdownMenu.Sub><DropdownMenu.SubTrigger className={styles.menuItem}><Repeat2/><span>Make recurring…</span><ChevronRight/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className={styles.moreMenu} sideOffset={3}>{(['daily','weekly','monthly'] as const).map(value=><DropdownMenu.CheckboxItem className={styles.menuItem} checked={recurrence===value} key={value} onCheckedChange={()=>onRecurrenceChange(recurrence===value?'':value)}><Repeat2/><span>{value[0].toUpperCase()+value.slice(1)}</span>{recurrence===value&&<span>✓</span>}</DropdownMenu.CheckboxItem>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
       <DropdownMenu.Item className={styles.menuItem} onSelect={onInsertLink}><Link2/><span>Add link…</span><kbd>Ctrl L</kbd></DropdownMenu.Item>
-      <DropdownMenu.Item className={styles.menuItem} disabled><FilePlus2/><span>Add customer request…</span><kbd>Ctrl R</kbd></DropdownMenu.Item>
-      <DropdownMenu.Separator className={styles.menuSeparator}/>
-      <DropdownMenu.Item className={styles.menuItem} disabled><FilePlus2/><span>Add sub-issue</span><kbd>⌘ ⇧ O</kbd></DropdownMenu.Item>
     </DropdownMenu.Content></DropdownMenu.Portal>
   </DropdownMenu.Root>
 }

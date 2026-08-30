@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -880,6 +881,7 @@ func (s *server) deleteEmailIntakeAddress(w http.ResponseWriter, r *http.Request
 }
 
 func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
 	token := r.PathValue("token")
 	var input struct {
 		MessageID, From, Subject, Text string
@@ -889,11 +891,26 @@ func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input.MessageID = strings.TrimSpace(input.MessageID)
-	if input.MessageID == "" || strings.TrimSpace(input.Subject) == "" {
+	input.From, input.Subject = strings.TrimSpace(input.From), strings.TrimSpace(input.Subject)
+	if input.MessageID == "" || input.Subject == "" || len(input.MessageID) > 512 || len(input.Subject) > 1000 || len(input.Text) > 1<<20 || len(input.Attachments) > 50 {
 		writeError(w, http.StatusBadRequest, "messageId and subject are required")
 		return
 	}
+	if input.From != "" {
+		if _, err := mail.ParseAddress(input.From); err != nil || len(input.From) > 320 {
+			writeError(w, http.StatusBadRequest, "from must be a valid email address")
+			return
+		}
+	}
+	for _, attachment := range input.Attachments {
+		parsed, err := url.ParseRequestURI(strings.TrimSpace(attachment))
+		if err != nil || parsed.Host == "" || !slices.Contains([]string{"http", "https"}, parsed.Scheme) || len(attachment) > 2048 {
+			writeError(w, http.StatusBadRequest, "attachments must be valid http or https URLs")
+			return
+		}
+	}
 	var created domain.Issue
+	duplicate := false
 	key := ""
 	for _, workspaceKey := range s.store.WorkspaceKeys() {
 		data, ok := s.store.BootstrapFor(workspaceKey)
@@ -924,11 +941,15 @@ func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
 		if existing := slices.IndexFunc(data.EmailIntakeMessages, func(item domain.EmailIntakeMessage) bool { return item.MessageID == input.MessageID }); existing >= 0 {
 			if issue, e := issueByID(data, data.EmailIntakeMessages[existing].IssueID); e == nil {
 				created = *issue
+				duplicate = true
 				return created.ID, nil
 			}
 			return "", errConflict
 		}
 		addressIndex := slices.IndexFunc(data.EmailIntakeAddresses, func(item domain.EmailIntakeAddress) bool {
+			if !item.Enabled || item.VerificationState != "verified" {
+				return false
+			}
 			if subtle.ConstantTimeCompare([]byte(item.InboundTokenHash), []byte(secretHash(token))) == 1 {
 				return true
 			}
@@ -961,7 +982,11 @@ func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
 		data.EmailIntakeMessages = append(data.EmailIntakeMessages, domain.EmailIntakeMessage{ID: fmt.Sprintf("email_message_%d", now.UnixNano()), AddressID: address.ID, MessageID: input.MessageID, From: input.From, Subject: input.Subject, IssueID: created.ID, Status: "processed", ReceivedAt: now, ProcessedAt: &now})
 		return created.ID, nil
 	})
-	respondMutation(w, err, http.StatusCreated, created)
+	status := http.StatusCreated
+	if duplicate {
+		status = http.StatusOK
+	}
+	respondMutation(w, err, status, created)
 }
 
 type pushSubscriptionInput struct{ Endpoint, P256DH, Auth string }

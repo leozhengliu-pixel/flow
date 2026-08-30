@@ -289,6 +289,8 @@ func TestTemplatesAskApprovalSLAAndUnifiedUserState(t *testing.T) {
 	if draft.Body != "Updated draft body" {
 		t.Fatal("draft update did not persist")
 	}
+	requestJSON[any](t, handler, http.MethodPost, "/api/drafts", map[string]any{"type": "unknown", "title": "Invalid draft"}, http.StatusBadRequest)
+	requestJSON[any](t, handler, http.MethodPost, "/api/drafts", map[string]any{"type": "comment", "resourceId": "missing-issue", "body": "Orphan comment"}, http.StatusBadRequest)
 	favoriteA := requestJSON[domain.Favorite](t, handler, http.MethodPut, "/api/favorites/project/"+project.ID, nil, http.StatusOK)
 	favoriteB := requestJSON[domain.Favorite](t, handler, http.MethodPut, "/api/favorites/project/"+project.ID, nil, http.StatusOK)
 	if favoriteA.ID != favoriteB.ID {

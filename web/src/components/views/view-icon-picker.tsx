@@ -21,8 +21,8 @@ export function ViewGlyph({ className, color = DEFAULT_VIEW_COLOR, icon = DEFAUL
   const assetIcon = FLOW_VIEW_ICON_ALIASES[icon] ?? icon
   if (!ICON_NAME_SET.has(assetIcon) && assetIcon !== 'Team') return isEmoji(icon)
     ? <span aria-hidden="true" className={`${styles.glyph} ${styles.emojiGlyph} ${className ?? ''}`} style={{ color }}>{icon}</span>
-    : <svg aria-hidden="true" className={`${styles.glyph} ${className ?? ''}`} fill="currentColor" style={{ color }} viewBox="0 0 16 16"><use href="/flow-core-icons.svg#CustomView"/></svg>
-  return <svg aria-hidden="true" className={`${styles.glyph} ${className ?? ''}`} fill="currentColor" style={{ color }} viewBox="0 0 16 16"><use href={`${FLOW_CORE_ICON_NAMES.has(assetIcon) ? '/flow-core-icons.svg' : '/flow-view-icons.svg'}#${assetIcon}`}/></svg>
+    : <svg aria-hidden="true" className={`${styles.glyph} ${className ?? ''}`} fill="currentColor" style={{ color }} viewBox="0 0 16 16"><use href="#CustomView"/></svg>
+  return <svg aria-hidden="true" className={`${styles.glyph} ${className ?? ''}`} fill="currentColor" style={{ color }} viewBox="0 0 16 16"><use href={`${FLOW_CORE_ICON_NAMES.has(assetIcon) ? '' : '/flow-view-icons.svg'}#${assetIcon}`}/></svg>
 }
 
 export function ViewIconPicker({ align = 'start', color = DEFAULT_VIEW_COLOR, icon = DEFAULT_VIEW_ICON, onChange, prependTeam = false, triggerClassName }: { align?: 'start' | 'center' | 'end'; color?: string; icon?: string; onChange: (visual: ViewVisual) => void; prependTeam?: boolean; triggerClassName?: string }) {

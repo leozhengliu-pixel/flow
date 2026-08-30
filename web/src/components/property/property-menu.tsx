@@ -8,6 +8,7 @@ import { usePropertyCommand } from './use-property-command'
 import { groupOptionSections } from '@/lib/group-options'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import type { LabelResourceType } from '@/types/flow'
+import { useI18n } from '@/i18n/i18n'
 
 export interface PropertyOption {
   id: string
@@ -22,30 +23,35 @@ export interface PropertyOption {
   groupColor?: string
   keywords?: string
   shortcut?: string
+  end?: string
   icon?: ReactNode
   i18nIgnore?: boolean
 }
 
-export type PropertyMenuKind = 'standard' | 'labels' | 'project'
+export type PropertyMenuKind = 'standard' | 'labels' | 'project' | 'milestone'
 
-export function PropertyMenu({ label, value, icon, options, onChange, onCreate, multiple = false, selectedId, selectedIds = [], compact = false, searchPlaceholder, searchShortcut, kind: explicitKind, teamName = 'Cleantrack', trigger, customTrigger, triggerClassName, surfaceClassName, side = 'bottom', align = 'start', alignOffset = 0, ariaLabel, hoverContent, hoverClassName, valueIsEntityName = false }: {
+export function PropertyMenu({ label, value, icon, options, onChange, onCreate, multiple = false, selectedId, selectedIds = [], compact = false, emptyLabel, hideSearch = false, searchPlaceholder, searchShortcut, showGroupHeadings = true, kind: explicitKind, teamName = 'Cleantrack', trigger, customTrigger, triggerClassName, triggerRole = 'combobox', surfaceClassName, side = 'bottom', align = 'start', alignOffset = 0, ariaLabel, hoverContent, hoverClassName, valueIsEntityName = false }: {
   label: string
   value?: string
   icon?: ReactNode
   options: PropertyOption[]
-  onChange?: (id: string) => void | Promise<void>
-  onCreate?: (name: string) => void | Promise<void>
+  onChange?: (id: string) => void | Promise<unknown>
+  onCreate?: (name: string) => void | Promise<unknown>
   multiple?: boolean
   selectedId?: string
   selectedIds?: string[]
   compact?: boolean
+  emptyLabel?: string
+  hideSearch?: boolean
   searchPlaceholder?: string
   searchShortcut?: string
+  showGroupHeadings?: boolean
   kind?: PropertyMenuKind
   teamName?: string
   trigger?: ReactNode
   customTrigger?: (controls: { open: boolean; activeTrigger?: string; openMenu: (triggerId?: string) => void }) => ReactNode
   triggerClassName?: string
+  triggerRole?: 'button' | 'combobox'
   surfaceClassName?: string
   side?: 'top' | 'right' | 'bottom' | 'left'
   align?: 'start' | 'center' | 'end'
@@ -55,6 +61,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   hoverClassName?: string
   valueIsEntityName?: boolean
 }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [activeTrigger, setActiveTrigger] = useState<string>()
   const [hoverOpen, setHoverOpen] = useState(false)
@@ -70,21 +77,26 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
     options: orderedOptions,
     selectedIds: selected,
     onOpenChange: setOpen,
-    onSelect: option => onChange?.(option.id),
+    onSelect: option => { void onChange?.(option.id) },
   })
   const labelMenu = groupLabelOptions(command.filteredOptions, selectedSet)
   const standardSections = groupOptionSections(command.filteredOptions)
   const noProject = command.filteredOptions.filter(option => !option.id)
   const projects = command.filteredOptions.filter(option => option.id)
+  const selectedProjects = projects.filter(option => command.isSelected(option.id))
+  const otherProjects = projects.filter(option => !command.isSelected(option.id))
   const createName = command.query.trim()
   const canCreateLabel = kind === 'labels' && Boolean(onCreate && createName && !options.some(option => option.label.toLocaleLowerCase() === createName.toLocaleLowerCase()))
+  const canCreateMilestone = kind === 'milestone' && Boolean(onCreate && createName && !options.some(option => option.label.toLocaleLowerCase() === createName.toLocaleLowerCase()))
   const createLabel = () => { if (!canCreateLabel || !onCreate) return; setOpen(false); void onCreate(createName) }
+  const createMilestone = () => { if (!canCreateMilestone || !onCreate) return; setOpen(false); void onCreate(createName) }
   const onCommandKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' && canCreateLabel && !command.filteredOptions.length) { event.preventDefault(); createLabel(); return }
+    if (event.key === 'Enter' && canCreateMilestone && !command.filteredOptions.length) { event.preventDefault(); createMilestone(); return }
     command.onKeyDown(event)
   }
   const placeholder = searchPlaceholder ?? (kind === 'labels' ? 'Change or add labels…' : kind === 'project' ? 'Add to project…' : `Change ${label.toLowerCase()}…`)
-  const triggerButton = <button type="button" role="combobox" className={triggerClassName ?? (compact ? 'mini-property-trigger' : 'property-row')} aria-label={ariaLabel ?? `Change ${label}. Current value is ${value || 'none'}`} aria-haspopup="dialog" aria-expanded={open}>
+  const triggerButton = <button type="button" role={triggerRole === 'combobox' ? 'combobox' : undefined} className={triggerClassName ?? (compact ? 'mini-property-trigger' : 'property-row')} aria-label={ariaLabel ?? `Change ${label}. Current value is ${value || 'none'}`} aria-haspopup="dialog" aria-expanded={open}>
         {trigger ?? (compact ? <>{icon ?? iconFor(label)}<span data-i18n-ignore={valueIsEntityName || undefined}>{value || label}</span></> : <><span>{icon ?? iconFor(label)}</span><span className="property-label">{label}</span><span className="property-value" data-i18n-ignore={valueIsEntityName || undefined}>{value || `Add ${label.toLowerCase()}`}</span></>)}
       </button>
   const popoverTrigger = <Popover.Trigger asChild>{triggerButton}</Popover.Trigger>
@@ -96,15 +108,16 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
     <Popover.Portal>
       <Popover.Content className={`property-command-surface property-command-${kind}${surfaceClassName ? ` ${surfaceClassName}` : ''}`} role="dialog" aria-label={`Change ${label}`} align={align} alignOffset={alignOffset} side={side} sideOffset={4} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}>
         <div onKeyDown={onCommandKeyDown}>
-          <div className="property-command-search">
+          <div className={`property-command-search${hideSearch ? ' is-visually-hidden' : ''}`}>
             <input ref={command.inputRef} value={command.query} onFocus={() => setOpenLabelGroupId(undefined)} onChange={event => command.onQueryChange(event.target.value)} aria-label={placeholder} aria-controls={listboxId} aria-activedescendant={command.activeId ? `${listboxId}-${command.activeId || 'none'}` : undefined} placeholder={placeholder} autoComplete="off" spellCheck={false}/>
             {(searchShortcut ?? (kind === 'labels' ? 'L' : kind === 'project' ? 'Shift P' : undefined)) && <kbd>{searchShortcut ?? (kind === 'labels' ? 'L' : 'Shift P')}</kbd>}
           </div>
           <div id={listboxId} className="property-command-options" role="listbox" aria-label={label} aria-multiselectable={multiple || undefined} onWheel={event => event.stopPropagation()}>
-            {kind === 'labels' && <>{labelMenu.selectedOptions.length > 0 && <><div className="property-command-group">Frequently used</div>{labelMenu.selectedOptions.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked listboxId={listboxId} icon={iconFor(label)} multi showGroupLabel onChoose={() => command.choose(option)} onActive={() => { setOpenLabelGroupId(undefined); command.setActiveId(option.id) }}/>)}</>}{(labelMenu.options.length > 0 || labelMenu.groups.length > 0) && <div className="property-command-group">Labels</div>}{labelMenu.groups.map(group => <LabelGroupOption key={group.id} group={group} open={openLabelGroupId === group.id} selectedIds={selectedSet} listboxId={listboxId} onOpenChange={next => setOpenLabelGroupId(next ? group.id : undefined)} onChoose={option => command.choose(option)}/>)}{labelMenu.options.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={false} listboxId={listboxId} icon={iconFor(label)} multi onChoose={() => command.choose(option)} onActive={() => { setOpenLabelGroupId(undefined); command.setActiveId(option.id) }}/>) }{canCreateLabel && <button type="button" className="property-command-create" role="option" aria-label={`Create new label: ${createName}`} onClick={createLabel}><Plus size={15}/><span>Create new label: <strong data-i18n-ignore>"{createName}"</strong></span></button>}</>}
-            {kind === 'project' && <>{noProject.map(option => <CommandOption key="none" option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }{projects.length > 0 && <div className="property-command-group">Projects in {teamName} team</div>}{projects.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }{onCreate&&<><div className="property-command-group">New project</div><button type="button" className="property-command-create" role="option" aria-label="Create new project" onClick={()=>{setOpen(false);void onCreate('')}}><Plus size={15}/><span>Create new project…</span></button></>}</>}
-            {kind === 'standard' && standardSections.map(section => <div className="property-command-section" key={section.id}>{section.label && <div className="property-command-group" data-i18n-ignore>{section.label}</div>}{section.options.map(option => <CommandOption key={option.id || 'none'} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} multi={multiple} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>)}</div>) }
-            {!command.filteredOptions.length && !canCreateLabel && <div className="core-property-empty">No results</div>}
+            {kind === 'labels' && <>{labelMenu.selectedOptions.length > 0 && <>{showGroupHeadings && <div className="property-command-group">{t('Frequently used')}</div>}{labelMenu.selectedOptions.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked listboxId={listboxId} icon={iconFor(label)} multi showGroupLabel onChoose={() => command.choose(option)} onActive={() => { setOpenLabelGroupId(undefined); command.setActiveId(option.id) }}/>)}</>}{showGroupHeadings && (labelMenu.options.length > 0 || labelMenu.groups.length > 0) && <div className="property-command-group">{t('Labels')}</div>}{labelMenu.groups.map(group => <LabelGroupOption key={group.id} group={group} open={openLabelGroupId === group.id} selectedIds={selectedSet} listboxId={listboxId} onOpenChange={next => setOpenLabelGroupId(next ? group.id : undefined)} onChoose={option => command.choose(option)}/>)}{labelMenu.options.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={false} listboxId={listboxId} icon={iconFor(label)} multi onChoose={() => command.choose(option)} onActive={() => { setOpenLabelGroupId(undefined); command.setActiveId(option.id) }}/>) }{canCreateLabel && <button type="button" className="property-command-create" role="option" aria-label={`${t('Create new label')}: ${createName}`} onClick={createLabel}><Plus size={15}/><span>{t('Create new label')}: <strong data-i18n-ignore>"{createName}"</strong></span></button>}</>}
+            {kind === 'project' && <>{noProject.map(option => <CommandOption key="none" option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }{selectedProjects.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>)}{otherProjects.length > 0 && <div className="property-command-group">{t('Projects in {team} team').replace('{team}', teamName)}</div>}{otherProjects.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={false} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }{onCreate&&<><div className="property-command-group">{t('New project')}</div><button type="button" className="property-command-create" role="option" aria-label={t('Create new project…')} onClick={()=>{setOpen(false);void onCreate('')}}><Plus size={15}/><span>{t('Create new project…')}</span></button></>}</>}
+            {kind === 'milestone' && <>{command.filteredOptions.map(option => <CommandOption key={option.id || 'none'} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>)}{canCreateMilestone&&<><div className="property-command-group">{t('New project milestone')}</div><button type="button" className="property-command-create" role="option" aria-label={t('Create new milestone…')} onClick={createMilestone}><Plus size={15}/><span>{t('Create new milestone…')}</span></button></>}</>}
+            {kind === 'standard' && standardSections.map(section => <div className="property-command-section" key={section.id}>{section.label && <div className="property-command-group">{t(section.label)}</div>}{section.options.map(option => <CommandOption key={option.id || 'none'} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} multi={multiple} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>)}</div>) }
+            {!command.filteredOptions.length && !canCreateLabel && !canCreateMilestone && <div className="core-property-empty">{t(emptyLabel ?? 'No results')}</div>}
           </div>
         </div>
       </Popover.Content>
@@ -156,14 +169,15 @@ function LabelGroupOption({ group, open, selectedIds, listboxId, onOpenChange, o
       if (option) { event.preventDefault(); choose(option) }
     }
   }
-  return <Popover.Root open={open} onOpenChange={changeOpen}><Popover.Trigger asChild><button type="button" className="property-command-label-group-option" role="option" aria-selected={open} aria-haspopup="listbox" aria-expanded={open} onPointerEnter={() => changeOpen(true)} onFocus={() => changeOpen(true)} onClick={() => changeOpen(true)}>
+  return <Popover.Root open={open} onOpenChange={changeOpen}><Popover.Anchor asChild><button type="button" className="property-command-label-group-option" role="option" aria-selected={open} aria-haspopup="listbox" aria-expanded={open} onPointerEnter={() => changeOpen(true)} onFocus={() => changeOpen(true)} onClick={() => changeOpen(true)}>
     <span className="property-command-option-background"/><span className="property-command-checkbox"/><span className="property-command-icon"><LabelGroupIcon color={group.color ?? group.options[0]?.color ?? 'currentColor'} size={16}/></span><span className="property-command-group-copy"><span className="property-command-label">{group.label}</span></span><ChevronRight className="property-command-group-chevron" size={13}/>
-  </button></Popover.Trigger><Popover.Portal><Popover.Content className="property-command-label-submenu" side="right" align="start" alignOffset={-6} sideOffset={-2} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}><div onKeyDown={onKeyDown}><div className="property-command-search"><input ref={inputRef} value={query} onChange={event=>{setQuery(event.target.value);const normalized=event.target.value.trim().toLocaleLowerCase();setActiveId(group.options.find(option=>option.label.toLocaleLowerCase().includes(normalized))?.id)}} aria-label={group.label} placeholder={group.label} autoComplete="off" spellCheck={false}/></div><div className="property-command-options" role="listbox" aria-label={group.label}>{filtered.map(option => <CommandOption key={option.id} option={option} active={option.id === activeId} checked={selectedIds.has(option.id)} listboxId={`${listboxId}-${group.id}`} icon={<LabelIcon size={14}/>} onChoose={() => choose(option)} onActive={() => setActiveId(option.id)}/>)}{!filtered.length&&<div className="core-property-empty">No results</div>}</div></div></Popover.Content></Popover.Portal></Popover.Root>
+  </button></Popover.Anchor><Popover.Portal><Popover.Content className="property-command-label-submenu" side="right" align="start" alignOffset={-6} sideOffset={-2} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}><div onKeyDown={onKeyDown}><div className="property-command-search"><input ref={inputRef} value={query} onChange={event=>{setQuery(event.target.value);const normalized=event.target.value.trim().toLocaleLowerCase();setActiveId(group.options.find(option=>option.label.toLocaleLowerCase().includes(normalized))?.id)}} aria-label={group.label} placeholder={group.label} autoComplete="off" spellCheck={false}/></div><div className="property-command-options" role="listbox" aria-label={group.label}>{filtered.map(option => <CommandOption key={option.id} option={option} active={option.id === activeId} checked={selectedIds.has(option.id)} listboxId={`${listboxId}-${group.id}`} icon={<LabelIcon size={14}/>} onChoose={() => choose(option)} onActive={() => setActiveId(option.id)}/>)}{!filtered.length&&<div className="core-property-empty">No results</div>}</div></div></Popover.Content></Popover.Portal></Popover.Root>
 }
 
 function CommandOption({ option, active, checked, icon, listboxId, multi = false, showGroupLabel = false, onChoose, onActive }: { option: PropertyOption; active: boolean; checked: boolean; icon: ReactNode; listboxId: string; multi?: boolean; showGroupLabel?: boolean; onChoose: () => void; onActive: () => void }) {
+  const { t } = useI18n()
   const row = <button type="button" className={showGroupLabel && option.groupLabel ? 'is-grouped-label' : undefined} id={`${listboxId}-${option.id || 'none'}`} role="option" aria-selected={active} aria-checked={checked} onPointerMove={onActive} onFocus={onActive} onClick={onChoose}>
-    <span className="property-command-option-background"/>{multi && <span className="property-command-checkbox">{checked && <CheckboxMark/>}</span>}<span className="property-command-icon">{option.icon ?? (option.color ? <i className="option-dot" style={{ background: option.color }}/> : icon)}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.label}</span>{showGroupLabel && option.groupLabel && <span className="property-command-option-group" data-i18n-ignore>{option.groupLabel}</span>}{!multi && checked && <span className="property-command-check"><Check size={14}/></span>}{option.shortcut && <kbd>{option.shortcut}</kbd>}
+    <span className="property-command-option-background"/>{multi && <span className="property-command-checkbox">{checked && <CheckboxMark/>}</span>}<span className="property-command-icon">{option.icon ?? (option.color ? <i className="option-dot" style={{ background: option.color }}/> : icon)}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.i18nIgnore ? option.label : t(option.label)}</span>{showGroupLabel && option.groupLabel && <span className="property-command-option-group" data-i18n-ignore>{option.groupLabel}</span>}{!multi && checked && <span className="property-command-check"><Check size={14}/></span>}{option.end && <span className="property-command-option-end">{t(option.end)}</span>}{option.shortcut && <kbd>{option.shortcut}</kbd>}
   </button>
   return multi && option.color ? <LabelHoverPreview label={{ name: option.label, color: option.color, description: option.description, issueCount: option.issueCount, scope: option.scope, resourceType: option.resourceType }}>{row}</LabelHoverPreview> : row
 }

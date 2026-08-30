@@ -729,6 +729,7 @@
   outline: 0;
   font-size: 12px;
   cursor: pointer;
+  text-decoration: none;
 }
 .workspace-directory-member-row:hover {
   background: var(--theme-surface-1);
@@ -809,6 +810,8 @@
   border-radius: 50%;
   background: #3db56b;
 }
+.workspace-directory-avatar.is-invited{border:1px dashed var(--theme-border-strong);background:transparent!important;color:var(--theme-text-tertiary)}
+.member-profile-page{display:flex;min-width:0;flex-direction:column}.member-profile-header{height:52px;display:flex;align-items:center;gap:9px;padding:0 18px;border-bottom:.5px solid var(--theme-border)}.member-profile-header .user-avatar{width:24px;height:24px}.member-profile-header h1{margin:0;font-size:14px;font-weight:550}.member-profile-tabs{height:48px;display:flex;align-items:flex-end;gap:4px;padding:0 18px;border-bottom:.5px solid var(--theme-border)}.member-profile-tabs button{height:32px;padding:0 10px;border:0;border-radius:6px 6px 0 0;background:transparent;color:var(--theme-text-secondary);font:500 13px inherit}.member-profile-tabs button:hover{background:var(--theme-surface-hover);color:var(--theme-text-primary)}.member-profile-tabs button[aria-current=true]{color:var(--theme-text-primary)}.member-profile-list{min-height:0;flex:1;overflow:auto}
 
 .workspace-customers-toolbar label {
   height: 28px;
@@ -954,9 +957,10 @@
 }
 .workspace-customer-columns {
   height: 36px;
-  color: #7e7e83;
+  color: var(--theme-text-secondary);
   font-size: 11px;
 }
+.workspace-customer-columns > button{height:28px;display:flex;align-items:center;padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:left}.workspace-customer-columns > button:hover{color:var(--theme-text-primary)}.workspace-customer-columns > button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
 .workspace-customer-row {
   height: 48px;
   color: #96969b;

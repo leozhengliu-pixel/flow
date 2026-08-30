@@ -10,6 +10,8 @@ import { useMyIssuesController } from './use-my-issues-controller'
 import { applyExplorerFilters, explorerFilterOptions, explorerPropertyOptions, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import { SavedViewInsightsPanel, type SavedViewInsightsConfig } from '@/components/issue-explorer/saved-view-panels'
 import type { SavedView } from '@/types/flow'
+import { setGroupedLabelSelected } from '@/lib/labels'
+import { confirmAction } from '@/components/ui/action-dialog-service'
 
 export interface MyIssuesPageProps {
   data: BootstrapData
@@ -99,10 +101,12 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   }
   const contextAction = async (row: MyIssuesRowData, action: MyIssuesContextAction, value?: string) => {
     if (action === 'delete') {
-      if (window.confirm(`Delete ${row.identifier}? This cannot be undone.`)) await onDeleteIssues([row.id])
+      if (await confirmAction(`Delete ${row.identifier}?`,{description:'This cannot be undone.',confirmLabel:'Delete'})) await onDeleteIssues([row.id])
       return
     }
-    if (action === 'copy') { await navigator.clipboard.writeText(`${location.origin}${row.href ?? issueUrl(workspaceSlug, row.identifier)}`); return }
+    if (action === 'copy' || action === 'copyUrl') { await navigator.clipboard.writeText(`${location.origin}${row.href ?? issueUrl(workspaceSlug, row.identifier)}`); return }
+    if (action === 'copyId') { await navigator.clipboard.writeText(row.identifier); return }
+    if (action === 'copyTitle') { await navigator.clipboard.writeText(row.title); return }
     const update = updateForAction(action, value)
     if (update) await updateOne(row, update)
   }
@@ -228,7 +232,10 @@ function bulkOptions(action: MyIssuesBulkAction, options: ReturnType<typeof expl
 
 async function executeBulkAction({ action, ids, value, data, issuesById, onUpdateIssue, onUpdateIssues }: { action: MyIssuesBulkAction; ids: string[]; value?: string; data: BootstrapData; issuesById: Map<string, Issue>; onUpdateIssue: (id: string, input: IssueUpdateInput) => Promise<Issue>; onUpdateIssues: (ids: string[], input: IssueUpdateInput) => Promise<Issue[]> }): Promise<Issue[] | void> {
   if (action.startsWith('copy')) { await copyIssues(action, ids, issuesById, data.workspace.urlKey); return }
-  if (action === 'labels' && value != null) return Promise.all(ids.map(id => { const issue = issuesById.get(id)!; return onUpdateIssue(id, { labelIds: issue.labels.some(label => label.id === value) ? issue.labels.map(label => label.id) : [...issue.labels.map(label => label.id), value] }) }))
+  if (action === 'labels' && value != null) {
+    const selected = !ids.every(id => issuesById.get(id)?.labels.some(label => label.id === value))
+    return Promise.all(ids.map(id => { const issue = issuesById.get(id)!; return onUpdateIssue(id, { labelIds: setGroupedLabelSelected(issue.labels.map(label => label.id), value, data.labels, selected) }) }))
+  }
   if (action === 'subscribers' && value != null) return Promise.all(ids.map(id => { const issue = issuesById.get(id)!; return onUpdateIssue(id, { subscriberIds: issue.subscriberIds.includes(value) ? issue.subscriberIds : [...issue.subscriberIds, value] }) }))
   if (action === 'removeSubscribers') return Promise.all(ids.map(id => onUpdateIssue(id, { subscriberIds: [] })))
   if (action === 'unassignMe') return onUpdateIssues(ids, { assigneeId: '' })
@@ -242,6 +249,7 @@ function updateForAction(action: MyIssuesBulkAction | MyIssuesContextAction, val
   if (action === 'priority') return { priority: Number(value) }
   if (action === 'assign' || action === 'assignee') return { assigneeId: value }
   if (action === 'project') return { projectId: value }
+  if (action === 'cycle') return { cycleId: value }
   if (action === 'dueDate') return { dueDate: value }
 }
 
@@ -252,6 +260,7 @@ function updateForProperty(property: MyIssuesEditableProperty, value: string | s
   if (property === 'priority') return { priority: Number(value) }
   if (property === 'assignee') return { assigneeId: value }
   if (property === 'project') return { projectId: value }
+  if (property === 'cycle') return { cycleId: value }
   if (property === 'dueDate') return { dueDate: value }
 }
 
@@ -262,6 +271,7 @@ function optimisticRow(row: MyIssuesRowData, input: IssueUpdateInput, data: Boot
     priority: input.priority === undefined ? row.priority : clampPriority(input.priority),
     assignee: input.assigneeId === undefined ? row.assignee : input.assigneeId ? (() => { const user = data.users.find(item => item.id === input.assigneeId); return user ? { id: user.id, name: user.displayName, avatarUrl: user.avatarUrl } : row.assignee })() : undefined,
     project: input.projectId === undefined ? row.project : input.projectId ? data.projects.find(project => project.id === input.projectId) : undefined,
+    cycleId: input.cycleId === undefined ? row.cycleId : input.cycleId || undefined,
     dueDate: input.dueDate === undefined ? row.dueDate : input.dueDate || undefined,
     labels: input.labelIds === undefined ? row.labels : input.labelIds.map(id => data.labels.find(label => label.id === id)).filter((label): label is NonNullable<typeof label> => Boolean(label)),
     updatedAt: new Date().toISOString(),

@@ -34,6 +34,7 @@ interface InboxProjection extends InboxNotificationRowData {
 
 export interface InboxAppPageProps {
   data: BootstrapData
+  onReload: () => Promise<void> | void
   onOpenIssue: (issue: Issue) => void
   onOpenProject?: (project: Project) => void
   onOpenReview?: (review: CodeReview) => void
@@ -54,7 +55,7 @@ export interface InboxAppPageProps {
   onOpenSidebar?: () => void
 }
 
-export function InboxAppPage({ data, onOpenIssue, onOpenProject, onOpenReview, onSubscriberChange, onUpdateIssue, onDeleteIssue, onCreateRelation, onDeleteRelation, onCreateSubIssue, onReactIssue, onCreateComment, onEditComment, onDeleteComment, onReactComment, onUploadAttachment, onDeleteAttachment, onCopyIssueLink, onOpenSidebar }: InboxAppPageProps) {
+export function InboxAppPage({ data, onReload, onOpenIssue, onOpenProject, onOpenReview, onSubscriberChange, onUpdateIssue, onDeleteIssue, onCreateRelation, onDeleteRelation, onCreateSubIssue, onReactIssue, onCreateComment, onEditComment, onDeleteComment, onReactComment, onUploadAttachment, onDeleteAttachment, onCopyIssueLink, onOpenSidebar }: InboxAppPageProps) {
   const source = useMemo(() => projectInbox(data), [data])
   const issueById = useMemo(() => new Map(data.issues.map(issue => [issue.id, issue])), [data.issues])
   const [notifications, setNotifications] = useState<InboxProjection[]>(source)
@@ -160,7 +161,7 @@ export function InboxAppPage({ data, onOpenIssue, onOpenProject, onOpenReview, o
     filterHiddenCount={filterHiddenCount}
     onFiltersChange={setFilters}
     onOpenSidebar={onOpenSidebar}
-    onRetryLoad={() => undefined}
+    onRetryLoad={() => void onReload()}
     onOpenIssue={notification => {
       const projection = notifications.find(item => item.id === notification.id)
       const issue = projection ? issueById.get(projection.issueId) : undefined

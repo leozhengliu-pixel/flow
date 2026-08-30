@@ -37,6 +37,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { ViewIconPicker } from "@/components/views/view-icon-picker";
 import { ReleasesIcon } from "@/components/releases/release-icons";
 import type { Team } from "@/types/flow";
+import type { SettingsPageId } from "@/lib/app-routes";
 
 import "./workspace-directory.css";
 
@@ -103,18 +104,34 @@ const SETTINGS_SECTIONS: {
   },
 ];
 
+const SETTINGS_DESTINATIONS: Record<string, SettingsPageId> = {
+  "Personal/Preferences":"preferences","Personal/Profile":"profile","Personal/Notifications":"notifications","Personal/Code & reviews":"code-and-reviews","Personal/Security & access":"account-security","Personal/Connected accounts":"connections","Personal/Agent personalization":"agents",
+  "Issues/Labels":"issue-labels","Issues/Templates":"issue-templates","Issues/SLAs":"sla",
+  "Projects/Labels":"project-labels","Projects/Templates":"project-templates","Projects/Statuses":"project-statuses","Projects/Updates":"project-updates",
+  "Features/AI & Agents":"ai","Features/Initiatives":"initiatives","Features/Documents":"documents","Features/Customer requests":"customer-requests","Features/Releases":"releases","Features/Pulse":"pulse","Features/Asks":"asks","Features/Emojis":"emojis","Features/Integrations":"integrations",
+  "Administration/Workspace":"workspace","Administration/Teams":"teams","Administration/Members":"members","Administration/Security":"security","Administration/API":"api","Administration/Applications":"applications","Administration/Billing":"billing","Administration/Usage & limits":"usage","Administration/Import & export":"import-export",
+};
+
 export function TeamCreatePage({
   teams,
+  businessEnabled,
   onBack,
+  onNavigateSettings,
   onCreate,
 }: {
   teams: Team[];
+  businessEnabled: boolean;
   onBack: () => void;
+  onNavigateSettings: (page: SettingsPageId, teamKey?: string) => void;
   onCreate: (input: {
     name: string;
     key: string;
     color?: string;
     icon?: string;
+    private?: boolean;
+    parentTeamId?: string;
+    copyFromTeamId?: string;
+    timezone?: string;
   }) => Promise<void>;
 }) {
   const [name, setName] = useState("");
@@ -127,6 +144,8 @@ export function TeamCreatePage({
     "GMT+8:00 – China Standard Time - Shanghai",
   );
   const [copyFrom, setCopyFrom] = useState("");
+  const [parentTeamId, setParentTeamId] = useState("");
+  const [privateTeam, setPrivateTeam] = useState(false);
   const [saving, setSaving] = useState(false);
   const generatedKey = useMemo(() => teamCode(name), [name]);
   const submit = async (event: FormEvent) => {
@@ -135,7 +154,7 @@ export function TeamCreatePage({
     if (!name.trim() || !identifier || saving) return;
     setSaving(true);
     try {
-      await onCreate({ name: name.trim(), key: identifier, color, icon });
+      await onCreate({ name: name.trim(), key: identifier, color, icon, private: privateTeam, parentTeamId, copyFromTeamId: parentTeamId || copyFrom, timezone: timezone.includes("Coordinated") ? "Etc/UTC" : "Asia/Shanghai" });
       onBack();
     } finally {
       setSaving(false);
@@ -169,6 +188,7 @@ export function TeamCreatePage({
                 <button
                   className={item.label === "Teams" ? "active" : ""}
                   key={`${section.title}-${item.label}`}
+                  onClick={() => onNavigateSettings(SETTINGS_DESTINATIONS[`${section.title}/${item.label}`] ?? "workspace")}
                   type="button"
                 >
                   <item.icon />
@@ -182,7 +202,7 @@ export function TeamCreatePage({
           <div className="workspace-settings-nav__group">
             <h2>Your teams</h2>
             {teams.map((team) => (
-              <button key={team.id} type="button">
+              <button key={team.id} onClick={()=>onNavigateSettings("team",team.key)} type="button">
                 <Bot />
                 {team.name}
               </button>
@@ -249,9 +269,10 @@ export function TeamCreatePage({
             </label>
             <label>
               <span>Parent team</span>
-              <button type="button" disabled>
-                Available on Business
-              </button>
+              <select aria-label="Parent team" disabled={!businessEnabled} value={parentTeamId} onChange={(event) => { setParentTeamId(event.target.value); if (event.target.value) setCopyFrom(event.target.value); }}>
+                <option value="">{businessEnabled ? "No parent team" : "Available on Business"}</option>
+                {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+              </select>
             </label>
           </section>
           <h2>Team access</h2>
@@ -262,9 +283,10 @@ export function TeamCreatePage({
           <section className="workspace-settings-card">
             <label>
               <span>Change team access</span>
-              <button type="button" disabled>
-                Available on Business
-              </button>
+              <select aria-label="Team access" disabled={!businessEnabled} value={privateTeam ? "private" : "public"} onChange={(event) => setPrivateTeam(event.target.value === "private")}>
+                <option value="public">{businessEnabled ? "Public to workspace" : "Available on Business"}</option>
+                {businessEnabled && <option value="private">Private</option>}
+              </select>
             </label>
           </section>
           <h2>Timezone</h2>
@@ -292,6 +314,7 @@ export function TeamCreatePage({
               <span>Copy from team</span>
               <select
                 aria-label="Copy from team"
+                disabled={Boolean(parentTeamId)}
                 value={copyFrom}
                 onChange={(event) => setCopyFrom(event.target.value)}
               >

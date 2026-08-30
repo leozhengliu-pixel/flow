@@ -115,6 +115,11 @@ func (s *server) batchNotifications(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid notification batch action")
 		return
 	}
+	selectedAction := slices.Contains([]string{"delete", "markRead", "markUnread", "archive", "unarchive", "snooze", "unsnooze"}, input.Action)
+	if selectedAction && len(input.IDs) == 0 {
+		writeError(w, http.StatusBadRequest, "notification ids are required")
+		return
+	}
 	var snoozedUntil *time.Time
 	if input.Action == "snooze" || input.Action == "snoozeAll" {
 		if input.SnoozedUntil == nil {
@@ -240,6 +245,9 @@ func (s *server) retryNotificationDelivery(w http.ResponseWriter, r *http.Reques
 			return errNotFound
 		}
 		delivery := &data.NotificationDeliveries[index]
+		if delivery.Status != "failed" && delivery.Status != "pending-disabled" && delivery.Status != "pending" {
+			return fmt.Errorf("%w: delivery cannot be retried in its current state", errConflict)
+		}
 		delivery.Status, delivery.Error, delivery.NextAttemptAt, delivery.UpdatedAt = "pending", "", nil, time.Now().UTC()
 		updated = *delivery
 		return nil
@@ -257,6 +265,20 @@ func (s *server) dispatchNotificationEmails(ctx context.Context, key string) {
 	}
 	for _, delivery := range data.NotificationDeliveries {
 		if delivery.Channel != "email" || delivery.Status != "pending" {
+			continue
+		}
+		claimed := false
+		claimErr := s.store.MutateWorkspace(ctx, key, "notification.delivery_claimed", delivery.ID, nil, func(next *domain.Bootstrap) error {
+			index := slices.IndexFunc(next.NotificationDeliveries, func(item domain.NotificationDelivery) bool { return item.ID == delivery.ID })
+			if index < 0 || next.NotificationDeliveries[index].Status != "pending" {
+				return nil
+			}
+			next.NotificationDeliveries[index].Status = "delivering"
+			next.NotificationDeliveries[index].UpdatedAt = time.Now().UTC()
+			delivery, claimed = next.NotificationDeliveries[index], true
+			return nil
+		})
+		if claimErr != nil || !claimed {
 			continue
 		}
 		status, message := "delivered", ""
@@ -290,9 +312,10 @@ func (s *server) dispatchNotificationEmails(ctx context.Context, key string) {
 				}
 			}
 		}
-		_ = s.store.MutateWorkspace(ctx, key, "notification.delivery_updated", delivery.ID, map[string]string{"status": status}, func(next *domain.Bootstrap) error {
+		persistCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_ = s.store.MutateWorkspace(persistCtx, key, "notification.delivery_updated", delivery.ID, map[string]string{"status": status}, func(next *domain.Bootstrap) error {
 			index := slices.IndexFunc(next.NotificationDeliveries, func(item domain.NotificationDelivery) bool { return item.ID == delivery.ID })
-			if index < 0 {
+			if index < 0 || next.NotificationDeliveries[index].Status != "delivering" {
 				return nil
 			}
 			now := time.Now().UTC()
@@ -302,11 +325,12 @@ func (s *server) dispatchNotificationEmails(ctx context.Context, key string) {
 			if status == "delivered" {
 				item.DeliveredAt = &now
 			} else if status == "failed" {
-				retry := now.Add(time.Duration(min(item.Attempts, 6)) * time.Minute)
+				retry := now.Add(time.Duration(1<<min(item.Attempts, 6)) * time.Minute)
 				item.NextAttemptAt = &retry
 			}
 			return nil
 		})
+		cancel()
 	}
 }
 
@@ -349,6 +373,10 @@ func (s *server) createWorkflowState(w http.ResponseWriter, r *http.Request) {
 			clearDefaultState(data, teamID)
 		}
 		data.States = append(data.States, created)
+		normalizeWorkflowStatePositions(data, teamID)
+		if normalized := stateForTeam(data, teamID, created.ID); normalized != nil {
+			created = *normalized
+		}
 		if created.Default {
 			settings := teamSettings(data, teamID)
 			settings.DefaultStateID = created.ID
@@ -369,6 +397,9 @@ func (s *server) updateWorkflowState(w http.ResponseWriter, r *http.Request) {
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "workflow_state.updated", stateID, input, func(data *domain.Bootstrap) error {
 		materializeTeamStates(data, teamID)
 		state := stateForTeam(data, teamID, stateID)
+		if state == nil {
+			state = stateForTeam(data, teamID, teamID+"_"+stateID)
+		}
 		if state == nil {
 			return errNotFound
 		}
@@ -408,6 +439,11 @@ func (s *server) updateWorkflowState(w http.ResponseWriter, r *http.Request) {
 			data.TeamSettings[teamID] = settings
 		}
 		updated = *state
+		for index := range data.Issues {
+			if data.Issues[index].Team.ID == teamID && data.Issues[index].State.ID == updated.ID {
+				data.Issues[index].State = updated
+			}
+		}
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
@@ -423,8 +459,12 @@ func (s *server) deleteWorkflowState(w http.ResponseWriter, r *http.Request) {
 		materializeTeamStates(data, teamID)
 		state := stateForTeam(data, teamID, stateID)
 		if state == nil {
+			state = stateForTeam(data, teamID, teamID+"_"+stateID)
+		}
+		if state == nil {
 			return errNotFound
 		}
+		resolvedStateID := state.ID
 		if state.Reserved {
 			return fmt.Errorf("%w: reserved status cannot be deleted", errInvalid)
 		}
@@ -434,22 +474,25 @@ func (s *server) deleteWorkflowState(w http.ResponseWriter, r *http.Request) {
 		if countStatesOfType(data, teamID, state.Type) <= 1 {
 			return fmt.Errorf("%w: each workflow type needs at least one status", errInvalid)
 		}
-		inUse := slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool { return issue.Team.ID == teamID && issue.State.ID == stateID })
+		inUse := slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool { return issue.Team.ID == teamID && issue.State.ID == resolvedStateID })
 		var replacement *domain.WorkflowState
 		if input.ReplacementStateID != "" {
 			replacement = stateForTeam(data, teamID, input.ReplacementStateID)
+			if replacement == nil {
+				replacement = stateForTeam(data, teamID, teamID+"_"+input.ReplacementStateID)
+			}
 		}
 		if inUse && replacement == nil {
 			return fmt.Errorf("%w: replacementStateId is required for a status in use", errInvalid)
 		}
 		if replacement != nil {
 			for index := range data.Issues {
-				if data.Issues[index].Team.ID == teamID && data.Issues[index].State.ID == stateID {
+				if data.Issues[index].Team.ID == teamID && data.Issues[index].State.ID == resolvedStateID {
 					data.Issues[index].State = *replacement
 				}
 			}
 		}
-		data.States = slices.DeleteFunc(data.States, func(item domain.WorkflowState) bool { return item.TeamID == teamID && item.ID == stateID })
+		data.States = slices.DeleteFunc(data.States, func(item domain.WorkflowState) bool { return item.TeamID == teamID && item.ID == resolvedStateID })
 		return nil
 	})
 	if err != nil {
@@ -469,17 +512,32 @@ func (s *server) reorderWorkflowStates(w http.ResponseWriter, r *http.Request) {
 	var updated []domain.WorkflowState
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "workflow_states.reordered", teamID, input, func(data *domain.Bootstrap) error {
 		materializeTeamStates(data, teamID)
-		if len(input.StateIDs) != len(statesForTeam(data, teamID)) {
+		states := statesForTeam(data, teamID)
+		if len(input.StateIDs) != len(states) || !allUniqueStrings(input.StateIDs) {
 			return errInvalid
 		}
+		lastRank := -1
 		for position, id := range input.StateIDs {
 			state := stateForTeam(data, teamID, id)
 			if state == nil {
 				return errInvalid
 			}
+			rank := workflowStateRank(*state)
+			if rank < lastRank {
+				return errInvalid
+			}
+			lastRank = rank
 			state.Position = float64(position)
 		}
 		updated = statesForTeam(data, teamID)
+		for issueIndex := range data.Issues {
+			if data.Issues[issueIndex].Team.ID != teamID {
+				continue
+			}
+			if state := stateForTeam(data, teamID, data.Issues[issueIndex].State.ID); state != nil {
+				data.Issues[issueIndex].State = *state
+			}
+		}
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
@@ -648,7 +706,7 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 			settings.ShowInitiatives = *input.ShowInitiatives
 		}
 		if input.ParentTeamID != nil {
-			if *input.ParentTeamID == teamID || (*input.ParentTeamID != "" && !teamExists(data, *input.ParentTeamID)) {
+			if *input.ParentTeamID == teamID || (*input.ParentTeamID != "" && (!teamExists(data, *input.ParentTeamID) || teamParentCreatesCycle(data, teamID, *input.ParentTeamID))) {
 				return errInvalid
 			}
 			settings.ParentTeamID = *input.ParentTeamID
@@ -674,6 +732,18 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
+}
+
+func teamParentCreatesCycle(data *domain.Bootstrap, teamID, parentID string) bool {
+	seen := map[string]bool{teamID: true}
+	for parentID != "" {
+		if seen[parentID] {
+			return true
+		}
+		seen[parentID] = true
+		parentID = data.TeamSettings[parentID].ParentTeamID
+	}
+	return false
 }
 
 func (s *server) listIssueTemplates(w http.ResponseWriter, r *http.Request) {
@@ -843,9 +913,7 @@ func (s *server) deleteTeamLabel(w http.ResponseWriter, r *http.Request) {
 		if len(data.Labels) == before {
 			return errNotFound
 		}
-		for index := range data.Issues {
-			data.Issues[index].Labels = slices.DeleteFunc(data.Issues[index].Labels, func(item domain.IssueLabel) bool { return item.ID == labelID })
-		}
+		removeLabelReferences(data, map[string]struct{}{labelID: {}})
 		return nil
 	})
 	if err != nil {
@@ -919,7 +987,8 @@ func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, 
 		template.ProjectID = *input.ProjectID
 	}
 	if input.LabelIDs != nil {
-		if len(labelsByID(data, *input.LabelIDs)) != len(*input.LabelIDs) {
+		labels := labelsByIDForResource(data, *input.LabelIDs, "issue")
+		if len(labels) != len(*input.LabelIDs) || !validLabelGroupSelection(labels) || !labelsAvailableToTeam(labels, template.TeamID) {
 			return errInvalid
 		}
 		template.LabelIDs = slices.Clone(*input.LabelIDs)
@@ -953,7 +1022,8 @@ func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, 
 			if item.AssigneeID != "" && userByID(data, item.AssigneeID) == nil {
 				return errInvalid
 			}
-			if len(labelsByID(data, item.LabelIDs)) != len(item.LabelIDs) {
+			labels := labelsByIDForResource(data, item.LabelIDs, "issue")
+			if len(labels) != len(item.LabelIDs) || !validLabelGroupSelection(labels) || !labelsAvailableToTeam(labels, item.TeamID) {
 				return errInvalid
 			}
 			if item.ID == "" {
@@ -963,6 +1033,12 @@ func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, 
 		template.SubIssues = slices.Clone(*input.SubIssues)
 	}
 	return nil
+}
+
+func labelsAvailableToTeam(labels []domain.IssueLabel, teamID string) bool {
+	return !slices.ContainsFunc(labels, func(label domain.IssueLabel) bool {
+		return !labelScopeIsWorkspace(label.Scope) && label.Scope != teamID
+	})
 }
 
 func validWorkflowType(value string) bool {
@@ -1078,11 +1154,54 @@ func stateForTeam(data *domain.Bootstrap, teamID, stateID string) *domain.Workfl
 func countStatesOfType(data *domain.Bootstrap, teamID, stateType string) int {
 	count := 0
 	for _, state := range statesForTeam(data, teamID) {
-		if state.Type == stateType {
+		if state.Type == stateType && !state.Reserved {
 			count++
 		}
 	}
 	return count
+}
+
+func workflowStateRank(state domain.WorkflowState) int {
+	if state.Reserved {
+		return 5
+	}
+	return map[string]int{"backlog": 0, "unstarted": 1, "started": 2, "completed": 3, "canceled": 4}[state.Type]
+}
+
+func normalizeWorkflowStatePositions(data *domain.Bootstrap, teamID string) {
+	indexes := make([]int, 0)
+	for index := range data.States {
+		if data.States[index].TeamID == teamID {
+			indexes = append(indexes, index)
+		}
+	}
+	slices.SortStableFunc(indexes, func(left, right int) int {
+		leftState, rightState := data.States[left], data.States[right]
+		if rank := workflowStateRank(leftState) - workflowStateRank(rightState); rank != 0 {
+			return rank
+		}
+		if leftState.Position < rightState.Position {
+			return -1
+		}
+		if leftState.Position > rightState.Position {
+			return 1
+		}
+		return strings.Compare(leftState.Name, rightState.Name)
+	})
+	for position, index := range indexes {
+		data.States[index].Position = float64(position)
+	}
+}
+
+func allUniqueStrings(values []string) bool {
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if _, exists := seen[value]; exists {
+			return false
+		}
+		seen[value] = struct{}{}
+	}
+	return true
 }
 func clearDefaultState(data *domain.Bootstrap, teamID string) {
 	for index := range data.States {

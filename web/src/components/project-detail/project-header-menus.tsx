@@ -5,7 +5,6 @@ import * as Popover from '@radix-ui/react-popover'
 import { Bell, Check, ChevronRight, Clipboard, Clock3, Copy, FileClock, History, Link2, MessageSquareText, Star, Trash2 } from 'lucide-react'
 import { format, formatDistanceToNowStrict } from 'date-fns'
 import { toast } from 'sonner'
-import { SlackIcon } from '@/components/issue/issue-icons'
 import type { Project, Subscription } from '@/types/flow'
 import { NotificationCheckbox, NotificationOptionSection } from '@/components/ui/notification-controls'
 
@@ -27,7 +26,6 @@ export function ProjectNotificationMenu({ onOpenChange, open, project, subscript
     <Popover.Portal><Popover.Content align="end" className="project-notifications" collisionPadding={10} sideOffset={4}>
       <NotificationOptionSection className="project-notifications__section" title={<><span>Send inbox notifications for</span> <span data-i18n-ignore>{project.name}</span></>}>{EVENT_OPTIONS.map(([eventName, label]) => <NotificationCheckbox checked={events.includes(eventName)} key={eventName} label={label} onChange={checked => void changeEvent(eventName, checked)}/>)}</NotificationOptionSection>
       <section className="project-notifications__schedule"><div><strong>Update schedule</strong><span>{scheduleLabel(project.updateCadence || 'none')}</span></div><DropdownMenu.Root><DropdownMenu.Trigger asChild><button type="button">Change</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className="project-detail-page__menu" sideOffset={5}>{(['none','weekly','biweekly','monthly'] as const).map(schedule => <DropdownMenu.Item key={schedule} onSelect={() => void onUpdate({ updateCadence: schedule })}><Clock3 size={13}/><span>{scheduleLabel(schedule)}</span>{project.updateCadence === schedule && <Check size={13}/>}</DropdownMenu.Item>)}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></section>
-      <section className="project-notifications__slack"><SlackIcon size={15}/><strong>Slack notifications</strong><button aria-disabled="true" disabled title="Connect Slack in workspace settings first" type="button">Connect</button></section>
     </Popover.Content></Popover.Portal>
   </Popover.Root>
 }
@@ -54,7 +52,6 @@ export function ProjectActionsMenu({ project, favorited, onDelete, onFavorite, o
     {visible('Remind me') && <DropdownMenu.Sub><DropdownMenu.SubTrigger><Clock3 size={14}/><span>Remind me</span><kbd>⇧ H</kbd><ChevronRight size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="project-detail-page__menu" sideOffset={6}>{reminders.map(([label, remindAt]) => <DropdownMenu.Item key={label} onSelect={() => void onRemind(remindAt).then(() => toast.success(`Reminder set for ${label.toLowerCase()}`))}><span>{label}</span></DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>}
     <DropdownMenu.Separator/>
     {visible('Change update schedule') && <DropdownMenu.Item onSelect={onShowNotifications}><FileClock size={14}/><span>Change update schedule…</span></DropdownMenu.Item>}
-    <DropdownMenu.Item aria-disabled="true" disabled><SlackIcon size={14}/><span>Configure Slack notifications…</span></DropdownMenu.Item>
     <DropdownMenu.Separator/>
     {visible('Show description history') && <DropdownMenu.Item onSelect={onShowHistory}><History size={14}/><span>Show description history</span></DropdownMenu.Item>}
     {visible('Show updates and activity') && <DropdownMenu.Item onSelect={onShowActivity}><MessageSquareText size={14}/><span>Show updates and activity</span><kbd>⌘ U</kbd></DropdownMenu.Item>}
