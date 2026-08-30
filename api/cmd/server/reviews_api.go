@@ -42,6 +42,7 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		review := data.Reviews[index]
+		previousIssueIDs := slices.Clone(review.IssueIDs)
 		if input.Title != nil {
 			review.Title = strings.TrimSpace(*input.Title)
 			if review.Title == "" {
@@ -75,6 +76,16 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 				return errInvalid
 			}
 			review.IssueIDs = ids
+			for _, issueID := range ids {
+				if !slices.Contains(previousIssueIDs, issueID) {
+					appendActivity(data, issueID, "issue.review_linked", data.Viewer, map[string]string{"reviewId": review.ID, "reviewTitle": review.Title, "reviewNumber": fmt.Sprint(review.Number), "repository": review.RepositoryOwner + "/" + review.RepositoryName, "url": review.URL})
+				}
+			}
+			for _, issueID := range previousIssueIDs {
+				if !slices.Contains(ids, issueID) {
+					appendActivity(data, issueID, "issue.review_unlinked", data.Viewer, map[string]string{"reviewId": review.ID, "reviewTitle": review.Title, "reviewNumber": fmt.Sprint(review.Number), "repository": review.RepositoryOwner + "/" + review.RepositoryName})
+				}
+			}
 		}
 		if input.Favorite != nil {
 			review.Favorite = *input.Favorite

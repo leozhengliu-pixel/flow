@@ -15,6 +15,7 @@ import { ProjectActionsMenu, ProjectDescriptionHistoryDialog, ProjectNotificatio
 import type { ProjectDetailProps, ProjectDetailTab } from './project-detail-types'
 import { labelsForResource } from '@/lib/labels'
 import { AddViewIcon, InsightsIcon, SidebarIcon } from '@/components/ui/view-action-icons'
+import { confirmAction, promptAction } from '@/components/ui/action-dialog-service'
 import './project-detail-page.css'
 
 export type { ProjectDetailTab } from './project-detail-types'
@@ -34,8 +35,8 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
   const projectIssues = useMemo(() => issues.filter(issue => issue.project?.id === project.id), [issues, project.id])
   const scopedProjectIssues = useMemo(() => milestoneScopeId ? projectIssues.filter(issue => issue.projectMilestoneId === milestoneScopeId) : projectIssues, [milestoneScopeId, projectIssues])
   const milestoneScope = (project.milestones ?? []).find(milestone => milestone.id === milestoneScopeId)
-  const issueLabels = useMemo(() => labelsForResource(labels, 'issue'), [labels])
-  const projectLabels = useMemo(() => labelsForResource(labels, 'project'), [labels])
+  const issueLabels = useMemo(() => labelsForResource(labels, 'issue', labelGroups), [labelGroups, labels])
+  const projectLabels = useMemo(() => labelsForResource(labels, 'project', labelGroups), [labelGroups, labels])
   const projectSavedViews = useMemo(() => props.savedViews.filter(view => view.resource === 'issues' && JSON.stringify(view.filters).includes(project.id)), [project.id, props.savedViews])
   const favorited = Boolean(props.favorite)
   const changeIssueFilters = (next: ProjectIssueFilters) => { setIssueFilters(next); localStorage.setItem(`${issueStateKey}:filters`, JSON.stringify(next)) }
@@ -83,8 +84,6 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
   return <main className="project-detail-page">
     <header className="project-detail-page__header">
       <button aria-label="Open workspace sidebar" className="project-detail-page__mobile-menu" onClick={onOpenSidebar} type="button"><span/><span/><span/></button>
-      <a className="project-detail-page__all-projects" href={`/${location.pathname.split('/')[1]}/projects/all`}>Projects</a>
-      <span aria-hidden="true" className="project-detail-page__crumb-separator">›</span>
       <a className="project-detail-page__crumb" href={`/${location.pathname.split('/')[1]}/project/${project.slugId}/overview`} onClick={event => { event.preventDefault(); onTabChange('overview') }}><ViewGlyph color={project.color} icon={normalizeProjectIcon(project.icon)}/><span data-i18n-ignore>{project.name}</span></a>
       <button aria-checked={favorited} aria-label={favorited ? 'Remove from favorites' : 'Add to favorites'} className="project-detail-page__header-action" data-active={favorited} onClick={() => void toggleFavorite()} role="switch" type="button"><Star fill={favorited ? 'currentColor' : 'none'} size={14}/></button>
       <ProjectActionsMenu favorited={favorited} onDelete={() => setDeleteOpen(true)} onFavorite={() => void toggleFavorite()} onRemind={remindAt => props.onCreateReminder(project.id, remindAt).then(() => undefined)} onSetEvents={setEvents} onShowActivity={() => onTabChange('activity')} onShowHistory={() => setHistoryOpen(true)} onShowNotifications={() => setNotificationOpen(true)} project={project} subscription={props.subscription}/>
@@ -98,7 +97,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
         <ProjectTab active={tab === 'overview'} id="overview" onChange={onTabChange}>Overview</ProjectTab>
         <ProjectTab active={tab === 'activity'} id="activity" onChange={onTabChange}>Activity</ProjectTab>
         <ProjectTab active={tab === 'issues'} id="issues" onChange={onTabChange}>Issues</ProjectTab>
-        {projectSavedViews.map(view => <ContextMenu.Root key={view.id}><ContextMenu.Trigger asChild><button aria-current={tab === 'issues' && activeSavedViewId === view.id ? 'page' : undefined} className="project-detail-page__saved-view-tab" data-active={tab === 'issues' && activeSavedViewId === view.id} onClick={() => openSavedView(view)} title={`${view.description || view.name} · Right-click for view actions`} type="button"><ViewGlyph color={view.color || '#8a8f98'} icon={view.icon || 'CustomView'}/><span>{view.name}</span></button></ContextMenu.Trigger><ContextMenu.Portal><ContextMenu.Content className="project-detail-page__menu"><ContextMenu.Item onSelect={() => { const name = window.prompt('Rename view', view.name)?.trim(); if (name && name !== view.name) void props.onUpdateSavedView(view.id, { name }) }}><Pencil size={13}/><span>Rename view…</span></ContextMenu.Item><ContextMenu.Separator/><ContextMenu.Item className="is-danger" onSelect={() => { if (window.confirm(`Delete view “${view.name}”?`)) void props.onDeleteSavedView(view).then(() => { if (activeSavedViewId === view.id) setActiveSavedViewId(undefined) }) }}><Trash2 size={13}/><span>Delete view</span></ContextMenu.Item></ContextMenu.Content></ContextMenu.Portal></ContextMenu.Root>)}
+        {projectSavedViews.map(view => <ContextMenu.Root key={view.id}><ContextMenu.Trigger asChild><button aria-current={tab === 'issues' && activeSavedViewId === view.id ? 'page' : undefined} className="project-detail-page__saved-view-tab" data-active={tab === 'issues' && activeSavedViewId === view.id} onClick={() => openSavedView(view)} title={`${view.description || view.name} · Right-click for view actions`} type="button"><ViewGlyph color={view.color || '#8a8f98'} icon={view.icon || 'CustomView'}/><span>{view.name}</span></button></ContextMenu.Trigger><ContextMenu.Portal><ContextMenu.Content className="project-detail-page__menu"><ContextMenu.Item onSelect={() => { void promptAction('Rename view',view.name).then(name=>{if(name&&name!==view.name)return props.onUpdateSavedView(view.id,{name})}) }}><Pencil size={13}/><span>Rename view…</span></ContextMenu.Item><ContextMenu.Separator/><ContextMenu.Item className="is-danger" onSelect={() => { void confirmAction(`Delete view “${view.name}”?`,{confirmLabel:'Delete view'}).then(confirmed=>{if(confirmed)return props.onDeleteSavedView(view).then(()=>{if(activeSavedViewId===view.id)setActiveSavedViewId(undefined)})}) }}><Trash2 size={13}/><span>Delete view</span></ContextMenu.Item></ContextMenu.Content></ContextMenu.Portal></ContextMenu.Root>)}
         {tab === 'new' ? <button aria-current="page" className="project-detail-page__new-view-tab" type="button"><Layers2 size={13}/><span>New view</span><Pencil size={10}/></button> : <button aria-label="Add new view" className="project-detail-page__add-view" onClick={() => onTabChange('new')} type="button"><AddViewIcon/></button>}
       </nav>
       <div className="project-detail-page__toolbar-actions">
@@ -115,7 +114,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
         {tab === 'issues' && <ProjectIssues {...props} labels={issueLabels} display={issueDisplay} filters={issueFilters} milestoneScope={milestoneScope} onClearMilestoneScope={() => openMilestoneIssues()} onFiltersChange={changeIssueFilters} projectIssues={scopedProjectIssues}/>}
         {tab === 'new' && <ProjectNewView {...props} labels={issueLabels} display={issueDisplay} filters={issueFilters} onDisplayChange={changeIssueDisplay} onFiltersChange={changeIssueFilters} projectIssues={projectIssues}/>}
       </div>
-      {detailsOpen && <ProjectDetailsSidebar labelGroups={labelGroups} labels={projectLabels} onConvertMilestone={props.onConvertMilestone} onCreateMilestone={props.onCreateMilestone} onDeleteMilestone={props.onDeleteMilestone} onMoveMilestone={props.onMoveMilestone} onOpenIssueFilter={openIssueFilter} onOpenMilestoneIssues={openMilestoneIssues} onReorderMilestones={props.onReorderMilestones} onTabChange={onTabChange} onUpdate={save} onUpdateProject={props.onUpdate} onUpdateMilestone={props.onUpdateMilestone} project={project} projectIssues={projectIssues} projects={projects} projectStatuses={props.projectStatuses} projectUpdates={projectUpdates} teams={props.teams} users={users} viewer={viewer}/>}
+      {detailsOpen && <ProjectDetailsSidebar initiatives={props.initiatives} integrationConnections={props.integrationConnections} labelGroups={labelGroups} labels={projectLabels} onConvertMilestone={props.onConvertMilestone} onCreateMilestone={props.onCreateMilestone} onDeleteMilestone={props.onDeleteMilestone} onMoveMilestone={props.onMoveMilestone} onOpenIssueFilter={openIssueFilter} onOpenMilestoneIssues={openMilestoneIssues} onReorderMilestones={props.onReorderMilestones} onTabChange={onTabChange} onUpdate={save} onUpdateProject={props.onUpdate} onUpdateMilestone={props.onUpdateMilestone} project={project} projectIssues={projectIssues} projects={projects} projectStatuses={props.projectStatuses} projectUpdates={projectUpdates} teams={props.teams} users={users} viewer={viewer}/>}
       {insightsOpen && <ProjectInsights issues={projectIssues} labels={issueLabels} users={users}/>}
     </div>
 

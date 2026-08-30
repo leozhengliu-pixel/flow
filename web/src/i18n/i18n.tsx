@@ -105,6 +105,8 @@ export function translateToChinese(source: string): string {
     [/^(\d+) completed$/, count => `已完成 ${count} 项`],
     [/^Assigned, (\d+) issues?$/, count => `分配给我，${count} 个事项`],
     [/^(\d+) of (\d+) sub-issues completed$/, (completed, total) => `已完成 ${completed}/${total} 个子事项`],
+    [/^(\d+) of (\d+) projects? completed\. Click to view projects\.$/, (completed, total) => `已完成 ${completed}/${total} 个项目。点击查看项目。`],
+    [/^(\d+) projects? need an update\. Click to open updates\.$/, count => `${count} 个项目需要更新。点击打开更新。`],
     [/^(\d+)% project progress$/, count => `项目进度 ${count}%`],
     [/^(\d+)% of$/, count => `已完成 ${count}%，共`],
     [/^No milestone (\d+) issues?$/, count => `无里程碑，${count} 个事项`],

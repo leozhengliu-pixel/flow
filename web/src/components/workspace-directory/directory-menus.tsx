@@ -35,10 +35,10 @@ export function DirectoryFilterMenu({
 }: {
   groups: DirectoryFilterGroup[];
   selected: Record<string, Set<string>>;
-  trigger?: "icon" | "add";
+  trigger?: "icon" | "add" | "advanced";
   onAdvanced: () => void;
   onChoice: (groupId: string, choiceId: string, checked: boolean) => void;
-  onDirect: (groupId: string) => void;
+  onDirect?: (groupId: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
@@ -67,7 +67,7 @@ export function DirectoryFilterMenu({
           >
             <FlowFilterIcon />
           </button>
-        ) : (
+        ) : trigger === "add" ? (
           <button
             aria-label="Add another filter"
             className="workspace-filter-bar__add"
@@ -75,6 +75,8 @@ export function DirectoryFilterMenu({
           >
             +
           </button>
+        ) : (
+          <button aria-label="Add filter" className="workspace-advanced-filter-add" type="button">+&nbsp; Filter</button>
         )}
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
@@ -137,7 +139,7 @@ function FilterGroup({
   onPointerAway: () => void;
   selected: Set<string>;
   onChoice: (groupId: string, choiceId: string, checked: boolean) => void;
-  onDirect: (groupId: string) => void;
+  onDirect?: (groupId: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const choices = (group.choices ?? []).filter((choice) =>
@@ -196,7 +198,7 @@ function FilterGroup({
             </DropdownMenu.SubContent>
           </DropdownMenu.Portal>
         </DropdownMenu.Sub>
-      ) : (
+      ) : onDirect ? (
         <DropdownMenu.Item
           className="workspace-directory-filter-menu__item"
           onSelect={() => onDirect(group.id)}
@@ -205,7 +207,7 @@ function FilterGroup({
           {group.icon}
           <span>{group.label}</span>
         </DropdownMenu.Item>
-      )}
+      ) : null}
     </>
   );
 }
@@ -400,7 +402,7 @@ export function DirectoryCreatedDateIcon() {
 export function DirectoryLockIcon() {
   return (
     <svg aria-hidden="true" fill="currentColor" viewBox="0 0 16 16">
-      <use href="/flow-core-icons.svg#Lock" />
+      <use href="#Lock" />
     </svg>
   );
 }

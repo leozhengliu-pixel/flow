@@ -15,6 +15,7 @@ import { ViewIconPicker } from '@/components/views/view-icon-picker'
 import type { Issue, IssueUpdateInput, ProjectMilestone } from '@/types/flow'
 import type { ProjectDetailProps } from './project-detail-types'
 import { PRIORITY_LABELS } from './project-detail-types'
+import { toggleGroupedLabelIds } from '@/lib/labels'
 
 export type ProjectIssueFilters = MyIssuesAppliedFilter[]
 export type ProjectIssueProperty = MyIssuesProperty
@@ -91,7 +92,7 @@ export function ProjectIssues({ display, filters, issues, labels, labelGroups, m
     const before = target?.issues[targetIndex]
     const after = target?.issues[targetIndex - 1]
     const sortOrder = before && after ? ((before.sortOrder ?? 0) + (after.sortOrder ?? 0)) / 2 : before ? (before.sortOrder ?? 1) - 1 : (after?.sortOrder ?? 0) + 1
-    const groupUpdate = sourceGroupId === targetGroupId ? {} : projectBoardGroupUpdate(row, display.grouping, targetGroupId, allStates)
+    const groupUpdate = sourceGroupId === targetGroupId ? {} : projectBoardGroupUpdate(row, display.grouping, targetGroupId, allStates, labels)
     void onUpdateIssue(row.id, { sortOrder, ...groupUpdate })
   }
 
@@ -128,13 +129,13 @@ function groupIssues(issues: Issue[], display: MyIssuesDisplayOptions, allStates
   return display.groupOrder === 'desc' ? result.reverse() : result
 }
 function groupForRow(issue: MyIssuesRowData, grouping: MyIssuesGrouping): Omit<MyIssuesGroupData, 'issues'> { if (grouping === 'status') return { id: issue.state.id, label: issue.state.name, stateType: issue.state.type, state: issue.state }; if (grouping === 'priority') return { id: `priority-${issue.priority}`, label: PRIORITY_LABELS[issue.priority] }; if (grouping === 'assignee') return { id: issue.assignee?.id ?? 'unassigned', label: issue.assignee?.name ?? 'No assignee' }; if (grouping === 'label') { const label = issue.labels?.[0]; return { id: label?.id ?? 'no-label', label: label?.name ?? 'No label' } } return { id: 'project', label: issue.project?.name ?? 'Project' } }
-function projectBoardGroupUpdate(row: MyIssuesRowData, grouping: MyIssuesGrouping, targetGroupId: string, states: Issue['state'][]): IssueUpdateInput {
+function projectBoardGroupUpdate(row: MyIssuesRowData, grouping: MyIssuesGrouping, targetGroupId: string, states: Issue['state'][], labels: ProjectDetailProps['labels']): IssueUpdateInput {
   if (grouping === 'status' && states.some(state => state.id === targetGroupId)) return { stateId: targetGroupId }
   if (grouping === 'priority' && targetGroupId.startsWith('priority-')) return { priority: Number(targetGroupId.slice('priority-'.length)) }
   if (grouping === 'assignee') return { assigneeId: targetGroupId === 'unassigned' ? '' : targetGroupId }
   if (grouping === 'label') {
     if (targetGroupId === 'no-label') return { labelIds: [] }
-    return { labelIds: [targetGroupId, ...(row.labels ?? []).map(label => label.id).filter(id => id !== targetGroupId)] }
+    return { labelIds: toggleGroupedLabelIds((row.labels ?? []).map(label => label.id), targetGroupId, labels) }
   }
   return {}
 }

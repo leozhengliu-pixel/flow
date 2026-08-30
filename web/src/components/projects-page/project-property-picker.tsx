@@ -69,11 +69,11 @@ function ProjectPropertyOptionIcon({ option, property }: { option: ProjectProper
   return <ProjectStatusGlyph color={option.color} name={option.label} type={option.statusType}/>
 }
 
-export function ProjectStatusGlyph({ color: _color, name, type }: { color?: string; name: string; type?: string }) {
+export function ProjectStatusGlyph({ color: _color, name, progress, type }: { color?: string; name: string; progress?: number; type?: string }) {
   const normalized = `${type ?? ''} ${name}`.toLowerCase()
   const kind = normalized.includes('backlog') ? 'backlog' : normalized.includes('progress') || normalized.includes('started') ? 'started' : normalized.includes('complete') ? 'completed' : normalized.includes('cancel') ? 'canceled' : 'planned'
   const iconColor = ({ backlog: '#d6a526', started: '#d6a526', completed: '#5e6ad2', canceled: '#77777c', planned: '#b5b5ba' } as const)[kind]
-  return <ProjectStatusIcon className={styles.statusIcon} color={_color || iconColor} name={name} type={type}/>
+  return <ProjectStatusIcon className={styles.statusIcon} color={_color || iconColor} name={name} progress={progress} type={type}/>
 }
 
 function orderProjectPropertyOptions(options: ProjectPropertyOption[], property: ProjectPickerProperty, selected: string) {

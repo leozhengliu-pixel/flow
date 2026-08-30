@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -15,6 +16,23 @@ import (
 
 	"github.com/coder/websocket"
 )
+
+func TestRealtimeOverflowCollapsesToResync(t *testing.T) {
+	hub := newRealtimeHub()
+	channel, unsubscribe := hub.subscribe("workspace")
+	defer unsubscribe()
+	for index := 0; index < 65; index++ {
+		hub.publish("workspace", domain.RealtimeEvent{ID: fmt.Sprintf("event_%d", index), Type: "issue.updated", CreatedAt: time.Now().UTC()})
+	}
+	select {
+	case event := <-channel:
+		if event.Type != "workspace.resync_required" {
+			t.Fatalf("overflow event = %q", event.Type)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("overflow did not emit resync event")
+	}
+}
 
 func TestCollaborationSocketBroadcastsAndPersistsDocumentUpdates(t *testing.T) {
 	repository, err := store.OpenSQLite(filepath.Join(t.TempDir(), "flow.db"))

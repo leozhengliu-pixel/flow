@@ -20,7 +20,7 @@ export const ReleasesIcon = forwardRef<SVGSVGElement, LucideProps>(function Rele
 })
 
 type ReleaseStatus = 'planned' | 'inProgress' | 'released' | 'canceled'
-type ReleaseStatusIconProps = LucideProps & { status: ReleaseStatus }
+type ReleaseStatusIconProps = LucideProps & { status: ReleaseStatus; color?: string }
 
 const statusColors: Record<ReleaseStatus, string> = {
   planned: '#95999F',
@@ -30,10 +30,10 @@ const statusColors: Record<ReleaseStatus, string> = {
 }
 
 export const ReleaseStatusIcon = forwardRef<SVGSVGElement, ReleaseStatusIconProps>(function ReleaseStatusIcon(
-  { size = 16, status, ...props },
+  { size = 16, status, color: colorOverride, ...props },
   ref,
 ) {
-  const color = statusColors[status]
+  const color = colorOverride ?? statusColors[status]
   if (status === 'inProgress') return <svg {...props} ref={ref} aria-hidden="true" height={size} viewBox="0 0 16 16" width={size}>
     <path d="M5.25 1.75H10.75A3.5 3.5 0 0 1 14.25 5.25V10.75A3.5 3.5 0 0 1 10.75 14.25H5.25A3.5 3.5 0 0 1 1.75 10.75V5.25A3.5 3.5 0 0 1 5.25 1.75Z" fill="none" opacity="0.5" stroke={color} strokeWidth="1.5"/>
     <path d="M8 1.75H10.75A3.5 3.5 0 0 1 14.25 5.25V10.75A3.5 3.5 0 0 1 10.75 14.25H5.25A3.5 3.5 0 0 1 1.75 10.75V5.25A3.5 3.5 0 0 1 5.25 1.75H8Z" fill="none" stroke={color} strokeDasharray="22 44" strokeLinecap="round" strokeWidth="1.5"/>
@@ -47,5 +47,15 @@ export const ReleaseStatusIcon = forwardRef<SVGSVGElement, ReleaseStatusIconProp
   </svg>
   return <svg {...props} ref={ref} aria-hidden="true" fill={color} height={size} viewBox="0 0 16 16" width={size}>
     <path clipRule="evenodd" d="M10.75 1C13.0972 1 15 2.90279 15 5.25V10.75C15 13.0972 13.0972 15 10.75 15H5.25C2.90279 15 1 13.0972 1 10.75V5.25C1 2.90279 2.90279 1 5.25 1H10.75ZM8 5C7.84926 5 7.70752 5.06783 7.61328 5.18262L7.57617 5.23535L5.07617 9.23535C4.97999 9.38938 4.97455 9.58331 5.0625 9.74219C5.15063 9.90111 5.31827 10 5.5 10H10.5C10.6817 9.99993 10.8494 9.90111 10.9375 9.74219C11.0254 9.58336 11.0199 9.38934 10.9238 9.23535L8.42383 5.23535C8.33249 5.08922 8.17232 5.00007 8 5Z" fillRule="evenodd"/>
+  </svg>
+})
+
+export const ReleasePipelineIcon = forwardRef<SVGSVGElement, LucideProps>(function ReleasePipelineIcon(
+  { size = 16, ...props },
+  ref,
+) {
+  return <svg {...props} ref={ref} aria-hidden="true" fill="currentColor" height={size} viewBox="0 0 16 16" width={size}>
+    <path clipRule="evenodd" d="M3 10.25a3 3 0 0 1 3-3h4a1.5 1.5 0 0 0 0-3H7.5v-1.5H10a3 3 0 0 1 0 6H6a1.5 1.5 0 0 0 0 3h2.5v1.5H6a3 3 0 0 1-3-3Z" fillRule="evenodd"/>
+    <path clipRule="evenodd" d="M4.5 2.75a.25.25 0 0 0-.25-.25h-1.5a.25.25 0 0 0-.25.25v1.5c0 .138.112.25.25.25h1.5a.25.25 0 0 0 .25-.25v-1.5ZM6 4.25A1.75 1.75 0 0 1 4.25 6h-1.5A1.75 1.75 0 0 1 1 4.25v-1.5A1.75 1.75 0 0 1 2.75 1h1.5A1.75 1.75 0 0 1 6 2.75v1.5Zm7.5 7.5a.25.25 0 0 0-.25-.25h-1.5a.25.25 0 0 0-.25.25v1.5c0 .138.112.25.25.25h1.5a.25.25 0 0 0 .25-.25v-1.5Zm1.5 1.5A1.75 1.75 0 0 1 13.25 15h-1.5A1.75 1.75 0 0 1 10 13.25v-1.5A1.75 1.75 0 0 1 11.75 10h1.5A1.75 1.75 0 0 1 15 11.75v1.5Z" fillRule="evenodd"/>
   </svg>
 })

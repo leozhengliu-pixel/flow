@@ -1,6 +1,6 @@
 .customer-detail {
-  background: var(--color-bg-primary, #fff);
-  color: var(--color-text-primary, #222);
+  background: var(--theme-background);
+  color: var(--theme-text-primary);
   overflow: auto;
 }
 .customer-detail-header {
@@ -8,24 +8,24 @@
   top: 0;
   z-index: 10;
   height: 48px;
-  border-bottom: 1px solid var(--color-border-subtle, var(--theme-text-primary));
+  border-bottom: 1px solid var(--theme-border);
   background: inherit;
   display: flex;
   align-items: center;
   gap: 7px;
   padding: 0 14px;
-  color: var(--color-text-tertiary, #888);
+  color: var(--theme-text-tertiary);
   font-size: 12px;
 }
 .customer-detail-header > button {
   border: 0;
   background: transparent;
-  color: var(--color-text-secondary, #666);
+  color: var(--theme-text-secondary);
   padding: 4px;
   border-radius: 4px;
 }
 .customer-detail-header > button:hover {
-  background: var(--color-bg-hover, var(--theme-text-primary));
+  background: var(--theme-surface-hover);
 }
 .customer-detail-header > i {
   width: 19px;
@@ -40,7 +40,7 @@
 }
 .customer-detail-header > strong {
   font-weight: 500;
-  color: var(--color-text-secondary, #555);
+  color: var(--theme-text-secondary);
 }
 .customer-detail-header > div {
   margin-left: auto;
@@ -52,14 +52,14 @@
   height: 28px;
   border: 0;
   background: transparent;
-  color: var(--color-text-secondary, #666);
+  color: var(--theme-text-secondary);
   border-radius: 5px;
   display: grid;
   place-items: center;
 }
 .customer-detail-header > div > button:hover,
 .customer-detail-header > div > button[data-state="open"] {
-  background: var(--color-bg-hover, var(--theme-text-primary));
+  background: var(--theme-surface-hover);
 }
 .customer-detail-body {
   width: min(840px, calc(100% - 40px));
@@ -92,13 +92,13 @@
   letter-spacing: 0;
 }
 .customer-hero small {
-  color: var(--color-text-tertiary, #888);
+  color: var(--theme-text-tertiary);
 }
 .customer-hero > button,
 .customer-requests-heading > button,
 .customer-requests-empty > button {
   height: 29px;
-  border: 1px solid var(--color-border-subtle, var(--theme-text-primary));
+  border: 1px solid var(--theme-border);
   border-radius: 5px;
   background: transparent;
   color: inherit;
@@ -114,11 +114,11 @@
   align-items: center;
   gap: 8px 12px;
   padding: 17px 0 28px;
-  border-top: 1px solid var(--color-border-subtle, var(--theme-text-primary));
+  border-top: 1px solid var(--theme-border);
 }
 .customer-properties label {
   font-size: 12px;
-  color: var(--color-text-tertiary, #888);
+  color: var(--theme-text-tertiary);
 }
 .customer-properties > button,
 .customer-properties > span {
@@ -135,7 +135,7 @@
   font-size: 12px;
 }
 .customer-properties > button:hover {
-  background: var(--color-bg-hover, var(--theme-text-primary));
+  background: var(--theme-surface-hover);
 }
 .customer-status-dot {
   width: 10px;
@@ -148,7 +148,7 @@
 }
 .customer-requests-heading {
   height: 40px;
-  border-bottom: 1px solid var(--color-border-subtle, var(--theme-text-primary));
+  border-bottom: 1px solid var(--theme-border);
   display: flex;
   align-items: center;
   gap: 7px;
@@ -158,19 +158,21 @@
   font-weight: 500;
 }
 .customer-requests-heading > small {
-  color: var(--color-text-tertiary, #888);
+  color: var(--theme-text-tertiary);
 }
 .customer-requests-heading > button {
-  margin-left: auto;
   border: 0;
 }
+.customer-requests-heading > button:last-child {
+  margin-left: auto;
+}
 .customer-request-list {
-  border-bottom: 1px solid var(--color-border-subtle, var(--theme-text-primary));
+  border-bottom: 1px solid var(--theme-border);
 }
 .customer-request-row {
   min-height: 66px;
   padding: 10px 6px;
-  border-bottom: 1px solid var(--color-border-subtle, var(--theme-text-primary));
+  border-bottom: 1px solid var(--theme-border);
   display: flex;
   gap: 10px;
 }
@@ -188,7 +190,7 @@
 }
 .customer-request-row small {
   font-size: 11px;
-  color: var(--color-text-tertiary, #888);
+  color: var(--theme-text-tertiary);
 }
 .customer-request-attachments,
 .customer-request-file-queue {
@@ -204,9 +206,9 @@
   align-items: center;
   gap: 4px;
   padding: 3px 5px;
-  border: 1px solid var(--color-border-subtle, var(--theme-text-primary));
+  border: 1px solid var(--theme-border);
   border-radius: 4px;
-  background: var(--color-bg-secondary, var(--theme-text-primary));
+  background: var(--theme-surface-1);
   font-size: 10px;
 }
 .customer-request-attachments a {
@@ -229,17 +231,17 @@
   border: 0;
   border-radius: 3px;
   background: transparent;
-  color: var(--color-text-tertiary, #888);
+  color: var(--theme-text-tertiary);
   place-items: center;
 }
 .customer-request-attachments button:hover,
 .customer-request-file-queue button:hover {
-  background: var(--color-bg-hover, var(--theme-text-primary));
+  background: var(--theme-surface-hover);
   color: #c94848;
 }
 .customer-request-row > div > button {
   border: 0;
-  background: var(--color-bg-secondary, var(--theme-text-primary));
+  background: var(--theme-surface-1);
   border-radius: 4px;
   font-size: 11px;
   padding: 3px 6px;
@@ -273,14 +275,14 @@
   max-width: 440px;
   font-size: 12px;
   line-height: 18px;
-  color: var(--color-text-tertiary, #888);
+  color: var(--theme-text-tertiary);
 }
 .customer-requests-empty kbd {
   margin-left: 9px;
-  color: var(--color-text-tertiary, #888);
+  color: var(--theme-text-tertiary);
 }
 .customer-request-composer {
-  border: 1px solid var(--color-border-subtle, var(--theme-text-primary));
+  border: 1px solid var(--theme-border);
   border-radius: 7px;
   margin: 12px 0;
   padding: 10px;
@@ -299,12 +301,12 @@
   display: flex;
   justify-content: flex-end;
   gap: 7px;
-  border-bottom: 1px solid var(--color-border-subtle, var(--theme-text-primary));
+  border-bottom: 1px solid var(--theme-border);
   padding: 6px 0 9px;
 }
 .customer-request-tools > button {
   height: 29px;
-  border: 1px solid var(--color-border-subtle, var(--theme-text-primary));
+  border: 1px solid var(--theme-border);
   border-radius: 5px;
   background: transparent;
   padding: 0 9px;
@@ -325,22 +327,22 @@
   gap: 12px;
   padding-top: 10px;
   font-size: 11px;
-  color: var(--color-text-tertiary, #888);
+  color: var(--theme-text-tertiary);
 }
 .customer-request-composer select {
   flex: 1;
   min-width: 0;
   height: 29px;
-  border: 1px solid var(--color-border-subtle, var(--theme-text-primary));
+  border: 1px solid var(--theme-border);
   border-radius: 5px;
-  background: var(--color-bg-primary, #fff);
+  background: var(--theme-background);
   color: inherit;
 }
 .customer-detail-menu {
   z-index: 90;
   min-width: 190px;
-  border: 1px solid var(--color-border-subtle, var(--theme-text-primary));
-  background: var(--color-bg-elevated, #fff);
+  border: 1px solid var(--theme-border);
+  background: var(--theme-surface-2);
   box-shadow: var(--shadow-menu, 0 10px 26px #0002);
   padding: 4px;
   border-radius: 7px;
@@ -359,11 +361,11 @@
   margin-left: auto;
 }
 .customer-detail-menu [role="menuitem"][data-highlighted] {
-  background: var(--color-bg-hover, var(--theme-text-primary));
+  background: var(--theme-surface-hover);
 }
 .customer-detail-menu [role="separator"] {
   height: 1px;
-  background: var(--color-border-subtle, var(--theme-text-primary));
+  background: var(--theme-border);
   margin: 4px;
 }
 .customer-detail-menu .danger {
@@ -378,7 +380,7 @@
 }
 .customer-delete-dialog p {
   font-size: 13px;
-  color: var(--color-text-secondary, #666);
+  color: var(--theme-text-secondary);
 }
 .customer-delete-dialog footer {
   display: flex;
@@ -388,7 +390,7 @@
 .customer-delete-dialog footer button {
   height: 30px;
   padding: 0 11px;
-  border: 1px solid var(--color-border-subtle, var(--theme-text-primary));
+  border: 1px solid var(--theme-border);
   background: transparent;
   border-radius: 5px;
 }

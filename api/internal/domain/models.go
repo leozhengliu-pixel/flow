@@ -150,12 +150,13 @@ type AccountBootstrap struct {
 }
 
 type Team struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Key     string `json:"key"`
-	Color   string `json:"color"`
-	Icon    string `json:"icon,omitempty"`
-	Private bool   `json:"private,omitempty"`
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	Key       string     `json:"key"`
+	Color     string     `json:"color"`
+	Icon      string     `json:"icon,omitempty"`
+	Private   bool       `json:"private,omitempty"`
+	RetiredAt *time.Time `json:"retiredAt,omitempty"`
 }
 
 type Customer struct {
@@ -506,6 +507,7 @@ type Project struct {
 	Icon                 string                       `json:"icon,omitempty"`
 	Color                string                       `json:"color"`
 	Priority             int                          `json:"priority"`
+	Position             float64                      `json:"position"`
 	PriorityLabel        string                       `json:"priorityLabel"`
 	Progress             float64                      `json:"progress"`
 	Health               string                       `json:"health"`
@@ -526,6 +528,8 @@ type Project struct {
 	StartDateResolution  string                       `json:"startDateResolution,omitempty"`
 	TargetDate           *string                      `json:"targetDate,omitempty"`
 	TargetDateResolution string                       `json:"targetDateResolution,omitempty"`
+	SlackChannelID       string                       `json:"slackChannelId,omitempty"`
+	SlackChannelName     string                       `json:"slackChannelName,omitempty"`
 	IssueCount           int                          `json:"issueCount"`
 	ArchivedAt           *time.Time                   `json:"archivedAt,omitempty"`
 	CreatedAt            time.Time                    `json:"createdAt"`
@@ -717,6 +721,7 @@ type UserSettings struct {
 	FontSize                 string    `json:"fontSize"`
 	PointerCursor            bool      `json:"pointerCursor"`
 	UnderlineLinks           bool      `json:"underlineLinks"`
+	DisableAnimatedImages    bool      `json:"disableAnimatedImages"`
 	InterfaceTheme           string    `json:"interfaceTheme"`
 	LightTheme               string    `json:"lightTheme"`
 	DarkTheme                string    `json:"darkTheme"`
@@ -780,6 +785,11 @@ type WorkspaceSettings struct {
 	AgentWebSearch               bool            `json:"agentWebSearch"`
 	ExternalLoopTriggers         bool            `json:"externalLoopTriggers"`
 	MCPConnectorsEnabled         bool            `json:"mcpConnectorsEnabled"`
+	ReviewThirdPartyApplications bool            `json:"reviewThirdPartyApplications"`
+	AllowedMCPConnectors         string          `json:"allowedMcpConnectors,omitempty"`
+	RestrictFileUploads          bool            `json:"restrictFileUploads"`
+	ReduceSupportPersonalInfo    bool            `json:"reduceSupportPersonalInfo"`
+	HIPAACompliance              bool            `json:"hipaaCompliance"`
 	AICreditBalanceCents         int64           `json:"aiCreditBalanceCents"`
 	AICreditAutoReload           bool            `json:"aiCreditAutoReload"`
 	AICreditReloadThresholdCents int64           `json:"aiCreditReloadThresholdCents"`
@@ -1238,34 +1248,36 @@ type MigrationBundle struct {
 // ProjectIDs intentionally stores stable project IDs; list progress and health
 // are projections computed by the client from the associated projects.
 type Initiative struct {
-	ID                  string                          `json:"id"`
-	Name                string                          `json:"name"`
-	SlugID              string                          `json:"slugId"`
-	Summary             string                          `json:"summary"`
-	Description         string                          `json:"description"`
-	Icon                string                          `json:"icon,omitempty"`
-	Color               string                          `json:"color"`
-	Status              string                          `json:"status"`
-	Priority            int                             `json:"priority"`
-	PriorityLabel       string                          `json:"priorityLabel"`
-	Health              string                          `json:"health"`
-	Owner               *User                           `json:"owner,omitempty"`
-	Creator             User                            `json:"creator"`
-	LeadTeamID          string                          `json:"leadTeamId,omitempty"`
-	ContributingTeamIDs []string                        `json:"contributingTeamIds"`
-	LabelIDs            []string                        `json:"labelIds"`
-	ParentInitiativeIDs []string                        `json:"parentInitiativeIds"`
-	ProjectIDs          []string                        `json:"projectIds"`
-	Resources           []InitiativeResource            `json:"resources"`
-	Comments            []Comment                       `json:"comments"`
-	TargetDate          *string                         `json:"targetDate,omitempty"`
-	Favorite            bool                            `json:"favorite"`
-	Subscribed          bool                            `json:"subscribed"`
-	NotificationRules   InitiativeNotificationRules     `json:"notificationRules"`
-	UpdateSchedule      InitiativeUpdateSchedule        `json:"updateSchedule"`
-	DescriptionHistory  []InitiativeDescriptionRevision `json:"descriptionHistory"`
-	CreatedAt           time.Time                       `json:"createdAt"`
-	UpdatedAt           time.Time                       `json:"updatedAt"`
+	ID                   string                          `json:"id"`
+	Name                 string                          `json:"name"`
+	SlugID               string                          `json:"slugId"`
+	Summary              string                          `json:"summary"`
+	Description          string                          `json:"description"`
+	Icon                 string                          `json:"icon,omitempty"`
+	Color                string                          `json:"color"`
+	Status               string                          `json:"status"`
+	Priority             int                             `json:"priority"`
+	Position             float64                         `json:"position"`
+	PriorityLabel        string                          `json:"priorityLabel"`
+	Health               string                          `json:"health"`
+	Owner                *User                           `json:"owner,omitempty"`
+	Creator              User                            `json:"creator"`
+	LeadTeamID           string                          `json:"leadTeamId,omitempty"`
+	ContributingTeamIDs  []string                        `json:"contributingTeamIds"`
+	LabelIDs             []string                        `json:"labelIds"`
+	ParentInitiativeIDs  []string                        `json:"parentInitiativeIds"`
+	ProjectIDs           []string                        `json:"projectIds"`
+	Resources            []InitiativeResource            `json:"resources"`
+	Comments             []Comment                       `json:"comments"`
+	TargetDate           *string                         `json:"targetDate,omitempty"`
+	TargetDateResolution string                          `json:"targetDateResolution,omitempty"`
+	Favorite             bool                            `json:"favorite"`
+	Subscribed           bool                            `json:"subscribed"`
+	NotificationRules    InitiativeNotificationRules     `json:"notificationRules"`
+	UpdateSchedule       InitiativeUpdateSchedule        `json:"updateSchedule"`
+	DescriptionHistory   []InitiativeDescriptionRevision `json:"descriptionHistory"`
+	CreatedAt            time.Time                       `json:"createdAt"`
+	UpdatedAt            time.Time                       `json:"updatedAt"`
 }
 
 type InitiativeNotificationRules struct {
@@ -1537,6 +1549,7 @@ type IssueCreateInput struct {
 	ParentID           *string        `json:"parentId,omitempty"`
 	StateID            *string        `json:"stateId,omitempty"`
 	Priority           *int           `json:"priority,omitempty"`
+	Estimate           *float64       `json:"estimate,omitempty"`
 	AssigneeID         *string        `json:"assigneeId,omitempty"`
 	DelegateID         *string        `json:"delegateId,omitempty"`
 	ProjectID          *string        `json:"projectId,omitempty"`
@@ -1547,6 +1560,8 @@ type IssueCreateInput struct {
 	SLAType            *string        `json:"slaType,omitempty"`
 	LabelIDs           []string       `json:"labelIds,omitempty"`
 	TemplateID         string         `json:"templateId,omitempty"`
+	Recurrence         *string        `json:"recurrence,omitempty"`
+	NextOccurrenceAt   *string        `json:"nextOccurrenceAt,omitempty"`
 }
 
 type ProjectMutationInput struct {
@@ -1557,6 +1572,7 @@ type ProjectMutationInput struct {
 	Color                *string  `json:"color,omitempty"`
 	StatusID             *string  `json:"statusId,omitempty"`
 	Priority             *int     `json:"priority,omitempty"`
+	Position             *float64 `json:"position,omitempty"`
 	Health               *string  `json:"health,omitempty"`
 	LeadID               *string  `json:"leadId,omitempty"`
 	MemberIDs            []string `json:"memberIds,omitempty"`
@@ -1569,31 +1585,35 @@ type ProjectMutationInput struct {
 	StartDateResolution  *string  `json:"startDateResolution,omitempty"`
 	TargetDate           *string  `json:"targetDate,omitempty"`
 	TargetDateResolution *string  `json:"targetDateResolution,omitempty"`
+	SlackChannelID       *string  `json:"slackChannelId,omitempty"`
+	SlackChannelName     *string  `json:"slackChannelName,omitempty"`
 	UpdateCadence        *string  `json:"updateCadence,omitempty"`
 	Archived             *bool    `json:"archived,omitempty"`
 	TemplateID           string   `json:"templateId,omitempty"`
 }
 
 type InitiativeMutationInput struct {
-	Name                *string                      `json:"name,omitempty"`
-	Summary             *string                      `json:"summary,omitempty"`
-	Description         *string                      `json:"description,omitempty"`
-	Icon                *string                      `json:"icon,omitempty"`
-	Color               *string                      `json:"color,omitempty"`
-	Status              *string                      `json:"status,omitempty"`
-	Priority            *int                         `json:"priority,omitempty"`
-	Health              *string                      `json:"health,omitempty"`
-	OwnerID             *string                      `json:"ownerId,omitempty"`
-	LeadTeamID          *string                      `json:"leadTeamId,omitempty"`
-	ContributingTeamIDs *[]string                    `json:"contributingTeamIds,omitempty"`
-	LabelIDs            *[]string                    `json:"labelIds,omitempty"`
-	ParentInitiativeIDs *[]string                    `json:"parentInitiativeIds,omitempty"`
-	ProjectIDs          *[]string                    `json:"projectIds,omitempty"`
-	TargetDate          *string                      `json:"targetDate,omitempty"`
-	Favorite            *bool                        `json:"favorite,omitempty"`
-	Subscribed          *bool                        `json:"subscribed,omitempty"`
-	NotificationRules   *InitiativeNotificationRules `json:"notificationRules,omitempty"`
-	UpdateSchedule      *InitiativeUpdateSchedule    `json:"updateSchedule,omitempty"`
+	Name                 *string                      `json:"name,omitempty"`
+	Summary              *string                      `json:"summary,omitempty"`
+	Description          *string                      `json:"description,omitempty"`
+	Icon                 *string                      `json:"icon,omitempty"`
+	Color                *string                      `json:"color,omitempty"`
+	Status               *string                      `json:"status,omitempty"`
+	Priority             *int                         `json:"priority,omitempty"`
+	Position             *float64                     `json:"position,omitempty"`
+	Health               *string                      `json:"health,omitempty"`
+	OwnerID              *string                      `json:"ownerId,omitempty"`
+	LeadTeamID           *string                      `json:"leadTeamId,omitempty"`
+	ContributingTeamIDs  *[]string                    `json:"contributingTeamIds,omitempty"`
+	LabelIDs             *[]string                    `json:"labelIds,omitempty"`
+	ParentInitiativeIDs  *[]string                    `json:"parentInitiativeIds,omitempty"`
+	ProjectIDs           *[]string                    `json:"projectIds,omitempty"`
+	TargetDate           *string                      `json:"targetDate,omitempty"`
+	TargetDateResolution *string                      `json:"targetDateResolution,omitempty"`
+	Favorite             *bool                        `json:"favorite,omitempty"`
+	Subscribed           *bool                        `json:"subscribed,omitempty"`
+	NotificationRules    *InitiativeNotificationRules `json:"notificationRules,omitempty"`
+	UpdateSchedule       *InitiativeUpdateSchedule    `json:"updateSchedule,omitempty"`
 }
 
 type InitiativeUpdateCreateInput struct {
@@ -1654,6 +1674,7 @@ type IssueUpdateInput struct {
 	DocumentUpdateIDs       []string       `json:"documentUpdateIds,omitempty"`
 	StateID                 *string        `json:"stateId,omitempty"`
 	Priority                *int           `json:"priority,omitempty"`
+	Estimate                *float64       `json:"estimate,omitempty"`
 	AssigneeID              *string        `json:"assigneeId,omitempty"`
 	DelegateID              *string        `json:"delegateId,omitempty"`
 	ProjectID               *string        `json:"projectId,omitempty"`

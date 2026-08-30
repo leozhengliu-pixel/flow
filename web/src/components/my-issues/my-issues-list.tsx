@@ -13,10 +13,11 @@ import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
 import { SubIssueProgressRing } from '@/components/issue/sub-issue-progress-ring'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import type { IssueSLA } from '@/types/flow'
+import { toggleGroupedLabelIds } from '@/lib/labels'
 
 export type MyIssuesStateType = 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled'
-export type MyIssuesContextAction = 'status' | 'priority' | 'assignee' | 'dueDate' | 'labels' | 'project' | 'moreProperties' | 'createRelated' | 'markAs' | 'copy' | 'convertTo' | 'move' | 'openIn' | 'runLoop' | 'favorite' | 'remind' | 'delete'
-export type MyIssuesEditableProperty = 'status' | 'priority' | 'assignee' | 'dueDate' | 'labels' | 'project'
+export type MyIssuesContextAction = 'status' | 'priority' | 'assignee' | 'dueDate' | 'labels' | 'project' | 'cycle' | 'moreProperties' | 'createRelated' | 'markAs' | 'copy' | 'copyUrl' | 'copyId' | 'copyTitle' | 'convertTo' | 'move' | 'openIn' | 'runLoop' | 'favorite' | 'remind' | 'delete'
+export type MyIssuesEditableProperty = 'status' | 'priority' | 'assignee' | 'dueDate' | 'labels' | 'project' | 'cycle'
 export interface MyIssuesContextOption { id: string; label: string; color?: string; description?: string; issueCount?: number; scope?: string; groupId?: string; groupLabel?: string; avatarUrl?: string; kind?: MyIssuesEditableProperty; priority?: 0 | 1 | 2 | 3 | 4; shortcut?: string; stateType?: MyIssuesStateType }
 export interface MyIssuesRowPropertyOptions {
   status: MyIssuesContextOption[]
@@ -25,6 +26,7 @@ export interface MyIssuesRowPropertyOptions {
   dueDate: MyIssuesContextOption[]
   labels: MyIssuesContextOption[]
   project: MyIssuesContextOption[]
+  cycle?: MyIssuesContextOption[]
 }
 
 export interface MyIssuesRowData {
@@ -180,7 +182,7 @@ export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAU
             onOpenSubIssue={onOpen}
           />:null}
           <span className={styles.badges}>
-            {displayProperties.has('labels') && issue.labels?.length ? <RowCommandPicker propertyLabel="Labels" kind="labels" multi label={`Change labels. ${issue.labels.map(label => label.name).join(', ')} selected`} searchLabel="Change or add labels..." selectedIds={issue.labels.map(label => label.id)} options={propertyOptions.labels} onSelect={value => change('labels', toggleId(issue.labels?.map(label => label.id) ?? [], value))} triggerClassName={styles.labelsTrigger} trigger={<span className={styles.badgeGroup}>{issue.labels.map(label => <PropertyBadge key={label.id} label={label}/>)}</span>}/> : null}
+            {displayProperties.has('labels') && issue.labels?.length ? <RowCommandPicker propertyLabel="Labels" kind="labels" multi label={`Change labels. ${issue.labels.map(label => label.name).join(', ')} selected`} searchLabel="Change or add labels..." selectedIds={issue.labels.map(label => label.id)} options={propertyOptions.labels} onSelect={value => change('labels', toggleGroupedLabelIds(issue.labels?.map(label => label.id) ?? [], value, propertyOptions.labels))} triggerClassName={styles.labelsTrigger} trigger={<span className={styles.badgeGroup}>{issue.labels.map(label => <PropertyBadge key={label.id} label={label}/>)}</span>}/> : null}
             {displayProperties.has('project') && issue.project ? <RowCommandPicker propertyLabel="Project" kind="project" label={`Change project. Current project is ${issue.project.name}`} searchLabel="Set project..." selectedIds={[issue.project.id]} options={propertyOptions.project} onSelect={value => change('project', value)} trigger={<PropertyBadge color={issue.project.color}>{issue.project.name}</PropertyBadge>}/> : null}
             {displayProperties.has('dueDate') && issue.dueDate ? <DueDatePicker value={issue.dueDate} onChange={value => change('dueDate', value)} ariaLabel={`Change due date. Current due date is ${formatDueDate(issue.dueDate)}`} triggerClassName={styles.propertyTrigger} trigger={<time className={styles.dueDate} dateTime={issue.dueDate}><CalendarIcon size={13}/>{formatDueDate(issue.dueDate)}</time>}/> : null}
             {issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
@@ -226,15 +228,16 @@ function IssueCheckbox({ checked, onChange }: { checked: boolean; onChange: (che
   return <span className={styles.checkboxCell}><button type="button" className={styles.checkbox} role="checkbox" aria-label="Select issue" aria-checked={checked} data-checked={checked} onClick={click}>{checked && <CheckboxMark/>}</button></span>
 }
 
-function IssueContextMenu({ editable, issue, options, onPropertyChange, onAction }: { editable:boolean;issue:MyIssuesRowData;options: MyIssuesRowPropertyOptions; onPropertyChange: (property: MyIssuesEditableProperty, value: string | string[]) => void | Promise<void>; onAction?: (action: MyIssuesContextAction) => void }) {
+export function IssueContextMenu({ editable, issue, options, onPropertyChange, onAction }: { editable:boolean;issue:MyIssuesRowData;options: MyIssuesRowPropertyOptions; onPropertyChange: (property: MyIssuesEditableProperty, value: string | string[]) => void | Promise<void>; onAction?: (action: MyIssuesContextAction) => void }) {
   return <ContextMenu.Content className={styles.contextMenu} collisionPadding={10}>
     {editable&&<><ContextPropertySub label="Status" shortcut="S" options={options.status} selectedIds={[issue.state.id]} onSelect={id => onPropertyChange('status', id)}/>
     <ContextPropertySub label="Priority" shortcut="P" options={options.priority} selectedIds={[String(issue.priority)]} onSelect={id => onPropertyChange('priority', id)}/>
     <ContextPropertySub label="Assignee" shortcut="A" options={options.assignee} selectedIds={[issue.assignee?.id ?? '']} onSelect={id => onPropertyChange('assignee', id)}/>
     <ContextPropertySub label="Due date" shortcut="⇧ D" options={options.dueDate} selectedIds={[issue.dueDate ?? '']} onSelect={id => onPropertyChange('dueDate', id)}/>
-    <ContextPropertySub multi label="Labels" shortcut="L" options={options.labels} selectedIds={issue.labels?.map(label => label.id) ?? []} onSelect={id => onPropertyChange('labels', toggleId(issue.labels?.map(label => label.id) ?? [], id))}/>
-    <ContextPropertySub label="Project" shortcut="⇧ P" options={options.project} selectedIds={[issue.project?.id ?? '']} onSelect={id => onPropertyChange('project', id)}/></>}
-    {onAction&&<>{editable&&<ContextMenu.Separator className={styles.menuSeparator}/>}<MyIssuesMenuItem action="copy" label="Copy" onAction={onAction} submenu={false}/><ContextMenu.Separator className={styles.menuSeparator}/><MyIssuesMenuItem action="delete" label="Delete" shortcut="⌘ ⌫" danger onAction={onAction} submenu={false}/></>}
+    <ContextPropertySub multi label="Labels" shortcut="L" options={options.labels} selectedIds={issue.labels?.map(label => label.id) ?? []} onSelect={id => onPropertyChange('labels', toggleGroupedLabelIds(issue.labels?.map(label => label.id) ?? [], id, options.labels))}/>
+    <ContextPropertySub label="Project" shortcut="⇧ P" options={options.project} selectedIds={[issue.project?.id ?? '']} onSelect={id => onPropertyChange('project', id)}/>
+    <ContextPropertySub label="Cycle" shortcut="⇧ C" options={options.cycle??[]} selectedIds={[issue.cycleId ?? '']} onSelect={id => onPropertyChange('cycle', id)}/></>}
+    {onAction&&<>{editable&&<ContextMenu.Separator className={styles.menuSeparator}/>}<ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><span>Copy</span><ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}><MyIssuesMenuItem action="copyUrl" label="Copy issue URL" shortcut="⌘ ⇧ ," onAction={onAction} submenu={false}/><MyIssuesMenuItem action="copyId" label="Copy issue ID" onAction={onAction} submenu={false}/><MyIssuesMenuItem action="copyTitle" label="Copy issue title" onAction={onAction} submenu={false}/></ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub><ContextMenu.Separator className={styles.menuSeparator}/><MyIssuesMenuItem action="delete" label="Delete" shortcut="⌘ ⌫" danger onAction={onAction} submenu={false}/></>}
   </ContextMenu.Content>
 }
 
@@ -277,8 +280,7 @@ export function MyIssuesListError({ message, onRetry }: { message: string; onRet
 const EMPTY_SET = new Set<string>()
 const EMPTY_ERRORS = new Map<string, string>()
 const DEFAULT_PROPERTIES = new Set<MyIssuesProperty>(['id', 'status', 'assignee', 'priority', 'project', 'labels', 'created'])
-const EMPTY_OPTIONS: MyIssuesRowPropertyOptions = { status: [], priority: [], assignee: [], dueDate: [], labels: [], project: [] }
-function toggleId(ids: string[], id: string) { return ids.includes(id) ? ids.filter(value => value !== id) : [...ids, id] }
+const EMPTY_OPTIONS: MyIssuesRowPropertyOptions = { status: [], priority: [], assignee: [], dueDate: [], labels: [], project: [], cycle: [] }
 function priorityName(priority: number) { return ['No', 'Urgent', 'High', 'Medium', 'Low'][priority] }
 function rowAriaLabel(issue: MyIssuesRowData) { return `Select issue ${priorityName(issue.priority)} Priority ${issue.identifier} ${issue.title}` }
 function formatRowDate(value: string) { return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value)) }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { BootstrapData, Issue, IssueUpdateInput, SavedView, SavedViewMutationInput, Team } from '@/types/flow'
 import type { TeamIssuesRouteView } from '@/lib/app-routes'
 import { MyIssuesBulkActionBar } from '@/components/my-issues/my-issues-bulk-action-bar'
+import { toggleGroupedLabelIds } from '@/lib/labels'
 import { MyIssuesDetailsPane, type MyIssuesDetailsSummary, type MyIssuesSummaryItem, type MyIssuesSummaryTab } from '@/components/my-issues/my-issues-details-pane'
 import { MyIssuesFilterBar, type MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-bar'
 import { MyIssuesList, type MyIssuesContextAction, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData } from '@/components/my-issues/my-issues-list'
@@ -13,6 +14,7 @@ import { IssueExplorerSurface } from './issue-explorer-surface'
 import { IssueBoard } from './issue-board'
 import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from './saved-view-editor'
 import { SavedViewDetailsPanel, SavedViewInsightsPanel, type SavedViewInsightsConfig } from './saved-view-panels'
+import { confirmAction } from '@/components/ui/action-dialog-service'
 import type { ViewVisual } from '@/components/views/view-icon-picker'
 import {
   ISSUE_FILTER_LABELS, applyExplorerFilters, buildExplorerIssueGroups, executeExplorerBulkAction, explorerBulkOptions, explorerFilterOptions,
@@ -23,6 +25,8 @@ import {
 export interface IssueExplorerPageProps {
   data: BootstrapData
   initialLabelId?: string
+  initialStatusId?: string
+  initialInsightFilters?: { teamIds?: string[]; stateIds?: string[]; assigneeIds?: string[]; labelIds?: string[] }
   scope: { kind: 'team'; team: Team } | { kind: 'workspace' }
   view: TeamIssuesRouteView
   viewHref: (view: TeamIssuesRouteView) => string
@@ -40,6 +44,7 @@ export interface IssueExplorerPageProps {
   onDeleteSavedView?: (view: SavedView) => Promise<void>
   onToggleSavedViewFavorite?: (view: SavedView) => Promise<void>
   onSetSavedViewSubscriptionEvents?: (view: SavedView, events: string[]) => Promise<void>
+  onShareSavedView?: (view: SavedView) => Promise<string | undefined>
   onDuplicateSavedView?: (view: SavedView) => void
   onCancelCreateSavedView?: () => void
   onBeginEditSavedView?: () => void
@@ -54,14 +59,15 @@ export interface IssueExplorerPageProps {
   onDeleteIssues: (issueIds: string[]) => Promise<void>
 }
 
-export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref, savedView, duplicateFrom, creatingView = false, editingView = false, defaultSaveScope, savedViews = [], savedViewHref, onNavigateView, onNavigateSavedView, onCreateSavedView, onUpdateSavedView, onDeleteSavedView, onToggleSavedViewFavorite, onSetSavedViewSubscriptionEvents, onDuplicateSavedView, onCancelCreateSavedView, onBeginEditSavedView, onFinishEditSavedView, onNewViewResourceChange, onOpenIssue, renderIssuePreview, onOpenSidebar, onCreateIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues }: IssueExplorerPageProps) {
+export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initialInsightFilters, scope, view, viewHref, savedView, duplicateFrom, creatingView = false, editingView = false, defaultSaveScope, savedViews = [], savedViewHref, onNavigateView, onNavigateSavedView, onCreateSavedView, onUpdateSavedView, onDeleteSavedView, onToggleSavedViewFavorite, onSetSavedViewSubscriptionEvents, onShareSavedView, onDuplicateSavedView, onCancelCreateSavedView, onBeginEditSavedView, onFinishEditSavedView, onNewViewResourceChange, onOpenIssue, renderIssuePreview, onOpenSidebar, onCreateIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues }: IssueExplorerPageProps) {
   const storageScope = scope.kind === 'team' ? `team:${scope.team.id}` : 'workspace'
   const preferencesKey = `${data.workspace.urlKey}:issue-explorer:${storageScope}:${view}`
   const sourceView = savedView ?? duplicateFrom
-  const [filters, setFilters] = useState<MyIssuesAppliedFilter[]>(() => sourceView ? filtersFromSavedView(sourceView) : initialLabelFilter(data, initialLabelId) ?? readFilters(`${preferencesKey}:filters`))
+  const [filters, setFilters] = useState<MyIssuesAppliedFilter[]>(() => sourceView ? filtersFromSavedView(sourceView) : initialInsightFilters ? insightPropertyFilters(data, initialInsightFilters) : initialPropertyFilters(data, initialLabelId, initialStatusId) ?? readFilters(`${preferencesKey}:filters`))
   const [display, setDisplay] = useState<MyIssuesDisplayOptions>(() => sourceView ? displayFromSavedView(sourceView, view) : readDisplay(`${preferencesKey}:display`, view))
   const [detailsOpen, setDetailsOpen] = useState(() => readBoolean(`${data.workspace.urlKey}:issue-explorer:${storageScope}:details`, false))
   const [insightsOpen, setInsightsOpen] = useState(false)
+  const [draftInsights, setDraftInsights] = useState<SavedViewInsightsConfig>()
   const [detailsWidth, setDetailsWidth] = useState(350)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [filterOpenSignal, setFilterOpenSignal] = useState(0)
@@ -80,8 +86,10 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
   const savedViewSubscription = savedView ? data.subscriptions.find(item => item.userId === data.viewer.id && item.resourceType === 'view' && item.resourceId === savedView.id) : undefined
   const savedViewSubscriptionEvents = savedViewSubscription?.events?.length ? savedViewSubscription.events : savedViewSubscribed ? ['issue-added', 'issue-completed'] : []
 
-  const scopedIssues = useMemo(() => issuesForScope(data.issues, scope, view), [data.issues, scope, view])
-  const insightIssues = useMemo(() => issuesForScope(data.issues, scope, view, true), [data.issues, scope, view])
+  useEffect(() => { const onKey = (event: KeyboardEvent) => { if (!event.altKey || event.metaKey || event.ctrlKey || event.key.toLowerCase() !== 'v' || savedView || creatingView || viewEditor || (event.target as HTMLElement | null)?.closest('input,textarea,[contenteditable=true],[role=textbox]')) return; event.preventDefault(); setViewEditor('create') }; addEventListener('keydown', onKey); return () => removeEventListener('keydown', onKey) }, [creatingView, savedView, viewEditor])
+
+  const scopedIssues = useMemo(() => filterInsightTeams(issuesForScope(data.issues, scope, view), initialInsightFilters?.teamIds), [data.issues, initialInsightFilters?.teamIds, scope, view])
+  const insightIssues = useMemo(() => filterInsightTeams(issuesForScope(data.issues, scope, view, true), initialInsightFilters?.teamIds), [data.issues, initialInsightFilters?.teamIds, scope, view])
   const issuesById = useMemo(() => new Map(data.issues.map(issue => [issue.id, issue])), [data.issues])
   const rowOptions = useMemo(() => explorerPropertyOptions(data, scopedIssues), [data, scopedIssues])
   const visibleIssues = useMemo(() => applyExplorerFilters(scopedIssues, filters, data), [data, filters, scopedIssues])
@@ -170,7 +178,7 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
     void updateOne(row, update).catch(() => undefined)
   }
   const contextAction = async (row: MyIssuesRowData, action: MyIssuesContextAction) => {
-    if (action === 'delete') { if (window.confirm(`Delete ${row.identifier}? This cannot be undone.`)) await onDeleteIssues([row.id]); return }
+    if (action === 'delete') { if (await confirmAction(`Delete ${row.identifier}?`,{description:'This cannot be undone.',confirmLabel:'Delete'})) await onDeleteIssues([row.id]); return }
     if (action === 'copy') { await navigator.clipboard.writeText(`${location.origin}${row.href}`); return }
     const update = explorerUpdateForAction(action)
     if (update) await updateOne(row, update)
@@ -193,7 +201,9 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
     const update: IssueUpdateInput = { sortOrder, ...(sourceGroupId === targetGroupId ? {} : explorerBoardGroupUpdate(row, display.grouping, targetGroupId, data)) }
     void updateOne(row, update).catch(() => undefined)
   }
-  const savedViewSnapshot = (): SavedViewMutationInput => ({ resource: 'issues', scope: scope.kind, teamId: scope.kind === 'team' ? scope.team.id : '', ownerId: data.viewer.id, view, filters, display: displaySnapshot(display) })
+  const savedViewSnapshot = (): SavedViewMutationInput => ({ resource: 'issues', scope: scope.kind, teamId: scope.kind === 'team' ? scope.team.id : '', ownerId: data.viewer.id, view, filters, display: displaySnapshot(display), ...(draftInsights ? { insights: draftInsights as unknown as Record<string, unknown> } : {}) })
+  const previewTarget = initialSaveTarget ?? (scope.kind === 'team' ? { scope: 'team' as const, teamId: scope.team.id, label: scope.team.name } : { scope: 'workspace' as const, label: data.workspace.name })
+  const insightsView: SavedView | undefined = savedView ?? (creatingView ? { id: '__new-view', name: 'All issues', description: '', resource: 'issues', scope: previewTarget.scope, teamId: previewTarget.scope === 'team' ? previewTarget.teamId : '', ownerId: data.viewer.id, view, filters, display: displaySnapshot(display), insights: draftInsights as unknown as Record<string, unknown> | undefined, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : undefined)
   const saveViewEditor = async (name: string, description: string, target: SavedViewTarget | undefined, visual: ViewVisual) => {
     if (viewSaving) return
     setViewSaving(true)
@@ -217,9 +227,10 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
     onDuplicate={onDuplicateSavedView ? () => onDuplicateSavedView(savedView) : undefined}
     onUpdate={onUpdateSavedView ? input => { void onUpdateSavedView(savedView.id, input) } : undefined}
     onSetSubscriptionEvents={onSetSavedViewSubscriptionEvents ? events => { void onSetSavedViewSubscriptionEvents(savedView, events) } : undefined}
+    onShare={onShareSavedView ? () => { void onShareSavedView(savedView).then(path => { if (path) void navigator.clipboard.writeText(`${location.origin}${path}`) }) } : undefined}
     onCopy={() => { void navigator.clipboard.writeText(window.location.href) }}
     onExport={() => exportIssuesCsv(rows, savedView.name)}
-    onDelete={() => { if (onDeleteSavedView && window.confirm(`Delete view "${savedView.name}"?`)) void onDeleteSavedView(savedView) }}
+    onDelete={() => { if (onDeleteSavedView) void confirmAction(`Delete view “${savedView.name}”?`,{confirmLabel:'Delete view'}).then(confirmed=>{if(confirmed)return onDeleteSavedView(savedView)}) }}
   />
 
   return <>
@@ -316,13 +327,13 @@ export function IssueExplorerPage({ data, initialLabelId, scope, view, viewHref,
         view={savedView}
         workspace={data.workspace}
       />}
-      {savedView && insightsOpen && <SavedViewInsightsPanel
+      {insightsView && insightsOpen && <SavedViewInsightsPanel
         allRows={insightRows}
         data={data}
         onClose={() => changeInsights(false)}
-        onSave={async (config: SavedViewInsightsConfig) => { if (onUpdateSavedView) await onUpdateSavedView(savedView.id, { insights: config as unknown as Record<string, unknown> }) }}
+        onSave={async (config: SavedViewInsightsConfig) => { if (savedView && onUpdateSavedView) await onUpdateSavedView(savedView.id, { insights: config as unknown as Record<string, unknown> }); else setDraftInsights(config) }}
         rows={rows}
-        view={savedView}
+        view={insightsView}
       />}
     </IssueExplorerSurface>
     <MyIssuesBulkActionBar selectedIssues={selection.selectedIssues} actionOptions={action => explorerBulkOptions(action, rowOptions)} onAction={(action, _issues, value) => { void executeExplorerBulkAction({ action, ids: selection.selectedIssues.map(issue => issue.id), value, data, issuesById, onUpdateIssue, onUpdateIssues }).then(() => selection.clearSelection()) }} onClear={selection.clearSelection}/>
@@ -353,7 +364,7 @@ function explorerBoardGroupUpdate(row: MyIssuesRowData, grouping: MyIssuesGroupi
   if (grouping === 'label' && targetGroupId.startsWith('label-')) {
     if (targetGroupId === 'label-none') return { labelIds: [] }
     const labelId = targetGroupId.slice('label-'.length)
-    return { labelIds: [labelId, ...(row.labels ?? []).map(label => label.id).filter(id => id !== labelId)] }
+    return { labelIds: toggleGroupedLabelIds((row.labels ?? []).map(label => label.id), labelId, data.labels) }
   }
   return {}
 }
@@ -368,13 +379,27 @@ function deriveSummary(groups: MyIssuesGroupData[]): MyIssuesDetailsSummary {
 }
 function countItems(items: Omit<MyIssuesSummaryItem, 'count'>[]) { const values = new Map<string, MyIssuesSummaryItem>(); for (const item of items) values.set(item.id, { ...item, count: (values.get(item.id)?.count ?? 0) + 1 }); return [...values.values()].sort((a, b) => b.count - a.count) }
 function defaultDisplay(view: TeamIssuesRouteView): MyIssuesDisplayOptions { return { ...defaultMyIssuesDisplayOptions, grouping: 'status', completedWindow: view === 'all' ? 'all' : 'none', properties: new Set(defaultMyIssuesDisplayOptions.properties) } }
-function initialLabelFilter(data: BootstrapData, labelId?: string): MyIssuesAppliedFilter[] | undefined {
-  if (!labelId) return
+function initialPropertyFilters(data: BootstrapData, labelId?: string, statusId?: string): MyIssuesAppliedFilter[] | undefined {
+  const filters: MyIssuesAppliedFilter[] = []
   const label = data.labels.find(item => item.id === labelId)
-  if (!label) return
-  const value = { value: label.id, valueLabel: label.name, color: label.color }
-  return [{ id: `labels-${label.id}`, field: 'labels', fieldLabel: 'Labels', operator: 'is', ...value, values: [value] }]
+  if (label) { const value = { value: label.id, valueLabel: label.name, color: label.color }; filters.push({ id: `labels-${label.id}`, field: 'labels', fieldLabel: 'Labels', operator: 'is', ...value, values: [value] }) }
+  const state = data.states.find(item => item.id === statusId)
+  if (state) { const value = { value: state.id, valueLabel: state.name, color: state.color }; filters.push({ id: `status-${state.id}`, field: 'status', fieldLabel: 'Status', operator: 'is', ...value, values: [value] }) }
+  return filters.length ? filters : undefined
 }
+function insightPropertyFilters(data: BootstrapData, filters: NonNullable<IssueExplorerPageProps['initialInsightFilters']>): MyIssuesAppliedFilter[] {
+  const result: MyIssuesAppliedFilter[] = []
+  const add = (field: 'status'|'assignee'|'labels', fieldLabel: string, values: Array<{id:string;label:string;color?:string}>) => {
+    if (!values.length) return
+    const mapped = values.map(item => ({ value:item.id, valueLabel:item.label, color:item.color }))
+    result.push({ id:`insight-${field}`, field, fieldLabel, operator:'is', ...mapped[0], values:mapped })
+  }
+  add('status','Status',(filters.stateIds??[]).map(id=>data.states.find(item=>item.id===id)).filter((item):item is NonNullable<typeof item>=>Boolean(item)).map(item=>({id:item.id,label:item.name,color:item.color})))
+  add('assignee','Assignee',(filters.assigneeIds??[]).map(id=>data.users.find(item=>item.id===id)).filter((item):item is NonNullable<typeof item>=>Boolean(item)).map(item=>({id:item.id,label:item.displayName})))
+  add('labels','Labels',(filters.labelIds??[]).map(id=>data.labels.find(item=>item.id===id)).filter((item):item is NonNullable<typeof item>=>Boolean(item)).map(item=>({id:item.id,label:item.name,color:item.color})))
+  return result
+}
+function filterInsightTeams(issues: Issue[], teamIds?: string[]) { return teamIds?.length ? issues.filter(issue=>teamIds.includes(issue.team.id)) : issues }
 function readFilters(key: string): MyIssuesAppliedFilter[] { try { const value = JSON.parse(localStorage.getItem(key) ?? '[]'); return Array.isArray(value) ? value : [] } catch { return [] } }
 function readDisplay(key: string, view: TeamIssuesRouteView): MyIssuesDisplayOptions { const fallback = defaultDisplay(view); try { const value = JSON.parse(localStorage.getItem(key) ?? 'null'); return value ? { ...fallback, ...value, properties: new Set(Array.isArray(value.properties) ? value.properties : [...fallback.properties]) } : fallback } catch { return fallback } }
 function readBoolean(key: string, fallback: boolean) { try { const value = localStorage.getItem(key); return value == null ? fallback : value === 'true' } catch { return fallback } }
