@@ -62,6 +62,7 @@ func (s *server) oauthAuthorizationServer(w http.ResponseWriter, r *http.Request
 }
 
 func (s *server) registerOAuthClient(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	var input struct {
 		ClientName              string   `json:"client_name"`
 		ClientURI               string   `json:"client_uri"`
@@ -74,12 +75,17 @@ func (s *server) registerOAuthClient(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	if len(input.RedirectURIs) == 0 || slices.ContainsFunc(input.RedirectURIs, func(item string) bool { return !validOAuthRedirectURI(item) }) {
+	if len(input.RedirectURIs) == 0 || len(input.RedirectURIs) > 20 || slices.ContainsFunc(input.RedirectURIs, func(item string) bool { return !validOAuthRedirectURI(item) }) {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_redirect_uri", "At least one valid HTTPS or loopback redirect URI is required")
 		return
 	}
 	if input.ClientName == "" {
 		input.ClientName = "MCP client"
+	}
+	input.ClientName = strings.TrimSpace(input.ClientName)
+	if len(input.ClientName) > 200 || (input.ClientURI != "" && !validOAuthMetadataURI(input.ClientURI)) || (input.LogoURI != "" && !validOAuthMetadataURI(input.LogoURI)) {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_client_metadata", "Client metadata contains an invalid name or URL")
+		return
 	}
 	if len(input.GrantTypes) == 0 {
 		input.GrantTypes = []string{"authorization_code", "refresh_token"}
@@ -90,7 +96,7 @@ func (s *server) registerOAuthClient(w http.ResponseWriter, r *http.Request) {
 	if input.TokenEndpointAuthMethod == "" {
 		input.TokenEndpointAuthMethod = "none"
 	}
-	if input.TokenEndpointAuthMethod != "none" || !slices.Contains(input.GrantTypes, "authorization_code") || !slices.Contains(input.ResponseTypes, "code") {
+	if input.TokenEndpointAuthMethod != "none" || !slices.Contains(input.GrantTypes, "authorization_code") || slices.ContainsFunc(input.GrantTypes, func(value string) bool { return value != "authorization_code" && value != "refresh_token" }) || len(input.ResponseTypes) != 1 || input.ResponseTypes[0] != "code" {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_client_metadata", "Flow supports public PKCE authorization-code clients")
 		return
 	}
@@ -131,6 +137,7 @@ func (s *server) getOAuthAuthorizationRequest(w http.ResponseWriter, r *http.Req
 }
 
 func (s *server) decideOAuthAuthorization(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	var input oauthAuthorizationRequest
 	if !decodeJSON(w, r, &input) {
 		return
@@ -193,6 +200,7 @@ func (s *server) oauthRequestUser(r *http.Request) domain.User {
 }
 
 func (s *server) exchangeMCPToken(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	if err := r.ParseForm(); err != nil {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "Invalid form body")
 		return
@@ -249,6 +257,7 @@ func (s *server) issueOAuthTokens(w http.ResponseWriter, r *http.Request, grant 
 }
 
 func (s *server) revokeOAuthToken(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	if err := r.ParseForm(); err != nil {
 		w.WriteHeader(http.StatusOK)
 		return
@@ -335,6 +344,11 @@ func validOAuthRedirectURI(raw string) bool {
 	}
 	host := parsed.Hostname()
 	return parsed.Scheme == "http" && (host == "127.0.0.1" || host == "::1" || host == "localhost")
+}
+
+func validOAuthMetadataURI(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	return err == nil && parsed.Scheme == "https" && parsed.Host != "" && parsed.User == nil && parsed.Fragment == ""
 }
 
 func validPKCE(verifier, challenge string) bool {

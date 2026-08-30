@@ -8,7 +8,7 @@ import { ReleasesPage } from '@/components/releases/releases-page'
 import { createAsk, decideAsk, deleteAllDrafts, deleteAsk, deleteDraft } from '@/lib/api'
 import type { Ask, BootstrapData, Draft } from '@/types/flow'
 import type { ReleasePipelineTab, ReleaseRouteTab } from '@/lib/app-routes'
-import { releasePath, releasePipelinePath } from '@/lib/app-routes'
+import { releasePath, releasePipelinePath, settingsPath } from '@/lib/app-routes'
 import { useI18n } from '@/i18n/i18n'
 import { StatusIcon } from '@/components/issue/issue-icons'
 
@@ -22,7 +22,7 @@ export function WorkspaceOperationsPage({ data, view, pipelineSlug, releaseSlug,
   const [askSurface, setAskSurface] = useState<'configuration'|'intake'>('configuration')
   if (view === 'releases') return <ReleasesPage data={data} pipelineSlug={pipelineSlug} releaseSlug={releaseSlug} pipelineTab={pipelineTab} releaseTab={releaseTab} onOpenSidebar={onOpenSidebar} onReload={onReload} onNavigate={onNavigate}/>
   if (view === 'asks') return <>
-    <AsksPage data={data} surface={askSurface} onSurfaceChange={setAskSurface} onOpenSidebar={onOpenSidebar} onCreate={() => setCreateOpen(true)} onDecide={(ask, decision) => setAskDecision({ ask, decision })} onDelete={async id => { await deleteAsk(id); await onReload() }}/>
+    <AsksPage data={data} surface={askSurface} onSurfaceChange={setAskSurface} onOpenSidebar={onOpenSidebar} onCreate={() => setCreateOpen(true)} onOpenSettings={page=>onNavigate(settingsPath(data.workspace.urlKey,page))} onDecide={(ask, decision) => setAskDecision({ ask, decision })} onDelete={async id => { await deleteAsk(id); await onReload() }}/>
     {createOpen && (
       <CreateAskDialog data={data} onClose={() => setCreateOpen(false)} onCreated={async () => { setCreateOpen(false); await onReload() }}/>
     )}
@@ -38,15 +38,15 @@ function OperationsTopBar({ title, onOpenSidebar, children }: { title: ReactNode
   return <header className="operations-header operations-special-header"><button className="operations-mobile-menu" aria-label="Open sidebar" onClick={onOpenSidebar}><Menu/></button><div className="operations-heading">{title}</div><div className="operations-header-actions">{children}</div></header>
 }
 
-function AsksPage({ data, surface, onSurfaceChange, onOpenSidebar, onCreate, onDecide, onDelete }: { data: BootstrapData; surface: 'configuration'|'intake'; onSurfaceChange: (value: 'configuration'|'intake') => void; onOpenSidebar: () => void; onCreate: () => void; onDecide: (ask: Ask, decision: 'approved'|'rejected') => void; onDelete: (id: string) => Promise<void> }) {
+function AsksPage({ data, surface, onSurfaceChange, onOpenSidebar, onCreate, onOpenSettings, onDecide, onDelete }: { data: BootstrapData; surface: 'configuration'|'intake'; onSurfaceChange: (value: 'configuration'|'intake') => void; onOpenSidebar: () => void; onCreate: () => void; onOpenSettings:(page:'asks'|'integrations')=>void; onDecide: (ask: Ask, decision: 'approved'|'rejected') => void; onDelete: (id: string) => Promise<void> }) {
   const pending=data.asks.filter(item=>item.status==='pending').length
   return <main className="main-panel operations-page asks-page" aria-label="Asks">
     <OperationsTopBar title={<h1>Asks</h1>} onOpenSidebar={onOpenSidebar}><button className="operations-icon-button" aria-label="Create ask" onClick={onCreate}><Plus/></button></OperationsTopBar>
     <div className="asks-content">
-      <div className="asks-intro"><h2>Asks</h2><p>Let anyone submit bug reports, feature requests, and more using structured templates from Slack or email. <a href="https://linear.app/docs/linear-asks" target="_blank" rel="noreferrer">Docs ↗</a></p><div className="asks-mode"><button className={surface==='configuration'?'active':''} onClick={()=>onSurfaceChange('configuration')}>Configuration</button><button className={surface==='intake'?'active':''} onClick={()=>onSurfaceChange('intake')}>Intake {pending>0&&<span>{pending}</span>}</button></div></div>
+      <div className="asks-intro"><h2>Asks</h2><p>Let anyone submit bug reports, feature requests, and more using structured templates from Slack or email. <a href="https://flow.app/docs/asks" target="_blank" rel="noreferrer">Docs ↗</a></p><div className="asks-mode"><button className={surface==='configuration'?'active':''} onClick={()=>onSurfaceChange('configuration')}>Configuration</button><button className={surface==='intake'?'active':''} onClick={()=>onSurfaceChange('intake')}>Intake {pending>0&&<span>{pending}</span>}</button></div></div>
       {surface === 'configuration' ? <div className="asks-config">
-        <section><header><h3>Slack</h3><p>Allow anyone in your Slack workspace to submit Asks using templated forms</p></header><button className="asks-config-row"><span className="asks-source-icon slack"><MessageCircleQuestion/></span><span><strong>No workspaces connected</strong><small>Connect Slack to route requests into team Triage.</small></span><Plus/></button></section>
-        <section><header><h3>Email</h3><p>Allow anyone to submit Asks by emailing a custom address</p></header><button className="asks-config-row"><span className="asks-source-icon mail"><Mail/></span><span><strong>No email addresses configured</strong><small>Create an intake address and choose a team and template.</small></span><Plus/></button></section>
+        <section><header><h3>Slack</h3><p>Allow anyone in your Slack workspace to submit Asks using templated forms</p></header><button className="asks-config-row" onClick={()=>onOpenSettings('integrations')}><span className="asks-source-icon slack"><MessageCircleQuestion/></span><span><strong>No workspaces connected</strong><small>Connect Slack to route requests into team Triage.</small></span><Plus/></button></section>
+        <section><header><h3>Email</h3><p>Allow anyone to submit Asks by emailing a custom address</p></header><button className="asks-config-row" onClick={()=>onOpenSettings('asks')}><span className="asks-source-icon mail"><Mail/></span><span><strong>No email addresses configured</strong><small>Create an intake address and choose a team and template.</small></span><Plus/></button></section>
       </div> : <div className="asks-intake"><div className="asks-intake-header"><span>{`${data.asks.length} requests`}</span><button className="linear-primary" onClick={onCreate}><Plus/> New request</button></div>{data.asks.length?<div className="asks-intake-list">{data.asks.map(item=><div className="ask-linear-row" key={item.id}><span className={`operations-ask-status ${item.status}`}>{item.status==='pending'?<Clock3/>:<Check/>}</span><div><strong>{item.title}</strong><small>{item.requester.displayName} · {item.source} · {relative(item.createdAt)} ago</small></div><span className={`ask-state ${item.status}`}>{item.status}</span><RowMenu>{item.status==='pending'&&<><OperationsMenuItem icon={<Check/>} onSelect={()=>onDecide(item,'approved')}>Approve...</OperationsMenuItem><OperationsMenuItem icon={<X/>} onSelect={()=>onDecide(item,'rejected')}>Reject...</OperationsMenuItem></>}<OperationsMenuItem icon={<Trash2/>} danger onSelect={()=>void onDelete(item.id)}>Delete ask</OperationsMenuItem></RowMenu></div>)}</div>:<div className="linear-empty-state compact"><Inbox/><strong>No asks yet</strong><span>Requests submitted through Slack or email will appear here for review.</span></div>}</div>}
     </div>
   </main>

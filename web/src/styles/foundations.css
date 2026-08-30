@@ -1,0 +1,38 @@
+:root {
+  --font-monospace: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  --font-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Twemoji Mozilla", "Noto Color Emoji", sans-serif;
+  --speed-highlight-fade-in: 0s;
+  --speed-highlight-fade-out: .15s;
+  --speed-quick-transition: .1s;
+  --speed-regular-transition: .25s;
+  --speed-slow-transition: .35s;
+  --font-size-micro: .6875rem;
+  --font-size-mini: .75rem;
+  --font-size-small: .8125rem;
+  --font-size-regular: .9375rem;
+  --font-size-large: 1.125rem;
+  --font-size-title-1: 2.25rem;
+  --font-size-title-2: 1.5rem;
+  --font-size-title-3: 1.25rem;
+  --font-weight-light: 300;
+  --font-weight-normal: 450;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --radius-rounded: 9999px;
+  --ease-in-quad: cubic-bezier(.55,.085,.68,.53);
+  --ease-out-quad: cubic-bezier(.25,.46,.45,.94);
+  --ease-in-out-quad: cubic-bezier(.455,.03,.515,.955);
+  --ease-out-cubic: cubic-bezier(.215,.61,.355,1);
+  --ease-out-quart: cubic-bezier(.165,.84,.44,1);
+  --ease-out-expo: cubic-bezier(.19,1,.22,1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto!important;
+    animation-duration: .01ms!important;
+    animation-iteration-count: 1!important;
+    transition-duration: .01ms!important;
+  }
+}

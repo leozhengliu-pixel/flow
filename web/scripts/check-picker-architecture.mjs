@@ -4,6 +4,8 @@ import { extname, join, relative } from 'node:path'
 const root = new URL('../src/components/', import.meta.url)
 const dedicated = new Set([
   'issue/due-date-picker.tsx',
+  'issue/issue-options-menu.tsx',
+  'issue/issue-release-picker.tsx',
   'issue/editor/selection-toolbar.tsx',
   'issue/editor/slash-command-menu.tsx',
 ])

@@ -8,11 +8,12 @@ import { PriorityIcon } from '@/components/issue/issue-icons'
 import { ViewGlyph, ViewIconPicker } from '@/components/views/view-icon-picker'
 import { useI18n } from '@/i18n/i18n'
 import type { Initiative, InitiativeMutationInput, InitiativeStatus, InitiativeUpdate, IssueLabel, Project, ProjectUpdate, Team, User } from '@/types/flow'
-import type { InitiativeRouteTab, InitiativesRouteView } from '@/lib/app-routes'
+import { initiativePath, initiativesPath, type InitiativeRouteTab, type InitiativesRouteView } from '@/lib/app-routes'
 import { InitiativeLabelsPicker, InitiativeProperties, InitiativeStatusIcon } from './initiative-shared'
 import { DisplayIcon, FilterIcon as Filter, PlusIcon, SidebarIcon } from '@/components/ui/view-action-icons'
 import { titleCase } from './initiative-model'
 import './initiatives.css'
+import './initiatives-list-parity.css'
 
 type Props = {
   initiatives: Initiative[]
@@ -34,30 +35,36 @@ type Props = {
   onCreateReminder: (id: string, remindAt: string) => Promise<unknown>
   onOpenSidebar?: () => void
   createOnMount?: boolean
+  displayDefault?: { grouping?: string; ordering?: string; properties?: string[]; showTeamInitiatives?: boolean }
+  onSetDefault: (value: { grouping: string; ordering: string; properties: string[]; showTeamInitiatives: boolean }) => Promise<void>
 }
 
-const PROPERTY_ORDER = ['description', 'owner', 'status', 'priority', 'leadTeam', 'teams', 'health', 'projects', 'activeProjects', 'target', 'created', 'updated', 'completed', 'labels'] as const
+const PROPERTY_ORDER = ['description', 'owner', 'status', 'leadTeam', 'teams', 'priority', 'health', 'projects', 'activeProjects', 'target', 'created', 'updated', 'completed', 'labels'] as const
 type Property = typeof PROPERTY_ORDER[number]
 const TABLE_PROPERTY_ORDER: Property[] = ['status', 'priority', 'owner', 'leadTeam', 'target', 'projects', 'health', 'activeProjects', 'labels', 'teams', 'created', 'updated', 'completed']
-const DEFAULT_PROPERTIES: Property[] = ['owner', 'priority', 'leadTeam', 'health', 'projects', 'activeProjects', 'target']
-type Sort = 'manual' | 'name' | 'priority' | 'target' | 'health' | 'created' | 'updated'
+const DEFAULT_PROPERTIES: Property[] = ['description', 'status', 'priority', 'owner', 'leadTeam', 'target', 'projects', 'health', 'activeProjects']
+type Sort = 'manual' | 'name' | 'status' | 'priority' | 'target' | 'health' | 'created' | 'updated'
 type Grouping = 'none'|'contributingTeam'|'leadTeam'|'owner'|'health'|'status'|'priority'|'label'
 type FilterState = { status?: InitiativeStatus; priority?: number; ownerId?: string; creatorId?: string; leadTeamId?: string; teamId?: string; health?: Project['health']; labelId?: string; date?: 'created7'|'updated7'|'targetMonth'|'completed' }
 
 export function InitiativesPage(props: Props) {
-  const { initiatives, initiativeUpdates, projects, projectUpdates, users, teams, labels, viewer, view, onViewChange, onOpen, onCreate, onCreateLabel, onCreateUpdate, onUpdate, onDelete, onCreateReminder, onOpenSidebar, createOnMount = false } = props
+  const { initiatives, initiativeUpdates, projects, projectUpdates, users, teams, labels, viewer, view, displayDefault, onViewChange, onOpen, onCreate, onCreateLabel, onCreateUpdate, onUpdate, onDelete, onCreateReminder, onSetDefault, onOpenSidebar, createOnMount = false } = props
+  const defaultProperties = displayDefault?.properties?.filter((item): item is Property => PROPERTY_ORDER.includes(item as Property)) ?? DEFAULT_PROPERTIES
+  const defaultSort = displayDefault?.ordering && ['manual', 'name', 'status', 'priority', 'target', 'health', 'created', 'updated'].includes(displayDefault.ordering) ? displayDefault.ordering as Sort : 'manual'
+  const defaultGrouping = displayDefault?.grouping && ['none','contributingTeam','leadTeam','owner','health','status','priority','label'].includes(displayDefault.grouping) ? displayDefault.grouping as Grouping : 'none'
+  const defaultShowTeam = displayDefault?.showTeamInitiatives ?? true
   const [creating, setCreating] = useState(false)
   const [filters, setFilters] = useState<FilterState>({})
   const [filterMode, setFilterMode] = useState<'all'|'any'>('all')
   const [advancedFilterEnabled, setAdvancedFilterEnabled] = useState(false)
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false)
-  const [properties, setProperties] = useState<Set<Property>>(() => new Set(DEFAULT_PROPERTIES))
+  const [properties, setProperties] = useState<Set<Property>>(() => displayDefault ? new Set(defaultProperties) : readInitiativeProperties())
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [sort, setSort] = useState<Sort>('manual')
-  const [grouping, setGrouping] = useState<Grouping>('none')
-  const [showTeamInitiatives, setShowTeamInitiatives] = useState(true)
+  const [sort, setSort] = useState<Sort>(() => displayDefault ? defaultSort : readInitiativeSetting('sort', ['manual', 'name', 'status', 'priority', 'target', 'health', 'created', 'updated'], 'manual'))
+  const [grouping, setGrouping] = useState<Grouping>(() => displayDefault ? defaultGrouping : readInitiativeSetting('grouping', ['none','contributingTeam','leadTeam','owner','health','status','priority','label'], 'none'))
+  const [showTeamInitiatives, setShowTeamInitiatives] = useState(() => displayDefault ? defaultShowTeam : localStorage.getItem('flow:initiatives:show-team') !== 'false')
   const [updatesInitiative, setUpdatesInitiative] = useState<Initiative>()
-  const [detailsOpen, setDetailsOpen] = useState(() => window.innerWidth > 800 && localStorage.getItem('flow:initiatives:details-open') !== 'false')
+  const [detailsOpen, setDetailsOpen] = useState(() => window.innerWidth > 800 && localStorage.getItem('flow:initiatives:details-open') === 'true')
 
   const visible = useMemo(() => initiatives.filter(item => {
     const inView = view === 'active' ? item.status === 'active' : view === 'planned' ? item.status === 'planned' || item.status === 'proposed' : true
@@ -67,7 +74,9 @@ export function InitiativesPage(props: Props) {
       && (showTeamInitiatives || !(item.leadTeamId && item.contributingTeamIds.includes(item.leadTeamId)))
       && matchesFilters
   }).sort((a, b) => {
+    if (sort === 'manual') return (a.position ?? 0) - (b.position ?? 0)
     if (sort === 'name') return a.name.localeCompare(b.name)
+    if (sort === 'status') return ['proposed', 'planned', 'active', 'completed', 'canceled'].indexOf(a.status) - ['proposed', 'planned', 'active', 'completed', 'canceled'].indexOf(b.status)
     if (sort === 'priority') return a.priority - b.priority
     if (sort === 'target') return (a.targetDate ?? '').localeCompare(b.targetDate ?? '')
     if (sort === 'health') return a.health.localeCompare(b.health)
@@ -77,8 +86,12 @@ export function InitiativesPage(props: Props) {
   }), [filterMode, filters, initiatives, showTeamInitiatives, sort, view])
 
   const columns = TABLE_PROPERTY_ORDER.filter(property => properties.has(property))
-  const columnGrid = `300px ${columns.map(columnWidth).join(' ')}`
+  const showDetails = detailsOpen && view !== 'planned'
+  const columnGrid = `8px 20px minmax(280px,1fr) ${columns.map(property => columnWidth(property, showDetails)).join(' ')} 12px`
+  const workspaceSlug = location.pathname.split('/').filter(Boolean)[0] ?? ''
   const grouped = groupInitiatives(visible, grouping, teams, labels)
+  const displayDirty = grouping !== defaultGrouping || sort !== defaultSort || showTeamInitiatives !== defaultShowTeam || !sameStringSet(properties, new Set(defaultProperties))
+  const resetDisplay = () => { setGrouping(defaultGrouping); setSort(defaultSort); setShowTeamInitiatives(defaultShowTeam); setProperties(new Set(defaultProperties)) }
   const toggleProperty = (property: Property) => setProperties(current => {
     const next = new Set(current)
     if (next.has(property)) next.delete(property); else next.add(property)
@@ -106,6 +119,10 @@ export function InitiativesPage(props: Props) {
   useEffect(() => {
     if (createOnMount) setCreating(true)
   }, [createOnMount])
+  useEffect(() => { localStorage.setItem('flow:initiatives:properties-version', '2'); localStorage.setItem('flow:initiatives:properties', JSON.stringify([...properties])) }, [properties])
+  useEffect(() => localStorage.setItem('flow:initiatives:sort', sort), [sort])
+  useEffect(() => localStorage.setItem('flow:initiatives:grouping', grouping), [grouping])
+  useEffect(() => localStorage.setItem('flow:initiatives:show-team', String(showTeamInitiatives)), [showTeamInitiatives])
 
   const toggleDetails = () => setDetailsOpen(open => {
     localStorage.setItem('flow:initiatives:details-open', String(!open))
@@ -115,26 +132,26 @@ export function InitiativesPage(props: Props) {
   return <main className="main-panel li-page">
     <header className="li-page-header">
       <button className="li-mobile-menu" onClick={onOpenSidebar} type="button">☰</button>
-      <h1>Initiatives</h1>
+      <h2>Initiatives</h2>
       <button aria-label="New initiative" className="li-new-initiative" onClick={() => setCreating(true)} type="button"><PlusIcon/><span>New initiative</span></button>
     </header>
     <div className="li-toolbar">
-      <nav>{(['active', 'planned', 'all'] as InitiativesRouteView[]).map(item => <button className="ui-pill" aria-current={view === item ? 'page' : undefined} key={item} onClick={() => onViewChange(item)} type="button">{item === 'all' ? 'All initiatives' : titleCase(item)}</button>)}</nav>
+      <nav>{(['active', 'planned', 'all'] as InitiativesRouteView[]).map(item => <a className="ui-pill" aria-current={view === item ? 'page' : undefined} href={initiativesPath(workspaceSlug, item)} key={item} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onViewChange(item) }}>{item === 'all' ? 'All initiatives' : titleCase(item)}</a>)}</nav>
       <div className="li-toolbar-actions">
         <InitiativeFilterMenu filters={filters} initiatives={initiatives} labels={labels} onAdvanced={() => { setAdvancedFilterEnabled(true); setAdvancedFilterOpen(true) }} onChange={setFilters} teams={teams} users={users}/>
-        <InitiativeDisplayMenu grouping={grouping} properties={properties} showTeamInitiatives={showTeamInitiatives} sort={sort} onGrouping={setGrouping} onProperty={toggleProperty} onShowTeamInitiatives={setShowTeamInitiatives} onSort={setSort}/>
-        <button aria-expanded={detailsOpen} aria-label={detailsOpen ? 'Close sidebar' : 'Open sidebar'} className="li-icon-button ui-pill" onClick={toggleDetails} type="button"><SidebarIcon/></button>
+        <InitiativeDisplayMenu dirty={displayDirty} grouping={grouping} properties={properties} showTeamInitiatives={showTeamInitiatives} sort={sort} onGrouping={setGrouping} onProperty={toggleProperty} onReset={resetDisplay} onSetDefault={() => onSetDefault({ grouping, ordering: sort, properties: [...properties], showTeamInitiatives })} onShowTeamInitiatives={setShowTeamInitiatives} onSort={setSort}/>
+        {view !== 'planned' && <button aria-expanded={detailsOpen} aria-label="Close sidebar" className="li-icon-button ui-pill" onClick={toggleDetails} type="button"><SidebarIcon/></button>}
       </div>
     </div>
     {advancedFilterEnabled ? <AdvancedFilterBar filters={filters} initiatives={initiatives} labels={labels} mode={filterMode} open={advancedFilterOpen} teams={teams} users={users} onChange={setFilters} onMode={setFilterMode} onOpenChange={setAdvancedFilterOpen} onRemove={() => { setFilters({}); setAdvancedFilterEnabled(false); setAdvancedFilterOpen(false) }}/> : Object.keys(filters).length > 0 && <div className="li-filter-chips">{Object.entries(filters).map(([key, value]) => <button key={key} onClick={() => setFilters(current => { const next = { ...current }; delete next[key as keyof FilterState]; return next })} type="button"><span>{filterLabel(key, value, users, teams, labels)}</span><X size={11}/></button>)}<button onClick={() => setFilters({})} type="button">Clear all</button></div>}
-    <div className="li-list-body">
-      <div className="li-table" style={{ '--li-extra-columns': columns.length } as React.CSSProperties}>
-        {visible.length > 0 && <div className="li-columns" style={{ gridTemplateColumns: columnGrid }}><button onClick={() => setSort('name')} type="button">Name</button>{columns.map(property => <ColumnHeader key={property} property={property} onSort={setSort}/>)}</div>}
+    <div className={`li-list-body${showDetails ? ' has-details' : ''}`}>
+      <div className={`li-table${showDetails ? ' has-details' : ''}`} style={{ '--li-extra-columns': columns.length } as React.CSSProperties}>
+        {visible.length > 0 && <div className="li-columns" style={{ gridTemplateColumns: columnGrid }}><span aria-hidden="true"/><span aria-hidden="true"/><button aria-label="Order by Name" onClick={() => setSort('name')} style={{ gridColumn: 3 }} type="button">Name<InitiativeSortIcon/></button>{columns.map((property, index) => <ColumnHeader gridColumn={index + 4} key={property} property={property} onSort={setSort}/>)}</div>}
         {creating && <InitiativeCreateRow labels={labels} teams={teams} users={users} viewer={viewer} view={view} onCancel={() => setCreating(false)} onCreate={async input => { await onCreate(input); setCreating(false) }} onCreateLabel={onCreateLabel}/>}
-        {grouped.map(group => <Fragment key={group.key}>{grouping !== 'none' && <div className="li-group-heading"><span>{group.label}</span><small>{group.items.length}</small></div>}{group.items.map(initiative => <InitiativeRow columns={columns} initiative={initiative} initiativeUpdates={initiativeUpdates[initiative.id] ?? []} key={initiative.id} labels={labels} projects={projects} projectUpdates={projectUpdates} properties={properties} selected={selected.has(initiative.id)} teams={teams} users={users} onCreateLabel={onCreateLabel} onCreateReminder={remindAt => onCreateReminder(initiative.id, remindAt)} onDelete={onDelete} onOpen={onOpen} onOpenUpdates={() => setUpdatesInitiative(initiative)} onSelect={() => toggleSelected(initiative.id)} onUpdate={input => onUpdate(initiative.id, input)}/>)}</Fragment>)}
+        {grouped.map(group => <Fragment key={group.key}>{grouping !== 'none' && <div className="li-group-heading"><span data-i18n-ignore={['owner','leadTeam','contributingTeam','label'].includes(grouping) ? true : undefined}>{group.label}</span><small>{group.items.length}</small></div>}{group.items.map(initiative => <InitiativeRow columns={columns} grid={columnGrid} href={initiativePath(workspaceSlug, initiative)} initiative={initiative} initiativeUpdates={initiativeUpdates[initiative.id] ?? []} key={initiative.id} labels={labels} projects={projects} projectUpdates={projectUpdates} properties={properties} selected={selected.has(initiative.id)} teams={teams} users={users} onCreateLabel={onCreateLabel} onCreateReminder={remindAt => onCreateReminder(initiative.id, remindAt)} onDelete={onDelete} onOpen={onOpen} onOpenUpdates={() => setUpdatesInitiative(initiative)} onSelect={() => toggleSelected(initiative.id)} onUpdate={input => onUpdate(initiative.id, input)}/>)}</Fragment>)}
         {!creating && !visible.length && <InitiativesEmpty filtered={Object.keys(filters).length > 0} onCreate={() => setCreating(true)} view={view}/>} 
       </div>
-      {detailsOpen && <InitiativesListSidebar initiatives={visible} teams={teams} users={users} view={view}/>}
+      {showDetails && <InitiativesListSidebar initiatives={visible} teams={teams} users={users} view={view}/>}
     </div>
     {selected.size > 0 && <InitiativesBulkBar initiatives={initiatives.filter(item => selected.has(item.id))} labels={labels} users={users} onClear={() => setSelected(new Set())} onDelete={async () => { await Promise.all([...selected].map(onDelete)); setSelected(new Set()) }} onUpdate={input => Promise.all([...selected].map(id => onUpdate(id, input)))}/>} 
     {updatesInitiative && <InitiativeUpdatesPanel initiative={updatesInitiative} updates={initiativeUpdates[updatesInitiative.id] ?? []} viewer={viewer} onClose={() => setUpdatesInitiative(undefined)} onCreateUpdate={onCreateUpdate} onOpen={() => onOpen(updatesInitiative, 'activity')} onUpdate={input => onUpdate(updatesInitiative.id, input)}/>}
@@ -161,21 +178,20 @@ function InitiativesBulkBar({ initiatives, users, labels, onClear, onDelete, onU
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root><button aria-label="Ask Flow" aria-disabled="true" disabled title="Flow AI is not configured for this workspace" type="button"><MousePointer2 size={14}/></button><button aria-label="Clear selected" onClick={onClear} type="button"><X size={14}/></button></div>
 }
 
-function InitiativeRow({ initiative, initiativeUpdates, projects, projectUpdates, properties, columns, selected, users, teams, labels, onCreateLabel, onCreateReminder, onDelete, onOpen, onOpenUpdates, onSelect, onUpdate }: {
-  initiative: Initiative; initiativeUpdates: InitiativeUpdate[]; projects: Project[]; projectUpdates: Record<string, ProjectUpdate[]>; properties: Set<Property>; columns: Property[]; selected: boolean; users: User[]; teams: Team[]; labels: IssueLabel[]
+function InitiativeRow({ initiative, initiativeUpdates, projects, projectUpdates, properties, columns, grid, href, selected, users, teams, labels, onCreateLabel, onCreateReminder, onDelete, onOpen, onOpenUpdates, onSelect, onUpdate }: {
+  initiative: Initiative; initiativeUpdates: InitiativeUpdate[]; projects: Project[]; projectUpdates: Record<string, ProjectUpdate[]>; properties: Set<Property>; columns: Property[]; grid: string; href: string; selected: boolean; users: User[]; teams: Team[]; labels: IssueLabel[]
   onCreateLabel: (name: string) => Promise<IssueLabel>; onCreateReminder: (remindAt: string) => Promise<unknown>; onDelete: (id: string) => Promise<void>; onOpen: (initiative: Initiative, tab?: InitiativeRouteTab) => void; onOpenUpdates: () => void; onSelect: () => void; onUpdate: (input: InitiativeMutationInput) => void | Promise<unknown>
 }) {
   const linked = projects.filter(project => initiative.projectIds.includes(project.id))
   const completed = linked.filter(project => project.status.type === 'completed').length
   const needingUpdate = linked.filter(project => !['completed', 'canceled'].includes(project.status.type) && !(projectUpdates[project.id]?.length)).length
   const selectedLabels = labels.filter(label => initiative.labelIds.includes(label.id))
-  return <ContextMenu.Root><ContextMenu.Trigger asChild><div className="li-row" data-selected={selected} onClick={() => onOpen(initiative)} style={{ gridTemplateColumns: `28px 272px ${columns.map(columnWidth).join(' ')}` }}>
-    <button aria-label="Select initiative" className="li-select" onClick={event => { event.stopPropagation(); onSelect() }} type="button"><span>{selected && <Check size={11}/>}</span></button>
-    <div className="li-row-icon" onClick={event => event.stopPropagation()}><ViewIconPicker color={initiative.color} icon={initiative.icon || 'Initiative'} onChange={onUpdate}/></div>
-    <div className="li-name"><strong data-i18n-ignore>{initiative.name}</strong>{properties.has('description') && <small data-i18n-ignore>{initiative.summary}</small>}</div>
-    {columns.map(property => <div className={`li-cell li-cell--${property}`} key={property} onClick={event => event.stopPropagation()}>{renderCell(property)}</div>)}
-    <button aria-label="Initiative actions" className="li-row-more" onClick={event => { event.stopPropagation(); event.currentTarget.closest('.li-row')?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: event.clientX, clientY: event.clientY })) }} type="button"><MoreHorizontal size={14}/></button>
-  </div></ContextMenu.Trigger><ContextMenu.Portal><InitiativeRowContextMenu initiative={initiative} labels={labels} teams={teams} users={users} onCreateReminder={onCreateReminder} onDelete={() => onDelete(initiative.id)} onOpen={tab => onOpen(initiative, tab)} onUpdate={onUpdate}/></ContextMenu.Portal></ContextMenu.Root>
+  return <ContextMenu.Root><ContextMenu.Trigger asChild><a className="li-row" data-selected={selected} href={href} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onOpen(initiative) }} style={{ gridTemplateColumns: grid }}>
+    <button aria-label="Select initiative" className="li-select" onClick={event => { event.preventDefault(); event.stopPropagation(); onSelect() }} style={{ gridColumn: 2 }} type="button"><span>{selected && <Check size={11}/>}</span></button>
+    <div className="li-name" style={{ gridColumn: 3 }}><span className="li-row-icon" onClick={event => { event.preventDefault(); event.stopPropagation() }}><ViewIconPicker color={initiative.color} icon={initiative.icon || 'Initiative'} onChange={onUpdate} triggerClassName="li-initiative-icon"/></span><strong data-i18n-ignore>{initiative.name}</strong>{properties.has('description') && <small data-i18n-ignore>{initiative.summary}</small>}</div>
+    {columns.map((property, index) => <div className={`li-cell li-cell--${property}`} key={property} onClick={event => { event.preventDefault(); event.stopPropagation() }} style={{ gridColumn: index + 4 }}>{renderCell(property)}</div>)}
+    <button aria-label="Initiative actions" className="li-row-more" onClick={event => { event.preventDefault(); event.stopPropagation(); event.currentTarget.closest('.li-row')?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: event.clientX, clientY: event.clientY })) }} type="button"><MoreHorizontal size={14}/></button>
+  </a></ContextMenu.Trigger><ContextMenu.Portal><InitiativeRowContextMenu initiative={initiative} labels={labels} teams={teams} users={users} onCreateReminder={onCreateReminder} onDelete={() => onDelete(initiative.id)} onOpen={tab => onOpen(initiative, tab)} onUpdate={onUpdate}/></ContextMenu.Portal></ContextMenu.Root>
 
   function renderCell(property: Property) {
     if (property === 'priority') return <InitiativeProperties compact only="priority" initiative={initiative} teams={teams} users={users} onUpdate={onUpdate}/>
@@ -184,8 +200,8 @@ function InitiativeRow({ initiative, initiativeUpdates, projects, projectUpdates
     if (property === 'target') return <InitiativeProperties compact only="target" initiative={initiative} teams={teams} users={users} onUpdate={onUpdate}/>
     if (property === 'status') return <InitiativeProperties compact only="status" initiative={initiative} teams={teams} users={users} onUpdate={onUpdate}/>
     if (property === 'projects') return <button aria-label={`${completed} of ${linked.length} project completed. Click to view projects.`} className="li-project-count" onClick={() => onOpen(initiative, 'projects')} type="button"><span>{completed} /</span> {linked.length}</button>
-    if (property === 'health') return <button className={`li-health is-${initiative.health}`} onClick={onOpenUpdates} type="button"><i/><span>{initiativeUpdates.length ? healthLabel(initiative.health) : 'No updates'}</span></button>
-    if (property === 'activeProjects') return <button className="li-active-projects" onClick={onOpenUpdates} type="button"><i/>{needingUpdate}</button>
+    if (property === 'health') return <button aria-label={initiativeUpdates.length ? healthLabel(initiative.health) : 'There are no updates for this initiative'} className={`li-health is-${initiative.health}`} onClick={onOpenUpdates} type="button"><i/><span>{initiativeUpdates.length ? healthLabel(initiative.health) : 'No updates'}</span></button>
+    if (property === 'activeProjects') return <button aria-label={`${needingUpdate} project${needingUpdate === 1 ? '' : 's'} need an update. Click to open updates.`} className="li-active-projects" onClick={onOpenUpdates} type="button"><i/>{needingUpdate}</button>
     if (property === 'labels') return <InitiativeLabelsPicker compact initiative={initiative} labels={labels} onCreateLabel={onCreateLabel} onUpdate={onUpdate}/>
     if (property === 'created' || property === 'updated') return <time>{new Date(property === 'created' ? initiative.createdAt : initiative.updatedAt).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</time>
     if (property === 'completed') return <span>{initiative.status === 'completed' ? new Date(initiative.updatedAt).toLocaleDateString('en', { month: 'short', day: 'numeric' }) : '–'}</span>
@@ -204,10 +220,10 @@ function InitiativeRowContextMenu({ initiative, users, teams, labels, onCreateRe
     {visible('Edit') && <ContextMenu.Item onSelect={() => onOpen()}><Edit3 size={14}/>Edit</ContextMenu.Item>}
     {visible('Status') && <ContextMenu.Sub><ContextMenu.SubTrigger><InitiativeStatusIcon status={initiative.status}/>Status<kbd>S</kbd><ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent className="li-menu">{(['proposed', 'planned', 'active', 'completed', 'canceled'] as InitiativeStatus[]).map(status => <ContextMenu.Item key={status} onSelect={() => onUpdate({ status })}><InitiativeStatusIcon status={status}/>{titleCase(status)}{initiative.status === status && <Check className="li-menu-end" size={12}/>}</ContextMenu.Item>)}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>}
     {visible('Priority') && <ContextMenu.Sub><ContextMenu.SubTrigger><PriorityIcon priority={initiative.priority} size={14}/>Priority<ChevronRight className="li-menu-end" size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent className="li-menu">{[0, 1, 2, 3, 4].map(priority => <ContextMenu.Item key={priority} onSelect={() => onUpdate({ priority })}><PriorityIcon priority={priority} size={14}/>{['No priority', 'Urgent', 'High', 'Medium', 'Low'][priority]}{initiative.priority === priority && <Check className="li-menu-end" size={12}/>}</ContextMenu.Item>)}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>}
-    {visible('Owner') && <ContextMenu.Sub><ContextMenu.SubTrigger><span className="li-owner-empty">+</span>Owner<kbd>N then O</kbd><ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent className="li-menu"><ContextMenu.Item onSelect={() => onUpdate({ ownerId: '' })}><span className="li-owner-empty">+</span>No owner</ContextMenu.Item>{users.map(user => <ContextMenu.Item key={user.id} onSelect={() => onUpdate({ ownerId: user.id })}><Avatar name={user.displayName || user.name}/>{user.displayName || user.name}{initiative.owner?.id === user.id && <Check className="li-menu-end" size={12}/>}</ContextMenu.Item>)}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>}
+    {visible('Owner') && <ContextMenu.Sub><ContextMenu.SubTrigger><span className="li-owner-empty">+</span>Owner<kbd>N then O</kbd><ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent className="li-menu"><ContextMenu.Item onSelect={() => onUpdate({ ownerId: '' })}><span className="li-owner-empty">+</span>No owner</ContextMenu.Item>{users.map(user => <ContextMenu.Item key={user.id} onSelect={() => onUpdate({ ownerId: user.id })}><Avatar name={user.displayName || user.name}/><span data-i18n-ignore>{user.displayName || user.name}</span>{initiative.owner?.id === user.id && <Check className="li-menu-end" size={12}/>}</ContextMenu.Item>)}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>}
     {visible('Lead team') && <ContextMenu.Sub><ContextMenu.SubTrigger><span className="li-owner-empty">+</span>Lead team<ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent className="li-menu"><ContextMenu.Item onSelect={() => onUpdate({ leadTeamId: '' })}>No lead team</ContextMenu.Item>{teams.map(team => <ContextMenu.Item key={team.id} onSelect={() => onUpdate({ leadTeamId: team.id })}><span className="li-team-mark" style={{ background: team.color }}>{team.key.slice(0, 2)}</span><span data-i18n-ignore>{team.name}</span>{initiative.leadTeamId === team.id && <Check className="li-menu-end" size={12}/>}</ContextMenu.Item>)}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>}
     {visible('Target date') && <ContextMenu.Sub><ContextMenu.SubTrigger><span className="li-target-glyph is-empty"/>Target date…<kbd>Ctrl ⌥ D</kbd><ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent className="li-menu"><ContextMenu.Item onSelect={() => onUpdate({ targetDate: '' })}>No target date</ContextMenu.Item><ContextMenu.Item onSelect={() => onUpdate({ targetDate: isoDate(new Date()) })}>Today</ContextMenu.Item><ContextMenu.Item onSelect={() => onUpdate({ targetDate: isoDate(due) })}>Tomorrow</ContextMenu.Item></ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>}
-    {visible('Labels') && <ContextMenu.Sub><ContextMenu.SubTrigger><span className="li-label-outline"/>Labels<kbd>N then L</kbd><ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent className="li-menu">{labels.map(label => <ContextMenu.Item key={label.id} onSelect={() => onUpdate({ labelIds: initiative.labelIds.includes(label.id) ? initiative.labelIds.filter(id => id !== label.id) : [...initiative.labelIds, label.id] })}><i className="li-filter-color" style={{ background: label.color }}/>{label.name}{initiative.labelIds.includes(label.id) && <Check className="li-menu-end" size={12}/>}</ContextMenu.Item>)}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>}
+    {visible('Labels') && <ContextMenu.Sub><ContextMenu.SubTrigger><span className="li-label-outline"/>Labels<kbd>N then L</kbd><ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent className="li-menu">{labels.map(label => <ContextMenu.Item key={label.id} onSelect={() => onUpdate({ labelIds: initiative.labelIds.includes(label.id) ? initiative.labelIds.filter(id => id !== label.id) : [...initiative.labelIds, label.id] })}><i className="li-filter-color" style={{ background: label.color }}/><span data-i18n-ignore>{label.name}</span>{initiative.labelIds.includes(label.id) && <Check className="li-menu-end" size={12}/>}</ContextMenu.Item>)}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>}
     <ContextMenu.Separator/>
     {visible('Copy') && <ContextMenu.Sub><ContextMenu.SubTrigger><Copy size={14}/>Copy<ChevronRight className="li-menu-end" size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent className="li-menu"><ContextMenu.Item onSelect={() => void navigator.clipboard.writeText(location.href)}>Copy page URL</ContextMenu.Item><ContextMenu.Item onSelect={() => void navigator.clipboard.writeText(initiative.name)}>Copy initiative title</ContextMenu.Item></ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>}
     <ContextMenu.Separator/>
@@ -224,17 +240,17 @@ function InitiativeRowContextMenu({ initiative, users, teams, labels, onCreateRe
 
 function InitiativeCreateRow({ labels, users, teams, viewer, view, onCancel, onCreate, onCreateLabel }: { labels: IssueLabel[]; users: User[]; teams: Team[]; viewer: User; view: InitiativesRouteView; onCancel: () => void; onCreate: (input: InitiativeMutationInput & { name: string }) => Promise<void>; onCreateLabel: (name: string) => Promise<IssueLabel> }) {
   const initialStatus: InitiativeStatus = view === 'planned' ? 'planned' : 'active'
-  const [draft, setDraft] = useState<Initiative>({ id: 'draft', name: '', slugId: '', summary: '', description: '', icon: 'Initiative', color: '#8a8f98', status: initialStatus, priority: 0, priorityLabel: 'No priority', health: 'noUpdate', creator: viewer, contributingTeamIds: [], labelIds: [], projectIds: [], resources: [], comments: [], favorite: false, subscribed: false, notificationRules: { descriptionChanges: true, newUpdate: true, allProjectUpdates: false }, updateSchedule: { cadence: 'none', weekday: 1, timeRange: '09:00-12:00' }, descriptionHistory: [], createdAt: '', updatedAt: '' })
+  const [draft, setDraft] = useState<Initiative>({ id: 'draft', name: '', slugId: '', summary: '', description: '', icon: 'Initiative', color: '#d6a526', status: initialStatus, priority: 0, priorityLabel: 'No priority', health: 'noUpdate', creator: viewer, contributingTeamIds: [], labelIds: [], projectIds: [], resources: [], comments: [], favorite: false, subscribed: false, notificationRules: { descriptionChanges: true, newUpdate: true, allProjectUpdates: false }, updateSchedule: { cadence: 'none', weekday: 1, timeRange: '09:00-12:00' }, descriptionHistory: [], createdAt: '', updatedAt: '' })
   const [saving, setSaving] = useState(false)
-  const update = (input: InitiativeMutationInput) => setDraft(current => ({ ...current, ...input, owner: input.ownerId !== undefined ? users.find(user => user.id === input.ownerId) : current.owner, priorityLabel: input.priority !== undefined ? ['No priority', 'Urgent', 'High', 'Medium', 'Low'][input.priority] : current.priorityLabel }))
+  const update = (input: InitiativeMutationInput) => setDraft(current => ({ ...current, ...input, targetDateResolution: input.targetDateResolution === '' ? undefined : input.targetDateResolution ?? current.targetDateResolution, owner: input.ownerId !== undefined ? users.find(user => user.id === input.ownerId) : current.owner, priorityLabel: input.priority !== undefined ? ['No priority', 'Urgent', 'High', 'Medium', 'Low'][input.priority] : current.priorityLabel }))
   const submit = async () => {
     if (!draft.name.trim() || saving) return
     setSaving(true)
-    try { await onCreate({ name: draft.name.trim(), summary: draft.summary, icon: draft.icon, color: draft.color, status: draft.status, priority: draft.priority, ownerId: draft.owner?.id, leadTeamId: draft.leadTeamId, contributingTeamIds: draft.contributingTeamIds, targetDate: draft.targetDate, labelIds: draft.labelIds }) } finally { setSaving(false) }
+    try { await onCreate({ name: draft.name.trim(), summary: draft.summary, icon: draft.icon, color: draft.color, status: draft.status, priority: draft.priority, ownerId: draft.owner?.id, leadTeamId: draft.leadTeamId, targetDate: draft.targetDate, targetDateResolution: draft.targetDateResolution, labelIds: draft.labelIds }) } finally { setSaving(false) }
   }
-  return <section className="li-create-row" onKeyDown={event => { if (event.key === 'Escape') onCancel(); if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') void submit() }}>
-    <ViewIconPicker color={draft.color} icon={draft.icon} onChange={update}/>
-    <div className="li-create-fields"><input autoFocus aria-label="Initiative name" placeholder="New initiative" value={draft.name} onChange={event => update({ name: event.target.value })}/><input aria-label="Initiative summary" placeholder="Add a short summary…" value={draft.summary} onChange={event => update({ summary: event.target.value })}/><div className="li-create-properties"><InitiativeProperties compact initiative={draft} teams={teams} users={users} onUpdate={update}/><InitiativeLabelsPicker compact initiative={draft} labels={labels} onCreateLabel={onCreateLabel} onUpdate={update}/></div></div>
+  return <section className="li-create-row" onKeyDown={event => { if (event.key === 'Escape' && (event.target as HTMLElement).closest('.li-create-row') === event.currentTarget) onCancel(); if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') void submit() }}>
+    <ViewIconPicker color={draft.color} icon={draft.icon} onChange={update} triggerClassName="li-initiative-icon is-create"/>
+    <div className="li-create-fields"><input autoFocus aria-label="Initiative name" placeholder="New initiative" value={draft.name} onChange={event => update({ name: event.target.value })}/><input aria-label="Initiative summary" placeholder="Add a short summary…" value={draft.summary} onChange={event => update({ summary: event.target.value })}/><div className="li-create-properties"><InitiativeProperties compact initiative={draft} only="status" teams={teams} users={users} onUpdate={update}/><InitiativeProperties compact initiative={draft} only="priority" teams={teams} users={users} onUpdate={update}/><InitiativeProperties compact initiative={draft} only="owner" teams={teams} users={users} onUpdate={update}/><InitiativeProperties compact initiative={draft} only="leadTeam" teams={teams} users={users} onUpdate={update}/><InitiativeProperties compact initiative={draft} only="target" teams={teams} users={users} onUpdate={update}/><InitiativeLabelsPicker compact initiative={draft} labels={labels} onCreateLabel={onCreateLabel} onUpdate={update}/></div></div>
     <footer><button onClick={onCancel} type="button">Cancel</button><button disabled={!draft.name.trim() || saving} onClick={() => void submit()} type="button">{saving ? 'Creating…' : 'Create'}</button></footer>
   </section>
 }
@@ -245,17 +261,20 @@ function InitiativesEmpty({ filtered, onCreate, view }: { filtered: boolean; onC
   return <div className="li-empty li-empty--planned"><span className="li-empty-initiatives" aria-hidden="true"><i/><i/><i/></span><strong>{view === 'active' ? 'Active initiatives' : 'Create your first initiative'}</strong><p>{view === 'active' ? 'Initiatives in progress will appear here.' : 'Coordinate strategic work and monitor project progress at scale.'}</p><div><button onClick={onCreate} type="button">Create new initiative</button></div></div>
 }
 
-function ColumnHeader({ property, onSort }: { property: Property; onSort: (sort: Sort) => void }) {
+function ColumnHeader({ gridColumn, property, onSort }: { gridColumn: number; property: Property; onSort: (sort: Sort) => void }) {
   const label = ({ owner: 'Owner', status: 'Status', priority: 'Priority', leadTeam: 'Lead team', teams: 'Contributing teams', health: 'Health', projects: 'Projects', activeProjects: 'Active Projects', target: 'Target', created: 'Created', updated: 'Updated', completed: 'Completed', labels: 'Labels', description: 'Description' } as const)[property]
-  const sortable: Partial<Record<Property, Sort>> = { priority: 'priority', target: 'target', health: 'health', created: 'created', updated: 'updated' }
-  return sortable[property] ? <button onClick={() => onSort(sortable[property]!)} type="button">{label}</button> : <span>{label}</span>
+  const sortable: Partial<Record<Property, Sort>> = { status: 'status', priority: 'priority', target: 'target', health: 'health', created: 'created', updated: 'updated' }
+  return sortable[property] ? <button aria-label={`Order by ${label}`} onClick={() => onSort(sortable[property]!)} style={{ gridColumn }} type="button">{label}<InitiativeSortIcon/></button> : <span style={{ gridColumn }}>{label}</span>
 }
 
-function InitiativeDisplayMenu({ grouping, properties, showTeamInitiatives, sort, onGrouping, onProperty, onShowTeamInitiatives, onSort }: { grouping: Grouping; properties: Set<Property>; showTeamInitiatives: boolean; sort: Sort; onGrouping: (grouping: Grouping) => void; onProperty: (property: Property) => void; onShowTeamInitiatives: (show: boolean) => void; onSort: (sort: Sort) => void }) {
-  return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Display options" className="li-icon-button ui-pill" type="button"><DisplayIcon/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className="li-menu li-display-menu" sideOffset={4}>
+function InitiativeSortIcon() { return <svg aria-hidden="true" className="li-column-sort-icon" viewBox="0 0 16 16"><path d="M11.536 10.275c.266-.272.289-.707.04-1.005-.249-.299-.68-.355-.995-.142l-.062.046L8 11.274 5.48 9.174l-.061-.046c-.315-.213-.747-.157-.995.142-.249.298-.226.733.04 1.005l.056.051 3 2.5a.75.75 0 0 0 .96 0l3-2.5.056-.051Z"/><path d="M8.75 12.25a.75.75 0 0 1-1.5 0v-8.5a.75.75 0 0 1 1.5 0v8.5Z"/></svg> }
+
+function InitiativeDisplayMenu({ dirty, grouping, properties, showTeamInitiatives, sort, onGrouping, onProperty, onReset, onSetDefault, onShowTeamInitiatives, onSort }: { dirty: boolean; grouping: Grouping; properties: Set<Property>; showTeamInitiatives: boolean; sort: Sort; onGrouping: (grouping: Grouping) => void; onProperty: (property: Property) => void; onReset: () => void; onSetDefault: () => Promise<void>; onShowTeamInitiatives: (show: boolean) => void; onSort: (sort: Sort) => void }) {
+  const [saving, setSaving] = useState(false)
+  return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Display options" className="li-icon-button ui-pill" type="button"><DisplayIcon/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className={`li-menu li-display-menu${dirty ? ' has-footer' : ''}`} sideOffset={4}>
     <div className="li-display-row"><span>Grouping</span><DropdownMenu.Sub><DropdownMenu.SubTrigger>{groupingLabel(grouping)} <ChevronRight size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="li-menu">{(['none','contributingTeam','leadTeam','owner','health','status','priority','label'] as Grouping[]).map(item => <DropdownMenu.Item key={item} onSelect={() => onGrouping(item)}>{groupingLabel(item)}{grouping === item && <Check className="li-menu-end" size={13}/>}</DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub></div>
     <div className="li-display-row"><span>Ordering</span><DropdownMenu.Sub><DropdownMenu.SubTrigger>{titleCase(sort)} <ChevronRight size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="li-menu">{(['manual', 'name', 'priority', 'target', 'health', 'created', 'updated'] as Sort[]).map(item => <DropdownMenu.Item key={item} onSelect={() => onSort(item)}>{titleCase(item)}{sort === item && <Check className="li-menu-end" size={13}/>}</DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub></div>
-    <DropdownMenu.Separator/><DropdownMenu.CheckboxItem checked={showTeamInitiatives} className="li-display-team-toggle" onCheckedChange={value => onShowTeamInitiatives(value === true)}>{showTeamInitiatives ? <Check size={12}/> : <span/>}Show team initiatives</DropdownMenu.CheckboxItem><DropdownMenu.Separator/><DropdownMenu.Label>Display properties</DropdownMenu.Label><div className="li-display-properties">{PROPERTY_ORDER.map(property => <button aria-pressed={properties.has(property)} className={properties.has(property) ? 'is-active' : ''} key={property} onClick={event => { event.preventDefault(); onProperty(property) }} type="button"><span>{properties.has(property) && <Check size={10}/>}</span>{columnLabel(property)}</button>)}</div>
+    <DropdownMenu.Separator/><DropdownMenu.CheckboxItem checked={showTeamInitiatives} className="li-display-team-toggle" onCheckedChange={value => onShowTeamInitiatives(value === true)}><span>Show team initiatives</span><span aria-hidden="true" className="li-display-switch" data-checked={showTeamInitiatives}><i/></span></DropdownMenu.CheckboxItem><DropdownMenu.Separator/><DropdownMenu.Label className="li-display-properties-label">Display properties</DropdownMenu.Label><div className="li-display-properties">{PROPERTY_ORDER.map(property => <button aria-pressed={properties.has(property)} className={properties.has(property) ? 'is-active' : ''} key={property} onClick={event => { event.preventDefault(); onProperty(property) }} type="button">{columnLabel(property)}</button>)}</div>{dirty && <footer className="li-display-footer"><button onClick={event => { event.preventDefault(); onReset() }} type="button">Reset</button><button disabled={saving} onClick={event => { event.preventDefault(); setSaving(true); void onSetDefault().finally(() => setSaving(false)) }} type="button">Set default for everyone</button></footer>}
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 
@@ -268,8 +287,14 @@ function InitiativeFilterMenu({ filters, initiatives, users, teams, labels, onCh
   return <DropdownMenu.Root onOpenChange={open => { if (!open) setQuery('') }}><DropdownMenu.Trigger asChild><button aria-label="Add filter" className="li-icon-button ui-pill" type="button"><Filter size={14}/>{Object.keys(filters).length > 0 && <i/>}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className="li-menu li-filter-menu" sideOffset={4}>
     <div className="li-menu-search"><Search size={13}/><input aria-label="Add Filter…" autoFocus placeholder="Add Filter…" value={query} onChange={event => setQuery(event.target.value)}/><kbd>F</kbd></div>
     {!query && <><DropdownMenu.Item disabled title="Requires the Flow AI integration"><span className="li-ai-filter">✦</span>AI filter</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item onSelect={onAdvanced}>Advanced filter</DropdownMenu.Item><DropdownMenu.Separator/></>}
-    {entries.map(entry => <DropdownMenu.Sub key={entry.id}><DropdownMenu.SubTrigger>{entry.label}<ChevronRight className="li-menu-end" size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="li-menu li-filter-values" sideOffset={5}>{filterOptions(entry.id, initiatives, users, teams, labels).map(option => <DropdownMenu.Item key={String(option.value)} onSelect={() => onChange({ ...filters, [entry.id]: option.value })}>{option.icon}{option.label}{filters[entry.id as keyof FilterState] === option.value && <Check className="li-menu-end" size={13}/>}</DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>)}
+    {entries.map(entry => <DropdownMenu.Sub key={entry.id}><DropdownMenu.SubTrigger>{entry.label}<ChevronRight className="li-menu-end" size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className={`li-menu li-filter-values is-${entry.id}`} sideOffset={5}><InitiativeFilterValues entry={entry} filters={filters} initiatives={initiatives} labels={labels} onChange={onChange} teams={teams} users={users}/></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>)}
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+}
+
+function InitiativeFilterValues({ entry, filters, initiatives, labels, onChange, teams, users }: { entry: { id: string; label: string }; filters: FilterState; initiatives: Initiative[]; labels: IssueLabel[]; onChange: (filters: FilterState) => void; teams: Team[]; users: User[] }) {
+  const [query, setQuery] = useState('')
+  const options = filterOptions(entry.id, initiatives, users, teams, labels).filter(option => option.label.toLowerCase().includes(query.toLowerCase()))
+  return <><div className="li-menu-search"><input aria-label="Filter…" autoFocus onChange={event => setQuery(event.target.value)} placeholder="Filter…" value={query}/></div>{options.map(option => { const checked = filters[entry.id as keyof FilterState] === option.value; const count = initiatives.filter(item => matchesInitiativeFilter(item, entry.id as keyof FilterState, option.value as NonNullable<FilterState[keyof FilterState]>)).length; return <DropdownMenu.Item key={String(option.value)} onSelect={() => onChange({ ...filters, [entry.id]: option.value })}><span className="li-filter-checkbox">{checked && <Check size={10}/>}</span>{option.icon}<span data-i18n-ignore={['ownerId','creatorId','leadTeamId','teamId','labelId'].includes(entry.id) ? true : undefined}>{option.label}</span>{count > 0 && <small className="li-menu-end">{count} initiative{count === 1 ? '' : 's'}</small>}</DropdownMenu.Item> })}</>
 }
 
 const ADVANCED_FILTER_FIELDS = [
@@ -368,7 +393,7 @@ function filterOptions(id: string, initiatives: Initiative[], users: User[], tea
 function columnLabel(property: Property) { return ({ description: 'Description', owner: 'Owner', status: 'Status', priority: 'Priority', leadTeam: 'Lead team', teams: 'Contributing teams', health: 'Health', projects: 'Projects', activeProjects: 'Active projects', target: 'Target date', created: 'Created', updated: 'Updated', completed: 'Completed', labels: 'Labels' } as const)[property] }
 function filterLabel(key: string, value: unknown, users: User[], teams: Team[], labels: IssueLabel[]) { if (key === 'ownerId' || key === 'creatorId') return `${key === 'ownerId' ? 'Owner' : 'Creator'}: ${users.find(user => user.id === value)?.displayName ?? 'No owner'}`; if (key === 'leadTeamId' || key === 'teamId') return `${key === 'leadTeamId' ? 'Lead team' : 'Contributing teams'}: ${teams.find(team => team.id === value)?.name ?? value}`; if (key === 'labelId') return `Labels: ${labels.find(label => label.id === value)?.name ?? value}`; if (key === 'priority') return `Priority: ${['No priority', 'Urgent', 'High', 'Medium', 'Low'][Number(value)]}`; return `${titleCase(key)}: ${titleCase(String(value))}` }
 function groupingLabel(grouping: Grouping) { return ({ none: 'No grouping', contributingTeam: 'Contributing team', leadTeam: 'Lead team', owner: 'Owner', health: 'Health', status: 'Status', priority: 'Priority', label: 'Label' })[grouping] }
-function columnWidth(property: Property) { return ({ description: '0px', owner: '72px', status: '78px', priority: '72px', leadTeam: '84px', teams: '110px', health: '88px', projects: '70px', activeProjects: '60px', target: '86px', created: '78px', updated: '78px', completed: '82px', labels: '100px' })[property] }
+function columnWidth(property: Property, detailsOpen = false) { return ({ description: '0px', owner: detailsOpen ? '40px' : '50px', status: '100px', priority: '56px', leadTeam: '100px', teams: '110px', health: '52px', projects: '59px', activeProjects: '98px', target: '100px', created: '78px', updated: '78px', completed: '82px', labels: '100px' })[property] }
 function groupInitiatives(initiatives: Initiative[], grouping: Grouping, teams: Team[], labels: IssueLabel[]) {
   if (grouping === 'none') return [{ key: 'all', label: '', items: initiatives }]
   const buckets = new Map<string, { key: string; label: string; items: Initiative[] }>()
@@ -388,3 +413,6 @@ function matchesDateFilter(initiative: Initiative, filter: NonNullable<FilterSta
 function matchesInitiativeFilter(initiative: Initiative, key: keyof FilterState, value: NonNullable<FilterState[keyof FilterState]>) { if (key === 'status') return initiative.status === value; if (key === 'priority') return initiative.priority === value; if (key === 'ownerId') return (initiative.owner?.id ?? '') === value; if (key === 'creatorId') return initiative.creator.id === value; if (key === 'leadTeamId') return (initiative.leadTeamId ?? '') === value; if (key === 'teamId') return initiative.contributingTeamIds.includes(String(value)); if (key === 'health') return initiative.health === value; if (key === 'labelId') return initiative.labelIds.includes(String(value)); return matchesDateFilter(initiative, value as NonNullable<FilterState['date']>) }
 function healthLabel(value: Project['health']) { return ({ onTrack: 'On track', atRisk: 'At risk', offTrack: 'Off track', noUpdate: 'No updates' } as const)[value] }
 function isoDate(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
+function readInitiativeProperties() { if (localStorage.getItem('flow:initiatives:properties-version') !== '2') return new Set(DEFAULT_PROPERTIES); try { const stored = JSON.parse(localStorage.getItem('flow:initiatives:properties') ?? 'null'); if (Array.isArray(stored)) return new Set<Property>(stored.filter((item): item is Property => PROPERTY_ORDER.includes(item))) } catch { /* use defaults */ } return new Set(DEFAULT_PROPERTIES) }
+function readInitiativeSetting<T extends string>(key: string, values: readonly T[], fallback: T) { const stored = localStorage.getItem(`flow:initiatives:${key}`) as T | null; return stored && values.includes(stored) ? stored : fallback }
+function sameStringSet<T extends string>(left: Set<T>, right: Set<T>) { return left.size === right.size && [...left].every(value => right.has(value)) }

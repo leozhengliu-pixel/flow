@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -809,6 +810,37 @@ func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "Guest accounts are disabled for this workspace")
 		return
 	}
+	if s.authDisabled {
+		var created []domain.Invitation
+		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_invitations.created", strings.Join(input.Emails, ","), input, func(workspace *domain.Bootstrap) error {
+			materializeDevelopmentMembers(workspace)
+			if !validMemberRole(input.Role) || input.Role == "guest" && len(input.TeamIDs) == 0 || slices.ContainsFunc(input.TeamIDs, func(teamID string) bool {
+				return !slices.ContainsFunc(workspace.Teams, func(team domain.Team) bool { return team.ID == teamID })
+			}) {
+				return errInvalid
+			}
+			seen := map[string]bool{}
+			for _, rawEmail := range input.Emails {
+				email := strings.ToLower(strings.TrimSpace(rawEmail))
+				if !strings.Contains(email, "@") || seen[email] || slices.ContainsFunc(workspace.Members, func(member domain.WorkspaceMember) bool { return strings.EqualFold(member.User.Email, email) }) || slices.ContainsFunc(workspace.Invitations, func(invitation domain.Invitation) bool {
+					return invitation.Status == "pending" && strings.EqualFold(invitation.Email, email)
+				}) {
+					return errInvalid
+				}
+				seen[email] = true
+			}
+			now := time.Now().UTC()
+			for _, rawEmail := range input.Emails {
+				email := strings.ToLower(strings.TrimSpace(rawEmail))
+				invitation := domain.Invitation{ID: fmt.Sprintf("invite_%d", time.Now().UnixNano()), WorkspaceID: workspace.Workspace.ID, Email: email, Role: input.Role, TeamIDs: slices.Clone(input.TeamIDs), Status: "pending", InviterID: workspace.Viewer.ID, Token: randomURLToken(24), ExpiresAt: now.Add(7 * 24 * time.Hour), CreatedAt: now}
+				workspace.Invitations = append(workspace.Invitations, invitation)
+				created = append(created, invitation)
+			}
+			return nil
+		})
+		respondMutation(w, err, http.StatusCreated, created)
+		return
+	}
 	result := make([]domain.Invitation, 0, len(input.Emails))
 	for _, email := range input.Emails {
 		email = strings.ToLower(strings.TrimSpace(email))
@@ -839,6 +871,23 @@ func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) invitationPreview(w http.ResponseWriter, r *http.Request) {
+	if s.authDisabled {
+		for _, key := range s.store.WorkspaceKeys() {
+			data, ok := s.store.BootstrapFor(key)
+			if !ok {
+				continue
+			}
+			if index := slices.IndexFunc(data.Invitations, func(item domain.Invitation) bool {
+				return item.Token == r.PathValue("token") && item.Status == "pending" && item.ExpiresAt.After(time.Now())
+			}); index >= 0 {
+				item := data.Invitations[index]
+				writeJSON(w, http.StatusOK, map[string]any{"id": item.ID, "email": item.Email, "role": item.Role, "teamIds": item.TeamIDs, "expiresAt": item.ExpiresAt, "workspace": data.Workspace})
+				return
+			}
+		}
+		writeError(w, http.StatusNotFound, "This invitation is invalid or has expired")
+		return
+	}
 	invitation, workspace, err := s.store.InvitationPreview(r.Context(), r.PathValue("token"))
 	if err != nil {
 		writeError(w, http.StatusNotFound, "This invitation is invalid or has expired")
@@ -856,6 +905,19 @@ func (s *server) revokeInvitation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
+	if s.authDisabled {
+		invitationID := r.PathValue("invitationId")
+		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_invitation.revoked", invitationID, nil, func(workspace *domain.Bootstrap) error {
+			index := slices.IndexFunc(workspace.Invitations, func(item domain.Invitation) bool { return item.ID == invitationID && item.Status == "pending" })
+			if index < 0 {
+				return errNotFound
+			}
+			workspace.Invitations[index].Status = "revoked"
+			return nil
+		})
+		respondMutation(w, err, http.StatusNoContent, nil)
+		return
+	}
 	err := s.store.RevokeInvitation(r.Context(), data.Workspace.ID, r.PathValue("invitationId"))
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
@@ -864,6 +926,22 @@ func (s *server) resendInvitation(w http.ResponseWriter, r *http.Request) {
 	data, ok := s.store.BootstrapFor(r.PathValue("workspaceKey"))
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+	if s.authDisabled {
+		invitationID := r.PathValue("invitationId")
+		var resent domain.Invitation
+		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_invitation.resent", invitationID, nil, func(workspace *domain.Bootstrap) error {
+			index := slices.IndexFunc(workspace.Invitations, func(item domain.Invitation) bool { return item.ID == invitationID && item.Status == "pending" })
+			if index < 0 {
+				return errNotFound
+			}
+			now := time.Now().UTC()
+			workspace.Invitations[index].Token, workspace.Invitations[index].CreatedAt, workspace.Invitations[index].ExpiresAt = randomURLToken(24), now, now.Add(7*24*time.Hour)
+			resent = workspace.Invitations[index]
+			return nil
+		})
+		respondMutation(w, err, http.StatusOK, resent)
 		return
 	}
 	invitation, err := s.store.ResendInvitation(r.Context(), data.Workspace.ID, r.PathValue("invitationId"))
@@ -883,6 +961,46 @@ func (s *server) acceptInvitation(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	if s.authDisabled {
+		for _, key := range s.store.WorkspaceKeys() {
+			var membership domain.WorkspaceMembership
+			found := false
+			err := s.store.MutateWorkspace(r.Context(), key, "workspace_invitation.accepted", input.Token, nil, func(workspace *domain.Bootstrap) error {
+				materializeDevelopmentMembers(workspace)
+				index := slices.IndexFunc(workspace.Invitations, func(item domain.Invitation) bool {
+					return item.Token == input.Token && item.Status == "pending" && item.ExpiresAt.After(time.Now())
+				})
+				if index < 0 {
+					return errNotFound
+				}
+				invitation := &workspace.Invitations[index]
+				userIndex := slices.IndexFunc(workspace.Users, func(user domain.User) bool { return strings.EqualFold(user.Email, invitation.Email) })
+				var user domain.User
+				if userIndex >= 0 {
+					user = workspace.Users[userIndex]
+				} else {
+					name := strings.Split(invitation.Email, "@")[0]
+					user = domain.User{ID: fmt.Sprintf("user_%d", time.Now().UnixNano()), Name: name, DisplayName: name, Email: invitation.Email, Active: true, EmailVerified: true}
+					workspace.Users = append(workspace.Users, user)
+				}
+				now := time.Now().UTC()
+				workspace.Members = append(workspace.Members, domain.WorkspaceMember{User: user, Role: invitation.Role, Status: "active", JoinedAt: now, LastSeenAt: &now})
+				for _, teamID := range invitation.TeamIDs {
+					workspace.TeamMembers = append(workspace.TeamMembers, domain.TeamMember{TeamID: teamID, UserID: user.ID, Role: "member", JoinedAt: now})
+				}
+				invitation.Status, invitation.AcceptedAt = "accepted", &now
+				membership = domain.WorkspaceMembership{Workspace: workspace.Workspace, Role: invitation.Role, JoinedAt: now, IssueCount: len(workspace.Issues)}
+				found = true
+				return nil
+			})
+			if err == nil && found {
+				writeJSON(w, http.StatusOK, membership)
+				return
+			}
+		}
+		writeError(w, http.StatusBadRequest, "This invitation is invalid or has expired")
+		return
+	}
 	membership, err := s.store.AcceptInvitation(r.Context(), input.Token, authUser(r).ID)
 	respondMutation(w, err, http.StatusOK, membership)
 }
@@ -894,24 +1012,209 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Role string `json:"role"`
+		Role        string `json:"role"`
+		DisplayName string `json:"displayName"`
+		Username    string `json:"username"`
+		Email       string `json:"email"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	err := s.store.UpdateMemberRole(r.Context(), data.Workspace.ID, r.PathValue("userId"), input.Role)
-	if err != nil {
-		respondMutation(w, err, http.StatusOK, nil)
+	userID := r.PathValue("userId")
+	if s.authDisabled {
+		var updated domain.WorkspaceMember
+		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.updated", userID, input, func(workspace *domain.Bootstrap) error {
+			materializeDevelopmentMembers(workspace)
+			index := slices.IndexFunc(workspace.Members, func(member domain.WorkspaceMember) bool { return member.User.ID == userID })
+			if index < 0 {
+				return errNotFound
+			}
+			member := &workspace.Members[index]
+			if input.Role != "" {
+				if !validMemberRole(input.Role) || member.Role == "admin" && input.Role != "admin" && activeAdminCount(workspace) <= 1 {
+					return errInvalid
+				}
+				member.Role = input.Role
+			}
+			if input.DisplayName != "" || input.Username != "" || input.Email != "" {
+				user := member.User
+				if input.DisplayName != "" {
+					user.DisplayName = strings.TrimSpace(input.DisplayName)
+				}
+				if input.Username != "" {
+					user.Name = strings.TrimSpace(input.Username)
+				}
+				if input.Email != "" {
+					user.Email = strings.ToLower(strings.TrimSpace(input.Email))
+				}
+				if user.DisplayName == "" || user.Name == "" || !strings.Contains(user.Email, "@") || slices.ContainsFunc(workspace.Members, func(other domain.WorkspaceMember) bool {
+					return other.User.ID != user.ID && strings.EqualFold(other.User.Email, user.Email)
+				}) {
+					return errInvalid
+				}
+				member.User = user
+				cascadeUserIdentity(workspace, user)
+			}
+			updated = *member
+			return nil
+		})
+		respondMutation(w, err, http.StatusOK, updated)
 		return
+	}
+	if input.Role != "" {
+		if err := s.store.UpdateMemberRole(r.Context(), data.Workspace.ID, userID, input.Role); err != nil {
+			respondMutation(w, err, http.StatusOK, nil)
+			return
+		}
+	}
+	if input.DisplayName != "" || input.Username != "" || input.Email != "" {
+		members, _ := s.store.ListMembers(r.Context(), data.Workspace.ID)
+		index := slices.IndexFunc(members, func(member domain.WorkspaceMember) bool { return member.User.ID == userID })
+		if index < 0 {
+			writeError(w, http.StatusNotFound, "member not found")
+			return
+		}
+		current := members[index].User
+		displayName, username, email := input.DisplayName, input.Username, input.Email
+		if displayName == "" {
+			displayName = current.DisplayName
+		}
+		if username == "" {
+			username = current.Name
+		}
+		if email == "" {
+			email = current.Email
+		}
+		if _, err := s.store.UpdateMemberIdentity(r.Context(), userID, displayName, username, email); err != nil {
+			respondMutation(w, err, http.StatusOK, nil)
+			return
+		}
 	}
 	members, _ := s.store.ListMembers(r.Context(), data.Workspace.ID)
 	for _, member := range members {
-		if member.User.ID == r.PathValue("userId") {
+		if member.User.ID == userID {
+			_ = s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.identity_cascaded", userID, nil, func(workspace *domain.Bootstrap) error { cascadeUserIdentity(workspace, member.User); return nil })
 			writeJSON(w, http.StatusOK, member)
 			return
 		}
 	}
 	writeError(w, http.StatusNotFound, "member not found")
+}
+
+func materializeDevelopmentMembers(data *domain.Bootstrap) {
+	if len(data.Members) == 0 {
+		joined := data.Workspace.CreatedAt
+		if joined.IsZero() {
+			joined = time.Now().UTC()
+			for _, issue := range data.Issues {
+				if issue.CreatedAt.Before(joined) {
+					joined = issue.CreatedAt
+				}
+			}
+		}
+		for _, user := range data.Users {
+			role := "member"
+			if user.ID == data.Viewer.ID {
+				role = "admin"
+			}
+			member := domain.WorkspaceMember{User: user, Role: role, Status: "active", JoinedAt: joined}
+			if user.ID == data.Viewer.ID {
+				now := time.Now().UTC()
+				member.LastSeenAt = &now
+			}
+			data.Members = append(data.Members, member)
+		}
+	}
+	if len(data.TeamMembers) == 0 {
+		joined := data.Workspace.CreatedAt
+		if joined.IsZero() {
+			joined = time.Now().UTC()
+		}
+		for _, team := range data.Teams {
+			for _, member := range data.Members {
+				if member.Status == "active" {
+					data.TeamMembers = append(data.TeamMembers, domain.TeamMember{TeamID: team.ID, UserID: member.User.ID, Role: "member", JoinedAt: joined})
+				}
+			}
+		}
+	}
+}
+
+func validMemberRole(role string) bool {
+	return role == "admin" || role == "member" || role == "guest"
+}
+
+func activeAdminCount(data *domain.Bootstrap) int {
+	count := 0
+	for _, member := range data.Members {
+		if member.Role == "admin" && member.Status == "active" {
+			count++
+		}
+	}
+	return count
+}
+
+func cascadeUserIdentity(data *domain.Bootstrap, user domain.User) {
+	if index := slices.IndexFunc(data.Users, func(item domain.User) bool { return item.ID == user.ID }); index >= 0 {
+		data.Users[index] = user
+	}
+	if data.Viewer.ID == user.ID {
+		data.Viewer = user
+	}
+	for index := range data.Members {
+		if data.Members[index].User.ID == user.ID {
+			data.Members[index].User = user
+		}
+	}
+	for index := range data.Issues {
+		if data.Issues[index].Creator.ID == user.ID {
+			data.Issues[index].Creator = user
+		}
+		if data.Issues[index].Assignee != nil && data.Issues[index].Assignee.ID == user.ID {
+			copy := user
+			data.Issues[index].Assignee = &copy
+		}
+		if data.Issues[index].Delegate != nil && data.Issues[index].Delegate.ID == user.ID {
+			copy := user
+			data.Issues[index].Delegate = &copy
+		}
+	}
+	for index := range data.Projects {
+		if data.Projects[index].Lead != nil && data.Projects[index].Lead.ID == user.ID {
+			copy := user
+			data.Projects[index].Lead = &copy
+		}
+	}
+	for index := range data.Initiatives {
+		if data.Initiatives[index].Creator.ID == user.ID {
+			data.Initiatives[index].Creator = user
+		}
+		if data.Initiatives[index].Owner != nil && data.Initiatives[index].Owner.ID == user.ID {
+			copy := user
+			data.Initiatives[index].Owner = &copy
+		}
+	}
+	for issueID := range data.Comments {
+		for index := range data.Comments[issueID] {
+			if data.Comments[issueID][index].User.ID == user.ID {
+				data.Comments[issueID][index].User = user
+			}
+		}
+	}
+	for projectID := range data.ProjectUpdates {
+		for index := range data.ProjectUpdates[projectID] {
+			if data.ProjectUpdates[projectID][index].User.ID == user.ID {
+				data.ProjectUpdates[projectID][index].User = user
+			}
+		}
+	}
+	for initiativeID := range data.InitiativeUpdates {
+		for index := range data.InitiativeUpdates[initiativeID] {
+			if data.InitiativeUpdates[initiativeID][index].User.ID == user.ID {
+				data.InitiativeUpdates[initiativeID][index].User = user
+			}
+		}
+	}
 }
 
 func (s *server) suspendMember(w http.ResponseWriter, r *http.Request) {
@@ -920,11 +1223,64 @@ func (s *server) suspendMember(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
-	if r.PathValue("userId") == authUser(r).ID {
+	actorID := authUser(r).ID
+	if s.authDisabled {
+		actorID = data.Viewer.ID
+	}
+	if r.PathValue("userId") == actorID {
 		writeError(w, http.StatusBadRequest, "You cannot suspend yourself")
 		return
 	}
+	if s.authDisabled {
+		userID := r.PathValue("userId")
+		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.suspended", userID, nil, func(workspace *domain.Bootstrap) error {
+			materializeDevelopmentMembers(workspace)
+			index := slices.IndexFunc(workspace.Members, func(member domain.WorkspaceMember) bool { return member.User.ID == userID })
+			if index < 0 {
+				return errNotFound
+			}
+			if workspace.Members[index].Role == "admin" && activeAdminCount(workspace) <= 1 {
+				return errInvalid
+			}
+			workspace.Members[index].Status = "suspended"
+			return nil
+		})
+		if err != nil {
+			respondMutation(w, err, http.StatusNoContent, nil)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	err := s.store.SuspendMember(r.Context(), data.Workspace.ID, r.PathValue("userId"))
+	respondMutation(w, err, http.StatusNoContent, nil)
+}
+
+func (s *server) resumeMember(w http.ResponseWriter, r *http.Request) {
+	data, ok := s.store.BootstrapFor(r.PathValue("workspaceKey"))
+	if !ok {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+	userID := r.PathValue("userId")
+	if s.authDisabled {
+		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.resumed", userID, nil, func(workspace *domain.Bootstrap) error {
+			materializeDevelopmentMembers(workspace)
+			index := slices.IndexFunc(workspace.Members, func(member domain.WorkspaceMember) bool { return member.User.ID == userID })
+			if index < 0 || workspace.Members[index].Status != "suspended" {
+				return errNotFound
+			}
+			workspace.Members[index].Status = "active"
+			return nil
+		})
+		if err != nil {
+			respondMutation(w, err, http.StatusNoContent, nil)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	err := s.store.ResumeMember(r.Context(), data.Workspace.ID, userID)
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
 
@@ -934,8 +1290,34 @@ func (s *server) removeMember(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
-	if r.PathValue("userId") == authUser(r).ID {
+	actorID := authUser(r).ID
+	if s.authDisabled {
+		actorID = data.Viewer.ID
+	}
+	if r.PathValue("userId") == actorID {
 		writeError(w, http.StatusBadRequest, "You cannot remove yourself")
+		return
+	}
+	if s.authDisabled {
+		userID := r.PathValue("userId")
+		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.removed", userID, nil, func(workspace *domain.Bootstrap) error {
+			materializeDevelopmentMembers(workspace)
+			index := slices.IndexFunc(workspace.Members, func(member domain.WorkspaceMember) bool { return member.User.ID == userID })
+			if index < 0 {
+				return errNotFound
+			}
+			if workspace.Members[index].Role == "admin" && workspace.Members[index].Status == "active" && activeAdminCount(workspace) <= 1 {
+				return errInvalid
+			}
+			workspace.Members = slices.Delete(workspace.Members, index, index+1)
+			workspace.TeamMembers = slices.DeleteFunc(workspace.TeamMembers, func(member domain.TeamMember) bool { return member.UserID == userID })
+			return nil
+		})
+		if err != nil {
+			respondMutation(w, err, http.StatusNoContent, nil)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	err := s.store.RemoveMember(r.Context(), data.Workspace.ID, r.PathValue("userId"))
@@ -957,6 +1339,32 @@ func (s *server) updateTeamMember(w http.ResponseWriter, r *http.Request) {
 	}
 	if input.Role == "" {
 		input.Role = "member"
+	}
+	if s.authDisabled {
+		teamID, userID := r.PathValue("teamId"), r.PathValue("userId")
+		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "team_member.updated", userID, input, func(workspace *domain.Bootstrap) error {
+			materializeDevelopmentMembers(workspace)
+			if !slices.ContainsFunc(workspace.Teams, func(team domain.Team) bool { return team.ID == teamID }) || !slices.ContainsFunc(workspace.Members, func(member domain.WorkspaceMember) bool { return member.User.ID == userID && member.Status == "active" }) || input.Role != "member" && input.Role != "owner" {
+				return errInvalid
+			}
+			index := slices.IndexFunc(workspace.TeamMembers, func(member domain.TeamMember) bool { return member.TeamID == teamID && member.UserID == userID })
+			if input.Member {
+				if index >= 0 {
+					workspace.TeamMembers[index].Role = input.Role
+				} else {
+					workspace.TeamMembers = append(workspace.TeamMembers, domain.TeamMember{TeamID: teamID, UserID: userID, Role: input.Role, JoinedAt: time.Now().UTC()})
+				}
+			} else if index >= 0 {
+				workspace.TeamMembers = slices.Delete(workspace.TeamMembers, index, index+1)
+			}
+			return nil
+		})
+		if err != nil {
+			respondMutation(w, err, http.StatusNoContent, nil)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
 	}
 	err := s.store.SetTeamMembership(r.Context(), data.Workspace.ID, r.PathValue("teamId"), r.PathValue("userId"), input.Role, input.Member)
 	respondMutation(w, err, http.StatusNoContent, nil)

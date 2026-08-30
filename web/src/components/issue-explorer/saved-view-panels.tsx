@@ -3,7 +3,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
 import { BarChart3, Bot, Building2, CalendarDays, Check, ChevronDown, ChevronRight, CircleDot, Clock3, Copy, Download, Ellipsis, Expand, Flame, FolderKanban, History, Layers3, Link2, LockKeyhole, Palette, RefreshCw, Search, SlidersHorizontal, Star, Tag, UserRound, X } from 'lucide-react'
 import { toast } from 'sonner'
-import { TeamIcon } from '@/components/issue/issue-icons'
+import { CycleIcon, TeamIcon } from '@/components/issue/issue-icons'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import type { BootstrapData, SavedView, Team, User, Workspace } from '@/types/flow'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
@@ -128,7 +128,7 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
     {showIntro && <section className={styles.insightIntro}>
       <p>Insights makes it easy to analyze issue data. Create reports to reveal trends and find outlier issues that need attention.</p>
       <button aria-label="Dismiss insights introduction" className={styles.iconButton} onClick={dismissIntro} type="button"><X size={14}/></button>
-      <a href="https://linear.app/docs/insights" rel="noreferrer" target="_blank">Documentation</a>
+      <a href="https://flow.app/docs/insights" rel="noreferrer" target="_blank">Documentation</a>
     </section>}
     <section className={styles.insightCard}>
       <header><strong>{expanded ? selectedRows.length : source.length} {(expanded ? selectedRows.length : source.length) === 1 ? 'issue' : 'issues'}</strong><div>
@@ -160,7 +160,7 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
 }
 
 function InsightActionsMenu({ copyLink, exportCsv, onRefresh }: { copyLink: () => void; exportCsv: () => void; onRefresh: () => void }) {
-  return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open menu" className={styles.iconButton} type="button"><Ellipsis size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className={styles.insightMenu} collisionPadding={8} sideOffset={4}><DropdownMenu.Item className={styles.insightMenuItem} onSelect={copyLink}><Link2/>Copy link</DropdownMenu.Item><DropdownMenu.Item className={styles.insightMenuItem} onSelect={exportCsv}><Download/>Export insights as CSV…</DropdownMenu.Item><DropdownMenu.Item className={styles.insightMenuItem} onSelect={() => window.open('https://linear.app/docs/insights', '_blank', 'noopener,noreferrer')}><BarChart3/>Insights examples</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item className={styles.insightMenuItem} onSelect={onRefresh}><RefreshCw/>Refresh</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+  return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open menu" className={styles.iconButton} type="button"><Ellipsis size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className={styles.insightMenu} collisionPadding={8} sideOffset={4}><DropdownMenu.Item className={styles.insightMenuItem} onSelect={copyLink}><Link2/>Copy link</DropdownMenu.Item><DropdownMenu.Item className={styles.insightMenuItem} onSelect={exportCsv}><Download/>Export insights as CSV…</DropdownMenu.Item><DropdownMenu.Item className={styles.insightMenuItem} onSelect={() => window.open('https://flow.app/docs/insights', '_blank', 'noopener,noreferrer')}><BarChart3/>Insights examples</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item className={styles.insightMenuItem} onSelect={onRefresh}><RefreshCw/>Refresh</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 
 function InsightIssuePanel({ color, label, rows }: { color?: string; label: string; rows: MyIssuesRowData[] }) {
@@ -314,7 +314,7 @@ function dimensionOptions(data: BootstrapData, includeDates: boolean): InsightOp
     { id: 'project', label: 'Project', separatorBefore: true, icon: <FolderKanban/> }, { id: 'initiative', label: 'Initiative', icon: <Layers3/> },
     { id: 'projectLabel', label: 'Project label', icon: <Tag/> },
     { id: 'projectLabelGroup', label: 'Project label group', icon: <Layers3/>, children: projectGroups.map(group => ({ id: `projectLabelGroup:${group.id}`, label: group.name, icon: <i className={styles.optionDot} style={{ backgroundColor: group.color }}/> })) },
-    { id: 'cycle', label: 'Cycle', icon: <RefreshCw/> }, { id: 'addedToCycle', label: 'Added to cycle', icon: <CalendarDays/> },
+    { id: 'cycle', label: 'Cycle', icon: <CycleIcon/> }, { id: 'addedToCycle', label: 'Added to cycle', icon: <CalendarDays/> },
   ]
   if (includeDates) options.push(
     { id: 'createdDate', label: 'Created date', separatorBefore: true, icon: <CalendarDays/> }, { id: 'completedDate', label: 'Completed date', icon: <CalendarDays/> },

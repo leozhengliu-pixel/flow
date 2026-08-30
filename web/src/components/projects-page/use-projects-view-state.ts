@@ -49,9 +49,10 @@ export function useProjectsViewState(projects: ProjectPageItem[], { initial, sto
 
   const grouped = useMemo(() => groupAndSort(projects, state), [projects, state])
 
-  const dataViewProps: Pick<ProjectsDataViewProps, 'groups' | 'layout' | 'selectedIds' | 'sort' | 'visibleProperties' | 'onSelectionChange' | 'onSort'> = {
+  const dataViewProps: Pick<ProjectsDataViewProps, 'groups' | 'layout' | 'manualOrdering' | 'selectedIds' | 'sort' | 'visibleProperties' | 'onSelectionChange' | 'onSort'> = {
     groups: grouped,
     layout: state.display.layout,
+    manualOrdering: state.display.ordering === 'Manual',
     onSelectionChange: selectedIds => setState(current => ({ ...current, selectedIds })),
     onSort: (column, direction) => setState(current => ({ ...current, display: { ...current.display, ordering: orderingForColumn(column), orderingDirection: direction }, sort: { column, direction } })),
     selectedIds: state.selectedIds,
@@ -196,6 +197,7 @@ function compare(left: ProjectPageItem, right: ProjectPageItem, ordering: string
 }
 
 function sortValue(project: ProjectPageItem, ordering: string): string | number {
+  if (ordering === 'Manual') return project.position ?? 0
   if (ordering === 'Priority') return ({ urgent: 0, high: 1, medium: 2, low: 3, none: 4 })[project.priority]
   if (ordering === 'Health') return ({ 'on-track': 0, 'at-risk': 1, 'off-track': 2, 'no-update': 3 })[project.health]
   if (ordering === 'Health updated') return ({ 'on-track': 0, 'at-risk': 1, 'off-track': 2, 'no-update': 3 })[project.health]

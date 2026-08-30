@@ -242,6 +242,31 @@ func (r *Redis) WithWorkspaceLock(ctx context.Context, workspace string, action 
 	return nil
 }
 
+// WithLeaderLock runs action on at most one connected instance. Unlike the
+// workspace mutation lock it is non-blocking, so every instance may poll while
+// only the elected instance performs a scheduler tick.
+func (r *Redis) WithLeaderLock(ctx context.Context, name string, action func() error) (bool, error) {
+	key, token := r.key("leader", hash(name)), randomID()
+	acquired, err := r.client.SetNX(ctx, key, token, r.lockTTL).Result()
+	if err != nil || !acquired {
+		return false, err
+	}
+	done := make(chan struct{})
+	go r.refreshLock(key, token, done)
+	actionErr := action()
+	close(done)
+	releaseCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, releaseErr := unlockScript.Run(releaseCtx, r.client, []string{key}, token).Result()
+	if actionErr != nil {
+		return true, actionErr
+	}
+	if releaseErr != nil {
+		return true, fmt.Errorf("release Redis leader lock: %w", releaseErr)
+	}
+	return true, nil
+}
+
 func (r *Redis) refreshLock(key, token string, done <-chan struct{}) {
 	interval := r.lockTTL / 3
 	if interval < time.Second {

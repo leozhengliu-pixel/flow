@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  Bot, Check, ChevronDown, ChevronRight, CircleDot, Code2, FileText,
+  Bot, CalendarDays, Check, ChevronDown, ChevronRight, CircleDot, Code2, FileText,
   Inbox, Mail, MessageSquare, MoreHorizontal, Plus, Radio, Rocket,
   Search, Settings2, Smile, Sparkles, Upload, UsersRound, Zap,
   type LucideIcon,
@@ -69,7 +69,7 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
 
 function AIPage({settings,busy,setEnabled,setFeature}:{settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void}) {
   const cards = [
-    ["ai-agent", "Linear Agent", "Create issues and answer questions about your workspace", Bot],
+    ["ai-agent", "Flow Agent", "Create issues and answer questions about your workspace", Bot],
     ["coding-sessions", "Coding sessions", "Assign or ask Flow to make code changes", Code2],
     ["loops", "Loops", "Automated agent workflows triggered by schedules or issue updates", Radio],
     ["code-intelligence", "Code Intelligence", "Allow agents to analyze and answer questions about your code", Sparkles],
@@ -77,7 +77,7 @@ function AIPage({settings,busy,setEnabled,setFeature}:{settings:WorkspaceSetting
   ] as const;
   return <FeatureShell title="AI & Agents" description="Automate your product development processes and operations with AI">
     <FeatureCard><FeatureRow title="Enable usage feedback" description="Improve AI functionality by sharing usage feedback. Never used to train models"><Toggle checked={settings.featureSettings.aiUsageFeedback} disabled={busy} label="Enable usage feedback" onChange={value=>setFeature("aiUsageFeedback",value)}/></FeatureRow></FeatureCard>
-    <FeatureSection title="Linear Agent" description="Create issues and answer questions about your workspace.">
+    <FeatureSection title="Flow Agent" description="Create issues and answer questions about your workspace.">
       <FeatureCard>{cards.map(([id,title,description,Icon])=><FeatureRow key={id} icon={Icon} title={title} businessTitle={id==="ai-agent"} description={description} badge={id==="code-intelligence"?"Beta":undefined}><Toggle checked={settings.featureFlags[id]??["ai-agent","coding-sessions","loops"].includes(id)} disabled={busy} label={title} onChange={value=>setEnabled(id,value)}/></FeatureRow>)}</FeatureCard>
     </FeatureSection>
     <FeatureSection title="Installed Agents" description="AI agents can work alongside you as teammates."><FeatureCard><FeatureRow icon={Settings2} title="Installed agents guidance" description="Provide context and instructions for installed agents"><span className="feature-state">Configured in Agent personalization</span></FeatureRow></FeatureCard></FeatureSection>
@@ -165,6 +165,8 @@ const INTEGRATIONS: {provider:string;name:string;description:string;category:str
   {provider:"slack",name:"Slack",description:"Create issues from Slack messages and sync threads",category:"Essentials",icon:MessageSquare},
   {provider:"gitlab",name:"GitLab",description:"Automate your merge request workflow",category:"Engineering",icon:Code2},
   {provider:"figma",name:"Figma",description:"Create and link issues directly from Figma",category:"Essentials",icon:FileText},
+  {provider:"google-calendar",name:"Google Calendar",description:"Sync calendar out-of-office status to member profiles",category:"Essentials",icon:CalendarDays},
+  {provider:"notion",name:"Notion",description:"Preview Flow issues, projects, and views in Notion",category:"Essentials",icon:FileText},
   {provider:"intercom",name:"Intercom",description:"Keep a tight feedback loop with customers",category:"Customer support",icon:MessageSquare},
   {provider:"codex",name:"Codex",description:"Delegate issues to Codex directly from Flow",category:"Agents",icon:Bot},
   {provider:"cursor",name:"Cursor",description:"Turn issues into pull requests with Cursor agents",category:"Agents",icon:Sparkles},

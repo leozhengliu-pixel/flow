@@ -94,6 +94,17 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 			review.ReviewerIDs = reviewerIDs(data, event)
 			data.Reviews[index] = review
 		}
+		if index >= 0 {
+			review := data.Reviews[index]
+			previous := slices.Clone(review.IssueIDs)
+			review.IssueIDs = normalizedStrings(append(review.IssueIDs, inferredReviewIssueIDs(data, review)...))
+			for _, issueID := range review.IssueIDs {
+				if !slices.Contains(previous, issueID) {
+					appendActivity(data, issueID, "issue.review_linked", data.Viewer, map[string]string{"reviewId": review.ID, "reviewTitle": review.Title, "reviewNumber": fmt.Sprint(review.Number), "repository": review.RepositoryOwner + "/" + review.RepositoryName, "url": review.URL, "source": "webhook"})
+				}
+			}
+			data.Reviews[index] = review
+		}
 		// Keep a durable event trail so review details and notification retries can
 		// distinguish successive deliveries for the same PR/MR.
 		if index >= 0 {
@@ -132,6 +143,17 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"reviewId": updated.ID, "eventId": eventID})
+}
+
+func inferredReviewIssueIDs(data *domain.Bootstrap, review domain.CodeReview) []string {
+	haystack := strings.ToUpper(strings.Join([]string{review.Title, review.Description, review.HeadBranch}, " "))
+	ids := make([]string, 0)
+	for _, issue := range data.Issues {
+		if strings.Contains(haystack, strings.ToUpper(issue.Identifier)) {
+			ids = append(ids, issue.ID)
+		}
+	}
+	return ids
 }
 
 // testIntegrationWebhook lets operators verify a configured connection and
