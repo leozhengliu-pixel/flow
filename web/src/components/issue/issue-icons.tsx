@@ -1,4 +1,5 @@
 import { useId, type SVGProps } from 'react'
+import { useI18n } from '@/i18n/i18n'
 import type { Cycle, WorkflowState } from '@/types/flow'
 
 export type FlowIconProps = Omit<SVGProps<SVGSVGElement>, 'width' | 'height'> & { size?: number }
@@ -6,9 +7,10 @@ export type FlowIconProps = Omit<SVGProps<SVGSVGElement>, 'width' | 'height'> & 
 const priorityLabels = ['No Priority', 'Urgent Priority', 'High Priority', 'Medium Priority', 'Low Priority']
 
 export function PriorityIcon({ priority, size = 15, className, ...props }: FlowIconProps & { priority: number }) {
+  const { t } = useI18n()
   const normalized = Math.max(0, Math.min(4, priority))
   const classes = ['priority', `priority-${priority}`, className].filter(Boolean).join(' ')
-  return <AssetIcon aria-label={priorityLabels[normalized]} asset={`Priority${normalized}`} className={classes} role="img" size={size} {...props} style={{ color: normalized === 1 ? 'lch(66% 80 48)' : undefined, ...props.style }}/>
+  return <AssetIcon aria-label={t(priorityLabels[normalized])} asset={`Priority${normalized}`} className={classes} role="img" size={size} {...props} style={{ color: normalized === 1 ? 'lch(66% 80 48)' : undefined, ...props.style }}/>
 }
 
 function AssetIcon({ asset, size = 16, ...props }: FlowIconProps & { asset: string }) {
@@ -106,6 +108,7 @@ const projectStatusColors: Record<ProjectStatusKind, string> = {
 }
 
 export function ProjectStatusIcon({ color, name, progress, type, size = 16, ...props }: FlowIconProps & { color?: string; name?: string; progress?: number; type?: string }) {
+  const { locale } = useI18n()
   const kind = projectStatusKind(type, name)
   const maskId = `project-status-${useId().replaceAll(':', '')}-${kind}`
   const stroke = color ?? projectStatusColors[kind]
@@ -114,7 +117,7 @@ export function ProjectStatusIcon({ color, name, progress, type, size = 16, ...p
     : kind === 'completed' || kind === 'canceled' ? 1 : 0
   const progressLength = statusProgress * 25.12
   const finished = kind === 'completed' || kind === 'canceled'
-  const label = props['aria-label'] ?? (name ? `${name} status` : undefined)
+  const label = props['aria-label'] ?? (name ? locale === 'zh-CN' ? `${name} 状态` : `${name} status` : undefined)
   return <svg aria-hidden={label ? undefined : true} fill="none" focusable="false" height={size} role={label ? props.role ?? 'img' : undefined} viewBox="-1 -1 16 16" width={size} {...props} aria-label={label}>
     <path d="M2.95778 3.02069L5.70777 1.36023C6.50244 0.88041 7.49756 0.88041 8.29223 1.36024L11.0422 3.02074C11.7918 3.47336 12.25 4.2852 12.25 5.16086V8.84803C12.25 9.7251 11.7904 10.5381 11.0388 10.9902L8.29114 12.6433C7.49693 13.1211 6.50355 13.1203 5.71011 12.6412L2.95775 10.9792C2.20815 10.5266 1.75 9.7148 1.75 8.83911V5.16082C1.75 4.28516 2.20816 3.47332 2.95778 3.02069Z" fill="none" stroke={stroke} strokeDasharray={kind === 'backlog' ? '1.65 1.35' : '3.14 0'} strokeDashoffset={kind === 'backlog' ? 2.3 : 1} strokeLinejoin="bevel" strokeWidth="1.5"/>
     <g mask={`url(#${maskId})`}><circle cx="7" cy="7" fill="none" r="4" stroke={stroke} strokeDasharray={`${progressLength} 25.12`} strokeWidth="8" style={{ transition: 'stroke-dasharray 160ms cubic-bezier(.2,.8,.2,1)' }} transform="rotate(-90 7 7)"/></g>
