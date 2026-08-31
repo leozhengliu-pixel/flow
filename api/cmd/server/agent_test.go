@@ -99,3 +99,54 @@ func TestAgentSessionAndSkillLifecycle(t *testing.T) {
 		t.Fatalf("session delete failed: %#v", remaining)
 	}
 }
+
+func TestAgentSessionStreamsResponsesAndExecutesReadTools(t *testing.T) {
+	providerCalls := 0
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		providerCalls++
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		if providerCalls == 1 {
+			if tools, ok := payload["tools"].([]any); !ok || len(tools) == 0 {
+				t.Fatalf("Flow tools missing from request: %#v", payload)
+			}
+			_, _ = w.Write([]byte("event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"item_1\",\"call_id\":\"call_1\",\"type\":\"function_call\",\"name\":\"list_issues\",\"arguments\":\"\"}}\n\n" +
+				"event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"item_id\":\"item_1\",\"arguments\":\"{}\"}\n\n" +
+				"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"))
+			return
+		}
+		raw, _ := json.Marshal(payload["input"])
+		if !strings.Contains(string(raw), "function_call_output") || !strings.Contains(string(raw), "TST-1") {
+			t.Fatalf("tool result missing from continuation: %s", raw)
+		}
+		_, _ = w.Write([]byte("event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"Found the issue.\"}\n\n" +
+			"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"))
+	}))
+	defer provider.Close()
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true, agent: appconfig.AgentConfig{Enabled: true, Protocol: "openai-responses", BaseURL: provider.URL, Model: "flow-test", MaxOutputTokens: 256, ToolsEnabled: true}, agentClient: provider.Client()})
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/agent/sessions/stream", strings.NewReader(`{"message":"Find issues","location":"page"}`))
+	request.Header.Set("Content-Type", "application/json")
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || providerCalls != 2 {
+		t.Fatalf("stream status=%d providerCalls=%d body=%s", recorder.Code, providerCalls, recorder.Body.String())
+	}
+	body := recorder.Body.String()
+	for _, expected := range []string{"event: session.started", "event: tool.started", "event: tool.completed", "event: text.delta", "event: session.completed", "Found the issue."} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("stream missing %q: %s", expected, body)
+		}
+	}
+	sessions := requestJSON[[]domain.AgentSession](t, handler, http.MethodGet, "/api/agent/sessions", nil, http.StatusOK)
+	if len(sessions) != 1 || len(sessions[0].Messages) != 2 || sessions[0].Messages[1].Content != "Found the issue." || len(sessions[0].Messages[1].Parts) < 2 || sessions[0].Messages[1].Parts[0].ToolCall == nil || sessions[0].Messages[1].Parts[0].ToolCall.Status != "completed" {
+		t.Fatalf("streamed session not persisted: %#v", sessions)
+	}
+}

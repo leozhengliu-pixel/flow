@@ -56,7 +56,7 @@ test('renders core workspace workflows without runtime or viewport failures', as
   expect(errors).toEqual([])
 })
 
-test('keeps the Agent composer editable before backend configuration', async ({ page, request }, testInfo) => {
+test('streams Agent reasoning, tools, and text into the conversation', async ({ page, request }, testInfo) => {
   const device = testInfo.project.name === 'chromium' ? 'desktop' : 'mobile'
   const workspaceKey = `e2e-agent-${device}`
   const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
@@ -66,7 +66,9 @@ test('keeps the Agent composer editable before backend configuration', async ({ 
   await page.goto(`/${workspaceKey}/agent`)
   const editor = page.getByRole('textbox', { name: 'Send a message to Flow AI' })
   await expect(editor).toHaveAttribute('contenteditable', 'true')
-  await editor.fill('Draft a project plan')
-  await expect(editor).toHaveText('Draft a project plan')
-  await expect(page.getByRole('button', { name: 'Submit comment' })).toBeDisabled()
+  await editor.fill('Review the workspace')
+  await page.getByRole('button', { name: 'Submit comment' }).click()
+  await expect(page.getByText('Looked at issues')).toBeVisible()
+  await expect(page.getByText('Streaming response')).toBeVisible()
+  await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/agent/.+`))
 })

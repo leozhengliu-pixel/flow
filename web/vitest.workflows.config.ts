@@ -14,6 +14,9 @@ export default defineConfig({
       reportsDirectory: './coverage/workflows',
       reporter: ['text', 'json-summary', 'lcov'],
       include: [
+        'src/components/agent/agent-page.tsx',
+        'src/components/agent/agent-chat-panel.tsx',
+        'src/components/agent/agent-stream-state.ts',
         'src/components/issue-explorer/issue-explorer-model.ts',
         'src/components/project-detail/project-overview.tsx',
         'src/components/project-detail/project-detail-helpers.ts',
@@ -27,6 +30,7 @@ export default defineConfig({
         'src/components/issue/issue-subscriber-picker.tsx',
         'src/components/issue/editor/use-issue-autosave.ts',
         'src/lib/api-client.ts',
+        'src/lib/agent-stream.ts',
         'src/lib/issue-collaboration.ts',
       ],
       thresholds: { branches: 40, functions: 50, lines: 70, statements: 60 },
