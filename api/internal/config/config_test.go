@@ -6,14 +6,14 @@ import (
 )
 
 func TestLoadDefaultsAndBackendValidation(t *testing.T) {
-	for _, key := range []string{"FLOW_DATABASE_DRIVER", "FLOW_DATABASE_URL", "FLOW_WORKSPACE_STATE_MAX_BYTES", "FLOW_REDIS_MODE", "FLOW_REDIS_URL", "FLOW_REDIS_ADDRS", "FLOW_STORAGE_DRIVER", "FLOW_S3_BUCKET", "FLOW_S3_REGION", "FLOW_AUTH_GOOGLE_ENABLED", "FLOW_AUTH_OIDC_ENABLED", "FLOW_AUTH_SAML_ENABLED", "FLOW_AGENT_ENABLED", "FLOW_AGENT_BASE_URL", "FLOW_AGENT_MODEL", "FLOW_TELEMETRY_ENABLED", "OTEL_EXPORTER_OTLP_ENDPOINT"} {
+	for _, key := range []string{"FLOW_DATABASE_DRIVER", "FLOW_DATABASE_URL", "FLOW_WORKSPACE_STATE_MAX_BYTES", "FLOW_REDIS_MODE", "FLOW_REDIS_URL", "FLOW_REDIS_ADDRS", "FLOW_STORAGE_DRIVER", "FLOW_S3_BUCKET", "FLOW_S3_REGION", "FLOW_AUTH_GOOGLE_ENABLED", "FLOW_AUTH_OIDC_ENABLED", "FLOW_AUTH_SAML_ENABLED", "FLOW_AGENT_ENABLED", "FLOW_AGENT_PROTOCOL", "FLOW_AGENT_BASE_URL", "FLOW_AGENT_MODEL", "FLOW_AGENT_MAX_OUTPUT_TOKENS", "FLOW_TELEMETRY_ENABLED", "OTEL_EXPORTER_OTLP_ENDPOINT"} {
 		t.Setenv(key, "")
 	}
 	loaded, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Database.Driver != "sqlite" || loaded.Database.MaxStateBytes != 64<<20 || loaded.Storage.Driver != "local" || loaded.Agent.Enabled || loaded.Telemetry.Enabled || loaded.Auth.OIDC.IdentityClaim != "sub" {
+	if loaded.Database.Driver != "sqlite" || loaded.Database.MaxStateBytes != 64<<20 || loaded.Storage.Driver != "local" || loaded.Agent.Enabled || loaded.Agent.Protocol != "openai-responses" || loaded.Agent.MaxOutputTokens != 4096 || !loaded.Agent.ToolsEnabled || loaded.Telemetry.Enabled || loaded.Auth.OIDC.IdentityClaim != "sub" {
 		t.Fatalf("unexpected defaults: %#v", loaded)
 	}
 	t.Setenv("FLOW_DATABASE_DRIVER", "postgres")
@@ -76,8 +76,16 @@ func TestLoadAgentValidation(t *testing.T) {
 	t.Setenv("FLOW_AGENT_BASE_URL", "http://agent.example/v1")
 	t.Setenv("FLOW_AGENT_MODEL", "flow-test")
 	loaded, err := Load()
-	if err != nil || !loaded.Agent.Enabled || loaded.Agent.Model != "flow-test" {
+	if err != nil || !loaded.Agent.Enabled || loaded.Agent.Model != "flow-test" || loaded.Agent.Protocol != "openai-responses" {
 		t.Fatalf("agent config = %#v, %v", loaded.Agent, err)
+	}
+	t.Setenv("FLOW_AGENT_PROTOCOL", "anthropic-messages")
+	if loaded, err := Load(); err != nil || loaded.Agent.Protocol != "anthropic-messages" {
+		t.Fatalf("Anthropic agent config = %#v, %v", loaded.Agent, err)
+	}
+	t.Setenv("FLOW_AGENT_PROTOCOL", "invalid")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_AGENT_PROTOCOL") {
+		t.Fatalf("invalid agent protocol error = %v", err)
 	}
 }
 

@@ -5,6 +5,7 @@ import {
   Check,
   Box,
   Copy,
+  LoaderCircle,
   MoreHorizontal,
   PanelTop,
   Plus,
@@ -15,15 +16,13 @@ import {
   X,
 } from "lucide-react";
 import {
-  createAgentSession,
-  createAgentSessionMessage,
   deleteAgentSession,
   fetchAgentStatus,
   updateAgentSession,
-  updateAgentSessionMessage,
 } from "@/lib/api";
+import { streamAgentSessionMessage, streamAgentSessionMessageEdit, streamNewAgentSession, type AgentStreamEvent } from "@/lib/agent-stream";
 import { agentPath, newAgentSkillPath } from "@/lib/app-routes";
-import type { AgentSession, AgentStatus, BootstrapData } from "@/types/flow";
+import type { AgentMessage, AgentSession, AgentStatus, BootstrapData } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
 import { usePropertyCommand } from "@/components/property/use-property-command";
 import {
@@ -34,6 +33,7 @@ import {
 } from "./agent-icons";
 import styles from "./agent-page.module.css";
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
+import { applyAgentStreamEvent, markAgentSessionStopped } from './agent-stream-state'
 
 export function AgentPage({
   chatSlug,
@@ -63,6 +63,7 @@ export function AgentPage({
     [attachments, setAttachments] = useState<File[]>([]);
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const streamAbortRef = useRef<AbortController | undefined>(undefined);
   useEffect(() => setSessions(data.agentSessions ?? []), [data.agentSessions]);
   useEffect(() => {
     let active = true;
@@ -112,30 +113,39 @@ export function AgentPage({
       const providerMessage = attachmentContext.length
         ? `${message}\n\n${attachmentContext.join("\n\n")}`
         : message;
-      const next = current
-        ? editingId
-          ? await updateAgentSessionMessage(
-              current.id,
-              editingId,
-              providerMessage,
-            )
-          : await createAgentSessionMessage(current.id, providerMessage)
-        : await createAgentSession({
-            message: providerMessage,
-            skillIds: selectedSkills,
-            location: "page",
-          });
-      commitSession(next);
+      const controller = new AbortController();
+      streamAbortRef.current = controller;
+      let streamed = current;
+      const onEvent = (event: AgentStreamEvent) => {
+          streamed = applyAgentStreamEvent(streamed, event);
+          if (!streamed) return;
+          const next = streamed;
+          setSessions((list) => [next, ...list.filter((item) => item.id !== next.id)]);
+          if (event.type === "session.started") onNavigate(agentPath(data.workspace.urlKey, next.slugId));
+          if (event.type === "session.completed") {
+            onNavigate(agentPath(data.workspace.urlKey, next.slugId));
+            void onReload();
+          }
+      };
+      if (current && editingId) await streamAgentSessionMessageEdit(current.id, editingId, providerMessage, onEvent, controller.signal);
+      else if (current) await streamAgentSessionMessage(current.id, providerMessage, onEvent, controller.signal);
+      else await streamNewAgentSession({ message: providerMessage, skillIds: selectedSkills, location: "page" }, onEvent, controller.signal);
       writeInput("");
       setAttachments([]);
       setEditingId(undefined);
     } catch (reason) {
+      if (reason instanceof DOMException && reason.name === "AbortError") {
+        setSessions(list => list.map(markAgentSessionStopped));
+        void onReload();
+        return;
+      }
       setError(
         reason instanceof Error
           ? reason.message
           : t("Flow Agent is unavailable"),
       );
     } finally {
+	  streamAbortRef.current = undefined;
       setBusy(false);
       requestAnimationFrame(() => editorRef.current?.focus());
     }
@@ -496,14 +506,12 @@ export function AgentPage({
               }}
               type="file"
             />
-            <button
+            {busy ? <button aria-label={t("Stop generating")} onClick={() => streamAbortRef.current?.abort()} type="button"><X /></button> : <button
               aria-label={t("Submit comment")}
-              disabled={!input.trim() || busy || !status?.enabled}
+              disabled={!input.trim() || !status?.enabled}
               onClick={() => void send()}
               type="button"
-            >
-              <AgentSubmitIcon />
-            </button>
+            ><AgentSubmitIcon /></button>}
           </footer>
           {error && (
             <span className={styles.error} role="alert">
@@ -592,7 +600,7 @@ function Conversation({
           role="document"
           className={message.role === "user" ? styles.user : styles.assistant}
         >
-          <p>{message.content}</p>
+          {message.parts?.length ? <AgentMessageParts message={message}/> : <p>{message.content}</p>}
           <div>
             <button
               aria-label={t("Copy message")}
@@ -620,6 +628,59 @@ function Conversation({
       ))}
     </div>
   );
+}
+
+function AgentMessageParts({ message }: { message: AgentMessage }) {
+  const text = message.parts?.filter(part => part.type === "text").map(part => part.text ?? "").join("") || message.content;
+  return <div className={styles.messageParts}>
+    {message.parts?.map(part => {
+      if (part.type === "reasoning") return <details className={styles.reasoning} key={part.id} open={part.status === "running"}><summary>{part.status === "running" ? "Thinking…" : "Reasoning"}</summary><p>{part.text}</p></details>;
+      if (part.type === "toolCall" && part.toolCall) return <AgentToolCallItem key={part.id} part={part}/>;
+      if (part.type === "error") return <div className={styles.partError} key={part.id} role="alert">{part.text}</div>;
+      if (part.type !== "text") return <div className={styles.eventPart} key={part.id}>{part.text}</div>;
+      return null;
+    })}
+    {text && <p>{text}</p>}
+  </div>;
+}
+
+function AgentToolCallItem({ part }: { part: NonNullable<AgentMessage["parts"]>[number] }) {
+  const call = part.toolCall!;
+  const running = call.status === "running" || call.status === "pending";
+  const detail = readableToolDetail(call.arguments);
+  return <details className={`${styles.toolCall} ${call.status === "error" ? styles.toolCallError : ""}`} open={call.status === "error"}>
+    <summary>{running ? <LoaderCircle className={styles.spin}/> : call.status === "error" ? <X/> : <Check/>}<span>{toolStatusLabel(call.name, running)}</span>{detail && <small>{detail}</small>}</summary>
+    <div><code>{JSON.stringify(call.arguments ?? {}, null, 2)}</code>{call.error && <p role="alert">{call.error}</p>}{call.result !== undefined && <code>{JSON.stringify(call.result, null, 2)}</code>}</div>
+  </details>;
+}
+
+function toolStatusLabel(name: string, running: boolean) {
+  const labels: Record<string, [string, string]> = {
+    list_issues: ["Looking at issues…", "Looked at issues"], list_projects: ["Looking at projects…", "Looked at projects"],
+    list_initiatives: ["Looking at initiatives…", "Looked at initiatives"], list_documents: ["Looking at documents…", "Looked at documents"],
+    search_documentation: ["Searching documentation…", "Searched documentation"], save_issue: ["Updating issue…", "Updated issue"],
+    save_project: ["Updating project…", "Updated project"], save_initiative: ["Updating initiative…", "Updated initiative"],
+  };
+  if (labels[name]) return labels[name][running ? 0 : 1];
+  const [verb, ...words] = name.split("_");
+  const subject = words.join(" ") || "workspace";
+  const verbs: Record<string, [string, string]> = {
+    list: ["Looking at", "Looked at"], get: ["Looking at", "Looked at"], search: ["Searching", "Searched"], extract: ["Extracting", "Extracted"],
+    save: ["Updating", "Updated"], update: ["Updating", "Updated"], create: ["Creating", "Created"], delete: ["Deleting", "Deleted"],
+    prepare: ["Preparing", "Prepared"], merge: ["Merging", "Merged"], submit: ["Submitting", "Submitted"], resolve: ["Resolving", "Resolved"],
+  };
+  const action = verbs[verb]?.[running ? 0 : 1];
+  if (action) return `${action} ${subject}${running ? "…" : ""}`;
+  const fallback = name.replaceAll("_", " ").replace(/^./, value => value.toUpperCase());
+  return running ? `${fallback}…` : fallback;
+}
+
+function readableToolDetail(value: Record<string, unknown> | undefined) {
+  if (!value) return "";
+  for (const key of ["query", "id", "name", "issueId", "projectId"]) {
+    if (typeof value[key] === "string") return String(value[key]);
+  }
+  return "";
 }
 function relative(value: string) {
   const seconds = Math.max(

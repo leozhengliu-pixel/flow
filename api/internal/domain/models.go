@@ -86,11 +86,29 @@ type AuthSession struct {
 }
 
 type AgentMessage struct {
-	ID         string    `json:"id"`
-	Role       string    `json:"role"`
-	Content    string    `json:"content"`
-	DurationMS int64     `json:"durationMs,omitempty"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ID         string             `json:"id"`
+	Role       string             `json:"role"`
+	Content    string             `json:"content"`
+	Parts      []AgentMessagePart `json:"parts,omitempty"`
+	DurationMS int64              `json:"durationMs,omitempty"`
+	CreatedAt  time.Time          `json:"createdAt"`
+}
+
+type AgentMessagePart struct {
+	ID       string         `json:"id"`
+	Type     string         `json:"type"`
+	Text     string         `json:"text,omitempty"`
+	Status   string         `json:"status,omitempty"`
+	ToolCall *AgentToolCall `json:"toolCall,omitempty"`
+}
+
+type AgentToolCall struct {
+	ID        string          `json:"id"`
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments,omitempty"`
+	Result    json.RawMessage `json:"result,omitempty"`
+	Status    string          `json:"status"`
+	Error     string          `json:"error,omitempty"`
 }
 
 type AgentSession struct {

@@ -216,25 +216,45 @@ Flow never derives an email address from the employee number.
 
 ## Flow Agent
 
-Flow Agent uses an OpenAI-compatible Chat Completions endpoint. The browser
-sends selected issue IDs to Flow; the API loads the authorized workspace issues
-and builds the model context server-side. Provider credentials are never sent to
-the browser.
+Flow Agent streams provider output through a unified SSE transport. It supports
+OpenAI Responses, Anthropic Messages, and OpenAI-compatible Chat Completions.
+The browser sends selected issue IDs to Flow; the API loads authorized workspace
+context, executes enabled Flow tools server-side, and never exposes provider
+credentials to the browser.
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `FLOW_AGENT_ENABLED` | `false` | Enable Agent chat requests. |
-| `FLOW_AGENT_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API base URL. |
-| `FLOW_AGENT_API_KEY` | empty | Provider bearer token; `_FILE` is supported. |
+| `FLOW_AGENT_PROTOCOL` | `openai-responses` | `openai-responses`, `anthropic-messages`, or `openai-chat-completions`. |
+| `FLOW_AGENT_BASE_URL` | `https://api.openai.com/v1` | Provider API base URL. |
+| `FLOW_AGENT_API_KEY` | empty | Provider credential; `_FILE` is supported. |
 | `FLOW_AGENT_MODEL` | `gpt-5-mini` | Provider model identifier. |
 | `FLOW_AGENT_TIMEOUT` | `60s` | Per-request Go timeout. |
+| `FLOW_AGENT_MAX_OUTPUT_TOKENS` | `4096` | Maximum output tokens per provider turn. |
+| `FLOW_AGENT_ANTHROPIC_VERSION` | `2023-06-01` | Anthropic API version header. |
+| `FLOW_AGENT_TOOLS_ENABLED` | `true` | Expose Flow MCP read tools to the Agent. |
+| `FLOW_AGENT_WRITE_TOOLS` | `false` | Also expose write tools. Enable only when automatic mutations are acceptable. |
 
 ```dotenv
 FLOW_AGENT_ENABLED=true
-FLOW_AGENT_BASE_URL=https://api.example.com/v1
+FLOW_AGENT_PROTOCOL=openai-responses
+FLOW_AGENT_BASE_URL=https://api.openai.com/v1
 FLOW_AGENT_API_KEY=secret
 FLOW_AGENT_MODEL=your-model
 ```
+
+For Anthropic Messages:
+
+```dotenv
+FLOW_AGENT_PROTOCOL=anthropic-messages
+FLOW_AGENT_BASE_URL=https://api.anthropic.com/v1
+FLOW_AGENT_API_KEY=secret
+FLOW_AGENT_MODEL=your-claude-model
+```
+
+For a legacy OpenAI-compatible endpoint, use
+`FLOW_AGENT_PROTOCOL=openai-chat-completions`. Responses and Messages streams
+are normalized into text, reasoning, tool-call, error, and completion events.
 
 ## Telemetry
 
