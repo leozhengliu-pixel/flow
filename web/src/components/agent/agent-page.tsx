@@ -400,7 +400,7 @@ export function AgentPage({
               ref={editorRef}
               aria-label={t("Send a message to Flow AI")}
               className={styles.editor}
-              contentEditable={!busy && Boolean(status?.enabled)}
+              contentEditable={!busy}
               data-placeholder={current ? t("Reply…") : t("Ask Flow…")}
               role="textbox"
               suppressContentEditableWarning
