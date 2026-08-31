@@ -27,17 +27,21 @@ export function jsonRequest(method: string, input: unknown): RequestInit {
 }
 
 export async function request<T>(url: string, init?: RequestInit): Promise<T> {
+	const response = await apiFetch(url, init)
+	if (!response.ok) {
+		const payload = await response.json().catch(() => null)
+		throw new ApiError(payload?.error || `Request failed: ${response.status}`, response.status, payload?.code, payload?.current)
+	}
+	if (response.status === 204) return undefined as T
+	return response.json()
+}
+
+export function apiFetch(url: string, init?: RequestInit) {
   const workspaceKey = currentWorkspaceKey()
   const headers = new Headers(init?.headers)
   if (workspaceKey && !headers.has('X-Workspace-Key')) headers.set('X-Workspace-Key', workspaceKey)
   headers.set('X-Client-ID', realtimeClientId())
-  const response = await fetch(url, { ...init, headers, credentials: 'same-origin' })
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null)
-    throw new ApiError(payload?.error || `Request failed: ${response.status}`, response.status, payload?.code, payload?.current)
-  }
-  if (response.status === 204) return undefined as T
-  return response.json()
+	return fetch(url, { ...init, headers, credentials: 'same-origin' })
 }
 
 function currentWorkspaceKey() {

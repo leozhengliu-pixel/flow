@@ -8,11 +8,10 @@ import {
   X,
 } from "lucide-react";
 import {
-  createAgentSession,
-  createAgentSessionMessage,
   fetchAgentStatus,
 } from "@/lib/api";
-import type { AgentChatMessage, AgentSession, AgentStatus } from "@/types/flow";
+import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from "@/lib/agent-stream";
+import type { AgentChatMessage, AgentMessagePart, AgentSession, AgentStatus } from "@/types/flow";
 import type { MyIssuesRowData } from "@/components/my-issues/my-issues-list";
 import { StatusIcon } from "@/components/issue/issue-icons";
 import { useI18n } from "@/i18n/i18n";
@@ -39,10 +38,12 @@ export function AgentChatPanel({
   const [input, setInput] = useState("");
   const [status, setStatus] = useState<AgentStatus>();
   const [loading, setLoading] = useState(false);
+  const [streamParts, setStreamParts] = useState<AgentMessagePart[]>([]);
   const [error, setError] = useState<string>();
   const [minimized, setMinimized] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | undefined>(undefined);
   useEffect(() => {
     if (!open) return;
     let active = true;
@@ -82,6 +83,7 @@ export function AgentChatPanel({
     setStatus(undefined);
     setError(undefined);
     setLoading(false);
+    setStreamParts([]);
     setMinimized(false);
     setFullscreen(false);
     onClose();
@@ -93,26 +95,57 @@ export function AgentChatPanel({
     setInput("");
     setError(undefined);
     setLoading(true);
+    setStreamParts([]);
     try {
-      const next = session
-        ? await createAgentSessionMessage(session.id, message)
-        : await createAgentSession({
-            message,
-            issueIds: issues.map((issue) => issue.id),
-            location: "toolbar",
+      const controller = new AbortController();
+      abortRef.current = controller;
+      let next = session;
+      const onEvent = (event: AgentStreamEvent) => {
+        if (event.session) {
+          next = event.session;
+          setSession(event.session);
+        }
+        if (event.type === "session.started" && event.session) {
+          setMessages(event.session.messages.map(({ role, content }) => ({ role, content })));
+        }
+        if (event.type === "text.delta") {
+          setMessages(current => current.at(-1)?.role === "assistant"
+            ? current.map((item, index) => index === current.length - 1 ? { ...item, content: item.content + (event.delta ?? "") } : item)
+            : [...current, { role: "assistant", content: event.delta ?? "" }]);
+        }
+        if ((event.type.startsWith("tool.") || event.type === "reasoning.delta") && event.part) {
+          const nextPart = event.part;
+          setStreamParts(current => {
+            const index = current.findIndex(part => part.id === nextPart.id);
+            return index >= 0 ? current.map((part, itemIndex) => itemIndex === index ? nextPart : part) : [...current, nextPart];
           });
+        }
+        if (event.type === "session.completed" && event.session) {
+          setMessages(event.session.messages.map(({ role, content }) => ({ role, content })));
+          setStreamParts([]);
+        }
+      };
+      next = session
+        ? await streamAgentSessionMessage(session.id, message, onEvent, controller.signal)
+        : await streamNewAgentSession({ message, issueIds: issues.map(issue => issue.id), location: "toolbar" }, onEvent, controller.signal);
+      if (!next) return;
       setSession(next);
       onSessionChange?.(next);
       setMessages(
         next.messages.map(({ role, content }) => ({ role, content })),
       );
     } catch (reason) {
+      if (reason instanceof DOMException && reason.name === "AbortError") {
+        setStreamParts(current => current.map(part => part.status === "running" ? { ...part, status: "error" } : part));
+        return;
+      }
       setError(
         reason instanceof Error
           ? reason.message
           : t("Flow Agent is unavailable"),
       );
     } finally {
+	  abortRef.current = undefined;
       setLoading(false);
       requestAnimationFrame(() => inputRef.current?.focus());
     }
@@ -188,6 +221,7 @@ export function AgentChatPanel({
                 {t("Thinking…")}
               </div>
             )}
+            {streamParts.map(part => <div className={styles.streamPart} key={part.id}>{part.type === "toolCall" ? `${part.status === "completed" ? "✓" : "…"} ${part.toolCall?.name.replaceAll("_", " ")}` : part.type === "reasoning" ? `Thinking: ${part.text ?? ""}` : part.text}</div>)}
           </div>
           <div className={styles.composer}>
             <div className={styles.context}>
@@ -220,14 +254,12 @@ export function AgentChatPanel({
             />
             <footer>
               {error ? <span role="alert">{error}</span> : <span />}
-              <button
+              {loading ? <button aria-label={t("Stop generating")} onClick={() => abortRef.current?.abort()} type="button"><X /></button> : <button
                 aria-label={t("Send message")}
-                disabled={!input.trim() || loading || !status?.enabled}
+                disabled={!input.trim() || !status?.enabled}
                 onClick={() => void submit()}
                 type="button"
-              >
-                {loading ? <LoaderCircle /> : <Send />}
-              </button>
+              ><Send /></button>}
             </footer>
           </div>
         </>
