@@ -209,8 +209,8 @@ jobs:
             if curl -fsS http://127.0.0.1:9000/minio/health/live; then break; fi
             sleep 2
           done
-          docker run --rm --network host minio/mc:RELEASE.2025-07-21T05-28-08Z \
-            sh -c 'mc alias set flow http://127.0.0.1:9000 flow flow-development-secret && mc mb --ignore-existing flow/flow-integration'
+          docker run --rm --network host --entrypoint /bin/sh minio/mc:RELEASE.2025-07-21T05-28-08Z \
+            -c 'mc alias set flow http://127.0.0.1:9000 flow flow-development-secret && mc mb --ignore-existing flow/flow-integration'
 
       - name: S3 round trip
         working-directory: api
