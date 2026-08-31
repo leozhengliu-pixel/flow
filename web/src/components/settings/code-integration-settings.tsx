@@ -418,10 +418,9 @@ function IntegrationDeliveryHistory({
           <div className="code-delivery-row" key={item.id}>
             <StatusIcon data-status={item.status} />
             <div>
-              <strong>{item.eventType}</strong>
+              <strong>{t(integrationEventLabel(item.eventType))}</strong>
               <span>
-                {item.status} · {item.attempts} attempt
-                {item.attempts === 1 ? "" : "s"} ·{" "}
+                {t(integrationDeliveryStatusLabel(item.status))} · {item.attempts} {t(item.attempts === 1 ? "attempt" : "attempts")} ·{" "}
                 {formatDate(item.updatedAt, {
                   dateStyle: "medium",
                   timeStyle: "short",
@@ -450,6 +449,23 @@ function IntegrationDeliveryHistory({
       )}
     </section>
   );
+}
+
+function integrationDeliveryStatusLabel(status: string) {
+  if (status === "delivered") return "Delivered";
+  if (status === "failed") return "Failed";
+  if (status === "queued") return "Queued";
+  if (status === "processing") return "Processing";
+  return status;
+}
+
+function integrationEventLabel(eventType: string) {
+  if (eventType === "pull_request") return "Pull request";
+  if (eventType === "merge_request") return "Merge request";
+  if (eventType === "issue") return "Issue";
+  if (eventType === "push") return "Push";
+  if (eventType === "ping") return "Ping";
+  return eventType;
 }
 
 function IntegrationOptions({

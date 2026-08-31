@@ -448,7 +448,7 @@ export function SettingsPage(props: SettingsPageProps) {
                           icon={team.icon || "Team"}
                         />
                       </span>
-                      <span>{team.name}</span>
+                      <span data-i18n-ignore>{team.name}</span>
                     </button>
                   ))}
                 {isAdmin && (
@@ -977,7 +977,7 @@ function WorkspacePage(
         </Row>
         <Row title="URL">
           <div className="settings-url">
-            <span>flow.app/</span>
+            <span data-i18n-ignore>flow.app/</span>
             <input
               aria-label="URL"
               value={urlKey}
@@ -1124,7 +1124,7 @@ function WorkspaceLogoControl({
         {data.workspace.logoUrl ? (
           <img alt={t("Workspace logo")} src={data.workspace.logoUrl} />
         ) : (
-          <span>{initials(data.workspace.name)}</span>
+          <span data-i18n-ignore>{initials(data.workspace.name)}</span>
         )}
         <Upload />
       </button>
@@ -1223,7 +1223,7 @@ function TeamsPage({
               <ViewGlyph color={team.color} icon={team.icon || "Team"} />
             </span>
             <div>
-              <strong>{team.name}</strong>
+              <strong data-i18n-ignore>{team.name}</strong>
               <span>
                 {team.key} ·{" "}
                 {
@@ -1247,6 +1247,7 @@ export function MembersPage({
   data: BootstrapData;
   onReload: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All");
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -1422,6 +1423,7 @@ export function MembersPage({
                             );
                             return (
                               <DropdownMenuCheckboxItem
+                                data-i18n-ignore
                                 key={team.id}
                                 checked={Boolean(membership)}
                                 onCheckedChange={(checked) =>
@@ -1576,11 +1578,12 @@ export function MembersPage({
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
         <DialogContent className="settings-invite-dialog">
           <DialogTitle>Invite to your workspace</DialogTitle>
-          <p>Invite teammates to {data.workspace.name}.</p>
+          <p>{t("Invite teammates to")} <span data-i18n-ignore>{data.workspace.name}</span>.</p>
           <label>
             Email addresses
             <textarea
               autoFocus
+              data-i18n-ignore
               placeholder="name@company.com"
               value={emails}
               onChange={(event) => setEmails(event.target.value)}
@@ -1613,6 +1616,7 @@ export function MembersPage({
                 <DropdownMenuContent align="end">
                   {data.teams.map((team) => (
                     <DropdownMenuCheckboxItem
+                      data-i18n-ignore
                       key={team.id}
                       checked={teamIds.includes(team.id)}
                       onCheckedChange={(checked) =>
@@ -2257,7 +2261,7 @@ function MembersPageV2({
         <DialogContent className="settings-invite-dialog">
           <DialogTitle>
             <span className="settings-invite-mark">
-              {data.workspace.name.slice(0, 2).toUpperCase()}
+              <span data-i18n-ignore>{data.workspace.name.slice(0, 2).toUpperCase()}</span>
             </span>
             {t("Invite to your workspace")}
           </DialogTitle>
@@ -2266,6 +2270,7 @@ function MembersPageV2({
             <textarea
               autoFocus
               aria-label={t("Email")}
+              data-i18n-ignore
               placeholder="email@foxmail.com, email2@foxmail.com…"
               value={emails}
               onChange={(event) => setEmails(event.target.value)}
@@ -3002,7 +3007,7 @@ function ApiPage({
                         )
                       }
                     />
-                    {team.name}
+                    <span data-i18n-ignore>{team.name}</span>
                   </label>
                 ))}
               </fieldset>
@@ -3208,7 +3213,7 @@ function WebhookEditor({
                   )
                 }
               />
-              {team.name}
+              <span data-i18n-ignore>{team.name}</span>
             </label>
           ))}
         </fieldset>
@@ -4056,6 +4061,7 @@ function IdentityProviderEditor({
           Discovery domains
           <input
             className="settings-input"
+            data-i18n-ignore
             value={domains}
             onChange={(e) => setDomains(e.target.value)}
             placeholder="example.com"
@@ -4206,13 +4212,13 @@ function title(value: string) {
   return value ? value[0].toUpperCase() + value.slice(1) : value;
 }
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(document.documentElement.lang || "en-US", {
     month: "short",
     day: "numeric",
   }).format(new Date(value));
 }
 function currency(cents: number) {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat(document.documentElement.lang || "en-US", {
     style: "currency",
     currency: "USD",
   }).format(cents / 100);

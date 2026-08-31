@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  Check,
+  ChevronRight,
   LoaderCircle,
   Maximize2,
   Minimize2,
@@ -11,10 +13,11 @@ import {
   fetchAgentStatus,
 } from "@/lib/api";
 import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from "@/lib/agent-stream";
-import type { AgentChatMessage, AgentMessagePart, AgentSession, AgentStatus } from "@/types/flow";
+import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus } from "@/types/flow";
 import type { MyIssuesRowData } from "@/components/my-issues/my-issues-list";
 import { StatusIcon } from "@/components/issue/issue-icons";
 import { useI18n } from "@/i18n/i18n";
+import { AgentRichText } from "./agent-rich-text";
 import styles from "./agent-chat-panel.module.css";
 
 export function AgentChatPanel({
@@ -33,7 +36,7 @@ export function AgentChatPanel({
   open: boolean;
 }) {
   const { t } = useI18n();
-  const [messages, setMessages] = useState<AgentChatMessage[]>([]);
+  const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [session, setSession] = useState<AgentSession>();
   const [input, setInput] = useState("");
   const [status, setStatus] = useState<AgentStatus>();
@@ -71,9 +74,7 @@ export function AgentChatPanel({
   useEffect(() => {
     if (!open || !initialSession) return;
     setSession(initialSession);
-    setMessages(
-      initialSession.messages.map(({ role, content }) => ({ role, content })),
-    );
+    setMessages(initialSession.messages);
   }, [initialSession, open]);
   if (!open) return null;
   const close = () => {
@@ -91,7 +92,7 @@ export function AgentChatPanel({
   const submit = async () => {
     const message = input.trim();
     if (!message || loading || !status?.enabled) return;
-    setMessages((current) => [...current, { role: "user", content: message }]);
+    setMessages((current) => [...current, { id: `pending-${Date.now()}`, role: "user", content: message, createdAt: new Date().toISOString() }]);
     setInput("");
     setError(undefined);
     setLoading(true);
@@ -106,12 +107,12 @@ export function AgentChatPanel({
           setSession(event.session);
         }
         if (event.type === "session.started" && event.session) {
-          setMessages(event.session.messages.map(({ role, content }) => ({ role, content })));
+          setMessages(event.session.messages);
         }
         if (event.type === "text.delta") {
           setMessages(current => current.at(-1)?.role === "assistant"
             ? current.map((item, index) => index === current.length - 1 ? { ...item, content: item.content + (event.delta ?? "") } : item)
-            : [...current, { role: "assistant", content: event.delta ?? "" }]);
+            : [...current, { id: event.messageId ?? `stream-${Date.now()}`, role: "assistant", content: event.delta ?? "", createdAt: new Date().toISOString() }]);
         }
         if ((event.type.startsWith("tool.") || event.type === "reasoning.delta") && event.part) {
           const nextPart = event.part;
@@ -121,7 +122,7 @@ export function AgentChatPanel({
           });
         }
         if (event.type === "session.completed" && event.session) {
-          setMessages(event.session.messages.map(({ role, content }) => ({ role, content })));
+          setMessages(event.session.messages);
           setStreamParts([]);
         }
       };
@@ -131,9 +132,7 @@ export function AgentChatPanel({
       if (!next) return;
       setSession(next);
       onSessionChange?.(next);
-      setMessages(
-        next.messages.map(({ role, content }) => ({ role, content })),
-      );
+      setMessages(next.messages);
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === "AbortError") {
         setStreamParts(current => current.map(part => part.status === "running" ? { ...part, status: "error" } : part));
@@ -207,12 +206,13 @@ export function AgentChatPanel({
                     ? styles.userMessage
                     : styles.agentMessage
                 }
-                key={`${message.role}-${index}`}
+                key={message.id || `${message.role}-${index}`}
               >
                 <strong>
                   {message.role === "user" ? t("You") : t("Flow Agent")}
                 </strong>
-                <p>{message.content}</p>
+                {message.role === "assistant" && <PanelMessageActivity parts={message.parts ?? []}/>}
+                {message.content && <AgentRichText ariaLabel={message.role === "user" ? t("Your message") : t("AI message")} className={styles.messageDocument} content={message.content}/>}
               </article>
             ))}
             {loading && (
@@ -266,4 +266,15 @@ export function AgentChatPanel({
       )}
     </section>
   );
+}
+
+function PanelMessageActivity({ parts }: { parts: AgentMessagePart[] }) {
+  const { t } = useI18n()
+  const work = parts.filter(part => part.type === 'reasoning' || part.type === 'toolCall')
+  if (!work.length) return null
+  const running = work.some(part => part.status === 'running' || part.status === 'pending' || part.toolCall?.status === 'running' || part.toolCall?.status === 'pending')
+  return <details className={styles.messageActivity} open={running || undefined}>
+    <summary>{running ? <LoaderCircle/> : <Check/>}<span>{running ? t('Thinking…') : t('Work completed')}</span><ChevronRight/></summary>
+    <div>{work.map(part => <div key={part.id}>{part.type === 'reasoning' ? <><strong>{t('Reasoning')}</strong><p>{part.text}</p></> : <span>{part.toolCall?.name.replaceAll('_', ' ')}</span>}</div>)}</div>
+  </details>
 }

@@ -60,4 +60,20 @@ describe('Agent chat panel streaming', () => {
     await user.click(await screen.findByRole('button', { name: 'Stop generating' }))
     expect(signal?.aborted).toBe(true)
   })
+
+  it('renders persisted reasoning and markdown in toolbar conversations', async () => {
+    const richSession: AgentSession = {
+      ...session,
+      messages: [{
+        id: 'assistant-rich', role: 'assistant', content: '## Result\n\n- **Passed** checks', createdAt: '2026-08-31T00:00:01Z',
+        parts: [{ id: 'reasoning', type: 'reasoning', text: 'Inspected the workspace', status: 'completed' }],
+      }],
+    }
+    const user = userEvent.setup()
+    render(<I18nProvider><AgentChatPanel initialSession={richSession} issues={[]} onClose={vi.fn()} open/></I18nProvider>)
+    expect(await screen.findByRole('heading', { name: 'Result' })).toBeVisible()
+    expect(screen.getByRole('list')).toBeVisible()
+    await user.click(screen.getByText('Work completed'))
+    expect(screen.getByText('Inspected the workspace')).toBeVisible()
+  })
 })

@@ -61,6 +61,22 @@ describe('agent page composer', () => {
     expect(reload).toHaveBeenCalled()
   })
 
+  it('shows a thinking state before the provider sends its first delta', async () => {
+    api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
+    streams.streamNewAgentSession.mockImplementation((_input, onEvent, signal: AbortSignal) => {
+      const session: AgentSession = { id: 'session-waiting', slugId: 'waiting', userId: 'user-1', title: 'Waiting', favorite: false, location: 'page', issueIds: [], skillIds: [], messages: [{ id: 'user-message', role: 'user', content: 'Think first', createdAt: '2026-08-31T00:00:00Z' }], createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:00Z' }
+      onEvent({ type: 'session.started', session, messageId: 'assistant-message' })
+      return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))))
+    })
+    const user = userEvent.setup()
+    render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+    const editor = screen.getByRole('textbox', { name: 'Send a message to Flow AI' })
+    await user.type(editor, 'Think first')
+    await user.click(screen.getByRole('button', { name: 'Submit comment' }))
+    expect(await screen.findByText('Thinking…')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Stop generating' }))
+  })
+
   it('reduces incremental stream events into one assistant message', () => {
     const session = { id: 'session', slugId: 'chat', userId: 'user', title: 'Chat', favorite: false, location: 'page', issueIds: [], skillIds: [], messages: [], createdAt: '', updatedAt: '' } as AgentSession
     const started = applyAgentStreamEvent(undefined, { type: 'session.started', session, messageId: 'message' })!
@@ -116,5 +132,18 @@ describe('agent page composer', () => {
     await user.hover(screen.getByRole('option', { name: 'New chat' }))
     await user.keyboard('{Enter}')
     expect(navigate).toHaveBeenCalledWith('/workspace/agent')
+  })
+
+  it('renders assistant markdown as rich content', async () => {
+    const session: AgentSession = {
+      id: 'session-markdown', slugId: 'markdown', userId: 'user-1', title: 'Markdown', favorite: false, location: 'page', issueIds: [], skillIds: [],
+      messages: [{ id: 'assistant', role: 'assistant', content: '## Plan\n\n1. **Build** the API\n2. `Verify` the UI', createdAt: '2026-08-31T00:00:00Z' }],
+      createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:00Z',
+    }
+    render(<I18nProvider><AgentPage chatSlug="markdown" data={makeBootstrap({ agentSessions: [session], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+    expect(await screen.findByRole('heading', { name: 'Plan' })).toBeVisible()
+    expect(screen.getByRole('list')).toBeVisible()
+    expect(screen.getByText('Build').tagName).toBe('STRONG')
+    expect(screen.getByText('Verify').tagName).toBe('CODE')
   })
 })
