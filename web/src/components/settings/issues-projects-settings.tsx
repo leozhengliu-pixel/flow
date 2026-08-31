@@ -173,6 +173,7 @@ function ProjectTemplateSettings({
   onNavigateList: () => void;
   onReload: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const template =
       mode === "edit"
         ? data.projectTemplates.find((item) => item.id === templateId)
@@ -197,7 +198,7 @@ function ProjectTemplateSettings({
         onReload={onReload}
       />
     ) : (
-      <div className="it-not-found">Project template not found</div>
+      <div className="it-not-found">{t("Project template not found")}</div>
     );
   return (
     <ProjectTemplateList
@@ -913,6 +914,7 @@ function IssueTemplateSettings({
   onNavigateList: () => void;
   onReload: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const items = data.issueTemplates.filter(
     (item) => item.scope === "workspace" || !item.visibilityTeamId,
   );
@@ -941,7 +943,7 @@ function IssueTemplateSettings({
         onReload={onReload}
       />
     ) : (
-      <div className="it-not-found">Issue template not found</div>
+      <div className="it-not-found">{t("Issue template not found")}</div>
     );
   return (
     <IssueTemplateList
@@ -3633,7 +3635,7 @@ export function ProjectUpdateSettings({
       </section>
       <section className="ip-settings-section">
         <header>
-          <h3>Slack</h3>
+          <h3 data-i18n-ignore>Slack</h3>
         </header>
         <div className="ip-setting-row">
           <span className="ip-slack-label">

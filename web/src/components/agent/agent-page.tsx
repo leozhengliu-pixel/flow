@@ -1,9 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Popover from "@radix-ui/react-popover";
-import { Markdown } from "@tiptap/markdown";
-import { EditorContent, useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
 import {
   AlertCircle,
   Check,
@@ -37,6 +34,7 @@ import {
   AgentSkillsIcon,
   AgentSubmitIcon,
 } from "./agent-icons";
+import { AgentRichText } from "./agent-rich-text";
 import styles from "./agent-page.module.css";
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
 import { applyAgentStreamEvent, markAgentSessionStopped } from './agent-stream-state'
@@ -65,6 +63,7 @@ export function AgentPage({
     [selectedSkills, setSelectedSkills] = useState<string[]>([]),
     [deleteTarget, setDeleteTarget] = useState<AgentSession>(),
     [editingId, setEditingId] = useState<string>(),
+    [activeStreamId, setActiveStreamId] = useState<string>(),
     [examplesVisible, setExamplesVisible] = useState(true),
     [attachments, setAttachments] = useState<File[]>([]);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -90,8 +89,8 @@ export function AgentPage({
         ? sessions.find(
             (item) => item.slugId === chatSlug || item.id === chatSlug,
           )
-        : undefined,
-    [chatSlug, sessions],
+        : sessions.find((item) => item.id === activeStreamId),
+    [activeStreamId, chatSlug, sessions],
   );
   useEffect(
     () => setSelectedSkills(current?.skillIds ?? []),
@@ -131,7 +130,10 @@ export function AgentPage({
           if (!streamed) return;
           const next = streamed;
           setSessions((list) => [next, ...list.filter((item) => item.id !== next.id)]);
-          if (event.type === "session.started") onNavigate(agentPath(data.workspace.urlKey, next.slugId));
+          if (event.type === "session.started") {
+            setActiveStreamId(next.id);
+            onNavigate(agentPath(data.workspace.urlKey, next.slugId));
+          }
           if (event.type === "session.completed") {
             onNavigate(agentPath(data.workspace.urlKey, next.slugId));
             void onReload();
@@ -177,6 +179,7 @@ export function AgentPage({
     onSelect: (option) => {
       if (option.id === "__new__") {
         setHistoryOpen(false);
+        setActiveStreamId(undefined);
         writeInput("");
         setSelectedSkills([]);
         onNavigate(agentPath(data.workspace.urlKey));
@@ -223,6 +226,7 @@ export function AgentPage({
   });
   const newChat = () => {
     setHistoryOpen(false);
+    setActiveStreamId(undefined);
     writeInput("");
     setSelectedSkills([]);
     onNavigate(agentPath(data.workspace.urlKey));
@@ -389,6 +393,7 @@ export function AgentPage({
       <section className={`${styles.body}${current ? ` ${styles.hasConversation}` : ""}`}>
         {current ? (
           <Conversation
+            busy={busy}
             session={current}
             editingId={editingId}
             onRetry={(message) => void send(message)}
@@ -597,11 +602,13 @@ function AgentExample({description,icon,onClick,title}:{description:string;icon:
 function AgentBackground(){return <svg aria-hidden="true" className={styles.emptyGraphic} viewBox="0 0 48 48"><path d="M10 6a4 4 0 0 0-4 4v28a4 4 0 0 0 8 0v-8h16a4 4 0 0 0 0-8H14v-8h24a4 4 0 0 0 0-8H10Z"/><circle cx="35" cy="38" r="4"/></svg>}
 
 function Conversation({
+  busy,
   editingId,
   onEdit,
   onRetry,
   session,
 }: {
+  busy: boolean;
   editingId?: string;
   onEdit: (message: AgentSession["messages"][number]) => void;
   onRetry: (message: string) => void;
@@ -625,7 +632,9 @@ function Conversation({
       role="group"
     >
       <div className={styles.conversationInner}>
-        {session.messages.map((message, index) => (
+        {session.messages.map((message, index) => {
+          const waiting = busy && index === session.messages.length - 1 && message.role === "assistant" && !message.content && !message.parts?.length;
+          return (
           <Fragment key={message.id}>
             {shouldShowAgentTime(session.messages, index) && (
               <time className={styles.messageTime} dateTime={message.createdAt}>
@@ -637,7 +646,11 @@ function Conversation({
               data-message-id={message.id}
             >
               <div className={styles.messageContent}>
-                {message.parts?.length ? <AgentMessageParts message={message} onRetry={lastUserMessage(session.messages, index) ? () => onRetry(lastUserMessage(session.messages, index)) : undefined}/> : <AgentRichText content={message.content} />}
+                {waiting
+                  ? <div aria-live="polite" className={styles.thinkingPlaceholder}><LoaderCircle className={styles.spin}/><span>{t("Thinking…")}</span></div>
+                  : message.parts?.length
+                    ? <AgentMessageParts message={message} onRetry={lastUserMessage(session.messages, index) ? () => onRetry(lastUserMessage(session.messages, index)) : undefined}/>
+                    : <AgentRichText className={styles.messageDocument} content={message.content}/>}
               </div>
               <div className={styles.messageActions}>
                 <button
@@ -659,27 +672,10 @@ function Conversation({
               </div>
             </article>
           </Fragment>
-        ))}
+        )})}
       </div>
     </div>
   );
-}
-
-function AgentRichText({ content }: { content: string }) {
-  const editor = useEditor({
-    immediatelyRender: false,
-    editable: false,
-    extensions: [StarterKit, Markdown],
-    content: content || " ",
-    contentType: "markdown",
-    editorProps: { attributes: { class: styles.messageDocument, role: "document", "aria-label": "AI message" } },
-  });
-  useEffect(() => {
-    if (!editor || editor.isDestroyed || editor.getMarkdown() === content) return;
-    editor.commands.setContent(content || " ", { contentType: "markdown" });
-  }, [content, editor]);
-  if (!editor) return <div aria-label="AI message" className={styles.messageDocument} role="document"><p>{content}</p></div>;
-  return <EditorContent editor={editor} />;
 }
 
 function AgentMessageParts({ message, onRetry }: { message: AgentMessage; onRetry?: () => void }) {
@@ -692,7 +688,7 @@ function AgentMessageParts({ message, onRetry }: { message: AgentMessage; onRetr
     {other.map(part => part.type === "error"
       ? <div className={styles.partError} key={part.id} role="alert"><AlertCircle/><span>{part.text}</span>{onRetry && <button onClick={onRetry} type="button">{t("Retry")}</button>}</div>
       : <div className={styles.eventPart} key={part.id}><span>{part.text}</span></div>)}
-    {text && <AgentRichText content={text}/>}
+    {text && <AgentRichText className={styles.messageDocument} content={text}/>}
   </div>;
 }
 
