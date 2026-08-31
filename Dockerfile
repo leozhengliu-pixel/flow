@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM --platform=$BUILDPLATFORM node:24-alpine AS web-build
+FROM --platform=$BUILDPLATFORM node:26-alpine AS web-build
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
@@ -9,7 +9,7 @@ RUN --mount=type=cache,target=/root/.npm \
 COPY web/ ./
 RUN npm run build
 
-FROM --platform=$BUILDPLATFORM golang:1.26.6-alpine AS api-build
+FROM --platform=$BUILDPLATFORM golang:1.27.0-alpine AS api-build
 ARG TARGETOS
 ARG TARGETARCH
 ARG TARGETVARIANT
@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
       CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${VCS_REF}" -o /out/flow-api ./cmd/server; \
     fi
 
-FROM --platform=$BUILDPLATFORM alpine:3.22 AS certificates
+FROM --platform=$BUILDPLATFORM alpine:3.24 AS certificates
 RUN apk add --no-cache ca-certificates && \
     mkdir -p /out/data/uploads && \
     chown -R 65532:65532 /out/data
