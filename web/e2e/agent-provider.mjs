@@ -22,9 +22,9 @@ http.createServer(async (request, response) => {
   } else {
     send(response, 'response.reasoning_summary_text.delta', { delta: 'Reviewed workspace context.' })
     await new Promise(resolve => setTimeout(resolve, 30))
-    send(response, 'response.output_text.delta', { delta: 'Streaming ' })
+    send(response, 'response.output_text.delta', { delta: '## Result\n\n1. **Streaming** ' })
     await new Promise(resolve => setTimeout(resolve, 30))
-    send(response, 'response.output_text.delta', { delta: 'response' })
+    send(response, 'response.output_text.delta', { delta: 'response\n2. `Verified`' })
   }
   send(response, 'response.completed', { response: { status: 'completed' } })
   response.end()

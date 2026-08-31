@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Play, Plus, RefreshCw, Trash2, Workflow } from "lucide-react";
 import { toast } from "sonner";
+
+import { useI18n } from "@/i18n/i18n";
 
 import {
   createWorkflowDefinition,
@@ -25,6 +27,7 @@ import {
 } from "./settings-primitives";
 
 export function WorkflowAutomationSettings({ data }: { data: BootstrapData }) {
+  const { formatDate, t } = useI18n();
   const [definitions, setDefinitions] = useState<WorkflowDefinition[]>(
     data.workflowDefinitions ?? [],
   );
@@ -37,17 +40,17 @@ export function WorkflowAutomationSettings({ data }: { data: BootstrapData }) {
   const [actionType, setActionType] =
     useState<WorkflowAction["type"]>("notify");
   const [teamId, setTeamId] = useState("");
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     const [nextDefinitions, nextRuns] = await Promise.all([
       listWorkflowDefinitions(),
       listWorkflowRuns(),
     ]);
     setDefinitions(nextDefinitions);
     setRuns(nextRuns);
-  };
-  useEffect(() => {
-    void refresh().catch((error) => toast.error(message(error)));
   }, []);
+  useEffect(() => {
+    void refresh().catch((error) => toast.error(message(error, t)));
+  }, [refresh, t]);
   const create = async () => {
     const config: Record<string, string> = {};
     if (actionType === "createIssue") {
@@ -68,7 +71,7 @@ export function WorkflowAutomationSettings({ data }: { data: BootstrapData }) {
       setName("");
       await refresh();
     } catch (error) {
-      toast.error(message(error));
+      toast.error(message(error, t));
     }
   };
   const run = async (id: string) => {
@@ -76,20 +79,20 @@ export function WorkflowAutomationSettings({ data }: { data: BootstrapData }) {
       await runWorkflowDefinition(id);
       await refresh();
     } catch (error) {
-      toast.error(message(error));
+      toast.error(message(error, t));
     }
   };
   return (
     <>
-      <SettingsPageTitle description="Run durable automations on a schedule or when issues are created.">
-        Workflows
+      <SettingsPageTitle description={t("Run durable automations on a schedule or when issues are created.")}>
+        {t("Workflows")}
       </SettingsPageTitle>
       <SettingsSection
-        title="Definitions"
+        title={t("Definitions")}
         action={
           <button className="settings-action" onClick={() => setCreating(true)}>
             <Plus size={13} />
-            New workflow
+            {t("New workflow")}
           </button>
         }
       >
@@ -105,37 +108,38 @@ export function WorkflowAutomationSettings({ data }: { data: BootstrapData }) {
               <input
                 autoFocus
                 className="settings-input"
-                placeholder="Workflow name"
+                aria-label={t("Workflow name")}
+                placeholder={t("Workflow name")}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
               />
               <SettingsSelect
-                label="Trigger"
+                label={t("Trigger")}
                 value={trigger}
                 onChange={(value) =>
                   setTrigger(value as WorkflowDefinition["trigger"])
                 }
                 options={[
-                  { value: "manual", label: "Manual" },
-                  { value: "schedule", label: "Schedule" },
-                  { value: "issueCreated", label: "Issue created" },
+                  { value: "manual", label: t("Manual") },
+                  { value: "schedule", label: t("Schedule") },
+                  { value: "issueCreated", label: t("Issue created") },
                 ]}
               />
               {trigger === "schedule" && (
                 <input
                   className="settings-input"
-                  aria-label="Cron schedule"
+                  aria-label={t("Cron schedule")}
                   value={schedule}
                   onChange={(event) => setSchedule(event.target.value)}
                   placeholder="0 9 * * *"
                 />
               )}
               <SettingsSelect
-                label="Team"
+                label={t("Team")}
                 value={teamId}
                 onChange={setTeamId}
                 options={[
-                  { value: "", label: "Workspace" },
+                  { value: "", label: t("Workspace") },
                   ...data.teams.map((team) => ({
                     value: team.id,
                     label: team.name,
@@ -144,14 +148,14 @@ export function WorkflowAutomationSettings({ data }: { data: BootstrapData }) {
                 ]}
               />
               <SettingsSelect
-                label="Action"
+                label={t("Action")}
                 value={actionType}
                 onChange={(value) =>
                   setActionType(value as WorkflowAction["type"])
                 }
                 options={[
-                  { value: "notify", label: "Notify creator" },
-                  { value: "createIssue", label: "Create issue" },
+                  { value: "notify", label: t("Notify creator") },
+                  { value: "createIssue", label: t("Create issue") },
                 ]}
               />
               <footer>
@@ -160,13 +164,13 @@ export function WorkflowAutomationSettings({ data }: { data: BootstrapData }) {
                   className="settings-action"
                   onClick={() => setCreating(false)}
                 >
-                  Cancel
+                  {t("Cancel")}
                 </button>
                 <button
                   className="settings-action primary"
                   disabled={!name.trim()}
                 >
-                  Create
+                  {t("Create")}
                 </button>
               </footer>
             </form>
@@ -175,18 +179,18 @@ export function WorkflowAutomationSettings({ data }: { data: BootstrapData }) {
             <div className="automation-rule-row" key={item.id}>
               <Workflow size={17} />
               <span>
-                <strong>{item.name}</strong>
+                <strong data-i18n-ignore>{item.name}</strong>
                 <small>
-                  {item.trigger}
+                  {t(workflowTriggerLabel(item.trigger))}
                   {item.schedule ? ` · ${item.schedule}` : ""}
                   {item.nextRunAt
-                    ? ` · Next ${new Date(item.nextRunAt).toLocaleString()}`
+                    ? ` · ${t("Next")} ${formatDate(item.nextRunAt, { dateStyle: "medium", timeStyle: "short" })}`
                     : ""}
-                  {item.lastRunStatus ? ` · ${item.lastRunStatus}` : ""}
+                  {item.lastRunStatus ? ` · ${t(workflowRunStatusLabel(item.lastRunStatus))}` : ""}
                 </small>
               </span>
               <SettingsToggle
-                label={`${item.name} enabled`}
+                label={t("Workflow enabled")}
                 checked={item.enabled}
                 onChange={(enabled) =>
                   void updateWorkflowDefinition(item.id, {
@@ -201,23 +205,23 @@ export function WorkflowAutomationSettings({ data }: { data: BootstrapData }) {
                     maxAttempts: item.maxAttempts,
                   })
                     .then(refresh)
-                    .catch((error) => toast.error(message(error)))
+                    .catch((error) => toast.error(message(error, t)))
                 }
               />
               <button
                 className="settings-icon-action"
-                aria-label={`Run ${item.name}`}
+                aria-label={`${t("Run workflow")}: ${item.name}`}
                 onClick={() => void run(item.id)}
               >
                 <Play size={14} />
               </button>
               <button
                 className="settings-icon-action danger"
-                aria-label={`Delete ${item.name}`}
+                aria-label={`${t("Delete workflow")}: ${item.name}`}
                 onClick={() =>
                   void deleteWorkflowDefinition(item.id)
                     .then(refresh)
-                    .catch((error) => toast.error(message(error)))
+                    .catch((error) => toast.error(message(error, t)))
                 }
               >
                 <Trash2 size={14} />
@@ -227,24 +231,24 @@ export function WorkflowAutomationSettings({ data }: { data: BootstrapData }) {
           {!definitions.length && !creating && (
             <div className="settings-empty compact">
               <Workflow size={24} />
-              <h3>No workflows</h3>
-              <p>Create a manual, scheduled, or issue-triggered workflow.</p>
+              <h3>{t("No workflows")}</h3>
+              <p>{t("Create a manual, scheduled, or issue-triggered workflow.")}</p>
             </div>
           )}
         </div>
       </SettingsSection>
-      <SettingsSection title="Run history">
+      <SettingsSection title={t("Run history")}>
         <div className="team-setting-list">
           {runs.slice(0, 50).map((run) => (
             <div className="automation-rule-row" key={run.id}>
               <span>
                 <strong>
                   {definitions.find((item) => item.id === run.workflowId)
-                    ?.name ?? "Deleted workflow"}
+                    ?.name ?? t("Deleted workflow")}
                 </strong>
                 <small>
-                  {run.status} · Attempt {run.attempt} ·{" "}
-                  {new Date(run.startedAt).toLocaleString()}
+                  {t(workflowRunStatusLabel(run.status))} · {t("Attempt")} {run.attempt} ·{" "}
+                  {formatDate(run.startedAt, { dateStyle: "medium", timeStyle: "short" })}
                   {run.error ? ` · ${run.error}` : ""}
                 </small>
               </span>
@@ -254,18 +258,18 @@ export function WorkflowAutomationSettings({ data }: { data: BootstrapData }) {
                   onClick={() =>
                     void retryWorkflowRun(run.id)
                       .then(refresh)
-                      .catch((error) => toast.error(message(error)))
+                      .catch((error) => toast.error(message(error, t)))
                   }
                 >
                   <RefreshCw size={13} />
-                  Retry
+                  {t("Retry")}
                 </button>
               )}
             </div>
           ))}
           {!runs.length && (
             <div className="settings-empty compact">
-              <p>No workflow runs yet.</p>
+              <p>{t("No workflow runs yet.")}</p>
             </div>
           )}
         </div>
@@ -273,6 +277,20 @@ export function WorkflowAutomationSettings({ data }: { data: BootstrapData }) {
     </>
   );
 }
-function message(error: unknown) {
-  return error instanceof Error ? error.message : "Workflow request failed";
+function workflowTriggerLabel(trigger: WorkflowDefinition["trigger"]) {
+  if (trigger === "schedule") return "Schedule";
+  if (trigger === "issueCreated") return "Issue created";
+  return "Manual";
+}
+
+function workflowRunStatusLabel(status: string) {
+  if (status === "queued") return "Queued";
+  if (status === "running") return "Running";
+  if (status === "completed") return "Completed";
+  if (status === "failed") return "Failed";
+  return status;
+}
+
+function message(error: unknown, t: (value: string) => string) {
+  return error instanceof Error ? error.message : t("Workflow request failed");
 }

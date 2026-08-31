@@ -543,6 +543,7 @@ function MigrationAssistant({
                 <label>
                   Linear team ID
                   <input
+                    data-i18n-ignore
                     value={targetTeamId}
                     onChange={(event) => setTargetTeamId(event.target.value)}
                     placeholder="Linear team UUID or key"
@@ -553,6 +554,7 @@ function MigrationAssistant({
                 <label>
                   Temporary Linear API key
                   <input
+                    data-i18n-ignore
                     type="password"
                     autoComplete="off"
                     value={apiToken}

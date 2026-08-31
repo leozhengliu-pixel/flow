@@ -115,6 +115,7 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 	payload := map[string]any{
 		"model": s.agent.Model, "instructions": instructions, "input": input, "stream": true,
 		"max_output_tokens": s.agent.MaxOutputTokens, "store": false,
+		"reasoning": map[string]any{"summary": "auto"},
 	}
 	if len(tools) > 0 {
 		payload["tools"] = mapTools(tools, func(tool agentProviderTool, parameters any) any {
@@ -127,7 +128,8 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 	}
 	defer response.Body.Close()
 	if !isEventStream(response) {
-		return decodeOpenAIResponse(response)
+		turn, decodeErr := decodeOpenAIResponse(response)
+		return turn, emitDecodedAgentTurn(turn, decodeErr, emit)
 	}
 	turn := agentProviderTurn{}
 	calls := map[string]*domain.AgentToolCall{}
@@ -221,7 +223,8 @@ func (s *server) requestChatCompletions(ctx context.Context, messages []agentPro
 	}
 	defer response.Body.Close()
 	if !isEventStream(response) {
-		return decodeChatResponse(response)
+		turn, decodeErr := decodeChatResponse(response)
+		return turn, emitDecodedAgentTurn(turn, decodeErr, emit)
 	}
 	turn := agentProviderTurn{}
 	calls := map[int]*domain.AgentToolCall{}
@@ -311,7 +314,8 @@ func (s *server) requestAnthropicMessages(ctx context.Context, messages []agentP
 	}
 	defer response.Body.Close()
 	if !isEventStream(response) {
-		return decodeAnthropicResponse(response)
+		turn, decodeErr := decodeAnthropicResponse(response)
+		return turn, emitDecodedAgentTurn(turn, decodeErr, emit)
 	}
 	turn := agentProviderTurn{}
 	calls := map[int]*domain.AgentToolCall{}
@@ -493,6 +497,29 @@ func anthropicMessages(messages []agentProviderMessage) (string, []any) {
 	return system, result
 }
 
+func emitDecodedAgentTurn(turn agentProviderTurn, decodeErr error, emit func(agentProviderEvent) error) error {
+	if decodeErr != nil {
+		return decodeErr
+	}
+	if turn.Reasoning != "" {
+		if err := emit(agentProviderEvent{Type: "reasoning.delta", Delta: turn.Reasoning}); err != nil {
+			return err
+		}
+	}
+	if turn.Text != "" {
+		if err := emit(agentProviderEvent{Type: "text.delta", Delta: turn.Text}); err != nil {
+			return err
+		}
+	}
+	for index := range turn.ToolCalls {
+		call := turn.ToolCalls[index]
+		if err := emit(agentProviderEvent{Type: "tool.started", ToolCall: &call}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func mapTools(tools []agentProviderTool, mapper func(agentProviderTool, any) any) []any {
 	result := make([]any, 0, len(tools))
 	for _, tool := range tools {
@@ -550,6 +577,7 @@ func decodeOpenAIResponse(response *http.Response) (agentProviderTurn, error) {
 			Name      string                        `json:"name"`
 			Arguments string                        `json:"arguments"`
 			Content   []struct{ Type, Text string } `json:"content"`
+			Summary   []struct{ Type, Text string } `json:"summary"`
 		} `json:"output"`
 	}
 	if err := json.NewDecoder(io.LimitReader(response.Body, 4<<20)).Decode(&decoded); err != nil {
@@ -557,6 +585,11 @@ func decodeOpenAIResponse(response *http.Response) (agentProviderTurn, error) {
 	}
 	turn := agentProviderTurn{ResponseID: decoded.ID, Text: decoded.OutputText, StopReason: "completed"}
 	for _, item := range decoded.Output {
+		for _, summary := range item.Summary {
+			if summary.Type == "summary_text" {
+				turn.Reasoning += summary.Text
+			}
+		}
 		if item.Type == "function_call" {
 			turn.ToolCalls = append(turn.ToolCalls, domain.AgentToolCall{ID: firstNonEmpty(item.CallID, item.ID), Name: item.Name, Arguments: json.RawMessage(item.Arguments), Status: "running"})
 		}
