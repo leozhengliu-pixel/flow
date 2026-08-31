@@ -80,9 +80,41 @@ describe('agent page composer', () => {
       ] }], createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:00Z',
     }
     render(<I18nProvider><AgentPage chatSlug="parts" data={makeBootstrap({ agentSessions: [session], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+    await userEvent.click(screen.getByText('Work completed'))
     expect(screen.getByText('Looked at issues')).toBeVisible()
     expect(screen.getByText('Reasoning')).toBeVisible()
     expect(screen.getByText('Finished')).toBeVisible()
     expect(screen.getByRole('alert')).toHaveTextContent('Partial warning')
+  })
+
+  it('keeps the conversation visible while editing a user message', async () => {
+    const session: AgentSession = {
+      id: 'session-edit', slugId: 'edit', userId: 'user-1', title: 'Edit chat', favorite: false, location: 'page', issueIds: [], skillIds: [],
+      messages: [
+        { id: 'user', role: 'user', content: 'Original question', createdAt: '2026-08-31T00:00:00Z' },
+        { id: 'assistant', role: 'assistant', content: 'Original answer', createdAt: '2026-08-31T00:00:01Z' },
+      ], createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:01Z',
+    }
+    const user = userEvent.setup()
+    render(<I18nProvider><AgentPage chatSlug="edit" data={makeBootstrap({ agentSessions: [session], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Edit message' }))
+    expect(screen.getByText('Original answer')).toBeVisible()
+    expect(screen.getByRole('textbox', { name: 'Send a message to Flow AI' })).toHaveTextContent('Original question')
+    expect(screen.getByText('Editing message')).toBeVisible()
+  })
+
+  it('groups chat history and supports keyboard navigation to a new chat', async () => {
+    const session: AgentSession = {
+      id: 'session-history', slugId: 'history', userId: 'user-1', title: 'Workspace review', favorite: false, location: 'page', issueIds: [], skillIds: [], messages: [],
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    }
+    const navigate = vi.fn()
+    const user = userEvent.setup()
+    render(<I18nProvider><AgentPage chatSlug="history" data={makeBootstrap({ agentSessions: [session], agentSkills: [] })} onNavigate={navigate} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Switch agent chat' }))
+    expect(screen.getByRole('group', { name: 'Today' })).toBeVisible()
+    await user.hover(screen.getByRole('option', { name: 'New chat' }))
+    await user.keyboard('{Enter}')
+    expect(navigate).toHaveBeenCalledWith('/workspace/agent')
   })
 })

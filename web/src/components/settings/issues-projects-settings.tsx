@@ -1,354 +1,4426 @@
-import * as Dialog from '@radix-ui/react-dialog'
-import * as Dropdown from '@radix-ui/react-dropdown-menu'
-import * as Popover from '@radix-ui/react-popover'
-import { AlignLeft, CalendarDays, Check, ChevronDown, ChevronRight, Circle, Clipboard, Copy, ExternalLink, FileText, Heading, LayoutTemplate, ListChecks, MessageSquare, MoreHorizontal, Pencil, Plus, Tag, TextCursorInput, Trash2, Upload, UsersRound, X } from 'lucide-react'
-import { useMemo, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type ReactNode, type RefObject, type SetStateAction } from 'react'
-import { toast } from 'sonner'
+import * as Dialog from "@radix-ui/react-dialog";
+import * as Dropdown from "@radix-ui/react-dropdown-menu";
+import * as Popover from "@radix-ui/react-popover";
+import {
+  AlignLeft,
+  CalendarDays,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Circle,
+  Clipboard,
+  Copy,
+  ExternalLink,
+  FileText,
+  Heading,
+  LayoutTemplate,
+  ListChecks,
+  MessageSquare,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Tag,
+  TextCursorInput,
+  Trash2,
+  Upload,
+  UsersRound,
+  X,
+} from "lucide-react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type Dispatch,
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+  type SetStateAction,
+} from "react";
+import { toast } from "sonner";
 
 import {
-  connectIntegration, createIssueTemplate, createProjectStatus, createProjectTemplate, createSLARule,
-  createWorkspaceIssueTemplate, deleteIssueTemplate, deleteProjectStatus, deleteProjectTemplate, deleteSLARule,
-  deleteWorkspaceIssueTemplate, reorderProjectStatuses, updateIssueTemplate, updateProjectStatus, updateProjectTemplate,
-  updateProjectUpdateSettings, updateSLASettings, updateSLARule, updateWorkspaceIssueTemplate,
-} from '@/lib/api'
-import { labelsForResource, toggleGroupedLabelIds } from '@/lib/labels'
-import { useI18n } from '@/i18n/i18n'
-import { Avatar } from '@/components/issue/issue-row'
-import { LabelIcon, MembersIcon, NoAssigneeIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, TeamIcon } from '@/components/issue/issue-icons'
-import { PropertyMenu, type PropertyOption } from '@/components/property/property-menu'
-import { ViewGlyph, ViewIconPicker } from '@/components/views/view-icon-picker'
-import { normalizeProjectIcon } from '@/components/views/project-icon'
-import type { BootstrapData, IssueTemplate, ProjectStatus, ProjectTemplate, TemplateFormField, TemplateFormFieldType, TemplateMilestone, TemplateSubIssue } from '@/types/flow'
+  connectIntegration,
+  createIssueTemplate,
+  createProjectStatus,
+  createProjectTemplate,
+  createSLARule,
+  createWorkspaceIssueTemplate,
+  deleteIssueTemplate,
+  deleteProjectStatus,
+  deleteProjectTemplate,
+  deleteSLARule,
+  deleteWorkspaceIssueTemplate,
+  reorderProjectStatuses,
+  updateIssueTemplate,
+  updateProjectStatus,
+  updateProjectTemplate,
+  updateProjectUpdateSettings,
+  updateSLASettings,
+  updateSLARule,
+  updateWorkspaceIssueTemplate,
+} from "@/lib/api";
+import { labelsForResource, toggleGroupedLabelIds } from "@/lib/labels";
+import { useI18n } from "@/i18n/i18n";
+import { Avatar } from "@/components/issue/issue-row";
+import {
+  LabelIcon,
+  MembersIcon,
+  NoAssigneeIcon,
+  PriorityIcon,
+  ProjectIcon,
+  ProjectStatusIcon,
+  TeamIcon,
+} from "@/components/issue/issue-icons";
+import {
+  PropertyMenu,
+  type PropertyOption,
+} from "@/components/property/property-menu";
+import { ViewGlyph, ViewIconPicker } from "@/components/views/view-icon-picker";
+import { normalizeProjectIcon } from "@/components/views/project-icon";
+import type {
+  BootstrapData,
+  IssueTemplate,
+  ProjectStatus,
+  ProjectTemplate,
+  TemplateFormField,
+  TemplateFormFieldType,
+  TemplateMilestone,
+  TemplateSubIssue,
+} from "@/types/flow";
 
-import './issues-projects-settings.css'
-import './issue-template-settings.css'
-import './project-template-settings.css'
-import { SettingsToggle } from './settings-primitives'
+import "./issues-projects-settings.css";
+import "./issue-template-settings.css";
+import "./project-template-settings.css";
+import { SettingsSelect, SettingsToggle } from "./settings-primitives";
 
-type TemplateKind = 'issue' | 'project'
-type TemplateValue = IssueTemplate | ProjectTemplate
-type StatusType = 'backlog' | 'planned' | 'started' | 'completed' | 'canceled'
+type TemplateKind = "issue" | "project";
+type TemplateValue = IssueTemplate | ProjectTemplate;
+type StatusType = "backlog" | "planned" | "started" | "completed" | "canceled";
 
 const STATUS_SECTIONS: Array<{ type: StatusType; label: string }> = [
-  { type: 'backlog', label: 'Backlog' }, { type: 'planned', label: 'Planned' }, { type: 'started', label: 'In Progress' },
-  { type: 'completed', label: 'Completed' }, { type: 'canceled', label: 'Canceled' },
-]
+  { type: "backlog", label: "Backlog" },
+  { type: "planned", label: "Planned" },
+  { type: "started", label: "In Progress" },
+  { type: "completed", label: "Completed" },
+  { type: "canceled", label: "Canceled" },
+];
 
-type TemplateSettingsProps={data:BootstrapData;mode?:'new'|'new-form'|'edit';templateId?:string;onNavigateList:()=>void;onReload:()=>Promise<void>}&(
-  {type:'issue';onCreateIssue:(form:boolean)=>void;onOpenIssue:(template:IssueTemplate)=>void;onDuplicateIssue:(template:IssueTemplate)=>void}|
-  {type:'project';onCreateProject:()=>void;onOpenProject:(template:ProjectTemplate)=>void;onDuplicateProject:(template:ProjectTemplate)=>void}
-)
-export function TemplateSettings(props:TemplateSettingsProps) {
-  if(props.type==='issue')return <IssueTemplateSettings data={props.data} mode={props.mode} templateId={props.templateId} onCreate={props.onCreateIssue} onOpen={props.onOpenIssue} onDuplicate={props.onDuplicateIssue} onNavigateList={props.onNavigateList} onReload={props.onReload}/>
-  return <ProjectTemplateSettings data={props.data} mode={props.mode==='new-form'?'new':props.mode} templateId={props.templateId} onCreate={props.onCreateProject} onOpen={props.onOpenProject} onDuplicate={props.onDuplicateProject} onNavigateList={props.onNavigateList} onReload={props.onReload}/>
+type TemplateSettingsProps = {
+  data: BootstrapData;
+  mode?: "new" | "new-form" | "edit";
+  templateId?: string;
+  onNavigateList: () => void;
+  onReload: () => Promise<void>;
+} & (
+  | {
+      type: "issue";
+      onCreateIssue: (form: boolean) => void;
+      onOpenIssue: (template: IssueTemplate) => void;
+      onDuplicateIssue: (template: IssueTemplate) => void;
+    }
+  | {
+      type: "project";
+      onCreateProject: () => void;
+      onOpenProject: (template: ProjectTemplate) => void;
+      onDuplicateProject: (template: ProjectTemplate) => void;
+    }
+);
+export function TemplateSettings(props: TemplateSettingsProps) {
+  if (props.type === "issue")
+    return (
+      <IssueTemplateSettings
+        data={props.data}
+        mode={props.mode}
+        templateId={props.templateId}
+        onCreate={props.onCreateIssue}
+        onOpen={props.onOpenIssue}
+        onDuplicate={props.onDuplicateIssue}
+        onNavigateList={props.onNavigateList}
+        onReload={props.onReload}
+      />
+    );
+  return (
+    <ProjectTemplateSettings
+      data={props.data}
+      mode={props.mode === "new-form" ? "new" : props.mode}
+      templateId={props.templateId}
+      onCreate={props.onCreateProject}
+      onOpen={props.onOpenProject}
+      onDuplicate={props.onDuplicateProject}
+      onNavigateList={props.onNavigateList}
+      onReload={props.onReload}
+    />
+  );
 }
 
-function ProjectTemplateSettings({data,mode,templateId,onCreate,onOpen,onDuplicate,onNavigateList,onReload}:{data:BootstrapData;mode?:'new'|'edit';templateId?:string;onCreate:()=>void;onOpen:(template:ProjectTemplate)=>void;onDuplicate:(template:ProjectTemplate)=>void;onNavigateList:()=>void;onReload:()=>Promise<void>}){
-  const template=mode==='edit'?data.projectTemplates.find(item=>item.id===templateId):undefined,source=mode==='new'?duplicateProjectTemplate(data):undefined
-  if(mode==='new')return <ProjectTemplateEditor data={data} source={source} onClose={onNavigateList} onReload={onReload}/>
-  if(mode==='edit')return template?<ProjectTemplateEditor data={data} template={template} onClose={onNavigateList} onDuplicate={()=>onDuplicate(template)} onReload={onReload}/>:<div className="it-not-found">Project template not found</div>
-  return <ProjectTemplateList data={data} items={data.projectTemplates.filter(item=>(item.visibility??'workspace')==='workspace'||!item.visibilityTeamId)} onCreate={onCreate} onOpen={onOpen} onDuplicate={onDuplicate} onReload={onReload}/>
+function ProjectTemplateSettings({
+  data,
+  mode,
+  templateId,
+  onCreate,
+  onOpen,
+  onDuplicate,
+  onNavigateList,
+  onReload,
+}: {
+  data: BootstrapData;
+  mode?: "new" | "edit";
+  templateId?: string;
+  onCreate: () => void;
+  onOpen: (template: ProjectTemplate) => void;
+  onDuplicate: (template: ProjectTemplate) => void;
+  onNavigateList: () => void;
+  onReload: () => Promise<void>;
+}) {
+  const template =
+      mode === "edit"
+        ? data.projectTemplates.find((item) => item.id === templateId)
+        : undefined,
+    source = mode === "new" ? duplicateProjectTemplate(data) : undefined;
+  if (mode === "new")
+    return (
+      <ProjectTemplateEditor
+        data={data}
+        source={source}
+        onClose={onNavigateList}
+        onReload={onReload}
+      />
+    );
+  if (mode === "edit")
+    return template ? (
+      <ProjectTemplateEditor
+        data={data}
+        template={template}
+        onClose={onNavigateList}
+        onDuplicate={() => onDuplicate(template)}
+        onReload={onReload}
+      />
+    ) : (
+      <div className="it-not-found">Project template not found</div>
+    );
+  return (
+    <ProjectTemplateList
+      data={data}
+      items={data.projectTemplates.filter(
+        (item) =>
+          (item.visibility ?? "workspace") === "workspace" ||
+          !item.visibilityTeamId,
+      )}
+      onCreate={onCreate}
+      onOpen={onOpen}
+      onDuplicate={onDuplicate}
+      onReload={onReload}
+    />
+  );
 }
-function duplicateProjectTemplate(data:BootstrapData){const id=new URLSearchParams(location.search).get('duplicate');return id?data.projectTemplates.find(item=>item.id===id):undefined}
-
-function ProjectTemplateList({data,items,onCreate,onOpen,onDuplicate,onReload}:{data:BootstrapData;items:ProjectTemplate[];onCreate:()=>void;onOpen:(template:ProjectTemplate)=>void;onDuplicate:(template:ProjectTemplate)=>void;onReload:()=>Promise<void>}){
-  const{t}=useI18n(),[menuId,setMenuId]=useState<string>(),[deleteTarget,setDeleteTarget]=useState<ProjectTemplate>()
-  const copy=async(item:ProjectTemplate)=>{await navigator.clipboard.writeText(`${location.origin}/${encodeURIComponent(data.workspace.urlKey)}/projects/all?create=1&template=${encodeURIComponent(item.id)}`);toast.success(t('Link copied'))}
-  const remove=async()=>{if(!deleteTarget)return;await deleteProjectTemplate(deleteTarget.id);setDeleteTarget(undefined);await onReload()}
-  return <div className="it-list-page pt-list-page" data-i18n-ignore><header className="it-list-header"><h1>{t('Project templates')}</h1><p>{t('These templates are available when creating projects for any team in the workspace. To create templates that only apply to specific teams, add them as team templates.')} <a href="https://flow.app/docs/project-templates" target="_blank" rel="noreferrer">{t('Docs')}<ExternalLink/></a></p></header><section className="it-list-card"><header><span>{items.length?t(items.length===1?'1 project template':'project template count').replace('{count}',String(items.length)):t('No project templates')}</span><button aria-label={t('Create new project template')} onClick={onCreate}><Plus/>{t('New template')}</button></header>{items.map(item=><div className="it-list-row" key={item.id}><button aria-label={item.name} className="it-row-link" onClick={()=>onOpen(item)}/><span className="it-row-icon"><ViewGlyph color={item.color||'#bec2c8'} icon={normalizeProjectIcon(item.icon)}/></span><span><strong data-i18n-ignore>{item.name}</strong><small>{t('Created on')} {relativeTemplateTime(item.createdAt)}</small></span><Popover.Root open={menuId===item.id} onOpenChange={open=>setMenuId(open?item.id:undefined)}><Popover.Trigger asChild><button aria-label={t('Open menu')} className="it-row-menu-trigger"><MoreHorizontal/></button></Popover.Trigger><Popover.Portal><Popover.Content align="end" className="it-menu pt-list-menu" sideOffset={4} data-i18n-ignore><button role="option" onClick={()=>onOpen(item)}><IssueTemplateMenuIcon name="edit"/>{t('Edit')}</button><button role="option" onClick={()=>onDuplicate(item)}><IssueTemplateMenuIcon name="duplicate"/>{t('Duplicate…')}</button><button role="option" onClick={()=>void copy(item)}><IssueTemplateMenuIcon name="clipboard"/>{t('Copy URL to create project from template')}</button><button role="option" onClick={()=>setDeleteTarget(item)}><IssueTemplateMenuIcon name="delete"/>{t('Delete')}</button></Popover.Content></Popover.Portal></Popover.Root></div>)}</section><ConfirmProjectTemplateDelete template={deleteTarget} onClose={()=>setDeleteTarget(undefined)} onDelete={remove}/></div>
-}
-
-function ProjectTemplateEditor({data,template,source,onClose,onDuplicate,onReload}:{data:BootstrapData;template?:ProjectTemplate;source?:ProjectTemplate;onClose:()=>void;onDuplicate?:()=>void;onReload:()=>Promise<void>}){
-  const defaultStatusId=data.projectStatuses.find(item=>item.type==='backlog')?.id??data.projectStatuses[0]?.id??''
-  const{t}=useI18n(),base=template??source,[name,setName]=useState(source?`Copy of ${source.name}`:base?.name??''),[projectName,setProjectName]=useState(base?.projectName??''),[summary,setSummary]=useState(base?.summary??''),[description,setDescription]=useState(base?.description??''),[icon,setIcon]=useState(normalizeProjectIcon(base?.icon)),[color,setColor]=useState(base?.color??'#bec2c8'),[statusId,setStatusId]=useState(base?.statusId??defaultStatusId),[priority,setPriority]=useState(base?.priority??0),[leadId,setLeadId]=useState(base?.leadId??''),[memberIds,setMemberIds]=useState(base?.memberIds??[]),[teamIds,setTeamIds]=useState(base?.teamIds??[]),[initiativeIds,setInitiativeIds]=useState(base?.initiativeIds??[]),[labelIds,setLabelIds]=useState(base?.labelIds??[]),[dependencyIds,setDependencyIds]=useState(base?.dependencyIds??[]),[issueIds,setIssueIds]=useState(base?.issueIds??[]),[milestones,setMilestones]=useState(base?.milestones??[]),[visibilityTeamId,setVisibilityTeamId]=useState(base?.visibilityTeamId??''),[milestoneOpen,setMilestoneOpen]=useState(false),[actionsOpen,setActionsOpen]=useState(false),[discardOpen,setDiscardOpen]=useState(false),[deleteOpen,setDeleteOpen]=useState(false),[saving,setSaving]=useState(false)
-  const current={name,projectName,summary,description,icon,color,statusId,priority,leadId,memberIds,teamIds,initiativeIds,labelIds,dependencyIds,issueIds,milestones,visibilityTeamId},initial={name:base?.name??'',projectName:base?.projectName??'',summary:base?.summary??'',description:base?.description??'',icon:normalizeProjectIcon(base?.icon),color:base?.color??'#bec2c8',statusId:base?.statusId??defaultStatusId,priority:base?.priority??0,leadId:base?.leadId??'',memberIds:base?.memberIds??[],teamIds:base?.teamIds??[],initiativeIds:base?.initiativeIds??[],labelIds:base?.labelIds??[],dependencyIds:base?.dependencyIds??[],issueIds:base?.issueIds??[],milestones:base?.milestones??[],visibilityTeamId:base?.visibilityTeamId??''},dirty=JSON.stringify(current)!==JSON.stringify(initial)
-  const close=()=>dirty?setDiscardOpen(true):onClose()
-  const save=async()=>{if(!name.trim())return;setSaving(true);try{const input={...current,name:name.trim(),visibility:visibilityTeamId?'teams' as const:'workspace' as const};if(template)await updateProjectTemplate(template.id,input);else await createProjectTemplate(input);await onReload();onClose()}catch(error){toast.error(errorMessage(error))}finally{setSaving(false)}}
-  const remove=async()=>{if(!template)return;await deleteProjectTemplate(template.id);await onReload();onClose()}
-  const copy=async()=>{if(!template)return;await navigator.clipboard.writeText(`${location.origin}/${encodeURIComponent(data.workspace.urlKey)}/projects/all?create=1&template=${encodeURIComponent(template.id)}`);toast.success(t('Link copied'))}
-  return <div className="pt-editor" data-i18n-ignore><a className="it-editor-back" onClick={close}><ChevronRight/>{t('Project templates')}</a><div className="pt-editor-inner"><header className="pt-title"><h1>{t(template?'Edit project template':'New project template')}</h1>{template&&<Popover.Root open={actionsOpen} onOpenChange={setActionsOpen}><Popover.Trigger asChild><button aria-label={t('Open menu')}><MoreHorizontal/></button></Popover.Trigger><Popover.Portal><Popover.Content align="end" className="it-menu pt-editor-menu" sideOffset={4}><button role="option" onClick={onDuplicate}><IssueTemplateMenuIcon name="duplicate"/>{t('Duplicate…')}</button><button role="option" onClick={()=>void copy()}><IssueTemplateMenuIcon name="clipboard"/>{t('Copy URL to create project from template')}</button><button role="option" onClick={()=>setDeleteOpen(true)}><IssueTemplateMenuIcon name="delete"/>{t('Delete')}</button></Popover.Content></Popover.Portal></Popover.Root>}</header><label className="pt-template-name"><span>{t('Name')}</span><input autoFocus placeholder={t('Add a descriptive name…')} value={name} onChange={e=>setName(e.target.value)}/></label><section className="pt-project-card"><div className="pt-project-heading"><ViewIconPicker color={color} icon={icon} onChange={visual=>{setIcon(visual.icon);setColor(visual.color)}} triggerClassName="it-icon-trigger"/><input aria-label={t('Project name')} placeholder={t('Project name')} value={projectName} onChange={e=>setProjectName(e.target.value)}/><input aria-label={t('Project summary')} placeholder={t('Add a short summary…')} value={summary} onChange={e=>setSummary(e.target.value)}/></div><div className="pt-properties"><ProjectTemplatePropertyMenus data={data} statusId={statusId} priority={priority} leadId={leadId} memberIds={memberIds} teamIds={teamIds} initiativeIds={initiativeIds} labelIds={labelIds} dependencyIds={dependencyIds} issueIds={issueIds} onStatus={setStatusId} onPriority={setPriority} onLead={setLeadId} onMembers={setMemberIds} onTeams={setTeamIds} onInitiatives={setInitiativeIds} onLabels={setLabelIds} onDependencies={setDependencyIds} onIssues={setIssueIds}/></div><textarea aria-label={t('Project description')} placeholder={t('Write a description, a project brief, or collect ideas…')} value={description} onChange={e=>setDescription(e.target.value)}/><ProjectMilestonesEditor milestones={milestones} open={milestoneOpen} onOpenChange={setMilestoneOpen} onChange={setMilestones}/></section><footer className="pt-footer"><span>{t('Visibility')}</span><TemplateVisibility showSelection teamId={visibilityTeamId} teams={data.teams} onChange={setVisibilityTeamId}/><button onClick={close}>{t('Cancel')}</button><button className="primary" disabled={!name.trim()||saving} onClick={()=>void save()}>{t(template?'Save':'Create')}</button></footer></div><DiscardTemplateDialog open={discardOpen} onClose={()=>setDiscardOpen(false)} onConfirm={onClose}/><ConfirmProjectTemplateDelete template={deleteOpen?template:undefined} onClose={()=>setDeleteOpen(false)} onDelete={remove}/></div>
-}
-
-function ProjectTemplatePropertyMenus({data,statusId,priority,leadId,memberIds,teamIds,initiativeIds,labelIds,dependencyIds,issueIds,onStatus,onPriority,onLead,onMembers,onTeams,onInitiatives,onLabels,onDependencies,onIssues}:{data:BootstrapData;statusId:string;priority:number;leadId:string;memberIds:string[];teamIds:string[];initiativeIds:string[];labelIds:string[];dependencyIds:string[];issueIds:string[];onStatus:(id:string)=>void;onPriority:(value:number)=>void;onLead:(id:string)=>void;onMembers:(ids:string[])=>void;onTeams:(ids:string[])=>void;onInitiatives:(ids:string[])=>void;onLabels:(ids:string[])=>void;onDependencies:(ids:string[])=>void;onIssues:(ids:string[])=>void}){
-  const{t}=useI18n(),status=data.projectStatuses.find(item=>item.id===statusId),lead=data.users.find(item=>item.id===leadId),members=data.users.filter(item=>memberIds.includes(item.id)),selectedTeams=data.teams.filter(item=>teamIds.includes(item.id))
-  return <>
-    <PropertyMenu compact label={t('Status')} ariaLabel={t('Change project status')} searchPlaceholder={t('Change status…')} value={status?.name??t('Status')} valueIsEntityName={Boolean(status)} selectedId={statusId} triggerClassName="it-property" icon={<ProjectStatusIcon color={status?.color} name={status?.name} size={14} type={status?.type}/>} options={data.projectStatuses.map((item,index)=>({id:item.id,label:item.name,icon:<ProjectStatusIcon color={item.color} name={item.name} size={14} type={item.type}/>,shortcut:String(index+1),i18nIgnore:true}))} onChange={onStatus}/>
-    <PropertyMenu compact label={t('Priority')} ariaLabel={t('Change project priority')} searchPlaceholder={t('Change priority…')} value={priorityOptions(t)[priority]?.[1]??t('No priority')} selectedId={String(priority)} triggerClassName="it-property" icon={<PriorityIcon priority={priority} size={14}/>} options={priorityPropertyOptions(t)} onChange={value=>onPriority(Number(value))}/>
-    <PropertyMenu compact label={t('Lead')} ariaLabel={t('Set project lead')} searchPlaceholder={t('Change lead…')} value={lead?.displayName??t('Lead')} valueIsEntityName={Boolean(lead)} selectedId={leadId} triggerClassName="it-property" icon={lead?<Avatar name={lead.displayName}/>:<NoAssigneeIcon size={14}/>} options={userPropertyOptions(data,t('No lead'))} onChange={onLead}/>
-    <PropertyMenu compact multiple label={t('Members')} ariaLabel={t('Change members')} searchPlaceholder={t('Change members…')} value={members.length===1?members[0].displayName:members.length?`${t('Members')} ${members.length}`:t('Members')} valueIsEntityName={members.length===1} selectedIds={memberIds} triggerClassName="it-property" icon={members[0]?<Avatar name={members[0].displayName}/>:<MembersIcon size={14}/>} options={userPropertyOptions(data)} onChange={id=>onMembers(toggleTemplateId(memberIds,id))}/>
-    <PropertyMenu compact multiple label={t('Team')} ariaLabel={t('Change team')} searchPlaceholder={t('Change team…')} value={selectedTeams.length===1?selectedTeams[0].name:selectedTeams.length?`${t('Team')} ${selectedTeams.length}`:t('Team')} valueIsEntityName={selectedTeams.length===1} selectedIds={teamIds} triggerClassName="it-property" icon={<TeamIcon size={14}/>} options={data.teams.map(item=>({id:item.id,label:item.name,icon:<TeamIcon size={14}/>,i18nIgnore:true}))} onChange={id=>onTeams(toggleTemplateId(teamIds,id))}/>
-    <PropertyMenu compact multiple label={t('Initiatives')} ariaLabel={t('Change initiatives')} searchPlaceholder={t('Change initiatives…')} value={initiativeIds.length?`${t('Initiatives')} ${initiativeIds.length}`:t('Initiatives')} selectedIds={initiativeIds} triggerClassName="it-property" icon={<LayoutTemplate size={14}/>} options={data.initiatives.map(item=>({id:item.id,label:item.name,icon:<LayoutTemplate size={14}/>,i18nIgnore:true}))} onChange={id=>onInitiatives(toggleTemplateId(initiativeIds,id))}/>
-    <PropertyMenu compact multiple kind="labels" label={t('Labels')} ariaLabel={t('Change labels')} searchPlaceholder={t('Change labels…')} value={labelIds.length?`${t('Labels')} ${labelIds.length}`:t('Labels')} selectedIds={labelIds} triggerClassName="it-property" icon={<LabelIcon size={14}/>} options={templateLabelOptions(data,'project')} onChange={id=>onLabels(toggleGroupedLabelIds(labelIds,id,templateLabelOptions(data,'project')))}/>
-    <span className="pt-property-break"/>
-    <PropertyMenu compact multiple label={t('Dependencies')} ariaLabel={t('Change dependencies')} searchPlaceholder={t('Change dependencies…')} value={dependencyIds.length?`${t('Dependencies')} ${dependencyIds.length}`:t('Dependencies')} selectedIds={dependencyIds} triggerClassName="it-property" icon={<ListChecks size={14}/>} options={data.projects.map(item=>({id:item.id,label:item.name,icon:<ProjectIcon size={14} style={{color:item.color}}/>,i18nIgnore:true}))} onChange={id=>onDependencies(toggleTemplateId(dependencyIds,id))}/>
-    <PropertyMenu compact multiple label={t('Issues')} ariaLabel={t('Change issues')} searchPlaceholder={t('Change issues…')} value={issueIds.length?`${t('Issues')} ${issueIds.length}`:t('Issues')} selectedIds={issueIds} triggerClassName="it-property" icon={<FileText size={14}/>} options={data.issues.map(item=>({id:item.id,label:`${item.identifier} ${item.title}`,icon:<FileText size={14}/>,i18nIgnore:true}))} onChange={id=>onIssues(toggleTemplateId(issueIds,id))}/>
-  </>
-}
-
-const TEMPLATE_FIELD_TYPES: Array<{type:TemplateFormFieldType;label:string;icon:typeof AlignLeft}> = [
-  {type:'text',label:'Text',icon:TextCursorInput},{type:'longText',label:'Long text',icon:AlignLeft},{type:'dropdown',label:'Dropdown',icon:ChevronDown},
-  {type:'checkboxes',label:'Checkboxes',icon:ListChecks},{type:'date',label:'Date',icon:CalendarDays},{type:'upload',label:'Upload file',icon:Upload},
-  {type:'instructions',label:'Instructions',icon:AlignLeft},{type:'title',label:'Title',icon:Heading},{type:'labelGroup',label:'Label group',icon:Tag},
-  {type:'priority',label:'Priority',icon:LayoutTemplate},{type:'dueDate',label:'Due date',icon:CalendarDays},
-]
-
-function IssueTemplateSettings({data,mode,templateId,onCreate,onOpen,onDuplicate,onNavigateList,onReload}:{data:BootstrapData;mode?:'new'|'new-form'|'edit';templateId?:string;onCreate:(form:boolean)=>void;onOpen:(template:IssueTemplate)=>void;onDuplicate:(template:IssueTemplate)=>void;onNavigateList:()=>void;onReload:()=>Promise<void>}){
-  const items=data.issueTemplates.filter(item=>item.scope==='workspace'||!item.visibilityTeamId)
-  const template=mode==='edit'?data.issueTemplates.find(item=>item.id===templateId):undefined
-  if(mode&&mode!=='edit')return <IssueTemplateEditor data={data} source={duplicateTemplate(data)} templateType={mode==='new-form'?'customForm':'standard'} onClose={onNavigateList} onReload={onReload}/>
-  if(mode==='edit')return template?<IssueTemplateEditor data={data} template={template} templateType={template.templateType??'standard'} onClose={onNavigateList} onDuplicate={()=>onDuplicate(template)} onReload={onReload}/>:<div className="it-not-found">Issue template not found</div>
-  return <IssueTemplateList data={data} items={items} onCreate={onCreate} onOpen={onOpen} onDuplicate={onDuplicate} onReload={onReload}/>
-}
-
-function duplicateTemplate(data:BootstrapData){const id=new URLSearchParams(location.search).get('duplicate');return id?data.issueTemplates.find(item=>item.id===id):undefined}
-
-function IssueTemplateList({data,items,onCreate,onOpen,onDuplicate,onReload}:{data:BootstrapData;items:IssueTemplate[];onCreate:(form:boolean)=>void;onOpen:(template:IssueTemplate)=>void;onDuplicate:(template:IssueTemplate)=>void;onReload:()=>Promise<void>}){
-  const {t}=useI18n(),[chooser,setChooser]=useState(false),[deleteTarget,setDeleteTarget]=useState<IssueTemplate>(),[menuId,setMenuId]=useState<string>()
-  const copyUrl=async(template:IssueTemplate)=>{const url=`${location.origin}/${encodeURIComponent(data.workspace.urlKey)}/issues/all?create=1&template=${encodeURIComponent(template.id)}`;await navigator.clipboard.writeText(url);toast.success(t('Link copied'))}
-  const remove=async()=>{if(!deleteTarget)return;await deleteWorkspaceIssueTemplate(deleteTarget.id);setDeleteTarget(undefined);await onReload()}
-  return <div className="it-list-page" data-i18n-ignore><header className="it-list-header"><h1>{t('Issue templates')}</h1><p>{t('These templates are available when creating issues for any team in the workspace. To create templates that only apply to specific teams, add them as team templates.')} <a href="https://flow.app/docs/issue-templates" target="_blank" rel="noreferrer">{t('Docs')}<ExternalLink/></a></p></header><section className="it-list-card"><header><span>{items.length?t(items.length===1?'1 issue template':'issue template count').replace('{count}',String(items.length)):t('No issue templates')}</span><button aria-label={t('Create new issue template')} onClick={()=>setChooser(true)}><Plus/>{t('New template')}</button></header>{items.map(item=><div className="it-list-row" key={item.id}><button aria-label={item.name} className="it-row-link" onClick={()=>onOpen(item)}/><span className="it-row-icon"><ViewGlyph color={item.color||'#bec2c8'} icon={item.icon||'Page'}/></span><span><strong data-i18n-ignore>{item.name}</strong><small>{t('Created by')} <b data-i18n-ignore>{item.creator.displayName}</b> {relativeTemplateTime(item.createdAt)}</small></span><Popover.Root open={menuId===item.id} onOpenChange={open=>setMenuId(open?item.id:undefined)}><Popover.Trigger asChild><button aria-label={t('Open menu')} className="it-row-menu-trigger"><MoreHorizontal/></button></Popover.Trigger><Popover.Portal><Popover.Content align="end" className="it-menu it-list-menu" sideOffset={4} data-i18n-ignore><button role="option" onClick={()=>{setMenuId(undefined);onOpen(item)}}><IssueTemplateMenuIcon name="edit"/>{t('Edit')}</button><button role="option" onClick={()=>{setMenuId(undefined);onDuplicate(item)}}><IssueTemplateMenuIcon name="duplicate"/>{t('Duplicate…')}</button><button role="option" onClick={()=>{setMenuId(undefined);void copyUrl(item)}}><IssueTemplateMenuIcon name="clipboard"/>{t('Copy URL to create issue from template')}</button><button role="option" onClick={()=>{setMenuId(undefined);setDeleteTarget(item)}}><IssueTemplateMenuIcon name="delete"/>{t('Delete')}</button></Popover.Content></Popover.Portal></Popover.Root></div>)}</section><TemplateTypeDialog onChoose={form=>{setChooser(false);onCreate(form)}} onOpenChange={setChooser} open={chooser}/><ConfirmTemplateDelete template={deleteTarget} onClose={()=>setDeleteTarget(undefined)} onDelete={remove}/></div>
-}
-
-function IssueTemplateMenuIcon({name}:{name:'edit'|'duplicate'|'clipboard'|'delete'}){if(name==='edit'||name==='delete')return <StatusMenuIcon name={name}/>;return <svg aria-hidden="true" viewBox="0 0 16 16">{name==='duplicate'?<path d="M12.2517 1A2.75 2.75 0 0 1 15.0017 3.75v4.5A2.75 2.75 0 0 1 12.2517 11H11.001l.0007 1.25A2.75 2.75 0 0 1 8.25171 15H3.75A2.75 2.75 0 0 1 1 12.25v-4.5A2.75 2.75 0 0 1 3.75 5H5V3.75A2.75 2.75 0 0 1 7.75 1h4.5017ZM5 6.5H3.75c-.69036 0-1.25.55964-1.25 1.25v4.5c0 .6904.55964 1.25 1.25 1.25h4.50171c.69035 0 1.25-.5596 1.25-1.25L9.501 9.5l.00071-1.75c0-.69036-.55965-1.25-1.25-1.25H5Zm7.2517-4H7.75c-.69036 0-1.25.55964-1.25 1.25V5h1.75171a2.75 2.75 0 0 1 2.75 2.75L11.001 9.5h1.2507c.6904 0 1.25-.55964 1.25-1.25v-4.5c0-.69036-.5596-1.25-1.25-1.25Z"/>:<><path fillRule="evenodd" d="M6.08 2.5v1.167h3.834V2.5H6.08Zm-1.5-.083C4.58 1.634 5.216 1 5.998 1h4c.783 0 1.417.634 1.417 1.417V3.75c0 .782-.634 1.417-1.417 1.417h-4A1.417 1.417 0 0 1 4.581 3.75V2.417Z" clipRule="evenodd"/><path fillRule="evenodd" d="M4.087 3.749a.583.583 0 0 0-.583.583l.001 8.583a.583.583 0 0 0 .584.584h7.82a.583.583 0 0 0 .583-.584V4.332a.583.583 0 0 0-.584-.583H11a.75.75 0 0 1 0-1.5h.909a2.083 2.083 0 0 1 2.083 2.083v8.583A2.083 2.083 0 0 1 11.908 15h-7.82a2.083 2.083 0 0 1-2.083-2.084l-.001-8.583A2.084 2.084 0 0 1 4.087 2.25H5a.75.75 0 1 1 0 1.5h-.913Z" clipRule="evenodd"/></>}</svg>}
-
-function TemplateTypeDialog({open,onOpenChange,onChoose}:{open:boolean;onOpenChange:(open:boolean)=>void;onChoose:(form:boolean)=>void}){const{t}=useI18n();return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="it-dialog-overlay"/><Dialog.Content className="it-type-dialog" aria-describedby={undefined} data-i18n-ignore><Dialog.Title>{t('Choose issue template type')}</Dialog.Title><Dialog.Close asChild><button aria-label={t('Close modal dialog')} className="it-dialog-close"><X/></button></Dialog.Close><div className="it-type-options"><button onClick={()=>onChoose(false)}><span><strong>{t('Standard')}</strong><small>{t('Basic template with title, description, and default attributes')}</small></span><i className="it-standard-preview"><b>{t('Issue title')}</b><em>{t('Add description…')}</em><span>◌ {t('Backlog')}　··· {t('Priority')}　···</span></i></button><button onClick={()=>onChoose(true)}><span><strong>{t('Custom Form')}</strong><small>{t('Define structured fields and inputs. Ideal for Asks')}</small></span><i className="it-form-preview"><b>{t('Repro steps')}</b><em>{t('Enter text')}</em><b>{t('Platform')}</b><em>{t('Select an option')}⌄</em></i></button></div></Dialog.Content></Dialog.Portal></Dialog.Root>}
-
-function IssueTemplateEditor({data,template,source,templateType,onClose,onDuplicate,onReload}:{data:BootstrapData;template?:IssueTemplate;source?:IssueTemplate;templateType:'standard'|'customForm';onClose:()=>void;onDuplicate?:()=>void;onReload:()=>Promise<void>}){
-  const{t}=useI18n(),base=template??source,[name,setName]=useState(source?`Copy of ${source.name}`:base?.name??''),[templateDescription,setTemplateDescription]=useState(source?'':base?.description??''),[title,setTitle]=useState(base?.title??''),[body,setBody]=useState(base?.body??''),[icon,setIcon]=useState(base?.icon??'Page'),[color,setColor]=useState(base?.color??'#bec2c8'),[teamId,setTeamId]=useState(base?.teamId??''),[visibilityTeamId,setVisibilityTeamId]=useState(base?.visibilityTeamId??''),[priority,setPriority]=useState(base?.priority??0),[assigneeId,setAssigneeId]=useState(base?.assigneeId??''),[projectId,setProjectId]=useState(base?.projectId??''),[labelIds,setLabelIds]=useState(base?.labelIds??[]),[formFields,setFormFields]=useState(base?.formFields??[]),[subIssues,setSubIssues]=useState(base?.subIssues??[]),[type,setType]=useState<'standard'|'customForm'>(templateType),[saving,setSaving]=useState(false),[discardOpen,setDiscardOpen]=useState(false),[deleteOpen,setDeleteOpen]=useState(false),[actionsOpen,setActionsOpen]=useState(false)
-  const initial=JSON.stringify({name:source?`Copy of ${source.name}`:base?.name??'',templateDescription:source?'':base?.description??'',title:base?.title??'',body:base?.body??'',icon:base?.icon??'Page',color:base?.color??'#bec2c8',teamId:base?.teamId??'',visibilityTeamId:base?.visibilityTeamId??'',priority:base?.priority??0,assigneeId:base?.assigneeId??'',projectId:base?.projectId??'',labelIds:base?.labelIds??[],formFields:base?.formFields??[],subIssues:base?.subIssues??[],type:templateType}),dirty=initial!==JSON.stringify({name,templateDescription,title,body,icon,color,teamId,visibilityTeamId,priority,assigneeId,projectId,labelIds,formFields,subIssues,type})
-  const close=()=>dirty?setDiscardOpen(true):onClose()
-  const save=async()=>{if(!name.trim())return;setSaving(true);try{const input={name:name.trim(),description:templateDescription,title,body,icon,color,teamId:teamId||undefined,visibilityTeamId:visibilityTeamId||undefined,priority,assigneeId:assigneeId||undefined,projectId:projectId||undefined,labelIds,templateType:type,formFields,subIssues};if(template)await updateWorkspaceIssueTemplate(template.id,input);else await createWorkspaceIssueTemplate(input);await onReload();onClose()}catch(error){toast.error(errorMessage(error))}finally{setSaving(false)}}
-  const remove=async()=>{if(!template)return;await deleteWorkspaceIssueTemplate(template.id);await onReload();onClose()}
-  const copyUrl=async()=>{if(!template)return;await navigator.clipboard.writeText(`${location.origin}/${encodeURIComponent(data.workspace.urlKey)}/issues/all?create=1&template=${encodeURIComponent(template.id)}`);toast.success(t('Link copied'))}
-  return <div className="it-editor" data-i18n-ignore><a className="it-editor-back" onClick={close}><ChevronRight/>{t('Issue templates')}</a><div className="it-template-heading"><ViewIconPicker color={color} icon={icon} onChange={visual=>{setIcon(visual.icon);setColor(visual.color)}} triggerClassName="it-icon-trigger"/><input autoFocus aria-label={t('Template name')} placeholder={t('Template name')} value={name} onChange={e=>setName(e.target.value)}/>{template&&<Popover.Root open={actionsOpen} onOpenChange={setActionsOpen}><Popover.Trigger asChild><button aria-label={t('Open menu')} className="it-editor-actions"><MoreHorizontal/></button></Popover.Trigger><Popover.Portal><Popover.Content align="end" className="it-menu it-editor-menu" sideOffset={4} data-i18n-ignore>{onDuplicate&&<button role="option" onClick={onDuplicate}><Copy/>{t('Duplicate…')}</button>}<TemplateVisibility teamId={visibilityTeamId} teams={data.teams} onChange={setVisibilityTeamId}/>{type==='standard'&&<button role="option" onClick={()=>{setActionsOpen(false);setType('customForm')}}><FileText/>{t('Convert to form template')}</button>}<span/><button role="option" onClick={()=>{setActionsOpen(false);void copyUrl()}}><Clipboard/>{t('Copy URL to create issue from template')}</button><span/><button role="option" onClick={()=>{setActionsOpen(false);setDeleteOpen(true)}}><Trash2/>{t('Delete')}</button></Popover.Content></Popover.Portal></Popover.Root>}<input aria-label={t('Template description')} placeholder={t('Add an optional template description…')} value={templateDescription} onChange={e=>setTemplateDescription(e.target.value)}/></div>{type==='standard'?<StandardTemplateBody data={data} title={title} body={body} teamId={teamId} priority={priority} assigneeId={assigneeId} projectId={projectId} labelIds={labelIds} subIssues={subIssues} onTitle={setTitle} onBody={setBody} onTeam={setTeamId} onPriority={setPriority} onAssignee={setAssigneeId} onProject={setProjectId} onLabels={setLabelIds} onSubIssues={setSubIssues}/>:<CustomFormTemplateBody data={data} fields={formFields} teamId={teamId} priority={priority} assigneeId={assigneeId} projectId={projectId} labelIds={labelIds} onFields={setFormFields} onTeam={setTeamId} onPriority={setPriority} onAssignee={setAssigneeId} onProject={setProjectId} onLabels={setLabelIds}/>}<footer className="it-editor-footer"><button onClick={close}>{t('Cancel')}</button><button className="primary" disabled={!name.trim()||saving} onClick={()=>void save()}>{t(template?'Save':'Create')}</button></footer><DiscardTemplateDialog open={discardOpen} onClose={()=>setDiscardOpen(false)} onConfirm={onClose}/><ConfirmTemplateDelete template={deleteOpen?template:undefined} onClose={()=>setDeleteOpen(false)} onDelete={remove}/></div>
+function duplicateProjectTemplate(data: BootstrapData) {
+  const id = new URLSearchParams(location.search).get("duplicate");
+  return id ? data.projectTemplates.find((item) => item.id === id) : undefined;
 }
 
-function StandardTemplateBody({data,title,body,teamId,priority,assigneeId,projectId,labelIds,subIssues,onTitle,onBody,onTeam,onPriority,onAssignee,onProject,onLabels,onSubIssues}:{data:BootstrapData;title:string;body:string;teamId:string;priority:number;assigneeId:string;projectId:string;labelIds:string[];subIssues:TemplateSubIssue[];onTitle:(v:string)=>void;onBody:(v:string)=>void;onTeam:(v:string)=>void;onPriority:(v:number)=>void;onAssignee:(v:string)=>void;onProject:(v:string)=>void;onLabels:(v:string[])=>void;onSubIssues:(v:TemplateSubIssue[])=>void}){
-  const{t}=useI18n(),[subOpen,setSubOpen]=useState(false)
-  return <><section className="it-issue-preview"><input aria-label={t('Issue title')} placeholder={t('Issue title')} value={title} onChange={e=>onTitle(e.target.value)}/><textarea aria-label={t('Issue description')} placeholder={t('Add description…')} value={body} onChange={e=>onBody(e.target.value)}/></section><TemplateDefaults data={data} teamId={teamId} priority={priority} assigneeId={assigneeId} projectId={projectId} labelIds={labelIds} onTeam={onTeam} onPriority={onPriority} onAssignee={onAssignee} onProject={onProject} onLabels={onLabels} onAddSubIssue={()=>setSubOpen(true)}>{subIssues.map(item=><SubIssueTemplateRow item={item} key={item.id} onChange={next=>onSubIssues(subIssues.map(value=>value.id===next.id?next:value))} onRemove={()=>onSubIssues(subIssues.filter(value=>value.id!==item.id))}/>)}</TemplateDefaults>{subOpen&&<SubIssueTemplateComposer data={data} onCancel={()=>setSubOpen(false)} onAdd={item=>{onSubIssues([...subIssues,item]);setSubOpen(false)}}/>}</>
-}
-
-function CustomFormTemplateBody({data,fields,teamId,priority,assigneeId,projectId,labelIds,onFields,onTeam,onPriority,onAssignee,onProject,onLabels}:{data:BootstrapData;fields:TemplateFormField[];teamId:string;priority:number;assigneeId:string;projectId:string;labelIds:string[];onFields:(v:TemplateFormField[])=>void;onTeam:(v:string)=>void;onPriority:(v:number)=>void;onAssignee:(v:string)=>void;onProject:(v:string)=>void;onLabels:(v:string[])=>void}){
-  const{t}=useI18n(),[menuOpen,setMenuOpen]=useState(false),[dragging,setDragging]=useState<string>()
-  const add=(type:TemplateFormFieldType)=>{const fixed=TEMPLATE_FIELD_TYPES.find(item=>item.type===type)?.label??'',label=['instructions','title','labelGroup','priority','dueDate'].includes(type)?t(fixed):'';onFields([...fields,{id:crypto.randomUUID(),label,type,required:false,options:[]}]);setMenuOpen(false)}
-  const move=(from:number,to:number)=>{if(to<0||to>=fields.length)return;const next=[...fields],[item]=next.splice(from,1);next.splice(to,0,item);onFields(next)}
-  return <>
-    <section className="it-form-fields">
-      <header><h2>{t('Form fields')}</h2><p>{t('Choose which form fields to show when creating an issue with this template')}</p></header>
-      <div className={`it-fields-card${fields.length?' has-fields':''}`}>
-        {fields.length ? fields.map((field,index)=><div className={`it-field-sortable${dragging===field.id?' is-dragging':''}`} draggable={fields.length>1} key={field.id} onDragStart={()=>setDragging(field.id)} onDragEnd={()=>setDragging(undefined)} onDragOver={e=>{if(fields.length>1)e.preventDefault()}} onDrop={e=>{e.preventDefault();const from=fields.findIndex(item=>item.id===dragging);if(from>=0)move(from,index);setDragging(undefined)}} onKeyDown={e=>{if(e.altKey&&e.key==='ArrowUp'){e.preventDefault();move(index,index-1)}if(e.altKey&&e.key==='ArrowDown'){e.preventDefault();move(index,index+1)}}} tabIndex={fields.length>1?0:-1}>
-          {fields.length>1&&<StatusDragHandle/>}
-          <TemplateFormFieldEditor field={field} onChange={next=>onFields(fields.map((value,i)=>i===index?next:value))} onRemove={()=>onFields(fields.filter((_,i)=>i!==index))}/>
-        </div>) : <span>{t('No fields added yet')}</span>}
-        {!fields.length&&<AddTemplateFieldMenu onAdd={add} open={menuOpen} onOpenChange={setMenuOpen}/>}
-      </div>
-      {Boolean(fields.length)&&<AddTemplateFieldMenu onAdd={add} open={menuOpen} onOpenChange={setMenuOpen}/>}
-    </section>
-    <TemplateDefaults data={data} teamId={teamId} priority={priority} assigneeId={assigneeId} projectId={projectId} labelIds={labelIds} onTeam={onTeam} onPriority={onPriority} onAssignee={onAssignee} onProject={onProject} onLabels={onLabels}/>
-  </>
-}
-
-function AddTemplateFieldMenu({open,onOpenChange,onAdd}:{open:boolean;onOpenChange:(v:boolean)=>void;onAdd:(type:TemplateFormFieldType)=>void}){const{t}=useI18n();return <Popover.Root open={open} onOpenChange={onOpenChange}><Popover.Trigger asChild><button className="it-add-field"><Plus/>{t('Add field')}</button></Popover.Trigger><Popover.Portal><Popover.Content align="end" className="it-menu it-field-menu" sideOffset={4} data-i18n-ignore>{TEMPLATE_FIELD_TYPES.map((item,index)=>{const Icon=item.icon;return <span key={item.type}>{index===7&&<small>{t('Issue properties')}</small>}<button role="option" onClick={()=>onAdd(item.type)}><Icon/>{t(item.label)}{item.type==='labelGroup'&&<ChevronRight/>}</button></span>})}</Popover.Content></Popover.Portal></Popover.Root>}
-
-function TemplateFormFieldEditor({field,onChange,onRemove}:{field:TemplateFormField;onChange:(v:TemplateFormField)=>void;onRemove:()=>void}){
-  const{t}=useI18n(),[typeOpen,setTypeOpen]=useState(false),definition=TEMPLATE_FIELD_TYPES.find(item=>item.type===field.type)!,Icon=definition.icon,needsLabel=!['instructions','title','labelGroup','priority','dueDate'].includes(field.type),hasOptions=field.type==='dropdown'||field.type==='checkboxes'
-  return <div className="it-field-editor"><header><Popover.Root open={typeOpen} onOpenChange={setTypeOpen}><Popover.Trigger asChild><button><Icon/>{t(definition.label)}<ChevronDown/></button></Popover.Trigger><Popover.Portal><Popover.Content className="it-menu it-field-type-menu" sideOffset={4}>{TEMPLATE_FIELD_TYPES.map(item=>{const TypeIcon=item.icon;return <button role="option" key={item.type} onClick={()=>{onChange({...field,type:item.type,label:['instructions','title','labelGroup','priority','dueDate'].includes(item.type)?t(item.label):field.label});setTypeOpen(false)}}><TypeIcon/>{t(item.label)}{item.type===field.type&&<Check/>}</button>})}</Popover.Content></Popover.Portal></Popover.Root>{needsLabel&&<label><input type="checkbox" checked={field.required} onChange={e=>onChange({...field,required:e.target.checked})}/>{t('Required')}</label>}<button aria-label={t('Remove field')} onClick={onRemove}><X/></button></header>{needsLabel&&<><input autoFocus aria-label={t('Field label')} placeholder={t('Add label…')} value={field.label} onChange={e=>onChange({...field,label:e.target.value})}/><input aria-label={t('Field description')} placeholder={t('Add description…')} value={field.description??''} onChange={e=>onChange({...field,description:e.target.value})}/></>}{field.type==='text'&&<input disabled placeholder={t('Enter text')}/>} {field.type==='longText'&&<textarea disabled placeholder={t('Enter text')}/>} {hasOptions&&<TemplateFieldOptions field={field} onChange={onChange}/>} {field.type==='date'&&<input disabled placeholder={t('Select a date')}/>} {field.type==='upload'&&<button disabled className="it-upload-preview"><Upload/>{t('Upload file')}</button>}</div>
-}
-
-function TemplateFieldOptions({field,onChange}:{field:TemplateFormField;onChange:(v:TemplateFormField)=>void}){const{t}=useI18n(),options=field.options??[];return <div className="it-field-options">{options.map((option,index)=><div key={index}><input aria-label={`${t('Option')} ${index+1}`} placeholder={t('Option')} value={option} onChange={e=>onChange({...field,options:options.map((value,i)=>i===index?e.target.value:value)})}/><button aria-label={t('Remove option')} onClick={()=>onChange({...field,options:options.filter((_,i)=>i!==index)})}><X/></button></div>)}<button onClick={()=>onChange({...field,options:[...options,'']})}><Plus/>{t('Add option')}</button></div>}
-
-function IssueTemplatePropertyMenus({data,teamId,priority,assigneeId,projectId,labelIds,showProject=true,onTeam,onPriority,onAssignee,onProject,onLabels}:{data:BootstrapData;teamId:string;priority:number;assigneeId:string;projectId:string;labelIds:string[];showProject?:boolean;onTeam:(id:string)=>void;onPriority:(value:number)=>void;onAssignee:(id:string)=>void;onProject?:(id:string)=>void;onLabels:(ids:string[])=>void}){
-  const{t}=useI18n(),team=data.teams.find(item=>item.id===teamId),assignee=data.users.find(item=>item.id===assigneeId),project=data.projects.find(item=>item.id===projectId)
-  return <>
-    <PropertyMenu compact label={t('Team')} ariaLabel={t('Change team')} searchPlaceholder={t('Change team…')} value={team?.name??t('Team')} valueIsEntityName={Boolean(team)} selectedId={teamId} triggerClassName="it-property" icon={<TeamIcon size={14}/>} options={[{id:'',label:t('Team'),icon:<TeamIcon size={14}/>},...data.teams.map(item=>({id:item.id,label:item.name,icon:<TeamIcon size={14}/>,i18nIgnore:true}))]} onChange={onTeam}/>
-    <PropertyMenu compact label={t('Priority')} ariaLabel={t('Change priority')} searchPlaceholder={t('Change priority…')} value={priorityOptions(t)[priority]?.[1]??t('No priority')} selectedId={String(priority)} triggerClassName="it-property" icon={<PriorityIcon priority={priority} size={14}/>} options={priorityPropertyOptions(t)} onChange={value=>onPriority(Number(value))}/>
-    <PropertyMenu compact label={t('Assignee')} ariaLabel={t('Change assignee')} searchPlaceholder={t('Change assignee…')} value={assignee?.displayName??t('Assignee')} valueIsEntityName={Boolean(assignee)} selectedId={assigneeId} triggerClassName="it-property" icon={assignee?<Avatar name={assignee.displayName}/>:<NoAssigneeIcon size={14}/>} options={userPropertyOptions(data,t('Assignee'))} onChange={onAssignee}/>
-    {showProject&&onProject&&<PropertyMenu compact label={t('Project')} ariaLabel={t('Change project')} searchPlaceholder={t('Change project…')} value={project?.name??t('Project')} valueIsEntityName={Boolean(project)} selectedId={projectId} triggerClassName="it-property" icon={<ProjectIcon size={14} style={{color:project?.color}}/>} options={[{id:'',label:t('Project'),icon:<ProjectIcon size={14}/>},...data.projects.map(item=>({id:item.id,label:item.name,icon:<ProjectIcon size={14} style={{color:item.color}}/>,i18nIgnore:true}))]} onChange={onProject}/>}
-    <PropertyMenu compact multiple kind="labels" label={t('Labels')} ariaLabel={t('Change labels')} searchPlaceholder={t('Change labels…')} value={labelIds.length?`${labelIds.length} ${t('Labels')}`:t('Labels')} selectedIds={labelIds} triggerClassName="it-property" icon={<LabelIcon size={14}/>} options={templateLabelOptions(data,'issue')} onChange={id=>onLabels(toggleGroupedLabelIds(labelIds,id,templateLabelOptions(data,'issue')))}/>
-  </>
-}
-
-function TemplateDefaults({data,teamId,priority,assigneeId,projectId,labelIds,onTeam,onPriority,onAssignee,onProject,onLabels,onAddSubIssue,children}:{data:BootstrapData;teamId:string;priority:number;assigneeId:string;projectId:string;labelIds:string[];onTeam:(v:string)=>void;onPriority:(v:number)=>void;onAssignee:(v:string)=>void;onProject:(v:string)=>void;onLabels:(v:string[])=>void;onAddSubIssue?:()=>void;children?:ReactNode}){
-  const{t}=useI18n();return <section className="it-defaults"><header><h2>{t('Default properties')}</h2><p>{t(onAddSubIssue?'Automatically applied upon issue creation, and editable while composing in Flow':'Automatically applied upon issue creation')}</p></header><div className="it-defaults-card"><IssueTemplatePropertyMenus data={data} teamId={teamId} priority={priority} assigneeId={assigneeId} projectId={projectId} labelIds={labelIds} onTeam={onTeam} onPriority={onPriority} onAssignee={onAssignee} onProject={onProject} onLabels={onLabels}/>{onAddSubIssue&&<Popover.Root><Popover.Trigger asChild><button aria-label={t('Open menu')} className="it-property-more"><MoreHorizontal/></button></Popover.Trigger><Popover.Portal><Popover.Content align="end" className="it-menu it-subissue-menu" sideOffset={4}><button role="option" onClick={onAddSubIssue}><Plus/>{t('Add sub-issue')}<kbd>⌘ ⇧ O</kbd></button></Popover.Content></Popover.Portal></Popover.Root>}</div>{children}</section>}
-
-function toggleTemplateId(values:string[],id:string){return values.includes(id)?values.filter(value=>value!==id):[...values,id]}
-function priorityPropertyOptions(t:(value:string)=>string):PropertyOption[]{return priorityOptions(t).map(([id,label],index)=>({id,label,icon:<PriorityIcon priority={index} size={14}/>,shortcut:id}))}
-function userPropertyOptions(data:BootstrapData,emptyLabel?:string):PropertyOption[]{return [...(emptyLabel?[{id:'',label:emptyLabel,icon:<NoAssigneeIcon size={14}/>}]:[]),...data.users.filter(item=>item.active).map(item=>({id:item.id,label:item.displayName,keywords:`${item.name} ${item.email}`,icon:<Avatar name={item.displayName}/>,i18nIgnore:true}))]}
-function templateLabelOptions(data:BootstrapData,type:'issue'|'project'):PropertyOption[]{const groups=new Map(data.labelGroups.filter(group=>group.resourceType===type&&!group.archivedAt).map(group=>[group.id,group.name]));return labelsForResource(data.labels,type,data.labelGroups).map(item=>({id:item.id,label:item.name,color:item.color,description:item.description,issueCount:item.issueCount,scope:item.scope,groupId:item.groupId,groupLabel:item.groupId?groups.get(item.groupId):undefined,i18nIgnore:true}))}
-function SubIssueTemplateComposer({data,onCancel,onAdd}:{data:BootstrapData;onCancel:()=>void;onAdd:(v:TemplateSubIssue)=>void}){const{t}=useI18n(),[title,setTitle]=useState(''),[description,setDescription]=useState(''),[teamId,setTeamId]=useState(''),[priority,setPriority]=useState(0),[assigneeId,setAssigneeId]=useState(''),[labelIds,setLabelIds]=useState<string[]>([]);return <section className="it-subissue-composer"><strong>{t('Create sub-issue')}</strong><input autoFocus aria-label={t('Issue title')} placeholder={t('Issue title')} value={title} onChange={e=>setTitle(e.target.value)}/><textarea aria-label={t('Issue description')} placeholder={t('Add description…')} value={description} onChange={e=>setDescription(e.target.value)}/><div><IssueTemplatePropertyMenus data={data} teamId={teamId} priority={priority} assigneeId={assigneeId} projectId="" labelIds={labelIds} showProject={false} onTeam={setTeamId} onPriority={setPriority} onAssignee={setAssigneeId} onLabels={setLabelIds}/><span/><button onClick={onCancel}>{t('Cancel')}</button><button className="primary" disabled={!title.trim()} onClick={()=>onAdd({id:crypto.randomUUID(),title:title.trim(),description,teamId:teamId||undefined,priority,assigneeId:assigneeId||undefined,labelIds})}>{t('Add sub-issue')}</button></div></section>}
-function SubIssueTemplateRow({item,onChange,onRemove}:{item:TemplateSubIssue;onChange:(v:TemplateSubIssue)=>void;onRemove:()=>void}){const{t}=useI18n(),[editing,setEditing]=useState(false),[title,setTitle]=useState(item.title),[description,setDescription]=useState(item.description??'');if(editing)return <div className="it-subissue-row is-editing"><span><input autoFocus aria-label={t('Issue title')} value={title} onChange={e=>setTitle(e.target.value)}/><input aria-label={t('Issue description')} value={description} onChange={e=>setDescription(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&title.trim()){onChange({...item,title:title.trim(),description});setEditing(false)}if(e.key==='Escape'){setTitle(item.title);setDescription(item.description??'');setEditing(false)}}}/></span><button aria-label={t('Save')} disabled={!title.trim()} onClick={()=>{onChange({...item,title:title.trim(),description});setEditing(false)}}><Check/></button><button aria-label={t('Cancel')} onClick={()=>setEditing(false)}><X/></button></div>;return <div className="it-subissue-row"><span><strong data-i18n-ignore>{item.title}</strong><small data-i18n-ignore>{item.description}</small></span><button aria-label={t('Edit sub-issue')} onClick={()=>setEditing(true)}><Pencil/></button><button aria-label={t('Remove sub-issue')} onClick={onRemove}><X/></button></div>}
-
-function TemplateVisibility({teamId,teams,onChange,showSelection=false}:{teamId:string;teams:BootstrapData['teams'];onChange:(v:string)=>void;showSelection?:boolean}){const{t}=useI18n(),[open,setOpen]=useState(false);return <Popover.Root open={open} onOpenChange={setOpen}><Popover.Trigger asChild><button role="option">{showSelection?<><LayoutTemplate/>{teamId?teams.find(team=>team.id===teamId)?.name:t('Workspace')}<ChevronDown/></>:<><UsersRound/>{t('Template visibility')}<ChevronRight/></>}</button></Popover.Trigger><Popover.Portal><Popover.Content className="it-menu it-visibility-menu" side={showSelection?'bottom':'right'} align="start" sideOffset={4}><button role="option" onClick={()=>{onChange('');setOpen(false)}}><LayoutTemplate/>{t('Workspace')}{!teamId&&<Check/>}</button><small>{t('Your teams')}</small>{teams.map(team=><button role="option" key={team.id} onClick={()=>{onChange(team.id);setOpen(false)}}><UsersRound/><span data-i18n-ignore>{team.name}</span>{teamId===team.id&&<Check/>}</button>)}</Popover.Content></Popover.Portal></Popover.Root>}
-
-function DiscardTemplateDialog({open,onClose,onConfirm}:{open:boolean;onClose:()=>void;onConfirm:()=>void}){const{t}=useI18n();return <Dialog.Root open={open} onOpenChange={value=>!value&&onClose()}><Dialog.Portal><Dialog.Overlay className="it-dialog-overlay"/><Dialog.Content className="it-confirm-dialog" aria-describedby={undefined}><Dialog.Title>{t('Discard changes?')}</Dialog.Title><footer><button onClick={onClose}>{t('Cancel')}</button><button className="primary" onClick={onConfirm}>{t('Confirm')}</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>}
-function ConfirmTemplateDelete({template,onClose,onDelete}:{template?:IssueTemplate;onClose:()=>void;onDelete:()=>Promise<void>}){const{locale,t}=useI18n();return <Dialog.Root open={Boolean(template)} onOpenChange={value=>!value&&onClose()}><Dialog.Portal><Dialog.Overlay className="it-dialog-overlay"/><Dialog.Content className="it-confirm-dialog it-delete-confirm" aria-describedby={undefined} data-i18n-ignore><Dialog.Title>{locale==='zh-CN'?<>删除模板“<strong>{template?.name}</strong>”？</>:<>Delete the template <strong>"{template?.name}"</strong>?</>}</Dialog.Title><p>{t('You cannot undo this action.')}</p><footer><button onClick={onClose}>{t('Cancel')}</button><button className="primary" onClick={()=>void onDelete()}>{t('Delete')}</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>}
-function ConfirmProjectTemplateDelete({template,onClose,onDelete}:{template?:ProjectTemplate;onClose:()=>void;onDelete:()=>Promise<void>}){const{locale,t}=useI18n();return <Dialog.Root open={Boolean(template)} onOpenChange={value=>!value&&onClose()}><Dialog.Portal><Dialog.Overlay className="it-dialog-overlay"/><Dialog.Content className="it-confirm-dialog it-delete-confirm" aria-describedby={undefined} data-i18n-ignore><Dialog.Title>{locale==='zh-CN'?<>删除模板“<strong>{template?.name}</strong>”？</>:<>Delete the template <strong>"{template?.name}"</strong>?</>}</Dialog.Title><p>{t('You cannot undo this action.')}</p><footer><button onClick={onClose}>{t('Cancel')}</button><button className="primary" onClick={()=>void onDelete()}>{t('Delete')}</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>}
-function relativeTemplateTime(value:string){const minutes=Math.max(0,Math.round((Date.now()-new Date(value).getTime())/60000));return minutes<1?'just now':minutes===1?'1 minute ago':`${minutes} minutes ago`}
-
-function ProjectMilestonesEditor({milestones,open,onOpenChange,onChange}:{milestones:TemplateMilestone[];open:boolean;onOpenChange:(v:boolean)=>void;onChange:(v:TemplateMilestone[])=>void}){const{t}=useI18n(),[name,setName]=useState(''),[description,setDescription]=useState(''),[dragging,setDragging]=useState<string>();const add=()=>{if(!name.trim())return;onChange([...milestones,{id:crypto.randomUUID(),name:name.trim(),description}]);setName('');setDescription('');onOpenChange(false)},move=(from:number,to:number)=>{if(to<0||to>=milestones.length)return;const next=[...milestones],[item]=next.splice(from,1);next.splice(to,0,item);onChange(next)};return <section className="pt-milestones"><header><button>{t('Milestones')} {milestones.length||''}{Boolean(milestones.length)&&<ChevronDown/>}</button><button aria-label={t('Add')} onClick={()=>onOpenChange(true)}><Plus/></button></header>{milestones.map((item,index)=><div className={`pt-milestone-row${dragging===item.id?' is-dragging':''}`} draggable={milestones.length>1} key={item.id} onDragStart={()=>setDragging(item.id)} onDragEnd={()=>setDragging(undefined)} onDragOver={e=>milestones.length>1&&e.preventDefault()} onDrop={e=>{e.preventDefault();const from=milestones.findIndex(value=>value.id===dragging);if(from>=0)move(from,index);setDragging(undefined)}} onKeyDown={e=>{if(e.altKey&&e.key==='ArrowUp'){e.preventDefault();move(index,index-1)}if(e.altKey&&e.key==='ArrowDown'){e.preventDefault();move(index,index+1)}}} tabIndex={milestones.length>1?0:-1}>{milestones.length>1&&<StatusDragHandle/>}<span>◇</span><strong data-i18n-ignore>{item.name}</strong><button aria-label={t('Remove milestone')} onClick={()=>onChange(milestones.filter(value=>value.id!==item.id))}><X/></button></div>)}{open&&<div className="pt-milestone-composer"><small>{t('Create milestone')}</small><input autoFocus aria-label={t('Milestone name')} placeholder={t('Milestone name')} value={name} onChange={e=>setName(e.target.value)}/><textarea aria-label={t('Milestone description template')} placeholder={t('Add a description template…')} value={description} onChange={e=>setDescription(e.target.value)}/><footer><button onClick={()=>onOpenChange(false)}>{t('Cancel')}</button><button className="primary" disabled={!name.trim()} onClick={add}>{t('Add milestone')}</button></footer></div>}{!open&&Boolean(milestones.length)&&<button className="pt-add-milestone" onClick={()=>onOpenChange(true)}><Plus/>{t('Add milestone')}</button>}</section>}
-
-export function TemplateEditor({ data, type, template, teamId: lockedTeamId, initialTemplateType, onClose, onSaved }: { data: BootstrapData; type: TemplateKind; template: TemplateValue|null; teamId?: string; initialTemplateType?: 'standard'|'customForm'; onClose: () => void; onSaved: () => Promise<void> }) {
-  const { t } = useI18n()
-  const issue = type === 'issue' ? template as IssueTemplate|null : null
-  const project = type === 'project' ? template as ProjectTemplate|null : null
-  const [name, setName] = useState(template?.name ?? '')
-  const [templateDescription, setTemplateDescription] = useState(issue?.description ?? project?.templateDescription ?? '')
-  const [description, setDescription] = useState(project?.description ?? '')
-  const [title, setTitle] = useState(issue?.title ?? '')
-  const [projectName, setProjectName] = useState(project?.projectName ?? '')
-  const [body, setBody] = useState(issue?.body ?? '')
-  const [summary, setSummary] = useState(project?.summary ?? '')
-  const [teamId, setTeamId] = useState(lockedTeamId ?? issue?.teamId ?? '')
-  const [statusId, setStatusId] = useState(issue?.stateId ?? project?.statusId ?? '')
-  const [priority, setPriority] = useState(template?.priority ?? 0)
-  const [ownerId, setOwnerId] = useState(issue?.assigneeId ?? project?.leadId ?? '')
-  const [projectId, setProjectId] = useState(issue?.projectId ?? '')
-  const [labelIds, setLabelIds] = useState(template?.labelIds ?? [])
-  const [teamIds, setTeamIds] = useState(project?.teamIds ?? (lockedTeamId ? [lockedTeamId] : []))
-  const [memberIds, setMemberIds] = useState(project?.memberIds ?? [])
-  const [initiativeIds, setInitiativeIds] = useState(project?.initiativeIds ?? [])
-  const [dependencyIds, setDependencyIds] = useState(project?.dependencyIds ?? [])
-  const [issueIds, setIssueIds] = useState(project?.issueIds ?? [])
-  const [milestones, setMilestones] = useState<TemplateMilestone[]>(project?.milestones ?? [])
-  const [visibility, setVisibility] = useState<'workspace'|'teams'>(project?.visibility ?? (lockedTeamId ? 'teams' : 'workspace'))
-  const [templateType] = useState<'standard'|'customForm'>(issue?.templateType ?? initialTemplateType ?? 'standard')
-  const [formFields, setFormFields] = useState<TemplateFormField[]>(issue?.formFields ?? [])
-  const [milestoneOpen, setMilestoneOpen] = useState(false)
-  const milestoneTriggerRef = useRef<HTMLButtonElement>(null)
-  const [saving, setSaving] = useState(false)
-  const labelOptions = labelsForResource(data.labels, type, data.labelGroups).filter(label => !label.scope || label.scope === 'Workspace')
-  const toggle = (setter: Dispatch<SetStateAction<string[]>>, id: string) => setter(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id])
-  const toggleLabel = (id: string) => setLabelIds(current => toggleGroupedLabelIds(current, id, labelOptions))
-  const save = async () => {
-    if (!name.trim()) return
-    setSaving(true)
-    try {
-      if (type === 'issue') {
-        const input = { name: name.trim(), title, description: templateDescription, body, teamId: teamId || undefined, stateId: statusId || undefined, priority, assigneeId: ownerId || undefined, projectId: projectId || undefined, labelIds, templateType, formFields }
-        if (lockedTeamId) { if (template) await updateIssueTemplate(lockedTeamId, template.id, input); else await createIssueTemplate(lockedTeamId, input) }
-        else if (template) await updateWorkspaceIssueTemplate(template.id, input); else await createWorkspaceIssueTemplate(input)
-      } else {
-        const input = { name: name.trim(), projectName, templateDescription, description, summary, statusId: statusId || undefined, priority, leadId: ownerId || undefined, teamIds, memberIds, labelIds, initiativeIds, dependencyIds, issueIds, milestones, visibility }
-        if (template) await updateProjectTemplate(template.id, input); else await createProjectTemplate(input)
-      }
-      await onSaved(); onClose()
-    } catch (error) { toast.error(errorMessage(error)) } finally { setSaving(false) }
-  }
+function ProjectTemplateList({
+  data,
+  items,
+  onCreate,
+  onOpen,
+  onDuplicate,
+  onReload,
+}: {
+  data: BootstrapData;
+  items: ProjectTemplate[];
+  onCreate: () => void;
+  onOpen: (template: ProjectTemplate) => void;
+  onDuplicate: (template: ProjectTemplate) => void;
+  onReload: () => Promise<void>;
+}) {
+  const { t } = useI18n(),
+    [menuId, setMenuId] = useState<string>(),
+    [deleteTarget, setDeleteTarget] = useState<ProjectTemplate>();
+  const copy = async (item: ProjectTemplate) => {
+    await navigator.clipboard.writeText(
+      `${location.origin}/${encodeURIComponent(data.workspace.urlKey)}/projects/all?create=1&template=${encodeURIComponent(item.id)}`,
+    );
+    toast.success(t("Link copied"));
+  };
   const remove = async () => {
-    if (!template) return
-    try { if (type === 'issue' && lockedTeamId) await deleteIssueTemplate(lockedTeamId, template.id); else if (type === 'issue') await deleteWorkspaceIssueTemplate(template.id); else await deleteProjectTemplate(template.id); await onSaved(); onClose() } catch (error) { toast.error(errorMessage(error)) }
-  }
-  return <div className="ip-settings-page ip-template-editor" data-i18n-ignore>
-    <header className="ip-editor-header"><button onClick={onClose}>{t('Cancel')}</button><strong>{t(template ? `Edit ${type} template` : `New ${type} template`)}</strong><button className="primary" disabled={saving} onClick={() => void save()}>{t(saving ? 'Saving…' : template ? 'Save' : 'Create')}</button></header>
-    <div className="ip-editor-content">
-      <EditorField label={t('Template name')}><input autoFocus value={name} onChange={event => setName(event.target.value)}/></EditorField>
-      <EditorField label={t('Template description')}><input value={templateDescription} onChange={event => setTemplateDescription(event.target.value)}/></EditorField>
-      {type === 'issue' ? <>
-        <EditorField label={t('Issue title')}><input value={title} onChange={event => setTitle(event.target.value)}/></EditorField>
-        <EditorField label={t('Issue description')}><textarea rows={5} value={body} onChange={event => setBody(event.target.value)}/></EditorField>
-        <div className="ip-properties-grid"><SelectField label={t('Team')} value={teamId} onChange={setTeamId} options={data.teams.map(item => [item.id, item.name])} empty={t('Choose when creating')} disabled={Boolean(lockedTeamId)}/><SelectField label={t('Priority')} value={String(priority)} onChange={value => setPriority(Number(value))} options={priorityOptions(t)}/><SelectField label={t('Assignee')} value={ownerId} onChange={setOwnerId} options={data.users.map(item => [item.id, item.displayName])} empty={t('Unassigned')}/><SelectField label={t('Project')} value={projectId} onChange={setProjectId} options={data.projects.map(item => [item.id, item.name])} empty={t('No project')}/></div>
-        <SelectField label={t('Status')} value={statusId} onChange={setStatusId} options={data.states.filter(item => !teamId || item.teamId === teamId).map(item => [item.id, item.name])} empty={t('Default')}/>
-        <CheckGroup label={t('Labels')} values={labelIds} options={labelOptions.map(item => [item.id, item.name])} onToggle={toggleLabel}/>
-        {templateType === 'customForm' && <FormFields fields={formFields} onChange={setFormFields}/>}
-      </> : <>
-        <EditorField label={t('Project name')}><input value={projectName} onChange={event => setProjectName(event.target.value)}/></EditorField>
-        <EditorField label={t('Project summary')}><input value={summary} onChange={event => setSummary(event.target.value)}/></EditorField>
-        <div className="ip-properties-grid"><SelectField label={t('Status')} value={statusId} onChange={setStatusId} options={data.projectStatuses.map(item => [item.id, item.name])} empty={t('Default')}/><SelectField label={t('Priority')} value={String(priority)} onChange={value => setPriority(Number(value))} options={priorityOptions(t)}/><SelectField label={t('Lead')} value={ownerId} onChange={setOwnerId} options={data.users.map(item => [item.id, item.displayName])} empty={t('Unassigned')}/><SelectField label={t('Visibility')} value={visibility} onChange={value => setVisibility(value as 'workspace'|'teams')} options={[["workspace", t('Workspace')], ["teams", t('Teams')]]}/></div>
-        <CheckGroup label={t('Members')} values={memberIds} options={data.users.map(item => [item.id, item.displayName])} onToggle={id => toggle(setMemberIds, id)}/>
-        <CheckGroup label={t('Teams')} values={teamIds} options={data.teams.map(item => [item.id, item.name])} onToggle={id => toggle(setTeamIds, id)} disabled={Boolean(lockedTeamId)}/>
-        <CheckGroup label={t('Initiatives')} values={initiativeIds} options={data.initiatives.map(item => [item.id, item.name])} onToggle={id => toggle(setInitiativeIds, id)}/>
-        <CheckGroup label={t('Labels')} values={labelIds} options={labelOptions.map(item => [item.id, item.name])} onToggle={toggleLabel}/>
-        <CheckGroup label={t('Dependencies')} values={dependencyIds} options={data.projects.filter(item => item.id !== template?.id).map(item => [item.id, item.name])} onToggle={id => toggle(setDependencyIds, id)}/>
-        <CheckGroup label={t('Issues')} values={issueIds} options={data.issues.slice(0, 30).map(item => [item.id, `${item.identifier} ${item.title}`])} onToggle={id => toggle(setIssueIds, id)}/>
-        <EditorField label={t('Project description')}><textarea rows={5} value={description} onChange={event => setDescription(event.target.value)}/></EditorField>
-        <div className="ip-milestones"><div><strong>{t('Milestones')}</strong><button ref={milestoneTriggerRef} onClick={() => setMilestoneOpen(true)}><Plus size={13}/>{t('Add')}</button></div>{milestones.length ? milestones.map(item => <div className="ip-milestone-row" key={item.id}><span><strong data-i18n-ignore>{item.name}</strong><small data-i18n-ignore>{item.description}</small></span><button aria-label={t('Remove milestone')} onClick={() => setMilestones(current => current.filter(value => value.id !== item.id))}><X size={13}/></button></div>) : <small>{t('No milestones')}</small>}</div>
-      </>}
-      {template && <button className="ip-delete-button" onClick={() => void remove()}><Trash2 size={14}/>{t('Delete template')}</button>}
+    if (!deleteTarget) return;
+    await deleteProjectTemplate(deleteTarget.id);
+    setDeleteTarget(undefined);
+    await onReload();
+  };
+  return (
+    <div className="it-list-page pt-list-page" data-i18n-ignore>
+      <header className="it-list-header">
+        <h1>{t("Project templates")}</h1>
+        <p>
+          {t(
+            "These templates are available when creating projects for any team in the workspace. To create templates that only apply to specific teams, add them as team templates.",
+          )}{" "}
+          <a
+            href="https://flow.app/docs/project-templates"
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t("Docs")}
+            <ExternalLink />
+          </a>
+        </p>
+      </header>
+      <section className="it-list-card">
+        <header>
+          <span>
+            {items.length
+              ? t(
+                  items.length === 1
+                    ? "1 project template"
+                    : "project template count",
+                ).replace("{count}", String(items.length))
+              : t("No project templates")}
+          </span>
+          <button
+            aria-label={t("Create new project template")}
+            onClick={onCreate}
+          >
+            <Plus />
+            {t("New template")}
+          </button>
+        </header>
+        {items.map((item) => (
+          <div className="it-list-row" key={item.id}>
+            <button
+              aria-label={item.name}
+              className="it-row-link"
+              onClick={() => onOpen(item)}
+            />
+            <span className="it-row-icon">
+              <ViewGlyph
+                color={item.color || "#bec2c8"}
+                icon={normalizeProjectIcon(item.icon)}
+              />
+            </span>
+            <span>
+              <strong data-i18n-ignore>{item.name}</strong>
+              <small>
+                {t("Created on")} {relativeTemplateTime(item.createdAt)}
+              </small>
+            </span>
+            <Popover.Root
+              open={menuId === item.id}
+              onOpenChange={(open) => setMenuId(open ? item.id : undefined)}
+            >
+              <Popover.Trigger asChild>
+                <button
+                  aria-label={t("Open menu")}
+                  className="it-row-menu-trigger"
+                >
+                  <MoreHorizontal />
+                </button>
+              </Popover.Trigger>
+              <Popover.Portal>
+                <Popover.Content
+                  align="end"
+                  className="it-menu pt-list-menu"
+                  sideOffset={4}
+                  data-i18n-ignore
+                >
+                  <button role="option" onClick={() => onOpen(item)}>
+                    <IssueTemplateMenuIcon name="edit" />
+                    {t("Edit")}
+                  </button>
+                  <button role="option" onClick={() => onDuplicate(item)}>
+                    <IssueTemplateMenuIcon name="duplicate" />
+                    {t("Duplicate…")}
+                  </button>
+                  <button role="option" onClick={() => void copy(item)}>
+                    <IssueTemplateMenuIcon name="clipboard" />
+                    {t("Copy URL to create project from template")}
+                  </button>
+                  <button role="option" onClick={() => setDeleteTarget(item)}>
+                    <IssueTemplateMenuIcon name="delete" />
+                    {t("Delete")}
+                  </button>
+                </Popover.Content>
+              </Popover.Portal>
+            </Popover.Root>
+          </div>
+        ))}
+      </section>
+      <ConfirmProjectTemplateDelete
+        template={deleteTarget}
+        onClose={() => setDeleteTarget(undefined)}
+        onDelete={remove}
+      />
     </div>
-    <MilestoneDialog open={milestoneOpen} onOpenChange={setMilestoneOpen} triggerRef={milestoneTriggerRef} onAdd={milestone => setMilestones(current => [...current, milestone])}/>
-  </div>
+  );
 }
 
-function EditorField({ label, children }: { label: string; children: ReactNode }) { return <label className="ip-editor-field"><span>{label}</span>{children}</label> }
-function SelectField({ label, value, options, empty, disabled, onChange }: { label: string; value: string; options: string[][]; empty?: string; disabled?: boolean; onChange: (value: string) => void }) { return <EditorField label={label}><select disabled={disabled} value={value} onChange={event => onChange(event.target.value)}>{empty !== undefined && <option value="">{empty}</option>}{options.map(([id, name]) => <option value={id} key={id} data-i18n-ignore>{name}</option>)}</select></EditorField> }
-function CheckGroup({ label, values, options, disabled, onToggle }: { label: string; values: string[]; options: string[][]; disabled?: boolean; onToggle: (id: string) => void }) { const { t } = useI18n(); return <fieldset className="ip-check-group" disabled={disabled}><legend>{label}</legend>{options.length ? options.map(([id, name]) => <label key={id}><input type="checkbox" checked={values.includes(id)} onChange={() => onToggle(id)}/><span data-i18n-ignore>{name}</span></label>) : <small>{t('No options')}</small>}</fieldset> }
-function priorityOptions(t: (value: string) => string) { return ['No priority', 'Urgent', 'High', 'Medium', 'Low'].map((item, index) => [String(index), t(item)]) }
-
-function FormFields({ fields, onChange }: { fields: TemplateFormField[]; onChange: (value: TemplateFormField[]) => void }) {
-  const { t } = useI18n()
-  return <div className="ip-form-fields"><div><strong>{t('Form fields')}</strong><button onClick={() => onChange([...fields, { id: crypto.randomUUID(), label: '', type: 'text', required: false, options: [] }])}><Plus size={13}/>{t('Add field')}</button></div>{fields.map((field, index) => <div className="ip-form-field" key={field.id}><input aria-label={t('Field label')} placeholder={t('Field label')} value={field.label} onChange={event => onChange(fields.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))}/><select value={field.type} onChange={event => onChange(fields.map((item, itemIndex) => itemIndex === index ? { ...item, type: event.target.value as TemplateFormField['type'] } : item))}>{['text','textarea','select','checkbox','date'].map(value => <option key={value}>{value}</option>)}</select><label><input type="checkbox" checked={field.required} onChange={event => onChange(fields.map((item, itemIndex) => itemIndex === index ? { ...item, required: event.target.checked } : item))}/>{t('Required')}</label><button aria-label={t('Delete field')} onClick={() => onChange(fields.filter((_, itemIndex) => itemIndex !== index))}><Trash2 size={13}/></button></div>)}</div>
+function ProjectTemplateEditor({
+  data,
+  template,
+  source,
+  onClose,
+  onDuplicate,
+  onReload,
+}: {
+  data: BootstrapData;
+  template?: ProjectTemplate;
+  source?: ProjectTemplate;
+  onClose: () => void;
+  onDuplicate?: () => void;
+  onReload: () => Promise<void>;
+}) {
+  const defaultStatusId =
+    data.projectStatuses.find((item) => item.type === "backlog")?.id ??
+    data.projectStatuses[0]?.id ??
+    "";
+  const { t } = useI18n(),
+    base = template ?? source,
+    [name, setName] = useState(
+      source ? `Copy of ${source.name}` : (base?.name ?? ""),
+    ),
+    [projectName, setProjectName] = useState(base?.projectName ?? ""),
+    [summary, setSummary] = useState(base?.summary ?? ""),
+    [description, setDescription] = useState(base?.description ?? ""),
+    [icon, setIcon] = useState(normalizeProjectIcon(base?.icon)),
+    [color, setColor] = useState(base?.color ?? "#bec2c8"),
+    [statusId, setStatusId] = useState(base?.statusId ?? defaultStatusId),
+    [priority, setPriority] = useState(base?.priority ?? 0),
+    [leadId, setLeadId] = useState(base?.leadId ?? ""),
+    [memberIds, setMemberIds] = useState(base?.memberIds ?? []),
+    [teamIds, setTeamIds] = useState(base?.teamIds ?? []),
+    [initiativeIds, setInitiativeIds] = useState(base?.initiativeIds ?? []),
+    [labelIds, setLabelIds] = useState(base?.labelIds ?? []),
+    [dependencyIds, setDependencyIds] = useState(base?.dependencyIds ?? []),
+    [issueIds, setIssueIds] = useState(base?.issueIds ?? []),
+    [milestones, setMilestones] = useState(base?.milestones ?? []),
+    [visibilityTeamId, setVisibilityTeamId] = useState(
+      base?.visibilityTeamId ?? "",
+    ),
+    [milestoneOpen, setMilestoneOpen] = useState(false),
+    [actionsOpen, setActionsOpen] = useState(false),
+    [discardOpen, setDiscardOpen] = useState(false),
+    [deleteOpen, setDeleteOpen] = useState(false),
+    [saving, setSaving] = useState(false);
+  const current = {
+      name,
+      projectName,
+      summary,
+      description,
+      icon,
+      color,
+      statusId,
+      priority,
+      leadId,
+      memberIds,
+      teamIds,
+      initiativeIds,
+      labelIds,
+      dependencyIds,
+      issueIds,
+      milestones,
+      visibilityTeamId,
+    },
+    initial = {
+      name: base?.name ?? "",
+      projectName: base?.projectName ?? "",
+      summary: base?.summary ?? "",
+      description: base?.description ?? "",
+      icon: normalizeProjectIcon(base?.icon),
+      color: base?.color ?? "#bec2c8",
+      statusId: base?.statusId ?? defaultStatusId,
+      priority: base?.priority ?? 0,
+      leadId: base?.leadId ?? "",
+      memberIds: base?.memberIds ?? [],
+      teamIds: base?.teamIds ?? [],
+      initiativeIds: base?.initiativeIds ?? [],
+      labelIds: base?.labelIds ?? [],
+      dependencyIds: base?.dependencyIds ?? [],
+      issueIds: base?.issueIds ?? [],
+      milestones: base?.milestones ?? [],
+      visibilityTeamId: base?.visibilityTeamId ?? "",
+    },
+    dirty = JSON.stringify(current) !== JSON.stringify(initial);
+  const close = () => (dirty ? setDiscardOpen(true) : onClose());
+  const save = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      const input = {
+        ...current,
+        name: name.trim(),
+        visibility: visibilityTeamId
+          ? ("teams" as const)
+          : ("workspace" as const),
+      };
+      if (template) await updateProjectTemplate(template.id, input);
+      else await createProjectTemplate(input);
+      await onReload();
+      onClose();
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const remove = async () => {
+    if (!template) return;
+    await deleteProjectTemplate(template.id);
+    await onReload();
+    onClose();
+  };
+  const copy = async () => {
+    if (!template) return;
+    await navigator.clipboard.writeText(
+      `${location.origin}/${encodeURIComponent(data.workspace.urlKey)}/projects/all?create=1&template=${encodeURIComponent(template.id)}`,
+    );
+    toast.success(t("Link copied"));
+  };
+  return (
+    <div className="pt-editor" data-i18n-ignore>
+      <a className="it-editor-back" onClick={close}>
+        <ChevronRight />
+        {t("Project templates")}
+      </a>
+      <div className="pt-editor-inner">
+        <header className="pt-title">
+          <h1>
+            {t(template ? "Edit project template" : "New project template")}
+          </h1>
+          {template && (
+            <Popover.Root open={actionsOpen} onOpenChange={setActionsOpen}>
+              <Popover.Trigger asChild>
+                <button aria-label={t("Open menu")}>
+                  <MoreHorizontal />
+                </button>
+              </Popover.Trigger>
+              <Popover.Portal>
+                <Popover.Content
+                  align="end"
+                  className="it-menu pt-editor-menu"
+                  sideOffset={4}
+                >
+                  <button role="option" onClick={onDuplicate}>
+                    <IssueTemplateMenuIcon name="duplicate" />
+                    {t("Duplicate…")}
+                  </button>
+                  <button role="option" onClick={() => void copy()}>
+                    <IssueTemplateMenuIcon name="clipboard" />
+                    {t("Copy URL to create project from template")}
+                  </button>
+                  <button role="option" onClick={() => setDeleteOpen(true)}>
+                    <IssueTemplateMenuIcon name="delete" />
+                    {t("Delete")}
+                  </button>
+                </Popover.Content>
+              </Popover.Portal>
+            </Popover.Root>
+          )}
+        </header>
+        <label className="pt-template-name">
+          <span>{t("Name")}</span>
+          <input
+            autoFocus
+            placeholder={t("Add a descriptive name…")}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </label>
+        <section className="pt-project-card">
+          <div className="pt-project-heading">
+            <ViewIconPicker
+              color={color}
+              icon={icon}
+              onChange={(visual) => {
+                setIcon(visual.icon);
+                setColor(visual.color);
+              }}
+              triggerClassName="it-icon-trigger"
+            />
+            <input
+              aria-label={t("Project name")}
+              placeholder={t("Project name")}
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
+            />
+            <input
+              aria-label={t("Project summary")}
+              placeholder={t("Add a short summary…")}
+              value={summary}
+              onChange={(e) => setSummary(e.target.value)}
+            />
+          </div>
+          <div className="pt-properties">
+            <ProjectTemplatePropertyMenus
+              data={data}
+              statusId={statusId}
+              priority={priority}
+              leadId={leadId}
+              memberIds={memberIds}
+              teamIds={teamIds}
+              initiativeIds={initiativeIds}
+              labelIds={labelIds}
+              dependencyIds={dependencyIds}
+              issueIds={issueIds}
+              onStatus={setStatusId}
+              onPriority={setPriority}
+              onLead={setLeadId}
+              onMembers={setMemberIds}
+              onTeams={setTeamIds}
+              onInitiatives={setInitiativeIds}
+              onLabels={setLabelIds}
+              onDependencies={setDependencyIds}
+              onIssues={setIssueIds}
+            />
+          </div>
+          <textarea
+            aria-label={t("Project description")}
+            placeholder={t(
+              "Write a description, a project brief, or collect ideas…",
+            )}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+          <ProjectMilestonesEditor
+            milestones={milestones}
+            open={milestoneOpen}
+            onOpenChange={setMilestoneOpen}
+            onChange={setMilestones}
+          />
+        </section>
+        <footer className="pt-footer">
+          <span>{t("Visibility")}</span>
+          <TemplateVisibility
+            showSelection
+            teamId={visibilityTeamId}
+            teams={data.teams}
+            onChange={setVisibilityTeamId}
+          />
+          <button onClick={close}>{t("Cancel")}</button>
+          <button
+            className="primary"
+            disabled={!name.trim() || saving}
+            onClick={() => void save()}
+          >
+            {t(template ? "Save" : "Create")}
+          </button>
+        </footer>
+      </div>
+      <DiscardTemplateDialog
+        open={discardOpen}
+        onClose={() => setDiscardOpen(false)}
+        onConfirm={onClose}
+      />
+      <ConfirmProjectTemplateDelete
+        template={deleteOpen ? template : undefined}
+        onClose={() => setDeleteOpen(false)}
+        onDelete={remove}
+      />
+    </div>
+  );
 }
 
-function MilestoneDialog({ open, onOpenChange, triggerRef, onAdd }: { open: boolean; onOpenChange: (value: boolean) => void; triggerRef: RefObject<HTMLButtonElement|null>; onAdd: (value: TemplateMilestone) => void }) {
-  const { t } = useI18n(); const [name, setName] = useState(''); const [description, setDescription] = useState('')
-  const add = () => { if (!name.trim()) return; onAdd({ id: crypto.randomUUID(), name: name.trim(), description }); setName(''); setDescription(''); onOpenChange(false) }
-  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="ip-dialog-overlay"/><Dialog.Content className="ip-dialog" data-i18n-ignore onCloseAutoFocus={event => { event.preventDefault(); triggerRef.current?.focus() }} onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) add() }}><Dialog.Title>{t('Add milestone')}</Dialog.Title><EditorField label={t('Milestone name')}><input autoFocus value={name} onChange={event => setName(event.target.value)}/></EditorField><EditorField label={t('Milestone description template')}><textarea rows={4} value={description} onChange={event => setDescription(event.target.value)}/></EditorField><footer><Dialog.Close asChild><button>{t('Cancel')}</button></Dialog.Close><button className="primary" disabled={!name.trim()} onClick={add}>{t('Add milestone')}</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
+function ProjectTemplatePropertyMenus({
+  data,
+  statusId,
+  priority,
+  leadId,
+  memberIds,
+  teamIds,
+  initiativeIds,
+  labelIds,
+  dependencyIds,
+  issueIds,
+  onStatus,
+  onPriority,
+  onLead,
+  onMembers,
+  onTeams,
+  onInitiatives,
+  onLabels,
+  onDependencies,
+  onIssues,
+}: {
+  data: BootstrapData;
+  statusId: string;
+  priority: number;
+  leadId: string;
+  memberIds: string[];
+  teamIds: string[];
+  initiativeIds: string[];
+  labelIds: string[];
+  dependencyIds: string[];
+  issueIds: string[];
+  onStatus: (id: string) => void;
+  onPriority: (value: number) => void;
+  onLead: (id: string) => void;
+  onMembers: (ids: string[]) => void;
+  onTeams: (ids: string[]) => void;
+  onInitiatives: (ids: string[]) => void;
+  onLabels: (ids: string[]) => void;
+  onDependencies: (ids: string[]) => void;
+  onIssues: (ids: string[]) => void;
+}) {
+  const { t } = useI18n(),
+    status = data.projectStatuses.find((item) => item.id === statusId),
+    lead = data.users.find((item) => item.id === leadId),
+    members = data.users.filter((item) => memberIds.includes(item.id)),
+    selectedTeams = data.teams.filter((item) => teamIds.includes(item.id));
+  return (
+    <>
+      <PropertyMenu
+        compact
+        label={t("Status")}
+        ariaLabel={t("Change project status")}
+        searchPlaceholder={t("Change status…")}
+        value={status?.name ?? t("Status")}
+        valueIsEntityName={Boolean(status)}
+        selectedId={statusId}
+        triggerClassName="it-property"
+        icon={
+          <ProjectStatusIcon
+            color={status?.color}
+            name={status?.name}
+            size={14}
+            type={status?.type}
+          />
+        }
+        options={data.projectStatuses.map((item, index) => ({
+          id: item.id,
+          label: item.name,
+          icon: (
+            <ProjectStatusIcon
+              color={item.color}
+              name={item.name}
+              size={14}
+              type={item.type}
+            />
+          ),
+          shortcut: String(index + 1),
+          i18nIgnore: true,
+        }))}
+        onChange={onStatus}
+      />
+      <PropertyMenu
+        compact
+        label={t("Priority")}
+        ariaLabel={t("Change project priority")}
+        searchPlaceholder={t("Change priority…")}
+        value={priorityOptions(t)[priority]?.[1] ?? t("No priority")}
+        selectedId={String(priority)}
+        triggerClassName="it-property"
+        icon={<PriorityIcon priority={priority} size={14} />}
+        options={priorityPropertyOptions(t)}
+        onChange={(value) => onPriority(Number(value))}
+      />
+      <PropertyMenu
+        compact
+        label={t("Lead")}
+        ariaLabel={t("Set project lead")}
+        searchPlaceholder={t("Change lead…")}
+        value={lead?.displayName ?? t("Lead")}
+        valueIsEntityName={Boolean(lead)}
+        selectedId={leadId}
+        triggerClassName="it-property"
+        icon={
+          lead ? (
+            <Avatar name={lead.displayName} />
+          ) : (
+            <NoAssigneeIcon size={14} />
+          )
+        }
+        options={userPropertyOptions(data, t("No lead"))}
+        onChange={onLead}
+      />
+      <PropertyMenu
+        compact
+        multiple
+        label={t("Members")}
+        ariaLabel={t("Change members")}
+        searchPlaceholder={t("Change members…")}
+        value={
+          members.length === 1
+            ? members[0].displayName
+            : members.length
+              ? `${t("Members")} ${members.length}`
+              : t("Members")
+        }
+        valueIsEntityName={members.length === 1}
+        selectedIds={memberIds}
+        triggerClassName="it-property"
+        icon={
+          members[0] ? (
+            <Avatar name={members[0].displayName} />
+          ) : (
+            <MembersIcon size={14} />
+          )
+        }
+        options={userPropertyOptions(data)}
+        onChange={(id) => onMembers(toggleTemplateId(memberIds, id))}
+      />
+      <PropertyMenu
+        compact
+        multiple
+        label={t("Team")}
+        ariaLabel={t("Change team")}
+        searchPlaceholder={t("Change team…")}
+        value={
+          selectedTeams.length === 1
+            ? selectedTeams[0].name
+            : selectedTeams.length
+              ? `${t("Team")} ${selectedTeams.length}`
+              : t("Team")
+        }
+        valueIsEntityName={selectedTeams.length === 1}
+        selectedIds={teamIds}
+        triggerClassName="it-property"
+        icon={<TeamIcon size={14} />}
+        options={data.teams.map((item) => ({
+          id: item.id,
+          label: item.name,
+          icon: <TeamIcon size={14} />,
+          i18nIgnore: true,
+        }))}
+        onChange={(id) => onTeams(toggleTemplateId(teamIds, id))}
+      />
+      <PropertyMenu
+        compact
+        multiple
+        label={t("Initiatives")}
+        ariaLabel={t("Change initiatives")}
+        searchPlaceholder={t("Change initiatives…")}
+        value={
+          initiativeIds.length
+            ? `${t("Initiatives")} ${initiativeIds.length}`
+            : t("Initiatives")
+        }
+        selectedIds={initiativeIds}
+        triggerClassName="it-property"
+        icon={<LayoutTemplate size={14} />}
+        options={data.initiatives.map((item) => ({
+          id: item.id,
+          label: item.name,
+          icon: <LayoutTemplate size={14} />,
+          i18nIgnore: true,
+        }))}
+        onChange={(id) => onInitiatives(toggleTemplateId(initiativeIds, id))}
+      />
+      <PropertyMenu
+        compact
+        multiple
+        kind="labels"
+        label={t("Labels")}
+        ariaLabel={t("Change labels")}
+        searchPlaceholder={t("Change labels…")}
+        value={
+          labelIds.length ? `${t("Labels")} ${labelIds.length}` : t("Labels")
+        }
+        selectedIds={labelIds}
+        triggerClassName="it-property"
+        icon={<LabelIcon size={14} />}
+        options={templateLabelOptions(data, "project")}
+        onChange={(id) =>
+          onLabels(
+            toggleGroupedLabelIds(
+              labelIds,
+              id,
+              templateLabelOptions(data, "project"),
+            ),
+          )
+        }
+      />
+      <span className="pt-property-break" />
+      <PropertyMenu
+        compact
+        multiple
+        label={t("Dependencies")}
+        ariaLabel={t("Change dependencies")}
+        searchPlaceholder={t("Change dependencies…")}
+        value={
+          dependencyIds.length
+            ? `${t("Dependencies")} ${dependencyIds.length}`
+            : t("Dependencies")
+        }
+        selectedIds={dependencyIds}
+        triggerClassName="it-property"
+        icon={<ListChecks size={14} />}
+        options={data.projects.map((item) => ({
+          id: item.id,
+          label: item.name,
+          icon: <ProjectIcon size={14} style={{ color: item.color }} />,
+          i18nIgnore: true,
+        }))}
+        onChange={(id) => onDependencies(toggleTemplateId(dependencyIds, id))}
+      />
+      <PropertyMenu
+        compact
+        multiple
+        label={t("Issues")}
+        ariaLabel={t("Change issues")}
+        searchPlaceholder={t("Change issues…")}
+        value={
+          issueIds.length ? `${t("Issues")} ${issueIds.length}` : t("Issues")
+        }
+        selectedIds={issueIds}
+        triggerClassName="it-property"
+        icon={<FileText size={14} />}
+        options={data.issues.map((item) => ({
+          id: item.id,
+          label: `${item.identifier} ${item.title}`,
+          icon: <FileText size={14} />,
+          i18nIgnore: true,
+        }))}
+        onChange={(id) => onIssues(toggleTemplateId(issueIds, id))}
+      />
+    </>
+  );
 }
 
-export function SLASettings({ data, onReload }: { data: BootstrapData; onReload: () => Promise<void> }) {
-  const { t } = useI18n(); const settings = (data.settings?.sla ?? {}) as Record<string, unknown>; const enabled = settings.enabled === true
-  const [creating, setCreating] = useState(false); const [name, setName] = useState(''); const [targetMinutes, setTargetMinutes] = useState(1440); const [priority, setPriority] = useState(''); const [saving, setSaving] = useState(false)
-  const run = async (action: () => Promise<unknown>) => { setSaving(true); try { await action(); await onReload() } catch (error) { toast.error(errorMessage(error)) } finally { setSaving(false) } }
-  return <div className="ip-settings-page" data-i18n-ignore><header className="settings-page-header ip-page-header"><div><h1>{t('SLAs')}</h1><p>{t('Set response and resolution expectations for issues that match defined rules.')}{' '}<a href="https://flow.app/docs/sla" target="_blank" rel="noreferrer">{t('Docs')}<ExternalLink size={11}/></a></p></div></header><section className="ip-settings-section"><div className="ip-setting-row"><span><strong>{t('Enable SLAs')}</strong><small>{t('Apply SLA rules and deadlines across your workspace.')}</small></span><SettingsToggle checked={enabled} disabled={saving} label={t('Enable SLAs')} onChange={value => run(() => updateSLASettings({ enabled: value }))}/></div></section><section className="ip-settings-section"><header><h3>{t('Automation rules')}</h3><button className="settings-action" disabled={!enabled || creating} onClick={() => setCreating(true)}><Plus size={14}/>{t('Add rule')}</button></header>{creating && <form className="ip-rule-editor" onSubmit={event => { event.preventDefault(); if (!name.trim()) return; void run(() => createSLARule({ name: name.trim(), targetMinutes, teamIds: data.teams.map(item => item.id), filters: priority ? { priority: Number(priority) } : {}, pauseStatuses: ['completed','canceled'], enabled: true })).then(() => { setCreating(false); setName('') }) }}><EditorField label={t('Rule name')}><input autoFocus value={name} onChange={event => setName(event.target.value)}/></EditorField><div className="ip-properties-grid"><SelectField label={t('Target')} value={String(targetMinutes)} onChange={value => setTargetMinutes(Number(value))} options={[["60",t('1 hour')],["240",t('4 hours')],["480",t('8 hours')],["1440",t('24 hours')],["4320",t('3 days')]]}/><SelectField label={t('Priority')} value={priority} onChange={setPriority} empty={t('Any priority')} options={priorityOptions(t).slice(1)}/></div><footer><button type="button" onClick={() => setCreating(false)}>{t('Cancel')}</button><button className="primary" disabled={saving}>{t('Create')}</button></footer></form>}{data.slaRules.length ? data.slaRules.map(rule => <div className="ip-setting-row" key={rule.id}><span><strong data-i18n-ignore>{rule.name}</strong><small>{formatDuration(rule.targetMinutes, t)} · {t(rule.enabled ? 'Active' : 'Disabled')}</small></span><div className="ip-row-actions"><SettingsToggle checked={rule.enabled} disabled={!enabled || saving} label={rule.name} onChange={value => run(() => updateSLARule(rule.id, { enabled: value }))}/><button aria-label={t('Delete rule')} onClick={() => void run(() => deleteSLARule(rule.id))}><Trash2 size={14}/></button></div></div>) : !creating && <div className="ip-empty-row"><span className="ip-template-glyph"><Circle size={14}/></span><span><strong>{t('No automation rules')}</strong><small>{enabled ? t('Add a rule to begin applying SLAs.') : t('Enable SLAs to add automation rules.')}</small></span></div>}</section></div>
+const TEMPLATE_FIELD_TYPES: Array<{
+  type: TemplateFormFieldType;
+  label: string;
+  icon: typeof AlignLeft;
+}> = [
+  { type: "text", label: "Text", icon: TextCursorInput },
+  { type: "longText", label: "Long text", icon: AlignLeft },
+  { type: "dropdown", label: "Dropdown", icon: ChevronDown },
+  { type: "checkboxes", label: "Checkboxes", icon: ListChecks },
+  { type: "date", label: "Date", icon: CalendarDays },
+  { type: "upload", label: "Upload file", icon: Upload },
+  { type: "instructions", label: "Instructions", icon: AlignLeft },
+  { type: "title", label: "Title", icon: Heading },
+  { type: "labelGroup", label: "Label group", icon: Tag },
+  { type: "priority", label: "Priority", icon: LayoutTemplate },
+  { type: "dueDate", label: "Due date", icon: CalendarDays },
+];
+
+function IssueTemplateSettings({
+  data,
+  mode,
+  templateId,
+  onCreate,
+  onOpen,
+  onDuplicate,
+  onNavigateList,
+  onReload,
+}: {
+  data: BootstrapData;
+  mode?: "new" | "new-form" | "edit";
+  templateId?: string;
+  onCreate: (form: boolean) => void;
+  onOpen: (template: IssueTemplate) => void;
+  onDuplicate: (template: IssueTemplate) => void;
+  onNavigateList: () => void;
+  onReload: () => Promise<void>;
+}) {
+  const items = data.issueTemplates.filter(
+    (item) => item.scope === "workspace" || !item.visibilityTeamId,
+  );
+  const template =
+    mode === "edit"
+      ? data.issueTemplates.find((item) => item.id === templateId)
+      : undefined;
+  if (mode && mode !== "edit")
+    return (
+      <IssueTemplateEditor
+        data={data}
+        source={duplicateTemplate(data)}
+        templateType={mode === "new-form" ? "customForm" : "standard"}
+        onClose={onNavigateList}
+        onReload={onReload}
+      />
+    );
+  if (mode === "edit")
+    return template ? (
+      <IssueTemplateEditor
+        data={data}
+        template={template}
+        templateType={template.templateType ?? "standard"}
+        onClose={onNavigateList}
+        onDuplicate={() => onDuplicate(template)}
+        onReload={onReload}
+      />
+    ) : (
+      <div className="it-not-found">Issue template not found</div>
+    );
+  return (
+    <IssueTemplateList
+      data={data}
+      items={items}
+      onCreate={onCreate}
+      onOpen={onOpen}
+      onDuplicate={onDuplicate}
+      onReload={onReload}
+    />
+  );
 }
 
-export function ProjectUpdateSettings({ data, onReload }: { data: BootstrapData; onReload: () => Promise<void> }) {
-  const { t } = useI18n(); const current = (data.settings?.projectUpdates ?? {}) as Record<string, unknown>; const initial = Number(current.cadenceDays ?? 0)
-  const [editing, setEditing] = useState(false); const [cadence, setCadence] = useState(initial); const [saving, setSaving] = useState(false); const cadenceLabel = cadenceOptions(t).find(item => item[0] === cadence)?.[1] ?? t('No expectation')
-  const save = async () => { setSaving(true); try { await updateProjectUpdateSettings({ cadenceDays: cadence }); await onReload(); setEditing(false); toast.success(t('Update schedule saved')) } catch (error) { toast.error(errorMessage(error)) } finally { setSaving(false) } }
-  const connectSlack = async () => { setSaving(true); try { await connectIntegration('slack', { name: 'Slack', config: { source: 'project-updates' } }); toast.success(t('Slack connected')) } catch (error) { toast.error(errorMessage(error)) } finally { setSaving(false) } }
-  return <div className="ip-settings-page" data-i18n-ignore><header className="settings-page-header ip-page-header"><div><h1>{t('Project updates')}</h1><p>{t('Configure when project updates are expected and where reminders are sent.')}{' '}<a href="https://flow.app/docs/project-updates" target="_blank" rel="noreferrer">{t('Docs')}<ExternalLink size={11}/></a></p></div></header><section className="ip-settings-section"><header><h3>{t('Update schedule')}</h3></header><div className="ip-setting-row"><span><strong>{t('Update cadence')}</strong><small>{cadenceLabel}</small></span>{editing ? <div className="ip-update-editor"><CadenceMenu value={cadence} onChange={setCadence}/><button onClick={() => { setCadence(initial); setEditing(false) }}>{t('Cancel')}</button><button className="primary" disabled={saving} onClick={() => void save()}>{t('Save')}</button></div> : <button className="settings-action" onClick={() => setEditing(true)}>{t('Edit')}</button>}</div></section><section className="ip-settings-section"><header><h3>Slack</h3></header><div className="ip-setting-row"><span className="ip-slack-label"><MessageSquare size={17}/><span><strong>{t('Project update notifications')}</strong><small>{t('Send project update reminders and notifications to Slack.')}</small></span></span><button className="settings-action" disabled={saving} onClick={() => void connectSlack()}>{t('Connect')}</button></div></section></div>
+function duplicateTemplate(data: BootstrapData) {
+  const id = new URLSearchParams(location.search).get("duplicate");
+  return id ? data.issueTemplates.find((item) => item.id === id) : undefined;
 }
 
-function CadenceMenu({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  const { t } = useI18n(); const options = cadenceOptions(t); const label = options.find(item => item[0] === value)?.[1]
-  return <Dropdown.Root><Dropdown.Trigger asChild><button className="ip-combobox" role="combobox">{label}<ChevronDown size={13}/></button></Dropdown.Trigger><Dropdown.Portal><Dropdown.Content className="ip-cadence-menu" align="end" sideOffset={5} data-i18n-ignore>{options.map(([days, text]) => <Dropdown.Item className="ip-cadence-item" key={days} onSelect={() => onChange(days)}>{text}{days === value && <Check size={13}/>}</Dropdown.Item>)}</Dropdown.Content></Dropdown.Portal></Dropdown.Root>
+function IssueTemplateList({
+  data,
+  items,
+  onCreate,
+  onOpen,
+  onDuplicate,
+  onReload,
+}: {
+  data: BootstrapData;
+  items: IssueTemplate[];
+  onCreate: (form: boolean) => void;
+  onOpen: (template: IssueTemplate) => void;
+  onDuplicate: (template: IssueTemplate) => void;
+  onReload: () => Promise<void>;
+}) {
+  const { t } = useI18n(),
+    [chooser, setChooser] = useState(false),
+    [deleteTarget, setDeleteTarget] = useState<IssueTemplate>(),
+    [menuId, setMenuId] = useState<string>();
+  const copyUrl = async (template: IssueTemplate) => {
+    const url = `${location.origin}/${encodeURIComponent(data.workspace.urlKey)}/issues/all?create=1&template=${encodeURIComponent(template.id)}`;
+    await navigator.clipboard.writeText(url);
+    toast.success(t("Link copied"));
+  };
+  const remove = async () => {
+    if (!deleteTarget) return;
+    await deleteWorkspaceIssueTemplate(deleteTarget.id);
+    setDeleteTarget(undefined);
+    await onReload();
+  };
+  return (
+    <div className="it-list-page" data-i18n-ignore>
+      <header className="it-list-header">
+        <h1>{t("Issue templates")}</h1>
+        <p>
+          {t(
+            "These templates are available when creating issues for any team in the workspace. To create templates that only apply to specific teams, add them as team templates.",
+          )}{" "}
+          <a
+            href="https://flow.app/docs/issue-templates"
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t("Docs")}
+            <ExternalLink />
+          </a>
+        </p>
+      </header>
+      <section className="it-list-card">
+        <header>
+          <span>
+            {items.length
+              ? t(
+                  items.length === 1
+                    ? "1 issue template"
+                    : "issue template count",
+                ).replace("{count}", String(items.length))
+              : t("No issue templates")}
+          </span>
+          <button
+            aria-label={t("Create new issue template")}
+            onClick={() => setChooser(true)}
+          >
+            <Plus />
+            {t("New template")}
+          </button>
+        </header>
+        {items.map((item) => (
+          <div className="it-list-row" key={item.id}>
+            <button
+              aria-label={item.name}
+              className="it-row-link"
+              onClick={() => onOpen(item)}
+            />
+            <span className="it-row-icon">
+              <ViewGlyph
+                color={item.color || "#bec2c8"}
+                icon={item.icon || "Page"}
+              />
+            </span>
+            <span>
+              <strong data-i18n-ignore>{item.name}</strong>
+              <small>
+                {t("Created by")}{" "}
+                <b data-i18n-ignore>{item.creator.displayName}</b>{" "}
+                {relativeTemplateTime(item.createdAt)}
+              </small>
+            </span>
+            <Popover.Root
+              open={menuId === item.id}
+              onOpenChange={(open) => setMenuId(open ? item.id : undefined)}
+            >
+              <Popover.Trigger asChild>
+                <button
+                  aria-label={t("Open menu")}
+                  className="it-row-menu-trigger"
+                >
+                  <MoreHorizontal />
+                </button>
+              </Popover.Trigger>
+              <Popover.Portal>
+                <Popover.Content
+                  align="end"
+                  className="it-menu it-list-menu"
+                  sideOffset={4}
+                  data-i18n-ignore
+                >
+                  <button
+                    role="option"
+                    onClick={() => {
+                      setMenuId(undefined);
+                      onOpen(item);
+                    }}
+                  >
+                    <IssueTemplateMenuIcon name="edit" />
+                    {t("Edit")}
+                  </button>
+                  <button
+                    role="option"
+                    onClick={() => {
+                      setMenuId(undefined);
+                      onDuplicate(item);
+                    }}
+                  >
+                    <IssueTemplateMenuIcon name="duplicate" />
+                    {t("Duplicate…")}
+                  </button>
+                  <button
+                    role="option"
+                    onClick={() => {
+                      setMenuId(undefined);
+                      void copyUrl(item);
+                    }}
+                  >
+                    <IssueTemplateMenuIcon name="clipboard" />
+                    {t("Copy URL to create issue from template")}
+                  </button>
+                  <button
+                    role="option"
+                    onClick={() => {
+                      setMenuId(undefined);
+                      setDeleteTarget(item);
+                    }}
+                  >
+                    <IssueTemplateMenuIcon name="delete" />
+                    {t("Delete")}
+                  </button>
+                </Popover.Content>
+              </Popover.Portal>
+            </Popover.Root>
+          </div>
+        ))}
+      </section>
+      <TemplateTypeDialog
+        onChoose={(form) => {
+          setChooser(false);
+          onCreate(form);
+        }}
+        onOpenChange={setChooser}
+        open={chooser}
+      />
+      <ConfirmTemplateDelete
+        template={deleteTarget}
+        onClose={() => setDeleteTarget(undefined)}
+        onDelete={remove}
+      />
+    </div>
+  );
 }
-function cadenceOptions(t: (value: string) => string): Array<[number,string]> { return [[0,t('No expectation')],[7,t('Every week')],...[2,3,4,5,6,7,8].map(value => [value * 7, t(`Every ${value} weeks`)] as [number,string])] }
 
-export function ProjectStatusesSettings({ data, onReload }: { data: BootstrapData; onReload: () => Promise<void> }) {
-  const { t } = useI18n(); const [creating, setCreating] = useState<StatusType|null>(null); const [editing, setEditing] = useState<string|null>(null); const [dragging,setDragging]=useState<string|null>(null); const ordered = useMemo(() => [...data.projectStatuses].sort((a,b) => (a.position ?? 0) - (b.position ?? 0)), [data.projectStatuses])
-  const run = async (action: () => Promise<unknown>) => { try { await action(); await onReload() } catch (error) { toast.error(errorMessage(error)) } }
-  const move = (status: ProjectStatus, delta: number) => { const group = ordered.filter(item => item.type === status.type); const index = group.findIndex(item => item.id === status.id); const target = index + delta; if (target < 0 || target >= group.length) return; const next=[...ordered],left=next.findIndex(item=>item.id===group[index].id),right=next.findIndex(item=>item.id===group[target].id);[next[left],next[right]]=[next[right],next[left]];void run(()=>reorderProjectStatuses(next.map(item=>item.id))) }
-  const moveBefore=(status:ProjectStatus,target:ProjectStatus)=>{if(status.id===target.id||status.type!==target.type)return;const next=ordered.filter(item=>item.id!==status.id),targetIndex=next.findIndex(item=>item.id===target.id);next.splice(targetIndex,0,status);void run(()=>reorderProjectStatuses(next.map(item=>item.id)))}
-  const busy=creating!==null||editing!==null
-  return <div className="ip-settings-page ip-project-statuses-page" data-i18n-ignore><header className="settings-page-header ip-page-header"><div><h1>{t('Project statuses')}</h1><p>{t('Project statuses define the workflow that projects go through from start to completion')}</p></div></header><section className="ip-status-card" role="list" aria-label={t('Project statuses')}>{STATUS_SECTIONS.map(section => { const statuses = ordered.filter(item => item.type === section.type),canReorder=statuses.length>1; return <div className="ip-status-section" role="list" key={section.type}><header><h3>{t(section.label)}</h3><button aria-label={t('Create new project status')} disabled={busy} onClick={() => setCreating(section.type)}><Plus/></button></header>{statuses.map((status,index) => {const usage=data.projects.filter(item=>item.status.id===status.id).length;return editing===status.id?<StatusEditor key={status.id} type={section.type} status={status} onCancel={()=>setEditing(null)} onSave={async input=>{await run(()=>updateProjectStatus(status.id,input));setEditing(null)}}/>:<StatusRow key={status.id} canReorder={canReorder} progress={section.type==='started'?(statuses.length===1?.3:.3+index*.4/(statuses.length-1)):undefined} status={status} usage={usage} dragging={dragging===status.id} onDragStart={()=>setDragging(status.id)} onDragEnd={()=>setDragging(null)} onDrop={()=>{const source=ordered.find(item=>item.id===dragging);if(source)moveBefore(source,status);setDragging(null)}} onEdit={()=>setEditing(status.id)} onMove={delta=>move(status,delta)} onDelete={()=>{if(statuses.length===1){toast(t("Can't delete status"),{description:t("You can't delete the last status of a type.")});return Promise.resolve()}if(usage){toast(`Can't delete the "${status.name}" project status`,{description:`The status has ${usage} ${usage===1?'project':'projects'} assigned. Please archive or move them before deleting the status.`});return Promise.resolve()}return run(()=>deleteProjectStatus(status.id))}}/>})}{creating===section.type&&<StatusEditor type={section.type} onCancel={()=>setCreating(null)} onSave={async input=>{await run(()=>createProjectStatus(input));setCreating(null)}}/>}</div>})}</section></div>
-}
-function StatusEditor({ type, status, onCancel, onSave }: { type: StatusType; status?: ProjectStatus; onCancel: () => void; onSave: (input: { name: string; description: string; color: string; type: string }) => Promise<void> }) {
-  const { t } = useI18n(); const [name, setName] = useState(status?.name ?? ''); const [description, setDescription] = useState(status?.description ?? ''); const [color, setColor] = useState(status?.color ?? STATUS_DEFAULT_COLORS[type]); const [saving, setSaving] = useState(false)
-  const submit = async () => { if (!name.trim()) return; setSaving(true); try { await onSave({ name: name.trim(), description: description.trim(), color, type }) } finally { setSaving(false) } }
-  return <form className="ip-status-editor" onSubmit={event => { event.preventDefault(); void submit() }} onKeyDown={event => { if (event.key === 'Escape') onCancel() }}><StatusDragHandle/><StatusColorPicker color={color} type={type} onChange={setColor}/><input autoFocus required aria-label={t('Name')} placeholder={t('Name')} value={name} onChange={event => setName(event.target.value)}/><input aria-label={t('Description')} placeholder={t('Description…')} value={description} onChange={event => setDescription(event.target.value)}/><footer><button aria-label={t('Cancel')} type="button" onClick={onCancel}>{t('Cancel')}</button><button aria-label={t('Submit')} className="primary" disabled={saving}>{t(status ? 'Save' : 'Create')}</button></footer></form>
-}
-
-function StatusRow({ status, usage, progress, canReorder, dragging, onDragStart, onDragEnd, onDrop, onEdit, onMove, onDelete }: { status: ProjectStatus; usage: number; progress?:number; canReorder:boolean; dragging:boolean; onDragStart:()=>void; onDragEnd:()=>void; onDrop:()=>void; onEdit: () => void; onMove: (delta: number) => void; onDelete: () => Promise<void> }) {
-  const { t } = useI18n(),[menuOpen,setMenuOpen]=useState(false)
-  const view=()=>{location.href=`/${location.pathname.split('/')[1]}/projects/all?status=${encodeURIComponent(status.id)}`}
-  const menuKeyDown=(event:KeyboardEvent<HTMLDivElement>)=>{const items=[...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role=option]')],index=items.indexOf(document.activeElement as HTMLButtonElement);if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();items[(index+(event.key==='ArrowDown'?1:-1)+items.length)%items.length]?.focus()}if(event.key==='Home'){event.preventDefault();items[0]?.focus()}if(event.key==='End'){event.preventDefault();items.at(-1)?.focus()}}
-  const usageControl=usage>0?(canReorder?<button className="ip-status-usage" aria-label={t('View projects')} onClick={event=>{event.stopPropagation();view()}}>{usage} {t(usage===1?'project':'projects')}</button>:<span className="ip-status-usage is-disabled">{usage} {t(usage===1?'project':'projects')}</span>):null
-  return <div className={`ip-status-row${dragging?' is-dragging':''}`} role="button" aria-disabled={!canReorder} aria-roledescription="sortable" tabIndex={canReorder?0:-1} draggable={canReorder} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragOver={event=>{if(canReorder)event.preventDefault()}} onDrop={event=>{event.preventDefault();onDrop()}} onKeyDown={event=>{if(!canReorder||!event.altKey)return;if(event.key==='ArrowUp'){event.preventDefault();onMove(-1)}if(event.key==='ArrowDown'){event.preventDefault();onMove(1)}}}>{canReorder&&<StatusDragHandle/>}<ProjectStatusMark progress={progress} status={status}/><span className="ip-status-copy"><strong data-i18n-ignore>{status.name}</strong>{(usageControl||status.description)&&<small>{usageControl}{usageControl&&status.description&&' · '}{status.description&&<span data-i18n-ignore>{status.description}</span>}</small>}</span>{canReorder?<Popover.Root open={menuOpen} onOpenChange={setMenuOpen}><Popover.Trigger asChild><button className="ip-status-more" aria-label={t('Open menu')}><MoreHorizontal/></button></Popover.Trigger><Popover.Portal><Popover.Content className="ip-status-menu" align="end" sideOffset={4} data-i18n-ignore onKeyDown={menuKeyDown}><span className="ip-status-menu-filter"><input autoFocus aria-label={t('Filter…')} tabIndex={-1}/></span><button role="option" onClick={()=>{setMenuOpen(false);onEdit()}}><StatusMenuIcon name="edit"/><span>{t('Edit')}</span></button><button role="option" onClick={()=>{setMenuOpen(false);void onDelete()}}><StatusMenuIcon name="delete"/><span>{t('Delete')}</span></button></Popover.Content></Popover.Portal></Popover.Root>:<span/>}</div>
-}
-
-export function StatusDragHandle(){return <span className="ip-status-drag-handle" aria-hidden="true"><svg width="6" height="10" viewBox="0 0 6 10"><path fillRule="evenodd" d="M1 8a1 1 0 1 1 0 2 1 1 0 0 1 0-2Zm4 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2ZM1 4a1 1 0 1 1 0 2 1 1 0 0 1 0-2Zm4 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2ZM1 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2Zm4 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2Z"/></svg></span>}
-export function StatusMenuIcon({name}:{name:'edit'|'delete'}){return <svg aria-hidden="true" viewBox="0 0 16 16">{name==='edit'?<><path d="M10.1805 3.34195 4.14166 9.416a4.02 4.02 0 0 1 2.59842 2.4024L12.6877 5.8425a7.98 7.98 0 0 1-2.5072-2.50055Z"/><path d="M13.7391 4.71631c.4184-.68683.3336-1.59893-.2545-2.19441-.5938-.60118-1.5062-.68298-2.1866-.24541a6.04 6.04 0 0 0 2.4412 2.43982Z"/><path d="M3.03104 10.7502a2.5 2.5 0 0 1 2.46679 2.2612c-.66515.4146-2.09586.7808-2.96669.9772-.33104.0746-.61088-.2284-.51039-.5513.23251-.7471.62517-1.9237 1.01029-2.6871Z"/></>:<><path fillRule="evenodd" d="m2 3 1.652 9.911A2.5 2.5 0 0 0 6.118 15h3.764a2.5 2.5 0 0 0 2.466-2.089L14 3H2Zm1.77 1.5 1.361 8.164a1 1 0 0 0 .987.836h3.764a1 1 0 0 0 .987-.836l1.36-8.164H3.771Z" clipRule="evenodd"/><path d="M5.5 2.5A1.5 1.5 0 0 1 7 1h2a1.5 1.5 0 0 1 1.5 1.5v1h-5v-1Z"/><path d="M1 3.75A.75.75 0 0 1 1.75 3h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 3.75Z"/></>}</svg>}
-
-function ProjectStatusMark({status,progress=.3}:{status:ProjectStatus;progress?:number}){const outer="M2.95778 3.02069 5.70777 1.36023c.79467-.47982 1.78979-.47982 2.58446 0l2.74997 1.6605A2.5 2.5 0 0 1 12.25 5.16086v3.68717a2.5 2.5 0 0 1-1.2112 2.14217l-2.74766 1.6531a2.5 2.5 0 0 1-2.58103-.0021l-2.75236-1.662A2.5 2.5 0 0 1 1.75 8.83911V5.16082a2.5 2.5 0 0 1 1.20778-2.14013Z",inner="M8.3779 4.74233c-.23352-.13626-.52228-.13626-.7558 0L5.37209 6.05513A.75.75 0 0 0 5 6.70311v2.63905c0 .26681.14168.51357.37209.648l2.25001 1.31284c.23352.1362.52228.1362.7558 0l2.25001-1.31284A.75.75 0 0 0 11 9.34216V6.70311a.75.75 0 0 0-.37209-.64798L8.3779 4.74233Z",maskId=`project-status-${status.id.replace(/[^a-z0-9_-]/gi,'')}-${Math.round(progress*100)}`;const done=status.type==='completed',canceled=status.type==='canceled',started=status.type==='started';return <span className={`ip-status-mark is-${status.type}`} style={{'--status-color':status.color} as CSSProperties}><svg viewBox="-1 -1 16 16" aria-hidden="true"><path className="ip-status-hex" d={outer}/>{status.type==='backlog'&&<path className="ip-status-hex-dash" d={outer}/>} {started&&<><mask id={maskId}><path transform="translate(-1 -1)" d={inner} fill="white"/></mask><circle className="ip-status-progress" cx="7" cy="7" r="4" pathLength="100" mask={`url(#${maskId})`} style={{'--status-progress':progress*100} as CSSProperties}/></>} {(done||canceled)&&<path className="ip-status-fill" d={outer}/>} {done&&<path className="ip-status-symbol" d="m3.75 7.1 2 2 4.5-4.5"/>}{canceled&&<path className="ip-status-symbol" d="m4.25 4.25 5.5 5.5m0-5.5-5.5 5.5"/>}</svg></span>}
-
-const STATUS_DEFAULT_COLORS: Record<StatusType,string> = {
-  backlog: '#e79d4f', planned: '#a8a8aa', started: '#e2b714', completed: '#5e6ad2', canceled: '#8a8f98',
+function IssueTemplateMenuIcon({
+  name,
+}: {
+  name: "edit" | "duplicate" | "clipboard" | "delete";
+}) {
+  if (name === "edit" || name === "delete")
+    return <StatusMenuIcon name={name} />;
+  return (
+    <svg aria-hidden="true" viewBox="0 0 16 16">
+      {name === "duplicate" ? (
+        <path d="M12.2517 1A2.75 2.75 0 0 1 15.0017 3.75v4.5A2.75 2.75 0 0 1 12.2517 11H11.001l.0007 1.25A2.75 2.75 0 0 1 8.25171 15H3.75A2.75 2.75 0 0 1 1 12.25v-4.5A2.75 2.75 0 0 1 3.75 5H5V3.75A2.75 2.75 0 0 1 7.75 1h4.5017ZM5 6.5H3.75c-.69036 0-1.25.55964-1.25 1.25v4.5c0 .6904.55964 1.25 1.25 1.25h4.50171c.69035 0 1.25-.5596 1.25-1.25L9.501 9.5l.00071-1.75c0-.69036-.55965-1.25-1.25-1.25H5Zm7.2517-4H7.75c-.69036 0-1.25.55964-1.25 1.25V5h1.75171a2.75 2.75 0 0 1 2.75 2.75L11.001 9.5h1.2507c.6904 0 1.25-.55964 1.25-1.25v-4.5c0-.69036-.5596-1.25-1.25-1.25Z" />
+      ) : (
+        <>
+          <path
+            fillRule="evenodd"
+            d="M6.08 2.5v1.167h3.834V2.5H6.08Zm-1.5-.083C4.58 1.634 5.216 1 5.998 1h4c.783 0 1.417.634 1.417 1.417V3.75c0 .782-.634 1.417-1.417 1.417h-4A1.417 1.417 0 0 1 4.581 3.75V2.417Z"
+            clipRule="evenodd"
+          />
+          <path
+            fillRule="evenodd"
+            d="M4.087 3.749a.583.583 0 0 0-.583.583l.001 8.583a.583.583 0 0 0 .584.584h7.82a.583.583 0 0 0 .583-.584V4.332a.583.583 0 0 0-.584-.583H11a.75.75 0 0 1 0-1.5h.909a2.083 2.083 0 0 1 2.083 2.083v8.583A2.083 2.083 0 0 1 11.908 15h-7.82a2.083 2.083 0 0 1-2.083-2.084l-.001-8.583A2.084 2.084 0 0 1 4.087 2.25H5a.75.75 0 1 1 0 1.5h-.913Z"
+            clipRule="evenodd"
+          />
+        </>
+      )}
+    </svg>
+  );
 }
 
-export function StatusColorPicker({color,type,onChange,preview}:{color:string;type:string;onChange:(color:string)=>void;preview?:ReactNode}) {
-  const {t}=useI18n(),satRef=useRef<HTMLDivElement>(null),hsv=hexToHsv(color),[draft,setDraft]=useState(color.toLowerCase())
-  const progress=type==='started'?.7:undefined
-  const commit=(next:string)=>{const normalized=normalizeHex(next);if(!normalized)return;setDraft(normalized);onChange(normalized)}
-  const pickSaturation=(clientX:number,clientY:number)=>{const rect=satRef.current?.getBoundingClientRect();if(!rect)return;commit(hsvToHex(hsv.h,clamp((clientX-rect.left)/rect.width),clamp(1-(clientY-rect.top)/rect.height)))}
-  return <Popover.Root onOpenChange={open=>{if(open)setDraft(color.toLowerCase())}}><Popover.Trigger asChild><button className="ip-status-color" aria-label={t('Color')} type="button">{preview??<ProjectStatusMark progress={progress} status={{id:'status-color-preview',name:'',color,type:type as ProjectStatus['type'],position:0}}/>}</button></Popover.Trigger><Popover.Portal><Popover.Content align="start" className="ip-status-color-menu" collisionPadding={8} sideOffset={4} data-i18n-ignore onCloseAutoFocus={event=>event.preventDefault()} onKeyDown={event=>{if(event.key==='Escape')event.stopPropagation()}}><div className="ip-status-color-value"><span aria-hidden="true" style={{background:color}}><Check/></span><label>HEX<input aria-label="HEX" spellCheck={false} value={draft} onChange={event=>setDraft(event.target.value)} onBlur={()=>{const normalized=normalizeHex(draft);if(normalized)commit(normalized);else setDraft(color.toLowerCase())}} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();const normalized=normalizeHex(draft);if(normalized)commit(normalized)}}}/></label></div><div className="ip-status-color-controls"><div aria-label={t('Saturation and brightness')} aria-valuemax={100} aria-valuemin={0} aria-valuenow={Math.round(hsv.s*100)} className="ip-status-saturation" onKeyDown={event=>{let s=hsv.s,v=hsv.v;if(event.key==='ArrowLeft')s-=.01;else if(event.key==='ArrowRight')s+=.01;else if(event.key==='ArrowDown')v-=.01;else if(event.key==='ArrowUp')v+=.01;else return;event.preventDefault();commit(hsvToHex(hsv.h,clamp(s),clamp(v)))}} onPointerDown={event=>{event.currentTarget.setPointerCapture(event.pointerId);pickSaturation(event.clientX,event.clientY)}} onPointerMove={event=>{if(event.currentTarget.hasPointerCapture(event.pointerId))pickSaturation(event.clientX,event.clientY)}} ref={satRef} role="slider" style={{'--status-hue':`hsl(${hsv.h} 100% 50%)`} as CSSProperties} tabIndex={0}><i style={{left:`${hsv.s*100}%`,top:`${(1-hsv.v)*100}%`}}/></div><div className="ip-status-hue-wrap"><input aria-label={t('Hue')} max="360" min="0" onChange={event=>commit(hsvToHex(Number(event.target.value),hsv.s,hsv.v))} type="range" value={Math.round(hsv.h)}/><i style={{top:`${(hsv.h/360)*100}%`}}/></div></div></Popover.Content></Popover.Portal></Popover.Root>
+function TemplateTypeDialog({
+  open,
+  onOpenChange,
+  onChoose,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onChoose: (form: boolean) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="it-dialog-overlay" />
+        <Dialog.Content
+          className="it-type-dialog"
+          aria-describedby={undefined}
+          data-i18n-ignore
+        >
+          <Dialog.Title>{t("Choose issue template type")}</Dialog.Title>
+          <Dialog.Close asChild>
+            <button
+              aria-label={t("Close modal dialog")}
+              className="it-dialog-close"
+            >
+              <X />
+            </button>
+          </Dialog.Close>
+          <div className="it-type-options">
+            <button onClick={() => onChoose(false)}>
+              <span>
+                <strong>{t("Standard")}</strong>
+                <small>
+                  {t(
+                    "Basic template with title, description, and default attributes",
+                  )}
+                </small>
+              </span>
+              <i className="it-standard-preview">
+                <b>{t("Issue title")}</b>
+                <em>{t("Add description…")}</em>
+                <span>
+                  ◌ {t("Backlog")}　··· {t("Priority")}　···
+                </span>
+              </i>
+            </button>
+            <button onClick={() => onChoose(true)}>
+              <span>
+                <strong>{t("Custom Form")}</strong>
+                <small>
+                  {t("Define structured fields and inputs. Ideal for Asks")}
+                </small>
+              </span>
+              <i className="it-form-preview">
+                <b>{t("Repro steps")}</b>
+                <em>{t("Enter text")}</em>
+                <b>{t("Platform")}</b>
+                <em>{t("Select an option")}⌄</em>
+              </i>
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
 }
 
-function clamp(value:number){return Math.min(1,Math.max(0,value))}
-function normalizeHex(value:string){const trimmed=value.trim();const short=/^#?([0-9a-f]{3})$/i.exec(trimmed);if(short)return `#${short[1].split('').map(part=>part+part).join('').toLowerCase()}`;const full=/^#?([0-9a-f]{6})$/i.exec(trimmed);return full?`#${full[1].toLowerCase()}`:null}
-function hexToHsv(value:string){const normalized=normalizeHex(value)??'#8a8f98',number=Number.parseInt(normalized.slice(1),16),r=((number>>16)&255)/255,g=((number>>8)&255)/255,b=(number&255)/255,max=Math.max(r,g,b),min=Math.min(r,g,b),delta=max-min;let h=0;if(delta){if(max===r)h=60*(((g-b)/delta)%6);else if(max===g)h=60*((b-r)/delta+2);else h=60*((r-g)/delta+4)}return{h:h<0?h+360:h,s:max===0?0:delta/max,v:max}}
-function hsvToHex(h:number,s:number,v:number){const c=v*s,x=c*(1-Math.abs(((h/60)%2)-1)),m=v-c;let r=0,g=0,b=0;if(h<60)[r,g,b]=[c,x,0];else if(h<120)[r,g,b]=[x,c,0];else if(h<180)[r,g,b]=[0,c,x];else if(h<240)[r,g,b]=[0,x,c];else if(h<300)[r,g,b]=[x,0,c];else[r,g,b]=[c,0,x];return`#${[r,g,b].map(part=>Math.round((part+m)*255).toString(16).padStart(2,'0')).join('')}`}
+function IssueTemplateEditor({
+  data,
+  template,
+  source,
+  templateType,
+  onClose,
+  onDuplicate,
+  onReload,
+}: {
+  data: BootstrapData;
+  template?: IssueTemplate;
+  source?: IssueTemplate;
+  templateType: "standard" | "customForm";
+  onClose: () => void;
+  onDuplicate?: () => void;
+  onReload: () => Promise<void>;
+}) {
+  const { t } = useI18n(),
+    base = template ?? source,
+    [name, setName] = useState(
+      source ? `Copy of ${source.name}` : (base?.name ?? ""),
+    ),
+    [templateDescription, setTemplateDescription] = useState(
+      source ? "" : (base?.description ?? ""),
+    ),
+    [title, setTitle] = useState(base?.title ?? ""),
+    [body, setBody] = useState(base?.body ?? ""),
+    [icon, setIcon] = useState(base?.icon ?? "Page"),
+    [color, setColor] = useState(base?.color ?? "#bec2c8"),
+    [teamId, setTeamId] = useState(base?.teamId ?? ""),
+    [visibilityTeamId, setVisibilityTeamId] = useState(
+      base?.visibilityTeamId ?? "",
+    ),
+    [priority, setPriority] = useState(base?.priority ?? 0),
+    [assigneeId, setAssigneeId] = useState(base?.assigneeId ?? ""),
+    [projectId, setProjectId] = useState(base?.projectId ?? ""),
+    [labelIds, setLabelIds] = useState(base?.labelIds ?? []),
+    [formFields, setFormFields] = useState(base?.formFields ?? []),
+    [subIssues, setSubIssues] = useState(base?.subIssues ?? []),
+    [type, setType] = useState<"standard" | "customForm">(templateType),
+    [saving, setSaving] = useState(false),
+    [discardOpen, setDiscardOpen] = useState(false),
+    [deleteOpen, setDeleteOpen] = useState(false),
+    [actionsOpen, setActionsOpen] = useState(false);
+  const initial = JSON.stringify({
+      name: source ? `Copy of ${source.name}` : (base?.name ?? ""),
+      templateDescription: source ? "" : (base?.description ?? ""),
+      title: base?.title ?? "",
+      body: base?.body ?? "",
+      icon: base?.icon ?? "Page",
+      color: base?.color ?? "#bec2c8",
+      teamId: base?.teamId ?? "",
+      visibilityTeamId: base?.visibilityTeamId ?? "",
+      priority: base?.priority ?? 0,
+      assigneeId: base?.assigneeId ?? "",
+      projectId: base?.projectId ?? "",
+      labelIds: base?.labelIds ?? [],
+      formFields: base?.formFields ?? [],
+      subIssues: base?.subIssues ?? [],
+      type: templateType,
+    }),
+    dirty =
+      initial !==
+      JSON.stringify({
+        name,
+        templateDescription,
+        title,
+        body,
+        icon,
+        color,
+        teamId,
+        visibilityTeamId,
+        priority,
+        assigneeId,
+        projectId,
+        labelIds,
+        formFields,
+        subIssues,
+        type,
+      });
+  const close = () => (dirty ? setDiscardOpen(true) : onClose());
+  const save = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      const input = {
+        name: name.trim(),
+        description: templateDescription,
+        title,
+        body,
+        icon,
+        color,
+        teamId: teamId || undefined,
+        visibilityTeamId: visibilityTeamId || undefined,
+        priority,
+        assigneeId: assigneeId || undefined,
+        projectId: projectId || undefined,
+        labelIds,
+        templateType: type,
+        formFields,
+        subIssues,
+      };
+      if (template) await updateWorkspaceIssueTemplate(template.id, input);
+      else await createWorkspaceIssueTemplate(input);
+      await onReload();
+      onClose();
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const remove = async () => {
+    if (!template) return;
+    await deleteWorkspaceIssueTemplate(template.id);
+    await onReload();
+    onClose();
+  };
+  const copyUrl = async () => {
+    if (!template) return;
+    await navigator.clipboard.writeText(
+      `${location.origin}/${encodeURIComponent(data.workspace.urlKey)}/issues/all?create=1&template=${encodeURIComponent(template.id)}`,
+    );
+    toast.success(t("Link copied"));
+  };
+  return (
+    <div className="it-editor" data-i18n-ignore>
+      <a className="it-editor-back" onClick={close}>
+        <ChevronRight />
+        {t("Issue templates")}
+      </a>
+      <div className="it-template-heading">
+        <ViewIconPicker
+          color={color}
+          icon={icon}
+          onChange={(visual) => {
+            setIcon(visual.icon);
+            setColor(visual.color);
+          }}
+          triggerClassName="it-icon-trigger"
+        />
+        <input
+          autoFocus
+          aria-label={t("Template name")}
+          placeholder={t("Template name")}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        {template && (
+          <Popover.Root open={actionsOpen} onOpenChange={setActionsOpen}>
+            <Popover.Trigger asChild>
+              <button aria-label={t("Open menu")} className="it-editor-actions">
+                <MoreHorizontal />
+              </button>
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content
+                align="end"
+                className="it-menu it-editor-menu"
+                sideOffset={4}
+                data-i18n-ignore
+              >
+                {onDuplicate && (
+                  <button role="option" onClick={onDuplicate}>
+                    <Copy />
+                    {t("Duplicate…")}
+                  </button>
+                )}
+                <TemplateVisibility
+                  teamId={visibilityTeamId}
+                  teams={data.teams}
+                  onChange={setVisibilityTeamId}
+                />
+                {type === "standard" && (
+                  <button
+                    role="option"
+                    onClick={() => {
+                      setActionsOpen(false);
+                      setType("customForm");
+                    }}
+                  >
+                    <FileText />
+                    {t("Convert to form template")}
+                  </button>
+                )}
+                <span />
+                <button
+                  role="option"
+                  onClick={() => {
+                    setActionsOpen(false);
+                    void copyUrl();
+                  }}
+                >
+                  <Clipboard />
+                  {t("Copy URL to create issue from template")}
+                </button>
+                <span />
+                <button
+                  role="option"
+                  onClick={() => {
+                    setActionsOpen(false);
+                    setDeleteOpen(true);
+                  }}
+                >
+                  <Trash2 />
+                  {t("Delete")}
+                </button>
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
+        )}
+        <input
+          aria-label={t("Template description")}
+          placeholder={t("Add an optional template description…")}
+          value={templateDescription}
+          onChange={(e) => setTemplateDescription(e.target.value)}
+        />
+      </div>
+      {type === "standard" ? (
+        <StandardTemplateBody
+          data={data}
+          title={title}
+          body={body}
+          teamId={teamId}
+          priority={priority}
+          assigneeId={assigneeId}
+          projectId={projectId}
+          labelIds={labelIds}
+          subIssues={subIssues}
+          onTitle={setTitle}
+          onBody={setBody}
+          onTeam={setTeamId}
+          onPriority={setPriority}
+          onAssignee={setAssigneeId}
+          onProject={setProjectId}
+          onLabels={setLabelIds}
+          onSubIssues={setSubIssues}
+        />
+      ) : (
+        <CustomFormTemplateBody
+          data={data}
+          fields={formFields}
+          teamId={teamId}
+          priority={priority}
+          assigneeId={assigneeId}
+          projectId={projectId}
+          labelIds={labelIds}
+          onFields={setFormFields}
+          onTeam={setTeamId}
+          onPriority={setPriority}
+          onAssignee={setAssigneeId}
+          onProject={setProjectId}
+          onLabels={setLabelIds}
+        />
+      )}
+      <footer className="it-editor-footer">
+        <button onClick={close}>{t("Cancel")}</button>
+        <button
+          className="primary"
+          disabled={!name.trim() || saving}
+          onClick={() => void save()}
+        >
+          {t(template ? "Save" : "Create")}
+        </button>
+      </footer>
+      <DiscardTemplateDialog
+        open={discardOpen}
+        onClose={() => setDiscardOpen(false)}
+        onConfirm={onClose}
+      />
+      <ConfirmTemplateDelete
+        template={deleteOpen ? template : undefined}
+        onClose={() => setDeleteOpen(false)}
+        onDelete={remove}
+      />
+    </div>
+  );
+}
 
-function formatDuration(minutes: number, t: (value: string) => string) { if (minutes % 1440 === 0) return t(`${minutes / 1440} days`); if (minutes % 60 === 0) return t(`${minutes / 60} hours`); return t(`${minutes} minutes`) }
-function errorMessage(error: unknown) { return error instanceof Error ? error.message : 'Could not save setting' }
+function StandardTemplateBody({
+  data,
+  title,
+  body,
+  teamId,
+  priority,
+  assigneeId,
+  projectId,
+  labelIds,
+  subIssues,
+  onTitle,
+  onBody,
+  onTeam,
+  onPriority,
+  onAssignee,
+  onProject,
+  onLabels,
+  onSubIssues,
+}: {
+  data: BootstrapData;
+  title: string;
+  body: string;
+  teamId: string;
+  priority: number;
+  assigneeId: string;
+  projectId: string;
+  labelIds: string[];
+  subIssues: TemplateSubIssue[];
+  onTitle: (v: string) => void;
+  onBody: (v: string) => void;
+  onTeam: (v: string) => void;
+  onPriority: (v: number) => void;
+  onAssignee: (v: string) => void;
+  onProject: (v: string) => void;
+  onLabels: (v: string[]) => void;
+  onSubIssues: (v: TemplateSubIssue[]) => void;
+}) {
+  const { t } = useI18n(),
+    [subOpen, setSubOpen] = useState(false);
+  return (
+    <>
+      <section className="it-issue-preview">
+        <input
+          aria-label={t("Issue title")}
+          placeholder={t("Issue title")}
+          value={title}
+          onChange={(e) => onTitle(e.target.value)}
+        />
+        <textarea
+          aria-label={t("Issue description")}
+          placeholder={t("Add description…")}
+          value={body}
+          onChange={(e) => onBody(e.target.value)}
+        />
+      </section>
+      <TemplateDefaults
+        data={data}
+        teamId={teamId}
+        priority={priority}
+        assigneeId={assigneeId}
+        projectId={projectId}
+        labelIds={labelIds}
+        onTeam={onTeam}
+        onPriority={onPriority}
+        onAssignee={onAssignee}
+        onProject={onProject}
+        onLabels={onLabels}
+        onAddSubIssue={() => setSubOpen(true)}
+      >
+        {subIssues.map((item) => (
+          <SubIssueTemplateRow
+            item={item}
+            key={item.id}
+            onChange={(next) =>
+              onSubIssues(
+                subIssues.map((value) => (value.id === next.id ? next : value)),
+              )
+            }
+            onRemove={() =>
+              onSubIssues(subIssues.filter((value) => value.id !== item.id))
+            }
+          />
+        ))}
+      </TemplateDefaults>
+      {subOpen && (
+        <SubIssueTemplateComposer
+          data={data}
+          onCancel={() => setSubOpen(false)}
+          onAdd={(item) => {
+            onSubIssues([...subIssues, item]);
+            setSubOpen(false);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function CustomFormTemplateBody({
+  data,
+  fields,
+  teamId,
+  priority,
+  assigneeId,
+  projectId,
+  labelIds,
+  onFields,
+  onTeam,
+  onPriority,
+  onAssignee,
+  onProject,
+  onLabels,
+}: {
+  data: BootstrapData;
+  fields: TemplateFormField[];
+  teamId: string;
+  priority: number;
+  assigneeId: string;
+  projectId: string;
+  labelIds: string[];
+  onFields: (v: TemplateFormField[]) => void;
+  onTeam: (v: string) => void;
+  onPriority: (v: number) => void;
+  onAssignee: (v: string) => void;
+  onProject: (v: string) => void;
+  onLabels: (v: string[]) => void;
+}) {
+  const { t } = useI18n(),
+    [menuOpen, setMenuOpen] = useState(false),
+    [dragging, setDragging] = useState<string>();
+  const add = (type: TemplateFormFieldType) => {
+    const fixed =
+        TEMPLATE_FIELD_TYPES.find((item) => item.type === type)?.label ?? "",
+      label = [
+        "instructions",
+        "title",
+        "labelGroup",
+        "priority",
+        "dueDate",
+      ].includes(type)
+        ? t(fixed)
+        : "";
+    onFields([
+      ...fields,
+      { id: crypto.randomUUID(), label, type, required: false, options: [] },
+    ]);
+    setMenuOpen(false);
+  };
+  const move = (from: number, to: number) => {
+    if (to < 0 || to >= fields.length) return;
+    const next = [...fields],
+      [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    onFields(next);
+  };
+  return (
+    <>
+      <section className="it-form-fields">
+        <header>
+          <h2>{t("Form fields")}</h2>
+          <p>
+            {t(
+              "Choose which form fields to show when creating an issue with this template",
+            )}
+          </p>
+        </header>
+        <div className={`it-fields-card${fields.length ? " has-fields" : ""}`}>
+          {fields.length ? (
+            fields.map((field, index) => (
+              <div
+                className={`it-field-sortable${dragging === field.id ? " is-dragging" : ""}`}
+                draggable={fields.length > 1}
+                key={field.id}
+                onDragStart={() => setDragging(field.id)}
+                onDragEnd={() => setDragging(undefined)}
+                onDragOver={(e) => {
+                  if (fields.length > 1) e.preventDefault();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const from = fields.findIndex((item) => item.id === dragging);
+                  if (from >= 0) move(from, index);
+                  setDragging(undefined);
+                }}
+                onKeyDown={(e) => {
+                  if (e.altKey && e.key === "ArrowUp") {
+                    e.preventDefault();
+                    move(index, index - 1);
+                  }
+                  if (e.altKey && e.key === "ArrowDown") {
+                    e.preventDefault();
+                    move(index, index + 1);
+                  }
+                }}
+                tabIndex={fields.length > 1 ? 0 : -1}
+              >
+                {fields.length > 1 && <StatusDragHandle />}
+                <TemplateFormFieldEditor
+                  field={field}
+                  onChange={(next) =>
+                    onFields(
+                      fields.map((value, i) => (i === index ? next : value)),
+                    )
+                  }
+                  onRemove={() =>
+                    onFields(fields.filter((_, i) => i !== index))
+                  }
+                />
+              </div>
+            ))
+          ) : (
+            <span>{t("No fields added yet")}</span>
+          )}
+          {!fields.length && (
+            <AddTemplateFieldMenu
+              onAdd={add}
+              open={menuOpen}
+              onOpenChange={setMenuOpen}
+            />
+          )}
+        </div>
+        {Boolean(fields.length) && (
+          <AddTemplateFieldMenu
+            onAdd={add}
+            open={menuOpen}
+            onOpenChange={setMenuOpen}
+          />
+        )}
+      </section>
+      <TemplateDefaults
+        data={data}
+        teamId={teamId}
+        priority={priority}
+        assigneeId={assigneeId}
+        projectId={projectId}
+        labelIds={labelIds}
+        onTeam={onTeam}
+        onPriority={onPriority}
+        onAssignee={onAssignee}
+        onProject={onProject}
+        onLabels={onLabels}
+      />
+    </>
+  );
+}
+
+function AddTemplateFieldMenu({
+  open,
+  onOpenChange,
+  onAdd,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onAdd: (type: TemplateFormFieldType) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <Popover.Root open={open} onOpenChange={onOpenChange}>
+      <Popover.Trigger asChild>
+        <button className="it-add-field">
+          <Plus />
+          {t("Add field")}
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          align="end"
+          className="it-menu it-field-menu"
+          sideOffset={4}
+          data-i18n-ignore
+        >
+          {TEMPLATE_FIELD_TYPES.map((item, index) => {
+            const Icon = item.icon;
+            return (
+              <span key={item.type}>
+                {index === 7 && <small>{t("Issue properties")}</small>}
+                <button role="option" onClick={() => onAdd(item.type)}>
+                  <Icon />
+                  {t(item.label)}
+                  {item.type === "labelGroup" && <ChevronRight />}
+                </button>
+              </span>
+            );
+          })}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
+function TemplateFormFieldEditor({
+  field,
+  onChange,
+  onRemove,
+}: {
+  field: TemplateFormField;
+  onChange: (v: TemplateFormField) => void;
+  onRemove: () => void;
+}) {
+  const { t } = useI18n(),
+    [typeOpen, setTypeOpen] = useState(false),
+    definition = TEMPLATE_FIELD_TYPES.find((item) => item.type === field.type)!,
+    Icon = definition.icon,
+    needsLabel = ![
+      "instructions",
+      "title",
+      "labelGroup",
+      "priority",
+      "dueDate",
+    ].includes(field.type),
+    hasOptions = field.type === "dropdown" || field.type === "checkboxes";
+  return (
+    <div className="it-field-editor">
+      <header>
+        <Popover.Root open={typeOpen} onOpenChange={setTypeOpen}>
+          <Popover.Trigger asChild>
+            <button>
+              <Icon />
+              {t(definition.label)}
+              <ChevronDown />
+            </button>
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Content
+              className="it-menu it-field-type-menu"
+              sideOffset={4}
+            >
+              {TEMPLATE_FIELD_TYPES.map((item) => {
+                const TypeIcon = item.icon;
+                return (
+                  <button
+                    role="option"
+                    key={item.type}
+                    onClick={() => {
+                      onChange({
+                        ...field,
+                        type: item.type,
+                        label: [
+                          "instructions",
+                          "title",
+                          "labelGroup",
+                          "priority",
+                          "dueDate",
+                        ].includes(item.type)
+                          ? t(item.label)
+                          : field.label,
+                      });
+                      setTypeOpen(false);
+                    }}
+                  >
+                    <TypeIcon />
+                    {t(item.label)}
+                    {item.type === field.type && <Check />}
+                  </button>
+                );
+              })}
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
+        {needsLabel && (
+          <label>
+            <input
+              type="checkbox"
+              checked={field.required}
+              onChange={(e) =>
+                onChange({ ...field, required: e.target.checked })
+              }
+            />
+            {t("Required")}
+          </label>
+        )}
+        <button aria-label={t("Remove field")} onClick={onRemove}>
+          <X />
+        </button>
+      </header>
+      {needsLabel && (
+        <>
+          <input
+            autoFocus
+            aria-label={t("Field label")}
+            placeholder={t("Add label…")}
+            value={field.label}
+            onChange={(e) => onChange({ ...field, label: e.target.value })}
+          />
+          <input
+            aria-label={t("Field description")}
+            placeholder={t("Add description…")}
+            value={field.description ?? ""}
+            onChange={(e) =>
+              onChange({ ...field, description: e.target.value })
+            }
+          />
+        </>
+      )}
+      {field.type === "text" && (
+        <input disabled placeholder={t("Enter text")} />
+      )}{" "}
+      {field.type === "longText" && (
+        <textarea disabled placeholder={t("Enter text")} />
+      )}{" "}
+      {hasOptions && <TemplateFieldOptions field={field} onChange={onChange} />}{" "}
+      {field.type === "date" && (
+        <input disabled placeholder={t("Select a date")} />
+      )}{" "}
+      {field.type === "upload" && (
+        <button disabled className="it-upload-preview">
+          <Upload />
+          {t("Upload file")}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function TemplateFieldOptions({
+  field,
+  onChange,
+}: {
+  field: TemplateFormField;
+  onChange: (v: TemplateFormField) => void;
+}) {
+  const { t } = useI18n(),
+    options = field.options ?? [];
+  return (
+    <div className="it-field-options">
+      {options.map((option, index) => (
+        <div key={index}>
+          <input
+            aria-label={`${t("Option")} ${index + 1}`}
+            placeholder={t("Option")}
+            value={option}
+            onChange={(e) =>
+              onChange({
+                ...field,
+                options: options.map((value, i) =>
+                  i === index ? e.target.value : value,
+                ),
+              })
+            }
+          />
+          <button
+            aria-label={t("Remove option")}
+            onClick={() =>
+              onChange({
+                ...field,
+                options: options.filter((_, i) => i !== index),
+              })
+            }
+          >
+            <X />
+          </button>
+        </div>
+      ))}
+      <button onClick={() => onChange({ ...field, options: [...options, ""] })}>
+        <Plus />
+        {t("Add option")}
+      </button>
+    </div>
+  );
+}
+
+function IssueTemplatePropertyMenus({
+  data,
+  teamId,
+  priority,
+  assigneeId,
+  projectId,
+  labelIds,
+  showProject = true,
+  onTeam,
+  onPriority,
+  onAssignee,
+  onProject,
+  onLabels,
+}: {
+  data: BootstrapData;
+  teamId: string;
+  priority: number;
+  assigneeId: string;
+  projectId: string;
+  labelIds: string[];
+  showProject?: boolean;
+  onTeam: (id: string) => void;
+  onPriority: (value: number) => void;
+  onAssignee: (id: string) => void;
+  onProject?: (id: string) => void;
+  onLabels: (ids: string[]) => void;
+}) {
+  const { t } = useI18n(),
+    team = data.teams.find((item) => item.id === teamId),
+    assignee = data.users.find((item) => item.id === assigneeId),
+    project = data.projects.find((item) => item.id === projectId);
+  return (
+    <>
+      <PropertyMenu
+        compact
+        label={t("Team")}
+        ariaLabel={t("Change team")}
+        searchPlaceholder={t("Change team…")}
+        value={team?.name ?? t("Team")}
+        valueIsEntityName={Boolean(team)}
+        selectedId={teamId}
+        triggerClassName="it-property"
+        icon={<TeamIcon size={14} />}
+        options={[
+          { id: "", label: t("Team"), icon: <TeamIcon size={14} /> },
+          ...data.teams.map((item) => ({
+            id: item.id,
+            label: item.name,
+            icon: <TeamIcon size={14} />,
+            i18nIgnore: true,
+          })),
+        ]}
+        onChange={onTeam}
+      />
+      <PropertyMenu
+        compact
+        label={t("Priority")}
+        ariaLabel={t("Change priority")}
+        searchPlaceholder={t("Change priority…")}
+        value={priorityOptions(t)[priority]?.[1] ?? t("No priority")}
+        selectedId={String(priority)}
+        triggerClassName="it-property"
+        icon={<PriorityIcon priority={priority} size={14} />}
+        options={priorityPropertyOptions(t)}
+        onChange={(value) => onPriority(Number(value))}
+      />
+      <PropertyMenu
+        compact
+        label={t("Assignee")}
+        ariaLabel={t("Change assignee")}
+        searchPlaceholder={t("Change assignee…")}
+        value={assignee?.displayName ?? t("Assignee")}
+        valueIsEntityName={Boolean(assignee)}
+        selectedId={assigneeId}
+        triggerClassName="it-property"
+        icon={
+          assignee ? (
+            <Avatar name={assignee.displayName} />
+          ) : (
+            <NoAssigneeIcon size={14} />
+          )
+        }
+        options={userPropertyOptions(data, t("Assignee"))}
+        onChange={onAssignee}
+      />
+      {showProject && onProject && (
+        <PropertyMenu
+          compact
+          label={t("Project")}
+          ariaLabel={t("Change project")}
+          searchPlaceholder={t("Change project…")}
+          value={project?.name ?? t("Project")}
+          valueIsEntityName={Boolean(project)}
+          selectedId={projectId}
+          triggerClassName="it-property"
+          icon={<ProjectIcon size={14} style={{ color: project?.color }} />}
+          options={[
+            { id: "", label: t("Project"), icon: <ProjectIcon size={14} /> },
+            ...data.projects.map((item) => ({
+              id: item.id,
+              label: item.name,
+              icon: <ProjectIcon size={14} style={{ color: item.color }} />,
+              i18nIgnore: true,
+            })),
+          ]}
+          onChange={onProject}
+        />
+      )}
+      <PropertyMenu
+        compact
+        multiple
+        kind="labels"
+        label={t("Labels")}
+        ariaLabel={t("Change labels")}
+        searchPlaceholder={t("Change labels…")}
+        value={
+          labelIds.length ? `${labelIds.length} ${t("Labels")}` : t("Labels")
+        }
+        selectedIds={labelIds}
+        triggerClassName="it-property"
+        icon={<LabelIcon size={14} />}
+        options={templateLabelOptions(data, "issue")}
+        onChange={(id) =>
+          onLabels(
+            toggleGroupedLabelIds(
+              labelIds,
+              id,
+              templateLabelOptions(data, "issue"),
+            ),
+          )
+        }
+      />
+    </>
+  );
+}
+
+function TemplateDefaults({
+  data,
+  teamId,
+  priority,
+  assigneeId,
+  projectId,
+  labelIds,
+  onTeam,
+  onPriority,
+  onAssignee,
+  onProject,
+  onLabels,
+  onAddSubIssue,
+  children,
+}: {
+  data: BootstrapData;
+  teamId: string;
+  priority: number;
+  assigneeId: string;
+  projectId: string;
+  labelIds: string[];
+  onTeam: (v: string) => void;
+  onPriority: (v: number) => void;
+  onAssignee: (v: string) => void;
+  onProject: (v: string) => void;
+  onLabels: (v: string[]) => void;
+  onAddSubIssue?: () => void;
+  children?: ReactNode;
+}) {
+  const { t } = useI18n();
+  return (
+    <section className="it-defaults">
+      <header>
+        <h2>{t("Default properties")}</h2>
+        <p>
+          {t(
+            onAddSubIssue
+              ? "Automatically applied upon issue creation, and editable while composing in Flow"
+              : "Automatically applied upon issue creation",
+          )}
+        </p>
+      </header>
+      <div className="it-defaults-card">
+        <IssueTemplatePropertyMenus
+          data={data}
+          teamId={teamId}
+          priority={priority}
+          assigneeId={assigneeId}
+          projectId={projectId}
+          labelIds={labelIds}
+          onTeam={onTeam}
+          onPriority={onPriority}
+          onAssignee={onAssignee}
+          onProject={onProject}
+          onLabels={onLabels}
+        />
+        {onAddSubIssue && (
+          <Popover.Root>
+            <Popover.Trigger asChild>
+              <button aria-label={t("Open menu")} className="it-property-more">
+                <MoreHorizontal />
+              </button>
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content
+                align="end"
+                className="it-menu it-subissue-menu"
+                sideOffset={4}
+              >
+                <button role="option" onClick={onAddSubIssue}>
+                  <Plus />
+                  {t("Add sub-issue")}
+                  <kbd>⌘ ⇧ O</kbd>
+                </button>
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function toggleTemplateId(values: string[], id: string) {
+  return values.includes(id)
+    ? values.filter((value) => value !== id)
+    : [...values, id];
+}
+function priorityPropertyOptions(
+  t: (value: string) => string,
+): PropertyOption[] {
+  return priorityOptions(t).map(([id, label], index) => ({
+    id,
+    label,
+    icon: <PriorityIcon priority={index} size={14} />,
+    shortcut: id,
+  }));
+}
+function userPropertyOptions(
+  data: BootstrapData,
+  emptyLabel?: string,
+): PropertyOption[] {
+  return [
+    ...(emptyLabel
+      ? [{ id: "", label: emptyLabel, icon: <NoAssigneeIcon size={14} /> }]
+      : []),
+    ...data.users
+      .filter((item) => item.active)
+      .map((item) => ({
+        id: item.id,
+        label: item.displayName,
+        keywords: `${item.name} ${item.email}`,
+        icon: <Avatar name={item.displayName} />,
+        i18nIgnore: true,
+      })),
+  ];
+}
+function templateLabelOptions(
+  data: BootstrapData,
+  type: "issue" | "project",
+): PropertyOption[] {
+  const groups = new Map(
+    data.labelGroups
+      .filter((group) => group.resourceType === type && !group.archivedAt)
+      .map((group) => [group.id, group.name]),
+  );
+  return labelsForResource(data.labels, type, data.labelGroups).map((item) => ({
+    id: item.id,
+    label: item.name,
+    color: item.color,
+    description: item.description,
+    issueCount: item.issueCount,
+    scope: item.scope,
+    groupId: item.groupId,
+    groupLabel: item.groupId ? groups.get(item.groupId) : undefined,
+    i18nIgnore: true,
+  }));
+}
+function SubIssueTemplateComposer({
+  data,
+  onCancel,
+  onAdd,
+}: {
+  data: BootstrapData;
+  onCancel: () => void;
+  onAdd: (v: TemplateSubIssue) => void;
+}) {
+  const { t } = useI18n(),
+    [title, setTitle] = useState(""),
+    [description, setDescription] = useState(""),
+    [teamId, setTeamId] = useState(""),
+    [priority, setPriority] = useState(0),
+    [assigneeId, setAssigneeId] = useState(""),
+    [labelIds, setLabelIds] = useState<string[]>([]);
+  return (
+    <section className="it-subissue-composer">
+      <strong>{t("Create sub-issue")}</strong>
+      <input
+        autoFocus
+        aria-label={t("Issue title")}
+        placeholder={t("Issue title")}
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+      />
+      <textarea
+        aria-label={t("Issue description")}
+        placeholder={t("Add description…")}
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+      />
+      <div>
+        <IssueTemplatePropertyMenus
+          data={data}
+          teamId={teamId}
+          priority={priority}
+          assigneeId={assigneeId}
+          projectId=""
+          labelIds={labelIds}
+          showProject={false}
+          onTeam={setTeamId}
+          onPriority={setPriority}
+          onAssignee={setAssigneeId}
+          onLabels={setLabelIds}
+        />
+        <span />
+        <button onClick={onCancel}>{t("Cancel")}</button>
+        <button
+          className="primary"
+          disabled={!title.trim()}
+          onClick={() =>
+            onAdd({
+              id: crypto.randomUUID(),
+              title: title.trim(),
+              description,
+              teamId: teamId || undefined,
+              priority,
+              assigneeId: assigneeId || undefined,
+              labelIds,
+            })
+          }
+        >
+          {t("Add sub-issue")}
+        </button>
+      </div>
+    </section>
+  );
+}
+function SubIssueTemplateRow({
+  item,
+  onChange,
+  onRemove,
+}: {
+  item: TemplateSubIssue;
+  onChange: (v: TemplateSubIssue) => void;
+  onRemove: () => void;
+}) {
+  const { t } = useI18n(),
+    [editing, setEditing] = useState(false),
+    [title, setTitle] = useState(item.title),
+    [description, setDescription] = useState(item.description ?? "");
+  if (editing)
+    return (
+      <div className="it-subissue-row is-editing">
+        <span>
+          <input
+            autoFocus
+            aria-label={t("Issue title")}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+          <input
+            aria-label={t("Issue description")}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && title.trim()) {
+                onChange({ ...item, title: title.trim(), description });
+                setEditing(false);
+              }
+              if (e.key === "Escape") {
+                setTitle(item.title);
+                setDescription(item.description ?? "");
+                setEditing(false);
+              }
+            }}
+          />
+        </span>
+        <button
+          aria-label={t("Save")}
+          disabled={!title.trim()}
+          onClick={() => {
+            onChange({ ...item, title: title.trim(), description });
+            setEditing(false);
+          }}
+        >
+          <Check />
+        </button>
+        <button aria-label={t("Cancel")} onClick={() => setEditing(false)}>
+          <X />
+        </button>
+      </div>
+    );
+  return (
+    <div className="it-subissue-row">
+      <span>
+        <strong data-i18n-ignore>{item.title}</strong>
+        <small data-i18n-ignore>{item.description}</small>
+      </span>
+      <button aria-label={t("Edit sub-issue")} onClick={() => setEditing(true)}>
+        <Pencil />
+      </button>
+      <button aria-label={t("Remove sub-issue")} onClick={onRemove}>
+        <X />
+      </button>
+    </div>
+  );
+}
+
+function TemplateVisibility({
+  teamId,
+  teams,
+  onChange,
+  showSelection = false,
+}: {
+  teamId: string;
+  teams: BootstrapData["teams"];
+  onChange: (v: string) => void;
+  showSelection?: boolean;
+}) {
+  const { t } = useI18n(),
+    [open, setOpen] = useState(false);
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <button role="option">
+          {showSelection ? (
+            <>
+              <LayoutTemplate />
+              {teamId
+                ? teams.find((team) => team.id === teamId)?.name
+                : t("Workspace")}
+              <ChevronDown />
+            </>
+          ) : (
+            <>
+              <UsersRound />
+              {t("Template visibility")}
+              <ChevronRight />
+            </>
+          )}
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          className="it-menu it-visibility-menu"
+          side={showSelection ? "bottom" : "right"}
+          align="start"
+          sideOffset={4}
+        >
+          <button
+            role="option"
+            onClick={() => {
+              onChange("");
+              setOpen(false);
+            }}
+          >
+            <LayoutTemplate />
+            {t("Workspace")}
+            {!teamId && <Check />}
+          </button>
+          <small>{t("Your teams")}</small>
+          {teams.map((team) => (
+            <button
+              role="option"
+              key={team.id}
+              onClick={() => {
+                onChange(team.id);
+                setOpen(false);
+              }}
+            >
+              <UsersRound />
+              <span data-i18n-ignore>{team.name}</span>
+              {teamId === team.id && <Check />}
+            </button>
+          ))}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
+function DiscardTemplateDialog({
+  open,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <Dialog.Root open={open} onOpenChange={(value) => !value && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="it-dialog-overlay" />
+        <Dialog.Content
+          className="it-confirm-dialog"
+          aria-describedby={undefined}
+        >
+          <Dialog.Title>{t("Discard changes?")}</Dialog.Title>
+          <footer>
+            <button onClick={onClose}>{t("Cancel")}</button>
+            <button className="primary" onClick={onConfirm}>
+              {t("Confirm")}
+            </button>
+          </footer>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+function ConfirmTemplateDelete({
+  template,
+  onClose,
+  onDelete,
+}: {
+  template?: IssueTemplate;
+  onClose: () => void;
+  onDelete: () => Promise<void>;
+}) {
+  const { locale, t } = useI18n();
+  return (
+    <Dialog.Root
+      open={Boolean(template)}
+      onOpenChange={(value) => !value && onClose()}
+    >
+      <Dialog.Portal>
+        <Dialog.Overlay className="it-dialog-overlay" />
+        <Dialog.Content
+          className="it-confirm-dialog it-delete-confirm"
+          aria-describedby={undefined}
+          data-i18n-ignore
+        >
+          <Dialog.Title>
+            {locale === "zh-CN" ? (
+              <>
+                删除模板“<strong>{template?.name}</strong>”？
+              </>
+            ) : (
+              <>
+                Delete the template <strong>"{template?.name}"</strong>?
+              </>
+            )}
+          </Dialog.Title>
+          <p>{t("You cannot undo this action.")}</p>
+          <footer>
+            <button onClick={onClose}>{t("Cancel")}</button>
+            <button className="primary" onClick={() => void onDelete()}>
+              {t("Delete")}
+            </button>
+          </footer>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+function ConfirmProjectTemplateDelete({
+  template,
+  onClose,
+  onDelete,
+}: {
+  template?: ProjectTemplate;
+  onClose: () => void;
+  onDelete: () => Promise<void>;
+}) {
+  const { locale, t } = useI18n();
+  return (
+    <Dialog.Root
+      open={Boolean(template)}
+      onOpenChange={(value) => !value && onClose()}
+    >
+      <Dialog.Portal>
+        <Dialog.Overlay className="it-dialog-overlay" />
+        <Dialog.Content
+          className="it-confirm-dialog it-delete-confirm"
+          aria-describedby={undefined}
+          data-i18n-ignore
+        >
+          <Dialog.Title>
+            {locale === "zh-CN" ? (
+              <>
+                删除模板“<strong>{template?.name}</strong>”？
+              </>
+            ) : (
+              <>
+                Delete the template <strong>"{template?.name}"</strong>?
+              </>
+            )}
+          </Dialog.Title>
+          <p>{t("You cannot undo this action.")}</p>
+          <footer>
+            <button onClick={onClose}>{t("Cancel")}</button>
+            <button className="primary" onClick={() => void onDelete()}>
+              {t("Delete")}
+            </button>
+          </footer>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+function relativeTemplateTime(value: string) {
+  const minutes = Math.max(
+    0,
+    Math.round((Date.now() - new Date(value).getTime()) / 60000),
+  );
+  return minutes < 1
+    ? "just now"
+    : minutes === 1
+      ? "1 minute ago"
+      : `${minutes} minutes ago`;
+}
+
+function ProjectMilestonesEditor({
+  milestones,
+  open,
+  onOpenChange,
+  onChange,
+}: {
+  milestones: TemplateMilestone[];
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onChange: (v: TemplateMilestone[]) => void;
+}) {
+  const { t } = useI18n(),
+    [name, setName] = useState(""),
+    [description, setDescription] = useState(""),
+    [dragging, setDragging] = useState<string>();
+  const add = () => {
+      if (!name.trim()) return;
+      onChange([
+        ...milestones,
+        { id: crypto.randomUUID(), name: name.trim(), description },
+      ]);
+      setName("");
+      setDescription("");
+      onOpenChange(false);
+    },
+    move = (from: number, to: number) => {
+      if (to < 0 || to >= milestones.length) return;
+      const next = [...milestones],
+        [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      onChange(next);
+    };
+  return (
+    <section className="pt-milestones">
+      <header>
+        <button>
+          {t("Milestones")} {milestones.length || ""}
+          {Boolean(milestones.length) && <ChevronDown />}
+        </button>
+        <button aria-label={t("Add")} onClick={() => onOpenChange(true)}>
+          <Plus />
+        </button>
+      </header>
+      {milestones.map((item, index) => (
+        <div
+          className={`pt-milestone-row${dragging === item.id ? " is-dragging" : ""}`}
+          draggable={milestones.length > 1}
+          key={item.id}
+          onDragStart={() => setDragging(item.id)}
+          onDragEnd={() => setDragging(undefined)}
+          onDragOver={(e) => milestones.length > 1 && e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const from = milestones.findIndex((value) => value.id === dragging);
+            if (from >= 0) move(from, index);
+            setDragging(undefined);
+          }}
+          onKeyDown={(e) => {
+            if (e.altKey && e.key === "ArrowUp") {
+              e.preventDefault();
+              move(index, index - 1);
+            }
+            if (e.altKey && e.key === "ArrowDown") {
+              e.preventDefault();
+              move(index, index + 1);
+            }
+          }}
+          tabIndex={milestones.length > 1 ? 0 : -1}
+        >
+          {milestones.length > 1 && <StatusDragHandle />}
+          <span>◇</span>
+          <strong data-i18n-ignore>{item.name}</strong>
+          <button
+            aria-label={t("Remove milestone")}
+            onClick={() =>
+              onChange(milestones.filter((value) => value.id !== item.id))
+            }
+          >
+            <X />
+          </button>
+        </div>
+      ))}
+      {open && (
+        <div className="pt-milestone-composer">
+          <small>{t("Create milestone")}</small>
+          <input
+            autoFocus
+            aria-label={t("Milestone name")}
+            placeholder={t("Milestone name")}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <textarea
+            aria-label={t("Milestone description template")}
+            placeholder={t("Add a description template…")}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+          <footer>
+            <button onClick={() => onOpenChange(false)}>{t("Cancel")}</button>
+            <button className="primary" disabled={!name.trim()} onClick={add}>
+              {t("Add milestone")}
+            </button>
+          </footer>
+        </div>
+      )}
+      {!open && Boolean(milestones.length) && (
+        <button className="pt-add-milestone" onClick={() => onOpenChange(true)}>
+          <Plus />
+          {t("Add milestone")}
+        </button>
+      )}
+    </section>
+  );
+}
+
+export function TemplateEditor({
+  data,
+  type,
+  template,
+  teamId: lockedTeamId,
+  initialTemplateType,
+  onClose,
+  onSaved,
+}: {
+  data: BootstrapData;
+  type: TemplateKind;
+  template: TemplateValue | null;
+  teamId?: string;
+  initialTemplateType?: "standard" | "customForm";
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const issue = type === "issue" ? (template as IssueTemplate | null) : null;
+  const project =
+    type === "project" ? (template as ProjectTemplate | null) : null;
+  const [name, setName] = useState(template?.name ?? "");
+  const [templateDescription, setTemplateDescription] = useState(
+    issue?.description ?? project?.templateDescription ?? "",
+  );
+  const [description, setDescription] = useState(project?.description ?? "");
+  const [title, setTitle] = useState(issue?.title ?? "");
+  const [projectName, setProjectName] = useState(project?.projectName ?? "");
+  const [body, setBody] = useState(issue?.body ?? "");
+  const [summary, setSummary] = useState(project?.summary ?? "");
+  const [teamId, setTeamId] = useState(lockedTeamId ?? issue?.teamId ?? "");
+  const [statusId, setStatusId] = useState(
+    issue?.stateId ?? project?.statusId ?? "",
+  );
+  const [priority, setPriority] = useState(template?.priority ?? 0);
+  const [ownerId, setOwnerId] = useState(
+    issue?.assigneeId ?? project?.leadId ?? "",
+  );
+  const [projectId, setProjectId] = useState(issue?.projectId ?? "");
+  const [labelIds, setLabelIds] = useState(template?.labelIds ?? []);
+  const [teamIds, setTeamIds] = useState(
+    project?.teamIds ?? (lockedTeamId ? [lockedTeamId] : []),
+  );
+  const [memberIds, setMemberIds] = useState(project?.memberIds ?? []);
+  const [initiativeIds, setInitiativeIds] = useState(
+    project?.initiativeIds ?? [],
+  );
+  const [dependencyIds, setDependencyIds] = useState(
+    project?.dependencyIds ?? [],
+  );
+  const [issueIds, setIssueIds] = useState(project?.issueIds ?? []);
+  const [milestones, setMilestones] = useState<TemplateMilestone[]>(
+    project?.milestones ?? [],
+  );
+  const [visibility, setVisibility] = useState<"workspace" | "teams">(
+    project?.visibility ?? (lockedTeamId ? "teams" : "workspace"),
+  );
+  const [templateType] = useState<"standard" | "customForm">(
+    issue?.templateType ?? initialTemplateType ?? "standard",
+  );
+  const [formFields, setFormFields] = useState<TemplateFormField[]>(
+    issue?.formFields ?? [],
+  );
+  const [milestoneOpen, setMilestoneOpen] = useState(false);
+  const milestoneTriggerRef = useRef<HTMLButtonElement>(null);
+  const [saving, setSaving] = useState(false);
+  const labelOptions = labelsForResource(
+    data.labels,
+    type,
+    data.labelGroups,
+  ).filter((label) => !label.scope || label.scope === "Workspace");
+  const toggle = (setter: Dispatch<SetStateAction<string[]>>, id: string) =>
+    setter((current) =>
+      current.includes(id)
+        ? current.filter((value) => value !== id)
+        : [...current, id],
+    );
+  const toggleLabel = (id: string) =>
+    setLabelIds((current) => toggleGroupedLabelIds(current, id, labelOptions));
+  const save = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      if (type === "issue") {
+        const input = {
+          name: name.trim(),
+          title,
+          description: templateDescription,
+          body,
+          teamId: teamId || undefined,
+          stateId: statusId || undefined,
+          priority,
+          assigneeId: ownerId || undefined,
+          projectId: projectId || undefined,
+          labelIds,
+          templateType,
+          formFields,
+        };
+        if (lockedTeamId) {
+          if (template)
+            await updateIssueTemplate(lockedTeamId, template.id, input);
+          else await createIssueTemplate(lockedTeamId, input);
+        } else if (template)
+          await updateWorkspaceIssueTemplate(template.id, input);
+        else await createWorkspaceIssueTemplate(input);
+      } else {
+        const input = {
+          name: name.trim(),
+          projectName,
+          templateDescription,
+          description,
+          summary,
+          statusId: statusId || undefined,
+          priority,
+          leadId: ownerId || undefined,
+          teamIds,
+          memberIds,
+          labelIds,
+          initiativeIds,
+          dependencyIds,
+          issueIds,
+          milestones,
+          visibility,
+        };
+        if (template) await updateProjectTemplate(template.id, input);
+        else await createProjectTemplate(input);
+      }
+      await onSaved();
+      onClose();
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const remove = async () => {
+    if (!template) return;
+    try {
+      if (type === "issue" && lockedTeamId)
+        await deleteIssueTemplate(lockedTeamId, template.id);
+      else if (type === "issue")
+        await deleteWorkspaceIssueTemplate(template.id);
+      else await deleteProjectTemplate(template.id);
+      await onSaved();
+      onClose();
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  };
+  return (
+    <div className="ip-settings-page ip-template-editor" data-i18n-ignore>
+      <header className="ip-editor-header">
+        <button onClick={onClose}>{t("Cancel")}</button>
+        <strong>
+          {t(template ? `Edit ${type} template` : `New ${type} template`)}
+        </strong>
+        <button
+          className="primary"
+          disabled={saving}
+          onClick={() => void save()}
+        >
+          {t(saving ? "Saving…" : template ? "Save" : "Create")}
+        </button>
+      </header>
+      <div className="ip-editor-content">
+        <EditorField label={t("Template name")}>
+          <input
+            autoFocus
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </EditorField>
+        <EditorField label={t("Template description")}>
+          <input
+            value={templateDescription}
+            onChange={(event) => setTemplateDescription(event.target.value)}
+          />
+        </EditorField>
+        {type === "issue" ? (
+          <>
+            <EditorField label={t("Issue title")}>
+              <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+              />
+            </EditorField>
+            <EditorField label={t("Issue description")}>
+              <textarea
+                rows={5}
+                value={body}
+                onChange={(event) => setBody(event.target.value)}
+              />
+            </EditorField>
+            <div className="ip-properties-grid">
+              <SelectField
+                label={t("Team")}
+                value={teamId}
+                onChange={setTeamId}
+                options={data.teams.map((item) => [item.id, item.name])}
+                empty={t("Choose when creating")}
+                disabled={Boolean(lockedTeamId)}
+              />
+              <SelectField
+                label={t("Priority")}
+                value={String(priority)}
+                onChange={(value) => setPriority(Number(value))}
+                options={priorityOptions(t)}
+              />
+              <SelectField
+                label={t("Assignee")}
+                value={ownerId}
+                onChange={setOwnerId}
+                options={data.users.map((item) => [item.id, item.displayName])}
+                empty={t("Unassigned")}
+              />
+              <SelectField
+                label={t("Project")}
+                value={projectId}
+                onChange={setProjectId}
+                options={data.projects.map((item) => [item.id, item.name])}
+                empty={t("No project")}
+              />
+            </div>
+            <SelectField
+              label={t("Status")}
+              value={statusId}
+              onChange={setStatusId}
+              options={data.states
+                .filter((item) => !teamId || item.teamId === teamId)
+                .map((item) => [item.id, item.name])}
+              empty={t("Default")}
+            />
+            <CheckGroup
+              label={t("Labels")}
+              values={labelIds}
+              options={labelOptions.map((item) => [item.id, item.name])}
+              onToggle={toggleLabel}
+            />
+            {templateType === "customForm" && (
+              <FormFields fields={formFields} onChange={setFormFields} />
+            )}
+          </>
+        ) : (
+          <>
+            <EditorField label={t("Project name")}>
+              <input
+                value={projectName}
+                onChange={(event) => setProjectName(event.target.value)}
+              />
+            </EditorField>
+            <EditorField label={t("Project summary")}>
+              <input
+                value={summary}
+                onChange={(event) => setSummary(event.target.value)}
+              />
+            </EditorField>
+            <div className="ip-properties-grid">
+              <SelectField
+                label={t("Status")}
+                value={statusId}
+                onChange={setStatusId}
+                options={data.projectStatuses.map((item) => [
+                  item.id,
+                  item.name,
+                ])}
+                empty={t("Default")}
+              />
+              <SelectField
+                label={t("Priority")}
+                value={String(priority)}
+                onChange={(value) => setPriority(Number(value))}
+                options={priorityOptions(t)}
+              />
+              <SelectField
+                label={t("Lead")}
+                value={ownerId}
+                onChange={setOwnerId}
+                options={data.users.map((item) => [item.id, item.displayName])}
+                empty={t("Unassigned")}
+              />
+              <SelectField
+                label={t("Visibility")}
+                value={visibility}
+                onChange={(value) =>
+                  setVisibility(value as "workspace" | "teams")
+                }
+                options={[
+                  ["workspace", t("Workspace")],
+                  ["teams", t("Teams")],
+                ]}
+              />
+            </div>
+            <CheckGroup
+              label={t("Members")}
+              values={memberIds}
+              options={data.users.map((item) => [item.id, item.displayName])}
+              onToggle={(id) => toggle(setMemberIds, id)}
+            />
+            <CheckGroup
+              label={t("Teams")}
+              values={teamIds}
+              options={data.teams.map((item) => [item.id, item.name])}
+              onToggle={(id) => toggle(setTeamIds, id)}
+              disabled={Boolean(lockedTeamId)}
+            />
+            <CheckGroup
+              label={t("Initiatives")}
+              values={initiativeIds}
+              options={data.initiatives.map((item) => [item.id, item.name])}
+              onToggle={(id) => toggle(setInitiativeIds, id)}
+            />
+            <CheckGroup
+              label={t("Labels")}
+              values={labelIds}
+              options={labelOptions.map((item) => [item.id, item.name])}
+              onToggle={toggleLabel}
+            />
+            <CheckGroup
+              label={t("Dependencies")}
+              values={dependencyIds}
+              options={data.projects
+                .filter((item) => item.id !== template?.id)
+                .map((item) => [item.id, item.name])}
+              onToggle={(id) => toggle(setDependencyIds, id)}
+            />
+            <CheckGroup
+              label={t("Issues")}
+              values={issueIds}
+              options={data.issues
+                .slice(0, 30)
+                .map((item) => [item.id, `${item.identifier} ${item.title}`])}
+              onToggle={(id) => toggle(setIssueIds, id)}
+            />
+            <EditorField label={t("Project description")}>
+              <textarea
+                rows={5}
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+              />
+            </EditorField>
+            <div className="ip-milestones">
+              <div>
+                <strong>{t("Milestones")}</strong>
+                <button
+                  ref={milestoneTriggerRef}
+                  onClick={() => setMilestoneOpen(true)}
+                >
+                  <Plus size={13} />
+                  {t("Add")}
+                </button>
+              </div>
+              {milestones.length ? (
+                milestones.map((item) => (
+                  <div className="ip-milestone-row" key={item.id}>
+                    <span>
+                      <strong data-i18n-ignore>{item.name}</strong>
+                      <small data-i18n-ignore>{item.description}</small>
+                    </span>
+                    <button
+                      aria-label={t("Remove milestone")}
+                      onClick={() =>
+                        setMilestones((current) =>
+                          current.filter((value) => value.id !== item.id),
+                        )
+                      }
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <small>{t("No milestones")}</small>
+              )}
+            </div>
+          </>
+        )}
+        {template && (
+          <button className="ip-delete-button" onClick={() => void remove()}>
+            <Trash2 size={14} />
+            {t("Delete template")}
+          </button>
+        )}
+      </div>
+      <MilestoneDialog
+        open={milestoneOpen}
+        onOpenChange={setMilestoneOpen}
+        triggerRef={milestoneTriggerRef}
+        onAdd={(milestone) =>
+          setMilestones((current) => [...current, milestone])
+        }
+      />
+    </div>
+  );
+}
+
+function EditorField({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className="ip-editor-field">
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
+function SelectField({
+  label,
+  value,
+  options,
+  empty,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[][];
+  empty?: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <EditorField label={label}>
+      <SettingsSelect
+        disabled={disabled}
+        label={label}
+        value={value}
+        onChange={onChange}
+        options={[
+          ...(empty !== undefined ? [{ value: "", label: empty }] : []),
+          ...options.map(([id, name]) => ({
+            value: id,
+            label: name,
+            entityName: true,
+          })),
+        ]}
+      />
+    </EditorField>
+  );
+}
+function CheckGroup({
+  label,
+  values,
+  options,
+  disabled,
+  onToggle,
+}: {
+  label: string;
+  values: string[];
+  options: string[][];
+  disabled?: boolean;
+  onToggle: (id: string) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <fieldset className="ip-check-group" disabled={disabled}>
+      <legend>{label}</legend>
+      {options.length ? (
+        options.map(([id, name]) => (
+          <label key={id}>
+            <input
+              type="checkbox"
+              checked={values.includes(id)}
+              onChange={() => onToggle(id)}
+            />
+            <span data-i18n-ignore>{name}</span>
+          </label>
+        ))
+      ) : (
+        <small>{t("No options")}</small>
+      )}
+    </fieldset>
+  );
+}
+function priorityOptions(t: (value: string) => string) {
+  return ["No priority", "Urgent", "High", "Medium", "Low"].map(
+    (item, index) => [String(index), t(item)],
+  );
+}
+
+function FormFields({
+  fields,
+  onChange,
+}: {
+  fields: TemplateFormField[];
+  onChange: (value: TemplateFormField[]) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="ip-form-fields">
+      <div>
+        <strong>{t("Form fields")}</strong>
+        <button
+          onClick={() =>
+            onChange([
+              ...fields,
+              {
+                id: crypto.randomUUID(),
+                label: "",
+                type: "text",
+                required: false,
+                options: [],
+              },
+            ])
+          }
+        >
+          <Plus size={13} />
+          {t("Add field")}
+        </button>
+      </div>
+      {fields.map((field, index) => (
+        <div className="ip-form-field" key={field.id}>
+          <input
+            aria-label={t("Field label")}
+            placeholder={t("Field label")}
+            value={field.label}
+            onChange={(event) =>
+              onChange(
+                fields.map((item, itemIndex) =>
+                  itemIndex === index
+                    ? { ...item, label: event.target.value }
+                    : item,
+                ),
+              )
+            }
+          />
+          <SettingsSelect
+            label={t("Field type")}
+            value={field.type}
+            onChange={(value) =>
+              onChange(
+                fields.map((item, itemIndex) =>
+                  itemIndex === index
+                    ? {
+                        ...item,
+                        type: value as TemplateFormField["type"],
+                      }
+                    : item,
+                ),
+              )
+            }
+            options={["text", "textarea", "select", "checkbox", "date"]}
+          />
+          <label>
+            <input
+              type="checkbox"
+              checked={field.required}
+              onChange={(event) =>
+                onChange(
+                  fields.map((item, itemIndex) =>
+                    itemIndex === index
+                      ? { ...item, required: event.target.checked }
+                      : item,
+                  ),
+                )
+              }
+            />
+            {t("Required")}
+          </label>
+          <button
+            aria-label={t("Delete field")}
+            onClick={() =>
+              onChange(fields.filter((_, itemIndex) => itemIndex !== index))
+            }
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MilestoneDialog({
+  open,
+  onOpenChange,
+  triggerRef,
+  onAdd,
+}: {
+  open: boolean;
+  onOpenChange: (value: boolean) => void;
+  triggerRef: RefObject<HTMLButtonElement | null>;
+  onAdd: (value: TemplateMilestone) => void;
+}) {
+  const { t } = useI18n();
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const add = () => {
+    if (!name.trim()) return;
+    onAdd({ id: crypto.randomUUID(), name: name.trim(), description });
+    setName("");
+    setDescription("");
+    onOpenChange(false);
+  };
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="ip-dialog-overlay" />
+        <Dialog.Content
+          className="ip-dialog"
+          data-i18n-ignore
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            triggerRef.current?.focus();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey))
+              add();
+          }}
+        >
+          <Dialog.Title>{t("Add milestone")}</Dialog.Title>
+          <EditorField label={t("Milestone name")}>
+            <input
+              autoFocus
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </EditorField>
+          <EditorField label={t("Milestone description template")}>
+            <textarea
+              rows={4}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+            />
+          </EditorField>
+          <footer>
+            <Dialog.Close asChild>
+              <button>{t("Cancel")}</button>
+            </Dialog.Close>
+            <button className="primary" disabled={!name.trim()} onClick={add}>
+              {t("Add milestone")}
+            </button>
+          </footer>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+export function SLASettings({
+  data,
+  onReload,
+}: {
+  data: BootstrapData;
+  onReload: () => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const settings = (data.settings?.sla ?? {}) as Record<string, unknown>;
+  const enabled = settings.enabled === true;
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  const [targetMinutes, setTargetMinutes] = useState(1440);
+  const [priority, setPriority] = useState("");
+  const [saving, setSaving] = useState(false);
+  const run = async (action: () => Promise<unknown>) => {
+    setSaving(true);
+    try {
+      await action();
+      await onReload();
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="ip-settings-page" data-i18n-ignore>
+      <header className="settings-page-header ip-page-header">
+        <div>
+          <h1>{t("SLAs")}</h1>
+          <p>
+            {t(
+              "Set response and resolution expectations for issues that match defined rules.",
+            )}{" "}
+            <a
+              href="https://flow.app/docs/sla"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t("Docs")}
+              <ExternalLink size={11} />
+            </a>
+          </p>
+        </div>
+      </header>
+      <section className="ip-settings-section">
+        <div className="ip-setting-row">
+          <span>
+            <strong>{t("Enable SLAs")}</strong>
+            <small>
+              {t("Apply SLA rules and deadlines across your workspace.")}
+            </small>
+          </span>
+          <SettingsToggle
+            checked={enabled}
+            disabled={saving}
+            label={t("Enable SLAs")}
+            onChange={(value) =>
+              run(() => updateSLASettings({ enabled: value }))
+            }
+          />
+        </div>
+      </section>
+      <section className="ip-settings-section">
+        <header>
+          <h3>{t("Automation rules")}</h3>
+          <button
+            className="settings-action"
+            disabled={!enabled || creating}
+            onClick={() => setCreating(true)}
+          >
+            <Plus size={14} />
+            {t("Add rule")}
+          </button>
+        </header>
+        {creating && (
+          <form
+            className="ip-rule-editor"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!name.trim()) return;
+              void run(() =>
+                createSLARule({
+                  name: name.trim(),
+                  targetMinutes,
+                  teamIds: data.teams.map((item) => item.id),
+                  filters: priority ? { priority: Number(priority) } : {},
+                  pauseStatuses: ["completed", "canceled"],
+                  enabled: true,
+                }),
+              ).then(() => {
+                setCreating(false);
+                setName("");
+              });
+            }}
+          >
+            <EditorField label={t("Rule name")}>
+              <input
+                autoFocus
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </EditorField>
+            <div className="ip-properties-grid">
+              <SelectField
+                label={t("Target")}
+                value={String(targetMinutes)}
+                onChange={(value) => setTargetMinutes(Number(value))}
+                options={[
+                  ["60", t("1 hour")],
+                  ["240", t("4 hours")],
+                  ["480", t("8 hours")],
+                  ["1440", t("24 hours")],
+                  ["4320", t("3 days")],
+                ]}
+              />
+              <SelectField
+                label={t("Priority")}
+                value={priority}
+                onChange={setPriority}
+                empty={t("Any priority")}
+                options={priorityOptions(t).slice(1)}
+              />
+            </div>
+            <footer>
+              <button type="button" onClick={() => setCreating(false)}>
+                {t("Cancel")}
+              </button>
+              <button className="primary" disabled={saving}>
+                {t("Create")}
+              </button>
+            </footer>
+          </form>
+        )}
+        {data.slaRules.length
+          ? data.slaRules.map((rule) => (
+              <div className="ip-setting-row" key={rule.id}>
+                <span>
+                  <strong data-i18n-ignore>{rule.name}</strong>
+                  <small>
+                    {formatDuration(rule.targetMinutes, t)} ·{" "}
+                    {t(rule.enabled ? "Active" : "Disabled")}
+                  </small>
+                </span>
+                <div className="ip-row-actions">
+                  <SettingsToggle
+                    checked={rule.enabled}
+                    disabled={!enabled || saving}
+                    label={rule.name}
+                    onChange={(value) =>
+                      run(() => updateSLARule(rule.id, { enabled: value }))
+                    }
+                  />
+                  <button
+                    aria-label={t("Delete rule")}
+                    onClick={() => void run(() => deleteSLARule(rule.id))}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))
+          : !creating && (
+              <div className="ip-empty-row">
+                <span className="ip-template-glyph">
+                  <Circle size={14} />
+                </span>
+                <span>
+                  <strong>{t("No automation rules")}</strong>
+                  <small>
+                    {enabled
+                      ? t("Add a rule to begin applying SLAs.")
+                      : t("Enable SLAs to add automation rules.")}
+                  </small>
+                </span>
+              </div>
+            )}
+      </section>
+    </div>
+  );
+}
+
+export function ProjectUpdateSettings({
+  data,
+  onReload,
+}: {
+  data: BootstrapData;
+  onReload: () => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const current = (data.settings?.projectUpdates ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const initial = Number(current.cadenceDays ?? 0);
+  const [editing, setEditing] = useState(false);
+  const [cadence, setCadence] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const cadenceLabel =
+    cadenceOptions(t).find((item) => item[0] === cadence)?.[1] ??
+    t("No expectation");
+  const save = async () => {
+    setSaving(true);
+    try {
+      await updateProjectUpdateSettings({ cadenceDays: cadence });
+      await onReload();
+      setEditing(false);
+      toast.success(t("Update schedule saved"));
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const connectSlack = async () => {
+    setSaving(true);
+    try {
+      await connectIntegration("slack", {
+        name: "Slack",
+        config: { source: "project-updates" },
+      });
+      toast.success(t("Slack connected"));
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="ip-settings-page" data-i18n-ignore>
+      <header className="settings-page-header ip-page-header">
+        <div>
+          <h1>{t("Project updates")}</h1>
+          <p>
+            {t(
+              "Configure when project updates are expected and where reminders are sent.",
+            )}{" "}
+            <a
+              href="https://flow.app/docs/project-updates"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t("Docs")}
+              <ExternalLink size={11} />
+            </a>
+          </p>
+        </div>
+      </header>
+      <section className="ip-settings-section">
+        <header>
+          <h3>{t("Update schedule")}</h3>
+        </header>
+        <div className="ip-setting-row">
+          <span>
+            <strong>{t("Update cadence")}</strong>
+            <small>{cadenceLabel}</small>
+          </span>
+          {editing ? (
+            <div className="ip-update-editor">
+              <CadenceMenu value={cadence} onChange={setCadence} />
+              <button
+                onClick={() => {
+                  setCadence(initial);
+                  setEditing(false);
+                }}
+              >
+                {t("Cancel")}
+              </button>
+              <button
+                className="primary"
+                disabled={saving}
+                onClick={() => void save()}
+              >
+                {t("Save")}
+              </button>
+            </div>
+          ) : (
+            <button
+              className="settings-action"
+              onClick={() => setEditing(true)}
+            >
+              {t("Edit")}
+            </button>
+          )}
+        </div>
+      </section>
+      <section className="ip-settings-section">
+        <header>
+          <h3>Slack</h3>
+        </header>
+        <div className="ip-setting-row">
+          <span className="ip-slack-label">
+            <MessageSquare size={17} />
+            <span>
+              <strong>{t("Project update notifications")}</strong>
+              <small>
+                {t("Send project update reminders and notifications to Slack.")}
+              </small>
+            </span>
+          </span>
+          <button
+            className="settings-action"
+            disabled={saving}
+            onClick={() => void connectSlack()}
+          >
+            {t("Connect")}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function CadenceMenu({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const { t } = useI18n();
+  const options = cadenceOptions(t);
+  const label = options.find((item) => item[0] === value)?.[1];
+  return (
+    <Dropdown.Root>
+      <Dropdown.Trigger asChild>
+        <button className="ip-combobox" role="combobox">
+          {label}
+          <ChevronDown size={13} />
+        </button>
+      </Dropdown.Trigger>
+      <Dropdown.Portal>
+        <Dropdown.Content
+          className="ip-cadence-menu"
+          align="end"
+          sideOffset={5}
+          data-i18n-ignore
+        >
+          {options.map(([days, text]) => (
+            <Dropdown.Item
+              className="ip-cadence-item"
+              key={days}
+              onSelect={() => onChange(days)}
+            >
+              {text}
+              {days === value && <Check size={13} />}
+            </Dropdown.Item>
+          ))}
+        </Dropdown.Content>
+      </Dropdown.Portal>
+    </Dropdown.Root>
+  );
+}
+function cadenceOptions(t: (value: string) => string): Array<[number, string]> {
+  return [
+    [0, t("No expectation")],
+    [7, t("Every week")],
+    ...[2, 3, 4, 5, 6, 7, 8].map(
+      (value) => [value * 7, t(`Every ${value} weeks`)] as [number, string],
+    ),
+  ];
+}
+
+export function ProjectStatusesSettings({
+  data,
+  onReload,
+}: {
+  data: BootstrapData;
+  onReload: () => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const [creating, setCreating] = useState<StatusType | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const ordered = useMemo(
+    () =>
+      [...data.projectStatuses].sort(
+        (a, b) => (a.position ?? 0) - (b.position ?? 0),
+      ),
+    [data.projectStatuses],
+  );
+  const run = async (action: () => Promise<unknown>) => {
+    try {
+      await action();
+      await onReload();
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  };
+  const move = (status: ProjectStatus, delta: number) => {
+    const group = ordered.filter((item) => item.type === status.type);
+    const index = group.findIndex((item) => item.id === status.id);
+    const target = index + delta;
+    if (target < 0 || target >= group.length) return;
+    const next = [...ordered],
+      left = next.findIndex((item) => item.id === group[index].id),
+      right = next.findIndex((item) => item.id === group[target].id);
+    [next[left], next[right]] = [next[right], next[left]];
+    void run(() => reorderProjectStatuses(next.map((item) => item.id)));
+  };
+  const moveBefore = (status: ProjectStatus, target: ProjectStatus) => {
+    if (status.id === target.id || status.type !== target.type) return;
+    const next = ordered.filter((item) => item.id !== status.id),
+      targetIndex = next.findIndex((item) => item.id === target.id);
+    next.splice(targetIndex, 0, status);
+    void run(() => reorderProjectStatuses(next.map((item) => item.id)));
+  };
+  const busy = creating !== null || editing !== null;
+  return (
+    <div className="ip-settings-page ip-project-statuses-page" data-i18n-ignore>
+      <header className="settings-page-header ip-page-header">
+        <div>
+          <h1>{t("Project statuses")}</h1>
+          <p>
+            {t(
+              "Project statuses define the workflow that projects go through from start to completion",
+            )}
+          </p>
+        </div>
+      </header>
+      <section
+        className="ip-status-card"
+        role="list"
+        aria-label={t("Project statuses")}
+      >
+        {STATUS_SECTIONS.map((section) => {
+          const statuses = ordered.filter((item) => item.type === section.type),
+            canReorder = statuses.length > 1;
+          return (
+            <div className="ip-status-section" role="list" key={section.type}>
+              <header>
+                <h3>{t(section.label)}</h3>
+                <button
+                  aria-label={t("Create new project status")}
+                  disabled={busy}
+                  onClick={() => setCreating(section.type)}
+                >
+                  <Plus />
+                </button>
+              </header>
+              {statuses.map((status, index) => {
+                const usage = data.projects.filter(
+                  (item) => item.status.id === status.id,
+                ).length;
+                return editing === status.id ? (
+                  <StatusEditor
+                    key={status.id}
+                    type={section.type}
+                    status={status}
+                    onCancel={() => setEditing(null)}
+                    onSave={async (input) => {
+                      await run(() => updateProjectStatus(status.id, input));
+                      setEditing(null);
+                    }}
+                  />
+                ) : (
+                  <StatusRow
+                    key={status.id}
+                    canReorder={canReorder}
+                    progress={
+                      section.type === "started"
+                        ? statuses.length === 1
+                          ? 0.3
+                          : 0.3 + (index * 0.4) / (statuses.length - 1)
+                        : undefined
+                    }
+                    status={status}
+                    usage={usage}
+                    dragging={dragging === status.id}
+                    onDragStart={() => setDragging(status.id)}
+                    onDragEnd={() => setDragging(null)}
+                    onDrop={() => {
+                      const source = ordered.find(
+                        (item) => item.id === dragging,
+                      );
+                      if (source) moveBefore(source, status);
+                      setDragging(null);
+                    }}
+                    onEdit={() => setEditing(status.id)}
+                    onMove={(delta) => move(status, delta)}
+                    onDelete={() => {
+                      if (statuses.length === 1) {
+                        toast(t("Can't delete status"), {
+                          description: t(
+                            "You can't delete the last status of a type.",
+                          ),
+                        });
+                        return Promise.resolve();
+                      }
+                      if (usage) {
+                        toast(
+                          `Can't delete the "${status.name}" project status`,
+                          {
+                            description: `The status has ${usage} ${usage === 1 ? "project" : "projects"} assigned. Please archive or move them before deleting the status.`,
+                          },
+                        );
+                        return Promise.resolve();
+                      }
+                      return run(() => deleteProjectStatus(status.id));
+                    }}
+                  />
+                );
+              })}
+              {creating === section.type && (
+                <StatusEditor
+                  type={section.type}
+                  onCancel={() => setCreating(null)}
+                  onSave={async (input) => {
+                    await run(() => createProjectStatus(input));
+                    setCreating(null);
+                  }}
+                />
+              )}
+            </div>
+          );
+        })}
+      </section>
+    </div>
+  );
+}
+function StatusEditor({
+  type,
+  status,
+  onCancel,
+  onSave,
+}: {
+  type: StatusType;
+  status?: ProjectStatus;
+  onCancel: () => void;
+  onSave: (input: {
+    name: string;
+    description: string;
+    color: string;
+    type: string;
+  }) => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const [name, setName] = useState(status?.name ?? "");
+  const [description, setDescription] = useState(status?.description ?? "");
+  const [color, setColor] = useState(
+    status?.color ?? STATUS_DEFAULT_COLORS[type],
+  );
+  const [saving, setSaving] = useState(false);
+  const submit = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      await onSave({
+        name: name.trim(),
+        description: description.trim(),
+        color,
+        type,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <form
+      className="ip-status-editor"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") onCancel();
+      }}
+    >
+      <StatusDragHandle />
+      <StatusColorPicker color={color} type={type} onChange={setColor} />
+      <input
+        autoFocus
+        required
+        aria-label={t("Name")}
+        placeholder={t("Name")}
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+      />
+      <input
+        aria-label={t("Description")}
+        placeholder={t("Description…")}
+        value={description}
+        onChange={(event) => setDescription(event.target.value)}
+      />
+      <footer>
+        <button aria-label={t("Cancel")} type="button" onClick={onCancel}>
+          {t("Cancel")}
+        </button>
+        <button aria-label={t("Submit")} className="primary" disabled={saving}>
+          {t(status ? "Save" : "Create")}
+        </button>
+      </footer>
+    </form>
+  );
+}
+
+function StatusRow({
+  status,
+  usage,
+  progress,
+  canReorder,
+  dragging,
+  onDragStart,
+  onDragEnd,
+  onDrop,
+  onEdit,
+  onMove,
+  onDelete,
+}: {
+  status: ProjectStatus;
+  usage: number;
+  progress?: number;
+  canReorder: boolean;
+  dragging: boolean;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onDrop: () => void;
+  onEdit: () => void;
+  onMove: (delta: number) => void;
+  onDelete: () => Promise<void>;
+}) {
+  const { t } = useI18n(),
+    [menuOpen, setMenuOpen] = useState(false);
+  const view = () => {
+    location.href = `/${location.pathname.split("/")[1]}/projects/all?status=${encodeURIComponent(status.id)}`;
+  };
+  const menuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const items = [
+        ...event.currentTarget.querySelectorAll<HTMLButtonElement>(
+          "[role=option]",
+        ),
+      ],
+      index = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      items[
+        (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) %
+          items.length
+      ]?.focus();
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      items[0]?.focus();
+    }
+    if (event.key === "End") {
+      event.preventDefault();
+      items.at(-1)?.focus();
+    }
+  };
+  const usageControl =
+    usage > 0 ? (
+      canReorder ? (
+        <button
+          className="ip-status-usage"
+          aria-label={t("View projects")}
+          onClick={(event) => {
+            event.stopPropagation();
+            view();
+          }}
+        >
+          {usage} {t(usage === 1 ? "project" : "projects")}
+        </button>
+      ) : (
+        <span className="ip-status-usage is-disabled">
+          {usage} {t(usage === 1 ? "project" : "projects")}
+        </span>
+      )
+    ) : null;
+  return (
+    <div
+      className={`ip-status-row${dragging ? " is-dragging" : ""}`}
+      role="button"
+      aria-disabled={!canReorder}
+      aria-roledescription="sortable"
+      tabIndex={canReorder ? 0 : -1}
+      draggable={canReorder}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragOver={(event) => {
+        if (canReorder) event.preventDefault();
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        onDrop();
+      }}
+      onKeyDown={(event) => {
+        if (!canReorder || !event.altKey) return;
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          onMove(-1);
+        }
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          onMove(1);
+        }
+      }}
+    >
+      {canReorder && <StatusDragHandle />}
+      <ProjectStatusMark progress={progress} status={status} />
+      <span className="ip-status-copy">
+        <strong data-i18n-ignore>{status.name}</strong>
+        {(usageControl || status.description) && (
+          <small>
+            {usageControl}
+            {usageControl && status.description && " · "}
+            {status.description && (
+              <span data-i18n-ignore>{status.description}</span>
+            )}
+          </small>
+        )}
+      </span>
+      {canReorder ? (
+        <Popover.Root open={menuOpen} onOpenChange={setMenuOpen}>
+          <Popover.Trigger asChild>
+            <button className="ip-status-more" aria-label={t("Open menu")}>
+              <MoreHorizontal />
+            </button>
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Content
+              className="ip-status-menu"
+              align="end"
+              sideOffset={4}
+              data-i18n-ignore
+              onKeyDown={menuKeyDown}
+            >
+              <span className="ip-status-menu-filter">
+                <input autoFocus aria-label={t("Filter…")} tabIndex={-1} />
+              </span>
+              <button
+                role="option"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onEdit();
+                }}
+              >
+                <StatusMenuIcon name="edit" />
+                <span>{t("Edit")}</span>
+              </button>
+              <button
+                role="option"
+                onClick={() => {
+                  setMenuOpen(false);
+                  void onDelete();
+                }}
+              >
+                <StatusMenuIcon name="delete" />
+                <span>{t("Delete")}</span>
+              </button>
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
+      ) : (
+        <span />
+      )}
+    </div>
+  );
+}
+
+export function StatusDragHandle() {
+  return (
+    <span className="ip-status-drag-handle" aria-hidden="true">
+      <svg width="6" height="10" viewBox="0 0 6 10">
+        <path
+          fillRule="evenodd"
+          d="M1 8a1 1 0 1 1 0 2 1 1 0 0 1 0-2Zm4 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2ZM1 4a1 1 0 1 1 0 2 1 1 0 0 1 0-2Zm4 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2ZM1 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2Zm4 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2Z"
+        />
+      </svg>
+    </span>
+  );
+}
+export function StatusMenuIcon({ name }: { name: "edit" | "delete" }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 16 16">
+      {name === "edit" ? (
+        <>
+          <path d="M10.1805 3.34195 4.14166 9.416a4.02 4.02 0 0 1 2.59842 2.4024L12.6877 5.8425a7.98 7.98 0 0 1-2.5072-2.50055Z" />
+          <path d="M13.7391 4.71631c.4184-.68683.3336-1.59893-.2545-2.19441-.5938-.60118-1.5062-.68298-2.1866-.24541a6.04 6.04 0 0 0 2.4412 2.43982Z" />
+          <path d="M3.03104 10.7502a2.5 2.5 0 0 1 2.46679 2.2612c-.66515.4146-2.09586.7808-2.96669.9772-.33104.0746-.61088-.2284-.51039-.5513.23251-.7471.62517-1.9237 1.01029-2.6871Z" />
+        </>
+      ) : (
+        <>
+          <path
+            fillRule="evenodd"
+            d="m2 3 1.652 9.911A2.5 2.5 0 0 0 6.118 15h3.764a2.5 2.5 0 0 0 2.466-2.089L14 3H2Zm1.77 1.5 1.361 8.164a1 1 0 0 0 .987.836h3.764a1 1 0 0 0 .987-.836l1.36-8.164H3.771Z"
+            clipRule="evenodd"
+          />
+          <path d="M5.5 2.5A1.5 1.5 0 0 1 7 1h2a1.5 1.5 0 0 1 1.5 1.5v1h-5v-1Z" />
+          <path d="M1 3.75A.75.75 0 0 1 1.75 3h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 3.75Z" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+function ProjectStatusMark({
+  status,
+  progress = 0.3,
+}: {
+  status: ProjectStatus;
+  progress?: number;
+}) {
+  const outer =
+      "M2.95778 3.02069 5.70777 1.36023c.79467-.47982 1.78979-.47982 2.58446 0l2.74997 1.6605A2.5 2.5 0 0 1 12.25 5.16086v3.68717a2.5 2.5 0 0 1-1.2112 2.14217l-2.74766 1.6531a2.5 2.5 0 0 1-2.58103-.0021l-2.75236-1.662A2.5 2.5 0 0 1 1.75 8.83911V5.16082a2.5 2.5 0 0 1 1.20778-2.14013Z",
+    inner =
+      "M8.3779 4.74233c-.23352-.13626-.52228-.13626-.7558 0L5.37209 6.05513A.75.75 0 0 0 5 6.70311v2.63905c0 .26681.14168.51357.37209.648l2.25001 1.31284c.23352.1362.52228.1362.7558 0l2.25001-1.31284A.75.75 0 0 0 11 9.34216V6.70311a.75.75 0 0 0-.37209-.64798L8.3779 4.74233Z",
+    maskId = `project-status-${status.id.replace(/[^a-z0-9_-]/gi, "")}-${Math.round(progress * 100)}`;
+  const done = status.type === "completed",
+    canceled = status.type === "canceled",
+    started = status.type === "started";
+  return (
+    <span
+      className={`ip-status-mark is-${status.type}`}
+      style={{ "--status-color": status.color } as CSSProperties}
+    >
+      <svg viewBox="-1 -1 16 16" aria-hidden="true">
+        <path className="ip-status-hex" d={outer} />
+        {status.type === "backlog" && (
+          <path className="ip-status-hex-dash" d={outer} />
+        )}{" "}
+        {started && (
+          <>
+            <mask id={maskId}>
+              <path transform="translate(-1 -1)" d={inner} fill="white" />
+            </mask>
+            <circle
+              className="ip-status-progress"
+              cx="7"
+              cy="7"
+              r="4"
+              pathLength="100"
+              mask={`url(#${maskId})`}
+              style={{ "--status-progress": progress * 100 } as CSSProperties}
+            />
+          </>
+        )}{" "}
+        {(done || canceled) && <path className="ip-status-fill" d={outer} />}{" "}
+        {done && (
+          <path className="ip-status-symbol" d="m3.75 7.1 2 2 4.5-4.5" />
+        )}
+        {canceled && (
+          <path
+            className="ip-status-symbol"
+            d="m4.25 4.25 5.5 5.5m0-5.5-5.5 5.5"
+          />
+        )}
+      </svg>
+    </span>
+  );
+}
+
+const STATUS_DEFAULT_COLORS: Record<StatusType, string> = {
+  backlog: "#e79d4f",
+  planned: "#a8a8aa",
+  started: "#e2b714",
+  completed: "#5e6ad2",
+  canceled: "#8a8f98",
+};
+
+export function StatusColorPicker({
+  color,
+  type,
+  onChange,
+  preview,
+}: {
+  color: string;
+  type: string;
+  onChange: (color: string) => void;
+  preview?: ReactNode;
+}) {
+  const { t } = useI18n(),
+    satRef = useRef<HTMLDivElement>(null),
+    hsv = hexToHsv(color),
+    [draft, setDraft] = useState(color.toLowerCase());
+  const progress = type === "started" ? 0.7 : undefined;
+  const commit = (next: string) => {
+    const normalized = normalizeHex(next);
+    if (!normalized) return;
+    setDraft(normalized);
+    if (normalized === color.toLowerCase()) return;
+    onChange(normalized);
+  };
+  const pickSaturation = (clientX: number, clientY: number) => {
+    const rect = satRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    commit(
+      hsvToHex(
+        hsv.h,
+        clamp((clientX - rect.left) / rect.width),
+        clamp(1 - (clientY - rect.top) / rect.height),
+      ),
+    );
+  };
+  return (
+    <Popover.Root
+      onOpenChange={(open) => {
+        if (open) setDraft(color.toLowerCase());
+      }}
+    >
+      <Popover.Trigger asChild>
+        <button
+          className="ip-status-color"
+          aria-label={t("Color")}
+          type="button"
+        >
+          {preview ?? (
+            <ProjectStatusMark
+              progress={progress}
+              status={{
+                id: "status-color-preview",
+                name: "",
+                color,
+                type: type as ProjectStatus["type"],
+                position: 0,
+              }}
+            />
+          )}
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          align="start"
+          className="ip-status-color-menu"
+          collisionPadding={8}
+          sideOffset={4}
+          data-i18n-ignore
+          onCloseAutoFocus={(event) => event.preventDefault()}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") event.stopPropagation();
+          }}
+        >
+          <div className="ip-status-color-value">
+            <span aria-hidden="true" style={{ background: color }}>
+              <Check />
+            </span>
+            <label>
+              HEX
+              <input
+                aria-label="HEX"
+                spellCheck={false}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onBlur={() => {
+                  const normalized = normalizeHex(draft);
+                  if (normalized) commit(normalized);
+                  else setDraft(color.toLowerCase());
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    const normalized = normalizeHex(draft);
+                    if (normalized) commit(normalized);
+                  }
+                }}
+              />
+            </label>
+          </div>
+          <div className="ip-status-color-controls">
+            <div
+              aria-label={t("Saturation and brightness")}
+              aria-valuemax={100}
+              aria-valuemin={0}
+              aria-valuenow={Math.round(hsv.s * 100)}
+              className="ip-status-saturation"
+              onKeyDown={(event) => {
+                let s = hsv.s,
+                  v = hsv.v;
+                if (event.key === "ArrowLeft") s -= 0.01;
+                else if (event.key === "ArrowRight") s += 0.01;
+                else if (event.key === "ArrowDown") v -= 0.01;
+                else if (event.key === "ArrowUp") v += 0.01;
+                else return;
+                event.preventDefault();
+                commit(hsvToHex(hsv.h, clamp(s), clamp(v)));
+              }}
+              onPointerDown={(event) => {
+                event.currentTarget.setPointerCapture(event.pointerId);
+                pickSaturation(event.clientX, event.clientY);
+              }}
+              onPointerMove={(event) => {
+                if (event.currentTarget.hasPointerCapture(event.pointerId))
+                  pickSaturation(event.clientX, event.clientY);
+              }}
+              ref={satRef}
+              role="slider"
+              style={
+                { "--status-hue": `hsl(${hsv.h} 100% 50%)` } as CSSProperties
+              }
+              tabIndex={0}
+            >
+              <i
+                style={{
+                  left: `${hsv.s * 100}%`,
+                  top: `${(1 - hsv.v) * 100}%`,
+                }}
+              />
+            </div>
+            <div className="ip-status-hue-wrap">
+              <input
+                aria-label={t("Hue")}
+                max="360"
+                min="0"
+                onChange={(event) =>
+                  commit(hsvToHex(Number(event.target.value), hsv.s, hsv.v))
+                }
+                type="range"
+                value={Math.round(hsv.h)}
+              />
+              <i style={{ top: `${(hsv.h / 360) * 100}%` }} />
+            </div>
+          </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
+function clamp(value: number) {
+  return Math.min(1, Math.max(0, value));
+}
+function normalizeHex(value: string) {
+  const trimmed = value.trim();
+  const short = /^#?([0-9a-f]{3})$/i.exec(trimmed);
+  if (short)
+    return `#${short[1]
+      .split("")
+      .map((part) => part + part)
+      .join("")
+      .toLowerCase()}`;
+  const full = /^#?([0-9a-f]{6})$/i.exec(trimmed);
+  return full ? `#${full[1].toLowerCase()}` : null;
+}
+function hexToHsv(value: string) {
+  const normalized = normalizeHex(value) ?? "#8a8f98",
+    number = Number.parseInt(normalized.slice(1), 16),
+    r = ((number >> 16) & 255) / 255,
+    g = ((number >> 8) & 255) / 255,
+    b = (number & 255) / 255,
+    max = Math.max(r, g, b),
+    min = Math.min(r, g, b),
+    delta = max - min;
+  let h = 0;
+  if (delta) {
+    if (max === r) h = 60 * (((g - b) / delta) % 6);
+    else if (max === g) h = 60 * ((b - r) / delta + 2);
+    else h = 60 * ((r - g) / delta + 4);
+  }
+  return { h: h < 0 ? h + 360 : h, s: max === 0 ? 0 : delta / max, v: max };
+}
+function hsvToHex(h: number, s: number, v: number) {
+  const c = v * s,
+    x = c * (1 - Math.abs(((h / 60) % 2) - 1)),
+    m = v - c;
+  let r = 0,
+    g = 0,
+    b = 0;
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  return `#${[r, g, b]
+    .map((part) =>
+      Math.round((part + m) * 255)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
+}
+
+function formatDuration(minutes: number, t: (value: string) => string) {
+  if (minutes % 1440 === 0) return t(`${minutes / 1440} days`);
+  if (minutes % 60 === 0) return t(`${minutes / 60} hours`);
+  return t(`${minutes} minutes`);
+}
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Could not save setting";
+}

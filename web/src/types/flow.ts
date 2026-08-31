@@ -14,6 +14,7 @@ export interface Workspace {
   name: string;
   urlKey: string;
   icon?: string;
+  logoUrl?: string;
   color?: string;
   region?: "us" | "eu" | string;
   createdAt?: string;
@@ -76,6 +77,7 @@ export interface WorkspaceMutationInput {
   name?: string;
   urlKey?: string;
   icon?: string;
+  logoUrl?: string;
   color?: string;
   region?: string;
 }
@@ -870,6 +872,8 @@ export interface FeatureSettings {
 }
 export interface WorkspaceSettings {
   fiscalMonth: string;
+  welcomeMessage?: string;
+  defaultHomeView?: string;
   guestsAllowed: boolean;
   requireTwoFactor: boolean;
   sessionDurationDays: number;
@@ -1712,9 +1716,20 @@ export interface DashboardWidget {
 }
 export interface DashboardInsightConfig {
   display?: "chart" | "table" | "metric";
-  measure?: "issue_count" | "estimate" | "cycle_time" | "lead_time" | "sla_breaches";
+  measure?:
+    "issue_count" | "estimate" | "cycle_time" | "lead_time" | "sla_breaches";
   aggregation?: "count" | "sum" | "average" | "minimum" | "maximum";
-  slice?: "none" | "status" | "team" | "assignee" | "label" | "project" | "cycle" | "priority" | "created_at" | "completed_at";
+  slice?:
+    | "none"
+    | "status"
+    | "team"
+    | "assignee"
+    | "label"
+    | "project"
+    | "cycle"
+    | "priority"
+    | "created_at"
+    | "completed_at";
   segment?: "none" | "status" | "team" | "assignee" | "project" | "priority";
   dateAggregation?: "day" | "week" | "month" | "quarter" | "year";
   teamIds?: string[];
@@ -1933,7 +1948,15 @@ export interface AgentMessage extends AgentChatMessage {
 }
 export interface AgentMessagePart {
   id: UUID;
-  type: "text" | "reasoning" | "toolCall" | "error" | "event" | "widget" | "elicitation" | "context";
+  type:
+    | "text"
+    | "reasoning"
+    | "toolCall"
+    | "error"
+    | "event"
+    | "widget"
+    | "elicitation"
+    | "context";
   text?: string;
   status?: "pending" | "running" | "completed" | "error";
   toolCall?: AgentToolCall;
@@ -1970,7 +1993,8 @@ export interface PersonalAgentSkill {
 export interface AgentStatus {
   enabled: boolean;
   model: string;
-  protocol?: "openai-responses" | "anthropic-messages" | "openai-chat-completions";
+  protocol?:
+    "openai-responses" | "anthropic-messages" | "openai-chat-completions";
   toolsEnabled?: boolean;
   writeTools?: boolean;
 }
