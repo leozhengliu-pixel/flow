@@ -1927,8 +1927,24 @@ export interface AgentChatMessage {
 }
 export interface AgentMessage extends AgentChatMessage {
   id: UUID;
+  parts?: AgentMessagePart[];
   durationMs?: number;
   createdAt: string;
+}
+export interface AgentMessagePart {
+  id: UUID;
+  type: "text" | "reasoning" | "toolCall" | "error" | "event" | "widget" | "elicitation" | "context";
+  text?: string;
+  status?: "pending" | "running" | "completed" | "error";
+  toolCall?: AgentToolCall;
+}
+export interface AgentToolCall {
+  id: UUID;
+  name: string;
+  arguments?: Record<string, unknown>;
+  result?: unknown;
+  status: "pending" | "running" | "completed" | "error";
+  error?: string;
 }
 export interface AgentSession {
   id: UUID;
@@ -1954,6 +1970,9 @@ export interface PersonalAgentSkill {
 export interface AgentStatus {
   enabled: boolean;
   model: string;
+  protocol?: "openai-responses" | "anthropic-messages" | "openai-chat-completions";
+  toolsEnabled?: boolean;
+  writeTools?: boolean;
 }
 export interface AgentChatResponse {
   message: string;

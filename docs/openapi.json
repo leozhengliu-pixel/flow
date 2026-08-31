@@ -609,6 +609,94 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/agent/sessions/{id}/messages/{messageId}/stream": {
+      "patch": {
+        "operationId": "patch_agent_sessions_id_messages_messageId_stream",
+        "tags": [
+          "agent"
+        ],
+        "summary": "PATCH /api/agent/sessions/{id}/messages/{messageId}/stream",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/agent/sessions/{id}/messages/stream": {
+      "post": {
+        "operationId": "post_agent_sessions_id_messages_stream",
+        "tags": [
+          "agent"
+        ],
+        "summary": "POST /api/agent/sessions/{id}/messages/stream",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/agent/sessions/stream": {
+      "post": {
+        "operationId": "post_agent_sessions_stream",
+        "tags": [
+          "agent"
+        ],
+        "summary": "POST /api/agent/sessions/stream",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/agent/skills": {
       "get": {
         "operationId": "get_agent_skills",

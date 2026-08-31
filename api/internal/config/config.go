@@ -28,11 +28,16 @@ type Config struct {
 }
 
 type AgentConfig struct {
-	Enabled bool
-	BaseURL string
-	APIKey  string
-	Model   string
-	Timeout time.Duration
+	Enabled          bool
+	Protocol         string
+	BaseURL          string
+	APIKey           string
+	Model            string
+	Timeout          time.Duration
+	MaxOutputTokens  int
+	AnthropicVersion string
+	ToolsEnabled     bool
+	WriteTools       bool
 }
 
 type AuthConfig struct {
@@ -127,7 +132,12 @@ func Load() (Config, error) {
 			SAML:          SAMLProvider{Enabled: boolean("FLOW_AUTH_SAML_ENABLED", false), MetadataURL: value("FLOW_SAML_METADATA_URL", ""), MetadataXML: secret("FLOW_SAML_METADATA_XML"), EntityID: value("FLOW_SAML_ENTITY_ID", appURL), ACSURL: value("FLOW_SAML_ACS_URL", appURL+"/api/auth/saml/acs"), SPPrivateKey: secret("FLOW_SAML_SP_PRIVATE_KEY"), SPCertificate: secret("FLOW_SAML_SP_CERTIFICATE"), DisplayName: value("FLOW_SAML_DISPLAY_NAME", "SAML")},
 			AutoProvision: boolean("FLOW_AUTH_AUTO_PROVISION", true), AllowedDomains: csv(value("FLOW_AUTH_ALLOWED_DOMAINS", "")),
 		},
-		Agent:     AgentConfig{Enabled: boolean("FLOW_AGENT_ENABLED", false), BaseURL: value("FLOW_AGENT_BASE_URL", "https://api.openai.com/v1"), APIKey: secret("FLOW_AGENT_API_KEY"), Model: value("FLOW_AGENT_MODEL", "gpt-5-mini"), Timeout: duration("FLOW_AGENT_TIMEOUT", 60*time.Second)},
+		Agent: AgentConfig{
+			Enabled: boolean("FLOW_AGENT_ENABLED", false), Protocol: strings.ToLower(value("FLOW_AGENT_PROTOCOL", "openai-responses")),
+			BaseURL: value("FLOW_AGENT_BASE_URL", "https://api.openai.com/v1"), APIKey: secret("FLOW_AGENT_API_KEY"), Model: value("FLOW_AGENT_MODEL", "gpt-5-mini"),
+			Timeout: duration("FLOW_AGENT_TIMEOUT", 60*time.Second), MaxOutputTokens: integer("FLOW_AGENT_MAX_OUTPUT_TOKENS", 4096),
+			AnthropicVersion: value("FLOW_AGENT_ANTHROPIC_VERSION", "2023-06-01"), ToolsEnabled: boolean("FLOW_AGENT_TOOLS_ENABLED", true), WriteTools: boolean("FLOW_AGENT_WRITE_TOOLS", false),
+		},
 		Telemetry: TelemetryConfig{Enabled: boolean("FLOW_TELEMETRY_ENABLED", false) && !boolean("OTEL_SDK_DISABLED", false), ServiceName: value("OTEL_SERVICE_NAME", "flow-api"), Environment: value("FLOW_ENVIRONMENT", "production"), Endpoint: value("OTEL_EXPORTER_OTLP_ENDPOINT", ""), TraceEndpoint: value("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", ""), MetricEndpoint: value("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "")},
 	}
 	return config, config.Validate()
@@ -190,6 +200,12 @@ func (c Config) Validate() error {
 	}
 	if c.Agent.Enabled && (c.Agent.BaseURL == "" || c.Agent.Model == "") {
 		return fmt.Errorf("FLOW_AGENT_BASE_URL and FLOW_AGENT_MODEL are required when Flow Agent is enabled")
+	}
+	if c.Agent.Protocol != "openai-responses" && c.Agent.Protocol != "anthropic-messages" && c.Agent.Protocol != "openai-chat-completions" {
+		return fmt.Errorf("FLOW_AGENT_PROTOCOL must be openai-responses, anthropic-messages, or openai-chat-completions")
+	}
+	if c.Agent.MaxOutputTokens < 1 || c.Agent.MaxOutputTokens > 131072 {
+		return fmt.Errorf("FLOW_AGENT_MAX_OUTPUT_TOKENS must be between 1 and 131072")
 	}
 	if c.Telemetry.Enabled && c.Telemetry.Endpoint == "" && (c.Telemetry.TraceEndpoint == "" || c.Telemetry.MetricEndpoint == "") {
 		return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT or both signal-specific trace and metric endpoints are required when telemetry is enabled")

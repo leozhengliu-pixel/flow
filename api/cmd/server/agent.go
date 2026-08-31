@@ -1,10 +1,7 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -88,7 +85,11 @@ func (s *server) completeAgentSessionResponse(w http.ResponseWriter, r *http.Req
 }
 
 func (s *server) agentStatus(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"enabled": s.agent.Enabled, "model": s.agent.Model})
+	protocol := s.agent.Protocol
+	if protocol == "" {
+		protocol = "openai-chat-completions"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"enabled": s.agent.Enabled, "model": s.agent.Model, "protocol": protocol, "toolsEnabled": s.agent.ToolsEnabled, "writeTools": s.agent.WriteTools})
 }
 
 func (s *server) agentChat(w http.ResponseWriter, r *http.Request) {
@@ -179,6 +180,15 @@ func (s *server) createAgentSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "location must be page or toolbar")
 		return
 	}
+	session, err := s.beginAgentSession(r, input)
+	if err != nil {
+		respondMutation(w, err, http.StatusCreated, session)
+		return
+	}
+	s.completeAgentSessionResponse(w, r, session.ID, http.StatusCreated)
+}
+
+func (s *server) beginAgentSession(r *http.Request, input agentSessionInput) (domain.AgentSession, error) {
 	now := time.Now().UTC()
 	sessionID := fmt.Sprintf("agent_session_%d", now.UnixNano())
 	title := agentSessionTitle(input.Message)
@@ -194,11 +204,7 @@ func (s *server) createAgentSession(w http.ResponseWriter, r *http.Request) {
 		data.AgentSessions = append(data.AgentSessions, session)
 		return nil
 	})
-	if err != nil {
-		respondMutation(w, err, http.StatusCreated, session)
-		return
-	}
-	s.completeAgentSessionResponse(w, r, sessionID, http.StatusCreated)
+	return session, err
 }
 
 func (s *server) createAgentSessionMessage(w http.ResponseWriter, r *http.Request) {
@@ -209,10 +215,19 @@ func (s *server) createAgentSessionMessage(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	input := map[string]string{"message": message}
 	id := r.PathValue("id")
+	err := s.appendAgentSessionMessage(r, id, message)
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	s.completeAgentSessionResponse(w, r, id, http.StatusOK)
+}
+
+func (s *server) appendAgentSessionMessage(r *http.Request, id, message string) error {
+	input := map[string]string{"message": message}
 	now := time.Now().UTC()
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.message_created", id, input, func(data *domain.Bootstrap) error {
+	return s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.message_created", id, input, func(data *domain.Bootstrap) error {
 		session, err := ownedAgentSession(data, id)
 		if err != nil {
 			return err
@@ -222,11 +237,6 @@ func (s *server) createAgentSessionMessage(w http.ResponseWriter, r *http.Reques
 		session.UpdatedAt = now
 		return nil
 	})
-	if err != nil {
-		respondMutation(w, err, http.StatusOK, nil)
-		return
-	}
-	s.completeAgentSessionResponse(w, r, id, http.StatusOK)
 }
 
 func (s *server) updateAgentSessionMessage(w http.ResponseWriter, r *http.Request) {
@@ -237,9 +247,18 @@ func (s *server) updateAgentSessionMessage(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	input := map[string]string{"message": message}
 	id, messageID := r.PathValue("id"), r.PathValue("messageId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.message_updated", id, input, func(data *domain.Bootstrap) error {
+	err := s.replaceAgentSessionMessage(r, id, messageID, message)
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	s.completeAgentSessionResponse(w, r, id, http.StatusOK)
+}
+
+func (s *server) replaceAgentSessionMessage(r *http.Request, id, messageID, message string) error {
+	input := map[string]string{"message": message}
+	return s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.message_updated", id, input, func(data *domain.Bootstrap) error {
 		session, err := ownedAgentSession(data, id)
 		if err != nil {
 			return err
@@ -255,48 +274,10 @@ func (s *server) updateAgentSessionMessage(w http.ResponseWriter, r *http.Reques
 		}
 		return errNotFound
 	})
-	if err != nil {
-		respondMutation(w, err, http.StatusOK, nil)
-		return
-	}
-	s.completeAgentSessionResponse(w, r, id, http.StatusOK)
 }
 
 func (s *server) completeAgentSession(r *http.Request, id string) (domain.AgentSession, error) {
-	data := s.workspaceData(r)
-	session, err := ownedAgentSession(&data, id)
-	if err != nil {
-		return domain.AgentSession{}, err
-	}
-	issues := selectedAgentIssues(data.Issues, session.IssueIDs)
-	skills := selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)
-	messages := []agentChatMessage{{Role: "system", Content: agentSystemPrompt(data.Workspace.Name, issues, skills)}}
-	for _, message := range session.Messages {
-		messages = append(messages, agentChatMessage{Role: message.Role, Content: message.Content})
-	}
-	if len(messages) > 21 {
-		messages = append(messages[:1], messages[len(messages)-20:]...)
-	}
-	started := time.Now()
-	reply, err := s.requestAgent(r, messages)
-	if err != nil {
-		return domain.AgentSession{}, err
-	}
-	now := time.Now().UTC()
-	duration := time.Since(started).Milliseconds()
-	var completed domain.AgentSession
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.message_completed", session.ID, nil, func(next *domain.Bootstrap) error {
-		current, err := ownedAgentSession(next, session.ID)
-		if err != nil {
-			return err
-		}
-		current.Messages = append(current.Messages, domain.AgentMessage{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "assistant", Content: reply, DurationMS: duration, CreatedAt: now})
-		next.AgentActivities = append(next.AgentActivities, domain.AgentActivity{ID: fmt.Sprintf("agent_activity_%d", now.UnixNano()), SessionID: session.ID, Type: "response", Status: "completed", Body: reply, Metadata: map[string]any{"durationMs": duration}, CreatedAt: now, UpdatedAt: now})
-		current.UpdatedAt = now
-		completed = *current
-		return nil
-	})
-	return completed, err
+	return s.runAgentSession(r, id, nil)
 }
 
 func (s *server) updateAgentSession(w http.ResponseWriter, r *http.Request) {
@@ -458,48 +439,15 @@ func agentSessionSlug(title string, createdAt time.Time) string {
 }
 
 func (s *server) requestAgent(r *http.Request, messages []agentChatMessage) (string, error) {
-	payload, err := json.Marshal(map[string]any{"model": s.agent.Model, "messages": messages})
+	providerMessages := make([]agentProviderMessage, 0, len(messages))
+	for _, message := range messages {
+		providerMessages = append(providerMessages, agentProviderMessage{Role: message.Role, Content: message.Content})
+	}
+	turn, err := s.requestAgentTurnWithoutTools(r.Context(), providerMessages)
 	if err != nil {
-		return "", fmt.Errorf("could not encode agent request")
+		return "", err
 	}
-	endpoint := strings.TrimRight(s.agent.BaseURL, "/") + "/chat/completions"
-	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return "", fmt.Errorf("could not create agent request")
-	}
-	request.Header.Set("Content-Type", "application/json")
-	if s.agent.APIKey != "" {
-		request.Header.Set("Authorization", "Bearer "+s.agent.APIKey)
-	}
-	client := s.agentClient
-	if client == nil {
-		timeout := s.agent.Timeout
-		if timeout <= 0 {
-			timeout = 60 * time.Second
-		}
-		client = &http.Client{Timeout: timeout}
-	}
-	response, err := client.Do(request)
-	if err != nil {
-		return "", fmt.Errorf("Flow Agent provider is unavailable")
-	}
-	defer response.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
-	if err != nil {
-		return "", fmt.Errorf("could not read Flow Agent response")
-	}
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return "", fmt.Errorf("Flow Agent provider returned status %d", response.StatusCode)
-	}
-	var decoded struct {
-		Choices []struct {
-			Message agentChatMessage `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(body, &decoded); err != nil || len(decoded.Choices) == 0 {
-		return "", fmt.Errorf("Flow Agent provider returned an invalid response")
-	}
-	reply := strings.TrimSpace(decoded.Choices[0].Message.Content)
+	reply := strings.TrimSpace(turn.Text)
 	if reply == "" {
 		return "", fmt.Errorf("Flow Agent provider returned an empty response")
 	}
