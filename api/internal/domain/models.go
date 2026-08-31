@@ -147,6 +147,7 @@ type Workspace struct {
 	Name      string    `json:"name"`
 	URLKey    string    `json:"urlKey"`
 	Icon      string    `json:"icon,omitempty"`
+	LogoURL   string    `json:"logoUrl,omitempty"`
 	Color     string    `json:"color,omitempty"`
 	Region    string    `json:"region,omitempty"`
 	CreatedAt time.Time `json:"createdAt,omitempty"`
@@ -778,6 +779,8 @@ type UserSettings struct {
 
 type WorkspaceSettings struct {
 	FiscalMonth                  string          `json:"fiscalMonth"`
+	WelcomeMessage               string          `json:"welcomeMessage,omitempty"`
+	DefaultHomeView              string          `json:"defaultHomeView,omitempty"`
 	GuestsAllowed                bool            `json:"guestsAllowed"`
 	RequireTwoFactor             bool            `json:"requireTwoFactor"`
 	SessionDurationDays          int             `json:"sessionDurationDays"`

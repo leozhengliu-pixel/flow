@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { useI18n } from '@/i18n/i18n'
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { Toggle } from '@/components/ui/toggle'
+import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { createReleasePipeline, deleteReleasePipeline, rotateReleasePipelineAccessKey, updateReleasePipeline } from '@/lib/api'
 import type { BootstrapData, Release, ReleasePipeline } from '@/types/flow'
 import './pipeline-editor.css'
@@ -104,7 +105,7 @@ export function PipelineEditorPage({ data, pipeline, onCancel, onSaved }: {
               <Popover.Content className="flow-pipeline-team-menu" align="start" sideOffset={5} collisionPadding={12} onOpenAutoFocus={event => event.preventDefault()}>
                 <div id="flow-pipeline-team-options" role="listbox" aria-label={t('Teams')} aria-multiselectable="true">
                   {filteredTeams.map(team => <button id={`flow-pipeline-team-${team.id}`} type="button" role="option" aria-selected={teamCommand.activeId===team.id} aria-checked={teamCommand.isSelected(team.id)} className={teamCommand.activeId===team.id?'active':''} key={team.id} onPointerMove={()=>teamCommand.setActiveId(team.id)} onFocus={()=>teamCommand.setActiveId(team.id)} onMouseDown={event=>event.preventDefault()} onClick={()=>teamCommand.choose(teamOptions.find(option=>option.id===team.id)!)}>
-                    <span className="flow-pipeline-team-check">{teamIds.includes(team.id) && <Check/>}</span><i style={{ color: team.color }} data-i18n-ignore>{team.icon || team.key.slice(0, 1)}</i><strong data-i18n-ignore>{team.name}</strong>
+                    <span className="flow-pipeline-team-check">{teamIds.includes(team.id) && <Check/>}</span><i data-i18n-ignore><ViewGlyph color={team.color} icon={team.icon || 'Team'}/></i><strong data-i18n-ignore>{team.name}</strong>
                   </button>)}
                   {!filteredTeams.length && <p>{t('No teams found')}</p>}
                 </div>
