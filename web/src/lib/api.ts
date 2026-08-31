@@ -301,6 +301,24 @@ export function updateWorkspace(
     body: JSON.stringify(input),
   });
 }
+export function uploadWorkspaceLogo(
+  workspaceKey: string,
+  file: File,
+): Promise<BootstrapData> {
+  const body = new FormData();
+  body.append("file", file);
+  return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}/logo`, {
+    method: "POST",
+    body,
+  });
+}
+export function deleteWorkspaceLogo(
+  workspaceKey: string,
+): Promise<BootstrapData> {
+  return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}/logo`, {
+    method: "DELETE",
+  });
+}
 export function deleteWorkspace(workspaceKey: string): Promise<void> {
   return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}`, {
     method: "DELETE",
@@ -723,7 +741,9 @@ export function createTeam(
 export function updateTeam(
   workspaceKey: string,
   teamId: string,
-  input: Partial<Pick<Team, "name" | "key" | "color" | "icon" | "private">> & { retired?: boolean },
+  input: Partial<Pick<Team, "name" | "key" | "color" | "icon" | "private">> & {
+    retired?: boolean;
+  },
 ): Promise<Team> {
   return request(
     `/api/workspaces/${encodeURIComponent(workspaceKey)}/teams/${teamId}`,
@@ -2717,7 +2737,12 @@ export function fetchDashboards(cursor = ""): Promise<CursorPage<Dashboard>> {
 }
 export function createDashboard(
   input: Pick<Dashboard, "name" | "visibility"> &
-    Partial<Pick<Dashboard, "description" | "teamIds" | "filters" | "hideFilters" | "widgets">>,
+    Partial<
+      Pick<
+        Dashboard,
+        "description" | "teamIds" | "filters" | "hideFilters" | "widgets"
+      >
+    >,
 ): Promise<Dashboard> {
   return request("/api/dashboards", jsonRequest("POST", input));
 }
@@ -2726,7 +2751,14 @@ export function updateDashboard(
   input: Partial<
     Pick<
       Dashboard,
-      "name" | "description" | "ownerId" | "visibility" | "teamIds" | "filters" | "hideFilters" | "widgets"
+      | "name"
+      | "description"
+      | "ownerId"
+      | "visibility"
+      | "teamIds"
+      | "filters"
+      | "hideFilters"
+      | "widgets"
     >
   >,
 ): Promise<Dashboard> {

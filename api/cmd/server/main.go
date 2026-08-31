@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -252,6 +254,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/agent/skills/{id}", s.deleteAgentSkill)
 	mux.HandleFunc("POST /api/workspaces", s.createWorkspace)
 	mux.HandleFunc("PATCH /api/workspaces/{workspaceKey}", s.updateWorkspace)
+	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/logo", s.uploadWorkspaceLogo)
+	mux.HandleFunc("DELETE /api/workspaces/{workspaceKey}/logo", s.deleteWorkspaceLogo)
 	mux.HandleFunc("DELETE /api/workspaces/{workspaceKey}", s.deleteWorkspace)
 	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/teams", s.createTeam)
 	mux.HandleFunc("PATCH /api/workspaces/{workspaceKey}/teams/{teamId}", s.updateTeam)
@@ -855,11 +859,12 @@ func (s *server) updateWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Name   *string `json:"name"`
-		URLKey *string `json:"urlKey"`
-		Icon   *string `json:"icon"`
-		Color  *string `json:"color"`
-		Region *string `json:"region"`
+		Name    *string `json:"name"`
+		URLKey  *string `json:"urlKey"`
+		Icon    *string `json:"icon"`
+		LogoURL *string `json:"logoUrl"`
+		Color   *string `json:"color"`
+		Region  *string `json:"region"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
@@ -874,6 +879,9 @@ func (s *server) updateWorkspace(w http.ResponseWriter, r *http.Request) {
 	if input.Icon != nil {
 		workspace.Icon = *input.Icon
 	}
+	if input.LogoURL != nil {
+		workspace.LogoURL = strings.TrimSpace(*input.LogoURL)
+	}
 	if input.Color != nil {
 		workspace.Color = *input.Color
 	}
@@ -885,6 +893,165 @@ func (s *server) updateWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	updated, err := s.store.UpdateWorkspace(r.Context(), key, workspace)
+	respondMutation(w, err, http.StatusOK, updated)
+}
+
+func (s *server) uploadWorkspaceLogo(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("workspaceKey")
+	data, ok := s.store.BootstrapFor(key)
+	if !ok {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+	if !s.authDisabled && data.ViewerRole != "admin" {
+		writeError(w, http.StatusForbidden, "admin access required")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 6<<20)
+	if err := r.ParseMultipartForm(5 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid logo")
+		return
+	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "logo file is required")
+		return
+	}
+	defer file.Close()
+	extension := strings.ToLower(filepath.Ext(header.Filename))
+	payload, readErr := io.ReadAll(io.LimitReader(file, (5<<20)+1))
+	if readErr != nil {
+		writeError(w, http.StatusBadRequest, "invalid logo")
+		return
+	}
+	if len(payload) > 5<<20 {
+		writeError(w, http.StatusRequestEntityTooLarge, "logo exceeds 5 MB")
+		return
+	}
+	contentType, validationErr := validateWorkspaceLogo(extension, payload)
+	if validationErr != nil {
+		writeError(w, http.StatusBadRequest, "logo must be PNG, JPEG, WebP, or a safe SVG")
+		return
+	}
+	storage, err := s.storage()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "storage unavailable")
+		return
+	}
+	objectKey := fmt.Sprintf("workspace_logo_%s_%d%s", data.Workspace.ID, time.Now().UnixNano(), extension)
+	size, err := storage.Put(r.Context(), objectKey, bytes.NewReader(payload), contentType)
+	if err != nil {
+		_ = storage.Delete(r.Context(), objectKey)
+		writeError(w, http.StatusInternalServerError, "logo upload failed")
+		return
+	}
+	if size != int64(len(payload)) {
+		_ = storage.Delete(r.Context(), objectKey)
+		writeError(w, http.StatusInternalServerError, "logo upload incomplete")
+		return
+	}
+	previous := data.Workspace.LogoURL
+	data.Workspace.LogoURL = "/uploads/" + objectKey
+	updated, err := s.store.UpdateWorkspace(r.Context(), key, data.Workspace)
+	if err != nil {
+		_ = storage.Delete(r.Context(), objectKey)
+	} else if strings.HasPrefix(previous, "/uploads/") {
+		_ = storage.Delete(r.Context(), strings.TrimPrefix(previous, "/uploads/"))
+	}
+	respondMutation(w, err, http.StatusOK, updated)
+}
+
+func validateWorkspaceLogo(extension string, payload []byte) (string, error) {
+	allowed := map[string]string{".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".svg": "image/svg+xml"}
+	expected, ok := allowed[extension]
+	if !ok || len(payload) == 0 {
+		return "", errInvalid
+	}
+	if extension == ".svg" {
+		if err := validateWorkspaceLogoSVG(payload); err != nil {
+			return "", err
+		}
+		return expected, nil
+	}
+	if detected := http.DetectContentType(payload); detected != expected {
+		return "", errInvalid
+	}
+	return expected, nil
+}
+
+func validateWorkspaceLogoSVG(payload []byte) error {
+	decoder := xml.NewDecoder(bytes.NewReader(payload))
+	rootSeen := false
+	blockedElements := map[string]bool{"script": true, "style": true, "foreignobject": true, "iframe": true, "object": true, "embed": true, "link": true}
+	for {
+		token, err := decoder.Token()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return errInvalid
+		}
+		switch value := token.(type) {
+		case xml.StartElement:
+			name := strings.ToLower(value.Name.Local)
+			if !rootSeen {
+				if name != "svg" {
+					return errInvalid
+				}
+				rootSeen = true
+			}
+			if blockedElements[name] {
+				return errInvalid
+			}
+			for _, attribute := range value.Attr {
+				attributeName := strings.ToLower(attribute.Name.Local)
+				attributeValue := strings.ToLower(strings.TrimSpace(attribute.Value))
+				if strings.HasPrefix(attributeName, "on") || strings.Contains(attributeValue, "javascript:") || strings.Contains(attributeValue, "expression(") || strings.Contains(attributeValue, "@import") {
+					return errInvalid
+				}
+				if (attributeName == "href" || attributeName == "src") && attributeValue != "" && !strings.HasPrefix(attributeValue, "#") {
+					return errInvalid
+				}
+				if attributeName == "style" && strings.Contains(attributeValue, "url(") {
+					return errInvalid
+				}
+			}
+		case xml.Directive:
+			return errInvalid
+		case xml.ProcInst:
+			if !strings.EqualFold(value.Target, "xml") {
+				return errInvalid
+			}
+		}
+	}
+	if !rootSeen {
+		return errInvalid
+	}
+	return nil
+}
+
+func (s *server) deleteWorkspaceLogo(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("workspaceKey")
+	data, ok := s.store.BootstrapFor(key)
+	if !ok {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+	if !s.authDisabled && data.ViewerRole != "admin" {
+		writeError(w, http.StatusForbidden, "admin access required")
+		return
+	}
+	previous := data.Workspace.LogoURL
+	data.Workspace.LogoURL = ""
+	updated, err := s.store.UpdateWorkspace(r.Context(), key, data.Workspace)
+	if err == nil && strings.HasPrefix(previous, "/uploads/") {
+		if storage, storageErr := s.storage(); storageErr == nil {
+			_ = storage.Delete(r.Context(), strings.TrimPrefix(previous, "/uploads/"))
+		}
+	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
@@ -1205,13 +1372,22 @@ func applyCustomerInput(customer *domain.Customer, input customerInput) {
 func normalizeWorkspaceKey(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	var builder strings.Builder
+	lastSeparator := false
+	count := 0
 	for _, r := range value {
-		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+		if count >= 48 {
+			break
+		}
+		if unicode.IsLetter(r) || unicode.IsNumber(r) {
 			builder.WriteRune(r)
+			lastSeparator = false
+			count++
 			continue
 		}
-		if (r == '-' || r == '_' || r == ' ') && builder.Len() > 0 && !strings.HasSuffix(builder.String(), "-") {
+		if (r == '-' || r == '_' || unicode.IsSpace(r)) && builder.Len() > 0 && !lastSeparator {
 			builder.WriteByte('-')
+			lastSeparator = true
+			count++
 		}
 	}
 	return strings.Trim(builder.String(), "-")
@@ -3724,12 +3900,15 @@ func (s *server) serveUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer reader.Close()
+	if contentType == "" {
+		contentType = mime.TypeByExtension(strings.ToLower(filepath.Ext(name)))
+	}
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
 	if contentType != "" {
 		w.Header().Set("Content-Type", contentType)
 	}
-	if !safeInlineUploadType(contentType) {
+	if !safeInlineUploadType(contentType, name) {
 		w.Header().Set("Content-Disposition", `attachment; filename="download"`)
 	}
 	if size >= 0 {
@@ -3739,9 +3918,9 @@ func (s *server) serveUpload(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, reader)
 }
 
-func safeInlineUploadType(value string) bool {
+func safeInlineUploadType(value, name string) bool {
 	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(value, ";")[0]))
-	return strings.HasPrefix(mediaType, "image/png") || strings.HasPrefix(mediaType, "image/jpeg") || strings.HasPrefix(mediaType, "image/gif") || strings.HasPrefix(mediaType, "image/webp") || strings.HasPrefix(mediaType, "image/avif") || strings.HasPrefix(mediaType, "audio/") || strings.HasPrefix(mediaType, "video/") || mediaType == "application/pdf"
+	return strings.HasPrefix(mediaType, "image/png") || strings.HasPrefix(mediaType, "image/jpeg") || strings.HasPrefix(mediaType, "image/gif") || strings.HasPrefix(mediaType, "image/webp") || strings.HasPrefix(mediaType, "image/avif") || mediaType == "image/svg+xml" && strings.HasPrefix(name, "workspace_logo_") || strings.HasPrefix(mediaType, "audio/") || strings.HasPrefix(mediaType, "video/") || mediaType == "application/pdf"
 }
 
 func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBootstrap, userID, url string) bool {
