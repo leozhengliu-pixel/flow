@@ -1,7 +1,7 @@
 .flow-inbox {
   --inbox-bg: var(--bg-panel);
   --inbox-menu-bg: var(--theme-control);
-  --inbox-border: var(--theme-control);
+  --inbox-border: var(--border);
   --inbox-border-strong: var(--theme-border-strong);
   --inbox-text: var(--theme-text-primary);
   --inbox-muted: var(--theme-text-secondary);
@@ -17,14 +17,14 @@
   overflow: hidden;
   color: var(--inbox-text);
   background: var(--inbox-bg);
-  border: 0.5px solid var(--inbox-border);
-  border-radius: 12px;
-  box-shadow: 0 0.5px 1px 1px rgb(0 0 0 / 30%);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   font-family: "Inter Variable", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }.flow-inbox[data-detail-open="true"] { grid-template-columns: var(--inbox-list-width) minmax(0, 1fr); }.flow-inbox-page-composition {
   position: relative;
   width: auto;
-  height: calc(100% - 16px);
+  height: calc(100% - 44px);
   min-width: 0;
   min-height: 0;
   margin: 8px 8px 8px 0;
@@ -395,7 +395,7 @@
     box-shadow: none;
   }
   .flow-inbox-story { padding: 0; }
-  .flow-inbox-page-composition { width: 100%; height: 100%; margin: 0; }
+  .flow-inbox-page-composition { width: 100%; height: calc(100% - 36px); margin: 0 0 36px; }
   .flow-inbox-mutation-error { right: 8px; bottom: 8px; }
 
   .flow-inbox[data-detail-open="true"] { display: block; }
