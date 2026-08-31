@@ -1,9 +1,15 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Popover from "@radix-ui/react-popover";
+import { Markdown } from "@tiptap/markdown";
+import { EditorContent, useEditor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
 import {
+  AlertCircle,
   Check,
   Box,
+  ChevronRight,
+  CircleCheck,
   Copy,
   LoaderCircle,
   MoreHorizontal,
@@ -64,7 +70,11 @@ export function AgentPage({
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamAbortRef = useRef<AbortController | undefined>(undefined);
+  const historyRequested = new URLSearchParams(window.location.search).get("history") === "1";
   useEffect(() => setSessions(data.agentSessions ?? []), [data.agentSessions]);
+  useEffect(() => {
+    if (historyRequested) setHistoryOpen(true);
+  }, [chatSlug, historyRequested]);
   useEffect(() => {
     let active = true;
     fetchAgentStatus()
@@ -151,22 +161,38 @@ export function AgentPage({
     }
   };
   const historyOptions = useMemo(
-    () =>
-      [...sessions]
+    () => [
+      { id: "__new__", label: t("New chat") },
+      ...[...sessions]
         .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
         .map((item) => ({ id: item.id, label: item.title })),
-    [sessions],
+    ],
+    [sessions, t],
   );
   const historyCommand = usePropertyCommand({
     open: historyOpen,
     options: historyOptions,
-    selectedIds: current ? [current.id] : [],
+    selectedIds: current ? [current.id] : ["__new__"],
     onOpenChange: setHistoryOpen,
     onSelect: (option) => {
+      if (option.id === "__new__") {
+        setHistoryOpen(false);
+        writeInput("");
+        setSelectedSkills([]);
+        onNavigate(agentPath(data.workspace.urlKey));
+        return;
+      }
       const session = sessions.find((item) => item.id === option.id);
       if (session) onNavigate(agentPath(data.workspace.urlKey, session.slugId));
     },
   });
+  const historyGroups = useMemo(
+    () => groupAgentHistory(historyCommand.filteredOptions
+      .filter((option) => option.id !== "__new__")
+      .map((option) => sessions.find((session) => session.id === option.id))
+      .filter((session): session is AgentSession => Boolean(session))),
+    [historyCommand.filteredOptions, sessions],
+  );
   const skillOptions = useMemo(
     () => [
       ...(data.agentSkills ?? []).map((item) => ({
@@ -229,63 +255,62 @@ export function AgentPage({
           <Popover.Portal>
             <Popover.Content
               align="start"
+              alignOffset={8}
               className={styles.historyMenu}
               side="bottom"
               sideOffset={3}
               onOpenAutoFocus={(event) => event.preventDefault()}
               onKeyDown={historyCommand.onKeyDown}
             >
-              <div className={styles.menuSearch}>
-                <Search />
-                <input
-                  ref={historyCommand.inputRef}
-                  autoFocus
-                  aria-label={t("Chat history")}
-                  placeholder={t("Chat history")}
-                  value={historyCommand.query}
-                  onChange={(event) =>
-                    historyCommand.onQueryChange(event.target.value)
-                  }
-                />
-              </div>
+              <input
+                ref={historyCommand.inputRef}
+                autoFocus
+                aria-label={t("Chat history")}
+                className={styles.historySearch}
+                value={historyCommand.query}
+                onChange={(event) => historyCommand.onQueryChange(event.target.value)}
+              />
               <div role="listbox">
-                {historyCommand.filteredOptions.map((option) => {
-                  const item = sessions.find(
-                    (session) => session.id === option.id,
-                  )!;
-                  return (
-                    <button
-                      aria-selected={historyCommand.activeId === item.id}
-                      key={item.id}
-                      onMouseMove={() => historyCommand.setActiveId(item.id)}
-                      onClick={() => historyCommand.choose(option)}
-                      role="option"
-                      type="button"
-                    >
-                      <strong data-i18n-ignore>{item.title}</strong>
-                      <span>
-                        {item.location === "toolbar" ? t("Toolbar") : t("Page")}
-                      </span>
-                      <time>{relative(item.updatedAt)}</time>
-                    </button>
-                  );
-                })}
-                {!historyCommand.filteredOptions.length && (
+                {historyCommand.filteredOptions.some(({ id }) => id === "__new__") && <button
+                  aria-selected={historyCommand.activeId === "__new__"}
+                  className={styles.newChat}
+                  onMouseMove={() => historyCommand.setActiveId("__new__")}
+                  onClick={() => historyCommand.choose(historyOptions[0])}
+                  role="option"
+                  type="button"
+                >
+                  <Plus />
+                  <span>{t("New chat")}</span>
+                </button>}
+                {historyGroups.map((group) => (
+                  <Fragment key={group.label}>
+                    <div className={styles.historySeparator} role="separator" />
+                    <div aria-label={t(group.label)} className={styles.historyGroup} role="group">{t(group.label)}</div>
+                    {group.sessions.map((item) => {
+                      const option = historyCommand.filteredOptions.find(({ id }) => id === item.id)!;
+                      return <button
+                        aria-selected={historyCommand.activeId === item.id}
+                        key={item.id}
+                        onMouseMove={() => historyCommand.setActiveId(item.id)}
+                        onClick={() => historyCommand.choose(option)}
+                        role="option"
+                        type="button"
+                      >
+                        <i aria-hidden="true" />
+                        <strong data-i18n-ignore>{item.title}</strong>
+                        <span>{current?.id === item.id ? t("Current") : ""}</span>
+                        <time>{relative(item.updatedAt)}</time>
+                      </button>;
+                    })}
+                  </Fragment>
+                ))}
+                {!historyGroups.length && (
                   <span className={styles.noHistory}>{t("No history")}</span>
                 )}
               </div>
-              <button
-                className={styles.newChat}
-                onClick={newChat}
-                type="button"
-              >
-                <Plus />
-                {t("New chat")}
-              </button>
             </Popover.Content>
           </Popover.Portal>
         </Popover.Root>
-        <span />
         {current && (
           <>
             <button
@@ -339,32 +364,34 @@ export function AgentPage({
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>
             </DropdownMenu.Root>
-            <button
-              className={styles.headerIcon}
-              aria-label={t("Move to toolbar")}
-              onClick={() =>
-                void updateAgentSession(current.id, {
-                  location: "toolbar",
-                }).then(async (next) => {
-                  setSessions((list) =>
-                    list.map((item) => (item.id === next.id ? next : item)),
-                  );
-                  await onReload();
-                  newChat();
-                })
-              }
-              type="button"
-            >
-              <PanelTop />
-            </button>
           </>
         )}
+        <span className={styles.headerSpacer} />
+        {current && <button
+          className={styles.headerIcon}
+          aria-label={t("Move to toolbar")}
+          onClick={() =>
+            void updateAgentSession(current.id, {
+              location: "toolbar",
+            }).then(async (next) => {
+              setSessions((list) =>
+                list.map((item) => (item.id === next.id ? next : item)),
+              );
+              await onReload();
+              newChat();
+            })
+          }
+          type="button"
+        >
+          <PanelTop />
+        </button>}
       </header>
-      <section className={styles.body}>
+      <section className={`${styles.body}${current ? ` ${styles.hasConversation}` : ""}`}>
         {current ? (
           <Conversation
             session={current}
             editingId={editingId}
+            onRetry={(message) => void send(message)}
             onEdit={(message) => {
               setEditingId(message.id);
               writeInput(message.content);
@@ -387,7 +414,7 @@ export function AgentPage({
             </button>
           </div>
         )}
-        <div className={styles.composer}>
+        <div className={`${styles.composer}${current ? ` ${styles.conversationComposer}` : ""}`}>
           {attachments.length > 0 && (
             <div className={styles.attachments}>
               {attachments.map((file, index) => (
@@ -572,85 +599,137 @@ function AgentBackground(){return <svg aria-hidden="true" className={styles.empt
 function Conversation({
   editingId,
   onEdit,
+  onRetry,
   session,
 }: {
   editingId?: string;
   onEdit: (message: AgentSession["messages"][number]) => void;
+  onRetry: (message: string) => void;
   session: AgentSession;
 }) {
   const { t } = useI18n();
-  if (editingId) return <div className={styles.conversation} />;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const viewport = scrollRef.current;
+    if (!viewport) return;
+    requestAnimationFrame(() => {
+      if (typeof viewport.scrollTo === "function") viewport.scrollTo({ top: viewport.scrollHeight });
+      else viewport.scrollTop = viewport.scrollHeight;
+    });
+  }, [session.messages.length, session.updatedAt]);
   return (
     <div
+      ref={scrollRef}
       aria-label={t("Agent conversation")}
       className={styles.conversation}
       role="group"
     >
-      <time>
-        {new Date(session.createdAt).toLocaleString(undefined, {
-          weekday: "short",
-          hour: "numeric",
-          minute: "2-digit",
-        })}
-      </time>
-      {session.messages.map((message) => (
-        <article
-          aria-label="AI message"
-          key={message.id}
-          role="document"
-          className={message.role === "user" ? styles.user : styles.assistant}
-        >
-          {message.parts?.length ? <AgentMessageParts message={message}/> : <p>{message.content}</p>}
-          <div>
-            <button
-              aria-label={t("Copy message")}
-              onClick={() =>
-                void navigator.clipboard.writeText(message.content)
-              }
-              type="button"
-            >
-              <Copy />
-            </button>
-            {message.role === "user" && (
-              <button
-                aria-label={t("Edit message")}
-                onClick={() => onEdit(message)}
-                type="button"
-              >
-                {t("Edit")}
-              </button>
+      <div className={styles.conversationInner}>
+        {session.messages.map((message, index) => (
+          <Fragment key={message.id}>
+            {shouldShowAgentTime(session.messages, index) && (
+              <time className={styles.messageTime} dateTime={message.createdAt}>
+                {formatAgentTime(message.createdAt || session.createdAt, t("Today"))}
+              </time>
             )}
-          </div>
-          {message.role === "assistant" && message.durationMs ? (
-            <small>{`${t("Worked for")} ${Math.max(1, Math.round(message.durationMs / 1000))} ${t("seconds")}`}</small>
-          ) : null}
-        </article>
-      ))}
+            <article
+              className={`${message.role === "user" ? styles.user : styles.assistant}${editingId === message.id ? ` ${styles.isEditing}` : ""}`}
+              data-message-id={message.id}
+            >
+              <div className={styles.messageContent}>
+                {message.parts?.length ? <AgentMessageParts message={message} onRetry={lastUserMessage(session.messages, index) ? () => onRetry(lastUserMessage(session.messages, index)) : undefined}/> : <AgentRichText content={message.content} />}
+              </div>
+              <div className={styles.messageActions}>
+                <button
+                  aria-label={t("Copy message")}
+                  onClick={() => void navigator.clipboard.writeText(message.content)}
+                  type="button"
+                >
+                  <Copy />
+                </button>
+                {message.role === "user" && (
+                  <button
+                    aria-label={t("Edit message")}
+                    onClick={() => onEdit(message)}
+                    type="button"
+                  >
+                    <span>{t("Edit")}</span>
+                  </button>
+                )}
+              </div>
+            </article>
+          </Fragment>
+        ))}
+      </div>
     </div>
   );
 }
 
-function AgentMessageParts({ message }: { message: AgentMessage }) {
+function AgentRichText({ content }: { content: string }) {
+  const editor = useEditor({
+    immediatelyRender: false,
+    editable: false,
+    extensions: [StarterKit, Markdown],
+    content: content || " ",
+    contentType: "markdown",
+    editorProps: { attributes: { class: styles.messageDocument, role: "document", "aria-label": "AI message" } },
+  });
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || editor.getMarkdown() === content) return;
+    editor.commands.setContent(content || " ", { contentType: "markdown" });
+  }, [content, editor]);
+  if (!editor) return <div aria-label="AI message" className={styles.messageDocument} role="document"><p>{content}</p></div>;
+  return <EditorContent editor={editor} />;
+}
+
+function AgentMessageParts({ message, onRetry }: { message: AgentMessage; onRetry?: () => void }) {
+  const { t } = useI18n();
   const text = message.parts?.filter(part => part.type === "text").map(part => part.text ?? "").join("") || message.content;
+  const work = message.parts?.filter(part => part.type === "reasoning" || part.type === "toolCall") ?? [];
+  const other = message.parts?.filter(part => !["text", "reasoning", "toolCall"].includes(part.type)) ?? [];
   return <div className={styles.messageParts}>
-    {message.parts?.map(part => {
-      if (part.type === "reasoning") return <details className={styles.reasoning} key={part.id} open={part.status === "running"}><summary>{part.status === "running" ? "Thinking…" : "Reasoning"}</summary><p>{part.text}</p></details>;
-      if (part.type === "toolCall" && part.toolCall) return <AgentToolCallItem key={part.id} part={part}/>;
-      if (part.type === "error") return <div className={styles.partError} key={part.id} role="alert">{part.text}</div>;
-      if (part.type !== "text") return <div className={styles.eventPart} key={part.id}>{part.text}</div>;
-      return null;
-    })}
-    {text && <p>{text}</p>}
+    {work.length > 0 && <AgentWorkGroup message={message} parts={work}/>}
+    {other.map(part => part.type === "error"
+      ? <div className={styles.partError} key={part.id} role="alert"><AlertCircle/><span>{part.text}</span>{onRetry && <button onClick={onRetry} type="button">{t("Retry")}</button>}</div>
+      : <div className={styles.eventPart} key={part.id}><span>{part.text}</span></div>)}
+    {text && <AgentRichText content={text}/>}
   </div>;
+}
+
+function AgentWorkGroup({ message, parts }: { message: AgentMessage; parts: NonNullable<AgentMessage["parts"]> }) {
+  const { t } = useI18n();
+  const running = parts.some(part => part.status === "running" || part.status === "pending" || part.toolCall?.status === "running" || part.toolCall?.status === "pending");
+  const failed = parts.some(part => part.status === "error" || part.toolCall?.status === "error");
+  const [open, setOpen] = useState(running || failed);
+  useEffect(() => {
+    if (running || failed) setOpen(true);
+  }, [failed, running]);
+  const toolCount = parts.filter(part => part.type === "toolCall").length;
+  const duration = Math.max(1, Math.round((message.durationMs ?? 0) / 1000));
+  const label = running
+    ? t("Working…")
+    : message.durationMs
+      ? `${t("Worked for")} ${duration} ${t(duration === 1 ? "second" : "seconds")}`
+      : toolCount > 2
+        ? `${t("Used")} ${toolCount} ${t("tools")}`
+        : t("Work completed");
+  return <details className={`${styles.workGroup}${failed ? ` ${styles.workFailed}` : ""}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary>{running ? <LoaderCircle className={styles.spin}/> : failed ? <AlertCircle/> : <CircleCheck/>}<span>{label}</span><ChevronRight/></summary>
+    <div className={styles.workItems}>
+      {parts.map(part => part.type === "reasoning"
+        ? <div className={styles.reasoningRow} key={part.id}><span>{part.status === "running" ? t("Thinking…") : t("Reasoning")}</span>{part.text && <p>{part.text}</p>}</div>
+        : part.toolCall ? <AgentToolCallItem key={part.id} part={part}/> : null)}
+    </div>
+  </details>;
 }
 
 function AgentToolCallItem({ part }: { part: NonNullable<AgentMessage["parts"]>[number] }) {
   const call = part.toolCall!;
   const running = call.status === "running" || call.status === "pending";
   const detail = readableToolDetail(call.arguments);
-  return <details className={`${styles.toolCall} ${call.status === "error" ? styles.toolCallError : ""}`} open={call.status === "error"}>
-    <summary>{running ? <LoaderCircle className={styles.spin}/> : call.status === "error" ? <X/> : <Check/>}<span>{toolStatusLabel(call.name, running)}</span>{detail && <small>{detail}</small>}</summary>
-    <div><code>{JSON.stringify(call.arguments ?? {}, null, 2)}</code>{call.error && <p role="alert">{call.error}</p>}{call.result !== undefined && <code>{JSON.stringify(call.result, null, 2)}</code>}</div>
+  return <details className={`${styles.toolCall} ${call.status === "error" ? styles.toolCallError : ""}`} open={call.status === "error" || undefined}>
+    <summary>{running ? <LoaderCircle className={styles.spin}/> : call.status === "error" ? <AlertCircle/> : <Check/>}<span>{toolStatusLabel(call.name, running)}</span>{detail && <small>{detail}</small>}<ChevronRight/></summary>
+    <div>{call.error && <p role="alert">{call.error}</p>}<code>{JSON.stringify(call.result ?? call.arguments ?? {}, null, 2)}</code></div>
   </details>;
 }
 
@@ -682,6 +761,45 @@ function readableToolDetail(value: Record<string, unknown> | undefined) {
   }
   return "";
 }
+
+function shouldShowAgentTime(messages: AgentMessage[], index: number) {
+  if (index === 0) return true;
+  const current = Date.parse(messages[index].createdAt);
+  const previous = Date.parse(messages[index - 1].createdAt);
+  return !Number.isFinite(current) || !Number.isFinite(previous) || current - previous >= 12 * 60 * 60 * 1000;
+}
+
+function formatAgentTime(value: string, todayLabel: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const sameDay = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
+  const time = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  if (sameDay) return `${todayLabel} ${time}`;
+  return `${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${time}`;
+}
+
+function lastUserMessage(messages: AgentMessage[], before: number) {
+  for (let index = before; index >= 0; index--) {
+    if (messages[index].role === "user") return messages[index].content;
+  }
+  return "";
+}
+
+function groupAgentHistory(sessions: AgentSession[]) {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const groups = new Map<string, AgentSession[]>();
+  for (const session of sessions) {
+    const days = Math.max(0, Math.floor((start.getTime() - new Date(session.updatedAt).setHours(0, 0, 0, 0)) / 86_400_000));
+    const label = days === 0 ? "Today" : days === 1 ? "Yesterday" : days < 7 ? "Last week" : "Older";
+    groups.set(label, [...(groups.get(label) ?? []), session]);
+  }
+  return ["Today", "Yesterday", "Last week", "Older"]
+    .filter(label => groups.has(label))
+    .map(label => ({ label, sessions: groups.get(label)! }));
+}
+
 function relative(value: string) {
   const seconds = Math.max(
     0,

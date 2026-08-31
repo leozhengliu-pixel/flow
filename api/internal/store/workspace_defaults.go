@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"hash/fnv"
 	"strings"
 	"time"
 
@@ -12,13 +13,7 @@ import (
 // It intentionally contains no sample issues, projects, members, or activity.
 func EmptyWorkspace(name, urlKey, region string, viewer domain.User) domain.Bootstrap {
 	now := time.Now().UTC()
-	key := strings.ToUpper(urlKey)
-	if len(key) > 3 {
-		key = key[:3]
-	}
-	if key == "" {
-		key = "NEW"
-	}
+	key := defaultTeamKey(urlKey)
 	workspaceID := fmt.Sprintf("workspace_%d", now.UnixNano())
 	team := domain.Team{ID: fmt.Sprintf("team_%d", now.UnixNano()), Name: name, Key: key, Color: "#5E6AD2"}
 	data := domain.Bootstrap{
@@ -31,6 +26,24 @@ func EmptyWorkspace(name, urlKey, region string, viewer domain.User) domain.Boot
 	}
 	normalize(&data)
 	return data
+}
+
+func defaultTeamKey(urlKey string) string {
+	var builder strings.Builder
+	for _, r := range strings.ToUpper(urlKey) {
+		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			builder.WriteRune(r)
+			if builder.Len() == 3 {
+				return builder.String()
+			}
+		}
+	}
+	if builder.Len() >= 2 {
+		return builder.String()
+	}
+	hash := fnv.New32a()
+	_, _ = hash.Write([]byte(urlKey))
+	return fmt.Sprintf("W%02X", hash.Sum32()%256)
 }
 
 func localSQLiteFixture() domain.Bootstrap {

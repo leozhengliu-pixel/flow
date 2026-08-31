@@ -81,3 +81,4 @@
 @media(max-width:760px){.team-statuses-page>.team-statuses-header{height:auto;margin:0 8px 22px;padding-top:0}.team-statuses-header>div{margin:14px 0 0}.team-statuses-header>div h1{font-size:22px}.team-statuses-header>div p{max-width:none}}
 .ip-combobox:hover,.ip-combobox[data-state=open]{background:var(--dropdown-hover)}
 .ip-cadence-item[data-highlighted],.ip-row-menu [role=menuitem][data-highlighted]{background:var(--dropdown-hover)}
+.ip-editor-field>.settings-select,.ip-form-field>.settings-select{width:100%}

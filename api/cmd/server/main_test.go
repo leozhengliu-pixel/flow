@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"net/url"
 	"path/filepath"
 	"slices"
@@ -83,6 +85,10 @@ func TestTeamCreationHierarchyCopyAndDelete(t *testing.T) {
 	source := bootstrap.Teams[0]
 	requestJSON[domain.TeamSettings](t, handler, http.MethodPatch, "/api/teams/"+source.ID+"/settings", map[string]any{"timezone": "Asia/Shanghai", "progressOrder": "last"}, http.StatusOK)
 	parent := requestJSON[domain.Team](t, handler, http.MethodPost, "/api/workspaces/test-workspace/teams", map[string]any{"name": "Platform", "key": "PLT", "private": true, "copyFromTeamId": source.ID, "timezone": "Europe/London"}, http.StatusCreated)
+	parent = requestJSON[domain.Team](t, handler, http.MethodPatch, "/api/workspaces/test-workspace/teams/"+parent.ID, map[string]any{"icon": "🚀", "color": "#d758fc"}, http.StatusOK)
+	if parent.Icon != "🚀" || parent.Color != "#d758fc" {
+		t.Fatalf("team visual settings were not persisted: %#v", parent)
+	}
 	child := requestJSON[domain.Team](t, handler, http.MethodPost, "/api/workspaces/test-workspace/teams", map[string]any{"name": "Runtime", "key": "RUN", "parentTeamId": parent.ID}, http.StatusCreated)
 	afterCreate := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	if afterCreate.TeamSettings[parent.ID].Timezone != "Europe/London" || afterCreate.TeamSettings[parent.ID].ProgressOrder != "last" || afterCreate.TeamSettings[child.ID].ParentTeamID != parent.ID {
@@ -122,6 +128,96 @@ func TestWorkspaceRegionSelectorCanBeDisabled(t *testing.T) {
 	if created.Workspace.Region != "eu" {
 		t.Fatalf("client bypassed configured region: %#v", created.Workspace)
 	}
+}
+
+func TestWorkspaceCreationSupportsUnicodeNamesAndKeys(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	created := requestJSON[domain.Bootstrap](t, handler, http.MethodPost, "/api/workspaces", map[string]string{"name": "研发平台", "urlKey": "研发 平台", "region": "asia"}, http.StatusCreated)
+	if created.Workspace.Name != "研发平台" || created.Workspace.URLKey != "研发-平台" {
+		t.Fatalf("unicode workspace was normalized incorrectly: %#v", created.Workspace)
+	}
+	if len(created.Teams) != 1 || len(created.Teams[0].Key) != 3 || created.Teams[0].Key[0] != 'W' {
+		t.Fatalf("unicode workspace generated an invalid default team key: %#v", created.Teams)
+	}
+	if got := normalizeWorkspaceKey("研发 Platform_二期"); got != "研发-platform-二期" {
+		t.Fatalf("normalizeWorkspaceKey() = %q", got)
+	}
+}
+
+func TestWorkspaceLogoUploadAndRemoval(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	header := textproto.MIMEHeader{}
+	header.Set("Content-Disposition", `form-data; name="file"; filename="logo.png"`)
+	header.Set("Content-Type", "image/png")
+	part, err := writer.CreatePart(header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = part.Write([]byte("\x89PNG\r\n\x1a\nflow"))
+	_ = writer.Close()
+	request := httptest.NewRequest(http.MethodPost, "/api/workspaces/test-workspace/logo", &body)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("logo upload status=%d body=%s", response.Code, response.Body.String())
+	}
+	var updated domain.Bootstrap
+	if err := json.Unmarshal(response.Body.Bytes(), &updated); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(updated.Workspace.LogoURL, "/uploads/workspace_logo_") {
+		t.Fatalf("logo URL = %q", updated.Workspace.LogoURL)
+	}
+	removed := requestJSON[domain.Bootstrap](t, handler, http.MethodDelete, "/api/workspaces/test-workspace/logo", nil, http.StatusOK)
+	if removed.Workspace.LogoURL != "" {
+		t.Fatalf("logo was not removed: %q", removed.Workspace.LogoURL)
+	}
+	upload := func(filename, contentType, content string, wantStatus int) *httptest.ResponseRecorder {
+		t.Helper()
+		var uploadBody bytes.Buffer
+		uploadWriter := multipart.NewWriter(&uploadBody)
+		uploadHeader := textproto.MIMEHeader{}
+		uploadHeader.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename=%q`, filename))
+		uploadHeader.Set("Content-Type", contentType)
+		uploadPart, createErr := uploadWriter.CreatePart(uploadHeader)
+		if createErr != nil {
+			t.Fatal(createErr)
+		}
+		_, _ = uploadPart.Write([]byte(content))
+		_ = uploadWriter.Close()
+		uploadRequest := httptest.NewRequest(http.MethodPost, "/api/workspaces/test-workspace/logo", &uploadBody)
+		uploadRequest.Header.Set("Content-Type", uploadWriter.FormDataContentType())
+		uploadResponse := httptest.NewRecorder()
+		handler.ServeHTTP(uploadResponse, uploadRequest)
+		if uploadResponse.Code != wantStatus {
+			t.Fatalf("%s upload status=%d body=%s", filename, uploadResponse.Code, uploadResponse.Body.String())
+		}
+		return uploadResponse
+	}
+	safeSVGResponse := upload("logo.svg", "image/svg+xml", `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M0 0h16v16H0z"/></svg>`, http.StatusOK)
+	var safeSVGWorkspace domain.Bootstrap
+	if err := json.Unmarshal(safeSVGResponse.Body.Bytes(), &safeSVGWorkspace); err != nil {
+		t.Fatal(err)
+	}
+	inlineSVG := httptest.NewRecorder()
+	handler.ServeHTTP(inlineSVG, httptest.NewRequest(http.MethodGet, safeSVGWorkspace.Workspace.LogoURL, nil))
+	if inlineSVG.Code != http.StatusOK || inlineSVG.Header().Get("Content-Type") != "image/svg+xml" || inlineSVG.Header().Get("Content-Disposition") != "" {
+		t.Fatalf("safe SVG response headers = %#v", inlineSVG.Header())
+	}
+	upload("unsafe.svg", "image/svg+xml", `<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`, http.StatusBadRequest)
 }
 
 func TestIssueStateTransitionsPersistInsightTimestamps(t *testing.T) {

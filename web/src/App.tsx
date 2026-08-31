@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { CircleHelp } from "lucide-react";
+import { Bot, History } from "lucide-react";
 import {
   addFavorite,
   addSubscription,
@@ -5505,14 +5505,23 @@ function App() {
           }}
         />
       )}
-      <button
-        className="bottom-agent"
-        aria-label="Agent"
-        onClick={() => navigateTo(agentPath(data.workspace.urlKey))}
-        type="button"
-      >
-        <span>⌁</span> Agent <CircleHelp size={14} />
-      </button>
+      <div className="bottom-agent">
+        <button
+          aria-label="Agent"
+          onClick={() => navigateTo(agentPath(data.workspace.urlKey))}
+          type="button"
+        >
+          <Bot />
+          <span>Agent</span>
+        </button>
+        <button
+          aria-label="Chat history"
+          onClick={() => navigateTo(`${agentPath(data.workspace.urlKey)}?history=1`)}
+          type="button"
+        >
+          <History />
+        </button>
+      </div>
     </div>
   );
 }
