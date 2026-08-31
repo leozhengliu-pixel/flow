@@ -1,3 +1,3 @@
 export function slugifyWorkspace(value: string) {
-  return value.normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48)
+  return Array.from(value.normalize('NFKC').toLocaleLowerCase().replace(/[^\p{Letter}\p{Number}]+/gu, '-').replace(/^-+|-+$/g, '')).slice(0, 48).join('')
 }

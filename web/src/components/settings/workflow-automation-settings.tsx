@@ -19,6 +19,7 @@ import type {
 } from "@/types/flow";
 import {
   SettingsPageTitle,
+  SettingsSelect,
   SettingsSection,
   SettingsToggle,
 } from "./settings-primitives";
@@ -108,19 +109,18 @@ export function WorkflowAutomationSettings({ data }: { data: BootstrapData }) {
                 value={name}
                 onChange={(event) => setName(event.target.value)}
               />
-              <select
-                className="settings-select native"
+              <SettingsSelect
+                label="Trigger"
                 value={trigger}
-                onChange={(event) =>
-                  setTrigger(
-                    event.target.value as WorkflowDefinition["trigger"],
-                  )
+                onChange={(value) =>
+                  setTrigger(value as WorkflowDefinition["trigger"])
                 }
-              >
-                <option value="manual">Manual</option>
-                <option value="schedule">Schedule</option>
-                <option value="issueCreated">Issue created</option>
-              </select>
+                options={[
+                  { value: "manual", label: "Manual" },
+                  { value: "schedule", label: "Schedule" },
+                  { value: "issueCreated", label: "Issue created" },
+                ]}
+              />
               {trigger === "schedule" && (
                 <input
                   className="settings-input"
@@ -130,28 +130,30 @@ export function WorkflowAutomationSettings({ data }: { data: BootstrapData }) {
                   placeholder="0 9 * * *"
                 />
               )}
-              <select
-                className="settings-select native"
+              <SettingsSelect
+                label="Team"
                 value={teamId}
-                onChange={(event) => setTeamId(event.target.value)}
-              >
-                <option value="">Workspace</option>
-                {data.teams.map((team) => (
-                  <option key={team.id} value={team.id}>
-                    {team.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="settings-select native"
+                onChange={setTeamId}
+                options={[
+                  { value: "", label: "Workspace" },
+                  ...data.teams.map((team) => ({
+                    value: team.id,
+                    label: team.name,
+                    entityName: true,
+                  })),
+                ]}
+              />
+              <SettingsSelect
+                label="Action"
                 value={actionType}
-                onChange={(event) =>
-                  setActionType(event.target.value as WorkflowAction["type"])
+                onChange={(value) =>
+                  setActionType(value as WorkflowAction["type"])
                 }
-              >
-                <option value="notify">Notify creator</option>
-                <option value="createIssue">Create issue</option>
-              </select>
+                options={[
+                  { value: "notify", label: "Notify creator" },
+                  { value: "createIssue", label: "Create issue" },
+                ]}
+              />
               <footer>
                 <button
                   type="button"

@@ -2,7 +2,9 @@
   position: relative;
   min-width: 0;
   height: calc(100% - 44px);
-  margin: 8px 8px 36px 0;
+  display: flex;
+  flex-direction: column;
+  margin: 8px 8px 8px 0;
   overflow: hidden;
   border: 0.5px solid var(--border);
   border-radius: 12px;
@@ -13,19 +15,20 @@
 }
 .page > header {
   height: 44px;
-  display: grid;
-  grid-template-columns: auto 1fr repeat(3, 28px);
+  flex: 0 0 44px;
+  display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 12px;
+  gap: 0;
+  padding: 0 8px 0 18px;
   border-bottom: 0.5px solid var(--theme-border);
 }
+.headerSpacer { min-width: 0; flex: 1; }
 .switcher {
   height: 28px;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: -8px;
+  margin: 0 4px 0 -8px;
   padding: 0 8px;
   border: 0.5px solid transparent;
   border-radius: 9999px;
@@ -79,8 +82,9 @@
 }
 .body {
   position: relative;
-  height: calc(100% - 44px);
-  overflow: auto;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
 }
 .emptyGraphic {
   position: absolute;
@@ -101,7 +105,7 @@
 .composer {
   position: absolute;
   z-index: 2;
-  top: 160px;
+  top: 41%;
   left: 50%;
   width: 712px;
   min-height: 104px;
@@ -112,6 +116,15 @@
   border-radius: 10px;
   background: var(--agent-composer-bg);
   box-shadow: var(--shadow);
+}
+.conversationComposer {
+  top: auto;
+  bottom: 12px;
+  width: min(821px, calc(100% - 40px));
+  min-height: 128px;
+}
+.conversationComposer .editorScroll {
+  min-height: 72px;
 }
 .editor {
   min-height: 24px;
@@ -195,131 +208,233 @@
   white-space: nowrap;
 }
 .conversation {
-  width: min(760px, calc(100% - 40px));
-  min-height: calc(100% - 170px);
-  margin: 0 auto;
-  padding: 42px 0 190px;
+  position: absolute;
+  inset: 0 0 152px;
+  overflow: hidden auto;
+  scrollbar-width: thin;
 }
-.conversation > time {
+.conversationInner {
+  width: min(821px, calc(100% - 40px));
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 18px 0 44px;
+}
+.messageTime {
   display: block;
-  margin-bottom: 18px;
+  margin: 0 auto 16px;
   color: var(--theme-text-tertiary);
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 15px;
   text-align: center;
 }
 .conversation article {
   position: relative;
-  margin: 0 0 20px;
-  padding: 0 38px;
-  color: var(--text-body);
-  font-size: 14px;
-  line-height: 22px;
+  display: flex;
+  flex-direction: column;
+  margin: 0 0 26px;
+  color: var(--theme-text-primary);
+  font-size: 15px;
+  line-height: 24px;
 }
-.conversation article p {
-  margin: 0;
-  white-space: pre-wrap;
+.messageContent {
+  max-width: 85%;
 }
-.conversation article > div {
+.conversation article.user {
+  align-items: flex-end;
+  color: var(--theme-text-primary);
+}
+.user .messageContent {
+  max-width: 75%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--theme-surface-2);
+}
+.assistant {
+  align-items: flex-start;
+}
+.isEditing .messageContent {
+  box-shadow: 0 0 0 1px var(--accent-primary);
+}
+.messageActions {
   height: 26px;
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: 2px;
+  margin: 4px 0 -30px;
   opacity: 0;
-  transition: opacity 0.1s;
+  transition: opacity 100ms ease;
 }
-.conversation article:hover > div,
-.conversation article:focus-within > div {
+.user .messageActions {
+  justify-content: flex-end;
+}
+.conversation article:hover .messageActions,
+.conversation article:focus-within .messageActions {
   opacity: 1;
 }
-.conversation article button {
+.messageActions button {
+  min-width: 24px;
   height: 24px;
   display: grid;
   place-items: center;
-  padding: 0 6px;
-  border: 0;
-  border-radius: 5px;
+  padding: 0 5px;
+  border: 0.5px solid transparent;
+  border-radius: 9999px;
   background: transparent;
   color: var(--theme-text-secondary);
-  font-size: 11px;
+  font-size: 12px;
 }
-.conversation article button:hover {
+.messageActions button:hover,
+.messageActions button:focus-visible {
   background: var(--theme-surface-hover);
+  color: var(--theme-text-primary);
+  outline: 0;
 }
-.conversation article button svg {
+.messageActions button svg {
   width: 12px;
   height: 12px;
 }
-.conversation article small {
-  display: block;
-  margin: 4px 0 8px;
-  color: var(--theme-text-tertiary);
-  font-size: 11px;
+.messageDocument {
+  color: inherit;
+  font: inherit;
 }
-.user {
-  font-weight: 500;
-}
-.assistant {
-  padding-top: 8px;
-  border-top: 0.5px solid var(--theme-border);
-}
-.messageParts {
-  display: grid;
-  gap: 10px;
-}
-.messageParts > p {
+.messageDocument p {
   margin: 0;
   white-space: pre-wrap;
 }
-.reasoning,
-.toolCall {
-  overflow: hidden;
+.messageDocument p + p,
+.messageDocument p + ul,
+.messageDocument p + ol,
+.messageDocument ul + p,
+.messageDocument ol + p,
+.messageDocument pre + p {
+  margin-top: 16px;
+}
+.messageDocument ul,
+.messageDocument ol {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding-left: 24px;
+}
+.messageDocument li p {
+  margin: 0;
+}
+.messageDocument h2,
+.messageDocument h3 {
+  margin: 16px 0 6px;
+  color: var(--theme-text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+.messageDocument code {
+  padding: 1px 4px;
+  border: 0.5px solid var(--theme-border);
+  border-radius: 4px;
+  background: var(--theme-surface-1);
+  font: 12px/20px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.messageDocument pre {
+  overflow: auto;
+  margin: 12px 0 0;
+  padding: 10px 12px;
   border: 0.5px solid var(--theme-border);
   border-radius: 7px;
   background: var(--theme-surface-1);
-  color: var(--theme-text-secondary);
 }
-.reasoning > summary,
-.toolCall > summary {
-  min-height: 30px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 8px;
-  cursor: pointer;
-  list-style: none;
+.messageDocument pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.messageParts {
+  display: grid;
+  gap: 12px;
+}
+.workGroup {
+  color: var(--theme-text-tertiary);
   font-size: 12px;
 }
-.reasoning > summary::-webkit-details-marker,
-.toolCall > summary::-webkit-details-marker {
-  display: none;
+.workGroup > summary,
+.toolCall {
+  list-style: none;
 }
-.reasoning > summary::after,
-.toolCall > summary::after {
-  content: "›";
-  margin-left: auto;
-  transition: transform 120ms ease;
+.workGroup > summary {
+  width: max-content;
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+  border-radius: 5px;
+  cursor: pointer;
 }
-.reasoning[open] > summary::after,
-.toolCall[open] > summary::after {
-  transform: rotate(90deg);
+.workGroup > summary:hover {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-secondary);
 }
+.workFailed > summary { color: var(--semantic-danger-text); }
+.workGroup summary::-webkit-details-marker,
+.toolCall summary::-webkit-details-marker { display: none; }
+.workGroup summary svg,
 .toolCall summary svg {
   width: 14px;
   height: 14px;
+  flex: 0 0 auto;
+}
+.workGroup > summary > svg:last-child,
+.toolCall summary > svg:last-child {
+  width: 12px;
+  height: 12px;
+  margin-left: 2px;
+  transition: transform 120ms ease;
+}
+.workGroup[open] > summary > svg:last-child,
+.toolCall[open] summary > svg:last-child {
+  transform: rotate(90deg);
+}
+.workItems {
+  display: grid;
+  gap: 2px;
+  margin: 4px 0 0 7px;
+  padding: 3px 0 3px 15px;
+  border-left: 0.5px solid var(--theme-border);
+}
+.reasoningRow {
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.reasoningRow p {
+  margin: 3px 0 0;
+  color: var(--theme-text-tertiary);
+  white-space: pre-wrap;
+}
+.toolCall > summary {
+  min-height: 28px;
+  display: grid;
+  grid-template-columns: 14px auto minmax(0, 1fr) 12px;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.toolCall > summary:hover {
+  background: var(--theme-surface-hover);
 }
 .toolCall summary small {
-  max-width: 240px;
   overflow: hidden;
   color: var(--theme-text-tertiary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.reasoning > p,
 .toolCall > div {
-  margin: 0;
-  padding: 8px;
-  border-top: 0.5px solid var(--theme-border);
-  font-size: 12px;
-  white-space: pre-wrap;
+  margin: 2px 8px 6px 29px;
+  padding: 8px 10px;
+  border: 0.5px solid var(--theme-border);
+  border-radius: 6px;
+  background: var(--theme-surface-1);
 }
 .toolCall code {
   display: block;
@@ -334,29 +449,40 @@
 }
 .partError,
 .eventPart {
-  padding: 8px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 0.5px solid var(--theme-border);
   border-radius: 7px;
   background: var(--theme-surface-1);
   color: var(--theme-text-secondary);
   font-size: 12px;
 }
+.partError > svg { width: 14px; height: 14px; flex: 0 0 auto; }
+.partError > span { min-width: 0; flex: 1; }
+.partError > button {
+  height: 24px;
+  padding: 0 8px;
+  border: 0.5px solid var(--theme-border);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+}
+.partError > button:hover { background: var(--theme-surface-hover); }
 .spin {
   animation: agent-spin 900ms linear infinite;
 }
 @keyframes agent-spin {
   to { transform: rotate(360deg); }
 }
-.page:has(.conversation article) .composer {
-  position: absolute;
-  top: auto;
-  bottom: 12px;
-}
 .editing {
   position: absolute;
   z-index: 3;
   left: 50%;
-  bottom: 171px;
-  width: 688px;
+  bottom: 148px;
+  width: min(797px, calc(100% - 64px));
   transform: translateX(-50%);
   display: flex;
   justify-content: space-between;
@@ -384,8 +510,16 @@
 }
 .historyMenu {
   width: 320px;
-  max-height: 360px;
-  padding: 6px;
+  max-height: 420px;
+  padding: 6px 0;
+  overflow: hidden;
+}
+.historySearch {
+  position: fixed;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
 }
 .menuSearch {
   height: 36px;
@@ -409,16 +543,18 @@
   font-size: 13px;
 }
 .historyMenu [role="listbox"] {
-  max-height: 278px;
+  max-height: 408px;
   overflow: auto;
+  padding: 0 6px;
 }
 .historyMenu [role="option"] {
   width: 100%;
-  height: 42px;
+  height: 32px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: 20px 16px;
-  padding: 3px 8px;
+  grid-template-columns: 16px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px;
   border: 0;
   border-radius: 7px;
   background: transparent;
@@ -431,7 +567,7 @@
 }
 .historyMenu strong {
   overflow: hidden;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -439,11 +575,34 @@
 .historyMenu [role="option"] span,
 .historyMenu time {
   color: var(--theme-text-secondary);
-  font-size: 10px;
+  font-size: 11px;
 }
-.historyMenu time {
-  grid-row: 1;
-  grid-column: 2;
+.historyMenu [role="option"] > i {
+  width: 6px;
+  height: 6px;
+  justify-self: center;
+  border-radius: 50%;
+  background: var(--theme-text-tertiary);
+}
+.historyGroup {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  color: var(--theme-text-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+}
+.historySeparator {
+  height: 12px;
+  position: relative;
+}
+.historySeparator::after {
+  content: "";
+  position: absolute;
+  inset: 5.5px -6px auto;
+  height: 0.5px;
+  background: var(--theme-border);
 }
 .noHistory {
   height: 32px;
@@ -453,23 +612,11 @@
   font-size: 12px;
 }
 .newChat {
-  width: 100%;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: inherit;
-  font-size: 12px;
-}
-.newChat:hover {
-  background: var(--theme-surface-hover);
+  grid-template-columns: 16px minmax(0, 1fr) !important;
 }
 .newChat svg {
-  width: 13px;
+  width: 14px;
+  height: 14px;
 }
 .skillsMenu {
   width: 240px;
@@ -501,7 +648,7 @@
   height: 14px;
 }
 .optionsMenu {
-  width: 192px;
+  width: 176px;
   padding: 6px 0;
 }
 .optionsMenu [role="menuitem"] {
@@ -587,9 +734,14 @@
   .mobileMenu {
     display: grid;
   }
+  .mobileMenu + .switcher { margin-left: 0; }
   .composer {
     top: 42.4%;
     width: calc(100% - 48px);
+  }
+  .conversationComposer {
+    top: auto;
+    width: calc(100% - 24px);
   }
   .emptyGraphic {
     top: 20%;
@@ -597,11 +749,15 @@
     height: auto;
   }
   .conversation {
-    width: 100%;
-    padding: 32px 12px 190px;
+    bottom: 152px;
   }
-  .page:has(.conversation article) .composer {
-    bottom: 12px;
+  .conversationInner {
+    width: calc(100% - 24px);
+    padding-top: 18px;
+  }
+  .messageContent,
+  .user .messageContent {
+    max-width: 92%;
   }
   .editing {
     bottom: 130px;
@@ -649,12 +805,12 @@
 }
 .examples {
   position: absolute;
-  top: 277px;
+  top: calc(41% + 124px);
   left: 50%;
   width: 712px;
   transform: translateX(-50%);
 }
-.examplesWithError { top: 295px; }
+.examplesWithError { top: calc(41% + 148px); }
 .examples > header {
   height: 28px;
   display: flex;
