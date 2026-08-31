@@ -10,6 +10,7 @@ cd web
 npm ci
 npm run lint
 npm run test:coverage
+npm run test:coverage:workflows
 npm run test:coverage:all
 npm audit --audit-level=high
 npm run build
@@ -19,7 +20,8 @@ npm run test:e2e
 
 Vitest covers shared routing, label, filtering, cycle, pulse, resource-count,
 localization, and design-system logic. Coverage thresholds are enforced in
-`vitest.config.ts`; `test:coverage:all` separately reports the complete source
+`vitest.config.ts`. A second gate covers issue, project detail, settings, inbox,
+picker, autosave, API transport, and collaboration workflows. `test:coverage:all` separately reports the complete source
 tree with a regression floor, so the narrower high-confidence gate cannot be
 mistaken for global UI coverage. Playwright starts
 an isolated API and Vite server, creates a temporary workspace through the API,
