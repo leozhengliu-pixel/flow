@@ -16,12 +16,12 @@ const groups: PulseFilterField[][] = [
 
 function Filter({size=16}:{size?:number}){return <FilterIcon width={size} height={size}/>}
 
-export function PulseFilterMenu({ data, filters, match, onChange, onMatchChange }: { data:BootstrapData;filters:PulseFilter[];match:PulseFilterMatch;onChange:(filters:PulseFilter[])=>void;onMatchChange:(match:PulseFilterMatch)=>void }) {
+export function PulseFilterMenu({ align='start', compact=false, data, filters, match, onChange, onMatchChange }: { align?:'start'|'end';compact?:boolean;data:BootstrapData;filters:PulseFilter[];match:PulseFilterMatch;onChange:(filters:PulseFilter[])=>void;onMatchChange:(match:PulseFilterMatch)=>void }) {
   const [query,setQuery]=useState('')
   const [advancedOpen,setAdvancedOpen]=useState(false)
   const visibleGroups=groups.map(fields=>fields.filter(field=>pulseFilterLabels[field].toLowerCase().includes(query.trim().toLowerCase()))).filter(fields=>fields.length)
   const updateField=(field:PulseFilterField,value:string)=>{const existing=filters.find(filter=>filter.field===field);if(existing){const values=existing.values.includes(value)?existing.values.filter(item=>item!==value):[...existing.values,value];onChange(values.length?filters.map(filter=>filter.id===existing.id?{...filter,values}:filter):filters.filter(filter=>filter.id!==existing.id));return}onChange([...filters,{id:`pulse_filter_${crypto.randomUUID()}`,field,operator:'is',values:[value]}])}
-  return <><DropdownMenu.Root onOpenChange={open=>{if(!open)setQuery('')}}><DropdownMenu.Trigger asChild><button className="pulse-filter-button" type="button"><Filter size={13}/>Add filter</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="start" className="pulse-menu pulse-filter-builder" sideOffset={5}>
+  return <><DropdownMenu.Root onOpenChange={open=>{if(!open)setQuery('')}}><DropdownMenu.Trigger asChild><button aria-label="Add filter" className="pulse-filter-button" data-compact={compact||undefined} type="button"><Filter size={13}/>{!compact&&'Add filter'}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align={align} className="pulse-menu pulse-filter-builder" sideOffset={5}>
     <div className="pulse-menu-search"><input aria-label="Add Filter…" autoFocus placeholder="Add Filter…" value={query} onChange={event=>setQuery(event.target.value)}/><kbd>F</kbd></div>
     {!query&&<><DropdownMenu.Item onSelect={()=>setAdvancedOpen(true)}><SlidersHorizontal size={14}/><span>Advanced filter</span></DropdownMenu.Item><DropdownMenu.Separator/></>}
     {visibleGroups.map((fields,index)=><div key={fields.join(':')}>{index>0&&<DropdownMenu.Separator/>}{fields.map(field=><FilterFieldSubmenu data={data} field={field} filters={filters} key={field} onToggle={value=>updateField(field,value)}/>)}</div>)}

@@ -1,5 +1,7 @@
 @import "tailwindcss";
 @import "../components/workspace/workspace.css";
+.flow-framed-workspace.flow-framed-workspace{width:auto;height:calc(100% - 44px);min-width:0;min-height:0;margin:8px 8px 8px 0;border:.5px solid var(--border);border-radius:var(--panel-radius);background:var(--bg-panel);box-shadow:var(--shadow);overflow:hidden}
+@media(max-width:800px){.flow-framed-workspace.flow-framed-workspace{width:100%;height:calc(100% - 36px);margin:0 0 36px;border:0;border-radius:0;box-shadow:none}}
 @font-face{font-family:"Inter Variable";src:url("/fonts/InterVariable.woff2") format("woff2");font-weight:100 900;font-display:swap}
 .settings-pointer-cursor :is(a[href],button,[role=button],[role=menuitem],[role=option],[role=checkbox],[role=switch],select,label[for]){cursor:pointer}
 .settings-underline-links :is(.tiptap,.issue-description,.document-content,.rich-comment) a{text-decoration:underline;text-underline-offset:2px}
