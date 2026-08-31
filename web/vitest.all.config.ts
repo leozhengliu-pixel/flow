@@ -11,10 +11,11 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     coverage: {
       provider: 'v8',
+      reportsDirectory: './coverage/all',
       reporter: ['text-summary', 'json-summary', 'lcov'],
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/**/*.d.ts', 'src/**/*.test.{ts,tsx}', 'src/test/**'],
-      thresholds: { branches: 2, functions: 1, lines: 2, statements: 1.5 },
+      thresholds: { branches: 5, functions: 5, lines: 8, statements: 6 },
     },
   },
 })

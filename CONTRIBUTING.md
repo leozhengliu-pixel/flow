@@ -81,6 +81,7 @@ cd web
 npm ci
 npm run lint
 npm run test:coverage
+npm run test:coverage:workflows
 npm run test:coverage:all
 npm audit --audit-level=high
 npm run build
