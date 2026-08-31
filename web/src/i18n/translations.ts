@@ -1690,6 +1690,7 @@ export const zhCN: Record<string, string> = {
   "Delete request": "删除需求",
   "Delete update": "删除更新",
   "Delete view": "删除视图",
+  "Delete view?": "删除视图？",
   Description: "描述",
   "Description…": "描述…",
   "Description history": "描述历史",
