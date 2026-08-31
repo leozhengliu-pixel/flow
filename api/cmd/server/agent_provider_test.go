@@ -22,13 +22,15 @@ func TestAgentProviderStreamingProtocols(t *testing.T) {
 		{
 			name: "OpenAI Responses", protocol: "openai-responses", path: "/responses",
 			stream: "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n\n" +
+				"event: response.reasoning_summary_text.delta\ndata: {\"type\":\"response.reasoning_summary_text.delta\",\"delta\":\"Checked the workspace.\"}\n\n" +
 				"event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"Hello \"}\n\n" +
 				"event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"world\"}\n\n" +
 				"event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"item_1\",\"call_id\":\"call_1\",\"type\":\"function_call\",\"name\":\"list_issues\",\"arguments\":\"\"}}\n\n" +
 				"event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"item_id\":\"item_1\",\"delta\":\"{\\\"query\\\":\\\"bug\\\"}\"}\n\n" +
 				"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n",
 			assertBody: func(t *testing.T, body map[string]any, header http.Header) {
-				if body["stream"] != true || body["instructions"] != "System" || header.Get("Authorization") != "Bearer secret" {
+				reasoning, _ := body["reasoning"].(map[string]any)
+				if body["stream"] != true || body["instructions"] != "System" || reasoning["summary"] != "auto" || header.Get("Authorization") != "Bearer secret" {
 					t.Fatalf("Responses request body=%#v headers=%v", body, header)
 				}
 			},
@@ -94,6 +96,9 @@ func TestAgentProviderStreamingProtocols(t *testing.T) {
 			if len(events) < 2 {
 				t.Fatalf("events=%#v", events)
 			}
+			if test.protocol == "openai-responses" && turn.Reasoning != "Checked the workspace." {
+				t.Fatalf("reasoning=%q events=%#v", turn.Reasoning, events)
+			}
 		})
 	}
 }
@@ -104,7 +109,7 @@ func TestAgentProviderNonStreamingFallbacks(t *testing.T) {
 		path     string
 		body     string
 	}{
-		{"openai-responses", "/responses", `{"id":"resp","output":[{"type":"message","content":[{"type":"output_text","text":"response text"}]}]}`},
+		{"openai-responses", "/responses", `{"id":"resp","output":[{"type":"reasoning","summary":[{"type":"summary_text","text":"response reasoning"}]},{"type":"message","content":[{"type":"output_text","text":"response text"}]}]}`},
 		{"openai-chat-completions", "/chat/completions", `{"choices":[{"finish_reason":"stop","message":{"content":"response text"}}]}`},
 		{"anthropic-messages", "/messages", `{"id":"msg","stop_reason":"end_turn","content":[{"type":"text","text":"response text"}]}`},
 	}
@@ -122,6 +127,9 @@ func TestAgentProviderNonStreamingFallbacks(t *testing.T) {
 			turn, err := s.requestAgentTurn(context.Background(), []agentProviderMessage{{Role: "user", Content: "hello"}}, nil)
 			if err != nil || turn.Text != "response text" {
 				t.Fatalf("turn=%#v err=%v", turn, err)
+			}
+			if test.protocol == "openai-responses" && turn.Reasoning != "response reasoning" {
+				t.Fatalf("reasoning=%q", turn.Reasoning)
 			}
 		})
 	}

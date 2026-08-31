@@ -79,8 +79,9 @@ import { TemplateEditor } from "./advanced-settings";
 import {
   SettingsRow,
   SettingsSection,
-  SettingsSelect,
+  SettingsSelect as BaseSettingsSelect,
   SettingsToggle,
+  type SettingsSelectOption,
 } from "./settings-primitives";
 import { CheckboxMark } from "@/components/ui/checkbox-mark";
 import { confirmAction } from "@/components/ui/action-dialog-service";
@@ -204,6 +205,7 @@ export function TeamWorkflowSettings({
   onNavigate: (section: TeamSettingsSection) => void;
   onReload: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   if (section === "statuses")
     return (
       <StatusesSettings
@@ -221,7 +223,7 @@ export function TeamWorkflowSettings({
           {section !== "overview" && (
             <button
               className="settings-icon-action team-settings-back"
-              aria-label="Back to team settings"
+              aria-label={t("Back to team settings")}
               onClick={() => onNavigate("overview")}
             >
               <ArrowLeft size={15} />
@@ -234,9 +236,11 @@ export function TeamWorkflowSettings({
             <ViewGlyph color={team.color} icon={team.icon || "Team"} />
           </span>
           <h1>
-            {section === "overview"
-              ? team.name
-              : SECTIONS.find((item) => item.id === section)?.label}
+            {section === "overview" ? (
+              <span data-i18n-ignore>{team.name}</span>
+            ) : (
+              t(SECTIONS.find((item) => item.id === section)?.label ?? "")
+            )}
           </h1>
         </div>
       </header>
@@ -329,12 +333,13 @@ function TeamOverview({
   onNavigate: (section: TeamSettingsSection) => void;
   onReload: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const { settings, save } = useTeamSettings(data, team, onReload);
   const retire = async () => {
     const action = team.retiredAt ? "Restore" : "Retire";
     if (
-      !(await confirmAction(`${action} ${team.name}?`, {
-        confirmLabel: action,
+      !(await confirmAction(`${t(action)} ${team.name}?`, {
+        confirmLabel: t(team.retiredAt ? "Restore team" : "Retire team"),
         danger: !team.retiredAt,
       }))
     )
@@ -347,8 +352,8 @@ function TeamOverview({
   const remove = async () => {
     if (
       !(await confirmAction(`Delete ${team.name}?`, {
-        description: "This permanently deletes the team and its owned data.",
-        confirmLabel: "Delete team",
+        description: t("This permanently deletes the team and its owned data."),
+        confirmLabel: t("Delete team"),
       }))
     )
       return;
@@ -358,7 +363,7 @@ function TeamOverview({
   const leave = async () => {
     if (
       !(await confirmAction(`Leave ${team.name}?`, {
-        confirmLabel: "Leave team",
+        confirmLabel: t("Leave team"),
       }))
     )
       return;
@@ -379,8 +384,8 @@ function TeamOverview({
           return (
             <button key={item.id} onClick={() => onNavigate(item.id)}>
               <span>
-                <strong>{item.label}</strong>
-                <small>{item.description}</small>
+                <strong>{t(item.label)}</strong>
+                <small>{t(item.description)}</small>
               </span>
               <ChevronRight size={15} />
             </button>
@@ -392,25 +397,25 @@ function TeamOverview({
   return (
     <>
       {group(undefined, ["general", "security", "members", "notifications"])}
-      {group("Issues, projects, and docs", [
+      {group(t("Issues, projects, and docs"), [
         "issue-labels",
         "templates",
         "recurring-issues",
       ])}
-      {group("Workflow", ["statuses", "workflow", "triage", "cycles"])}
-      <TeamSection title="AI & Agents">
+      {group(t("Workflow"), ["statuses", "workflow", "triage", "cycles"])}
+      <TeamSection title={t("AI & Agents")}>
         <div className="team-overview-list">
           {["agents", "agent-skills"].map((id) => {
             const item = SECTIONS.find((value) => value.id === id)!;
-            return <button key={item.id} onClick={() => onNavigate(item.id)}><span><strong>{item.label}</strong><small>{item.description}</small></span><ChevronRight size={15}/></button>;
+            return <button key={item.id} onClick={() => onNavigate(item.id)}><span><strong>{t(item.label)}</strong><small>{t(item.description)}</small></span><ChevronRight size={15}/></button>;
           })}
           <a href={loopsPath(data.workspace.urlKey)}>
-            <span><strong>Loops</strong><small>Automated agent workflows that run on a schedule or when an issue is updated</small></span>
+            <span><strong>Loops</strong><small>{t("Automated agent workflows that run on a schedule or when an issue is updated")}</small></span>
             <ChevronRight size={15}/>
           </a>
           {["ai-updates", "ai-summaries"].map((id) => {
             const item = SECTIONS.find((value) => value.id === id)!;
-            return <button key={item.id} onClick={() => onNavigate(item.id)}><span><strong>{item.label}</strong><small>{item.description}</small></span><ChevronRight size={15}/></button>;
+            return <button key={item.id} onClick={() => onNavigate(item.id)}><span><strong>{t(item.label)}</strong><small>{t(item.description)}</small></span><ChevronRight size={15}/></button>;
           })}
         </div>
       </TeamSection>
@@ -433,6 +438,7 @@ function TeamOverview({
               data.teams.map((item) => [item.id, item.name]),
             ),
           }}
+          entityOptions={data.teams.map((item) => item.id)}
           onChange={(value) => save({ parentTeamId: value })}
         />
       </TeamSection>
@@ -688,6 +694,7 @@ function EmailIntakeSettings({
   save: (patch: Partial<TeamSettings>) => Promise<void>;
   onReload: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const addresses = data.emailIntakeAddresses.filter(
     (item) => item.teamId === team.id && item.enabled,
   );
@@ -704,7 +711,7 @@ function EmailIntakeSettings({
       await save({ issueEmailEnabled: true });
       setConfiguring(false);
       await onReload();
-      toast.success("Issue intake email created");
+      toast.success(t("Issue intake email created"));
     } catch (error) {
       toast.error(message(error));
     }
@@ -728,7 +735,7 @@ function EmailIntakeSettings({
       >
         <SettingsToggle
           checked={settings.issueEmailEnabled}
-          label="Enable issue creation by email"
+          label={t("Enable issue creation by email")}
           onChange={(value) => {
             if (value) {
               setConfiguring(true);
@@ -745,17 +752,17 @@ function EmailIntakeSettings({
             <strong data-i18n-ignore>{item.address}</strong>
             <small>
               {item.verificationState === "verified"
-                ? "Ready to receive email"
-                : "Domain verification pending"}
+                ? t("Ready to receive email")
+                : t("Domain verification pending")}
             </small>
           </span>
           <button
             className="settings-icon-action"
-            aria-label="Reset email address"
+            aria-label={t("Reset email address")}
             onClick={() =>
               void rotateEmailIntakeAddress(team.id, item.id)
                 .then(onReload)
-                .then(() => toast.success("Email address reset"))
+                .then(() => toast.success(t("Email address reset")))
                 .catch((error) => toast.error(message(error)))
             }
           >
@@ -768,13 +775,13 @@ function EmailIntakeSettings({
                 .writeText(item.address)
                 .then(() =>
                   toast.success(
-                    "Email address successfully copied to clipboard",
+                    t("Email address successfully copied to clipboard"),
                   ),
                 )
             }
           >
             <Copy size={14} />
-            Copy
+            {t("Copy")}
           </button>
         </div>
       ))}
@@ -789,7 +796,7 @@ function EmailIntakeSettings({
           <input
             autoFocus
             className="settings-input"
-            aria-label="Email local part"
+            aria-label={t("Email local part")}
             placeholder="issues"
             value={localPart}
             onChange={(event) =>
@@ -801,7 +808,7 @@ function EmailIntakeSettings({
           <span className="email-at">@</span>
           <input
             className="settings-input"
-            aria-label="Email domain"
+            aria-label={t("Email domain")}
             placeholder="mail.example.com"
             value={domain}
             onChange={(event) => setDomain(event.target.value)}
@@ -811,13 +818,13 @@ function EmailIntakeSettings({
             className="settings-action"
             onClick={() => setConfiguring(false)}
           >
-            Cancel
+            {t("Cancel")}
           </button>
           <button
             className="settings-action primary"
             disabled={!localPart.trim() || !domain.trim()}
           >
-            Create
+            {t("Create")}
           </button>
         </form>
       )}
@@ -907,6 +914,7 @@ function SlackSettings({
   team: Team;
   onReload: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const { settings, setSettings, save } = useTeamSettings(data, team, onReload);
   const slack = data.integrationConnections.find(
     (item) =>
@@ -927,7 +935,7 @@ function SlackSettings({
           title="Workspace connection"
           description={
             slack
-              ? `Connected as ${slack.name}`
+              ? t(`Connected as ${slack.name}`)
               : "Connect Slack from workspace Integrations before choosing a channel."
           }
         >
@@ -981,6 +989,7 @@ function RecurringIssuesSettings({
   team: Team;
   onReload: () => Promise<void>;
 }) {
+  const { formatDate, t } = useI18n();
   const issues = data.issues.filter(
     (issue) => issue.team.id === team.id && issue.recurrence,
   );
@@ -1058,19 +1067,19 @@ function RecurringIssuesSettings({
         )}
         {issues.map((issue) => (
           <div className="recurring-issue-row" key={issue.id}>
-            <span>
-              <strong>
-                {issue.identifier} {issue.title}
-              </strong>
+          <span>
+            <strong data-i18n-ignore>
+              {issue.identifier} {issue.title}
+            </strong>
               <small>
                 {titleCase(issue.recurrence ?? "")}
                 {issue.nextOccurrenceAt
-                  ? ` · Next ${new Date(issue.nextOccurrenceAt).toLocaleDateString()}`
+                  ? ` · ${t("Next")} ${formatDate(issue.nextOccurrenceAt)}`
                   : ""}
               </small>
             </span>
             <SettingsSelect
-              label={`${issue.title} cadence`}
+              label="Change recurrence cadence"
               value={issue.recurrence ?? "daily"}
               onChange={(value) =>
                 void updateIssue(issue.id, {
@@ -1198,6 +1207,7 @@ function WorkflowSettings({
             value={settings.prAutomations[key] ?? ""}
             options={stateOptions}
             labels={stateLabels}
+            entityOptions={states.map((item) => item.id)}
             onChange={(value) => savePR(key, value)}
           />
         ))}
@@ -1300,10 +1310,12 @@ function WorkflowSettings({
         {settings.releaseAutomations.map((rule) => (
           <div className="automation-rule-row" key={rule.id}>
             <span>
-              <strong>{rule.name}</strong>
+              <strong data-i18n-ignore>{rule.name}</strong>
               <small>
                 On release completion →{" "}
-                {stateLabels[rule.action] ?? rule.action}
+                <span data-i18n-ignore>
+                  {stateLabels[rule.action] ?? rule.action}
+                </span>
               </small>
             </span>
             <Menu
@@ -1407,6 +1419,7 @@ function WorkflowSettings({
               value={settings.staleStatusId ?? ""}
               options={stateOptions}
               labels={stateLabels}
+              entityOptions={states.map((item) => item.id)}
               onChange={(value) => save({ staleStatusId: value })}
             />
           </>
@@ -1444,6 +1457,7 @@ function TriageSettings({
   team: Team;
   onReload: () => Promise<void>;
 }) {
+  const { formatNumber, t } = useI18n();
   const { settings, save } = useTeamSettings(data, team, onReload);
   const responsibilities = data.triageResponsibilities.filter(
       (item) => item.teamId === team.id,
@@ -1524,16 +1538,18 @@ function TriageSettings({
         {responsibilities.map((item) => (
           <div className="automation-rule-row" key={item.id}>
             <span>
-              <strong>{item.name}</strong>
+              <strong data-i18n-ignore>{item.name}</strong>
               <small>
                 {item.mode === "roundRobin" ? "Round robin" : "Individual"} ·{" "}
-                {item.userIds
-                  .map(
-                    (id) =>
-                      data.users.find((user) => user.id === id)?.displayName,
-                  )
-                  .filter(Boolean)
-                  .join(", ")}
+                <span data-i18n-ignore>
+                  {item.userIds
+                    .map(
+                      (id) =>
+                        data.users.find((user) => user.id === id)?.displayName,
+                    )
+                    .filter(Boolean)
+                    .join(", ")}
+                </span>
               </small>
             </span>
             <Menu
@@ -1637,14 +1653,16 @@ function TriageSettings({
         {rules.map((rule) => (
           <div className="automation-rule-row" key={rule.id}>
             <span>
-              <strong>{rule.name}</strong>
+              <strong data-i18n-ignore>{rule.name}</strong>
               <small>
                 All incoming issues →{" "}
-                {
-                  responsibilities.find(
-                    (item) => item.id === rule.responsibilityId,
-                  )?.name
-                }
+                <span data-i18n-ignore>
+                  {
+                    responsibilities.find(
+                      (item) => item.id === rule.responsibilityId,
+                    )?.name
+                  }
+                </span>
               </small>
             </span>
             <Menu
@@ -1670,7 +1688,11 @@ function TriageSettings({
           description={`Loops acting on issues in triage for this team`}
         >
           <span className="settings-static">
-            {data.loops.filter((item) => item.level === "team").length} loops
+            {t(
+              `${formatNumber(
+                data.loops.filter((item) => item.level === "team").length,
+              )} loops`,
+            )}
           </span>
         </TeamRow>
       </TeamSection>
@@ -1697,7 +1719,11 @@ function TeamAgentsSettings({ data }: { data: BootstrapData }) {
   return (
     <TeamSection title="Connected agents">
       {agents.map((item) => (
-        <TeamRow key={item.id} title={item.name} description={item.provider}>
+        <TeamRow
+          key={item.id}
+          title={<span data-i18n-ignore>{item.name}</span>}
+          description={<span data-i18n-ignore>{item.provider}</span>}
+        >
           <span className="settings-static">Connected</span>
         </TeamRow>
       ))}
@@ -1721,6 +1747,7 @@ function AgentSkillsSettings({
   team: Team;
   onReload: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const { settings, save } = useTeamSettings(data, team, onReload);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -1794,13 +1821,13 @@ function AgentSkillsSettings({
         {settings.agentSkills.map((skill) => (
           <div className="agent-skill-row" key={skill.id}>
             <WandSparkles size={17} />
-            <span>
+            <span data-i18n-ignore>
               <strong>{skill.name}</strong>
               <small>{skill.instructions}</small>
             </span>
             <SettingsToggle
               checked={skill.enabled}
-              label={`${skill.name} enabled`}
+              label={t("Enable skill")}
               onChange={(enabled) =>
                 save({
                   agentSkills: settings.agentSkills.map((item) =>
@@ -1841,11 +1868,15 @@ function ProjectUpdatePromptSettings({
   team: Team;
   onReload: () => Promise<void>;
 }) {
+  const { formatNumber, t } = useI18n();
   const { settings, setSettings, save } = useTeamSettings(data, team, onReload);
   return (
     <TeamSection title="Project update prompt">
       <div className="team-prompt-editor">
-        <p>Guidance used when generating project updates for {team.name}.</p>
+        <p>
+          {t("Guidance used when generating project updates for")}{" "}
+          <span data-i18n-ignore>{team.name}</span>.
+        </p>
         <textarea
           aria-label="Project update prompt"
           value={settings.projectUpdatePrompt}
@@ -1859,7 +1890,9 @@ function ProjectUpdatePromptSettings({
             void save({ projectUpdatePrompt: settings.projectUpdatePrompt })
           }
         />
-        <span>{settings.projectUpdatePrompt.length} characters</span>
+        <span>
+          {t(`${formatNumber(settings.projectUpdatePrompt.length)} characters`)}
+        </span>
       </div>
     </TeamSection>
   );
@@ -1923,9 +1956,11 @@ function MembersSettings({
           .map((member) => (
             <div className="team-member-setting" key={member.user.id}>
               <span className="settings-member-avatar">
-                {initials(member.user.displayName)}
+                <span data-i18n-ignore>
+                  {initials(member.user.displayName)}
+                </span>
               </span>
-              <span>
+              <span data-i18n-ignore>
                 <strong>{member.user.displayName}</strong>
                 <small>{member.user.email}</small>
               </span>
@@ -2016,13 +2051,14 @@ function TeamLabelRow({
   label: IssueLabel;
   onReload: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [name, setName] = useState(label.name);
   return (
     <div className="team-label-setting">
       <input
         type="color"
         value={label.color}
-        aria-label={`${label.name} color`}
+        aria-label={t("Label color")}
         onChange={(event) =>
           void updateTeamLabel(team.id, label.id, {
             color: event.target.value,
@@ -2037,7 +2073,9 @@ function TeamLabelRow({
           void updateTeamLabel(team.id, label.id, { name }).then(onReload)
         }
       />
-      <span>{label.description || "No description"}</span>
+      <span data-i18n-ignore={Boolean(label.description) || undefined}>
+        {label.description || "No description"}
+      </span>
       <Menu
         onDelete={() => void deleteTeamLabel(team.id, label.id).then(onReload)}
       />
@@ -2054,6 +2092,7 @@ function TemplatesSettings({
   team: Team;
   onReload: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [type, setType] = useState<"issue" | "project" | "document">("issue");
   const [editing, setEditing] = useState<
     IssueTemplate | ProjectTemplate | DocumentTemplate | null | undefined
@@ -2078,7 +2117,7 @@ function TemplatesSettings({
               setType(value);
               setEditing(undefined);
             }}
-          >{`${titleCase(value)} templates`}</button>
+          >{t(`${titleCase(value)} templates`)}</button>
         ))}
       </div>
       <TeamSection
@@ -2099,9 +2138,13 @@ function TemplatesSettings({
             >
               <span className="template-icon">T</span>
               <span>
-                <strong>{template.name}</strong>
+                <strong data-i18n-ignore>{template.name}</strong>
                 <small>
-                  {template.description || `${titleCase(type)} template`}
+                  {template.description ? (
+                    <span data-i18n-ignore>{template.description}</span>
+                  ) : (
+                    `${titleCase(type)} template`
+                  )}
                 </small>
               </span>
             </button>
@@ -2148,6 +2191,7 @@ function DocumentTemplateEditor({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [name, setName] = useState(template?.name ?? "");
   const [description, setDescription] = useState(template?.description ?? "");
   const [documentTitle, setDocumentTitle] = useState(template?.title ?? "");
@@ -2186,19 +2230,21 @@ function DocumentTemplateEditor({
   return (
     <div className="template-full-editor">
       <header>
-        <button onClick={onClose}>Cancel</button>
-        <strong>{template ? "Edit" : "New"} document template</strong>
+        <button onClick={onClose}>{t("Cancel")}</button>
+        <strong>
+          {t(template ? "Edit document template" : "New document template")}
+        </strong>
         <button
           className="primary"
           disabled={!name.trim() || saving}
           onClick={() => void save()}
         >
-          {saving ? "Saving…" : "Save"}
+          {t(saving ? "Saving…" : "Save")}
         </button>
       </header>
       <div className="template-editor-content">
         <label>
-          Template name
+          {t("Template name")}
           <input
             autoFocus
             value={name}
@@ -2206,21 +2252,21 @@ function DocumentTemplateEditor({
           />
         </label>
         <label>
-          Template description
+          {t("Template description")}
           <input
             value={description}
             onChange={(event) => setDescription(event.target.value)}
           />
         </label>
         <label>
-          Document title
+          {t("Document title")}
           <input
             value={documentTitle}
             onChange={(event) => setDocumentTitle(event.target.value)}
           />
         </label>
         <label>
-          Document content
+          {t("Document content")}
           <textarea
             rows={14}
             value={content}
@@ -2233,7 +2279,7 @@ function DocumentTemplateEditor({
             onClick={() => void remove()}
           >
             <Trash2 size={14} />
-            Delete template
+            {t("Delete template")}
           </button>
         )}
       </div>
@@ -2835,19 +2881,64 @@ function TeamSection({
   action?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const { t } = useI18n();
   return (
     <SettingsSection
       action={action}
-      description={description}
+      description={
+        typeof description === "string" ? t(description) : description
+      }
       headerClassName="team-settings-section-title"
-      title={title}
+      title={title ? t(title) : title}
     >
       {children}
     </SettingsSection>
   );
 }
 function TeamRow(props: React.ComponentProps<typeof SettingsRow>) {
-  return <SettingsRow {...props} />;
+  const { t } = useI18n();
+  return (
+    <SettingsRow
+      {...props}
+      title={typeof props.title === "string" ? t(props.title) : props.title}
+      description={
+        typeof props.description === "string"
+          ? t(props.description)
+          : props.description
+      }
+    />
+  );
+}
+function SettingsSelect({
+  entityName,
+  label,
+  options,
+  ...props
+}: Omit<React.ComponentProps<typeof BaseSettingsSelect>, "label" | "options"> & {
+  label: string;
+  options: SettingsSelectOption[];
+}) {
+  const { t } = useI18n();
+  return (
+    <BaseSettingsSelect
+      {...props}
+      entityName={entityName}
+      label={t(label)}
+      options={options.map((option) => {
+        if (typeof option === "string") {
+          const isEntity = entityName?.(option) ?? false;
+          return {
+            value: option,
+            label: isEntity ? option : t(option),
+            entityName: isEntity,
+          };
+        }
+        return option.entityName
+          ? option
+          : { ...option, label: t(option.label) };
+      })}
+    />
+  );
 }
 function InputRow({
   title,
@@ -2862,10 +2953,12 @@ function InputRow({
   onChange: (value: string) => void;
   onCommit: (value: string) => void | Promise<void>;
 }) {
+  const { t } = useI18n();
   const initialOnFocus = useRef(value);
   return (
     <TeamRow title={title} description={description}>
       <input
+        aria-label={t(title)}
         className="settings-input"
         value={value}
         onFocus={() => {
@@ -2885,6 +2978,7 @@ function SelectRow({
   value,
   options,
   labels = {},
+  entityOptions = [],
   onChange,
 }: {
   title: string;
@@ -2892,17 +2986,22 @@ function SelectRow({
   value: string;
   options: string[];
   labels?: Record<string, string>;
+  entityOptions?: string[];
   onChange: (value: string) => void | Promise<void>;
 }) {
+  const { t } = useI18n();
   return (
     <TeamRow title={title} description={description}>
       <SettingsSelect
-        label={title}
+        label={t(title)}
         value={value}
         onChange={(next) => void onChange(next)}
         options={options.map((option) => ({
           value: option,
-          label: labels[option] ?? option,
+          label: entityOptions.includes(option)
+            ? labels[option] ?? option
+            : t(labels[option] ?? option),
+          entityName: entityOptions.includes(option),
         }))}
       />
     </TeamRow>
@@ -2919,9 +3018,10 @@ function ToggleRow({
   checked: boolean;
   onChange: (value: boolean) => void | Promise<void>;
 }) {
+  const { t } = useI18n();
   return (
     <TeamRow title={title} description={description}>
-      <SettingsToggle checked={checked} label={title} onChange={onChange} />
+      <SettingsToggle checked={checked} label={t(title)} onChange={onChange} />
     </TeamRow>
   );
 }
@@ -2936,11 +3036,13 @@ function NumberRow({
   value: number;
   onCommit: (value: number) => void | Promise<void>;
 }) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
   return (
     <TeamRow title={title} description={description}>
       <input
+        aria-label={t(title)}
         type="number"
         min={0}
         className="settings-input short"
@@ -2963,6 +3065,7 @@ function InlineCreate({
   onCancel: () => void;
   onCreate: (name: string, color: string) => void | Promise<void>;
 }) {
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [color, setColor] = useState("#5E6AD2");
   return (
@@ -2980,11 +3083,11 @@ function InlineCreate({
       />
       <input
         autoFocus
-        placeholder={placeholder}
+        placeholder={t(placeholder)}
         value={name}
         onChange={(event) => setName(event.target.value)}
       />
-      <button type="button" aria-label="Cancel" onClick={onCancel}>
+      <button type="button" aria-label={t("Cancel")} onClick={onCancel}>
         <X size={14} />
       </button>
       <button className="create" disabled={!name.trim()}>
@@ -2994,17 +3097,18 @@ function InlineCreate({
   );
 }
 function Menu({ onDelete }: { onDelete: () => void }) {
+  const { t } = useI18n();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="settings-icon-action" aria-label="More actions">
+        <button className="settings-icon-action" aria-label={t("More actions")}>
           <MoreHorizontal size={15} />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem className="danger-item" onSelect={onDelete}>
           <Trash2 size={14} />
-          Delete
+          {t("Delete")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -3019,11 +3123,12 @@ function TeamEmpty({
   title: string;
   description: string;
 }) {
+  const { t } = useI18n();
   return (
     <div className="settings-empty compact">
       {icon}
-      <h3>{title}</h3>
-      <p>{description}</p>
+      <h3>{t(title)}</h3>
+      <p>{t(description)}</p>
     </div>
   );
 }
