@@ -20,6 +20,7 @@
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:coverage:workflows": "vitest run --coverage --config vitest.workflows.config.ts",
     "test:coverage:all": "vitest run --coverage --config vitest.all.config.ts",
     "test:e2e": "playwright test",
     "lint": "oxlint && npm run check:pickers && npm run check:design-tokens && npm run check:ui-foundations && npm run check:functional-controls",

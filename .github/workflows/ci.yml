@@ -43,6 +43,9 @@ jobs:
       - name: Unit tests and coverage
         run: npm run test:coverage
 
+      - name: Workflow coverage gate
+        run: npm run test:coverage:workflows
+
       - name: Record whole-source coverage baseline
         run: npm run test:coverage:all
 
