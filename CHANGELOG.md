@@ -25,6 +25,7 @@ after the first tagged release.
 - Frontend unit coverage, browser end-to-end tests, Go race/coverage gates, CodeQL, dependency auditing, and secret scanning.
 - Versioned database migrations and PostgreSQL, MySQL, Redis, and S3 integration tests.
 - Non-root, read-only container runtime with application health checks.
+- Streaming Agent conversations with OpenAI Responses, Anthropic Messages, Chat Completions compatibility, Flow tool execution, reasoning/tool activity UI, and cancellation.
 
 ## 2026-08-17
 

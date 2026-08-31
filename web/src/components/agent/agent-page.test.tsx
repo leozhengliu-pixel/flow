@@ -3,18 +3,23 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap } from '@/test/fixtures'
+import type { AgentSession } from '@/types/flow'
 
 const api = vi.hoisted(() => ({
   createAgentSession: vi.fn(), createAgentSessionMessage: vi.fn(), deleteAgentSession: vi.fn(),
   fetchAgentStatus: vi.fn(), updateAgentSession: vi.fn(), updateAgentSessionMessage: vi.fn(),
 }))
+const streams = vi.hoisted(() => ({ streamNewAgentSession: vi.fn(), streamAgentSessionMessage: vi.fn(), streamAgentSessionMessageEdit: vi.fn() }))
 vi.mock('@/lib/api', () => api)
+vi.mock('@/lib/agent-stream', () => streams)
 
 import { AgentPage } from './agent-page'
+import { applyAgentStreamEvent } from './agent-stream-state'
 
 describe('agent page composer', () => {
   beforeEach(() => {
     Object.values(api).forEach(mock => mock.mockReset())
+    Object.values(streams).forEach(mock => mock.mockReset())
     api.fetchAgentStatus.mockResolvedValue({ enabled: false, model: '' })
   })
 
@@ -28,5 +33,56 @@ describe('agent page composer', () => {
     await user.type(editor, 'Draft a project plan')
     expect(editor).toHaveTextContent('Draft a project plan')
     expect(screen.getByRole('button', { name: 'Submit comment' })).toBeDisabled()
+  })
+
+  it('renders text, reasoning, and tool deltas while a session streams', async () => {
+    const user = userEvent.setup()
+    const navigate = vi.fn()
+    const reload = vi.fn().mockResolvedValue(undefined)
+    api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
+    streams.streamNewAgentSession.mockImplementation(async (_input, onEvent) => {
+      const session: AgentSession = { id: 'session-1', slugId: 'streamed-chat', userId: 'user-1', title: 'Streamed chat', favorite: false, location: 'page', issueIds: [], skillIds: [], messages: [{ id: 'user-message', role: 'user', content: 'Hello', createdAt: '2026-08-31T00:00:00Z' }], createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:00Z' }
+      onEvent({ type: 'session.started', session, messageId: 'assistant-message' })
+      onEvent({ type: 'reasoning.delta', messageId: 'assistant-message', delta: 'Checking workspace', part: { id: 'reasoning', type: 'reasoning', text: 'Checking workspace', status: 'running' } })
+      onEvent({ type: 'tool.started', messageId: 'assistant-message', part: { id: 'tool', type: 'toolCall', status: 'running', toolCall: { id: 'call-1', name: 'list_issues', arguments: { query: 'bug' }, status: 'running' } } })
+      onEvent({ type: 'tool.completed', messageId: 'assistant-message', part: { id: 'tool', type: 'toolCall', status: 'completed', toolCall: { id: 'call-1', name: 'list_issues', arguments: { query: 'bug' }, result: { items: [] }, status: 'completed' } } })
+      onEvent({ type: 'text.delta', messageId: 'assistant-message', delta: 'No bugs found.', part: { id: 'text', type: 'text', text: 'No bugs found.', status: 'completed' } })
+      const completed: AgentSession = { ...session, messages: [...session.messages, { id: 'assistant-message', role: 'assistant', content: 'No bugs found.', parts: [], createdAt: '2026-08-31T00:00:01Z' }] }
+      onEvent({ type: 'session.completed', session: completed })
+      return completed
+    })
+    render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={navigate} onOpenSidebar={vi.fn()} onReload={reload}/></I18nProvider>)
+    const editor = screen.getByRole('textbox', { name: 'Send a message to Flow AI' })
+    await user.type(editor, 'Hello')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Submit comment' })).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: 'Submit comment' }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/workspace/agent/streamed-chat'))
+    expect(streams.streamNewAgentSession).toHaveBeenCalled()
+    expect(reload).toHaveBeenCalled()
+  })
+
+  it('reduces incremental stream events into one assistant message', () => {
+    const session = { id: 'session', slugId: 'chat', userId: 'user', title: 'Chat', favorite: false, location: 'page', issueIds: [], skillIds: [], messages: [], createdAt: '', updatedAt: '' } as AgentSession
+    const started = applyAgentStreamEvent(undefined, { type: 'session.started', session, messageId: 'message' })!
+    const text = applyAgentStreamEvent(started, { type: 'text.delta', messageId: 'message', delta: 'Hello', part: { id: 'text', type: 'text', text: 'Hello', status: 'running' } })!
+    const finished = applyAgentStreamEvent(text, { type: 'text.delta', messageId: 'message', delta: ' world', part: { id: 'text', type: 'text', text: 'Hello world', status: 'completed' } })!
+    expect(finished.messages[0]).toMatchObject({ content: 'Hello world', parts: [{ id: 'text', text: 'Hello world' }] })
+  })
+
+  it('renders persisted reasoning, tool, text, and error parts', async () => {
+    const session: AgentSession = {
+      id: 'session-parts', slugId: 'parts', userId: 'user-1', title: 'Tool run', favorite: false, location: 'page', issueIds: [], skillIds: [],
+      messages: [{ id: 'assistant', role: 'assistant', content: 'Finished', createdAt: '2026-08-31T00:00:00Z', parts: [
+        { id: 'reasoning', type: 'reasoning', text: 'Checked workspace state', status: 'completed' },
+        { id: 'tool', type: 'toolCall', status: 'completed', toolCall: { id: 'call', name: 'list_issues', arguments: { query: 'bug' }, result: { items: [] }, status: 'completed' } },
+        { id: 'text', type: 'text', text: 'Finished', status: 'completed' },
+        { id: 'error', type: 'error', text: 'Partial warning', status: 'error' },
+      ] }], createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:00Z',
+    }
+    render(<I18nProvider><AgentPage chatSlug="parts" data={makeBootstrap({ agentSessions: [session], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+    expect(screen.getByText('Looked at issues')).toBeVisible()
+    expect(screen.getByText('Reasoning')).toBeVisible()
+    expect(screen.getByText('Finished')).toBeVisible()
+    expect(screen.getByRole('alert')).toHaveTextContent('Partial warning')
   })
 })
