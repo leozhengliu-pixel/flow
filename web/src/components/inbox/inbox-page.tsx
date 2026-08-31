@@ -118,7 +118,7 @@ export function InboxPage(props: InboxPageProps) {
   ) : undefined
 
   return (
-    <div className="flow-inbox-page-composition" ref={compositionRef}>
+    <div className="flow-framed-workspace flow-inbox-page-composition" ref={compositionRef}>
       <InboxPageShell
         detail={preview}
         displayOptions={props.displayOptions}
