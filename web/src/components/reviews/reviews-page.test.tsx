@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 
@@ -8,6 +8,7 @@ import type { CodeReview } from "@/types/flow";
 
 const api = vi.hoisted(() => ({
   commentOnReview: vi.fn(),
+  submitReview: vi.fn(),
   updateReview: vi.fn(),
 }));
 vi.mock("@/lib/api", async (importOriginal) => ({
@@ -174,4 +175,62 @@ it("uses merge-request identifiers and actions for GitLab reviews", async () => 
 
   expect(screen.getByText("!27 Improve release workflow")).toBeVisible();
   expect(screen.getByText("platform/api!27")).toBeVisible();
+});
+
+it("reports quick-approve failures and unlocks the action", async () => {
+  const user = userEvent.setup();
+  api.submitReview.mockRejectedValueOnce(new Error("provider unavailable"));
+  render(
+    <I18nProvider>
+      <ReviewsPage
+        data={makeBootstrap({
+          viewer,
+          users: [viewer, teammate],
+          reviews: [review],
+          userSettings: {},
+          integrationConnections: [{ id: "github", provider: "github" }] as never[],
+        })}
+        view="for-you"
+        review={review}
+        onNavigate={vi.fn()}
+        onReload={vi.fn().mockResolvedValue(undefined)}
+        onOpenSidebar={vi.fn()}
+      />
+    </I18nProvider>,
+  );
+
+  await user.click(screen.getByRole("button", { name: "pull request actions" }));
+  const approve = screen.getByRole("button", { name: "Quick approve" });
+  await user.click(approve);
+  await waitFor(() => expect(api.submitReview).toHaveBeenCalledWith(review.id, { decision: "approve", body: "" }));
+  expect(approve).not.toBeDisabled();
+});
+
+it("keeps a review comment available when posting fails", async () => {
+  const user = userEvent.setup();
+  api.commentOnReview.mockRejectedValueOnce(new Error("network unavailable"));
+  render(
+    <I18nProvider>
+      <ReviewsPage
+        data={makeBootstrap({
+          viewer,
+          users: [viewer, teammate],
+          reviews: [review],
+          userSettings: {},
+          integrationConnections: [{ id: "github", provider: "github" }] as never[],
+        })}
+        view="for-you"
+        review={review}
+        onNavigate={vi.fn()}
+        onReload={vi.fn().mockResolvedValue(undefined)}
+        onOpenSidebar={vi.fn()}
+      />
+    </I18nProvider>,
+  );
+
+  const comment = screen.getByRole("textbox", { name: "Comment" });
+  await user.type(comment, "Please check the migration");
+  await user.click(screen.getByRole("button", { name: "Submit comment" }));
+  await waitFor(() => expect(api.commentOnReview).toHaveBeenCalledWith(review.id, "Please check the migration"));
+  expect(comment).toHaveValue("Please check the migration");
 });

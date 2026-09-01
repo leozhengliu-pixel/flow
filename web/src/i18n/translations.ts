@@ -1,4 +1,7 @@
 export const zhCN: Record<string, string> = {
+  "Share view": "分享视图",
+  "Shared view link copied": "共享视图链接已复制",
+  "This cannot be undone.": "此操作无法撤销。",
   "Collapse sub-issues section": "收起子事项部分",
   "Expand sub-issues section": "展开子事项部分",
   Cycle: "周期",
