@@ -409,3 +409,22 @@ func TestBootstrapForUserProjectsTeamStatesAndPrivateNotificationData(t *testing
 		t.Fatalf("private notifications leaked: %#v", projected.Notifications)
 	}
 }
+
+func TestFilterBootstrapTeamsHidesPrivateTeamDocuments(t *testing.T) {
+	data := domain.Bootstrap{
+		ViewerRole: "member",
+		Teams:      []domain.Team{{ID: "public-team"}, {ID: "private-team", Private: true}},
+		Documents: []domain.Document{
+			{ID: "public-doc", TeamIDs: []string{"public-team"}},
+			{ID: "private-doc", TeamIDs: []string{"private-team"}},
+			{ID: "workspace-doc"},
+		},
+	}
+	filterBootstrapTeams(&data, map[string]bool{"public-team": true}, false)
+	if slices.ContainsFunc(data.Documents, func(document domain.Document) bool { return document.ID == "private-doc" }) {
+		t.Fatal("private team document leaked")
+	}
+	if !slices.ContainsFunc(data.Documents, func(document domain.Document) bool { return document.ID == "public-doc" }) || !slices.ContainsFunc(data.Documents, func(document domain.Document) bool { return document.ID == "workspace-doc" }) {
+		t.Fatalf("visible documents were filtered: %#v", data.Documents)
+	}
+}

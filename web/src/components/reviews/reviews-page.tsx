@@ -472,9 +472,15 @@ function ReviewDetail({
     sendComments = data.userSettings[data.viewer.id]?.sendComments ?? "Enter";
   const commentSubmit = async () => {
     if (!comment.trim()) return;
-    await commentOnReview(review.id, comment);
-    setComment("");
-    await onReload();
+    try {
+      await commentOnReview(review.id, comment);
+      setComment("");
+      await onReload();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("Could not submit review"),
+      );
+    }
   };
   return (
     <>
@@ -532,11 +538,20 @@ function ReviewDetail({
         </button>
         <ReviewActions
           review={review}
+          busy={busy}
           onMutate={onMutate}
           onOpenPicker={onOpenPicker}
           onQuickApprove={async () => {
-            await submitReview(review.id, { decision: "approve", body: "" });
-            await onReload();
+            try {
+              await submitReview(review.id, { decision: "approve", body: "" });
+              await onReload();
+            } catch (error) {
+              toast.error(
+                error instanceof Error
+                  ? error.message
+                  : t("Could not submit review"),
+              );
+            }
           }}
         />
         <button
@@ -1344,17 +1359,28 @@ function CheckLine({
 
 function ReviewActions({
   review,
+  busy,
   onMutate,
   onOpenPicker,
   onQuickApprove,
 }: {
   review: CodeReview;
+  busy?: boolean;
   onMutate: (input: Parameters<typeof updateReview>[1]) => Promise<void>;
   onOpenPicker: (value: "reviewers" | "issues") => void;
   onQuickApprove: () => Promise<void>;
 }) {
   const { t } = useI18n();
+  const [approving, setApproving] = useState(false);
   const closed = review.status === "merged" || review.status === "closed";
+  const quickApprove = async () => {
+    setApproving(true);
+    try {
+      await onQuickApprove();
+    } finally {
+      setApproving(false);
+    }
+  };
   return (
     <Popover.Root>
       <Popover.Trigger asChild>
@@ -1403,7 +1429,7 @@ function ReviewActions({
             <Users />
             {t("Select reviewers")}
           </button>
-          <button disabled={closed} onClick={() => void onQuickApprove()}>
+          <button disabled={closed || busy || approving} onClick={() => void quickApprove()}>
             <CheckCircle2 />
             {t("Quick approve")}
           </button>

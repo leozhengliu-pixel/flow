@@ -1,10 +1,10 @@
 import { addDays, format, startOfDay } from 'date-fns'
 import { describe, expect, it } from 'vitest'
 
-import { buildProgressData } from './project-progress-data'
+import { buildProgressData, shouldShowProgressGraph } from './project-progress-data'
 import type { Issue } from '@/types/flow'
 
-function issue(createdAt: Date, state: 'started' | 'completed', index = 0): Issue {
+function issue(createdAt: Date, state: 'started' | 'completed', index = 0, estimate?: number): Issue {
   const timestamp = createdAt.toISOString()
   return {
     id: `${state}-${timestamp}-${index}`,
@@ -12,6 +12,7 @@ function issue(createdAt: Date, state: 'started' | 'completed', index = 0): Issu
     identifier: 'SYN-1',
     createdAt: timestamp,
     updatedAt: timestamp,
+    estimate,
     completedAt: state === 'completed' ? timestamp : undefined,
     state: { id: state, name: state, type: state, color: '#5e6ad2' },
   } as Issue
@@ -31,7 +32,7 @@ describe('project progress data', () => {
     expect(result.forecast.completed).toBe(5)
     expect(result.forecast.optimisticDate).toBeDefined()
     expect(result.forecast.pessimisticDate).toBeDefined()
-    expect(result.series.map(item => item.id)).toEqual(['Scope', 'Started', 'Completed'])
+    expect(result.series.map(item => item.id)).toEqual(['Scope', 'Started', 'Completed', 'Target'])
   })
 
   it('keeps the target marker while projecting completion beyond an overdue target', () => {
@@ -47,7 +48,7 @@ describe('project progress data', () => {
     expect(result.endDate.getTime()).toBeGreaterThan(result.currentDate.getTime())
     expect(result.forecast.optimisticDate?.getTime()).toBeGreaterThan(result.currentDate.getTime())
     expect(result.forecast.pessimisticDate?.getTime()).toBeGreaterThan(result.forecast.optimisticDate?.getTime() ?? 0)
-    expect(result.series.map(item => item.id)).toEqual(['Scope', 'Started', 'Completed'])
+    expect(result.series.map(item => item.id)).toEqual(['Scope', 'Started', 'Completed', 'Target'])
   })
 
   it('uses persisted weekly history for the rendered series', () => {
@@ -65,5 +66,30 @@ describe('project progress data', () => {
 
     expect(result.series[0].data.map(point => point.y)).toEqual([0, 3, 6, 6])
     expect(result.series[2].data.map(point => point.y)).toEqual([0, 3, 6])
+    expect(result.series[1].data.map(point => point.y)).toEqual([0, 6, 12])
+    expect(result.series[3].data.every(point => point.y === 0)).toBe(true)
+  })
+
+  it('uses estimate points for target and engaged progress', () => {
+    const today = startOfDay(new Date())
+    const start = addDays(today, -14)
+    const target = addDays(today, 7)
+    const result = buildProgressData([
+      issue(addDays(today, -10), 'started', 0, 3),
+      issue(addDays(today, -8), 'completed', 1, 5),
+    ], format(start, 'yyyy-MM-dd'), format(target, 'yyyy-MM-dd'))
+
+    expect(result.totalEstimate).toBe(8)
+    expect(result.series[3].data.every(point => point.y === 8)).toBe(true)
+    expect(result.forecast.completed).toBe(5)
+    expect(result.series[1].data.at(-1)?.y).toBe(8)
+  })
+
+  it('hides the graph until a started project has aligned non-empty history', () => {
+    expect(shouldShowProgressGraph({})).toBe(false)
+    expect(shouldShowProgressGraph({ startDate: format(startOfDay(new Date()), 'yyyy-MM-dd'), scopeHistory: [], completedScopeHistory: [] })).toBe(false)
+    expect(shouldShowProgressGraph({ startDate: format(startOfDay(new Date()), 'yyyy-MM-dd'), scopeHistory: [{ date: new Date().toISOString(), value: 2 }], completedScopeHistory: [] })).toBe(false)
+    expect(shouldShowProgressGraph({ startDate: format(startOfDay(new Date()), 'yyyy-MM-dd'), scopeHistory: [{ date: new Date().toISOString(), value: 2 }], completedScopeHistory: [{ date: new Date().toISOString(), value: 0 }] })).toBe(true)
+    expect(shouldShowProgressGraph({ startDate: format(startOfDay(new Date()), 'yyyy-MM-dd'), scopeHistory: [{ date: new Date().toISOString(), value: 2 }], completedScopeHistory: [{ date: new Date().toISOString(), value: 0 }], status: { id: 'planned', name: 'Planned', color: '#888', type: 'planned' } })).toBe(false)
   })
 })

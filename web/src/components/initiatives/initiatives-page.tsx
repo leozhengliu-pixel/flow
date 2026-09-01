@@ -50,6 +50,7 @@ type Grouping = 'none'|'contributingTeam'|'leadTeam'|'owner'|'health'|'status'|'
 type FilterState = { status?: InitiativeStatus; priority?: number; ownerId?: string; creatorId?: string; leadTeamId?: string; teamId?: string; health?: Project['health']; labelId?: string; date?: 'created7'|'updated7'|'targetMonth'|'completed' }
 
 export function InitiativesPage(props: Props) {
+  const { t } = useI18n()
   const { initiatives, initiativeUpdates, projects, projectUpdates, users, teams, labels, viewer, view, displayDefault, onViewChange, onOpen, onCreate, onCreateLabel, onCreateUpdate, onUpdate, onDelete, onCreateReminder, onSetDefault, onOpenSidebar, createOnMount = false } = props
   const defaultProperties = displayDefault?.properties?.filter((item): item is Property => PROPERTY_ORDER.includes(item as Property)) ?? DEFAULT_PROPERTIES
   const defaultSort = displayDefault?.ordering && ['manual', 'name', 'status', 'priority', 'target', 'health', 'created', 'updated'].includes(displayDefault.ordering) ? displayDefault.ordering as Sort : 'manual'
@@ -134,15 +135,15 @@ export function InitiativesPage(props: Props) {
   return <main className="main-panel li-page">
     <header className="li-page-header">
       <button className="li-mobile-menu" onClick={onOpenSidebar} type="button">☰</button>
-      <h2>Initiatives</h2>
-      <button aria-label="New initiative" className="li-new-initiative" onClick={() => setCreating(true)} type="button"><PlusIcon/><span>New initiative</span></button>
+      <h2>{t('Initiatives')}</h2>
+      <button aria-label={t('New initiative')} className="li-new-initiative" onClick={() => setCreating(true)} type="button"><PlusIcon/><span>{t('New initiative')}</span></button>
     </header>
     <div className="li-toolbar">
-      <nav>{(['active', 'planned', 'all'] as InitiativesRouteView[]).map(item => <a className="ui-pill" aria-current={view === item ? 'page' : undefined} href={initiativesPath(workspaceSlug, item)} key={item} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onViewChange(item) }}>{item === 'all' ? 'All initiatives' : titleCase(item)}</a>)}</nav>
+      <nav aria-label={t('Initiatives views')}>{(['active', 'planned', 'all'] as InitiativesRouteView[]).map(item => <a className="ui-pill" aria-current={view === item ? 'page' : undefined} href={initiativesPath(workspaceSlug, item)} key={item} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onViewChange(item) }}>{item === 'all' ? t('All initiatives') : t(titleCase(item))}</a>)}</nav>
       <div className="li-toolbar-actions">
         <InitiativeFilterMenu filters={filters} initiatives={initiatives} labels={labels} onAdvanced={() => { setAdvancedFilterEnabled(true); setAdvancedFilterOpen(true) }} onChange={setFilters} teams={teams} users={users}/>
         <InitiativeDisplayMenu dirty={displayDirty} grouping={grouping} properties={properties} showTeamInitiatives={showTeamInitiatives} sort={sort} onGrouping={setGrouping} onProperty={toggleProperty} onReset={resetDisplay} onSetDefault={() => onSetDefault({ grouping, ordering: sort, properties: [...properties], showTeamInitiatives })} onShowTeamInitiatives={setShowTeamInitiatives} onSort={setSort}/>
-        {view !== 'planned' && <button aria-expanded={detailsOpen} aria-label="Close sidebar" className="li-icon-button ui-pill" onClick={toggleDetails} type="button"><SidebarIcon/></button>}
+        {view !== 'planned' && <button aria-expanded={detailsOpen} aria-label={t(detailsOpen ? 'Close sidebar' : 'Open sidebar')} className="li-icon-button ui-pill" onClick={toggleDetails} type="button"><SidebarIcon/></button>}
       </div>
     </div>
     {advancedFilterEnabled ? <AdvancedFilterBar filters={filters} initiatives={initiatives} labels={labels} mode={filterMode} open={advancedFilterOpen} teams={teams} users={users} onChange={setFilters} onMode={setFilterMode} onOpenChange={setAdvancedFilterOpen} onRemove={() => { setFilters({}); setAdvancedFilterEnabled(false); setAdvancedFilterOpen(false) }}/> : Object.keys(filters).length > 0 && <div className="li-filter-chips">{Object.entries(filters).map(([key, value]) => <button key={key} onClick={() => setFilters(current => { const next = { ...current }; delete next[key as keyof FilterState]; return next })} type="button"><span>{filterLabel(key, value, users, teams, labels)}</span><X size={11}/></button>)}<button onClick={() => setFilters({})} type="button">Clear all</button></div>}
@@ -188,7 +189,7 @@ function InitiativeRow({ initiative, initiativeUpdates, projects, projectUpdates
   const completed = linked.filter(project => project.status.type === 'completed').length
   const needingUpdate = linked.filter(project => !['completed', 'canceled'].includes(project.status.type) && !(projectUpdates[project.id]?.length)).length
   const selectedLabels = labels.filter(label => initiative.labelIds.includes(label.id))
-  return <ContextMenu.Root><ContextMenu.Trigger asChild><a className="li-row" data-selected={selected} href={href} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onOpen(initiative) }} style={{ gridTemplateColumns: grid }}>
+  return <ContextMenu.Root><ContextMenu.Trigger asChild><a aria-selected={selected} className="li-row" data-selected={selected} href={href} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onOpen(initiative) }} onKeyDown={event => { if (event.target !== event.currentTarget) return; if (event.key === ' ') { event.preventDefault(); onSelect() } }} style={{ gridTemplateColumns: grid }}>
     <button aria-label="Select initiative" className="li-select" onClick={event => { event.preventDefault(); event.stopPropagation(); onSelect() }} style={{ gridColumn: 2 }} type="button"><span>{selected && <Check size={11}/>}</span></button>
     <div className="li-name" style={{ gridColumn: 3 }}><span className="li-row-icon" onClick={event => { event.preventDefault(); event.stopPropagation() }}><ViewIconPicker color={initiative.color} icon={initiative.icon || 'Initiative'} onChange={onUpdate} triggerClassName="li-initiative-icon"/></span><strong data-i18n-ignore>{initiative.name}</strong>{properties.has('description') && <small data-i18n-ignore>{initiative.summary}</small>}</div>
     {columns.map((property, index) => <div className={`li-cell li-cell--${property}`} key={property} onClick={event => { event.preventDefault(); event.stopPropagation() }} style={{ gridColumn: index + 4 }}>{renderCell(property)}</div>)}
