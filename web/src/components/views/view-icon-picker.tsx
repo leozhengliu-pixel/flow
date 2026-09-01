@@ -25,7 +25,7 @@ export function ViewGlyph({ className, color = DEFAULT_VIEW_COLOR, icon = DEFAUL
   return <svg aria-hidden="true" className={`${styles.glyph} ${className ?? ''}`} fill="currentColor" style={{ color }} viewBox="0 0 16 16"><use href={`${FLOW_CORE_ICON_NAMES.has(assetIcon) ? '' : '/flow-view-icons.svg'}#${assetIcon}`}/></svg>
 }
 
-export function ViewIconPicker({ align = 'start', color = DEFAULT_VIEW_COLOR, icon = DEFAULT_VIEW_ICON, onChange, prependTeam = false, triggerClassName }: { align?: 'start' | 'center' | 'end'; color?: string; icon?: string; onChange: (visual: ViewVisual) => void; prependTeam?: boolean; triggerClassName?: string }) {
+export function ViewIconPicker({ align = 'start', ariaLabel, color = DEFAULT_VIEW_COLOR, icon = DEFAULT_VIEW_ICON, onChange, prependTeam = false, triggerClassName }: { align?: 'start' | 'center' | 'end'; ariaLabel?: string; color?: string; icon?: string; onChange: (visual: ViewVisual) => void; prependTeam?: boolean; triggerClassName?: string }) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<'icons' | 'emojis'>('icons')
@@ -62,7 +62,7 @@ export function ViewIconPicker({ align = 'start', color = DEFAULT_VIEW_COLOR, ic
   }
 
   return <Popover.Root open={open} onOpenChange={setOpen}>
-    <Popover.Trigger asChild><button aria-label={t('Choose icon')} className={`${styles.trigger} ${triggerClassName ?? ''}`} data-state={open ? 'open' : 'closed'} style={{ '--view-color': color } as CSSProperties} type="button"><ViewGlyph color={color} icon={icon}/></button></Popover.Trigger>
+    <Popover.Trigger asChild><button aria-label={ariaLabel ?? t('Choose icon')} className={`${styles.trigger} ${triggerClassName ?? ''}`} data-state={open ? 'open' : 'closed'} style={{ '--view-color': color } as CSSProperties} type="button"><ViewGlyph color={color} icon={icon}/></button></Popover.Trigger>
     <Popover.Portal><Popover.Content align={align} className={styles.content} collisionPadding={8} onCloseAutoFocus={event => event.preventDefault()} onOpenAutoFocus={event => { event.preventDefault(); requestAnimationFrame(() => searchRef.current?.focus()) }} side="bottom" sideOffset={4}>
       <div aria-label={t('Icon type')} className={styles.tabs} role="tablist">
         <button aria-controls="view-icons-panel" aria-selected={tab === 'icons'} className={styles.tab} onClick={() => { setTab('icons'); setQuery(''); requestAnimationFrame(() => searchRef.current?.focus()) }} role="tab" type="button">{t('Icons')}</button>
