@@ -28,7 +28,7 @@ const tokenSource = await readFile(new URL('../src/styles/tokens.css', import.me
 const allCSS = `${tokenSource}\n${sources.join('\n')}`
 const definitions = new Set([...allCSS.matchAll(/(?:^|[;{])\s*(--[\w-]+)\s*:/gm)].map(match => match[1]))
 const dynamicProperties = new Set([
-  '--accent', '--capacity', '--customer-columns', '--dashboard-columns', '--dot-index', '--flow-inbox-avatar', '--insight-columns', '--issue-identifier-width', '--li-extra-columns', '--li-month-count', '--li-month-width', '--li-today-left', '--nest-level', '--nested-depth', '--picker-hue', '--project-status-color', '--status-color', '--status-hue', '--status-progress', '--sub-depth', '--team-columns', '--timeline-drag-offset', '--timeline-start', '--timeline-width', '--view-color', '--views-columns',
+  '--accent', '--capacity', '--customer-columns', '--dashboard-columns', '--dot-index', '--flow-inbox-avatar', '--insight-columns', '--issue-identifier-width', '--li-extra-columns', '--li-month-count', '--li-month-width', '--li-today-left', '--nest-level', '--nested-depth', '--palette-color', '--picker-hue', '--project-status-color', '--status-color', '--status-hue', '--status-progress', '--sub-depth', '--team-columns', '--timeline-drag-offset', '--timeline-start', '--timeline-width', '--view-color', '--views-columns',
 ])
 for (const match of allCSS.matchAll(/var\(\s*(--[\w-]+)/g)) {
   const property = match[1]

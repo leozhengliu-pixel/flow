@@ -108,7 +108,7 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
       SlashCommandExtension,
       ...(collaborationSession ? [
         Collaboration.configure({ document: collaborationSession.document, field: 'prosemirror' }),
-        CollaborationCaret.configure({ provider: collaborationSession.provider, user: collaboration?.viewer ? { name: collaboration.viewer.displayName, color: collaborationColor(collaboration.viewer.id) } : undefined }),
+        CollaborationCaret.configure({ provider: collaborationSession.provider, user: collaboration?.viewer ? { ...collaboration.viewer, name: collaboration.viewer.displayName, color: collaborationColor(collaboration.viewer.id) } : undefined }),
       ] : []),
     ],
     content: collaborationSession ? undefined : initial.content,
