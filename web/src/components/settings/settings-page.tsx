@@ -344,6 +344,7 @@ const DEFAULT_VALUES: StoredSettings["values"] = {
 };
 
 export function SettingsPage(props: SettingsPageProps) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [mobileNav, setMobileNav] = useState(false);
   const [sidebarCustomizationOpen, setSidebarCustomizationOpen] =
@@ -363,10 +364,11 @@ export function SettingsPage(props: SettingsPageProps) {
             (isAdmin ||
               section.title === "Personal" ||
               memberCanManage(item.id, props.data.workspaceSettings)) &&
-            item.label.toLowerCase().includes(query.toLowerCase()),
+            (item.label.toLowerCase().includes(query.toLowerCase()) ||
+              t(item.label).toLowerCase().includes(query.toLowerCase())),
         ),
       })).filter((section) => section.items.length),
-    [isAdmin, props.data.workspaceSettings, query],
+    [isAdmin, props.data.workspaceSettings, query, t],
   );
   const setValue = (key: string, value: string | boolean) => {
     if (Object.is(settings.values[key], value)) return;
@@ -381,13 +383,13 @@ export function SettingsPage(props: SettingsPageProps) {
         <aside className={`settings-sidebar${mobileNav ? " open" : ""}`}>
           <button className="settings-back" onClick={props.onBack}>
             <ArrowLeft size={16} />
-            Back to app
+            {t("Back to app")}
           </button>
           <label className="settings-search">
             <Search size={15} />
             <input
               aria-label="Search settings"
-              placeholder="Search…"
+              placeholder={t("Search…")}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
@@ -400,7 +402,7 @@ export function SettingsPage(props: SettingsPageProps) {
           <nav aria-label="Settings navigation">
             {visible.map((section) => (
               <section key={section.title}>
-                <h2>{section.title}</h2>
+                <h2>{t(section.title)}</h2>
                 {section.items.map((item) => (
                   <SettingsNavButton
                     key={item.id}
@@ -416,7 +418,7 @@ export function SettingsPage(props: SettingsPageProps) {
             ))}
             {!query && props.data.viewerRole !== "guest" && (
               <section>
-                <h2>Your teams</h2>
+                <h2>{t("Your teams")}</h2>
                 {props.data.teams
                   .filter(
                     (team) =>
@@ -454,7 +456,7 @@ export function SettingsPage(props: SettingsPageProps) {
                 {isAdmin && (
                   <button onClick={props.onCreateTeam}>
                     <Plus size={16} />
-                    <span>Create a team</span>
+                      <span>{t("Create a team")}</span>
                   </button>
                 )}
               </section>
@@ -463,12 +465,13 @@ export function SettingsPage(props: SettingsPageProps) {
         </aside>
         <button
           className={`settings-sidebar-scrim${mobileNav ? " open" : ""}`}
-          aria-label="Close settings navigation"
+          aria-label={t("Close settings navigation")}
           onClick={() => setMobileNav(false)}
         />
         <main className="settings-main">
           <button
             className="settings-mobile-menu"
+            aria-label={t("Settings navigation")}
             onClick={() => setMobileNav(true)}
           >
             <ListFilter size={15} />
@@ -501,8 +504,9 @@ export function SettingsPage(props: SettingsPageProps) {
 }
 
 function SettingsPageFallback() {
+  const { t } = useI18n();
   return (
-    <div className="settings-loading" aria-label="Loading settings">
+    <div className="settings-loading" aria-label={t("Loading settings")}>
       <span />
       <span />
       <span />
@@ -519,11 +523,12 @@ function SettingsNavButton({
   active: boolean;
   onClick: () => void;
 }) {
+  const { t } = useI18n();
   const Icon = item.icon;
   return (
-    <button className={active ? "active" : ""} onClick={onClick}>
+    <button aria-current={active ? "page" : undefined} className={active ? "active" : ""} onClick={onClick}>
       <Icon size={16} />
-      <span>{item.label}</span>
+      <span>{t(item.label)}</span>
     </button>
   );
 }
@@ -568,8 +573,8 @@ function SettingsBody(
     return (
       <div className="settings-empty">
         <ShieldCheck size={28} />
-        <h3>Admin access required</h3>
-        <p>You don't have permission to manage this workspace setting.</p>
+        <h3>{t("Admin access required")}</h3>
+        <p>{t("You don't have permission to manage this workspace setting.")}</p>
       </div>
     );
   if (
@@ -731,7 +736,7 @@ function SettingsBody(
       />
     ) : (
       <div className="settings-empty">
-        <h3>Team not found</h3>
+        <h3>{t("Team not found")}</h3>
       </div>
     );
   }

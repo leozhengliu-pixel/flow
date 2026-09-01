@@ -519,13 +519,20 @@ type ProjectStatus struct {
 }
 
 type ProjectProgressHistoryPoint struct {
-	Date              time.Time `json:"date"`
-	Value             float64   `json:"value"`
-	BacklogEstimate   float64   `json:"backlogEstimate,omitempty"`
-	UnstartedEstimate float64   `json:"unstartedEstimate,omitempty"`
-	StartedEstimate   float64   `json:"startedEstimate,omitempty"`
-	CompletedEstimate float64   `json:"completedEstimate,omitempty"`
-	ScopeEstimate     float64   `json:"scopeEstimate,omitempty"`
+	Date                     time.Time `json:"date"`
+	Value                    float64   `json:"value"`
+	BacklogEstimate          float64   `json:"backlogEstimate,omitempty"`
+	UnstartedEstimate        float64   `json:"unstartedEstimate,omitempty"`
+	StartedEstimate          float64   `json:"startedEstimate,omitempty"`
+	CompletedEstimate        float64   `json:"completedEstimate,omitempty"`
+	ScopeEstimate            float64   `json:"scopeEstimate,omitempty"`
+	ScopeCount               int       `json:"scopeCount,omitempty"`
+	CompletedIssueCount      int       `json:"completedIssueCount,omitempty"`
+	StartedIssueCount        int       `json:"startedIssueCount,omitempty"`
+	CompletedEstimateToday   float64   `json:"completedEstimateToday,omitempty"`
+	CompletedIssueCountToday int       `json:"completedIssueCountToday,omitempty"`
+	AddedEstimateToday       float64   `json:"addedEstimateToday,omitempty"`
+	AddedIssueCountToday     int       `json:"addedIssueCountToday,omitempty"`
 }
 
 type Project struct {
@@ -1559,6 +1566,7 @@ type SavedView struct {
 	Icon        string          `json:"icon,omitempty"`
 	Color       string          `json:"color,omitempty"`
 	Resource    string          `json:"resource"`
+	ProjectID   string          `json:"projectId,omitempty"`
 	Scope       string          `json:"scope"`
 	TeamID      string          `json:"teamId,omitempty"`
 	OwnerID     string          `json:"ownerId,omitempty"`
@@ -1580,6 +1588,7 @@ type SavedViewMutationInput struct {
 	Icon        *string         `json:"icon,omitempty"`
 	Color       *string         `json:"color,omitempty"`
 	Resource    *string         `json:"resource,omitempty"`
+	ProjectID   *string         `json:"projectId,omitempty"`
 	Scope       *string         `json:"scope,omitempty"`
 	TeamID      *string         `json:"teamId,omitempty"`
 	OwnerID     *string         `json:"ownerId,omitempty"`

@@ -102,6 +102,8 @@ export function translateToChinese(source: string): string {
     [/^(\d+) drafts?$/, count => `${count} 份草稿`],
     [/^(\d+) releases?$/, count => `${count} 个发布版本`],
     [/^(\d+) views?$/, count => `${count} 个视图`],
+    [/^(Issues|Projects) matching (\d+) filters?$/, (resource, count) => `${resource === 'Issues' ? '事项' : '项目'}符合 ${count} 个筛选条件`],
+    [/^All (issues|projects)$/, resource => resource === 'issues' ? '所有事项' : '所有项目'],
     [/^(\d+) cycles?$/, count => `${count} 个周期`],
     [/^(\d+) loops?$/, count => `${count} 个 Loops`],
     [/^(\d+) characters?$/, count => `${count} 个字符`],

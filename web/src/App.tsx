@@ -172,6 +172,8 @@ import {
   newTeamPath,
   parseAppRoute,
   projectPath,
+  projectSavedViewPath,
+  projectSavedViewEditPath,
   projectTemplateEditPath,
   projectsNewViewPath,
   projectsPath,
@@ -444,10 +446,24 @@ function App() {
     const settings = data.userSettings[data.viewer.id] ?? {};
     const root = document.documentElement;
     applyTheme(settings);
-    root.style.fontSize = settings.fontSize === "Small" ? "14px" : settings.fontSize === "Large" ? "18px" : "";
-    root.classList.toggle("settings-pointer-cursor", Boolean(settings.pointerCursor));
-    root.classList.toggle("settings-underline-links", Boolean(settings.underlineLinks));
-    root.classList.toggle("settings-reduce-animated-media", Boolean(settings.disableAnimatedImages));
+    root.style.fontSize =
+      settings.fontSize === "Small"
+        ? "14px"
+        : settings.fontSize === "Large"
+          ? "18px"
+          : "";
+    root.classList.toggle(
+      "settings-pointer-cursor",
+      Boolean(settings.pointerCursor),
+    );
+    root.classList.toggle(
+      "settings-underline-links",
+      Boolean(settings.underlineLinks),
+    );
+    root.classList.toggle(
+      "settings-reduce-animated-media",
+      Boolean(settings.disableAnimatedImages),
+    );
   }, [data]);
   const oauthPath = location.pathname === "/oauth/authorize";
   const authPath =
@@ -500,9 +516,14 @@ function App() {
         account.workspaces.find(
           (item) => item.workspace.urlKey === account.lastWorkspaceKey,
         )?.workspace ?? account.workspaces[0]?.workspace;
-      navigateTo(next ? `/${encodeURIComponent(next.urlKey)}` : workspaceOnboardingPath(), {
-        replace: true,
-      });
+      navigateTo(
+        next
+          ? `/${encodeURIComponent(next.urlKey)}`
+          : workspaceOnboardingPath(),
+        {
+          replace: true,
+        },
+      );
       return;
     }
     if (route.kind === "workspace-onboarding") {
@@ -601,7 +622,7 @@ function App() {
         ) || null
       : null;
   const selectedProject =
-    route.kind === "project"
+    route.kind === "project" || route.kind === "project-saved-view"
       ? data?.projects.find(
           (project) => project.slugId === route.projectSlugId,
         ) || null
@@ -661,7 +682,9 @@ function App() {
   const availableSavedViews = data?.savedViews ?? [];
   const issueSavedViews = availableSavedViews.filter(
     (view) =>
-      view.resource !== "projects" && view.resource !== "initiativeProjects",
+      view.resource !== "projects" &&
+      view.resource !== "initiativeProjects" &&
+      !view.projectId,
   );
   const projectSavedViews = availableSavedViews.filter(
     (view) => view.resource === "projects",
@@ -679,21 +702,33 @@ function App() {
           (view) => view.id === route.viewId || view.slugId === route.viewId,
         ) || null
       : null;
+  const projectFacetViews = availableSavedViews.filter(
+    (view) => view.resource === "issues" && view.projectId,
+  );
+  const selectedProjectFacetView =
+    route.kind === "project-saved-view"
+      ? projectFacetViews.find(
+          (view) => view.id === route.viewId || view.slugId === route.viewId,
+        ) || null
+      : null;
   const viewedResourceType: SearchResourceType | undefined = selectedIssue
     ? "issue"
-    : selectedProject
-      ? "project"
-      : selectedInitiative
-        ? "initiative"
-        : selectedDocument
-          ? "document"
-          : selectedCustomer
-            ? "customer"
-            : selectedSavedView || selectedProjectSavedView
-              ? "view"
-              : undefined;
+    : selectedProjectFacetView
+      ? "view"
+      : selectedProject
+        ? "project"
+        : selectedInitiative
+          ? "initiative"
+          : selectedDocument
+            ? "document"
+            : selectedCustomer
+              ? "customer"
+              : selectedSavedView || selectedProjectSavedView
+                ? "view"
+                : undefined;
   const viewedResourceId =
     selectedIssue?.id ??
+    selectedProjectFacetView?.id ??
     selectedProject?.id ??
     selectedInitiative?.id ??
     selectedDocument?.id ??
@@ -973,7 +1008,18 @@ function App() {
   const addIssue = async (input: CreateIssueInput): Promise<Issue> => {
     if (!data) throw new Error("Workspace is not loaded");
     const issue = await run(
-      () => createIssue({ ...input, teamId: input.teamId || data.teams[0].id, ...(input.recurrence ? { nextOccurrenceAt: nextOccurrence(input.recurrence).toISOString() } : {}) }),
+      () =>
+        createIssue({
+          ...input,
+          teamId: input.teamId || data.teams[0].id,
+          ...(input.recurrence
+            ? {
+                nextOccurrenceAt: nextOccurrence(
+                  input.recurrence,
+                ).toISOString(),
+              }
+            : {}),
+        }),
       "Could not create issue",
     );
     setData((current) =>
@@ -1623,12 +1669,42 @@ function App() {
   };
   const toggleTeamFavorite = async (teamId: string, favorite: boolean) => {
     if (!favorite) {
-      await run(() => removeFavorite("team", teamId), "Could not update favorite");
-      setData((state) => state ? { ...state, favorites: state.favorites.filter(item => !(item.userId === state.viewer.id && item.resourceType === "team" && item.resourceId === teamId)) } : state);
+      await run(
+        () => removeFavorite("team", teamId),
+        "Could not update favorite",
+      );
+      setData((state) =>
+        state
+          ? {
+              ...state,
+              favorites: state.favorites.filter(
+                (item) =>
+                  !(
+                    item.userId === state.viewer.id &&
+                    item.resourceType === "team" &&
+                    item.resourceId === teamId
+                  ),
+              ),
+            }
+          : state,
+      );
       return;
     }
-    const created = await run(() => addFavorite("team", teamId), "Could not update favorite");
-    setData((state) => state ? { ...state, favorites: [created, ...state.favorites.filter(item => item.id !== created.id)] } : state);
+    const created = await run(
+      () => addFavorite("team", teamId),
+      "Could not update favorite",
+    );
+    setData((state) =>
+      state
+        ? {
+            ...state,
+            favorites: [
+              created,
+              ...state.favorites.filter((item) => item.id !== created.id),
+            ],
+          }
+        : state,
+    );
   };
   const setProjectSubscriptionEvents = async (
     projectId: string,
@@ -2634,16 +2710,46 @@ function App() {
   const batchToggleLabel = async (labelId: string) => {
     if (!data) return;
     const issues = data.issues.filter((issue) => selected.has(issue.id));
-    const shouldSelect = !issues.every((issue) => issue.labels.some((label) => label.id === labelId));
+    const shouldSelect = !issues.every((issue) =>
+      issue.labels.some((label) => label.id === labelId),
+    );
     const updated = await run(
-      () => Promise.all(issues.map((issue) => updateIssue(issue.id, { expectedVersion: issue.version, labelIds: setGroupedLabelSelected(issue.labels.map((label) => label.id), labelId, data.labels, shouldSelect) }))),
+      () =>
+        Promise.all(
+          issues.map((issue) =>
+            updateIssue(issue.id, {
+              expectedVersion: issue.version,
+              labelIds: setGroupedLabelSelected(
+                issue.labels.map((label) => label.id),
+                labelId,
+                data.labels,
+                shouldSelect,
+              ),
+            }),
+          ),
+        ),
       "Could not update selected issue labels",
     );
-    setData((current) => current ? { ...current, issues: current.issues.map((issue) => updated.find((item) => item.id === issue.id) || issue) } : current);
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            issues: current.issues.map(
+              (issue) => updated.find((item) => item.id === issue.id) || issue,
+            ),
+          }
+        : current,
+    );
     setSelected(new Set());
   };
   const batchDelete = async () => {
-    if (!await confirmAction(`Delete ${selected.size} selected issues?`, { description: "This cannot be undone.", confirmLabel: "Delete" })) return;
+    if (
+      !(await confirmAction(`Delete ${selected.size} selected issues?`, {
+        description: "This cannot be undone.",
+        confirmLabel: "Delete",
+      }))
+    )
+      return;
     await run(
       () => Promise.all([...selected].map(deleteIssue)),
       "Could not delete selected issues",
@@ -3104,7 +3210,9 @@ function App() {
     const nextAccount = await fetchAccountBootstrap();
     setAccount(nextAccount);
     setData(created);
-    navigateTo(`/${encodeURIComponent(created.workspace.urlKey)}`, { replace: true });
+    navigateTo(`/${encodeURIComponent(created.workspace.urlKey)}`, {
+      replace: true,
+    });
     return created;
   };
   const switchWorkspace = (workspace: Workspace) => {
@@ -3125,10 +3233,19 @@ function App() {
     setData(updated);
     setAccount(await fetchAccountBootstrap());
     if (updated.workspace.urlKey !== previousKey)
-      navigateTo(`/${encodeURIComponent(updated.workspace.urlKey)}`, { replace: true });
+      navigateTo(`/${encodeURIComponent(updated.workspace.urlKey)}`, {
+        replace: true,
+      });
   };
   const removeWorkspace = async () => {
-    if (!data || !await confirmAction(`Delete ${data.workspace.name}?`, { description: "This permanently deletes all workspace data.", confirmLabel: "Delete workspace" })) return;
+    if (
+      !data ||
+      !(await confirmAction(`Delete ${data.workspace.name}?`, {
+        description: "This permanently deletes all workspace data.",
+        confirmLabel: "Delete workspace",
+      }))
+    )
+      return;
     await run(
       () => deleteWorkspace(data.workspace.urlKey),
       "Could not delete workspace",
@@ -3195,7 +3312,12 @@ function App() {
     );
   };
   const removeCustomer = async (customer: Customer) => {
-    if (!await confirmAction(`Delete ${customer.name}?`, { confirmLabel: "Delete customer" })) return;
+    if (
+      !(await confirmAction(`Delete ${customer.name}?`, {
+        confirmLabel: "Delete customer",
+      }))
+    )
+      return;
     await run(() => deleteCustomer(customer.id), "Could not delete customer");
     setData((current) =>
       current
@@ -3274,10 +3396,13 @@ function App() {
     )
       navigateTo(membersPath(workspace), { replace: true });
     if (route.kind === "member-profile") {
-      const user = data.users.find(item => item.name === route.username || item.id === route.username)
+      const user = data.users.find(
+        (item) => item.name === route.username || item.id === route.username,
+      );
       if (user) {
-        const canonical = memberProfilePath(workspace, user.name, route.view)
-        if (location.pathname !== canonical) navigateTo(canonical, { replace: true })
+        const canonical = memberProfilePath(workspace, user.name, route.view);
+        if (location.pathname !== canonical)
+          navigateTo(canonical, { replace: true });
       }
     }
     if (
@@ -3494,6 +3619,25 @@ function App() {
       if (location.pathname !== canonical)
         navigateTo(canonical, { replace: true });
     }
+    if (
+      route.kind === "project-saved-view" &&
+      selectedProject &&
+      selectedProjectFacetView
+    ) {
+      const canonical = route.editing
+        ? projectSavedViewEditPath(
+            workspace,
+            selectedProject.slugId,
+            savedViewPathId(selectedProjectFacetView),
+          )
+        : projectSavedViewPath(
+            workspace,
+            selectedProject.slugId,
+            savedViewPathId(selectedProjectFacetView),
+          );
+      if (location.pathname !== canonical)
+        navigateTo(canonical, { replace: true });
+    }
     if (route.kind === "document" && selectedDocument) {
       const canonical = documentPath(workspace, selectedDocument);
       if (location.pathname !== canonical)
@@ -3526,6 +3670,7 @@ function App() {
     selectedDocument,
     selectedCustomer,
     selectedProjectSavedView,
+    selectedProjectFacetView,
     selectedSavedView,
     selectedReview,
   ]);
@@ -3587,7 +3732,9 @@ function App() {
               account.workspaces.find(
                 (item) => item.workspace.urlKey === account.lastWorkspaceKey,
               )?.workspace ?? account.workspaces[0]?.workspace;
-            navigateTo(workspace ? `/${encodeURIComponent(workspace.urlKey)}` : "/");
+            navigateTo(
+              workspace ? `/${encodeURIComponent(workspace.urlKey)}` : "/",
+            );
           }}
           onLogout={async () => {
             await logoutAccount();
@@ -3790,6 +3937,9 @@ function App() {
         view.scope === "team"
           ? data.teams.find((item) => item.id === view.teamId)
           : undefined;
+      const project = view.projectId
+        ? data.projects.find((item) => item.id === view.projectId)
+        : undefined;
       if ((view.resource ?? "issues") === "projects") {
         navigateTo(
           team
@@ -3803,18 +3953,17 @@ function App() {
                 savedViewPathId(view),
               ),
         );
+      } else if (project) {
+        navigateTo(
+          projectSavedViewPath(
+            data.workspace.urlKey,
+            project.slugId,
+            savedViewPathId(view),
+          ),
+        );
       } else {
         navigateTo(
-          team
-            ? teamSavedViewPath(
-                data.workspace.urlKey,
-                team.key,
-                savedViewPathId(view),
-              )
-            : workspaceSavedViewPath(
-                data.workspace.urlKey,
-                savedViewPathId(view),
-              ),
+          workspaceSavedViewPath(data.workspace.urlKey, savedViewPathId(view)),
         );
       }
       return;
@@ -3882,6 +4031,7 @@ function App() {
   const directoryViews = availableSavedViews.filter(
     (view) =>
       (view.resource ?? "issues") === viewsResource &&
+      !view.projectId &&
       (viewsTeam
         ? view.scope === "team" && view.teamId === viewsTeam.id
         : view.scope === "personal" || view.scope === "workspace"),
@@ -3890,40 +4040,28 @@ function App() {
     (view) => view.id === new URLSearchParams(location.search).get("duplicate"),
   );
   const savedIssuePathFor = (view: SavedView) => {
-    const team =
-      view.scope === "team"
-        ? data.teams.find((item) => item.id === view.teamId)
-        : undefined;
-    return team
-      ? teamSavedViewPath(
+    const project = view.projectId
+      ? data.projects.find((item) => item.id === view.projectId)
+      : undefined;
+    return project
+      ? projectSavedViewPath(
           data.workspace.urlKey,
-          team.key,
+          project.slugId,
           savedViewPathId(view),
         )
       : workspaceSavedViewPath(data.workspace.urlKey, savedViewPathId(view));
   };
   const savedProjectPathFor = (view: SavedView) => {
-    const team =
-      view.scope === "team"
-        ? data.teams.find((item) => item.id === view.teamId)
-        : undefined;
-    return team
-      ? teamProjectsSavedViewPath(
-          data.workspace.urlKey,
-          team.key,
-          savedViewPathId(view),
-        )
-      : projectsSavedViewPath(data.workspace.urlKey, savedViewPathId(view));
+    return projectsSavedViewPath(data.workspace.urlKey, savedViewPathId(view));
   };
   const savedIssueEditPathFor = (view: SavedView) => {
-    const team =
-      view.scope === "team"
-        ? data.teams.find((item) => item.id === view.teamId)
-        : undefined;
-    return team
-      ? teamSavedViewEditPath(
+    const project = view.projectId
+      ? data.projects.find((item) => item.id === view.projectId)
+      : undefined;
+    return project
+      ? projectSavedViewEditPath(
           data.workspace.urlKey,
-          team.key,
+          project.slugId,
           savedViewPathId(view),
         )
       : workspaceSavedViewEditPath(
@@ -3932,18 +4070,24 @@ function App() {
         );
   };
   const savedProjectEditPathFor = (view: SavedView) => {
-    const team =
-      view.scope === "team"
-        ? data.teams.find((item) => item.id === view.teamId)
-        : undefined;
-    return team
-      ? teamProjectsSavedViewEditPath(
-          data.workspace.urlKey,
-          team.key,
-          savedViewPathId(view),
-        )
-      : projectsSavedViewEditPath(data.workspace.urlKey, savedViewPathId(view));
+    return projectsSavedViewEditPath(
+      data.workspace.urlKey,
+      savedViewPathId(view),
+    );
   };
+  const selectedSavedViewTeam =
+    selectedSavedView?.scope === "team" && selectedSavedView.teamId
+      ? data.teams.find((team) => team.id === selectedSavedView.teamId)
+      : undefined;
+  const selectedSavedViewScope = selectedSavedViewTeam
+    ? { kind: "team" as const, team: selectedSavedViewTeam }
+    : { kind: "workspace" as const };
+  const selectedSavedViewList = selectedSavedViewTeam
+    ? issueSavedViews.filter(
+        (view) =>
+          view.scope === "team" && view.teamId === selectedSavedViewTeam.id,
+      )
+    : issueSavedViews.filter((view) => view.scope !== "team");
   return (
     <div className="app">
       <Sidebar
@@ -3964,7 +4108,9 @@ function App() {
         }
         onSwitchWorkspace={switchWorkspace}
         onCreateWorkspace={() => navigateTo(workspaceOnboardingPath())}
-        onReload={async () => setData(await fetchBootstrap(data.workspace.urlKey))}
+        onReload={async () =>
+          setData(await fetchBootstrap(data.workspace.urlKey))
+        }
         onLogout={async () => {
           await logoutAccount();
           setSession(null);
@@ -4049,12 +4195,25 @@ function App() {
               onOpenResource={(resource) =>
                 navigateTo(
                   route.teamKey
-                    ? teamViewsPath(data.workspace.urlKey, route.teamKey, resource)
+                    ? teamViewsPath(
+                        data.workspace.urlKey,
+                        route.teamKey,
+                        resource,
+                      )
                     : workspaceViewsPath(data.workspace.urlKey, resource),
                 )
               }
               onOpenSidebar={() => setMobileSidebarOpen(true)}
-              onOpenCreate={() => navigateTo(route.teamKey ? teamDashboardsNewPath(data.workspace.urlKey, route.teamKey) : dashboardsNewPath(data.workspace.urlKey))}
+              onOpenCreate={() =>
+                navigateTo(
+                  route.teamKey
+                    ? teamDashboardsNewPath(
+                        data.workspace.urlKey,
+                        route.teamKey,
+                      )
+                    : dashboardsNewPath(data.workspace.urlKey),
+                )
+              }
               onExploreIssues={(filters) =>
                 navigateTo(
                   `${workspaceIssuesPath(data.workspace.urlKey, "all")}?insightFilter=${encodeURIComponent(JSON.stringify(filters))}`,
@@ -4071,7 +4230,11 @@ function App() {
               }
               resourceHref={(resource) =>
                 route.teamKey
-                  ? teamViewsPath(data.workspace.urlKey, route.teamKey, resource)
+                  ? teamViewsPath(
+                      data.workspace.urlKey,
+                      route.teamKey,
+                      resource,
+                    )
                   : workspaceViewsPath(data.workspace.urlKey, resource)
               }
               teamKey={route.teamKey}
@@ -4147,8 +4310,15 @@ function App() {
             }
             onNavigate={(path) => navigateTo(path)}
             onResumeDraft={(draft: Draft) => {
-              setCreateDraftId(draft.id.startsWith("local:") ? undefined : draft.id);
-              setCreateTeamId(draft.id.startsWith("local:") && typeof draft.metadata?.teamId === "string" ? draft.metadata.teamId : undefined);
+              setCreateDraftId(
+                draft.id.startsWith("local:") ? undefined : draft.id,
+              );
+              setCreateTeamId(
+                draft.id.startsWith("local:") &&
+                  typeof draft.metadata?.teamId === "string"
+                  ? draft.metadata.teamId
+                  : undefined,
+              );
               setCreateOpen(true);
             }}
           />
@@ -4233,9 +4403,17 @@ function App() {
             description="This team does not exist in the current workspace."
           />
         )}
-        {(route.kind === "workspace-members" || page === "customers" || page === "teams") && (
+        {(route.kind === "workspace-members" ||
+          page === "customers" ||
+          page === "teams") && (
           <WorkspaceDirectoryPage
-            kind={route.kind === "workspace-members" ? "members" : page === "customers" ? "customers" : "teams"}
+            kind={
+              route.kind === "workspace-members"
+                ? "members"
+                : page === "customers"
+                  ? "customers"
+                  : "teams"
+            }
             data={data}
             inviteOnOpen={
               page === "members" &&
@@ -4247,9 +4425,18 @@ function App() {
             }
             onOpenSidebar={() => setMobileSidebarOpen(true)}
             onNavigateTeamMembers={(team) =>
-              navigateTo(settingsPath(data.workspace.urlKey, "team", team.key, "members"))
+              navigateTo(
+                settingsPath(
+                  data.workspace.urlKey,
+                  "team",
+                  team.key,
+                  "members",
+                ),
+              )
             }
-            onNavigateMember={(user) => navigateTo(memberProfilePath(data.workspace.urlKey,user.name))}
+            onNavigateMember={(user) =>
+              navigateTo(memberProfilePath(data.workspace.urlKey, user.name))
+            }
             onNavigateTeam={(team) =>
               navigateTo(teamHomePath(data.workspace.urlKey, team.key))
             }
@@ -4274,14 +4461,44 @@ function App() {
             }
           />
         )}
-        {route.kind === "member-profile" && (()=>{const user=data.users.find(item=>item.name===route.username||item.id===route.username);return user?<MemberProfilePage data={data} user={user} view={route.view} onNavigate={view=>navigateTo(memberProfilePath(data.workspace.urlKey,user.name,view))} onOpenIssue={openIssue} onUpdateIssue={updateIssueFromPage}/>:<RouteNotFound title="Member not found" description="This member is not available in the workspace."/>})()}
+        {route.kind === "member-profile" &&
+          (() => {
+            const user = data.users.find(
+              (item) =>
+                item.name === route.username || item.id === route.username,
+            );
+            return user ? (
+              <MemberProfilePage
+                data={data}
+                user={user}
+                view={route.view}
+                onNavigate={(view) =>
+                  navigateTo(
+                    memberProfilePath(data.workspace.urlKey, user.name, view),
+                  )
+                }
+                onOpenIssue={openIssue}
+                onUpdateIssue={updateIssueFromPage}
+              />
+            ) : (
+              <RouteNotFound
+                title="Member not found"
+                description="This member is not available in the workspace."
+              />
+            );
+          })()}
         {page === "new-team" && (
           <TeamCreatePage
             teams={data.teams}
-            businessEnabled={data.workspaceSettings.plan === "business" || data.workspaceSettings.plan === "enterprise"}
+            businessEnabled={
+              data.workspaceSettings.plan === "business" ||
+              data.workspaceSettings.plan === "enterprise"
+            }
             onBack={() => navigateTo(teamsPath(data.workspace.urlKey))}
             onNavigateSettings={(settingsPage, teamKey) =>
-              navigateTo(settingsPath(data.workspace.urlKey, settingsPage, teamKey))
+              navigateTo(
+                settingsPath(data.workspace.urlKey, settingsPage, teamKey),
+              )
             }
             onCreate={addTeam}
           />
@@ -4395,9 +4612,22 @@ function App() {
               projectUpdates={data.projectUpdates}
               teams={data.teams}
               users={data.users}
-              labels={labelsForResource(data.labels, "initiative", data.labelGroups)}
+              labels={labelsForResource(
+                data.labels,
+                "initiative",
+                data.labelGroups,
+              )}
               viewer={data.viewer}
-              displayDefault={data.settings?.initiativeDisplay as { grouping?: string; ordering?: string; properties?: string[]; showTeamInitiatives?: boolean } | undefined}
+              displayDefault={
+                data.settings?.initiativeDisplay as
+                  | {
+                      grouping?: string;
+                      ordering?: string;
+                      properties?: string[];
+                      showTeamInitiatives?: boolean;
+                    }
+                  | undefined
+              }
               view={route.view}
               onViewChange={(view) =>
                 navigateTo(
@@ -4431,7 +4661,10 @@ function App() {
               onDelete={removeInitiative}
               onCreateReminder={addInitiativeReminder}
               onSetDefault={async (initiativeDisplay) => {
-                await updateWorkspaceSettings({ ...(data.settings ?? {}), initiativeDisplay });
+                await updateWorkspaceSettings({
+                  ...(data.settings ?? {}),
+                  initiativeDisplay,
+                });
                 await load();
               }}
               onOpenSidebar={() => setMobileSidebarOpen(true)}
@@ -4673,37 +4906,38 @@ function App() {
         )}
         {page === "workspace-issues" &&
           route.kind === "workspace-saved-view" &&
-          selectedSavedView &&
-          selectedSavedView.scope !== "team" && (
+          selectedSavedView && (
             <IssueExplorerPage
               key={`${selectedSavedView.id}:${route.editing ? "edit" : "view"}`}
               data={data}
-              scope={{ kind: "workspace" }}
+              scope={selectedSavedViewScope}
               view={selectedSavedView.view}
               savedView={selectedSavedView}
               editingView={route.editing}
               viewHref={(view) =>
-                workspaceIssuesPath(data.workspace.urlKey, view)
+                selectedSavedViewTeam
+                  ? teamIssuesPath(
+                      data.workspace.urlKey,
+                      selectedSavedViewTeam.key,
+                      view,
+                    )
+                  : workspaceIssuesPath(data.workspace.urlKey, view)
               }
-              savedViews={issueSavedViews.filter(
-                (view) => view.scope !== "team",
-              )}
-              savedViewHref={(view) =>
-                workspaceSavedViewPath(
-                  data.workspace.urlKey,
-                  savedViewPathId(view),
-                )
-              }
+              savedViews={selectedSavedViewList}
+              savedViewHref={savedIssuePathFor}
               onNavigateView={(view) =>
-                navigateTo(workspaceIssuesPath(data.workspace.urlKey, view))
+                navigateTo(
+                  selectedSavedViewTeam
+                    ? teamIssuesPath(
+                        data.workspace.urlKey,
+                        selectedSavedViewTeam.key,
+                        view,
+                      )
+                    : workspaceIssuesPath(data.workspace.urlKey, view),
+                )
               }
               onNavigateSavedView={(view) =>
-                navigateTo(
-                  workspaceSavedViewPath(
-                    data.workspace.urlKey,
-                    savedViewPathId(view),
-                  ),
-                )
+                navigateTo(savedIssuePathFor(view))
               }
               onCreateSavedView={addSavedView}
               onUpdateSavedView={changeSavedView}
@@ -4713,24 +4947,22 @@ function App() {
               onShareSavedView={shareView}
               onDuplicateSavedView={(view) =>
                 navigateTo(
-                  `${workspaceViewsNewPath(data.workspace.urlKey, "issues")}?duplicate=${encodeURIComponent(view.id)}`,
+                  `${
+                    selectedSavedViewTeam
+                      ? teamViewsNewPath(
+                          data.workspace.urlKey,
+                          selectedSavedViewTeam.key,
+                          "issues",
+                        )
+                      : workspaceViewsNewPath(data.workspace.urlKey, "issues")
+                  }?duplicate=${encodeURIComponent(view.id)}`,
                 )
               }
               onBeginEditSavedView={() =>
-                navigateTo(
-                  workspaceSavedViewEditPath(
-                    data.workspace.urlKey,
-                    savedViewPathId(selectedSavedView),
-                  ),
-                )
+                navigateTo(savedIssueEditPathFor(selectedSavedView))
               }
               onFinishEditSavedView={() =>
-                navigateTo(
-                  workspaceSavedViewPath(
-                    data.workspace.urlKey,
-                    savedViewPathId(selectedSavedView),
-                  ),
-                )
+                navigateTo(savedIssuePathFor(selectedSavedView))
               }
               onOpenSidebar={() => setMobileSidebarOpen(true)}
               onOpenIssue={openIssue}
@@ -5025,8 +5257,18 @@ function App() {
                 scopeTeamId={viewsTeam?.id}
                 viewerId={data.viewer.id}
                 viewer={data.viewer}
-                favoriteProjectIds={data.favorites.filter(item => item.userId === data.viewer.id && item.resourceType === "project").map(item => item.resourceId)}
-                projectSubscriptions={data.subscriptions.filter(item => item.userId === data.viewer.id && item.resourceType === "project")}
+                favoriteProjectIds={data.favorites
+                  .filter(
+                    (item) =>
+                      item.userId === data.viewer.id &&
+                      item.resourceType === "project",
+                  )
+                  .map((item) => item.resourceId)}
+                projectSubscriptions={data.subscriptions.filter(
+                  (item) =>
+                    item.userId === data.viewer.id &&
+                    item.resourceType === "project",
+                )}
                 onToggleProjectFavorite={toggleProjectFavorite}
                 onSetProjectSubscriptionEvents={setProjectSubscriptionEvents}
                 onCreateProjectReminder={addProjectReminder}
@@ -5133,8 +5375,18 @@ function App() {
                 scopeTeamId={projectTeam?.id}
                 viewerId={data.viewer.id}
                 viewer={data.viewer}
-                favoriteProjectIds={data.favorites.filter(item => item.userId === data.viewer.id && item.resourceType === "project").map(item => item.resourceId)}
-                projectSubscriptions={data.subscriptions.filter(item => item.userId === data.viewer.id && item.resourceType === "project")}
+                favoriteProjectIds={data.favorites
+                  .filter(
+                    (item) =>
+                      item.userId === data.viewer.id &&
+                      item.resourceType === "project",
+                  )
+                  .map((item) => item.resourceId)}
+                projectSubscriptions={data.subscriptions.filter(
+                  (item) =>
+                    item.userId === data.viewer.id &&
+                    item.resourceType === "project",
+                )}
                 onToggleProjectFavorite={toggleProjectFavorite}
                 onSetProjectSubscriptionEvents={setProjectSubscriptionEvents}
                 onCreateProjectReminder={addProjectReminder}
@@ -5248,10 +5500,12 @@ function App() {
             </main>
           )}
         {page === "project-detail" &&
-          route.kind === "project" &&
+          (route.kind === "project" ||
+            (route.kind === "project-saved-view" &&
+              selectedProjectFacetView)) &&
           selectedProject && (
             <ProjectDetailPage
-              key={selectedProject.id}
+              key={`${selectedProject.id}:${selectedProjectFacetView?.id ?? "base"}`}
               project={selectedProject}
               projects={data.projects}
               initiatives={data.initiatives}
@@ -5279,8 +5533,30 @@ function App() {
                   item.resourceType === "project" &&
                   item.resourceId === selectedProject.id,
               )}
-              tab={route.tab}
+              tab={route.kind === "project-saved-view" ? "issues" : route.tab}
+              savedView={selectedProjectFacetView ?? undefined}
+              editingSavedView={
+                route.kind === "project-saved-view" && route.editing
+              }
               savedViews={data.savedViews}
+              onOpenSavedView={(view) =>
+                navigateTo(
+                  projectSavedViewPath(
+                    data.workspace.urlKey,
+                    selectedProject.slugId,
+                    savedViewPathId(view),
+                  ),
+                )
+              }
+              onEditSavedView={(view) =>
+                navigateTo(
+                  projectSavedViewEditPath(
+                    data.workspace.urlKey,
+                    selectedProject.slugId,
+                    savedViewPathId(view),
+                  ),
+                )
+              }
               onTabChange={(tab) =>
                 navigateTo(
                   projectPath(data.workspace.urlKey, selectedProject, tab),
@@ -5381,6 +5657,15 @@ function App() {
           />
         )}
         {routeScopeValid &&
+          route.kind === "project-saved-view" &&
+          selectedProject &&
+          !selectedProjectFacetView && (
+            <RouteNotFound
+              title="Project view not found"
+              description="This project view does not exist or is no longer available."
+            />
+          )}
+        {routeScopeValid &&
           page === "initiative-detail" &&
           !selectedInitiative && (
             <RouteNotFound
@@ -5424,8 +5709,18 @@ function App() {
             open={commandOpen}
             onOpenChange={setCommandOpen}
             onCreateIssue={() => openCreateIssue()}
-            onCreateDocument={() => void run(() => createDocument({ title: "Untitled document" }), "Could not create document").then(async document => { setData(await fetchBootstrap(data.workspace.urlKey)); navigateTo(documentPath(data.workspace.urlKey, document)); })}
-            onCreateIssueTemplate={() => navigateTo(newIssueTemplatePath(data.workspace.urlKey))}
+            onCreateDocument={() =>
+              void run(
+                () => createDocument({ title: "Untitled document" }),
+                "Could not create document",
+              ).then(async (document) => {
+                setData(await fetchBootstrap(data.workspace.urlKey));
+                navigateTo(documentPath(data.workspace.urlKey, document));
+              })
+            }
+            onCreateIssueTemplate={() =>
+              navigateTo(newIssueTemplatePath(data.workspace.urlKey))
+            }
             onCreateProject={() =>
               navigateTo(`${projectsPath(data.workspace.urlKey)}?create=1`)
             }
@@ -5571,7 +5866,9 @@ function App() {
         </button>
         <button
           aria-label="Chat history"
-          onClick={() => navigateTo(`${agentPath(data.workspace.urlKey)}?history=1`)}
+          onClick={() =>
+            navigateTo(`${agentPath(data.workspace.urlKey)}?history=1`)
+          }
           type="button"
         >
           <History />
@@ -5581,9 +5878,13 @@ function App() {
   );
 }
 
-function readInsightDrillFilters(search: string): NonNullable<Dashboard["filters"]> | undefined {
+function readInsightDrillFilters(
+  search: string,
+): NonNullable<Dashboard["filters"]> | undefined {
   try {
-    const value = JSON.parse(new URLSearchParams(search).get("insightFilter") ?? "null") as Dashboard["filters"] | null;
+    const value = JSON.parse(
+      new URLSearchParams(search).get("insightFilter") ?? "null",
+    ) as Dashboard["filters"] | null;
     return value && typeof value === "object" ? value : undefined;
   } catch {
     return undefined;
@@ -5650,7 +5951,8 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
   if (route.kind === "initiatives" || route.kind === "team-initiatives")
     return "initiatives";
   if (route.kind === "initiative") return "initiative-detail";
-  if (route.kind === "project") return "project-detail";
+  if (route.kind === "project" || route.kind === "project-saved-view")
+    return "project-detail";
   if (route.kind === "issue") return "issue-detail";
   return "not-found";
 }
@@ -5750,8 +6052,8 @@ function applyOptimisticIssue(
   if (input.dueDate !== undefined) next.dueDate = input.dueDate || undefined;
   if (input.labelIds !== undefined)
     next.labels = data
-      ? labelsForResource(data.labels, "issue", data.labelGroups).filter((item) =>
-          input.labelIds?.includes(item.id),
+      ? labelsForResource(data.labels, "issue", data.labelGroups).filter(
+          (item) => input.labelIds?.includes(item.id),
         )
       : next.labels;
   if (input.subscriberIds !== undefined)

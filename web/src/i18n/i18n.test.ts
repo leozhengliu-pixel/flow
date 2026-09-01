@@ -13,6 +13,8 @@ describe('translateToChinese', () => {
     expect(translateToChinese('2 of 5 projects completed. Click to view projects.')).toBe('已完成 2/5 个项目。点击查看项目。')
     expect(translateToChinese('1 project need an update. Click to open updates.')).toBe('1 个项目需要更新。点击打开更新。')
     expect(translateToChinese('Delete “Roadmap”?')).toBe('删除“Roadmap”吗？')
+    expect(translateToChinese('Issues matching 2 filters')).toBe('事项符合 2 个筛选条件')
+    expect(translateToChinese('All projects')).toBe('所有项目')
   })
 
   it('leaves business entity names untouched when no UI translation exists', () => {
