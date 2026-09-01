@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { DocumentGlyph } from '@/components/documents/document-icon'
 import { ReleasesIcon } from '@/components/releases/release-icons'
 import { searchWorkspace } from '@/lib/api'
 import type { SearchResult } from '@/types/flow'
@@ -135,5 +136,6 @@ function ResourceIcon({ result }: { result: SearchResult }) {
   if (result.type === 'customer') return <span className="command-item-icon"><Building2/></span>
   if (result.type === 'release') return <span className="command-item-icon"><ReleasesIcon/></span>
   if (result.type === 'view') return <span className="command-item-icon"><Layers3/></span>
+  if (result.type === 'document') return <span className="command-item-icon"><DocumentGlyph color={result.color} icon={result.icon}/></span>
   return <span className="command-item-icon"><FileText/></span>
 }

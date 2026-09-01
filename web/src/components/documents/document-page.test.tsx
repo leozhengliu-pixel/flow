@@ -1,13 +1,24 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, viewer } from '@/test/fixtures'
 import type { FlowDocument } from '@/types/flow'
 
+const api = vi.hoisted(() => ({
+  addFavorite: vi.fn(),
+  addSubscription: vi.fn(),
+  removeFavorite: vi.fn(),
+  removeSubscription: vi.fn(),
+}))
+
 vi.mock('@/components/issue/issue-description-editor', () => ({ IssueDescriptionEditor: () => <div aria-label="Document content"/> }))
-vi.mock('@/components/views/view-icon-picker', () => ({ ViewGlyph: () => <svg aria-label="Document breadcrumb icon"/>, ViewIconPicker: () => <button aria-label="Document icon"/> }))
+vi.mock('@/components/views/view-icon-picker', () => ({ ViewGlyph: () => <svg aria-hidden="true"/>, ViewIconPicker: () => <button aria-label="Document icon"/> }))
+vi.mock('@/lib/api', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/lib/api')>()),
+  ...api,
+}))
 
 import { DocumentPage } from './document-page'
 
@@ -19,6 +30,27 @@ const flowDocument = {
 } as FlowDocument
 
 describe('DocumentPage edited details', () => {
+  beforeEach(() => {
+    api.addFavorite.mockReset().mockResolvedValue(undefined)
+    api.addSubscription.mockReset().mockResolvedValue(undefined)
+    api.removeFavorite.mockReset().mockResolvedValue(undefined)
+    api.removeSubscription.mockReset().mockResolvedValue(undefined)
+  })
+
+  it('persists the document favorite switch before refreshing the sidebar', async () => {
+    const user = userEvent.setup()
+    const onReload = vi.fn().mockResolvedValue(undefined)
+    const data = makeBootstrap({ comments: { [flowDocument.id]: [] }, documents: [flowDocument], favorites: [], subscriptions: [] })
+    render(<I18nProvider><DocumentPage data={data} document={flowDocument} onBack={vi.fn()} onReload={onReload}/></I18nProvider>)
+
+    const favoriteSwitch = screen.getByRole('switch', { name: 'Add to favorites' })
+    expect(favoriteSwitch).toHaveAttribute('aria-checked', 'false')
+    await user.click(favoriteSwitch)
+
+    await waitFor(() => expect(api.addFavorite).toHaveBeenCalledWith('document', flowDocument.id))
+    expect(onReload).toHaveBeenCalledOnce()
+  })
+
   it('matches the Linear metadata popover and opens history as a second action', async () => {
     const user = userEvent.setup()
     const data = makeBootstrap({ comments: { [flowDocument.id]: [] }, documents: [flowDocument], favorites: [], subscriptions: [] })
@@ -48,5 +80,34 @@ describe('DocumentPage edited details', () => {
     await user.click(screen.getByRole('button', { name: /Edited|已编辑/ }))
     await user.click(screen.getByRole('checkbox', { name: /Show author names|显示作者姓名/ }))
     expect(screen.getByText('Viewer', { selector: '.document-author-name' })).toBeVisible()
+  })
+
+  it('copies the canonical document URL from the header action', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    const data = makeBootstrap({ comments: { [flowDocument.id]: [] }, documents: [flowDocument], favorites: [], subscriptions: [] })
+    render(<I18nProvider><DocumentPage data={data} document={flowDocument} onBack={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+
+    await user.click(screen.getByRole('button', { name: 'Copy document URL' }))
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${location.origin}/workspace/document/document-one`))
+  })
+
+  it('persists direct subscribe and unsubscribe actions before refreshing data', async () => {
+    const user = userEvent.setup()
+    const onReload = vi.fn().mockResolvedValue(undefined)
+    const data = makeBootstrap({ comments: { [flowDocument.id]: [] }, documents: [flowDocument], favorites: [], subscriptions: [] })
+    const { rerender } = render(<I18nProvider><DocumentPage data={data} document={flowDocument} onBack={vi.fn()} onReload={onReload}/></I18nProvider>)
+
+    await user.click(screen.getByRole('button', { name: 'Unsubscribe' }))
+    await waitFor(() => expect(api.removeSubscription).toHaveBeenCalledWith('document', flowDocument.id))
+    expect(onReload).toHaveBeenCalledOnce()
+
+    const unsubscribedDocument = { ...flowDocument, subscriberIds: [] }
+    rerender(<I18nProvider><DocumentPage data={{ ...data, documents: [unsubscribedDocument] }} document={unsubscribedDocument} onBack={vi.fn()} onReload={onReload}/></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Subscribe' }))
+    await waitFor(() => expect(api.addSubscription).toHaveBeenCalledWith('document', flowDocument.id))
+    expect(onReload).toHaveBeenCalledTimes(2)
   })
 })

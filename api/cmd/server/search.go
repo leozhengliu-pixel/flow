@@ -124,7 +124,7 @@ func buildSearchResultsLimited(data domain.Bootstrap, query string, types map[st
 					subtitle = data.Projects[index].Name
 				}
 			}
-			add(domain.SearchResult{ID: document.ID, Type: "document", Title: document.Title, Subtitle: subtitle, Icon: document.Icon, UpdatedAt: document.UpdatedAt}, document.Title, document.Content, subtitle)
+			add(domain.SearchResult{ID: document.ID, Type: "document", Title: document.Title, Subtitle: subtitle, Icon: document.Icon, Color: document.Color, UpdatedAt: document.UpdatedAt}, document.Title, document.Content, subtitle)
 			indexed[document.ID] = true
 		}
 		for _, project := range data.Projects {
@@ -137,9 +137,17 @@ func buildSearchResultsLimited(data domain.Bootstrap, query string, types map[st
 		}
 		for _, initiative := range data.Initiatives {
 			for _, resource := range initiative.Resources {
-				if resource.Type == "document" && !indexed[resource.ID] {
-					add(domain.SearchResult{ID: resource.ID, Type: "document", Title: resource.Title, Subtitle: initiative.Name, ParentID: initiative.ID, ParentType: "initiative", UpdatedAt: resource.CreatedAt}, resource.Title, resource.URL, initiative.Name)
-					indexed[resource.ID] = true
+				documentID := resource.DocumentID
+				if documentID == "" {
+					documentID = resource.ID
+				}
+				if resource.Type == "document" && !indexed[documentID] {
+					result := domain.SearchResult{ID: documentID, Type: "document", Title: resource.Title, Subtitle: initiative.Name, ParentID: initiative.ID, ParentType: "initiative", UpdatedAt: resource.CreatedAt}
+					if index := slices.IndexFunc(data.Documents, func(item domain.Document) bool { return item.ID == documentID }); index >= 0 {
+						result.Icon, result.Color, result.UpdatedAt = data.Documents[index].Icon, data.Documents[index].Color, data.Documents[index].UpdatedAt
+					}
+					add(result, resource.Title, resource.URL, initiative.Name)
+					indexed[documentID] = true
 				}
 			}
 		}

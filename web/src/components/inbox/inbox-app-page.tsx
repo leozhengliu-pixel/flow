@@ -6,7 +6,8 @@ import { NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/componen
 import type { SubIssueInput } from '@/components/issue/sub-issue-editor'
 import { batchNotifications, updateInboxNotification } from '@/lib/api'
 
-import type { InboxFilterCondition, InboxFilterOptions } from './inbox-filter-builder'
+import { type InboxFilterCondition, type InboxFilterOptions } from './inbox-filter-builder'
+import { INBOX_REVIEW_STATUS_OPTIONS, normalizeInboxFilters } from './inbox-filter-types'
 import { InboxPage, type InboxPageAdapter } from './inbox-page'
 import type { InboxDisplayOptions } from './inbox-page-shell'
 import type { InboxNotificationKind, InboxNotificationRowData, InboxSnoozePreset } from './notification-row'
@@ -30,6 +31,7 @@ interface InboxProjection extends InboxNotificationRowData {
   issuePriority: number
   issueStatusType: Issue['state']['type']
   reviewId?: string
+  reviewStatus?: string
 }
 
 export interface InboxAppPageProps {
@@ -61,7 +63,7 @@ export function InboxAppPage({ data, onReload, onOpenIssue, onOpenProject, onOpe
   const [notifications, setNotifications] = useState<InboxProjection[]>(source)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [displayOptions, setDisplayOptions] = useState(readInboxDisplayOptions)
-  const [filters, setFilters] = useState<InboxFilterCondition[]>([])
+  const [filters, setFilters] = useState<InboxFilterCondition[]>(readInboxFilters)
   const filterOptions = useMemo<InboxFilterOptions>(
     () => buildInboxFilterOptions(notifications, filters, displayOptions, data),
     [data, displayOptions, filters, notifications],
@@ -69,6 +71,13 @@ export function InboxAppPage({ data, onReload, onOpenIssue, onOpenProject, onOpe
   const notificationsRef = useRef(notifications)
   notificationsRef.current = notifications
   const sourceByIdRef = useRef(new Map(source.map(notification => [notification.id, notification])))
+
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    if (filters.length) url.searchParams.set('filter', encodeInboxFilters(filters))
+    else url.searchParams.delete('filter')
+    window.history.replaceState(window.history.state, '', url)
+  }, [filters])
 
   useEffect(() => {
     try {
@@ -232,6 +241,34 @@ export function InboxAppPage({ data, onReload, onOpenIssue, onOpenProject, onOpe
   />
 }
 
+function readInboxFilters(): InboxFilterCondition[] {
+  if (typeof window === 'undefined') return []
+  const raw = new URL(window.location.href).searchParams.get('filter')
+  if (!raw) return []
+  try {
+    const decoded = decodeInboxFilters(raw)
+    const allowed = new Set<InboxFilterCondition['property']>(['notificationType', 'from', 'project', 'initiative', 'issuePriority', 'issueStatusType', 'reviewStatus'])
+    const values = Array.isArray(decoded) ? decoded.filter(item => item && allowed.has(item.property) && Array.isArray(item.values)) : []
+    return normalizeInboxFilters(values)
+  } catch {
+    return []
+  }
+}
+
+function encodeInboxFilters(filters: InboxFilterCondition[]) {
+  const bytes = new TextEncoder().encode(JSON.stringify(filters))
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
+}
+
+function decodeInboxFilters(value: string): unknown {
+  const normalized = value.replaceAll('-', '+').replaceAll('_', '/')
+  const binary = atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '='))
+  const bytes = Uint8Array.from(binary, character => character.charCodeAt(0))
+  return JSON.parse(new TextDecoder().decode(bytes))
+}
+
 function readInboxDisplayOptions(): InboxDisplayOptions {
   if (typeof window === 'undefined') return initialDisplayOptions
   try {
@@ -251,7 +288,7 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
     if (notification.reviewId) {
       const review = data.reviews.find(item => item.id === notification.reviewId)
       if (!review || notification.deletedAt || notification.archivedAt) return []
-      return [{ id: notification.id, href: `/${data.workspace.urlKey}/review/${review.slugId}`, issueId: '', sourceType: 'activity' as const, sourceId: notification.sourceId, notificationType: 'codeReview', actorId: notification.actor.id, actor: notification.actor.displayName, actorAvatarUrl: notification.actor.avatarUrl, kind: 'generic' as const, identifier: `${review.provider}#${review.number}`, title: review.title, body: `${notification.actor.displayName} requested your review`, timeLabel: relativeTime(notification.updatedAt), timestamp: notification.updatedAt, read: Boolean(notification.readAt), favorite: notification.favorite, initiativeIds: [], issuePriority: 0, issueStatusType: 'started' as const, reviewId: review.id }]
+      return [{ id: notification.id, href: `/${data.workspace.urlKey}/review/${review.slugId}`, issueId: '', sourceType: 'activity' as const, sourceId: notification.sourceId, notificationType: 'review', actorId: notification.actor.id, actor: notification.actor.displayName, actorAvatarUrl: notification.actor.avatarUrl, kind: 'generic' as const, identifier: `${review.provider}#${review.number}`, title: review.title, body: `${notification.actor.displayName} requested your review`, timeLabel: relativeTime(notification.updatedAt), timestamp: notification.updatedAt, read: Boolean(notification.readAt), favorite: notification.favorite, initiativeIds: [], issuePriority: 0, issueStatusType: 'started' as const, reviewId: review.id, reviewStatus: review.draft ? 'draft' : review.status }]
     }
     const issue = notification.issueId ? issues.get(notification.issueId) : undefined
     const reminderProject = notification.projectId ? data.projects.find(project => project.id === notification.projectId) : undefined
@@ -399,6 +436,7 @@ function notificationMatchesFilter(notification: InboxProjection, filter: InboxF
   if (filter.property === 'initiative') match = notification.initiativeIds.length ? notification.initiativeIds.some(id => values.has(id)) : values.has('__none__')
   if (filter.property === 'issuePriority') match = values.has(String(notification.issuePriority))
   if (filter.property === 'issueStatusType') match = values.has(notification.issueStatusType)
+  if (filter.property === 'reviewStatus') match = notification.reviewStatus ? values.has(notification.reviewStatus) : values.has('__none__')
   return filter.operator === 'is' ? match : !match
 }
 
@@ -436,25 +474,25 @@ function buildInboxFilterOptions(notifications: InboxProjection[], filters: Inbo
     id: 'count', property, operator: 'is', values: [{ value, valueLabel: value }],
   })).length
   const statusDefinitions = [
-    { id: 'triage', label: 'Triage', type: 'backlog' as const, color: '#8a8f98' },
-    { id: 'backlog', label: 'Backlog', type: 'backlog' as const, color: '#8a8f98' },
-    { id: 'unstarted', label: 'Unstarted', type: 'unstarted' as const, color: '#8a8f98' },
-    { id: 'started', label: 'Started', type: 'started' as const, color: '#f2c94c' },
-    { id: 'completed', label: 'Completed', type: 'completed' as const, color: '#5e6ad2' },
-    { id: 'canceled', label: 'Canceled', type: 'canceled' as const, color: '#8a8f98' },
-    { id: 'duplicate', label: 'Duplicate', type: 'canceled' as const, color: '#8a8f98' },
+    { id: 'triage', label: 'Triage', type: 'backlog' as const, color: 'var(--status-neutral)' },
+    { id: 'backlog', label: 'Backlog', type: 'backlog' as const, color: 'var(--status-neutral)' },
+    { id: 'unstarted', label: 'Unstarted', type: 'unstarted' as const, color: 'var(--status-neutral)' },
+    { id: 'started', label: 'Started', type: 'started' as const, color: 'var(--data-vis-3)' },
+    { id: 'completed', label: 'Completed', type: 'completed' as const, color: 'var(--accent-primary)' },
+    { id: 'canceled', label: 'Canceled', type: 'canceled' as const, color: 'var(--status-neutral)' },
+    { id: 'duplicate', label: 'Duplicate', type: 'canceled' as const, color: 'var(--status-neutral)' },
   ]
 
   return {
     notificationType: notificationTypeOptions.map(([id, label, keywords]) => ({ id, label, keywords, count: count('notificationType', id) })),
-    from: data.users.map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, keywords: `${user.name} ${user.email}`, count: count('from', user.id) })),
+    from: data.users.map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, keywords: `${user.name} ${user.email}`, count: count('from', user.id), i18nIgnore: true })),
     project: [
       { id: '__none__', label: 'No project', keywords: 'none empty', icon: <NoProjectIcon size={15} />, count: count('project', '__none__') },
-      ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, icon: <ProjectIcon size={15} style={{ color: project.color }} />, count: count('project', project.id) })),
+      ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, icon: <ProjectIcon size={15} style={{ color: project.color }} />, count: count('project', project.id), i18nIgnore: true })),
     ],
     initiative: [
       { id: '__none__', label: 'No initiative', keywords: 'none empty', icon: <InitiativeGlyph />, count: count('initiative', '__none__') },
-      ...data.initiatives.map(initiative => ({ id: initiative.id, label: initiative.name, color: initiative.color, icon: <InitiativeGlyph color={initiative.color} />, count: count('initiative', initiative.id) })),
+      ...data.initiatives.map(initiative => ({ id: initiative.id, label: initiative.name, color: initiative.color, icon: <InitiativeGlyph color={initiative.color} />, count: count('initiative', initiative.id), i18nIgnore: true })),
     ],
     issuePriority: ['No priority', 'Urgent', 'High', 'Medium', 'Low'].map((label, priority) => ({ id: String(priority), label, icon: <PriorityIcon priority={priority} size={15} />, count: count('issuePriority', String(priority)) })),
     issueStatusType: statusDefinitions.map(status => {
@@ -464,6 +502,7 @@ function buildInboxFilterOptions(notifications: InboxProjection[], filters: Inbo
         : { id: status.id, name: status.label, type: status.type, color: workspaceState?.color ?? status.color }
       return { id: status.id, label: status.label, icon: <StatusIcon state={state} size={14} />, count: count('issueStatusType', status.id) }
     }),
+    reviewStatus: INBOX_REVIEW_STATUS_OPTIONS.map(status => ({ id: status.id, label: status.label, color: status.color, count: count('reviewStatus', status.id) })),
   }
 }
 

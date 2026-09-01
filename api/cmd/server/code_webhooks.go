@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -109,7 +110,7 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 		// distinguish successive deliveries for the same PR/MR.
 		if index >= 0 {
 			review := data.Reviews[index]
-			review.Events = append(review.Events, domain.ReviewEvent{ID: eventID, Type: event.Action, Body: provider, Actor: data.Viewer, CreatedAt: now})
+			review.Events = append(review.Events, domain.ReviewEvent{ID: eventID, Type: reviewEventType(provider, event), Body: provider, Actor: data.Viewer, CreatedAt: now})
 			if len(review.Events) > 100 {
 				review.Events = review.Events[len(review.Events)-100:]
 			}
@@ -156,47 +157,143 @@ func inferredReviewIssueIDs(data *domain.Bootstrap, review domain.CodeReview) []
 	return ids
 }
 
-// testIntegrationWebhook lets operators verify a configured connection and
-// records the result. It intentionally does not call a provider API or emit a
-// fake review event; delivery still has to come from GitHub/GitLab.
-func (s *server) testIntegrationWebhook(w http.ResponseWriter, r *http.Request) {
-	provider, id := strings.ToLower(r.PathValue("provider")), r.PathValue("id")
+// testIntegrationConnection performs a real provider handshake when a GitLab
+// token is supplied. Existing connections keep only a token hash, so a later
+// test asks for the token again (or uses an OAuth access token). No credential
+// is persisted from this request.
+func (s *server) testIntegrationConnection(w http.ResponseWriter, r *http.Request) {
+	provider, id := strings.ToLower(r.PathValue("provider")), strings.TrimSpace(r.PathValue("id"))
 	if provider != "github" && provider != "gitlab" {
 		writeError(w, http.StatusNotFound, "unsupported provider")
 		return
 	}
-	var result map[string]any
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.webhook_tested", id, nil, func(data *domain.Bootstrap) error {
+	var input struct {
+		Token string `json:"token"`
+		Host  string `json:"host"`
+	}
+	if r.ContentLength != 0 {
+		if !decodeJSON(w, r, &input) {
+			return
+		}
+	}
+	data := s.workspaceData(r)
+	var connection *domain.IntegrationConnection
+	if id != "" {
+		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
+		if index < 0 {
+			respondMutation(w, errNotFound, http.StatusOK, nil)
+			return
+		}
+		connection = &data.IntegrationConnections[index]
+	}
+	if provider == "gitlab" {
+		token, host := strings.TrimSpace(input.Token), strings.TrimSpace(input.Host)
+		if token == "" && connection != nil {
+			token = strings.TrimSpace(connection.OAuthAccessToken)
+		}
+		if host == "" && connection != nil {
+			host = strings.TrimSpace(connection.Config["host"])
+		}
+		if token == "" {
+			persistIntegrationTestError(s, r, provider, id, "GitLab API token is not available")
+			writeError(w, http.StatusUnprocessableEntity, "GitLab API token is required to test the connection")
+			return
+		}
+		username, err := probeGitLabConnection(r.Context(), host, token)
+		if err != nil {
+			persistIntegrationTestError(s, r, provider, id, err.Error())
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		now := time.Now().UTC()
+		persistIntegrationTestSuccess(s, r, provider, id, now)
+		writeJSON(w, http.StatusOK, map[string]any{"provider": provider, "connectionId": id, "status": "ready", "username": username, "testedAt": now})
+		return
+	}
+	// GitHub connections are installed through OAuth/app setup. Until an OAuth
+	// token is available, the webhook secret is the verifiable local contract.
+	if connection == nil {
+		writeError(w, http.StatusUnprocessableEntity, "GitHub connection id is required")
+		return
+	}
+	secret := strings.TrimSpace(connection.Config["webhookSecret"])
+	if envName := strings.TrimSpace(connection.Config["webhookSecretEnv"]); strings.HasPrefix(envName, "FLOW_INTEGRATION_") {
+		secret = os.Getenv(envName)
+	}
+	if secret == "" {
+		persistIntegrationTestError(s, r, provider, id, "webhook secret is not configured")
+		writeError(w, http.StatusUnprocessableEntity, "webhook secret is not configured")
+		return
+	}
+	now := time.Now().UTC()
+	persistIntegrationTestSuccess(s, r, provider, id, now)
+	writeJSON(w, http.StatusOK, map[string]any{"provider": provider, "connectionId": id, "status": "ready", "testedAt": now})
+}
+
+func probeGitLabConnection(ctx context.Context, host, token string) (string, error) {
+	if strings.TrimSpace(host) == "" {
+		host = "https://gitlab.com"
+	}
+	host = strings.TrimRight(strings.TrimSpace(host), "/")
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, host+"/api/v4/user", nil)
+	if err != nil {
+		return "", fmt.Errorf("invalid GitLab URL")
+	}
+	request.Header.Set("PRIVATE-TOKEN", token)
+	request.Header.Set("Accept", "application/json")
+	response, err := (&http.Client{Timeout: 8 * time.Second}).Do(request)
+	if err != nil {
+		return "", fmt.Errorf("GitLab connection failed: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
+		return "", fmt.Errorf("GitLab token was rejected")
+	}
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return "", fmt.Errorf("GitLab API returned %s", response.Status)
+	}
+	var user struct {
+		Username string `json:"username"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&user); err != nil {
+		return "", fmt.Errorf("GitLab returned an invalid response")
+	}
+	return user.Username, nil
+}
+
+func persistIntegrationTestError(s *server, r *http.Request, provider, id, message string) {
+	if id == "" {
+		return
+	}
+	_ = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.connection_tested", id, map[string]string{"provider": provider, "status": "error"}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
 		if index < 0 {
 			return errNotFound
 		}
-		connection := &data.IntegrationConnections[index]
-		secret := strings.TrimSpace(connection.Config["webhookSecret"])
-		if envName := strings.TrimSpace(connection.Config["webhookSecretEnv"]); strings.HasPrefix(envName, "FLOW_INTEGRATION_") {
-			secret = os.Getenv(envName)
-		}
-		if secret == "" {
-			connection.LastError = "webhook secret is not configured"
-			connection.UpdatedAt = time.Now().UTC()
-			return errInvalid
-		}
-		now := time.Now().UTC()
-		connection.LastWebhookAt = &now
-		connection.LastError = ""
-		connection.UpdatedAt = now
-		result = map[string]any{"provider": provider, "connectionId": id, "status": "ready", "testedAt": now}
+		data.IntegrationConnections[index].LastError = message
+		data.IntegrationConnections[index].LastTestStatus = "error"
+		testedAt := time.Now().UTC()
+		data.IntegrationConnections[index].LastTestAt = &testedAt
+		data.IntegrationConnections[index].UpdatedAt = time.Now().UTC()
 		return nil
 	})
-	if err != nil {
-		if err == errInvalid {
-			writeError(w, http.StatusUnprocessableEntity, "webhook secret is not configured")
-			return
-		}
-		respondMutation(w, err, http.StatusOK, nil)
+}
+
+func persistIntegrationTestSuccess(s *server, r *http.Request, provider, id string, testedAt time.Time) {
+	if id == "" {
 		return
 	}
-	writeJSON(w, http.StatusOK, result)
+	_ = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.connection_tested", id, map[string]string{"provider": provider, "status": "ready"}, func(data *domain.Bootstrap) error {
+		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
+		if index < 0 {
+			return errNotFound
+		}
+		data.IntegrationConnections[index].LastError = ""
+		data.IntegrationConnections[index].LastTestStatus = "ready"
+		data.IntegrationConnections[index].LastTestAt = &testedAt
+		data.IntegrationConnections[index].UpdatedAt = testedAt
+		return nil
+	})
 }
 
 func (s *server) webhookConnection(r *http.Request, provider string) *domain.IntegrationConnection {
@@ -326,10 +423,14 @@ func (e externalCodeReviewEvent) applyToReview(r *domain.CodeReview, now time.Ti
 	if e.ObjectAttributes.ID != 0 {
 		r.Title, r.Description, r.URL = e.ObjectAttributes.Title, e.ObjectAttributes.Description, e.ObjectAttributes.URL
 		r.BaseBranch, r.HeadBranch = e.ObjectAttributes.TargetBranch, e.ObjectAttributes.SourceBranch
-		if e.ObjectAttributes.State == "merged" {
+		state := strings.ToLower(strings.TrimSpace(e.ObjectAttributes.State))
+		action := strings.ToLower(strings.TrimSpace(e.ObjectAttributes.Action))
+		if state == "merged" || action == "merge" {
 			r.Status = "merged"
-		} else if e.ObjectAttributes.State == "closed" {
+		} else if state == "closed" || action == "close" {
 			r.Status = "closed"
+		} else if state == "opened" || state == "open" || action == "reopen" {
+			r.Status = "open"
 		}
 	}
 	if r.Title == "" {
@@ -355,6 +456,24 @@ func (e externalCodeReviewEvent) applyToReview(r *domain.CodeReview, now time.Ti
 		r.URL = e.ExternalURL
 	}
 	r.UpdatedAt = now
+}
+
+func reviewEventType(provider string, event externalCodeReviewEvent) string {
+	if provider != "gitlab" {
+		return event.Action
+	}
+	switch strings.ToLower(strings.TrimSpace(event.ObjectAttributes.Action)) {
+	case "open", "opened", "reopen", "reopened":
+		return "opened"
+	case "merge", "merged":
+		return "merged"
+	case "close", "closed":
+		return "closed"
+	case "update", "updated":
+		return "updated"
+	default:
+		return event.Action
+	}
 }
 
 func appendCodeReviewNotifications(data *domain.Bootstrap, review domain.CodeReview, event externalCodeReviewEvent, eventID string, now time.Time) []domain.Notification {

@@ -182,7 +182,7 @@ export type AppRoute =
     }
   | { kind: "asks"; workspaceSlug: string }
   | { kind: "loops"; workspaceSlug: string }
-  | { kind: "loop-editor"; workspaceSlug: string; loopId?: string }
+  | { kind: "loop-editor"; workspaceSlug: string; loopId?: string; draftId?: string }
   | {
       kind: "team-archive";
       workspaceSlug: string;
@@ -290,7 +290,7 @@ const TEAM_ARCHIVE_TABS = new Set<TeamArchiveTab>([
   "recently-deleted-documents",
 ]);
 
-export function parseAppRoute(pathname: string): AppRoute {
+export function parseAppRoute(pathname: string, search = ""): AppRoute {
   const segments = pathname
     .split("/")
     .filter(Boolean)
@@ -468,8 +468,10 @@ export function parseAppRoute(pathname: string): AppRoute {
     return { kind: "asks", workspaceSlug };
   if (section === "loops" && !third && segments.length === 2)
     return { kind: "loops", workspaceSlug };
-  if (section === "loops" && third === "new" && segments.length === 3)
-    return { kind: "loop-editor", workspaceSlug };
+  if (section === "loops" && third === "new" && segments.length === 3) {
+    const draftId = new URLSearchParams(search).get("draftId") || undefined;
+    return draftId ? { kind: "loop-editor", workspaceSlug, draftId } : { kind: "loop-editor", workspaceSlug };
+  }
   if (section === "loops" && third && segments.length === 3)
     return { kind: "loop-editor", workspaceSlug, loopId: third };
   if (section === "teams" && segments.length === 2)

@@ -12,6 +12,7 @@ import { projectStatusOptionColor } from '@/lib/project-status-color'
 import { ViewIconPicker } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { ProjectDatePicker } from '@/components/projects-page/project-target-date-picker'
+import { DocumentGlyph } from '@/components/documents/document-icon'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { groupOptionSections } from '@/lib/group-options'
 import { useI18n } from '@/i18n/i18n'
@@ -24,7 +25,7 @@ import { formatProjectPropertyDate, initiativeStatusLabel, inviteProjectMember }
 
 type Props = ProjectDetailProps & { projectIssues: Issue[]; save: (input: ProjectMutationInput) => Promise<void> }
 
-export function ProjectOverview({ project, projects, initiatives, projectStatuses, projectUpdates, users, teams, labels, labelGroups, projectIssues, save, onCreateResource, onUpdateResource, onDeleteResource, onCreateMilestone, onUpdateMilestone, onDeleteMilestone, onOpenMilestoneIssues = () => onTabChange('issues'), onTabChange }: Props & { onOpenMilestoneIssues?: (milestoneId?: string) => void }) {
+export function ProjectOverview({ project, projects, initiatives, documents, projectStatuses, projectUpdates, users, teams, labels, labelGroups, projectIssues, save, onCreateResource, onUpdateResource, onDeleteResource, onCreateMilestone, onUpdateMilestone, onDeleteMilestone, onOpenMilestoneIssues = () => onTabChange('issues'), onTabChange }: Props & { onOpenMilestoneIssues?: (milestoneId?: string) => void }) {
   const statuses = useMemo(() => uniqueById(projectStatuses.length ? projectStatuses : projects.map(item => item.status)), [projectStatuses, projects])
   const members = users.filter(user => (project.memberIds ?? []).includes(user.id))
   const selectedMemberIds = [...new Set([...(project.memberIds ?? []), ...(project.lead?.id ? [project.lead.id] : [])])]
@@ -53,7 +54,7 @@ export function ProjectOverview({ project, projects, initiatives, projectStatuse
 
     <InitiativeSection initiatives={initiatives} project={project} save={save}/>
     <ProjectLabelSection labels={labels} labelGroups={labelGroups} project={project} save={save}/>
-    <ResourceSection onCreate={input => onCreateResource(project.id, input)} onDelete={resourceId => onDeleteResource(project.id, resourceId)} onUpdate={(resourceId, input) => onUpdateResource(project.id, resourceId, input)} resources={project.resources ?? []} teams={teams}/>
+    <ResourceSection documents={documents} onCreate={input => onCreateResource(project.id, input)} onDelete={resourceId => onDeleteResource(project.id, resourceId)} onUpdate={(resourceId, input) => onUpdateResource(project.id, resourceId, input)} resources={project.resources ?? []} teams={teams}/>
     <InlineStringSection addLabel="Add customer request" items={project.customers ?? []} onChange={customers => void save({ customers })} title="Customers"/>
 
     <section className="project-overview__latest">
@@ -138,7 +139,7 @@ function InlineStringSection({ addLabel, items, onChange, title }: { addLabel: s
   </div><StringInputDialog label={addLabel} onOpenChange={setOpen} open={open} onSubmit={value => { onChange([...items, value]); setOpen(false) }}/></section>
 }
 
-function ResourceSection({ onCreate, onDelete, onUpdate, resources, teams }: { resources: ProjectResource[]; teams: Team[]; onCreate: (input: { type?: 'link'|'document'; title?: string; url?: string }) => Promise<ProjectResource>; onDelete: (id: string) => Promise<void>; onUpdate: (id: string, input: { type?: 'link'|'document'; title?: string; url?: string; pinnedTeamIds?: string[] }) => Promise<ProjectResource> }) {
+function ResourceSection({ documents, onCreate, onDelete, onUpdate, resources, teams }: { documents: Props['documents']; resources: ProjectResource[]; teams: Team[]; onCreate: (input: { type?: 'link'|'document'; title?: string; url?: string }) => Promise<ProjectResource>; onDelete: (id: string) => Promise<void>; onUpdate: (id: string, input: { type?: 'link'|'document'; title?: string; url?: string; pinnedTeamIds?: string[] }) => Promise<ProjectResource> }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [dialog, setDialog] = useState<{ mode: 'create'|'edit'; resource?: ProjectResource }>()
   const [deleteResource, setDeleteResource] = useState<ProjectResource>()
@@ -147,12 +148,12 @@ function ResourceSection({ onCreate, onDelete, onUpdate, resources, teams }: { r
     setMenuOpen(false)
   }
   return <section className="project-overview__row-section"><h3>Resources</h3><div className="project-overview__row-content">
-    {resources.map(resource => <div className="project-overview__resource" key={resource.id}><a data-i18n-ignore href={resource.url} rel={resource.type === 'link' ? 'noreferrer' : undefined} target={resource.type === 'link' ? '_blank' : undefined}>{resource.type === 'document' ? <FileText size={16}/> : <Link2 size={16}/>}<span>{resource.title}</span>{resource.type === 'link' && <ExternalLink size={16}/>}</a><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={`${resource.title} actions`} data-i18n-ignore type="button"><MoreHorizontal size={13}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className="project-detail-page__menu" sideOffset={4}>
+    {resources.map(resource => { const document=resource.type==='document'?documents.find(item=>item.id===resource.id):undefined; return <div className="project-overview__resource" key={resource.id}><a data-i18n-ignore href={resource.url} rel={resource.type === 'link' ? 'noreferrer' : undefined} target={resource.type === 'link' ? '_blank' : undefined}>{document?<DocumentGlyph document={document}/>:resource.type === 'document' ? <FileText size={16}/> : <Link2 size={16}/>}<span>{resource.title}</span>{resource.type === 'link' && <ExternalLink size={16}/>}</a><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={`${resource.title} actions`} data-i18n-ignore type="button"><MoreHorizontal size={13}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className="project-detail-page__menu" sideOffset={4}>
       <DropdownMenu.Item onSelect={() => void navigator.clipboard.writeText(resource.url).then(() => toast.success('Resource link copied'))}><Link2 size={14}/><span>Copy link</span></DropdownMenu.Item>
       <DropdownMenu.Sub><DropdownMenu.SubTrigger><TeamIcon size={14}/><span>Pin to team</span><ChevronRight size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className="project-detail-page__menu" sideOffset={6}>{teams.map(team => <DropdownMenu.CheckboxItem checked={(resource.pinnedTeamIds ?? []).includes(team.id)} key={team.id} onCheckedChange={() => void onUpdate(resource.id, { pinnedTeamIds: toggleString(resource.pinnedTeamIds ?? [], team.id) })}><TeamIcon size={14}/><span data-i18n-ignore>{team.name}</span>{(resource.pinnedTeamIds ?? []).includes(team.id) && <Check size={13}/>}</DropdownMenu.CheckboxItem>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
       <DropdownMenu.Item onSelect={() => setDialog({ mode: 'edit', resource })}><Link2 size={14}/><span>Edit</span></DropdownMenu.Item>
       <DropdownMenu.Separator/><DropdownMenu.Item className="is-danger" onSelect={() => setDeleteResource(resource)}><Trash2 size={14}/><span>Delete</span></DropdownMenu.Item>
-    </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></div>)}
+    </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></div>})}
     <DropdownMenu.Root onOpenChange={setMenuOpen} open={menuOpen}><DropdownMenu.Trigger asChild><button className="project-overview__inline-add" type="button"><Plus size={13}/>Add document or link…</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="start" className="project-detail-page__menu project-overview__resource-menu" sideOffset={4}><DropdownMenu.Label>Add document or link…</DropdownMenu.Label><DropdownMenu.Item onSelect={() => void createDocument()}><FileText size={14}/><span>Create new document…</span></DropdownMenu.Item><DropdownMenu.Item onSelect={() => setDialog({ mode: 'create' })}><Link2 size={14}/><span>Add a link…</span><kbd>Ctrl L</kbd></DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
   </div><ProjectResourceDialog key={dialog?.resource?.id ?? dialog?.mode ?? 'closed'} onOpenChange={open => { if (!open) setDialog(undefined) }} open={Boolean(dialog)} resource={dialog?.resource} onSubmit={async input => { if (dialog?.resource) await onUpdate(dialog.resource.id, input); else await onCreate({ type: 'link', url: input.url!, title: input.title }); setDialog(undefined) }}/>
   <Dialog.Root onOpenChange={open => { if (!open) setDeleteResource(undefined) }} open={Boolean(deleteResource)}><Dialog.Portal><Dialog.Overlay className="project-detail-page__dialog-overlay"/><Dialog.Content aria-describedby="project-resource-delete-description" className="project-detail-page__form-dialog"><Dialog.Title>{`Delete “${deleteResource?.title ?? ''}”?`}</Dialog.Title><Dialog.Description id="project-resource-delete-description">This resource will be removed from the project.</Dialog.Description><footer><Dialog.Close asChild><button type="button">Cancel</button></Dialog.Close><button className="is-danger" onClick={() => { if (!deleteResource) return; void onDelete(deleteResource.id).then(() => setDeleteResource(undefined)) }} type="button">Delete</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
