@@ -36,6 +36,7 @@ export type ProjectsPageSurfaceProps = {
   filterOptions?: Partial<Record<string, ProjectFilterOption[]>>
   displaySettings?: Partial<ProjectsDisplaySettings>
   filterCount?: number
+  displayLabelGroups?: Array<{ id: string; name: string }>
   sidebarOpen?: boolean
   views: ProjectsView[]
   onAddFilter?: (filter: string, option?: ProjectFilterOption) => void
@@ -70,6 +71,7 @@ export function ProjectsPageSurface({
   filterOptions,
   displaySettings,
   filterCount = 0,
+  displayLabelGroups = [],
   sidebarOpen = true,
   views,
   onAddFilter,
@@ -123,6 +125,7 @@ export function ProjectsPageSurface({
       setOpenSurface(null)
     }} />}
     {openSurface?.origin === origin && openSurface.kind === 'display' && <ProjectsDisplayMenu
+      labelGroups={displayLabelGroups}
       onChange={updateSettings}
       onReset={() => {
         if (onResetDisplay) onResetDisplay()

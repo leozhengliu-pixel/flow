@@ -1102,3 +1102,29 @@
     animation: none;
   }
 }
+.team-members-directory{position:relative;min-height:0;flex:1;overflow:visible;padding:0 8px 64px}
+.team-members-toolbar{position:absolute;z-index:22;top:-44px;right:8px;height:44px;display:flex;align-items:center;gap:6px}
+.team-members-add{height:28px;display:flex;align-items:center;gap:6px;padding:0 10px;border:.5px solid var(--ui-pill-ring);border-radius:9999px;background:var(--ui-pill-bg);box-shadow:var(--ui-pill-shadow);color:var(--ui-pill-fg);font:500 12px/normal var(--font)}
+.team-members-add:hover{background:var(--ui-pill-hover-bg);color:var(--ui-pill-hover-fg)}
+.team-members-add svg{width:14px;height:14px}
+.team-members-display{width:28px;height:28px;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:var(--ui-pill-bg);color:var(--ui-pill-fg)}
+.team-members-display:hover{background:var(--ui-pill-hover-bg);color:var(--ui-pill-hover-fg)}
+.team-members-display svg{width:14px;height:14px}
+.team-members-directory>header,.team-members-list>a{display:grid;grid-template-columns:minmax(260px,1fr) 240px 170px 28px;align-items:center;gap:8px}
+.team-members-directory>header{height:32px;padding:0 10px;color:var(--theme-text-secondary);font:500 12px/normal var(--font)}
+.team-members-directory>header button{width:max-content;padding:0;border:0;background:transparent;color:inherit;font:inherit}
+.team-members-directory>header button span{margin-left:2px}
+.team-members-list>a{height:48px;padding:0 10px;border-radius:8px;color:var(--theme-text-secondary);font:450 13px/normal var(--font);text-decoration:none}
+.team-members-list>a:hover{background:var(--theme-surface-hover)}
+.team-members-person{min-width:0;display:flex;align-items:center;gap:10px}
+.team-members-person>span:first-child{width:24px;height:24px;display:grid;place-items:center;overflow:hidden;border-radius:9999px;background:var(--avatar);color:white;font-size:9px}
+.team-members-person img{width:100%;height:100%;object-fit:cover}
+.team-members-person>span:last-child{min-width:0;display:flex;flex-direction:column;gap:2px}
+.team-members-person strong,.team-members-person small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.team-members-person strong{color:var(--theme-text-primary);font-weight:500}.team-members-person small{font-size:12px}
+.team-members-role{width:max-content;padding:2px 5px;background:var(--theme-surface-hover);color:var(--theme-text-primary)}
+.team-members-list>a>button{width:28px;height:28px;display:grid;place-items:center;padding:0;border:0;border-radius:9999px;background:transparent;color:var(--theme-text-secondary);opacity:0}
+.team-members-list>a:hover>button,.team-members-list>a>button:focus-visible{opacity:1}
+.team-members-list>a>button:hover{background:var(--theme-surface-active)}
+.team-members-list>a>button svg{width:14px;height:14px}
+@media(max-width:760px){.team-members-directory>header,.team-members-list>a{min-width:760px}}

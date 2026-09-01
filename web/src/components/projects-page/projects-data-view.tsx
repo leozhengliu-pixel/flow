@@ -8,6 +8,7 @@ import { CheckIcon, ChevronRightIcon, PlusIcon } from './projects-page-icons'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
 import { ProjectPropertyPicker, ProjectStatusGlyph, type ProjectPropertyOption } from './project-property-picker'
 import { ProjectDatePicker, ProjectTargetDatePicker } from './project-target-date-picker'
+import { projectLabelGroupProperty } from './projects-display-model'
 import './projects-page.css'
 
 export type ProjectPageItem = {
@@ -30,6 +31,8 @@ export type ProjectPageItem = {
   team?: { id: string, name: string }
   memberIds?: string[]
   labelIds?: string[]
+  initiativeNames?: string[]
+  labelsByGroup?: Record<string, Array<{ id: string; name: string; color: string }>>
   teamIds?: string[]
   rawStartDate?: string
   rawTargetDate?: string
@@ -66,7 +69,17 @@ export type ProjectsDataViewProps = {
   onSelectionChange?: (ids: string[]) => void
   onSort?: (column: ProjectSortColumn, direction: 'asc' | 'desc') => void
   onProjectAction?: (project: ProjectPageItem, action: ProjectAction) => void
+  projectMenu?: ProjectMenuIntegration
+  labelGroupProperties?: Array<{ id: string; name: string }>
   sort?: { column: ProjectSortColumn, direction: 'asc' | 'desc' }
+}
+
+export type ProjectMenuIntegration = {
+  isFavorite: (projectId: string) => boolean
+  subscriptionEvents: (projectId: string) => string[]
+  onFavoriteChange: (projectId: string, favorite: boolean) => Promise<unknown>
+  onSubscriptionEventsChange: (projectId: string, events: string[]) => Promise<unknown>
+  onCreateReminder: (projectId: string, remindAt: string) => Promise<unknown>
 }
 
 export type ProjectProperty = 'health' | 'priority' | 'lead' | 'members' | 'labels' | 'startDate' | 'targetDate' | 'status'
@@ -127,6 +140,8 @@ export function ProjectsDataView({
   onSelectionChange,
   onSort,
   onUpdateProject,
+  projectMenu,
+  labelGroupProperties = [],
   sort: externalSort,
 }: ProjectsDataViewProps) {
   const [collapsed, setCollapsed] = useState<string[]>([])
@@ -164,6 +179,8 @@ export function ProjectsDataView({
       onProjectAction={onProjectAction}
       onProjectVisualChange={onProjectVisualChange}
       onPropertyChange={onPropertyChange}
+      projectMenu={projectMenu}
+      labelGroupProperties={labelGroupProperties}
       onDropProject={projectId => {
         const project = findProject(groups, projectId)
         const destination = projectGroupProperty(group)
@@ -184,8 +201,8 @@ export function ProjectsDataView({
 
   if (layout === 'timeline') return <ProjectTimeline groups={groups} onOpenProject={onOpenProject} onUpdateProject={onUpdateProject} propertyOptions={propertyOptions}/>
 
-  return <div className="lp-project-table" role="grid" style={{ '--lp-project-grid': projectGrid(visible) } as CSSProperties}>
-    <ProjectTableHeader sort={sort} onSort={changeSort} visible={visible} />
+  return <div className="lp-project-table" role="grid" style={{ '--lp-project-grid': projectGrid(visible, labelGroupProperties) } as CSSProperties}>
+    <ProjectTableHeader labelGroupProperties={labelGroupProperties} sort={sort} onSort={changeSort} visible={visible} />
     {groups.map(group => {
       const isCollapsed = collapsed.includes(group.id)
     return <section aria-label={group.name} className="lp-project-group" key={group.id} role="rowgroup">
@@ -210,6 +227,8 @@ export function ProjectsDataView({
           onPropertyChange={onPropertyChange}
           onSelect={toggleSelection}
           propertyOptions={propertyOptions}
+          projectMenu={projectMenu}
+          labelGroupProperties={labelGroupProperties}
           selectedIds={selectedIds}
           visible={visible}
         />) : group.projects.map(project => <ProjectListRow
@@ -223,6 +242,8 @@ export function ProjectsDataView({
           onPropertyChange={onPropertyChange}
           onSelect={toggleSelection}
           propertyOptions={propertyOptions}
+          projectMenu={projectMenu}
+          labelGroupProperties={labelGroupProperties}
           project={project}
           selected={selectedIds.includes(project.id)}
           visible={visible}
@@ -232,7 +253,7 @@ export function ProjectsDataView({
   </div>
 }
 
-function ProjectSubgroup({ group, manualOrdering, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, onSelect, propertyOptions, selectedIds, visible }: {
+function ProjectSubgroup({ group, manualOrdering, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, onSelect, propertyOptions, projectMenu, labelGroupProperties, selectedIds, visible }: {
   group: ProjectDataGroup
   onOpen?: (project: ProjectPageItem) => void
   onOpenIssues?: (project: ProjectPageItem) => void
@@ -243,6 +264,8 @@ function ProjectSubgroup({ group, manualOrdering, onOpen, onOpenIssues, onOpenUp
   onPropertyChange?: (project: ProjectPageItem, property: ProjectProperty, value: string) => void
   onSelect: (id: string, range?: boolean) => void
   propertyOptions?: ProjectPropertyOptions
+  projectMenu?: ProjectMenuIntegration
+  labelGroupProperties?: Array<{ id: string; name: string }>
   selectedIds: string[]
   visible: Set<string>
 }) {
@@ -259,6 +282,8 @@ function ProjectSubgroup({ group, manualOrdering, onOpen, onOpenIssues, onOpenUp
       onPropertyChange={onPropertyChange}
       onSelect={onSelect}
       propertyOptions={propertyOptions}
+      projectMenu={projectMenu}
+      labelGroupProperties={labelGroupProperties}
       project={project}
       selected={selectedIds.includes(project.id)}
       visible={visible}
@@ -266,7 +291,7 @@ function ProjectSubgroup({ group, manualOrdering, onOpen, onOpenIssues, onOpenUp
   </div>
 }
 
-function ProjectTableHeader({ sort, onSort, visible }: { sort: { column: ProjectSortColumn, direction: 'asc' | 'desc' }, onSort: (column: ProjectSortColumn) => void, visible: Set<string> }) {
+function ProjectTableHeader({ labelGroupProperties, sort, onSort, visible }: { labelGroupProperties: Array<{ id: string; name: string }>; sort: { column: ProjectSortColumn, direction: 'asc' | 'desc' }, onSort: (column: ProjectSortColumn) => void, visible: Set<string> }) {
   const header = (column: ProjectSortColumn, label: string) => <button
     aria-label={`${sort.column === column ? sort.direction === 'asc' ? 'A–Z' : 'Z–A' : 'Order by'} ${label}`}
     className={sort.column === column ? 'is-sorted' : ''}
@@ -280,9 +305,11 @@ function ProjectTableHeader({ sort, onSort, visible }: { sort: { column: Project
     <div hidden={!visible.has('Health')} role="columnheader">{header('health', 'Health')}</div>
     <div hidden={!visible.has('Priority')} role="columnheader">{header('priority', 'Priority')}</div>
     <div hidden={!visible.has('Lead')} role="columnheader"><span>Lead</span></div>
+    <div hidden={!visible.has('Initiatives')} role="columnheader"><span>Initiatives</span></div>
     <div hidden={!visible.has('Target date')} role="columnheader">{header('targetDate', 'Target date')}</div>
     <div hidden={!visible.has('Issues')} role="columnheader"><span>Issues</span></div>
     <div hidden={!visible.has('Status')} role="columnheader">{header('status', 'Status')}</div>
+    {labelGroupProperties.filter(group => visible.has(projectLabelGroupProperty(group.id))).map(group => <div data-i18n-ignore key={group.id} role="columnheader"><span>{group.name}</span></div>)}
     <span />
   </div>
 }
@@ -314,10 +341,12 @@ type ProjectItemActions = {
   onProjectVisualChange?: (project: ProjectPageItem, icon: string, color: string) => void
   onPropertyChange?: (project: ProjectPageItem, property: ProjectProperty, value: string) => void
   propertyOptions?: ProjectPropertyOptions
+  projectMenu?: ProjectMenuIntegration
+  labelGroupProperties?: Array<{ id: string; name: string }>
   visible: Set<string>
 }
 
-function ProjectListRow({ project, selected, manualOrdering, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, onSelect, propertyOptions, visible }: ProjectItemActions & { selected: boolean; onSelect: (id: string, range?: boolean) => void }) {
+function ProjectListRow({ project, selected, manualOrdering, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, onSelect, propertyOptions, projectMenu, labelGroupProperties = [], visible }: ProjectItemActions & { selected: boolean; onSelect: (id: string, range?: boolean) => void }) {
   const [menuPoint, setMenuPoint] = useState<{ x: number, y: number } | null>(null)
   const statusOption = (propertyOptions?.status ?? PROPERTY_OPTIONS.status).find(option => option.value === project.status)
   const rowKey = (event: KeyboardEvent<HTMLAnchorElement>) => {
@@ -355,16 +384,18 @@ function ProjectListRow({ project, selected, manualOrdering, onOpen, onOpenIssue
       <div hidden={!visible.has('Health')} role="gridcell"><button aria-label={project.healthLabel ?? `${healthText(project.health)}. Click to open updates.`} className="lp-project-row__health" onClick={event => { stopPropagation(event); onOpenUpdates?.(project) }} type="button"><HealthIcon value={project.health} /><span>{healthText(project.health)}</span>{project.health !== 'no-update' && <small>· {compactAge(project.updatedAt)}</small>}</button></div>
       <div hidden={!visible.has('Priority')} role="gridcell"><ProjectPropertyPicker label={`${priorityText(project.priority)} Priority`} onChange={value => onPropertyChange?.(project, 'priority', value)} options={propertyOptions?.priority ?? PROPERTY_OPTIONS.priority} property="priority" value={project.priority}><DataViewPriorityIcon value={project.priority} /></ProjectPropertyPicker></div>
       <div className={`lp-project-row__lead ${project.lead ? '' : 'is-empty'}`} hidden={!visible.has('Lead')} role="gridcell"><LeadPropertyButton lead={project.lead} onChange={value => onPropertyChange?.(project, 'lead', value)} options={propertyOptions?.lead} /></div>
+      <div className="lp-project-row__initiatives" hidden={!visible.has('Initiatives')} role="gridcell"><span data-i18n-ignore>{project.initiativeNames?.join(', ')}</span></div>
       <div hidden={!visible.has('Target date')} role="gridcell"><ProjectTargetDatePicker buttonClassName="lp-project-row__date" displayValue={project.targetDate} onChange={value => onPropertyChange?.(project, 'targetDate', value)} value={project.rawTargetDate}>{project.targetDate || <span className="lp-project-row__date-placeholder">Set date</span>}</ProjectTargetDatePicker></div>
       <div hidden={!visible.has('Issues')} role="gridcell"><button aria-label={`Open ${project.name} issues`} className="lp-project-row__issues" onClick={event => { stopPropagation(event); onOpenIssues?.(project) }} type="button">{project.issueCount}</button></div>
       <div className="lp-project-row__status" hidden={!visible.has('Status')} role="gridcell"><ProjectPropertyPicker buttonClassName="lp-project-row__progress" label={`${project.progress}%`} onChange={value => onPropertyChange?.(project, 'status', value)} options={propertyOptions?.status ?? PROPERTY_OPTIONS.status} property="status" value={project.status}><ProjectStatusGlyph color={statusOption?.color} name={project.status} progress={project.progress / 100} type={statusOption?.statusType}/><span>{project.progress}%</span></ProjectPropertyPicker><ProjectProgressSparkline createdAt={project.createdAt} progress={project.progress} startDate={project.rawStartDate} targetDate={project.rawTargetDate}/></div>
+      {labelGroupProperties.filter(group => visible.has(projectLabelGroupProperty(group.id))).map(group => <div className="lp-project-row__label-group" data-i18n-ignore key={group.id} role="gridcell">{(project.labelsByGroup?.[group.id] ?? []).map(label => <span key={label.id}><i style={{ background: label.color }}/>{label.name}</span>)}</div>)}
       <span />
     </a>
-    <ProjectItemMenu manualOrdering={manualOrdering} onProjectAction={onProjectAction} onPropertyChange={onPropertyChange} options={propertyOptions} point={menuPoint} project={project} setPoint={setMenuPoint}/>
+    <ProjectItemMenu manualOrdering={manualOrdering} onProjectAction={onProjectAction} onPropertyChange={onPropertyChange} options={propertyOptions} point={menuPoint} project={project} projectMenu={projectMenu} setPoint={setMenuPoint}/>
   </>
 }
 
-function ProjectBoardColumn({ group, manualOrdering, onCreateProject, onDropProject, onKeyboardMove, onOpenProject, onOpenProjectIssues, onOpenProjectUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, propertyOptions, visible }: {
+function ProjectBoardColumn({ group, manualOrdering, onCreateProject, onDropProject, onKeyboardMove, onOpenProject, onOpenProjectIssues, onOpenProjectUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, propertyOptions, projectMenu, labelGroupProperties, visible }: {
   group: ProjectsDataViewProps['groups'][number]
   manualOrdering?: boolean
   onCreateProject?: (status: string) => void
@@ -377,11 +408,13 @@ function ProjectBoardColumn({ group, manualOrdering, onCreateProject, onDropProj
   onDropProject: (projectId: string) => boolean
   onKeyboardMove: (project: ProjectPageItem, direction: -1 | 1) => void
   propertyOptions?: ProjectPropertyOptions
+  projectMenu?: ProjectMenuIntegration
+  labelGroupProperties?: Array<{ id: string; name: string }>
   visible: Set<string>
 }) {
   const [collapsed, setCollapsed] = useState(false)
   const [dragOver, setDragOver] = useState(false)
-  const card = (project: ProjectPageItem) => <ProjectBoardCard key={project.id} manualOrdering={manualOrdering} onKeyboardMove={direction => onKeyboardMove(project, direction)} onOpen={onOpenProject} onOpenIssues={onOpenProjectIssues} onOpenUpdates={onOpenProjectUpdates} onProjectAction={onProjectAction} onProjectVisualChange={onProjectVisualChange} onPropertyChange={onPropertyChange} project={project} propertyOptions={propertyOptions} visible={visible} />
+  const card = (project: ProjectPageItem) => <ProjectBoardCard key={project.id} manualOrdering={manualOrdering} onKeyboardMove={direction => onKeyboardMove(project, direction)} onOpen={onOpenProject} onOpenIssues={onOpenProjectIssues} onOpenUpdates={onOpenProjectUpdates} onProjectAction={onProjectAction} onProjectVisualChange={onProjectVisualChange} onPropertyChange={onPropertyChange} project={project} projectMenu={projectMenu} propertyOptions={propertyOptions} labelGroupProperties={labelGroupProperties} visible={visible} />
   return <section aria-label={group.name} className="lp-project-board__column" data-collapsed={collapsed || undefined} data-drop-target={dragOver || undefined} onDragEnter={event => { if (event.dataTransfer.types.includes(PROJECT_DRAG_TYPE)) setDragOver(true) }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragOver(false) }} onDragOver={event => { if (event.dataTransfer.types.includes(PROJECT_DRAG_TYPE)) { event.preventDefault(); event.dataTransfer.dropEffect = 'move' } }} onDrop={event => { const projectId = event.dataTransfer.getData(PROJECT_DRAG_TYPE); if (projectId) { event.preventDefault(); onDropProject(projectId) } setDragOver(false) }}>
     <header><ProjectGroupStatus color={group.color} name={group.name} propertyOptions={propertyOptions}/><strong data-i18n-ignore>{group.name}</strong><span>{projectCount(group)}</span><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open group menu" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className="lp-project-board__group-menu" sideOffset={4}><DropdownMenu.Item onSelect={() => setCollapsed(value => !value)}>{collapsed ? 'Expand group' : 'Collapse group'}</DropdownMenu.Item><DropdownMenu.Item onSelect={() => onCreateProject?.(projectCreateStatus(group.name))}>Create new project</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root><button aria-label="Create new project" onClick={() => onCreateProject?.(projectCreateStatus(group.name))} type="button"><PlusIcon /></button></header>
     {!collapsed && <div className="lp-project-board__cards">
@@ -392,7 +425,7 @@ function ProjectBoardColumn({ group, manualOrdering, onCreateProject, onDropProj
   </section>
 }
 
-function ProjectBoardCard({ project, manualOrdering, onKeyboardMove, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, propertyOptions, visible }: ProjectItemActions & { onKeyboardMove: (direction: -1 | 1) => void }) {
+function ProjectBoardCard({ project, manualOrdering, onKeyboardMove, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, projectMenu, propertyOptions, labelGroupProperties = [], visible }: ProjectItemActions & { onKeyboardMove: (direction: -1 | 1) => void }) {
   const [menuPoint, setMenuPoint] = useState<{ x: number, y: number } | null>(null)
   return <>
     <a
@@ -419,11 +452,13 @@ function ProjectBoardCard({ project, manualOrdering, onKeyboardMove, onOpen, onO
       {visible.has('Summary') && project.summary && <p>{project.summary}</p>}
       <div className="lp-project-card__bottom">
         {visible.has('Target date') && <ProjectTargetDatePicker displayValue={project.targetDate} onChange={value => onPropertyChange?.(project, 'targetDate', value)} value={project.rawTargetDate}>{project.targetDate}</ProjectTargetDatePicker>}
+        {visible.has('Initiatives') && project.initiativeNames?.map(name => <span className="lp-project-card__initiative" data-i18n-ignore key={name}>{name}</span>)}
+        {labelGroupProperties.filter(group => visible.has(projectLabelGroupProperty(group.id))).flatMap(group => project.labelsByGroup?.[group.id] ?? []).map(label => <span className="lp-project-card__initiative" data-i18n-ignore key={label.id}><i style={{ background: label.color }}/>{label.name}</span>)}
         {project.milestone && <button className="lp-project-card__milestone" onClick={stopPropagation} type="button"><span />{project.milestone}</button>}
         {visible.has('Issues') && <button className="lp-project-card__issues" onClick={event => { stopPropagation(event); onOpenIssues?.(project) }} type="button">{project.issueCount} issues</button>}
       </div>
     </a>
-    <ProjectItemMenu manualOrdering={manualOrdering} onProjectAction={onProjectAction} onPropertyChange={onPropertyChange} options={propertyOptions} point={menuPoint} project={project} setPoint={setMenuPoint}/>
+    <ProjectItemMenu manualOrdering={manualOrdering} onProjectAction={onProjectAction} onPropertyChange={onPropertyChange} options={propertyOptions} point={menuPoint} project={project} projectMenu={projectMenu} setPoint={setMenuPoint}/>
   </>
 }
 
@@ -451,8 +486,8 @@ function openProjectLink(event: MouseEvent<HTMLAnchorElement>, project: ProjectP
   if (onOpen && !event.metaKey && !event.ctrlKey && !event.shiftKey && event.button === 0) { event.preventDefault(); onOpen(project) }
 }
 
-function ProjectItemMenu({ manualOrdering, onProjectAction, onPropertyChange, options, point, project, setPoint }: Pick<ProjectItemActions,'manualOrdering'|'onProjectAction'|'onPropertyChange'|'project'> & { options?: ProjectPropertyOptions; point: {x:number;y:number}|null; setPoint: (point:{x:number;y:number}|null)=>void }) {
-  return point ? <ProjectContextMenu manualOrdering={manualOrdering} options={options} project={project} onPropertyChange={(property,value)=>onPropertyChange?.(project,property,value)} onAction={action=>{setPoint(null);onProjectAction?.(project,action)}} onClose={()=>setPoint(null)} point={point}/> : null
+function ProjectItemMenu({ manualOrdering, onProjectAction, onPropertyChange, options, point, project, projectMenu, setPoint }: Pick<ProjectItemActions,'manualOrdering'|'onProjectAction'|'onPropertyChange'|'project'|'projectMenu'> & { options?: ProjectPropertyOptions; point: {x:number;y:number}|null; setPoint: (point:{x:number;y:number}|null)=>void }) {
+  return point ? <ProjectContextMenu integration={projectMenu} manualOrdering={manualOrdering} options={options} project={project} onPropertyChange={(property,value)=>onPropertyChange?.(project,property,value)} onAction={action=>{setPoint(null);onProjectAction?.(project,action)}} onClose={()=>setPoint(null)} point={point}/> : null
 }
 
 function LeadPropertyButton({ lead, onChange, options }: {
@@ -477,14 +512,15 @@ function LeadPropertyButton({ lead, onChange, options }: {
 type ProjectContextKind = ProjectProperty | 'copy-menu' | 'move-menu' | 'subscribe-menu' | 'remind-menu' | 'more-menu'
 type ProjectContextItem = { label: string; icon: ReactNode; action?: ProjectAction; kind?: ProjectContextKind; shortcut?: string; danger?: boolean; date?: 'startDate' | 'targetDate' }
 
-function ProjectContextMenu({ manualOrdering = false, point, onAction, onClose, onPropertyChange, options, project }: { manualOrdering?: boolean; point: { x: number, y: number }, onAction: (action: ProjectAction) => void, onClose: () => void, onPropertyChange: (property: ProjectProperty, value: string) => void, options?: ProjectPropertyOptions, project: ProjectPageItem }) {
+function ProjectContextMenu({ integration, manualOrdering = false, point, onAction, onClose, onPropertyChange, options, project }: { integration?: ProjectMenuIntegration; manualOrdering?: boolean; point: { x: number, y: number }, onAction: (action: ProjectAction) => void, onClose: () => void, onPropertyChange: (property: ProjectProperty, value: string) => void, options?: ProjectPropertyOptions, project: ProjectPageItem }) {
   const ref = useRef<HTMLDivElement>(null)
   const nestedRef = useRef<HTMLDivElement>(null)
   const [nested, setNested] = useState<ProjectContextKind | null>(null)
   const [query, setQuery] = useState('')
   const [nestedQuery, setNestedQuery] = useState('')
-  const [favorite, setFavorite] = useState(() => readStoredBoolean(`flow:project:${project.id}:favorite`, false))
-  const [subscriptions, setSubscriptions] = useState<Record<string, boolean>>(() => readStoredRecord(`flow:project:${project.id}:subscriptions`, DEFAULT_SUBSCRIPTIONS))
+  const favorite = integration?.isFavorite(project.id) ?? false
+  const subscriptionEvents = new Set(integration?.subscriptionEvents(project.id) ?? [])
+  const subscriptions = Object.fromEntries(Object.keys(SUBSCRIPTION_LABELS).map(event => [event, subscriptionEvents.has(event)]))
   useEffect(() => { ref.current?.querySelector<HTMLInputElement>('.lp-project-context__search input')?.focus() }, [])
   useEffect(() => setNestedQuery(''), [nested])
   useDismissibleLayer({ open: true, refs: [ref], onDismiss: onClose })
@@ -513,9 +549,7 @@ function ProjectContextMenu({ manualOrdering = false, point, onAction, onClose, 
   const invoke = (item: ProjectContextItem) => {
     if (item.kind) { setNested(item.kind); return }
     if (item.label === 'Favorite' || item.label === 'Unfavorite') {
-      const next = !favorite
-      setFavorite(next)
-      localStorage.setItem(`flow:project:${project.id}:favorite`, JSON.stringify(next))
+      void integration?.onFavoriteChange(project.id, !favorite)
       onClose()
       return
     }
@@ -556,7 +590,8 @@ function ProjectContextMenu({ manualOrdering = false, point, onAction, onClose, 
         project={project}
         query={nestedQuery}
         setQuery={setNestedQuery}
-        setSubscriptions={next => { setSubscriptions(next); localStorage.setItem(`flow:project:${project.id}:subscriptions`, JSON.stringify(next)) }}
+        setSubscriptions={next => { void integration?.onSubscriptionEventsChange(project.id, Object.entries(next).filter(([, enabled]) => enabled).map(([event]) => event)) }}
+        onCreateReminder={integration ? remindAt => integration.onCreateReminder(project.id, remindAt) : undefined}
         subscriptions={subscriptions}
       />
     </div>}
@@ -567,7 +602,7 @@ function ContextItemContent({ item }: { item: ProjectContextItem }) {
   return <><span className="lp-project-context__icon">{item.icon}</span><span className="lp-project-context__label">{item.label}</span>{item.shortcut && <kbd>{item.shortcut}</kbd>}{(item.kind || item.date) && <ChevronRightIcon />}</>
 }
 
-function ProjectContextSubmenu({ kind, manualOrdering, onAction, onClose, onPropertyChange, options, project, query, setQuery, setSubscriptions, subscriptions }: {
+function ProjectContextSubmenu({ kind, manualOrdering, onAction, onClose, onPropertyChange, options, project, query, setQuery, setSubscriptions, subscriptions, onCreateReminder }: {
   kind: ProjectContextKind
   manualOrdering: boolean
   onAction: (action: ProjectAction) => void
@@ -579,6 +614,7 @@ function ProjectContextSubmenu({ kind, manualOrdering, onAction, onClose, onProp
   setQuery: (value: string) => void
   setSubscriptions: (value: Record<string, boolean>) => void
   subscriptions: Record<string, boolean>
+  onCreateReminder?: (remindAt: string) => Promise<unknown>
 }) {
   if (kind === 'copy-menu') return <SimpleSubmenu searchable items={[
     { icon: <Link2/>, label: 'Copy URL', shortcut: '⌘ ⇧ ,' },
@@ -592,7 +628,7 @@ function ProjectContextSubmenu({ kind, manualOrdering, onAction, onClose, onProp
 
   if (kind === 'subscribe-menu') return <SimpleSubmenu searchable items={Object.entries(SUBSCRIPTION_LABELS).map(([id, label]) => ({ checked: subscriptions[id], id, label }))} onChoose={(_label, id) => setSubscriptions({ ...subscriptions, [id]: !subscriptions[id] })} query={query} setQuery={setQuery}/>
 
-  if (kind === 'remind-menu') return <SimpleSubmenu searchable items={reminderChoices()} onChoose={(_label, id) => { localStorage.setItem(`flow:project:${project.id}:reminder`, reminderTimestamp(id)); onClose() }} query={query} setQuery={setQuery}/>
+  if (kind === 'remind-menu') return <SimpleSubmenu searchable items={reminderChoices()} onChoose={(_label, id) => { void onCreateReminder?.(reminderTimestamp(id)); onClose() }} query={query} setQuery={setQuery}/>
 
   if (kind === 'more-menu') return <SimpleSubmenu searchable items={[
     { label: 'Initiatives', shortcut: 'P then N' }, { label: 'Dependencies' }, { label: 'Add customer request…', shortcut: 'Ctrl R' }, { label: 'Change update schedule…' }, { label: 'Configure Slack notifications…', disabled: true }, { label: 'Rename…', shortcut: '⇧ R' },
@@ -705,12 +741,9 @@ const SUBSCRIPTION_LABELS: Record<string, string> = {
   updatePosted: 'New project update is posted',
   pulse: 'Subscribe to project updates in Pulse',
 }
-const DEFAULT_SUBSCRIPTIONS = { issueAdded: false, issueCompleted: false, descriptionChanged: true, customerRequest: true, updatePosted: true, pulse: false }
 function reminderChoices(): SimpleItem[] { return [{ id: 'hour', label: 'An hour from now', detail: formatReminder(60) }, { id: 'tomorrow', label: 'Tomorrow', detail: formatReminder(24 * 60) }, { id: 'week', label: 'Next week', detail: formatReminder(7 * 24 * 60) }, { id: 'month', label: 'A month from now', detail: formatReminder(30 * 24 * 60) }, { id: 'custom', label: 'Custom…' }] }
 function reminderTimestamp(id: string) { const minutes = ({ hour: 60, tomorrow: 1440, week: 10080, month: 43200, custom: 1440 } as Record<string, number>)[id] ?? 1440; return new Date(Date.now() + minutes * 60_000).toISOString() }
 function formatReminder(minutes: number) { return new Intl.DateTimeFormat('en', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(Date.now() + minutes * 60_000)) }
-function readStoredBoolean(key: string, fallback: boolean) { try { const value = localStorage.getItem(key); return value === null ? fallback : Boolean(JSON.parse(value)) } catch { return fallback } }
-function readStoredRecord(key: string, fallback: Record<string, boolean>) { try { const value = localStorage.getItem(key); return value ? { ...fallback, ...JSON.parse(value) } : fallback } catch { return fallback } }
 async function copyProjectValue(project: ProjectPageItem, label: string) {
   const url = project.href ? new URL(project.href, window.location.origin).href : window.location.href
   const value = label === 'Copy URL' ? url : label === 'Copy title' ? project.name : label === 'Copy title as link' ? `[${project.name}](${url})` : label === 'Copy overview as Markdown' ? `# ${project.name}\n\n${project.summary ?? ''}` : project.summary ?? project.name
@@ -851,7 +884,7 @@ function healthText(health: ProjectPageItem['health']) {
   return ({ 'on-track': 'On track', 'at-risk': 'At risk', 'off-track': 'Off track', 'no-update': 'No updates' })[health]
 }
 
-function projectGrid(visible: Set<string>) {
+function projectGrid(visible: Set<string>, labelGroupProperties: Array<{ id: string; name: string }>) {
   return [
     '8px',
     '18px',
@@ -859,9 +892,11 @@ function projectGrid(visible: Set<string>) {
     visible.has('Health') ? '130px' : '0px',
     visible.has('Priority') ? '68px' : '0px',
     visible.has('Lead') ? '48px' : '0px',
+    visible.has('Initiatives') ? '120px' : '0px',
     visible.has('Target date') ? '92px' : '0px',
     visible.has('Issues') ? '49px' : '0px',
     visible.has('Status') ? '120px' : '0px',
+    ...labelGroupProperties.filter(group => visible.has(projectLabelGroupProperty(group.id))).map(() => '120px'),
     '8px',
   ].join(' ')
 }

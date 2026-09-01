@@ -304,6 +304,14 @@ func TestReleaseAuthorizationAndFeatureGate(t *testing.T) {
 	authRequest[any](t, admin, http.MethodPut, server.URL+"/api/issues/"+publicIssue.ID+"/releases", map[string]any{"releaseIds": []string{publicRelease.ID}}, "test-workspace", http.StatusForbidden)
 	authRequest[any](t, admin, http.MethodPost, server.URL+"/api/release-pipelines/"+publicPipeline.ID+"/access-key", nil, "test-workspace", http.StatusForbidden)
 	authRequest[any](t, admin, http.MethodPost, server.URL+"/api/trash/"+pipelineTrashID+"/restore", nil, "test-workspace", http.StatusForbidden)
+	err = repository.MutateWorkspace(context.Background(), "test-workspace", "test.dashboards_disabled", "workspace", nil, func(data *domain.Bootstrap) error {
+		data.WorkspaceSettings.FeatureFlags["dashboards"] = false
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	authRequest[any](t, admin, http.MethodGet, server.URL+"/api/dashboards", nil, "test-workspace", http.StatusForbidden)
 }
 
 func TestAuthenticationRateLimit(t *testing.T) {

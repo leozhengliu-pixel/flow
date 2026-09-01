@@ -13,6 +13,7 @@ import (
 type loopInput struct {
 	Name                       *string        `json:"name,omitempty"`
 	Icon                       *string        `json:"icon,omitempty"`
+	Color                      *string        `json:"color,omitempty"`
 	Level                      *string        `json:"level,omitempty"`
 	TriggerType                *string        `json:"triggerType,omitempty"`
 	TriggerConfig              map[string]any `json:"triggerConfig,omitempty"`
@@ -48,6 +49,9 @@ func applyLoopInput(loop *domain.Loop, input loopInput) {
 	}
 	if input.Icon != nil {
 		loop.Icon = strings.TrimSpace(*input.Icon)
+	}
+	if input.Color != nil {
+		loop.Color = strings.TrimSpace(*input.Color)
 	}
 	if input.Level != nil {
 		loop.Level = *input.Level
@@ -115,7 +119,7 @@ func (s *server) createLoop(w http.ResponseWriter, r *http.Request) {
 	var created domain.Loop
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "loop.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
-		created = domain.Loop{ID: fmt.Sprintf("loop_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), Icon: "repeat", Level: "workspace", TriggerType: "schedule", TriggerConfig: map[string]any{"interval": 1, "unit": "day", "time": "10:00"}, Instructions: "", ConnectorIDs: []string{}, TeamAccess: "allPublic", AllowChangesOutsideTrigger: true, Enabled: true, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
+		created = domain.Loop{ID: fmt.Sprintf("loop_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), Icon: "Automation", Color: "#d9b84b", Level: "workspace", TriggerType: "schedule", TriggerConfig: map[string]any{"interval": 1, "unit": "day", "time": "10:00"}, Instructions: "", ConnectorIDs: []string{}, TeamAccess: "allPublic", AllowChangesOutsideTrigger: true, Enabled: true, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
 		applyLoopInput(&created, input)
 		if created.TriggerConfig == nil {
 			created.TriggerConfig = map[string]any{}
