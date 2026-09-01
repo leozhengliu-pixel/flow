@@ -5586,7 +5586,13 @@ function App() {
               onCreateReminder={addProjectReminder}
               onCreateSavedView={addSavedView}
               onUpdateSavedView={changeSavedView}
-              onDeleteSavedView={removeSavedViewOnly}
+              onDeleteSavedView={async (view) => {
+                await removeSavedViewOnly(view);
+                navigateTo(
+                  projectPath(data.workspace.urlKey, selectedProject, "issues"),
+                  { replace: true },
+                );
+              }}
               onOpenIssue={openIssue}
               onUpdateIssue={updateIssueFromPage}
               onDeleteIssues={deleteIssuesFromPage}
