@@ -1,48 +1,914 @@
-.panel{position:absolute;z-index:90;right:0;top:88px;bottom:0;width:400px;padding:0 8px 8px 4px;overflow:auto;color:var(--text);font-family:"Inter Variable","SF Pro Display",-apple-system,system-ui,"Segoe UI",sans-serif}
-.identityCard,.metadataCard,.summaryCard,.insightIntro,.insightCard{border:.5px solid var(--theme-border);border-radius:10px;background:var(--theme-surface-1);box-shadow:0 .5px 1px 1px var(--shadow-color-card)}
-.identityCard{min-height:82px;display:grid;grid-template-columns:28px minmax(0,1fr) 24px 28px;grid-template-rows:40px auto;align-items:center;padding:8px 10px 9px 12px}.identityCard h2{min-width:0;margin:0;color:var(--text);font-size:15px;font-weight:600;line-height:23px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.viewIcon{width:18px;height:18px;color:var(--muted)}.identityCard p{grid-column:1/5;margin:1px 0 0;color:var(--muted);font-size:13px;line-height:19px}.iconButton,.mobileClose{width:24px;height:24px;display:grid;place-items:center;padding:0;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--muted)}.iconButton:hover,.iconButton[aria-expanded=true],.mobileClose:hover{background:var(--theme-surface-hover);color:var(--text)}.mobileClose{display:none}.identityCard>:global(button[aria-label$="view options"]){width:28px;height:28px;background:transparent}
-.metadataCard{margin-top:8px;padding:8px 12px}.metadataCard>div{height:35px;display:grid;grid-template-columns:92px minmax(0,1fr);align-items:center;font-size:13px}.metadataCard>div>span{color:var(--muted)}.metadataCard strong{min-width:0;display:flex;align-items:center;gap:8px;overflow:hidden;color:var(--text);font-weight:450;text-overflow:ellipsis;white-space:nowrap}.metadataCard strong>svg{width:15px;height:15px;color:var(--muted)}.avatar{width:18px;height:18px;display:grid;place-items:center;border-radius:50%;background:var(--chart-cyan);color:var(--on-accent);font-size:8px;font-weight:600}
-.summaryCard{min-height:calc(100% - 183px);margin-top:8px;padding:10px 12px}.tabs{height:32px;display:flex;align-items:center;gap:6px}.tabs button{min-width:0;height:28px;flex:1;padding:0 12px;border:.5px solid var(--theme-border);border-radius:9999px;background:var(--theme-surface-1);color:var(--muted);font:500 12px inherit}.tabs button[aria-selected=true]{border-color:transparent;background:var(--theme-surface-active);color:var(--text)}.tabs button:focus-visible,.summaryItem:focus-visible,.iconButton:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}.summaryList{margin-top:8px}.summaryItem{width:100%;height:42px;display:flex;align-items:center;gap:8px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:var(--text);font:13px inherit;text-align:left}.summaryItem:hover{background:var(--theme-surface-hover)}.summaryItem>span:nth-child(2){min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.summaryItem small{display:none;color:var(--muted);font-size:12px}.summaryItem:hover small,.summaryItem:focus-visible small{display:block}.summaryItem b{width:24px;color:var(--muted);font-weight:450;text-align:center}.dot{width:9px;height:9px;flex:0 0 9px;border-radius:50%}.avatarMark{width:18px;height:18px;display:grid;place-items:center;border-radius:50%;background:var(--chart-cyan);color:var(--on-accent)}.projectMark{width:18px;height:18px;display:grid;place-items:center;color:var(--muted)}.empty{min-height:90px;display:grid;place-items:center;color:var(--muted);font-size:12px}
-.insightsPanel{top:96px;width:346px;display:flex;flex-direction:column;padding:0 0 8px}.insightIntro{position:relative;min-height:118px;padding:16px 44px 14px 20px}.insightIntro p{margin:0;color:var(--text);font-size:13px;line-height:18px}.insightIntro>.iconButton{position:absolute;right:12px;top:14px}.insightIntro a{display:inline-flex;margin-top:14px;color:var(--text);font-size:13px;text-decoration:none}.insightIntro a:before{content:"▣";margin-right:7px;color:var(--chart-accent)}.insightCard{position:relative;min-height:0;flex:1;display:flex;flex-direction:column;margin-top:8px;overflow:hidden}.insightCard:first-child{margin-top:0}.insightCard>header{height:42px;flex:0 0 42px;display:flex;align-items:center;justify-content:space-between;padding:0 12px 0 16px}.insightCard>header strong{font-size:14px;font-weight:500}.insightCard>header>div{display:flex;gap:4px}.panelClose{display:none}.insightControls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;padding:10px 16px 0}.insightControls label{min-width:0;display:flex;flex-direction:column;gap:5px;color:var(--muted);font-size:12px}.insightSelect{width:100%;height:30px;display:flex;align-items:center;gap:6px;padding:0 8px 0 10px;border:.5px solid transparent;border-radius:8px;background:transparent;color:var(--text);font:500 13px inherit;text-align:left;outline:0}.insightSelect>span{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.insightSelect>svg{width:12px;height:12px}.insightSelect:hover,.insightSelect:focus-visible,.insightSelect[data-state=open]{border-color:var(--theme-border);background:var(--theme-surface-hover)}.chart{height:244px;flex:0 0 244px;display:flex;align-items:flex-end;justify-content:space-around;gap:8px;margin:16px 16px 0;padding:20px 8px 31px;border-bottom:.5px solid var(--theme-border);background:repeating-linear-gradient(to bottom,transparent 0,transparent 38px,var(--theme-border) 39px,transparent 40px)}.chartColumn{position:relative;min-width:30px;max-width:90px;height:100%;flex:1;display:flex;align-items:center;justify-content:flex-end;flex-direction:column}.chartBar{width:11px;min-height:4px;display:flex;flex-direction:column-reverse;overflow:hidden}.chartBar>i{min-height:2px}.chartColumn>span{position:absolute;bottom:-24px;max-width:90px;overflow:hidden;color:var(--muted);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.chartColumn>small{position:absolute;right:calc(50% - 22px);top:0;color:var(--muted);font-size:10px}.insightTable{min-width:100%;overflow:auto;color:var(--muted);font-size:11px}.insightTableRow{min-width:max-content;height:37px;display:grid;grid-template-columns:var(--insight-columns);border-bottom:.5px solid var(--theme-border)}.insightTableRow>span{min-width:0;display:flex;align-items:center;gap:7px;padding:0 12px;border-right:.5px solid var(--theme-border);overflow:hidden;white-space:nowrap}.insightTableRow b{overflow:hidden;color:inherit;font-weight:450;text-overflow:ellipsis}.insightTableRow:not(:first-child){color:var(--text);font-size:12px}.legendMark,.tableMark{width:8px;height:8px;flex:0 0 8px;border-radius:50%}.tableMark{background:var(--muted)}.saveInsight{height:34px;min-height:34px;display:block;margin:auto 0 0 auto;padding:0 16px;border:0;background:transparent;color:var(--accent-primary);font:12px inherit}.saveInsight:disabled{color:var(--muted);opacity:.55}
-.insightMenu{z-index:620;min-width:188px;padding:6px;border:.5px solid var(--theme-border-strong);border-radius:12px;background:var(--theme-surface-2);box-shadow:var(--menu-shadow);color:var(--text);font:13px/1.5 "Inter Variable","SF Pro Display",-apple-system,system-ui,"Segoe UI",sans-serif;outline:0;transform-origin:var(--radix-dropdown-menu-content-transform-origin)}.insightMenu[data-state=open]{animation:insightMenuIn 120ms cubic-bezier(.2,.8,.2,1)}.insightMenuItem{min-height:32px;display:flex;align-items:center;gap:9px;padding:0 8px;border-radius:6px;outline:0;cursor:default}.insightMenuItem[data-highlighted]{background:var(--theme-surface-hover)}.insightMenuItem>svg,.insightMenuIcon>svg{width:15px;height:15px;color:var(--muted)}.insightMenu>div[role=separator],.insightMenuScroll>div[role=separator]{height:.5px;margin:5px -1px;background:var(--theme-border)}.insightSelectMenu{width:220px;max-height:min(520px,calc(100vh - 24px));padding:0;overflow:hidden}.insightSubMenu{max-height:min(440px,calc(100vh - 24px));overflow:auto}.insightMenuScroll{max-height:min(490px,calc(100vh - 56px));padding:6px;overflow:auto}.insightSearch{position:absolute;left:-99999px;width:1px;height:1px;overflow:hidden}.insightMenuIcon{width:16px;height:16px;display:grid;place-items:center;flex:0 0 16px}.insightMenuCopy{min-width:0;flex:1;display:flex;flex-direction:column}.insightMenuCopy b{overflow:hidden;font:450 13px/18px inherit;text-overflow:ellipsis;white-space:nowrap}.insightMenuCopy small{display:none;color:var(--muted);font-size:11px}.insightDisplayMenu .insightMenuCopy small{display:block}.trailingCheck,.menuChevron{width:14px!important;height:14px!important;margin-left:auto;flex:0 0 14px}.optionDot{width:9px;height:9px;display:block;border-radius:50%}.insightMenuEmpty{padding:12px;color:var(--muted);text-align:center}.insightDisplayMenu{width:232px}.insightDisplayMenu .insightMenuItem>span:first-child{flex:1}.menuCheckbox{width:15px;height:15px;display:grid;place-items:center;flex:0 0 15px;border:.5px solid var(--theme-border-strong);border-radius:4px}.menuCheckbox svg{width:11px;height:11px}.expanded{position:fixed;z-index:700;left:244px;right:8px;top:8px;bottom:8px;width:auto;height:auto;padding:0;background:var(--bg-panel);box-shadow:0 18px 60px var(--shadow-color-overlay)}.expanded .insightCard{margin:0}.expanded .chart{height:min(55vh,520px);flex-basis:min(55vh,520px)}
-@keyframes insightMenuIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
-.insightDisplayPopover{z-index:620;width:300px;padding:8px 0;border:.5px solid var(--theme-border-strong);border-radius:12px;background:var(--theme-surface-2);box-shadow:var(--menu-shadow);color:var(--text);font:450 13px/19.5px "Inter Variable","SF Pro Display",-apple-system,system-ui,"Segoe UI",sans-serif;outline:0;transform-origin:var(--radix-popover-content-transform-origin)}
-.insightDisplayPopover[data-state=open]{animation:insightMenuIn 120ms cubic-bezier(.2,.8,.2,1)}
-.insightDisplayRow{height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 16px}
-.insightDisplaySeparator{height:.5px;background:var(--theme-border)}
-.insightToggle{width:20px;height:12px;display:flex;align-items:center;padding:1px;border:0;border-radius:9999px;background:var(--theme-border-strong)}
-.insightToggle i{width:10px;height:10px;border-radius:50%;background:var(--theme-surface-2);transition:transform 120ms cubic-bezier(.2,.8,.2,1)}
-.insightToggle[aria-checked=true]{background:var(--accent-primary)}
-.insightToggle[aria-checked=true] i{transform:translateX(8px)}
-.insightColorSelect{height:24px;display:flex;align-items:center;gap:6px;padding:0 8px;border:.5px solid var(--theme-border);border-radius:6px;background:var(--theme-surface-1);color:var(--text);font:450 12px inherit}
-.insightColorSelect svg{width:12px;height:12px;color:var(--muted)}
-.insightsPanel{top:88px}
-.insightsPanel.expanded{top:8px;bottom:8px}
-.insightCard>header{margin-top:12px;padding-right:16px}
-.insightCard>header>div{gap:6px}
-.insightControls{gap:16px;padding-top:0}
-.insightSelect{font-family:inherit;font-size:13px;font-weight:500;line-height:19.5px}
-.insightSelect{position:relative;padding-right:28px}
-.insightSelect>svg{position:absolute;right:10px}
-.expanded{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:44px minmax(0,1fr);overflow:hidden}
-.fullscreenHeader{grid-column:1/3;display:flex;align-items:center;gap:7px;padding:0 8px 0 16px;border-bottom:.5px solid var(--theme-border);font-size:13px}
-.fullscreenHeader>strong{font-weight:500}.fullscreenHeader>span{color:var(--muted)}.fullscreenHeader>svg{width:12px;color:var(--muted)}
-.fullscreenHeader>.iconButton:last-child{margin-left:auto}
-.expanded .insightIntro{display:none}.expanded .insightCard{grid-column:1;grid-row:2;border:0;border-right:.5px solid var(--theme-border);border-radius:0;box-shadow:none}
-.expanded .insightControls,.expanded .saveInsight{display:none}
-.expanded .insightCard>header{display:flex;height:42px;flex-basis:42px;margin-top:0;padding:0 14px 0 16px}
-.expanded .insightCard>header>div>button:not(:nth-of-type(2)){display:none}
-.expanded .chart{height:340px;flex-basis:340px;margin:0;padding:24px 18px 34px}
-.expanded .insightTable{flex:1;border-top:.5px solid var(--theme-border)}
-.expanded .insightTableRow[aria-selected=true]{outline:1px solid var(--focus-ring);outline-offset:-1px}
-.chartColumn[role=button]{cursor:pointer;outline:0}.chartColumn[role=button]:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-.fullscreenIssues{min-width:0;grid-column:2;grid-row:2;overflow:hidden;background:var(--theme-surface-1)}
-.fullscreenIssues>header{height:42px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:.5px solid var(--theme-border)}
-.fullscreenIssues>header>i,.fullscreenIssues a>i{width:12px;height:12px;flex:0 0 12px;border:1px solid var(--muted);border-radius:50%}
-.fullscreenIssues>header strong{font-size:13px;font-weight:500}.fullscreenIssues>header span{color:var(--muted);font-size:12px}
-.fullscreenIssues>div{height:calc(100% - 42px);overflow:auto}
-.fullscreenIssues a{height:44px;display:grid;grid-template-columns:20px 14px 62px minmax(0,1fr) 24px;align-items:center;gap:7px;padding:0 12px;border-bottom:.5px solid var(--theme-border);color:var(--text);text-decoration:none}
-.fullscreenIssues a:hover{background:var(--theme-surface-hover)}.fullscreenIssues a small{color:var(--muted);font-size:12px}.fullscreenIssues a strong{overflow:hidden;font-size:13px;font-weight:500;text-overflow:ellipsis;white-space:nowrap}.fullscreenIssues a b{width:20px;height:20px;display:grid;place-items:center;border-radius:50%;background:var(--chart-cyan);color:var(--on-accent);font-size:8px}.issueDrag{color:var(--muted);letter-spacing:2px}
-:global(:root[data-theme="light"]) .identityCard,:global(:root[data-theme="light"]) .metadataCard,:global(:root[data-theme="light"]) .summaryCard,:global(:root[data-theme="light"]) .insightIntro,:global(:root[data-theme="light"]) .insightCard{border-color:var(--theme-border);background:var(--theme-surface-2);box-shadow:0 3px 6px -2px var(--shadow-color-faint),0 1px 1px var(--shadow-color-soft)}
-:global(:root[data-theme="light"]) .insightMenu{border-color:var(--theme-border-strong);background:var(--theme-surface-2);box-shadow:0 8px 24px var(--shadow-color-raised),0 2px 7px var(--shadow-color-medium)}
-@media(max-width:800px){.panel{top:88px;width:min(400px,calc(100vw - 24px));padding-right:0;background:var(--bg-panel);box-shadow:-16px 0 32px var(--overlay-medium)}.expanded{left:8px;right:8px}.mobileClose,.panelClose{display:grid}.identityCard{grid-template-columns:28px minmax(0,1fr) 24px 28px 24px}.identityCard p{grid-column:1/6}}
+.panel {
+  position: absolute;
+  z-index: 90;
+  right: 0;
+  top: 88px;
+  bottom: 0;
+  width: 400px;
+  padding: 0 8px 8px 4px;
+  overflow: auto;
+  color: var(--text);
+  font-family:
+    "Inter Variable",
+    "SF Pro Display",
+    -apple-system,
+    system-ui,
+    "Segoe UI",
+    sans-serif;
+}
+.identityCard,
+.metadataCard,
+.summaryCard,
+.insightIntro,
+.insightCard {
+  border: 0.5px solid var(--theme-border);
+  border-radius: 10px;
+  background: var(--theme-surface-1);
+  box-shadow: 0 0.5px 1px 1px var(--shadow-color-card);
+}
+.identityCard {
+  min-height: 82px;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 24px 28px;
+  grid-template-rows: 40px auto;
+  align-items: center;
+  padding: 8px 10px 9px 12px;
+}
+.identityCard h2 {
+  min-width: 0;
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 23px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.viewIcon {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+}
+.identityCard p {
+  grid-column: 1/5;
+  margin: 1px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 19px;
+}
+.iconButton,
+.mobileClose {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0.5px solid transparent;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--muted);
+}
+.iconButton:hover,
+.iconButton[aria-expanded="true"],
+.mobileClose:hover {
+  background: var(--theme-surface-hover);
+  color: var(--text);
+}
+.mobileClose {
+  display: none;
+}
+.identityCard > :global(button[aria-label$="view options"]) {
+  width: 28px;
+  height: 28px;
+  background: transparent;
+}
+.metadataCard {
+  margin-top: 8px;
+  padding: 8px 12px;
+}
+.metadataCard > div {
+  height: 35px;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  font-size: 13px;
+}
+.metadataCard > div > span {
+  color: var(--muted);
+}
+.metadataCard strong {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 450;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.metadataCard strong > svg {
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+}
+.avatar {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--chart-cyan);
+  color: var(--on-accent);
+  font-size: 8px;
+  font-weight: 600;
+}
+.summaryCard {
+  min-height: calc(100% - 183px);
+  margin-top: 8px;
+  padding: 10px 12px;
+}
+.tabs {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tabs button {
+  min-width: 0;
+  height: 28px;
+  flex: 1;
+  padding: 0 12px;
+  border: 0.5px solid var(--theme-border);
+  border-radius: 9999px;
+  background: var(--theme-surface-1);
+  color: var(--muted);
+  font: 500 12px inherit;
+}
+.tabs button[aria-selected="true"] {
+  border-color: transparent;
+  background: var(--theme-surface-active);
+  color: var(--text);
+}
+.tabs button:focus-visible,
+.summaryItem:focus-visible,
+.iconButton:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.summaryList {
+  margin-top: 8px;
+}
+.summaryItem {
+  width: 100%;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: 13px inherit;
+  text-align: left;
+}
+.summaryItem:hover {
+  background: var(--theme-surface-hover);
+}
+.summaryItem > span:nth-child(2) {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.summaryItem small {
+  display: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+.summaryItem:hover small,
+.summaryItem:focus-visible small {
+  display: block;
+}
+.summaryItem b {
+  width: 24px;
+  color: var(--muted);
+  font-weight: 450;
+  text-align: center;
+}
+.dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-radius: 50%;
+}
+.avatarMark {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--chart-cyan);
+  color: var(--on-accent);
+}
+.projectMark {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+.empty {
+  min-height: 90px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+.insightsPanel {
+  top: 96px;
+  width: 346px;
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 8px;
+}
+.insightIntro {
+  position: relative;
+  min-height: 118px;
+  padding: 16px 44px 14px 20px;
+}
+.insightIntro p {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 18px;
+}
+.insightIntro > .iconButton {
+  position: absolute;
+  right: 12px;
+  top: 14px;
+}
+.insightIntro a {
+  display: inline-flex;
+  margin-top: 14px;
+  color: var(--text);
+  font-size: 13px;
+  text-decoration: none;
+}
+.insightIntro a:before {
+  content: "▣";
+  margin-right: 7px;
+  color: var(--chart-accent);
+}
+.insightCard {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.insightCard:first-child {
+  margin-top: 0;
+}
+.insightCard > header {
+  height: 42px;
+  flex: 0 0 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px 0 16px;
+}
+.insightCard > header strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+.insightCard > header > div {
+  display: flex;
+  gap: 4px;
+}
+.panelClose {
+  display: none;
+}
+.insightControls {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  padding: 10px 16px 0;
+}
+.insightControls label {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.insightSelect {
+  width: 100%;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 10px;
+  border: 0.5px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: 500 13px inherit;
+  text-align: left;
+  outline: 0;
+}
+.insightSelect > span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.insightSelect > svg {
+  width: 12px;
+  height: 12px;
+}
+.insightSelect:hover,
+.insightSelect:focus-visible,
+.insightSelect[data-state="open"] {
+  border-color: var(--theme-border);
+  background: var(--theme-surface-hover);
+}
+.chart {
+  height: 244px;
+  flex: 0 0 244px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  gap: 8px;
+  margin: 16px 16px 0;
+  padding: 20px 8px 31px;
+  border-bottom: 0.5px solid var(--theme-border);
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 38px,
+    var(--theme-border) 39px,
+    transparent 40px
+  );
+}
+.chartColumn {
+  position: relative;
+  min-width: 30px;
+  max-width: 90px;
+  height: 100%;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-direction: column;
+}
+.chartBar {
+  width: 11px;
+  min-height: 4px;
+  display: flex;
+  flex-direction: column-reverse;
+  overflow: hidden;
+}
+.chartBar > i {
+  min-height: 2px;
+}
+.chartColumn > span {
+  position: absolute;
+  bottom: -24px;
+  max-width: 90px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chartColumn > small {
+  position: absolute;
+  right: calc(50% - 22px);
+  top: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+.insightTable {
+  min-width: 100%;
+  overflow: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+.insightTableRow {
+  min-width: max-content;
+  height: 37px;
+  display: grid;
+  grid-template-columns: var(--insight-columns);
+  border-bottom: 0.5px solid var(--theme-border);
+}
+.insightTableRow > span {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border-right: 0.5px solid var(--theme-border);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.insightTableRow b {
+  overflow: hidden;
+  color: inherit;
+  font-weight: 450;
+  text-overflow: ellipsis;
+}
+.insightTableRow:not(:first-child) {
+  color: var(--text);
+  font-size: 12px;
+}
+.legendMark,
+.tableMark {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+}
+.tableMark {
+  background: var(--muted);
+}
+.saveInsight {
+  height: 34px;
+  min-height: 34px;
+  display: block;
+  margin: auto 0 0 auto;
+  padding: 0 16px;
+  border: 0;
+  background: transparent;
+  color: var(--accent-primary);
+  font: 12px inherit;
+}
+.saveInsight:disabled {
+  color: var(--muted);
+  opacity: 0.55;
+}
+.insightMenu {
+  z-index: 620;
+  min-width: 188px;
+  padding: 6px;
+  border: 0.5px solid var(--theme-border-strong);
+  border-radius: 12px;
+  background: var(--theme-surface-2);
+  box-shadow: var(--menu-shadow);
+  color: var(--text);
+  font:
+    13px/1.5 "Inter Variable",
+    "SF Pro Display",
+    -apple-system,
+    system-ui,
+    "Segoe UI",
+    sans-serif;
+  outline: 0;
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin);
+}
+.insightMenu[data-state="open"] {
+  animation: insightMenuIn 120ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.insightMenuItem {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 8px;
+  border-radius: 6px;
+  outline: 0;
+  cursor: default;
+}
+.insightMenuItem[data-highlighted] {
+  background: var(--theme-surface-hover);
+}
+.insightMenuItem > svg,
+.insightMenuIcon > svg {
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+}
+.insightMenu > div[role="separator"],
+.insightMenuScroll > div[role="separator"] {
+  height: 0.5px;
+  margin: 5px -1px;
+  background: var(--theme-border);
+}
+.insightSelectMenu {
+  width: 220px;
+  max-height: min(520px, calc(100vh - 24px));
+  padding: 0;
+  overflow: hidden;
+}
+.insightSubMenu {
+  max-height: min(440px, calc(100vh - 24px));
+  overflow: auto;
+}
+.insightMenuScroll {
+  max-height: min(490px, calc(100vh - 56px));
+  padding: 6px;
+  overflow: auto;
+}
+.insightSearch {
+  position: absolute;
+  left: -99999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.insightMenuIcon {
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 16px;
+}
+.insightMenuCopy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.insightMenuCopy b {
+  overflow: hidden;
+  font: 450 13px/18px inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.insightMenuCopy small {
+  display: none;
+  color: var(--muted);
+  font-size: 11px;
+}
+.insightDisplayMenu .insightMenuCopy small {
+  display: block;
+}
+.trailingCheck,
+.menuChevron {
+  width: 14px !important;
+  height: 14px !important;
+  margin-left: auto;
+  flex: 0 0 14px;
+}
+.optionDot {
+  width: 9px;
+  height: 9px;
+  display: block;
+  border-radius: 50%;
+}
+.insightMenuEmpty {
+  padding: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+.insightDisplayMenu {
+  width: 232px;
+}
+.insightDisplayMenu .insightMenuItem > span:first-child {
+  flex: 1;
+}
+.menuCheckbox {
+  width: 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 15px;
+  border: 0.5px solid var(--theme-border-strong);
+  border-radius: 4px;
+}
+.menuCheckbox svg {
+  width: 11px;
+  height: 11px;
+}
+.expanded {
+  position: fixed;
+  z-index: 700;
+  left: 244px;
+  right: 8px;
+  top: 8px;
+  bottom: 8px;
+  width: auto;
+  height: auto;
+  padding: 0;
+  background: var(--bg-panel);
+  box-shadow: 0 18px 60px var(--shadow-color-overlay);
+}
+.expanded .insightCard {
+  margin: 0;
+}
+.expanded .chart {
+  height: min(55vh, 520px);
+  flex-basis: min(55vh, 520px);
+}
+@keyframes insightMenuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.insightDisplayPopover {
+  z-index: 620;
+  width: 300px;
+  padding: 8px 0;
+  border: 0.5px solid var(--theme-border-strong);
+  border-radius: 12px;
+  background: var(--theme-surface-2);
+  box-shadow: var(--menu-shadow);
+  color: var(--text);
+  font:
+    450 13px/19.5px "Inter Variable",
+    "SF Pro Display",
+    -apple-system,
+    system-ui,
+    "Segoe UI",
+    sans-serif;
+  outline: 0;
+  transform-origin: var(--radix-popover-content-transform-origin);
+}
+.insightDisplayPopover[data-state="open"] {
+  animation: insightMenuIn 120ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.insightDisplayRow {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+}
+.insightDisplaySeparator {
+  height: 0.5px;
+  background: var(--theme-border);
+}
+.insightToggle {
+  width: 20px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  padding: 1px;
+  border: 0;
+  border-radius: 9999px;
+  background: var(--theme-border-strong);
+}
+.insightToggle i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--theme-surface-2);
+  transition: transform 120ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.insightToggle[aria-checked="true"] {
+  background: var(--accent-primary);
+}
+.insightToggle[aria-checked="true"] i {
+  transform: translateX(8px);
+}
+.insightColorSelect {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 0.5px solid var(--theme-border);
+  border-radius: 6px;
+  background: var(--theme-surface-1);
+  color: var(--text);
+  font: 450 12px inherit;
+}
+.insightColorSelect svg {
+  width: 12px;
+  height: 12px;
+  color: var(--muted);
+}
+.insightsPanel {
+  top: 88px;
+}
+.insightsPanel.expanded {
+  top: 8px;
+  bottom: 8px;
+}
+.insightCard > header {
+  margin-top: 12px;
+  padding-right: 16px;
+}
+.insightCard > header > div {
+  gap: 6px;
+}
+.insightControls {
+  gap: 16px;
+  padding-top: 0;
+}
+.insightSelect {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 19.5px;
+}
+.insightSelect {
+  position: relative;
+  padding-right: 28px;
+}
+.insightSelect > svg {
+  position: absolute;
+  right: 10px;
+}
+.expanded {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: 44px minmax(0, 1fr);
+  overflow: hidden;
+}
+.fullscreenHeader {
+  grid-column: 1/3;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px 0 16px;
+  border-bottom: 0.5px solid var(--theme-border);
+  font-size: 13px;
+}
+.fullscreenHeader > strong {
+  font-weight: 500;
+}
+.fullscreenHeader > span {
+  color: var(--muted);
+}
+.fullscreenHeader > svg {
+  width: 12px;
+  color: var(--muted);
+}
+.fullscreenHeader > .iconButton:last-child {
+  margin-left: auto;
+}
+.expanded .insightIntro {
+  display: none;
+}
+.expanded .insightCard {
+  grid-column: 1;
+  grid-row: 2;
+  border: 0;
+  border-right: 0.5px solid var(--theme-border);
+  border-radius: 0;
+  box-shadow: none;
+}
+.expanded .insightControls,
+.expanded .saveInsight {
+  display: none;
+}
+.expanded .insightCard > header {
+  display: flex;
+  height: 42px;
+  flex-basis: 42px;
+  margin-top: 0;
+  padding: 0 14px 0 16px;
+}
+.expanded .insightCard > header > div > button:not(:nth-of-type(2)) {
+  display: none;
+}
+.expanded .chart {
+  height: 340px;
+  flex-basis: 340px;
+  margin: 0;
+  padding: 24px 18px 34px;
+}
+.expanded .insightTable {
+  flex: 1;
+  border-top: 0.5px solid var(--theme-border);
+}
+.expanded .insightTableRow[aria-selected="true"] {
+  outline: 1px solid var(--focus-ring);
+  outline-offset: -1px;
+}
+.chartColumn[role="button"] {
+  cursor: pointer;
+  outline: 0;
+}
+.chartColumn[role="button"]:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.fullscreenIssues {
+  min-width: 0;
+  grid-column: 2;
+  grid-row: 2;
+  overflow: hidden;
+  background: var(--theme-surface-1);
+}
+.fullscreenIssues > header {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-bottom: 0.5px solid var(--theme-border);
+}
+.fullscreenIssues > header > i,
+.fullscreenIssues a > i {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  border: 1px solid var(--muted);
+  border-radius: 50%;
+}
+.fullscreenIssues > header strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.fullscreenIssues > header span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.fullscreenIssues > div {
+  height: calc(100% - 42px);
+  overflow: auto;
+}
+.fullscreenIssues a {
+  height: 44px;
+  display: grid;
+  grid-template-columns: 20px 14px 62px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border-bottom: 0.5px solid var(--theme-border);
+  color: var(--text);
+  text-decoration: none;
+}
+.fullscreenIssues a:hover {
+  background: var(--theme-surface-hover);
+}
+.fullscreenIssues a small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.fullscreenIssues a strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fullscreenIssues a b {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--chart-cyan);
+  color: var(--on-accent);
+  font-size: 8px;
+}
+.issueDrag {
+  color: var(--muted);
+  letter-spacing: 2px;
+}
+:global(:root[data-theme="light"]) .identityCard,
+:global(:root[data-theme="light"]) .metadataCard,
+:global(:root[data-theme="light"]) .summaryCard,
+:global(:root[data-theme="light"]) .insightIntro,
+:global(:root[data-theme="light"]) .insightCard {
+  border-color: var(--theme-border);
+  background: var(--theme-surface-2);
+  box-shadow:
+    0 3px 6px -2px var(--shadow-color-faint),
+    0 1px 1px var(--shadow-color-soft);
+}
+:global(:root[data-theme="light"]) .insightMenu {
+  border-color: var(--theme-border-strong);
+  background: var(--theme-surface-2);
+  box-shadow:
+    0 8px 24px var(--shadow-color-raised),
+    0 2px 7px var(--shadow-color-medium);
+}
+@media (max-width: 800px) {
+  .panel {
+    top: 88px;
+    width: min(400px, calc(100vw - 24px));
+    padding-right: 0;
+    background: var(--bg-panel);
+    box-shadow: -16px 0 32px var(--overlay-medium);
+  }
+  .expanded {
+    left: 8px;
+    right: 8px;
+  }
+  .mobileClose,
+  .panelClose {
+    display: grid;
+  }
+  .identityCard {
+    grid-template-columns: 28px minmax(0, 1fr) 24px 28px 24px;
+  }
+  .identityCard p {
+    grid-column: 1/6;
+  }
+}
