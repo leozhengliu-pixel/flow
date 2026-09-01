@@ -251,6 +251,7 @@ type Document struct {
 	SlugID        string             `json:"slugId"`
 	Title         string             `json:"title"`
 	Icon          string             `json:"icon,omitempty"`
+	Color         string             `json:"color,omitempty"`
 	Content       string             `json:"content"`
 	ContentState  string             `json:"contentState,omitempty"`
 	ContentData   map[string]any     `json:"contentData,omitempty"`
@@ -681,6 +682,7 @@ type Loop struct {
 	ID                         string         `json:"id"`
 	Name                       string         `json:"name"`
 	Icon                       string         `json:"icon,omitempty"`
+	Color                      string         `json:"color,omitempty"`
 	Level                      string         `json:"level"`
 	TriggerType                string         `json:"triggerType"`
 	TriggerConfig              map[string]any `json:"triggerConfig,omitempty"`

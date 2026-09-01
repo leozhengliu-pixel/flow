@@ -2,6 +2,8 @@ import * as Popover from '@radix-ui/react-popover'
 import { CalendarRange, X } from 'lucide-react'
 import { useMemo, useState, type ReactNode, type SyntheticEvent } from 'react'
 import { CalendarIcon } from '@/components/issue/issue-icons'
+import { DateTimeControl } from '@/components/ui/date-time-control'
+import './due-date-control.css'
 
 interface DueDatePickerProps {
   value?: string
@@ -59,7 +61,7 @@ export function DueDateCommand({ value, onSelect, className = '' }: { value?: st
     <input autoFocus className="due-date-search" aria-label="Try: 24h, 7 days, Feb 9" placeholder="Try: 24h, 7 days, Feb 9" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && query.trim()) { event.preventDefault(); submitQuery() } }}/>
     {error ? <p className="due-date-error" role="alert">{error}</p> : null}
     {custom ? <div className="due-date-custom">
-      <label><CalendarRange size={15}/><input aria-label="Custom due date" type="date" defaultValue={value} onChange={event => event.target.value && void choose(event.target.value)}/></label>
+      <label><CalendarRange size={15}/><DateTimeControl label="Custom due date" value={value ?? isoDate(new Date())} onChange={next => void choose(next)}/></label>
       <button type="button" onPointerDown={stopCommandEvent} onClick={event => { stopCommandEvent(event); setCustom(false) }}>Back</button>
     </div> : <div className="due-date-options" role="listbox" aria-label="Due date options">
       <button type="button" role="option" aria-selected="false" onPointerDown={stopCommandEvent} onClick={event => { stopCommandEvent(event); setCustom(true) }}><span>Custom…</span></button>

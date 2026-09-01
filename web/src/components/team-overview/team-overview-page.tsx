@@ -44,14 +44,16 @@ import {
   teamIssuesPath,
   teamProjectsPath,
   teamCyclesPath,
+  teamLoopsPath,
+  teamMembersPath,
   teamViewsPath,
-  loopsPath,
   projectPath,
 } from "@/lib/app-routes";
 import { DisplayIcon, FilterIcon } from "@/components/ui/view-action-icons";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { ProjectIcon, SlackIcon } from "@/components/issue/issue-icons";
 import { ViewGlyph, ViewIconPicker } from "@/components/views/view-icon-picker";
+import { LoopsDirectory } from "@/components/loops/loops-page";
 import { useI18n } from "@/i18n/i18n";
 import type {
   BootstrapData,
@@ -63,7 +65,7 @@ import type {
 
 import "./team-overview-page.css";
 
-type View = "overview" | "documents";
+type View = "overview" | "documents" | "loops" | "members";
 
 export function TeamOverviewPage({
   data,
@@ -216,21 +218,21 @@ export function TeamOverviewPage({
         {t("Documents")}
       </a>
       <a
-        href={loopsPath(data.workspace.urlKey)}
+        aria-current={view === "loops" ? "page" : undefined}
+        href={teamLoopsPath(data.workspace.urlKey, team.key)}
         onClick={(event) => {
           event.preventDefault();
-          onNavigate(loopsPath(data.workspace.urlKey));
+          onNavigate(teamLoopsPath(data.workspace.urlKey, team.key));
         }}
       >
         Loops
       </a>
       <a
-        href={settingsPath(data.workspace.urlKey, "team", team.key, "members")}
+        aria-current={view === "members" ? "page" : undefined}
+        href={teamMembersPath(data.workspace.urlKey, team.key)}
         onClick={(event) => {
           event.preventDefault();
-          onNavigate(
-            settingsPath(data.workspace.urlKey, "team", team.key, "members"),
-          );
+          onNavigate(teamMembersPath(data.workspace.urlKey, team.key));
         }}
       >
         {t("Members")}
@@ -424,22 +426,10 @@ export function TeamOverviewPage({
                   aria-label={teamMembers
                     .map((user) => user!.displayName)
                     .join(" ")}
-                  href={settingsPath(
-                    data.workspace.urlKey,
-                    "team",
-                    team.key,
-                    "members",
-                  )}
+                  href={teamMembersPath(data.workspace.urlKey, team.key)}
                   onClick={(event) => {
                     event.preventDefault();
-                    onNavigate(
-                      settingsPath(
-                        data.workspace.urlKey,
-                        "team",
-                        team.key,
-                        "members",
-                      ),
-                    );
+                    onNavigate(teamMembersPath(data.workspace.urlKey, team.key));
                   }}
                 >
                   <span className="team-home-avatar-stack">
@@ -530,12 +520,29 @@ export function TeamOverviewPage({
             </section>
           </aside>
         </div>
-      ) : (
+      ) : view === "documents" ? (
         <TeamDocuments
           data={data}
           documents={documents}
           onNavigate={onNavigate}
           onNew={() => void newDocument()}
+        />
+      ) : view === "loops" ? (
+        <LoopsDirectory
+          data={data}
+          embedded
+          onNavigate={onNavigate}
+          onOpenSidebar={onOpenSidebar}
+          onReload={onReload}
+          teamId={team.id}
+        />
+      ) : (
+        <TeamMembersDirectory
+          data={data}
+          onAdd={() => setMembersOpen(true)}
+          onNavigate={onNavigate}
+          onReload={onReload}
+          team={team}
         />
       )}
       {resourceOpen && (
@@ -1297,6 +1304,64 @@ function AddMembersDialog({
       </Dialog.Portal>
     </Dialog.Root>
   );
+}
+
+function TeamMembersDirectory({
+  data,
+  onAdd,
+  onNavigate,
+  onReload,
+  team,
+}: {
+  data: BootstrapData;
+  onAdd: () => void;
+  onNavigate: (path: string) => void;
+  onReload: () => Promise<void>;
+  team: Team;
+}) {
+  const { t } = useI18n();
+  const members = data.teamMembers
+    .filter((membership) => membership.teamId === team.id)
+    .map((membership) => {
+      const user = data.users.find((item) => item.id === membership.userId);
+      const workspaceMember = data.members.find((item) => item.user.id === membership.userId);
+      return user ? { membership, user, workspaceMember } : undefined;
+    })
+    .filter(Boolean);
+  return <section className="team-members-directory">
+    <div className="team-members-toolbar">
+      <button className="team-members-add" onClick={onAdd}><PlusIcon/>{t("Add a member")}</button>
+      <button aria-label={t("Display options")} className="team-members-display"><DisplayIcon/></button>
+    </div>
+    <header>
+      <button>{t("Name")} <span>↓</span></button>
+      <button>{t("Email")}</button>
+      <button>{t("Role")}</button>
+      <span/>
+    </header>
+    <div className="team-members-list">
+      {members.map((entry, index) => {
+        const value = entry!;
+        const profile = `/${data.workspace.urlKey}/profiles/${encodeURIComponent(value.user.name)}`;
+        return <a href={profile} key={value.user.id} onClick={event => { event.preventDefault(); onNavigate(profile) }}>
+          <span className="team-members-person">
+            <UserAvatar avatarUrl={value.user.avatarUrl} color={memberColor(index)} name={value.user.displayName}/>
+            <span><strong data-i18n-ignore>{value.user.displayName}</strong><small data-i18n-ignore>{value.user.name}</small></span>
+          </span>
+          <span data-i18n-ignore>{value.user.email}</span>
+          <span className="team-members-role">{t(value.workspaceMember?.role === "admin" ? "Workspace admin" : "Member")}</span>
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild><button aria-label={t("Open menu")} onClick={event => { event.preventDefault(); event.stopPropagation() }}><TeamMoreIcon/></button></DropdownMenu.Trigger>
+            <DropdownMenu.Portal><DropdownMenu.Content align="end" className="team-home-menu" sideOffset={4}>
+              <DropdownMenu.Item onSelect={() => onNavigate(profile)}>{t("View profile")}</DropdownMenu.Item>
+              <DropdownMenu.Separator/>
+              <DropdownMenu.Item className="danger" onSelect={() => void setTeamMembership(data.workspace.urlKey, team.id, value.user.id, false).then(onReload)}>{t("Remove from team")}</DropdownMenu.Item>
+            </DropdownMenu.Content></DropdownMenu.Portal>
+          </DropdownMenu.Root>
+        </a>;
+      })}
+    </div>
+  </section>;
 }
 
 function TeamDocuments({

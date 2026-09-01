@@ -24,6 +24,7 @@ type documentInput struct {
 	TemplateID    *string        `json:"templateId,omitempty"`
 	Title         *string        `json:"title,omitempty"`
 	Icon          *string        `json:"icon,omitempty"`
+	Color         *string        `json:"color,omitempty"`
 	Content       *string        `json:"content,omitempty"`
 	ContentState  *string        `json:"contentState,omitempty"`
 	ContentData   map[string]any `json:"contentData,omitempty"`
@@ -352,7 +353,7 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 				return "", errInvalid
 			}
 		}
-		created = domain.Document{ID: fmt.Sprintf("document_%d", now.UnixNano()), SlugID: slug(title) + "-" + strconv.FormatInt(now.UnixNano()%0xffffff, 16), Title: title, Creator: data.Viewer, ProjectIDs: projects, TeamIDs: teams, IssueID: issueID, SubscriberIDs: []string{data.Viewer.ID}, ContentData: map[string]any{"type": "doc", "content": []any{}}, CreatedAt: now, UpdatedAt: now, Revisions: []domain.DocumentRevision{}}
+		created = domain.Document{ID: fmt.Sprintf("document_%d", now.UnixNano()), SlugID: slug(title) + "-" + strconv.FormatInt(now.UnixNano()%0xffffff, 16), Title: title, Color: "#8b8b90", Creator: data.Viewer, ProjectIDs: projects, TeamIDs: teams, IssueID: issueID, SubscriberIDs: []string{data.Viewer.ID}, ContentData: map[string]any{"type": "doc", "content": []any{}}, CreatedAt: now, UpdatedAt: now, Revisions: []domain.DocumentRevision{}}
 		if template != nil {
 			created.Icon, created.Content, created.ContentState = template.Icon, template.Content, template.ContentState
 			if template.ContentData != nil {
@@ -361,6 +362,9 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Icon != nil {
 			created.Icon = *input.Icon
+		}
+		if input.Color != nil {
+			created.Color = *input.Color
 		}
 		if input.Content != nil {
 			created.Content = *input.Content
@@ -406,6 +410,9 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Icon != nil {
 			document.Icon = *input.Icon
+		}
+		if input.Color != nil {
+			document.Color = *input.Color
 		}
 		if input.Content != nil {
 			document.Content = *input.Content

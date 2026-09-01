@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { initiativePath, issuePath, parseAppRoute, projectPath, routeBelongsToWorkspace, teamViewsNewPath, workspaceViewsNewPath } from './app-routes'
+import { initiativePath, issuePath, parseAppRoute, projectPath, routeBelongsToWorkspace, teamLoopsPath, teamMembersPath, teamViewsNewPath, workspaceViewsNewPath } from './app-routes'
 import type { Initiative, Issue, Project } from '@/types/flow'
 
 describe('application routes', () => {
   it('parses workspace, team, detail, and settings routes', () => {
     expect(parseAppRoute('/acme/projects/all')).toMatchObject({ kind: 'projects', workspaceSlug: 'acme' })
     expect(parseAppRoute('/acme/team/ENG/backlog')).toEqual({ kind: 'team-issues', workspaceSlug: 'acme', teamKey: 'ENG', view: 'backlog' })
+    expect(parseAppRoute('/acme/team/ENG/loops')).toEqual({ kind: 'team-loops', workspaceSlug: 'acme', teamKey: 'ENG' })
+    expect(parseAppRoute('/acme/team/ENG/members')).toEqual({ kind: 'team-members', workspaceSlug: 'acme', teamKey: 'ENG' })
     expect(parseAppRoute('/acme/settings/account/preferences')).toEqual({ kind: 'settings', workspaceSlug: 'acme', page: 'preferences' })
     expect(parseAppRoute('/')).toEqual({ kind: 'root' })
   })
@@ -16,6 +18,8 @@ describe('application routes', () => {
     expect(initiativePath('acme', { slugId: 'north-star' } as Initiative, 'projects')).toBe('/acme/initiative/north-star/projects')
     expect(workspaceViewsNewPath('acme', 'projects')).toBe('/acme/views/projects/new')
     expect(teamViewsNewPath('acme', 'ENG', 'issues')).toBe('/acme/team/ENG/views/issues/new')
+    expect(teamLoopsPath('acme', 'ENG')).toBe('/acme/team/ENG/loops')
+    expect(teamMembersPath('acme', 'ENG')).toBe('/acme/team/ENG/members')
   })
 
   it('rejects routes from another workspace', () => {

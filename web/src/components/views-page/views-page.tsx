@@ -38,17 +38,18 @@ export type ViewsPageProps = {
   onOpenDashboards: () => void
   onUpdate: (viewId: string, input: SavedViewMutationInput) => Promise<SavedView>
   onToggleFavorite: (view: SavedView) => Promise<void>
+  onToggleScopeFavorite?: (teamId: string, favorite: boolean) => Promise<void>
   onSetSubscriptionEvents: (view: SavedView, events: string[]) => Promise<void>
   onShare?: (view: SavedView) => Promise<string | undefined>
   viewHref: (view: SavedView) => string
 }
 
-export function ViewsPage({ data, resource, scope, views, onCreate, onDelete, onDuplicate, onEdit, onOpen, onOpenSidebar, onResourceChange, resourceHref, onUpdate, onToggleFavorite, onSetSubscriptionEvents, onShare, viewHref }: ViewsPageProps) {
+export function ViewsPage({ data, resource, scope, views, onCreate, onDelete, onDuplicate, onEdit, onOpen, onOpenSidebar, onResourceChange, resourceHref, dashboardsHref, onOpenDashboards, onUpdate, onToggleFavorite, onToggleScopeFavorite, onSetSubscriptionEvents, onShare, viewHref }: ViewsPageProps) {
   const storageKey = `${data.workspace.urlKey}:views-directory:${scope.kind === 'team' ? scope.team.id : 'workspace'}:${resource}`
   const [ordering, setOrdering] = useState<Ordering>(() => readPreference(`${storageKey}:ordering`, scope.kind === 'team' ? 'owner' : 'name') as Ordering)
   const [direction, setDirection] = useState<Direction>(() => readPreference(`${storageKey}:direction`, 'asc') as Direction)
   const [properties, setProperties] = useState<Set<DisplayProperty>>(() => new Set(readProperties(`${storageKey}:properties`)))
-  const [teamFavorite, setTeamFavorite] = useState(() => readPreference(`${storageKey}:favorite`, 'false') === 'true')
+  const teamFavorite = scope.kind === 'team' && data.favorites.some(item => item.userId === data.viewer.id && item.resourceType === 'team' && item.resourceId === scope.team.id)
   const usersById = useMemo(() => new Map(data.users.map(user => [user.id, user])), [data.users])
   const orderedViews = useMemo(() => [...views].sort((left, right) => compareViews(left, right, ordering, direction, usersById, data.viewer)), [data.viewer, direction, ordering, usersById, views])
   const groups = useMemo(() => scope.kind === 'team'
@@ -89,12 +90,13 @@ export function ViewsPage({ data, resource, scope, views, onCreate, onDelete, on
     <ViewsDirectoryHeader
       activeResource={resource}
       actionLabel="New view"
-      afterTitle={scope.kind === 'team' && <button aria-checked={teamFavorite} aria-label={teamFavorite ? 'Remove from favorites' : 'Add to favorites'} className={styles.favoriteHeader} onClick={() => { const next = !teamFavorite; setTeamFavorite(next); writePreference(`${storageKey}:favorite`, String(next)) }} role="switch" type="button"><ViewFavoriteIcon selected={teamFavorite}/></button>}
+      afterTitle={scope.kind === 'team' && <button aria-checked={teamFavorite} aria-label={teamFavorite ? 'Remove from favorites' : 'Add to favorites'} className={styles.favoriteHeader} disabled={!onToggleScopeFavorite} onClick={() => void onToggleScopeFavorite?.(scope.team.id, !teamFavorite)} role="switch" type="button"><ViewFavoriteIcon selected={teamFavorite}/></button>}
       onAction={onCreate}
       onOpenSidebar={onOpenSidebar}
       tabs={[
         { resource: 'issues', label: 'Issues', href: resourceHref('issues'), onSelect: () => onResourceChange('issues') },
         { resource: 'projects', label: 'Projects', href: resourceHref('projects'), onSelect: () => onResourceChange('projects') },
+        ...(data.workspaceSettings.featureFlags.dashboards !== false ? [{ resource: 'dashboards' as const, label: 'Dashboards', href: dashboardsHref, onSelect: onOpenDashboards }] : []),
       ]}
       title="Views"
       toolbarEnd={<ViewsDisplayMenu direction={direction} ordering={ordering} properties={properties} onDirection={changeDirection} onOrdering={next => { setOrdering(next); writePreference(`${storageKey}:ordering`, next) }} onToggleProperty={toggleProperty}/>}
