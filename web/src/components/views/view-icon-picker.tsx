@@ -13,6 +13,7 @@ const ICON_NAME_SET = new Set<string>(ICON_NAMES)
 
 const FREQUENT_EMOJIS = `👍 👌 🙏 😂 ❤️ 👀 ✅ 🙂 😃 😄 😀 🤔 😅 ⚠️ 😕 ❌ 🙌 🎉 😉 😊 🤷 👋 ❓`.split(' ')
 const PEOPLE_EMOJIS = `😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 🫠 😉 😊 😇 🥰 😍 🤩 😘 😗 ☺️ 😚 😙 🥲 😋 😛 😜 🤪 😝 🤑 🤗 🤭 🫢 🫣 🤫 🤔 🫡 🤐 🤨 😐 😑 😶 😶‍🌫️ 😏 😒 🙄 😬 😮‍💨 🤥 😌 😔 😪 🤤 😴 😷 🤒 🤕 🤢 🤮 🤧 🥵 🥶 🥴 😵 😵‍💫 🤯 🤠 🥳 🥸 😎 🤓 🧐 😕 🫤 😟 🙁 ☹️ 😮 😯 😲 😳 🥺 🥹 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 ☠️ 💩 🤡 👻 👽 👾 🤖 👋 🤚 🖐️ ✋ 🖖 🫱 🫲 🫳 🫴 👌 🤌 🤏 ✌️ 🤞 🫰 🤟 🤘 🤙 👈 👉 👆 🖕 👇 ☝️ 🫵 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 🫶 👐 🤲 🤝 🙏 ✍️ 💅`.split(' ')
+const PRESET_COLORS = ['#95a2b3', '#5e6ad2', '#24b4c7', '#4cb782', '#f2c300', '#eb9138', '#c99790', '#ee565d']
 const EMOJI_NAMES: Record<string, string> = { '👍': '+1', '👌': 'ok_hand', '🙏': 'pray', '😂': 'joy', '❤️': 'heart', '👀': 'eyes', '✅': 'white_check_mark', '🙂': 'slightly_smiling_face', '⚠️': 'warning', '❌': 'x', '🙌': 'raised_hands', '🎉': 'tada', '🤷': 'shrug', '👋': 'wave', '❓': 'question' }
 
 export type ViewVisual = { icon: string; color: string }
@@ -30,6 +31,7 @@ export function ViewIconPicker({ align = 'start', ariaLabel, color = DEFAULT_VIE
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<'icons' | 'emojis'>('icons')
   const [query, setQuery] = useState('')
+  const [customColorOpen, setCustomColorOpen] = useState(false)
   const [draftColor, setDraftColor] = useState(normalizeColor(color))
   const searchRef = useRef<HTMLInputElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
@@ -43,7 +45,7 @@ export function ViewIconPicker({ align = 'start', ariaLabel, color = DEFAULT_VIE
     { label: 'Smileys & People', values: PEOPLE_EMOJIS.filter(value => matchesEmoji(value, normalizedQuery)) },
   ].filter(section => section.values.length), [normalizedQuery])
 
-  useEffect(() => { if (!open) { setQuery(''); setTab('icons') } }, [open])
+  useEffect(() => { if (!open) { setQuery(''); setTab('icons'); setCustomColorOpen(false) } }, [open])
   useEffect(() => setDraftColor(normalizeColor(color)), [color])
 
   const chooseColor = (nextColor: string) => {
@@ -71,10 +73,10 @@ export function ViewIconPicker({ align = 'start', ariaLabel, color = DEFAULT_VIE
         <button aria-controls="view-icons-panel" aria-selected={tab === 'icons'} className={styles.tab} onClick={() => { setTab('icons'); setQuery(''); requestAnimationFrame(() => searchRef.current?.focus()) }} role="tab" type="button">{t('Icons')}</button>
         <button aria-controls="view-emojis-panel" aria-selected={tab === 'emojis'} className={styles.tab} onClick={() => { setTab('emojis'); setQuery(''); requestAnimationFrame(() => searchRef.current?.focus()) }} role="tab" type="button">{t('Emojis')}</button>
       </div>
-      {tab === 'icons' && <div aria-label={t('Icons')} className={styles.panel} id="view-icons-panel" role="tabpanel">
-        <ColorEditor color={draftColor} onChange={setDraftColor} onCommit={chooseColor}/>
+      {tab === 'icons' && <div aria-label={t('Icons')} className={`${styles.panel} ${customColorOpen ? '' : styles.compactPanel}`} id="view-icons-panel" role="tabpanel">
+        <ColorEditor color={draftColor} custom={customColorOpen} onCustom={() => setCustomColorOpen(true)} onChange={setDraftColor} onCommit={chooseColor}/>
         <SearchBox onArrowDown={() => focusGridItem(0)} placeholder={t('Search icons…')} query={query} searchRef={searchRef} setQuery={setQuery}/>
-        <div className={styles.iconGrid} ref={gridRef}>{filteredIcons.map((name, index) => <button aria-label={name} className={styles.iconButton} data-i18n-ignore data-selected={icon === name} key={name} onClick={() => chooseIcon(name)} onKeyDown={event => moveGridFocus(event, index)} title={name} type="button"><ViewGlyph color={draftColor} icon={name}/></button>)}</div>
+        <div className={`${styles.iconGrid} ${customColorOpen ? '' : styles.compactIconGrid}`} ref={gridRef}>{filteredIcons.map((name, index) => <button aria-label={name} className={styles.iconButton} data-i18n-ignore data-selected={icon === name} key={name} onClick={() => chooseIcon(name)} onKeyDown={event => moveGridFocus(event, index)} title={name} type="button"><ViewGlyph color={draftColor} icon={name}/></button>)}</div>
       </div>}
       {tab === 'emojis' && <div aria-label={t('Emojis')} className={`${styles.panel} ${styles.emojiPanel}`} id="view-emojis-panel" role="tabpanel">
         <SearchBox onArrowDown={() => focusGridItem(0)} placeholder={t('Search emoji…')} query={query} searchRef={searchRef} setQuery={setQuery}/>
@@ -84,7 +86,7 @@ export function ViewIconPicker({ align = 'start', ariaLabel, color = DEFAULT_VIE
   </Popover.Root>
 }
 
-function ColorEditor({ color, onChange, onCommit }: { color: string; onChange: (color: string) => void; onCommit: (color: string) => void }) {
+function ColorEditor({ color, custom, onCustom, onChange, onCommit }: { color: string; custom: boolean; onCustom: () => void; onChange: (color: string) => void; onCommit: (color: string) => void }) {
   const { t } = useI18n()
   const hsv = useMemo(() => hexToHsv(color), [color])
   const [hexDraft, setHexDraft] = useState(color)
@@ -107,6 +109,14 @@ function ColorEditor({ color, onChange, onCommit }: { color: string; onChange: (
     if (validColor(value)) onCommit(value)
     else setHexDraft(color)
   }
+  if (!custom) return <div className={`${styles.colorEditor} ${styles.compactColorEditor}`}>
+    <div className={styles.colorPalette}>
+      <button aria-label={`${t('Selected color')} ${color}`} className={styles.selectedColor} style={{ backgroundColor: color }} type="button"><CheckMark/></button>
+      {PRESET_COLORS.map(value => <button aria-label={`${t('Color')} ${value}`} data-selected={value === color} key={value} onClick={() => onCommit(value)} style={{ '--palette-color': value } as CSSProperties} type="button"/>)}
+      <span className={styles.paletteDivider}/>
+      <button aria-label={t('Set custom color')} className={styles.paletteCustom} onClick={onCustom} type="button"/>
+    </div>
+  </div>
   return <div className={styles.colorEditor}>
     <div className={styles.colorHeader}>
       <button aria-label={`${t('Selected color')} ${color}`} className={styles.selectedColor} style={{ backgroundColor: color }} type="button"><CheckMark/></button>

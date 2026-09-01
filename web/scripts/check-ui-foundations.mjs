@@ -3,12 +3,14 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const [font, foundations, tokens, cycles, projects] = await Promise.all([
+const [font, foundations, tokens, cycles, projects, teamOverview, documents] = await Promise.all([
   readFile(`${root}/public/fonts/InterVariable.woff2`),
   readFile(`${root}/src/styles/foundations.css`, 'utf8'),
   readFile(`${root}/src/styles/tokens.css`, 'utf8'),
   readFile(`${root}/src/components/cycles/cycles.css`, 'utf8'),
   readFile(`${root}/src/components/projects-page/projects-page.css`, 'utf8'),
+  readFile(`${root}/src/components/team-overview/team-overview-page.css`, 'utf8'),
+  readFile(`${root}/src/components/documents/document-page.css`, 'utf8'),
 ])
 
 const expectedFontHash = '693b77d4f32ee9b8bfc995589b5fad5e99adf2832738661f5402f9978429a8e3'
@@ -39,6 +41,15 @@ if (!cycles.includes('.flow-cycles-page,.flow-cycle-detail{height:calc(100% - 16
 }
 if (!projects.includes('.lp-project-row__name strong { flex: none; font-size: 13px; font-weight: 500; line-height: 18.5px; }')) {
   throw new Error('Project row title typography drifted from the measured Linear line box')
+}
+if (!teamOverview.includes('isolation: isolate;') || !teamOverview.includes('z-index: -1;')) {
+  throw new Error('Team resource menu hover layers must remain behind direct text nodes')
+}
+if (!documents.includes('.document-meta-avatar {') || !documents.includes('background: var(--chart-cyan);') || !documents.includes('border-radius: 50%;')) {
+  throw new Error('Document metadata avatars must retain the measured 18px circular treatment')
+}
+if (!documents.includes('.document-icon.is-empty {') || !documents.includes('width: 32px;') || !documents.includes('height: 36px;')) {
+  throw new Error('Empty-document icon must retain the measured Retina-corrected 32x36 treatment')
 }
 
 for (const color of [

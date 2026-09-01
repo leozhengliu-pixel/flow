@@ -188,6 +188,7 @@ import {
   routeBelongsToWorkspace,
   savedViewPathId,
   teamCyclesPath,
+  teamDocumentsPath,
   teamDashboardsPath,
   teamDashboardsNewPath,
   teamHomePath,
@@ -4179,12 +4180,17 @@ function App() {
               const project = data.projects.find((item) =>
                 selectedDocument.projectIds.includes(item.id),
               );
+              const team = data.teams.find((item) =>
+                selectedDocument.teamIds.includes(item.id),
+              );
               navigateTo(
                 issue
                   ? issuePath(data.workspace.urlKey, issue)
                   : project
                     ? projectPath(data.workspace.urlKey, project)
-                    : projectsPath(data.workspace.urlKey),
+                    : team
+                      ? teamDocumentsPath(data.workspace.urlKey, team.key)
+                      : projectsPath(data.workspace.urlKey),
               );
             }}
           />
