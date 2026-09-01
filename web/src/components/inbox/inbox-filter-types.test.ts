@@ -28,4 +28,10 @@ describe('inbox filters', () => {
     expect(removeInboxFilter(changed, changed[0].id)).toEqual([])
     expect(added[0].operator).toBe('is')
   })
+
+  it('supports review status as a first-class Inbox property', () => {
+    const filters = toggleInboxFilterValue([], 'reviewStatus', { id: 'approved', label: 'Approved' })
+    expect(filters).toEqual([expect.objectContaining({ property: 'reviewStatus', operator: 'is', values: [{ value: 'approved', valueLabel: 'Approved' }] })])
+    expect(updateInboxFilterOperator(filters, filters[0].id, 'isNot')[0].operator).toBe('isNot')
+  })
 })

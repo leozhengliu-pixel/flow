@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Popover from "@radix-ui/react-popover";
 import {
@@ -70,7 +70,16 @@ export function AgentPage({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamAbortRef = useRef<AbortController | undefined>(undefined);
   const historyRequested = new URLSearchParams(window.location.search).get("history") === "1";
+  const agentDraftKey = `flow:agent-draft:${data.workspace.id}`;
+  const restoredAgentDraft = useRef(readAgentDraft(agentDraftKey));
   useEffect(() => setSessions(data.agentSessions ?? []), [data.agentSessions]);
+  useEffect(() => {
+    if (chatSlug || !restoredAgentDraft.current?.input) return;
+    const restored = restoredAgentDraft.current;
+    setInput(restored.input);
+    setSelectedSkills(restored.skillIds);
+    requestAnimationFrame(() => writeInputToEditor(editorRef, restored.input));
+  }, [chatSlug]);
   useEffect(() => {
     if (historyRequested) setHistoryOpen(true);
   }, [chatSlug, historyRequested]);
@@ -92,6 +101,14 @@ export function AgentPage({
         : sessions.find((item) => item.id === activeStreamId),
     [activeStreamId, chatSlug, sessions],
   );
+  useEffect(() => {
+    if (chatSlug || current || !input.trim()) {
+      if (!chatSlug && !current && !input.trim()) clearAgentDraft(agentDraftKey);
+      return;
+    }
+    const timer = window.setTimeout(() => writeAgentDraft(agentDraftKey, { input, skillIds: selectedSkills }), 250);
+    return () => window.clearTimeout(timer);
+  }, [agentDraftKey, chatSlug, current, input, selectedSkills]);
   useEffect(
     () => setSelectedSkills(current?.skillIds ?? []),
     [current?.id, current?.skillIds],
@@ -143,6 +160,7 @@ export function AgentPage({
       else if (current) await streamAgentSessionMessage(current.id, providerMessage, onEvent, controller.signal);
       else await streamNewAgentSession({ message: providerMessage, skillIds: selectedSkills, location: "page" }, onEvent, controller.signal);
       writeInput("");
+      clearAgentDraft(agentDraftKey);
       setAttachments([]);
       setEditingId(undefined);
     } catch (reason) {
@@ -228,6 +246,7 @@ export function AgentPage({
     setHistoryOpen(false);
     setActiveStreamId(undefined);
     writeInput("");
+    clearAgentDraft(agentDraftKey);
     setSelectedSkills([]);
     onNavigate(agentPath(data.workspace.urlKey));
   };
@@ -813,6 +832,28 @@ function markdown(session: AgentSession) {
         `**${message.role === "user" ? "You" : "Flow Agent"}**\n\n${message.content}`,
     )
     .join("\n\n");
+}
+
+function readAgentDraft(key: string): { input: string; skillIds: string[] } | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) ?? "null") as { input?: unknown; skillIds?: unknown } | null;
+    if (!value || typeof value.input !== "string") return null;
+    return { input: value.input, skillIds: Array.isArray(value.skillIds) ? value.skillIds.filter((id): id is string => typeof id === "string") : [] };
+  } catch {
+    return null;
+  }
+}
+
+function writeAgentDraft(key: string, draft: { input: string; skillIds: string[] }) {
+  try { localStorage.setItem(key, JSON.stringify({ ...draft, updatedAt: new Date().toISOString() })); } catch { /* Draft persistence is best-effort in private browsing. */ }
+}
+
+function clearAgentDraft(key: string) {
+  try { localStorage.removeItem(key); } catch { /* Draft cleanup is best-effort in private browsing. */ }
+}
+
+function writeInputToEditor(editorRef: RefObject<HTMLDivElement | null>, value: string) {
+  if (editorRef.current && editorRef.current.textContent !== value) editorRef.current.textContent = value;
 }
 
 async function agentFileContext(file: File) {

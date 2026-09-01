@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-/** The six predicates exposed by Flow's Inbox filter picker. */
+/** The predicates exposed by Flow's Inbox filter picker. */
 export type InboxFilterProperty =
   | 'notificationType'
   | 'from'
@@ -8,6 +8,7 @@ export type InboxFilterProperty =
   | 'initiative'
   | 'issuePriority'
   | 'issueStatusType'
+  | 'reviewStatus'
 
 export type InboxFilterOperator = 'is' | 'isNot'
 
@@ -21,7 +22,18 @@ export interface InboxFilterOption {
   keywords?: string
   disabled?: boolean
   icon?: ReactNode
+  /** Entity names are never translated by the UI compatibility translator. */
+  i18nIgnore?: boolean
 }
+
+export const INBOX_REVIEW_STATUS_OPTIONS = [
+  { id: 'draft', label: 'Draft', color: 'var(--status-neutral)' },
+  { id: 'open', label: 'Open', color: 'var(--data-vis-4)' },
+  { id: 'inReview', label: 'In review', color: 'var(--data-vis-3)' },
+  { id: 'approved', label: 'Approved', color: 'var(--semantic-success)' },
+  { id: 'merged', label: 'Merged', color: 'var(--accent-primary)' },
+  { id: 'closed', label: 'Closed', color: 'var(--status-neutral)' },
+] as const
 
 export interface InboxFilterValue {
   value: string

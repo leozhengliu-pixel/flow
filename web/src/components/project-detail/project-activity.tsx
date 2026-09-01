@@ -1,9 +1,11 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check, Flag, MessageCircle, MoreHorizontal, Paperclip, SmilePlus, Trash2, X } from 'lucide-react'
 import { format, formatDistanceToNowStrict } from 'date-fns'
 import { toast } from 'sonner'
+import { createDraft, deleteDraft, updateDraft } from '@/lib/api'
+import { clearComposerDraft, readComposerDraft, writeComposerDraft, type ComposerDraftType } from '@/lib/composer-drafts'
 import { Avatar } from '@/components/issue/issue-row'
 import { CalendarIcon, PriorityIcon } from '@/components/issue/issue-icons'
 import { EmojiPicker } from '@/components/reactions/emoji-picker'
@@ -11,20 +13,52 @@ import type { Comment, Project, ProjectUpdate } from '@/types/flow'
 import type { ProjectDetailProps } from './project-detail-types'
 import { PROJECT_HEALTHS } from './project-detail-types'
 
-export function ProjectActivity({ activities, project, projectUpdates, viewer, onCommentProject, onCommentProjectUpdate, onCreateUpdate, onDeleteUpdate, onReactProjectUpdate, onUpdateProjectUpdate, onUploadProjectUpdateAttachment, onDeleteProjectUpdateAttachment }: ProjectDetailProps) {
-  const [composerMode, setComposerMode] = useState<'comment'|'update'>('update')
-  const [body, setBody] = useState('')
-  const [health, setHealth] = useState<Project['health']>(project.health === 'noUpdate' ? 'onTrack' : project.health)
+export function ProjectActivity({ activities, drafts = [], project, projectUpdates, viewer, onCommentProject, onCommentProjectUpdate, onCreateUpdate, onDeleteUpdate, onReactProjectUpdate, onUpdateProjectUpdate, onUploadProjectUpdateAttachment, onDeleteProjectUpdateAttachment }: ProjectDetailProps) {
+  const parentDrafts = useMemo(() => ({
+    comment: drafts.find(item => item.type === 'comment' && item.resourceId === project.id && (item.metadata?.resourceType ?? 'issue') === 'project') ?? readComposerDraft('comment', project.id),
+    project_update: drafts.find(item => item.type === 'project_update' && item.resourceId === project.id) ?? readComposerDraft('project_update', project.id),
+  }), [drafts, project.id])
+  const initialDraft = parentDrafts.project_update ?? parentDrafts.comment
+  const [composerMode, setComposerMode] = useState<'comment'|'update'>(() => initialDraft?.type === 'comment' ? 'comment' : 'update')
+  const draftType: ComposerDraftType = composerMode === 'comment' ? 'comment' : 'project_update'
+  const [body, setBody] = useState(initialDraft?.body ?? '')
+  const [health, setHealth] = useState<Project['health']>(typeof initialDraft?.metadata?.health === 'string' ? initialDraft.metadata.health as Project['health'] : project.health === 'noUpdate' ? 'onTrack' : project.health)
   const [saving, setSaving] = useState(false)
   const [files, setFiles] = useState<File[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
   const [deleteTarget, setDeleteTarget] = useState<ProjectUpdate>()
   const [editing, setEditing] = useState<ProjectUpdate>()
+  const draftIds = useRef<Partial<Record<ComposerDraftType, string>>>({ comment: parentDrafts.comment?.id ?? '', project_update: parentDrafts.project_update?.id ?? '' })
   const feed = useMemo(() => [
     ...projectUpdates.map(update => ({ type: 'update' as const, createdAt: update.createdAt, update })),
     ...(project.comments ?? []).map(comment => ({ type: 'comment' as const, createdAt: comment.createdAt, comment })),
   ].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)), [project.comments, projectUpdates])
   const propertyEvents = useMemo(() => buildProjectEvents(activities), [activities])
+
+  useEffect(() => {
+    if (!body.trim() || saving) return
+    const timer = window.setTimeout(() => {
+      const input = { type: draftType, resourceId: project.id, title: project.name, body: body.trim(), metadata: { resourceType: 'project', health } }
+      const save = async () => {
+        if (!draftIds.current[draftType]) return createDraft(input)
+        try { return await updateDraft(draftIds.current[draftType]!, input) } catch { draftIds.current[draftType] = ''; return createDraft(input) }
+      }
+      void save().then(saved => {
+        draftIds.current[draftType] = saved.id
+        writeComposerDraft({ id: saved.id, type: draftType, resourceId: project.id, title: project.name, body: body.trim(), metadata: input.metadata, updatedAt: saved.updatedAt })
+      }).catch(() => undefined)
+    }, 350)
+    return () => window.clearTimeout(timer)
+  }, [body, draftType, health, project.id, project.name, saving])
+
+  const switchComposerMode = (next: 'comment' | 'update') => {
+    if (next === composerMode) return
+    const nextType: ComposerDraftType = next === 'comment' ? 'comment' : 'project_update'
+    const nextDraft = parentDrafts[nextType]
+    setComposerMode(next)
+    setBody(nextDraft?.body ?? '')
+    if (typeof nextDraft?.metadata?.health === 'string') setHealth(nextDraft.metadata.health as Project['health'])
+  }
 
   const submit = async () => {
     if (!body.trim() || saving) return
@@ -35,6 +69,11 @@ export function ProjectActivity({ activities, project, projectUpdates, viewer, o
         const update = await onCreateUpdate(project.id, { body: body.trim(), health })
         for (const file of files) await onUploadProjectUpdateAttachment(project.id, update.id, file)
       }
+      const savedType = draftType
+      const savedId = draftIds.current[savedType]
+      if (savedId && !savedId.startsWith('local:')) await deleteDraft(savedId).catch(() => undefined)
+      clearComposerDraft(savedType, project.id)
+      draftIds.current[savedType] = ''
       setBody('')
       setFiles([])
     } catch (error) { toast.error('Could not post to project', { description: error instanceof Error ? error.message : undefined }) }
@@ -43,7 +82,7 @@ export function ProjectActivity({ activities, project, projectUpdates, viewer, o
 
   return <div className="project-activity">
     <section className="project-activity__composer" data-mode={composerMode}>
-      <header><div aria-label="Post type" role="tablist"><button aria-selected={composerMode === 'comment'} onClick={() => setComposerMode('comment')} role="tab" type="button">Comment</button><button aria-selected={composerMode === 'update'} onClick={() => setComposerMode('update')} role="tab" type="button">Update</button></div>{composerMode === 'update' && <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={`project-activity__health is-${health}`} type="button"><i/>{healthLabel(health)}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="start" className="project-detail-page__menu" sideOffset={4}>{PROJECT_HEALTHS.slice(0, 3).map(option => <DropdownMenu.Item key={option.id} onSelect={() => setHealth(option.id)}><span className={`project-activity__health-dot is-${option.id}`}/><span>{option.label}</span>{health === option.id && <Check size={13}/>}</DropdownMenu.Item>)}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>}</header>
+      <header><div aria-label="Post type" role="tablist"><button aria-selected={composerMode === 'comment'} onClick={() => switchComposerMode('comment')} role="tab" type="button">Comment</button><button aria-selected={composerMode === 'update'} onClick={() => switchComposerMode('update')} role="tab" type="button">Update</button></div>{composerMode === 'update' && <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={`project-activity__health is-${health}`} type="button"><i/>{healthLabel(health)}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="start" className="project-detail-page__menu" sideOffset={4}>{PROJECT_HEALTHS.slice(0, 3).map(option => <DropdownMenu.Item key={option.id} onSelect={() => setHealth(option.id)}><span className={`project-activity__health-dot is-${option.id}`}/><span>{option.label}</span>{health === option.id && <Check size={13}/>}</DropdownMenu.Item>)}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>}</header>
       <textarea aria-label={composerMode === 'update' ? 'Project update' : 'Project comment'} onChange={event => setBody(event.target.value)} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); void submit() } }} placeholder={composerMode === 'update' ? 'Write a project update…' : 'Leave a comment…'} value={body}/>
       {composerMode === 'update' && <div className="project-activity__metadata">
         <div><span>Priority</span><div><PriorityIcon priority={0} size={13}/><small>No priority</small><b>→</b><PriorityIcon priority={project.priority} size={13}/><strong>{project.priorityLabel}</strong></div></div>

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -51,6 +52,58 @@ func TestSQLiteStorePersistsStateAndDomainEvents(t *testing.T) {
 	}
 	if len(events) != 1 || events[0].Type != "issue.created" || events[0].AggregateID != issueID {
 		t.Fatalf("unexpected events: %#v", events)
+	}
+}
+
+func TestProjectProgressHistoriesPersistAndRefreshOnIssueMutation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "flow.db")
+	store, err := OpenSQLiteTestFixture(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	seed, ok := store.BootstrapFor("test-workspace")
+	if !ok {
+		t.Fatal("test workspace is missing")
+	}
+	projectIndex := slices.IndexFunc(seed.Projects, func(project domain.Project) bool { return project.ID == "project_aut" })
+	if projectIndex < 0 || len(seed.Projects[projectIndex].IssueCountHistory) == 0 {
+		t.Fatalf("project progress history was not generated: %#v", seed.Projects)
+	}
+	issueID := seed.Issues[0].ID
+	err = store.MutateWorkspace(context.Background(), "test-workspace", "issue.updated", issueID, nil, func(data *domain.Bootstrap) error {
+		index := slices.IndexFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == issueID })
+		if index < 0 {
+			return errors.New("issue not found")
+		}
+		completedAt := time.Now().UTC()
+		data.Issues[index].State.Type = "completed"
+		data.Issues[index].CompletedAt = &completedAt
+		data.Issues[index].UpdatedAt = completedAt
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, ok := store.BootstrapFor("test-workspace")
+	if !ok || len(updated.Projects[projectIndex].CompletedScopeHistory) == 0 {
+		t.Fatalf("project progress history was not refreshed: %#v", updated.Projects)
+	}
+	if got := updated.Projects[projectIndex].CompletedScopeHistory[len(updated.Projects[projectIndex].CompletedScopeHistory)-1].Value; got < 1 {
+		t.Fatalf("completed history value = %v, want at least 1", got)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := OpenSQLiteTestFixture(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	persisted, ok := reopened.BootstrapFor("test-workspace")
+	if !ok || len(persisted.Projects[projectIndex].ProgressHistory) == 0 {
+		t.Fatalf("project progress history was not persisted: %#v", persisted.Projects)
 	}
 }
 

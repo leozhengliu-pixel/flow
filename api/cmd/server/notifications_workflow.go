@@ -914,6 +914,7 @@ func (s *server) deleteTeamLabel(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		removeLabelReferences(data, map[string]struct{}{labelID: {}})
+		removeResourcePreferences(data, "label", labelID)
 		return nil
 	})
 	if err != nil {

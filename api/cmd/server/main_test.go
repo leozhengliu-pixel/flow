@@ -768,7 +768,7 @@ func TestSearchHistoryRecentResourcesAndConcurrentIssuePatches(t *testing.T) {
 func TestWorkspaceSearchIndexesUnifiedResourceTypes(t *testing.T) {
 	now := time.Now().UTC()
 	data := domain.Bootstrap{
-		Documents:  []domain.Document{{ID: "doc-1", Title: "Launch handbook", Content: "Customer rollout", UpdatedAt: now}},
+		Documents:  []domain.Document{{ID: "doc-1", Title: "Launch handbook", Icon: "BookOpen", Color: "#eb5757", Content: "Customer rollout", UpdatedAt: now}},
 		Customers:  []domain.Customer{{ID: "customer-1", Name: "Northstar Labs", Domains: []string{"northstar.example"}, Status: "active", UpdatedAt: now}},
 		Releases:   []domain.Release{{ID: "release-1", Name: "Summer launch", Version: "v2.0", Status: "planned", UpdatedAt: now}},
 		SavedViews: []domain.SavedView{{ID: "view-1", Name: "Escalated requests", Description: "High priority customer work", Resource: "issues", Scope: "workspace", UpdatedAt: now}},
@@ -786,6 +786,9 @@ func TestWorkspaceSearchIndexesUnifiedResourceTypes(t *testing.T) {
 		}
 		if !searchResourceVisible(data, results[0].Type, results[0].ID) {
 			t.Fatalf("search result %s:%s is not recordable as recent", results[0].Type, results[0].ID)
+		}
+		if expected == "document" && (results[0].Icon != "BookOpen" || results[0].Color != "#eb5757") {
+			t.Fatalf("document search visual = %#v", results[0])
 		}
 	}
 }

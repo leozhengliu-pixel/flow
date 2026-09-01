@@ -53,6 +53,7 @@ import { DisplayIcon, FilterIcon } from "@/components/ui/view-action-icons";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { ProjectIcon, SlackIcon } from "@/components/issue/issue-icons";
 import { ViewGlyph, ViewIconPicker } from "@/components/views/view-icon-picker";
+import { DocumentGlyph } from "@/components/documents/document-icon";
 import { LoopsDirectory } from "@/components/loops/loops-page";
 import { useI18n } from "@/i18n/i18n";
 import type {
@@ -836,9 +837,13 @@ function ResourceSection({
           </DropdownMenu.Root>
         </header>
       )}
-      {items.map((item) => (
+      {items.map((item) => {
+        const resourceDocument = item.resourceType === "document"
+          ? data.documents.find((value) => value.id === item.resourceId)
+          : undefined;
+        return (
         <div className="team-resource-row" key={item.id}>
-          {item.resourceType === "document" ? <FileText /> : <Link2 />}
+          {resourceDocument ? <DocumentGlyph document={resourceDocument} /> : item.resourceType === "document" ? <FileText /> : <Link2 />}
           <button
             data-i18n-ignore
             onClick={() => {
@@ -909,7 +914,7 @@ function ResourceSection({
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
         </div>
-      ))}
+      )})}
     </div>
   );
 }
@@ -1018,6 +1023,7 @@ function ResourceCommandMenu({
                       <span className="team-resource-checkbox">
                         {pinnedIds.has(document.id) && <Check />}
                       </span>
+                      <DocumentGlyph document={document} />
                       <span data-i18n-ignore>{document.title}</span>
                     </DropdownMenu.CheckboxItem>
                   ))}
@@ -1404,7 +1410,7 @@ function TeamDocuments({
         <div className="team-documents-group-header"><button aria-expanded={!collapsed.has(group.id)} aria-label={collapsed.has(group.id)?"Expand group":"Collapse group"} onClick={()=>setCollapsed(current=>{const next=new Set(current);if(next.has(group.id))next.delete(group.id);else next.add(group.id);return next})} type="button"><ChevronRight/></button>{"project" in group && group.project ? <a data-i18n-ignore href={projectPath(data.workspace.urlKey, group.project)} onClick={event => { event.preventDefault(); onNavigate(projectPath(data.workspace.urlKey, group.project)) }}>{group.name}</a> : <span>{group.name}</span>}<small>{group.items.length}</small></div>
         {!collapsed.has(group.id)&&group.items.map(document => <a className="team-document-row" href={documentPath(data.workspace.urlKey, document)} key={document.id} onClick={event => { if ((event.target as HTMLElement).closest("button,input")) { event.preventDefault(); return } event.preventDefault(); onNavigate(documentPath(data.workspace.urlKey, document)) }}>
           <label aria-label="Select document"><input checked={selected.includes(document.id)} onChange={() => setSelected(current => current.includes(document.id) ? current.filter(id => id !== document.id) : [...current, document.id])} type="checkbox"/><span><Check size={10}/></span></label>
-          <FileText/><strong data-i18n-ignore>{document.title}</strong><time>{relativeDocumentDate(document.createdAt)}</time><time>{relativeDocumentDate(document.updatedAt)}</time><button className="team-document-owner" type="button"><span>{document.creator.displayName.slice(0,2).toUpperCase()}</span><i data-i18n-ignore>{document.creator.displayName}</i></button>
+          <DocumentGlyph document={document}/><strong data-i18n-ignore>{document.title}</strong><time>{relativeDocumentDate(document.createdAt)}</time><time>{relativeDocumentDate(document.updatedAt)}</time><button className="team-document-owner" type="button"><span>{document.creator.displayName.slice(0,2).toUpperCase()}</span><i data-i18n-ignore>{document.creator.displayName}</i></button>
           <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open menu" className="team-document-more" type="button"><TeamMoreIcon/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="team-home-menu"><DropdownMenu.Item onSelect={() => onNavigate(documentPath(data.workspace.urlKey, document))}>Open document</DropdownMenu.Item><DropdownMenu.Item onSelect={() => void navigator.clipboard.writeText(`${location.origin}${documentPath(data.workspace.urlKey, document)}`)}>Copy link</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
         </a>)}
       </section>)}

@@ -22,6 +22,7 @@ import {
   connectIntegration,
   disconnectIntegrationConnection,
   retryIntegrationDelivery,
+  testIntegrationConnection,
   updateIntegrationConnection,
 } from "@/lib/api";
 import type { BootstrapData, IntegrationConnection } from "@/types/flow";
@@ -46,6 +47,7 @@ export function CodeIntegrationSettings({
   );
   const [editing, setEditing] = useState(false),
     [busy, setBusy] = useState(false),
+    [testing, setTesting] = useState(false),
     [disconnecting, setDisconnecting] = useState<IntegrationConnection>();
   const [organization, setOrganization] = useState(""),
     [token, setToken] = useState(""),
@@ -96,6 +98,29 @@ export function CodeIntegrationSettings({
       );
     } finally {
       setBusy(false);
+    }
+  };
+  const testConnection = async () => {
+    if (provider !== "gitlab" || !token.trim()) return;
+    setTesting(true);
+    try {
+      await testIntegrationConnection(
+        "gitlab",
+        editing ? connections[0]?.id : undefined,
+        {
+          token: token.trim(),
+          host: host.trim() || undefined,
+        },
+      );
+      toast.success(t("GitLab connection verified"));
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("Could not test GitLab connection"),
+      );
+    } finally {
+      setTesting(false);
     }
   };
   const setting = async (
@@ -207,6 +232,16 @@ export function CodeIntegrationSettings({
                   day: "numeric",
                   year: "numeric",
                 })}
+                {connection.lastTestStatus && (
+                  <>
+                    {" · "}
+                    {t(
+                      connection.lastTestStatus === "ready"
+                        ? "Connection verified"
+                        : "Connection test failed",
+                    )}
+                  </>
+                )}
               </span>
             </div>
             <DropdownMenu.Root>
@@ -236,6 +271,12 @@ export function CodeIntegrationSettings({
                     <ExternalLink />
                     {t(`Configure in ${title}`)}
                   </DropdownMenu.Item>
+                  {provider === "gitlab" && (
+                    <DropdownMenu.Item onSelect={() => setEditing(true)}>
+                      <RefreshCw />
+                      {t("Test connection")}
+                    </DropdownMenu.Item>
+                  )}
                   <DropdownMenu.Separator />
                   <DropdownMenu.Item
                     className="danger"
@@ -317,10 +358,20 @@ export function CodeIntegrationSettings({
               >
                 {t("Cancel")}
               </button>
+              {provider === "gitlab" && (
+                <button
+                  disabled={busy || testing || !token.trim()}
+                  onClick={() => void testConnection()}
+                  type="button"
+                >
+                  {testing ? t("Testing…") : t("Test connection")}
+                </button>
+              )}
               <button
                 className="code-primary"
                 disabled={
                   busy ||
+                  testing ||
                   (provider === "github" ? !organization.trim() : !token.trim())
                 }
                 onClick={() => void connect()}
@@ -420,7 +471,9 @@ function IntegrationDeliveryHistory({
             <div>
               <strong>{t(integrationEventLabel(item.eventType))}</strong>
               <span>
-                {t(integrationDeliveryStatusLabel(item.status))} · {item.attempts} {t(item.attempts === 1 ? "attempt" : "attempts")} ·{" "}
+                {t(integrationDeliveryStatusLabel(item.status))} ·{" "}
+                {item.attempts}{" "}
+                {t(item.attempts === 1 ? "attempt" : "attempts")} ·{" "}
                 {formatDate(item.updatedAt, {
                   dateStyle: "medium",
                   timeStyle: "short",

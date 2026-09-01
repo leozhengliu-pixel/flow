@@ -30,10 +30,10 @@
 .team-documents-group-header>button[aria-expanded=false] svg{transform:none}
 .team-documents-group-header>a,.team-documents-group-header>span{color:var(--theme-text-primary);font-weight:500;text-decoration:none}
 .team-documents-group-header small{color:var(--theme-text-secondary);font-size:12px}
-.team-document-row{position:relative;box-sizing:border-box;width:100%;height:48px;display:grid;grid-template-columns:20px 18px minmax(220px,1fr) 120px 120px 150px 28px;align-items:center;gap:6px;padding:0 14px;color:var(--theme-text-secondary);text-decoration:none}
+.team-document-row{position:relative;box-sizing:border-box;width:100%;height:48px;display:grid;grid-template-columns:20px 16px minmax(220px,1fr) 120px 120px 150px 28px;align-items:center;gap:8px;padding:0 14px 0 18px;color:var(--theme-text-secondary);text-decoration:none}
 .team-document-row:hover{background:var(--theme-surface-hover)}
-.team-document-row>label{position:relative;width:20px;height:48px;display:grid;place-items:center}
-.team-document-row>label input{position:absolute;opacity:0}
+.team-document-row>label{position:relative;width:20px;height:22px;display:grid;place-items:center}
+.team-document-row>label>input[type=checkbox]:not([data-control=toggle]){position:absolute!important;left:4px;top:5px;width:12px;height:12px;margin:0;opacity:0}
 .team-document-row>label span{box-sizing:border-box;width:14px;height:14px;display:grid;place-items:center;border:1px solid var(--theme-border-strong);border-radius:3px;opacity:0}
 .team-document-row:hover>label span,.team-document-row>label:has(input:checked) span{opacity:1}
 .team-document-row>label:has(input:checked) span{border-color:var(--accent-primary);background:var(--accent-primary);color:white}

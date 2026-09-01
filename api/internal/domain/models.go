@@ -518,6 +518,16 @@ type ProjectStatus struct {
 	Position    float64 `json:"position"`
 }
 
+type ProjectProgressHistoryPoint struct {
+	Date              time.Time `json:"date"`
+	Value             float64   `json:"value"`
+	BacklogEstimate   float64   `json:"backlogEstimate,omitempty"`
+	UnstartedEstimate float64   `json:"unstartedEstimate,omitempty"`
+	StartedEstimate   float64   `json:"startedEstimate,omitempty"`
+	CompletedEstimate float64   `json:"completedEstimate,omitempty"`
+	ScopeEstimate     float64   `json:"scopeEstimate,omitempty"`
+}
+
 type Project struct {
 	ID                   string                       `json:"id"`
 	Name                 string                       `json:"name"`
@@ -554,6 +564,12 @@ type Project struct {
 	ArchivedAt           *time.Time                   `json:"archivedAt,omitempty"`
 	CreatedAt            time.Time                    `json:"createdAt"`
 	UpdatedAt            time.Time                    `json:"updatedAt"`
+
+	IssueCountHistory      []ProjectProgressHistoryPoint `json:"issueCountHistory,omitempty"`
+	ScopeHistory           []ProjectProgressHistoryPoint `json:"scopeHistory,omitempty"`
+	CompletedScopeHistory  []ProjectProgressHistoryPoint `json:"completedScopeHistory,omitempty"`
+	InProgressScopeHistory []ProjectProgressHistoryPoint `json:"inProgressScopeHistory,omitempty"`
+	ProgressHistory        []ProjectProgressHistoryPoint `json:"progressHistory,omitempty"`
 }
 
 type ProjectDescriptionRevision struct {
@@ -968,6 +984,8 @@ type IntegrationConnection struct {
 	CreatedAt         time.Time         `json:"createdAt"`
 	UpdatedAt         time.Time         `json:"updatedAt"`
 	LastWebhookAt     *time.Time        `json:"lastWebhookAt,omitempty"`
+	LastTestAt        *time.Time        `json:"lastTestAt,omitempty"`
+	LastTestStatus    string            `json:"lastTestStatus,omitempty"`
 	LastError         string            `json:"lastError,omitempty"`
 	OAuthState        string            `json:"oauthState,omitempty"`
 	OAuthStartedAt    *time.Time        `json:"oauthStartedAt,omitempty"`
@@ -1136,8 +1154,18 @@ type Favorite struct {
 	UserID       string    `json:"userId"`
 	ResourceType string    `json:"resourceType"`
 	ResourceID   string    `json:"resourceId"`
+	FolderID     string    `json:"folderId,omitempty"`
 	Position     float64   `json:"position"`
 	CreatedAt    time.Time `json:"createdAt"`
+}
+
+type FavoriteFolder struct {
+	ID        string    `json:"id"`
+	UserID    string    `json:"userId"`
+	Name      string    `json:"name"`
+	Position  float64   `json:"position"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 type Subscription struct {
@@ -1461,6 +1489,7 @@ type Bootstrap struct {
 	SLAEvents               []SLAEvent                         `json:"slaEvents"`
 	Drafts                  []Draft                            `json:"drafts"`
 	Favorites               []Favorite                         `json:"favorites"`
+	FavoriteFolders         []FavoriteFolder                   `json:"favoriteFolders"`
 	Subscriptions           []Subscription                     `json:"subscriptions"`
 	AuditLog                []AuditLogEntry                    `json:"auditLog"`
 	Trash                   []TrashEntry                       `json:"trash"`

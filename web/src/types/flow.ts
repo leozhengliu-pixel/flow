@@ -599,8 +599,22 @@ export interface Project {
   slackChannelName?: string;
   archivedAt?: string;
   issueCount: number;
+  issueCountHistory?: ProjectProgressHistoryPoint[];
+  scopeHistory?: ProjectProgressHistoryPoint[];
+  completedScopeHistory?: ProjectProgressHistoryPoint[];
+  inProgressScopeHistory?: ProjectProgressHistoryPoint[];
+  progressHistory?: ProjectProgressHistoryPoint[];
   createdAt: string;
   updatedAt: string;
+}
+export interface ProjectProgressHistoryPoint {
+  date: string;
+  value: number;
+  backlogEstimate?: number;
+  unstartedEstimate?: number;
+  startedEstimate?: number;
+  completedEstimate?: number;
+  scopeEstimate?: number;
 }
 export interface ProjectRelation {
   id: UUID;
@@ -997,6 +1011,8 @@ export interface IntegrationConnection {
   createdAt: string;
   updatedAt: string;
   lastWebhookAt?: string;
+  lastTestAt?: string;
+  lastTestStatus?: "ready" | "error";
   lastDeliveryAt?: string;
   lastError?: string;
   oauthStartedAt?: string;
@@ -1206,8 +1222,17 @@ export interface Favorite {
   userId: UUID;
   resourceType: string;
   resourceId: UUID;
+  folderId?: UUID;
   position: number;
   createdAt: string;
+}
+export interface FavoriteFolder {
+  id: UUID;
+  userId: UUID;
+  name: string;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
 }
 export interface Subscription {
   id: UUID;
@@ -1538,6 +1563,7 @@ export interface BootstrapData {
   slaEvents: SLAEvent[];
   drafts: Draft[];
   favorites: Favorite[];
+  favoriteFolders: FavoriteFolder[];
   subscriptions: Subscription[];
   auditLog: AuditLogEntry[];
   trash: TrashEntry[];

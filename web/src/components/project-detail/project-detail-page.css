@@ -478,6 +478,8 @@
 .project-details-sidebar__progress-line.is-scope { stroke: var(--progress-scope-line); }
 .project-details-sidebar__progress-line.is-started { stroke: var(--progress-started); }
 .project-details-sidebar__progress-line.is-completed { stroke: var(--progress-completed); }
+.project-details-sidebar__progress-line.is-completed-forecast { stroke: var(--progress-completed); stroke-dasharray: 3 3; stroke-linecap: round; }
+.project-details-sidebar__forecast-hatch { opacity: .36; }
 .project-details-sidebar__progress-end { stroke: var(--pd-panel); stroke-width: .5; }
 .project-details-sidebar__progress-end.is-started { fill: var(--progress-started); }
 .project-details-sidebar__progress-end.is-completed { fill: var(--progress-completed); }

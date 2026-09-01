@@ -81,6 +81,12 @@ func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) 
 	if err != nil {
 		return err
 	}
+	historyChanged := refreshProjectProgressHistories(&data, time.Now().UTC())
+	if historyChanged {
+		if err := s.persistWorkspace(ctx, workspaceKey, data, nil); err != nil {
+			return err
+		}
+	}
 	s.mu.Lock()
 	s.workspaces[workspaceKey] = data
 	s.mu.Unlock()
@@ -255,6 +261,7 @@ func (s *SQLiteStore) makeAuthEmailNullable(ctx context.Context) error {
 
 func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	s.workspaces = map[string]domain.Bootstrap{}
+	historyChanged := map[string]bool{}
 	rows, err := s.db.QueryContext(ctx, `SELECT workspace_key,data FROM workspace_states ORDER BY updated_at ASC`)
 	if err != nil {
 		return err
@@ -276,6 +283,7 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 			return err
 		}
 		normalize(&data)
+		historyChanged[key] = refreshProjectProgressHistories(&data, time.Now().UTC())
 		s.workspaces[key] = data
 	}
 	if err := rows.Close(); err != nil {
@@ -291,6 +299,13 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 		if s.viewer.ID == "" {
 			s.viewer = s.workspaces[s.lastWorkspaceKey].Viewer
 		}
+		for key, data := range s.workspaces {
+			if historyChanged[key] {
+				if err := s.persistWorkspace(ctx, key, data, nil); err != nil {
+					return err
+				}
+			}
+		}
 		return nil
 	}
 
@@ -300,6 +315,7 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 		if strings.EqualFold(s.fixtureProfile, "test") {
 			data := localSQLiteFixture()
 			normalize(&data)
+			refreshProjectProgressHistories(&data, time.Now().UTC())
 			s.workspaces[data.Workspace.URLKey] = data
 			s.lastWorkspaceKey = data.Workspace.URLKey
 			s.viewer = data.Viewer
@@ -317,6 +333,7 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 		return err
 	}
 	normalize(&data)
+	refreshProjectProgressHistories(&data, time.Now().UTC())
 	s.workspaces[data.Workspace.URLKey] = data
 	s.lastWorkspaceKey = data.Workspace.URLKey
 	s.viewer = data.Viewer
@@ -579,6 +596,9 @@ func normalize(data *domain.Bootstrap) {
 	}
 	if data.Favorites == nil {
 		data.Favorites = []domain.Favorite{}
+	}
+	if data.FavoriteFolders == nil {
+		data.FavoriteFolders = []domain.FavoriteFolder{}
 	}
 	if data.Subscriptions == nil {
 		data.Subscriptions = []domain.Subscription{}
@@ -1065,6 +1085,9 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 		aggregateID, err := mutate(&next)
 		if err != nil {
 			return err
+		}
+		if progressEvent(eventType) {
+			refreshProjectProgressHistories(&next, time.Now().UTC())
 		}
 		refreshResourceCounts(&next)
 		payloadRaw, err := json.Marshal(payload)
