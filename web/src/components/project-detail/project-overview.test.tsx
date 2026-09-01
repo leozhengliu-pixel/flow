@@ -24,7 +24,7 @@ describe('project overview workflow', () => {
     const onCreateMilestone = vi.fn().mockResolvedValue({ id: 'milestone-1', name: 'Launch' })
     const props = {
       project: { ...project, milestones: [], resources: [], customers: [] }, projects: [project], initiatives: [],
-      projectStatuses: [project.status], projectUpdates: [], users: data.users, teams: data.teams,
+      documents: data.documents, projectStatuses: [project.status], projectUpdates: [], users: data.users, teams: data.teams,
       labels: [], labelGroups: [], projectIssues: [], save, onTabChange,
       onCreateResource, onUpdateResource: vi.fn(), onDeleteResource: vi.fn(),
       onCreateMilestone, onUpdateMilestone: vi.fn(), onDeleteMilestone: vi.fn(),

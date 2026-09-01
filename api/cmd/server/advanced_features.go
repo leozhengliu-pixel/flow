@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -452,6 +453,7 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Favorite != nil {
 			document.Favorite = *input.Favorite
+			setFavoriteRecord(data, "document", document.ID, *input.Favorite)
 		}
 		if input.Archived != nil {
 			now := time.Now().UTC()
@@ -505,6 +507,8 @@ func (s *server) deleteDocument(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		data.Documents = slices.Delete(data.Documents, index, index+1)
+		removeResourcePreferences(data, "document", removed.ID)
+		data.Drafts = slices.DeleteFunc(data.Drafts, func(item domain.Draft) bool { return draftBelongsToResource(item, "document", removed.ID) })
 		for projectIndex := range data.Projects {
 			data.Projects[projectIndex].Resources = slices.DeleteFunc(data.Projects[projectIndex].Resources, func(item domain.ProjectResource) bool { return item.ID == removed.ID })
 		}
@@ -1029,6 +1033,7 @@ func (s *server) deleteRelease(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		data.Releases = slices.Delete(data.Releases, index, index+1)
+		removeResourcePreferences(data, "release", item.ID)
 		return nil
 	})
 	respondMutation(w, err, http.StatusNoContent, nil)
@@ -1691,7 +1696,7 @@ func (s *server) updateDraft(w http.ResponseWriter, r *http.Request) {
 
 func applyDraftInput(item *domain.Draft, input draftInput) {
 	if input.Type != nil {
-		item.Type = strings.TrimSpace(*input.Type)
+		item.Type = normalizeDraftType(*input.Type)
 	}
 	if input.ResourceID != nil {
 		item.ResourceID = strings.TrimSpace(*input.ResourceID)
@@ -1710,17 +1715,98 @@ func applyDraftInput(item *domain.Draft, input draftInput) {
 	}
 }
 
+// normalizeDraftType keeps the public API tolerant of the entity-style names
+// emitted by clients while storing one canonical value for filtering and UI.
+func normalizeDraftType(value string) string {
+	switch strings.TrimSpace(value) {
+	case "projectUpdate":
+		return "project_update"
+	case "initiativeUpdate":
+		return "initiative_update"
+	case "customerNeed":
+		return "customer_need"
+	case "pullRequestComment":
+		return "pull_request_comment"
+	default:
+		return strings.TrimSpace(value)
+	}
+}
+
+func draftBelongsToResource(item domain.Draft, resourceType, resourceID string) bool {
+	if item.ResourceID != resourceID {
+		return false
+	}
+	if item.Type == resourceType {
+		return true
+	}
+	if item.Type != "comment" {
+		return false
+	}
+	parentType := "issue"
+	if value, ok := item.Metadata["resourceType"].(string); ok && strings.TrimSpace(value) != "" {
+		parentType = normalizeDraftType(value)
+	}
+	switch parentType {
+	case "project_update":
+		parentType = "project"
+	case "initiative_update":
+		parentType = "initiative"
+	case "customer_need":
+		parentType = "customer"
+	case "pull_request_comment":
+		parentType = "review"
+	}
+	return parentType == resourceType
+}
+
 func validateDraft(data *domain.Bootstrap, item domain.Draft) error {
-	if !slices.Contains([]string{"issue", "comment", "document"}, item.Type) {
+	if !slices.Contains([]string{"issue", "comment", "document", "loop", "project_update", "initiative_update", "customer_need", "pull_request_comment"}, item.Type) {
 		return fmt.Errorf("%w: unsupported draft type", errInvalid)
 	}
 	if len(item.Title) > 512 || len(item.Body) > 1<<20 {
 		return fmt.Errorf("%w: draft content is too large", errInvalid)
 	}
-	if item.Type == "comment" && (item.ResourceID == "" || !resourceExists(data, "issue", item.ResourceID)) {
-		return fmt.Errorf("%w: comment draft requires an issue", errInvalid)
+	if item.Type == "comment" {
+		parentType := "issue"
+		if value, ok := item.Metadata["resourceType"].(string); ok && strings.TrimSpace(value) != "" {
+			parentType = normalizeDraftType(value)
+		}
+		if parentType == "project_update" {
+			parentType = "project"
+		} else if parentType == "initiative_update" {
+			parentType = "initiative"
+		} else if parentType == "customer_need" {
+			parentType = "customer"
+		} else if parentType == "pull_request_comment" {
+			parentType = "review"
+		}
+		if item.ResourceID == "" || !resourceExists(data, parentType, item.ResourceID) {
+			return fmt.Errorf("%w: comment draft requires a valid parent resource", errInvalid)
+		}
 	}
-	if item.ResourceID != "" && item.Type != "comment" && !resourceExists(data, item.Type, item.ResourceID) {
+	if item.Type == "project_update" && (item.ResourceID == "" || !resourceExists(data, "project", item.ResourceID)) {
+		return fmt.Errorf("%w: project update draft requires a project", errInvalid)
+	}
+	if item.Type == "initiative_update" && (item.ResourceID == "" || !resourceExists(data, "initiative", item.ResourceID)) {
+		return fmt.Errorf("%w: initiative update draft requires an initiative", errInvalid)
+	}
+	if item.Type == "customer_need" && (item.ResourceID == "" || !resourceExists(data, "customer", item.ResourceID)) {
+		return fmt.Errorf("%w: customer request draft requires a customer", errInvalid)
+	}
+	if item.Type == "pull_request_comment" && (item.ResourceID == "" || !resourceExists(data, "review", item.ResourceID)) {
+		return fmt.Errorf("%w: pull request comment draft requires a review", errInvalid)
+	}
+	resourceType := item.Type
+	if item.Type == "project_update" {
+		resourceType = "project"
+	} else if item.Type == "initiative_update" {
+		resourceType = "initiative"
+	} else if item.Type == "customer_need" {
+		resourceType = "customer"
+	} else if item.Type == "pull_request_comment" {
+		resourceType = "review"
+	}
+	if item.ResourceID != "" && item.Type != "comment" && item.Type != "project_update" && item.Type != "initiative_update" && item.Type != "customer_need" && item.Type != "pull_request_comment" && !resourceExists(data, resourceType, item.ResourceID) {
 		return fmt.Errorf("%w: draft resource does not exist", errInvalid)
 	}
 	return nil
@@ -1754,8 +1840,14 @@ func resourceExists(data *domain.Bootstrap, kind, id string) bool {
 		return validateResourceIDs(data, "issue", []string{id})
 	case "project":
 		return validateResourceIDs(data, "project", []string{id})
+	case "team":
+		return slices.ContainsFunc(data.Teams, func(item domain.Team) bool { return item.ID == id && item.RetiredAt == nil })
 	case "document":
 		return slices.ContainsFunc(data.Documents, func(item domain.Document) bool { return item.ID == id })
+	case "label":
+		return slices.ContainsFunc(data.Labels, func(item domain.IssueLabel) bool { return item.ID == id && item.ArchivedAt == nil })
+	case "cycle":
+		return slices.ContainsFunc(data.Cycles, func(item domain.Cycle) bool { return item.ID == id })
 	case "release":
 		return slices.ContainsFunc(data.Releases, func(item domain.Release) bool { return item.ID == id })
 	case "release_pipeline":
@@ -1764,12 +1856,67 @@ func resourceExists(data *domain.Bootstrap, kind, id string) bool {
 		return slices.ContainsFunc(data.Customers, func(item domain.Customer) bool { return item.ID == id })
 	case "initiative":
 		return slices.ContainsFunc(data.Initiatives, func(item domain.Initiative) bool { return item.ID == id })
+	case "review":
+		return slices.ContainsFunc(data.Reviews, func(item domain.CodeReview) bool { return item.ID == id || item.SlugID == id })
 	case "view":
 		return slices.ContainsFunc(data.SavedViews, func(item domain.SavedView) bool { return item.ID == id })
 	case "dashboard":
 		return slices.ContainsFunc(settingCollection[domain.Dashboard](*data, dashboardsSettingsKey), func(item domain.Dashboard) bool { return item.ID == id })
 	}
 	return false
+}
+
+func setResourceFavoriteFlag(data *domain.Bootstrap, kind, id string, favorite bool) {
+	switch kind {
+	case "document":
+		if index := slices.IndexFunc(data.Documents, func(item domain.Document) bool { return item.ID == id }); index >= 0 {
+			data.Documents[index].Favorite = favorite
+		}
+	case "cycle":
+		if index := slices.IndexFunc(data.Cycles, func(item domain.Cycle) bool { return item.ID == id }); index >= 0 {
+			data.Cycles[index].Favorite = favorite
+		}
+	case "initiative":
+		if index := slices.IndexFunc(data.Initiatives, func(item domain.Initiative) bool { return item.ID == id }); index >= 0 {
+			data.Initiatives[index].Favorite = favorite
+		}
+	case "view":
+		if index := slices.IndexFunc(data.SavedViews, func(item domain.SavedView) bool { return item.ID == id }); index >= 0 {
+			data.SavedViews[index].Favorite = favorite
+		}
+	}
+}
+
+func removeResourcePreferences(data *domain.Bootstrap, kind, id string) {
+	data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool {
+		return item.ResourceType == kind && item.ResourceID == id
+	})
+	data.Subscriptions = slices.DeleteFunc(data.Subscriptions, func(item domain.Subscription) bool {
+		return item.ResourceType == kind && item.ResourceID == id
+	})
+}
+
+func setFavoriteRecord(data *domain.Bootstrap, kind, id string, favorite bool) {
+	index := slices.IndexFunc(data.Favorites, func(item domain.Favorite) bool {
+		return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
+	})
+	if !favorite {
+		if index >= 0 {
+			data.Favorites = append(data.Favorites[:index], data.Favorites[index+1:]...)
+		}
+		return
+	}
+	if index >= 0 {
+		return
+	}
+	now := time.Now().UTC()
+	position := 0.0
+	for _, item := range data.Favorites {
+		if item.UserID == data.Viewer.ID && item.FolderID == "" && item.Position >= position {
+			position = item.Position + 1
+		}
+	}
+	data.Favorites = append(data.Favorites, domain.Favorite{ID: fmt.Sprintf("favorite_%d", now.UnixNano()), UserID: data.Viewer.ID, ResourceType: kind, ResourceID: id, Position: position, CreatedAt: now})
 }
 
 func (s *server) addFavorite(w http.ResponseWriter, r *http.Request) {
@@ -1779,6 +1926,7 @@ func (s *server) addFavorite(w http.ResponseWriter, r *http.Request) {
 		if !resourceExists(data, kind, id) {
 			return errNotFound
 		}
+		setResourceFavoriteFlag(data, kind, id, true)
 		index := slices.IndexFunc(data.Favorites, func(item domain.Favorite) bool {
 			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
 		})
@@ -1786,9 +1934,13 @@ func (s *server) addFavorite(w http.ResponseWriter, r *http.Request) {
 			created = data.Favorites[index]
 			return nil
 		}
-		now := time.Now().UTC()
-		created = domain.Favorite{ID: fmt.Sprintf("favorite_%d", now.UnixNano()), UserID: data.Viewer.ID, ResourceType: kind, ResourceID: id, Position: float64(len(data.Favorites)), CreatedAt: now}
-		data.Favorites = append(data.Favorites, created)
+		setFavoriteRecord(data, kind, id, true)
+		index = slices.IndexFunc(data.Favorites, func(item domain.Favorite) bool {
+			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
+		})
+		if index >= 0 {
+			created = data.Favorites[index]
+		}
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, created)
@@ -1797,9 +1949,141 @@ func (s *server) addFavorite(w http.ResponseWriter, r *http.Request) {
 func (s *server) removeFavorite(w http.ResponseWriter, r *http.Request) {
 	kind, id := r.PathValue("type"), r.PathValue("id")
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "favorite.removed", id, map[string]string{"type": kind}, func(data *domain.Bootstrap) error {
+		setResourceFavoriteFlag(data, kind, id, false)
 		data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool {
 			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
 		})
+		return nil
+	})
+	respondMutation(w, err, http.StatusNoContent, nil)
+}
+
+type favoriteUpdateInput struct {
+	FolderID *string  `json:"folderId,omitempty"`
+	Position *float64 `json:"position,omitempty"`
+}
+
+func (s *server) updateFavorite(w http.ResponseWriter, r *http.Request) {
+	kind, id := r.PathValue("type"), r.PathValue("id")
+	var input favoriteUpdateInput
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if input.Position != nil && (math.IsNaN(*input.Position) || math.IsInf(*input.Position, 0)) {
+		writeError(w, http.StatusBadRequest, "position must be finite")
+		return
+	}
+	var updated domain.Favorite
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "favorite.updated", id, input, func(data *domain.Bootstrap) error {
+		index := slices.IndexFunc(data.Favorites, func(item domain.Favorite) bool {
+			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
+		})
+		if index < 0 {
+			return errNotFound
+		}
+		if input.FolderID != nil {
+			folderID := strings.TrimSpace(*input.FolderID)
+			if folderID != "" && !slices.ContainsFunc(data.FavoriteFolders, func(folder domain.FavoriteFolder) bool {
+				return folder.ID == folderID && folder.UserID == data.Viewer.ID
+			}) {
+				return errNotFound
+			}
+			data.Favorites[index].FolderID = folderID
+		}
+		if input.Position != nil {
+			data.Favorites[index].Position = *input.Position
+		}
+		updated = data.Favorites[index]
+		return nil
+	})
+	respondMutation(w, err, http.StatusOK, updated)
+}
+
+type favoriteFolderInput struct {
+	Name     *string  `json:"name,omitempty"`
+	Position *float64 `json:"position,omitempty"`
+}
+
+func (s *server) createFavoriteFolder(w http.ResponseWriter, r *http.Request) {
+	var input favoriteFolderInput
+	if !decodeJSON(w, r, &input) || input.Name == nil {
+		return
+	}
+	name := strings.TrimSpace(*input.Name)
+	if name == "" || len([]rune(name)) > 80 {
+		writeError(w, http.StatusBadRequest, "folder name is required and must not exceed 80 characters")
+		return
+	}
+	var created domain.FavoriteFolder
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "favorite_folder.created", "", input, func(data *domain.Bootstrap) error {
+		now := time.Now().UTC()
+		position := 0.0
+		for _, folder := range data.FavoriteFolders {
+			if folder.UserID == data.Viewer.ID && folder.Position >= position {
+				position = folder.Position + 1
+			}
+		}
+		created = domain.FavoriteFolder{ID: fmt.Sprintf("favorite_folder_%d", now.UnixNano()), UserID: data.Viewer.ID, Name: name, Position: position, CreatedAt: now, UpdatedAt: now}
+		data.FavoriteFolders = append(data.FavoriteFolders, created)
+		return nil
+	})
+	respondMutation(w, err, http.StatusCreated, created)
+}
+
+func (s *server) updateFavoriteFolder(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var input favoriteFolderInput
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if input.Position != nil && (math.IsNaN(*input.Position) || math.IsInf(*input.Position, 0)) {
+		writeError(w, http.StatusBadRequest, "position must be finite")
+		return
+	}
+	var updated domain.FavoriteFolder
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "favorite_folder.updated", id, input, func(data *domain.Bootstrap) error {
+		index := slices.IndexFunc(data.FavoriteFolders, func(folder domain.FavoriteFolder) bool { return folder.ID == id && folder.UserID == data.Viewer.ID })
+		if index < 0 {
+			return errNotFound
+		}
+		if input.Name != nil {
+			name := strings.TrimSpace(*input.Name)
+			if name == "" || len([]rune(name)) > 80 {
+				return fmt.Errorf("%w: folder name is required and must not exceed 80 characters", errInvalid)
+			}
+			data.FavoriteFolders[index].Name = name
+		}
+		if input.Position != nil {
+			data.FavoriteFolders[index].Position = *input.Position
+		}
+		data.FavoriteFolders[index].UpdatedAt = time.Now().UTC()
+		updated = data.FavoriteFolders[index]
+		return nil
+	})
+	respondMutation(w, err, http.StatusOK, updated)
+}
+
+func (s *server) deleteFavoriteFolder(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "favorite_folder.deleted", id, nil, func(data *domain.Bootstrap) error {
+		index := slices.IndexFunc(data.FavoriteFolders, func(folder domain.FavoriteFolder) bool { return folder.ID == id && folder.UserID == data.Viewer.ID })
+		if index < 0 {
+			return errNotFound
+		}
+		position := 0.0
+		for _, favorite := range data.Favorites {
+			if favorite.UserID == data.Viewer.ID && favorite.FolderID == "" && favorite.Position >= position {
+				position = favorite.Position + 1
+			}
+		}
+		for favoriteIndex := range data.Favorites {
+			if data.Favorites[favoriteIndex].UserID == data.Viewer.ID && data.Favorites[favoriteIndex].FolderID == id {
+				data.Favorites[favoriteIndex].FolderID = ""
+				data.Favorites[favoriteIndex].Position = position
+				position++
+			}
+		}
+		data.FavoriteFolders = append(data.FavoriteFolders[:index], data.FavoriteFolders[index+1:]...)
 		return nil
 	})
 	respondMutation(w, err, http.StatusNoContent, nil)
@@ -1816,6 +2100,7 @@ func (s *server) addSubscription(w http.ResponseWriter, r *http.Request) {
 		if !resourceExists(data, kind, id) {
 			return errNotFound
 		}
+		setDocumentSubscription(data, kind, id, data.Viewer.ID, true)
 		index := slices.IndexFunc(data.Subscriptions, func(item domain.Subscription) bool {
 			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
 		})
@@ -1840,12 +2125,30 @@ func (s *server) addSubscription(w http.ResponseWriter, r *http.Request) {
 func (s *server) removeSubscription(w http.ResponseWriter, r *http.Request) {
 	kind, id := r.PathValue("type"), r.PathValue("id")
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "subscription.removed", id, map[string]string{"type": kind}, func(data *domain.Bootstrap) error {
+		setDocumentSubscription(data, kind, id, data.Viewer.ID, false)
 		data.Subscriptions = slices.DeleteFunc(data.Subscriptions, func(item domain.Subscription) bool {
 			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
 		})
 		return nil
 	})
 	respondMutation(w, err, http.StatusNoContent, nil)
+}
+
+func setDocumentSubscription(data *domain.Bootstrap, kind, id, userID string, subscribed bool) {
+	if kind != "document" {
+		return
+	}
+	index := slices.IndexFunc(data.Documents, func(item domain.Document) bool { return item.ID == id })
+	if index < 0 {
+		return
+	}
+	if subscribed {
+		if !slices.Contains(data.Documents[index].SubscriberIDs, userID) {
+			data.Documents[index].SubscriberIDs = append(data.Documents[index].SubscriberIDs, userID)
+		}
+		return
+	}
+	data.Documents[index].SubscriberIDs = slices.DeleteFunc(data.Documents[index].SubscriberIDs, func(id string) bool { return id == userID })
 }
 
 func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {

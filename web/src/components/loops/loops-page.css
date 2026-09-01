@@ -63,3 +63,4 @@
 .loops-embedded .loops-toolbar-left{margin-left:6px}
 .loops-embedded .loops-empty{top:50%}
 @media(max-width:760px){.loops-editor-heading .select-control{grid-column:1/-1;width:100%}.loops-permissions .select-control{width:100%}}
+.loops-editor-topbar h2{margin:0;font-size:13px;font-weight:600}

@@ -454,22 +454,28 @@ func (s *server) deleteReleasePipeline(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		remainingReleases := make([]domain.Release, 0, len(data.Releases))
+		removedReleaseIDs := make([]string, 0)
 		for _, release := range data.Releases {
 			if release.PipelineID != id {
 				remainingReleases = append(remainingReleases, release)
 				continue
 			}
+			removedReleaseIDs = append(removedReleaseIDs, release.ID)
 			if err := appendTrash(data, "release", release.ID, release.Name, release); err != nil {
 				return err
 			}
 		}
 		data.Releases = remainingReleases
+		for _, releaseID := range removedReleaseIDs {
+			removeResourcePreferences(data, "release", releaseID)
+		}
 		item := data.ReleasePipelines[index]
 		item.AccessKeyHash = ""
 		if err := appendTrash(data, "release_pipeline", item.ID, item.Name, item); err != nil {
 			return err
 		}
 		data.ReleasePipelines = slices.Delete(data.ReleasePipelines, index, index+1)
+		removeResourcePreferences(data, "release_pipeline", item.ID)
 		return nil
 	})
 	respondMutation(w, err, http.StatusNoContent, nil)
