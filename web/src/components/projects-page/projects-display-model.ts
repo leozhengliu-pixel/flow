@@ -21,3 +21,7 @@ export const DEFAULT_PROJECTS_DISPLAY: ProjectsDisplaySettings = {
   showEmptyGroups: false,
   subGrouping: 'No grouping',
 }
+
+const LABEL_GROUP_PREFIX = 'Label group:'
+export function projectLabelGroupProperty(id: string) { return `${LABEL_GROUP_PREFIX}${id}` }
+export function projectLabelGroupId(property: string) { return property.startsWith(LABEL_GROUP_PREFIX) ? property.slice(LABEL_GROUP_PREFIX.length) : undefined }

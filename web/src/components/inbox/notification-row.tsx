@@ -3,9 +3,11 @@ import * as Popover from '@radix-ui/react-popover'
 import { useCallback, useRef, useState, type CSSProperties, type FocusEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 
 import { StatusIcon } from '@/components/issue/issue-icons'
+import { DateTimeControl } from '@/components/ui/date-time-control'
 import type { WorkflowState } from '@/types/flow'
 
 import styles from './notification-row.module.css'
+import './inbox-date-control.css'
 
 export type InboxNotificationKind = 'comment' | 'assignment' | 'mention' | 'status' | 'project' | 'generic'
 export type InboxSnoozePreset = 'hour' | 'tomorrow' | 'nextWeek' | 'month' | {
@@ -420,26 +422,10 @@ export function InboxCustomSnoozeForm({ disabled = false, onCancel, onConfirm }:
     onConfirm({ kind: 'custom', snoozedUntil: selected.toISOString() })
   }
 
-  return <form className="flow-inbox-snooze-custom" aria-label="Custom snooze date and time" onSubmit={submit}>
+  return <form className="flow-inbox-snooze-custom" aria-label="Custom snooze date and time" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); onCancel() } }} onSubmit={submit}>
     <label className="flow-inbox-snooze-custom__field">
       <span>Date and time</span>
-      <input
-        autoFocus
-        type="datetime-local"
-        aria-invalid={invalid || undefined}
-        aria-label="Snooze until"
-        value={value}
-        onChange={(event) => {
-          setValue(event.target.value)
-          setInvalid(false)
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') {
-            event.preventDefault()
-            onCancel()
-          }
-        }}
-      />
+      <DateTimeControl label="Snooze until" min={localDateTimeValue(new Date())} mode="datetime" value={value} onChange={next => { setValue(next); setInvalid(false) }}/>
     </label>
     {invalid ? <p className="flow-inbox-snooze-custom__error" role="alert">Choose a valid date and time.</p> : null}
     <div className="flow-inbox-snooze-custom__actions">

@@ -1,13 +1,13 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
-import { ArrowDownUp, ChevronDown, GitBranch, LayoutGrid, List } from 'lucide-react'
+import { ArrowDownUp, ChevronDown, GitBranch, LayoutGrid, List, Plus } from 'lucide-react'
 import { usePropertyCommand, type PropertyCommandOption } from '@/components/property/use-property-command'
 import { CheckIcon } from './projects-page-icons'
-import type { ProjectsDisplaySettings } from './projects-display-model'
+import { projectLabelGroupProperty, type ProjectsDisplaySettings } from './projects-display-model'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
 import { Toggle } from '@/components/ui/toggle'
 
 const PROJECT_DISPLAY_PROPERTIES = [
-  'Milestones', 'Summary', 'Priority', 'Status', 'Health', 'Teams', 'Lead', 'Members', 'Dependencies', 'Start date', 'Target date', 'Issues', 'Created', 'Updated', 'Completed', 'Customers', 'Customer revenue', 'Labels',
+  'Milestones', 'Summary', 'Priority', 'Status', 'Health', 'Teams', 'Initiatives', 'Lead', 'Members', 'Dependencies', 'Start date', 'Target date', 'Issues', 'Created', 'Updated', 'Completed', 'Customers', 'Customer revenue', 'Labels',
 ]
 
 type DisplayField = 'grouping' | 'subGrouping' | 'ordering' | 'showClosed'
@@ -60,7 +60,8 @@ const LAYOUTS = [
   { id: 'timeline' as const, label: 'Timeline', icon: GitBranch },
 ]
 
-export function ProjectsDisplayMenu({ onChange, onReset, onSetDefault, rootRef, settings }: {
+export function ProjectsDisplayMenu({ labelGroups = [], onChange, onReset, onSetDefault, rootRef, settings }: {
+  labelGroups?: Array<{ id: string; name: string }>
   onChange: (settings: ProjectsDisplaySettings) => void
   onReset?: () => void
   onSetDefault?: () => void
@@ -68,6 +69,7 @@ export function ProjectsDisplayMenu({ onChange, onReset, onSetDefault, rootRef, 
   settings: ProjectsDisplaySettings
 }) {
   const [openField, setOpenField] = useState<DisplayField | null>(null)
+  const [labelGroupsOpen, setLabelGroupsOpen] = useState(false)
   const set = <K extends keyof ProjectsDisplaySettings>(key: K, value: ProjectsDisplaySettings[K]) => onChange({ ...settings, [key]: value })
   const toggleProperty = (property: string) => set('properties', settings.properties.includes(property)
     ? settings.properties.filter(item => item !== property)
@@ -111,7 +113,21 @@ export function ProjectsDisplayMenu({ onChange, onReset, onSetDefault, rootRef, 
           onClick={() => toggleProperty(property)}
           type="button"
         >{property}</button>
-      })}</div>
+      })}{labelGroups.filter(group => settings.properties.includes(projectLabelGroupProperty(group.id))).map(group => <button
+        aria-pressed="true"
+        className="is-selected"
+        key={group.id}
+        onClick={() => toggleProperty(projectLabelGroupProperty(group.id))}
+        type="button"
+      ><span data-i18n-ignore>{group.name}</span></button>)}</div>
+      {labelGroups.length > 0 && <div className="lp-projects-display__label-groups">
+        <button aria-expanded={labelGroupsOpen} onClick={() => setLabelGroupsOpen(open => !open)} type="button"><Plus size={12}/>Add label group…</button>
+        {labelGroupsOpen && <div aria-label="Add label group" role="listbox">{labelGroups.map(group => {
+          const property = projectLabelGroupProperty(group.id)
+          const selected = settings.properties.includes(property)
+          return <button aria-selected={selected} key={group.id} onClick={() => { if (!selected) toggleProperty(property); setLabelGroupsOpen(false) }} role="option" type="button"><span data-i18n-ignore>{group.name}</span>{selected && <CheckIcon/>}</button>
+        })}</div>}
+      </div>}
     </section>
 
     <footer className="lp-projects-display__footer">
