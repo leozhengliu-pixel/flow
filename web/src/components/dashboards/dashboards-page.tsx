@@ -362,15 +362,15 @@ export function DashboardsPage({
         <section className="dashboard-index">
           <ViewsDirectoryHeader
             activeResource="dashboards"
-            actionLabel={t("New dashboard")}
+            actionLabel="New dashboard"
             onAction={onOpenCreate}
             onOpenSidebar={onOpenSidebar}
             tabs={[
-              { resource: "issues", label: t("Issues"), href: resourceHref("issues"), onSelect: () => onOpenResource("issues") },
-              { resource: "projects", label: t("Projects"), href: resourceHref("projects"), onSelect: () => onOpenResource("projects") },
-              { resource: "dashboards", label: t("Dashboards"), href: dashboardsHref },
+              { resource: "issues", label: "Issues", href: resourceHref("issues"), onSelect: () => onOpenResource("issues") },
+              { resource: "projects", label: "Projects", href: resourceHref("projects"), onSelect: () => onOpenResource("projects") },
+              { resource: "dashboards", label: "Dashboards", href: dashboardsHref },
             ]}
-            title={t("Views")}
+            title="Views"
             toolbarEnd={<>
               <input
                 className="dashboard-search"

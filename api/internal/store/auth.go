@@ -1089,6 +1089,14 @@ func (s *SQLiteStore) workspaceByID(id string) (domain.Bootstrap, string, bool) 
 func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest bool) {
 	data.Teams = slices.DeleteFunc(data.Teams, func(team domain.Team) bool { return !allowed[team.ID] })
 	data.Issues = slices.DeleteFunc(data.Issues, func(issue domain.Issue) bool { return !allowed[issue.Team.ID] })
+	// Documents can be scoped to private teams just like issues and projects.
+	// Keep unscoped documents workspace-visible, while preventing a member from
+	// discovering the title or content of a team document they cannot access.
+	if data.ViewerRole != "admin" {
+		data.Documents = slices.DeleteFunc(data.Documents, func(document domain.Document) bool {
+			return len(document.TeamIDs) > 0 && !slices.ContainsFunc(document.TeamIDs, func(teamID string) bool { return allowed[teamID] })
+		})
+	}
 	data.Cycles = slices.DeleteFunc(data.Cycles, func(cycle domain.Cycle) bool { return !allowed[cycle.TeamID] })
 	data.Projects = slices.DeleteFunc(data.Projects, func(project domain.Project) bool {
 		for _, id := range project.TeamIDs {
