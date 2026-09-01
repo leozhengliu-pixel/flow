@@ -343,6 +343,7 @@ export function ViewsPage({
                         item.resourceId === view.id,
                     )
                   }
+                  href={viewHref(view)}
                   key={view.id}
                   onCopy={() => {
                     void copyLink(view);
@@ -412,6 +413,7 @@ export function ViewsPage({
 function ViewRow({
   data,
   favorite,
+  href,
   onCopy,
   onDelete,
   onDuplicate,
@@ -431,6 +433,7 @@ function ViewRow({
 }: {
   data: BootstrapData;
   favorite: boolean;
+  href: string;
   onCopy: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
@@ -464,17 +467,20 @@ function ViewRow({
     onSetSubscriptionEvents([...next]);
   };
   const row = (
-    <div
+    <a
       aria-label={`${view.name} ${viewDescription(view, resource, t)} ${owner.displayName}`}
       className={styles.row}
-      onClick={() => onOpen()}
+      href={href}
+      onClick={(event) => {
+        event.preventDefault();
+        onOpen();
+      }}
       onKeyDown={(event) => {
         if (event.key === " " || event.key === "Enter") {
           event.preventDefault();
           onOpen();
         }
       }}
-      role="link"
       style={
         { "--views-columns": columnTemplate(properties) } as React.CSSProperties
       }
@@ -527,7 +533,7 @@ function ViewRow({
       >
         <Ellipsis size={15} />
       </button>
-    </div>
+    </a>
   );
   return (
     <ContextMenu.Root>
