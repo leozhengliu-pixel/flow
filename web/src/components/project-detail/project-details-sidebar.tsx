@@ -1,9 +1,9 @@
-import { Component, useEffect, useMemo, useState, type DragEvent, type ErrorInfo, type KeyboardEvent, type ReactNode } from 'react'
+import { Component, useId, useEffect, useMemo, useState, type DragEvent, type ErrorInfo, type KeyboardEvent, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Line, type LineCustomSvgLayerProps, type SliceTooltipProps } from '@nivo/line'
 import { Blocks, ChevronDown, ChevronRight, Flag, MoreHorizontal, OctagonMinus, Plus, X } from 'lucide-react'
-import { addDays, differenceInCalendarDays, format, formatDistanceToNowStrict, startOfDay } from 'date-fns'
+import { format, formatDistanceToNowStrict } from 'date-fns'
 import { toast } from 'sonner'
 import { Avatar } from '@/components/issue/issue-row'
 import { CalendarIcon, LabelIcon, MembersIcon, NoAssigneeIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, SlackIcon, TeamIcon } from '@/components/issue/issue-icons'
@@ -19,6 +19,7 @@ import { PRIORITY_LABELS } from './project-detail-types'
 import { toggleGroupedLabelIds } from '@/lib/labels'
 import { useI18n } from '@/i18n/i18n'
 import { formatProjectPropertyDate, initiativeStatusLabel, inviteProjectMember } from './project-detail-helpers'
+import { buildProgressData, type PersistedProgressHistory, type ProgressSeries } from './project-progress-data'
 
 export function ProjectDetailsSidebar({ initiatives, integrationConnections, labelGroups, labels, onConvertMilestone, onCreateMilestone, onDeleteMilestone, onMoveMilestone, onOpenIssueFilter, onOpenMilestoneIssues, onReorderMilestones, onTabChange, onUpdate, onUpdateProject, onUpdateMilestone, project, projectIssues, projects, projectStatuses, projectUpdates, teams, users, viewer }: {
   initiatives: Initiative[]
@@ -93,7 +94,7 @@ export function ProjectDetailsSidebar({ initiatives, integrationConnections, lab
     <SidebarSection onToggle={() => setProgressOpen(value => !value)} open={progressOpen} title="Progress">
       <div className="project-details-sidebar__progress">
         <div className="project-details-sidebar__stats"><span><i className="is-scope"/>Scope<strong>{projectIssues.length}</strong></span><span><i className="is-started"/>Started<strong>{started}</strong></span><span><i className="is-completed"/>Completed<strong>{completed}</strong></span></div>
-        <ProgressChart issues={projectIssues} progress={project.progress} start={project.startDate} target={project.targetDate}/>
+        <ProgressChart issues={projectIssues} progress={project.progress} start={project.startDate} target={project.targetDate} persistedHistory={project}/>
         <div aria-label="Progress grouping" className="project-details-sidebar__segments" role="tablist"><button aria-selected={progressTab === 'assignees'} onClick={() => setProgressTab('assignees')} role="tab" type="button">Assignees</button><button aria-selected={progressTab === 'labels'} onClick={() => setProgressTab('labels')} role="tab" type="button">Labels</button></div>
         <div className="project-details-sidebar__breakdown">{progressTab === 'assignees' ? assignees.map(user => {
           const userIssues = projectIssues.filter(issue => issue.assignee?.id === user.id)
@@ -413,10 +414,9 @@ function milestoneMonthDays(month: Date) {
   })
 }
 
-type ProgressSeries = { id: 'Scope'|'Started'|'Completed'; data: { x: Date; y: number }[] }
-
-function ProgressChart({ issues, progress, start, target }: { issues: Issue[]; progress: number; start?: string; target?: string }) {
-  const chart = useMemo(() => buildProgressData(issues, start, target), [issues, start, target])
+function ProgressChart({ issues, persistedHistory, progress, start, target }: { issues: Issue[]; persistedHistory?: PersistedProgressHistory; progress: number; start?: string; target?: string }) {
+  const chart = useMemo(() => buildProgressData(issues, start, target, persistedHistory), [issues, persistedHistory, start, target])
+  const chartId = useId().replaceAll(':', '')
   const markers = [
     { axis: 'x' as const, value: chart.currentDate, lineStyle: { stroke: 'var(--progress-current-line)', strokeWidth: 1 } },
     { axis: 'x' as const, value: chart.targetDate, lineStyle: { stroke: 'var(--progress-target-line)', strokeWidth: 1 } },
@@ -432,6 +432,7 @@ function ProgressChart({ issues, progress, start, target }: { issues: Issue[]; p
     { match: { id: 'Completed' }, id: 'flowCompletedGradient' },
   ]
   const CompletionBars = (props: LineCustomSvgLayerProps<ProgressSeries>) => <ProgressCompletionBars {...props} changes={chart.completedChanges}/>
+  const Forecast = (props: LineCustomSvgLayerProps<ProgressSeries>) => <ProgressForecastLayer {...props} chartId={chartId} completed={chart.forecast.completed} currentDate={chart.currentDate} optimisticDate={chart.forecast.optimisticDate} pessimisticDate={chart.forecast.pessimisticDate} targetDate={chart.targetDate} total={chart.forecast.total}/>
 
   return <div className="project-details-sidebar__chart">
     <Line<ProgressSeries>
@@ -452,7 +453,7 @@ function ProgressChart({ issues, progress, start, target }: { issues: Issue[]; p
       enableSlices="x"
       fill={fill}
       isInteractive
-      layers={['markers', 'axes', 'areas', ProgressLinesLayer, CompletionBars, ProgressActiveSliceLayer, 'slices']}
+      layers={['markers', 'axes', 'areas', Forecast, ProgressLinesLayer, CompletionBars, ProgressActiveSliceLayer, 'slices']}
       lineWidth={1}
       margin={{ top: 38, right: 0, bottom: 30, left: 0 }}
       markers={markers}
@@ -474,6 +475,41 @@ function ProgressLinesLayer({ lineGenerator, series }: LineCustomSvgLayerProps<P
     const end = item.data[item.data.length - 1]?.position
     return <g key={item.id}><path className={`project-details-sidebar__progress-line is-${String(item.id).toLowerCase()}`} d={path ?? undefined}/>{item.id !== 'Scope' && end && <circle className={`project-details-sidebar__progress-end is-${String(item.id).toLowerCase()}`} cx={end.x} cy={end.y} r="2.5"/>}</g>
   })}</g>
+}
+
+function ProgressForecastLayer({ chartId, completed, currentDate, lineGenerator, optimisticDate, pessimisticDate, targetDate, total, xScale, yScale, innerHeight }: LineCustomSvgLayerProps<ProgressSeries> & { chartId: string; completed: number; currentDate: Date; optimisticDate?: Date; pessimisticDate?: Date; targetDate: Date; total: number }) {
+  const currentX = xScale(currentDate)
+  const optimisticX = optimisticDate ? xScale(optimisticDate) : Number.NaN
+  const pessimisticX = pessimisticDate ? xScale(pessimisticDate) : Number.NaN
+  const targetX = xScale(targetDate)
+  const hatchStart = Number.isFinite(targetX) && Number.isFinite(optimisticX) ? Math.min(targetX, optimisticX) : Number.NaN
+  const hatchEnd = Number.isFinite(targetX) && Number.isFinite(optimisticX) ? Math.max(targetX, optimisticX) : Number.NaN
+  const hatchWidth = hatchEnd - hatchStart
+  const hasForecast = Number.isFinite(currentX) && (Number.isFinite(optimisticX) || Number.isFinite(pessimisticX))
+  const hasHatch = Number.isFinite(hatchStart) && hatchWidth > 0
+  if (!hasForecast) return null
+  const patternId = `${chartId}-forecast-hatch`
+  const maskId = `${chartId}-forecast-fade`
+  const completedPath = Number.isFinite(optimisticX) ? lineGenerator([{ x: currentX, y: yScale(completed) }, { x: optimisticX, y: yScale(total) }]) : null
+  const pessimisticPath = Number.isFinite(pessimisticX) ? lineGenerator([{ x: currentX, y: yScale(completed) }, { x: pessimisticX, y: yScale(total) }]) : null
+  return <g className="project-details-sidebar__forecast" pointerEvents="none">
+    {hasHatch && <defs>
+      <pattern height="8" id={patternId} patternUnits="userSpaceOnUse" width="8">
+        <path d="M-2 8 8-2M6 10 10 6" fill="none" stroke="var(--progress-target-line)" strokeWidth="1.5"/>
+      </pattern>
+      <linearGradient id={maskId} x1="0" x2="1" y1="0" y2="0">
+        <stop offset="0%" stopColor="white" stopOpacity=".75"/>
+        <stop offset="65%" stopColor="white" stopOpacity=".34"/>
+        <stop offset="100%" stopColor="white" stopOpacity="0"/>
+      </linearGradient>
+      <mask id={`${maskId}-mask`} maskUnits="userSpaceOnUse" x={hatchStart} y="0" width={hatchWidth} height={innerHeight}>
+        <rect fill={`url(#${maskId})`} height={innerHeight} width={hatchWidth} x={hatchStart} y="0"/>
+      </mask>
+    </defs>}
+    {hasHatch && <rect className="project-details-sidebar__forecast-hatch" fill={`url(#${patternId})`} height={innerHeight} mask={`url(#${maskId}-mask)`} width={hatchWidth} x={hatchStart} y="0"/>}
+    {completedPath && <path className="project-details-sidebar__progress-line is-completed-forecast" d={completedPath}/>}
+    {pessimisticPath && <path className="project-details-sidebar__progress-line is-completed-forecast is-pessimistic-forecast" d={pessimisticPath}/>}
+  </g>
 }
 
 function ProgressAxisTick({ lineX, lineY, textY, tickIndex, value, x, y }: { lineX: number; lineY: number; textY: number; tickIndex: number; value: Date | string | number; x: number; y: number }) {
@@ -500,55 +536,6 @@ function ProgressSliceTooltip({ slice }: SliceTooltipProps<ProgressSeries>) {
   const date = slice.points[0]?.data.x as Date | undefined
   return <div className="project-details-sidebar__chart-tooltip"><time>{date ? format(date, 'MMM d, yyyy') : ''}</time>{slice.points.slice().reverse().map(point => <div key={point.id}><i className={`is-${String(point.seriesId).toLowerCase()}`}/><span>{point.seriesId}</span><strong>{point.data.y}</strong></div>)}</div>
 }
-
-function buildProgressData(issues: Issue[], start?: string, target?: string) {
-  const today = startOfDay(new Date())
-  const createdDates = issues.map(issue => startOfDay(new Date(issue.createdAt))).filter(date => !Number.isNaN(date.getTime()))
-  const requestedStart = start ? startOfDay(new Date(`${start}T00:00:00`)) : createdDates[0]
-  const startDate = requestedStart && !Number.isNaN(requestedStart.getTime()) ? requestedStart : today
-  const requestedTarget = target ? startOfDay(new Date(`${target}T00:00:00`)) : addDays(startDate, 14)
-  const targetDate = requestedTarget > startDate ? requestedTarget : addDays(startDate, 1)
-  const endDate = today > targetDate ? today : targetDate
-  const currentDate = today < startDate ? startDate : today > endDate ? endDate : today
-  const isCreated = (issue: Issue, date: Date) => startOfDay(new Date(issue.createdAt)) <= date
-  const isStarted = (issue: Issue, date: Date) => ['started','completed'].includes(issue.state.type) && isCreated(issue, date)
-  const isCompleted = (issue: Issue, date: Date) => {
-    if (issue.state.type !== 'completed') return false
-    const completedDate = startOfDay(new Date(issue.completedAt ?? issue.updatedAt))
-    return completedDate <= date
-  }
-  const eventDays = uniqueDates([
-    startDate,
-    currentDate,
-    targetDate,
-    endDate,
-    ...issues.flatMap(issue => [startOfDay(new Date(issue.createdAt)), ...(issue.state.type === 'completed' ? [startOfDay(new Date(issue.completedAt ?? issue.updatedAt))] : [])]),
-  ]).filter(date => date >= startDate && date <= endDate)
-  const scope = eventDays.map(date => ({ x: date, y: issues.filter(issue => isCreated(issue, date)).length }))
-  const activeDays = eventDays.filter(date => date <= currentDate)
-  const startedData = activeDays.map(date => ({ x: date, y: issues.filter(issue => isStarted(issue, date)).length }))
-  const completedData = activeDays.map(date => ({ x: date, y: issues.filter(issue => isCompleted(issue, date)).length }))
-  const completedChanges = buildCompletionChanges(issues, startDate, currentDate)
-  return { startDate, targetDate, endDate, currentDate, completedChanges, series: [{ id: 'Scope' as const, data: scope }, { id: 'Started' as const, data: startedData }, { id: 'Completed' as const, data: completedData }] }
-}
-
-function buildCompletionChanges(issues: Issue[], startDate: Date, currentDate: Date) {
-  const rangeDays = Math.max(1, differenceInCalendarDays(currentDate, startDate))
-  const bucketDays = rangeDays > 90 ? 7 : 1
-  const buckets = new Map<number, number>()
-  for (const issue of issues) {
-    if (issue.state.type !== 'completed') continue
-    const completedDate = startOfDay(new Date(issue.completedAt ?? issue.updatedAt))
-    const offset = differenceInCalendarDays(completedDate, startDate)
-    if (offset < 0 || completedDate > currentDate) continue
-    const bucketStart = addDays(startDate, Math.floor(offset / bucketDays) * bucketDays)
-    const bucketDate = addDays(bucketStart, Math.floor((bucketDays - 1) / 2))
-    buckets.set(bucketDate.getTime(), (buckets.get(bucketDate.getTime()) ?? 0) + 1)
-  }
-  return [...buckets].map(([timestamp, y]) => ({ x: new Date(timestamp), y })).sort((left, right) => left.x.getTime() - right.x.getTime())
-}
-
-function uniqueDates(values: Date[]) { return [...new Map(values.filter(date => !Number.isNaN(date.getTime())).map(date => [date.getTime(), date])).values()].sort((left, right) => left.getTime() - right.getTime()) }
 
 function ProgressBreakdownRow({ icon, issues, label, onOpen }: { icon: ReactNode; issues: Issue[]; label: string; onOpen: () => void }) {
   const completed = issues.filter(issue => issue.state.type === 'completed').length

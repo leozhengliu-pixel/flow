@@ -360,7 +360,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/integrations/{provider}/{id}/oauth/token", s.revokeIntegrationOAuth)
 	mux.HandleFunc("DELETE /api/integrations/{provider}", s.disconnectIntegration)
 	mux.HandleFunc("POST /api/integrations/{provider}/webhook", s.codeWebhook)
-	mux.HandleFunc("POST /api/integrations/{provider}/{id}/test", s.testIntegrationWebhook)
+	mux.HandleFunc("POST /api/integrations/{provider}/test", s.testIntegrationConnection)
+	mux.HandleFunc("POST /api/integrations/{provider}/{id}/test", s.testIntegrationConnection)
 	mux.HandleFunc("PATCH /api/integrations/{provider}/{id}", s.updateIntegration)
 	mux.HandleFunc("DELETE /api/integrations/{provider}/{id}", s.disconnectIntegrationConnection)
 	mux.HandleFunc("POST /api/integration-deliveries", s.createIntegrationDelivery)
@@ -388,7 +389,11 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/drafts/{id}", s.updateDraft)
 	mux.HandleFunc("DELETE /api/drafts/{id}", s.deleteDraft)
 	mux.HandleFunc("PUT /api/favorites/{type}/{id}", s.addFavorite)
+	mux.HandleFunc("PATCH /api/favorites/{type}/{id}", s.updateFavorite)
 	mux.HandleFunc("DELETE /api/favorites/{type}/{id}", s.removeFavorite)
+	mux.HandleFunc("POST /api/favorite-folders", s.createFavoriteFolder)
+	mux.HandleFunc("PATCH /api/favorite-folders/{id}", s.updateFavoriteFolder)
+	mux.HandleFunc("DELETE /api/favorite-folders/{id}", s.deleteFavoriteFolder)
 	mux.HandleFunc("PUT /api/subscriptions/{type}/{id}", s.addSubscription)
 	mux.HandleFunc("DELETE /api/subscriptions/{type}/{id}", s.removeSubscription)
 	mux.HandleFunc("POST /api/trash/{id}/restore", s.restoreTrashEntry)
@@ -704,6 +709,8 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	data.DocumentContentDrafts = slices.DeleteFunc(data.DocumentContentDrafts, func(item domain.DocumentContentDraft) bool { return item.UserID != data.Viewer.ID })
 	data.AgentSessions = slices.DeleteFunc(data.AgentSessions, func(item domain.AgentSession) bool { return item.UserID != data.Viewer.ID })
 	data.AgentSkills = slices.DeleteFunc(data.AgentSkills, func(item domain.PersonalAgentSkill) bool { return item.UserID != data.Viewer.ID })
+	data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool { return item.UserID != data.Viewer.ID })
+	data.FavoriteFolders = slices.DeleteFunc(data.FavoriteFolders, func(item domain.FavoriteFolder) bool { return item.UserID != data.Viewer.ID })
 	for index := range data.Cycles {
 		data.Cycles[index].CalendarToken = ""
 	}
@@ -1227,6 +1234,7 @@ func (s *server) deleteTeam(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		data.Teams = slices.Delete(data.Teams, index, index+1)
+		removeResourcePreferences(data, "team", teamID)
 		issueIDs := map[string]bool{}
 		for _, issue := range data.Issues {
 			if issue.Team.ID == teamID {
@@ -1237,6 +1245,12 @@ func (s *server) deleteTeam(w http.ResponseWriter, r *http.Request) {
 		for issueID := range issueIDs {
 			delete(data.Comments, issueID)
 			delete(data.Activities, issueID)
+			removeResourcePreferences(data, "issue", issueID)
+		}
+		for _, cycle := range data.Cycles {
+			if cycle.TeamID == teamID {
+				removeResourcePreferences(data, "cycle", cycle.ID)
+			}
 		}
 		data.Cycles = slices.DeleteFunc(data.Cycles, func(cycle domain.Cycle) bool { return cycle.TeamID == teamID })
 		data.Labels = slices.DeleteFunc(data.Labels, func(label domain.IssueLabel) bool { return label.Scope == teamID })
@@ -1333,6 +1347,7 @@ func (s *server) deleteCustomer(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		data.Customers = slices.Delete(data.Customers, index, index+1)
+		removeResourcePreferences(data, "customer", removed.ID)
 		data.CustomerRequests = slices.DeleteFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool { return item.CustomerID == id })
 		for projectIndex := range data.Projects {
 			data.Projects[projectIndex].Customers = slices.DeleteFunc(data.Projects[projectIndex].Customers, func(value string) bool { return value == id })
@@ -1574,13 +1589,9 @@ func (s *server) deleteSavedView(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
+		removedID := data.SavedViews[index].ID
 		data.SavedViews = slices.Delete(data.SavedViews, index, index+1)
-		data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool {
-			return item.ResourceType == "view" && item.ResourceID == id
-		})
-		data.Subscriptions = slices.DeleteFunc(data.Subscriptions, func(item domain.Subscription) bool {
-			return item.ResourceType == "view" && item.ResourceID == id
-		})
+		removeResourcePreferences(data, "view", removedID)
 		return nil
 	})
 	if err != nil {
@@ -1799,6 +1810,7 @@ func (s *server) updateCycle(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Favorite != nil {
 			cycle.Favorite = *input.Favorite
+			setFavoriteRecord(data, "cycle", cycle.ID, *input.Favorite)
 		}
 		if input.Status != nil {
 			if !slices.Contains([]string{"upcoming", "current", "completed"}, *input.Status) {
@@ -2274,6 +2286,8 @@ func (s *server) deleteProject(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		data.Projects = slices.Delete(data.Projects, index, index+1)
+		removeResourcePreferences(data, "project", removed.ID)
+		data.Drafts = slices.DeleteFunc(data.Drafts, func(item domain.Draft) bool { return draftBelongsToResource(item, "project", id) })
 		for i := range data.Issues {
 			if data.Issues[i].Project != nil && data.Issues[i].Project.ID == id {
 				data.Issues[i].Project = nil
@@ -2352,6 +2366,8 @@ func (s *server) deleteInitiative(w http.ResponseWriter, r *http.Request) {
 			data.Projects[i].Initiatives = removeString(data.Projects[i].Initiatives, id)
 		}
 		data.Initiatives = slices.Delete(data.Initiatives, index, index+1)
+		removeResourcePreferences(data, "initiative", removed.ID)
+		data.Drafts = slices.DeleteFunc(data.Drafts, func(item domain.Draft) bool { return draftBelongsToResource(item, "initiative", id) })
 		delete(data.InitiativeUpdates, id)
 		return nil
 	})
@@ -3363,7 +3379,7 @@ func (s *server) deleteIssue(w http.ResponseWriter, r *http.Request) {
 		data.IssueSLAs = slices.DeleteFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return item.IssueID == id })
 		data.SLAEvents = slices.DeleteFunc(data.SLAEvents, func(item domain.SLAEvent) bool { return item.IssueID == id })
 		data.Drafts = slices.DeleteFunc(data.Drafts, func(item domain.Draft) bool {
-			return item.Type == "issue" && item.ResourceID == id
+			return draftBelongsToResource(item, "issue", id)
 		})
 		data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool {
 			return item.ResourceType == "issue" && item.ResourceID == id
@@ -4476,6 +4492,7 @@ func applySavedViewUpdate(data *domain.Bootstrap, view *domain.SavedView, input 
 	}
 	if input.Favorite != nil {
 		view.Favorite = *input.Favorite
+		setFavoriteRecord(data, "view", view.ID, *input.Favorite)
 	}
 	if input.Subscribed != nil {
 		view.Subscribed = *input.Subscribed
@@ -4965,6 +4982,7 @@ func applyInitiativeUpdate(data *domain.Bootstrap, initiative *domain.Initiative
 	}
 	if input.Favorite != nil {
 		initiative.Favorite = *input.Favorite
+		setFavoriteRecord(data, "initiative", initiative.ID, *input.Favorite)
 	}
 	if input.Subscribed != nil {
 		initiative.Subscribed = *input.Subscribed

@@ -11,6 +11,17 @@ const project: ProjectPageItem = {
 }
 
 describe('ProjectsDataView project menu', () => {
+  it('keeps hidden table columns in the subgrid so later columns do not shift', () => {
+    render(<I18nProvider><ProjectsDataView groups={[{ id: 'status-progress', name: 'In Progress', projects: [project] }]}/></I18nProvider>)
+
+    const initiativeColumn = document.querySelector('.lp-project-table__header [role="columnheader"][data-column-hidden="true"]')
+    const targetDateColumn = [...document.querySelectorAll('.lp-project-table__header [role="columnheader"]')].find(column => column.textContent?.includes('Target date'))
+    expect(initiativeColumn).toBeTruthy()
+    expect(initiativeColumn).not.toHaveAttribute('hidden')
+    expect(targetDateColumn).toBeTruthy()
+    expect(targetDateColumn).not.toHaveAttribute('data-column-hidden')
+  })
+
   it('persists favorite, subscription, and reminder actions through the API integration', async () => {
     const user = userEvent.setup()
     const onFavoriteChange = vi.fn().mockResolvedValue(undefined)

@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"flow/api/internal/domain"
@@ -60,5 +61,74 @@ func TestGitHubPullRequestWebhookCreatesReviewAndInboxNotification(t *testing.T)
 	handler.ServeHTTP(rec, request())
 	if rec.Code != http.StatusAccepted || len(repository.Bootstrap().Notifications) != notificationCount {
 		t.Fatalf("webhook retry was not idempotent: status=%d notifications=%d", rec.Code, len(repository.Bootstrap().Notifications))
+	}
+}
+
+func TestGitLabMergeRequestWebhookAndConnectionProbe(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	gitlab := requestJSON[domain.IntegrationConnection](t, handler, http.MethodPut, "/api/integrations/gitlab?workspace=test-workspace", map[string]any{
+		"name": "self-hosted", "config": map[string]string{"apiToken": "glpat-configured", "webhookSecret": "hook-secret"},
+	}, http.StatusOK)
+	seed := repository.Bootstrap()
+	if len(seed.Issues) == 0 || len(seed.Users) < 2 {
+		t.Fatal("seed must include issues and users")
+	}
+	payload := []byte(fmt.Sprintf(`{"object_kind":"merge_request","event_type":"merge_request","user":{"username":"dependabot"},"project":{"path_with_namespace":"acme/platform/api","web_url":"https://gitlab.example.com/acme/platform/api"},"object_attributes":{"id":44001,"iid":27,"title":"Fix checkout %s","description":"Please review","url":"https://gitlab.example.com/acme/platform/api/-/merge_requests/27","state":"opened","action":"open","source_branch":"feature/checkout","target_branch":"main","last_commit":{"id":"abc"}},"reviewers":[{"username":"%s"}]}`, seed.Issues[0].Identifier, strings.SplitN(seed.Users[1].Email, "@", 2)[0]))
+	request := func(eventID string) *http.Request {
+		req := httptest.NewRequest(http.MethodPost, "/api/integrations/gitlab/webhook?workspace=test-workspace", bytes.NewReader(payload))
+		req.Header.Set("X-Gitlab-Token", "hook-secret")
+		req.Header.Set("X-Gitlab-Event-UUID", eventID)
+		return req
+	}
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, request("gitlab-delivery-27"))
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("GitLab webhook status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	bootstrap := repository.Bootstrap()
+	if len(bootstrap.Reviews) == 0 {
+		t.Fatal("GitLab webhook did not create a review")
+	}
+	review := bootstrap.Reviews[0]
+	if review.Provider != "gitlab" || review.ExternalID != "44001" || review.Number != 27 || review.RepositoryOwner != "acme" || review.RepositoryName != "platform/api" || review.BaseBranch != "main" || review.HeadBranch != "feature/checkout" {
+		t.Fatalf("GitLab merge request fields were not projected: %#v", review)
+	}
+	if len(review.Events) == 0 || review.Events[len(review.Events)-1].Type != "opened" {
+		t.Fatalf("GitLab merge request action was not normalized: %#v", review.Events)
+	}
+	if len(review.ReviewerIDs) != 1 || review.ReviewerIDs[0] != seed.Users[1].ID {
+		t.Fatalf("GitLab reviewers were not resolved: %#v", review.ReviewerIDs)
+	}
+	if !slices.Contains(review.IssueIDs, seed.Issues[0].ID) {
+		t.Fatalf("GitLab merge request was not linked to the issue: %#v", review.IssueIDs)
+	}
+	count := len(bootstrap.Notifications)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, request("gitlab-delivery-27"))
+	if rec.Code != http.StatusAccepted || len(repository.Bootstrap().Notifications) != count {
+		t.Fatalf("GitLab webhook retry was not idempotent: status=%d notifications=%d", rec.Code, len(repository.Bootstrap().Notifications))
+	}
+
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v4/user" || r.Header.Get("PRIVATE-TOKEN") != "glpat-test" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"username":"flow-bot"}`))
+	}))
+	defer api.Close()
+	requestJSON[map[string]any](t, handler, http.MethodPost, "/api/integrations/gitlab/"+gitlab.ID+"/test?workspace=test-workspace", map[string]string{"token": "glpat-test", "host": api.URL}, http.StatusOK)
+	if status := repository.Bootstrap().IntegrationConnections[0].LastTestStatus; status != "ready" {
+		t.Fatalf("successful GitLab connection test was not persisted: %q", status)
+	}
+	requestJSON[any](t, handler, http.MethodPost, "/api/integrations/gitlab/"+gitlab.ID+"/test?workspace=test-workspace", map[string]string{"token": "bad-token", "host": api.URL}, http.StatusBadGateway)
+	if status := repository.Bootstrap().IntegrationConnections[0].LastTestStatus; status != "error" {
+		t.Fatalf("failed GitLab connection test was not persisted: %q", status)
 	}
 }
