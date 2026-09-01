@@ -329,15 +329,7 @@
   font-size: 11px;
   color: var(--theme-text-tertiary);
 }
-.customer-request-composer select {
-  flex: 1;
-  min-width: 0;
-  height: 29px;
-  border: 1px solid var(--theme-border);
-  border-radius: 5px;
-  background: var(--theme-background);
-  color: inherit;
-}
+.customer-request-composer .select-control{min-width:0;flex:1;height:29px}
 .customer-detail-menu {
   z-index: 90;
   min-width: 190px;
@@ -414,7 +406,5 @@
     align-items: flex-start;
     flex-direction: column;
   }
-  .customer-request-composer select {
-    width: 100%;
-  }
+  .customer-request-composer .select-control{width:100%}
 }

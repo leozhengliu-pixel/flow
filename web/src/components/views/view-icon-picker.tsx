@@ -25,7 +25,7 @@ export function ViewGlyph({ className, color = DEFAULT_VIEW_COLOR, icon = DEFAUL
   return <svg aria-hidden="true" className={`${styles.glyph} ${className ?? ''}`} fill="currentColor" style={{ color }} viewBox="0 0 16 16"><use href={`${FLOW_CORE_ICON_NAMES.has(assetIcon) ? '' : '/flow-view-icons.svg'}#${assetIcon}`}/></svg>
 }
 
-export function ViewIconPicker({ align = 'start', ariaLabel, color = DEFAULT_VIEW_COLOR, icon = DEFAULT_VIEW_ICON, onChange, prependTeam = false, triggerClassName }: { align?: 'start' | 'center' | 'end'; ariaLabel?: string; color?: string; icon?: string; onChange: (visual: ViewVisual) => void; prependTeam?: boolean; triggerClassName?: string }) {
+export function ViewIconPicker({ align = 'start', ariaLabel, color = DEFAULT_VIEW_COLOR, icon = DEFAULT_VIEW_ICON, onChange, prependIcons = [], prependTeam = false, triggerClassName }: { align?: 'start' | 'center' | 'end'; ariaLabel?: string; color?: string; icon?: string; onChange: (visual: ViewVisual) => void; prependIcons?: string[]; prependTeam?: boolean; triggerClassName?: string }) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<'icons' | 'emojis'>('icons')
@@ -34,7 +34,10 @@ export function ViewIconPicker({ align = 'start', ariaLabel, color = DEFAULT_VIE
   const searchRef = useRef<HTMLInputElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const normalizedQuery = query.trim().toLowerCase()
-  const filteredIcons = useMemo(() => (prependTeam ? ['Team', ...ICON_NAMES.filter(name => name !== 'Team')] : ICON_NAMES).filter(name => name.toLowerCase().includes(normalizedQuery)), [normalizedQuery, prependTeam])
+  const filteredIcons = useMemo(() => {
+    const leading = [...prependIcons, ...(prependTeam ? ['Team'] : [])]
+    return [...leading, ...ICON_NAMES.filter(name => !leading.includes(name))].filter(name => name.toLowerCase().includes(normalizedQuery))
+  }, [normalizedQuery, prependIcons, prependTeam])
   const emojiSections = useMemo(() => [
     { label: 'Frequently used', values: FREQUENT_EMOJIS.filter(value => matchesEmoji(value, normalizedQuery)) },
     { label: 'Smileys & People', values: PEOPLE_EMOJIS.filter(value => matchesEmoji(value, normalizedQuery)) },

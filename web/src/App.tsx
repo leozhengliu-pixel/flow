@@ -1617,6 +1617,15 @@ function App() {
         : state,
     );
   };
+  const toggleTeamFavorite = async (teamId: string, favorite: boolean) => {
+    if (!favorite) {
+      await run(() => removeFavorite("team", teamId), "Could not update favorite");
+      setData((state) => state ? { ...state, favorites: state.favorites.filter(item => !(item.userId === state.viewer.id && item.resourceType === "team" && item.resourceId === teamId)) } : state);
+      return;
+    }
+    const created = await run(() => addFavorite("team", teamId), "Could not update favorite");
+    setData((state) => state ? { ...state, favorites: [created, ...state.favorites.filter(item => item.id !== created.id)] } : state);
+  };
   const setProjectSubscriptionEvents = async (
     projectId: string,
     events: string[],
@@ -3211,6 +3220,13 @@ function App() {
       return;
     }
     if (!routeBelongsToWorkspace(route, workspace)) return;
+    if (
+      route.kind === "dashboards" &&
+      data.workspaceSettings.featureFlags.dashboards === false
+    ) {
+      navigateTo(workspaceViewsPath(workspace, "issues"), { replace: true });
+      return;
+    }
     if (route.kind === "inbox" && location.pathname !== inboxPath(workspace))
       navigateTo(inboxPath(workspace), { replace: true });
     if (route.kind === "search" && location.pathname !== searchPath(workspace))
@@ -3976,14 +3992,24 @@ function App() {
         )}
         {page === "team-overview" &&
           (route.kind === "team-overview" ||
-            route.kind === "team-documents") && (
+            route.kind === "team-documents" ||
+            route.kind === "team-loops" ||
+            route.kind === "team-members") && (
             <TeamOverviewPage
               data={data}
               team={data.teams.find(
                 (team) =>
                   team.key.toLowerCase() === route.teamKey.toLowerCase(),
               )!}
-              view={route.kind === "team-documents" ? "documents" : "overview"}
+              view={
+                route.kind === "team-documents"
+                  ? "documents"
+                  : route.kind === "team-loops"
+                    ? "loops"
+                    : route.kind === "team-members"
+                      ? "members"
+                      : "overview"
+              }
               onNavigate={navigateTo}
               onOpenSidebar={() => setMobileSidebarOpen(true)}
               onReload={async () =>
@@ -4886,6 +4912,7 @@ function App() {
                 }
                 onUpdate={changeSavedView}
                 onToggleFavorite={toggleSavedViewFavorite}
+                onToggleScopeFavorite={toggleTeamFavorite}
                 onSetSubscriptionEvents={setSavedViewSubscriptionEvents}
                 onShare={shareView}
               />
@@ -4984,6 +5011,11 @@ function App() {
                 scopeTeamId={viewsTeam?.id}
                 viewerId={data.viewer.id}
                 viewer={data.viewer}
+                favoriteProjectIds={data.favorites.filter(item => item.userId === data.viewer.id && item.resourceType === "project").map(item => item.resourceId)}
+                projectSubscriptions={data.subscriptions.filter(item => item.userId === data.viewer.id && item.resourceType === "project")}
+                onToggleProjectFavorite={toggleProjectFavorite}
+                onSetProjectSubscriptionEvents={setProjectSubscriptionEvents}
+                onCreateProjectReminder={addProjectReminder}
                 creatingView
                 duplicateFrom={
                   duplicateSavedView?.resource === "projects"
@@ -5087,6 +5119,11 @@ function App() {
                 scopeTeamId={projectTeam?.id}
                 viewerId={data.viewer.id}
                 viewer={data.viewer}
+                favoriteProjectIds={data.favorites.filter(item => item.userId === data.viewer.id && item.resourceType === "project").map(item => item.resourceId)}
+                projectSubscriptions={data.subscriptions.filter(item => item.userId === data.viewer.id && item.resourceType === "project")}
+                onToggleProjectFavorite={toggleProjectFavorite}
+                onSetProjectSubscriptionEvents={setProjectSubscriptionEvents}
+                onCreateProjectReminder={addProjectReminder}
                 creatingView={
                   route.kind === "projects-new-view" ||
                   route.kind === "team-projects-new-view"
@@ -5542,7 +5579,12 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
   if (route.kind === "my-issues") return "my-issues";
   if (route.kind === "reviews" || route.kind === "review") return "reviews";
   if (route.kind === "team-issues") return "team-issues";
-  if (route.kind === "team-overview" || route.kind === "team-documents")
+  if (
+    route.kind === "team-overview" ||
+    route.kind === "team-documents" ||
+    route.kind === "team-loops" ||
+    route.kind === "team-members"
+  )
     return "team-overview";
   if (route.kind === "team-cycles") return "cycles";
   if (route.kind === "cycle" || route.kind === "cycle-upcoming")

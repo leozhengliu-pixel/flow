@@ -27,6 +27,9 @@ import { FlowOptionsIcon } from '@/components/issue/flow-header-icons'
 import { CalendarIcon } from '@/components/issue/issue-icons'
 import { ReleasesIcon } from '@/components/releases/release-icons'
 import { confirmAction } from '@/components/ui/action-dialog-service'
+import { SelectControl } from '@/components/ui/select-control'
+import { DateTimeControl } from '@/components/ui/date-time-control'
+import './issue-options-select.css'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
 import type { ActivityEvent, BootstrapData, Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 
@@ -335,7 +338,7 @@ export function IssueOptionsMenu({
       <IssueOptionsDialogFooter busy={busy} disabled={!linkUrl.trim()} action="Add link" onCancel={() => setDialog(null)} onSubmit={() => actions && void perform(() => actions.addLink({ url: linkUrl.trim(), title: linkTitle.trim() || undefined }), 'Link added')}/>
     </ActionDialog>
     <ActionDialog open={dialog === 'customer'} title={`Add customer request to ${issue.identifier}`} onOpenChange={value => !value && setDialog(null)}>
-      {data?.customers.length ? <label>Customer<select value={customerId} onChange={event => setCustomerId(event.target.value)}>{data.customers.map(customer => <option value={customer.id} key={customer.id}>{customer.name}</option>)}<option value="">Create new customer...</option></select></label> : null}
+      {data?.customers.length ? <label>Customer<SelectControl label="Customer" value={customerId} onChange={setCustomerId} options={[...data.customers.map(customer=>({value:customer.id,label:customer.name,entityName:true})),{value:'',label:'Create new customer...'}]}/></label> : null}
       {!customerId && <label>Customer name<input autoFocus value={customerName} onChange={event => setCustomerName(event.target.value)}/></label>}
       <label>Request<textarea value={customerBody} onChange={event => setCustomerBody(event.target.value)}/></label>
       <IssueOptionsDialogFooter busy={busy} disabled={!customerBody.trim() || (!customerId && !customerName.trim())} action="Add request" onCancel={() => setDialog(null)} onSubmit={() => actions && void perform(() => actions.addCustomerRequest({ customerId: customerId || undefined, customerName: customerName.trim() || undefined, body: customerBody.trim() }), 'Customer request added')}/>
@@ -350,7 +353,7 @@ export function IssueOptionsMenu({
       <IssueOptionsDialogFooter busy={busy} disabled={!relatedTitle.trim()} action="Create issue" onCancel={() => setDialog(null)} onSubmit={() => actions && void perform(() => actions.createRelated(relatedKind, relatedTitle.trim()), 'Related issue created')}/>
     </ActionDialog>
     <ActionDialog open={dialog === 'reminder'} title={`Remind me about ${issue.identifier}`} onOpenChange={value => !value && setDialog(null)}>
-      <label>Date and time<input autoFocus type="datetime-local" value={customReminder} onChange={event => setCustomReminder(event.target.value)}/></label>
+      <label>Date and time<DateTimeControl label="Date and time" min={new Date().toISOString()} mode="datetime" value={customReminder} onChange={setCustomReminder}/></label>
       <IssueOptionsDialogFooter busy={busy} disabled={!customReminder || new Date(customReminder).getTime() <= Date.now()} action="Set reminder" onCancel={() => setDialog(null)} onSubmit={() => remindAt(new Date(customReminder))}/>
     </ActionDialog>
     <ActionDialog open={dialog === 'loop'} title={`Run loop on ${issue.identifier}`} onOpenChange={value => !value && setDialog(null)}>

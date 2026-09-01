@@ -114,6 +114,8 @@ export type AppRoute =
     }
   | { kind: "team-overview"; workspaceSlug: string; teamKey: string }
   | { kind: "team-documents"; workspaceSlug: string; teamKey: string }
+  | { kind: "team-loops"; workspaceSlug: string; teamKey: string }
+  | { kind: "team-members"; workspaceSlug: string; teamKey: string }
   | { kind: "team-cycles"; workspaceSlug: string; teamKey: string }
   | {
       kind: "team-initiatives";
@@ -834,6 +836,20 @@ export function parseAppRoute(pathname: string): AppRoute {
     segments.length === 4
   )
     return { kind: "team-documents", workspaceSlug, teamKey: third };
+  if (
+    section === "team" &&
+    third &&
+    fourth === "loops" &&
+    segments.length === 4
+  )
+    return { kind: "team-loops", workspaceSlug, teamKey: third };
+  if (
+    section === "team" &&
+    third &&
+    fourth === "members" &&
+    segments.length === 4
+  )
+    return { kind: "team-members", workspaceSlug, teamKey: third };
   if (section === "team" && third && !fourth)
     return { kind: "team-overview", workspaceSlug, teamKey: third };
   if (
@@ -1321,6 +1337,12 @@ export function teamHomePath(workspaceSlug: string, teamKey: string) {
 }
 export function teamDocumentsPath(workspaceSlug: string, teamKey: string) {
   return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/documents`;
+}
+export function teamLoopsPath(workspaceSlug: string, teamKey: string) {
+  return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/loops`;
+}
+export function teamMembersPath(workspaceSlug: string, teamKey: string) {
+  return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/members`;
 }
 export function teamCyclesPath(workspaceSlug: string, teamKey: string) {
   return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/cycles`;

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { SelectControl } from '@/components/ui/select-control'
 import type { Customer, CustomerMutationInput, User } from '@/types/flow'
 
 type CustomerDraft = {
@@ -71,9 +72,9 @@ export function CustomerDialog({ open, users, customer, onOpenChange, onSubmit }
         </div>
         <div className="workspace-customer-form-grid">
           <Field label="Name"><input autoFocus aria-label="Name" placeholder="Customer name" value={draft.name} onChange={event => setDraft(value => ({ ...value, name: event.target.value }))}/></Field>
-          <Field label="Owner"><select aria-label="Owner" value={draft.ownerId} onChange={event => setDraft(value => ({ ...value, ownerId: event.target.value }))}><option value="">No owner</option>{users.map(user => <option key={user.id} value={user.id}>{user.displayName}</option>)}</select></Field>
-          <Field label="Status"><div className="workspace-status-select"><i data-active={draft.status === 'active'}/><select aria-label="Status" value={draft.status} onChange={event => setDraft(value => ({ ...value, status: event.target.value as Customer['status'] }))}><option value="active">Active</option><option value="inactive">Inactive</option></select></div></Field>
-          <Field label="Tier"><select aria-label="Tier" value={draft.tier} onChange={event => setDraft(value => ({ ...value, tier: event.target.value }))}><option value="">No tier</option><option>Enterprise</option><option>Mid-market</option><option>Small business</option></select></Field>
+          <Field label="Owner"><SelectControl className="workspace-customer-select" label="Owner" value={draft.ownerId} onChange={ownerId => setDraft(value => ({ ...value, ownerId }))} options={[{value:'',label:'No owner'},...users.map(user=>({value:user.id,label:user.displayName,entityName:true}))]}/></Field>
+          <Field label="Status"><SelectControl className="workspace-customer-select" label="Status" value={draft.status} onChange={status => setDraft(value => ({ ...value, status: status as Customer['status'] }))} options={[{value:'active',label:'Active'},{value:'inactive',label:'Inactive'}]}/></Field>
+          <Field label="Tier"><SelectControl className="workspace-customer-select" label="Tier" value={draft.tier} onChange={tier => setDraft(value => ({ ...value, tier }))} options={[{value:'',label:'No tier'},{value:'Enterprise',label:'Enterprise'},{value:'Mid-market',label:'Mid-market'},{value:'Small business',label:'Small business'}]}/></Field>
           <Field label="Annual revenue"><div className="workspace-money-input"><span>$</span><input aria-label="Annual revenue" inputMode="decimal" value={draft.annualRevenue} onChange={event => setDraft(value => ({ ...value, annualRevenue: event.target.value.replace(/[^\d.]/g, '') }))}/></div></Field>
           <Field label="Size"><input aria-label="Size" inputMode="numeric" value={draft.size} onChange={event => setDraft(value => ({ ...value, size: event.target.value.replace(/\D/g, '') }))}/></Field>
         </div>

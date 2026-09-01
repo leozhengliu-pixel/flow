@@ -66,7 +66,7 @@
 
 .lp-projects button,
 .lp-projects input,
-.lp-projects select { font: inherit; letter-spacing: 0; }
+
 
 .lp-projects__header {
   align-items: center;
@@ -373,6 +373,11 @@
 .lp-projects-display__properties button { align-items: center; background: var(--theme-control-hover); border: .5px solid #3a3a3e; border-radius: 9999px; color: #96969b; display: inline-flex; font-size: 11px; height: 24px; line-height: 18px; padding: 0 8px; }
 .lp-projects-display__properties button:hover { background: #323235; color: var(--theme-text-primary); }
 .lp-projects-display__properties button.is-selected { background: var(--theme-border-strong); color: var(--theme-text-primary); }
+.lp-projects-display__properties .lp-projects-display__label-groups{position:relative;display:block;margin-top:7px}
+.lp-projects-display__properties .lp-projects-display__label-groups>button{gap:5px;padding:0 7px;border-color:transparent;background:transparent;color:var(--theme-text-secondary)}
+.lp-projects-display__properties .lp-projects-display__label-groups>div{position:absolute;z-index:90;right:-2px;bottom:28px;width:190px;max-height:220px;overflow:auto;padding:4px;border:.5px solid var(--theme-border-strong);border-radius:12px;background:var(--theme-surface-2);box-shadow:var(--menu-shadow)}
+.lp-projects-display__properties .lp-projects-display__label-groups>div>button{width:100%;display:flex;justify-content:space-between;border:0;border-radius:6px;background:transparent;color:var(--theme-text-primary)}
+.lp-projects-display__properties .lp-projects-display__label-groups>div>button:hover,.lp-projects-display__properties .lp-projects-display__label-groups>div>button:focus-visible{background:var(--theme-surface-hover);outline:0}
 .lp-projects-display__properties button:focus-visible,
 .lp-projects-display__footer button:focus-visible,
 .lp-projects-display__footer { align-items: center; border-top: .5px solid var(--theme-border-strong); display: flex; gap: 8px; justify-content: flex-end; padding: 8px 12px; }
@@ -523,7 +528,7 @@
 .lp-project-symbol { align-items: center; display: inline-flex; flex: none; height: 28px; justify-content: center; position: relative; width: 28px; }
 .lp-project-symbol > span { font-size: 9px; position: absolute; }
 .lp-project-row__name > div { align-items: baseline; display: flex; gap: 12px; min-width: 0; }
-.lp-project-row__name strong { flex: none; font-size: 13px; font-weight: 500; line-height: 15.5px; }
+.lp-project-row__name strong { flex: none; font-size: 13px; font-weight: 500; line-height: 18.5px; }
 .lp-project-row__name small { color: #77777c; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .lp-project-property { display: inline-flex; max-width: 100%; position: relative; }
@@ -639,6 +644,12 @@
 .lp-project-row__health > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; }
 .lp-project-row__health small { color: #65656a; flex: none; font-size: 11px; }
 .lp-project-row__status { gap: 4px; }
+.lp-project-row__initiatives,.lp-project-row__label-group{min-width:0;overflow:hidden;color:var(--theme-text-secondary);font-size:12px;white-space:nowrap}
+.lp-project-row__initiatives>span{overflow:hidden;text-overflow:ellipsis}
+.lp-project-row__label-group{gap:4px}
+.lp-project-row__label-group>span,.lp-project-card__initiative{min-width:0;display:inline-flex;align-items:center;gap:5px;overflow:hidden;padding:2px 6px;border:.5px solid var(--theme-border);border-radius:9999px;text-overflow:ellipsis;white-space:nowrap}
+.lp-project-row__label-group i,.lp-project-card__initiative i{width:7px;height:7px;flex:none;border-radius:50%}
+.lp-project-card__initiative{max-width:150px;color:var(--theme-text-secondary);font-size:11px}
 .lp-project-row__progress { border: 0; gap: 8px; }
 .lp-project-row__progress > svg { flex: none; height: 16px; width: 16px; }
 .lp-project-row__progress > span { color: var(--theme-text-primary); font-size: 12px; line-height: normal; }

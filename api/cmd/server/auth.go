@@ -243,9 +243,11 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	if feature == "" && (trashResourceType == "release" || trashResourceType == "release_pipeline") {
 		feature = "releases"
 	}
-	if feature != "" && data.WorkspaceSettings.FeatureFlags != nil && !data.WorkspaceSettings.FeatureFlags[feature] {
-		writeError(w, http.StatusForbidden, "This workspace feature is disabled")
-		return false
+	if feature != "" && data.WorkspaceSettings.FeatureFlags != nil {
+		if enabled, configured := data.WorkspaceSettings.FeatureFlags[feature]; configured && !enabled {
+			writeError(w, http.StatusForbidden, "This workspace feature is disabled")
+			return false
+		}
 	}
 	if !s.resourceAllowed(r, key, user.ID) {
 		writeError(w, http.StatusForbidden, "This resource is outside your teams")
@@ -274,7 +276,7 @@ func featureForPath(path string) string {
 	if strings.HasPrefix(path, "/api/issues/") && strings.HasSuffix(path, "/releases") {
 		return "releases"
 	}
-	for prefix, feature := range map[string]string{"/api/documents": "documents", "/api/customers": "customer-requests", "/api/customer-requests": "customer-requests", "/api/releases": "releases", "/api/release-pipelines": "releases", "/api/asks": "asks", "/api/initiatives": "initiatives"} {
+	for prefix, feature := range map[string]string{"/api/documents": "documents", "/api/customers": "customer-requests", "/api/customer-requests": "customer-requests", "/api/releases": "releases", "/api/release-pipelines": "releases", "/api/asks": "asks", "/api/initiatives": "initiatives", "/api/dashboards": "dashboards"} {
 		if strings.HasPrefix(path, prefix) {
 			return feature
 		}

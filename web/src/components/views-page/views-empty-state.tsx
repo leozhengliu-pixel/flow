@@ -8,7 +8,7 @@ type ViewsEmptyStateProps = {
 }
 
 export function ViewsEmptyState({ onCreate, resource }: ViewsEmptyStateProps) {
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const description = resource === 'issues'
     ? 'Create custom views using filters to show only the issues you want to see. You can save, share, and favorite these views for easy access and faster team collaboration.'
     : 'Create custom views using filters to show only the projects you want to see. You can save, share, and favorite these views for easy access and faster team collaboration.'
@@ -22,16 +22,18 @@ export function ViewsEmptyState({ onCreate, resource }: ViewsEmptyStateProps) {
         <span className={styles.emptyTitle}>Views</span>
         <div className={styles.emptyParagraphs}>
           <span data-i18n-ignore>{t(description)}</span>
-          <span>You can also save any existing view by clicking the <SaveViewIcon /> icon or by pressing <span className={styles.shortcut} aria-label="Option V"><span className={styles.shortcutKeys}><span className={styles.shortcutLabel}>Option V</span><kbd aria-hidden="true">⌥</kbd><kbd aria-hidden="true">V</kbd></span></span>.</span>
+          <span data-i18n-ignore>{locale === 'zh-CN' ? <>你也可以点击 <SaveViewIcon /> 图标，或按下 <ViewShortcut/> 保存任何现有视图。</> : <>You can also save any existing view by clicking the <SaveViewIcon /> icon or by pressing <ViewShortcut/>.</>}</span>
         </div>
       </div>
       <div className={styles.emptyActions}>
-        <button className={styles.emptyPrimary} onClick={onCreate} type="button">Create new view</button>
-        <a className={styles.emptySecondary} href="https://flow.app/docs/custom-views" rel="noopener noreferrer" target="_blank">Documentation</a>
+        <button className={styles.emptyPrimary} onClick={onCreate} type="button">{t('Create new view')}</button>
+        <a className={styles.emptySecondary} href="https://flow.app/docs/custom-views" rel="noopener noreferrer" target="_blank">{t('Documentation')}</a>
       </div>
     </div>
   </div>
 }
+
+function ViewShortcut() { return <span className={styles.shortcut} aria-label="Option V"><span className={styles.shortcutKeys}><span className={styles.shortcutLabel}>Option V</span><kbd aria-hidden="true">⌥</kbd><kbd aria-hidden="true">V</kbd></span></span> }
 
 function SaveViewIcon() {
   return <svg aria-hidden="true" className={styles.saveViewIcon} fill="currentColor" viewBox="0 0 16 16">
