@@ -2133,9 +2133,9 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		}
 		data.Issues = append([]domain.Issue{created}, append(children, data.Issues...)...)
 		applyTriggeredWorkflows(data, "issueCreated", "issue", created.ID)
-		appendActivity(data, created.ID, "issue.created", data.Viewer, map[string]string{})
+		appendActivity(data, created.ID, "issue.created", data.Viewer, map[string]string{"stateId": created.State.ID, "state": created.State.Name})
 		for _, child := range children {
-			appendActivity(data, child.ID, "issue.created", data.Viewer, map[string]string{})
+			appendActivity(data, child.ID, "issue.created", data.Viewer, map[string]string{"stateId": child.State.ID, "state": child.State.Name})
 		}
 		return created.ID, nil
 	})
@@ -4154,8 +4154,10 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 			previousState := issue.State
 			changes["stateBefore"] = issue.State.Name
 			changes["stateBeforeId"] = issue.State.ID
+			changes["stateBeforeType"] = issue.State.Type
 			changes["state"] = value.Name
 			changes["stateId"] = value.ID
+			changes["stateType"] = value.Type
 			issue.StatusChangedAt = &now
 			if value.Type == "started" && issue.StartedAt == nil {
 				issue.StartedAt = &now
@@ -4186,6 +4188,11 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 	if input.Estimate != nil {
 		if *input.Estimate < 0 {
 			return nil, fmt.Errorf("%w: invalid estimate", errInvalid)
+		}
+		if issue.Estimate != nil {
+			changes["estimateBefore"] = strconv.FormatFloat(*issue.Estimate, 'f', -1, 64)
+		} else {
+			changes["estimateBefore"] = "0"
 		}
 		if *input.Estimate == 0 {
 			issue.Estimate = nil
@@ -4438,7 +4445,7 @@ func transitionRelatedIssue(data *domain.Bootstrap, issue *domain.Issue, state d
 	}
 	issue.UpdatedAt = now
 	issue.Version++
-	activity := appendActivity(data, issue.ID, "issue.updated", data.Viewer, map[string]string{"stateBefore": previous.Name, "stateBeforeId": previous.ID, "state": state.Name, "stateId": state.ID, "automation": reason})
+	activity := appendActivity(data, issue.ID, "issue.updated", data.Viewer, map[string]string{"stateBefore": previous.Name, "stateBeforeId": previous.ID, "stateBeforeType": previous.Type, "state": state.Name, "stateId": state.ID, "stateType": state.Type, "automation": reason})
 	appendIssueNotifications(data, *issue, activity, nil)
 }
 
@@ -4471,6 +4478,12 @@ func applySavedViewUpdate(data *domain.Bootstrap, view *domain.SavedView, input 
 			return errInvalid
 		}
 		view.Resource = *input.Resource
+	}
+	if input.ProjectID != nil {
+		if *input.ProjectID != "" && !slices.ContainsFunc(data.Projects, func(project domain.Project) bool { return project.ID == *input.ProjectID }) {
+			return errInvalid
+		}
+		view.ProjectID = *input.ProjectID
 	}
 	if input.Scope != nil {
 		if !slices.Contains([]string{"personal", "team", "workspace"}, *input.Scope) {
@@ -4523,6 +4536,9 @@ func applySavedViewUpdate(data *domain.Bootstrap, view *domain.SavedView, input 
 	}
 	if view.Resource == "" {
 		view.Resource = "issues"
+	}
+	if view.ProjectID != "" && view.Resource != "issues" {
+		return errInvalid
 	}
 	if view.Icon == "" {
 		view.Icon = "CustomView"

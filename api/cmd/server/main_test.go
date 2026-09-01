@@ -793,6 +793,36 @@ func TestWorkspaceSearchIndexesUnifiedResourceTypes(t *testing.T) {
 	}
 }
 
+func TestSemanticSearchIndexesAllResourceTypes(t *testing.T) {
+	handler, repository := newContentFeatureHandler(t)
+	defer repository.Close()
+	viewer := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK).Viewer
+	initiative := requestJSON[domain.Initiative](t, handler, http.MethodPost, "/api/initiatives", map[string]any{"name": "Semantic initiative"}, http.StatusCreated)
+	customer := requestJSON[domain.Customer](t, handler, http.MethodPost, "/api/customers", map[string]any{"name": "Semantic customer"}, http.StatusCreated)
+	release := requestJSON[domain.Release](t, handler, http.MethodPost, "/api/releases", map[string]any{"name": "Semantic release"}, http.StatusCreated)
+	view := requestJSON[domain.SavedView](t, handler, http.MethodPost, "/api/views", map[string]any{"name": "Semantic saved view", "resource": "issues", "scope": "workspace"}, http.StatusCreated)
+
+	queries := map[string]struct {
+		query    string
+		typeName string
+	}{
+		"initiative": {query: initiative.Name, typeName: "initiative"},
+		"member":     {query: viewer.DisplayName, typeName: "member"},
+		"customer":   {query: customer.Name, typeName: "customer"},
+		"release":    {query: release.Name, typeName: "release"},
+		"view":       {query: view.Name, typeName: "view"},
+	}
+	for name, item := range queries {
+		result := requestJSON[struct {
+			Results []semanticResult `json:"results"`
+			Total   int              `json:"total"`
+		}](t, handler, http.MethodGet, "/api/search/semantic?q="+url.QueryEscape(item.query)+"&types="+item.typeName, nil, http.StatusOK)
+		if result.Total == 0 || len(result.Results) == 0 || result.Results[0].Type != item.typeName {
+			t.Fatalf("semantic %s search = %#v, want a %s result", name, result, item.typeName)
+		}
+	}
+}
+
 func TestRealtimeHubWorkspaceIsolationAndPresence(t *testing.T) {
 	hub := newRealtimeHub()
 	testWorkspace, unsubscribeTestWorkspace := hub.subscribe("test-workspace")
@@ -867,6 +897,30 @@ func TestPulsePreferencesViewsAndUpdateAttachments(t *testing.T) {
 	if persisted.UserSettings[persisted.Viewer.ID].PulseSchedule != "weekly" || !slices.ContainsFunc(persisted.SavedViews, func(item domain.SavedView) bool { return item.ID == saved.ID }) {
 		t.Fatal("Pulse preferences or view did not persist")
 	}
+}
+
+func TestProjectScopedSavedViewPersistsProjectIdentity(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if len(bootstrap.Projects) == 0 {
+		t.Fatal("seed must include a project")
+	}
+	name, resource, scope, projectID := "Project work", "issues", "workspace", bootstrap.Projects[0].ID
+	view := requestJSON[domain.SavedView](t, handler, http.MethodPost, "/api/views", domain.SavedViewMutationInput{Name: &name, Resource: &resource, Scope: &scope, ProjectID: &projectID}, http.StatusCreated)
+	if view.ProjectID != projectID || view.Resource != resource {
+		t.Fatalf("project view identity was not persisted: %#v", view)
+	}
+	updated := requestJSON[domain.SavedView](t, handler, http.MethodPatch, "/api/views/"+view.ID, domain.SavedViewMutationInput{ProjectID: &projectID}, http.StatusOK)
+	if updated.ProjectID != projectID {
+		t.Fatalf("project view identity was lost during update: %#v", updated)
+	}
+	invalid := "missing-project"
+	requestJSON[any](t, handler, http.MethodPost, "/api/views", domain.SavedViewMutationInput{Name: &name, Resource: &resource, ProjectID: &invalid}, http.StatusBadRequest)
 }
 
 func uploadPulseAttachmentForTest(t *testing.T, handler http.Handler, path, name, contents string) domain.ProjectUpdate {

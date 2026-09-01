@@ -615,6 +615,13 @@ export interface ProjectProgressHistoryPoint {
   startedEstimate?: number;
   completedEstimate?: number;
   scopeEstimate?: number;
+  scopeCount?: number;
+  completedIssueCount?: number;
+  startedIssueCount?: number;
+  completedEstimateToday?: number;
+  completedIssueCountToday?: number;
+  addedEstimateToday?: number;
+  addedIssueCountToday?: number;
 }
 export interface ProjectRelation {
   id: UUID;
@@ -1872,6 +1879,7 @@ export interface SavedView {
   color?: string;
   resource?: SavedViewResource;
   scope: "personal" | "team" | "workspace";
+  projectId?: UUID;
   teamId?: UUID;
   ownerId?: UUID;
   favorite?: boolean;
@@ -1892,6 +1900,7 @@ export interface SavedViewMutationInput {
   color?: string;
   resource?: SavedViewResource;
   scope?: "personal" | "team" | "workspace";
+  projectId?: string;
   teamId?: string;
   ownerId?: string;
   favorite?: boolean;

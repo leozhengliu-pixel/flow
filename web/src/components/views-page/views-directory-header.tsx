@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useI18n } from '@/i18n/i18n'
 
 import styles from './views-page.module.css'
 
@@ -30,18 +31,20 @@ export function ViewsDirectoryHeader({
   title: string
   toolbarEnd?: ReactNode
 }) {
+  const { t } = useI18n()
+  const localizedAction = t(actionLabel)
   return <>
     <header className={styles.header}>
-      <button className={styles.mobileMenu} aria-label="Open workspace sidebar" onClick={onOpenSidebar} type="button">Menu</button>
-      <h2>{title}</h2>
+      <button className={styles.mobileMenu} aria-label={t('Open workspace sidebar')} onClick={onOpenSidebar} type="button">{t('Menu')}</button>
+      <h2>{t(title)}</h2>
       {afterTitle}
-      <button aria-label={`Create ${actionLabel.toLowerCase()}`} className={styles.createHeader} onClick={onAction} type="button">
+      <button aria-label={t(`Create ${actionLabel.toLowerCase()}`)} className={styles.createHeader} onClick={onAction} type="button">
         <FlowPlusIcon/>
-        <span>{actionLabel}</span>
+        <span>{localizedAction}</span>
       </button>
     </header>
     <div className={styles.toolbar}>
-      <nav aria-label="View resources" className={styles.tabs}>
+      <nav aria-label={t('View resources')} className={styles.tabs}>
         {tabs.map(tab => <a
           aria-current={activeResource === tab.resource ? 'page' : undefined}
           className="ui-pill"
@@ -52,7 +55,7 @@ export function ViewsDirectoryHeader({
             event.preventDefault()
             if (activeResource !== tab.resource) tab.onSelect?.()
           }}
-        >{tab.label}</a>)}
+        >{t(tab.label)}</a>)}
       </nav>
       {toolbarEnd && <div className={styles.toolbarEnd}>{toolbarEnd}</div>}
     </div>

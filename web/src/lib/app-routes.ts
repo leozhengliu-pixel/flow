@@ -182,7 +182,12 @@ export type AppRoute =
     }
   | { kind: "asks"; workspaceSlug: string }
   | { kind: "loops"; workspaceSlug: string }
-  | { kind: "loop-editor"; workspaceSlug: string; loopId?: string; draftId?: string }
+  | {
+      kind: "loop-editor";
+      workspaceSlug: string;
+      loopId?: string;
+      draftId?: string;
+    }
   | {
       kind: "team-archive";
       workspaceSlug: string;
@@ -249,6 +254,13 @@ export type AppRoute =
       workspaceSlug: string;
       projectSlugId: string;
       tab: ProjectRouteTab;
+    }
+  | {
+      kind: "project-saved-view";
+      workspaceSlug: string;
+      projectSlugId: string;
+      viewId: string;
+      editing?: boolean;
     }
   | {
       kind: "issue";
@@ -408,7 +420,12 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     fifth === "new" &&
     segments.length === 5
   )
-    return { kind: "dashboards", workspaceSlug, teamKey: third, creating: true };
+    return {
+      kind: "dashboards",
+      workspaceSlug,
+      teamKey: third,
+      creating: true,
+    };
   if (
     section === "team" &&
     third &&
@@ -470,7 +487,9 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     return { kind: "loops", workspaceSlug };
   if (section === "loops" && third === "new" && segments.length === 3) {
     const draftId = new URLSearchParams(search).get("draftId") || undefined;
-    return draftId ? { kind: "loop-editor", workspaceSlug, draftId } : { kind: "loop-editor", workspaceSlug };
+    return draftId
+      ? { kind: "loop-editor", workspaceSlug, draftId }
+      : { kind: "loop-editor", workspaceSlug };
   }
   if (section === "loops" && third && segments.length === 3)
     return { kind: "loop-editor", workspaceSlug, loopId: third };
@@ -1037,6 +1056,34 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
   if (
     section === "project" &&
     third &&
+    fourth === "view" &&
+    fifth &&
+    sixth === "edit" &&
+    segments.length === 6
+  )
+    return {
+      kind: "project-saved-view",
+      workspaceSlug,
+      projectSlugId: third,
+      viewId: fifth,
+      editing: true,
+    };
+  if (
+    section === "project" &&
+    third &&
+    fourth === "view" &&
+    fifth &&
+    segments.length === 5
+  )
+    return {
+      kind: "project-saved-view",
+      workspaceSlug,
+      projectSlugId: third,
+      viewId: fifth,
+    };
+  if (
+    section === "project" &&
+    third &&
     PROJECT_TABS.has(fourth as ProjectRouteTab) &&
     segments.length === 4
   )
@@ -1473,6 +1520,20 @@ export function projectPath(
   tab: ProjectRouteTab = "overview",
 ) {
   return `${workspaceRootPath(workspaceSlug)}/project/${encode(project.slugId)}/${tab === "new" ? "view/new" : tab}`;
+}
+export function projectSavedViewPath(
+  workspaceSlug: string,
+  projectSlugId: string,
+  viewId: string,
+) {
+  return `${workspaceRootPath(workspaceSlug)}/project/${encode(projectSlugId)}/view/${encode(viewId)}`;
+}
+export function projectSavedViewEditPath(
+  workspaceSlug: string,
+  projectSlugId: string,
+  viewId: string,
+) {
+  return `${projectSavedViewPath(workspaceSlug, projectSlugId, viewId)}/edit`;
 }
 
 export function routeBelongsToWorkspace(

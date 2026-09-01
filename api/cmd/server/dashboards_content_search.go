@@ -1267,6 +1267,41 @@ func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if types["initiative"] {
+		for _, item := range data.Initiatives {
+			add(domain.SearchResult{ID: item.ID, Type: "initiative", Title: item.Name, Subtitle: item.Summary, Icon: item.Icon, Color: item.Color, UpdatedAt: item.UpdatedAt}, item.Name, item.Summary, item.Description, item.Status, item.Health)
+		}
+	}
+	if types["member"] {
+		for _, item := range data.Users {
+			add(domain.SearchResult{ID: item.ID, Type: "member", Title: item.DisplayName, Subtitle: item.Email, Email: item.Email}, item.DisplayName, item.Name, item.Email)
+		}
+	}
+	if types["customer"] {
+		for _, item := range data.Customers {
+			subtitle := strings.Join(item.Domains, ", ")
+			owner := ""
+			if index := slices.IndexFunc(data.Users, func(user domain.User) bool { return user.ID == item.OwnerID }); index >= 0 {
+				owner = data.Users[index].DisplayName
+			}
+			add(domain.SearchResult{ID: item.ID, Type: "customer", Title: item.Name, Subtitle: subtitle, UpdatedAt: item.UpdatedAt}, item.Name, subtitle, item.Status, item.Tier, owner)
+		}
+	}
+	if types["release"] {
+		for _, item := range data.Releases {
+			if item.ArchivedAt != nil {
+				continue
+			}
+			subtitle := strings.TrimSpace(strings.Join([]string{item.Version, item.Status}, " "))
+			add(domain.SearchResult{ID: item.ID, Type: "release", Title: item.Name, Subtitle: subtitle, UpdatedAt: item.UpdatedAt}, item.Name, item.Version, item.Description, item.Status, item.ReleaseNotes)
+		}
+	}
+	if types["view"] {
+		for _, item := range data.SavedViews {
+			subtitle := strings.TrimSpace(strings.Join([]string{item.Scope, item.Resource}, " "))
+			add(domain.SearchResult{ID: item.ID, Type: "view", Title: item.Name, Subtitle: subtitle, Icon: item.Icon, Color: item.Color, UpdatedAt: item.UpdatedAt}, item.Name, item.Description, item.Scope, item.Resource)
+		}
+	}
 	sort.SliceStable(results, func(i, j int) bool {
 		if results[i].SemanticScore == results[j].SemanticScore {
 			return results[i].UpdatedAt.After(results[j].UpdatedAt)

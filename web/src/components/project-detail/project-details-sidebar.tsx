@@ -19,7 +19,7 @@ import { PRIORITY_LABELS } from './project-detail-types'
 import { toggleGroupedLabelIds } from '@/lib/labels'
 import { useI18n } from '@/i18n/i18n'
 import { formatProjectPropertyDate, initiativeStatusLabel, inviteProjectMember } from './project-detail-helpers'
-import { buildProgressData, type PersistedProgressHistory, type ProgressSeries } from './project-progress-data'
+import { buildProgressData, shouldShowProgressGraph, type PersistedProgressHistory, type ProgressSeries } from './project-progress-data'
 
 export function ProjectDetailsSidebar({ initiatives, integrationConnections, labelGroups, labels, onConvertMilestone, onCreateMilestone, onDeleteMilestone, onMoveMilestone, onOpenIssueFilter, onOpenMilestoneIssues, onReorderMilestones, onTabChange, onUpdate, onUpdateProject, onUpdateMilestone, project, projectIssues, projects, projectStatuses, projectUpdates, teams, users, viewer }: {
   initiatives: Initiative[]
@@ -94,7 +94,7 @@ export function ProjectDetailsSidebar({ initiatives, integrationConnections, lab
     <SidebarSection onToggle={() => setProgressOpen(value => !value)} open={progressOpen} title="Progress">
       <div className="project-details-sidebar__progress">
         <div className="project-details-sidebar__stats"><span><i className="is-scope"/>Scope<strong>{projectIssues.length}</strong></span><span><i className="is-started"/>Started<strong>{started}</strong></span><span><i className="is-completed"/>Completed<strong>{completed}</strong></span></div>
-        <ProgressChart issues={projectIssues} progress={project.progress} start={project.startDate} target={project.targetDate} persistedHistory={project}/>
+        {shouldShowProgressGraph(project) && <ProgressChart issues={projectIssues} progress={project.progress} start={project.startDate} target={project.targetDate} persistedHistory={project}/>}
         <div aria-label="Progress grouping" className="project-details-sidebar__segments" role="tablist"><button aria-selected={progressTab === 'assignees'} onClick={() => setProgressTab('assignees')} role="tab" type="button">Assignees</button><button aria-selected={progressTab === 'labels'} onClick={() => setProgressTab('labels')} role="tab" type="button">Labels</button></div>
         <div className="project-details-sidebar__breakdown">{progressTab === 'assignees' ? assignees.map(user => {
           const userIssues = projectIssues.filter(issue => issue.assignee?.id === user.id)
@@ -425,23 +425,25 @@ function ProgressChart({ issues, persistedHistory, progress, start, target }: { 
     { id: 'flowScopeGradient', type: 'linearGradient' as const, colors: [{ offset: 0, color: 'var(--progress-scope-fill)', opacity: .3 }, { offset: 20, color: 'var(--progress-scope-fill)', opacity: .1 }, { offset: 60, color: 'var(--progress-scope-fill)', opacity: 0 }] },
     { id: 'flowStartedGradient', type: 'linearGradient' as const, colors: [{ offset: 0, color: 'var(--progress-started)', opacity: .1 }, { offset: 28, color: 'var(--progress-started)', opacity: 0 }] },
     { id: 'flowCompletedGradient', type: 'linearGradient' as const, colors: [{ offset: 0, color: 'var(--progress-completed)', opacity: .4 }, { offset: 80, color: 'var(--progress-completed)', opacity: 0 }] },
+    { id: 'flowTargetGradient', type: 'linearGradient' as const, colors: [{ offset: 0, color: 'transparent', opacity: 0 }] },
   ]
   const fill = [
     { match: { id: 'Scope' }, id: 'flowScopeGradient' },
     { match: { id: 'Started' }, id: 'flowStartedGradient' },
     { match: { id: 'Completed' }, id: 'flowCompletedGradient' },
+    { match: { id: 'Target' }, id: 'flowTargetGradient' },
   ]
   const CompletionBars = (props: LineCustomSvgLayerProps<ProgressSeries>) => <ProgressCompletionBars {...props} changes={chart.completedChanges}/>
-  const Forecast = (props: LineCustomSvgLayerProps<ProgressSeries>) => <ProgressForecastLayer {...props} chartId={chartId} completed={chart.forecast.completed} currentDate={chart.currentDate} optimisticDate={chart.forecast.optimisticDate} pessimisticDate={chart.forecast.pessimisticDate} targetDate={chart.targetDate} total={chart.forecast.total}/>
+  const Forecast = (props: LineCustomSvgLayerProps<ProgressSeries>) => <ProgressForecastLayer {...props} chartId={chartId} completed={chart.forecast.completed} currentDate={chart.currentDate} endDate={chart.endDate} optimisticDate={chart.forecast.optimisticDate} pessimisticDate={chart.forecast.pessimisticDate} startDate={chart.startDate} targetDate={chart.targetDate} total={chart.forecast.total}/>
 
   return <div className="project-details-sidebar__chart">
     <Line<ProgressSeries>
       animate={false}
       ariaLabel={`${Math.round(progress * 100)}% project progress`}
       areaOpacity={1}
-      axisBottom={{ tickPadding: 3, tickSize: 6, tickValues: [chart.startDate, chart.endDate], renderTick: ProgressAxisTick }}
+      axisBottom={{ tickPadding: 3, tickSize: 6, tickValues: [chart.startDate, chart.targetDate, chart.endDate].filter((date, index, dates) => dates.findIndex(item => item.getTime() === date.getTime()) === index), renderTick: ProgressAxisTick }}
       axisLeft={null}
-      colors={['var(--progress-scope-line)', 'var(--progress-started)', 'var(--progress-completed)']}
+      colors={['var(--progress-scope-line)', 'var(--progress-started)', 'var(--progress-completed)', 'var(--progress-completed)']}
       curve="monotoneX"
       data={chart.series}
       defs={defs}
@@ -463,7 +465,7 @@ function ProgressChart({ issues, persistedHistory, progress, start, target }: { 
       useMesh={false}
       width={359}
       xScale={{ type: 'time', format: 'native', precision: 'day', min: chart.startDate, max: chart.endDate }}
-      yScale={{ type: 'linear', stacked: false, min: 0, max: Math.max(1, issues.length) }}
+      yScale={{ type: 'linear', stacked: false, min: 0, max: Math.max(1, chart.totalEstimate) }}
       height={200}
     />
   </div>
@@ -473,49 +475,52 @@ function ProgressLinesLayer({ lineGenerator, series }: LineCustomSvgLayerProps<P
   return <g>{series.map(item => {
     const path = lineGenerator(item.data.map(point => point.position))
     const end = item.data[item.data.length - 1]?.position
-    return <g key={item.id}><path className={`project-details-sidebar__progress-line is-${String(item.id).toLowerCase()}`} d={path ?? undefined}/>{item.id !== 'Scope' && end && <circle className={`project-details-sidebar__progress-end is-${String(item.id).toLowerCase()}`} cx={end.x} cy={end.y} r="2.5"/>}</g>
+    return <g key={item.id}><path className={`project-details-sidebar__progress-line is-${String(item.id).toLowerCase()}`} d={path ?? undefined}/>{!['Scope', 'Target'].includes(item.id) && end && <circle className={`project-details-sidebar__progress-end is-${String(item.id).toLowerCase()}`} cx={end.x} cy={end.y} r="2.5"/>}</g>
   })}</g>
 }
 
-function ProgressForecastLayer({ chartId, completed, currentDate, lineGenerator, optimisticDate, pessimisticDate, targetDate, total, xScale, yScale, innerHeight }: LineCustomSvgLayerProps<ProgressSeries> & { chartId: string; completed: number; currentDate: Date; optimisticDate?: Date; pessimisticDate?: Date; targetDate: Date; total: number }) {
+function ProgressForecastLayer({ chartId, completed, currentDate, endDate, optimisticDate, pessimisticDate, startDate, targetDate, total, xScale, yScale, innerHeight }: LineCustomSvgLayerProps<ProgressSeries> & { chartId: string; completed: number; currentDate: Date; endDate: Date; optimisticDate?: Date; pessimisticDate?: Date; startDate: Date; targetDate: Date; total: number }) {
   const currentX = xScale(currentDate)
   const optimisticX = optimisticDate ? xScale(optimisticDate) : Number.NaN
   const pessimisticX = pessimisticDate ? xScale(pessimisticDate) : Number.NaN
   const targetX = xScale(targetDate)
-  const hatchStart = Number.isFinite(targetX) && Number.isFinite(optimisticX) ? Math.min(targetX, optimisticX) : Number.NaN
-  const hatchEnd = Number.isFinite(targetX) && Number.isFinite(optimisticX) ? Math.max(targetX, optimisticX) : Number.NaN
+  const endX = xScale(endDate)
+  const hatchStart = Number.isFinite(targetX) && Number.isFinite(endX) && targetDate >= startDate ? targetX : Number.NaN
+  const hatchEnd = Number.isFinite(targetX) && Number.isFinite(endX) && targetDate >= startDate ? endX : Number.NaN
   const hatchWidth = hatchEnd - hatchStart
   const hasForecast = Number.isFinite(currentX) && (Number.isFinite(optimisticX) || Number.isFinite(pessimisticX))
   const hasHatch = Number.isFinite(hatchStart) && hatchWidth > 0
-  if (!hasForecast) return null
+  if (!hasForecast && !hasHatch) return null
   const patternId = `${chartId}-forecast-hatch`
   const maskId = `${chartId}-forecast-fade`
-  const completedPath = Number.isFinite(optimisticX) ? lineGenerator([{ x: currentX, y: yScale(completed) }, { x: optimisticX, y: yScale(total) }]) : null
-  const pessimisticPath = Number.isFinite(pessimisticX) ? lineGenerator([{ x: currentX, y: yScale(completed) }, { x: pessimisticX, y: yScale(total) }]) : null
+  const coneId = `${chartId}-prediction-cone`
+  const completedY = yScale(completed)
+  const totalY = yScale(total)
   return <g className="project-details-sidebar__forecast" pointerEvents="none">
     {hasHatch && <defs>
-      <pattern height="8" id={patternId} patternUnits="userSpaceOnUse" width="8">
-        <path d="M-2 8 8-2M6 10 10 6" fill="none" stroke="var(--progress-target-line)" strokeWidth="1.5"/>
+      <pattern height="5" id={patternId} patternTransform="rotate(28)" patternUnits="userSpaceOnUse" width="5">
+        <line stroke="var(--progress-target-line)" strokeWidth="3" x1="0" x2="0" y1="0" y2="5"/>
       </pattern>
       <linearGradient id={maskId} x1="0" x2="1" y1="0" y2="0">
         <stop offset="0%" stopColor="white" stopOpacity=".75"/>
         <stop offset="65%" stopColor="white" stopOpacity=".34"/>
         <stop offset="100%" stopColor="white" stopOpacity="0"/>
       </linearGradient>
-      <mask id={`${maskId}-mask`} maskUnits="userSpaceOnUse" x={hatchStart} y="0" width={hatchWidth} height={innerHeight}>
-        <rect fill={`url(#${maskId})`} height={innerHeight} width={hatchWidth} x={hatchStart} y="0"/>
+      <mask id={`${maskId}-mask`} maskUnits="userSpaceOnUse" x={hatchStart} y="0" width="80" height={innerHeight}>
+        <rect fill={`url(#${maskId})`} height={innerHeight} width="80" x={hatchStart} y="0"/>
       </mask>
+      {Number.isFinite(optimisticX) && Number.isFinite(pessimisticX) && <linearGradient id={coneId} x1="80%" x2="100%" y1="0%" y2="100%"><stop offset="5%" stopColor="var(--progress-completed)" stopOpacity="0"/><stop offset="80%" stopColor="var(--progress-completed)" stopOpacity=".2"/></linearGradient>}
     </defs>}
     {hasHatch && <rect className="project-details-sidebar__forecast-hatch" fill={`url(#${patternId})`} height={innerHeight} mask={`url(#${maskId}-mask)`} width={hatchWidth} x={hatchStart} y="0"/>}
-    {completedPath && <path className="project-details-sidebar__progress-line is-completed-forecast" d={completedPath}/>}
-    {pessimisticPath && <path className="project-details-sidebar__progress-line is-completed-forecast is-pessimistic-forecast" d={pessimisticPath}/>}
+    {Number.isFinite(optimisticX) && Number.isFinite(pessimisticX) && <polygon className="project-details-sidebar__prediction-cone" fill={`url(#${coneId})`} points={`${currentX},${completedY + 2.5} ${currentX},${completedY - 2.5} ${optimisticX},${totalY} ${pessimisticX},${totalY}`} stroke="var(--progress-completed)" strokeDasharray="2 1.5"/>}
   </g>
 }
 
-function ProgressAxisTick({ lineX, lineY, textY, tickIndex, value, x, y }: { lineX: number; lineY: number; textY: number; tickIndex: number; value: Date | string | number; x: number; y: number }) {
+function ProgressAxisTick({ lineX, lineY, textY, tickIndex, tickValues, value, x, y }: { lineX: number; lineY: number; textY: number; tickIndex: number; tickValues?: unknown[]; value: Date | string | number; x: number; y: number }) {
   const date = value instanceof Date ? value : new Date(value)
   const isStart = tickIndex === 0
-  return <g transform={`translate(${x},${y})`}><line className="project-details-sidebar__axis-tick-line" x1="0" x2={lineX} y1="1.5" y2={lineY}/><text className="project-details-sidebar__axis-tick-label" dominantBaseline="text-before-edge" textAnchor={isStart ? 'start' : 'end'} transform={`translate(${isStart ? 2 : -2},${textY})`}>{format(date, 'MMM d')}</text></g>
+  const isEnd = tickValues ? tickIndex === tickValues.length - 1 : false
+  return <g transform={`translate(${x},${y})`}><line className="project-details-sidebar__axis-tick-line" x1="0" x2={lineX} y1="1.5" y2={lineY}/><text className="project-details-sidebar__axis-tick-label" dominantBaseline="text-before-edge" textAnchor={isStart ? 'start' : isEnd ? 'end' : 'middle'} transform={`translate(${isStart ? 2 : isEnd ? -2 : 0},${textY})`}>{format(date, 'MMM d')}</text></g>
 }
 
 function ProgressCompletionBars({ changes, innerHeight, xScale }: LineCustomSvgLayerProps<ProgressSeries> & { changes: { x: Date; y: number }[] }) {
