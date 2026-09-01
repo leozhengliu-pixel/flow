@@ -87,8 +87,21 @@ func TestDocumentHistoryProjectAssociationAndTrashRestore(t *testing.T) {
 	if document.IssueID != issue.ID || document.Icon != "Page" || document.Color != "#8b8b90" {
 		t.Fatalf("document issue association = %q, want %q", document.IssueID, issue.ID)
 	}
+	requestJSON[any](t, handler, http.MethodDelete, "/api/subscriptions/document/"+document.ID, nil, http.StatusNoContent)
 	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
-	if !slices.ContainsFunc(bootstrap.Documents, func(item domain.Document) bool { return item.ID == document.ID && item.IssueID == issue.ID }) {
+	unsubscribedIndex := slices.IndexFunc(bootstrap.Documents, func(item domain.Document) bool { return item.ID == document.ID })
+	if unsubscribedIndex < 0 || slices.Contains(bootstrap.Documents[unsubscribedIndex].SubscriberIDs, bootstrap.Viewer.ID) {
+		t.Fatalf("unsubscribing did not persist on the document: %#v", bootstrap.Documents)
+	}
+	requestJSON[domain.Subscription](t, handler, http.MethodPut, "/api/subscriptions/document/"+document.ID, nil, http.StatusOK)
+	document = requestJSON[domain.Document](t, handler, http.MethodPatch, "/api/documents/"+document.ID, map[string]any{"icon": "BookOpen", "color": "#eb5757"}, http.StatusOK)
+	if document.Icon != "BookOpen" || document.Color != "#eb5757" {
+		t.Fatalf("document visual did not persist: %#v", document)
+	}
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if !slices.ContainsFunc(bootstrap.Documents, func(item domain.Document) bool {
+		return item.ID == document.ID && item.IssueID == issue.ID && item.Icon == "BookOpen" && item.Color == "#eb5757" && slices.Contains(item.SubscriberIDs, bootstrap.Viewer.ID)
+	}) {
 		t.Fatal("document issue association did not survive bootstrap")
 	}
 	if !projectHasResource(bootstrap.Projects, project.ID, document.ID) {
@@ -289,12 +302,77 @@ func TestTemplatesAskApprovalSLAAndUnifiedUserState(t *testing.T) {
 	if draft.Body != "Updated draft body" {
 		t.Fatal("draft update did not persist")
 	}
+	loopDraft := requestJSON[domain.Draft](t, handler, http.MethodPost, "/api/drafts", map[string]any{"type": "loop", "title": "Automation draft", "body": "Review issues", "metadata": map[string]any{"level": "workspace", "triggerType": "schedule"}}, http.StatusCreated)
+	if loopDraft.Type != "loop" || loopDraft.Title != "Automation draft" {
+		t.Fatalf("loop draft was not persisted: %#v", loopDraft)
+	}
+	projectUpdateDraft := requestJSON[domain.Draft](t, handler, http.MethodPost, "/api/drafts", map[string]any{
+		"type": "projectUpdate", "resourceId": project.ID, "title": "Project update draft", "body": "Progress is on track",
+	}, http.StatusCreated)
+	if projectUpdateDraft.Type != "project_update" || projectUpdateDraft.ResourceID != project.ID {
+		t.Fatalf("project update draft was not normalized: %#v", projectUpdateDraft)
+	}
+	if len(bootstrap.Initiatives) > 0 {
+		initiativeDraft := requestJSON[domain.Draft](t, handler, http.MethodPost, "/api/drafts", map[string]any{
+			"type": "initiative_update", "resourceId": bootstrap.Initiatives[0].ID, "body": "Initiative update in progress",
+		}, http.StatusCreated)
+		if initiativeDraft.Type != "initiative_update" {
+			t.Fatalf("initiative update draft was not persisted: %#v", initiativeDraft)
+		}
+	}
+	projectCommentDraft := requestJSON[domain.Draft](t, handler, http.MethodPost, "/api/drafts", map[string]any{
+		"type": "comment", "resourceId": project.ID, "body": "A project comment in progress", "metadata": map[string]any{"resourceType": "project"},
+	}, http.StatusCreated)
+	if projectCommentDraft.Type != "comment" {
+		t.Fatalf("project comment draft was not persisted: %#v", projectCommentDraft)
+	}
 	requestJSON[any](t, handler, http.MethodPost, "/api/drafts", map[string]any{"type": "unknown", "title": "Invalid draft"}, http.StatusBadRequest)
 	requestJSON[any](t, handler, http.MethodPost, "/api/drafts", map[string]any{"type": "comment", "resourceId": "missing-issue", "body": "Orphan comment"}, http.StatusBadRequest)
 	favoriteA := requestJSON[domain.Favorite](t, handler, http.MethodPut, "/api/favorites/project/"+project.ID, nil, http.StatusOK)
 	favoriteB := requestJSON[domain.Favorite](t, handler, http.MethodPut, "/api/favorites/project/"+project.ID, nil, http.StatusOK)
 	if favoriteA.ID != favoriteB.ID {
 		t.Fatal("favorite endpoint created duplicates")
+	}
+	folder := requestJSON[domain.FavoriteFolder](t, handler, http.MethodPost, "/api/favorite-folders", map[string]any{"name": "Planning"}, http.StatusCreated)
+	favoriteA = requestJSON[domain.Favorite](t, handler, http.MethodPatch, "/api/favorites/project/"+project.ID, map[string]any{"folderId": folder.ID, "position": 4.5}, http.StatusOK)
+	if favoriteA.FolderID != folder.ID || favoriteA.Position != 4.5 {
+		t.Fatalf("favorite move = %#v", favoriteA)
+	}
+	teamFavorite := requestJSON[domain.Favorite](t, handler, http.MethodPut, "/api/favorites/team/"+team.ID, nil, http.StatusOK)
+	if teamFavorite.ResourceType != "team" || teamFavorite.ResourceID != team.ID {
+		t.Fatalf("team favorite = %#v", teamFavorite)
+	}
+	document := requestJSON[domain.Document](t, handler, http.MethodPost, "/api/documents", map[string]any{"title": "Favorite lifecycle"}, http.StatusCreated)
+	requestJSON[domain.Favorite](t, handler, http.MethodPut, "/api/favorites/document/"+document.ID, nil, http.StatusOK)
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	documentIndex := slices.IndexFunc(bootstrap.Documents, func(item domain.Document) bool { return item.ID == document.ID })
+	if documentIndex < 0 || !bootstrap.Documents[documentIndex].Favorite {
+		t.Fatalf("generic favorite did not update document state: %#v", bootstrap.Documents)
+	}
+	requestJSON[any](t, handler, http.MethodDelete, "/api/favorites/document/"+document.ID, nil, http.StatusNoContent)
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	documentIndex = slices.IndexFunc(bootstrap.Documents, func(item domain.Document) bool { return item.ID == document.ID })
+	if documentIndex < 0 || bootstrap.Documents[documentIndex].Favorite || slices.ContainsFunc(bootstrap.Favorites, func(item domain.Favorite) bool {
+		return item.ResourceType == "document" && item.ResourceID == document.ID
+	}) {
+		t.Fatalf("generic unfavorite did not clear document state: document=%#v favorites=%#v", bootstrap.Documents[documentIndex], bootstrap.Favorites)
+	}
+	requestJSON[domain.Favorite](t, handler, http.MethodPut, "/api/favorites/document/"+document.ID, nil, http.StatusOK)
+	requestJSON[any](t, handler, http.MethodDelete, "/api/documents/"+document.ID, nil, http.StatusNoContent)
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if slices.ContainsFunc(bootstrap.Favorites, func(item domain.Favorite) bool {
+		return item.ResourceType == "document" && item.ResourceID == document.ID
+	}) {
+		t.Fatalf("deleted document favorite remains: %#v", bootstrap.Favorites)
+	}
+	folder = requestJSON[domain.FavoriteFolder](t, handler, http.MethodPatch, "/api/favorite-folders/"+folder.ID, map[string]any{"name": "Roadmap", "position": 2}, http.StatusOK)
+	if folder.Name != "Roadmap" || folder.Position != 2 {
+		t.Fatalf("favorite folder update = %#v", folder)
+	}
+	requestJSON[any](t, handler, http.MethodDelete, "/api/favorite-folders/"+folder.ID, nil, http.StatusNoContent)
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if len(bootstrap.FavoriteFolders) != 0 || slices.ContainsFunc(bootstrap.Favorites, func(item domain.Favorite) bool { return item.ID == favoriteA.ID && item.FolderID != "" }) {
+		t.Fatalf("favorite folder deletion did not preserve root favorites: folders=%#v favorites=%#v", bootstrap.FavoriteFolders, bootstrap.Favorites)
 	}
 	subscriptionA := requestJSON[domain.Subscription](t, handler, http.MethodPut, "/api/subscriptions/project/"+project.ID, nil, http.StatusOK)
 	subscriptionB := requestJSON[domain.Subscription](t, handler, http.MethodPut, "/api/subscriptions/project/"+project.ID, nil, http.StatusOK)

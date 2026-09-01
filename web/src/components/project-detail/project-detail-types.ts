@@ -1,4 +1,4 @@
-import type { ActivityEvent, Comment, Favorite, Initiative, IntegrationConnection, Issue, IssueLabel, IssueUpdateInput, LabelGroup, Notification, Project, ProjectMilestone, ProjectResource, ProjectStatus, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
+import type { ActivityEvent, Comment, Draft, Favorite, FlowDocument, Initiative, IntegrationConnection, Issue, IssueLabel, IssueUpdateInput, LabelGroup, Notification, Project, ProjectMilestone, ProjectResource, ProjectStatus, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
 import type { ProjectMutationInput } from '@/components/projects-page/projects-page'
 
 export type ProjectDetailTab = 'overview' | 'activity' | 'issues' | 'new'
@@ -7,9 +7,11 @@ export type ProjectDetailProps = {
   project: Project
   projects: Project[]
   initiatives: Initiative[]
+  documents: FlowDocument[]
   integrationConnections: IntegrationConnection[]
   projectStatuses: ProjectStatus[]
   projectUpdates: ProjectUpdate[]
+  drafts?: Draft[]
   issues: Issue[]
   users: User[]
   teams: Team[]

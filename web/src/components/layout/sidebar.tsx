@@ -1,4 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Select from "@radix-ui/react-select";
 import {
   Archive,
@@ -9,6 +10,8 @@ import {
   CircleHelp,
   Copy,
   Download,
+  Folder,
+  FolderOpen,
   Keyboard,
   LogOut,
   MessageCircle,
@@ -33,31 +36,47 @@ import { toast } from "sonner";
 import {
   addFavorite,
   addSubscription,
+  createFavoriteFolder,
+  deleteFavoriteFolder,
   removeFavorite,
   removeSubscription,
   setTeamMembership,
+  updateFavorite,
+  updateFavoriteFolder,
 } from "@/lib/api";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { DocumentGlyph } from "@/components/documents/document-icon";
 import {
   CycleIcon as FlowCycleIcon,
+  StatusIcon,
   SlackIcon as FlowSlackIcon,
 } from "@/components/issue/issue-icons";
+import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { WorkspaceMenu } from "@/components/workspace/workspace-menu";
 import {
   agentPath,
   asksPath,
   currentCyclePath,
+  cyclePath,
+  customerPath,
   customersPath,
+  dashboardsPath,
+  documentPath,
   documentsPath,
   draftsPath,
   inboxPath,
+  initiativePath,
   initiativesPath,
+  issuePath,
   membersPath,
   myIssuesPath,
   projectsPath,
+  projectPath,
   pulsePath,
   releasePipelinesPath,
+  releasePipelinePath,
+  releasePath,
   reviewsPath,
   settingsPath,
   teamArchivePath,
@@ -68,7 +87,10 @@ import {
   teamProjectsPath,
   teamsPath,
   teamViewsPath,
+  teamSavedViewPath,
   upcomingCyclePath,
+  workspaceSavedViewPath,
+  savedViewPathId,
   workspaceViewsPath,
   loopsPath,
 } from "@/lib/app-routes";
@@ -76,6 +98,8 @@ import { useI18n } from "@/i18n/i18n";
 import type {
   AccountBootstrap,
   BootstrapData,
+  Favorite,
+  FavoriteFolder,
   Team,
   Workspace,
 } from "@/types/flow";
@@ -135,6 +159,7 @@ export function Sidebar({
   onSwitchWorkspace,
   onCreateWorkspace,
   onLogout,
+  onReload,
 }: {
   account: AccountBootstrap;
   data: BootstrapData;
@@ -147,12 +172,15 @@ export function Sidebar({
   onSwitchWorkspace: (workspace: Workspace) => void;
   onCreateWorkspace: () => void;
   onLogout: () => Promise<void>;
+  onReload?: () => Promise<void>;
 }) {
   const close = () => onOpenChange?.(false);
   const workspaceSlug = data.workspace.urlKey;
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [favorites, setFavorites] = useState<Favorite[]>(() => data.favorites.filter((item) => item.userId === data.viewer.id));
+  const [favoriteFolders, setFavoriteFolders] = useState<FavoriteFolder[]>(() => (data.favoriteFolders ?? []).filter((item) => item.userId === data.viewer.id));
   const {
     badgeStyle,
     order: sidebarOrder,
@@ -166,6 +194,9 @@ export function Sidebar({
   const navRef = useRef<HTMLElement>(null);
   const featureEnabled = (feature: string) =>
     data.workspaceSettings.featureFlags[feature] !== false;
+
+  useEffect(() => setFavorites(data.favorites.filter((item) => item.userId === data.viewer.id)), [data.favorites, data.viewer.id]);
+  useEffect(() => setFavoriteFolders((data.favoriteFolders ?? []).filter((item) => item.userId === data.viewer.id)), [data.favoriteFolders, data.viewer.id]);
 
   useEffect(
     () => persistPreference("flow.sidebar.dismissed-try", dismissedTry),
@@ -219,7 +250,7 @@ export function Sidebar({
       : entry === "reviews"
         ? reviewCount
         : entry === "drafts"
-          ? data.drafts.length
+          ? data.drafts.filter((draft) => draft.type !== "loop" || Boolean(draft.title.trim() || draft.body.trim() || (typeof draft.metadata?.name === "string" && draft.metadata.name.trim()) || (typeof draft.metadata?.instructions === "string" && draft.metadata.instructions.trim()))).length
           : 0;
   const activeWorkspaceEntry: SidebarEntry | undefined =
     page === "members"
@@ -250,6 +281,86 @@ export function Sidebar({
       (data.viewerRole !== "guest" ||
         !["initiatives", "views", "customers"].includes(entry)),
   );
+  const reloadFavorites = async () => {
+    await onReload?.();
+  };
+  const toggleSidebarFavorite = async (resourceType: string, resourceId: string) => {
+    const existing = favorites.find((item) => item.resourceType === resourceType && item.resourceId === resourceId);
+    try {
+      if (existing) {
+        setFavorites((items) => items.filter((item) => item.id !== existing.id));
+        await removeFavorite(resourceType, resourceId);
+      } else {
+        const created = await addFavorite(resourceType, resourceId);
+        setFavorites((items) => [created, ...items.filter((item) => item.id !== created.id)]);
+      }
+      await reloadFavorites();
+    } catch (error) {
+      setFavorites(data.favorites.filter((item) => item.userId === data.viewer.id));
+      toast.error(error instanceof Error ? error.message : "Could not update favorite");
+    }
+  };
+  const moveSidebarFavorite = async (favorite: Favorite, folderId: string, position?: number) => {
+    const targetSiblings = favorites.filter((item) => (item.folderId ?? "") === (folderId || "") && item.id !== favorite.id);
+    const targetPosition = position ?? targetSiblings.reduce((maximum, item) => Math.max(maximum, item.position), -1) + 1;
+    const previous = favorites;
+    setFavorites((items) => items.map((item) => item.id === favorite.id ? { ...item, folderId: folderId || undefined, position: targetPosition } : item));
+    try {
+      const updated = await updateFavorite(favorite.resourceType, favorite.resourceId, { folderId, position: targetPosition });
+      setFavorites((items) => items.map((item) => item.id === updated.id ? updated : item));
+      await reloadFavorites();
+    } catch (error) {
+      setFavorites(previous);
+      toast.error(error instanceof Error ? error.message : "Could not update favorite");
+    }
+  };
+  const moveSidebarFolder = async (folder: FavoriteFolder, position: number) => {
+    const previous = favoriteFolders;
+    setFavoriteFolders((items) => items.map((item) => item.id === folder.id ? { ...item, position } : item));
+    try {
+      const updated = await updateFavoriteFolder(folder.id, { position });
+      setFavoriteFolders((items) => items.map((item) => item.id === updated.id ? updated : item));
+      await reloadFavorites();
+    } catch (error) {
+      setFavoriteFolders(previous);
+      toast.error(error instanceof Error ? error.message : "Could not reorder favorite folders");
+    }
+  };
+  const createSidebarFolder = async (name: string) => {
+    try {
+      const created = await createFavoriteFolder(name);
+      setFavoriteFolders((items) => [...items, created]);
+      await reloadFavorites();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create favorite folder");
+      throw error;
+    }
+  };
+  const renameSidebarFolder = async (folder: FavoriteFolder, name: string) => {
+    const previous = favoriteFolders;
+    setFavoriteFolders((items) => items.map((item) => item.id === folder.id ? { ...item, name } : item));
+    try {
+      const updated = await updateFavoriteFolder(folder.id, { name });
+      setFavoriteFolders((items) => items.map((item) => item.id === updated.id ? updated : item));
+      await reloadFavorites();
+    } catch (error) {
+      setFavoriteFolders(previous);
+      toast.error(error instanceof Error ? error.message : "Could not rename favorite folder");
+    }
+  };
+  const removeSidebarFolder = async (folder: FavoriteFolder) => {
+    const previousFolders = favoriteFolders, previousFavorites = favorites;
+    setFavoriteFolders((items) => items.filter((item) => item.id !== folder.id));
+    setFavorites((items) => items.map((item) => item.folderId === folder.id ? { ...item, folderId: undefined } : item));
+    try {
+      await deleteFavoriteFolder(folder.id);
+      await reloadFavorites();
+    } catch (error) {
+      setFavoriteFolders(previousFolders);
+      setFavorites(previousFavorites);
+      toast.error(error instanceof Error ? error.message : "Could not delete favorite folder");
+    }
+  };
   const dismissTry = (id: string) =>
     setDismissedTry((current) => [...new Set([...current, id])]);
   const personalNavigation: Record<SidebarEntry, ReactNode> = {
@@ -291,7 +402,7 @@ export function Sidebar({
     ) : null,
     drafts: (
       <Nav
-        badge={data.drafts.length}
+        badge={badgeCount("drafts")}
         active={page === "drafts"}
         icon={<DraftIcon />}
         label="Drafts"
@@ -479,6 +590,20 @@ export function Sidebar({
             />
           </Section>
 
+          {(favorites.length > 0 || favoriteFolders.length > 0) && <FavoritesSection
+            data={data}
+            favorites={favorites}
+            folders={favoriteFolders}
+            workspaceSlug={workspaceSlug}
+            onCreateFolder={createSidebarFolder}
+            onMoveFavorite={moveSidebarFavorite}
+            onMoveFolder={moveSidebarFolder}
+            onRemoveFavorite={(favorite) => void toggleSidebarFavorite(favorite.resourceType, favorite.resourceId)}
+            onRenameFolder={renameSidebarFolder}
+            onRemoveFolder={removeSidebarFolder}
+            onNavigate={close}
+          />}
+
           <Section
             label="Your teams"
             storageKey="teams"
@@ -511,7 +636,7 @@ export function Sidebar({
                     data.viewerRole !== "guest" && featureEnabled("initiatives")
                   }
                   team={team}
-                  favorite={data.favorites.some(
+                  favorite={favorites.some(
                     (item) =>
                       item.userId === data.viewer.id &&
                       item.resourceType === "team" &&
@@ -528,6 +653,7 @@ export function Sidebar({
                   workspaceSlug={workspaceSlug}
                   page={page}
                   onNavigate={close}
+                  onFavoriteToggle={() => void toggleSidebarFavorite("team", team.id)}
                 />
               ))}
             </div>
@@ -599,6 +725,171 @@ export function Sidebar({
   );
 }
 
+export function FavoritesSection({ data, favorites, folders, onCreateFolder, onMoveFavorite, onMoveFolder, onNavigate, onRemoveFavorite, onRemoveFolder, onRenameFolder, workspaceSlug }: {
+  data: BootstrapData;
+  favorites: Favorite[];
+  folders: FavoriteFolder[];
+  onCreateFolder: (name: string) => Promise<void>;
+  onMoveFavorite: (favorite: Favorite, folderId: string, position?: number) => Promise<void>;
+  onMoveFolder: (folder: FavoriteFolder, position: number) => Promise<void>;
+  onNavigate: () => void;
+  onRemoveFavorite: (favorite: Favorite) => void;
+  onRemoveFolder: (folder: FavoriteFolder) => Promise<void>;
+  onRenameFolder: (folder: FavoriteFolder, name: string) => Promise<void>;
+  workspaceSlug: string;
+}) {
+  const { t } = useI18n();
+  const [expanded, setExpanded] = useState(() => readExpandedSection("favorites"));
+  const [creating, setCreating] = useState(false), [folderName, setFolderName] = useState("");
+  const [openFolders, setOpenFolders] = useState<Set<string>>(() => new Set(folders.map((folder) => folder.id)));
+  const [renaming, setRenaming] = useState<string>(), [renameValue, setRenameValue] = useState("");
+  const descriptors = favorites
+    .map((favorite) => favoriteDescriptor(data, favorite, workspaceSlug))
+    .filter((item): item is FavoriteDescriptor => Boolean(item))
+    .sort((a, b) => a.favorite.position - b.favorite.position || Date.parse(a.favorite.createdAt) - Date.parse(b.favorite.createdAt));
+  const orderedFolders = [...folders].sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
+  useEffect(() => persistPreference("flow.sidebar.section.favorites", expanded), [expanded]);
+  useEffect(() => setOpenFolders((current) => new Set([...current, ...folders.map((folder) => folder.id)])), [folders]);
+  const submitFolder = async () => {
+    const name = folderName.trim();
+    if (!name) return;
+    await onCreateFolder(name);
+    setFolderName("");
+    setCreating(false);
+  };
+  const dropFavorite = (event: React.DragEvent, folderId: string, beforePosition?: number) => {
+    event.preventDefault();
+    const id = event.dataTransfer.getData("application/x-flow-favorite");
+    const favorite = favorites.find((item) => item.id === id);
+    if (!favorite) return;
+    const siblings = favorites.filter((item) => (item.folderId ?? "") === folderId && item.id !== favorite.id);
+    const position = beforePosition === undefined ? siblings.reduce((maximum, item) => Math.max(maximum, item.position), -1) + 1 : beforePosition - .5;
+    void onMoveFavorite(favorite, folderId, position);
+  };
+  const dropFolder = (event: React.DragEvent, beforePosition?: number) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const id = event.dataTransfer.getData("application/x-flow-favorite-folder");
+    const folder = folders.find((item) => item.id === id);
+    if (!folder) return;
+    const siblings = folders.filter((item) => item.id !== folder.id);
+    const position = beforePosition === undefined ? siblings.reduce((maximum, item) => Math.max(maximum, item.position), -1) + 1 : beforePosition - .5;
+    void onMoveFolder(folder, position);
+  };
+  const dropRoot = (event: React.DragEvent) => {
+    if (event.dataTransfer.types.includes("application/x-flow-favorite-folder")) dropFolder(event);
+    else dropFavorite(event, "");
+  };
+  return <section className="nav-section sidebar-favorites" data-expanded={expanded}>
+    <div className="section-heading">
+      <button aria-expanded={expanded} className="section-label" onClick={() => setExpanded((value) => !value)} type="button"><span>{t("Favorites")}</span><SectionDisclosureIcon expanded={expanded}/></button>
+      <button aria-label={t("Create new folder for favorites")} className="section-action" onClick={() => { setExpanded(true); setCreating(true); }} type="button"><Plus/></button>
+    </div>
+    {expanded && <div className="sidebar-favorites-content" onDragOver={(event) => event.preventDefault()} onDrop={dropRoot}>
+      {creating && (
+        <input
+          aria-label={t("Folder name…")}
+          autoFocus
+          className="sidebar-favorite-folder-input"
+          maxLength={80}
+          placeholder={t("Folder name…")}
+          value={folderName}
+          onBlur={() => { if (!folderName.trim()) setCreating(false); }}
+          onChange={(event) => setFolderName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") { event.preventDefault(); void submitFolder(); }
+            else if (event.key === "Escape") { setFolderName(""); setCreating(false); }
+          }}
+        />
+      )}
+      {descriptors.filter((item) => !item.favorite.folderId).map((item) => <FavoriteLink item={item} folders={orderedFolders} key={item.favorite.id} onDropFavorite={(event) => dropFavorite(event, "", item.favorite.position)} onMove={onMoveFavorite} onNavigate={onNavigate} onRemove={onRemoveFavorite}/>)}
+      {orderedFolders.map((folder) => {
+        const folderItems = descriptors.filter((item) => item.favorite.folderId === folder.id);
+        const folderOpen = openFolders.has(folder.id);
+        return <div className="sidebar-favorite-folder" key={folder.id} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.stopPropagation(); dropFavorite(event, folder.id); }}>
+          <div className="sidebar-favorite-folder-heading" draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-flow-favorite-folder", folder.id); }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropFolder(event, folder.position)}>
+            {renaming === folder.id ? <input aria-label={t("Folder name…")} autoFocus maxLength={80} value={renameValue} onBlur={() => setRenaming(undefined)} onChange={(event) => setRenameValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && renameValue.trim()) { void onRenameFolder(folder, renameValue.trim()); setRenaming(undefined); } else if (event.key === "Escape") setRenaming(undefined); }}/>:<button aria-expanded={folderOpen} onClick={() => setOpenFolders((current) => { const next = new Set(current); if (next.has(folder.id)) next.delete(folder.id); else next.add(folder.id); return next; })} type="button">{folderOpen ? <FolderOpen/> : <Folder/>}<span data-i18n-ignore>{folder.name}</span><SectionDisclosureIcon expanded={folderOpen}/></button>}
+            <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={t("Favorite folder actions")} className="sidebar-favorite-folder-menu" type="button"><MoreHorizontal/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="start" className="sidebar-popover sidebar-favorite-folder-popover" side="right" sideOffset={4}><DropdownMenu.Item onSelect={() => { setRenameValue(folder.name); setRenaming(folder.id); }}>{t("Rename…")}</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item className="danger" onSelect={() => void onRemoveFolder(folder)}>{t("Delete folder")}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+          </div>
+          {folderOpen && <div className="sidebar-favorite-folder-items">{folderItems.map((item) => <FavoriteLink item={item} folders={orderedFolders} key={item.favorite.id} onDropFavorite={(event) => dropFavorite(event, folder.id, item.favorite.position)} onMove={onMoveFavorite} onNavigate={onNavigate} onRemove={onRemoveFavorite}/>)}</div>}
+        </div>;
+      })}
+    </div>}
+  </section>;
+}
+
+interface FavoriteDescriptor { favorite: Favorite; href: string; icon: ReactNode; title: string }
+
+function favoriteDescriptor(data: BootstrapData, favorite: Favorite, workspaceSlug: string): FavoriteDescriptor | undefined {
+  if (favorite.resourceType === "issue") {
+    const issue = data.issues.find((item) => item.id === favorite.resourceId);
+    if (issue) return { favorite, href: issuePath(workspaceSlug, issue), icon: <StatusIcon state={issue.state} size={14}/>, title: issue.title };
+  }
+  if (favorite.resourceType === "project") {
+    const project = data.projects.find((item) => item.id === favorite.resourceId);
+    if (project) return { favorite, href: projectPath(workspaceSlug, project, "overview"), icon: <FlowIcon name="Project" style={{ color: project.color }}/>, title: project.name };
+  }
+  if (favorite.resourceType === "team") {
+    const team = data.teams.find((item) => item.id === favorite.resourceId);
+    if (team) return { favorite, href: teamHomePath(workspaceSlug, team.key), icon: <FlowIcon name="Team" style={{ color: team.color }}/>, title: team.name };
+  }
+  if (favorite.resourceType === "document") {
+    const document = data.documents.find((item) => item.id === favorite.resourceId);
+    if (document) return { favorite, href: documentPath(workspaceSlug, document), icon: <DocumentGlyph document={document}/>, title: document.title };
+  }
+  if (favorite.resourceType === "label") {
+    const label = data.labels.find((item) => item.id === favorite.resourceId);
+    if (label) return {
+      favorite,
+      href: settingsPath(workspaceSlug, label.resourceType === "project" ? "project-labels" : "issue-labels"),
+      icon: <span className="sidebar-favorite-label-dot" style={{ backgroundColor: label.color }}/>,
+      title: label.name,
+    };
+  }
+  if (favorite.resourceType === "cycle") {
+    const cycle = data.cycles.find((item) => item.id === favorite.resourceId), team = data.teams.find((item) => item.id === cycle?.teamId);
+    if (cycle && team) return { favorite, href: cyclePath(workspaceSlug, team.key, cycle), icon: <FlowCycleIcon/>, title: cycle.name || `Cycle ${cycle.number}` };
+  }
+  if (favorite.resourceType === "view") {
+    const view = data.savedViews.find((item) => item.id === favorite.resourceId);
+    if (view) {
+      const team = view.scope === "team" ? data.teams.find((item) => item.id === view.teamId) : undefined;
+      return { favorite, href: team ? teamSavedViewPath(workspaceSlug, team.key, savedViewPathId(view)) : workspaceSavedViewPath(workspaceSlug, savedViewPathId(view)), icon: <ViewGlyph color={view.color} icon={view.icon}/>, title: view.name };
+    }
+  }
+  if (favorite.resourceType === "initiative") {
+    const initiative = data.initiatives.find((item) => item.id === favorite.resourceId);
+    if (initiative) return { favorite, href: initiativePath(workspaceSlug, initiative), icon: <InitiativeIcon/>, title: initiative.name };
+  }
+  if (favorite.resourceType === "customer") {
+    const customer = data.customers.find((item) => item.id === favorite.resourceId);
+    if (customer) return { favorite, href: customerPath(workspaceSlug, customer), icon: <CustomersIcon/>, title: customer.name };
+  }
+  if (favorite.resourceType === "release_pipeline") {
+    const pipeline = data.releasePipelines.find((item) => item.id === favorite.resourceId);
+    if (pipeline) return { favorite, href: releasePipelinePath(workspaceSlug, pipeline.slugId), icon: <ReleasesIcon/>, title: pipeline.name };
+  }
+  if (favorite.resourceType === "release") {
+    const release = data.releases.find((item) => item.id === favorite.resourceId), pipeline = data.releasePipelines.find((item) => item.id === release?.pipelineId);
+    if (release && pipeline) return { favorite, href: releasePath(workspaceSlug, pipeline.slugId, release.slugId), icon: <ReleasesIcon/>, title: release.name };
+  }
+  if (favorite.resourceType === "dashboard") return { favorite, href: dashboardsPath(workspaceSlug, favorite.resourceId), icon: <FlowIcon name="CustomView"/>, title: "Dashboard" };
+  return undefined;
+}
+
+function FavoriteLink({ folders, item, onDropFavorite, onMove, onNavigate, onRemove }: { folders: FavoriteFolder[]; item: FavoriteDescriptor; onDropFavorite: (event: React.DragEvent) => void; onMove: (favorite: Favorite, folderId: string) => Promise<void>; onNavigate: () => void; onRemove: (favorite: Favorite) => void }) {
+  const { t } = useI18n();
+  const link = <NavLink className="sidebar-favorite-link" draggable onClick={onNavigate} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.stopPropagation(); onDropFavorite(event); }} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-flow-favorite", item.favorite.id); }} to={item.href}>
+    <span className="sidebar-favorite-icon">{item.icon}</span><span className="sidebar-favorite-title" data-i18n-ignore title={item.title}>{item.title}</span>
+    <span aria-label={t("Remove favorite")} className="sidebar-favorite-remove" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onRemove(item.favorite); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onRemove(item.favorite); } }} role="button" tabIndex={0}><X/></span>
+  </NavLink>;
+  return <ContextMenu.Root><ContextMenu.Trigger asChild>{link}</ContextMenu.Trigger><ContextMenu.Portal><ContextMenu.Content className="sidebar-popover sidebar-favorite-context-menu">
+    <ContextMenu.Item onSelect={() => void navigator.clipboard.writeText(new URL(item.href, location.origin).href)}><Copy/>{t("Copy URL")}</ContextMenu.Item>
+    {folders.length > 0 && <ContextMenu.Sub><ContextMenu.SubTrigger><Folder/><span>{t("Move to folder")}</span><TeamDisclosureIcon/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent className="sidebar-popover sidebar-favorite-context-menu" sideOffset={4}><ContextMenu.Item disabled={!item.favorite.folderId} onSelect={() => void onMove(item.favorite, "")}>{t("No folder")}</ContextMenu.Item>{folders.map((folder) => <ContextMenu.Item key={folder.id} onSelect={() => void onMove(item.favorite, folder.id)}><span data-i18n-ignore>{folder.name}</span></ContextMenu.Item>)}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>}
+    <ContextMenu.Separator/><ContextMenu.Item onSelect={() => onRemove(item.favorite)}><X/>{t("Remove favorite")}</ContextMenu.Item>
+  </ContextMenu.Content></ContextMenu.Portal></ContextMenu.Root>;
+}
+
 function Section({
   label,
   children,
@@ -652,6 +943,7 @@ function TeamNavigation({
   viewerId,
   canLeave,
   onNavigate,
+  onFavoriteToggle,
 }: {
   team: Team;
   workspaceSlug: string;
@@ -665,6 +957,7 @@ function TeamNavigation({
   viewerId: string;
   canLeave: boolean;
   onNavigate: () => void;
+  onFavoriteToggle: () => void;
 }) {
   const [expanded, setExpanded] = useState(() =>
     readExpandedSection(`team.${team.id}`),
@@ -727,13 +1020,7 @@ function TeamNavigation({
               </div>
               {menuMatches(query, "Favorite") && (
                 <DropdownMenu.Item
-                  onSelect={() =>
-                    void (
-                      favorite
-                        ? removeFavorite("team", team.id)
-                        : addFavorite("team", team.id)
-                    ).then(() => setFavorite((value) => !value))
-                  }
+                  onSelect={() => { setFavorite((value) => !value); onFavoriteToggle(); }}
                 >
                   <Star fill={favorite ? "currentColor" : "none"} />
                   <span>{favorite ? "Unfavorite" : "Favorite"}</span>

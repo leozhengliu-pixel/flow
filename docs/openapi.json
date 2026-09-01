@@ -3413,6 +3413,84 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/favorite-folders": {
+      "post": {
+        "operationId": "post_favorite_folders",
+        "tags": [
+          "favorite-folders"
+        ],
+        "summary": "POST /api/favorite-folders",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/favorite-folders/{id}": {
+      "delete": {
+        "operationId": "delete_favorite_folders_id",
+        "tags": [
+          "favorite-folders"
+        ],
+        "summary": "DELETE /api/favorite-folders/{id}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "patch": {
+        "operationId": "patch_favorite_folders_id",
+        "tags": [
+          "favorite-folders"
+        ],
+        "summary": "PATCH /api/favorite-folders/{id}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/favorites/{type}/{id}": {
       "delete": {
         "operationId": "delete_favorites_type_id",
@@ -3420,6 +3498,42 @@
           "favorites"
         ],
         "summary": "DELETE /api/favorites/{type}/{id}",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "patch": {
+        "operationId": "patch_favorites_type_id",
+        "tags": [
+          "favorites"
+        ],
+        "summary": "PATCH /api/favorites/{type}/{id}",
         "parameters": [
           {
             "name": "type",
@@ -5024,6 +5138,36 @@
           "integrations"
         ],
         "summary": "POST /api/integrations/{provider}/oauth/start",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/integrations/{provider}/test": {
+      "post": {
+        "operationId": "post_integrations_provider_test",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "POST /api/integrations/{provider}/test",
         "parameters": [
           {
             "name": "provider",
@@ -11087,6 +11231,64 @@
           },
           {
             "name": "invitationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/workspaces/{workspaceKey}/logo": {
+      "delete": {
+        "operationId": "delete_workspaces_workspaceKey_logo",
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "DELETE /api/workspaces/{workspaceKey}/logo",
+        "parameters": [
+          {
+            "name": "workspaceKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "post": {
+        "operationId": "post_workspaces_workspaceKey_logo",
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "POST /api/workspaces/{workspaceKey}/logo",
+        "parameters": [
+          {
+            "name": "workspaceKey",
             "in": "path",
             "required": true,
             "schema": {

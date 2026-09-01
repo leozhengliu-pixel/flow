@@ -7,6 +7,7 @@ describe('application routes', () => {
     expect(parseAppRoute('/acme/projects/all')).toMatchObject({ kind: 'projects', workspaceSlug: 'acme' })
     expect(parseAppRoute('/acme/team/ENG/backlog')).toEqual({ kind: 'team-issues', workspaceSlug: 'acme', teamKey: 'ENG', view: 'backlog' })
     expect(parseAppRoute('/acme/team/ENG/loops')).toEqual({ kind: 'team-loops', workspaceSlug: 'acme', teamKey: 'ENG' })
+    expect(parseAppRoute('/acme/loops/new', '?draftId=draft-loop-1')).toEqual({ kind: 'loop-editor', workspaceSlug: 'acme', draftId: 'draft-loop-1' })
     expect(parseAppRoute('/acme/team/ENG/members')).toEqual({ kind: 'team-members', workspaceSlug: 'acme', teamKey: 'ENG' })
     expect(parseAppRoute('/acme/settings/account/preferences')).toEqual({ kind: 'settings', workspaceSlug: 'acme', page: 'preferences' })
     expect(parseAppRoute('/')).toEqual({ kind: 'root' })

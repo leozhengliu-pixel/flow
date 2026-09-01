@@ -656,6 +656,23 @@ export function updateIntegrationConnection(
     jsonRequest("PATCH", input),
   );
 }
+export function testIntegrationConnection(
+  provider: "github" | "gitlab",
+  id?: string,
+  input?: { token?: string; host?: string },
+): Promise<{
+  provider: string;
+  connectionId?: string;
+  status: string;
+  username?: string;
+  testedAt: string;
+}> {
+  const suffix = id ? `/${encodeURIComponent(id)}` : "";
+  return request(
+    `/api/integrations/${provider}${suffix}/test`,
+    jsonRequest("POST", input ?? {}),
+  );
+}
 export function disconnectIntegrationConnection(
   provider: string,
   id: string,
@@ -895,6 +912,7 @@ export function updateDocument(
       FlowDocument,
       | "title"
       | "icon"
+      | "color"
       | "content"
       | "contentState"
       | "contentData"
@@ -1213,6 +1231,32 @@ export function addFavorite(type: string, id: string): Promise<Favorite> {
 }
 export function removeFavorite(type: string, id: string): Promise<void> {
   return request(`/api/favorites/${type}/${id}`, { method: "DELETE" });
+}
+export function updateFavorite(
+  type: string,
+  id: string,
+  input: { folderId?: string; position?: number },
+): Promise<Favorite> {
+  return request(`/api/favorites/${type}/${id}`, jsonRequest("PATCH", input));
+}
+export function createFavoriteFolder(
+  name: string,
+): Promise<import("@/types/flow").FavoriteFolder> {
+  return request("/api/favorite-folders", jsonRequest("POST", { name }));
+}
+export function updateFavoriteFolder(
+  id: string,
+  input: { name?: string; position?: number },
+): Promise<import("@/types/flow").FavoriteFolder> {
+  return request(
+    `/api/favorite-folders/${encodeURIComponent(id)}`,
+    jsonRequest("PATCH", input),
+  );
+}
+export function deleteFavoriteFolder(id: string): Promise<void> {
+  return request(`/api/favorite-folders/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }
 export function addSubscription(
   type: string,

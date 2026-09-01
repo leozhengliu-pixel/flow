@@ -415,6 +415,7 @@ func (s *server) deleteWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		removeLabelReferences(data, map[string]struct{}{id: {}})
+		removeResourcePreferences(data, "label", id)
 		return nil
 	})
 	if err != nil {

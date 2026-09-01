@@ -5,6 +5,8 @@ import { Check, ChevronDown, ChevronRight, Copy, Edit3, Link2, MoreHorizontal, P
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { formatDistanceToNowStrict } from 'date-fns'
 import { toast } from 'sonner'
+import { createDraft, deleteDraft, updateDraft } from '@/lib/api'
+import { clearComposerDraft, readComposerDraft, writeComposerDraft, type ComposerDraftType } from '@/lib/composer-drafts'
 import { Avatar } from '@/components/issue/issue-row'
 import { NoAssigneeIcon, PriorityIcon } from '@/components/issue/issue-icons'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
@@ -14,7 +16,7 @@ import { ProjectPropertyPicker, ProjectStatusGlyph, type ProjectPropertyOption }
 import { ProjectUpdatesPreview } from '@/components/projects-page/project-updates-preview'
 import { NewProjectDialog, type NewProjectDraft } from '@/components/projects-page/new-project-dialog'
 import type { ProjectCreateInput, ProjectMutationInput } from '@/components/projects-page/projects-page'
-import type { Initiative, InitiativeMutationInput, InitiativeResource, InitiativeUpdate, IssueLabel, LabelGroup, Project, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
+import type { Draft, FlowDocument, Initiative, InitiativeMutationInput, InitiativeResource, InitiativeUpdate, IssueLabel, LabelGroup, Project, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
 import type { InitiativeRouteTab } from '@/lib/app-routes'
 import { InitiativeLabelsPicker, InitiativeProperties, ProjectAssociationPicker } from './initiative-shared'
 import { DisplayIcon as SlidersHorizontal, FilterIcon as Filter } from '@/components/ui/view-action-icons'
@@ -28,6 +30,8 @@ type Props = {
   initiative: Initiative
   initiatives: Initiative[]
   initiativeUpdates: InitiativeUpdate[]
+  drafts?: Draft[]
+  documents: FlowDocument[]
   projects: Project[]
   projectUpdates: Record<string, ProjectUpdate[]>
   users: User[]
@@ -176,7 +180,7 @@ function InitiativeOverview(props: Props & { update: (input: InitiativeMutationI
   return <div className="li-overview">
     <div className="li-overview-title"><ViewIconPicker color={initiative.color} icon={initiative.icon || 'Initiative'} onChange={update} triggerClassName="li-overview-icon"/><InitiativeEditableText className="li-title-input" label="Initiative name" value={initiative.name} onCommit={name => update({ name })}/><InitiativeEditableText className="li-summary-input" label="Initiative summary" placeholder="Add a short summary…" value={initiative.summary} onCommit={summary => update({ summary })}/></div>
     <section><h3>Properties</h3><InitiativeProperties initiative={initiative} teams={props.teams} users={users} onUpdate={update}/><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="More properties" className="li-more-properties" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="li-menu"><DropdownMenu.Item onSelect={() => document.querySelector<HTMLElement>('.li-detail-sidebar [aria-label="Add labels"]')?.click()}>Labels</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></section>
-    <InitiativeResources initiativeId={initiative.id} resources={initiative.resources} onCreate={props.onCreateResource} onUpdate={props.onUpdateResource} onDelete={props.onDeleteResource}/>
+    <InitiativeResources documents={props.documents} initiativeId={initiative.id} resources={initiative.resources} onCreate={props.onCreateResource} onUpdate={props.onUpdateResource} onDelete={props.onDeleteResource}/>
     <button className="li-first-update" onClick={() => onTabChange('activity')} type="button"><Send size={15}/>{props.initiativeUpdates.length ? 'View initiative updates' : 'Write first initiative update'}</button>
     <section className="li-description"><h3>Description</h3><EditableArea label="Initiative description" placeholder="Add description…" value={initiative.description} onCommit={description => update({ description })}/></section>
     <section className="li-overview-projects"><header><h3>Projects</h3><span/><OverviewProjectDisplayMenu properties={projectProperties} onChange={setProjectProperties}/><ProjectAssociationPicker initiative={initiative} projects={projects} onUpdate={update}><button type="button"><Plus size={14}/> Add a project</button></ProjectAssociationPicker></header>{linked.length ? <><div className="li-project-columns" style={projectGrid}><button onClick={() => setProjectSort('name')} type="button">Name</button>{projectColumns.map(property => property === 'lead' ? <span key={property}>Lead</span> : <button key={property} onClick={() => setProjectSort(property as typeof projectSort)} type="button">{property === 'target' ? 'Target date' : titleCase(property)}</button>)}</div><div className="li-project-group"><button aria-label="Collapse group" type="button"><ChevronDown size={12}/>In Progress</button>{linked.map(project => <button className="li-detail-project-row" key={project.id} onClick={() => onOpenProject(project)} style={projectGrid} type="button"><span className="li-project-primary"><i><ViewGlyph color={project.color} icon={normalizeProjectIcon(project.icon)}/></i><strong data-i18n-ignore>{project.name}</strong></span>{projectColumns.map(property => property === 'health' ? <span className={`li-health is-${project.health}`} key={property}><i/>{projectUpdates[project.id]?.length ? healthLabel(project.health) : 'No updates'}</span> : property === 'priority' ? <span key={property}><PriorityIcon priority={project.priority} size={13}/>{project.priorityLabel}</span> : property === 'lead' ? <span key={property}>{project.lead ? <Avatar name={project.lead.displayName || project.lead.name}/> : ''}</span> : property === 'target' ? <span key={property}>{project.targetDate ? formatTarget(project.targetDate) : ''}</span> : <span key={property}><ProjectStatusGlyph name={project.status.name} type={project.status.type}/><span data-i18n-ignore>{project.status.name}</span></span>)}</button>)}</div></> : <div className="li-overview-projects-empty">No projects in this initiative</div>}</section>
@@ -184,16 +188,46 @@ function InitiativeOverview(props: Props & { update: (input: InitiativeMutationI
 }
 
 function InitiativeActivity(props: Props & { display: { updates: boolean; comments: boolean; activity: boolean } }) {
-  const { initiative, initiativeUpdates, viewer, onCreateUpdate, onUpdateInitiativeUpdate, onDeleteUpdate, onComment } = props
-  const [mode, setMode] = useState<'comment' | 'update'>('update')
-  const [body, setBody] = useState('')
-  const [health, setHealth] = useState<Project['health']>(initiative.health === 'noUpdate' ? 'onTrack' : initiative.health)
+  const { initiative, initiativeUpdates, viewer, onCreateUpdate, onUpdateInitiativeUpdate, onDeleteUpdate, onComment, drafts = [] } = props
+  const parentDrafts = useMemo(() => ({
+    comment: drafts.find(item => item.type === 'comment' && item.resourceId === initiative.id && item.metadata?.resourceType === 'initiative') ?? readComposerDraft('comment', initiative.id),
+    initiative_update: drafts.find(item => item.type === 'initiative_update' && item.resourceId === initiative.id) ?? readComposerDraft('initiative_update', initiative.id),
+  }), [drafts, initiative.id])
+  const initialDraft = parentDrafts.initiative_update ?? parentDrafts.comment
+  const [mode, setMode] = useState<'comment' | 'update'>(() => initialDraft?.type === 'comment' ? 'comment' : 'update')
+  const draftType: ComposerDraftType = mode === 'comment' ? 'comment' : 'initiative_update'
+  const [body, setBody] = useState(initialDraft?.body ?? '')
+  const [health, setHealth] = useState<Project['health']>(typeof initialDraft?.metadata?.health === 'string' ? initialDraft.metadata.health as Project['health'] : initiative.health === 'noUpdate' ? 'onTrack' : initiative.health)
   const [saving, setSaving] = useState(false)
+  const draftIds = useRef<Partial<Record<ComposerDraftType, string>>>({ comment: parentDrafts.comment?.id ?? '', initiative_update: parentDrafts.initiative_update?.id ?? '' })
   const [editing, setEditing] = useState<InitiativeUpdate>()
   const [editingComment, setEditingComment] = useState<Initiative['comments'][number]>()
   const feed = useMemo(() => [...initiativeUpdates.map(update => ({ type: 'update' as const, date: update.createdAt, update })), ...initiative.comments.map(comment => ({ type: 'comment' as const, date: comment.createdAt, comment }))].sort((a, b) => +new Date(b.date) - +new Date(a.date)), [initiative.comments, initiativeUpdates])
-  const submit = async () => { if (!body.trim() || saving) return; setSaving(true); try { if (mode === 'comment') await onComment(initiative.id, body.trim()); else await onCreateUpdate(initiative.id, { body: body.trim(), health }); setBody('') } finally { setSaving(false) } }
-  return <div className="li-activity"><div className="li-activity-composer"><header><div role="tablist"><button aria-selected={mode === 'comment'} onClick={() => setMode('comment')} role="tab" type="button">Comment</button><button aria-selected={mode === 'update'} onClick={() => setMode('update')} role="tab" type="button">Update</button>{mode === 'update' && <InitiativeHealthMenu health={health} onHealth={setHealth}/>}</div></header><textarea aria-label={mode === 'update' ? 'Initiative update' : 'Initiative comment'} placeholder={mode === 'update' ? 'Write an initiative update…' : 'Leave a comment…'} value={body} onChange={event => setBody(event.target.value)} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') void submit() }}/><footer><button aria-disabled="true" className="li-agent-write" disabled title="Flow AI is not configured for this workspace" type="button"><Sparkles size={13}/>Write with Agent</button><span/><button aria-disabled="true" aria-label="Attach images, files, or videos" disabled title="Initiative update attachments are not available" type="button"><Paperclip size={14}/></button><button disabled={!body.trim() || saving} onClick={() => void submit()} type="button">{mode === 'update' ? 'Post update' : 'Comment'}</button></footer></div>
+  useEffect(() => {
+    if (!body.trim() || saving) return
+    const timer = window.setTimeout(() => {
+      const input = { type: draftType, resourceId: initiative.id, title: initiative.name, body: body.trim(), metadata: { resourceType: 'initiative', health } }
+      const save = async () => {
+        if (!draftIds.current[draftType]) return createDraft(input)
+        try { return await updateDraft(draftIds.current[draftType]!, input) } catch { draftIds.current[draftType] = ''; return createDraft(input) }
+      }
+      void save().then(saved => {
+        draftIds.current[draftType] = saved.id
+        writeComposerDraft({ id: saved.id, type: draftType, resourceId: initiative.id, title: initiative.name, body: body.trim(), metadata: input.metadata, updatedAt: saved.updatedAt })
+      }).catch(() => undefined)
+    }, 350)
+    return () => window.clearTimeout(timer)
+  }, [body, draftType, health, initiative.id, initiative.name, saving])
+  const switchMode = (next: 'comment' | 'update') => {
+    if (next === mode) return
+    const nextType: ComposerDraftType = next === 'comment' ? 'comment' : 'initiative_update'
+    const nextDraft = parentDrafts[nextType]
+    setMode(next)
+    setBody(nextDraft?.body ?? '')
+    if (typeof nextDraft?.metadata?.health === 'string') setHealth(nextDraft.metadata.health as Project['health'])
+  }
+  const submit = async () => { if (!body.trim() || saving) return; setSaving(true); try { if (mode === 'comment') await onComment(initiative.id, body.trim()); else await onCreateUpdate(initiative.id, { body: body.trim(), health }); const savedId = draftIds.current[draftType]; if (savedId && !savedId.startsWith('local:')) await deleteDraft(savedId).catch(() => undefined); clearComposerDraft(draftType, initiative.id); draftIds.current[draftType] = ''; setBody('') } finally { setSaving(false) } }
+  return <div className="li-activity"><div className="li-activity-composer"><header><div role="tablist"><button aria-selected={mode === 'comment'} onClick={() => switchMode('comment')} role="tab" type="button">Comment</button><button aria-selected={mode === 'update'} onClick={() => switchMode('update')} role="tab" type="button">Update</button>{mode === 'update' && <InitiativeHealthMenu health={health} onHealth={setHealth}/>}</div></header><textarea aria-label={mode === 'update' ? 'Initiative update' : 'Initiative comment'} placeholder={mode === 'update' ? 'Write an initiative update…' : 'Leave a comment…'} value={body} onChange={event => setBody(event.target.value)} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') void submit() }}/><footer><button aria-disabled="true" className="li-agent-write" disabled title="Flow AI is not configured for this workspace" type="button"><Sparkles size={13}/>Write with Agent</button><span/><button aria-disabled="true" aria-label="Attach images, files, or videos" disabled title="Initiative update attachments are not available" type="button"><Paperclip size={14}/></button><button disabled={!body.trim() || saving} onClick={() => void submit()} type="button">{mode === 'update' ? 'Post update' : 'Comment'}</button></footer></div>
     <div className="li-feed">{feed.map(item => item.type === 'update' ? props.display.updates && <article className="li-update-card" key={item.update.id}><header><Avatar name={item.update.user.displayName || item.update.user.name}/><strong data-i18n-ignore>{item.update.user.displayName || item.update.user.name}</strong><span>{formatDistanceToNowStrict(new Date(item.update.createdAt), { addSuffix: true })}{item.update.editedAt ? ' · edited' : ''}</span><span className={`li-update-health is-${item.update.health}`}/><small>{healthLabel(item.update.health)}</small><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Update actions" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="li-menu"><DropdownMenu.Item onSelect={() => { setEditing(item.update); setBody('') }}>Edit update</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item className="danger" onSelect={() => onDeleteUpdate(initiative.id, item.update.id)}><Trash2 size={14}/>Delete update</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></header>{editing?.id === item.update.id ? <InlineUpdateEditor update={editing} onCancel={() => setEditing(undefined)} onSave={async input => { await onUpdateInitiativeUpdate(initiative.id, editing.id, input); setEditing(undefined) }}/> : <p data-i18n-ignore>{item.update.body}</p>}</article> : props.display.comments && <article className="li-comment-card" key={item.comment.id}><Avatar name={item.comment.user.displayName || item.comment.user.name}/><div><header><strong data-i18n-ignore>{item.comment.user.displayName || item.comment.user.name}</strong><span>{formatDistanceToNowStrict(new Date(item.comment.createdAt), { addSuffix: true })}{item.comment.editedAt ? ' · edited' : ''}</span><EmojiPicker align="end" onSelect={async emoji => { await props.onReactComment(initiative.id, item.comment.id, emoji) }}><button aria-label="Add reaction" type="button">☺</button></EmojiPicker><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Comment actions" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="li-menu"><DropdownMenu.Item onSelect={() => setEditingComment(item.comment)}>Edit comment</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item className="danger" onSelect={() => props.onDeleteComment(initiative.id, item.comment.id)}><Trash2 size={14}/>Delete comment</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></header>{editingComment?.id === item.comment.id ? <InlineCommentEditor comment={editingComment} onCancel={() => setEditingComment(undefined)} onSave={async value => { await props.onUpdateComment(initiative.id, item.comment.id, value); setEditingComment(undefined) }}/> : <p data-i18n-ignore>{item.comment.body}</p>}<ReactionPills reactions={item.comment.reactions} viewerId={viewer.id} onToggle={async emoji => { await props.onReactComment(initiative.id, item.comment.id, emoji) }}/></div></article>)}{props.display.activity && <div className="li-created-event"><ViewGlyph color={initiative.color} icon={initiative.icon || 'Initiative'}/><span><strong data-i18n-ignore>{viewer.displayName || viewer.name}</strong> created the initiative · {new Date(initiative.createdAt).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</span></div>}</div>
   </div>
 }

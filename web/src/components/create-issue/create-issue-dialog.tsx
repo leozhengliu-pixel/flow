@@ -44,6 +44,7 @@ export interface CreateIssueDialogProps {
   initialStateId?: string
   initialProjectId?: string
   initialProjectMilestoneId?: string
+  initialTeamId?: string
   initialTemplateId?: string
   draftId?: string
   onOpenChange: (open: boolean) => void
@@ -71,10 +72,11 @@ interface StoredIssueDraft {
   labelIds: string[]
   templateId?: string
   recurrence?: '' | 'daily' | 'weekly' | 'monthly'
+  updatedAt?: string
 }
 
-export function CreateIssueDialog({ data, draftId, initialProjectId, initialProjectMilestoneId, initialStateId, initialTemplateId, onCreate, onDraftDeleted, onDraftSaved, onOpenChange, onUpload, open }: CreateIssueDialogProps) {
-  const [teamId, setTeamId] = useState(data.teams[0]?.id ?? '')
+export function CreateIssueDialog({ data, draftId, initialProjectId, initialProjectMilestoneId, initialTeamId, initialStateId, initialTemplateId, onCreate, onDraftDeleted, onDraftSaved, onOpenChange, onUpload, open }: CreateIssueDialogProps) {
+  const [teamId, setTeamId] = useState(initialTeamId || data.teams[0]?.id || '')
   const availableStates = useMemo(() => {
     const specific = data.states.some(state => state.teamId === teamId)
     const states = data.states.filter(state => specific ? state.teamId === teamId : !state.teamId)
@@ -124,11 +126,22 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
   const hasDraftContent = Boolean(title.trim() || description?.markdown.trim() || files.length)
 
   useEffect(() => {
+    if (!open || draftId || !hasDraftContent) return
+    const timer = window.setTimeout(() => writeStoredDraft(draftKey, {
+      title, description, stateId, priority, estimate, assigneeId, projectId,
+      projectMilestoneId, cycleId, dueDate, labelIds, templateId, recurrence, teamId,
+    }), 250)
+    return () => window.clearTimeout(timer)
+  }, [assigneeId, cycleId, description, draftId, draftKey, dueDate, estimate, hasDraftContent, labelIds, open, priority, projectId, projectMilestoneId, recurrence, stateId, teamId, templateId, title])
+
+  useEffect(() => {
     if (!open) return
     const draft = draftId ? null : readStoredDraft(draftKey)
     const remoteDraft = draftId
       ? data.drafts.find(item => item.id === draftId)
-      : data.drafts.find(item => item.type === 'issue' && item.metadata?.teamId === data.teams[0]?.id)
+      : data.drafts
+        .filter(item => item.type === 'issue' && item.metadata?.teamId === teamId)
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0]
     const remote = remoteDraft?.metadata as Partial<StoredIssueDraft> | undefined
     const requestedProject = initialProjectId ? data.projects.find(project => project.id === initialProjectId) : undefined
     const requestedMilestone = requestedProject?.milestones.find(milestone => milestone.id === initialProjectMilestoneId)
@@ -150,7 +163,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
       setRecurrence(restored.recurrence ?? '')
       setServerDraftId(remoteDraft?.id ?? '')
     } else {
-      setTitle(''); setDescription(null); setFiles([]); setError(undefined); setServerDraftId(''); setTeamId(data.teams[0]?.id ?? '')
+      setTitle(''); setDescription(null); setFiles([]); setError(undefined); setServerDraftId(''); setTeamId(initialTeamId || data.teams[0]?.id || '')
       setStateId(defaultState.id); setPriority(0); setEstimate(0); setAssigneeId(data.viewer.id); setProjectId(''); setProjectMilestoneId(''); setCycleId(''); setDueDate(''); setLabelIds([]); setTemplateId(''); setRecurrence(''); setCreateMore(false); setExpanded(false)
       titleEditorRef.current?.commands.clearContent(); descriptionEditorRef.current?.commands.clearContent()
       if (initialStateId && availableStates.some(state => state.id === initialStateId)) setStateId(initialStateId)
@@ -161,7 +174,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
     }
     const frame = requestAnimationFrame(() => requestAnimationFrame(() => titleEditorRef.current?.commands.focus('end')))
     return () => cancelAnimationFrame(frame)
-  }, [availableStates, data.drafts, data.projects, data.teams, data.viewer.id, defaultState.id, draftId, draftKey, initialProjectId, initialProjectMilestoneId, initialStateId, open])
+  }, [availableStates, data.drafts, data.projects, data.teams, data.viewer.id, defaultState.id, draftId, draftKey, initialProjectId, initialProjectMilestoneId, initialStateId, initialTeamId, open, teamId])
 
   useEffect(() => { if (open && !availableStates.some(state => state.id === stateId)) setStateId(defaultState.id) }, [availableStates, defaultState.id, open, stateId])
 
@@ -225,8 +238,8 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
       const input = { type: 'issue', title: title || 'Untitled issue', body: description?.markdown ?? '', contentData: description?.document as Record<string,unknown>|undefined, metadata }
       const saved = serverDraftId ? await updateDraft(serverDraftId, input) : await createDraft(input)
       setServerDraftId(saved.id)
-      writeStoredDraft(draftKey, metadata)
       await onDraftSaved?.(saved)
+      removeStoredDraft(draftKey)
       setConfirmOpen(false)
       onOpenChange(false)
     } catch (failure) {
@@ -446,7 +459,7 @@ function readStoredDraft(key: string): StoredIssueDraft | null {
 }
 
 function writeStoredDraft(key: string, draft: StoredIssueDraft) {
-  try { globalThis.localStorage?.setItem(key, JSON.stringify(draft)) } catch { /* Draft persistence is best-effort in private browsing. */ }
+  try { globalThis.localStorage?.setItem(key, JSON.stringify({ ...draft, updatedAt: new Date().toISOString() })) } catch { /* Draft persistence is best-effort in private browsing. */ }
 }
 
 function removeStoredDraft(key: string) {

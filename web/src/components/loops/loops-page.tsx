@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
@@ -16,8 +16,11 @@ import { DateTimeControl, TimeControl } from "@/components/ui/date-time-control"
 import { ViewGlyph, ViewIconPicker } from "@/components/views/view-icon-picker";
 import {
   createLoop,
+  createDraft,
+  deleteDraft,
   deleteLoop,
   sendAgentMessage,
+  updateDraft,
   updateLoop,
   type LoopMutation,
 } from "@/lib/api";
@@ -31,6 +34,7 @@ type Props = {
   data: BootstrapData;
   embedded?: boolean;
   loopId?: string;
+  draftId?: string;
   editing: boolean;
   onOpenSidebar: () => void;
   onNavigate: (path: string) => void;
@@ -47,6 +51,7 @@ const triggerLabels: Record<Loop["triggerType"], string> = {
 
 export function LoopsPage({
   data,
+  draftId,
   loopId,
   editing,
   onOpenSidebar,
@@ -75,6 +80,7 @@ export function LoopsPage({
   return editing ? (
     <LoopEditor
       data={data}
+      draftId={draftId}
       loop={loop}
       onOpenSidebar={onOpenSidebar}
       onNavigate={onNavigate}
@@ -413,12 +419,14 @@ function LoopEmptyIllustration() {
 
 function LoopEditor({
   data,
+  draftId,
   loop,
   onOpenSidebar,
   onNavigate,
   onReload,
 }: {
   data: BootstrapData;
+  draftId?: string;
   loop?: Loop;
   onOpenSidebar: () => void;
   onNavigate: (path: string) => void;
@@ -426,28 +434,30 @@ function LoopEditor({
 }) {
   const { t } = useI18n();
   const editing = Boolean(loop);
-  const [name, setName] = useState(loop?.name ?? "");
-  const [icon, setIcon] = useState(loop?.icon ?? "Automation");
-  const [color, setColor] = useState(loop?.color ?? "#d9b84b");
-  const [level, setLevel] = useState<Loop["level"]>(loop?.level ?? "workspace");
+  const draft = draftId ? data.drafts.find((item) => item.id === draftId && item.type === "loop") : undefined;
+  const draftValues = (draft?.metadata ?? {}) as Partial<Loop>;
+  const [name, setName] = useState(loop?.name ?? draftValues.name ?? draft?.title ?? "");
+  const [icon, setIcon] = useState(loop?.icon ?? draftValues.icon ?? "Automation");
+  const [color, setColor] = useState(loop?.color ?? draftValues.color ?? "#d9b84b");
+  const [level, setLevel] = useState<Loop["level"]>(loop?.level ?? draftValues.level ?? "workspace");
   const [triggerType, setTriggerType] = useState<Loop["triggerType"]>(
-    loop?.triggerType ?? "schedule",
+    loop?.triggerType ?? draftValues.triggerType ?? "schedule",
   );
   const [triggerConfig, setTriggerConfig] = useState<Record<string, unknown>>(
-    loop?.triggerConfig ?? { interval: 1, unit: "day", time: "10:00" },
+    loop?.triggerConfig ?? draftValues.triggerConfig ?? { interval: 1, unit: "day", time: "10:00" },
   );
-  const [instructions, setInstructions] = useState(loop?.instructions ?? "");
+  const [instructions, setInstructions] = useState(loop?.instructions ?? draftValues.instructions ?? draft?.body ?? "");
   const [connectorIds, setConnectorIds] = useState<string[]>(
-    loop?.connectorIds ?? [],
+    loop?.connectorIds ?? draftValues.connectorIds ?? [],
   );
   const [teamAccess, setTeamAccess] = useState<Loop["teamAccess"]>(
-    loop?.teamAccess ?? "allPublic",
+    loop?.teamAccess ?? draftValues.teamAccess ?? "allPublic",
   );
   const [allowOutside, setAllowOutside] = useState(
-    loop?.allowChangesOutsideTrigger ?? true,
+    loop?.allowChangesOutsideTrigger ?? draftValues.allowChangesOutsideTrigger ?? true,
   );
   const [allowExternal, setAllowExternal] = useState(
-    loop?.allowExternalSync ?? false,
+    loop?.allowExternalSync ?? draftValues.allowExternalSync ?? false,
   );
   const [composeOpen, setComposeOpen] = useState(false);
   const [composePrompt, setComposePrompt] = useState("");
@@ -455,6 +465,8 @@ function LoopEditor({
   const [scopeOpen, setScopeOpen] = useState(false);
   const [connectorOpen, setConnectorOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [serverDraftId, setServerDraftId] = useState(draft?.id ?? "");
+  const draftSaving = useRef(false);
   const setConfig = (key: string, value: unknown) =>
     setTriggerConfig((current) => ({ ...current, [key]: value }));
   const clearConfig = (key: string) =>
@@ -481,6 +493,44 @@ function LoopEditor({
         ? scopeTeamIds.filter((id) => id !== teamId)
         : [...scopeTeamIds, teamId],
     );
+  const draftMetadata = useMemo(() => ({
+    name: name.trim(), icon, color, level, triggerType, triggerConfig, instructions,
+    connectorIds, teamAccess, allowChangesOutsideTrigger: allowOutside, allowExternalSync: allowExternal,
+    enabled: loop?.enabled ?? true,
+  } satisfies Partial<Loop>), [allowExternal, allowOutside, color, connectorIds, icon, instructions, level, loop?.enabled, name, teamAccess, triggerConfig, triggerType]);
+  const initialDraftMetadata = useRef(draftMetadata);
+  const hasDraftContent = Boolean(name.trim() || instructions.trim() || connectorIds.length);
+  useEffect(() => {
+    if (editing || serverDraftId || draftSaving.current) return;
+    draftSaving.current = true;
+    void createDraft({ type: "loop", title: "", body: "", metadata: initialDraftMetadata.current })
+      .then((saved) => {
+        setServerDraftId(saved.id);
+        window.history.replaceState({}, "", `${newLoopPath(data.workspace.urlKey)}?draftId=${encodeURIComponent(saved.id)}`);
+      })
+      .catch((error) => toast.error(error instanceof Error ? error.message : t("Could not save draft")))
+      .finally(() => { draftSaving.current = false; });
+  }, [data.workspace.urlKey, editing, serverDraftId, t]);
+  useEffect(() => {
+    if (editing || saving || !hasDraftContent) return;
+    const timer = window.setTimeout(async () => {
+      if (draftSaving.current) return;
+      draftSaving.current = true;
+      try {
+        const input = { type: "loop", title: name.trim() || "Untitled loop", body: instructions, metadata: draftMetadata };
+        const saved = serverDraftId ? await updateDraft(serverDraftId, input) : await createDraft(input);
+        if (!serverDraftId) {
+          setServerDraftId(saved.id);
+          window.history.replaceState({}, "", `${newLoopPath(data.workspace.urlKey)}?draftId=${encodeURIComponent(saved.id)}`);
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t("Could not save draft"));
+      } finally {
+        draftSaving.current = false;
+      }
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [allowExternal, allowOutside, color, connectorIds, data.workspace.urlKey, draftMetadata, editing, hasDraftContent, instructions, level, name, saving, serverDraftId, teamAccess, triggerConfig, triggerType, t]);
   const submit = async () => {
     if (!name.trim() || !instructions.trim()) return;
     setSaving(true);
@@ -502,11 +552,28 @@ function LoopEditor({
       };
       if (loop) await updateLoop(loop.id, input);
       else await createLoop(input as LoopMutation & { name: string });
+      if (!loop && serverDraftId) await deleteDraft(serverDraftId);
       await onReload();
       onNavigate(loopsPath(data.workspace.urlKey));
     } finally {
       setSaving(false);
     }
+  };
+  const cancel = async () => {
+    if (saving) return;
+    if (!editing && serverDraftId) {
+      draftSaving.current = true;
+      try {
+        await deleteDraft(serverDraftId);
+        await onReload();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t("Could not discard draft"));
+        draftSaving.current = false;
+        return;
+      }
+      draftSaving.current = false;
+    }
+    onNavigate(loopsPath(data.workspace.urlKey));
   };
   const compose = async () => {
     if (!composePrompt.trim() || composeBusy) return;
@@ -597,9 +664,9 @@ function LoopEditor({
           {t("Loops")}
         </a>
         <span>›</span>
-        <h1>{editing ? t("Edit loop") : t("New loop")}</h1>
+        <h2>{editing ? t("Edit loop") : t("New loop")}</h2>
         <div className="loops-editor-actions">
-          <button onClick={() => onNavigate(loopsPath(data.workspace.urlKey))}>
+          <button onClick={() => void cancel()}>
             {t("Cancel")}
           </button>
           <button

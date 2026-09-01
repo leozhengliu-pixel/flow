@@ -362,8 +362,8 @@ function App() {
   const location = useLocation(),
     navigateTo = useNavigate(),
     route = useMemo(
-      () => parseAppRoute(location.pathname),
-      [location.pathname],
+      () => parseAppRoute(location.pathname, location.search),
+      [location.pathname, location.search],
     );
   const [account, setAccount] = useState<AccountBootstrap | null>(null),
     [data, setData] = useState<BootstrapData | null>(null),
@@ -378,6 +378,7 @@ function App() {
     [commandOpen, setCommandOpen] = useState(false),
     [createOpen, setCreateOpen] = useState(false),
     [createDraftId, setCreateDraftId] = useState<string>(),
+    [createTeamId, setCreateTeamId] = useState<string>(),
     [createStateId, setCreateStateId] = useState<string>(),
     [createProjectId, setCreateProjectId] = useState<string>(),
     [createProjectMilestoneId, setCreateProjectMilestoneId] =
@@ -394,6 +395,8 @@ function App() {
             )?.id || "state_backlog"
           : data?.states.find((state) => state.type === "unstarted")?.id);
       createStateRef.current = next;
+      setCreateDraftId(undefined);
+      setCreateTeamId(undefined);
       setCreateStateId(next);
       setCreateOpen(true);
     },
@@ -3961,6 +3964,7 @@ function App() {
         }
         onSwitchWorkspace={switchWorkspace}
         onCreateWorkspace={() => navigateTo(workspaceOnboardingPath())}
+        onReload={async () => setData(await fetchBootstrap(data.workspace.urlKey))}
         onLogout={async () => {
           await logoutAccount();
           setSession(null);
@@ -4089,6 +4093,7 @@ function App() {
           (route.kind === "loops" || route.kind === "loop-editor") && (
             <LoopsPage
               data={data}
+              draftId={route.kind === "loop-editor" ? route.draftId : undefined}
               loopId={route.kind === "loop-editor" ? route.loopId : undefined}
               editing={route.kind === "loop-editor"}
               onOpenSidebar={() => setMobileSidebarOpen(true)}
@@ -4142,7 +4147,8 @@ function App() {
             }
             onNavigate={(path) => navigateTo(path)}
             onResumeDraft={(draft: Draft) => {
-              setCreateDraftId(draft.id);
+              setCreateDraftId(draft.id.startsWith("local:") ? undefined : draft.id);
+              setCreateTeamId(draft.id.startsWith("local:") && typeof draft.metadata?.teamId === "string" ? draft.metadata.teamId : undefined);
               setCreateOpen(true);
             }}
           />
@@ -4438,9 +4444,11 @@ function App() {
               key={selectedInitiative.id}
               initiative={selectedInitiative}
               initiatives={data.initiatives}
+              documents={data.documents}
               initiativeUpdates={
                 data.initiativeUpdates[selectedInitiative.id] ?? []
               }
+              drafts={data.drafts}
               projects={data.projects}
               projectStatuses={data.projectStatuses}
               projectTemplates={data.projectTemplates}
@@ -5247,9 +5255,11 @@ function App() {
               project={selectedProject}
               projects={data.projects}
               initiatives={data.initiatives}
+              documents={data.documents}
               integrationConnections={data.integrationConnections}
               projectStatuses={data.projectStatuses}
               projectUpdates={data.projectUpdates?.[selectedProject.id] ?? []}
+              drafts={data.drafts}
               issues={data.issues}
               users={data.users}
               teams={data.teams}
@@ -5457,6 +5467,7 @@ function App() {
           <CreateIssueDialog
             open={createOpen}
             draftId={createDraftId}
+            initialTeamId={createTeamId}
             initialProjectId={createProjectId}
             initialProjectMilestoneId={createProjectMilestoneId}
             initialStateId={createStateId ?? createStateRef.current}
@@ -5467,6 +5478,7 @@ function App() {
               setCreateOpen(open);
               if (!open) {
                 setCreateDraftId(undefined);
+                setCreateTeamId(undefined);
                 setCreateProjectId(undefined);
                 setCreateProjectMilestoneId(undefined);
               }
