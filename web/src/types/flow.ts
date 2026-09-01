@@ -180,6 +180,7 @@ export interface FlowDocument {
   slugId: string;
   title: string;
   icon?: string;
+  color?: string;
   content: string;
   contentState?: string;
   contentData?: Record<string, unknown>;
@@ -730,6 +731,7 @@ export interface Loop {
   id: UUID;
   name: string;
   icon?: string;
+  color?: string;
   level: "workspace" | "team";
   triggerType: "schedule" | "issue" | "project" | "initiative" | "cycle";
   triggerConfig?: Record<string, unknown>;

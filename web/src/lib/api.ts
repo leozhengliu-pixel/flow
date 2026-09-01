@@ -834,6 +834,7 @@ export function createDocument(
       FlowDocument,
       | "title"
       | "icon"
+      | "color"
       | "content"
       | "contentState"
       | "contentData"
@@ -1824,6 +1825,7 @@ export type LoopMutation = Partial<
     Loop,
     | "name"
     | "icon"
+    | "color"
     | "level"
     | "triggerType"
     | "triggerConfig"

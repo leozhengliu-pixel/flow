@@ -15,10 +15,11 @@ html[data-locale="zh-CN"] body {
   font-size: 12px;
 }
 
-.auth-language select,
-.workspace-language select {
+.auth-language .language-select-control,
+.workspace-language .language-select-control {
   height: 28px;
-  padding: 0 24px 0 9px;
+  min-width: 104px;
+  padding: 0 8px 0 9px;
   border: .5px solid var(--border, #3b3b3f);
   border-radius: 6px;
   outline: 0;

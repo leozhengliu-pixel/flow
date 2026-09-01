@@ -1,5 +1,7 @@
 /* oxlint-disable react/only-export-components -- locale hooks and components share one provider contract. */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react'
+
+import { SelectControl } from '@/components/ui/select-control'
 
 import { zhCN } from './translations'
 
@@ -47,12 +49,18 @@ export function useI18n() {
 
 export function LanguageSelect({ className }: { className?: string }) {
   const { locale, setLocale, t } = useI18n()
-  return <label className={className} data-i18n-control>
+  return <label className={className} data-i18n-control data-i18n-ignore>
     <span>{t('Language')}</span>
-    <select aria-label={t('Language')} value={locale} onChange={event => setLocale(event.target.value as AppLocale)}>
-      <option value="en-US">English</option>
-      <option value="zh-CN">简体中文</option>
-    </select>
+    <SelectControl
+      className="language-select-control"
+      label={t('Language')}
+      onChange={next => setLocale(next as AppLocale)}
+      options={[
+        { value: 'en-US', label: 'English' },
+        { value: 'zh-CN', label: '简体中文' },
+      ]}
+      value={locale}
+    />
   </label>
 }
 
@@ -281,7 +289,7 @@ const attributeStates = new WeakMap<Element, Map<string, TextState>>()
 const attributes = ['aria-label', 'placeholder', 'title', 'data-placeholder'] as const
 
 function LegacyUiTranslator({ locale }: { locale: AppLocale }) {
-  useEffect(() => {
+  useLayoutEffect(() => {
     const translateTree = (root: ParentNode) => {
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
       let node: Node | null

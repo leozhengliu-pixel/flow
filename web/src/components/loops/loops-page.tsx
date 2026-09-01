@@ -5,13 +5,15 @@ import {
   Clock3,
   MoreHorizontal,
   Plus,
-  Repeat2,
   Settings2,
   Sparkles,
   Trash2,
   X,
 } from "lucide-react";
 import { DisplayIcon, FilterIcon, PlusIcon } from "@/components/ui/view-action-icons";
+import { SelectControl } from "@/components/ui/select-control";
+import { DateTimeControl, TimeControl } from "@/components/ui/date-time-control";
+import { ViewGlyph, ViewIconPicker } from "@/components/views/view-icon-picker";
 import {
   createLoop,
   deleteLoop,
@@ -27,11 +29,13 @@ import "./loops-page.css";
 
 type Props = {
   data: BootstrapData;
+  embedded?: boolean;
   loopId?: string;
   editing: boolean;
   onOpenSidebar: () => void;
   onNavigate: (path: string) => void;
   onReload: () => Promise<void>;
+  teamId?: string;
 };
 const triggerLabels: Record<Loop["triggerType"], string> = {
   schedule: "Schedule",
@@ -40,7 +44,6 @@ const triggerLabels: Record<Loop["triggerType"], string> = {
   initiative: "An initiative",
   cycle: "A cycle",
 };
-const iconChoices = ["repeat", "sparkles", "circle", "zap", "bot"];
 
 export function LoopsPage({
   data,
@@ -80,6 +83,7 @@ export function LoopsPage({
   ) : (
     <LoopList
       data={data}
+      embedded={false}
       onOpenSidebar={onOpenSidebar}
       onNavigate={onNavigate}
       onReload={onReload}
@@ -87,12 +91,25 @@ export function LoopsPage({
   );
 }
 
+export function LoopsDirectory({
+  data,
+  embedded = false,
+  onNavigate,
+  onOpenSidebar,
+  onReload,
+  teamId,
+}: Omit<Props, "editing" | "loopId">) {
+  return <LoopList data={data} embedded={embedded} onNavigate={onNavigate} onOpenSidebar={onOpenSidebar} onReload={onReload} teamId={teamId}/>;
+}
+
 function LoopList({
   data,
+  embedded,
   onOpenSidebar,
   onNavigate,
   onReload,
-}: Omit<Props, "editing" | "loopId">) {
+  teamId,
+}: Omit<Props, "editing" | "loopId"> & { embedded: boolean }) {
   const { t } = useI18n();
   const [filterOpen, setFilterOpen] = useState(false);
   const [displayOpen, setDisplayOpen] = useState(false);
@@ -101,8 +118,15 @@ function LoopList({
   const [showLastRun, setShowLastRun] = useState(true);
   const [confirm, setConfirm] = useState<Loop>();
   const loops = useMemo(
-    () => data.loops.filter((item) => !activeOnly || item.enabled),
-    [activeOnly, data.loops],
+    () => data.loops.filter((item) => {
+      if (activeOnly && !item.enabled) return false;
+      if (!teamId) return true;
+      const teamIds = Array.isArray(item.triggerConfig?.teamIds)
+        ? item.triggerConfig.teamIds as string[]
+        : [];
+      return item.level === "team" && (!teamIds.length || teamIds.includes(teamId));
+    }),
+    [activeOnly, data.loops, teamId],
   );
   const remove = async () => {
     if (!confirm) return;
@@ -110,9 +134,10 @@ function LoopList({
     setConfirm(undefined);
     await onReload();
   };
+  const Container = embedded ? "div" : "main";
   return (
-    <main className="main-panel loops-page" aria-label={t("Loops")}>
-      <header className="loops-topbar">
+    <Container className={embedded ? "loops-embedded" : "main-panel loops-page"} aria-label={t("Loops")} role={embedded ? "region" : undefined}>
+      {!embedded && <header className="loops-topbar">
         <button
           className="loops-mobile-menu"
           aria-label={t("Open sidebar")}
@@ -132,8 +157,9 @@ function LoopList({
             {t("New loop")}
           </button>
         </div>
-      </header>
+      </header>}
       <div className="loops-toolbar">
+        {embedded && <button className="loops-new-button" onClick={() => onNavigate(newLoopPath(data.workspace.urlKey))}><PlusIcon/>{t("New loop")}</button>}
         <div className="loops-toolbar-left">
           <button
             className={`loops-icon-button ${filterOpen ? "is-open" : ""}`}
@@ -254,7 +280,7 @@ function LoopList({
           </section>
         </div>
       )}
-    </main>
+    </Container>
   );
 }
 
@@ -278,8 +304,8 @@ function LoopRow({
   return (
     <article className={`loops-row ${!loop.enabled ? "is-disabled" : ""}`}>
       <button className="loops-row-main" onClick={onOpen}>
-        <span className="loops-row-icon">
-          <Repeat2 size={16} />
+        <span className="loops-row-icon" style={{ color: loop.color ?? "#d9b84b" }}>
+          <ViewGlyph color="currentColor" icon={loop.icon || "Automation"} />
         </span>
         <span className="loops-row-copy">
           <strong>{loop.name}</strong>
@@ -401,7 +427,8 @@ function LoopEditor({
   const { t } = useI18n();
   const editing = Boolean(loop);
   const [name, setName] = useState(loop?.name ?? "");
-  const [icon, setIcon] = useState(loop?.icon ?? "repeat");
+  const [icon, setIcon] = useState(loop?.icon ?? "Automation");
+  const [color, setColor] = useState(loop?.color ?? "#d9b84b");
   const [level, setLevel] = useState<Loop["level"]>(loop?.level ?? "workspace");
   const [triggerType, setTriggerType] = useState<Loop["triggerType"]>(
     loop?.triggerType ?? "schedule",
@@ -461,6 +488,7 @@ function LoopEditor({
       const input: LoopMutation = {
         name: name.trim(),
         icon,
+        color,
         level,
         triggerType,
         triggerConfig,
@@ -504,24 +532,26 @@ function LoopEditor({
   };
   const filter = triggerConfig.filter ? (
     <div className="loops-filter-builder">
-      <select
-        aria-label={t("Filter field")}
+      <SelectControl
+        label={t("Filter field")}
         value={String(triggerConfig.filterField ?? "status")}
-        onChange={(event) => setConfig("filterField", event.target.value)}
-      >
-        <option value="status">{t("Status")}</option>
-        <option value="priority">{t("Priority")}</option>
-        <option value="label">{t("Label")}</option>
-        <option value="assignee">{t("Assignee")}</option>
-      </select>
-      <select
-        aria-label={t("Filter operator")}
+        onChange={(value) => setConfig("filterField", value)}
+        options={[
+          { value: "status", label: t("Status") },
+          { value: "priority", label: t("Priority") },
+          { value: "label", label: t("Label") },
+          { value: "assignee", label: t("Assignee") },
+        ]}
+      />
+      <SelectControl
+        label={t("Filter operator")}
         value={String(triggerConfig.filterOperator ?? "is")}
-        onChange={(event) => setConfig("filterOperator", event.target.value)}
-      >
-        <option value="is">{t("is")}</option>
-        <option value="isNot">{t("is not")}</option>
-      </select>
+        onChange={(value) => setConfig("filterOperator", value)}
+        options={[
+          { value: "is", label: t("is") },
+          { value: "isNot", label: t("is not") },
+        ]}
+      />
       <input
         aria-label={t("Filter value")}
         value={String(triggerConfig.filterValue ?? "")}
@@ -587,107 +617,108 @@ function LoopEditor({
       </header>
       <div className="loops-editor-scroll">
         <div className="loops-editor-heading">
-          <button
-            className="loops-icon-picker"
-            aria-label={t("Loop icon")}
-            onClick={() =>
-              setIcon(
-                iconChoices[
-                  (iconChoices.indexOf(icon) + 1) % iconChoices.length
-                ],
-              )
-            }
-          >
-            <Repeat2 size={16} />
-          </button>
+          <ViewIconPicker
+            ariaLabel={t("Loop icon")}
+            color={color}
+            icon={icon}
+            onChange={(visual) => {
+              setIcon(visual.icon);
+              setColor(visual.color);
+            }}
+            prependIcons={["Automation", "CustomView"]}
+            triggerClassName="loops-icon-picker"
+          />
           <input
             aria-label={t("Loop name")}
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder={t("Loop name")}
           />
-          <select
-            aria-label={t("Loop level")}
+          <SelectControl
+            className="loops-level-select"
+            label={t("Loop level")}
             value={level}
-            onChange={(event) => setLevel(event.target.value as Loop["level"])}
-          >
-            <option value="workspace">{t("Workspace")}</option>
-            <option value="team">{t("Team")}</option>
-          </select>
+            onChange={(value) => setLevel(value as Loop["level"])}
+            options={[
+              { value: "workspace", label: t("Workspace") },
+              { value: "team", label: t("Team") },
+            ]}
+          />
         </div>
         <section className="loops-editor-section is-trigger">
           <h2>{t("Trigger")}</h2>
           <div className="loops-trigger-row">
-            <select
-              aria-label={t("Trigger type")}
+            <SelectControl
+              className="loops-trigger-select"
+              label={t("Trigger type")}
               value={triggerType}
-              onChange={(event) =>
-                setTriggerType(event.target.value as Loop["triggerType"])
+              onChange={(value) =>
+                setTriggerType(value as Loop["triggerType"])
               }
-            >
-              {(Object.keys(triggerLabels) as Loop["triggerType"][]).map(
-                (value) => (
-                  <option value={value} key={value}>
-                    {t(triggerLabels[value])}
-                  </option>
-                ),
+              options={(Object.keys(triggerLabels) as Loop["triggerType"][]).map(
+                (value) => ({ value, label: t(triggerLabels[value]) }),
               )}
-            </select>
+            />
             {triggerType === "schedule" ? (
               <>
                 <span>{t("Starting")}</span>
-                <input
-                  type="date"
+                <DateTimeControl
+                  className="loops-date-control"
+                  label={t("Starting")}
                   value={String(
                     triggerConfig.starting ??
                       new Date().toISOString().slice(0, 10),
                   )}
-                  onChange={(event) =>
-                    setConfig("starting", event.target.value)
-                  }
+                  onChange={(value) => setConfig("starting", value)}
                 />
                 <span>{t("every")}</span>
-                <input
-                  className="loops-small-input"
-                  type="number"
-                  min="1"
-                  value={Number(triggerConfig.interval ?? 1)}
-                  onChange={(event) =>
-                    setConfig("interval", Number(event.target.value))
-                  }
+                <SelectControl
+                  className="loops-count-select"
+                  label={t("Interval")}
+                  value={String(triggerConfig.interval ?? 1)}
+                  onChange={(value) => setConfig("interval", Number(value))}
+                  options={Array.from({ length: 30 }, (_, index) => ({ value: String(index + 1), label: String(index + 1) }))}
                 />
-                <select
+                <SelectControl
+                  className="loops-unit-select"
+                  label={t("Interval unit")}
                   value={String(triggerConfig.unit ?? "day")}
-                  onChange={(event) => setConfig("unit", event.target.value)}
-                >
-                  <option value="day">{t("day")}</option>
-                  <option value="week">{t("week")}</option>
-                  <option value="month">{t("month")}</option>
-                </select>
+                  onChange={(value) => setConfig("unit", value)}
+                  options={[
+                    { value: "day", label: t("day") },
+                    { value: "week", label: t("week") },
+                    { value: "month", label: t("month") },
+                  ]}
+                />
                 <span>{t("at")}</span>
-                <input
-                  type="time"
+                <TimeControl
+                  className="loops-time-control"
+                  label={t("Time")}
                   value={String(triggerConfig.time ?? "10:00")}
-                  onChange={(event) => setConfig("time", event.target.value)}
+                  onChange={(value) => setConfig("time", value)}
                 />
               </>
             ) : (
               <>
                 <span>{t("is")}</span>
-                <select
+                <SelectControl
+                  className="loops-action-select"
+                  label={t("Trigger action")}
                   value={String(
                     triggerConfig.action ??
                       (triggerType === "cycle"
                         ? "created"
                         : "created or updated"),
                   )}
-                  onChange={(event) => setConfig("action", event.target.value)}
-                >
-                  <option value="created">{t("created")}</option>
-                  <option value="created or updated">
-                    {t("created or updated")}
-                  </option>
-                </select>
+                  onChange={(value) => setConfig("action", value)}
+                  options={[
+                    { value: "created", label: t("created") },
+                    {
+                      value: "created or updated",
+                      label: t("created or updated"),
+                    },
+                  ]}
+                />
                 <span>
                   {triggerType === "initiative" ? t("with") : t("in")}
                 </span>
@@ -821,15 +852,18 @@ function LoopEditor({
                 {t("Choose which team’s data are available to this loop")}
               </small>
             </span>
-            <select
+            <SelectControl
+              className="loops-access-select"
+              label={t("Team access")}
               value={teamAccess}
-              onChange={(event) =>
-                setTeamAccess(event.target.value as Loop["teamAccess"])
+              onChange={(value) =>
+                setTeamAccess(value as Loop["teamAccess"])
               }
-            >
-              <option value="allPublic">{t("All public teams")}</option>
-              <option value="selected">{t("Selected teams")}</option>
-            </select>
+              options={[
+                { value: "allPublic", label: t("All public teams") },
+                { value: "selected", label: t("Selected teams") },
+              ]}
+            />
           </label>
           {triggerType !== "schedule" && (
             <label>

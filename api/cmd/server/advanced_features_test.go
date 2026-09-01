@@ -82,9 +82,9 @@ func TestDocumentHistoryProjectAssociationAndTrashRestore(t *testing.T) {
 	issue := bootstrap.Issues[0]
 
 	document := requestJSON[domain.Document](t, handler, http.MethodPost, "/api/documents", map[string]any{
-		"title": "Advanced document", "content": "First version", "projectIds": []string{project.ID}, "issueId": issue.ID,
+		"title": "Advanced document", "icon": "Page", "color": "#8b8b90", "content": "First version", "projectIds": []string{project.ID}, "issueId": issue.ID,
 	}, http.StatusCreated)
-	if document.IssueID != issue.ID {
+	if document.IssueID != issue.ID || document.Icon != "Page" || document.Color != "#8b8b90" {
 		t.Fatalf("document issue association = %q, want %q", document.IssueID, issue.ID)
 	}
 	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)

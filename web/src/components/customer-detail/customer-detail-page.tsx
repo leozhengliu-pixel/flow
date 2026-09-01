@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { SelectControl } from "@/components/ui/select-control";
 import { CustomerDialog } from "./customer-dialog";
 import {
   addFavorite,
@@ -569,25 +570,11 @@ function CustomerRequestComposer({
       </div>
       <label>
         This request will be added to
-        <select value={target} onChange={(e) => setTarget(e.target.value)}>
-          <option value="new">
-            New issue · Customer request from {customer.name}
-          </option>
-          <optgroup label="Existing issues">
-            {data.issues.slice(0, 30).map((issue) => (
-              <option key={issue.id} value={`issue:${issue.id}`}>
-                {issue.identifier} {issue.title}
-              </option>
-            ))}
-          </optgroup>
-          <optgroup label="Projects">
-            {data.projects.map((project) => (
-              <option key={project.id} value={`project:${project.id}`}>
-                {project.name}
-              </option>
-            ))}
-          </optgroup>
-        </select>
+        <SelectControl label="Request target" value={target} onChange={setTarget} options={[
+          { value: "new", label: `New issue · Customer request from ${customer.name}` },
+          ...data.issues.slice(0, 30).map(issue => ({ value: `issue:${issue.id}`, label: `${issue.identifier} ${issue.title}`, groupLabel: "Existing issues", entityName: true })),
+          ...data.projects.map(project => ({ value: `project:${project.id}`, label: project.name, groupLabel: "Projects", entityName: true })),
+        ]}/>
       </label>
     </div>
   );

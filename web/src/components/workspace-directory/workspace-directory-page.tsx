@@ -28,6 +28,7 @@ import { useI18n } from "@/i18n/i18n";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { SelectControl } from "@/components/ui/select-control";
 import { CustomerDialog } from "@/components/customer-detail/customer-dialog";
 import type {
   BootstrapData,
@@ -1326,7 +1327,10 @@ function InviteMembersDialog({
           />
           {error && <span className="workspace-invite-error">{error}</span>}
         </label>
-        <div className="workspace-invite-access"><label>Role<select value={role} onChange={event => setRole(event.target.value as typeof role)}><option value="member">Member - Full access with limited permissions</option><option value="admin">Admin - Full administrative access</option><option value="guest">Guest - Limited access to teams</option></select></label>{role==='guest'&&<label>Team<select value={teamId} onChange={event => setTeamId(event.target.value)}><option value="">Select a team</option>{teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>}</div>
+        <div className="workspace-invite-access">
+          <label>Role<SelectControl label="Role" value={role} onChange={value => setRole(value as typeof role)} options={[{value:"member",label:"Member - Full access with limited permissions"},{value:"admin",label:"Admin - Full administrative access"},{value:"guest",label:"Guest - Limited access to teams"}]}/></label>
+          {role==='guest'&&<label>Team<SelectControl label="Team" value={teamId} onChange={setTeamId} options={[{value:"",label:"Select a team"},...teams.map(team=>({value:team.id,label:team.name,entityName:true}))]}/></label>}
+        </div>
         <footer>
           <button type="button" disabled={sending} onClick={() => void send()}>
             {sending ? "Sending…" : "Send invites"}

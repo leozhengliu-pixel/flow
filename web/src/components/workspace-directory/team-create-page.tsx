@@ -35,6 +35,7 @@ import {
 import { useMemo, useState, type FormEvent } from "react";
 
 import { ViewIconPicker } from "@/components/views/view-icon-picker";
+import { SelectControl } from "@/components/ui/select-control";
 import { ReleasesIcon } from "@/components/releases/release-icons";
 import type { Team } from "@/types/flow";
 import type { SettingsPageId } from "@/lib/app-routes";
@@ -268,11 +269,8 @@ export function TeamCreatePage({
               />
             </label>
             <label>
-              <span>Parent team</span>
-              <select aria-label="Parent team" disabled={!businessEnabled} value={parentTeamId} onChange={(event) => { setParentTeamId(event.target.value); if (event.target.value) setCopyFrom(event.target.value); }}>
-                <option value="">{businessEnabled ? "No parent team" : "Available on Business"}</option>
-                {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
-              </select>
+              <span>Parent team<small>Settings and workflows will be inherited from the parent team</small></span>
+              <SelectControl label="Parent team" disabled={!businessEnabled} value={parentTeamId} onChange={(value) => { setParentTeamId(value); if (value) setCopyFrom(value); }} options={[{ value: "", label: businessEnabled ? "No parent team" : "Available on Business" }, ...teams.map(team => ({ value: team.id, label: team.name, entityName: true }))]}/>
             </label>
           </section>
           <h2>Team access</h2>
@@ -282,11 +280,8 @@ export function TeamCreatePage({
           </p>
           <section className="workspace-settings-card">
             <label>
-              <span>Change team access</span>
-              <select aria-label="Team access" disabled={!businessEnabled} value={privateTeam ? "private" : "public"} onChange={(event) => setPrivateTeam(event.target.value === "private")}>
-                <option value="public">{businessEnabled ? "Public to workspace" : "Available on Business"}</option>
-                {businessEnabled && <option value="private">Private</option>}
-              </select>
+              <span>Team access</span>
+              <SelectControl label="Team access" disabled={!businessEnabled} value={privateTeam ? "private" : "public"} onChange={(value) => setPrivateTeam(value === "private")} options={[{ value: "public", label: businessEnabled ? "Public to workspace" : "Available on Business" }, ...(businessEnabled ? [{ value: "private", label: "Private" }] : [])]}/>
             </label>
           </section>
           <h2>Timezone</h2>
@@ -294,14 +289,7 @@ export function TeamCreatePage({
           <section className="workspace-settings-card">
             <label>
               <span>Timezone</span>
-              <select
-                aria-label="Timezone"
-                value={timezone}
-                onChange={(event) => setTimezone(event.target.value)}
-              >
-                <option>GMT+8:00 – China Standard Time - Shanghai</option>
-                <option>GMT+0:00 – Coordinated Universal Time</option>
-              </select>
+              <SelectControl label="Timezone" value={timezone} onChange={setTimezone} options={[{ value: "GMT+8:00 – China Standard Time - Shanghai", label: "GMT+8:00 – China Standard Time - Shanghai" }, { value: "GMT+0:00 – Coordinated Universal Time", label: "GMT+0:00 – Coordinated Universal Time" }]}/>
             </label>
           </section>
           <h2>Copy settings from existing team</h2>
@@ -312,19 +300,7 @@ export function TeamCreatePage({
           <section className="workspace-settings-card">
             <label>
               <span>Copy from team</span>
-              <select
-                aria-label="Copy from team"
-                disabled={Boolean(parentTeamId)}
-                value={copyFrom}
-                onChange={(event) => setCopyFrom(event.target.value)}
-              >
-                <option value="">Don’t copy</option>
-                {teams.map((team) => (
-                  <option key={team.id} value={team.id}>
-                    {team.name}
-                  </option>
-                ))}
-              </select>
+              <SelectControl label="Copy from team" disabled={Boolean(parentTeamId)} value={copyFrom} onChange={setCopyFrom} options={[{ value: "", label: "Don’t copy" }, ...teams.map(team => ({ value: team.id, label: team.name, entityName: true }))]}/>
             </label>
           </section>
           <button

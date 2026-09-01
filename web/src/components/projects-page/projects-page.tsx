@@ -98,6 +98,11 @@ export type ProjectsPageProps = {
   onDeleteProjectUpdate?: (projectId: string, updateId: string) => Promise<void>
   onCommentProjectUpdate?: (projectId: string, updateId: string, body: string) => Promise<ProjectUpdate>
   onReactProjectUpdate?: (projectId: string, updateId: string, emoji: string) => Promise<ProjectUpdate>
+  favoriteProjectIds?: string[]
+  projectSubscriptions?: Subscription[]
+  onToggleProjectFavorite?: (projectId: string, favorite: boolean) => Promise<void>
+  onSetProjectSubscriptionEvents?: (projectId: string, events: string[]) => Promise<void>
+  onCreateProjectReminder?: (projectId: string, remindAt: string) => Promise<unknown>
   createOnMount?: boolean
   initialTemplateId?: string
 }
@@ -112,6 +117,8 @@ export function ProjectsPage({
   teams,
   labels = [],
   labelGroups = [],
+  favoriteProjectIds = [],
+  projectSubscriptions = [],
   loading = false,
   error = null,
   onCreateProject,
@@ -120,6 +127,9 @@ export function ProjectsPage({
   onOpenProjectIssues,
   onRetry,
   onUpdateProject,
+  onToggleProjectFavorite,
+  onSetProjectSubscriptionEvents,
+  onCreateProjectReminder,
   onOpenSidebar,
   onSetDisplayDefault,
   projectDisplayDefault,
@@ -157,7 +167,7 @@ export function ProjectsPage({
 }: ProjectsPageProps) {
   const sourceView = savedView ?? duplicateFrom
   const scopedProjects = useMemo(() => scopeTeamId ? projects.filter(project => project.teamIds.includes(scopeTeamId)) : projects, [projects, scopeTeamId])
-  const items = useMemo(() => scopedProjects.map(project => toPageItem(project, projectHref?.(project), teams, projectUpdates[project.id]?.[0])), [projectHref, projectUpdates, scopedProjects, teams])
+  const items = useMemo(() => scopedProjects.map(project => toPageItem(project, projectHref?.(project), teams, projectUpdates[project.id]?.[0], initiatives, labels, labelGroups)), [initiatives, labelGroups, labels, projectHref, projectUpdates, scopedProjects, teams])
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [insightMode, setInsightMode] = useState<ProjectInsightMode>('health')
   const [insightFilter, setInsightFilter] = useState<ProjectInsightFilter>(() => projectFilterFromSavedView(sourceView))
@@ -181,7 +191,8 @@ export function ProjectsPage({
   useEffect(() => { const onKey = (event: KeyboardEvent) => { if (!event.altKey || event.metaKey || event.ctrlKey || event.key.toLowerCase() !== 'v' || savedView || creatingView || viewEditor || (event.target as HTMLElement | null)?.closest('input,textarea,[contenteditable=true],[role=textbox]')) return; event.preventDefault(); setViewEditor('create') }; addEventListener('keydown', onKey); return () => removeEventListener('keydown', onKey) }, [creatingView, savedView, viewEditor])
   const projectById = useMemo(() => new Map(projects.map(project => [project.id, project])), [projects])
   const projectLabels = useMemo(() => labelsForResource(labels, 'project', labelGroups), [labelGroups, labels])
-  const projectLabelGroupNames = useMemo(() => new Map(labelGroups.filter(group => group.resourceType === 'project').map(group => [group.id, group.name])), [labelGroups])
+  const projectLabelGroups = useMemo(() => labelGroups.filter(group => group.resourceType === 'project'), [labelGroups])
+  const projectLabelGroupNames = useMemo(() => new Map(projectLabelGroups.map(group => [group.id, group.name])), [projectLabelGroups])
   const availableProjectStatuses = useMemo(() => projectStatuses.length ? projectStatuses : uniqueStatuses(projects.map(project => project.status)), [projectStatuses, projects])
   const statusOptions = useMemo(() => availableProjectStatuses.map((status, index) => ({ color: status.color, label: status.name, shortcut: String(index + 1), statusType: status.type, value: status.name })), [availableProjectStatuses])
   const propertyOptions: ProjectPropertyOptions = useMemo(() => ({
@@ -347,6 +358,7 @@ export function ProjectsPage({
       options={filterOptions}
     />}
     filterCount={projectFilters.length + (insightFilter ? 1 : 0)}
+    displayLabelGroups={projectLabelGroups.map(group => ({ id: group.id, name: group.name }))}
     filterOptions={Object.fromEntries(Object.entries(PROJECT_FILTER_FIELDS).map(([label, field]) => [label, filterOptions[field] ?? []]))}
     onAddFilter={addFilter}
     onChangeDisplay={view.setDisplay}
@@ -438,6 +450,14 @@ export function ProjectsPage({
         onRetry={onRetry}
         onUpdateProject={onUpdateProject ? async (projectId, input) => { await onUpdateProject(projectId, input) } : undefined}
         propertyOptions={propertyOptions}
+        labelGroupProperties={projectLabelGroups.map(group => ({ id: group.id, name: group.name }))}
+        projectMenu={onToggleProjectFavorite && onSetProjectSubscriptionEvents && onCreateProjectReminder ? {
+          isFavorite: projectId => favoriteProjectIds.includes(projectId),
+          subscriptionEvents: projectId => projectSubscriptions.find(subscription => subscription.resourceType === 'project' && subscription.resourceId === projectId)?.events ?? [],
+          onFavoriteChange: onToggleProjectFavorite,
+          onSubscriptionEventsChange: onSetProjectSubscriptionEvents,
+          onCreateReminder: onCreateProjectReminder,
+        } : undefined}
       /></div>
       {sidebarOpen && <ProjectsInsightsSidebar activeFilter={insightFilter} mode={insightMode} onChangeFilter={setInsightFilter} onChangeMode={setInsightMode} projects={items} />}
     </div>
@@ -492,7 +512,9 @@ export function ProjectsPage({
   </ProjectsPageSurface>
 }
 
-function toPageItem(project: Project, href?: string, teams: Team[] = [], latestUpdate?: ProjectUpdate): ProjectPageItem {
+function toPageItem(project: Project, href?: string, teams: Team[] = [], latestUpdate?: ProjectUpdate, initiatives: Initiative[] = [], labels: IssueLabel[] = [], labelGroups: LabelGroup[] = []): ProjectPageItem {
+  const projectLabels = labelsForResource(labels, 'project', labelGroups).filter(label => (project.labelIds ?? []).includes(label.id))
+  const labelsByGroup = Object.fromEntries(labelGroups.filter(group => group.resourceType === 'project').map(group => [group.id, projectLabels.filter(label => label.groupId === group.id).map(label => ({ id: label.id, name: label.name, color: label.color }))]))
   return {
     color: project.color,
     health: ({ onTrack: 'on-track', atRisk: 'at-risk', offTrack: 'off-track', noUpdate: 'no-update' } as const)[project.health],
@@ -512,6 +534,8 @@ function toPageItem(project: Project, href?: string, teams: Team[] = [], latestU
     team: project.teamIds[0] ? teams.find(team => team.id === project.teamIds[0]) : undefined,
     memberIds: project.memberIds,
     labelIds: project.labelIds,
+    initiativeNames: (project.initiatives ?? []).map(id => initiatives.find(initiative => initiative.id === id)?.name).filter((name): name is string => Boolean(name)),
+    labelsByGroup,
     teamIds: project.teamIds,
     rawStartDate: project.startDate,
     rawTargetDate: project.targetDate,
