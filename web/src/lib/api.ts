@@ -1819,6 +1819,12 @@ export function updateIssue(
     body: JSON.stringify(input),
   });
 }
+export function shareIssue(issueId: string): Promise<{ issue: Issue; token: string; url: string }> {
+  return request(`/api/issues/${issueId}/share`, jsonRequest("POST", {}));
+}
+export function unshareIssue(issueId: string): Promise<void> {
+  return request(`/api/issues/${issueId}/share`, { method: "DELETE" });
+}
 export function setIssueReleases(
   issueId: string,
   releaseIds: string[],

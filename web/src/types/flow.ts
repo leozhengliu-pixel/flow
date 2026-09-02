@@ -255,6 +255,8 @@ export interface Issue {
   autoClosedAt?: string;
   canceledAt?: string;
   archivedAt?: string;
+  shareToken?: string;
+  sharedAt?: string;
   team: Team;
   state: WorkflowState;
   assignee?: User;
