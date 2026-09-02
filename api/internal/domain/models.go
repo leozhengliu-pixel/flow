@@ -1705,6 +1705,7 @@ type ProjectMutationInput struct {
 	DependencyIDs        []string `json:"dependencyIds,omitempty"`
 	Initiatives          []string `json:"initiatives,omitempty"`
 	Customers            []string `json:"customers,omitempty"`
+	Milestones           []string `json:"milestones,omitempty"`
 	StartDate            *string  `json:"startDate,omitempty"`
 	StartDateResolution  *string  `json:"startDateResolution,omitempty"`
 	TargetDate           *string  `json:"targetDate,omitempty"`
