@@ -9,6 +9,7 @@ import {
   CircleCheck,
   CircleHelp,
   Copy,
+  ChevronRight,
   Download,
   Folder,
   FolderOpen,
@@ -772,6 +773,20 @@ export function Sidebar({
                         item.resourceType === "team" &&
                         item.resourceId === team.id,
                     )}
+                    subscriptionEvents={data.subscriptions.find(
+                      (item) =>
+                        item.userId === data.viewer.id &&
+                        item.resourceType === "team" &&
+                        item.resourceId === team.id,
+                    )?.events}
+                    onSubscriptionEvents={async (events) => {
+                      if (events.length) {
+                        await addSubscription("team", team.id, events);
+                      } else {
+                        await removeSubscription("team", team.id);
+                      }
+                      await onReload?.();
+                    }}
                     viewerId={data.viewer.id}
                     canLeave={
                       data.teams.filter((item) => !item.retiredAt).length > 1
@@ -1491,6 +1506,19 @@ function Section({
   );
 }
 
+const TEAM_SUBSCRIPTION_OPTIONS = [
+  ["issueAdded", "An issue is added to the team"],
+  ["issueCompleted", "An issue is marked completed or canceled"],
+  ["triage", "An issue is added to the triage queue"],
+  ["pulse", "A team project update is posted"],
+] as const;
+
+function initialTeamSubscriptionEvents(subscribed: boolean, events?: string[]) {
+  if (!subscribed) return [];
+  if (!events?.length) return ["pulse"];
+  return events.map((event) => (event === "updates" ? "pulse" : event));
+}
+
 function TeamNavigation({
   team,
   workspaceSlug,
@@ -1501,6 +1529,8 @@ function TeamNavigation({
   initiativesEnabled,
   favorite: initialFavorite,
   subscribed: initialSubscribed,
+  subscriptionEvents: initialSubscriptionEvents,
+  onSubscriptionEvents,
   viewerId,
   canLeave,
   onNavigate,
@@ -1515,6 +1545,8 @@ function TeamNavigation({
   initiativesEnabled: boolean;
   favorite: boolean;
   subscribed: boolean;
+  subscriptionEvents?: string[];
+  onSubscriptionEvents: (events: string[]) => Promise<void>;
   viewerId: string;
   canLeave: boolean;
   onNavigate: () => void;
@@ -1524,12 +1556,31 @@ function TeamNavigation({
     readExpandedSection(`team.${team.id}`),
   );
   const [favorite, setFavorite] = useState(initialFavorite),
-    [subscribed, setSubscribed] = useState(initialSubscribed),
+    [subscriptionEvents, setSubscriptionEvents] = useState(() =>
+      initialTeamSubscriptionEvents(initialSubscribed, initialSubscriptionEvents),
+    ),
     [query, setQuery] = useState("");
   useEffect(
     () => persistPreference(`flow.sidebar.section.team.${team.id}`, expanded),
     [expanded, team.id],
   );
+  useEffect(() => {
+    setSubscriptionEvents(
+      initialTeamSubscriptionEvents(initialSubscribed, initialSubscriptionEvents),
+    );
+  }, [initialSubscribed, initialSubscriptionEvents, team.id]);
+  const updateSubscriptionEvent = async (event: string, checked: boolean) => {
+    const previous = subscriptionEvents;
+    const next = checked
+      ? [...new Set([...previous, event])]
+      : previous.filter((value) => value !== event);
+    setSubscriptionEvents(next);
+    try {
+      await onSubscriptionEvents(next);
+    } catch {
+      setSubscriptionEvents(previous);
+    }
+  };
   const overviewPath = teamHomePath(workspaceSlug, team.key);
   const onOverview =
     typeof location !== "undefined" && location.pathname === overviewPath;
@@ -1567,7 +1618,7 @@ function TeamNavigation({
               className="sidebar-popover sidebar-team-menu"
               side="right"
               align="start"
-              sideOffset={4}
+              sideOffset={-24}
             >
               <div className="sidebar-team-menu-search">
                 <Search />
@@ -1588,6 +1639,7 @@ function TeamNavigation({
                 >
                   <Star fill={favorite ? "currentColor" : "none"} />
                   <span>{favorite ? "Unfavorite" : "Favorite"}</span>
+                  <kbd>⌥ F</kbd>
                 </DropdownMenu.Item>
               )}
               <DropdownMenu.Separator />
@@ -1609,6 +1661,7 @@ function TeamNavigation({
                 >
                   <Copy />
                   <span>Copy URL</span>
+                  <kbd>⌘ ⇧ ,</kbd>
                 </DropdownMenu.Item>
               )}
               {menuMatches(query, "Open archive") && (
@@ -1621,18 +1674,43 @@ function TeamNavigation({
               )}
               <DropdownMenu.Separator />
               {menuMatches(query, "Subscribe") && (
-                <DropdownMenu.Item
-                  onSelect={() =>
-                    void (
-                      subscribed
-                        ? removeSubscription("team", team.id)
-                        : addSubscription("team", team.id, ["updates"])
-                    ).then(() => setSubscribed((value) => !value))
-                  }
-                >
-                  <Bell />
-                  <span>{subscribed ? "Unsubscribe" : "Subscribe"}</span>
-                </DropdownMenu.Item>
+                <DropdownMenu.Sub>
+                  <DropdownMenu.SubTrigger>
+                    <Bell />
+                    <span>Subscribe</span>
+                    <ChevronRight className="menu-chevron" />
+                  </DropdownMenu.SubTrigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.SubContent
+                      className="sidebar-popover sidebar-team-subscribe-menu"
+                      sideOffset={-2}
+                    >
+                      <DropdownMenu.Label>Inbox notifications</DropdownMenu.Label>
+                      {TEAM_SUBSCRIPTION_OPTIONS.slice(0, 3).map(([event, label]) => (
+                        <DropdownMenu.CheckboxItem
+                          checked={subscriptionEvents.includes(event)}
+                          key={event}
+                          onCheckedChange={(checked) =>
+                            void updateSubscriptionEvent(event, checked)
+                          }
+                          onSelect={(event) => event.preventDefault()}
+                        >
+                          <span>{label}</span>
+                        </DropdownMenu.CheckboxItem>
+                      ))}
+                      <DropdownMenu.Label>Pulse updates</DropdownMenu.Label>
+                      <DropdownMenu.CheckboxItem
+                        checked={subscriptionEvents.includes("pulse")}
+                        onCheckedChange={(checked) =>
+                          void updateSubscriptionEvent("pulse", checked)
+                        }
+                        onSelect={(event) => event.preventDefault()}
+                      >
+                        <span>A team project update is posted</span>
+                      </DropdownMenu.CheckboxItem>
+                    </DropdownMenu.SubContent>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Sub>
               )}
               {menuMatches(query, "Configure Slack notifications") && (
                 <DropdownMenu.Item asChild>
