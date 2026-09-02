@@ -520,6 +520,15 @@ func TestImportRetryAndIntegrationOAuthLifecycle(t *testing.T) {
 	}
 	defer repository.Close()
 	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/token" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"access","refresh_token":"refresh","expires_in":3600}`))
+	}))
+	defer provider.Close()
 	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	team := bootstrap.Teams[0]
 	job := previewImportRequest(t, handler, "retry.csv", "Title,Description\n,missing title\n")
@@ -535,7 +544,7 @@ func TestImportRetryAndIntegrationOAuthLifecycle(t *testing.T) {
 		t.Fatalf("retry did not reset import state: %#v", job)
 	}
 	connection := requestJSON[domain.IntegrationConnection](t, handler, http.MethodPut, "/api/integrations/slack", map[string]any{
-		"config": map[string]string{"authorizationURL": "https://idp.example.test/authorize", "clientID": "flow-client", "redirectURI": "https://flow.example.test/api/integrations/slack/oauth/callback"},
+		"config": map[string]string{"authorizationURL": "https://idp.example.test/authorize", "tokenURL": provider.URL + "/token", "clientID": "flow-client", "redirectURI": "https://flow.example.test/api/integrations/slack/oauth/callback"},
 	}, http.StatusOK)
 	started := requestJSON[map[string]string](t, handler, http.MethodPost, "/api/integrations/slack/oauth/start", nil, http.StatusOK)
 	if started["state"] == "" || !strings.Contains(started["authorizationURL"], "client_id=flow-client") {

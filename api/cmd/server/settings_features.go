@@ -13,7 +13,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -1122,6 +1121,13 @@ func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 	if input.Config == nil {
 		input.Config = map[string]string{}
 	}
+	// OAuth client secrets and provider access tokens must come from the
+	// deployment environment. Persisting them in workspace state would expose
+	// credentials through backups and state exports.
+	if strings.TrimSpace(input.Config["clientSecret"]) != "" || strings.TrimSpace(input.Config["oauthAccessToken"]) != "" || strings.TrimSpace(input.Config["oauthRefreshToken"]) != "" {
+		writeError(w, http.StatusUnprocessableEntity, "clientSecret must be provided through FLOW_INTEGRATION_<PROVIDER>_CLIENT_SECRET or clientSecretEnv")
+		return
+	}
 	secret := strings.TrimSpace(input.Config["apiToken"])
 	if provider == "github" && strings.TrimSpace(input.Config["organization"]) == "" {
 		writeError(w, http.StatusBadRequest, "organization is required")
@@ -1179,17 +1185,31 @@ func (s *server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var result map[string]string
+	var providerConfig integrationOAuthConfig
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_started", provider, nil, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.Provider == provider })
 		if index < 0 {
 			return errNotFound
 		}
 		connection := &data.IntegrationConnections[index]
-		authorizationURL := strings.TrimSpace(connection.Config["authorizationURL"])
-		clientID := strings.TrimSpace(connection.Config["clientID"])
-		redirectURI := strings.TrimSpace(connection.Config["redirectURI"])
+		providerConfig = integrationOAuthConfigFor(provider, connection.Config)
+		authorizationURL := providerConfig.AuthorizationURL
+		clientID := providerConfig.ClientID
+		redirectURI := providerConfig.RedirectURI
 		if authorizationURL == "" || clientID == "" || redirectURI == "" {
-			connection.LastError = "OAuth authorizationURL, clientID, and redirectURI are required"
+			missing := "authorizationURL"
+			if clientID == "" {
+				missing = "clientID"
+			} else if redirectURI == "" {
+				missing = "redirectURI"
+			}
+			connection.LastError = integrationOAuthUnavailable(missing).Error()
+			connection.Status = "error"
+			connection.UpdatedAt = time.Now().UTC()
+			return errInvalid
+		}
+		if integrationEndpoint(authorizationURL) != nil {
+			connection.LastError = "OAuth authorization endpoint is invalid"
 			connection.Status = "error"
 			connection.UpdatedAt = time.Now().UTC()
 			return errInvalid
@@ -1219,7 +1239,7 @@ func (s *server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if err == errInvalid {
-			writeError(w, http.StatusUnprocessableEntity, "OAuth configuration is incomplete")
+			writeError(w, http.StatusServiceUnavailable, "OAuth integration is unavailable; configure provider endpoints and credentials")
 			return
 		}
 		respondMutation(w, err, http.StatusNotFound, nil)
@@ -1251,15 +1271,44 @@ func (s *server) finishIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	snapshot := data.IntegrationConnections[index]
+	oauthConfig := integrationOAuthConfigFor(provider, snapshot.Config)
+	if snapshot.OAuthStartedAt == nil || time.Since(*snapshot.OAuthStartedAt) > 10*time.Minute {
+		_ = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_expired", snapshot.ID, nil, func(next *domain.Bootstrap) error {
+			for i := range next.IntegrationConnections {
+				if next.IntegrationConnections[i].ID == snapshot.ID && next.IntegrationConnections[i].OAuthState == state {
+					next.IntegrationConnections[i].OAuthState = ""
+					next.IntegrationConnections[i].Status = "error"
+					next.IntegrationConnections[i].LastError = "OAuth state expired"
+					next.IntegrationConnections[i].UpdatedAt = time.Now().UTC()
+				}
+			}
+			return nil
+		})
+		writeError(w, http.StatusBadRequest, "OAuth state expired")
+		return
+	}
 	providerError := strings.TrimSpace(r.URL.Query().Get("error"))
+	if providerError == "" && oauthConfig.TokenURL == "" {
+		_ = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_unavailable", snapshot.ID, nil, func(next *domain.Bootstrap) error {
+			for i := range next.IntegrationConnections {
+				if next.IntegrationConnections[i].ID == snapshot.ID && next.IntegrationConnections[i].OAuthState == state {
+					next.IntegrationConnections[i].OAuthState = ""
+					next.IntegrationConnections[i].Status = "error"
+					next.IntegrationConnections[i].LastError = integrationOAuthUnavailable("tokenURL").Error()
+					next.IntegrationConnections[i].UpdatedAt = time.Now().UTC()
+				}
+			}
+			return nil
+		})
+		writeError(w, http.StatusServiceUnavailable, "OAuth integration is unavailable; token endpoint is not configured")
+		return
+	}
 	access, refresh, expiresIn := "", "", int64(0)
 	if providerError == "" && code != "" {
-		if tokenURL := strings.TrimSpace(snapshot.Config["tokenURL"]); tokenURL != "" {
-			var exchangeErr error
-			access, refresh, expiresIn, exchangeErr = exchangeIntegrationToken(r.Context(), tokenURL, snapshot.Config, code, s.authDisabled)
-			if exchangeErr != nil {
-				providerError = exchangeErr.Error()
-			}
+		var exchangeErr error
+		access, refresh, expiresIn, exchangeErr = exchangeIntegrationToken(r.Context(), oauthConfig.TokenURL, oauthConfig, code, s.authDisabled)
+		if exchangeErr != nil {
+			providerError = exchangeErr.Error()
 		}
 	} else if providerError == "" {
 		providerError = "OAuth provider did not return a code"
@@ -1292,19 +1341,24 @@ func (s *server) finishIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 		respondMutation(w, err, http.StatusBadRequest, nil)
 		return
 	}
+	if providerError != "" {
+		status := http.StatusBadGateway
+		if strings.TrimSpace(r.URL.Query().Get("error")) != "" {
+			status = http.StatusBadRequest
+		}
+		writeError(w, status, providerError)
+		return
+	}
 	writeJSON(w, http.StatusOK, result)
 }
 
-func exchangeIntegrationToken(ctx context.Context, tokenURL string, config map[string]string, code string, allowLocal bool) (string, string, int64, error) {
+func exchangeIntegrationToken(ctx context.Context, tokenURL string, config integrationOAuthConfig, code string, allowLocal bool) (string, string, int64, error) {
 	local := allowLocal && safeLocalDevelopmentURL(tokenURL)
 	if !local && !safeOutboundHTTPS(ctx, tokenURL) {
 		return "", "", 0, errors.New("unsafe OAuth token endpoint")
 	}
-	values := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {config["clientID"]}, "redirect_uri": {config["redirectURI"]}}
-	secret := config["clientSecret"]
-	if envName := config["clientSecretEnv"]; strings.HasPrefix(envName, "FLOW_INTEGRATION_") {
-		secret = os.Getenv(envName)
-	}
+	values := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {config.ClientID}, "redirect_uri": {config.RedirectURI}}
+	secret := config.ClientSecret
 	if secret != "" {
 		values.Set("client_secret", secret)
 	}
@@ -1349,29 +1403,34 @@ func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	snapshot := data.IntegrationConnections[index]
-	if snapshot.OAuthRefreshToken == "" || strings.TrimSpace(snapshot.Config["tokenURL"]) == "" {
-		writeError(w, http.StatusBadRequest, "invalid request")
+	oauthConfig := integrationOAuthConfigFor(provider, snapshot.Config)
+	if snapshot.OAuthRefreshToken == "" {
+		writeError(w, http.StatusBadRequest, "OAuth refresh token is not available")
 		return
 	}
-	if !safeOutboundHTTPS(r.Context(), snapshot.Config["tokenURL"]) {
+	if oauthConfig.TokenURL == "" {
+		writeError(w, http.StatusServiceUnavailable, "OAuth integration is unavailable; token endpoint is not configured")
+		return
+	}
+	if !integrationEndpointSafe(r.Context(), oauthConfig.TokenURL, s.authDisabled) {
 		writeError(w, http.StatusUnprocessableEntity, "unsafe OAuth token endpoint")
 		return
 	}
-	values := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {snapshot.OAuthRefreshToken}, "client_id": {snapshot.Config["clientID"]}}
-	secret := snapshot.Config["clientSecret"]
-	if envName := snapshot.Config["clientSecretEnv"]; strings.HasPrefix(envName, "FLOW_INTEGRATION_") {
-		secret = os.Getenv(envName)
+	values := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {snapshot.OAuthRefreshToken}, "client_id": {oauthConfig.ClientID}}
+	if oauthConfig.ClientSecret != "" {
+		values.Set("client_secret", oauthConfig.ClientSecret)
 	}
-	if secret != "" {
-		values.Set("client_secret", secret)
-	}
-	request, requestErr := http.NewRequestWithContext(r.Context(), http.MethodPost, snapshot.Config["tokenURL"], strings.NewReader(values.Encode()))
+	request, requestErr := http.NewRequestWithContext(r.Context(), http.MethodPost, oauthConfig.TokenURL, strings.NewReader(values.Encode()))
 	if requestErr != nil {
 		writeError(w, http.StatusBadGateway, requestErr.Error())
 		return
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	response, exchangeErr := secureOutboundClient(15 * time.Second).Do(request)
+	client := secureOutboundClient(15 * time.Second)
+	if s.authDisabled && safeLocalDevelopmentURL(oauthConfig.TokenURL) {
+		client = &http.Client{Timeout: 15 * time.Second}
+	}
+	response, exchangeErr := client.Do(request)
 	if exchangeErr != nil {
 		writeError(w, http.StatusBadGateway, exchangeErr.Error())
 		return
@@ -1379,7 +1438,9 @@ func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request)
 	defer response.Body.Close()
 	body, readErr := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	if readErr != nil || response.StatusCode < 200 || response.StatusCode >= 300 {
-		writeError(w, http.StatusBadGateway, fmt.Sprintf("OAuth refresh returned HTTP %d", response.StatusCode))
+		message := fmt.Sprintf("OAuth refresh returned HTTP %d", response.StatusCode)
+		persistOAuthIntegrationError(s, r, provider, id, message)
+		writeError(w, http.StatusBadGateway, message)
 		return
 	}
 	var payload struct {
@@ -1388,6 +1449,7 @@ func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request)
 		ExpiresIn    int64  `json:"expires_in"`
 	}
 	if json.Unmarshal(body, &payload) != nil || payload.AccessToken == "" {
+		persistOAuthIntegrationError(s, r, provider, id, "OAuth refresh response did not include access_token")
 		writeError(w, http.StatusBadGateway, "OAuth refresh response did not include access_token")
 		return
 	}
@@ -1429,18 +1491,31 @@ func (s *server) revokeIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	snapshot := data.IntegrationConnections[index]
-	if revokeURL := strings.TrimSpace(snapshot.Config["revokeURL"]); revokeURL != "" && snapshot.OAuthAccessToken != "" {
-		if !safeOutboundHTTPS(r.Context(), revokeURL) {
+	oauthConfig := integrationOAuthConfigFor(provider, snapshot.Config)
+	revocationToken := snapshot.OAuthAccessToken
+	if revocationToken == "" {
+		revocationToken = snapshot.OAuthRefreshToken
+	}
+	if revocationToken != "" {
+		if oauthConfig.RevokeURL == "" {
+			writeError(w, http.StatusServiceUnavailable, "OAuth integration is unavailable; revoke endpoint is not configured")
+			return
+		}
+		if !integrationEndpointSafe(r.Context(), oauthConfig.RevokeURL, s.authDisabled) {
 			writeError(w, http.StatusUnprocessableEntity, "unsafe OAuth revocation endpoint")
 			return
 		}
-		request, requestErr := http.NewRequestWithContext(r.Context(), http.MethodPost, revokeURL, strings.NewReader(url.Values{"token": {snapshot.OAuthAccessToken}}.Encode()))
+		request, requestErr := http.NewRequestWithContext(r.Context(), http.MethodPost, oauthConfig.RevokeURL, strings.NewReader(url.Values{"token": {revocationToken}, "client_id": {oauthConfig.ClientID}}.Encode()))
 		if requestErr != nil {
 			writeError(w, http.StatusBadGateway, requestErr.Error())
 			return
 		}
 		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		response, callErr := secureOutboundClient(15 * time.Second).Do(request)
+		client := secureOutboundClient(15 * time.Second)
+		if s.authDisabled && safeLocalDevelopmentURL(oauthConfig.RevokeURL) {
+			client = &http.Client{Timeout: 15 * time.Second}
+		}
+		response, callErr := client.Do(request)
 		if callErr != nil || response.StatusCode < 200 || response.StatusCode >= 300 {
 			if response != nil {
 				response.Body.Close()
@@ -1482,6 +1557,10 @@ func (s *server) updateIntegration(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	if _, ok := input.Config["clientSecret"]; ok && strings.TrimSpace(input.Config["clientSecret"]) != "" {
+		writeError(w, http.StatusUnprocessableEntity, "clientSecret must be provided through FLOW_INTEGRATION_<PROVIDER>_CLIENT_SECRET or clientSecretEnv")
+		return
+	}
 	var updated domain.IntegrationConnection
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.updated", id, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
@@ -1496,7 +1575,7 @@ func (s *server) updateIntegration(w http.ResponseWriter, r *http.Request) {
 			updated.Name = strings.TrimSpace(*input.Name)
 		}
 		for key, value := range input.Config {
-			if key != "apiToken" {
+			if key != "apiToken" && key != "clientSecret" && key != "oauthAccessToken" && key != "oauthRefreshToken" {
 				updated.Config[key] = strings.TrimSpace(value)
 			}
 		}
