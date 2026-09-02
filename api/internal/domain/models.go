@@ -350,6 +350,8 @@ type Issue struct {
 	AutoClosedAt       *time.Time          `json:"autoClosedAt,omitempty"`
 	CanceledAt         *time.Time          `json:"canceledAt,omitempty"`
 	ArchivedAt         *time.Time          `json:"archivedAt,omitempty"`
+	ShareToken         string              `json:"shareToken,omitempty"`
+	SharedAt           *time.Time          `json:"sharedAt,omitempty"`
 	Team               Team                `json:"team"`
 	State              WorkflowState       `json:"state"`
 	Assignee           *User               `json:"assignee,omitempty"`

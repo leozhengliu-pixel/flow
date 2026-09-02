@@ -332,7 +332,7 @@ func (s *server) scimGroups(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSON(w, r, &input) {
 			return
 		}
-		role := scimGroupRole(s.workspaceData(r).WorkspaceSettings, input.DisplayName)
+		role := scimGroupRole(s.scimWorkspaceSettings(workspaceKey), input.DisplayName)
 		group, err := s.store.CreateSCIMGroup(r.Context(), workspaceID, input.ExternalID, input.DisplayName, role)
 		if err != nil {
 			writeError(w, http.StatusUnprocessableEntity, err.Error())
@@ -415,7 +415,7 @@ func (s *server) scimGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	role := group.Role
 	if input.DisplayName != "" {
-		role = scimGroupRole(s.workspaceData(r).WorkspaceSettings, input.DisplayName)
+		role = scimGroupRole(s.scimWorkspaceSettings(workspaceKey), input.DisplayName)
 	}
 	updated, err := s.store.UpdateSCIMGroup(r.Context(), workspaceID, group.ID, input.ExternalID, input.DisplayName, role)
 	if err != nil {
@@ -442,6 +442,11 @@ func (s *server) scimGroup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, scimGroupResourceFromStore(workspaceKey, updated))
+}
+
+func (s *server) scimWorkspaceSettings(workspaceKey string) domain.WorkspaceSettings {
+	data, _ := s.store.BootstrapFor(workspaceKey)
+	return data.WorkspaceSettings
 }
 
 // scimTeamForGroup resolves an explicit workspace mapping, or a group whose
