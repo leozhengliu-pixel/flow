@@ -2455,6 +2455,16 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+		for _, name := range input.Milestones {
+			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
+			created.Milestones = append(created.Milestones, domain.ProjectMilestone{
+				ID: fmt.Sprintf("project_milestone_%d", time.Now().UnixNano()), ProjectID: created.ID,
+				Name: name, CreatedAt: now, UpdatedAt: now,
+			})
+		}
 		data.Projects = append([]domain.Project{created}, data.Projects...)
 		if input.TemplateID != "" {
 			if index := slices.IndexFunc(data.ProjectTemplates, func(template domain.ProjectTemplate) bool { return template.ID == input.TemplateID }); index >= 0 {

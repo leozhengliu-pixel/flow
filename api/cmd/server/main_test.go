@@ -1030,6 +1030,13 @@ func TestProjectLifecycle(t *testing.T) {
 	if created.ID == "" || created.Name != "Project API test" || created.Icon != "Project" || created.Priority != 2 || created.Lead == nil {
 		t.Fatalf("project create failed: %#v", created)
 	}
+	createdWithMilestone := requestJSON[domain.Project](t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"name": "Project milestone create test", "teamIds": []string{"team_test"},
+		"milestones": []string{"Launch", "  ", "Ship"}, "targetDate": "2026-09-30", "targetDateResolution": "month",
+	}, http.StatusCreated)
+	if len(createdWithMilestone.Milestones) != 2 || createdWithMilestone.Milestones[0].Name != "Launch" || createdWithMilestone.Milestones[1].Name != "Ship" || createdWithMilestone.TargetDateResolution != "month" {
+		t.Fatalf("project create milestones failed: %#v", createdWithMilestone.Milestones)
+	}
 
 	updated := requestJSON[domain.Project](t, handler, http.MethodPatch, "/api/projects/"+created.ID, map[string]any{
 		"name": "Updated project", "health": "atRisk", "targetDate": "2026-09-30", "statusId": "ps_planned",
