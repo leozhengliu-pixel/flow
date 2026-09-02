@@ -36,13 +36,17 @@ type scimListResponse struct {
 }
 
 type scimGroupResource struct {
-	Schemas     []string `json:"schemas"`
-	ID          string   `json:"id,omitempty"`
-	DisplayName string   `json:"displayName"`
-	Members     []struct {
-		Value string `json:"value"`
-		Ref   string `json:"$ref,omitempty"`
-	} `json:"members,omitempty"`
+	Schemas     []string          `json:"schemas"`
+	ID          string            `json:"id,omitempty"`
+	ExternalID  string            `json:"externalId,omitempty"`
+	DisplayName string            `json:"displayName"`
+	Members     []scimGroupMember `json:"members,omitempty"`
+	Meta        map[string]string `json:"meta,omitempty"`
+}
+
+type scimGroupMember struct {
+	Value string `json:"value"`
+	Ref   string `json:"$ref,omitempty"`
 }
 
 func (s *server) listSCIMTokens(w http.ResponseWriter, r *http.Request) {
@@ -65,6 +69,10 @@ func (s *server) createSCIMToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := s.workspaceData(r)
+	if !strings.EqualFold(data.WorkspaceSettings.Plan, "enterprise") {
+		writeError(w, http.StatusForbidden, "SCIM provisioning requires an Enterprise workspace")
+		return
+	}
 	item, err := s.store.CreateSCIMToken(r.Context(), data.Workspace.ID, input.Name)
 	if err == nil {
 		// Token issuance enables the SCIM surface for this workspace. The
@@ -123,6 +131,10 @@ func (s *server) authenticateSCIMRequest(w http.ResponseWriter, r *http.Request)
 	}
 	if !data.WorkspaceSettings.SCIMEnabled {
 		writeError(w, http.StatusForbidden, "SCIM provisioning is disabled")
+		return "", "", false
+	}
+	if !strings.EqualFold(data.WorkspaceSettings.Plan, "enterprise") {
+		writeError(w, http.StatusForbidden, "SCIM provisioning requires an Enterprise workspace")
 		return "", "", false
 	}
 	return workspaceKey, workspaceID, true
@@ -311,29 +323,137 @@ func (s *server) scimUser(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) scimGroups(w http.ResponseWriter, r *http.Request) {
 	workspaceKey, workspaceID, ok := s.authenticateSCIMRequest(w, r)
-	if !ok || r.Method != http.MethodGet {
-		if ok && r.Method != http.MethodGet {
-			writeError(w, http.StatusNotImplemented, "SCIM group provisioning is not supported")
+	if !ok {
+		return
+	}
+	if r.Method == http.MethodPost {
+		var input scimGroupResource
+		if !decodeJSON(w, r, &input) {
+			return
 		}
+		role := scimGroupRole(s.workspaceData(r).WorkspaceSettings, input.DisplayName)
+		group, err := s.store.CreateSCIMGroup(r.Context(), workspaceID, input.ExternalID, input.DisplayName, role)
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		members := make([]string, 0, len(input.Members))
+		for _, member := range input.Members {
+			if strings.TrimSpace(member.Value) != "" {
+				members = append(members, strings.TrimSpace(member.Value))
+			}
+		}
+		if _, err = s.store.ReplaceSCIMGroupMembers(r.Context(), workspaceID, group.ID, members); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		group, _ = s.store.SCIMGroup(r.Context(), workspaceID, group.ID)
+		resource := scimGroupResourceFromStore(workspaceKey, group)
+		w.Header().Set("Location", "/scim/v2/"+workspaceKey+"/Groups/"+group.ID)
+		writeJSON(w, http.StatusCreated, resource)
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "SCIM group method is not supported")
 		return
 	}
 	data, _ := s.store.BootstrapFor(workspaceKey)
-	resources := make([]scimGroupResource, 0, len(data.Teams))
+	groups, _ := s.store.ListSCIMGroups(r.Context(), workspaceID)
+	resources := make([]scimGroupResource, 0, len(data.Teams)+len(groups))
 	teamMembers, _ := s.store.ListTeamMembers(r.Context(), workspaceID)
 	for _, team := range data.Teams {
-		resource := scimGroupResource{Schemas: []string{"urn:ietf:params:scim:schemas:core:2.0:Group"}, ID: team.ID, DisplayName: team.Name}
+		resource := scimGroupResource{Schemas: []string{"urn:ietf:params:scim:schemas:core:2.0:Group"}, ID: team.ID, DisplayName: team.Name, Meta: map[string]string{"resourceType": "Team"}}
 		for _, member := range teamMembers {
 			if member.TeamID != team.ID {
 				continue
 			}
-			resource.Members = append(resource.Members, struct {
-				Value string `json:"value"`
-				Ref   string `json:"$ref,omitempty"`
-			}{Value: member.UserID, Ref: fmt.Sprintf("/scim/v2/%s/Users/%s", workspaceKey, member.UserID)})
+			resource.Members = append(resource.Members, scimGroupMember{Value: member.UserID, Ref: fmt.Sprintf("/scim/v2/%s/Users/%s", workspaceKey, member.UserID)})
 		}
 		resources = append(resources, resource)
 	}
+	for _, group := range groups {
+		resources = append(resources, scimGroupResourceFromStore(workspaceKey, group))
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"schemas": []string{"urn:ietf:params:scim:api:messages:2.0:ListResponse"}, "totalResults": len(resources), "startIndex": 1, "itemsPerPage": len(resources), "Resources": resources})
+}
+
+func (s *server) scimGroup(w http.ResponseWriter, r *http.Request) {
+	workspaceKey, workspaceID, ok := s.authenticateSCIMRequest(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	group, err := s.store.SCIMGroup(r.Context(), workspaceID, id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "SCIM group not found")
+		return
+	}
+	if r.Method == http.MethodGet {
+		writeJSON(w, http.StatusOK, scimGroupResourceFromStore(workspaceKey, group))
+		return
+	}
+	if r.Method == http.MethodDelete {
+		respondMutation(w, s.store.DeleteSCIMGroup(r.Context(), workspaceID, group.ID), http.StatusNoContent, nil)
+		return
+	}
+	var input scimGroupResource
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	role := group.Role
+	if input.DisplayName != "" {
+		role = scimGroupRole(s.workspaceData(r).WorkspaceSettings, input.DisplayName)
+	}
+	updated, err := s.store.UpdateSCIMGroup(r.Context(), workspaceID, group.ID, input.ExternalID, input.DisplayName, role)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	if input.Members != nil {
+		members := make([]string, 0, len(input.Members))
+		for _, member := range input.Members {
+			if strings.TrimSpace(member.Value) != "" {
+				members = append(members, strings.TrimSpace(member.Value))
+			}
+		}
+		updated, err = s.store.ReplaceSCIMGroupMembers(r.Context(), workspaceID, updated.ID, members)
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, scimGroupResourceFromStore(workspaceKey, updated))
+}
+
+func scimGroupResourceFromStore(workspaceKey string, group store.SCIMGroup) scimGroupResource {
+	resource := scimGroupResource{Schemas: []string{"urn:ietf:params:scim:schemas:core:2.0:Group"}, ID: group.ID, ExternalID: group.ExternalID, DisplayName: group.DisplayName, Meta: map[string]string{"resourceType": "Group"}}
+	for _, member := range group.Members {
+		value := member.ExternalID
+		if value == "" {
+			value = member.UserID
+		}
+		resource.Members = append(resource.Members, scimGroupMember{Value: value, Ref: fmt.Sprintf("/scim/v2/%s/Users/%s", workspaceKey, member.UserID)})
+	}
+	return resource
+}
+
+func scimGroupRole(settings domain.WorkspaceSettings, displayName string) string {
+	name := strings.ToLower(strings.TrimSpace(displayName))
+	for role, configured := range settings.SCIMRoleGroups {
+		if strings.EqualFold(strings.TrimSpace(configured), displayName) {
+			return strings.ToLower(strings.TrimSpace(role))
+		}
+	}
+	switch name {
+	case "linear-owners":
+		return "owner"
+	case "linear-admins":
+		return "admin"
+	case "linear-guests":
+		return "guest"
+	default:
+		return ""
+	}
 }
 
 func parseSCIMFilter(value string) string {
