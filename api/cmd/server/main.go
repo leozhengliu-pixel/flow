@@ -362,6 +362,17 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/identity-providers/{id}", s.updateIdentityProvider)
 	mux.HandleFunc("DELETE /api/identity-providers/{id}", s.deleteIdentityProvider)
 	mux.HandleFunc("POST /api/identity-providers/{id}/verify", s.verifyIdentityProvider)
+	mux.HandleFunc("GET /api/scim/tokens", s.listSCIMTokens)
+	mux.HandleFunc("POST /api/scim/tokens", s.createSCIMToken)
+	mux.HandleFunc("DELETE /api/scim/tokens/{id}", s.revokeSCIMToken)
+	mux.HandleFunc("GET /scim/v2/{workspace}/ServiceProviderConfig", s.scimServiceProviderConfig)
+	mux.HandleFunc("GET /scim/v2/{workspace}/Users", s.scimUsers)
+	mux.HandleFunc("POST /scim/v2/{workspace}/Users", s.scimUsers)
+	mux.HandleFunc("GET /scim/v2/{workspace}/Users/{id}", s.scimUser)
+	mux.HandleFunc("PUT /scim/v2/{workspace}/Users/{id}", s.scimUser)
+	mux.HandleFunc("PATCH /scim/v2/{workspace}/Users/{id}", s.scimUser)
+	mux.HandleFunc("DELETE /scim/v2/{workspace}/Users/{id}", s.scimUser)
+	mux.HandleFunc("GET /scim/v2/{workspace}/Groups", s.scimGroups)
 	mux.HandleFunc("PUT /api/integrations/{provider}", s.connectIntegration)
 	mux.HandleFunc("POST /api/integrations/{provider}/oauth/start", s.startIntegrationOAuth)
 	mux.HandleFunc("GET /api/integrations/{provider}/oauth/callback", s.finishIntegrationOAuth)
@@ -636,7 +647,7 @@ func (s *server) withStaticFiles(next http.Handler) http.Handler {
 	}
 	files := http.FileServer(http.Dir(s.staticPath))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/uploads/") || strings.HasPrefix(r.URL.Path, "/.well-known/oauth-") || r.URL.Path == "/mcp" || r.URL.Path == "/mcp/readonly" || r.URL.Path == "/oauth/register" || r.URL.Path == "/oauth/token" || r.URL.Path == "/oauth/revoke" {
+		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/scim/") || strings.HasPrefix(r.URL.Path, "/uploads/") || strings.HasPrefix(r.URL.Path, "/.well-known/oauth-") || r.URL.Path == "/mcp" || r.URL.Path == "/mcp/readonly" || r.URL.Path == "/oauth/register" || r.URL.Path == "/oauth/token" || r.URL.Path == "/oauth/revoke" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -810,8 +821,28 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	allowed := func(id string) bool { return slices.Contains(key.TeamIDs, id) }
 	data.Teams = slices.DeleteFunc(data.Teams, func(item domain.Team) bool { return !allowed(item.ID) })
 	data.States = slices.DeleteFunc(data.States, func(item domain.WorkflowState) bool { return item.TeamID != "" && !allowed(item.TeamID) })
-	data.Labels = slices.DeleteFunc(data.Labels, func(item domain.IssueLabel) bool { return item.Scope != "" && !allowed(item.Scope) })
+	data.Labels = slices.DeleteFunc(data.Labels, func(item domain.IssueLabel) bool {
+		scope := strings.ToLower(strings.TrimSpace(item.Scope))
+		return scope != "" && scope != "workspace" && !allowed(item.Scope)
+	})
+	visibleLabel := func(id string) bool {
+		return slices.ContainsFunc(data.Labels, func(item domain.IssueLabel) bool { return item.ID == id })
+	}
+	data.LabelGroups = slices.DeleteFunc(data.LabelGroups, func(item domain.LabelGroup) bool {
+		return item.Scope != "" && item.Scope != "workspace" && !allowed(item.Scope)
+	})
+	visibleLabelGroup := func(id string) bool {
+		return slices.ContainsFunc(data.LabelGroups, func(item domain.LabelGroup) bool { return item.ID == id })
+	}
+	for index := range data.Labels {
+		if data.Labels[index].GroupID != "" && !visibleLabelGroup(data.Labels[index].GroupID) {
+			data.Labels[index].GroupID = ""
+		}
+	}
 	data.Issues = slices.DeleteFunc(data.Issues, func(item domain.Issue) bool { return !allowed(item.Team.ID) })
+	for index := range data.Issues {
+		data.Issues[index].Labels = slices.DeleteFunc(data.Issues[index].Labels, func(label domain.IssueLabel) bool { return !visibleLabel(label.ID) })
+	}
 	visibleIssue := func(id string) bool {
 		return slices.ContainsFunc(data.Issues, func(item domain.Issue) bool { return item.ID == id })
 	}
@@ -820,6 +851,9 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	visibleProject := func(id string) bool {
 		return slices.ContainsFunc(data.Projects, func(item domain.Project) bool { return item.ID == id })
 	}
+	data.ProjectRelations = slices.DeleteFunc(data.ProjectRelations, func(relation domain.ProjectRelation) bool {
+		return !visibleProject(relation.ProjectID) || !visibleProject(relation.RelatedProjectID)
+	})
 	data.IssueTemplates = slices.DeleteFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool { return item.TeamID != "" && !allowed(item.TeamID) })
 	data.ProjectTemplates = slices.DeleteFunc(data.ProjectTemplates, func(item domain.ProjectTemplate) bool {
 		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, allowed)
@@ -830,6 +864,35 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 		if !visibleIssue(id) && !visibleProject(id) && !slices.ContainsFunc(data.Documents, func(item domain.Document) bool { return item.ID == id || item.SlugID == id }) {
 			delete(data.Comments, id)
 		}
+	}
+	for index := range data.Issues {
+		issue := &data.Issues[index]
+		if issue.ParentID != nil && !visibleIssue(*issue.ParentID) {
+			issue.ParentID = nil
+		}
+		issue.SubIssueIDs = slices.DeleteFunc(issue.SubIssueIDs, func(id string) bool { return !visibleIssue(id) })
+		issue.Relations = slices.DeleteFunc(issue.Relations, func(relation domain.IssueRelation) bool { return !visibleIssue(relation.RelatedIssueID) })
+		if issue.Project != nil && !visibleProject(issue.Project.ID) {
+			issue.Project = nil
+		}
+	}
+	data.Reviews = slices.DeleteFunc(data.Reviews, func(review domain.CodeReview) bool {
+		if len(review.IssueIDs) == 0 {
+			return false
+		}
+		return !slices.ContainsFunc(review.IssueIDs, visibleIssue)
+	})
+	for index := range data.Reviews {
+		data.Reviews[index].IssueIDs = slices.DeleteFunc(data.Reviews[index].IssueIDs, func(id string) bool { return !visibleIssue(id) })
+		data.Reviews[index].TeamReviewers = slices.DeleteFunc(data.Reviews[index].TeamReviewers, func(id string) bool { return !allowed(id) })
+	}
+	data.IssueSLAs = slices.DeleteFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return !visibleIssue(item.IssueID) })
+	data.SLAEvents = slices.DeleteFunc(data.SLAEvents, func(item domain.SLAEvent) bool { return !visibleIssue(item.IssueID) })
+	data.SLARules = slices.DeleteFunc(data.SLARules, func(item domain.SLARule) bool {
+		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, allowed)
+	})
+	for index := range data.SLARules {
+		data.SLARules[index].TeamIDs = slices.DeleteFunc(data.SLARules[index].TeamIDs, func(id string) bool { return !allowed(id) })
 	}
 	data.TeamMembers = slices.DeleteFunc(data.TeamMembers, func(item domain.TeamMember) bool { return !allowed(item.TeamID) })
 	for id := range data.TeamSettings {
@@ -850,6 +913,42 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	})
 	data.Asks = slices.DeleteFunc(data.Asks, func(item domain.Ask) bool { return item.TeamID != "" && !allowed(item.TeamID) })
 	data.Initiatives = slices.DeleteFunc(data.Initiatives, func(item domain.Initiative) bool { return !slices.ContainsFunc(item.ProjectIDs, visibleProject) })
+	visibleInitiative := func(id string) bool {
+		return slices.ContainsFunc(data.Initiatives, func(item domain.Initiative) bool { return item.ID == id })
+	}
+	data.InitiativeRelations = slices.DeleteFunc(data.InitiativeRelations, func(relation domain.InitiativeRelation) bool {
+		return !visibleInitiative(relation.InitiativeID) || !visibleInitiative(relation.RelatedInitiativeID)
+	})
+	visibleResource := func(kind, id string) bool {
+		switch kind {
+		case "issue":
+			return visibleIssue(id)
+		case "project":
+			return visibleProject(id)
+		case "initiative":
+			return visibleInitiative(id)
+		case "document":
+			return slices.ContainsFunc(data.Documents, func(item domain.Document) bool { return item.ID == id || item.SlugID == id })
+		case "team":
+			return allowed(id)
+		case "cycle":
+			return slices.ContainsFunc(data.Cycles, func(item domain.Cycle) bool { return item.ID == id })
+		case "release":
+			return slices.ContainsFunc(data.Releases, func(item domain.Release) bool { return item.ID == id })
+		case "release_pipeline":
+			return slices.ContainsFunc(data.ReleasePipelines, func(item domain.ReleasePipeline) bool { return item.ID == id })
+		case "customer":
+			return slices.ContainsFunc(data.Customers, func(item domain.Customer) bool { return item.ID == id })
+		case "view":
+			return slices.ContainsFunc(data.SavedViews, func(item domain.SavedView) bool { return item.ID == id || item.SlugID == id })
+		case "dashboard":
+			return slices.ContainsFunc(settingCollection[domain.Dashboard](*data, dashboardsSettingsKey), func(item domain.Dashboard) bool { return item.ID == id })
+		default:
+			return false
+		}
+	}
+	data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool { return !visibleResource(item.ResourceType, item.ResourceID) })
+	data.Subscriptions = slices.DeleteFunc(data.Subscriptions, func(item domain.Subscription) bool { return !visibleResource(item.ResourceType, item.ResourceID) })
 	data.Webhooks = slices.DeleteFunc(data.Webhooks, func(item domain.Webhook) bool {
 		if item.TeamRestriction == "" || item.TeamRestriction == "all" {
 			return false
