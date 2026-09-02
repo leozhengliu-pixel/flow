@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -620,6 +622,9 @@ func (s *server) processIntegrationDelivery(ctx context.Context, workspace, id s
 		return domain.IntegrationDelivery{}, errNotFound
 	}
 	snapshot := data.IntegrationDeliveries[deliveryIndex]
+	if snapshot.Status != "pending" && snapshot.Status != "failed" {
+		return domain.IntegrationDelivery{}, fmt.Errorf("%w: delivery is not retryable", errConflict)
+	}
 	if snapshot.Attempts >= 8 {
 		return domain.IntegrationDelivery{}, fmt.Errorf("%w: delivery retry limit reached", errConflict)
 	}
@@ -629,7 +634,7 @@ func (s *server) processIntegrationDelivery(ctx context.Context, workspace, id s
 	}
 	connectionSnapshot := data.IntegrationConnections[connectionIndex]
 	endpoint := strings.TrimSpace(connectionSnapshot.Config["deliveryURL"])
-	if !safeOutboundHTTPS(ctx, endpoint) {
+	if !integrationEndpointSafe(ctx, endpoint, s.authDisabled) {
 		return domain.IntegrationDelivery{}, fmt.Errorf("%w: delivery URL must be a public HTTPS endpoint", errInvalid)
 	}
 	claimErr := s.store.MutateWorkspace(ctx, workspace, "integration_delivery.claimed", id, nil, func(current *domain.Bootstrap) error {
@@ -662,12 +667,41 @@ func (s *server) processIntegrationDelivery(ctx context.Context, workspace, id s
 		return domain.IntegrationDelivery{}, fmt.Errorf("%w: invalid delivery request", errInvalid)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	// Sign outbound deliveries when a deployment secret is configured. The
+	// timestamp and delivery id are part of the signed envelope so receivers
+	// can reject replays while retaining idempotent retries.
+	deliverySecret := strings.TrimSpace(connectionSnapshot.Config["deliverySecret"])
+	if envName := strings.TrimSpace(connectionSnapshot.Config["deliverySecretEnv"]); strings.HasPrefix(envName, "FLOW_INTEGRATION_") {
+		deliverySecret = strings.TrimSpace(os.Getenv(envName))
+	}
+	if deliverySecret == "" {
+		for _, suffix := range []string{"DELIVERY_SECRET", "WEBHOOK_SECRET"} {
+			if value := strings.TrimSpace(os.Getenv("FLOW_INTEGRATION_" + strings.ToUpper(connectionSnapshot.Provider) + "_" + suffix)); value != "" {
+				deliverySecret = value
+				break
+			}
+		}
+	}
+	if deliverySecret != "" {
+		timestamp := fmt.Sprint(time.Now().UTC().Unix())
+		envelope := timestamp + "." + string(snapshot.Payload)
+		mac := hmac.New(sha256.New, []byte(deliverySecret))
+		_, _ = mac.Write([]byte(envelope))
+		req.Header.Set("X-Flow-Timestamp", timestamp)
+		req.Header.Set("X-Flow-Delivery", snapshot.ID)
+		req.Header.Set("X-Flow-Event", snapshot.EventType)
+		req.Header.Set("X-Flow-Signature-256", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+	}
 	if envName := connectionSnapshot.Config["deliveryTokenEnv"]; strings.HasPrefix(envName, "FLOW_INTEGRATION_") {
 		if token := os.Getenv(envName); token != "" {
 			req.Header.Set("Authorization", "Bearer "+token)
 		}
 	}
-	resp, callErr := secureOutboundClient(10 * time.Second).Do(req)
+	client := secureOutboundClient(10 * time.Second)
+	if s.authDisabled && safeLocalDevelopmentURL(endpoint) {
+		client = &http.Client{Timeout: 10 * time.Second}
+	}
+	resp, callErr := client.Do(req)
 	status, lastError := "delivered", ""
 	if callErr != nil {
 		status, lastError = "failed", truncateSecurityError(callErr.Error())

@@ -20,6 +20,10 @@ import (
 
 func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 	provider := r.PathValue("provider")
+	if provider == "slack" {
+		s.slackWebhook(w, r)
+		return
+	}
 	if provider != "github" && provider != "gitlab" {
 		writeError(w, http.StatusNotFound, "unsupported provider")
 		return
@@ -144,6 +148,96 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"reviewId": updated.ID, "eventId": eventID})
+}
+
+func (s *server) slackWebhook(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 5<<20)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "could not read webhook")
+		return
+	}
+	connection := s.webhookConnection(r, "slack")
+	if connection == nil || !verifySlackWebhook(connection, r, body) {
+		writeError(w, http.StatusUnauthorized, "invalid webhook signature")
+		return
+	}
+	var event struct {
+		Type      string `json:"type"`
+		Challenge string `json:"challenge"`
+		EventID   string `json:"event_id"`
+		TeamID    string `json:"team_id"`
+		Event     struct {
+			Type string `json:"type"`
+			User string `json:"user"`
+			Text string `json:"text"`
+		} `json:"event"`
+	}
+	if err := json.Unmarshal(body, &event); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid webhook payload")
+		return
+	}
+	if event.Type == "url_verification" {
+		if strings.TrimSpace(event.Challenge) == "" {
+			writeError(w, http.StatusBadRequest, "challenge is required")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"challenge": event.Challenge})
+		return
+	}
+	eventID := strings.TrimSpace(event.EventID)
+	if eventID == "" {
+		eventID = strings.TrimSpace(r.Header.Get("X-Slack-Request-Timestamp")) + ":" + fmt.Sprintf("%x", sha256.Sum256(body))
+	}
+	now := time.Now().UTC()
+	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "slack.webhook", eventID, map[string]string{"eventType": event.Event.Type}, func(data *domain.Bootstrap) error {
+		for i := range data.IntegrationConnections {
+			if data.IntegrationConnections[i].Provider == "slack" {
+				data.IntegrationConnections[i].LastWebhookAt = &now
+				data.IntegrationConnections[i].LastError = ""
+			}
+		}
+		if slices.ContainsFunc(data.Notifications, func(item domain.Notification) bool { return item.SourceID == eventID }) {
+			return nil
+		}
+		actor := data.Viewer
+		data.Notifications = append(data.Notifications, domain.Notification{ID: fmt.Sprintf("notification_slack_%d", now.UnixNano()), RecipientID: actor.ID, Type: "integration", SourceType: "integration", SourceID: eventID, Actor: actor, Category: "integrations", GroupKey: "slack:" + event.TeamID, OccurrenceCount: 1, LatestActorIDs: []string{actor.ID}, CreatedAt: now, UpdatedAt: now})
+		return nil
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not persist webhook")
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"eventId": eventID})
+}
+
+func verifySlackWebhook(connection *domain.IntegrationConnection, r *http.Request, body []byte) bool {
+	secret := strings.TrimSpace(connection.Config["signingSecret"])
+	if envName := strings.TrimSpace(connection.Config["signingSecretEnv"]); strings.HasPrefix(envName, "FLOW_INTEGRATION_") {
+		secret = strings.TrimSpace(os.Getenv(envName))
+	}
+	if secret == "" {
+		secret = strings.TrimSpace(os.Getenv("FLOW_INTEGRATION_SLACK_SIGNING_SECRET"))
+	}
+	timestamp := strings.TrimSpace(r.Header.Get("X-Slack-Request-Timestamp"))
+	if secret == "" || timestamp == "" {
+		return false
+	}
+	seconds, err := strconv.ParseInt(timestamp, 10, 64)
+	if err != nil || absInt64(time.Now().Unix()-seconds) > 300 {
+		return false
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte("v0:" + timestamp + ":" + string(body)))
+	want := "v0=" + hex.EncodeToString(mac.Sum(nil))
+	return hmac.Equal([]byte(want), []byte(strings.TrimSpace(r.Header.Get("X-Slack-Signature"))))
+}
+
+func absInt64(value int64) int64 {
+	if value < 0 {
+		return -value
+	}
+	return value
 }
 
 func inferredReviewIssueIDs(data *domain.Bootstrap, review domain.CodeReview) []string {
