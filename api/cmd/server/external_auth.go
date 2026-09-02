@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"flow/api/internal/config"
+	"flow/api/internal/domain"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/crewjam/saml/samlsp"
@@ -278,11 +279,27 @@ func (s *server) finishSAML(w http.ResponseWriter, r *http.Request) {
 	values := attributes.GetAttributes()
 	email := firstAttribute(values, "email", "mail", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress")
 	name := firstAttribute(values, "name", "displayName", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name")
-	if email == "" || !allowedExternalEmail(email, s.externalAuth.config.AllowedDomains) {
+	subject := firstAttribute(values, "uid", "employeeNumber", "employeeId", "userName", "username", "nameID", "nameid", "subject")
+	if subject == "" {
+		subject = email
+	}
+	if subject == "" || email != "" && !allowedExternalEmail(email, s.externalAuth.config.AllowedDomains) {
 		writeError(w, http.StatusForbidden, "SAML identity is not allowed")
 		return
 	}
-	flowSession, token, err := s.store.LoginExternal(r.Context(), email, name, "", s.externalAuth.config.AutoProvision)
+	var flowSession domain.AuthSession
+	var token string
+	var err error
+	if email == "" {
+		claims, _ := json.Marshal(map[string]any{"subject": subject, "name": name})
+		issuer := strings.TrimSpace(s.externalAuth.config.SAML.EntityID)
+		if issuer == "" {
+			issuer = "saml"
+		}
+		flowSession, token, err = s.store.LoginExternalIdentity(r.Context(), "saml", issuer, subject, subject, "", name, "", string(claims), s.externalAuth.config.AutoProvision)
+	} else {
+		flowSession, token, err = s.store.LoginExternal(r.Context(), email, name, "", s.externalAuth.config.AutoProvision)
+	}
 	if err != nil {
 		writeError(w, http.StatusForbidden, "could not create Flow session")
 		return

@@ -428,3 +428,49 @@ func TestFilterBootstrapTeamsHidesPrivateTeamDocuments(t *testing.T) {
 		t.Fatalf("visible documents were filtered: %#v", data.Documents)
 	}
 }
+
+func TestFilterBootstrapTeamsRedactsHiddenCollaborationData(t *testing.T) {
+	privateParent := "private-parent"
+	data := domain.Bootstrap{
+		Viewer:     domain.User{ID: "viewer"},
+		ViewerRole: "member",
+		Teams:      []domain.Team{{ID: "public-team"}, {ID: privateParent, Private: true}},
+		Documents: []domain.Document{
+			{ID: "public-doc", TeamIDs: []string{"public-team"}},
+			{ID: "private-doc", TeamIDs: []string{privateParent}},
+		},
+		Issues: []domain.Issue{
+			{ID: "public-issue", Team: domain.Team{ID: "public-team"}, Relations: []domain.IssueRelation{{ID: "rel-public", RelatedIssueID: "private-issue"}}},
+			{ID: "private-issue", Team: domain.Team{ID: privateParent}},
+		},
+		Comments: map[string][]domain.Comment{
+			"public-issue":  {{ID: "comment-public"}},
+			"private-issue": {{ID: "comment-private"}},
+			"public-doc":    {{ID: "comment-doc"}},
+			"private-doc":   {{ID: "comment-private-doc"}},
+		},
+		Activities: map[string][]domain.ActivityEvent{
+			"public-issue":  {{ID: "activity-public"}},
+			"private-issue": {{ID: "activity-private"}},
+		},
+		ProjectRelations: []domain.ProjectRelation{
+			{ID: "project-rel", ProjectID: "hidden-project", RelatedProjectID: "public-project"},
+		},
+	}
+	filterBootstrapTeams(&data, map[string]bool{"public-team": true}, false)
+	if _, ok := data.Comments["private-issue"]; ok {
+		t.Fatal("private issue comments leaked")
+	}
+	if _, ok := data.Comments["private-doc"]; ok {
+		t.Fatal("private document comments leaked")
+	}
+	if _, ok := data.Activities["private-issue"]; ok {
+		t.Fatal("private issue activity leaked")
+	}
+	if len(data.Issues[0].Relations) != 0 {
+		t.Fatalf("relation to hidden issue leaked: %#v", data.Issues[0].Relations)
+	}
+	if len(data.ProjectRelations) != 0 {
+		t.Fatalf("relation to hidden project leaked: %#v", data.ProjectRelations)
+	}
+}

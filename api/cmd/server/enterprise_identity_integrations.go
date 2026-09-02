@@ -48,6 +48,14 @@ func validateIdentityProvider(input domain.IdentityProvider) error {
 			return errInvalid
 		}
 	}
+	if input.DefaultRole != "" && !identityRoleValid(input.DefaultRole) {
+		return errInvalid
+	}
+	for _, mapped := range input.RoleMapping {
+		if !identityRoleValid(mapped) {
+			return errInvalid
+		}
+	}
 	return nil
 }
 
@@ -69,6 +77,12 @@ func (s *server) createIdentityProvider(w http.ResponseWriter, r *http.Request) 
 	if input.Scopes == nil {
 		input.Scopes = []string{"openid", "profile", "email"}
 	}
+	if input.DefaultRole == "" {
+		input.DefaultRole = "member"
+	}
+	if input.RoleMapping == nil {
+		input.RoleMapping = map[string]string{}
+	}
 	input.Domains = uniqueLower(input.Domains)
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "identity_provider.created", input.ID, nil, func(data *domain.Bootstrap) error {
 		data.IdentityProviders = append(data.IdentityProviders, input)
@@ -79,15 +93,18 @@ func (s *server) createIdentityProvider(w http.ResponseWriter, r *http.Request) 
 
 func (s *server) updateIdentityProvider(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Type            *string   `json:"type"`
-		Name            *string   `json:"name"`
-		Issuer          *string   `json:"issuer"`
-		ClientID        *string   `json:"clientId"`
-		ClientSecretEnv *string   `json:"clientSecretEnv"`
-		Scopes          *[]string `json:"scopes"`
-		Domains         *[]string `json:"domains"`
-		Enabled         *bool     `json:"enabled"`
-		Enforced        *bool     `json:"enforced"`
+		Type            *string            `json:"type"`
+		Name            *string            `json:"name"`
+		Issuer          *string            `json:"issuer"`
+		ClientID        *string            `json:"clientId"`
+		ClientSecretEnv *string            `json:"clientSecretEnv"`
+		Scopes          *[]string          `json:"scopes"`
+		Domains         *[]string          `json:"domains"`
+		Enabled         *bool              `json:"enabled"`
+		Enforced        *bool              `json:"enforced"`
+		RoleClaim       *string            `json:"roleClaim"`
+		RoleMapping     *map[string]string `json:"roleMapping"`
+		DefaultRole     *string            `json:"defaultRole"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
@@ -125,6 +142,25 @@ func (s *server) updateIdentityProvider(w http.ResponseWriter, r *http.Request) 
 		}
 		if input.Enforced != nil {
 			current.Enforced = *input.Enforced
+		}
+		if input.RoleClaim != nil {
+			current.RoleClaim = strings.TrimSpace(*input.RoleClaim)
+		}
+		if input.RoleMapping != nil {
+			current.RoleMapping = map[string]string{}
+			for key, value := range *input.RoleMapping {
+				mapped := strings.ToLower(strings.TrimSpace(value))
+				if identityRoleValid(mapped) {
+					current.RoleMapping[strings.ToLower(strings.TrimSpace(key))] = mapped
+				}
+			}
+		}
+		if input.DefaultRole != nil {
+			role := strings.ToLower(strings.TrimSpace(*input.DefaultRole))
+			if !identityRoleValid(role) {
+				return errInvalid
+			}
+			current.DefaultRole = role
 		}
 		current.UpdatedAt = time.Now().UTC()
 		if validateIdentityProvider(current) != nil {
@@ -369,6 +405,12 @@ func (s *server) finishEnterpriseOIDC(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not grant workspace access")
 		return
 	}
+	if role := identityRole(provider, claims); role != "" {
+		if err := s.store.UpdateMemberRole(ctx, data.Workspace.ID, session.User.ID, role); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not apply identity role")
+			return
+		}
+	}
 	clearExternalState(w, r)
 	setSessionCookie(w, r, sessionToken, session.ExpiresAt)
 	http.Redirect(w, r, strings.TrimRight(s.allowedOrigin, "/")+"/"+workspaceKey, http.StatusFound)
@@ -383,6 +425,47 @@ func uniqueLower(values []string) []string {
 		}
 	}
 	return result
+}
+
+func identityRole(provider domain.IdentityProvider, claims map[string]any) string {
+	role := ""
+	if provider.RoleClaim != "" {
+		role = roleClaimValue(claims, provider.RoleClaim)
+	}
+	if role == "" {
+		role = provider.DefaultRole
+	}
+	if mapped := provider.RoleMapping[strings.ToLower(strings.TrimSpace(role))]; mapped != "" {
+		role = mapped
+	}
+	role = strings.ToLower(strings.TrimSpace(role))
+	if !identityRoleValid(role) {
+		return ""
+	}
+	return role
+}
+
+func roleClaimValue(claims map[string]any, claim string) string {
+	value, ok := claims[strings.TrimSpace(claim)]
+	if !ok {
+		return ""
+	}
+	if text, ok := value.(string); ok {
+		return strings.TrimSpace(text)
+	}
+	if values, ok := value.([]any); ok {
+		for _, item := range values {
+			if text, ok := item.(string); ok && strings.TrimSpace(text) != "" {
+				return strings.TrimSpace(text)
+			}
+		}
+	}
+	return ""
+}
+
+func identityRoleValid(role string) bool {
+	role = strings.ToLower(strings.TrimSpace(role))
+	return role == "owner" || role == "admin" || role == "member" || role == "guest"
 }
 func uniqueTrimmed(values []string) []string {
 	result := []string{}

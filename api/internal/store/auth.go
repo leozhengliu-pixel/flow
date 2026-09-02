@@ -1273,6 +1273,30 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 		})
 	}
 	data.Cycles = slices.DeleteFunc(data.Cycles, func(cycle domain.Cycle) bool { return !allowed[cycle.TeamID] })
+	data.Labels = slices.DeleteFunc(data.Labels, func(label domain.IssueLabel) bool {
+		scope := strings.ToLower(strings.TrimSpace(label.Scope))
+		return scope != "" && scope != "workspace" && !allowed[label.Scope]
+	})
+	visibleLabels := map[string]bool{}
+	for _, label := range data.Labels {
+		visibleLabels[label.ID] = true
+	}
+	data.LabelGroups = slices.DeleteFunc(data.LabelGroups, func(group domain.LabelGroup) bool {
+		scope := strings.ToLower(strings.TrimSpace(group.Scope))
+		return scope != "" && scope != "workspace" && !allowed[group.Scope]
+	})
+	visibleLabelGroups := map[string]bool{}
+	for _, group := range data.LabelGroups {
+		visibleLabelGroups[group.ID] = true
+	}
+	for index := range data.Labels {
+		if data.Labels[index].GroupID != "" && !visibleLabelGroups[data.Labels[index].GroupID] {
+			data.Labels[index].GroupID = ""
+		}
+	}
+	for index := range data.Issues {
+		data.Issues[index].Labels = slices.DeleteFunc(data.Issues[index].Labels, func(label domain.IssueLabel) bool { return !visibleLabels[label.ID] })
+	}
 	data.Projects = slices.DeleteFunc(data.Projects, func(project domain.Project) bool {
 		if len(project.TeamIDs) == 0 {
 			return false
@@ -1297,9 +1321,69 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 	for _, project := range data.Projects {
 		visibleProjects[project.ID] = true
 	}
+	data.ProjectRelations = slices.DeleteFunc(data.ProjectRelations, func(relation domain.ProjectRelation) bool {
+		return !visibleProjects[relation.ProjectID] || !visibleProjects[relation.RelatedProjectID]
+	})
 	visibleIssues := map[string]bool{}
 	for _, issue := range data.Issues {
 		visibleIssues[issue.ID] = true
+	}
+	visibleDocuments := map[string]bool{}
+	for _, document := range data.Documents {
+		visibleDocuments[document.ID] = true
+		if document.SlugID != "" {
+			visibleDocuments[document.SlugID] = true
+		}
+	}
+	// Comments and activity are keyed by their parent id in the persisted
+	// workspace snapshot.  They must follow the same projection as their
+	// parent resources; otherwise a member of a public team could enumerate
+	// comments belonging to a private issue by reading bootstrap data.
+	for id := range data.Comments {
+		if !visibleIssues[id] && !visibleDocuments[id] {
+			delete(data.Comments, id)
+		}
+	}
+	for id := range data.Activities {
+		if !visibleIssues[id] {
+			delete(data.Activities, id)
+		}
+	}
+	// Shared issues can remain visible even when their parent issue is not.
+	// Redact dangling hierarchy and relation references so the projection does
+	// not disclose identifiers from private teams.
+	for index := range data.Issues {
+		issue := &data.Issues[index]
+		if issue.ParentID != nil && !visibleIssues[*issue.ParentID] {
+			issue.ParentID = nil
+		}
+		issue.SubIssueIDs = slices.DeleteFunc(issue.SubIssueIDs, func(id string) bool { return !visibleIssues[id] })
+		issue.Relations = slices.DeleteFunc(issue.Relations, func(relation domain.IssueRelation) bool {
+			return !visibleIssues[relation.RelatedIssueID]
+		})
+		if issue.Project != nil {
+			if !visibleProjects[issue.Project.ID] {
+				issue.Project = nil
+			}
+		}
+	}
+	data.Reviews = slices.DeleteFunc(data.Reviews, func(review domain.CodeReview) bool {
+		if len(review.IssueIDs) == 0 {
+			return false
+		}
+		return !slices.ContainsFunc(review.IssueIDs, func(id string) bool { return visibleIssues[id] })
+	})
+	for index := range data.Reviews {
+		data.Reviews[index].IssueIDs = slices.DeleteFunc(data.Reviews[index].IssueIDs, func(id string) bool { return !visibleIssues[id] })
+		data.Reviews[index].TeamReviewers = slices.DeleteFunc(data.Reviews[index].TeamReviewers, func(id string) bool { return !allowed[id] })
+	}
+	data.IssueSLAs = slices.DeleteFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return !visibleIssues[item.IssueID] })
+	data.SLAEvents = slices.DeleteFunc(data.SLAEvents, func(item domain.SLAEvent) bool { return !visibleIssues[item.IssueID] })
+	data.SLARules = slices.DeleteFunc(data.SLARules, func(item domain.SLARule) bool {
+		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, func(id string) bool { return allowed[id] })
+	})
+	for index := range data.SLARules {
+		data.SLARules[index].TeamIDs = slices.DeleteFunc(data.SLARules[index].TeamIDs, func(id string) bool { return !allowed[id] })
 	}
 	// Recompute project issue counts from the visible issue projection so a
 	// public project shell cannot reveal the size of a private team's backlog.
@@ -1347,7 +1431,22 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 	})
 	// Preserve workspace initiatives but redact links into projects the viewer
 	// cannot access. This keeps a cross-team initiative shell useful without
-	// disclosing private project identifiers.
+	// disclosing private project identifiers. Track initiatives that are scoped
+	// exclusively to hidden resources so their title and update history can be
+	// removed as well.
+	hiddenInitiatives := map[string]bool{}
+	for _, initiative := range data.Initiatives {
+		hasScopedResource := initiative.LeadTeamID != "" || len(initiative.ContributingTeamIDs) > 0 || len(initiative.ProjectIDs) > 0
+		if !hasScopedResource {
+			continue
+		}
+		visible := initiative.LeadTeamID != "" && allowed[initiative.LeadTeamID]
+		visible = visible || slices.ContainsFunc(initiative.ContributingTeamIDs, func(id string) bool { return allowed[id] })
+		visible = visible || slices.ContainsFunc(initiative.ProjectIDs, func(id string) bool { return visibleProjects[id] })
+		if !visible {
+			hiddenInitiatives[initiative.ID] = true
+		}
+	}
 	for index := range data.Initiatives {
 		data.Initiatives[index].ProjectIDs = slices.DeleteFunc(data.Initiatives[index].ProjectIDs, func(id string) bool { return !visibleProjects[id] })
 		data.Initiatives[index].ParentInitiativeIDs = slices.DeleteFunc(data.Initiatives[index].ParentInitiativeIDs, func(id string) bool {
@@ -1358,6 +1457,19 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 		}
 		data.Initiatives[index].ContributingTeamIDs = slices.DeleteFunc(data.Initiatives[index].ContributingTeamIDs, func(id string) bool { return !allowed[id] })
 	}
+	data.Initiatives = slices.DeleteFunc(data.Initiatives, func(initiative domain.Initiative) bool { return hiddenInitiatives[initiative.ID] })
+	visibleInitiatives := map[string]bool{}
+	for _, initiative := range data.Initiatives {
+		visibleInitiatives[initiative.ID] = true
+	}
+	for id := range data.InitiativeUpdates {
+		if !visibleInitiatives[id] {
+			delete(data.InitiativeUpdates, id)
+		}
+	}
+	data.InitiativeRelations = slices.DeleteFunc(data.InitiativeRelations, func(relation domain.InitiativeRelation) bool {
+		return !visibleInitiatives[relation.InitiativeID] || !visibleInitiatives[relation.RelatedInitiativeID]
+	})
 	data.Asks = slices.DeleteFunc(data.Asks, func(item domain.Ask) bool {
 		return item.TeamID != "" && !allowed[item.TeamID]
 	})
@@ -1370,6 +1482,41 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 			return true
 		}
 		return false
+	})
+	visibleResource := func(kind, id string) bool {
+		switch kind {
+		case "issue":
+			return visibleIssues[id]
+		case "project":
+			return visibleProjects[id]
+		case "initiative":
+			return visibleInitiatives[id]
+		case "document":
+			return visibleDocuments[id]
+		case "view":
+			return slices.ContainsFunc(data.SavedViews, func(view domain.SavedView) bool { return view.ID == id || view.SlugID == id })
+		case "team":
+			return allowed[id]
+		case "cycle":
+			return slices.ContainsFunc(data.Cycles, func(cycle domain.Cycle) bool { return cycle.ID == id })
+		case "release":
+			return slices.ContainsFunc(data.Releases, func(release domain.Release) bool { return release.ID == id })
+		case "release_pipeline":
+			return slices.ContainsFunc(data.ReleasePipelines, func(pipeline domain.ReleasePipeline) bool { return pipeline.ID == id })
+		case "customer":
+			return data.ViewerRole != "guest" && slices.ContainsFunc(data.Customers, func(customer domain.Customer) bool { return customer.ID == id })
+		case "dashboard":
+			dashboards, _ := data.Settings["dashboards.v1"].([]domain.Dashboard)
+			return slices.ContainsFunc(dashboards, func(dashboard domain.Dashboard) bool { return dashboard.ID == id })
+		default:
+			return false
+		}
+	}
+	data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool {
+		return item.UserID == data.Viewer.ID && !visibleResource(item.ResourceType, item.ResourceID)
+	})
+	data.Subscriptions = slices.DeleteFunc(data.Subscriptions, func(item domain.Subscription) bool {
+		return item.UserID == data.Viewer.ID && !visibleResource(item.ResourceType, item.ResourceID)
 	})
 	data.Notifications = slices.DeleteFunc(data.Notifications, func(item domain.Notification) bool { return item.RecipientID != data.Viewer.ID })
 	if !guest {
