@@ -206,6 +206,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 	}{
 		{version: 1, name: "base schema", apply: func(ctx context.Context) error { return s.applyMigrationStatements(ctx, databaseMigrations(s.dialect)) }},
 		{version: 2, name: "nullable external identity email", apply: s.makeAuthEmailNullable},
+		{version: 3, name: "domain event previous values", apply: s.addDomainEventPreviousValues},
 	}
 	for _, migration := range migrations {
 		if applied[migration.version] {
@@ -219,6 +220,17 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (s *SQLiteStore) addDomainEventPreviousValues(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, `ALTER TABLE domain_events ADD COLUMN previous_values TEXT`)
+	if err != nil {
+		message := strings.ToLower(err.Error())
+		if strings.Contains(message, "duplicate column") || strings.Contains(message, "already exists") {
+			return nil
+		}
+	}
+	return err
 }
 
 // backfillWorkspaceOwners upgrades existing installations without changing
@@ -1334,7 +1346,7 @@ func (s *SQLiteStore) persistWorkspace(ctx context.Context, workspaceKey string,
 		return err
 	}
 	if event != nil {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,created_at) VALUES(?,?,?,?,?)`, event.ID, event.Type, event.AggregateID, []byte(event.Payload), event.CreatedAt.Format(time.RFC3339Nano)); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at) VALUES(?,?,?,?,?,?)`, event.ID, event.Type, event.AggregateID, []byte(event.Payload), []byte(event.PreviousValues), event.CreatedAt.Format(time.RFC3339Nano)); err != nil {
 			return err
 		}
 	}
@@ -1547,7 +1559,7 @@ func (s *SQLiteStore) publishWorkspaceEvent(ctx context.Context, workspaceKey, e
 }
 
 func (s *SQLiteStore) Events(ctx context.Context, aggregateID string) ([]domain.DomainEvent, error) {
-	query := `SELECT id,event_type,aggregate_id,payload,created_at FROM domain_events`
+	query := `SELECT id,event_type,aggregate_id,payload,previous_values,created_at FROM domain_events`
 	args := []any{}
 	if aggregateID != "" {
 		query += ` WHERE aggregate_id = ?`
@@ -1563,8 +1575,12 @@ func (s *SQLiteStore) Events(ctx context.Context, aggregateID string) ([]domain.
 	for rows.Next() {
 		var event domain.DomainEvent
 		var created string
-		if err := rows.Scan(&event.ID, &event.Type, &event.AggregateID, &event.Payload, &created); err != nil {
+		var previous sql.NullString
+		if err := rows.Scan(&event.ID, &event.Type, &event.AggregateID, &event.Payload, &previous, &created); err != nil {
 			return nil, err
+		}
+		if previous.Valid && previous.String != "" {
+			event.PreviousValues = json.RawMessage(previous.String)
 		}
 		event.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
 		events = append(events, event)
