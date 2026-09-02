@@ -984,7 +984,7 @@
   justify-content: space-between;
   margin: 24px 0 0;
   padding: 0 10px;
-  border: .5px solid var(--border-subtle);
+  border: .5px solid transparent;
   border-radius: 8px;
   background: var(--theme-surface-2);
   color: var(--theme-text-secondary);
@@ -993,7 +993,18 @@
 }
 .team-members-select:hover,
 .team-members-select[data-state="open"] {
-  border-color: var(--theme-border-strong);
+  border-color: transparent;
+}
+:root:not([data-theme="light"]) .team-members-select {
+  background: var(--team-members-select-closed-bg);
+}
+:root:not([data-theme="light"]) .team-members-select:hover,
+:root:not([data-theme="light"]) .team-members-select[data-state="open"] {
+  background: var(--team-members-select-open-bg);
+}
+:root[data-theme="light"] .team-members-select:hover,
+:root[data-theme="light"] .team-members-select[data-state="open"] {
+  background: var(--team-members-select-open-bg);
 }
 .team-members-select svg {
   width: 10px;
@@ -1005,7 +1016,8 @@
 }
 .team-members-picker {
   position: relative;
-  width: min(529px, calc(100vw - 32px));
+  width: min(175px, calc(100vw - 32px));
+  min-width: 175px;
   max-height: 360px;
   z-index: 802;
   padding-top: 0;
