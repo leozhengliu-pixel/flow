@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"flow/api/internal/domain"
@@ -23,9 +24,11 @@ func TestIdentityRoleMappingSupportsClaimsAndDefaults(t *testing.T) {
 
 func TestSCIMProvisioningSupportsExternalIdentifiersWithoutEmail(t *testing.T) {
 	handler, repository := enterpriseTestServer(t)
+	seed, _ := repository.BootstrapFor("test-workspace")
 	if err := repository.MutateWorkspace(t.Context(), "test-workspace", "scim.test.configured", "workspace", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.Plan = "enterprise"
 		data.WorkspaceSettings.SCIMRoleMapping = map[string]string{"employee": "guest"}
+		data.WorkspaceSettings.SCIMTeamGroupMapping = map[string]string{seed.Teams[0].ID: "engineering"}
 		data.WorkspaceSettings.SCIMDefaultRole = "member"
 		return nil
 	}); err != nil {
@@ -52,6 +55,25 @@ func TestSCIMProvisioningSupportsExternalIdentifiersWithoutEmail(t *testing.T) {
 	id, _ := created["id"].(string)
 	if id == "" {
 		t.Fatal("SCIM user id missing")
+	}
+	teamGroup := scimRequest(t, handler, http.MethodPost, "/scim/v2/test-workspace/Groups", token.Secret, map[string]any{
+		"externalId": "idp-engineering", "displayName": "engineering", "members": []map[string]string{{"value": "employee-10042"}},
+	}, http.StatusCreated)
+	var teamResource map[string]any
+	if err := json.Unmarshal(teamGroup, &teamResource); err != nil || teamResource["displayName"] != "engineering" {
+		t.Fatalf("SCIM team group=%#v err=%v", teamResource, err)
+	}
+	teamMembers, err := repository.ListTeamMembers(t.Context(), seed.Workspace.ID)
+	if err != nil || !slices.ContainsFunc(teamMembers, func(item domain.TeamMember) bool { return item.TeamID == seed.Teams[0].ID && item.UserID == id }) {
+		t.Fatalf("SCIM group did not add Flow team membership: members=%#v err=%v", teamMembers, err)
+	}
+	teamGroupID := teamResource["id"].(string)
+	scimRequest(t, handler, http.MethodPatch, "/scim/v2/test-workspace/Groups/"+teamGroupID, token.Secret, map[string]any{
+		"displayName": "engineering", "members": []map[string]string{},
+	}, http.StatusOK)
+	teamMembers, err = repository.ListTeamMembers(t.Context(), seed.Workspace.ID)
+	if err != nil || slices.ContainsFunc(teamMembers, func(item domain.TeamMember) bool { return item.TeamID == seed.Teams[0].ID && item.UserID == id }) {
+		t.Fatalf("SCIM group removal did not revoke managed Flow team membership: members=%#v err=%v", teamMembers, err)
 	}
 	adminGroup := scimRequest(t, handler, http.MethodPost, "/scim/v2/test-workspace/Groups", token.Secret, map[string]any{
 		"externalId": "role-admins", "displayName": "linear-admins", "members": []map[string]string{{"value": id}},

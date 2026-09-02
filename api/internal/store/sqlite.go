@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -23,6 +24,7 @@ type SQLiteStore struct {
 	lastWorkspaceKey string
 	viewer           domain.User
 	realtimeSink     func(string, domain.RealtimeEvent)
+	webhookSink      func(string, domain.DomainEvent)
 	coordinator      WorkspaceCoordinator
 	fixtureProfile   string
 	fixturePassword  string
@@ -62,6 +64,39 @@ func (s *SQLiteStore) SetRealtimeSink(sink func(string, domain.RealtimeEvent)) {
 	s.mu.Lock()
 	s.realtimeSink = sink
 	s.mu.Unlock()
+}
+
+func (s *SQLiteStore) SetWebhookSink(sink func(string, domain.DomainEvent)) {
+	s.mu.Lock()
+	s.webhookSink = sink
+	s.mu.Unlock()
+}
+
+func (s *SQLiteStore) webhookConfigured() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.webhookSink != nil
+}
+
+func (s *SQLiteStore) webhookNeeded(workspaceKey string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	data, ok := s.workspaces[workspaceKey]
+	if !ok {
+		return false
+	}
+	for _, webhook := range data.Webhooks {
+		if webhook.Enabled && strings.TrimSpace(webhook.URL) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *SQLiteStore) webhook() func(string, domain.DomainEvent) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.webhookSink
 }
 
 func (s *SQLiteStore) realtime() func(string, domain.RealtimeEvent) {
@@ -1126,6 +1161,7 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 		s.mu.RUnlock()
 	}
 	var event domain.DomainEvent
+	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(workspaceKey)
 	apply := func() error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -1165,6 +1201,10 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 		if err != nil {
 			return err
 		}
+		previousValues := json.RawMessage(nil)
+		if webhookEnabled {
+			previousValues = aggregatePreviousValues(current, next, aggregateID)
+		}
 		if progressEvent(eventType) {
 			refreshProjectProgressHistories(&next, time.Now().UTC())
 		}
@@ -1173,7 +1213,7 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 		if err != nil {
 			return err
 		}
-		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, CreatedAt: time.Now().UTC()}
+		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, PreviousValues: previousValues, CreatedAt: time.Now().UTC()}
 		if err := s.persistWorkspace(ctx, workspaceKey, next, &event); err != nil {
 			return err
 		}
@@ -1190,9 +1230,77 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 	if err != nil {
 		return err
 	}
+	if sink := s.webhook(); sink != nil {
+		sink(workspaceKey, event)
+	}
 	if sink := s.realtime(); sink != nil {
 		actor, _ := actorFromContext(ctx)
 		sink(workspaceKey, domain.RealtimeEvent{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, ActorID: actor.ID, ClientID: realtimeClientFromContext(ctx), Payload: event.Payload, CreatedAt: event.CreatedAt})
+	}
+	return nil
+}
+
+func aggregatePreviousValues(previous, next domain.Bootstrap, aggregateID string) json.RawMessage {
+	if strings.TrimSpace(aggregateID) == "" {
+		return nil
+	}
+	oldValue := aggregateJSONValue(previous, aggregateID)
+	if oldValue == nil {
+		return nil
+	}
+	newValue := aggregateJSONValue(next, aggregateID)
+	if newValue == nil {
+		encoded, _ := json.Marshal(oldValue)
+		return encoded
+	}
+	oldMap, oldOK := oldValue.(map[string]any)
+	newMap, newOK := newValue.(map[string]any)
+	if !oldOK || !newOK {
+		encoded, _ := json.Marshal(oldValue)
+		return encoded
+	}
+	diff := map[string]any{}
+	for key, value := range oldMap {
+		if nextValue, exists := newMap[key]; !exists || !reflect.DeepEqual(value, nextValue) {
+			diff[key] = value
+		}
+	}
+	if len(diff) == 0 {
+		return nil
+	}
+	encoded, _ := json.Marshal(diff)
+	return encoded
+}
+
+func aggregateJSONValue(data domain.Bootstrap, aggregateID string) any {
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return nil
+	}
+	var value any
+	if json.Unmarshal(raw, &value) != nil {
+		return nil
+	}
+	return findJSONObjectByID(value, aggregateID)
+}
+
+func findJSONObjectByID(value any, aggregateID string) any {
+	switch item := value.(type) {
+	case map[string]any:
+		if id, ok := item["id"].(string); ok && id == aggregateID {
+			return item
+		}
+		for _, child := range item {
+			if found := findJSONObjectByID(child, aggregateID); found != nil {
+				return found
+			}
+		}
+	case []any:
+		for _, child := range item {
+			if found := findJSONObjectByID(child, aggregateID); found != nil {
+				return found
+			}
+		}
 	}
 	return nil
 }

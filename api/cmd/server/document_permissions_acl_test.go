@@ -87,6 +87,12 @@ func TestDocumentPermissionRoles(t *testing.T) {
 	}
 	authRequest[any](t, outsider, http.MethodGet, server.URL+"/api/documents/"+document.ID+"/comments", nil, "test-workspace", http.StatusForbidden)
 	authRequest[any](t, commenter, http.MethodPut, server.URL+"/api/documents/"+document.ID+"/permissions", map[string]any{"permissions": permissions}, "test-workspace", http.StatusForbidden)
+	authRequest[[]domain.Presence](t, viewer, http.MethodPost, server.URL+"/api/realtime/presence", map[string]any{"clientId": "document-viewer", "documentId": document.ID, "route": "document"}, "test-workspace", http.StatusOK)
+	presence := authRequest[[]domain.Presence](t, commenter, http.MethodGet, server.URL+"/api/realtime/presence?documentId="+document.ID, nil, "test-workspace", http.StatusOK)
+	if !slices.ContainsFunc(presence, func(item domain.Presence) bool { return item.ClientID == "document-viewer" }) {
+		t.Fatalf("shared document presence was not visible: %#v", presence)
+	}
+	authRequest[any](t, outsider, http.MethodPost, server.URL+"/api/realtime/presence", map[string]any{"clientId": "document-outsider", "documentId": document.ID}, "test-workspace", http.StatusForbidden)
 	// Replacing the ACL with an empty list still leaves the canonical owner
 	// entry, which must make the document owner-only rather than public.
 	authRequest[[]domain.DocumentPermission](t, owner, http.MethodPut, server.URL+"/api/documents/"+document.ID+"/permissions", map[string]any{"permissions": []map[string]string{}}, "test-workspace", http.StatusOK)

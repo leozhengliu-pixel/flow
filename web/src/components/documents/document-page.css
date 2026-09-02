@@ -388,6 +388,65 @@
 .document-menu [role="menuitemcheckbox"] svg {
   margin-left: auto;
 }
+.document-access {
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(640px, calc(100vh - 48px));
+  overflow: auto;
+}
+.document-access h2 {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 600;
+}
+.document-access-description {
+  margin: 0 0 18px;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+.document-access-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.document-access-row {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 4px 0;
+}
+.document-access-person {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.document-access-person strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+}
+.document-access-team-mark {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 18px;
+  border-radius: 5px;
+  background: var(--theme-surface-active);
+  color: var(--theme-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+}
+.document-access-row .select-control {
+  flex: 0 0 132px;
+  min-width: 132px;
+}
 .document-history {
   width: min(960px, calc(100vw - 32px));
   height: min(620px, calc(100vh - 48px));

@@ -943,6 +943,12 @@ export interface WorkspaceSettings {
   aiCreditReloadThresholdCents?: number;
   aiCreditReloadAmountCents?: number;
   aiWorkspaceSpendLimitCents?: number;
+  scimEnabled?: boolean;
+  scimRoleClaim?: string;
+  scimRoleMapping?: Record<string, string>;
+  scimRoleGroups?: Record<string, string>;
+  scimTeamGroupMapping?: Record<string, string>;
+  scimDefaultRole?: string;
 }
 export interface ReleasePipeline {
   id: UUID;
@@ -1074,6 +1080,7 @@ export interface IntegrationDelivery {
   lastError?: string;
   createdAt: string;
   updatedAt: string;
+  previousValues?: unknown;
 }
 export interface GitAutomationState {
   id: UUID;
