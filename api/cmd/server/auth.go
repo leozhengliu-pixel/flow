@@ -516,7 +516,7 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 				if item.ID != id && item.SlugID != id {
 					return false
 				}
-				return len(item.TeamIDs) == 0 || slices.ContainsFunc(item.TeamIDs, teamAllowed)
+				return len(item.TeamIDs) == 0 || slices.ContainsFunc(item.TeamIDs, teamAllowed) || documentRole(s, data, item) != "none"
 			})
 		}
 		if len(parts) == 2 && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
