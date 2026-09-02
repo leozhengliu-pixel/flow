@@ -2270,6 +2270,9 @@ func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		entry := data.Trash[index]
+		if !workspaceAdminRole(data.ViewerRole) && entry.DeletedBy.ID != data.Viewer.ID {
+			return store.ErrAuthForbidden
+		}
 		switch entry.ResourceType {
 		case "document":
 			var value domain.Document
@@ -2366,6 +2369,15 @@ func (s *server) purgeTrashEntry(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "trash.purged", id, nil, func(data *domain.Bootstrap) error {
 		before := len(data.Trash)
+		if !workspaceAdminRole(data.ViewerRole) {
+			entryIndex := slices.IndexFunc(data.Trash, func(item domain.TrashEntry) bool { return item.ID == id })
+			if entryIndex < 0 {
+				return errNotFound
+			}
+			if data.Trash[entryIndex].DeletedBy.ID != data.Viewer.ID {
+				return store.ErrAuthForbidden
+			}
+		}
 		data.Trash = slices.DeleteFunc(data.Trash, func(item domain.TrashEntry) bool { return item.ID == id })
 		if before == len(data.Trash) {
 			return errNotFound
