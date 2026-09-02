@@ -73,6 +73,44 @@ func TestLoginExternalRemainsEmailBased(t *testing.T) {
 	}
 }
 
+func TestLoginExternalIdentityDoesNotAutoJoinWhenDisabled(t *testing.T) {
+	repository, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "external-membership.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+
+	first, _, err := repository.LoginExternalIdentity(t.Context(), "oidc", "https://idp.example/tenant", "employee-200", "employee-200", "employee.200@example.com", "Employee 200", "", `{}`, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, ok := repository.BootstrapFor("test-workspace")
+	if !ok {
+		t.Fatal("test workspace not found")
+	}
+	if _, err := repository.db.ExecContext(t.Context(), `DELETE FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspace.Workspace.ID, first.User.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repository.db.ExecContext(t.Context(), `DELETE FROM team_memberships WHERE workspace_id=? AND user_id=?`, workspace.Workspace.ID, first.User.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	second, _, err := repository.LoginExternalIdentity(t.Context(), "oidc", "https://idp.example/tenant", "employee-200", "employee-200", "employee.200@example.com", "Employee 200", "", `{}`, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second.Memberships) != 0 {
+		t.Fatalf("disabled auto-provision restored %d workspace memberships", len(second.Memberships))
+	}
+	var count int
+	if err := repository.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspace.Workspace.ID, first.User.ID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("workspace memberships=%d, want 0", count)
+	}
+}
+
 func TestOpenSQLiteMigratesLegacyRequiredEmailColumn(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
 	db, err := sql.Open("sqlite", path)

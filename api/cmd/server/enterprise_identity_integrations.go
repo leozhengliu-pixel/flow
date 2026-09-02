@@ -395,15 +395,23 @@ func (s *server) finishEnterpriseOIDC(w http.ResponseWriter, r *http.Request) {
 		name = stringClaim(claims, "preferred_username")
 	}
 	claimsJSON, _ := json.Marshal(claims)
-	session, sessionToken, err := s.store.LoginExternalIdentity(ctx, "enterprise:"+provider.ID, provider.Issuer, subject, stringClaim(claims, "preferred_username"), email, name, picture, string(claimsJSON), true)
+	autoProvision := s.externalAuth != nil && s.externalAuth.config.AutoProvision
+	session, sessionToken, err := s.store.LoginExternalIdentity(ctx, "enterprise:"+provider.ID, provider.Issuer, subject, stringClaim(claims, "preferred_username"), email, name, picture, string(claimsJSON), autoProvision)
 	if err != nil {
 		writeError(w, http.StatusForbidden, "could not create Flow session")
 		return
 	}
 	data, _ := s.store.BootstrapFor(workspaceKey)
-	if err = s.store.EnsureWorkspaceMembership(ctx, data.Workspace.ID, session.User.ID); err != nil {
-		writeError(w, http.StatusInternalServerError, "could not grant workspace access")
-		return
+	if autoProvision {
+		if err = s.store.EnsureWorkspaceMembership(ctx, data.Workspace.ID, session.User.ID); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not grant workspace access")
+			return
+		}
+	} else {
+		if _, status, membershipErr := s.store.WorkspaceRole(ctx, data.Workspace.ID, session.User.ID); membershipErr != nil || status != "active" {
+			writeError(w, http.StatusForbidden, "workspace invitation required")
+			return
+		}
 	}
 	if role := identityRole(provider, claims); role != "" {
 		if err := s.store.UpdateMemberRole(ctx, data.Workspace.ID, session.User.ID, role); err != nil {
