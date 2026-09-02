@@ -1023,6 +1023,33 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		if len(parts) < 3 || !documentAllowed(parts[2]) {
 			return false
 		}
+		documentIndex := slices.IndexFunc(data.Documents, func(item domain.Document) bool { return item.ID == parts[2] || item.SlugID == parts[2] })
+		if documentIndex < 0 {
+			return false
+		}
+		// Document comment threads use the same role semantics as issue
+		// comments: commenters may create and manage their own comments,
+		// editors may moderate any comment, and viewers are read-only.
+		if len(parts) >= 4 && parts[3] == "comments" {
+			documentRoleRankValue := documentRoleRank(documentRole(s, data, data.Documents[documentIndex]))
+			if len(parts) == 4 && r.Method == http.MethodPost {
+				return documentRoleRankValue >= documentRoleRank("commenter")
+			}
+			if len(parts) >= 5 {
+				if len(parts) == 6 && parts[5] == "reactions" && r.Method == http.MethodPost {
+					return documentRoleRankValue >= documentRoleRank("commenter")
+				}
+				commentIndex := slices.IndexFunc(data.Comments[parts[2]], func(comment domain.Comment) bool { return comment.ID == parts[4] })
+				if commentIndex < 0 {
+					return false
+				}
+				if r.Method == http.MethodPatch || r.Method == http.MethodDelete {
+					comment := data.Comments[parts[2]][commentIndex]
+					return documentRoleRankValue >= documentRoleRank("editor") || comment.User.ID == userID
+				}
+			}
+			return true
+		}
 		if r.Method == http.MethodPatch {
 			var input documentInput
 			if !peekRequestJSON(r, &input) {
