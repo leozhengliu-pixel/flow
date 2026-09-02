@@ -2,13 +2,26 @@ import { describe, expect, it } from "vitest";
 import {
   initiativePath,
   issuePath,
+  automationNewPath,
+  automationPath,
+  automationRunsPath,
+  diaryPath,
+  labelPath,
+  meetingPath,
   parseAppRoute,
   projectPath,
   projectSavedViewEditPath,
   projectSavedViewPath,
+  releaseNotePath,
   routeBelongsToWorkspace,
+  teamBoardPath,
+  teamLinksPath,
   teamLoopsPath,
   teamMembersPath,
+  teamResourcesPath,
+  teamTriagePath,
+  teamUpdatePath,
+  teamUpdatesPath,
   teamViewsNewPath,
   workspaceSavedViewPath,
   workspaceViewsNewPath,
@@ -104,6 +117,43 @@ describe("application routes", () => {
     expect(routeBelongsToWorkspace(parseAppRoute("/other/inbox"), "acme")).toBe(
       false,
     );
+  });
+
+  it("generates canonical secondary routes", () => {
+    expect(diaryPath("acme")).toBe("/acme/diary");
+    expect(meetingPath("acme", "meeting 1")).toBe(
+      "/acme/meeting/meeting%201",
+    );
+    expect(automationNewPath("acme")).toBe("/acme/automations/new");
+    expect(automationPath("acme", "rule/1", true)).toBe(
+      "/acme/automation/rule%2F1/edit",
+    );
+    expect(automationRunsPath("acme", "rule-1")).toBe(
+      "/acme/automation/rule-1/runs",
+    );
+    expect(automationRunsPath("acme", "rule-1", "run-1")).toBe(
+      "/acme/automation/rule-1/run/run-1",
+    );
+    expect(teamBoardPath("acme", "ENG")).toBe("/acme/team/ENG/board");
+    expect(teamTriagePath("acme", "ENG")).toBe("/acme/team/ENG/triage");
+    expect(teamUpdatesPath("acme", "ENG")).toBe("/acme/team/ENG/updates");
+    expect(teamUpdatePath("acme", "ENG", "post 1")).toBe(
+      "/acme/team/ENG/update/post%201",
+    );
+    expect(teamResourcesPath("acme", "ENG")).toBe(
+      "/acme/team/ENG/resources",
+    );
+    expect(teamLinksPath("acme", "ENG")).toBe("/acme/team/ENG/links");
+    expect(releaseNotePath("acme", "note 1")).toBe(
+      "/acme/release-note/note%201",
+    );
+    expect(labelPath("acme", "issue", "bug report")).toBe(
+      "/acme/issue-label/bug%20report",
+    );
+  });
+
+  it("does not throw on malformed encoded route segments", () => {
+    expect(parseAppRoute("/acme/document/%E0%A4%A").kind).toBe("document");
   });
 
   it("parses workspace and team secondary routes", () => {
