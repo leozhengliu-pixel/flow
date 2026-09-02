@@ -47,6 +47,7 @@ export type ProjectMutationInput = {
 }
 
 export type ProjectCreateInput = Required<Pick<ProjectMutationInput, 'name'>> & ProjectMutationInput
+  & { milestones?: string[] }
 
 export type ProjectsPageProps = {
   projects: Project[]
@@ -499,7 +500,7 @@ export function ProjectsPage({
       onClose={() => setCreateOpen(false)}
       onCreate={create}
       open={createOpen}
-      teamLabel={teams[0]?.key ?? 'Team'}
+      teamLabel={teams[0]?.name ?? 'Team'}
       teams={teams.map(team => ({ id: team.id, label: team.name, color: team.color }))}
     />
     <ProjectsBulkActionBar
@@ -564,15 +565,18 @@ function draftMutation(projects: Project[], draft: NewProjectDraft, projectStatu
     icon: draft.icon,
     leadId: draft.leadId,
     memberIds: draft.memberIds,
+    milestones: draft.milestones,
     labelIds: draft.labelIds,
     dependencyIds: draft.dependencyIds,
     initiatives: draft.initiativeIds,
     name: draft.name,
     priority: Math.max(0, ['No priority', 'Urgent', 'High', 'Medium', 'Low'].indexOf(draft.priority)),
     startDate: draft.startDate,
+    startDateResolution: draft.startDateResolution,
     statusId: projectStatuses.find(status => status.name === draft.status)?.id ?? projects.find(project => project.status.name === draft.status)?.status.id,
     summary: draft.summary,
     targetDate: draft.targetDate,
+    targetDateResolution: draft.targetDateResolution,
     teamIds: draft.teamIds,
   }
 }

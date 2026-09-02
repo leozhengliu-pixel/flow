@@ -2522,6 +2522,7 @@ function App() {
         ),
       ),
       startDate: draft.startDate,
+      startDateResolution: draft.startDateResolution,
       statusId:
         data.projectStatuses.find((status) => status.name === draft.status)
           ?.id ??
@@ -2529,6 +2530,7 @@ function App() {
           ?.status.id,
       summary: draft.summary,
       targetDate: draft.targetDate,
+      targetDateResolution: draft.targetDateResolution,
       teamIds: draft.teamIds,
     });
     const milestones: ProjectMilestone[] = [];
