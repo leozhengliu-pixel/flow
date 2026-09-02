@@ -24,6 +24,7 @@ func TestIdentityRoleMappingSupportsClaimsAndDefaults(t *testing.T) {
 func TestSCIMProvisioningSupportsExternalIdentifiersWithoutEmail(t *testing.T) {
 	handler, repository := enterpriseTestServer(t)
 	if err := repository.MutateWorkspace(t.Context(), "test-workspace", "scim.test.configured", "workspace", nil, func(data *domain.Bootstrap) error {
+		data.WorkspaceSettings.Plan = "enterprise"
 		data.WorkspaceSettings.SCIMRoleMapping = map[string]string{"employee": "guest"}
 		data.WorkspaceSettings.SCIMDefaultRole = "member"
 		return nil
@@ -51,6 +52,21 @@ func TestSCIMProvisioningSupportsExternalIdentifiersWithoutEmail(t *testing.T) {
 	id, _ := created["id"].(string)
 	if id == "" {
 		t.Fatal("SCIM user id missing")
+	}
+	adminGroup := scimRequest(t, handler, http.MethodPost, "/scim/v2/test-workspace/Groups", token.Secret, map[string]any{
+		"externalId": "role-admins", "displayName": "linear-admins", "members": []map[string]string{{"value": id}},
+	}, http.StatusCreated)
+	var adminResource map[string]any
+	if err := json.Unmarshal(adminGroup, &adminResource); err != nil || adminResource["displayName"] != "linear-admins" {
+		t.Fatalf("SCIM admin group=%#v err=%v", adminResource, err)
+	}
+	scimRequest(t, handler, http.MethodPost, "/scim/v2/test-workspace/Groups", token.Secret, map[string]any{
+		"externalId": "role-owners", "displayName": "linear-owners", "members": []map[string]string{{"value": id}},
+	}, http.StatusCreated)
+	data, _ := repository.BootstrapFor("test-workspace")
+	members, _ := repository.ListMembers(t.Context(), data.Workspace.ID)
+	if member := findWorkspaceMember(members, id); member == nil || member.Role != "owner" {
+		t.Fatalf("latest SCIM role group did not win: %#v", member)
 	}
 
 	list := scimRequest(t, handler, http.MethodGet, "/scim/v2/test-workspace/Users?filter=userName%20eq%20%22e10042%22", token.Secret, nil, http.StatusOK)
@@ -100,4 +116,13 @@ func scimRequest(t *testing.T, handler http.Handler, method, path, token string,
 		t.Fatalf("%s %s status=%d want=%d body=%s", method, path, response.Code, wantStatus, response.Body.String())
 	}
 	return response.Body.Bytes()
+}
+
+func findWorkspaceMember(values []domain.WorkspaceMember, userID string) *domain.WorkspaceMember {
+	for index := range values {
+		if values[index].User.ID == userID {
+			return &values[index]
+		}
+	}
+	return nil
 }

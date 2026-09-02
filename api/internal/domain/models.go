@@ -876,8 +876,13 @@ type WorkspaceSettings struct {
 	SCIMEnabled                  bool              `json:"scimEnabled,omitempty"`
 	SCIMRoleClaim                string            `json:"scimRoleClaim,omitempty"`
 	SCIMRoleMapping              map[string]string `json:"scimRoleMapping,omitempty"`
-	SCIMDefaultRole              string            `json:"scimDefaultRole,omitempty"`
-	UpdatedAt                    time.Time         `json:"updatedAt"`
+	// SCIMRoleGroups maps workspace roles (owner/admin/member/guest) to the
+	// IdP-managed group display names used for role provisioning. Group
+	// membership updates are applied in push order, with the latest push
+	// taking precedence when a user belongs to multiple role groups.
+	SCIMRoleGroups  map[string]string `json:"scimRoleGroups,omitempty"`
+	SCIMDefaultRole string            `json:"scimDefaultRole,omitempty"`
+	UpdatedAt       time.Time         `json:"updatedAt"`
 }
 
 type FeatureOption struct {
