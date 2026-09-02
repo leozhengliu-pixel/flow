@@ -351,7 +351,8 @@ export function SettingsPage(props: SettingsPageProps) {
     useState(false);
   const sidebarCustomization = useSidebarCustomizationState();
   const [settings, setSettings] = useUserStoredSettings(props.data);
-  const isAdmin = props.data.viewerRole === "admin";
+  const isAdmin =
+    props.data.viewerRole === "admin" || props.data.viewerRole === "owner";
   const visible = useMemo(
     () =>
       NAV.map((section) => ({
@@ -543,6 +544,8 @@ function SettingsBody(
 ) {
   const { t } = useI18n();
   const { page } = props;
+  const isWorkspaceAdmin =
+    props.data.viewerRole === "admin" || props.data.viewerRole === "owner";
   const personal = [
     "preferences",
     "profile",
@@ -566,7 +569,7 @@ function SettingsBody(
     );
   if (
     !personal &&
-    props.data.viewerRole !== "admin" &&
+    !isWorkspaceAdmin &&
     !teamOwner &&
     !memberCanManage(page, props.data.workspaceSettings)
   )
@@ -579,7 +582,7 @@ function SettingsBody(
     );
   if (
     page === "audit-log" &&
-    (props.data.viewerRole !== "admin" ||
+    (!isWorkspaceAdmin ||
       props.data.workspaceSettings.plan !== "enterprise")
   )
     return (

@@ -788,7 +788,7 @@ export function Sidebar({
           </Section>
 
           <Section label="Try" storageKey="try">
-            {data.viewerRole === "admin" &&
+            {(data.viewerRole === "admin" || data.viewerRole === "owner") &&
               !dismissedTry.includes("invite") && (
                 <TryItem
                   icon={<Plus />}
