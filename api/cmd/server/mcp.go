@@ -112,7 +112,7 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 				return
 			}
 			tool := tools[index]
-			if readonly && tool.Access == "write" || tool.Access == "write" && !slices.Contains(actor.APIKey.Scopes, "write") {
+			if !mcpToolAllowed(tool, actor.APIKey, readonly, params.Arguments) {
 				s.writeMCPToolResult(w, request.ID, nil, fmt.Errorf("write scope is required"))
 				return
 			}
@@ -129,6 +129,36 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 	}
 }
 
+func mcpToolAllowed(tool flowMCPTool, key domain.APIKey, readonly bool, args map[string]any) bool {
+	if tool.Access == "read" {
+		return mcpAPIKeyHasScope(key, "read")
+	}
+	if readonly {
+		return false
+	}
+	name := strings.ToLower(tool.Name)
+	if strings.Contains(name, "save_issue") && stringArg(args, "id") == "" {
+		return mcpAPIKeyHasScope(key, "create_issues")
+	}
+	if strings.Contains(name, "save_comment") && stringArg(args, "id") == "" {
+		return mcpAPIKeyHasScope(key, "create_comments")
+	}
+	return mcpAPIKeyHasScope(key, "write")
+}
+
+func mcpAPIKeyHasScope(key domain.APIKey, required string) bool {
+	if slices.Contains(key.Scopes, "admin") || slices.Contains(key.Scopes, required) {
+		return true
+	}
+	if required == "read" {
+		return slices.Contains(key.Scopes, "write")
+	}
+	if required == "create_issues" || required == "create_comments" {
+		return slices.Contains(key.Scopes, "write")
+	}
+	return false
+}
+
 func (s *server) authenticateMCP(w http.ResponseWriter, r *http.Request) (mcpActor, bool) {
 	header := strings.TrimSpace(r.Header.Get("Authorization"))
 	if !strings.HasPrefix(strings.ToLower(header), "bearer ") {
@@ -136,7 +166,9 @@ func (s *server) authenticateMCP(w http.ResponseWriter, r *http.Request) (mcpAct
 		return mcpActor{}, false
 	}
 	workspaceKey, key, ok := s.store.FindAPIKey(secretHash(strings.TrimSpace(header[len("Bearer "):])))
-	if !ok || !slices.Contains(key.Scopes, "read") && !slices.Contains(key.Scopes, "write") {
+	if !ok || !slices.ContainsFunc(key.Scopes, func(scope string) bool {
+		return slices.Contains([]string{"read", "write", "admin", "create_issues", "create_comments"}, scope)
+	}) {
 		s.mcpUnauthorized(w, r, "Token is invalid, expired, or lacks read access")
 		return mcpActor{}, false
 	}

@@ -58,6 +58,20 @@ type WorkspaceMember struct {
 	LastSeenAt *time.Time `json:"lastSeenAt,omitempty"`
 }
 
+// IssuePermission grants access to an issue (and, for sub-issues, may be
+// inherited from an ancestor) to an individual, team, or the workspace.
+// Private-team issues use these grants to support explicit sharing without
+// making the whole team visible.
+type IssuePermission struct {
+	ID          string    `json:"id"`
+	IssueID     string    `json:"issueId"`
+	SubjectType string    `json:"subjectType"`
+	SubjectID   string    `json:"subjectId"`
+	Role        string    `json:"role"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
 type TeamMember struct {
 	TeamID   string    `json:"teamId"`
 	UserID   string    `json:"userId"`
@@ -355,6 +369,7 @@ type Issue struct {
 	SubIssueIDs        []string            `json:"subIssueIds"`
 	Relations          []IssueRelation     `json:"relations"`
 	Attachments        []Attachment        `json:"attachments"`
+	Permissions        []IssuePermission   `json:"permissions,omitempty"`
 }
 
 type Cycle struct {
@@ -910,13 +925,17 @@ type CustomEmoji struct {
 }
 
 type APIKey struct {
-	ID              string     `json:"id"`
-	Name            string     `json:"name"`
-	Prefix          string     `json:"prefix"`
-	SecretHash      string     `json:"secretHash,omitempty"`
-	CreatorID       string     `json:"creatorId"`
-	Scopes          []string   `json:"scopes"`
-	TeamIDs         []string   `json:"teamIds"`
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Prefix     string   `json:"prefix"`
+	SecretHash string   `json:"secretHash,omitempty"`
+	CreatorID  string   `json:"creatorId"`
+	Scopes     []string `json:"scopes"`
+	TeamIDs    []string `json:"teamIds"`
+	// TeamRestriction distinguishes an unrestricted key ("all") from a key
+	// explicitly constrained to the selected TeamIDs ("selected"). Empty is
+	// treated as "all" for backwards compatibility with existing records.
+	TeamRestriction string     `json:"teamRestriction,omitempty"`
 	CreatedAt       time.Time  `json:"createdAt"`
 	LastUsedAt      *time.Time `json:"lastUsedAt,omitempty"`
 	RevokedAt       *time.Time `json:"revokedAt,omitempty"`
@@ -982,15 +1001,19 @@ type OAuthApplication struct {
 }
 
 type Webhook struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	URL           string    `json:"url"`
-	ResourceTypes []string  `json:"resourceTypes"`
-	TeamIDs       []string  `json:"teamIds"`
-	Enabled       bool      `json:"enabled"`
-	CreatorID     string    `json:"creatorId"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	ID              string     `json:"id"`
+	Name            string     `json:"name"`
+	URL             string     `json:"url"`
+	ResourceTypes   []string   `json:"resourceTypes"`
+	TeamIDs         []string   `json:"teamIds"`
+	TeamRestriction string     `json:"teamRestriction,omitempty"`
+	Enabled         bool       `json:"enabled"`
+	CreatorID       string     `json:"creatorId"`
+	SecretHash      string     `json:"-"`
+	SecretPrefix    string     `json:"secretPrefix,omitempty"`
+	SecretRevokedAt *time.Time `json:"secretRevokedAt,omitempty"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	UpdatedAt       time.Time  `json:"updatedAt"`
 }
 
 type IntegrationConnection struct {

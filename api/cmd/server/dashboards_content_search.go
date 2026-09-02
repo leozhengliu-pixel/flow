@@ -140,7 +140,7 @@ func teamSet(data domain.Bootstrap) map[string]bool {
 }
 
 func scopedTeamsVisible(data domain.Bootstrap, ids []string) bool {
-	if data.ViewerRole == "admin" || len(ids) == 0 {
+	if workspaceAdminRole(data.ViewerRole) || len(ids) == 0 {
 		return true
 	}
 	allowed := teamSet(data)
@@ -150,11 +150,11 @@ func scopedTeamsVisible(data domain.Bootstrap, ids []string) bool {
 func dashboardVisible(data domain.Bootstrap, viewer string, item domain.Dashboard) bool {
 	switch item.Visibility {
 	case "private":
-		return item.OwnerID == viewer || data.ViewerRole == "admin"
+		return item.OwnerID == viewer || workspaceAdminRole(data.ViewerRole)
 	case "team":
 		return scopedTeamsVisible(data, item.TeamIDs)
 	default:
-		return true
+		return data.ViewerRole != "guest"
 	}
 }
 
@@ -379,7 +379,7 @@ func (s *server) updateDashboard(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
-		if items[index].OwnerID != viewer && next.ViewerRole != "admin" {
+		if items[index].OwnerID != viewer && !workspaceAdminRole(next.ViewerRole) {
 			return errNotFound
 		}
 		applyDashboardInput(&items[index], input)
@@ -406,7 +406,7 @@ func (s *server) deleteDashboard(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
-		if items[index].OwnerID != viewer && next.ViewerRole != "admin" {
+		if items[index].OwnerID != viewer && !workspaceAdminRole(next.ViewerRole) {
 			return errNotFound
 		}
 		removedID := items[index].ID
@@ -458,7 +458,7 @@ func (s *server) shareDashboard(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
-		if items[index].OwnerID != viewer && next.ViewerRole != "admin" {
+		if items[index].OwnerID != viewer && !workspaceAdminRole(next.ViewerRole) {
 			return errNotFound
 		}
 		if r.Method == http.MethodPost {
@@ -491,7 +491,30 @@ func (s *server) getSharedDashboard(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "dashboard not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"dashboard": items[index], "results": calculateDashboard(data, items[index])})
+	// Shared links are unauthenticated. Evaluate them against a public
+	// projection so private-team issues and metadata never escape the
+	// workspace boundary.
+	publicTeams := map[string]bool{}
+	for _, team := range data.Teams {
+		if !team.Private {
+			publicTeams[team.ID] = true
+		}
+	}
+	data.ViewerRole = "guest"
+	data.Teams = slices.DeleteFunc(data.Teams, func(team domain.Team) bool { return !publicTeams[team.ID] })
+	data.Issues = slices.DeleteFunc(data.Issues, func(issue domain.Issue) bool { return !publicTeams[issue.Team.ID] })
+	data.Projects = slices.DeleteFunc(data.Projects, func(project domain.Project) bool {
+		if len(project.TeamIDs) == 0 {
+			return false
+		}
+		return !slices.ContainsFunc(project.TeamIDs, func(id string) bool { return publicTeams[id] })
+	})
+	for index := range data.Projects {
+		data.Projects[index].TeamIDs = slices.DeleteFunc(data.Projects[index].TeamIDs, func(id string) bool { return !publicTeams[id] })
+	}
+	shared := items[index]
+	shared.TeamIDs = slices.DeleteFunc(shared.TeamIDs, func(id string) bool { return !publicTeams[id] })
+	writeJSON(w, http.StatusOK, map[string]any{"dashboard": shared, "results": calculateDashboard(data, shared)})
 }
 
 func (s *server) dashboardResults(w http.ResponseWriter, r *http.Request) {
@@ -979,7 +1002,7 @@ func (s *server) updatePost(w http.ResponseWriter, r *http.Request) {
 		if i < 0 {
 			return errNotFound
 		}
-		if items[i].CreatorID != viewer && next.ViewerRole != "admin" {
+		if items[i].CreatorID != viewer && !workspaceAdminRole(next.ViewerRole) {
 			return errNotFound
 		}
 		applyPostInput(&items[i], input)
@@ -1006,7 +1029,7 @@ func (s *server) deletePost(w http.ResponseWriter, r *http.Request) {
 		if i < 0 {
 			return errNotFound
 		}
-		if items[i].CreatorID != viewer && next.ViewerRole != "admin" {
+		if items[i].CreatorID != viewer && !workspaceAdminRole(next.ViewerRole) {
 			return errNotFound
 		}
 		items = append(items[:i], items[i+1:]...)
@@ -1128,7 +1151,7 @@ func (s *server) updateMeeting(w http.ResponseWriter, r *http.Request) {
 		if i < 0 {
 			return errNotFound
 		}
-		if items[i].OrganizerID != viewer && next.ViewerRole != "admin" {
+		if items[i].OrganizerID != viewer && !workspaceAdminRole(next.ViewerRole) {
 			return errNotFound
 		}
 		applyMeetingInput(&items[i], input)
@@ -1155,7 +1178,7 @@ func (s *server) deleteMeeting(w http.ResponseWriter, r *http.Request) {
 		if i < 0 {
 			return errNotFound
 		}
-		if items[i].OrganizerID != viewer && next.ViewerRole != "admin" {
+		if items[i].OrganizerID != viewer && !workspaceAdminRole(next.ViewerRole) {
 			return errNotFound
 		}
 		items = append(items[:i], items[i+1:]...)

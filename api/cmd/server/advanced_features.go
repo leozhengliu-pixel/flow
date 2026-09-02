@@ -46,7 +46,7 @@ func documentVisibleToViewer(s *server, data domain.Bootstrap, document domain.D
 }
 
 func documentRole(s *server, data domain.Bootstrap, document domain.Document) string {
-	if s.authDisabled || data.ViewerRole == "admin" || document.Creator.ID == data.Viewer.ID {
+	if s.authDisabled || workspaceAdminRole(data.ViewerRole) || document.Creator.ID == data.Viewer.ID {
 		return "owner"
 	}
 	best := "none"
@@ -2276,7 +2276,7 @@ func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 			if json.Unmarshal(entry.Payload, &value) != nil {
 				return errInvalid
 			}
-			if data.ViewerRole != "admin" && value.Creator.ID != data.Viewer.ID {
+			if !workspaceAdminRole(data.ViewerRole) && value.Creator.ID != data.Viewer.ID {
 				return store.ErrAuthForbidden
 			}
 			data.Documents = append([]domain.Document{value}, data.Documents...)
@@ -2781,7 +2781,7 @@ func (s *server) createExport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "format must be json or csv")
 		return
 	}
-	if input.IncludePrivate && !s.authDisabled && s.workspaceData(r).ViewerRole != "admin" {
+	if input.IncludePrivate && !s.authDisabled && !workspaceAdminRole(s.workspaceData(r).ViewerRole) {
 		writeError(w, http.StatusForbidden, "Only workspace admins can export private data")
 		return
 	}
