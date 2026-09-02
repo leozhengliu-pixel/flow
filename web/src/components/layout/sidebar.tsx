@@ -1695,6 +1695,11 @@ function TeamNavigation({
                           }
                           onSelect={(event) => event.preventDefault()}
                         >
+                          <span className="sidebar-team-subscribe-check">
+                            <DropdownMenu.ItemIndicator>
+                              <Check size={10} />
+                            </DropdownMenu.ItemIndicator>
+                          </span>
                           <span>{label}</span>
                         </DropdownMenu.CheckboxItem>
                       ))}
@@ -1706,6 +1711,11 @@ function TeamNavigation({
                         }
                         onSelect={(event) => event.preventDefault()}
                       >
+                        <span className="sidebar-team-subscribe-check">
+                          <DropdownMenu.ItemIndicator>
+                            <Check size={10} />
+                          </DropdownMenu.ItemIndicator>
+                        </span>
                         <span>A team project update is posted</span>
                       </DropdownMenu.CheckboxItem>
                     </DropdownMenu.SubContent>
