@@ -594,6 +594,7 @@ export function createIntegrationDelivery(input: {
   resourceId?: string;
   channel?: string;
   payload: unknown;
+  previousValues?: unknown;
 }): Promise<IntegrationDelivery> {
   return request("/api/integration-deliveries", jsonRequest("POST", input));
 }

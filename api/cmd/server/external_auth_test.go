@@ -54,6 +54,19 @@ func TestAllowedExternalEmail(t *testing.T) {
 	}
 }
 
+func TestExternalOIDCRoleMapping(t *testing.T) {
+	provider := config.OIDCProvider{RoleClaim: "groups", RoleMapping: map[string]string{"staff": "admin"}, DefaultRole: "member"}
+	if got := externalOIDCRole(provider, map[string]any{"groups": []any{"staff"}}); got != "admin" {
+		t.Fatalf("mapped OIDC role = %q", got)
+	}
+	if got := externalOIDCRole(provider, map[string]any{}); got != "member" {
+		t.Fatalf("default OIDC role = %q", got)
+	}
+	if got := externalOIDCRole(provider, map[string]any{"groups": []any{"unknown"}}); got != "member" {
+		t.Fatalf("unmapped OIDC role should use default, got %q", got)
+	}
+}
+
 func TestConfigureSAMLFromMetadata(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {

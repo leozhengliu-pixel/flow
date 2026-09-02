@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
-import { makeBootstrap, viewer } from '@/test/fixtures'
+import { makeBootstrap, teammate, viewer } from '@/test/fixtures'
 import type { FlowDocument } from '@/types/flow'
 
 const api = vi.hoisted(() => ({
@@ -11,6 +11,8 @@ const api = vi.hoisted(() => ({
   addSubscription: vi.fn(),
   removeFavorite: vi.fn(),
   removeSubscription: vi.fn(),
+  listDocumentPermissions: vi.fn(),
+  replaceDocumentPermissions: vi.fn(),
 }))
 
 vi.mock('@/components/issue/issue-description-editor', () => ({ IssueDescriptionEditor: () => <div aria-label="Document content"/> }))
@@ -35,6 +37,8 @@ describe('DocumentPage edited details', () => {
     api.addSubscription.mockReset().mockResolvedValue(undefined)
     api.removeFavorite.mockReset().mockResolvedValue(undefined)
     api.removeSubscription.mockReset().mockResolvedValue(undefined)
+    api.listDocumentPermissions.mockReset().mockResolvedValue([])
+    api.replaceDocumentPermissions.mockReset().mockResolvedValue([])
   })
 
   it('persists the document favorite switch before refreshing the sidebar', async () => {
@@ -109,5 +113,20 @@ describe('DocumentPage edited details', () => {
     await user.click(screen.getByRole('button', { name: 'Subscribe' }))
     await waitFor(() => expect(api.addSubscription).toHaveBeenCalledWith('document', flowDocument.id))
     expect(onReload).toHaveBeenCalledTimes(2)
+  })
+
+  it('lets the document owner manage member roles through the access dialog', async () => {
+    const user = userEvent.setup()
+    api.listDocumentPermissions.mockResolvedValue([{ id: 'owner-grant', documentId: flowDocument.id, subjectType: 'user', subjectId: viewer.id, role: 'owner' }])
+    api.replaceDocumentPermissions.mockResolvedValue([{ id: 'owner-grant', documentId: flowDocument.id, subjectType: 'user', subjectId: viewer.id, role: 'owner' }, { id: 'editor-grant', documentId: flowDocument.id, subjectType: 'user', subjectId: teammate.id, role: 'editor' }])
+    const data = makeBootstrap({ members: [{ user: viewer, role: 'owner', status: 'active' }, { user: teammate, role: 'member', status: 'active' }] as never, comments: { [flowDocument.id]: [] }, documents: [flowDocument], favorites: [], subscriptions: [] })
+    render(<I18nProvider><DocumentPage data={data} document={flowDocument} onBack={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+
+    await user.click(screen.getByRole('button', { name: 'Document options' }))
+    await user.click(screen.getByRole('menuitem', { name: 'People with access' }))
+    expect(await screen.findByRole('heading', { name: 'People with access' })).toBeVisible()
+    await user.click(screen.getByRole('combobox', { name: 'Access for Teammate' }))
+    await user.click(screen.getByRole('option', { name: 'Can edit' }))
+    await waitFor(() => expect(api.replaceDocumentPermissions).toHaveBeenCalledWith(flowDocument.id, [{ subjectType: 'user', subjectId: viewer.id, role: 'owner' }, { subjectType: 'user', subjectId: teammate.id, role: 'editor' }]))
   })
 })

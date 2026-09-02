@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -348,6 +349,12 @@ func (s *server) scimGroups(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		group, _ = s.store.SCIMGroup(r.Context(), workspaceID, group.ID)
+		if teamID := s.scimTeamForGroup(workspaceKey, group); teamID != "" {
+			if err = s.store.SyncSCIMGroupTeam(r.Context(), workspaceID, group.ID, teamID); err != nil {
+				writeError(w, http.StatusUnprocessableEntity, err.Error())
+				return
+			}
+		}
 		resource := scimGroupResourceFromStore(workspaceKey, group)
 		w.Header().Set("Location", "/scim/v2/"+workspaceKey+"/Groups/"+group.ID)
 		writeJSON(w, http.StatusCreated, resource)
@@ -393,6 +400,12 @@ func (s *server) scimGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodDelete {
+		if teamID := s.scimTeamForGroup(workspaceKey, group); teamID != "" {
+			if err := s.store.SyncSCIMGroupTeam(r.Context(), workspaceID, group.ID, teamID); err != nil {
+				writeError(w, http.StatusUnprocessableEntity, err.Error())
+				return
+			}
+		}
 		respondMutation(w, s.store.DeleteSCIMGroup(r.Context(), workspaceID, group.ID), http.StatusNoContent, nil)
 		return
 	}
@@ -422,7 +435,36 @@ func (s *server) scimGroup(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if teamID := s.scimTeamForGroup(workspaceKey, updated); teamID != "" {
+		if err := s.store.SyncSCIMGroupTeam(r.Context(), workspaceID, updated.ID, teamID); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+	}
 	writeJSON(w, http.StatusOK, scimGroupResourceFromStore(workspaceKey, updated))
+}
+
+// scimTeamForGroup resolves an explicit workspace mapping, or a group whose
+// externalId is the Flow team ID/key. Display names are not matched implicitly
+// because IdP group labels are not guaranteed to be unique.
+func (s *server) scimTeamForGroup(workspaceKey string, group store.SCIMGroup) string {
+	data, ok := s.store.BootstrapFor(workspaceKey)
+	if !ok {
+		return ""
+	}
+	for teamID, groupName := range data.WorkspaceSettings.SCIMTeamGroupMapping {
+		if strings.EqualFold(strings.TrimSpace(groupName), group.DisplayName) || strings.EqualFold(strings.TrimSpace(groupName), group.ExternalID) {
+			if slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) {
+				return teamID
+			}
+		}
+	}
+	for _, team := range data.Teams {
+		if strings.EqualFold(team.ID, group.ExternalID) || strings.EqualFold(team.Key, group.ExternalID) {
+			return team.ID
+		}
+	}
+	return ""
 }
 
 func scimGroupResourceFromStore(workspaceKey string, group store.SCIMGroup) scimGroupResource {
