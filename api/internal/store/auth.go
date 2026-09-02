@@ -1266,7 +1266,13 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 	// discovering the title or content of a team document they cannot access.
 	if !isWorkspaceAdminRole(data.ViewerRole) || strings.EqualFold(data.WorkspaceSettings.Plan, "enterprise") {
 		data.Documents = slices.DeleteFunc(data.Documents, func(document domain.Document) bool {
-			if len(document.TeamIDs) == 0 || slices.ContainsFunc(document.TeamIDs, func(teamID string) bool { return allowed[teamID] }) {
+			if len(document.TeamIDs) == 0 {
+				// An unscoped document is workspace-visible until explicit
+				// document permissions are configured. Once configured, only a
+				// matching grant (or the canonical owner) may discover it.
+				return len(document.Permissions) > 0 && !documentPermissionAllows(data, document, allowed)
+			}
+			if slices.ContainsFunc(document.TeamIDs, func(teamID string) bool { return allowed[teamID] }) {
 				return false
 			}
 			return !documentPermissionAllows(data, document, allowed)

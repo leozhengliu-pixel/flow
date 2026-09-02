@@ -50,6 +50,7 @@ func (s *server) replaceDocumentPermissions(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	id := r.PathValue("id")
+	viewerData := s.workspaceData(r)
 	var updated []domain.DocumentPermission
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.permissions_updated", id, input, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
@@ -68,7 +69,7 @@ func (s *server) replaceDocumentPermissions(w http.ResponseWriter, r *http.Reque
 			permission.SubjectID = strings.TrimSpace(permission.SubjectID)
 			permission.Role = strings.ToLower(strings.TrimSpace(permission.Role))
 			key := permission.SubjectType + ":" + permission.SubjectID
-			if _, exists := seen[key]; !validDocumentPermission(*data, permission) || permission.Role == "owner" && permission.SubjectType != "user" || key == ":" || exists {
+			if _, exists := seen[key]; !validDocumentPermission(viewerData, permission) || permission.Role == "owner" && permission.SubjectType != "user" || key == ":" || exists {
 				return errInvalid
 			}
 			seen[key] = struct{}{}

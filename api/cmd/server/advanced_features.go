@@ -50,11 +50,11 @@ func documentRole(s *server, data domain.Bootstrap, document domain.Document) st
 		return "owner"
 	}
 	best := "none"
-	hasExplicit := false
+	// A non-empty permissions list is an explicit ACL, including the
+	// canonical owner entry added by the permissions endpoint. Documents with
+	// no permissions retain their legacy workspace-visible behavior.
+	hasExplicit := len(document.Permissions) > 0
 	for _, permission := range document.Permissions {
-		if !(permission.SubjectType == "user" && permission.SubjectID == document.Creator.ID && strings.EqualFold(permission.Role, "owner")) {
-			hasExplicit = true
-		}
 		matched := permission.SubjectType == "user" && permission.SubjectID == data.Viewer.ID
 		if !matched && permission.SubjectType == "workspace" {
 			matched = permission.SubjectID == "" || permission.SubjectID == data.Workspace.ID || permission.SubjectID == data.Workspace.URLKey
