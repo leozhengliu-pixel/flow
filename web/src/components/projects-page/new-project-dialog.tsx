@@ -7,6 +7,8 @@ import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { CalendarIcon, LabelIcon, MembersIcon, NoAssigneeIcon, PriorityIcon } from '@/components/issue/issue-icons'
 import { ProjectStatusGlyph } from './project-property-picker'
 import { ProjectDatePicker } from './project-target-date-picker'
+import { formatProjectPropertyDate } from '@/components/project-detail/project-detail-helpers'
+import { useI18n } from '@/i18n/i18n'
 import './projects-page.css'
 
 export type NewProjectDraft = {
@@ -22,7 +24,9 @@ export type NewProjectDraft = {
   memberIds: string[]
   teamIds: string[]
   startDate?: string
+  startDateResolution?: 'halfYear' | 'month' | 'quarter' | 'year'
   targetDate?: string
+  targetDateResolution?: 'halfYear' | 'month' | 'quarter' | 'year'
   initiativeIds: string[]
   labelIds: string[]
   dependencyIds: string[]
@@ -179,8 +183,8 @@ export function NewProjectDialog({
           <ProjectDraftProperty icon={<PriorityIcon priority={Math.max(0, PRIORITY.indexOf(draft.priority))} size={14}/>} label="Change project priority" options={PRIORITY.map((value, priority) => ({ id: value, icon: <PriorityIcon priority={priority} size={14}/>, label: value }))} value={draft.priority} onChange={value => set('priority', value)} />
           <ProjectDraftProperty icon={<NoAssigneeIcon size={14}/>} label="Set project lead" options={[{ id: '', icon: <NoAssigneeIcon size={14}/>, label: 'Lead' }, ...leads]} value={draft.leadId ?? ''} onChange={value => set('leadId', value)} />
           <ProjectDraftProperty icon={<MembersIcon size={14}/>} label="Change project members" multiple options={members} placeholder="Members" value={draft.memberIds} onChange={value => set('memberIds', value)} />
-          <DateChip kind="start" placeholder="Start" value={draft.startDate} onChange={value => set('startDate', value)} />
-          <DateChip kind="target" placeholder="Target" value={draft.targetDate} onChange={value => set('targetDate', value)} />
+          <DateChip kind="start" max={draft.targetDate} placeholder="Start" resolution={draft.startDateResolution} value={draft.startDate} onChange={(value, resolution) => setDraft(current => ({ ...current, startDate: value || undefined, startDateResolution: resolution }))} />
+          <DateChip kind="target" min={draft.startDate} placeholder="Target" resolution={draft.targetDateResolution} value={draft.targetDate} onChange={(value, resolution) => setDraft(current => ({ ...current, targetDate: value || undefined, targetDateResolution: resolution }))} />
           <ProjectDraftProperty icon={<LayoutTemplate size={14}/>} label="Change project initiatives" multiple options={initiatives} placeholder="Initiatives" value={draft.initiativeIds} onChange={value => set('initiativeIds', value)} />
           <ProjectDraftProperty icon={<LabelIcon size={14}/>} label="Change labels" multiple options={labels} placeholder="Labels" value={draft.labelIds} onChange={value => set('labelIds', value)} />
           <ProjectDraftProperty icon={<Link2 size={14}/>} label="Add dependencies" multiple options={dependencies} placeholder="Dependencies" value={draft.dependencyIds} onChange={value => set('dependencyIds', value)} />
@@ -243,9 +247,11 @@ function ProjectDraftProperty(props: {
   />
 }
 
-function DateChip({ kind, onChange, placeholder, value }: { kind: 'start' | 'target', onChange: (value: string) => void, placeholder: string, value?: string }) {
+function DateChip({ kind, max, min, onChange, placeholder, resolution, value }: { kind: 'start' | 'target', max?: string, min?: string, onChange: (value: string, resolution?: 'halfYear' | 'month' | 'quarter' | 'year') => void, placeholder: string, resolution?: 'halfYear' | 'month' | 'quarter' | 'year', value?: string }) {
   const label = kind === 'start' ? 'Start date' : 'Target date'
-  return <ProjectDatePicker align="start" buttonClassName="lp-new-project-date" contentClassName="lp-new-project-date__surface" label={label} onChange={onChange} value={value}><CalendarIcon size={14} variant={kind}/><span>{value || placeholder}</span></ProjectDatePicker>
+  const { locale, formatDate } = useI18n()
+  const displayValue = value ? formatProjectPropertyDate(value, resolution, placeholder, locale, formatDate) : placeholder
+  return <ProjectDatePicker align="start" buttonClassName="lp-new-project-date" contentClassName="lp-new-project-date__surface" label={label} max={max} min={min} onChange={onChange} resolution={resolution} value={value}><CalendarIcon size={14} variant={kind}/><span>{displayValue}</span></ProjectDatePicker>
 }
 
 function ProjectIconPicker({ color = '#5e6ad2', icon = 'Project', onChange }: { color?: string, icon?: string, onChange: (icon: string, color: string) => void }) {

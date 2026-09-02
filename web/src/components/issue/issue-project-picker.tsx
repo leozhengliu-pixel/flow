@@ -103,7 +103,7 @@ export function IssueProjectPicker({ data, issue, grouped = false, onUpdate, onC
       onClose={() => setCreateOpen(false)}
       onCreate={async draft => { const created = onCreateProject ? await onCreateProject(draft) : await createDirectProject(draft, data); setCreatedProjects(current => [created, ...current.filter(item => item.id !== created.id)]); await onUpdate({ projectId: created.id, projectMilestoneId: '' }); setCreateOpen(false) }}
       open={createOpen}
-      teamLabel={issue.team.key}
+      teamLabel={issue.team.name}
       teams={data.teams.filter(team => !team.retiredAt).map(team => ({ id: team.id, label: team.name, color: team.color }))}
     />
   </>
@@ -133,21 +133,21 @@ async function createDirectProject(draft: NewProjectDraft, data: BootstrapData) 
     icon: draft.icon,
     leadId: draft.leadId,
     memberIds: draft.memberIds,
+    milestones: draft.milestones,
     labelIds: draft.labelIds,
     dependencyIds: draft.dependencyIds,
     initiatives: draft.initiativeIds,
     name: draft.name,
     priority: Math.max(0, ['No priority', 'Urgent', 'High', 'Medium', 'Low'].indexOf(draft.priority)),
     startDate: draft.startDate,
+    startDateResolution: draft.startDateResolution,
     statusId: data.projectStatuses.find(status => status.name === draft.status)?.id ?? data.projects.find(project => project.status.name === draft.status)?.status.id,
     summary: draft.summary,
     targetDate: draft.targetDate,
+    targetDateResolution: draft.targetDateResolution,
     teamIds: draft.teamIds,
   }
-  const project = await createProjectRequest(input)
-  const milestones: ProjectMilestone[] = []
-  for (const name of draft.milestones) milestones.push(await createProjectMilestoneRequest(project.id, { name }))
-  return { ...project, milestones }
+  return createProjectRequest(input)
 }
 
 function isEditable(target: EventTarget | null) { return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLElement && target.isContentEditable }
