@@ -21,6 +21,7 @@ import {
   migrationBundleDownloadUrl,
   migrationManifestDownloadUrl,
   previewImport,
+  resumeImport,
   previewMigration,
   retryImport,
   rollbackMigration,
@@ -33,6 +34,7 @@ import type {
   MigrationEntityMapping,
   MigrationJob,
 } from "@/types/flow";
+import { useI18n } from "@/i18n/i18n";
 import { SettingsSelect } from "./settings-primitives";
 
 export {
@@ -49,6 +51,7 @@ export function ImportExportSettings({
   data: BootstrapData;
   onReload: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [job, setJob] = useState<ImportJob>();
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState(false);
@@ -271,19 +274,34 @@ export function ImportExportSettings({
                 </button>
               )}
               {(item.status === "failed" || item.status === "cancelled") && (
-                <button
-                  className="settings-action"
-                  onClick={() =>
-                    void retryImport(item.id).then((value) => {
-                      setJob(value);
-                      setMapping(value.mapping ?? {});
-                      return onReload();
-                    })
-                  }
-                >
-                  <RotateCcw size={14} />
-                  Retry
-                </button>
+                <>
+                  <button
+                    className="settings-action"
+                    onClick={() =>
+                      void resumeImport(item.id).then((value) => {
+                        setJob(value);
+                        setMapping(value.mapping ?? {});
+                        return onReload();
+                      })
+                    }
+                  >
+                    <RotateCcw size={14} />
+                    {t("Resume")}
+                  </button>
+                  <button
+                    className="settings-action"
+                    onClick={() =>
+                      void retryImport(item.id).then((value) => {
+                        setJob(value);
+                        setMapping(value.mapping ?? {});
+                        return onReload();
+                      })
+                    }
+                  >
+                    <RotateCcw size={14} />
+                    {t("Retry")}
+                  </button>
+                </>
               )}
             </div>
           ))}

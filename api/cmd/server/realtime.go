@@ -68,11 +68,15 @@ func (h *realtimeHub) publish(workspace string, event domain.RealtimeEvent) {
 }
 
 func (h *realtimeHub) updatePresence(workspace, clientID string, user domain.User, issueID, route string) []domain.Presence {
+	return h.updatePresenceWithDocument(workspace, clientID, user, issueID, "", route)
+}
+
+func (h *realtimeHub) updatePresenceWithDocument(workspace, clientID string, user domain.User, issueID, documentID, route string) []domain.Presence {
 	h.mu.Lock()
 	if h.presence[workspace] == nil {
 		h.presence[workspace] = map[string]domain.Presence{}
 	}
-	h.presence[workspace][clientID] = domain.Presence{ClientID: clientID, User: user, IssueID: issueID, Route: route, LastSeenAt: time.Now().UTC()}
+	h.presence[workspace][clientID] = domain.Presence{ClientID: clientID, User: user, IssueID: issueID, DocumentID: documentID, Route: route, LastSeenAt: time.Now().UTC()}
 	presence := h.presenceLocked(workspace, time.Now())
 	h.mu.Unlock()
 	h.publishPresence(workspace, presence)
@@ -187,15 +191,16 @@ func writeSSE(w http.ResponseWriter, event domain.RealtimeEvent) bool {
 
 func (s *server) updatePresence(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		ClientID string `json:"clientId"`
-		IssueID  string `json:"issueId"`
-		Route    string `json:"route"`
-		Active   *bool  `json:"active"`
+		ClientID   string `json:"clientId"`
+		IssueID    string `json:"issueId"`
+		DocumentID string `json:"documentId"`
+		Route      string `json:"route"`
+		Active     *bool  `json:"active"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	input.ClientID, input.IssueID, input.Route = strings.TrimSpace(input.ClientID), strings.TrimSpace(input.IssueID), strings.TrimSpace(input.Route)
+	input.ClientID, input.IssueID, input.DocumentID, input.Route = strings.TrimSpace(input.ClientID), strings.TrimSpace(input.IssueID), strings.TrimSpace(input.DocumentID), strings.TrimSpace(input.Route)
 	if input.ClientID == "" || len(input.ClientID) > 128 || len(input.Route) > 500 {
 		writeError(w, http.StatusBadRequest, "clientId is required")
 		return
@@ -222,9 +227,19 @@ func (s *server) updatePresence(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if input.DocumentID != "" {
+		data := s.workspaceData(r)
+		index := slices.IndexFunc(data.Documents, func(document domain.Document) bool {
+			return document.ID == input.DocumentID || document.SlugID == input.DocumentID
+		})
+		if index < 0 || documentRole(s, data, data.Documents[index]) == "none" {
+			writeError(w, http.StatusForbidden, "Document is outside your permissions")
+			return
+		}
+	}
 	workspace := workspaceKey(r)
 	if s.coordinator != nil {
-		presence, err := s.coordinator.UpdatePresence(r.Context(), workspace, input.ClientID, domain.Presence{ClientID: input.ClientID, User: authUser(r), IssueID: input.IssueID, Route: input.Route, LastSeenAt: time.Now().UTC()}, presenceTTL)
+		presence, err := s.coordinator.UpdatePresence(r.Context(), workspace, input.ClientID, domain.Presence{ClientID: input.ClientID, User: authUser(r), IssueID: input.IssueID, DocumentID: input.DocumentID, Route: input.Route, LastSeenAt: time.Now().UTC()}, presenceTTL)
 		if err != nil {
 			writeError(w, http.StatusServiceUnavailable, "Presence is temporarily unavailable")
 			return
@@ -233,7 +248,40 @@ func (s *server) updatePresence(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, presence)
 		return
 	}
-	writeJSON(w, http.StatusOK, s.realtime.updatePresence(workspace, input.ClientID, authUser(r), input.IssueID, input.Route))
+	writeJSON(w, http.StatusOK, s.realtime.updatePresenceWithDocument(workspace, input.ClientID, authUser(r), input.IssueID, input.DocumentID, input.Route))
+}
+
+func (s *server) listPresence(w http.ResponseWriter, r *http.Request) {
+	workspace := workspaceKey(r)
+	presence, err := s.snapshotPresence(r.Context(), workspace)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "Presence is temporarily unavailable")
+		return
+	}
+	issueID := strings.TrimSpace(r.URL.Query().Get("issueId"))
+	documentID := strings.TrimSpace(r.URL.Query().Get("documentId"))
+	route := strings.TrimSpace(r.URL.Query().Get("route"))
+	if issueID != "" {
+		data := s.workspaceData(r)
+		if !slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == issueID }) {
+			writeError(w, http.StatusForbidden, "Issue is outside your teams")
+			return
+		}
+	}
+	if documentID != "" {
+		data := s.workspaceData(r)
+		index := slices.IndexFunc(data.Documents, func(document domain.Document) bool { return document.ID == documentID || document.SlugID == documentID })
+		if index < 0 || documentRole(s, data, data.Documents[index]) == "none" {
+			writeError(w, http.StatusForbidden, "Document is outside your permissions")
+			return
+		}
+	}
+	if issueID != "" || documentID != "" || route != "" {
+		presence = slices.DeleteFunc(presence, func(item domain.Presence) bool {
+			return issueID != "" && item.IssueID != issueID || documentID != "" && item.DocumentID != documentID || route != "" && item.Route != route
+		})
+	}
+	writeJSON(w, http.StatusOK, presence)
 }
 
 func (s *server) snapshotPresence(ctx context.Context, workspace string) ([]domain.Presence, error) {

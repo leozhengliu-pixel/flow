@@ -82,7 +82,7 @@
 }
 .insights-controls {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   padding: 20px 0 12px;
 }
@@ -171,6 +171,55 @@
   font-size: 12px;
   text-align: center;
 }
+.insights-state {
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: var(--theme-text-secondary);
+  text-align: center;
+}
+.insights-state > svg {
+  width: 28px;
+  height: 28px;
+}
+.insights-state > strong {
+  color: var(--theme-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+.insights-state > p {
+  margin: 0;
+  font-size: 12px;
+}
+.insights-state > button {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 4px;
+  padding: 0 12px;
+  border: 0.5px solid var(--theme-border);
+  border-radius: 8px;
+  background: var(--theme-surface-1);
+  color: var(--theme-text-primary);
+  font: 500 13px inherit;
+}
+.insights-state > button:hover {
+  background: var(--theme-surface-hover);
+}
+.insights-state > button svg {
+  width: 14px;
+  height: 14px;
+}
+.insights-state-error > strong {
+  color: var(--semantic-danger-text);
+}
+.insights-state-empty {
+  min-height: 260px;
+}
 .insights-menu {
   min-width: 210px;
   padding: 4px;
@@ -196,6 +245,10 @@
 .insights-menu [role="menuitem"][data-highlighted],
 .insights-menu [role="menuitemcheckbox"][data-highlighted] {
   background: var(--theme-surface-hover);
+}
+.insights-menu [role="menuitem"][data-disabled] {
+  cursor: default;
+  opacity: 0.55;
 }
 .insights-menu svg {
   width: 14px;

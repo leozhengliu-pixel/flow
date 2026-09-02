@@ -214,9 +214,7 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 			return errors.New("document is outside your teams")
 		}
 		document := data.Documents[index]
-		if !s.authDisabled && len(document.TeamIDs) > 0 && !slices.ContainsFunc(data.TeamMembers, func(member domain.TeamMember) bool {
-			return member.UserID == data.Viewer.ID && slices.Contains(document.TeamIDs, member.TeamID)
-		}) {
+		if documentRole(s, data, document) == "none" {
 			return errors.New("document is outside your teams")
 		}
 		contentState = document.ContentState

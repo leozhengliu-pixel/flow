@@ -232,6 +232,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/account/change-password", s.changeAccountPassword)
 	mux.HandleFunc("GET /api/realtime/events", s.realtimeEvents)
 	mux.HandleFunc("GET /api/realtime/socket", s.realtimeSocket)
+	mux.HandleFunc("GET /api/realtime/presence", s.listPresence)
 	mux.HandleFunc("POST /api/realtime/presence", s.updatePresence)
 	mux.HandleFunc("GET /api/search", s.searchWorkspace)
 	mux.HandleFunc("DELETE /api/search/history", s.clearSearchHistory)
@@ -280,6 +281,11 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/documents", s.createDocument)
 	mux.HandleFunc("PATCH /api/documents/{id}", s.updateDocument)
 	mux.HandleFunc("DELETE /api/documents/{id}", s.deleteDocument)
+	mux.HandleFunc("GET /api/documents/{id}/permissions", s.listDocumentPermissions)
+	mux.HandleFunc("PUT /api/documents/{id}/permissions", s.replaceDocumentPermissions)
+	mux.HandleFunc("PATCH /api/documents/{id}/permissions/{permissionId}", s.updateDocumentPermission)
+	mux.HandleFunc("DELETE /api/documents/{id}/permissions/{permissionId}", s.deleteDocumentPermission)
+	mux.HandleFunc("GET /api/documents/{id}/comments", s.listDocumentComments)
 	mux.HandleFunc("POST /api/documents/{id}/comments", s.createDocumentComment)
 	mux.HandleFunc("PATCH /api/documents/{id}/comments/{commentId}", s.updateDocumentComment)
 	mux.HandleFunc("DELETE /api/documents/{id}/comments/{commentId}", s.deleteDocumentComment)
@@ -404,6 +410,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/imports/{id}", s.getImport)
 	mux.HandleFunc("POST /api/imports/{id}/cancel", s.cancelImport)
 	mux.HandleFunc("POST /api/imports/{id}/retry", s.retryImport)
+	mux.HandleFunc("POST /api/imports/{id}/resume", s.resumeImport)
 	mux.HandleFunc("POST /api/exports", s.createExport)
 	mux.HandleFunc("GET /api/exports", s.listExports)
 	mux.HandleFunc("GET /api/exports/{id}", s.getExport)
@@ -548,6 +555,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/teams/{id}/labels/{labelId}", s.updateTeamLabel)
 	mux.HandleFunc("DELETE /api/teams/{id}/labels/{labelId}", s.deleteTeamLabel)
 	mux.HandleFunc("PATCH /api/cycles/{id}", s.updateCycle)
+	mux.HandleFunc("GET /api/cycles/{id}/capacity", s.getCycleCapacity)
+	mux.HandleFunc("PUT /api/cycles/{id}/capacity", s.updateCycleCapacity)
 	mux.HandleFunc("POST /api/cycles/{id}/start", s.startCycle)
 	mux.HandleFunc("POST /api/cycles/{id}/complete", s.completeCycle)
 	mux.HandleFunc("POST /api/cycles/{id}/resources", s.createCycleResource)
@@ -1801,7 +1810,7 @@ func (s *server) updateCycle(w http.ResponseWriter, r *http.Request) {
 					return errInvalid
 				}
 				for day, value := range days {
-					if value < 0 || value > 24 || !slices.Contains([]string{"mon", "tue", "wed", "thu", "fri", "sat", "sun"}, strings.ToLower(day)) {
+					if value < 0 || value > 24 || !validCycleCapacityDay(*cycle, day) {
 						return errInvalid
 					}
 				}
