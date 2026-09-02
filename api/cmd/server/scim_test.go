@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -119,6 +120,38 @@ func TestSCIMProvisioningSupportsExternalIdentifiersWithoutEmail(t *testing.T) {
 
 	requestJSON[any](t, handler, http.MethodDelete, "/api/scim/tokens/"+token.ID+"?workspace=test-workspace", nil, http.StatusNoContent)
 	_ = scimRequest(t, handler, http.MethodGet, "/scim/v2/test-workspace/Users", token.Secret, nil, http.StatusUnauthorized)
+}
+
+func TestSCIMRoleGroupsUseWorkspaceSettingsWithoutBrowserSession(t *testing.T) {
+	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "scim-authenticated.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	workspaceID := repository.Bootstrap().Workspace.ID
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir()})
+	httpServer := httptest.NewServer(handler)
+	defer httpServer.Close()
+	admin := authClient(t)
+	authRequest[domain.AuthSession](t, admin, http.MethodPost, httpServer.URL+"/api/auth/login", map[string]string{"email": "admin@example.test", "password": "test-password"}, "", http.StatusOK)
+	if err := repository.MutateWorkspace(t.Context(), "test-workspace", "scim.test.authenticated", "workspace", nil, func(data *domain.Bootstrap) error {
+		data.WorkspaceSettings.Plan = "enterprise"
+		data.WorkspaceSettings.SCIMRoleGroups = map[string]string{"owner": "Owners"}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	token := authRequest[store.SCIMToken](t, admin, http.MethodPost, httpServer.URL+"/api/scim/tokens?workspace=test-workspace", map[string]any{"name": "scim"}, "", http.StatusCreated)
+	resource := scimRequest(t, handler, http.MethodPost, "/scim/v2/test-workspace/Groups", token.Secret, map[string]any{"externalId": "role-owner", "displayName": "Owners"}, http.StatusCreated)
+	groupID := map[string]any{}
+	if err := json.Unmarshal(resource, &groupID); err != nil {
+		t.Fatal(err)
+	}
+	group, err := repository.SCIMGroup(t.Context(), workspaceID, groupID["id"].(string))
+	if err != nil || group.Role != "owner" {
+		t.Fatalf("SCIM role group was not mapped for unauthenticated provisioning: group=%#v err=%v", group, err)
+	}
 }
 
 func scimRequest(t *testing.T, handler http.Handler, method, path, token string, body any, wantStatus int) []byte {
