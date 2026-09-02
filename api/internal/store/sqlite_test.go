@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"slices"
@@ -21,6 +22,13 @@ func TestSQLiteStorePersistsStateAndDomainEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	store.SetWebhookSink(func(string, domain.DomainEvent) {})
+	if err := store.MutateWorkspace(context.Background(), "test-workspace", "webhook.created", "webhook_test", nil, func(data *domain.Bootstrap) error {
+		data.Webhooks = append(data.Webhooks, domain.Webhook{ID: "webhook_test", URL: "http://localhost", Enabled: true})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	const issueID = "issue_test"
 	err = store.MutateWithAggregate(context.Background(), "issue.created", map[string]string{"title": "Persist me"}, func(data *domain.Bootstrap) (string, error) {
@@ -34,6 +42,17 @@ func TestSQLiteStorePersistsStateAndDomainEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := store.MutateWorkspace(context.Background(), "test-workspace", "issue.updated", issueID, map[string]string{"title": "Updated"}, func(data *domain.Bootstrap) error {
+		for index := range data.Issues {
+			if data.Issues[index].ID == issueID {
+				data.Issues[index].Title = "Updated"
+				return nil
+			}
+		}
+		return errors.New("issue not found")
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -43,15 +62,19 @@ func TestSQLiteStorePersistsStateAndDomainEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
-	if got := reopened.Bootstrap().Issues[0].Title; got != "Persist me" {
+	if got := reopened.Bootstrap().Issues[0].Title; got != "Updated" {
 		t.Fatalf("persisted title = %q", got)
 	}
 	events, err := reopened.Events(context.Background(), issueID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 1 || events[0].Type != "issue.created" || events[0].AggregateID != issueID {
+	if len(events) != 2 || events[0].Type != "issue.created" || events[0].AggregateID != issueID || events[1].PreviousValues == nil {
 		t.Fatalf("unexpected events: %#v", events)
+	}
+	var previous map[string]any
+	if err := json.Unmarshal(events[1].PreviousValues, &previous); err != nil || previous["title"] != "Persist me" {
+		t.Fatalf("persisted previous values = %#v err=%v", events[1].PreviousValues, err)
 	}
 }
 
@@ -187,8 +210,8 @@ func TestSchemaMigrationsAreVersionedAndIdempotent(t *testing.T) {
 	if err := repository.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 2 {
-		t.Fatalf("schema migration count = %d, want 2", count)
+	if count != 3 {
+		t.Fatalf("schema migration count = %d, want 3", count)
 	}
 	if err := repository.Close(); err != nil {
 		t.Fatal(err)
@@ -201,8 +224,8 @@ func TestSchemaMigrationsAreVersionedAndIdempotent(t *testing.T) {
 	if err := reopened.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 2 {
-		t.Fatalf("schema migration count after reopen = %d, want 2", count)
+	if count != 3 {
+		t.Fatalf("schema migration count after reopen = %d, want 3", count)
 	}
 }
 
