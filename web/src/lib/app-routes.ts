@@ -355,7 +355,9 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
   const segments = pathname
     .split("/")
     .filter(Boolean)
-    .map((segment) => decodeURIComponent(segment));
+    // A malformed percent escape should resolve to a not-found route rather
+    // than throwing during the initial render and leaving the shell blank.
+    .map((segment) => safeDecode(segment));
   if (!segments.length) return { kind: "root" };
   if (segments.length === 1 && segments[0] === "join")
     return { kind: "workspace-onboarding" };
@@ -1232,6 +1234,57 @@ export function inboxPath(workspaceSlug: string) {
 export function searchPath(workspaceSlug: string) {
   return `${workspaceRootPath(workspaceSlug)}/search`;
 }
+export function diaryPath(workspaceSlug: string) {
+  return `${workspaceRootPath(workspaceSlug)}/diary`;
+}
+export function meetingPath(workspaceSlug: string, meetingId: string) {
+  return `${workspaceRootPath(workspaceSlug)}/meeting/${encode(meetingId)}`;
+}
+export function automationsPath(workspaceSlug: string) {
+  return `${workspaceRootPath(workspaceSlug)}/automations`;
+}
+export function automationNewPath(workspaceSlug: string) {
+  return `${automationsPath(workspaceSlug)}/new`;
+}
+export function automationPath(
+  workspaceSlug: string,
+  automationId: string,
+  editing = false,
+) {
+  return `${workspaceRootPath(workspaceSlug)}/automation/${encode(automationId)}${editing ? "/edit" : ""}`;
+}
+export function automationRunsPath(
+  workspaceSlug: string,
+  automationId: string,
+  runId?: string,
+) {
+  const root = automationPath(workspaceSlug, automationId);
+  return runId
+    ? `${root}/run/${encode(runId)}`
+    : `${root}/runs`;
+}
+export function teamBoardPath(workspaceSlug: string, teamKey: string) {
+  return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/board`;
+}
+export function teamTriagePath(workspaceSlug: string, teamKey: string) {
+  return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/triage`;
+}
+export function teamUpdatesPath(workspaceSlug: string, teamKey: string) {
+  return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/updates`;
+}
+export function teamUpdatePath(
+  workspaceSlug: string,
+  teamKey: string,
+  updateId: string,
+) {
+  return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/update/${encode(updateId)}`;
+}
+export function teamResourcesPath(workspaceSlug: string, teamKey: string) {
+  return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/resources`;
+}
+export function teamLinksPath(workspaceSlug: string, teamKey: string) {
+  return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/links`;
+}
 export function pulsePath(
   workspaceSlug: string,
   view: PulseRouteView = "following",
@@ -1309,6 +1362,16 @@ export function customerPath(
   customer: { id: string; name: string },
 ) {
   return `${workspaceRootPath(workspaceSlug)}/customer/${slug(customer.name)}-${customer.id.slice(-12)}`;
+}
+export function releaseNotePath(workspaceSlug: string, releaseNoteId: string) {
+  return `${workspaceRootPath(workspaceSlug)}/release-note/${encode(releaseNoteId)}`;
+}
+export function labelPath(
+  workspaceSlug: string,
+  resourceType: "issue" | "project" | "initiative",
+  resourceName: string,
+) {
+  return `${workspaceRootPath(workspaceSlug)}/${resourceType}-label/${encode(resourceName)}`;
 }
 export function documentPath(
   workspaceSlug: string,
@@ -1666,6 +1729,13 @@ export function routeBelongsToWorkspace(
 
 function encode(value: string) {
   return encodeURIComponent(value);
+}
+function safeDecode(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 function slug(value: string) {
   return (
