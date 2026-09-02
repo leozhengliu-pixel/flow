@@ -555,8 +555,15 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 		return
 	}
 	teamID := r.PathValue("id")
+	var persistedTeamMembers []domain.TeamMember
+	if current, ok := s.store.BootstrapFor(workspaceKey(r)); ok {
+		persistedTeamMembers, _ = s.store.ListTeamMembers(r.Context(), current.Workspace.ID)
+	}
 	var updated domain.TeamSettings
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "team.settings_updated", teamID, input, func(data *domain.Bootstrap) error {
+		if len(data.TeamMembers) == 0 && len(persistedTeamMembers) > 0 {
+			data.TeamMembers = slices.Clone(persistedTeamMembers)
+		}
 		if !teamExists(data, teamID) {
 			return errNotFound
 		}
@@ -607,10 +614,16 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 		}
 		permissionValues := []string{"allMembers", "teamMembers", "owners"}
 		if input.Access != nil {
-			if !slices.Contains([]string{"public", "private"}, *input.Access) {
+			if !slices.Contains([]string{"public", "private", "restricted"}, *input.Access) {
 				return errInvalid
 			}
 			settings.Access = *input.Access
+			for index := range data.Teams {
+				if data.Teams[index].ID == teamID {
+					data.Teams[index].Private = strings.EqualFold(*input.Access, "private")
+					break
+				}
+			}
 		}
 		if input.MembershipRestriction != nil {
 			if !slices.Contains([]string{"open", "members", "owners"}, *input.MembershipRestriction) {
@@ -727,7 +740,28 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 				}
 			}
 		}
+		previousAccess := ""
+		if previous, exists := data.TeamSettings[teamID]; exists {
+			previousAccess = strings.ToLower(strings.TrimSpace(previous.Access))
+		}
 		data.TeamSettings[teamID] = settings
+		if strings.EqualFold(settings.Access, "private") && previousAccess != "private" {
+			memberIDs := map[string]bool{}
+			for _, member := range data.TeamMembers {
+				if member.TeamID == teamID {
+					memberIDs[member.UserID] = true
+				}
+			}
+			for index := range data.Issues {
+				if data.Issues[index].Team.ID != teamID {
+					continue
+				}
+				if data.Issues[index].Assignee != nil && !memberIDs[data.Issues[index].Assignee.ID] {
+					data.Issues[index].Assignee = nil
+				}
+				data.Issues[index].SubscriberIDs = slices.DeleteFunc(data.Issues[index].SubscriberIDs, func(id string) bool { return !memberIDs[id] })
+			}
+		}
 		updated = settings
 		return nil
 	})
