@@ -900,9 +900,11 @@ func publicAPIKey(key domain.APIKey) domain.APIKey {
 
 func (s *server) listAPIKeys(w http.ResponseWriter, r *http.Request) {
 	actor := requestActor(s, r)
+	data := s.workspaceData(r)
 	result := []domain.APIKey{}
-	for _, key := range s.workspaceData(r).APIKeys {
-		if key.CreatorID == actor.ID && key.RevokedAt == nil {
+	admin := strings.EqualFold(data.ViewerRole, "admin") || strings.EqualFold(data.ViewerRole, "owner")
+	for _, key := range data.APIKeys {
+		if key.RevokedAt == nil && (admin || key.CreatorID == actor.ID) {
 			result = append(result, publicAPIKey(key))
 		}
 	}
@@ -911,9 +913,11 @@ func (s *server) listAPIKeys(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Name    string   `json:"name"`
-		Scopes  []string `json:"scopes"`
-		TeamIDs []string `json:"teamIds"`
+		Name            string   `json:"name"`
+		Scopes          []string `json:"scopes"`
+		TeamIDs         []string `json:"teamIds"`
+		TeamRestriction string   `json:"teamRestriction"`
+		ExpiresAt       *string  `json:"expiresAt,omitempty"`
 	}
 	if !decodeJSON(w, r, &input) || strings.TrimSpace(input.Name) == "" {
 		writeError(w, http.StatusBadRequest, "name is required")
@@ -927,13 +931,51 @@ func (s *server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 	actor := requestActor(s, r)
 	var created domain.APIKey
 	err = s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "api_key.created", input, func(data *domain.Bootstrap) (string, error) {
-		if data.WorkspaceSettings.APIKeyPermission == "admins" && data.ViewerRole != "admin" {
+		if data.WorkspaceSettings.APIKeyPermission == "admins" && !strings.EqualFold(data.ViewerRole, "admin") && !strings.EqualFold(data.ViewerRole, "owner") {
 			return "", errors.New("API key creation is limited to admins")
 		}
-		created = domain.APIKey{ID: fmt.Sprintf("api_key_%d", time.Now().UnixNano()), Name: strings.TrimSpace(input.Name), Prefix: secret[:min(len(secret), 17)], SecretHash: secretHash(secret), CreatorID: actor.ID, Scopes: normalizedStrings(input.Scopes), TeamIDs: normalizedStrings(input.TeamIDs), CreatedAt: time.Now().UTC()}
-		if len(created.Scopes) == 0 {
-			created.Scopes = []string{"read", "write"}
+		scopes := normalizedStrings(input.Scopes)
+		if len(scopes) == 0 {
+			scopes = []string{"read", "write"}
 		}
+		for _, scope := range scopes {
+			if !slices.Contains([]string{"read", "write", "admin", "create_issues", "create_comments"}, scope) {
+				return "", fmt.Errorf("%w: unsupported API key scope", errInvalid)
+			}
+			if scope == "admin" && !strings.EqualFold(data.ViewerRole, "admin") && !strings.EqualFold(data.ViewerRole, "owner") {
+				return "", errors.New("admin API key scope is limited to admins")
+			}
+		}
+		teamIDs := normalizedStrings(input.TeamIDs)
+		for _, id := range teamIDs {
+			if !teamExists(data, id) {
+				return "", fmt.Errorf("%w: unknown team", errInvalid)
+			}
+		}
+		restriction := strings.ToLower(strings.TrimSpace(input.TeamRestriction))
+		if restriction == "" {
+			if len(teamIDs) > 0 {
+				restriction = "selected"
+			} else {
+				restriction = "all"
+			}
+		}
+		if restriction != "all" && restriction != "selected" {
+			return "", fmt.Errorf("%w: teamRestriction must be all or selected", errInvalid)
+		}
+		if restriction == "all" {
+			teamIDs = nil
+		}
+		var expiresAt *time.Time
+		if input.ExpiresAt != nil && strings.TrimSpace(*input.ExpiresAt) != "" {
+			parsed, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(*input.ExpiresAt))
+			if parseErr != nil || !parsed.After(time.Now().UTC()) {
+				return "", fmt.Errorf("%w: expiresAt must be a future RFC3339 timestamp", errInvalid)
+			}
+			parsed = parsed.UTC()
+			expiresAt = &parsed
+		}
+		created = domain.APIKey{ID: fmt.Sprintf("api_key_%d", time.Now().UnixNano()), Name: strings.TrimSpace(input.Name), Prefix: secret[:min(len(secret), 17)], SecretHash: secretHash(secret), CreatorID: actor.ID, Scopes: scopes, TeamIDs: teamIDs, TeamRestriction: restriction, CreatedAt: time.Now().UTC(), ExpiresAt: expiresAt}
 		data.APIKeys = append([]domain.APIKey{created}, data.APIKeys...)
 		return created.ID, nil
 	})
@@ -944,11 +986,42 @@ func (s *server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"key": publicAPIKey(created), "secret": secret})
 }
 
+// rotateAPIKeySecret revokes the previous secret and returns a replacement
+// exactly once. The key id and scopes remain unchanged, so clients can rotate
+// credentials without widening access.
+func (s *server) rotateAPIKeySecret(w http.ResponseWriter, r *http.Request) {
+	id, actor := r.PathValue("id"), requestActor(s, r)
+	secret, err := randomSecret("flow_api_")
+	if err != nil {
+		respondMutation(w, err, http.StatusInternalServerError, nil)
+		return
+	}
+	var rotated domain.APIKey
+	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "api_key.secret_rotated", id, nil, func(data *domain.Bootstrap) error {
+		index := slices.IndexFunc(data.APIKeys, func(key domain.APIKey) bool {
+			return key.ID == id && key.RevokedAt == nil && (key.CreatorID == actor.ID || strings.EqualFold(data.ViewerRole, "admin") || strings.EqualFold(data.ViewerRole, "owner"))
+		})
+		if index < 0 {
+			return errNotFound
+		}
+		data.APIKeys[index].SecretHash = secretHash(secret)
+		data.APIKeys[index].Prefix = secret[:min(len(secret), 17)]
+		rotated = publicAPIKey(data.APIKeys[index])
+		return nil
+	})
+	if err != nil {
+		respondMutation(w, err, http.StatusNotFound, nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"key": rotated, "secret": secret})
+}
+
 func (s *server) revokeAPIKey(w http.ResponseWriter, r *http.Request) {
 	id, actor := r.PathValue("id"), requestActor(s, r)
+	viewerRole := s.workspaceData(r).ViewerRole
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "api_key.revoked", id, nil, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.APIKeys, func(key domain.APIKey) bool {
-			return key.ID == id && (key.CreatorID == actor.ID || data.ViewerRole == "admin")
+			return key.ID == id && (key.CreatorID == actor.ID || workspaceAdminRole(viewerRole))
 		})
 		if index < 0 {
 			return errNotFound

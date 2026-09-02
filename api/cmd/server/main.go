@@ -344,6 +344,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/api-keys", s.listAPIKeys)
 	mux.HandleFunc("POST /api/api-keys", s.createAPIKey)
 	mux.HandleFunc("DELETE /api/api-keys/{id}", s.revokeAPIKey)
+	mux.HandleFunc("POST /api/api-keys/{id}/rotate-secret", s.rotateAPIKeySecret)
 	mux.HandleFunc("GET /api/oauth-applications", s.listOAuthApplications)
 	mux.HandleFunc("POST /api/oauth-applications", s.createOAuthApplication)
 	mux.HandleFunc("PATCH /api/oauth-applications/{id}", s.updateOAuthApplication)
@@ -352,6 +353,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/webhooks", s.createWebhook)
 	mux.HandleFunc("PATCH /api/webhooks/{id}", s.updateWebhook)
 	mux.HandleFunc("DELETE /api/webhooks/{id}", s.deleteWebhook)
+	mux.HandleFunc("POST /api/webhooks/{id}/rotate-secret", s.rotateWebhookSecret)
+	mux.HandleFunc("POST /api/webhooks/{id}/revoke-secret", s.revokeWebhookSecret)
 	mux.HandleFunc("POST /api/oauth/token", s.exchangeOAuthToken)
 	mux.HandleFunc("GET /api/integrations", s.listIntegrations)
 	mux.HandleFunc("GET /api/identity-providers", s.listIdentityProviders)
@@ -525,6 +528,10 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/views/{id}/share", s.unshareSavedView)
 	mux.HandleFunc("GET /api/shared/views/{token}", s.getSharedView)
 	mux.HandleFunc("POST /api/issues", s.createIssue)
+	mux.HandleFunc("GET /api/issues/{id}/permissions", s.listIssuePermissions)
+	mux.HandleFunc("PUT /api/issues/{id}/permissions", s.replaceIssuePermissions)
+	mux.HandleFunc("PATCH /api/issues/{id}/permissions/{permissionId}", s.updateIssuePermission)
+	mux.HandleFunc("DELETE /api/issues/{id}/permissions/{permissionId}", s.deleteIssuePermission)
 	mux.HandleFunc("PATCH /api/teams/{id}/cycle-settings", s.updateCycleSettings)
 	mux.HandleFunc("GET /api/teams/{id}/states", s.listWorkflowStates)
 	mux.HandleFunc("POST /api/teams/{id}/states", s.createWorkflowState)
@@ -723,6 +730,25 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	for index := range data.Cycles {
 		data.Cycles[index].CalendarToken = ""
 	}
+	if !strings.EqualFold(data.ViewerRole, "admin") && !strings.EqualFold(data.ViewerRole, "owner") {
+		// Credentials are workspace-scoped resources. Members may inspect only
+		// keys they created; guests receive none. This keeps bootstrap useful for
+		// settings while preventing credential metadata from becoming a side
+		// channel for workspace enumeration.
+		if data.ViewerRole == "guest" {
+			data.APIKeys = []domain.APIKey{}
+		} else {
+			data.APIKeys = slices.DeleteFunc(data.APIKeys, func(item domain.APIKey) bool { return item.CreatorID != data.Viewer.ID })
+		}
+		data.OAuthApplications = []domain.OAuthApplication{}
+		if data.ViewerRole == "guest" {
+			data.Webhooks = []domain.Webhook{}
+		} else {
+			data.Webhooks = slices.DeleteFunc(data.Webhooks, func(item domain.Webhook) bool {
+				return item.CreatorID != data.Viewer.ID || !webhookVisibleToBootstrap(data, item)
+			})
+		}
+	}
 	for index := range data.APIKeys {
 		data.APIKeys[index].SecretHash = ""
 	}
@@ -735,7 +761,7 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	for index := range data.IntegrationConnections {
 		data.IntegrationConnections[index] = redactIntegrationConnection(data.IntegrationConnections[index])
 	}
-	if data.ViewerRole != "admin" {
+	if !workspaceAdminRole(data.ViewerRole) {
 		data.IdentityProviders = []domain.IdentityProvider{}
 		data.IntegrationDeliveries = []domain.IntegrationDelivery{}
 		data.GitAutomationStates = []domain.GitAutomationState{}
@@ -766,7 +792,19 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 
 func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
-	if !ok || len(key.TeamIDs) == 0 {
+	if !ok {
+		return
+	}
+	// Never expose other credentials through a token-authenticated bootstrap,
+	// even when the token owner is a workspace admin.
+	data.APIKeys = slices.DeleteFunc(data.APIKeys, func(item domain.APIKey) bool { return item.ID != key.ID })
+	if !slices.Contains(key.Scopes, "admin") {
+		data.OAuthApplications = []domain.OAuthApplication{}
+		data.Webhooks = []domain.Webhook{}
+		data.IdentityProviders = []domain.IdentityProvider{}
+		data.IntegrationDeliveries = []domain.IntegrationDelivery{}
+	}
+	if key.TeamRestriction == "" || key.TeamRestriction == "all" {
 		return
 	}
 	allowed := func(id string) bool { return slices.Contains(key.TeamIDs, id) }
@@ -812,6 +850,12 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	})
 	data.Asks = slices.DeleteFunc(data.Asks, func(item domain.Ask) bool { return item.TeamID != "" && !allowed(item.TeamID) })
 	data.Initiatives = slices.DeleteFunc(data.Initiatives, func(item domain.Initiative) bool { return !slices.ContainsFunc(item.ProjectIDs, visibleProject) })
+	data.Webhooks = slices.DeleteFunc(data.Webhooks, func(item domain.Webhook) bool {
+		if item.TeamRestriction == "" || item.TeamRestriction == "all" {
+			return false
+		}
+		return !slices.ContainsFunc(item.TeamIDs, allowed)
+	})
 }
 
 func (s *server) updateWorkspaceSettings(w http.ResponseWriter, r *http.Request) {
@@ -919,9 +963,12 @@ func (s *server) uploadWorkspaceLogo(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
-	if !s.authDisabled && data.ViewerRole != "admin" {
-		writeError(w, http.StatusForbidden, "admin access required")
-		return
+	if !s.authDisabled {
+		role, _, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
+		if !workspaceAdminRole(role) {
+			writeError(w, http.StatusForbidden, "admin access required")
+			return
+		}
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 6<<20)
 	if err := r.ParseMultipartForm(5 << 20); err != nil {
@@ -1056,9 +1103,12 @@ func (s *server) deleteWorkspaceLogo(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
-	if !s.authDisabled && data.ViewerRole != "admin" {
-		writeError(w, http.StatusForbidden, "admin access required")
-		return
+	if !s.authDisabled {
+		role, _, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
+		if !workspaceAdminRole(role) {
+			writeError(w, http.StatusForbidden, "admin access required")
+			return
+		}
 	}
 	previous := data.Workspace.LogoURL
 	data.Workspace.LogoURL = ""
@@ -1100,6 +1150,10 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 	if input.Color == "" {
 		input.Color = "#5E6AD2"
 	}
+	var persistedTeamMembers []domain.TeamMember
+	if data, ok := s.store.BootstrapFor(workspaceKey); ok {
+		persistedTeamMembers, _ = s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
+	}
 	team := domain.Team{ID: fmt.Sprintf("team_%d", time.Now().UnixNano()), Name: input.Name, Key: input.Key, Color: input.Color, Icon: input.Icon, Private: input.Private}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey, "team.created", team.ID, input, func(data *domain.Bootstrap) error {
 		for _, existing := range data.Teams {
@@ -1109,6 +1163,9 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.ParentTeamID != "" && !teamExists(data, input.ParentTeamID) || input.CopyFromTeamID != "" && !teamExists(data, input.CopyFromTeamID) {
 			return errInvalid
+		}
+		if len(data.TeamMembers) == 0 && len(persistedTeamMembers) > 0 {
+			data.TeamMembers = slices.Clone(persistedTeamMembers)
 		}
 		data.Teams = append(data.Teams, team)
 		if data.TeamSettings == nil {
@@ -1186,8 +1243,15 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	var persistedTeamMembers []domain.TeamMember
+	if data, ok := s.store.BootstrapFor(workspaceKey); ok {
+		persistedTeamMembers, _ = s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
+	}
 	var updated domain.Team
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey, "team.updated", teamID, input, func(data *domain.Bootstrap) error {
+		if len(data.TeamMembers) == 0 && len(persistedTeamMembers) > 0 {
+			data.TeamMembers = slices.Clone(persistedTeamMembers)
+		}
 		for index := range data.Teams {
 			if data.Teams[index].ID != teamID {
 				continue
@@ -1210,6 +1274,14 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 			}
 			if input.Private != nil {
 				data.Teams[index].Private = *input.Private
+				if settings, exists := data.TeamSettings[teamID]; exists {
+					if *input.Private {
+						settings.Access = "private"
+					} else if strings.EqualFold(settings.Access, "private") {
+						settings.Access = "public"
+					}
+					data.TeamSettings[teamID] = settings
+				}
 			}
 			if input.Retired != nil {
 				if *input.Retired {
@@ -1220,6 +1292,23 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			updated = data.Teams[index]
+			if input.Private != nil && *input.Private {
+				memberIDs := map[string]bool{}
+				for _, member := range data.TeamMembers {
+					if member.TeamID == teamID {
+						memberIDs[member.UserID] = true
+					}
+				}
+				for issueIndex := range data.Issues {
+					if data.Issues[issueIndex].Team.ID != teamID {
+						continue
+					}
+					if data.Issues[issueIndex].Assignee != nil && !memberIDs[data.Issues[issueIndex].Assignee.ID] {
+						data.Issues[issueIndex].Assignee = nil
+					}
+					data.Issues[issueIndex].SubscriberIDs = slices.DeleteFunc(data.Issues[issueIndex].SubscriberIDs, func(id string) bool { return !memberIDs[id] })
+				}
+			}
 			for issueIndex := range data.Issues {
 				if data.Issues[issueIndex].Team.ID == teamID {
 					data.Issues[issueIndex].Team = updated
@@ -1430,6 +1519,9 @@ func workspaceKey(r *http.Request) string {
 func (s *server) workspaceData(r *http.Request) domain.Bootstrap {
 	if !s.authDisabled {
 		data, _, _ := s.store.BootstrapForUser(r.Context(), workspaceKey(r), authUser(r).ID)
+		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+			applyAPIKeyProjection(&data, key)
+		}
 		return data
 	}
 	data, _ := s.store.BootstrapFor(workspaceKey(r))
@@ -1670,6 +1762,18 @@ func (s *server) getSharedView(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	for _, item := range data.SavedViews {
 		if item.ShareToken == token {
+			// A public view link must not disclose a private team or project
+			// identifier to an unauthenticated visitor.
+			if item.Scope == "team" && slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == item.TeamID && team.Private }) {
+				break
+			}
+			if item.ProjectID != "" {
+				if project, err := fullProjectByID(&data, item.ProjectID); err == nil && slices.ContainsFunc(project.TeamIDs, func(teamID string) bool {
+					return slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID && team.Private })
+				}) {
+					break
+				}
+			}
 			writeJSON(w, http.StatusOK, map[string]any{"view": item, "workspace": data.Workspace})
 			return
 		}
@@ -5204,6 +5308,10 @@ func respondMutation(w http.ResponseWriter, err error, success int, value any) {
 		return
 	}
 	if errors.Is(err, store.ErrLastAdmin) {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	if errors.Is(err, store.ErrLastTeamOwner) {
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	}
