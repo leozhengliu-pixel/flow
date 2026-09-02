@@ -1145,8 +1145,15 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 		if err := json.Unmarshal(raw, &next); err != nil {
 			return err
 		}
+		originalViewerRole := next.ViewerRole
 		if actor, ok := actorFromContext(ctx); ok {
 			next.Viewer = actor
+			if role, status, roleErr := s.WorkspaceRole(ctx, next.Workspace.ID, actor.ID); roleErr == nil && status == "active" {
+				// The canonical snapshot does not carry a viewer-specific role.
+				// Populate it only while authorization-aware callbacks execute,
+				// then restore the snapshot value before persistence.
+				next.ViewerRole = role
+			}
 			if index := slices.IndexFunc(next.Users, func(user domain.User) bool { return user.ID == actor.ID }); index >= 0 {
 				next.Users[index] = actor
 			} else {
@@ -1154,6 +1161,7 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 			}
 		}
 		aggregateID, err := mutate(&next)
+		next.ViewerRole = originalViewerRole
 		if err != nil {
 			return err
 		}
