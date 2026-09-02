@@ -1004,9 +1004,14 @@
   margin-top: 24px;
 }
 .team-members-picker {
+  position: relative;
   width: min(529px, calc(100vw - 32px));
   max-height: 360px;
+  z-index: 802;
   padding-top: 0;
+}
+[data-radix-popper-content-wrapper]:has(.team-members-picker) {
+  z-index: 802 !important;
 }
 .team-members-picker [role="menuitemcheckbox"] {
   display: grid;
