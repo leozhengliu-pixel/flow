@@ -67,6 +67,7 @@ func (s *SQLiteStore) ensureSCIMSchema(ctx context.Context) error {
 		`CREATE TABLE IF NOT EXISTS scim_groups (id VARCHAR(191) PRIMARY KEY, workspace_id VARCHAR(191) NOT NULL, external_id VARCHAR(320) NOT NULL DEFAULT '', display_name VARCHAR(320) NOT NULL, role VARCHAR(32) NOT NULL DEFAULT '', created_at VARCHAR(40) NOT NULL, updated_at VARCHAR(40) NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS scim_group_memberships (workspace_id VARCHAR(191) NOT NULL, group_id VARCHAR(191) NOT NULL, user_id VARCHAR(191) NOT NULL, updated_at VARCHAR(40) NOT NULL, PRIMARY KEY(group_id,user_id))`,
 		`CREATE TABLE IF NOT EXISTS scim_user_roles (workspace_id VARCHAR(191) NOT NULL, user_id VARCHAR(191) NOT NULL, role VARCHAR(32) NOT NULL, updated_at VARCHAR(40) NOT NULL, PRIMARY KEY(workspace_id,user_id))`,
+		`CREATE TABLE IF NOT EXISTS scim_team_memberships (workspace_id VARCHAR(191) NOT NULL, team_id VARCHAR(191) NOT NULL, group_id VARCHAR(191) NOT NULL, user_id VARCHAR(191) NOT NULL, managed INTEGER NOT NULL DEFAULT 1, updated_at VARCHAR(40) NOT NULL, PRIMARY KEY(group_id,user_id))`,
 	}
 	for _, statement := range groupSchema {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
@@ -78,6 +79,7 @@ func (s *SQLiteStore) ensureSCIMSchema(ctx context.Context) error {
 		"scim_group_memberships_user_idx ON scim_group_memberships(workspace_id,user_id,updated_at)",
 		"scim_group_memberships_group_idx ON scim_group_memberships(group_id,updated_at)",
 		"scim_user_roles_workspace_idx ON scim_user_roles(workspace_id,updated_at)",
+		"scim_team_memberships_team_user_idx ON scim_team_memberships(workspace_id,team_id,user_id)",
 	}
 	for _, index := range groupIndexes {
 		prefix := "CREATE INDEX IF NOT EXISTS "
@@ -441,18 +443,37 @@ func (s *SQLiteStore) DeleteSCIMGroup(ctx context.Context, workspaceID, id strin
 
 // ReplaceSCIMGroupMembers applies one complete IdP group push and updates all
 // affected users' effective workspace roles. A single timestamp is used for
-// the push so membership precedence is deterministic.
+// the push so membership precedence is deterministic. SCIM member values may
+// be either Flow user IDs or external IDs; both are normalized to the internal
+// user ID before persistence.
 func (s *SQLiteStore) ReplaceSCIMGroupMembers(ctx context.Context, workspaceID, id string, userIDs []string) (SCIMGroup, error) {
 	group, err := s.SCIMGroup(ctx, workspaceID, id)
 	if err != nil {
 		return SCIMGroup{}, err
 	}
+	normalized := make([]string, 0, len(userIDs))
+	seen := map[string]struct{}{}
+	for _, value := range userIDs {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		member, resolveErr := s.SCIMUser(ctx, workspaceID, value)
+		if resolveErr != nil {
+			return SCIMGroup{}, fmt.Errorf("SCIM group member %q not found", value)
+		}
+		if _, exists := seen[member.User.ID]; exists {
+			continue
+		}
+		seen[member.User.ID] = struct{}{}
+		normalized = append(normalized, member.User.ID)
+	}
 	affected := map[string]struct{}{}
 	for _, member := range group.Members {
 		affected[member.UserID] = struct{}{}
 	}
-	for _, userID := range userIDs {
-		if strings.TrimSpace(userID) != "" {
+	for _, userID := range normalized {
+		if userID != "" {
 			affected[userID] = struct{}{}
 		}
 	}
@@ -466,10 +487,7 @@ func (s *SQLiteStore) ReplaceSCIMGroupMembers(ctx context.Context, workspaceID, 
 		_ = tx.Rollback()
 		return SCIMGroup{}, err
 	}
-	for _, userID := range userIDs {
-		if strings.TrimSpace(userID) == "" {
-			continue
-		}
+	for _, userID := range normalized {
 		if _, err = tx.ExecContext(ctx, `INSERT INTO scim_group_memberships(workspace_id,group_id,user_id,updated_at) VALUES(?,?,?,?)`, workspaceID, group.ID, userID, stamp); err != nil {
 			_ = tx.Rollback()
 			return SCIMGroup{}, err
@@ -488,6 +506,104 @@ func (s *SQLiteStore) ReplaceSCIMGroupMembers(ctx context.Context, workspaceID, 
 		}
 	}
 	return s.SCIMGroup(ctx, workspaceID, group.ID)
+}
+
+// SyncSCIMGroupTeam mirrors a mapped IdP group into Flow team membership.
+// Memberships introduced by SCIM are tracked separately so removing a user
+// from the IdP group does not remove a manually managed team membership.
+func (s *SQLiteStore) SyncSCIMGroupTeam(ctx context.Context, workspaceID, groupID, teamID string) error {
+	teamID, groupID = strings.TrimSpace(teamID), strings.TrimSpace(groupID)
+	if workspaceID == "" || groupID == "" || teamID == "" {
+		return nil
+	}
+	group, err := s.SCIMGroup(ctx, workspaceID, groupID)
+	if err != nil {
+		return err
+	}
+	nextMembers := map[string]bool{}
+	for _, member := range group.Members {
+		if strings.TrimSpace(member.UserID) != "" {
+			nextMembers[member.UserID] = true
+		}
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT user_id,managed FROM scim_team_memberships WHERE workspace_id=? AND team_id=? AND group_id=?`, workspaceID, teamID, groupID)
+	if err != nil {
+		return err
+	}
+	previous := map[string]bool{}
+	for rows.Next() {
+		var userID string
+		var managed int
+		if err := rows.Scan(&userID, &managed); err != nil {
+			rows.Close()
+			return err
+		}
+		previous[userID] = managed == 1
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	stamp := time.Now().UTC().Format(time.RFC3339Nano)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `DELETE FROM scim_team_memberships WHERE workspace_id=? AND team_id=? AND group_id=?`, workspaceID, teamID, groupID); err != nil {
+		return err
+	}
+	for userID := range nextMembers {
+		var existingRole string
+		existingErr := tx.QueryRowContext(ctx, `SELECT role FROM team_memberships WHERE workspace_id=? AND team_id=? AND user_id=?`, workspaceID, teamID, userID).Scan(&existingRole)
+		managed := 0
+		if errors.Is(existingErr, sql.ErrNoRows) {
+			if _, err = tx.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?)`, workspaceID, teamID, userID, "member", stamp); err != nil {
+				return err
+			}
+			managed = 1
+		} else if existingErr != nil {
+			return existingErr
+		} else if previous[userID] {
+			managed = 1
+		} else {
+			var otherManaged int
+			if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM scim_team_memberships WHERE workspace_id=? AND team_id=? AND user_id=? AND group_id<>?`, workspaceID, teamID, userID, groupID).Scan(&otherManaged); err != nil {
+				return err
+			}
+			if otherManaged > 0 {
+				managed = 1
+			}
+		}
+		if _, err = tx.ExecContext(ctx, `INSERT INTO scim_team_memberships(workspace_id,team_id,group_id,user_id,managed,updated_at) VALUES(?,?,?,?,?,?)`, workspaceID, teamID, groupID, userID, managed, stamp); err != nil {
+			return err
+		}
+	}
+	for userID, managed := range previous {
+		if !managed || nextMembers[userID] {
+			continue
+		}
+		var otherGroups int
+		if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM scim_team_memberships WHERE workspace_id=? AND team_id=? AND user_id=?`, workspaceID, teamID, userID).Scan(&otherGroups); err != nil {
+			return err
+		}
+		if otherGroups > 0 {
+			continue
+		}
+		var role string
+		membershipErr := tx.QueryRowContext(ctx, `SELECT role FROM team_memberships WHERE workspace_id=? AND team_id=? AND user_id=?`, workspaceID, teamID, userID).Scan(&role)
+		if errors.Is(membershipErr, sql.ErrNoRows) {
+			continue
+		}
+		if membershipErr != nil {
+			return membershipErr
+		}
+		if strings.EqualFold(role, "member") {
+			if _, err = tx.ExecContext(ctx, `DELETE FROM team_memberships WHERE workspace_id=? AND team_id=? AND user_id=? AND role='member'`, workspaceID, teamID, userID); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *SQLiteStore) recomputeSCIMUserRole(ctx context.Context, workspaceID, userID string) error {

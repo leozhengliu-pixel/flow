@@ -880,9 +880,12 @@ type WorkspaceSettings struct {
 	// IdP-managed group display names used for role provisioning. Group
 	// membership updates are applied in push order, with the latest push
 	// taking precedence when a user belongs to multiple role groups.
-	SCIMRoleGroups  map[string]string `json:"scimRoleGroups,omitempty"`
-	SCIMDefaultRole string            `json:"scimDefaultRole,omitempty"`
-	UpdatedAt       time.Time         `json:"updatedAt"`
+	SCIMRoleGroups map[string]string `json:"scimRoleGroups,omitempty"`
+	// SCIMTeamGroupMapping maps Flow team IDs to IdP group display names. A
+	// matching SCIM group owns membership for that team.
+	SCIMTeamGroupMapping map[string]string `json:"scimTeamGroupMapping,omitempty"`
+	SCIMDefaultRole      string            `json:"scimDefaultRole,omitempty"`
+	UpdatedAt            time.Time         `json:"updatedAt"`
 }
 
 type FeatureOption struct {
@@ -1064,6 +1067,7 @@ type IntegrationDelivery struct {
 	ResourceID     string          `json:"resourceId"`
 	Channel        string          `json:"channel,omitempty"`
 	Payload        json.RawMessage `json:"payload"`
+	PreviousValues json.RawMessage `json:"previousValues,omitempty"`
 	Status         string          `json:"status"`
 	Attempts       int             `json:"attempts"`
 	NextAttemptAt  *time.Time      `json:"nextAttemptAt,omitempty"`
@@ -1960,11 +1964,12 @@ type RelationCreateInput struct {
 }
 
 type DomainEvent struct {
-	ID          string          `json:"id"`
-	Type        string          `json:"type"`
-	AggregateID string          `json:"aggregateId"`
-	Payload     json.RawMessage `json:"payload"`
-	CreatedAt   time.Time       `json:"createdAt"`
+	ID             string          `json:"id"`
+	Type           string          `json:"type"`
+	AggregateID    string          `json:"aggregateId"`
+	Payload        json.RawMessage `json:"payload"`
+	PreviousValues json.RawMessage `json:"previousValues,omitempty"`
+	CreatedAt      time.Time       `json:"createdAt"`
 }
 
 type RealtimeEvent struct {

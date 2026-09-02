@@ -167,6 +167,7 @@ func newHandler(s *server) http.Handler {
 		s.realtime = newRealtimeHub()
 	}
 	s.store.SetRealtimeSink(s.publishRealtime)
+	s.store.SetWebhookSink(s.dispatchWebhookEvent)
 	s.startCoordination()
 	s.startWorkflowScheduler()
 	s.startDeliveryScheduler()

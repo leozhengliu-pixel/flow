@@ -108,3 +108,17 @@ func TestLoadAuthAndTelemetryValidation(t *testing.T) {
 		t.Fatalf("telemetry config = %#v, %v", loaded.Telemetry, err)
 	}
 }
+
+func TestLoadOIDCRoleMapping(t *testing.T) {
+	t.Setenv("FLOW_OIDC_ROLE_CLAIM", "groups")
+	t.Setenv("FLOW_OIDC_ROLE_MAPPING", "staff=admin,contractors:guest")
+	t.Setenv("FLOW_OIDC_DEFAULT_ROLE", "member")
+	loaded, err := Load()
+	if err != nil || loaded.Auth.OIDC.RoleClaim != "groups" || loaded.Auth.OIDC.RoleMapping["staff"] != "admin" || loaded.Auth.OIDC.RoleMapping["contractors"] != "guest" || loaded.Auth.OIDC.DefaultRole != "member" {
+		t.Fatalf("OIDC role mapping config = %#v, %v", loaded.Auth.OIDC, err)
+	}
+	t.Setenv("FLOW_OIDC_DEFAULT_ROLE", "superuser")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_OIDC_DEFAULT_ROLE") {
+		t.Fatalf("invalid OIDC default role error = %v", err)
+	}
+}
