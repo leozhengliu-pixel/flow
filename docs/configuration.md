@@ -173,7 +173,7 @@ domain.
 | Variable | Default | Description |
 | --- | --- | --- |
 | `FLOW_AUTH_EMAIL_ENABLED` | `true` | Enable registration/password login and reset. |
-| `FLOW_AUTH_AUTO_PROVISION` | `true` | Create users and default membership after trusted SSO. |
+| `FLOW_AUTH_AUTO_PROVISION` | `false` | Create users and default workspace membership after trusted SSO. Set to `true` only when IdP users should join without an invitation. |
 | `FLOW_AUTH_ALLOWED_DOMAINS` | empty | Comma-separated SSO email domains. |
 | `FLOW_AUTH_GOOGLE_ENABLED` | `false` | Enable Google OIDC. |
 | `FLOW_GOOGLE_CLIENT_ID` | empty | Required Google client ID. |

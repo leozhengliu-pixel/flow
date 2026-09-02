@@ -13,7 +13,7 @@ func TestLoadDefaultsAndBackendValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Database.Driver != "sqlite" || loaded.Database.MaxStateBytes != 64<<20 || loaded.Storage.Driver != "local" || loaded.Agent.Enabled || loaded.Agent.Protocol != "openai-responses" || loaded.Agent.MaxOutputTokens != 4096 || !loaded.Agent.ToolsEnabled || loaded.Telemetry.Enabled || loaded.Auth.OIDC.IdentityClaim != "sub" {
+	if loaded.Database.Driver != "sqlite" || loaded.Database.MaxStateBytes != 64<<20 || loaded.Storage.Driver != "local" || loaded.Agent.Enabled || loaded.Agent.Protocol != "openai-responses" || loaded.Agent.MaxOutputTokens != 4096 || !loaded.Agent.ToolsEnabled || loaded.Telemetry.Enabled || loaded.Auth.OIDC.IdentityClaim != "sub" || loaded.Auth.AutoProvision {
 		t.Fatalf("unexpected defaults: %#v", loaded)
 	}
 	t.Setenv("FLOW_DATABASE_DRIVER", "postgres")
