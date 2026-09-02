@@ -440,6 +440,9 @@ func identityRole(provider domain.IdentityProvider, claims map[string]any) strin
 	}
 	role = strings.ToLower(strings.TrimSpace(role))
 	if !identityRoleValid(role) {
+		role = strings.ToLower(strings.TrimSpace(provider.DefaultRole))
+	}
+	if !identityRoleValid(role) {
 		return ""
 	}
 	return role
@@ -624,17 +627,18 @@ func (s *server) findAttachmentsByURL(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) createIntegrationDelivery(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		ConnectionID string          `json:"connectionId"`
-		EventType    string          `json:"eventType"`
-		ResourceID   string          `json:"resourceId"`
-		Channel      string          `json:"channel"`
-		Payload      json.RawMessage `json:"payload"`
+		ConnectionID   string          `json:"connectionId"`
+		EventType      string          `json:"eventType"`
+		ResourceID     string          `json:"resourceId"`
+		Channel        string          `json:"channel"`
+		Payload        json.RawMessage `json:"payload"`
+		PreviousValues json.RawMessage `json:"previousValues"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 256<<10)
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	if input.ConnectionID == "" || input.EventType == "" || len(input.Payload) == 0 || !json.Valid(input.Payload) {
+	if input.ConnectionID == "" || input.EventType == "" || len(input.Payload) == 0 || !json.Valid(input.Payload) || len(input.PreviousValues) > 0 && !json.Valid(input.PreviousValues) {
 		writeError(w, http.StatusUnprocessableEntity, "connection, event type, and JSON payload are required")
 		return
 	}
@@ -644,7 +648,7 @@ func (s *server) createIntegrationDelivery(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if idempotencyKey == "" {
-		sum := sha256.Sum256([]byte(input.ConnectionID + "\x00" + input.EventType + "\x00" + input.ResourceID + "\x00" + input.Channel + "\x00" + string(input.Payload)))
+		sum := sha256.Sum256([]byte(input.ConnectionID + "\x00" + input.EventType + "\x00" + input.ResourceID + "\x00" + input.Channel + "\x00" + string(input.Payload) + "\x00" + string(input.PreviousValues)))
 		idempotencyKey = fmt.Sprintf("%x", sum[:])
 	}
 	var result domain.IntegrationDelivery
@@ -675,7 +679,7 @@ func (s *server) createIntegrationDelivery(w http.ResponseWriter, r *http.Reques
 			}
 		}
 		now := time.Now().UTC()
-		result = domain.IntegrationDelivery{ID: fmt.Sprintf("integration_delivery_%d", now.UnixNano()), IdempotencyKey: idempotencyKey, ConnectionID: input.ConnectionID, EventType: input.EventType, ResourceID: input.ResourceID, Channel: input.Channel, Payload: append(json.RawMessage(nil), input.Payload...), Status: "pending", CreatedAt: now, UpdatedAt: now}
+		result = domain.IntegrationDelivery{ID: fmt.Sprintf("integration_delivery_%d", now.UnixNano()), IdempotencyKey: idempotencyKey, ConnectionID: input.ConnectionID, EventType: input.EventType, ResourceID: input.ResourceID, Channel: input.Channel, Payload: append(json.RawMessage(nil), input.Payload...), PreviousValues: append(json.RawMessage(nil), input.PreviousValues...), Status: "pending", CreatedAt: now, UpdatedAt: now}
 		data.IntegrationDeliveries = append(data.IntegrationDeliveries, result)
 		return nil
 	})
@@ -745,7 +749,8 @@ func (s *server) processIntegrationDelivery(ctx context.Context, workspace, id s
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	req, requestErr := http.NewRequestWithContext(callCtx, http.MethodPost, endpoint, strings.NewReader(string(snapshot.Payload)))
+	payload := integrationDeliveryPayload(snapshot)
+	req, requestErr := http.NewRequestWithContext(callCtx, http.MethodPost, endpoint, strings.NewReader(string(payload)))
 	if requestErr != nil {
 		return domain.IntegrationDelivery{}, fmt.Errorf("%w: invalid delivery request", errInvalid)
 	}
@@ -767,7 +772,7 @@ func (s *server) processIntegrationDelivery(ctx context.Context, workspace, id s
 	}
 	if deliverySecret != "" {
 		timestamp := fmt.Sprint(time.Now().UTC().Unix())
-		envelope := timestamp + "." + string(snapshot.Payload)
+		envelope := timestamp + "." + string(payload)
 		mac := hmac.New(sha256.New, []byte(deliverySecret))
 		_, _ = mac.Write([]byte(envelope))
 		req.Header.Set("X-Flow-Timestamp", timestamp)
@@ -829,6 +834,26 @@ func (s *server) processIntegrationDelivery(ctx context.Context, workspace, id s
 		return nil
 	})
 	return result, err
+}
+
+func integrationDeliveryPayload(delivery domain.IntegrationDelivery) []byte {
+	if len(delivery.PreviousValues) == 0 {
+		return append([]byte(nil), delivery.Payload...)
+	}
+	var envelope map[string]any
+	if json.Unmarshal(delivery.Payload, &envelope) != nil || envelope == nil {
+		return append([]byte(nil), delivery.Payload...)
+	}
+	var previous any
+	if json.Unmarshal(delivery.PreviousValues, &previous) != nil {
+		return append([]byte(nil), delivery.Payload...)
+	}
+	envelope["previousValues"] = previous
+	encoded, err := json.Marshal(envelope)
+	if err != nil {
+		return append([]byte(nil), delivery.Payload...)
+	}
+	return encoded
 }
 
 func truncateSecurityError(value string) string {

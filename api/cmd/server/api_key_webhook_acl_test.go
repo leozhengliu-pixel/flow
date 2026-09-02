@@ -1,10 +1,13 @@
 package main
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
@@ -85,5 +88,47 @@ func TestWebhookSecretLifecycleAndResourceTypes(t *testing.T) {
 	items := requestJSON[[]domain.Webhook](t, handler, http.MethodGet, "/api/webhooks?workspace=test-workspace", nil, http.StatusOK)
 	if len(items) != 1 || items[0].SecretPrefix != "" {
 		t.Fatalf("webhook secret material leaked after revocation: %#v", items)
+	}
+}
+
+func TestWebhookDeliveryIncludesPreviousValues(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "webhook-delivery.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	service := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true}
+	handler := newHandler(service)
+	events := make(chan map[string]any, 4)
+	destination := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var envelope map[string]any
+		if json.Unmarshal(body, &envelope) == nil {
+			events <- envelope
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer destination.Close()
+	seed, _ := repository.BootstrapFor("test-workspace")
+	requestJSON[map[string]any](t, handler, http.MethodPost, "/api/webhooks?workspace=test-workspace", map[string]any{
+		"name": "issue events", "url": destination.URL, "resourceTypes": []string{"issues"}, "teamRestriction": "selected", "teamIds": []string{seed.Teams[0].ID},
+	}, http.StatusCreated)
+	issue := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues?workspace=test-workspace", map[string]any{"title": "before title", "teamId": seed.Teams[0].ID}, http.StatusCreated)
+	requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+issue.ID+"?workspace=test-workspace", map[string]any{"title": "after title"}, http.StatusOK)
+	var updated map[string]any
+	deadline := time.After(2 * time.Second)
+	for updated == nil {
+		select {
+		case envelope := <-events:
+			if envelope["action"] == "updated" {
+				updated = envelope
+			}
+		case <-deadline:
+			t.Fatal("timed out waiting for issue.updated webhook")
+		}
+	}
+	previous, ok := updated["previousValues"].(map[string]any)
+	if !ok || previous["title"] != "before title" {
+		t.Fatalf("webhook previousValues = %#v", updated["previousValues"])
 	}
 }

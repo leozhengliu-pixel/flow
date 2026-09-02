@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -124,6 +125,14 @@ func TestIntegrationDeliverySignsAndRetries(t *testing.T) {
 	destination := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
 		body, _ := io.ReadAll(r.Body)
+		var envelope map[string]any
+		previous, previousOK := map[string]any(nil), false
+		if err := json.Unmarshal(body, &envelope); err == nil {
+			previous, previousOK = envelope["previousValues"].(map[string]any)
+		}
+		if !previousOK || previous["status"] != "backlog" {
+			t.Errorf("outbound previousValues missing: body=%s", body)
+		}
 		timestamp := r.Header.Get("X-Flow-Timestamp")
 		mac := hmac.New(sha256.New, []byte(secret))
 		_, _ = mac.Write([]byte(timestamp + "." + string(body)))
@@ -142,7 +151,7 @@ func TestIntegrationDeliverySignsAndRetries(t *testing.T) {
 		"config": map[string]string{"deliveryURL": destination.URL, "deliverySecret": secret}, "scopes": []string{"events:write"},
 	}, http.StatusOK)
 	delivery := requestJSON[domain.IntegrationDelivery](t, handler, http.MethodPost, "/api/integration-deliveries?workspace=test-workspace", map[string]any{
-		"connectionId": connection.ID, "eventType": "issue.updated", "resourceId": "issue-1", "payload": map[string]string{"id": "issue-1"},
+		"connectionId": connection.ID, "eventType": "issue.updated", "resourceId": "issue-1", "payload": map[string]string{"id": "issue-1"}, "previousValues": map[string]string{"status": "backlog"},
 	}, http.StatusAccepted)
 	failed := requestJSON[domain.IntegrationDelivery](t, handler, http.MethodPost, "/api/integration-deliveries/"+delivery.ID+"/retry?workspace=test-workspace", nil, http.StatusOK)
 	if failed.Status != "failed" || failed.Attempts != 1 || failed.NextAttemptAt == nil {

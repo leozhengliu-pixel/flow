@@ -65,6 +65,9 @@ type OIDCProvider struct {
 	Scopes        []string
 	DisplayName   string
 	IdentityClaim string
+	RoleClaim     string
+	RoleMapping   map[string]string
+	DefaultRole   string
 }
 
 type SAMLProvider struct {
@@ -128,7 +131,7 @@ func Load() (Config, error) {
 		Auth: AuthConfig{
 			EmailEnabled:  boolean("FLOW_AUTH_EMAIL_ENABLED", true),
 			Google:        OAuthProvider{Enabled: boolean("FLOW_AUTH_GOOGLE_ENABLED", false), ClientID: secret("FLOW_GOOGLE_CLIENT_ID"), ClientSecret: secret("FLOW_GOOGLE_CLIENT_SECRET"), RedirectURL: value("FLOW_GOOGLE_REDIRECT_URL", appURL+"/api/auth/google/callback")},
-			OIDC:          OIDCProvider{Enabled: boolean("FLOW_AUTH_OIDC_ENABLED", false), IssuerURL: value("FLOW_OIDC_ISSUER_URL", ""), ClientID: secret("FLOW_OIDC_CLIENT_ID"), ClientSecret: secret("FLOW_OIDC_CLIENT_SECRET"), RedirectURL: value("FLOW_OIDC_REDIRECT_URL", appURL+"/api/auth/oidc/callback"), Scopes: fields(value("FLOW_OIDC_SCOPES", "openid profile email")), DisplayName: value("FLOW_OIDC_DISPLAY_NAME", "OpenID Connect"), IdentityClaim: value("FLOW_OIDC_IDENTITY_CLAIM", "sub")},
+			OIDC:          OIDCProvider{Enabled: boolean("FLOW_AUTH_OIDC_ENABLED", false), IssuerURL: value("FLOW_OIDC_ISSUER_URL", ""), ClientID: secret("FLOW_OIDC_CLIENT_ID"), ClientSecret: secret("FLOW_OIDC_CLIENT_SECRET"), RedirectURL: value("FLOW_OIDC_REDIRECT_URL", appURL+"/api/auth/oidc/callback"), Scopes: fields(value("FLOW_OIDC_SCOPES", "openid profile email")), DisplayName: value("FLOW_OIDC_DISPLAY_NAME", "OpenID Connect"), IdentityClaim: value("FLOW_OIDC_IDENTITY_CLAIM", "sub"), RoleClaim: value("FLOW_OIDC_ROLE_CLAIM", ""), RoleMapping: roleMapping(value("FLOW_OIDC_ROLE_MAPPING", "")), DefaultRole: value("FLOW_OIDC_DEFAULT_ROLE", "")},
 			SAML:          SAMLProvider{Enabled: boolean("FLOW_AUTH_SAML_ENABLED", false), MetadataURL: value("FLOW_SAML_METADATA_URL", ""), MetadataXML: secret("FLOW_SAML_METADATA_XML"), EntityID: value("FLOW_SAML_ENTITY_ID", appURL), ACSURL: value("FLOW_SAML_ACS_URL", appURL+"/api/auth/saml/acs"), SPPrivateKey: secret("FLOW_SAML_SP_PRIVATE_KEY"), SPCertificate: secret("FLOW_SAML_SP_CERTIFICATE"), DisplayName: value("FLOW_SAML_DISPLAY_NAME", "SAML")},
 			AutoProvision: boolean("FLOW_AUTH_AUTO_PROVISION", true), AllowedDomains: csv(value("FLOW_AUTH_ALLOWED_DOMAINS", "")),
 		},
@@ -194,6 +197,14 @@ func (c Config) Validate() error {
 		if c.Auth.SAML.ACSURL != acsURL {
 			return fmt.Errorf("FLOW_SAML_ACS_URL must be %s", acsURL)
 		}
+	}
+	for source, target := range c.Auth.OIDC.RoleMapping {
+		if strings.TrimSpace(source) == "" || !validExternalRole(target) {
+			return fmt.Errorf("FLOW_OIDC_ROLE_MAPPING contains an invalid role mapping")
+		}
+	}
+	if c.Auth.OIDC.DefaultRole != "" && !validExternalRole(c.Auth.OIDC.DefaultRole) {
+		return fmt.Errorf("FLOW_OIDC_DEFAULT_ROLE must be owner, admin, member, or guest")
 	}
 	if !c.AuthDisabled && !c.Auth.EmailEnabled && !c.Auth.Google.Enabled && !c.Auth.OIDC.Enabled && !c.Auth.SAML.Enabled {
 		return fmt.Errorf("at least one authentication provider must be enabled")
@@ -275,6 +286,35 @@ func duration(name string, fallback time.Duration) time.Duration {
 }
 
 func fields(value string) []string { return strings.Fields(value) }
+
+func roleMapping(value string) map[string]string {
+	result := map[string]string{}
+	for _, item := range strings.Split(value, ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		parts := strings.FieldsFunc(item, func(r rune) bool { return r == '=' || r == ':' })
+		if len(parts) != 2 {
+			continue
+		}
+		source, target := strings.ToLower(strings.TrimSpace(parts[0])), strings.ToLower(strings.TrimSpace(parts[1]))
+		if source != "" && target != "" {
+			result[source] = target
+		}
+	}
+	return result
+}
+
+func validExternalRole(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "owner", "admin", "member", "guest":
+		return true
+	default:
+		return false
+	}
+}
+
 func csv(value string) []string {
 	result := []string{}
 	for _, item := range strings.Split(value, ",") {

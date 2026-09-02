@@ -245,9 +245,38 @@ func (s *server) finishOIDC(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "could not create Flow session")
 		return
 	}
+	if role := externalOIDCRole(s.externalAuth.config.OIDC, claims); role != "" {
+		for _, membership := range session.Memberships {
+			if err := s.store.UpdateMemberRole(r.Context(), membership.Workspace.ID, session.User.ID, role); err != nil {
+				writeError(w, http.StatusForbidden, "could not apply identity role")
+				return
+			}
+		}
+	}
 	clearExternalState(w, r)
 	setSessionCookie(w, r, sessionToken, session.ExpiresAt)
 	http.Redirect(w, r, s.externalAuth.appURL, http.StatusFound)
+}
+
+func externalOIDCRole(provider config.OIDCProvider, claims map[string]any) string {
+	role := ""
+	if provider.RoleClaim != "" {
+		role = roleClaimValue(claims, provider.RoleClaim)
+	}
+	if role == "" {
+		role = provider.DefaultRole
+	}
+	if mapped := provider.RoleMapping[strings.ToLower(strings.TrimSpace(role))]; mapped != "" {
+		role = mapped
+	}
+	role = strings.ToLower(strings.TrimSpace(role))
+	if !identityRoleValid(role) {
+		role = strings.ToLower(strings.TrimSpace(provider.DefaultRole))
+	}
+	if !identityRoleValid(role) {
+		return ""
+	}
+	return role
 }
 
 func stringClaim(claims map[string]any, name string) string {

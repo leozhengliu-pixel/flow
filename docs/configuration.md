@@ -186,6 +186,9 @@ domain.
 | `FLOW_OIDC_SCOPES` | `openid profile email` | Space-separated scopes. |
 | `FLOW_OIDC_DISPLAY_NAME` | `OpenID Connect` | Login button label. |
 | `FLOW_OIDC_IDENTITY_CLAIM` | `sub` | Stable claim used to bind the IdP identity. Use an employee-number claim only when the IdP guarantees it is unique, immutable, and never reused. |
+| `FLOW_OIDC_ROLE_CLAIM` | empty | Optional claim containing a workspace role, such as `groups`. |
+| `FLOW_OIDC_ROLE_MAPPING` | empty | Optional comma-separated mappings such as `staff=admin,contractor=guest`. |
+| `FLOW_OIDC_DEFAULT_ROLE` | empty | Fallback role when the claim is missing or unmapped. |
 | `FLOW_AUTH_SAML_ENABLED` | `false` | Enable SAML 2.0 SP endpoints. |
 | `FLOW_SAML_METADATA_URL` | empty | IdP metadata URL; alternatively use metadata XML. |
 | `FLOW_SAML_METADATA_XML` | empty | Inline/file IdP metadata. |
@@ -213,6 +216,12 @@ FLOW_OIDC_IDENTITY_CLAIM=employeeNumber
 
 The token must still contain a stable `sub` fallback or the configured claim;
 Flow never derives an email address from the employee number.
+
+SCIM role groups and team groups are configured in the workspace settings API.
+Set `scimRoleGroups` for role group display names and
+`scimTeamGroupMapping` as a map from Flow team ID to IdP group display name.
+SCIM pushes then add and remove managed team memberships without removing
+manually assigned members.
 
 ## Flow Agent
 
