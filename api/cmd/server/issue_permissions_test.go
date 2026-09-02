@@ -45,5 +45,19 @@ func TestPrivateIssueExplicitShareAndTeamOwnerInheritance(t *testing.T) {
 	// The workspace owner inherits team-owner access for a child team.
 	child := authRequest[domain.Team](t, admin, http.MethodPost, server.URL+"/api/workspaces/test-workspace/teams", map[string]any{"name": "Child", "key": "CHD", "parentTeamId": team.ID}, "", http.StatusCreated)
 	authRequest[any](t, admin, http.MethodPatch, server.URL+"/api/workspaces/test-workspace/teams/"+child.ID, map[string]string{"name": "Child renamed"}, "", http.StatusOK)
+	shared := authRequest[map[string]any](t, admin, http.MethodPost, server.URL+"/api/issues/"+issue.ID+"/share", nil, "test-workspace", http.StatusOK)
+	shareToken, _ := shared["token"].(string)
+	if shareToken == "" {
+		t.Fatalf("private issue share token missing: %#v", shared)
+	}
+	public := authRequest[map[string]any](t, authClient(t), http.MethodGet, server.URL+"/api/shared/issues/"+shareToken+"?workspace=test-workspace", nil, "", http.StatusOK)
+	publicIssue, _ := public["issue"].(map[string]any)
+	publicTeam, _ := publicIssue["team"].(map[string]any)
+	if publicIssue["id"] != issue.ID || publicIssue["shareToken"] != nil || publicTeam["id"] != "" || publicTeam["name"] != "" || publicTeam["key"] != "" {
+		t.Fatalf("shared private issue projection leaked token or issue: %#v", public)
+	}
+	authRequest[any](t, member, http.MethodPost, server.URL+"/api/issues/"+issue.ID+"/share", nil, "test-workspace", http.StatusNotFound)
+	authRequest[any](t, admin, http.MethodDelete, server.URL+"/api/issues/"+issue.ID+"/share", nil, "test-workspace", http.StatusNoContent)
+	authRequest[any](t, authClient(t), http.MethodGet, server.URL+"/api/shared/issues/"+shareToken+"?workspace=test-workspace", nil, "", http.StatusNotFound)
 	_ = bootstrap
 }
