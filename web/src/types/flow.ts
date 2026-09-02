@@ -19,7 +19,7 @@ export interface Workspace {
   region?: "us" | "eu" | string;
   createdAt?: string;
 }
-export type WorkspaceRole = "admin" | "member" | "guest";
+export type WorkspaceRole = "owner" | "admin" | "member" | "guest";
 export type TeamRole = "owner" | "member";
 export interface WorkspaceMembership {
   workspace: Workspace;
