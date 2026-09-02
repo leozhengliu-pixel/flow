@@ -82,3 +82,17 @@ it("filters settings using translated labels", async () => {
   expect(screen.getByRole("button", { name: "文档" })).toBeVisible();
   expect(screen.queryByRole("button", { name: "工作区" })).toBeNull();
 });
+
+it("treats workspace owners as administrators", () => {
+  const ownerProps = props();
+  ownerProps.data = { ...ownerProps.data, viewerRole: "owner" };
+
+  render(
+    <I18nProvider>
+      <SettingsPage {...ownerProps} />
+    </I18nProvider>,
+  );
+
+  expect(screen.queryByText("需要管理员权限")).toBeNull();
+  expect(screen.getByRole("heading", { name: "工作区" })).toBeVisible();
+});
