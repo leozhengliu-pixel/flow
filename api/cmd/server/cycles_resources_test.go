@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
@@ -45,4 +46,42 @@ func TestCycleResourcesAndCalendarFeed(t *testing.T) {
 		t.Fatal("bootstrap leaked cycle calendar token")
 	}
 	requestJSON[any](t, handler, http.MethodDelete, "/api/cycles/"+cycle.ID+"/resources/"+link.ID, nil, http.StatusNoContent)
+}
+
+func TestCycleCapacityMatrixLifecycle(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	cycle := bootstrap.Cycles[0]
+	var memberID string
+	for _, member := range bootstrap.TeamMembers {
+		if member.TeamID == cycle.TeamID {
+			memberID = member.UserID
+			break
+		}
+	}
+	if memberID == "" {
+		memberID = bootstrap.Viewer.ID
+		if err := repository.MutateWorkspace(t.Context(), bootstrap.Workspace.URLKey, "test.cycle_member", cycle.TeamID, nil, func(data *domain.Bootstrap) error {
+			data.TeamMembers = append(data.TeamMembers, domain.TeamMember{TeamID: cycle.TeamID, UserID: memberID, Role: "member", JoinedAt: time.Now().UTC()})
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	updated := requestJSON[domain.Cycle](t, handler, http.MethodPut, "/api/cycles/"+cycle.ID+"/capacity", map[string]any{
+		"capacity":         24,
+		"capacityByMember": map[string]any{memberID: map[string]int{"mon": 6, "tue": 5}},
+	}, http.StatusOK)
+	if updated.Capacity != 24 || updated.CapacityByMember[memberID]["mon"] != 6 || updated.CapacityByMember[memberID]["tue"] != 5 {
+		t.Fatalf("updated capacity=%#v", updated)
+	}
+	result := requestJSON[map[string]any](t, handler, http.MethodGet, "/api/cycles/"+cycle.ID+"/capacity", nil, http.StatusOK)
+	if result["cycleId"] != cycle.ID {
+		t.Fatalf("capacity response=%#v", result)
+	}
 }

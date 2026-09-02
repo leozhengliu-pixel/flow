@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 type documentInput struct {
@@ -41,13 +42,66 @@ type documentInput struct {
 // document is workspace-visible, while a team document is visible only to a
 // member of one of its teams (admins retain workspace access).
 func documentVisibleToViewer(s *server, data domain.Bootstrap, document domain.Document) bool {
-	if s.authDisabled || data.ViewerRole == "admin" || len(document.TeamIDs) == 0 {
-		return true
-	}
-	return slices.ContainsFunc(document.TeamIDs, func(teamID string) bool {
-		return slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID })
-	})
+	return documentRole(s, data, document) != "none"
 }
+
+func documentRole(s *server, data domain.Bootstrap, document domain.Document) string {
+	if s.authDisabled || data.ViewerRole == "admin" || document.Creator.ID == data.Viewer.ID {
+		return "owner"
+	}
+	best := "none"
+	hasExplicit := false
+	for _, permission := range document.Permissions {
+		if !(permission.SubjectType == "user" && permission.SubjectID == document.Creator.ID && strings.EqualFold(permission.Role, "owner")) {
+			hasExplicit = true
+		}
+		matched := permission.SubjectType == "user" && permission.SubjectID == data.Viewer.ID
+		if !matched && permission.SubjectType == "workspace" {
+			matched = permission.SubjectID == "" || permission.SubjectID == data.Workspace.ID || permission.SubjectID == data.Workspace.URLKey
+		}
+		if !matched && permission.SubjectType == "team" {
+			matched = slices.ContainsFunc(data.TeamMembers, func(member domain.TeamMember) bool {
+				return member.UserID == data.Viewer.ID && member.TeamID == permission.SubjectID
+			})
+		}
+		if matched && documentRoleRank(permission.Role) > documentRoleRank(best) {
+			best = permission.Role
+		}
+	}
+	if best != "none" {
+		return best
+	}
+	if hasExplicit {
+		return "none"
+	}
+	if len(document.TeamIDs) == 0 {
+		return "viewer"
+	}
+	if slices.ContainsFunc(document.TeamIDs, func(teamID string) bool {
+		return slices.ContainsFunc(data.TeamMembers, func(member domain.TeamMember) bool { return member.UserID == data.Viewer.ID && member.TeamID == teamID })
+	}) {
+		return "viewer"
+	}
+	return "none"
+}
+
+func documentRoleRank(role string) int {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "owner":
+		return 4
+	case "editor":
+		return 3
+	case "commenter":
+		return 2
+	case "viewer":
+		return 1
+	default:
+		return 0
+	}
+}
+
+func canEditDocument(role string) bool    { return documentRoleRank(role) >= 3 }
+func canCommentDocument(role string) bool { return documentRoleRank(role) >= 2 }
 
 func (s *server) listDocuments(w http.ResponseWriter, r *http.Request) {
 	data := s.workspaceData(r)
@@ -354,7 +408,8 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 				return "", errInvalid
 			}
 		}
-		created = domain.Document{ID: fmt.Sprintf("document_%d", now.UnixNano()), SlugID: slug(title) + "-" + strconv.FormatInt(now.UnixNano()%0xffffff, 16), Title: title, Color: "#8b8b90", Creator: data.Viewer, ProjectIDs: projects, TeamIDs: teams, IssueID: issueID, SubscriberIDs: []string{data.Viewer.ID}, ContentData: map[string]any{"type": "doc", "content": []any{}}, CreatedAt: now, UpdatedAt: now, Revisions: []domain.DocumentRevision{}}
+		created = domain.Document{ID: fmt.Sprintf("document_%d", now.UnixNano()), SlugID: slug(title) + "-" + strconv.FormatInt(now.UnixNano()%0xffffff, 16), Title: title, Color: "#8b8b90", Creator: data.Viewer, ProjectIDs: projects, TeamIDs: teams, IssueID: issueID, SubscriberIDs: []string{data.Viewer.ID}, ContentData: map[string]any{"type": "doc", "content": []any{}}, CreatedAt: now, UpdatedAt: now, Revisions: []domain.DocumentRevision{}, Permissions: []domain.DocumentPermission{{ID: fmt.Sprintf("document_permission_%d", now.UnixNano()), DocumentID: "", SubjectType: "user", SubjectID: data.Viewer.ID, Role: "owner", CreatedAt: now, UpdatedAt: now}}}
+		created.Permissions[0].DocumentID = created.ID
 		if template != nil {
 			created.Icon, created.Content, created.ContentState = template.Icon, template.Content, template.ContentState
 			if template.ContentData != nil {
@@ -401,6 +456,9 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 		document, err := documentByID(data, id)
 		if err != nil {
 			return err
+		}
+		if !canEditDocument(documentRole(s, *data, *document)) {
+			return store.ErrAuthForbidden
 		}
 		contentChange := input.Title != nil || input.Content != nil || input.ContentState != nil || input.ContentData != nil
 		if contentChange {
@@ -480,6 +538,9 @@ func (s *server) restoreDocumentRevision(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			return err
 		}
+		if !canEditDocument(documentRole(s, *data, *document)) {
+			return store.ErrAuthForbidden
+		}
 		index := slices.IndexFunc(document.Revisions, func(item domain.DocumentRevision) bool { return item.ID == revisionID })
 		if index < 0 {
 			return errNotFound
@@ -501,6 +562,9 @@ func (s *server) deleteDocument(w http.ResponseWriter, r *http.Request) {
 		index := slices.IndexFunc(data.Documents, func(item domain.Document) bool { return item.ID == id || item.SlugID == id })
 		if index < 0 {
 			return errNotFound
+		}
+		if documentRole(s, *data, data.Documents[index]) != "owner" {
+			return store.ErrAuthForbidden
 		}
 		removed := data.Documents[index]
 		if err := appendTrash(data, "document", removed.ID, removed.Title, removed); err != nil {
@@ -529,8 +593,12 @@ func (s *server) createDocumentComment(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var created domain.Comment
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.comment_created", id, input, func(data *domain.Bootstrap) error {
-		if _, err := documentByID(data, id); err != nil {
+		document, err := documentByID(data, id)
+		if err != nil {
 			return err
+		}
+		if !canCommentDocument(documentRole(s, *data, *document)) {
+			return store.ErrAuthForbidden
 		}
 		if input.ParentID != nil && slices.IndexFunc(data.Comments[id], func(item domain.Comment) bool { return item.ID == *input.ParentID }) < 0 {
 			return errNotFound
@@ -552,8 +620,12 @@ func (s *server) updateDocumentComment(w http.ResponseWriter, r *http.Request) {
 	id, commentID := r.PathValue("id"), r.PathValue("commentId")
 	var updated, current domain.Comment
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.comment_updated", id, input, func(data *domain.Bootstrap) error {
-		if _, err := documentByID(data, id); err != nil {
+		document, err := documentByID(data, id)
+		if err != nil {
 			return err
+		}
+		if !canCommentDocument(documentRole(s, *data, *document)) {
+			return store.ErrAuthForbidden
 		}
 		index := slices.IndexFunc(data.Comments[id], func(item domain.Comment) bool { return item.ID == commentID })
 		if index < 0 {
@@ -581,8 +653,12 @@ func (s *server) updateDocumentComment(w http.ResponseWriter, r *http.Request) {
 func (s *server) deleteDocumentComment(w http.ResponseWriter, r *http.Request) {
 	id, commentID := r.PathValue("id"), r.PathValue("commentId")
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.comment_deleted", id, map[string]string{"commentId": commentID}, func(data *domain.Bootstrap) error {
-		if _, err := documentByID(data, id); err != nil {
+		document, err := documentByID(data, id)
+		if err != nil {
 			return err
+		}
+		if !canCommentDocument(documentRole(s, *data, *document)) {
+			return store.ErrAuthForbidden
 		}
 		before := len(data.Comments[id])
 		data.Comments[id] = slices.DeleteFunc(data.Comments[id], func(item domain.Comment) bool {
@@ -609,8 +685,12 @@ func (s *server) toggleDocumentCommentReaction(w http.ResponseWriter, r *http.Re
 	id, commentID := r.PathValue("id"), r.PathValue("commentId")
 	var updated domain.Comment
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.comment_reaction_toggled", id, input, func(data *domain.Bootstrap) error {
-		if _, err := documentByID(data, id); err != nil {
+		document, err := documentByID(data, id)
+		if err != nil {
 			return err
+		}
+		if !canCommentDocument(documentRole(s, *data, *document)) {
+			return store.ErrAuthForbidden
 		}
 		index := slices.IndexFunc(data.Comments[id], func(item domain.Comment) bool { return item.ID == commentID })
 		if index < 0 {
@@ -1926,6 +2006,12 @@ func (s *server) addFavorite(w http.ResponseWriter, r *http.Request) {
 		if !resourceExists(data, kind, id) {
 			return errNotFound
 		}
+		if kind == "document" {
+			document, _ := documentByID(data, id)
+			if document == nil || documentRole(s, *data, *document) == "none" {
+				return store.ErrAuthForbidden
+			}
+		}
 		setResourceFavoriteFlag(data, kind, id, true)
 		index := slices.IndexFunc(data.Favorites, func(item domain.Favorite) bool {
 			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
@@ -1949,6 +2035,12 @@ func (s *server) addFavorite(w http.ResponseWriter, r *http.Request) {
 func (s *server) removeFavorite(w http.ResponseWriter, r *http.Request) {
 	kind, id := r.PathValue("type"), r.PathValue("id")
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "favorite.removed", id, map[string]string{"type": kind}, func(data *domain.Bootstrap) error {
+		if kind == "document" {
+			document, _ := documentByID(data, id)
+			if document == nil || documentRole(s, *data, *document) == "none" {
+				return store.ErrAuthForbidden
+			}
+		}
 		setResourceFavoriteFlag(data, kind, id, false)
 		data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool {
 			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
@@ -1975,6 +2067,12 @@ func (s *server) updateFavorite(w http.ResponseWriter, r *http.Request) {
 	}
 	var updated domain.Favorite
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "favorite.updated", id, input, func(data *domain.Bootstrap) error {
+		if kind == "document" {
+			document, _ := documentByID(data, id)
+			if document == nil || documentRole(s, *data, *document) == "none" {
+				return store.ErrAuthForbidden
+			}
+		}
 		index := slices.IndexFunc(data.Favorites, func(item domain.Favorite) bool {
 			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
 		})
@@ -2100,6 +2198,12 @@ func (s *server) addSubscription(w http.ResponseWriter, r *http.Request) {
 		if !resourceExists(data, kind, id) {
 			return errNotFound
 		}
+		if kind == "document" {
+			document, _ := documentByID(data, id)
+			if document == nil || !canCommentDocument(documentRole(s, *data, *document)) {
+				return store.ErrAuthForbidden
+			}
+		}
 		setDocumentSubscription(data, kind, id, data.Viewer.ID, true)
 		index := slices.IndexFunc(data.Subscriptions, func(item domain.Subscription) bool {
 			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
@@ -2125,6 +2229,12 @@ func (s *server) addSubscription(w http.ResponseWriter, r *http.Request) {
 func (s *server) removeSubscription(w http.ResponseWriter, r *http.Request) {
 	kind, id := r.PathValue("type"), r.PathValue("id")
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "subscription.removed", id, map[string]string{"type": kind}, func(data *domain.Bootstrap) error {
+		if kind == "document" {
+			document, _ := documentByID(data, id)
+			if document == nil || !canCommentDocument(documentRole(s, *data, *document)) {
+				return store.ErrAuthForbidden
+			}
+		}
 		setDocumentSubscription(data, kind, id, data.Viewer.ID, false)
 		data.Subscriptions = slices.DeleteFunc(data.Subscriptions, func(item domain.Subscription) bool {
 			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
@@ -2165,6 +2275,9 @@ func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 			var value domain.Document
 			if json.Unmarshal(entry.Payload, &value) != nil {
 				return errInvalid
+			}
+			if data.ViewerRole != "admin" && value.Creator.ID != data.Viewer.ID {
+				return store.ErrAuthForbidden
 			}
 			data.Documents = append([]domain.Document{value}, data.Documents...)
 			syncDocumentProjectResources(data, value)
@@ -2329,7 +2442,7 @@ func (s *server) previewImport(w http.ResponseWriter, r *http.Request) {
 	var created domain.ImportJob
 	err = s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "import.previewed", map[string]any{"filename": header.Filename, "rows": len(rows)}, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
-		created = domain.ImportJob{ID: fmt.Sprintf("import_%d", now.UnixNano()), UserID: data.Viewer.ID, Filename: header.Filename, Format: format, Status: "mapping", Headers: headers, Rows: rows, Mapping: map[string]string{}, Errors: []string{}, CreatedAt: now, UpdatedAt: now}
+		created = domain.ImportJob{ID: fmt.Sprintf("import_%d", now.UnixNano()), UserID: data.Viewer.ID, Filename: header.Filename, Format: format, Status: "mapping", Headers: headers, Rows: rows, RowsTotal: len(rows), Checkpoint: 0, Mapping: map[string]string{}, Errors: []string{}, RowErrors: []domain.ImportRowError{}, CreatedAt: now, UpdatedAt: now}
 		data.ImportJobs = append([]domain.ImportJob{created}, data.ImportJobs...)
 		appendAudit(data, "previewed", "import", created.ID, map[string]any{"filename": created.Filename, "rows": len(rows)})
 		return created.ID, nil
@@ -2427,8 +2540,9 @@ func (s *server) commitImportSync(w http.ResponseWriter, r *http.Request) {
 		if job.Status == "completed" {
 			return errInvalid
 		}
-		job.Status, job.Mapping, job.Errors, job.TeamID = "running", input.Mapping, []string{}, input.TeamID
+		job.Status, job.Mapping, job.Errors, job.RowErrors, job.TeamID = "running", input.Mapping, []string{}, []domain.ImportRowError{}, input.TeamID
 		job.Imported, job.Progress, job.Error = 0, 0, ""
+		job.Checkpoint = 0
 		sourceToIssueID, pendingParents := map[string]string{}, map[string]string{}
 		nextNumber := nextIssueNumber(data.Issues)
 		newIssues := make([]domain.Issue, 0, len(job.Rows))
@@ -2593,8 +2707,19 @@ func (s *server) commitImportSync(w http.ResponseWriter, r *http.Request) {
 			job.Error = "no rows could be imported"
 		}
 		job.Progress = 100
+		job.Checkpoint = len(job.Rows)
+		job.RowsTotal = len(job.Rows)
+		job.RowErrors = make([]domain.ImportRowError, 0, len(job.Errors))
+		for _, message := range job.Errors {
+			var row int
+			if _, scanErr := fmt.Sscanf(message, "Row %d:", &row); scanErr == nil && row > 0 {
+				job.RowErrors = append(job.RowErrors, domain.ImportRowError{Row: row, Message: message})
+			}
+		}
 		job.UpdatedAt = time.Now().UTC()
-		job.Rows = nil
+		if job.Status == "completed" {
+			job.Rows = nil
+		}
 		updated = *job
 		appendAudit(data, "completed", "import", id, map[string]any{"imported": job.Imported, "errors": len(job.Errors)})
 		return nil

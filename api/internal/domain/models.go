@@ -247,24 +247,37 @@ type DocumentContent struct {
 }
 
 type Document struct {
-	ID            string             `json:"id"`
-	SlugID        string             `json:"slugId"`
-	Title         string             `json:"title"`
-	Icon          string             `json:"icon,omitempty"`
-	Color         string             `json:"color,omitempty"`
-	Content       string             `json:"content"`
-	ContentState  string             `json:"contentState,omitempty"`
-	ContentData   map[string]any     `json:"contentData,omitempty"`
-	Creator       User               `json:"creator"`
-	ProjectIDs    []string           `json:"projectIds"`
-	TeamIDs       []string           `json:"teamIds"`
-	IssueID       string             `json:"issueId,omitempty"`
-	SubscriberIDs []string           `json:"subscriberIds"`
-	Favorite      bool               `json:"favorite"`
-	ArchivedAt    *time.Time         `json:"archivedAt,omitempty"`
-	CreatedAt     time.Time          `json:"createdAt"`
-	UpdatedAt     time.Time          `json:"updatedAt"`
-	Revisions     []DocumentRevision `json:"revisions"`
+	ID            string               `json:"id"`
+	SlugID        string               `json:"slugId"`
+	Title         string               `json:"title"`
+	Icon          string               `json:"icon,omitempty"`
+	Color         string               `json:"color,omitempty"`
+	Content       string               `json:"content"`
+	ContentState  string               `json:"contentState,omitempty"`
+	ContentData   map[string]any       `json:"contentData,omitempty"`
+	Creator       User                 `json:"creator"`
+	ProjectIDs    []string             `json:"projectIds"`
+	TeamIDs       []string             `json:"teamIds"`
+	IssueID       string               `json:"issueId,omitempty"`
+	SubscriberIDs []string             `json:"subscriberIds"`
+	Favorite      bool                 `json:"favorite"`
+	ArchivedAt    *time.Time           `json:"archivedAt,omitempty"`
+	CreatedAt     time.Time            `json:"createdAt"`
+	UpdatedAt     time.Time            `json:"updatedAt"`
+	Revisions     []DocumentRevision   `json:"revisions"`
+	Permissions   []DocumentPermission `json:"permissions,omitempty"`
+}
+
+// DocumentPermission grants a role to a workspace member, team, or the whole
+// workspace. Roles are owner, editor, commenter, or viewer.
+type DocumentPermission struct {
+	ID          string    `json:"id"`
+	DocumentID  string    `json:"documentId"`
+	SubjectType string    `json:"subjectType"`
+	SubjectID   string    `json:"subjectId"`
+	Role        string    `json:"role"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 type DocumentRevision struct {
@@ -1227,6 +1240,14 @@ type ImportJob struct {
 	Error      string              `json:"error,omitempty"`
 	RetryCount int                 `json:"retryCount,omitempty"`
 	TeamID     string              `json:"teamId,omitempty"`
+	RowsTotal  int                 `json:"rowsTotal,omitempty"`
+	Checkpoint int                 `json:"checkpoint,omitempty"`
+	RowErrors  []ImportRowError    `json:"rowErrors,omitempty"`
+}
+
+type ImportRowError struct {
+	Row     int    `json:"row"`
+	Message string `json:"message"`
 }
 
 type ExportJob struct {
@@ -1924,6 +1945,7 @@ type Presence struct {
 	ClientID   string    `json:"clientId"`
 	User       User      `json:"user"`
 	IssueID    string    `json:"issueId,omitempty"`
+	DocumentID string    `json:"documentId,omitempty"`
 	Route      string    `json:"route,omitempty"`
 	LastSeenAt time.Time `json:"lastSeenAt"`
 }

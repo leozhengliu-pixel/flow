@@ -185,6 +185,29 @@ func TestDocumentCommentThreads(t *testing.T) {
 	}
 }
 
+func TestDocumentPermissionsAndPresenceEndpoints(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	document := requestJSON[domain.Document](t, handler, http.MethodPost, "/api/documents", map[string]any{"title": "Permissions"}, http.StatusCreated)
+	permissions := requestJSON[[]domain.DocumentPermission](t, handler, http.MethodGet, "/api/documents/"+document.ID+"/permissions", nil, http.StatusOK)
+	if len(permissions) != 1 || permissions[0].Role != "owner" {
+		t.Fatalf("default document permission = %#v", permissions)
+	}
+	requestJSON[[]domain.DocumentPermission](t, handler, http.MethodPut, "/api/documents/"+document.ID+"/permissions", map[string]any{"permissions": []map[string]any{{"subjectType": "workspace", "role": "viewer"}}}, http.StatusOK)
+	comments := requestJSON[[]domain.Comment](t, handler, http.MethodGet, "/api/documents/"+document.ID+"/comments", nil, http.StatusOK)
+	if comments == nil {
+		t.Fatal("document comments endpoint returned null")
+	}
+	presence := requestJSON[[]domain.Presence](t, handler, http.MethodGet, "/api/realtime/presence", nil, http.StatusOK)
+	if presence == nil {
+		t.Fatal("presence endpoint returned null")
+	}
+}
+
 func TestDocumentIndexFiltersAndTeamBinding(t *testing.T) {
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {

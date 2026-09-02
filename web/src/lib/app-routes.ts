@@ -19,6 +19,21 @@ export type ReleasePipelineTab = "releases" | "changelog" | "archive";
 export type ReleaseRouteTab = "issues" | "release-notes";
 export type PulseRouteView = "following" | "popular" | "all";
 export type ReviewRouteTab = "overview" | "review" | "changes";
+export type WorkspaceSecondaryRouteKind =
+  | "diary"
+  | "meeting"
+  | "automations"
+  | "automation-new"
+  | "automation-detail"
+  | "automation-runs"
+  | "team-board"
+  | "team-triage"
+  | "team-updates"
+  | "team-update"
+  | "team-resources"
+  | "team-links"
+  | "release-note"
+  | "label";
 export type TeamArchiveTab =
   | "issues"
   | "projects"
@@ -87,6 +102,22 @@ export type AppRoute =
   | { kind: "workspace-root"; workspaceSlug: string }
   | { kind: "inbox"; workspaceSlug: string }
   | { kind: "search"; workspaceSlug: string }
+  | { kind: "diary"; workspaceSlug: string }
+  | { kind: "meeting"; workspaceSlug: string; meetingId: string }
+  | { kind: "automations"; workspaceSlug: string }
+  | { kind: "automation-new"; workspaceSlug: string }
+  | {
+      kind: "automation-detail";
+      workspaceSlug: string;
+      automationId: string;
+      editing?: boolean;
+    }
+  | {
+      kind: "automation-runs";
+      workspaceSlug: string;
+      automationId: string;
+      runId?: string;
+    }
   | {
       kind: "pulse";
       workspaceSlug: string;
@@ -113,6 +144,17 @@ export type AppRoute =
       view: TeamIssuesRouteView;
     }
   | { kind: "team-overview"; workspaceSlug: string; teamKey: string }
+  | { kind: "team-board"; workspaceSlug: string; teamKey: string }
+  | { kind: "team-triage"; workspaceSlug: string; teamKey: string }
+  | { kind: "team-updates"; workspaceSlug: string; teamKey: string }
+  | {
+      kind: "team-update";
+      workspaceSlug: string;
+      teamKey: string;
+      updateId: string;
+    }
+  | { kind: "team-resources"; workspaceSlug: string; teamKey: string }
+  | { kind: "team-links"; workspaceSlug: string; teamKey: string }
   | { kind: "team-documents"; workspaceSlug: string; teamKey: string }
   | { kind: "team-loops"; workspaceSlug: string; teamKey: string }
   | { kind: "team-members"; workspaceSlug: string; teamKey: string }
@@ -164,6 +206,13 @@ export type AppRoute =
       teamKey?: string;
     }
   | { kind: "document"; workspaceSlug: string; documentSlugId: string }
+  | { kind: "release-note"; workspaceSlug: string; releaseNoteId: string }
+  | {
+      kind: "label";
+      workspaceSlug: string;
+      resourceName: string;
+      resourceType: "issue" | "project" | "initiative";
+    }
   | { kind: "drafts"; workspaceSlug: string }
   | { kind: "agent"; workspaceSlug: string; chatSlug?: string }
   | { kind: "releases"; workspaceSlug: string }
@@ -316,6 +365,22 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     return { kind: "inbox", workspaceSlug };
   if (section === "search" && segments.length === 2)
     return { kind: "search", workspaceSlug };
+  if (section === "diary" && segments.length === 2)
+    return { kind: "diary", workspaceSlug };
+  if (section === "meeting" && third && segments.length === 3)
+    return { kind: "meeting", workspaceSlug, meetingId: third };
+  if (section === "automations" && segments.length === 2)
+    return { kind: "automations", workspaceSlug };
+  if (section === "automations" && third === "new" && segments.length === 3)
+    return { kind: "automation-new", workspaceSlug };
+  if (section === "automation" && third && fourth === "edit" && segments.length === 4)
+    return { kind: "automation-detail", workspaceSlug, automationId: third, editing: true };
+  if (section === "automation" && third && fourth === "runs" && segments.length === 4)
+    return { kind: "automation-runs", workspaceSlug, automationId: third };
+  if (section === "automation" && third && fourth === "run" && fifth && segments.length === 5)
+    return { kind: "automation-runs", workspaceSlug, automationId: third, runId: fifth };
+  if (section === "automation" && third && segments.length === 3)
+    return { kind: "automation-detail", workspaceSlug, automationId: third };
   if (section === "pulse" && !third)
     return { kind: "pulse", workspaceSlug, view: "following" };
   if (
@@ -435,6 +500,15 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     return { kind: "dashboards", workspaceSlug, teamKey: third };
   if (section === "document" && third && segments.length === 3)
     return { kind: "document", workspaceSlug, documentSlugId: third };
+  if (section === "release-note" && third && segments.length === 3)
+    return { kind: "release-note", workspaceSlug, releaseNoteId: third };
+  if ((section === "issue-label" || section === "project-label" || section === "initiative-label") && third && segments.length === 3)
+    return {
+      kind: "label",
+      workspaceSlug,
+      resourceName: third,
+      resourceType: section === "issue-label" ? "issue" : section === "project-label" ? "project" : "initiative",
+    };
   if (section === "drafts" && segments.length === 2)
     return { kind: "drafts", workspaceSlug };
   if (section === "agent" && segments.length <= 3)
@@ -714,6 +788,49 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     };
   if (section === "view" && third && segments.length === 3)
     return { kind: "workspace-saved-view", workspaceSlug, viewId: third };
+  if (
+    section === "team" &&
+    third &&
+    fourth === "board" &&
+    segments.length === 4
+  )
+    return { kind: "team-board", workspaceSlug, teamKey: third };
+  if (
+    section === "team" &&
+    third &&
+    fourth === "triage" &&
+    segments.length === 4
+  )
+    return { kind: "team-triage", workspaceSlug, teamKey: third };
+  if (
+    section === "team" &&
+    third &&
+    fourth === "updates" &&
+    segments.length === 4
+  )
+    return { kind: "team-updates", workspaceSlug, teamKey: third };
+  if (
+    section === "team" &&
+    third &&
+    fourth === "update" &&
+    fifth &&
+    segments.length === 5
+  )
+    return { kind: "team-update", workspaceSlug, teamKey: third, updateId: fifth };
+  if (
+    section === "team" &&
+    third &&
+    fourth === "resources" &&
+    segments.length === 4
+  )
+    return { kind: "team-resources", workspaceSlug, teamKey: third };
+  if (
+    section === "team" &&
+    third &&
+    fourth === "links" &&
+    segments.length === 4
+  )
+    return { kind: "team-links", workspaceSlug, teamKey: third };
   if (
     section === "team" &&
     third &&

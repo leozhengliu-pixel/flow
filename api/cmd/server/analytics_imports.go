@@ -106,11 +106,39 @@ func (s *server) retryImport(w http.ResponseWriter, r *http.Request) {
 		job.Progress = 0
 		job.Imported = 0
 		job.Errors = []string{}
+		job.RowErrors = []domain.ImportRowError{}
+		job.Checkpoint = 0
 		job.Error = ""
 		job.RetryCount++
 		job.UpdatedAt = time.Now().UTC()
 		updated = *job
 		appendAudit(data, "retried", "import", id, map[string]any{"retryCount": job.RetryCount})
+		return nil
+	})
+	respondMutation(w, err, http.StatusOK, updated)
+}
+
+func (s *server) resumeImport(w http.ResponseWriter, r *http.Request) {
+	// Resuming uses the same idempotent retry path while preserving the uploaded
+	// mapping and row-level diagnostics for the next commit request.
+	id := r.PathValue("id")
+	var updated domain.ImportJob
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "import.resumed", id, nil, func(data *domain.Bootstrap) error {
+		index := slices.IndexFunc(data.ImportJobs, func(item domain.ImportJob) bool {
+			return item.ID == id && (s.authDisabled || item.UserID == data.Viewer.ID)
+		})
+		if index < 0 {
+			return errNotFound
+		}
+		job := &data.ImportJobs[index]
+		if job.Status != "failed" && job.Status != "cancelled" {
+			return errInvalid
+		}
+		job.Status = "mapping"
+		job.Error = ""
+		job.UpdatedAt = time.Now().UTC()
+		updated = *job
+		appendAudit(data, "resumed", "import", id, map[string]any{"checkpoint": job.Checkpoint})
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)

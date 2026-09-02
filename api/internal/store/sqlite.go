@@ -534,6 +534,20 @@ func normalize(data *domain.Bootstrap) {
 	if data.Documents == nil {
 		data.Documents = []domain.Document{}
 	}
+	for index := range data.Documents {
+		if data.Documents[index].Permissions == nil {
+			data.Documents[index].Permissions = []domain.DocumentPermission{}
+		}
+		if data.Documents[index].Creator.ID != "" && !slices.ContainsFunc(data.Documents[index].Permissions, func(permission domain.DocumentPermission) bool {
+			return permission.SubjectType == "user" && permission.SubjectID == data.Documents[index].Creator.ID
+		}) {
+			now := data.Documents[index].CreatedAt
+			if now.IsZero() {
+				now = time.Now().UTC()
+			}
+			data.Documents[index].Permissions = append(data.Documents[index].Permissions, domain.DocumentPermission{ID: "document_permission_" + data.Documents[index].Creator.ID, DocumentID: data.Documents[index].ID, SubjectType: "user", SubjectID: data.Documents[index].Creator.ID, Role: "owner", CreatedAt: now, UpdatedAt: now})
+		}
+	}
 	if data.CustomerRequests == nil {
 		data.CustomerRequests = []domain.CustomerRequest{}
 	}

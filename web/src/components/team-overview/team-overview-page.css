@@ -736,6 +736,12 @@
   flex: 0 0 16px;
   color: var(--theme-text-secondary);
 }
+.team-resource-command-menu [role="menuitem"] > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .team-home-menu .danger {
   color: var(--semantic-danger-text);
 }
