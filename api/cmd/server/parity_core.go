@@ -2,6 +2,7 @@ package main
 
 import (
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 	"fmt"
 	"net/http"
 	"slices"
@@ -233,6 +234,11 @@ func (s *server) initiativeHistory(w http.ResponseWriter, r *http.Request) {
 func (s *server) listDocumentDrafts(w http.ResponseWriter, r *http.Request) {
 	data := s.workspaceData(r)
 	id := r.PathValue("id")
+	document, err := documentByID(&data, id)
+	if err != nil || documentRole(s, data, *document) == "none" {
+		writeError(w, http.StatusNotFound, "document not found")
+		return
+	}
 	items := slices.DeleteFunc(slices.Clone(data.DocumentContentDrafts), func(item domain.DocumentContentDraft) bool {
 		return item.DocumentID != id || (!s.authDisabled && item.UserID != data.Viewer.ID)
 	})
@@ -245,8 +251,12 @@ func (s *server) createDocumentDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	var result domain.DocumentContentDraft
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.draft_created", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
-		if _, err := documentByID(data, r.PathValue("id")); err != nil {
+		document, err := documentByID(data, r.PathValue("id"))
+		if err != nil {
 			return err
+		}
+		if !canEditDocument(documentRole(s, *data, *document)) {
+			return store.ErrAuthForbidden
 		}
 		index := slices.IndexFunc(data.DocumentContentDrafts, func(item domain.DocumentContentDraft) bool {
 			return item.DocumentID == r.PathValue("id") && item.UserID == data.Viewer.ID
@@ -286,6 +296,13 @@ func (s *server) updateDocumentDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	var result domain.DocumentContentDraft
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.draft_updated", r.PathValue("draftId"), input, func(data *domain.Bootstrap) error {
+		document, docErr := documentByID(data, r.PathValue("id"))
+		if docErr != nil {
+			return docErr
+		}
+		if !canEditDocument(documentRole(s, *data, *document)) {
+			return store.ErrAuthForbidden
+		}
 		index := slices.IndexFunc(data.DocumentContentDrafts, func(item domain.DocumentContentDraft) bool {
 			return item.ID == r.PathValue("draftId") && item.DocumentID == r.PathValue("id") && item.UserID == data.Viewer.ID
 		})
@@ -315,6 +332,13 @@ func (s *server) updateDocumentDraft(w http.ResponseWriter, r *http.Request) {
 func (s *server) publishDocumentDraft(w http.ResponseWriter, r *http.Request) {
 	var result domain.Document
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.draft_published", r.PathValue("draftId"), nil, func(data *domain.Bootstrap) error {
+		document, docErr := documentByID(data, r.PathValue("id"))
+		if docErr != nil {
+			return docErr
+		}
+		if !canEditDocument(documentRole(s, *data, *document)) {
+			return store.ErrAuthForbidden
+		}
 		index := slices.IndexFunc(data.DocumentContentDrafts, func(item domain.DocumentContentDraft) bool {
 			return item.ID == r.PathValue("draftId") && item.DocumentID == r.PathValue("id") && item.UserID == data.Viewer.ID
 		})
@@ -339,6 +363,13 @@ func (s *server) publishDocumentDraft(w http.ResponseWriter, r *http.Request) {
 }
 func (s *server) deleteDocumentDraft(w http.ResponseWriter, r *http.Request) {
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.draft_deleted", r.PathValue("draftId"), nil, func(data *domain.Bootstrap) error {
+		document, docErr := documentByID(data, r.PathValue("id"))
+		if docErr != nil {
+			return docErr
+		}
+		if !canEditDocument(documentRole(s, *data, *document)) {
+			return store.ErrAuthForbidden
+		}
 		before := len(data.DocumentContentDrafts)
 		data.DocumentContentDrafts = slices.DeleteFunc(data.DocumentContentDrafts, func(item domain.DocumentContentDraft) bool {
 			return item.ID == r.PathValue("draftId") && item.UserID == data.Viewer.ID
@@ -357,7 +388,7 @@ func (s *server) deleteDocumentDraft(w http.ResponseWriter, r *http.Request) {
 func (s *server) documentContentHistory(w http.ResponseWriter, r *http.Request) {
 	data := s.workspaceData(r)
 	document, err := documentByID(&data, r.PathValue("id"))
-	if err != nil {
+	if err != nil || documentRole(s, data, *document) == "none" {
 		writeError(w, http.StatusNotFound, "document not found")
 		return
 	}

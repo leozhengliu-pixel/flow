@@ -13,8 +13,7 @@
   position: sticky;
   z-index: 10;
   top: 0;
-  display: grid;
-  grid-template-columns: auto auto auto auto auto minmax(0, 1fr) auto auto auto;
+  display: flex;
   align-items: center;
   gap: 7px;
   padding: 0 14px;
@@ -22,6 +21,7 @@
   background: var(--theme-surface-0);
 }
 .dashboards-header > i {
+  flex: 1;
   min-width: 0;
 }
 .dashboards-header > small {
@@ -31,6 +31,8 @@
   white-space: nowrap;
 }
 .dashboards-header > strong {
+  flex: 0 1 auto;
+  max-width: min(42vw, 440px);
   min-width: 0;
   overflow: hidden;
   font-size: 13px;
@@ -303,6 +305,57 @@
   gap: 9px;
   color: var(--theme-text-secondary);
   text-align: center;
+}
+.dashboard-state {
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 24px;
+  color: var(--theme-text-secondary);
+  text-align: center;
+}
+.dashboard-state > svg {
+  width: 28px;
+  height: 28px;
+}
+.dashboard-state > strong {
+  color: var(--theme-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+.dashboard-state > p {
+  max-width: 360px;
+  margin: 0;
+  font-size: 13px;
+}
+.dashboard-state > button {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 4px;
+  padding: 0 12px;
+  border: 0.5px solid var(--theme-border);
+  border-radius: 8px;
+  background: var(--theme-surface-1);
+  color: var(--theme-text-primary);
+  font: 500 13px inherit;
+}
+.dashboard-state > button:hover {
+  background: var(--theme-surface-hover);
+}
+.dashboard-state > button svg {
+  width: 14px;
+  height: 14px;
+}
+.dashboard-state-error {
+  color: var(--semantic-danger-text);
+}
+.dashboard-state-error > strong {
+  color: var(--semantic-danger-text);
 }
 .dashboard-zero > svg {
   width: 30px;
@@ -1062,7 +1115,6 @@
 }
 @media (max-width: 700px) {
   .dashboards-header {
-    grid-template-columns: auto auto auto minmax(0, 1fr) auto auto;
     padding: 0 8px;
   }
   .dashboards-header .mobile-menu {

@@ -265,6 +265,10 @@ const DocumentsIndexPage = lazyPage(
   () => import("@/components/documents/documents-index-page"),
   "DocumentsIndexPage",
 );
+const WorkspaceSecondaryPage = lazyPage(
+  () => import("@/components/workspace/workspace-secondary-page"),
+  "WorkspaceSecondaryPage",
+);
 const AnalyticsDashboardPage = lazyPage(
   () => import("@/components/analytics/analytics-dashboard-page"),
   "AnalyticsDashboardPage",
@@ -4168,6 +4172,64 @@ function App() {
               }
             />
           )}
+        {(
+          route.kind === "diary" ||
+          route.kind === "meeting" ||
+          route.kind === "automations" ||
+          route.kind === "automation-new" ||
+          route.kind === "automation-detail" ||
+          route.kind === "automation-runs" ||
+          route.kind === "team-board" ||
+          route.kind === "team-triage" ||
+          route.kind === "team-updates" ||
+          route.kind === "team-update" ||
+          route.kind === "team-resources" ||
+          route.kind === "team-links" ||
+          route.kind === "release-note" ||
+          route.kind === "label"
+        ) && (
+          <WorkspaceSecondaryPage
+            data={data}
+            kind={
+              route.kind === "automation-detail"
+                ? "automation-detail"
+                : route.kind === "automation-runs"
+                  ? "automation-runs"
+                  : route.kind
+            }
+            team={
+              "teamKey" in route
+                ? data.teams.find(
+                    (team) =>
+                      team.key.toLowerCase() === route.teamKey.toLowerCase(),
+                  )
+                : undefined
+            }
+            workflowId={
+              route.kind === "automation-detail" ||
+              route.kind === "automation-runs"
+                ? route.automationId
+                : undefined
+            }
+            workflowRunId={
+              route.kind === "automation-runs" ? route.runId : undefined
+            }
+            editing={route.kind === "automation-detail" ? route.editing : undefined}
+            resourceName={route.kind === "label" ? route.resourceName : undefined}
+            resourceType={route.kind === "label" ? route.resourceType : undefined}
+            releaseNote={
+              route.kind === "release-note"
+                ? data.releaseNotes.find(
+                    (item) => item.id === route.releaseNoteId,
+                  )
+                : undefined
+            }
+            onNavigate={navigateTo}
+            onReload={async () => {
+              setData(await fetchBootstrap(data.workspace.urlKey));
+            }}
+          />
+        )}
         {page === "analytics" && route.kind === "analytics" && (
           <AnalyticsDashboardPage />
         )}
@@ -4284,7 +4346,12 @@ function App() {
               onOpenSidebar={() => setMobileSidebarOpen(true)}
             />
           )}
-        {(page === "drafts" || page === "releases" || page === "asks") && (
+        {((page === "drafts" && route.kind === "drafts") ||
+          (page === "asks" && route.kind === "asks") ||
+          (page === "releases" &&
+            (route.kind === "releases" ||
+              route.kind === "release-pipeline" ||
+              route.kind === "release"))) && (
           <WorkspaceOperationsPage
             data={data}
             view={
@@ -5900,6 +5967,16 @@ function readInsightDrillFilters(
 function pageForRoute(route: AppRoute): PageId | "not-found" {
   if (route.kind === "inbox") return "inbox";
   if (route.kind === "search") return "search";
+  if (
+    route.kind === "diary" ||
+    route.kind === "meeting" ||
+    route.kind === "automations" ||
+    route.kind === "automation-new" ||
+    route.kind === "automation-detail" ||
+    route.kind === "automation-runs" ||
+    route.kind === "label"
+  )
+    return "workspace-issues";
   if (route.kind === "pulse") return "pulse";
   if (route.kind === "my-issues") return "my-issues";
   if (route.kind === "reviews" || route.kind === "review") return "reviews";
@@ -5908,7 +5985,13 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
     route.kind === "team-overview" ||
     route.kind === "team-documents" ||
     route.kind === "team-loops" ||
-    route.kind === "team-members"
+    route.kind === "team-members" ||
+    route.kind === "team-board" ||
+    route.kind === "team-triage" ||
+    route.kind === "team-updates" ||
+    route.kind === "team-update" ||
+    route.kind === "team-resources" ||
+    route.kind === "team-links"
   )
     return "team-overview";
   if (route.kind === "team-cycles") return "cycles";
@@ -5929,7 +6012,8 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
   if (
     route.kind === "releases" ||
     route.kind === "release-pipeline" ||
-    route.kind === "release"
+    route.kind === "release" ||
+    route.kind === "release-note"
   )
     return "releases";
   if (route.kind === "asks") return "asks";

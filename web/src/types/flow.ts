@@ -175,6 +175,15 @@ export interface DocumentRevision {
   author: User;
   createdAt: string;
 }
+export interface DocumentPermission {
+  id: UUID;
+  documentId: UUID;
+  subjectType: "user" | "team" | "workspace";
+  subjectId: UUID | string;
+  role: "owner" | "editor" | "commenter" | "viewer";
+  createdAt: string;
+  updatedAt: string;
+}
 export interface FlowDocument {
   id: UUID;
   slugId: string;
@@ -194,6 +203,7 @@ export interface FlowDocument {
   createdAt: string;
   updatedAt: string;
   revisions: DocumentRevision[];
+  permissions?: DocumentPermission[];
 }
 export interface DocumentTemplate {
   id: UUID;
@@ -2053,6 +2063,7 @@ export interface Presence {
   clientId: string;
   user: User;
   issueId?: UUID;
+  documentId?: UUID;
   route?: string;
   lastSeenAt: string;
 }

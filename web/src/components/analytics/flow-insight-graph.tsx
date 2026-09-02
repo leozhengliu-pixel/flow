@@ -2,6 +2,7 @@ import { ResponsiveBar } from "@nivo/bar";
 import { ResponsiveLine } from "@nivo/line";
 import { useMemo } from "react";
 
+import { useI18n } from "@/i18n/i18n";
 import "./flow-insight-graph.css";
 
 export type InsightPoint = {
@@ -55,6 +56,7 @@ export function InsightBar({
   points: InsightPoint[];
   onSelect?: (point: InsightPoint) => void;
 }) {
+  const { t } = useI18n();
   const data = useMemo(
     () =>
       points.map((point, index) => ({
@@ -69,7 +71,7 @@ export function InsightBar({
     <div
       className="flow-insight-graph"
       role="img"
-      aria-label="Insight bar chart"
+      aria-label={t("Insight bar chart")}
     >
       <ResponsiveBar
         animate={false}
@@ -114,6 +116,7 @@ export function InsightLine({
   points: InsightPoint[];
   onSelect?: (point: InsightPoint) => void;
 }) {
+  const { t } = useI18n();
   const data = useMemo(
     () => [
       {
@@ -132,7 +135,7 @@ export function InsightLine({
     <div
       className="flow-insight-graph"
       role="img"
-      aria-label="Insight line chart"
+      aria-label={t("Insight line chart")}
     >
       <ResponsiveLine
         animate={false}

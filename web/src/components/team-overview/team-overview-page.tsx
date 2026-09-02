@@ -984,12 +984,12 @@ function ResourceCommandMenu({
         >
           <DropdownMenu.Item onSelect={onNew}>
             <NewDocumentIcon />
-            {t("New document")}
+            <span>{t("New document")}</span>
           </DropdownMenu.Item>
           <DropdownMenu.Sub>
             <DropdownMenu.SubTrigger>
               <PageIcon />
-              {t("Existing documents")}
+              <span>{t("Existing documents")}</span>
               <ChevronHomeIcon />
             </DropdownMenu.SubTrigger>
             <DropdownMenu.Portal>
@@ -1037,7 +1037,7 @@ function ResourceCommandMenu({
           <DropdownMenu.Separator />
           <DropdownMenu.Item onSelect={onLink}>
             <NewLinkIcon />
-            {t("New link…")}
+            <span>{t("New link…")}</span>
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

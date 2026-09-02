@@ -1,5 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   ArrowDown,
@@ -109,6 +109,8 @@ export function DashboardsPage({
   const [selectedId, setSelectedId] = useState(dashboardId ?? "");
   const [results, setResults] = useState<DashboardWidgetResult[]>([]);
   const [loading, setLoading] = useState(true);
+  const [directoryError, setDirectoryError] = useState("");
+  const [resultsError, setResultsError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -139,8 +141,9 @@ export function DashboardsPage({
   useEffect(() => setSelectedId(dashboardId ?? ""), [dashboardId]);
   useEffect(() => setCreateOpen(creating), [creating]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
+    setDirectoryError("");
     try {
       const loaded: Dashboard[] = [];
       let cursor = "";
@@ -153,23 +156,34 @@ export function DashboardsPage({
       setSelectedId((current) =>
         loaded.some((item) => item.id === current) ? current : "",
       );
+    } catch (error) {
+      setDirectoryError(t("Could not load dashboards"));
+      throw error;
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
   useEffect(() => {
     void load().catch(() => toast.error(t("Could not load dashboards")));
-  }, [t]);
+  }, [load, t]);
   useEffect(() => {
     const request = ++resultsRequest.current;
     if (!selected) {
       setResults([]);
+      setResultsError("");
       return;
     }
     setLoading(true);
+    setResultsError("");
     void fetchDashboardResults(selected.id)
       .then((value) => { if (resultsRequest.current === request) setResults(value.results); })
-      .catch(() => toast.error(t("Could not load dashboard data")))
+      .catch(() => {
+        if (resultsRequest.current === request) {
+          setResults([]);
+          setResultsError(t("Could not load dashboard data"));
+        }
+        toast.error(t("Could not load dashboard data"));
+      })
       .finally(() => { if (resultsRequest.current === request) setLoading(false); });
   }, [selected, t]);
 
@@ -230,8 +244,26 @@ export function DashboardsPage({
       setSelectedId("");
       onNavigate();
       setDeleteOpen(false);
+    } catch {
+      toast.error(t("Could not delete dashboard"));
     } finally {
       setBusy(false);
+    }
+  };
+  const disableShare = async () => {
+    if (!selected) return;
+    try {
+      replace(await shareDashboard(selected.id, false));
+    } catch {
+      toast.error(t("Could not update dashboard sharing"));
+    }
+  };
+  const toggleSubscribe = async () => {
+    if (!selected) return;
+    try {
+      replace(await subscribeDashboard(selected.id, !subscribed));
+    } catch {
+      toast.error(t("Could not update dashboard subscription"));
     }
   };
   const copyShareLink = async () => {
@@ -342,17 +374,13 @@ export function DashboardsPage({
             onNavigate();
           }}
           onDelete={() => setDeleteOpen(true)}
-          onDisableShare={() =>
-            void shareDashboard(selected.id, false).then(replace)
-          }
+          onDisableShare={() => void disableShare()}
           onFavorite={() => void toggleFavorite()}
           onOpenSidebar={onOpenSidebar}
           onOwner={(ownerId) => void patchDashboard({ ownerId })}
-          onRefresh={() => void load()}
+          onRefresh={() => void load().catch(() => undefined)}
           onShare={() => void copyShareLink()}
-          onSubscribe={() =>
-            void subscribeDashboard(selected.id, !subscribed).then(replace)
-          }
+          onSubscribe={() => void toggleSubscribe()}
           onVisibility={(visibility, teamIds) =>
             void patchDashboard({ visibility, teamIds })
           }
@@ -453,7 +481,17 @@ export function DashboardsPage({
                 />
               </>
             )}
-            {!loading && directoryItems.length === 0 && (
+            {loading && !directoryError ? (
+              <LoaderCircle className="dashboard-spin" />
+            ) : directoryError ? (
+              <div className="dashboard-state dashboard-state-error" role="alert">
+                <strong>{directoryError}</strong>
+                <button type="button" onClick={() => void load().catch(() => undefined)}>
+                  <RefreshCw />
+                  {t("Try again")}
+                </button>
+              </div>
+            ) : !loading && directoryItems.length === 0 && (
               <div className="dashboard-zero">
                 <LayoutDashboard />
                 <strong>{t("Dashboards")}</strong>
@@ -483,7 +521,7 @@ export function DashboardsPage({
             onNavigate(selected.id);
           }}
           onExplore={onExploreIssues}
-          onSave={(draft) => void saveInsight(draft)}
+          onSave={(draft) => void saveInsight(draft).catch(() => undefined)}
         />
       ) : (
         <section className="dashboard-detail">
@@ -546,9 +584,17 @@ export function DashboardsPage({
               {t("Add insight")}
             </button>
           </div>
-          {loading ? (
+          {resultsError ? (
+            <div className="dashboard-state dashboard-state-error" role="alert">
+              <strong>{resultsError}</strong>
+              <button type="button" onClick={() => void fetchDashboardResults(selected.id).then((value) => { setResults(value.results); setResultsError(""); }).catch(() => toast.error(t("Could not load dashboard data")))}>
+                <RefreshCw />
+                {t("Try again")}
+              </button>
+            </div>
+          ) : loading ? (
             <LoaderCircle className="dashboard-spin" />
-          ) : selected.widgets.length ? (
+          ) : selected.widgets.length && results.length ? (
             <div className="dashboard-grid">
               {results.map((result, index) => (
                 <DashboardCard
@@ -576,6 +622,16 @@ export function DashboardsPage({
                   }
                 />
               ))}
+            </div>
+          ) : selected.widgets.length ? (
+            <div className="dashboard-state dashboard-state-empty">
+              <LayoutDashboard />
+              <strong>{t("No insight data")}</strong>
+              <p>{t("No issues match the filters for this dashboard.")}</p>
+              <button type="button" onClick={() => void fetchDashboardResults(selected.id).then((value) => setResults(value.results)).catch(() => toast.error(t("Could not load dashboard data")))}>
+                <RefreshCw />
+                {t("Refresh data")}
+              </button>
             </div>
           ) : (
             <div className="dashboard-zero detail">
@@ -838,15 +894,15 @@ function DashboardFilterSummary({
   data: BootstrapData;
   onOpen: () => void;
 }) {
+  const { t } = useI18n();
+  const chips = filterChips(dashboard.filters ?? {}, data);
   if (dashboard.hideFilters)
-    return dashboard.filters &&
-      Object.values(dashboard.filters).some(Boolean) ? (
+    return chips.length ? (
       <button className="dashboard-saved-filters" type="button" onClick={onOpen}>
         <Filter />
-        Saved filters
+        {t("Saved filters")}
       </button>
     ) : null;
-  const chips = filterChips(dashboard.filters ?? {}, data);
   return (
     <>
       {chips.map((chip) => (
@@ -1173,6 +1229,7 @@ function WidgetValue({
   result: DashboardWidgetResult;
   display: InsightDisplay;
 }) {
+  const { t } = useI18n();
   if (result.widget.type === "issue_count")
     return (
       <div className="metric-number">
@@ -1184,7 +1241,7 @@ function WidgetValue({
     if (display === "chart") {
       const points: InsightPoint[] = rows.map((row, index) => ({
         id: String((row as { id?: string }).id ?? index),
-        label: String((row as { name?: string }).name ?? "Item"),
+        label: String((row as { name?: string }).name ?? t("Item")),
         value:
           "progress" in (row as object)
             ? Math.round(Number((row as { progress: number }).progress) * 100)
@@ -1196,7 +1253,7 @@ function WidgetValue({
       <div className="metric-list">
         {rows.map((row, index) => (
           <div key={String((row as { id?: string }).id ?? index)}>
-            <span>{String((row as { name?: string }).name ?? "Item")}</span>
+            <span>{String((row as { name?: string }).name ?? t("Item"))}</span>
             <strong>
               {"progress" in (row as object)
                 ? `${Math.round(Number((row as { progress: number }).progress) * 100)}%`
@@ -1215,7 +1272,7 @@ function WidgetValue({
     0,
   );
   if (display === "metric") return <div className="metric-number">{total}</div>;
-  if (!entries.length) return <span className="metric-muted">No data</span>;
+  if (!entries.length) return <span className="metric-muted">{t("No data")}</span>;
   if (display === "table")
     return (
       <div className="metric-list">

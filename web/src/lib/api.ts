@@ -88,6 +88,7 @@ import type {
   CursorPage,
   Dashboard,
   DashboardWidget,
+  DocumentPermission,
   DashboardWidgetResult,
   FeedItem,
   FilterSuggestion,
@@ -878,6 +879,40 @@ export function listDocuments(
   if (filters.archived) query.set("archived", filters.archived);
   return request(`/api/documents${query.size ? `?${query}` : ""}`);
 }
+export function listDocumentPermissions(
+  documentId: string,
+): Promise<DocumentPermission[]> {
+  return request(`/api/documents/${documentId}/permissions`);
+}
+export function replaceDocumentPermissions(
+  documentId: string,
+  permissions: Array<
+    Pick<DocumentPermission, "subjectType" | "subjectId" | "role">
+  >,
+): Promise<DocumentPermission[]> {
+  return request(
+    `/api/documents/${documentId}/permissions`,
+    jsonRequest("PUT", { permissions }),
+  );
+}
+export function updateDocumentPermission(
+  documentId: string,
+  permissionId: string,
+  input: Partial<Pick<DocumentPermission, "subjectType" | "subjectId" | "role">>,
+): Promise<DocumentPermission> {
+  return request(
+    `/api/documents/${documentId}/permissions/${permissionId}`,
+    jsonRequest("PATCH", input),
+  );
+}
+export function deleteDocumentPermission(
+  documentId: string,
+  permissionId: string,
+): Promise<void> {
+  return request(`/api/documents/${documentId}/permissions/${permissionId}`, {
+    method: "DELETE",
+  });
+}
 type DocumentTemplateMutation = Partial<
   Pick<
     DocumentTemplate,
@@ -1303,6 +1338,9 @@ export function cancelImport(id: string): Promise<ImportJob> {
 }
 export function retryImport(id: string): Promise<ImportJob> {
   return request(`/api/imports/${id}/retry`, { method: "POST" });
+}
+export function resumeImport(id: string): Promise<ImportJob> {
+  return request(`/api/imports/${id}/resume`, { method: "POST" });
 }
 export function createExport(
   format: "json" | "csv",
@@ -1730,6 +1768,17 @@ export function updatePresence(
     jsonRequest("POST", { clientId, issueId, route, active }),
   );
 }
+export function updateDocumentPresence(
+  clientId: string,
+  documentId: string,
+  route: string,
+  active = true,
+): Promise<Presence[]> {
+  return request(
+    "/api/realtime/presence",
+    jsonRequest("POST", { clientId, documentId, route, active }),
+  );
+}
 
 export async function createIssue(input: {
   title: string;
@@ -1787,6 +1836,21 @@ export function updateCycle(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
+}
+export type CycleCapacity = {
+  cycleId: string;
+  capacity: number;
+  weekdays: string[];
+  members: Array<{ user: User; capacity: Record<string, number> }>;
+};
+export function getCycleCapacity(id: string): Promise<CycleCapacity> {
+  return request(`/api/cycles/${id}/capacity`);
+}
+export function updateCycleCapacity(
+  id: string,
+  input: { capacity?: number; capacityByMember?: Record<string, Record<string, number>> },
+): Promise<Cycle> {
+  return request(`/api/cycles/${id}/capacity`, jsonRequest("PUT", input));
 }
 export function startCycle(id: string): Promise<Cycle> {
   return request(`/api/cycles/${id}/start`, { method: "POST" });
