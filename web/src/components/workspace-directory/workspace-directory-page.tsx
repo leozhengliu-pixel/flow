@@ -127,7 +127,7 @@ export function WorkspaceDirectoryPage({
               : undefined
         }
         onOpenSidebar={onOpenSidebar}
-        onCreate={kind === "members" && data.viewerRole !== "admin" ? undefined : () =>
+        onCreate={kind === "members" && data.viewerRole !== "admin" && data.viewerRole !== "owner" ? undefined : () =>
           kind === "members"
             ? setInviteOpen(true)
             : kind === "customers"
