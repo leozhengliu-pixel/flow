@@ -226,7 +226,7 @@ func (s *server) mcpWorkspaceData(ctx context.Context, actor mcpActor) (domain.B
 	if err != nil || !ok {
 		return data, fmt.Errorf("workspace access denied")
 	}
-	if len(actor.APIKey.TeamIDs) == 0 {
+	if actor.APIKey.TeamRestriction == "" || actor.APIKey.TeamRestriction == "all" {
 		return data, nil
 	}
 	allowed := func(id string) bool { return slices.Contains(actor.APIKey.TeamIDs, id) }
@@ -236,6 +236,17 @@ func (s *server) mcpWorkspaceData(ctx context.Context, actor mcpActor) (domain.B
 	data.Cycles = slices.DeleteFunc(data.Cycles, func(item domain.Cycle) bool { return !allowed(item.TeamID) })
 	data.Projects = slices.DeleteFunc(data.Projects, func(item domain.Project) bool {
 		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, allowed)
+	})
+	data.Labels = slices.DeleteFunc(data.Labels, func(item domain.IssueLabel) bool { return item.Scope != "" && !allowed(item.Scope) })
+	data.Documents = slices.DeleteFunc(data.Documents, func(item domain.Document) bool {
+		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, allowed)
+	})
+	data.TeamMembers = slices.DeleteFunc(data.TeamMembers, func(item domain.TeamMember) bool { return !allowed(item.TeamID) })
+	data.Initiatives = slices.DeleteFunc(data.Initiatives, func(item domain.Initiative) bool {
+		if item.LeadTeamID != "" && allowed(item.LeadTeamID) {
+			return false
+		}
+		return !slices.ContainsFunc(item.ContributingTeamIDs, allowed)
 	})
 	return data, nil
 }

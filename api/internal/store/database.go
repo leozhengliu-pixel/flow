@@ -141,6 +141,9 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 			db.Close()
 			return nil, err
 		}
+	} else if err := s.ensureSeedWorkspaceOwners(context.Background()); err != nil {
+		db.Close()
+		return nil, err
 	}
 	return s, nil
 }

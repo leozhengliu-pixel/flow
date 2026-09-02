@@ -153,7 +153,7 @@ func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKe
 		if key.SecretHash != hash || key.RevokedAt != nil || key.ExpiresAt != nil && time.Now().UTC().After(*key.ExpiresAt) {
 			continue
 		}
-		if r.Method != http.MethodGet && r.Method != http.MethodHead && !slices.Contains(key.Scopes, "write") {
+		if !apiKeyAllowsRequest(r, key) {
 			return domain.User{}, nil, ""
 		}
 		if user, err := s.store.UserByID(r.Context(), key.CreatorID); err == nil {
@@ -173,6 +173,118 @@ func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKe
 		}
 	}
 	return domain.User{}, nil, ""
+}
+
+// apiKeyAllowsRequest supports granular write scopes while retaining the
+// legacy read/write scopes. A key with no write scope is
+// read-only; admin implies every operation.
+func apiKeyAllowsRequest(r *http.Request, key domain.APIKey) bool {
+	if adminOnlyRequest(r) && !slices.Contains(key.Scopes, "admin") {
+		return false
+	}
+	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+		return true
+	}
+	if slices.Contains(key.Scopes, "admin") || slices.Contains(key.Scopes, "write") {
+		return true
+	}
+	path := r.URL.Path
+	if slices.Contains(key.Scopes, "create_issues") && r.Method == http.MethodPost && (path == "/api/issues" || strings.HasSuffix(path, "/issues")) {
+		return true
+	}
+	if slices.Contains(key.Scopes, "create_comments") && r.Method == http.MethodPost && strings.Contains(path, "/comments") {
+		return true
+	}
+	return false
+}
+
+func workspaceAdminRole(role string) bool {
+	role = strings.ToLower(strings.TrimSpace(role))
+	return role == "admin" || role == "owner"
+}
+
+// applyAPIKeyProjection applies team restrictions after the normal user
+// projection. API keys are often narrower than the creator's membership, so
+// returning the unrestricted bootstrap would expose unrelated resources.
+func applyAPIKeyProjection(data *domain.Bootstrap, key domain.APIKey) {
+	if len(key.TeamIDs) == 0 {
+		return
+	}
+	allowed := make(map[string]bool, len(key.TeamIDs))
+	for _, id := range key.TeamIDs {
+		allowed[id] = true
+	}
+	data.Teams = slices.DeleteFunc(data.Teams, func(team domain.Team) bool { return !allowed[team.ID] })
+	data.Issues = slices.DeleteFunc(data.Issues, func(issue domain.Issue) bool { return !allowed[issue.Team.ID] })
+	data.Cycles = slices.DeleteFunc(data.Cycles, func(cycle domain.Cycle) bool { return !allowed[cycle.TeamID] })
+	data.Projects = slices.DeleteFunc(data.Projects, func(project domain.Project) bool {
+		if len(project.TeamIDs) == 0 {
+			return true
+		}
+		return !slices.ContainsFunc(project.TeamIDs, func(id string) bool { return allowed[id] })
+	})
+	for index := range data.Projects {
+		data.Projects[index].TeamIDs = slices.DeleteFunc(data.Projects[index].TeamIDs, func(id string) bool { return !allowed[id] })
+	}
+	data.ReleasePipelines = slices.DeleteFunc(data.ReleasePipelines, func(pipeline domain.ReleasePipeline) bool {
+		return len(pipeline.TeamIDs) > 0 && !slices.ContainsFunc(pipeline.TeamIDs, func(id string) bool { return allowed[id] })
+	})
+	for index := range data.ReleasePipelines {
+		data.ReleasePipelines[index].TeamIDs = slices.DeleteFunc(data.ReleasePipelines[index].TeamIDs, func(id string) bool { return !allowed[id] })
+	}
+	visibleProjects, visibleIssues := map[string]bool{}, map[string]bool{}
+	for _, project := range data.Projects {
+		visibleProjects[project.ID] = true
+	}
+	for _, issue := range data.Issues {
+		visibleIssues[issue.ID] = true
+	}
+	data.Releases = slices.DeleteFunc(data.Releases, func(release domain.Release) bool {
+		if release.PipelineID != "" && !slices.ContainsFunc(data.ReleasePipelines, func(p domain.ReleasePipeline) bool { return p.ID == release.PipelineID }) {
+			return true
+		}
+		return slices.ContainsFunc(release.ProjectIDs, func(id string) bool { return !visibleProjects[id] }) || slices.ContainsFunc(release.IssueIDs, func(id string) bool { return !visibleIssues[id] })
+	})
+	data.Documents = slices.DeleteFunc(data.Documents, func(document domain.Document) bool {
+		return len(document.TeamIDs) > 0 && !slices.ContainsFunc(document.TeamIDs, func(id string) bool { return allowed[id] })
+	})
+	data.SavedViews = slices.DeleteFunc(data.SavedViews, func(view domain.SavedView) bool {
+		return view.Scope == "team" && !allowed[view.TeamID] || view.ProjectID != "" && !visibleProjects[view.ProjectID]
+	})
+	if data.Settings != nil {
+		dashboards := settingCollection[domain.Dashboard](*data, dashboardsSettingsKey)
+		for index := range dashboards {
+			dashboards[index].TeamIDs = slices.DeleteFunc(dashboards[index].TeamIDs, func(id string) bool { return !allowed[id] })
+		}
+		dashboards = slices.DeleteFunc(dashboards, func(item domain.Dashboard) bool { return item.Visibility == "team" && len(item.TeamIDs) == 0 })
+		saveSettingCollection(data, dashboardsSettingsKey, dashboards)
+		posts := settingCollection[domain.Post](*data, postsSettingsKey)
+		posts = slices.DeleteFunc(posts, func(item domain.Post) bool {
+			return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, func(id string) bool { return allowed[id] })
+		})
+		saveSettingCollection(data, postsSettingsKey, posts)
+		meetings := settingCollection[domain.Meeting](*data, meetingsSettingsKey)
+		meetings = slices.DeleteFunc(meetings, func(item domain.Meeting) bool {
+			return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, func(id string) bool { return allowed[id] }) || slices.ContainsFunc(item.IssueIDs, func(id string) bool { return !visibleIssues[id] })
+		})
+		saveSettingCollection(data, meetingsSettingsKey, meetings)
+	}
+}
+
+// A member may join or leave their own public/open team. Changes involving a
+// different user or assigning the owner role remain owner/admin operations.
+func membershipSelfServiceRequest(r *http.Request, userID string) bool {
+	if r.Method != http.MethodPut || !strings.HasPrefix(r.URL.Path, "/api/workspaces/") || !strings.Contains(r.URL.Path, "/teams/") || !strings.HasSuffix(r.URL.Path, "/members/"+userID) {
+		return false
+	}
+	var input struct {
+		Role   string `json:"role"`
+		Member *bool  `json:"member"`
+	}
+	if !peekRequestJSON(r, &input) || input.Member == nil {
+		return false
+	}
+	return strings.TrimSpace(input.Role) == "" || strings.EqualFold(strings.TrimSpace(input.Role), "member")
 }
 
 func publicAuthPath(path string) bool {
@@ -219,15 +331,23 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		return false
 	}
 	trashResourceType := trashRestoreResourceType(data, r)
-	if (adminOnlyRequest(r) || trashResourceType == "release_pipeline") && role != "admin" {
+	if (adminOnlyRequest(r) || trashResourceType == "release_pipeline") && !workspaceAdminRole(role) {
 		writeError(w, http.StatusForbidden, "Workspace admin access required")
 		return false
 	}
-	if teamManagementRequest(r) && role != "admin" {
+	if teamManagementRequest(r) && !workspaceAdminRole(role) && !membershipSelfServiceRequest(r, user.ID) {
 		teamID := teamIDFromWorkspacePath(r.URL.Path)
 		teamRole, err := s.store.TeamRole(r.Context(), data.Workspace.ID, teamID, user.ID)
 		if err != nil || teamRole != "owner" {
 			writeError(w, http.StatusForbidden, "Team owner access required")
+			return false
+		}
+	}
+	if membershipSelfServiceRequest(r, user.ID) {
+		teamID := teamIDFromWorkspacePath(r.URL.Path)
+		settings := data.TeamSettings[teamID]
+		if role == "guest" || strings.EqualFold(settings.Access, "private") || strings.EqualFold(settings.Access, "restricted") || strings.EqualFold(settings.MembershipRestriction, "members") || strings.EqualFold(settings.MembershipRestriction, "owners") {
+			writeError(w, http.StatusForbidden, "This team requires an invitation")
 			return false
 		}
 	}
@@ -298,6 +418,9 @@ func adminOnlyRequest(r *http.Request) bool {
 	if strings.HasPrefix(path, "/api/identity-providers") || strings.HasPrefix(path, "/api/git-automations") || strings.HasPrefix(path, "/api/target-branches") || strings.HasPrefix(path, "/api/integration-deliveries") {
 		return true
 	}
+	if strings.HasPrefix(path, "/api/webhooks") {
+		return true
+	}
 	if strings.HasPrefix(path, "/api/workflows") || strings.HasPrefix(path, "/api/workflow-runs") {
 		return true
 	}
@@ -335,7 +458,7 @@ func permissionForRequest(r *http.Request) string {
 }
 
 func workspacePermissionAllows(settings domain.WorkspaceSettings, permission, role string) bool {
-	if role == "admin" {
+	if workspaceAdminRole(role) {
 		return true
 	}
 	if role == "guest" {
@@ -374,7 +497,7 @@ func teamIDFromWorkspacePath(path string) string {
 }
 
 func guestRestrictedPath(path string) bool {
-	return strings.HasPrefix(path, "/api/initiatives") || strings.HasPrefix(path, "/api/customers") || strings.HasPrefix(path, "/api/views")
+	return strings.HasPrefix(path, "/api/initiatives") || strings.HasPrefix(path, "/api/customers") || strings.HasPrefix(path, "/api/customer-requests") || strings.HasPrefix(path, "/api/views") || strings.HasPrefix(path, "/api/analytics") || strings.HasPrefix(path, "/api/dashboards")
 }
 
 func (s *server) resourceAllowed(r *http.Request, workspace string, userID string) bool {
@@ -384,17 +507,89 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	teamAllowed := func(teamID string) bool {
-		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && len(key.TeamIDs) > 0 && !slices.Contains(key.TeamIDs, teamID) {
+		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && key.TeamRestriction == "selected" && !slices.Contains(key.TeamIDs, teamID) {
 			return false
 		}
 		return slices.ContainsFunc(data.Teams, func(item domain.Team) bool { return item.ID == teamID })
 	}
 	issueAllowed := func(issueID string) bool {
-		return slices.ContainsFunc(data.Issues, func(item domain.Issue) bool { return item.ID == issueID && teamAllowed(item.Team.ID) })
+		return slices.ContainsFunc(data.Issues, func(item domain.Issue) bool {
+			if item.ID != issueID {
+				return false
+			}
+			return teamAllowed(item.Team.ID) || issueRole(s, data, item) != "none"
+		})
 	}
 	projectAllowed := func(projectID string) bool {
 		return slices.ContainsFunc(data.Projects, func(item domain.Project) bool {
 			return item.ID == projectID && (len(item.TeamIDs) == 0 || slices.ContainsFunc(item.TeamIDs, teamAllowed))
+		})
+	}
+	initiativeAllowed := func(initiativeID string) bool {
+		return slices.ContainsFunc(data.Initiatives, func(item domain.Initiative) bool {
+			if item.ID != initiativeID {
+				return false
+			}
+			if len(item.ProjectIDs) == 0 && len(item.ContributingTeamIDs) == 0 && item.LeadTeamID == "" {
+				return data.ViewerRole != "guest"
+			}
+			if item.LeadTeamID != "" && teamAllowed(item.LeadTeamID) {
+				return true
+			}
+			if slices.ContainsFunc(item.ContributingTeamIDs, teamAllowed) {
+				return true
+			}
+			return slices.ContainsFunc(item.ProjectIDs, projectAllowed)
+		})
+	}
+	viewAllowed := func(viewID string) bool {
+		return slices.ContainsFunc(data.SavedViews, func(item domain.SavedView) bool {
+			if item.ID != viewID && item.SlugID != viewID {
+				return false
+			}
+			if item.Scope == "personal" {
+				return item.OwnerID == userID || workspaceAdminRole(data.ViewerRole)
+			}
+			if item.Scope == "team" && item.TeamID != "" && !teamAllowed(item.TeamID) {
+				return false
+			}
+			return item.ProjectID == "" || projectAllowed(item.ProjectID)
+		})
+	}
+	dashboardAllowed := func(dashboardID string) bool {
+		items := settingCollection[domain.Dashboard](data, dashboardsSettingsKey)
+		return slices.ContainsFunc(items, func(item domain.Dashboard) bool {
+			return item.ID == dashboardID && dashboardVisible(data, userID, item)
+		})
+	}
+	cycleAllowed := func(cycleID string) bool {
+		return slices.ContainsFunc(data.Cycles, func(item domain.Cycle) bool { return item.ID == cycleID && teamAllowed(item.TeamID) })
+	}
+	customerAllowed := func(customerID string) bool {
+		// Customer records are workspace-level, but guests and API keys scoped to
+		// teams must not access customer data outside their visible issues.
+		if data.ViewerRole == "guest" {
+			return false
+		}
+		return slices.ContainsFunc(data.Customers, func(item domain.Customer) bool { return item.ID == customerID })
+	}
+	customerRequestAllowed := func(requestID string) bool {
+		return slices.ContainsFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool {
+			if item.ID != requestID || !customerAllowed(item.CustomerID) {
+				return false
+			}
+			if item.IssueID != "" && !issueAllowed(item.IssueID) {
+				return false
+			}
+			if item.ProjectID != "" && !projectAllowed(item.ProjectID) {
+				return false
+			}
+			return true
+		})
+	}
+	askAllowed := func(askID string) bool {
+		return slices.ContainsFunc(data.Asks, func(item domain.Ask) bool {
+			return item.ID == askID && (item.TeamID == "" || teamAllowed(item.TeamID))
 		})
 	}
 	pipelineAllowed := func(pipelineID string) bool {
@@ -466,6 +661,9 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 			}
 			return mutationAllowed(domain.IssueUpdateInput{ProjectID: input.ProjectID, CycleID: input.CycleID, AssigneeID: input.AssigneeID})
 		}
+		if len(parts) < 3 {
+			return true
+		}
 		if parts[2] == "batch" {
 			var input domain.BatchIssueUpdateInput
 			if !peekRequestJSON(r, &input) || slices.ContainsFunc(input.IssueIDs, func(id string) bool { return !issueAllowed(id) }) {
@@ -487,6 +685,9 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 			return peekRequestJSON(r, &input) && !slices.ContainsFunc(input.ReleaseIDs, func(id string) bool { return !releaseAllowed(id) })
 		}
 		if r.Method == http.MethodPatch {
+			if issueIndex := slices.IndexFunc(data.Issues, func(item domain.Issue) bool { return item.ID == parts[2] }); issueIndex >= 0 && issuePermissionRank(issueRole(s, data, data.Issues[issueIndex])) < issuePermissionRank("editor") {
+				return false
+			}
 			var input domain.IssueUpdateInput
 			return peekRequestJSON(r, &input) && mutationAllowed(input)
 		}
@@ -499,6 +700,9 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 			}
 			return projectMutationAllowed(input)
 		}
+		if len(parts) < 3 {
+			return true
+		}
 		if !projectAllowed(parts[2]) {
 			return false
 		}
@@ -507,6 +711,158 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 			return peekRequestJSON(r, &input) && projectMutationAllowed(input)
 		}
 		return true
+	case "initiatives":
+		if len(parts) == 2 && r.Method == http.MethodPost {
+			return data.ViewerRole != "guest"
+		}
+		if len(parts) < 3 {
+			return data.ViewerRole != "guest"
+		}
+		if !initiativeAllowed(parts[2]) {
+			return false
+		}
+		if r.Method == http.MethodPatch {
+			var input domain.InitiativeMutationInput
+			if !peekRequestJSON(r, &input) {
+				return false
+			}
+			if input.LeadTeamID != nil && *input.LeadTeamID != "" && !teamAllowed(*input.LeadTeamID) {
+				return false
+			}
+			if input.ContributingTeamIDs != nil && slices.ContainsFunc(*input.ContributingTeamIDs, func(id string) bool { return !teamAllowed(id) }) {
+				return false
+			}
+			if input.ProjectIDs != nil && slices.ContainsFunc(*input.ProjectIDs, func(id string) bool { return !projectAllowed(id) }) {
+				return false
+			}
+		}
+		return true
+	case "views":
+		if len(parts) == 2 && r.Method == http.MethodPost {
+			if data.ViewerRole == "guest" {
+				return false
+			}
+			var input domain.SavedViewMutationInput
+			if !peekRequestJSON(r, &input) {
+				return false
+			}
+			if input.TeamID != nil && *input.TeamID != "" && !teamAllowed(*input.TeamID) {
+				return false
+			}
+			if input.ProjectID != nil && *input.ProjectID != "" && !projectAllowed(*input.ProjectID) {
+				return false
+			}
+			return true
+		}
+		if len(parts) < 3 {
+			return true
+		}
+		if !viewAllowed(parts[2]) {
+			return false
+		}
+		if r.Method == http.MethodPatch || r.Method == http.MethodDelete || strings.HasSuffix(r.URL.Path, "/share") {
+			item, err := savedViewByID(&data, parts[2])
+			if err != nil || (item.OwnerID != userID && !workspaceAdminRole(data.ViewerRole)) {
+				return false
+			}
+			if r.Method == http.MethodPatch {
+				var input domain.SavedViewMutationInput
+				if !peekRequestJSON(r, &input) {
+					return false
+				}
+				if input.OwnerID != nil && *input.OwnerID != "" && *input.OwnerID != item.OwnerID && !workspaceAdminRole(data.ViewerRole) {
+					return false
+				}
+				if input.TeamID != nil && *input.TeamID != "" && !teamAllowed(*input.TeamID) {
+					return false
+				}
+				if input.ProjectID != nil && *input.ProjectID != "" && !projectAllowed(*input.ProjectID) {
+					return false
+				}
+			}
+			return true
+		}
+		return true
+	case "dashboards":
+		if len(parts) == 2 && r.Method == http.MethodPost {
+			if data.ViewerRole == "guest" {
+				return false
+			}
+			var input dashboardInput
+			if !peekRequestJSON(r, &input) {
+				return false
+			}
+			if input.TeamIDs != nil && slices.ContainsFunc(*input.TeamIDs, func(id string) bool { return !teamAllowed(id) }) {
+				return false
+			}
+			return true
+		}
+		if len(parts) < 3 {
+			return true
+		}
+		if !dashboardAllowed(parts[2]) {
+			return false
+		}
+		if r.Method == http.MethodPatch || r.Method == http.MethodDelete || strings.HasSuffix(r.URL.Path, "/share") {
+			items := settingCollection[domain.Dashboard](data, dashboardsSettingsKey)
+			if !slices.ContainsFunc(items, func(item domain.Dashboard) bool {
+				return item.ID == parts[2] && (item.OwnerID == userID || workspaceAdminRole(data.ViewerRole))
+			}) {
+				return false
+			}
+			if r.Method == http.MethodPatch {
+				var input dashboardInput
+				if !peekRequestJSON(r, &input) {
+					return false
+				}
+				if input.OwnerID != nil && *input.OwnerID != "" && *input.OwnerID != userID && !workspaceAdminRole(data.ViewerRole) {
+					return false
+				}
+				if input.TeamIDs != nil && slices.ContainsFunc(*input.TeamIDs, func(id string) bool { return !teamAllowed(id) }) {
+					return false
+				}
+			}
+			return true
+		}
+		return true
+	case "customers":
+		if len(parts) < 3 {
+			return data.ViewerRole != "guest"
+		}
+		return customerAllowed(parts[2])
+	case "customer-requests":
+		if len(parts) == 2 && r.Method == http.MethodPost {
+			if data.ViewerRole == "guest" {
+				return false
+			}
+			var input customerRequestInput
+			if !peekRequestJSON(r, &input) {
+				return false
+			}
+			if input.CustomerID != "" && !customerAllowed(input.CustomerID) || input.IssueID != nil && *input.IssueID != "" && !issueAllowed(*input.IssueID) || input.ProjectID != nil && *input.ProjectID != "" && !projectAllowed(*input.ProjectID) {
+				return false
+			}
+			return true
+		}
+		if len(parts) < 3 {
+			return data.ViewerRole != "guest"
+		}
+		return customerRequestAllowed(parts[2])
+	case "asks":
+		if len(parts) == 2 && r.Method == http.MethodPost {
+			if data.ViewerRole == "guest" {
+				return false
+			}
+			var input domain.Ask
+			if !peekRequestJSON(r, &input) {
+				return false
+			}
+			return input.TeamID == "" || teamAllowed(input.TeamID)
+		}
+		if len(parts) < 3 {
+			return true
+		}
+		return askAllowed(parts[2])
 	case "documents":
 		// Documents inherit visibility from their team scope. Keep both the
 		// document itself and any team/project bindings inside the viewer's
@@ -598,7 +954,7 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		if len(parts) < 3 {
 			return true
 		}
-		return slices.ContainsFunc(data.Cycles, func(item domain.Cycle) bool { return item.ID == parts[2] })
+		return cycleAllowed(parts[2])
 	case "teams":
 		if len(parts) < 3 {
 			return true
@@ -811,6 +1167,13 @@ func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 	if input.Role == "" {
 		input.Role = "member"
 	}
+	if strings.EqualFold(input.Role, "owner") && !s.authDisabled {
+		role, _, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
+		if !workspaceAdminRole(role) {
+			writeError(w, http.StatusForbidden, "Only workspace owners and admins can invite owners")
+			return
+		}
+	}
 	if input.Role == "guest" && !data.WorkspaceSettings.GuestsAllowed {
 		writeError(w, http.StatusForbidden, "Guest accounts are disabled for this workspace")
 		return
@@ -991,7 +1354,11 @@ func (s *server) acceptInvitation(w http.ResponseWriter, r *http.Request) {
 				now := time.Now().UTC()
 				workspace.Members = append(workspace.Members, domain.WorkspaceMember{User: user, Role: invitation.Role, Status: "active", JoinedAt: now, LastSeenAt: &now})
 				for _, teamID := range invitation.TeamIDs {
-					workspace.TeamMembers = append(workspace.TeamMembers, domain.TeamMember{TeamID: teamID, UserID: user.ID, Role: "member", JoinedAt: now})
+					teamRole := "member"
+					if invitation.Role == "owner" {
+						teamRole = "owner"
+					}
+					workspace.TeamMembers = append(workspace.TeamMembers, domain.TeamMember{TeamID: teamID, UserID: user.ID, Role: teamRole, JoinedAt: now})
 				}
 				invitation.Status, invitation.AcceptedAt = "accepted", &now
 				membership = domain.WorkspaceMembership{Workspace: workspace.Workspace, Role: invitation.Role, JoinedAt: now, IssueCount: len(workspace.Issues)}
@@ -1036,7 +1403,7 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 			}
 			member := &workspace.Members[index]
 			if input.Role != "" {
-				if !validMemberRole(input.Role) || member.Role == "admin" && input.Role != "admin" && activeAdminCount(workspace) <= 1 {
+				if !validMemberRole(input.Role) || workspaceAdminRole(member.Role) && !workspaceAdminRole(input.Role) && activeAdminCount(workspace) <= 1 {
 					return errInvalid
 				}
 				member.Role = input.Role
@@ -1146,13 +1513,13 @@ func materializeDevelopmentMembers(data *domain.Bootstrap) {
 }
 
 func validMemberRole(role string) bool {
-	return role == "admin" || role == "member" || role == "guest"
+	return role == "owner" || role == "admin" || role == "member" || role == "guest"
 }
 
 func activeAdminCount(data *domain.Bootstrap) int {
 	count := 0
 	for _, member := range data.Members {
-		if member.Role == "admin" && member.Status == "active" {
+		if workspaceAdminRole(member.Role) && member.Status == "active" {
 			count++
 		}
 	}
@@ -1244,7 +1611,7 @@ func (s *server) suspendMember(w http.ResponseWriter, r *http.Request) {
 			if index < 0 {
 				return errNotFound
 			}
-			if workspace.Members[index].Role == "admin" && activeAdminCount(workspace) <= 1 {
+			if workspaceAdminRole(workspace.Members[index].Role) && activeAdminCount(workspace) <= 1 {
 				return errInvalid
 			}
 			workspace.Members[index].Status = "suspended"
@@ -1311,7 +1678,7 @@ func (s *server) removeMember(w http.ResponseWriter, r *http.Request) {
 			if index < 0 {
 				return errNotFound
 			}
-			if workspace.Members[index].Role == "admin" && workspace.Members[index].Status == "active" && activeAdminCount(workspace) <= 1 {
+			if workspaceAdminRole(workspace.Members[index].Role) && workspace.Members[index].Status == "active" && activeAdminCount(workspace) <= 1 {
 				return errInvalid
 			}
 			workspace.Members = slices.Delete(workspace.Members, index, index+1)

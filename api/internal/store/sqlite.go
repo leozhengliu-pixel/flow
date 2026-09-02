@@ -186,6 +186,42 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 	return nil
 }
 
+// backfillWorkspaceOwners upgrades existing installations without changing
+// the role of every administrator. The oldest active administrator becomes
+// the durable workspace owner; subsequent administrators remain admins.
+func (s *SQLiteStore) backfillWorkspaceOwners(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT workspace_id FROM workspace_memberships`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var workspaceID string
+	for rows.Next() {
+		if err := rows.Scan(&workspaceID); err != nil {
+			return err
+		}
+		var ownerCount int
+		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_memberships WHERE workspace_id=? AND role='owner'`, workspaceID).Scan(&ownerCount); err != nil {
+			return err
+		}
+		if ownerCount > 0 {
+			continue
+		}
+		var userID string
+		err := s.db.QueryRowContext(ctx, `SELECT user_id FROM workspace_memberships WHERE workspace_id=? AND role='admin' AND status='active' ORDER BY joined_at,user_id LIMIT 1`, workspaceID).Scan(&userID)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if _, err := s.db.ExecContext(ctx, `UPDATE workspace_memberships SET role='owner' WHERE workspace_id=? AND user_id=?`, workspaceID, userID); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
 func (s *SQLiteStore) applyMigrationStatements(ctx context.Context, statements []string) error {
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
@@ -437,6 +473,18 @@ func normalize(data *domain.Bootstrap) {
 	if data.APIKeys == nil {
 		data.APIKeys = []domain.APIKey{}
 	}
+	for index := range data.APIKeys {
+		if len(data.APIKeys[index].Scopes) == 0 {
+			data.APIKeys[index].Scopes = []string{"read", "write"}
+		}
+		if data.APIKeys[index].TeamRestriction == "" {
+			if len(data.APIKeys[index].TeamIDs) > 0 {
+				data.APIKeys[index].TeamRestriction = "selected"
+			} else {
+				data.APIKeys[index].TeamRestriction = "all"
+			}
+		}
+	}
 	if data.OAuthApplications == nil {
 		data.OAuthApplications = []domain.OAuthApplication{}
 	}
@@ -451,6 +499,15 @@ func normalize(data *domain.Bootstrap) {
 	}
 	if data.IntegrationDeliveries == nil {
 		data.IntegrationDeliveries = []domain.IntegrationDelivery{}
+	}
+	for index := range data.Webhooks {
+		if data.Webhooks[index].TeamRestriction == "" {
+			if len(data.Webhooks[index].TeamIDs) > 0 {
+				data.Webhooks[index].TeamRestriction = "selected"
+			} else {
+				data.Webhooks[index].TeamRestriction = "all"
+			}
+		}
 	}
 	if data.GitAutomationStates == nil {
 		data.GitAutomationStates = []domain.GitAutomationState{}
@@ -1217,7 +1274,7 @@ func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region 
 	s.workspaces[urlKey] = data
 	s.lastWorkspaceKey = urlKey
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, _ = s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,status=excluded.status,joined_at=excluded.joined_at,last_seen_at=excluded.last_seen_at`, data.Workspace.ID, viewer.ID, "admin", "active", now, now)
+	_, _ = s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,status=excluded.status,joined_at=excluded.joined_at,last_seen_at=excluded.last_seen_at`, data.Workspace.ID, viewer.ID, "owner", "active", now, now)
 	_, _ = s.db.ExecContext(ctx, `INSERT INTO auth_account_state(user_id,last_workspace_key,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,updated_at=excluded.updated_at`, viewer.ID, urlKey, now)
 	if len(data.Teams) > 0 {
 		_, _ = s.db.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT(workspace_id,team_id,user_id) DO UPDATE SET role=excluded.role,joined_at=excluded.joined_at`, data.Workspace.ID, data.Teams[0].ID, viewer.ID, "owner", now)

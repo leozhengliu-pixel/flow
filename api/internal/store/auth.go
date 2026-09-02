@@ -24,6 +24,7 @@ var (
 	ErrAuthConflict  = errors.New("account already exists")
 	ErrAuthForbidden = errors.New("forbidden")
 	ErrLastAdmin     = errors.New("a workspace needs at least one admin")
+	ErrLastTeamOwner = errors.New("a team needs at least one owner")
 )
 
 type actorContextKey struct{}
@@ -94,6 +95,32 @@ func (s *SQLiteStore) ensureAuthTestFixture(ctx context.Context) error {
 		}
 	}
 	return tx.Commit()
+}
+
+// ensureSeedWorkspaceOwners covers workspaces created from an empty install:
+// SQL migrations run before the seed snapshot exists, so the first creator is
+// promoted here after the workspace state has been loaded.
+func (s *SQLiteStore) ensureSeedWorkspaceOwners(ctx context.Context) error {
+	for _, data := range s.workspaces {
+		var ownerCount int
+		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_memberships WHERE workspace_id=? AND role='owner'`, data.Workspace.ID).Scan(&ownerCount); err != nil {
+			return err
+		}
+		if ownerCount > 0 {
+			continue
+		}
+		var userID string
+		if err := s.db.QueryRowContext(ctx, `SELECT user_id FROM workspace_memberships WHERE workspace_id=? AND role IN ('admin','member') AND status='active' ORDER BY joined_at,user_id LIMIT 1`, data.Workspace.ID).Scan(&userID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				continue
+			}
+			return err
+		}
+		if _, err := s.db.ExecContext(ctx, `UPDATE workspace_memberships SET role='owner' WHERE workspace_id=? AND user_id=?`, data.Workspace.ID, userID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *SQLiteStore) Register(ctx context.Context, name, email, password string) (domain.User, string, error) {
@@ -582,12 +609,51 @@ func (s *SQLiteStore) WorkspaceRole(ctx context.Context, workspaceID, userID str
 }
 
 func (s *SQLiteStore) TeamRole(ctx context.Context, workspaceID, teamID, userID string) (string, error) {
-	var role string
-	err := s.db.QueryRowContext(ctx, `SELECT role FROM team_memberships WHERE workspace_id=? AND team_id=? AND user_id=?`, workspaceID, teamID, userID).Scan(&role)
-	if err != nil {
+	// Workspace owners/admins can administer every team. Team owners are also
+	// inherited by descendants.
+	if workspaceRole, status, err := s.WorkspaceRole(ctx, workspaceID, userID); err == nil && status == "active" && isWorkspaceAdminRole(workspaceRole) {
+		return "owner", nil
+	}
+	data, _, ok := s.workspaceByID(workspaceID)
+	if !ok {
 		return "", ErrAuthForbidden
 	}
-	return role, nil
+	role := s.teamRoleDirect(ctx, workspaceID, teamID, userID)
+	if role == "owner" {
+		return role, nil
+	}
+	// Walk the parent chain defensively. A malformed cycle must not turn into
+	// an unbounded authorization query.
+	seen := map[string]bool{}
+	for current := teamID; current != "" && !seen[current]; {
+		seen[current] = true
+		settings, exists := data.TeamSettings[current]
+		if !exists || settings.ParentTeamID == "" {
+			break
+		}
+		parent := settings.ParentTeamID
+		if parentRole := s.teamRoleDirect(ctx, workspaceID, parent, userID); parentRole == "owner" {
+			return "owner", nil
+		}
+		current = parent
+	}
+	if role != "" {
+		return role, nil
+	}
+	return "", ErrAuthForbidden
+}
+
+func (s *SQLiteStore) teamRoleDirect(ctx context.Context, workspaceID, teamID, userID string) string {
+	var role string
+	if err := s.db.QueryRowContext(ctx, `SELECT role FROM team_memberships WHERE workspace_id=? AND team_id=? AND user_id=?`, workspaceID, teamID, userID).Scan(&role); err != nil {
+		return ""
+	}
+	return role
+}
+
+func isWorkspaceAdminRole(role string) bool {
+	role = strings.ToLower(strings.TrimSpace(role))
+	return role == "admin" || role == "owner"
 }
 
 func (s *SQLiteStore) AccountForUser(ctx context.Context, userID string) (domain.AccountBootstrap, error) {
@@ -651,12 +717,12 @@ func (s *SQLiteStore) BootstrapForUser(ctx context.Context, workspaceKey, userID
 		return domain.Bootstrap{}, false, err
 	}
 	data.Viewer, data.ViewerRole = user, role
-	if role != "admin" || data.WorkspaceSettings.Plan != "enterprise" {
+	if !isWorkspaceAdminRole(role) || data.WorkspaceSettings.Plan != "enterprise" {
 		data.AuditLog = []domain.AuditLogEntry{}
 	}
 	data.Members, _ = s.ListMembers(ctx, data.Workspace.ID)
 	data.TeamMembers, _ = s.ListTeamMembers(ctx, data.Workspace.ID)
-	if role == "admin" {
+	if isWorkspaceAdminRole(role) {
 		data.Invitations, _ = s.ListInvitations(ctx, data.Workspace.ID)
 	} else {
 		data.Invitations = []domain.Invitation{}
@@ -666,16 +732,9 @@ func (s *SQLiteStore) BootstrapForUser(ctx context.Context, workspaceKey, userID
 		data.Users = append(data.Users, member.User)
 	}
 	allowed := map[string]bool{}
-	if role != "guest" {
-		for _, team := range data.Teams {
-			if !team.Private {
-				allowed[team.ID] = true
-			}
-		}
-	}
-	for _, member := range data.TeamMembers {
-		if member.UserID == userID {
-			allowed[member.TeamID] = true
+	for _, team := range data.Teams {
+		if teamVisibleToUser(data, team.ID, userID, role) {
+			allowed[team.ID] = true
 		}
 	}
 	filterBootstrapTeams(&data, allowed, role == "guest")
@@ -723,7 +782,7 @@ func (s *SQLiteStore) BootstrapForUser(ctx context.Context, workspaceKey, userID
 	data.Subscriptions = slices.DeleteFunc(data.Subscriptions, func(item domain.Subscription) bool { return item.UserID != userID })
 	data.ImportJobs = slices.DeleteFunc(data.ImportJobs, func(item domain.ImportJob) bool { return item.UserID != userID })
 	data.ExportJobs = slices.DeleteFunc(data.ExportJobs, func(item domain.ExportJob) bool { return item.UserID != userID })
-	if role != "admin" {
+	if !isWorkspaceAdminRole(role) {
 		data.AuditLog = []domain.AuditLogEntry{}
 		data.Trash = slices.DeleteFunc(data.Trash, func(item domain.TrashEntry) bool { return item.DeletedBy.ID != userID })
 	}
@@ -838,7 +897,11 @@ func (s *SQLiteStore) AcceptInvitation(ctx context.Context, token, userID string
 	var teamIDs []string
 	_ = json.Unmarshal([]byte(teamRaw), &teamIDs)
 	for _, teamID := range teamIDs {
-		if _, err = tx.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`, workspaceID, teamID, userID, "member", now.Format(time.RFC3339Nano)); err != nil {
+		teamRole := "member"
+		if role == "owner" {
+			teamRole = "owner"
+		}
+		if _, err = tx.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`, workspaceID, teamID, userID, teamRole, now.Format(time.RFC3339Nano)); err != nil {
 			return domain.WorkspaceMembership{}, err
 		}
 	}
@@ -886,10 +949,8 @@ func (s *SQLiteStore) UpdateMemberRole(ctx context.Context, workspaceID, userID,
 	if !validWorkspaceRole(role) {
 		return fmt.Errorf("invalid role")
 	}
-	if role != "admin" {
-		if err := s.ensureAdminRemains(ctx, workspaceID, userID); err != nil {
-			return err
-		}
+	if err := s.ensureAdminRemains(ctx, workspaceID, userID); err != nil {
+		return err
 	}
 	result, err := s.db.ExecContext(ctx, `UPDATE workspace_memberships SET role=? WHERE workspace_id=? AND user_id=?`, role, workspaceID, userID)
 	if err != nil {
@@ -949,11 +1010,11 @@ func (s *SQLiteStore) ensureAdminRemains(ctx context.Context, workspaceID, userI
 	if err := s.db.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID).Scan(&role, &status); err != nil {
 		return ErrAuthForbidden
 	}
-	if role != "admin" || status != "active" {
+	if !isWorkspaceAdminRole(role) || status != "active" {
 		return nil
 	}
 	var count int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_memberships WHERE workspace_id=? AND role='admin' AND status='active'`, workspaceID).Scan(&count); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_memberships WHERE workspace_id=? AND role IN ('admin','owner') AND status='active'`, workspaceID).Scan(&count); err != nil {
 		return err
 	}
 	if count <= 1 {
@@ -1011,12 +1072,49 @@ func (s *SQLiteStore) SetTeamMembership(ctx context.Context, workspaceID, teamID
 	if role != "owner" && role != "member" {
 		return fmt.Errorf("invalid team role")
 	}
+	data, workspaceKey, ok := s.workspaceByID(workspaceID)
+	if !ok || !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) {
+		return ErrAuthForbidden
+	}
+	if _, status, err := s.WorkspaceRole(ctx, workspaceID, userID); err != nil || status != "active" {
+		return ErrAuthForbidden
+	}
 	if !member {
+		if direct := s.teamRoleDirect(ctx, workspaceID, teamID, userID); direct == "owner" {
+			var owners int
+			if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM team_memberships WHERE workspace_id=? AND team_id=? AND role='owner'`, workspaceID, teamID).Scan(&owners); err != nil {
+				return err
+			}
+			if owners <= 1 {
+				return ErrLastTeamOwner
+			}
+		}
 		_, err := s.db.ExecContext(ctx, `DELETE FROM team_memberships WHERE workspace_id=? AND team_id=? AND user_id=?`, workspaceID, teamID, userID)
-		return err
+		if err != nil {
+			return err
+		}
+		return s.cleanupTeamMemberData(ctx, workspaceKey, teamID, userID)
 	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT(workspace_id,team_id,user_id) DO UPDATE SET role=excluded.role`, workspaceID, teamID, userID, role, time.Now().UTC().Format(time.RFC3339Nano))
 	return err
+}
+
+// cleanupTeamMemberData removes assignments and subscriptions that are no
+// longer valid after a member leaves a team. Explicit issue shares remain
+// intact so a private issue can still be shared intentionally.
+func (s *SQLiteStore) cleanupTeamMemberData(ctx context.Context, workspaceKey, teamID, userID string) error {
+	return s.MutateWorkspace(ctx, workspaceKey, "team_member.cleaned_up", teamID, map[string]string{"userId": userID}, func(data *domain.Bootstrap) error {
+		for index := range data.Issues {
+			if data.Issues[index].Team.ID != teamID {
+				continue
+			}
+			if data.Issues[index].Assignee != nil && data.Issues[index].Assignee.ID == userID {
+				data.Issues[index].Assignee = nil
+			}
+			data.Issues[index].SubscriberIDs = slices.DeleteFunc(data.Issues[index].SubscriberIDs, func(id string) bool { return id == userID })
+		}
+		return nil
+	})
 }
 
 func (s *SQLiteStore) DeleteTeamMemberships(ctx context.Context, workspaceID, teamID string) error {
@@ -1086,13 +1184,87 @@ func (s *SQLiteStore) workspaceByID(id string) (domain.Bootstrap, string, bool) 
 	return domain.Bootstrap{}, "", false
 }
 
+// teamVisibleToUser applies the team access and membership settings before a
+// bootstrap projection is returned. Public teams are visible to workspace
+// members; private and restricted teams require explicit membership. A parent
+// team owner inherits owner access to descendants, but ordinary parent members
+// do not bypass a restricted child.
+func teamVisibleToUser(data domain.Bootstrap, teamID, userID, workspaceRole string) bool {
+	if isWorkspaceAdminRole(workspaceRole) && !strings.EqualFold(data.WorkspaceSettings.Plan, "enterprise") {
+		return true
+	}
+	exists := false
+	for _, item := range data.Teams {
+		if item.ID == teamID {
+			exists = true
+			break
+		}
+	}
+	if !exists {
+		return false
+	}
+	memberRole := ""
+	for _, membership := range data.TeamMembers {
+		if membership.TeamID == teamID && membership.UserID == userID {
+			memberRole = membership.Role
+			break
+		}
+	}
+	if memberRole != "" {
+		return true
+	}
+	// Parent-team owners inherit access to descendants, including private
+	// children. Ordinary parent members do not.
+	seen := map[string]bool{}
+	for current := teamID; current != "" && !seen[current]; {
+		seen[current] = true
+		settings := data.TeamSettings[current]
+		if settings.ParentTeamID == "" {
+			break
+		}
+		parentRole := ""
+		for _, membership := range data.TeamMembers {
+			if membership.TeamID == settings.ParentTeamID && membership.UserID == userID {
+				parentRole = membership.Role
+				break
+			}
+		}
+		if strings.EqualFold(parentRole, "owner") {
+			return true
+		}
+		current = settings.ParentTeamID
+	}
+	settings := data.TeamSettings[teamID]
+	access := strings.ToLower(strings.TrimSpace(settings.Access))
+	if access == "" {
+		for _, item := range data.Teams {
+			if item.ID == teamID && item.Private {
+				access = "private"
+				break
+			}
+		}
+	}
+	if workspaceRole == "guest" {
+		return false
+	}
+	if access == "private" || access == "restricted" || strings.EqualFold(settings.MembershipRestriction, "members") || strings.EqualFold(settings.MembershipRestriction, "owners") {
+		return false
+	}
+	return true
+}
+
 func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest bool) {
 	data.Teams = slices.DeleteFunc(data.Teams, func(team domain.Team) bool { return !allowed[team.ID] })
-	data.Issues = slices.DeleteFunc(data.Issues, func(issue domain.Issue) bool { return !allowed[issue.Team.ID] })
+	data.Issues = slices.DeleteFunc(data.Issues, func(issue domain.Issue) bool {
+		if allowed[issue.Team.ID] {
+			return false
+		}
+		return !issuePermissionAllows(*data, issue, allowed)
+	})
 	// Documents can be scoped to private teams just like issues and projects.
 	// Keep unscoped documents workspace-visible, while preventing a member from
 	// discovering the title or content of a team document they cannot access.
-	if data.ViewerRole != "admin" {
+	if !isWorkspaceAdminRole(data.ViewerRole) || strings.EqualFold(data.WorkspaceSettings.Plan, "enterprise") {
 		data.Documents = slices.DeleteFunc(data.Documents, func(document domain.Document) bool {
 			if len(document.TeamIDs) == 0 || slices.ContainsFunc(document.TeamIDs, func(teamID string) bool { return allowed[teamID] }) {
 				return false
@@ -1102,6 +1274,9 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 	}
 	data.Cycles = slices.DeleteFunc(data.Cycles, func(cycle domain.Cycle) bool { return !allowed[cycle.TeamID] })
 	data.Projects = slices.DeleteFunc(data.Projects, func(project domain.Project) bool {
+		if len(project.TeamIDs) == 0 {
+			return false
+		}
 		for _, id := range project.TeamIDs {
 			if allowed[id] {
 				return false
@@ -1109,6 +1284,15 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 		}
 		return true
 	})
+	// A project can be shared by public and private teams. Keep the project
+	// shell when at least one team is visible, but redact hidden team bindings
+	// and all cross-team references from the projected payload.
+	for index := range data.Projects {
+		data.Projects[index].TeamIDs = slices.DeleteFunc(data.Projects[index].TeamIDs, func(teamID string) bool { return !allowed[teamID] })
+		data.Projects[index].DependencyIDs = slices.DeleteFunc(data.Projects[index].DependencyIDs, func(projectID string) bool {
+			return !slices.ContainsFunc(data.Projects, func(project domain.Project) bool { return project.ID == projectID })
+		})
+	}
 	visibleProjects := map[string]bool{}
 	for _, project := range data.Projects {
 		visibleProjects[project.ID] = true
@@ -1116,6 +1300,17 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 	visibleIssues := map[string]bool{}
 	for _, issue := range data.Issues {
 		visibleIssues[issue.ID] = true
+	}
+	// Recompute project issue counts from the visible issue projection so a
+	// public project shell cannot reveal the size of a private team's backlog.
+	for index := range data.Projects {
+		count := 0
+		for _, issue := range data.Issues {
+			if issue.Project != nil && issue.Project.ID == data.Projects[index].ID {
+				count++
+			}
+		}
+		data.Projects[index].IssueCount = count
 	}
 	data.ReleasePipelines = slices.DeleteFunc(data.ReleasePipelines, func(pipeline domain.ReleasePipeline) bool {
 		return len(pipeline.TeamIDs) > 0 && !slices.ContainsFunc(pipeline.TeamIDs, func(teamID string) bool { return allowed[teamID] })
@@ -1132,13 +1327,49 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 		return slices.ContainsFunc(release.ProjectIDs, func(id string) bool { return !visibleProjects[id] }) ||
 			slices.ContainsFunc(release.IssueIDs, func(id string) bool { return !visibleIssues[id] })
 	})
+	for index := range data.Releases {
+		data.Releases[index].ProjectIDs = slices.DeleteFunc(data.Releases[index].ProjectIDs, func(id string) bool { return !visibleProjects[id] })
+		data.Releases[index].IssueIDs = slices.DeleteFunc(data.Releases[index].IssueIDs, func(id string) bool { return !visibleIssues[id] })
+	}
 	for id := range data.ProjectUpdates {
 		if !visibleProjects[id] {
 			delete(data.ProjectUpdates, id)
 		}
 	}
+	data.CustomerRequests = slices.DeleteFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool {
+		if item.IssueID != "" && !visibleIssues[item.IssueID] {
+			return true
+		}
+		if item.ProjectID != "" && !visibleProjects[item.ProjectID] {
+			return true
+		}
+		return data.ViewerRole == "guest"
+	})
+	// Preserve workspace initiatives but redact links into projects the viewer
+	// cannot access. This keeps a cross-team initiative shell useful without
+	// disclosing private project identifiers.
+	for index := range data.Initiatives {
+		data.Initiatives[index].ProjectIDs = slices.DeleteFunc(data.Initiatives[index].ProjectIDs, func(id string) bool { return !visibleProjects[id] })
+		data.Initiatives[index].ParentInitiativeIDs = slices.DeleteFunc(data.Initiatives[index].ParentInitiativeIDs, func(id string) bool {
+			return !slices.ContainsFunc(data.Initiatives, func(item domain.Initiative) bool { return item.ID == id })
+		})
+		if !allowed[data.Initiatives[index].LeadTeamID] {
+			data.Initiatives[index].LeadTeamID = ""
+		}
+		data.Initiatives[index].ContributingTeamIDs = slices.DeleteFunc(data.Initiatives[index].ContributingTeamIDs, func(id string) bool { return !allowed[id] })
+	}
+	data.Asks = slices.DeleteFunc(data.Asks, func(item domain.Ask) bool {
+		return item.TeamID != "" && !allowed[item.TeamID]
+	})
+	filterSettingsByVisibility(data, allowed)
 	data.SavedViews = slices.DeleteFunc(data.SavedViews, func(view domain.SavedView) bool {
-		return view.Scope == "team" && !allowed[view.TeamID] || view.Scope == "personal" && view.OwnerID != data.Viewer.ID
+		if view.Scope == "team" && !allowed[view.TeamID] || view.Scope == "personal" && view.OwnerID != data.Viewer.ID {
+			return true
+		}
+		if view.ProjectID != "" && !visibleProjects[view.ProjectID] {
+			return true
+		}
+		return false
 	})
 	data.Notifications = slices.DeleteFunc(data.Notifications, func(item domain.Notification) bool { return item.RecipientID != data.Viewer.ID })
 	if !guest {
@@ -1160,6 +1391,95 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 	data.Notifications = slices.DeleteFunc(data.Notifications, func(item domain.Notification) bool {
 		return item.RecipientID != data.Viewer.ID || !visibleIssues[item.IssueID]
 	})
+}
+
+// filterSettingsByVisibility redacts team-scoped setting collections embedded
+// in the bootstrap map. Keeping this projection at the store boundary avoids
+// leaking private posts, meetings, or dashboards through a raw settings blob.
+func filterSettingsByVisibility(data *domain.Bootstrap, allowed map[string]bool) {
+	if data.Settings == nil {
+		return
+	}
+	if raw, err := json.Marshal(data.Settings["posts.v1"]); err == nil {
+		var posts []domain.Post
+		if json.Unmarshal(raw, &posts) == nil {
+			posts = slices.DeleteFunc(posts, func(item domain.Post) bool {
+				return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, func(id string) bool { return allowed[id] })
+			})
+			data.Settings["posts.v1"] = posts
+		}
+	}
+	if raw, err := json.Marshal(data.Settings["meetings.v1"]); err == nil {
+		var meetings []domain.Meeting
+		if json.Unmarshal(raw, &meetings) == nil {
+			meetings = slices.DeleteFunc(meetings, func(item domain.Meeting) bool {
+				if slices.ContainsFunc(item.TeamIDs, func(id string) bool { return allowed[id] }) {
+					return false
+				}
+				return len(item.TeamIDs) > 0 || slices.ContainsFunc(item.IssueIDs, func(issueID string) bool {
+					return !slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == issueID })
+				})
+			})
+			data.Settings["meetings.v1"] = meetings
+		}
+	}
+	if raw, err := json.Marshal(data.Settings["dashboards.v1"]); err == nil {
+		var dashboards []domain.Dashboard
+		if json.Unmarshal(raw, &dashboards) == nil {
+			dashboards = slices.DeleteFunc(dashboards, func(item domain.Dashboard) bool {
+				switch item.Visibility {
+				case "private":
+					return item.OwnerID != data.Viewer.ID && !isWorkspaceAdminRole(data.ViewerRole)
+				case "team":
+					return !slices.ContainsFunc(item.TeamIDs, func(id string) bool { return allowed[id] })
+				default:
+					return data.ViewerRole == "guest"
+				}
+			})
+			for index := range dashboards {
+				dashboards[index].TeamIDs = slices.DeleteFunc(dashboards[index].TeamIDs, func(id string) bool { return !allowed[id] })
+			}
+			data.Settings["dashboards.v1"] = dashboards
+		}
+	}
+}
+
+func issuePermissionAllows(data domain.Bootstrap, issue domain.Issue, allowed map[string]bool) bool {
+	if isWorkspaceAdminRole(data.ViewerRole) && !strings.EqualFold(data.WorkspaceSettings.Plan, "enterprise") {
+		return true
+	}
+	seenIssues := map[string]bool{}
+	for current := &issue; current != nil && !seenIssues[current.ID]; {
+		seenIssues[current.ID] = true
+		for _, permission := range current.Permissions {
+			if permission.Role == "" || strings.EqualFold(permission.Role, "none") {
+				continue
+			}
+			switch permission.SubjectType {
+			case "user":
+				if permission.SubjectID == data.Viewer.ID {
+					return true
+				}
+			case "workspace":
+				if permission.SubjectID == "" || permission.SubjectID == data.Workspace.ID || permission.SubjectID == data.Workspace.URLKey {
+					return true
+				}
+			case "team":
+				if allowed[permission.SubjectID] {
+					return true
+				}
+			}
+		}
+		if current.ParentID == nil || *current.ParentID == "" {
+			break
+		}
+		parentIndex := slices.IndexFunc(data.Issues, func(candidate domain.Issue) bool { return candidate.ID == *current.ParentID })
+		if parentIndex < 0 {
+			break
+		}
+		current = &data.Issues[parentIndex]
+	}
+	return false
 }
 
 func documentPermissionAllows(data *domain.Bootstrap, document domain.Document, allowed map[string]bool) bool {
@@ -1206,9 +1526,12 @@ func boolInt(value bool) int {
 	return 0
 }
 func validWorkspaceRole(value string) bool {
-	return value == "admin" || value == "member" || value == "guest"
+	return value == "owner" || value == "admin" || value == "member" || value == "guest"
 }
 func titleRole(value string) string {
+	if value == "owner" {
+		return "Owner"
+	}
 	if value == "admin" {
 		return "Admin"
 	}
