@@ -1094,7 +1094,10 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 	// discovering the title or content of a team document they cannot access.
 	if data.ViewerRole != "admin" {
 		data.Documents = slices.DeleteFunc(data.Documents, func(document domain.Document) bool {
-			return len(document.TeamIDs) > 0 && !slices.ContainsFunc(document.TeamIDs, func(teamID string) bool { return allowed[teamID] })
+			if len(document.TeamIDs) == 0 || slices.ContainsFunc(document.TeamIDs, func(teamID string) bool { return allowed[teamID] }) {
+				return false
+			}
+			return !documentPermissionAllows(data, document, allowed)
 		})
 	}
 	data.Cycles = slices.DeleteFunc(data.Cycles, func(cycle domain.Cycle) bool { return !allowed[cycle.TeamID] })
@@ -1157,6 +1160,29 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 	data.Notifications = slices.DeleteFunc(data.Notifications, func(item domain.Notification) bool {
 		return item.RecipientID != data.Viewer.ID || !visibleIssues[item.IssueID]
 	})
+}
+
+func documentPermissionAllows(data *domain.Bootstrap, document domain.Document, allowed map[string]bool) bool {
+	for _, permission := range document.Permissions {
+		if permission.Role == "" || permission.Role == "none" {
+			continue
+		}
+		switch permission.SubjectType {
+		case "user":
+			if permission.SubjectID == data.Viewer.ID {
+				return true
+			}
+		case "workspace":
+			if permission.SubjectID == "" || permission.SubjectID == data.Workspace.ID || permission.SubjectID == data.Workspace.URLKey {
+				return true
+			}
+		case "team":
+			if allowed[permission.SubjectID] {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func randomToken() (string, error) {

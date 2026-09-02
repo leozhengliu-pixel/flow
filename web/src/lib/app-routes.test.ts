@@ -105,4 +105,47 @@ describe("application routes", () => {
       false,
     );
   });
+
+  it("parses workspace and team secondary routes", () => {
+    expect(parseAppRoute("/acme/diary")).toEqual({
+      kind: "diary",
+      workspaceSlug: "acme",
+    });
+    expect(parseAppRoute("/acme/meeting/meeting-1")).toEqual({
+      kind: "meeting",
+      workspaceSlug: "acme",
+      meetingId: "meeting-1",
+    });
+    expect(parseAppRoute("/acme/automations/new")).toEqual({
+      kind: "automation-new",
+      workspaceSlug: "acme",
+    });
+    expect(parseAppRoute("/acme/automation/auto-1/runs")).toEqual({
+      kind: "automation-runs",
+      workspaceSlug: "acme",
+      automationId: "auto-1",
+    });
+    expect(parseAppRoute("/acme/team/ENG/board")).toEqual({
+      kind: "team-board",
+      workspaceSlug: "acme",
+      teamKey: "ENG",
+    });
+    expect(parseAppRoute("/acme/team/ENG/update/post-1")).toEqual({
+      kind: "team-update",
+      workspaceSlug: "acme",
+      teamKey: "ENG",
+      updateId: "post-1",
+    });
+    expect(parseAppRoute("/acme/release-note/note-1")).toEqual({
+      kind: "release-note",
+      workspaceSlug: "acme",
+      releaseNoteId: "note-1",
+    });
+    expect(parseAppRoute("/acme/issue-label/bug")).toEqual({
+      kind: "label",
+      workspaceSlug: "acme",
+      resourceName: "bug",
+      resourceType: "issue",
+    });
+  });
 });
