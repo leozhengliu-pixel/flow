@@ -288,6 +288,11 @@ func membershipSelfServiceRequest(r *http.Request, userID string) bool {
 }
 
 func publicAuthPath(path string) bool {
+	if strings.HasPrefix(path, "/scim/") {
+		// SCIM uses its own bearer token validator in scim.go; do not require a
+		// browser session for IdP provisioning requests.
+		return true
+	}
 	if strings.HasPrefix(path, "/api/release-pipelines/") && strings.HasSuffix(path, "/events") {
 		return true
 	}
@@ -646,6 +651,37 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		}
 		return true
 	}
+	resourceReferenceAllowed := func(kind, id string) bool {
+		kind = strings.ToLower(strings.TrimSpace(kind))
+		switch kind {
+		case "issue":
+			return issueAllowed(id)
+		case "project":
+			return projectAllowed(id)
+		case "initiative":
+			return initiativeAllowed(id)
+		case "view":
+			return viewAllowed(id)
+		case "dashboard":
+			return dashboardAllowed(id)
+		case "cycle":
+			return cycleAllowed(id)
+		case "release":
+			return releaseAllowed(id)
+		case "document":
+			return slices.ContainsFunc(data.Documents, func(item domain.Document) bool {
+				return (item.ID == id || item.SlugID == id) && documentRole(s, data, item) != "none"
+			})
+		case "customer":
+			return customerAllowed(id)
+		case "customer_request":
+			return customerRequestAllowed(id)
+		case "ask":
+			return askAllowed(id)
+		default:
+			return false
+		}
+	}
 	if len(parts) < 2 {
 		return true
 	}
@@ -674,15 +710,72 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		if !issueAllowed(parts[2]) {
 			return false
 		}
-		if len(parts) >= 4 && parts[3] == "relations" && r.Method == http.MethodPost {
-			var input struct {
-				RelatedIssueID string `json:"relatedIssueId"`
+		issueIndex := slices.IndexFunc(data.Issues, func(item domain.Issue) bool { return item.ID == parts[2] })
+		if issueIndex < 0 {
+			return false
+		}
+		issue := data.Issues[issueIndex]
+		roleRank := issuePermissionRank(issueRole(s, data, issue))
+		canComment := roleRank >= issuePermissionRank("commenter")
+		if !canComment && roleRank >= issuePermissionRank("viewer") && data.ViewerRole != "guest" {
+			// Public teams are readable by every workspace member, and those
+			// members can participate in the discussion even when they are not
+			// explicitly listed as team members. Explicitly shared private issues
+			// remain read-only unless granted commenter access.
+			settings := data.TeamSettings[issue.Team.ID]
+			canComment = !issue.Team.Private && !strings.EqualFold(settings.Access, "private") && !strings.EqualFold(settings.Access, "restricted")
+		}
+		// Issue collaborators need at least commenter access to mutate a
+		// discussion. Viewers may still read the issue and its comments, but
+		// cannot create, edit, or delete comments or reactions.
+		if len(parts) >= 4 && parts[3] == "comments" {
+			if len(parts) == 4 && r.Method == http.MethodPost {
+				return canComment
 			}
-			return peekRequestJSON(r, &input) && issueAllowed(input.RelatedIssueID)
+			if len(parts) >= 5 {
+				if len(parts) == 6 && parts[5] == "reactions" && r.Method == http.MethodPost {
+					return canComment
+				}
+				commentIndex := slices.IndexFunc(data.Comments[parts[2]], func(comment domain.Comment) bool { return comment.ID == parts[4] })
+				if commentIndex < 0 {
+					return false
+				}
+				if r.Method == http.MethodPatch || r.Method == http.MethodDelete {
+					comment := data.Comments[parts[2]][commentIndex]
+					return roleRank >= issuePermissionRank("editor") || comment.User.ID == userID
+				}
+			}
+		}
+		if len(parts) >= 4 && parts[3] == "attachments" && (r.Method == http.MethodPost || r.Method == http.MethodDelete) {
+			return roleRank >= issuePermissionRank("editor")
+		}
+		if len(parts) >= 4 && parts[3] == "links" && r.Method == http.MethodPost {
+			return roleRank >= issuePermissionRank("editor")
+		}
+		if len(parts) >= 4 && parts[3] == "relations" {
+			if roleRank < issuePermissionRank("editor") {
+				return false
+			}
+			if r.Method == http.MethodPost {
+				var input struct {
+					RelatedIssueID string `json:"relatedIssueId"`
+				}
+				return peekRequestJSON(r, &input) && issueAllowed(input.RelatedIssueID)
+			}
+			return true
 		}
 		if len(parts) >= 4 && parts[3] == "releases" && r.Method == http.MethodPut {
+			if roleRank < issuePermissionRank("editor") {
+				return false
+			}
 			var input issueReleasesInput
 			return peekRequestJSON(r, &input) && !slices.ContainsFunc(input.ReleaseIDs, func(id string) bool { return !releaseAllowed(id) })
+		}
+		if len(parts) >= 4 && (parts[3] == "reminders" || parts[3] == "loop-runs") && r.Method == http.MethodPost {
+			return roleRank >= issuePermissionRank("editor")
+		}
+		if len(parts) == 3 && r.Method == http.MethodDelete {
+			return roleRank >= issuePermissionRank("editor")
 		}
 		if r.Method == http.MethodPatch {
 			if issueIndex := slices.IndexFunc(data.Issues, func(item domain.Issue) bool { return item.ID == parts[2] }); issueIndex >= 0 && issuePermissionRank(issueRole(s, data, data.Issues[issueIndex])) < issuePermissionRank("editor") {
@@ -706,6 +799,15 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		if !projectAllowed(parts[2]) {
 			return false
 		}
+		if len(parts) >= 4 && parts[3] == "relations" && r.Method == http.MethodPost {
+			var input domain.ProjectRelation
+			return peekRequestJSON(r, &input) && projectAllowed(input.RelatedProjectID)
+		}
+		if len(parts) >= 5 && parts[3] == "relations" {
+			return slices.ContainsFunc(data.ProjectRelations, func(relation domain.ProjectRelation) bool {
+				return relation.ID == parts[4] && relation.ProjectID == parts[2] && projectAllowed(relation.RelatedProjectID)
+			})
+		}
 		if r.Method == http.MethodPatch {
 			var input domain.ProjectMutationInput
 			return peekRequestJSON(r, &input) && projectMutationAllowed(input)
@@ -720,6 +822,15 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		}
 		if !initiativeAllowed(parts[2]) {
 			return false
+		}
+		if len(parts) >= 4 && parts[3] == "relations" && r.Method == http.MethodPost {
+			var input domain.InitiativeRelation
+			return peekRequestJSON(r, &input) && initiativeAllowed(input.RelatedInitiativeID)
+		}
+		if len(parts) >= 5 && parts[3] == "relations" {
+			return slices.ContainsFunc(data.InitiativeRelations, func(relation domain.InitiativeRelation) bool {
+				return relation.ID == parts[4] && relation.InitiativeID == parts[2] && initiativeAllowed(relation.RelatedInitiativeID)
+			})
 		}
 		if r.Method == http.MethodPatch {
 			var input domain.InitiativeMutationInput
@@ -863,6 +974,21 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 			return true
 		}
 		return askAllowed(parts[2])
+	case "favorites", "subscriptions":
+		if len(parts) < 4 {
+			return true
+		}
+		return resourceReferenceAllowed(parts[2], parts[3])
+	case "reviews":
+		if len(parts) < 3 {
+			return true
+		}
+		return slices.ContainsFunc(data.Reviews, func(item domain.CodeReview) bool {
+			if item.ID != parts[2] {
+				return false
+			}
+			return len(item.IssueIDs) == 0 || slices.ContainsFunc(item.IssueIDs, issueAllowed)
+		})
 	case "documents":
 		// Documents inherit visibility from their team scope. Keep both the
 		// document itself and any team/project bindings inside the viewer's
@@ -1513,6 +1639,10 @@ func materializeDevelopmentMembers(data *domain.Bootstrap) {
 }
 
 func validMemberRole(role string) bool {
+	return role == "owner" || role == "admin" || role == "member" || role == "guest"
+}
+
+func validWorkspaceRole(role string) bool {
 	return role == "owner" || role == "admin" || role == "member" || role == "guest"
 }
 

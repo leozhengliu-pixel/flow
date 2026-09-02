@@ -136,6 +136,7 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	workspace := workspaceKey(r)
+	data := s.workspaceData(r)
 	presence, err := s.snapshotPresence(r.Context(), workspace)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "Presence is temporarily unavailable")
@@ -147,6 +148,7 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no")
 	channel, unsubscribe := s.realtime.subscribe(workspace)
 	defer unsubscribe()
+	presence = filterPresenceForViewer(data, presence)
 	initial, _ := json.Marshal(map[string]any{"presence": presence})
 	if !writeSSE(w, domain.RealtimeEvent{ID: fmt.Sprintf("connected_%d", time.Now().UnixNano()), Type: "connected", Payload: initial, CreatedAt: time.Now().UTC()}) {
 		return
@@ -159,6 +161,18 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case event := <-channel:
+			if !realtimeEventVisible(data, event) {
+				continue
+			}
+			if event.Type == "presence.updated" {
+				var payload struct {
+					Presence []domain.Presence `json:"presence"`
+				}
+				if json.Unmarshal(event.Payload, &payload) == nil {
+					payload.Presence = filterPresenceForViewer(data, payload.Presence)
+					event.Payload, _ = json.Marshal(payload)
+				}
+			}
 			if !writeSSE(w, event) {
 				return
 			}
@@ -178,6 +192,52 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
+}
+
+func filterPresenceForViewer(data domain.Bootstrap, values []domain.Presence) []domain.Presence {
+	return slices.DeleteFunc(slices.Clone(values), func(item domain.Presence) bool {
+		if item.IssueID != "" && !slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == item.IssueID }) {
+			return true
+		}
+		if item.DocumentID != "" && !slices.ContainsFunc(data.Documents, func(document domain.Document) bool {
+			return document.ID == item.DocumentID || document.SlugID == item.DocumentID
+		}) {
+			return true
+		}
+		return false
+	})
+}
+
+func realtimeEventVisible(data domain.Bootstrap, event domain.RealtimeEvent) bool {
+	if event.Type == "connected" || event.Type == "presence.updated" || strings.HasPrefix(event.Type, "workspace.") {
+		return true
+	}
+	id := event.AggregateID
+	if id == "" {
+		return true
+	}
+	if strings.HasPrefix(event.Type, "issue.") || strings.HasPrefix(event.Type, "comment.") || strings.HasPrefix(event.Type, "attachment.") {
+		return slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == id }) || slices.ContainsFunc(data.Documents, func(document domain.Document) bool { return document.ID == id })
+	}
+	if strings.HasPrefix(event.Type, "project.") || strings.HasPrefix(event.Type, "project_update.") || strings.HasPrefix(event.Type, "release.") {
+		return slices.ContainsFunc(data.Projects, func(project domain.Project) bool { return project.ID == id }) || slices.ContainsFunc(data.Releases, func(release domain.Release) bool { return release.ID == id })
+	}
+	if strings.HasPrefix(event.Type, "initiative.") || strings.HasPrefix(event.Type, "initiative_update.") {
+		return slices.ContainsFunc(data.Initiatives, func(initiative domain.Initiative) bool { return initiative.ID == id })
+	}
+	if strings.HasPrefix(event.Type, "document.") {
+		return slices.ContainsFunc(data.Documents, func(document domain.Document) bool { return document.ID == id || document.SlugID == id })
+	}
+	if strings.HasPrefix(event.Type, "cycle.") {
+		return slices.ContainsFunc(data.Cycles, func(cycle domain.Cycle) bool { return cycle.ID == id })
+	}
+	if strings.HasPrefix(event.Type, "customer_request.") {
+		return slices.ContainsFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool { return item.ID == id })
+	}
+	if strings.HasPrefix(event.Type, "ask.") {
+		return slices.ContainsFunc(data.Asks, func(item domain.Ask) bool { return item.ID == id })
+	}
+	return true
 }
 
 func writeSSE(w http.ResponseWriter, event domain.RealtimeEvent) bool {

@@ -132,6 +132,12 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
+	// Keep the SCIM token table available for databases created before SCIM
+	// support. It is idempotent and does not alter the versioned base schema.
+	if err := s.ensureSCIMSchema(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := s.loadOrSeed(context.Background()); err != nil {
 		db.Close()
 		return nil, err
@@ -303,6 +309,7 @@ func databaseMigrations(dialect string) []string {
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS search_history (user_id %s NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, workspace_id %s NOT NULL, query %s NOT NULL, use_count INTEGER NOT NULL DEFAULT 1, last_used_at VARCHAR(40) NOT NULL, PRIMARY KEY(user_id,workspace_id,query))`, idType, idType, queryType),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS recently_viewed (user_id %s NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, workspace_id %s NOT NULL, resource_type VARCHAR(64) NOT NULL, resource_id %s NOT NULL, last_viewed_at VARCHAR(40) NOT NULL, PRIMARY KEY(user_id,workspace_id,resource_type,resource_id))`, idType, idType, idType),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS document_collaboration_updates (update_id %s PRIMARY KEY, workspace_key %s NOT NULL, document_id %s NOT NULL, client_id %s NOT NULL, update_data %s NOT NULL, created_at VARCHAR(40) NOT NULL)`, idType, idType, idType, idType, blobType),
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS scim_tokens (id %s PRIMARY KEY, workspace_id %s NOT NULL, token_hash %s NOT NULL UNIQUE, name VARCHAR(191) NOT NULL, created_at VARCHAR(40) NOT NULL, last_used_at VARCHAR(40), revoked_at VARCHAR(40))`, idType, idType, idType),
 	}
 	indexes := []string{
 		"workspace_states_updated_idx ON workspace_states(updated_at)",
@@ -316,6 +323,7 @@ func databaseMigrations(dialect string) []string {
 		"search_history_recent_idx ON search_history(user_id,workspace_id,last_used_at)",
 		"recently_viewed_recent_idx ON recently_viewed(user_id,workspace_id,last_viewed_at)",
 		"document_collaboration_updates_document_idx ON document_collaboration_updates(workspace_key,document_id,created_at)",
+		"scim_tokens_workspace_idx ON scim_tokens(workspace_id,revoked_at)",
 	}
 	for _, index := range indexes {
 		prefix := "CREATE INDEX IF NOT EXISTS "
