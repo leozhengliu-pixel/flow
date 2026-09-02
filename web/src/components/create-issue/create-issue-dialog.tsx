@@ -121,6 +121,8 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
   const titleEditorRef = useRef<Editor | null>(null)
   const descriptionEditorRef = useRef<Editor | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const initializationKey = [open, draftId ?? '', initialProjectId ?? '', initialProjectMilestoneId ?? '', initialStateId ?? '', initialTeamId ?? ''].join('\u001f')
+  const initializedKeyRef = useRef('')
   const draftKey = `${draftStoragePrefix}${teamId || data.teams[0]?.key || 'default'}`
   useEffect(()=>{if(!open||!initialTemplateId)return;const template=data.issueTemplates.find(item=>item.id===initialTemplateId);if(!template)return;setTemplateId(template.id);setTitle(current=>current||template.title||template.name);setStateId(template.stateId||defaultState.id);setPriority(template.priority);setAssigneeId(template.assigneeId??data.viewer.id);setProjectId(template.projectId??'');setLabelIds(template.labelIds);const templateBody=template.body;if(templateBody)requestAnimationFrame(()=>descriptionEditorRef.current?.commands.setContent(templateBody,{contentType:'markdown'}))},[data.issueTemplates,data.viewer.id,defaultState.id,initialTemplateId,open])
   const hasDraftContent = Boolean(title.trim() || description?.markdown.trim() || files.length)
@@ -135,7 +137,12 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
   }, [assigneeId, cycleId, description, draftId, draftKey, dueDate, estimate, hasDraftContent, labelIds, open, priority, projectId, projectMilestoneId, recurrence, stateId, teamId, templateId, title])
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      initializedKeyRef.current = ''
+      return
+    }
+    if (initializedKeyRef.current === initializationKey) return
+    initializedKeyRef.current = initializationKey
     const draft = draftId ? null : readStoredDraft(draftKey)
     const remoteDraft = draftId
       ? data.drafts.find(item => item.id === draftId)
@@ -174,7 +181,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
     }
     const frame = requestAnimationFrame(() => requestAnimationFrame(() => titleEditorRef.current?.commands.focus('end')))
     return () => cancelAnimationFrame(frame)
-  }, [availableStates, data.drafts, data.projects, data.teams, data.viewer.id, defaultState.id, draftId, draftKey, initialProjectId, initialProjectMilestoneId, initialStateId, initialTeamId, open, teamId])
+  }, [availableStates, data.drafts, data.projects, data.teams, data.viewer.id, defaultState.id, draftId, draftKey, initialProjectId, initialProjectMilestoneId, initialStateId, initialTeamId, initializationKey, open, teamId])
 
   useEffect(() => { if (open && !availableStates.some(state => state.id === stateId)) setStateId(defaultState.id) }, [availableStates, defaultState.id, open, stateId])
 

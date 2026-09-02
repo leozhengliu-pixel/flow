@@ -88,6 +88,14 @@ export function NewProjectDialog({
   const panelRef = useRef<HTMLFormElement>(null)
   const nameRef = useRef<HTMLInputElement>(null)
   const defaultTeamId = teams[0]?.id
+  const templateSignature = templates
+    .map(template => [template.id, template.name, template.icon, template.color].join(':'))
+    .join('|')
+  const labelSignature = labels.map(label => label.id).join('|')
+  const templatesRef = useRef(templates)
+  const labelsRef = useRef(labels)
+  templatesRef.current = templates
+  labelsRef.current = labels
   const [draft, setDraft] = useState<NewProjectDraft>(() => emptyDraft(defaultStatus, defaultTeamId))
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -95,11 +103,11 @@ export function NewProjectDialog({
 
   useEffect(() => {
     if (!open) return
-    setDraft(applyProjectTemplateDraft(emptyDraft(defaultStatus, defaultTeamId), initialTemplateId, templates, labels))
+    setDraft(applyProjectTemplateDraft(emptyDraft(defaultStatus, defaultTeamId), initialTemplateId, templatesRef.current, labelsRef.current))
     setError(null)
     setNameError(false)
     requestAnimationFrame(() => nameRef.current?.focus())
-  }, [defaultStatus, defaultTeamId, initialTemplateId, labels, open, templates])
+  }, [defaultStatus, defaultTeamId, initialTemplateId, labelSignature, open, templateSignature])
 
   useEffect(() => {
     if (!open) return

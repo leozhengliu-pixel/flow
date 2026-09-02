@@ -664,9 +664,10 @@
 .sidebar-team-subscribe-menu [role="menuitemcheckbox"] {
   width: 100%;
   height: 32px;
-  display: flex;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 0 18px 0 14px;
   border-radius: 0;
   position: relative;
@@ -675,26 +676,52 @@
   margin-left: auto;
   order: 2;
 }
-.sidebar-team-subscribe-menu [role="menuitemcheckbox"] > span {
+.sidebar-team-subscribe-menu [role="menuitemcheckbox"] > span:not(.sidebar-team-subscribe-check) {
   min-width: 0;
+  width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.sidebar-team-subscribe-menu [data-state="checked"] {
+.sidebar-team-subscribe-check {
+  width: 14px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--on-accent);
+}
+.sidebar-team-subscribe-check [data-radix-menu-item-indicator] {
+  display: grid;
+  place-items: center;
+}
+.sidebar-team-subscribe-check svg {
+  width: 10px;
+  height: 9px;
+}
+.sidebar-team-subscribe-menu [role="menuitemcheckbox"][data-state="checked"] .sidebar-team-subscribe-check {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary);
+}
+.sidebar-team-subscribe-menu [role="menuitemcheckbox"] {
+  position: relative;
   background: transparent;
 }
-.sidebar-team-subscribe-menu [data-state="checked"]::before {
+.sidebar-team-subscribe-menu [role="menuitemcheckbox"]::before {
   content: "";
   position: absolute;
   inset: 0 6px;
   z-index: 0;
   border-radius: 8px;
-  background: var(--theme-surface-active);
+  background: transparent;
 }
-.sidebar-team-subscribe-menu [data-state="checked"] > * {
+.sidebar-team-subscribe-menu [role="menuitemcheckbox"] > * {
   position: relative;
   z-index: 1;
+}
+.sidebar-team-subscribe-menu [role="menuitemcheckbox"][data-highlighted]::before {
+  background: var(--theme-surface-active);
 }
 .sidebar-team-subscribe-menu [role="menuitem"] > span,
 .sidebar-team-subscribe-menu [role="menuitemcheckbox"] > span {
