@@ -864,12 +864,15 @@
   line-height: 12px;
   padding: 0 8px 0 6px;
 }
+.lp-new-project-dependency-trigger { max-width: 220px; min-width: 0; }
+.lp-new-project-dependency-trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lp-new-project-picker__trigger:hover,
 .lp-new-project-picker__trigger[data-state="open"],
 .lp-new-project-date:hover,
 .lp-new-project-date[data-state="open"] { background: var(--ui-pill-hover-bg); color: var(--ui-pill-hover-fg); }
 .lp-new-project-picker__trigger > svg,
 .lp-new-project-date > svg { flex: 0 0 14px; height: 14px; width: 14px; }
+.lp-new-project-picker__trigger > .avatar { flex: 0 0 16px; height: 16px; width: 16px; }
 .lp-new-project-picker__dot { background: #68686e; border-radius: 50%; display: inline-block; height: 8px; width: 8px; }
 .lp-new-project-picker__surface { width: 252px; }
 .lp-new-project-date { position: relative; }
@@ -894,6 +897,34 @@
 .lp-new-project__toast strong { font-size: 13px; font-weight: 500; }
 .lp-new-project__toast p { color: var(--theme-text-secondary); font-size: 13px; margin: 5px 0 0; }
 @keyframes lp-project-spin { to { transform: rotate(360deg); } }
+
+/* Project people menus use the same 36px search / 32px row rhythm as the core assignee picker. */
+.lp-new-project-person-picker__surface { width: min(252px, calc(100vw - 20px)); max-height: min(490px, calc(100dvh - 20px)); }
+.lp-new-project-person-picker__surface .property-command-search { height: 36px; padding: 0 12px 0 14px; border-bottom: 0; }
+.lp-new-project-person-picker__surface .property-command-search input { height: 36px; padding: 10px 0 9px; }
+.lp-new-project-person-picker__surface .property-command-options { max-height: none; padding: 6px 0 5px; }
+.lp-new-project-person-picker__surface .property-command-options [role="option"] { height: 32px; border-radius: 0; padding: 0 18px 0 14px; }
+.lp-new-project-person-picker__surface .property-command-group { height: 30px; padding: 8px 14px; }
+.lp-new-project-person-picker__surface .core-person-picker-avatar { width: 16px; height: 16px; flex: 0 0 16px; font-size: 8px; }
+.core-person-picker-avatar { background: var(--avatar, var(--avatar-fallback)); }
+.lp-new-project-person-picker__surface .property-command-option-end { margin-left: auto; border: .5px solid var(--theme-border-strong); border-radius: 9999px; color: var(--theme-text-secondary); font-size: 11px; line-height: 18px; padding: 0 7px; }
+.lp-new-project-person-picker__lead .property-command-options [role="option"] { grid-template-columns: 16px minmax(0, 1fr) auto; gap: 8px; }
+.lp-new-project-person-picker__members .property-command-options [role="option"] { grid-template-columns: 14px 16px minmax(0, 1fr) auto; gap: 8px; }
+.lp-new-project-person-picker__members .property-command-checkbox { opacity: 0; }
+.lp-new-project-person-picker__members .property-command-options [role="option"]:is(:hover, :focus-visible, [aria-checked="true"]) .property-command-checkbox { opacity: 1; }
+.lp-new-project-person-picker__members .property-command-options [role="option"][aria-checked="true"] .property-command-checkbox { background: var(--accent-primary); border-color: var(--accent-primary); color: var(--theme-on-primary); }
+.property-command-search-shortcut { align-items: center; display: inline-flex; gap: 4px; }
+.property-command-search-shortcut > span { color: var(--theme-text-secondary); font-size: 10px; }
+.property-option-hover-trigger { display: block; width: 100%; }
+.lp-new-project-person-hover { width: 278px; max-width: 380px; padding: 6px; border: .5px solid var(--theme-border-strong); border-radius: 8px; background: var(--theme-surface-2); box-shadow: 0 9px 48px lch(0 0 0 / .08), 0 6px 24px lch(0 0 0 / .1), 0 1px 1px lch(0 0 0 / .04); color: var(--theme-text-primary); }
+.lp-new-project-person-hover .assignee-hover-preview { color: var(--theme-text-primary); }
+.lp-new-project-person-hover .assignee-hover-preview header { height: 40.5px; gap: 10px; padding: 4px; }
+.lp-new-project-person-hover .assignee-hover-preview header .avatar { width: 32px; height: 32px; flex: 0 0 32px; font-size: 14px; }
+.lp-new-project-person-hover .assignee-hover-preview__details { padding: 12px 4px 6px; }
+.lp-new-project-person-hover .assignee-hover-preview__details > span { height: 24px; }
+.lp-new-project-person-hover .assignee-hover-preview__details svg { width: 16px; height: 16px; }
+:root[data-theme="light"] .lp-new-project-person-picker__surface { border-color: lch(91.9% 0 282); background: lch(100% 0 282); box-shadow: 0 6px 18px lch(0 0 0 / .02), 0 3px 9px lch(0 0 0 / .04), 0 1px 1px lch(0 0 0 / .04); color: lch(20% 1 282); }
+:root[data-theme="light"] .lp-new-project-person-hover { border-color: lch(91.9% 0 282); background: lch(100% 0 282); box-shadow: 0 9px 48px lch(0 0 0 / .08), 0 6px 24px lch(0 0 0 / .1), 0 1px 1px lch(0 0 0 / .04); color: lch(20% 1 282); }
 
 .lp-project-updates-preview {
   position: fixed;

@@ -11,7 +11,9 @@ import { projectStatusOptionColor } from '@/lib/project-status-color'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { ProjectDatePicker } from '@/components/projects-page/project-target-date-picker'
-import type { Initiative, IntegrationConnection, Issue, IssueLabel, LabelGroup, Project, ProjectMilestone, ProjectStatus, ProjectUpdate, Team, User } from '@/types/flow'
+import { ViewGlyph } from '@/components/views/view-icon-picker'
+import { normalizeProjectIcon } from '@/components/views/project-icon'
+import type { Initiative, IntegrationConnection, Issue, IssueLabel, LabelGroup, Project, ProjectMilestone, ProjectRelation, ProjectStatus, ProjectUpdate, Team, User } from '@/types/flow'
 import type { ProjectMutationInput } from '@/components/projects-page/projects-page'
 import type { ProjectDetailTab, ProjectDetailProps } from './project-detail-types'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
@@ -21,7 +23,7 @@ import { useI18n } from '@/i18n/i18n'
 import { formatProjectPropertyDate, initiativeStatusLabel, inviteProjectMember } from './project-detail-helpers'
 import { buildProgressData, shouldShowProgressGraph, type PersistedProgressHistory, type ProgressSeries } from './project-progress-data'
 
-export function ProjectDetailsSidebar({ initiatives, integrationConnections, labelGroups, labels, onConvertMilestone, onCreateMilestone, onDeleteMilestone, onMoveMilestone, onOpenIssueFilter, onOpenMilestoneIssues, onReorderMilestones, onTabChange, onUpdate, onUpdateProject, onUpdateMilestone, project, projectIssues, projects, projectStatuses, projectUpdates, teams, users, viewer }: {
+export function ProjectDetailsSidebar({ initiatives, integrationConnections, labelGroups, labels, onConvertMilestone, onCreateMilestone, onDeleteMilestone, onMoveMilestone, onOpenIssueFilter, onOpenMilestoneIssues, onReorderMilestones, onTabChange, onUpdate, onUpdateProject, onUpdateMilestone, project, projectIssues, projectRelations, projects, projectStatuses, projectUpdates, teams, users, viewer }: {
   initiatives: Initiative[]
   integrationConnections: IntegrationConnection[]
   labelGroups: LabelGroup[]
@@ -39,6 +41,7 @@ export function ProjectDetailsSidebar({ initiatives, integrationConnections, lab
   onUpdateMilestone: ProjectDetailProps['onUpdateMilestone']
   project: Project
   projectIssues: Issue[]
+  projectRelations?: ProjectRelation[]
   projects: Project[]
   projectStatuses: ProjectStatus[]
   projectUpdates: ProjectUpdate[]
@@ -54,8 +57,7 @@ export function ProjectDetailsSidebar({ initiatives, integrationConnections, lab
   const [draggingMilestoneId, setDraggingMilestoneId] = useState<string>()
   const [milestoneDrop, setMilestoneDrop] = useState<{ id: string; edge: 'before'|'after' }>()
   const [progressTab, setProgressTab] = useState<'assignees'|'labels'>('assignees')
-  const blockedByProjects = projects.filter(item => (project.dependencyIds ?? []).includes(item.id))
-  const blockingProjects = projects.filter(item => (item.dependencyIds ?? []).includes(project.id))
+  const { blockedBy: blockedByProjects, blocking: blockingProjects } = dependencyProjects(project, projects, projectRelations)
   const started = projectIssues.filter(issue => issue.state.type === 'started').length
   const completed = projectIssues.filter(issue => issue.state.type === 'completed').length
   const issueLabels = labels.filter(label => projectIssues.some(issue => issue.labels.some(item => item.id === label.id))).sort((left, right) => left.name.localeCompare(right.name))
@@ -73,9 +75,9 @@ export function ProjectDetailsSidebar({ initiatives, integrationConnections, lab
   }
 
   return <aside aria-label="Project sidebar" className="project-details-sidebar">
-    <SidebarSection compact onToggle={() => setPropertiesOpen(value => !value)} open={propertiesOpen} title="Properties" action={<ProjectDependencyMenu onUpdate={onUpdate} onUpdateProject={onUpdateProject} project={project} projects={projects} viewer={viewer}/> }>
+    <SidebarSection compact onToggle={() => setPropertiesOpen(value => !value)} open={propertiesOpen} title="Properties" action={<ProjectDependencyMenu onUpdate={onUpdate} onUpdateProject={onUpdateProject} project={project} projectRelations={projectRelations} projects={projects} viewer={viewer}/> }>
       <SidebarPropertiesBoundary><SidebarProperties initiatives={initiatives} integrationConnections={integrationConnections} labelGroups={labelGroups} labels={labels} onUpdate={onUpdate} project={project} projects={projects} projectStatuses={projectStatuses} teams={teams} users={users}/></SidebarPropertiesBoundary>
-      <ProjectDependencyRows blockedBy={blockedByProjects} blocking={blockingProjects} onUpdate={onUpdate} onUpdateProject={onUpdateProject} project={project}/>
+      <ProjectDependencyRows blockedBy={blockedByProjects} blocking={blockingProjects} onUpdate={onUpdate} onUpdateProject={onUpdateProject} project={project} projectRelations={projectRelations}/>
     </SidebarSection>
 
     <SidebarSection onToggle={() => setMilestonesOpen(value => !value)} open={milestonesOpen} title="Milestones" action={<button aria-label="Add milestone" data-project-milestone-add onClick={() => { setMilestonesOpen(true); setMilestoneEditor('new') }} type="button"><svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16"><use href="#plus"/></svg></button>}>
@@ -112,21 +114,76 @@ export function ProjectDetailsSidebar({ initiatives, integrationConnections, lab
   </aside>
 }
 
-function ProjectDependencyRows({ blockedBy, blocking, onUpdate, onUpdateProject, project }: {
+function dependencyProjects(project: Project, projects: Project[], relations: ProjectRelation[] = []) {
+  const blockedByIds = new Set(project.dependencyIds ?? [])
+  const blockingIds = new Set(projects.filter(item => (item.dependencyIds ?? []).includes(project.id)).map(item => item.id))
+  for (const relation of relations) {
+    const type = relation.type
+    if (type !== 'blocked_by' && type !== 'blocks' && type !== 'dependency') continue
+    if (relation.projectId === project.id) {
+      if (type === 'blocks') {
+        blockingIds.add(relation.relatedProjectId)
+        blockedByIds.delete(relation.relatedProjectId)
+      } else {
+        blockedByIds.add(relation.relatedProjectId)
+        blockingIds.delete(relation.relatedProjectId)
+      }
+      continue
+    }
+    if (relation.relatedProjectId !== project.id) continue
+    if (type === 'blocks') {
+      blockedByIds.add(relation.projectId)
+      blockingIds.delete(relation.projectId)
+    } else {
+      blockingIds.add(relation.projectId)
+      blockedByIds.delete(relation.projectId)
+    }
+  }
+  return {
+    blockedBy: projects.filter(item => blockedByIds.has(item.id)),
+    blocking: projects.filter(item => blockingIds.has(item.id)),
+  }
+}
+
+function ProjectDependencyRows({ blockedBy, blocking, onUpdate, onUpdateProject, project, projectRelations }: {
   blockedBy: Project[]
   blocking: Project[]
   onUpdate: (input: ProjectMutationInput) => Promise<void>
   onUpdateProject: ProjectDetailProps['onUpdate']
   project: Project
+  projectRelations?: ProjectRelation[]
 }) {
   if (!blockedBy.length && !blocking.length) return null
   const workspaceKey = window.location.pathname.split('/').filter(Boolean)[0] ?? ''
   const remove = async (item: Project, direction: ProjectDependencyDirection) => {
+    const relation = findDependencyRelation(project.id, item.id, direction, projectRelations)
+    if (relation && projectRelations) {
+      const ownerRelations = ownedDependencyInputs(relation.projectId, projectRelations, relation.projectId === project.id ? project : item)
+      try {
+        await (relation.projectId === project.id
+          ? onUpdate({ dependencyRelations: ownerRelations.filter(candidate => candidate.projectId !== relation.relatedProjectId) })
+          : onUpdateProject(relation.projectId, { dependencyRelations: ownerRelations.filter(candidate => candidate.projectId !== relation.relatedProjectId) }))
+      } catch (error) {
+        toast.error('Could not remove project dependency', { description: error instanceof Error ? error.message : undefined })
+      }
+      return
+    }
     if (direction === 'blockedBy') await onUpdate({ dependencyIds: (project.dependencyIds ?? []).filter(id => id !== item.id) })
     else await onUpdateProject(item.id, { dependencyIds: (item.dependencyIds ?? []).filter(id => id !== project.id) })
   }
   const changeDirection = async (item: Project, direction: ProjectDependencyDirection) => {
     try {
+      const relation = findDependencyRelation(project.id, item.id, direction, projectRelations)
+      if (relation && projectRelations) {
+        const ownerRelations = ownedDependencyInputs(relation.projectId, projectRelations, relation.projectId === project.id ? project : item)
+        const flippedType = relation.type === 'blocks' ? 'blocked_by' : 'blocks'
+        const nextRelations = ownerRelations.filter(candidate => candidate.projectId !== relation.relatedProjectId)
+        nextRelations.push({ projectId: relation.relatedProjectId, type: flippedType })
+        await (relation.projectId === project.id
+          ? onUpdate({ dependencyRelations: nextRelations })
+          : onUpdateProject(relation.projectId, { dependencyRelations: nextRelations }))
+        return
+      }
       if (direction === 'blockedBy') {
         await onUpdateProject(item.id, { dependencyIds: [...new Set([...(item.dependencyIds ?? []), project.id])] })
         await onUpdate({ dependencyIds: (project.dependencyIds ?? []).filter(id => id !== item.id) })
@@ -141,7 +198,7 @@ function ProjectDependencyRows({ blockedBy, blocking, onUpdate, onUpdateProject,
   const group = (label: 'Blocked by'|'Blocking', items: Project[], direction: ProjectDependencyDirection) => items.length ? <section className="project-dependency-group">
     <h4>{label}</h4>
     {items.map(item => <div className="project-dependency-row" key={`${direction}-${item.id}`}>
-      <a aria-label={item.name} href={`/${workspaceKey}/project/${item.slugId}/overview`}><ProjectIcon size={16} style={{ color: item.color }}/><span data-i18n-ignore>{item.name}</span></a>
+      <a aria-label={item.name} href={`/${workspaceKey}/project/${item.slugId}/overview`}><ViewGlyph color={item.color} icon={normalizeProjectIcon(item.icon)}/><span data-i18n-ignore>{item.name}</span></a>
       <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Menu" className="project-dependency-row__menu-trigger" type="button"><MoreHorizontal size={12}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className="project-detail-page__menu project-dependency-row__menu" collisionPadding={10} onCloseAutoFocus={event => event.preventDefault()} sideOffset={-2}>
         <DropdownMenu.Item onSelect={() => void changeDirection(item, direction)}><ProjectIcon size={16}/><span>{direction === 'blockedBy' ? 'Change to blocking' : 'Change to blocked by'}</span></DropdownMenu.Item>
         <DropdownMenu.Item onSelect={() => void remove(item, direction)}><X size={16}/><span>Remove dependency</span></DropdownMenu.Item>
@@ -149,6 +206,28 @@ function ProjectDependencyRows({ blockedBy, blocking, onUpdate, onUpdateProject,
     </div>)}
   </section> : null
   return <div className="project-details-sidebar__dependencies">{group('Blocked by', blockedBy, 'blockedBy')}{group('Blocking', blocking, 'blocking')}</div>
+}
+
+function ownedDependencyInputs(ownerId: string, relations: ProjectRelation[] = [], fallback?: Project) {
+  const inputs = relations.filter(relation => relation.projectId === ownerId && (relation.type === 'blocked_by' || relation.type === 'blocks' || relation.type === 'dependency')).map(relation => ({ projectId: relation.relatedProjectId, type: relation.type === 'blocks' ? 'blocks' as const : 'blocked_by' as const }))
+  const represented = new Set(inputs.map(item => item.projectId))
+  for (const projectId of fallback?.dependencyIds ?? []) {
+    if (!represented.has(projectId)) inputs.push({ projectId, type: 'blocked_by' })
+  }
+  return inputs
+}
+
+function findDependencyRelation(projectId: string, relatedProjectId: string, direction: ProjectDependencyDirection, relations: ProjectRelation[] = []) {
+  const wanted = direction === 'blockedBy' ? 'blocked_by' : 'blocks'
+  const direct = relations.find(relation => relation.projectId === projectId && relation.relatedProjectId === relatedProjectId && (relation.type === wanted || wanted === 'blocked_by' && relation.type === 'dependency'))
+  if (direct) return direct
+  const inverse = wanted === 'blocked_by' ? 'blocks' : 'blocked_by'
+  return relations.find(relation => relation.projectId === relatedProjectId && relation.relatedProjectId === projectId && (relation.type === inverse || inverse === 'blocked_by' && relation.type === 'dependency'))
+}
+
+function findAnyDependencyRelation(projectId: string, relatedProjectId: string, relations: ProjectRelation[] = []) {
+  return relations.find(relation => relation.projectId === projectId && relation.relatedProjectId === relatedProjectId && (relation.type === 'blocked_by' || relation.type === 'blocks' || relation.type === 'dependency'))
+    ?? relations.find(relation => relation.projectId === relatedProjectId && relation.relatedProjectId === projectId && (relation.type === 'blocked_by' || relation.type === 'blocks' || relation.type === 'dependency'))
 }
 
 function MilestoneRow({ disabled, dragging, dropEdge, milestone, onConvert, onDelete, onDragEnd, onDragOver, onDragStart, onDrop, onEdit, onMove, onOpenIssues, onUpdateDate, projects, stats }: {
@@ -225,10 +304,11 @@ function SidebarSection({ action, children, compact, onToggle, open, title }: { 
 
 type ProjectDependencyDirection = 'blockedBy' | 'blocking'
 
-function ProjectDependencyMenu({ onUpdate, onUpdateProject, project, projects, viewer }: {
+function ProjectDependencyMenu({ onUpdate, onUpdateProject, project, projectRelations, projects, viewer }: {
   onUpdate: (input: ProjectMutationInput) => Promise<void>
   onUpdateProject: ProjectDetailProps['onUpdate']
   project: Project
+  projectRelations?: ProjectRelation[]
   projects: Project[]
   viewer: User
 }) {
@@ -248,7 +328,7 @@ function ProjectDependencyMenu({ onUpdate, onUpdateProject, project, projects, v
       <div className="project-dependency-menu__directions">{directions.map(item => <DropdownMenu.Sub key={item.id} open={direction === item.id} onOpenChange={next => setDirection(current => next ? item.id : current === item.id ? undefined : current)}>
           <DropdownMenu.SubTrigger className="project-dependency-menu__direction"><span className="project-dependency-menu__item-background"/>{item.icon}<span>{item.label}</span><ChevronRight size={13}/></DropdownMenu.SubTrigger>
           <DropdownMenu.Portal><DropdownMenu.SubContent alignOffset={-61} className="project-detail-page__menu project-dependency-projects" collisionPadding={10} sideOffset={3}>
-            <DependencyProjectPicker direction={item.id} onUpdate={onUpdate} onUpdateProject={onUpdateProject} project={project} projects={projects} viewer={viewer}/>
+          <DependencyProjectPicker direction={item.id} onUpdate={onUpdate} onUpdateProject={onUpdateProject} project={project} projectRelations={projectRelations} projects={projects} viewer={viewer}/>
           </DropdownMenu.SubContent></DropdownMenu.Portal>
         </DropdownMenu.Sub>)}
         {!directions.length && <DropdownMenu.Label>No results</DropdownMenu.Label>}
@@ -257,20 +337,44 @@ function ProjectDependencyMenu({ onUpdate, onUpdateProject, project, projects, v
   </DropdownMenu.Root>
 }
 
-function DependencyProjectPicker({ direction, onUpdate, onUpdateProject, project, projects, viewer }: {
+function DependencyProjectPicker({ direction, onUpdate, onUpdateProject, project, projectRelations, projects, viewer }: {
   direction: ProjectDependencyDirection
   onUpdate: (input: ProjectMutationInput) => Promise<void>
   onUpdateProject: ProjectDetailProps['onUpdate']
   project: Project
+  projectRelations?: ProjectRelation[]
   projects: Project[]
   viewer: User
 }) {
   const [query, setQuery] = useState('')
-  const candidates = projects.filter(item => item.id !== project.id && item.name.toLowerCase().includes(query.trim().toLowerCase()))
+  const candidates = projects.filter(item => !item.archivedAt && item.id !== project.id && item.name.toLowerCase().includes(query.trim().toLowerCase()))
   const yourProjects = candidates.filter(item => item.lead?.id === viewer.id || (item.memberIds ?? []).includes(viewer.id))
   const otherProjects = candidates.filter(item => !yourProjects.includes(item))
-  const checked = (candidate: Project) => direction === 'blockedBy' ? (project.dependencyIds ?? []).includes(candidate.id) : (candidate.dependencyIds ?? []).includes(project.id)
+  const checked = (candidate: Project) => Boolean(findDependencyRelation(project.id, candidate.id, direction, projectRelations)) || (direction === 'blockedBy' ? (project.dependencyIds ?? []).includes(candidate.id) : (candidate.dependencyIds ?? []).includes(project.id))
   const toggle = async (candidate: Project) => {
+    const relation = findDependencyRelation(project.id, candidate.id, direction, projectRelations) ?? findAnyDependencyRelation(project.id, candidate.id, projectRelations)
+    if (relation && projectRelations) {
+      const desiredType = relation.projectId === project.id
+        ? direction === 'blockedBy' ? 'blocked_by' : 'blocks'
+        : direction === 'blockedBy' ? 'blocks' : 'blocked_by'
+      const relationType = relation.type === 'blocks' ? 'blocks' : 'blocked_by'
+      const ownerRelations = ownedDependencyInputs(relation.projectId, projectRelations, relation.projectId === project.id ? project : candidate)
+      const nextRelations = ownerRelations.filter(item => item.projectId !== relation.relatedProjectId)
+      if (relationType !== desiredType) nextRelations.push({ projectId: relation.relatedProjectId, type: desiredType })
+      try {
+        await (relation.projectId === project.id
+          ? onUpdate({ dependencyRelations: nextRelations })
+          : onUpdateProject(relation.projectId, { dependencyRelations: nextRelations }))
+      } catch (error) {
+        toast.error('Could not update project dependency', { description: error instanceof Error ? error.message : undefined })
+      }
+      return
+    }
+    if (!checked(candidate) && projectRelations) {
+      const ownerRelations = ownedDependencyInputs(project.id, projectRelations, project)
+      await onUpdate({ dependencyRelations: [...ownerRelations, { projectId: candidate.id, type: direction === 'blockedBy' ? 'blocked_by' : 'blocks' }] })
+      return
+    }
     if (direction === 'blockedBy') {
       await onUpdate({ dependencyIds: toggleId(project.dependencyIds ?? [], candidate.id) })
       return
@@ -281,7 +385,7 @@ function DependencyProjectPicker({ direction, onUpdate, onUpdateProject, project
   const rows = (items: Project[], label: string) => items.length ? <DropdownMenu.Group>
     <DropdownMenu.Label className="project-dependency-projects__group-label">{label}</DropdownMenu.Label>
     {items.map(candidate => <DropdownMenu.CheckboxItem checked={checked(candidate)} className="project-dependency-projects__item" key={candidate.id} onCheckedChange={() => void toggle(candidate)} onSelect={event => event.preventDefault()}>
-      <span className="project-dependency-menu__item-background"/><span className="project-dependency-projects__checkbox">{checked(candidate) && <CheckboxMark/>}</span><span className="project-dependency-projects__label"><ProjectIcon size={16} style={{ color: candidate.color }}/><span data-i18n-ignore>{candidate.name}</span></span>
+      <span className="project-dependency-menu__item-background"/><span className="project-dependency-projects__checkbox">{checked(candidate) && <CheckboxMark/>}</span><span className="project-dependency-projects__label"><ViewGlyph color={candidate.color} icon={normalizeProjectIcon(candidate.icon)}/><span data-i18n-ignore>{candidate.name}</span></span>
     </DropdownMenu.CheckboxItem>)}
   </DropdownMenu.Group> : null
 

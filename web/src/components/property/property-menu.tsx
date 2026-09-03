@@ -1,7 +1,8 @@
 import * as Popover from '@radix-ui/react-popover'
 import * as Tooltip from '@radix-ui/react-tooltip'
 import { Check, ChevronRight, Layers3, Plus } from 'lucide-react'
-import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { LabelGroupIcon, LabelIcon, NoAssigneeIcon, ProjectIcon, PriorityIcon } from '@/components/issue/issue-icons'
 import { LabelHoverPreview } from './label-hover-preview'
 import { usePropertyCommand } from './use-property-command'
@@ -24,13 +25,16 @@ export interface PropertyOption {
   keywords?: string
   shortcut?: string
   end?: string
+  disabled?: boolean
   icon?: ReactNode
   i18nIgnore?: boolean
+  hoverContent?: ReactNode
+  hoverClassName?: string
 }
 
 export type PropertyMenuKind = 'standard' | 'labels' | 'project' | 'milestone'
 
-export function PropertyMenu({ label, value, icon, options, onChange, onCreate, multiple = false, selectedId, selectedIds = [], compact = false, emptyLabel, hideSearch = false, searchPlaceholder, searchShortcut, showGroupHeadings = true, kind: explicitKind, teamName, trigger, customTrigger, triggerClassName, triggerRole = 'combobox', surfaceClassName, side = 'bottom', align = 'start', alignOffset = 0, ariaLabel, hoverContent, hoverClassName, valueIsEntityName = false }: {
+export function PropertyMenu({ label, value, icon, options, onChange, onCreate, multiple = false, closeOnSelect, keepSelectedVisible = false, selectedId, selectedIds = [], compact = false, emptyLabel, hideSearch = false, searchPlaceholder, searchShortcut, showGroupHeadings = true, kind: explicitKind, teamName, trigger, customTrigger, triggerClassName, triggerRole = 'combobox', surfaceClassName, side = 'bottom', align = 'start', alignOffset = 0, ariaLabel, hoverContent, hoverClassName, valueIsEntityName = false }: {
   label: string
   value?: string
   icon?: ReactNode
@@ -38,6 +42,8 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   onChange?: (id: string) => void | Promise<unknown>
   onCreate?: (name: string) => void | Promise<unknown>
   multiple?: boolean
+  closeOnSelect?: boolean
+  keepSelectedVisible?: boolean
   selectedId?: string
   selectedIds?: string[]
   compact?: boolean
@@ -72,7 +78,8 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   const kind = explicitKind ?? (multiple && label === 'Labels' ? 'labels' : label === 'Project' ? 'project' : 'standard')
   const orderedOptions = multiple && kind !== 'labels' ? [...options].sort((left, right) => Number(selectedSet.has(right.id)) - Number(selectedSet.has(left.id))) : options
   const command = usePropertyCommand({
-    closeOnSelect: !multiple,
+    closeOnSelect: closeOnSelect ?? !multiple,
+    keepSelectedVisible,
     open,
     options: orderedOptions,
     selectedIds: selected,
@@ -96,7 +103,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
     command.onKeyDown(event)
   }
   const placeholder = searchPlaceholder ?? (kind === 'labels' ? 'Change or add labels…' : kind === 'project' ? 'Add to project…' : `Change ${label.toLowerCase()}…`)
-  const triggerButton = <button type="button" role={triggerRole === 'combobox' ? 'combobox' : undefined} className={triggerClassName ?? (compact ? 'mini-property-trigger' : 'property-row')} aria-label={ariaLabel ?? `Change ${label}. Current value is ${value || 'none'}`} aria-haspopup="dialog" aria-expanded={open}>
+  const triggerButton = <button type="button" role={triggerRole === 'combobox' ? 'combobox' : undefined} className={triggerClassName ?? (compact ? 'mini-property-trigger' : 'property-row')} aria-label={ariaLabel ?? `Change ${label}. Current value is ${value || 'none'}`} aria-haspopup="dialog" aria-expanded={open} data-state={open ? 'open' : 'closed'}>
         {trigger ?? (compact ? <>{icon ?? iconFor(label)}<span data-i18n-ignore={valueIsEntityName || undefined}>{value || label}</span></> : <><span>{icon ?? iconFor(label)}</span><span className="property-label">{label}</span><span className="property-value" data-i18n-ignore={valueIsEntityName || undefined}>{value || `Add ${label.toLowerCase()}`}</span></>)}
       </button>
   const popoverTrigger = <Popover.Trigger asChild>{triggerButton}</Popover.Trigger>
@@ -110,10 +117,10 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
         <div onKeyDown={onCommandKeyDown}>
           <div className={`property-command-search${hideSearch ? ' is-visually-hidden' : ''}`}>
             <input ref={command.inputRef} value={command.query} onFocus={() => setOpenLabelGroupId(undefined)} onChange={event => command.onQueryChange(event.target.value)} aria-label={placeholder} aria-controls={listboxId} aria-activedescendant={command.activeId ? `${listboxId}-${command.activeId || 'none'}` : undefined} placeholder={placeholder} autoComplete="off" spellCheck={false}/>
-            {(searchShortcut ?? (kind === 'labels' ? 'L' : kind === 'project' ? 'Shift P' : undefined)) && <kbd>{searchShortcut ?? (kind === 'labels' ? 'L' : 'Shift P')}</kbd>}
+            {(searchShortcut ?? (kind === 'labels' ? 'L' : kind === 'project' ? 'Shift P' : undefined)) && <SearchShortcut value={searchShortcut ?? (kind === 'labels' ? 'L' : 'Shift P')}/>}
           </div>
           <div id={listboxId} className="property-command-options" role="listbox" aria-label={label} aria-multiselectable={multiple || undefined} onWheel={event => event.stopPropagation()}>
-            {kind === 'labels' && <>{labelMenu.selectedOptions.length > 0 && <>{showGroupHeadings && <div className="property-command-group">{t('Frequently used')}</div>}{labelMenu.selectedOptions.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked listboxId={listboxId} icon={iconFor(label)} multi showGroupLabel onChoose={() => command.choose(option)} onActive={() => { setOpenLabelGroupId(undefined); command.setActiveId(option.id) }}/>)}</>}{showGroupHeadings && (labelMenu.options.length > 0 || labelMenu.groups.length > 0) && <div className="property-command-group">{t('Labels')}</div>}{labelMenu.groups.map(group => <LabelGroupOption key={group.id} group={group} open={openLabelGroupId === group.id} selectedIds={selectedSet} listboxId={listboxId} onOpenChange={next => setOpenLabelGroupId(next ? group.id : undefined)} onChoose={option => command.choose(option)}/>)}{labelMenu.options.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={false} listboxId={listboxId} icon={iconFor(label)} multi onChoose={() => command.choose(option)} onActive={() => { setOpenLabelGroupId(undefined); command.setActiveId(option.id) }}/>) }{canCreateLabel && <button type="button" className="property-command-create" role="option" aria-label={`${t('Create new label')}: ${createName}`} onClick={createLabel}><Plus size={15}/><span>{t('Create new label')}: <strong data-i18n-ignore>"{createName}"</strong></span></button>}</>}
+            {kind === 'labels' && <>{labelMenu.selectedOptions.length > 0 && <>{showGroupHeadings && <div className="property-command-group">{t('Frequently used')}</div>}{labelMenu.selectedOptions.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked labelHover listboxId={listboxId} icon={iconFor(label)} multi showGroupLabel onChoose={() => command.choose(option)} onActive={() => { setOpenLabelGroupId(undefined); command.setActiveId(option.id) }}/>)}</>}{showGroupHeadings && (labelMenu.options.length > 0 || labelMenu.groups.length > 0) && <div className="property-command-group">{t('Labels')}</div>}{labelMenu.groups.map(group => <LabelGroupOption key={group.id} group={group} open={openLabelGroupId === group.id} selectedIds={selectedSet} listboxId={listboxId} onOpenChange={next => setOpenLabelGroupId(next ? group.id : undefined)} onChoose={option => command.choose(option)}/>)}{labelMenu.options.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={false} labelHover listboxId={listboxId} icon={iconFor(label)} multi onChoose={() => command.choose(option)} onActive={() => { setOpenLabelGroupId(undefined); command.setActiveId(option.id) }}/>) }{canCreateLabel && <button type="button" className="property-command-create" role="option" aria-label={`${t('Create new label')}: ${createName}`} onClick={createLabel}><Plus size={15}/><span>{t('Create new label')}: <strong data-i18n-ignore>"{createName}"</strong></span></button>}</>}
             {kind === 'project' && <>{noProject.map(option => <CommandOption key="none" option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }{selectedProjects.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>)}{otherProjects.length > 0 && <div className="property-command-group">{teamName ? t('Projects in {team} team').replace('{team}', teamName) : t('Projects')}</div>}{otherProjects.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={false} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }{onCreate&&<><div className="property-command-group">{t('New project')}</div><button type="button" className="property-command-create" role="option" aria-label={t('Create new project…')} onClick={()=>{setOpen(false);void onCreate('')}}><Plus size={15}/><span>{t('Create new project…')}</span></button></>}</>}
             {kind === 'milestone' && <>{command.filteredOptions.map(option => <CommandOption key={option.id || 'none'} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>)}{canCreateMilestone&&<><div className="property-command-group">{t('New project milestone')}</div><button type="button" className="property-command-create" role="option" aria-label={t('Create new milestone…')} onClick={createMilestone}><Plus size={15}/><span>{t('Create new milestone…')}</span></button></>}</>}
             {kind === 'standard' && standardSections.map(section => <div className="property-command-section" key={section.id}>{section.label && <div className="property-command-group">{t(section.label)}</div>}{section.options.map(option => <CommandOption key={option.id || 'none'} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} multi={multiple} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>)}</div>) }
@@ -174,12 +181,64 @@ function LabelGroupOption({ group, open, selectedIds, listboxId, onOpenChange, o
   </button></Popover.Anchor><Popover.Portal><Popover.Content className="property-command-label-submenu" side="right" align="start" alignOffset={-6} sideOffset={-2} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}><div onKeyDown={onKeyDown}><div className="property-command-search"><input ref={inputRef} value={query} onChange={event=>{setQuery(event.target.value);const normalized=event.target.value.trim().toLocaleLowerCase();setActiveId(group.options.find(option=>option.label.toLocaleLowerCase().includes(normalized))?.id)}} aria-label={group.label} placeholder={group.label} autoComplete="off" spellCheck={false}/></div><div className="property-command-options" role="listbox" aria-label={group.label}>{filtered.map(option => <CommandOption key={option.id} option={option} active={option.id === activeId} checked={selectedIds.has(option.id)} listboxId={`${listboxId}-${group.id}`} icon={<LabelIcon size={14}/>} onChoose={() => choose(option)} onActive={() => setActiveId(option.id)}/>)}{!filtered.length&&<div className="core-property-empty">No results</div>}</div></div></Popover.Content></Popover.Portal></Popover.Root>
 }
 
-function CommandOption({ option, active, checked, icon, listboxId, multi = false, showGroupLabel = false, onChoose, onActive }: { option: PropertyOption; active: boolean; checked: boolean; icon: ReactNode; listboxId: string; multi?: boolean; showGroupLabel?: boolean; onChoose: () => void; onActive: () => void }) {
+function CommandOption({ option, active, checked, icon, labelHover = false, listboxId, multi = false, showGroupLabel = false, onChoose, onActive }: { option: PropertyOption; active: boolean; checked: boolean; icon: ReactNode; labelHover?: boolean; listboxId: string; multi?: boolean; showGroupLabel?: boolean; onChoose: () => void; onActive: () => void }) {
   const { t } = useI18n()
-  const row = <button type="button" className={showGroupLabel && option.groupLabel ? 'is-grouped-label' : undefined} id={`${listboxId}-${option.id || 'none'}`} role="option" aria-selected={active} aria-checked={checked} onPointerMove={onActive} onFocus={onActive} onClick={onChoose}>
+  const row = <button aria-disabled={option.disabled || undefined} className={showGroupLabel && option.groupLabel ? 'is-grouped-label' : undefined} disabled={option.disabled} id={`${listboxId}-${option.id || 'none'}`} role="option" type="button" aria-selected={active} aria-checked={checked} onPointerMove={onActive} onFocus={onActive} onClick={onChoose}>
     <span className="property-command-option-background"/>{multi && <span className="property-command-checkbox">{checked && <CheckboxMark/>}</span>}<span className="property-command-icon">{option.icon ?? (option.color ? <i className="option-dot" style={{ background: option.color }}/> : icon)}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.i18nIgnore ? option.label : t(option.label)}</span>{showGroupLabel && option.groupLabel && <span className="property-command-option-group" data-i18n-ignore>{option.groupLabel}</span>}{!multi && checked && <span className="property-command-check"><Check size={14}/></span>}{option.end && <span className="property-command-option-end">{t(option.end)}</span>}{option.shortcut && <kbd>{option.shortcut}</kbd>}
   </button>
-  return multi && option.color ? <LabelHoverPreview label={{ name: option.label, color: option.color, description: option.description, issueCount: option.issueCount, scope: option.scope, resourceType: option.resourceType }}>{row}</LabelHoverPreview> : row
+  if (option.hoverContent) return <OptionHover className={option.hoverClassName} content={option.hoverContent}>{row}</OptionHover>
+  return labelHover && option.color ? <LabelHoverPreview label={{ name: option.label, color: option.color, description: option.description, issueCount: option.issueCount, scope: option.scope, resourceType: option.resourceType }}>{row}</LabelHoverPreview> : row
+}
+
+function OptionHover({ children, className, content }: { children: ReactNode; className?: string; content: ReactNode }) {
+  const anchorRef = useRef<HTMLSpanElement>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const [open, setOpen] = useState(false)
+  const [position, setPosition] = useState({ left: 0, top: 0 })
+  const show = () => {
+    if (hideTimer.current) clearTimeout(hideTimer.current)
+    const rect = anchorRef.current?.getBoundingClientRect()
+    if (rect) {
+      const estimatedWidth = className?.includes('lp-new-project-person-hover') ? 278 : 198
+      const left = rect.right + estimatedWidth + 6 > window.innerWidth - 8 ? Math.max(8, rect.left - estimatedWidth - 6) : rect.right + 6
+      setPosition({ left, top: rect.top })
+    }
+    setOpen(true)
+  }
+  const hide = () => {
+    if (hideTimer.current) clearTimeout(hideTimer.current)
+    hideTimer.current = setTimeout(() => setOpen(false), 100)
+  }
+  useLayoutEffect(() => {
+    if (!open) return
+    const updatePosition = () => {
+      const anchor = anchorRef.current?.getBoundingClientRect()
+      const card = cardRef.current?.getBoundingClientRect()
+      if (!anchor || !card || !card.width || !card.height) return
+      const padding = 8
+      const gap = 6
+      let left = anchor.right + gap
+      if (left + card.width > window.innerWidth - padding) left = anchor.left - card.width - gap
+      let top = anchor.top
+      left = Math.max(padding, Math.min(left, window.innerWidth - card.width - padding))
+      top = Math.max(padding, Math.min(top, window.innerHeight - card.height - padding))
+      setPosition({ left, top })
+    }
+    const frame = requestAnimationFrame(updatePosition)
+    window.addEventListener('resize', updatePosition)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('resize', updatePosition)
+    }
+  }, [open])
+  useEffect(() => () => {
+    if (hideTimer.current) clearTimeout(hideTimer.current)
+  }, [])
+  return <>
+    <span className="property-option-hover-trigger" onBlur={hide} onFocus={show} onPointerEnter={show} onPointerLeave={hide} ref={anchorRef} role="presentation">{children}</span>
+    {open && createPortal(<div className={`property-option-hover-card ${className ?? 'property-rich-hover'}`} onPointerEnter={show} onPointerLeave={hide} ref={cardRef} role="tooltip" style={{ left: position.left, top: position.top }}>{content}</div>, document.body)}
+  </>
 }
 
 function iconFor(label: string) {
@@ -188,4 +247,10 @@ function iconFor(label: string) {
   if (label === 'Labels') return <LabelIcon size={14}/>
   if (label === 'Project') return <ProjectIcon size={14}/>
   return <Layers3 size={14}/>
+}
+
+function SearchShortcut({ value }: { value: string }) {
+  const sequence = value.match(/^(.+?)(?:,)?\s+then\s+(.+)$/i)
+  if (!sequence) return <kbd>{value}</kbd>
+  return <span className="property-command-search-shortcut"><kbd>{sequence[1]}</kbd><span>then</span><kbd>{sequence[2]}</kbd></span>
 }

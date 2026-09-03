@@ -528,6 +528,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
             onUpdateProject={props.onUpdate}
             onUpdateMilestone={props.onUpdateMilestone}
             project={project}
+            projectRelations={props.projectRelations}
             projectIssues={projectIssues}
             projects={projects}
             projectStatuses={props.projectStatuses}
