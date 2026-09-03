@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import type { Initiative, IssueLabel, LabelGroup, Project, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
+import type { Initiative, Invitation, IssueLabel, LabelGroup, Project, ProjectDependencyRelationInput, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
 import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from '@/components/issue-explorer/saved-view-editor'
 import { NewProjectDialog, type NewProjectDraft } from './new-project-dialog'
+import { projectPeopleChoices } from './project-people'
 import { ProjectsDataView, type ProjectAction, type ProjectPageItem, type ProjectProperty, type ProjectPropertyOptions } from './projects-data-view'
 import { ProjectsPageSurface } from './projects-page-surface'
 import { DEFAULT_PROJECTS_DISPLAY, type ProjectsDisplaySettings } from './projects-display-model'
@@ -34,6 +35,7 @@ export type ProjectMutationInput = {
   labelIds?: string[]
   teamIds?: string[]
   dependencyIds?: string[]
+  dependencyRelations?: ProjectDependencyRelationInput[]
   initiatives?: string[]
   customers?: string[]
   startDate?: string
@@ -57,6 +59,7 @@ export type ProjectsPageProps = {
   initiatives?: Initiative[]
   users: User[]
   teams: Team[]
+  invitations?: Invitation[]
   labels?: IssueLabel[]
   labelGroups?: LabelGroup[]
   loading?: boolean
@@ -116,6 +119,7 @@ export function ProjectsPage({
   initiatives = [],
   users,
   teams,
+  invitations = [],
   labels = [],
   labelGroups = [],
   favoriteProjectIds = [],
@@ -167,6 +171,7 @@ export function ProjectsPage({
   initialTemplateId,
 }: ProjectsPageProps) {
   const sourceView = savedView ?? duplicateFrom
+  const peopleChoices = useMemo(() => projectPeopleChoices(users, invitations), [invitations, users])
   const scopedProjects = useMemo(() => scopeTeamId ? projects.filter(project => project.teamIds.includes(scopeTeamId)) : projects, [projects, scopeTeamId])
   const items = useMemo(() => scopedProjects.map(project => toPageItem(project, projectHref?.(project), teams, projectUpdates[project.id]?.[0], initiatives, labels, labelGroups)), [initiatives, labelGroups, labels, projectHref, projectUpdates, scopedProjects, teams])
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -477,11 +482,11 @@ export function ProjectsPage({
     <NewProjectDialog
       initialTemplateId={initialTemplateId}
       defaultStatus={createStatus}
-      dependencies={projects.map(project => ({ id: project.id, label: project.name, color: project.color }))}
+      dependencies={projects.filter(project => !project.archivedAt).map(project => ({ id: project.id, label: project.name, icon: normalizeProjectIcon(project.icon), color: project.color, group: viewerId && (project.lead?.id === viewerId || (project.memberIds ?? []).includes(viewerId)) ? 'your' : 'other', previewData: { summary: project.summary || project.description, status: project.status.name, milestone: (project.milestones ?? [])[0]?.name, team: (project.teamIds ?? []).map(id => teams.find(team => team.id === id)?.name).filter(Boolean).join(', '), lead: project.lead?.displayName, member: (project.memberIds ?? []).map(id => users.find(user => user.id === id)?.displayName).find(Boolean), memberAvatarUrl: (project.memberIds ?? []).map(id => users.find(user => user.id === id)?.avatarUrl).find(Boolean), priority: project.priorityLabel, targetDate: project.targetDate, progress: Math.round(project.progress * 100), issueCount: project.issueCount } }))}
       initiatives={initiatives.map(initiative => ({ id: initiative.id, label: initiative.name, color: initiative.color }))}
       labels={projectLabels.map(label => ({ id: label.id, label: label.name, color: label.color, groupId: label.groupId, groupLabel: label.groupId ? projectLabelGroupNames.get(label.groupId) : undefined }))}
-      leads={users.map(user => ({ id: user.id, label: user.displayName }))}
-      members={users.map(user => ({ id: user.id, label: user.displayName }))}
+      leads={peopleChoices}
+      members={peopleChoices}
       statuses={availableProjectStatuses.map(status=>({id:status.name,label:status.name,color:status.color,icon:<ProjectStatusGlyph color={status.color} name={status.name} type={status.type}/> }))}
       templates={projectTemplates.map(template => ({
         id: template.id,
@@ -496,6 +501,7 @@ export function ProjectsPage({
         teamIds: template.teamIds,
         initiativeIds: template.initiativeIds,
         labelIds: template.labelIds.filter(id => projectLabels.some(label => label.id === id)),
+        dependencyIds: template.dependencyIds,
       }))}
       onClose={() => setCreateOpen(false)}
       onCreate={create}
@@ -568,6 +574,7 @@ function draftMutation(projects: Project[], draft: NewProjectDraft, projectStatu
     milestones: draft.milestones,
     labelIds: draft.labelIds,
     dependencyIds: draft.dependencyIds,
+    dependencyRelations: draft.dependencyRelations,
     initiatives: draft.initiativeIds,
     name: draft.name,
     priority: Math.max(0, ['No priority', 'Urgent', 'High', 'Medium', 'Low'].indexOf(draft.priority)),

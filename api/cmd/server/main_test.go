@@ -1189,6 +1189,137 @@ func TestProjectLifecycle(t *testing.T) {
 	}
 }
 
+func TestProjectDirectionalDependencies(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+
+	blocker := requestJSON[domain.Project](t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"name": "Dependency blocker", "teamIds": []string{"team_test"},
+	}, http.StatusCreated)
+	blocked := requestJSON[domain.Project](t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"name": "Dependency blocked", "teamIds": []string{"team_test"},
+	}, http.StatusCreated)
+	created := requestJSON[domain.Project](t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"name": "Directional dependency project", "teamIds": []string{"team_test"},
+		"dependencyRelations": []map[string]any{
+			{"projectId": blocker.ID, "type": "blocked_by"},
+			{"projectId": blocked.ID, "type": "blocks"},
+			{"projectId": blocker.ID, "type": "blocked_by"},
+		},
+	}, http.StatusCreated)
+	if !slices.Equal(created.DependencyIDs, []string{blocker.ID}) {
+		t.Fatalf("blocked-by compatibility ids = %#v", created.DependencyIDs)
+	}
+
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	relations := make([]domain.ProjectRelation, 0, 2)
+	for _, relation := range bootstrap.ProjectRelations {
+		if relation.ProjectID == created.ID {
+			relations = append(relations, relation)
+		}
+	}
+	if len(relations) != 2 || !slices.ContainsFunc(relations, func(relation domain.ProjectRelation) bool {
+		return relation.RelatedProjectID == blocker.ID && relation.Type == "blocked_by"
+	}) || !slices.ContainsFunc(relations, func(relation domain.ProjectRelation) bool {
+		return relation.RelatedProjectID == blocked.ID && relation.Type == "blocks"
+	}) {
+		t.Fatalf("directional create relations = %#v", relations)
+	}
+
+	updated := requestJSON[domain.Project](t, handler, http.MethodPatch, "/api/projects/"+created.ID, map[string]any{
+		"dependencyRelations": []map[string]any{{"projectId": blocker.ID, "type": "blocks"}},
+	}, http.StatusOK)
+	if len(updated.DependencyIDs) != 0 {
+		t.Fatalf("directional replacement retained blocked-by ids: %#v", updated.DependencyIDs)
+	}
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	relations = relations[:0]
+	for _, relation := range bootstrap.ProjectRelations {
+		if relation.ProjectID == created.ID {
+			relations = append(relations, relation)
+		}
+	}
+	if len(relations) != 1 || relations[0].RelatedProjectID != blocker.ID || relations[0].Type != "blocks" {
+		t.Fatalf("directional replacement relations = %#v", relations)
+	}
+
+	updated = requestJSON[domain.Project](t, handler, http.MethodPatch, "/api/projects/"+created.ID, map[string]any{
+		"dependencyIds": []string{blocked.ID},
+	}, http.StatusOK)
+	if !slices.Equal(updated.DependencyIDs, []string{blocked.ID}) {
+		t.Fatalf("legacy dependency ids = %#v", updated.DependencyIDs)
+	}
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	relations = relations[:0]
+	for _, relation := range bootstrap.ProjectRelations {
+		if relation.ProjectID == created.ID {
+			relations = append(relations, relation)
+		}
+	}
+	if len(relations) != 2 || !slices.ContainsFunc(relations, func(relation domain.ProjectRelation) bool {
+		return relation.RelatedProjectID == blocker.ID && relation.Type == "blocks"
+	}) || !slices.ContainsFunc(relations, func(relation domain.ProjectRelation) bool {
+		return relation.RelatedProjectID == blocked.ID && relation.Type == "blocked_by"
+	}) {
+		t.Fatalf("legacy update did not preserve directional blocks relation: %#v", relations)
+	}
+
+	updated = requestJSON[domain.Project](t, handler, http.MethodPatch, "/api/projects/"+created.ID, map[string]any{
+		"dependencyRelations": []map[string]any{},
+	}, http.StatusOK)
+	if len(updated.DependencyIDs) != 0 {
+		t.Fatalf("cleared directional dependencies retained ids: %#v", updated.DependencyIDs)
+	}
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if slices.ContainsFunc(bootstrap.ProjectRelations, func(relation domain.ProjectRelation) bool {
+		return relation.ProjectID == created.ID && (relation.Type == "blocked_by" || relation.Type == "blocks")
+	}) {
+		t.Fatalf("cleared directional dependencies retained relations: %#v", bootstrap.ProjectRelations)
+	}
+
+	requestJSON[any](t, handler, http.MethodPatch, "/api/projects/"+created.ID, map[string]any{
+		"dependencyRelations": []map[string]any{
+			{"projectId": blocker.ID, "type": "blocked_by"},
+			{"projectId": blocker.ID, "type": "blocks"},
+		},
+	}, http.StatusBadRequest)
+	requestJSON[any](t, handler, http.MethodPatch, "/api/projects/"+created.ID, map[string]any{
+		"dependencyRelations": []map[string]any{{"projectId": "missing-project", "type": "blocked_by"}},
+	}, http.StatusBadRequest)
+	requestJSON[any](t, handler, http.MethodPatch, "/api/projects/"+created.ID, map[string]any{
+		"dependencyRelations": []map[string]any{{"projectId": blocker.ID, "type": "related"}},
+	}, http.StatusBadRequest)
+}
+
+func TestProjectDeletionRemovesDependencies(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+
+	blocker := requestJSON[domain.Project](t, handler, http.MethodPost, "/api/projects", map[string]any{"name": "Delete blocker", "teamIds": []string{"team_test"}}, http.StatusCreated)
+	blocked := requestJSON[domain.Project](t, handler, http.MethodPost, "/api/projects", map[string]any{"name": "Delete blocked", "teamIds": []string{"team_test"}, "dependencyRelations": []map[string]any{{"projectId": blocker.ID, "type": "blocked_by"}}}, http.StatusCreated)
+	requestJSON[any](t, handler, http.MethodDelete, "/api/projects/"+blocker.ID, nil, http.StatusNoContent)
+
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if slices.ContainsFunc(bootstrap.ProjectRelations, func(relation domain.ProjectRelation) bool {
+		return relation.ProjectID == blocked.ID || relation.RelatedProjectID == blocker.ID
+	}) {
+		t.Fatalf("project deletion retained dependency relations: %#v", bootstrap.ProjectRelations)
+	}
+	for _, project := range bootstrap.Projects {
+		if project.ID == blocked.ID && slices.Contains(project.DependencyIDs, blocker.ID) {
+			t.Fatalf("project deletion retained legacy dependency id: %#v", project.DependencyIDs)
+		}
+	}
+}
+
 func TestCustomerLifecycle(t *testing.T) {
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {

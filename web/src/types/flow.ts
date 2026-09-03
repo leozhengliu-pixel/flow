@@ -645,6 +645,11 @@ export interface ProjectRelation {
   createdAt: string;
   updatedAt: string;
 }
+export type ProjectDependencyRelationType = "blocked_by" | "blocks";
+export interface ProjectDependencyRelationInput {
+  projectId: UUID;
+  type: ProjectDependencyRelationType;
+}
 export interface ProjectDescriptionRevision {
   id: UUID;
   projectId: UUID;

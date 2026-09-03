@@ -48,7 +48,10 @@ describe('API client contract', () => {
     fetchMock.mockResolvedValue(response({ id: 'result' }))
     await updateIssue('issue/1', { priority: 4 })
     await deleteIssue('issue/1')
-    await createProject({ name: 'Project' } as never)
+    await createProject({ name: 'Project', dependencyRelations: [
+      { projectId: 'project/blocker', type: 'blocked_by' },
+      { projectId: 'project/blocked', type: 'blocks' },
+    ] })
     await updateProject('project/1', { summary: 'Summary' })
     await deleteProject('project/1')
     await fetchInboxNotifications('?archived=true')
@@ -61,6 +64,12 @@ describe('API client contract', () => {
       '/api/notifications?archived=true', '/api/notifications/notification/1', '/api/realtime/presence',
       '/api/search?q=customer+request&limit=10&types=issue',
     ])
+    expect(JSON.parse(String((fetchMock.mock.calls[2][1] as RequestInit).body))).toMatchObject({
+      dependencyRelations: [
+        { projectId: 'project/blocker', type: 'blocked_by' },
+        { projectId: 'project/blocked', type: 'blocks' },
+      ],
+    })
   })
 
   it('returns undefined for 204 and exposes structured API errors', async () => {
