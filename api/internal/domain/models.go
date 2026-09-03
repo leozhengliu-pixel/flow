@@ -1689,32 +1689,38 @@ type IssueCreateInput struct {
 }
 
 type ProjectMutationInput struct {
-	Name                 *string  `json:"name,omitempty"`
-	Summary              *string  `json:"summary,omitempty"`
-	Description          *string  `json:"description,omitempty"`
-	Icon                 *string  `json:"icon,omitempty"`
-	Color                *string  `json:"color,omitempty"`
-	StatusID             *string  `json:"statusId,omitempty"`
-	Priority             *int     `json:"priority,omitempty"`
-	Position             *float64 `json:"position,omitempty"`
-	Health               *string  `json:"health,omitempty"`
-	LeadID               *string  `json:"leadId,omitempty"`
-	MemberIDs            []string `json:"memberIds,omitempty"`
-	LabelIDs             []string `json:"labelIds,omitempty"`
-	TeamIDs              []string `json:"teamIds,omitempty"`
-	DependencyIDs        []string `json:"dependencyIds,omitempty"`
-	Initiatives          []string `json:"initiatives,omitempty"`
-	Customers            []string `json:"customers,omitempty"`
-	Milestones           []string `json:"milestones,omitempty"`
-	StartDate            *string  `json:"startDate,omitempty"`
-	StartDateResolution  *string  `json:"startDateResolution,omitempty"`
-	TargetDate           *string  `json:"targetDate,omitempty"`
-	TargetDateResolution *string  `json:"targetDateResolution,omitempty"`
-	SlackChannelID       *string  `json:"slackChannelId,omitempty"`
-	SlackChannelName     *string  `json:"slackChannelName,omitempty"`
-	UpdateCadence        *string  `json:"updateCadence,omitempty"`
-	Archived             *bool    `json:"archived,omitempty"`
-	TemplateID           string   `json:"templateId,omitempty"`
+	Name                 *string                          `json:"name,omitempty"`
+	Summary              *string                          `json:"summary,omitempty"`
+	Description          *string                          `json:"description,omitempty"`
+	Icon                 *string                          `json:"icon,omitempty"`
+	Color                *string                          `json:"color,omitempty"`
+	StatusID             *string                          `json:"statusId,omitempty"`
+	Priority             *int                             `json:"priority,omitempty"`
+	Position             *float64                         `json:"position,omitempty"`
+	Health               *string                          `json:"health,omitempty"`
+	LeadID               *string                          `json:"leadId,omitempty"`
+	MemberIDs            []string                         `json:"memberIds,omitempty"`
+	LabelIDs             []string                         `json:"labelIds,omitempty"`
+	TeamIDs              []string                         `json:"teamIds,omitempty"`
+	DependencyIDs        []string                         `json:"dependencyIds,omitempty"`
+	DependencyRelations  []ProjectDependencyRelationInput `json:"dependencyRelations,omitempty"`
+	Initiatives          []string                         `json:"initiatives,omitempty"`
+	Customers            []string                         `json:"customers,omitempty"`
+	Milestones           []string                         `json:"milestones,omitempty"`
+	StartDate            *string                          `json:"startDate,omitempty"`
+	StartDateResolution  *string                          `json:"startDateResolution,omitempty"`
+	TargetDate           *string                          `json:"targetDate,omitempty"`
+	TargetDateResolution *string                          `json:"targetDateResolution,omitempty"`
+	SlackChannelID       *string                          `json:"slackChannelId,omitempty"`
+	SlackChannelName     *string                          `json:"slackChannelName,omitempty"`
+	UpdateCadence        *string                          `json:"updateCadence,omitempty"`
+	Archived             *bool                            `json:"archived,omitempty"`
+	TemplateID           string                           `json:"templateId,omitempty"`
+}
+
+type ProjectDependencyRelationInput struct {
+	ProjectID string `json:"projectId"`
+	Type      string `json:"type"`
 }
 
 type InitiativeMutationInput struct {

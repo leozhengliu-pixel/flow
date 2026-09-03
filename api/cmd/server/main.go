@@ -2424,7 +2424,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 			if len(input.MemberIDs) == 0 {
 				input.MemberIDs = slices.Clone(template.MemberIDs)
 			}
-			if len(input.DependencyIDs) == 0 {
+			if len(input.DependencyIDs) == 0 && input.DependencyRelations == nil {
 				input.DependencyIDs = slices.Clone(template.DependencyIDs)
 			}
 			if len(input.Initiatives) == 0 {
@@ -2517,6 +2517,12 @@ func (s *server) deleteProject(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		data.Projects = slices.Delete(data.Projects, index, index+1)
+		for projectIndex := range data.Projects {
+			data.Projects[projectIndex].DependencyIDs = slices.DeleteFunc(data.Projects[projectIndex].DependencyIDs, func(projectID string) bool { return projectID == id })
+		}
+		data.ProjectRelations = slices.DeleteFunc(data.ProjectRelations, func(relation domain.ProjectRelation) bool {
+			return relation.ProjectID == id || relation.RelatedProjectID == id
+		})
 		removeResourcePreferences(data, "project", removed.ID)
 		data.Drafts = slices.DeleteFunc(data.Drafts, func(item domain.Draft) bool { return draftBelongsToResource(item, "project", id) })
 		for i := range data.Issues {
@@ -5038,29 +5044,9 @@ func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input d
 		}
 		project.TeamIDs = slices.Clone(input.TeamIDs)
 	}
-	if input.DependencyIDs != nil {
-		for _, id := range input.DependencyIDs {
-			if id == project.ID || !slices.ContainsFunc(data.Projects, func(candidate domain.Project) bool { return candidate.ID == id }) {
-				return errInvalid
-			}
-		}
-		project.DependencyIDs = slices.Clone(input.DependencyIDs)
-		existing := map[string]domain.ProjectRelation{}
-		for _, relation := range data.ProjectRelations {
-			if relation.ProjectID == project.ID && relation.Type == "blocked_by" {
-				existing[relation.RelatedProjectID] = relation
-			}
-		}
-		data.ProjectRelations = slices.DeleteFunc(data.ProjectRelations, func(relation domain.ProjectRelation) bool {
-			return relation.ProjectID == project.ID && relation.Type == "blocked_by"
-		})
-		for _, dependencyID := range project.DependencyIDs {
-			if relation, ok := existing[dependencyID]; ok {
-				data.ProjectRelations = append(data.ProjectRelations, relation)
-			} else {
-				now := time.Now().UTC()
-				data.ProjectRelations = append(data.ProjectRelations, domain.ProjectRelation{ID: fmt.Sprintf("project_relation_%d", now.UnixNano()), ProjectID: project.ID, RelatedProjectID: dependencyID, Type: "blocked_by", CreatedAt: now, UpdatedAt: now})
-			}
+	if input.DependencyIDs != nil || input.DependencyRelations != nil {
+		if err := applyProjectDependencyUpdate(data, project, input.DependencyIDs, input.DependencyRelations); err != nil {
+			return err
 		}
 	}
 	if input.Initiatives != nil {
@@ -5099,6 +5085,71 @@ func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input d
 	if input.SlackChannelName != nil {
 		project.SlackChannelName = strings.TrimSpace(*input.SlackChannelName)
 	}
+	return nil
+}
+
+func applyProjectDependencyUpdate(data *domain.Bootstrap, project *domain.Project, dependencyIDs []string, relationInputs []domain.ProjectDependencyRelationInput) error {
+	authoritative := relationInputs != nil
+	requested := make([]domain.ProjectDependencyRelationInput, 0, len(dependencyIDs)+len(relationInputs))
+	for _, projectID := range dependencyIDs {
+		requested = append(requested, domain.ProjectDependencyRelationInput{ProjectID: projectID, Type: "blocked_by"})
+	}
+	if authoritative {
+		requested = append(requested, relationInputs...)
+	}
+
+	seen := make(map[string]string, len(requested))
+	normalized := requested[:0]
+	for _, relation := range requested {
+		relation.ProjectID = strings.TrimSpace(relation.ProjectID)
+		if relation.ProjectID == "" || relation.ProjectID == project.ID || !slices.Contains([]string{"blocked_by", "blocks"}, relation.Type) || !slices.ContainsFunc(data.Projects, func(candidate domain.Project) bool { return candidate.ID == relation.ProjectID }) {
+			return errInvalid
+		}
+		if existingType, ok := seen[relation.ProjectID]; ok {
+			if existingType != relation.Type {
+				return errInvalid
+			}
+			continue
+		}
+		seen[relation.ProjectID] = relation.Type
+		normalized = append(normalized, relation)
+	}
+
+	existing := make(map[string]domain.ProjectRelation)
+	for _, relation := range data.ProjectRelations {
+		if relation.ProjectID == project.ID && (relation.Type == "blocked_by" || relation.Type == "dependency" || authoritative && relation.Type == "blocks") {
+			relationType := relation.Type
+			if relationType == "dependency" {
+				relationType = "blocked_by"
+			}
+			existing[relationType+"\x00"+relation.RelatedProjectID] = relation
+		}
+	}
+	data.ProjectRelations = slices.DeleteFunc(data.ProjectRelations, func(relation domain.ProjectRelation) bool {
+		return relation.ProjectID == project.ID && (relation.Type == "blocked_by" || relation.Type == "dependency" || authoritative && relation.Type == "blocks")
+	})
+
+	blockedBy := make([]string, 0, len(normalized))
+	now := time.Now().UTC()
+	for index, relationInput := range normalized {
+		if relationInput.Type == "blocked_by" {
+			blockedBy = append(blockedBy, relationInput.ProjectID)
+		}
+		key := relationInput.Type + "\x00" + relationInput.ProjectID
+		if relation, ok := existing[key]; ok {
+			data.ProjectRelations = append(data.ProjectRelations, relation)
+			continue
+		}
+		data.ProjectRelations = append(data.ProjectRelations, domain.ProjectRelation{
+			ID:               fmt.Sprintf("project_relation_%d_%d", now.UnixNano(), index),
+			ProjectID:        project.ID,
+			RelatedProjectID: relationInput.ProjectID,
+			Type:             relationInput.Type,
+			CreatedAt:        now,
+			UpdatedAt:        now,
+		})
+	}
+	project.DependencyIDs = blockedBy
 	return nil
 }
 func applyInitiativeUpdate(data *domain.Bootstrap, initiative *domain.Initiative, input domain.InitiativeMutationInput) error {

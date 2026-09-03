@@ -15,8 +15,9 @@ import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { ProjectPropertyPicker, ProjectStatusGlyph, type ProjectPropertyOption } from '@/components/projects-page/project-property-picker'
 import { ProjectUpdatesPreview } from '@/components/projects-page/project-updates-preview'
 import { NewProjectDialog, type NewProjectDraft } from '@/components/projects-page/new-project-dialog'
+import { projectPeopleChoices } from '@/components/projects-page/project-people'
 import type { ProjectCreateInput, ProjectMutationInput } from '@/components/projects-page/projects-page'
-import type { Draft, FlowDocument, Initiative, InitiativeMutationInput, InitiativeResource, InitiativeUpdate, IssueLabel, LabelGroup, Project, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
+import type { Draft, FlowDocument, Initiative, InitiativeMutationInput, InitiativeResource, InitiativeUpdate, Invitation, IssueLabel, LabelGroup, Project, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
 import type { InitiativeRouteTab } from '@/lib/app-routes'
 import { InitiativeLabelsPicker, InitiativeProperties, ProjectAssociationPicker } from './initiative-shared'
 import { DisplayIcon as SlidersHorizontal, FilterIcon as Filter } from '@/components/ui/view-action-icons'
@@ -35,6 +36,7 @@ type Props = {
   projects: Project[]
   projectUpdates: Record<string, ProjectUpdate[]>
   users: User[]
+  invitations?: Invitation[]
   teams: Team[]
   projectStatuses: ProjectStatus[]
   projectTemplates: ProjectTemplate[]
@@ -81,6 +83,7 @@ type InitiativeViewDraft = Pick<InitiativeStoredView, 'name'|'description'|'icon
 
 export function InitiativeDetailPage(props: Props) {
   const { initiative, tab, onTabChange, onUpdate } = props
+  const peopleChoices = useMemo(() => projectPeopleChoices(props.users, props.invitations), [props.invitations, props.users])
   const [detailsOpen, setDetailsOpen] = useStoredBoolean(`flow:initiative:${initiative.id}:details`, false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [projectCreateOpen, setProjectCreateOpen] = useState(false)
@@ -160,7 +163,36 @@ export function InitiativeDetailPage(props: Props) {
     <DeleteInitiativeDialog initiative={initiative} open={deleteOpen} onOpenChange={setDeleteOpen} onDelete={async () => { await props.onDelete(initiative.id); props.onBack() }}/>
     <StoredViewEditDialog open={Boolean(editingView)} view={editingView} onOpenChange={open => { if (!open) setEditingView(undefined) }} onSave={async view => { await updateStoredView(view); setEditingView(undefined); if (activeView?.id === view.id) props.onOpenView(view.slugId) }}/>
     <StoredViewDeleteDialog open={Boolean(deletingView)} view={deletingView} onOpenChange={open => { if (!open) setDeletingView(undefined) }} onDelete={() => deletingView ? deleteStoredView(deletingView) : Promise.resolve()}/>
-    <NewProjectDialog dependencies={props.projects.map(project => ({ id: project.id, label: project.name, color: project.color }))} labels={projectLabels.map(label => ({ id: label.id, label: label.name, color: label.color, groupId: label.groupId, groupLabel: label.groupId ? projectLabelGroupNames.get(label.groupId) : undefined }))} leads={props.users.map(user => ({ id: user.id, label: user.displayName || user.name }))} members={props.users.map(user => ({ id: user.id, label: user.displayName || user.name }))} statuses={props.projectStatuses.map(status=>({id:status.name,label:status.name,color:status.color,icon:<ProjectStatusGlyph color={status.color} name={status.name} type={status.type}/> }))} templates={props.projectTemplates.map(template => ({ id: template.id, label: template.name, name: template.name, description: template.description, summary: template.summary, icon: template.icon, color: template.color, status: props.projectStatuses.find(status => status.id === template.statusId)?.name, priority: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][template.priority] ?? 'No priority', teamIds: template.teamIds, labelIds: template.labelIds.filter(id => projectLabels.some(label => label.id === id)) }))} onClose={() => setProjectCreateOpen(false)} onCreate={async draft => { const project = await props.onCreateProject(projectDraftMutation(draft, props.projects, props.projectStatuses)); await update({ projectIds: [...new Set([...initiative.projectIds, project.id])] }); setProjectCreateOpen(false) }} open={projectCreateOpen} teamLabel={props.teams[0]?.key ?? 'Team'} teams={props.teams.map(team => ({ id: team.id, label: team.name, color: team.color }))}/>
+    <NewProjectDialog
+      dependencies={props.projects.filter(project => !project.archivedAt).map(project => ({
+        id: project.id,
+        label: project.name,
+        icon: normalizeProjectIcon(project.icon),
+        color: project.color,
+        group: props.viewer.id === project.lead?.id || (project.memberIds ?? []).includes(props.viewer.id) ? 'your' : 'other',
+        previewData: {
+          summary: project.summary || project.description,
+          status: project.status.name,
+          milestone: (project.milestones ?? [])[0]?.name,
+          team: (project.teamIds ?? []).map(id => props.teams.find(team => team.id === id)?.name).filter(Boolean).join(', '),
+          lead: project.lead?.displayName, member: (project.memberIds ?? []).map(id => props.users.find(user => user.id === id)?.displayName).find(Boolean), memberAvatarUrl: (project.memberIds ?? []).map(id => props.users.find(user => user.id === id)?.avatarUrl).find(Boolean),
+          priority: project.priorityLabel,
+          targetDate: project.targetDate,
+          progress: Math.round(project.progress * 100),
+          issueCount: project.issueCount,
+        },
+      }))}
+      labels={projectLabels.map(label => ({ id: label.id, label: label.name, color: label.color, groupId: label.groupId, groupLabel: label.groupId ? projectLabelGroupNames.get(label.groupId) : undefined }))}
+      leads={peopleChoices}
+      members={peopleChoices}
+      statuses={props.projectStatuses.map(status => ({ id: status.name, label: status.name, color: status.color, icon: <ProjectStatusGlyph color={status.color} name={status.name} type={status.type}/> }))}
+      templates={props.projectTemplates.map(template => ({ id: template.id, label: template.name, name: template.name, description: template.description, summary: template.summary, icon: template.icon, color: template.color, status: props.projectStatuses.find(status => status.id === template.statusId)?.name, priority: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][template.priority] ?? 'No priority', teamIds: template.teamIds, initiativeIds: template.initiativeIds, labelIds: template.labelIds.filter(id => projectLabels.some(label => label.id === id)), dependencyIds: template.dependencyIds }))}
+      onClose={() => setProjectCreateOpen(false)}
+      onCreate={async draft => { const project = await props.onCreateProject(projectDraftMutation(draft, props.projects, props.projectStatuses)); await update({ projectIds: [...new Set([...initiative.projectIds, project.id])] }); setProjectCreateOpen(false) }}
+      open={projectCreateOpen}
+      teamLabel={props.teams[0]?.name ?? 'Team'}
+      teams={props.teams.map(team => ({ id: team.id, label: team.name, color: team.color }))}
+    />
   </main>
 }
 
@@ -341,7 +373,7 @@ function EditableArea({ value, placeholder, label, onCommit }: { value: string; 
 function healthLabel(value: Project['health']) { return ({ onTrack: 'On track', atRisk: 'At risk', offTrack: 'Off track', noUpdate: 'No updates' } as const)[value] }
 function roadmapPosition(project: Project, origin: Date, monthWidth: number) { const start = project.startDate ? new Date(`${project.startDate}T00:00:00`) : new Date(); const target = project.targetDate ? new Date(`${project.targetDate}T00:00:00`) : new Date(start.getFullYear(), start.getMonth() + 2, start.getDate()); const days = (date: Date) => (+date - +origin) / 86400000; return { left: `${315 + Math.max(0, days(start) / 30.44 * monthWidth)}px`, width: `${Math.max(90, (days(target) - days(start)) / 30.44 * monthWidth)}px` } }
 function isoRoadmapDate(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
-function projectDraftMutation(draft: NewProjectDraft, projects: Project[], statuses: ProjectStatus[]): ProjectCreateInput { return { templateId: draft.templateId, color: draft.color, description: draft.description, icon: draft.icon, leadId: draft.leadId, memberIds: draft.memberIds, labelIds: draft.labelIds, dependencyIds: draft.dependencyIds, milestones: draft.milestones, name: draft.name, priority: Math.max(0, ['No priority', 'Urgent', 'High', 'Medium', 'Low'].indexOf(draft.priority)), startDate: draft.startDate, startDateResolution: draft.startDateResolution, statusId: statuses.find(status => status.name === draft.status)?.id ?? projects.find(project => project.status.name === draft.status)?.status.id, summary: draft.summary, targetDate: draft.targetDate, targetDateResolution: draft.targetDateResolution, teamIds: draft.teamIds } }
+function projectDraftMutation(draft: NewProjectDraft, projects: Project[], statuses: ProjectStatus[]): ProjectCreateInput { return { templateId: draft.templateId, color: draft.color, description: draft.description, icon: draft.icon, leadId: draft.leadId, memberIds: draft.memberIds, labelIds: draft.labelIds, dependencyIds: draft.dependencyIds, dependencyRelations: draft.dependencyRelations, milestones: draft.milestones, name: draft.name, priority: Math.max(0, ['No priority', 'Urgent', 'High', 'Medium', 'Low'].indexOf(draft.priority)), startDate: draft.startDate, startDateResolution: draft.startDateResolution, statusId: statuses.find(status => status.name === draft.status)?.id ?? projects.find(project => project.status.name === draft.status)?.status.id, summary: draft.summary, targetDate: draft.targetDate, targetDateResolution: draft.targetDateResolution, teamIds: draft.teamIds } }
 function useStoredBoolean(key: string, fallback: boolean) { const [value, setValue] = useState(() => localStorage.getItem(key) === null ? fallback : localStorage.getItem(key) === 'true'); const update = (next: boolean | ((current: boolean) => boolean)) => setValue(current => { const resolved = typeof next === 'function' ? next(current) : next; localStorage.setItem(key, String(resolved)); return resolved }); return [value, update] as const }
 function slugifyView(value: string) { return value.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 64) || 'view' }
 function savedViewMatchesInitiative(view: SavedView, initiativeId: string) { return view.resource === 'initiativeProjects' && view.filters.some(item => { if (!item || typeof item !== 'object') return false; const filter = item as { field?: unknown; values?: unknown }; return filter.field === 'initiative' && Array.isArray(filter.values) && filter.values.includes(initiativeId) }) }

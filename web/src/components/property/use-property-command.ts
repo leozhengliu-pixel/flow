@@ -8,9 +8,10 @@ export interface PropertyCommandOption {
   disabled?: boolean
 }
 
-export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus = true, closeOnSelect = true, onOpenChange, onSelect, open, options, resetKey, selectedIds = [] }: {
+export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus = true, closeOnSelect = true, keepSelectedVisible = false, onOpenChange, onSelect, open, options, resetKey, selectedIds = [] }: {
   autoFocus?: boolean
   closeOnSelect?: boolean
+  keepSelectedVisible?: boolean
   onOpenChange: (open: boolean) => void
   onSelect: (option: T) => void | Promise<void>
   open: boolean
@@ -26,7 +27,7 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
   const selectedIdsRef = useRef(selectedIds)
   selectedIdsRef.current = selectedIds
   const normalizedQuery = query.trim().toLocaleLowerCase()
-  const filteredOptions = useMemo(() => normalizedQuery ? options.filter(option => `${option.label} ${option.keywords ?? ''}`.toLocaleLowerCase().includes(normalizedQuery)) : options, [normalizedQuery, options])
+  const filteredOptions = useMemo(() => normalizedQuery ? options.filter(option => (keepSelectedVisible && selectedIds.includes(option.id)) || matchesQuery(`${option.label} ${option.keywords ?? ''}`, normalizedQuery)) : options, [keepSelectedVisible, normalizedQuery, options, selectedIds])
 
   useEffect(() => {
     if (!open) return
@@ -78,7 +79,7 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
   const onQueryChange = (value: string) => {
     setQuery(value)
     const normalized = value.trim().toLocaleLowerCase()
-    setActiveId(options.find(option => !option.disabled && `${option.label} ${option.keywords ?? ''}`.toLocaleLowerCase().includes(normalized))?.id)
+    setActiveId(options.find(option => !option.disabled && matchesQuery(`${option.label} ${option.keywords ?? ''}`, normalized))?.id)
   }
 
   return {
@@ -92,4 +93,17 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
     query,
     setActiveId,
   }
+}
+
+function matchesQuery(value: string, query: string) {
+  if (!query) return true
+  const normalized = value.toLocaleLowerCase()
+  if (normalized.includes(query)) return true
+  let offset = 0
+  for (const character of query) {
+    offset = normalized.indexOf(character, offset)
+    if (offset < 0) return false
+    offset += 1
+  }
+  return true
 }

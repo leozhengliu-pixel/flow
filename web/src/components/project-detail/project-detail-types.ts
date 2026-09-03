@@ -12,6 +12,7 @@ import type {
   LabelGroup,
   Notification,
   Project,
+  ProjectRelation,
   ProjectMilestone,
   ProjectResource,
   ProjectStatus,
@@ -28,6 +29,7 @@ export type ProjectDetailTab = "overview" | "activity" | "issues" | "new";
 
 export type ProjectDetailProps = {
   project: Project;
+  projectRelations?: ProjectRelation[];
   projects: Project[];
   initiatives: Initiative[];
   documents: FlowDocument[];
