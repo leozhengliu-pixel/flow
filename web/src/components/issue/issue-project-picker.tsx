@@ -4,7 +4,9 @@ import { ProjectIcon, NoProjectIcon } from '@/components/issue/issue-icons'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { PropertyShortcutTooltip } from '@/components/property/issue-property-hover'
 import { NewProjectDialog, type NewProjectDraft } from '@/components/projects-page/new-project-dialog'
+import { projectPeopleChoices } from '@/components/projects-page/project-people'
 import { ProjectStatusGlyph } from '@/components/projects-page/project-property-picker'
+import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { labelsForResource } from '@/lib/labels'
 import { createProject as createProjectRequest, createProjectMilestone as createProjectMilestoneRequest } from '@/lib/api'
 import { useI18n } from '@/i18n/i18n'
@@ -22,6 +24,7 @@ export function IssueProjectPicker({ data, issue, grouped = false, onUpdate, onC
   onCreateMilestone?: (projectId: string, input: { name: string }) => Promise<ProjectMilestone>
 }) {
   const { t, formatDate } = useI18n()
+  const peopleChoices = projectPeopleChoices(data.users, data.invitations)
   const rootRef = useRef<HTMLDivElement>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createdProjects, setCreatedProjects] = useState<Project[]>([])
@@ -93,13 +96,13 @@ export function IssueProjectPicker({ data, issue, grouped = false, onUpdate, onC
   return <>
     {grouped ? <div ref={rootRef}><section className="property-group issue-project-group"><h4>{t('Project')}</h4>{body}</section></div> : <div ref={rootRef} className="issue-project-property">{body}</div>}
     <NewProjectDialog
-      dependencies={data.projects.map(item => ({ id: item.id, label: item.name, color: item.color }))}
+      dependencies={data.projects.filter(item => !item.archivedAt && item.id !== issue.project?.id).map(item => ({ id: item.id, label: item.name, icon: normalizeProjectIcon(item.icon), color: item.color, group: data.viewer?.id && (item.lead?.id === data.viewer.id || (item.memberIds ?? []).includes(data.viewer.id)) ? 'your' : 'other', previewData: { summary: item.summary || item.description, status: item.status.name, milestone: (item.milestones ?? [])[0]?.name, team: (item.teamIds ?? []).map(id => data.teams.find(team => team.id === id)?.name).filter(Boolean).join(', '), lead: item.lead?.displayName, member: (item.memberIds ?? []).map(id => data.users.find(user => user.id === id)?.displayName).find(Boolean), memberAvatarUrl: (item.memberIds ?? []).map(id => data.users.find(user => user.id === id)?.avatarUrl).find(Boolean), priority: item.priorityLabel, targetDate: item.targetDate, progress: Math.round(item.progress * 100), issueCount: item.issueCount } }))}
       initiatives={data.initiatives.map(item => ({ id: item.id, label: item.name, color: item.color }))}
       labels={projectLabels.map(label => ({ id: label.id, label: label.name, color: label.color, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined }))}
-      leads={data.users.map(user => ({ id: user.id, label: user.displayName }))}
-      members={data.users.map(user => ({ id: user.id, label: user.displayName }))}
+      leads={peopleChoices}
+      members={peopleChoices}
       statuses={data.projectStatuses.map(status => ({ id: status.name, label: status.name, color: status.color, icon: <ProjectStatusGlyph color={status.color} name={status.name} type={status.type}/> }))}
-      templates={data.projectTemplates.map(template => ({ id: template.id, label: template.name, name: template.name, description: template.description, summary: template.summary, icon: template.icon, color: template.color, status: data.projectStatuses.find(status => status.id === template.statusId)?.name, priority: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][template.priority] ?? 'No priority', teamIds: template.teamIds, initiativeIds: template.initiativeIds, labelIds: template.labelIds.filter(id => projectLabels.some(label => label.id === id)) }))}
+      templates={data.projectTemplates.map(template => ({ id: template.id, label: template.name, name: template.name, description: template.description, summary: template.summary, icon: template.icon, color: template.color, status: data.projectStatuses.find(status => status.id === template.statusId)?.name, priority: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][template.priority] ?? 'No priority', teamIds: template.teamIds, initiativeIds: template.initiativeIds, labelIds: template.labelIds.filter(id => projectLabels.some(label => label.id === id)), dependencyIds: template.dependencyIds }))}
       onClose={() => setCreateOpen(false)}
       onCreate={async draft => { const created = onCreateProject ? await onCreateProject(draft) : await createDirectProject(draft, data); setCreatedProjects(current => [created, ...current.filter(item => item.id !== created.id)]); await onUpdate({ projectId: created.id, projectMilestoneId: '' }); setCreateOpen(false) }}
       open={createOpen}
@@ -136,6 +139,7 @@ async function createDirectProject(draft: NewProjectDraft, data: BootstrapData) 
     milestones: draft.milestones,
     labelIds: draft.labelIds,
     dependencyIds: draft.dependencyIds,
+    dependencyRelations: draft.dependencyRelations,
     initiatives: draft.initiativeIds,
     name: draft.name,
     priority: Math.max(0, ['No priority', 'Urgent', 'High', 'Medium', 'Low'].indexOf(draft.priority)),

@@ -81,6 +81,7 @@ export function translateToChinese(source: string): string {
   const patterns: Array<[RegExp, (...groups: string[]) => string]> = [
     [/^(\d+) issues?$/, count => `${count} 个事项`],
     [/^(\d+) projects?$/, count => `${count} 个项目`],
+    [/^(\d+) dependencies?$/, count => `${count} 个依赖项`],
     [/^(\d+) initiatives?$/, count => `${count} 个目标`],
     [/^(\d+) labeled (issues?|projects?|initiatives?)$/, (count, resource) => `${count} 个带此标签的${countNoun(resource)}`],
     [/^(\d+) selected (issues?|projects?|labels?|members?|teams?|files?)$/, (count, resource) => `已选择 ${count} ${countResource(resource)}`],

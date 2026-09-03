@@ -60,6 +60,7 @@ import {
   fetchAuthSession,
   fetchBootstrap,
   logoutAccount,
+  listProjectRelations,
   recordRecentResource,
   removeFavorite,
   removeSubscription,
@@ -119,6 +120,7 @@ import type {
   IssueRelationType,
   IssueUpdateInput,
   Project,
+  ProjectRelation,
   ProjectMilestone,
   ProjectUpdate,
   SavedView,
@@ -215,6 +217,12 @@ import {
   type AppRoute,
 } from "@/lib/app-routes";
 import type { CreateIssueInput } from "@/components/create-issue/create-issue-dialog";
+
+function mergeProjectRelations(data: BootstrapData, projectId: string, relations: ProjectRelation[]) {
+  const unrelated = (data.projectRelations ?? []).filter(relation => relation.projectId !== projectId && relation.relatedProjectId !== projectId)
+  return [...unrelated, ...relations]
+}
+
 const WorkspaceOnboarding = lazyPage(
   () => import("@/components/workspace/workspace-onboarding"),
   "WorkspaceOnboarding",
@@ -1575,9 +1583,23 @@ function App() {
       () => createProject(input),
       "Could not create project",
     );
+    let relations: ProjectRelation[] | undefined;
+    if (input.templateId !== undefined || input.dependencyIds !== undefined || input.dependencyRelations !== undefined) {
+      try {
+        relations = (await listProjectRelations(project.id)).nodes;
+      } catch {
+        relations = undefined;
+      }
+    }
     setData((current) =>
       current
-        ? { ...current, projects: [project, ...current.projects] }
+        ? {
+            ...current,
+            projects: [project, ...current.projects],
+            projectRelations: relations
+              ? mergeProjectRelations(current, project.id, relations)
+              : current.projectRelations,
+          }
         : current,
     );
     return project;
@@ -1587,6 +1609,14 @@ function App() {
       () => updateProject(id, input),
       "Could not update project",
     );
+    let relations: ProjectRelation[] | undefined;
+    if (input.dependencyIds !== undefined || input.dependencyRelations !== undefined) {
+      try {
+        relations = (await listProjectRelations(id)).nodes;
+      } catch {
+        relations = undefined;
+      }
+    }
     setData((current) =>
       current
         ? {
@@ -1594,6 +1624,9 @@ function App() {
             projects: current.projects.map((item) =>
               item.id === id ? project : item,
             ),
+            projectRelations: relations
+              ? mergeProjectRelations(current, id, relations)
+              : current.projectRelations,
           }
         : current,
     );
@@ -1605,7 +1638,15 @@ function App() {
       current
         ? {
             ...current,
-            projects: current.projects.filter((project) => project.id !== id),
+            projects: current.projects
+              .filter((project) => project.id !== id)
+              .map((project) => ({
+                ...project,
+                dependencyIds: project.dependencyIds?.filter((dependencyId) => dependencyId !== id),
+              })),
+            projectRelations: (current.projectRelations ?? []).filter(
+              (relation) => relation.projectId !== id && relation.relatedProjectId !== id,
+            ),
             projectUpdates: Object.fromEntries(
               Object.entries(current.projectUpdates ?? {}).filter(
                 ([projectId]) => projectId !== id,
@@ -2513,6 +2554,8 @@ function App() {
       memberIds: draft.memberIds,
       labelIds: draft.labelIds,
       dependencyIds: draft.dependencyIds,
+      dependencyRelations: draft.dependencyRelations,
+      milestones: draft.milestones,
       initiatives: draft.initiativeIds,
       name: draft.name,
       priority: Math.max(
@@ -2533,11 +2576,7 @@ function App() {
       targetDateResolution: draft.targetDateResolution,
       teamIds: draft.teamIds,
     });
-    const milestones: ProjectMilestone[] = [];
-    for (const name of draft.milestones) {
-      milestones.push(await addProjectMilestone(project.id, { name }));
-    }
-    return { ...project, milestones };
+    return project;
   };
   const changeProjectMilestone = async (
     projectId: string,
@@ -4756,6 +4795,7 @@ function App() {
               projectTemplates={data.projectTemplates}
               projectUpdates={data.projectUpdates}
               teams={data.teams}
+              invitations={data.invitations}
               users={data.users}
               labels={data.labels}
               labelGroups={data.labelGroups}
@@ -5320,6 +5360,7 @@ function App() {
                 initiatives={data.initiatives}
                 users={data.users}
                 teams={data.teams}
+                invitations={data.invitations}
                 labels={data.labels}
                 labelGroups={data.labelGroups}
                 workspaceKey={data.workspace.urlKey}
@@ -5438,6 +5479,7 @@ function App() {
                 initiatives={data.initiatives}
                 users={data.users}
                 teams={data.teams}
+                invitations={data.invitations}
                 labels={data.labels}
                 labelGroups={data.labelGroups}
                 workspaceKey={data.workspace.urlKey}
@@ -5577,6 +5619,7 @@ function App() {
               key={`${selectedProject.id}:${selectedProjectFacetView?.id ?? "base"}`}
               project={selectedProject}
               projects={data.projects}
+              projectRelations={data.projectRelations}
               initiatives={data.initiatives}
               documents={data.documents}
               integrationConnections={data.integrationConnections}

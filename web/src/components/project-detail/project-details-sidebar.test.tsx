@@ -1,8 +1,13 @@
 import { addDays, format, startOfDay } from 'date-fns'
-import { describe, expect, it } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
 
 import { buildProgressData, shouldShowProgressGraph } from './project-progress-data'
+import { ProjectDetailsSidebar } from './project-details-sidebar'
 import type { Issue } from '@/types/flow'
+import { I18nProvider } from '@/i18n/i18n'
+import { makeBootstrap, project } from '@/test/fixtures'
 
 function issue(createdAt: Date, state: 'started' | 'completed', index = 0, estimate?: number): Issue {
   const timestamp = createdAt.toISOString()
@@ -91,5 +96,122 @@ describe('project progress data', () => {
     expect(shouldShowProgressGraph({ startDate: format(startOfDay(new Date()), 'yyyy-MM-dd'), scopeHistory: [{ date: new Date().toISOString(), value: 2 }], completedScopeHistory: [] })).toBe(false)
     expect(shouldShowProgressGraph({ startDate: format(startOfDay(new Date()), 'yyyy-MM-dd'), scopeHistory: [{ date: new Date().toISOString(), value: 2 }], completedScopeHistory: [{ date: new Date().toISOString(), value: 0 }] })).toBe(true)
     expect(shouldShowProgressGraph({ startDate: format(startOfDay(new Date()), 'yyyy-MM-dd'), scopeHistory: [{ date: new Date().toISOString(), value: 2 }], completedScopeHistory: [{ date: new Date().toISOString(), value: 0 }], status: { id: 'planned', name: 'Planned', color: '#888', type: 'planned' } })).toBe(false)
+  })
+})
+
+describe('project detail dependency relations', () => {
+  it('renders directional relations from projectRelations', () => {
+    const data = makeBootstrap()
+    const current = { ...project, id: 'project-current', slugId: 'current', name: 'Current project', dependencyIds: [], createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z' }
+    const blockedBy = { ...project, id: 'project-blocked-by', slugId: 'blocked-by', name: 'Blocked by project', dependencyIds: [], createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z' }
+    const blocking = { ...project, id: 'project-blocking', slugId: 'blocking', name: 'Blocking project', dependencyIds: [], createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z' }
+    render(<I18nProvider><ProjectDetailsSidebar
+      initiatives={[]}
+      integrationConnections={[]}
+      labelGroups={[]}
+      labels={[]}
+      onConvertMilestone={vi.fn()}
+      onCreateMilestone={vi.fn()}
+      onDeleteMilestone={vi.fn()}
+      onMoveMilestone={vi.fn()}
+      onOpenIssueFilter={vi.fn()}
+      onOpenMilestoneIssues={vi.fn()}
+      onReorderMilestones={vi.fn()}
+      onTabChange={vi.fn()}
+      onUpdate={vi.fn().mockResolvedValue(undefined)}
+      onUpdateProject={vi.fn().mockResolvedValue(current)}
+      onUpdateMilestone={vi.fn()}
+      project={current}
+      projectIssues={[]}
+      projectRelations={[
+        { id: 'relation-blocked-by', projectId: current.id, relatedProjectId: blockedBy.id, type: 'blocked_by', createdAt: '', updatedAt: '' },
+        { id: 'relation-blocking', projectId: blocking.id, relatedProjectId: current.id, type: 'blocked_by', createdAt: '', updatedAt: '' },
+      ]}
+      projects={[current, blockedBy, blocking]}
+      projectStatuses={[current.status]}
+      projectUpdates={[]}
+      teams={data.teams}
+      users={data.users}
+      viewer={data.viewer}
+    /></I18nProvider>)
+
+    expect(screen.getByRole('link', { name: 'Blocked by project' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Blocking project' })).toBeVisible()
+  })
+
+  it('uses directional payloads when removing a relation', async () => {
+    const user = userEvent.setup()
+    const data = makeBootstrap()
+    const current = { ...project, id: 'project-current', slugId: 'current', name: 'Current project', dependencyIds: [], createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z' }
+    const blockedBy = { ...project, id: 'project-blocked-by', slugId: 'blocked-by', name: 'Blocked by project', dependencyIds: [], createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z' }
+    const onUpdate = vi.fn().mockResolvedValue(undefined)
+    render(<I18nProvider><ProjectDetailsSidebar
+      initiatives={[]}
+      integrationConnections={[]}
+      labelGroups={[]}
+      labels={[]}
+      onConvertMilestone={vi.fn()}
+      onCreateMilestone={vi.fn()}
+      onDeleteMilestone={vi.fn()}
+      onMoveMilestone={vi.fn()}
+      onOpenIssueFilter={vi.fn()}
+      onOpenMilestoneIssues={vi.fn()}
+      onReorderMilestones={vi.fn()}
+      onTabChange={vi.fn()}
+      onUpdate={onUpdate}
+      onUpdateProject={vi.fn().mockResolvedValue(current)}
+      onUpdateMilestone={vi.fn()}
+      project={current}
+      projectIssues={[]}
+      projectRelations={[{ id: 'relation-blocked-by', projectId: current.id, relatedProjectId: blockedBy.id, type: 'blocked_by', createdAt: '', updatedAt: '' }]}
+      projects={[current, blockedBy]}
+      projectStatuses={[current.status]}
+      projectUpdates={[]}
+      teams={data.teams}
+      users={data.users}
+      viewer={data.viewer}
+    /></I18nProvider>)
+
+    await user.click(screen.getByRole('button', { name: 'Menu' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Remove dependency' }))
+    expect(onUpdate).toHaveBeenCalledWith({ dependencyRelations: [] })
+  })
+
+  it('updates the owning project when a relation is stored in the inverse direction', async () => {
+    const user = userEvent.setup()
+    const data = makeBootstrap()
+    const current = { ...project, id: 'project-current', slugId: 'current', name: 'Current project', dependencyIds: [], createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z' }
+    const owner = { ...project, id: 'project-owner', slugId: 'owner', name: 'Owner project', dependencyIds: [], createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z' }
+    const onUpdateProject = vi.fn().mockResolvedValue(current)
+    render(<I18nProvider><ProjectDetailsSidebar
+      initiatives={[]}
+      integrationConnections={[]}
+      labelGroups={[]}
+      labels={[]}
+      onConvertMilestone={vi.fn()}
+      onCreateMilestone={vi.fn()}
+      onDeleteMilestone={vi.fn()}
+      onMoveMilestone={vi.fn()}
+      onOpenIssueFilter={vi.fn()}
+      onOpenMilestoneIssues={vi.fn()}
+      onReorderMilestones={vi.fn()}
+      onTabChange={vi.fn()}
+      onUpdate={vi.fn().mockResolvedValue(undefined)}
+      onUpdateProject={onUpdateProject}
+      onUpdateMilestone={vi.fn()}
+      project={current}
+      projectIssues={[]}
+      projectRelations={[{ id: 'relation-inverse', projectId: owner.id, relatedProjectId: current.id, type: 'blocks', createdAt: '', updatedAt: '' }]}
+      projects={[current, owner]}
+      projectStatuses={[current.status]}
+      projectUpdates={[]}
+      teams={data.teams}
+      users={data.users}
+      viewer={data.viewer}
+    /></I18nProvider>)
+
+    await user.click(screen.getByRole('button', { name: 'Menu' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Remove dependency' }))
+    expect(onUpdateProject).toHaveBeenCalledWith(owner.id, { dependencyRelations: [] })
   })
 })
