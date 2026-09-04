@@ -336,7 +336,7 @@
 :root[data-theme="light"] .menu-separator{background:transparent}
 :root{--detail-sub-badge-border:var(--theme-border-strong)}
 :root{--issue-status-completed:lch(48% 59.31 288.43);--issue-status-terminal:#95a2b3}
-:root{--checkbox-selected-fill:var(--toggle-regular-on);--checkbox-selected-border:var(--toggle-compact-on)}
+:root{--checkbox-selected-fill:var(--toggle-regular-on);--checkbox-selected-border:var(--toggle-compact-on);--label-picker-checkbox-border:lch(55.92% 1.93 272)}
 :root{--checkbox-border:var(--theme-border-strong)}
 :root[data-theme="light"]{--checkbox-border:lch(84.44% 0 282)}
 input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:border-box;width:14px;height:14px;flex:0 0 14px;margin:0;appearance:none;border:1px solid var(--checkbox-border);border-radius:3px;outline:0;background:transparent;color:var(--on-accent);cursor:pointer}input[type=checkbox]:not([data-control=toggle]):checked{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}input[type=checkbox]:not([data-control=toggle]):checked:after{content:"";position:absolute;left:1px;top:1.5px;width:10px;height:9px;background:currentColor;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 8'%3E%3Cpath d='M3.46975 5.70757 1.88358 4.1225a.576.576 0 0 0-.81461.81424l1.99583 1.99443a.576.576 0 0 0 .8146 0l5.05163-5.04811a.576.576 0 0 0-.81457-.81427L3.46975 5.70757Z'/%3E%3C/svg%3E") center/10px 9px no-repeat}input[type=checkbox]:not([data-control=toggle]):focus-visible{box-shadow:0 0 0 2px var(--focus-ring)}input[type=checkbox]:not([data-control=toggle]):disabled{cursor:not-allowed;opacity:.45}
@@ -371,3 +371,7 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 /* Project creation assistant artwork tokens. */
 :root{--project-agent-grid-parent:lch(90.826% 1.425 272);--project-agent-grid-icon:lch(39.452% 1.425 272);--project-agent-grid-mask:radial-gradient(50% 100% at 50% 85%,#000 0%,#000000d9 12%,#00000080 30%,#00000026 55%,#0000 82%);--project-agent-featured-start:lch(100% 0 272);--project-agent-featured-end:lch(63.304% 1.425 272)}
 :root[data-theme="light"]{--project-agent-grid-parent:lch(20% 1 282);--project-agent-grid-icon:lch(66% 1 282);--project-agent-featured-start:lch(10% 0 282);--project-agent-featured-end:lch(40% 1 282)}
+
+/* Label-picker checks stay legible on both themes, matching the compact menu control. */
+.property-command-labels .property-command-checkbox{border:1px solid var(--label-picker-checkbox-border)}
+.property-command-labels [role=option][aria-selected=true] .property-command-checkbox{opacity:1}

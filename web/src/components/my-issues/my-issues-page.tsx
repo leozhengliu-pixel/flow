@@ -3,7 +3,7 @@ import type { BootstrapData, Issue, IssueUpdateInput } from '@/types/flow'
 import { MyIssuesBulkActionBar, type MyIssuesBulkAction, type MyIssuesBulkActionOption } from './my-issues-bulk-action-bar'
 import { MyIssuesDetailsPane, type MyIssuesSummaryItem, type MyIssuesSummaryTab } from './my-issues-details-pane'
 import { MyIssuesFilterBar, type MyIssuesAppliedFilter } from './my-issues-filter-bar'
-import { MyIssuesList, type MyIssuesContextAction, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData } from './my-issues-list'
+import { MyIssuesList, type MyIssuesContextAction, type MyIssuesCreateContext, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData } from './my-issues-list'
 import { defaultMyIssuesDisplayOptions } from './my-issues-display-defaults'
 import { MyIssuesSurface, type MyIssuesDisplayOptions, type MyIssuesFilterKey, type MyIssuesFilterOption, type MyIssuesView } from './my-issues-surface'
 import { useMyIssuesController } from './use-my-issues-controller'
@@ -20,7 +20,7 @@ export interface MyIssuesPageProps {
   error?: string
   workspaceSlug?: string
   onClearError?: () => void
-  onCreateIssue?: (stateId?: string) => void
+  onCreateIssue?: (context?: MyIssuesCreateContext) => void
   onDeleteIssues: (issueIds: string[]) => Promise<void>
   onNavigateView?: (view: MyIssuesView, href: string) => void
   onOpenIssue: (issue: Issue) => void
@@ -159,7 +159,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         propertyOptions={rowOptions}
         mutationErrors={mutationErrors}
         onClearError={onClearError}
-        onCreateIssue={group => onCreateIssue?.(stateIdForGroup(group, data))}
+        onCreateIssue={group => onCreateIssue?.(group.createContext ?? (stateIdForGroup(group, data) ? { stateId: stateIdForGroup(group, data) } : undefined))}
         onGroupCollapsedChange={(id, collapsed) => setCollapsedGroups(current => { const next = new Set(current); if (collapsed) next.add(id); else next.delete(id); return next })}
         onOpenIssue={row => { const issue = issuesById.get(row.id); if (issue) onOpenIssue(issue) }}
         onPropertyChange={changeProperty}
@@ -209,7 +209,7 @@ function groupIssues(issues: Issue[], workspaceSlug: string, data: BootstrapData
   const groups = new Map<string, MyIssuesGroupData>()
   for (const issue of issues) {
     const id = issue.state.type === 'started' ? 'other-active' : issue.state.id
-    const group = groups.get(id) ?? { id, label: issue.state.type === 'started' ? 'Other active' : issue.state.name, stateType: issue.state.type, state: issue.state, issues: [] }
+    const group = groups.get(id) ?? { id, label: issue.state.type === 'started' ? 'Other active' : issue.state.name, stateType: issue.state.type, state: issue.state, createContext: issue.state.type === 'started' ? undefined : { stateId: issue.state.id }, issues: [] }
     group.issues.push(toRow(issue, workspaceSlug, data, viewMatches.has(issue.id))); groups.set(id, group)
   }
   return [...groups.values()]

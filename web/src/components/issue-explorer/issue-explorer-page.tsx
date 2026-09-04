@@ -5,7 +5,7 @@ import { MyIssuesBulkActionBar } from '@/components/my-issues/my-issues-bulk-act
 import { toggleGroupedLabelIds } from '@/lib/labels'
 import { MyIssuesDetailsPane, type MyIssuesDetailsSummary, type MyIssuesSummaryItem, type MyIssuesSummaryTab } from '@/components/my-issues/my-issues-details-pane'
 import { MyIssuesFilterBar, type MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-bar'
-import { MyIssuesList, type MyIssuesContextAction, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData } from '@/components/my-issues/my-issues-list'
+import { MyIssuesList, type MyIssuesContextAction, type MyIssuesCreateContext, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import { defaultMyIssuesDisplayOptions } from '@/components/my-issues/my-issues-display-defaults'
 import type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption, MyIssuesGrouping, MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
 import { useMyIssuesSelection } from '@/components/my-issues/use-my-issues-state'
@@ -53,7 +53,7 @@ export interface IssueExplorerPageProps {
   onOpenIssue: (issue: Issue) => void
   renderIssuePreview?: (issue: Issue, onClose: () => void) => ReactNode
   onOpenSidebar?: () => void
-  onCreateIssue?: (stateId?: string) => void
+  onCreateIssue?: (context?: MyIssuesCreateContext) => void
   onUpdateIssue: (issueId: string, input: IssueUpdateInput) => Promise<Issue>
   onUpdateIssues: (issueIds: string[], input: IssueUpdateInput) => Promise<Issue[]>
   onDeleteIssues: (issueIds: string[]) => Promise<void>
@@ -284,7 +284,7 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
         nestedSubIssues={display.nestedSubIssues}
         propertyOptions={rowOptions}
         mutationErrors={mutationErrors}
-        onCreateIssue={group => { const stateId = stateIdForExplorerGroup(group, data) ?? data.states.find(state => state.name === group.label)?.id ?? (group.stateType === 'backlog' || group.label === 'Backlog' || group.label === '待规划' ? 'state_backlog' : undefined); onCreateIssue?.(stateId) }}
+        onCreateIssue={group => { const stateId = stateIdForExplorerGroup(group, data); const context = group.createContext ?? (stateId ? { stateId } : undefined); onCreateIssue?.(scope.kind === 'team' ? { ...context, teamId: scope.team.id } : context) }}
         onGroupCollapsedChange={(id, collapsed) => setCollapsedGroups(current => { const next = new Set(current); if (collapsed) next.add(id); else next.delete(id); return next })}
         onOpenIssue={openIssueFromExplorer}
         onPropertyChange={changeProperty}
@@ -297,7 +297,7 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
         properties={display.properties}
         propertyOptions={rowOptions}
         selectedIds={selection.selectedIds}
-        onCreateIssue={group => { const stateId = stateIdForExplorerGroup(group, data) ?? data.states.find(state => state.name === group.label)?.id ?? (group.stateType === 'backlog' || group.label === 'Backlog' || group.label === '待规划' ? 'state_backlog' : undefined); onCreateIssue?.(stateId) }}
+        onCreateIssue={group => { const stateId = stateIdForExplorerGroup(group, data); const context = group.createContext ?? (stateId ? { stateId } : undefined); onCreateIssue?.(scope.kind === 'team' ? { ...context, teamId: scope.team.id } : context) }}
         onHideGroup={groupId => changeDisplay({ ...display, hiddenGroupIds: [...new Set([...display.hiddenGroupIds, groupId])] })}
         onShowGroup={groupId => changeDisplay({ ...display, hiddenGroupIds: display.hiddenGroupIds.filter(id => id !== groupId) })}
         onMove={moveIssue}
