@@ -19,3 +19,275 @@
 .personal-agent-skills{overflow:hidden;border:.5px solid var(--personal-border);border-radius:10px;background:var(--personal-card);box-shadow:0 1px 1px #0000000a}.personal-agent-skills>a{min-height:52px;display:grid;grid-template-columns:24px minmax(0,1fr);align-items:center;gap:8px;padding:7px 12px;border-top:.5px solid var(--theme-border);color:var(--theme-text-primary);text-decoration:none}.personal-agent-skills>a:first-child{border-top:0}.personal-agent-skills>a:hover{background:var(--theme-surface-hover)}.personal-agent-skills>a>svg{width:16px;color:var(--theme-text-secondary)}.personal-agent-skills>a span{min-width:0}.personal-agent-skills>a strong,.personal-agent-skills>a small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.personal-agent-skills>a strong{font-size:13px;font-weight:500}.personal-agent-skills>a small{margin-top:3px;color:var(--theme-text-secondary);font-size:11px}.personal-agent-skills>.personal-agent-add-row{height:58px;min-height:58px;grid-template-columns:minmax(0,1fr) 20px;padding:0 16px;font-size:13px}.personal-agent-skills>.personal-agent-add-row>svg{width:14px;height:14px;justify-self:end;color:var(--theme-text-secondary)}
 .personal-select:hover,.personal-select[data-state=open]{background:var(--dropdown-hover)}
 .personal-select-menu .menu-item[data-highlighted]{background:var(--dropdown-hover)}
+
+/* Account security follows the compact, row-based settings surface. Keep the
+   selectors scoped so other personal settings pages retain their editor and
+   empty-state layouts. */
+.personal-security-page{--security-card:var(--theme-surface-1);--security-border:var(--theme-border);--security-hover:var(--theme-surface-hover);--security-copy:var(--theme-text-secondary);--security-text:var(--theme-text-primary);--security-outline:color-mix(in srgb,var(--theme-text-primary) 9%,transparent)}
+.personal-security-page .personal-page-header{margin-bottom:28px}
+.personal-security-section{margin-bottom:43px}
+.personal-security-section>h3{height:23px;margin:0 16px 16px;color:var(--security-text);font-size:15px;line-height:23px;font-weight:500}
+.personal-security-section>.settings-section-description{margin:-12px 16px 16px;color:var(--security-copy);font-size:13px;line-height:19px}
+.personal-security-section>.settings-card{overflow:hidden;border:0;border-radius:10px;background:var(--security-card);box-shadow:0 0 0 .5px var(--security-outline),var(--shadow)}
+.personal-security-section .settings-row{min-height:64px;padding:16px;gap:12px;border-bottom:0}
+.personal-security-section .settings-row:not(:last-child):after{left:14px;right:14px;background:var(--security-border)}
+.personal-security-page>.personal-security-section:first-of-type .personal-security-device-row{min-height:65px}
+.personal-security-section .settings-row>div:first-of-type{min-width:0;flex:1;display:flex;flex-direction:column;gap:1px}
+.personal-security-section .settings-row strong{color:var(--security-text);font-size:13px;font-weight:450;line-height:18px}
+.personal-security-section .settings-row span{color:var(--security-copy);font-size:12px;line-height:17px}
+.personal-security-section .settings-row-icon{width:28px;min-width:28px;height:28px;border-radius:7px;background:var(--security-hover);color:var(--security-copy)!important}
+.personal-security-section .settings-row-icon svg{width:14px;height:14px;stroke-width:1.65}
+.personal-security-section .settings-control{margin-left:auto;flex:0 0 auto}
+.personal-security-section .personal-section-action{position:absolute;right:8px;top:-5px;display:flex;align-items:center}
+.personal-security-section .personal-action{height:28px;padding:0 8px;border-radius:6px;font-size:12px}
+.personal-security-section .personal-action.danger{color:var(--semantic-danger)}
+.personal-security-section .personal-action.danger:hover:not(:disabled){background:color-mix(in srgb,var(--semantic-danger) 12%,transparent)}
+.personal-security-section .personal-action:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.personal-security-section-action{position:relative;z-index:1;height:64px;display:flex;align-items:center;justify-content:flex-end;margin-top:-64px;padding:0 16px;pointer-events:none}
+.personal-security-section-action .personal-action{height:28px;pointer-events:auto}
+.personal-security-section:has(.personal-security-section-action) .personal-security-empty-row:after{background:transparent}
+
+/* Optional explicit rows used by the security implementation. */
+.personal-security-device-row{min-height:64px;display:grid!important;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:12px;padding:16px!important}
+.personal-security-device-row>.personal-security-device-icon{width:28px;height:28px;display:grid;place-items:center;border-radius:7px;background:var(--security-hover);color:var(--security-copy)}
+.personal-security-device-row>.personal-security-device-icon svg{width:14px;height:14px;stroke-width:1.65}
+.personal-security-device-row .personal-browser-icon{fill:currentColor;stroke:none}
+.personal-security-current-dot{display:inline-block;width:6px;height:6px;margin:0 4px 1px 0;border-radius:50%;background:var(--semantic-success);vertical-align:middle}
+.personal-security-current-label{color:var(--semantic-success)!important}
+.personal-security-device-copy{min-width:0;display:flex;flex-direction:column;gap:1px}
+.personal-security-device-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.personal-security-device-copy span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.personal-security-device-row:hover{background:var(--security-hover)}
+.personal-security-device-row:focus-within{outline:0;background:var(--security-hover)}
+.personal-security-device-row .settings-control{opacity:0;pointer-events:none;transition:opacity .15s ease}
+.personal-security-device-row:hover .settings-control,.personal-security-device-row:focus-within .settings-control{opacity:1;pointer-events:auto}
+.personal-security-empty-row{min-height:64px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 16px}
+.personal-security-empty-row .personal-security-empty-copy{min-width:0;display:flex;flex-direction:column;gap:1px}
+.personal-security-empty-row .personal-security-empty-copy strong{font-size:13px;font-weight:450;line-height:18px}
+.personal-security-empty-row .personal-security-empty-copy span{color:var(--security-copy);font-size:12px;line-height:17px}
+.personal-security-empty-row:hover{background:var(--security-hover)}
+.personal-security-session-group>.personal-security-group-header{height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:.5px solid var(--security-border)}
+.personal-security-group-header h3{margin:0;color:var(--security-text);font-size:12px;font-weight:550;line-height:17px}
+.personal-security-group-header .personal-action{margin-left:auto}
+.personal-security-app-row{min-height:64px;display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:12px;padding:16px}
+.personal-security-app-row>.personal-security-app-icon{width:28px;height:28px;display:grid;place-items:center;border-radius:7px;background:var(--security-hover);color:var(--security-copy)}
+.personal-security-app-row>.personal-security-app-icon svg{width:14px;height:14px}
+.personal-security-app-row:hover{background:var(--security-hover)}
+.personal-security-api-key-row{min-height:64px;display:grid!important;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:12px;padding:16px!important}
+.personal-security-api-key-row>.settings-row-icon{width:28px;min-width:28px;height:28px;border-radius:7px;background:var(--security-hover);color:var(--security-copy)!important}
+.personal-security-api-key-row>.settings-row-icon svg{width:14px;height:14px}
+.personal-security-api-key-row .personal-security-key-actions{display:flex;align-items:center;gap:4px;margin-left:auto;opacity:0;pointer-events:none;transition:opacity .15s ease}
+.personal-security-api-key-row:hover .personal-security-key-actions,.personal-security-api-key-row:focus-within .personal-security-key-actions{opacity:1;pointer-events:auto}
+.personal-security-api-key-row:hover{background:var(--security-hover)}
+.personal-security-show-all{display:flex;justify-content:center;align-items:center;min-height:48px;border-top:.5px solid var(--security-border)}
+.personal-security-show-all .personal-action{height:28px;padding:0 10px;color:var(--security-copy)}
+.personal-security-device-row[role=button]{cursor:pointer;outline:0}
+.personal-security-device-row[role=button]:focus-visible{box-shadow:inset 0 0 0 2px var(--focus-ring)}
+.personal-session-dialog{width:min(420px,calc(100vw - 24px));padding:20px}
+.personal-session-dialog-header{display:flex;align-items:center;gap:12px;padding:0 0 16px;border-bottom:.5px solid var(--personal-border)}
+.personal-session-dialog-header h2{margin:0;color:var(--personal-text);font-size:15px;font-weight:500;line-height:20px}
+.personal-session-dialog-header p{margin:3px 0 0;color:var(--personal-muted);font-size:12px;line-height:17px}
+.personal-session-dialog-icon{width:32px;height:32px;display:grid;place-items:center;border-radius:8px;background:var(--personal-control);color:var(--personal-muted)}
+.personal-session-dialog-icon svg{width:16px;height:16px}
+.personal-session-details{display:grid;gap:0;margin:0;padding:8px 0}
+.personal-session-details>div{display:grid;grid-template-columns:1fr 1.5fr;gap:10px;padding:8px 0}
+.personal-session-details dt{color:var(--personal-muted);font-size:12px;line-height:17px}
+.personal-session-details dd{min-width:0;margin:0;overflow-wrap:anywhere;color:var(--personal-text);font-size:12px;line-height:17px}
+.personal-session-dialog>footer{display:flex;justify-content:flex-end;padding-top:8px;border-top:.5px solid var(--personal-border)}
+.personal-inline-input{box-sizing:border-box;width:100%;height:28px;padding:4px 8px;border:.5px solid var(--theme-border-strong);border-radius:6px;outline:0;background:var(--theme-surface-2);color:var(--theme-text-primary);font:13px/19px var(--font)}
+.personal-inline-input:focus{border-color:var(--focus-ring);box-shadow:0 0 0 2px color-mix(in srgb,var(--focus-ring) 25%,transparent)}
+
+:root[data-theme="light"] .personal-security-page{--security-card:var(--theme-surface-2);--security-border:var(--theme-border);--security-hover:var(--theme-surface-hover);--security-copy:var(--theme-text-secondary);--security-text:var(--theme-text-primary);--security-outline:var(--settings-card-outline-light)}
+:root[data-theme="light"] .personal-security-section>.settings-card{box-shadow:0 0 0 .5px var(--security-outline),var(--shadow)}
+:root[data-theme="light"] .personal-api-key-card{--api-card-outline:var(--settings-card-outline-light)}
+:root[data-theme="light"] .personal-security-section .personal-action.danger{color:var(--semantic-danger)}
+
+@media(max-width:760px){
+  /* Keep security actions on the same row at narrow widths. */
+  .personal-security-page .personal-page-header{margin-bottom:20px}
+  .personal-security-section{margin-bottom:28px}
+  .personal-security-section>h3,.personal-security-section>.settings-section-description{margin-left:0;margin-right:0}
+  .personal-security-section .settings-row{min-height:64px;align-items:center;flex-direction:row;padding:16px 12px}
+  .personal-security-section .settings-control{width:auto;justify-content:flex-end}
+  .personal-security-section .settings-row:not(:last-child):after{left:12px;right:12px}
+  .personal-security-section-action{height:64px;margin-top:-64px;padding:0 12px}
+  .personal-security-section .personal-section-action{position:absolute;right:0;top:-4px;margin:0}
+  .personal-security-device-row{min-height:64px;grid-template-columns:28px minmax(0,1fr) auto;padding:16px 12px!important}
+  .personal-security-empty-row{min-height:64px;padding:0 12px}
+  .personal-security-session-group>.personal-security-group-header{height:48px;padding:0 12px}
+  .personal-security-app-row{min-height:64px;padding:16px 12px}
+  .personal-security-api-key-row{min-height:64px;grid-template-columns:28px minmax(0,1fr) auto;padding:16px 12px!important}
+  .personal-security-device-row .settings-control{opacity:1;pointer-events:auto}
+}
+
+/* API-key creation is a dedicated settings route rather than a modal. */
+.personal-api-key-page{position:relative;width:100%;max-width:640px;margin:0 auto;padding:0 0 96px;color:var(--theme-text-primary);font-family:var(--font);letter-spacing:0}
+.personal-api-key-breadcrumb{position:relative;z-index:1;height:0;display:flex;align-items:center;margin:0;padding:0}
+.personal-api-key-breadcrumb button{position:absolute;top:-54px;left:-280.5px;height:28px;display:inline-flex;align-items:center;gap:7px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--theme-text-secondary);font-size:13px;font-weight:500}
+.personal-api-key-breadcrumb button:hover,.personal-api-key-breadcrumb button:focus-visible{background:var(--theme-surface-hover);color:var(--theme-text-primary);outline:0}
+.personal-api-key-breadcrumb button svg{width:12px;height:12px;transform:rotate(90deg)}
+.personal-api-key-header{margin:0 16px 28px}
+.personal-api-key-header h1{margin:0;color:var(--theme-text-primary);font-size:24px;line-height:32px;font-weight:500}
+.personal-api-key-header p{margin:4px 0 0;color:var(--theme-text-secondary);font-size:16px;line-height:22px}
+.personal-api-key-card{box-sizing:border-box;width:100%;min-height:433px;padding:16px;border:0;border-radius:10px;background:var(--theme-surface-2);box-shadow:0 0 0 .5px var(--api-card-outline,var(--settings-card-outline)),var(--shadow);color:var(--theme-text-primary)}
+.personal-api-key-card form{display:flex;min-height:0;flex-direction:column;gap:24px}
+.personal-api-key-field{height:60px;display:flex;flex-direction:column;gap:4px;color:var(--theme-text-secondary);font-size:13px;line-height:24px}
+.personal-api-key-field>input{box-sizing:border-box;width:100%;height:32px;padding:6px 12px;border:.5px solid var(--theme-border-strong);border-radius:8px;outline:0;background:var(--theme-surface-2);color:var(--theme-text-primary);font:13px/19px var(--font);transition:border .15s,box-shadow .15s}
+.personal-api-key-field>input::placeholder{color:var(--theme-text-tertiary)}
+.personal-api-key-field>input:hover{border-color:var(--theme-border-strong)}
+.personal-api-key-field>input:focus{border-color:var(--focus-ring);box-shadow:0 0 0 2px color-mix(in srgb,var(--focus-ring) 25%,transparent)}
+.personal-api-key-fieldset{min-width:0;margin:0;padding:0;border:0;color:var(--theme-text-primary)}
+.personal-api-key-fieldset legend{height:24px;margin:0 0 0;padding:0;color:var(--theme-text-primary);font-size:13px;line-height:24px;font-weight:500}
+.personal-api-key-fieldset>p{margin:0 0 12px;color:var(--theme-text-secondary);font-size:13px;line-height:19.5px}
+.personal-api-key-radio{box-sizing:border-box;height:27.5px;display:flex;align-items:center;gap:8px;margin:0 0 4px;padding:6px 0;color:var(--theme-text-primary);font-size:13px;line-height:19.5px}
+.personal-api-key-radio input{width:16px;height:16px;flex:0 0 16px;margin:0;accent-color:var(--accent-primary)}
+.personal-api-key-radio span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.personal-api-key-scope-list{display:grid;grid-template-columns:minmax(0,1fr);gap:0;margin:0 0 0;padding-left:24px}
+.personal-api-key-scope{height:27.95px;display:grid;grid-template-columns:16px 118px minmax(0,1fr);align-items:center;column-gap:8px;color:var(--theme-text-primary);font-size:13px;line-height:19.5px}
+.personal-api-key-scope>input{grid-column:1;width:14px;height:14px;align-self:center;margin:0;accent-color:var(--accent-primary)}
+.personal-api-key-scope>strong{grid-column:2;overflow:hidden;font-size:13px;font-weight:450;text-overflow:ellipsis;white-space:nowrap}
+.personal-api-key-scope>small{grid-column:3;overflow:hidden;color:var(--theme-text-secondary);font-size:13px;line-height:19.5px;text-overflow:ellipsis;white-space:nowrap}
+.personal-api-key-team-picker{position:relative;width:calc(100% - 24px);min-height:33px;height:auto;margin:0 0 10px 24px}
+.personal-api-key-team-control{min-height:33px;height:auto;display:flex;align-items:center;flex-wrap:wrap;gap:4px;padding:3px 4px;border:.5px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-2);transition:border .15s,box-shadow .15s}
+.personal-api-key-team-control:focus-within{border-color:var(--focus-ring);box-shadow:0 0 0 2px color-mix(in srgb,var(--focus-ring) 25%,transparent)}
+.personal-api-key-team-control input{min-width:110px;flex:1 1 110px;height:24px;padding:3px 6px;border:0;outline:0;background:transparent;color:var(--theme-text-primary);font:12px/18px var(--font)}
+.personal-api-key-team-control input::placeholder{color:var(--theme-text-tertiary)}
+.personal-api-key-team-control>button{width:24px;height:24px;display:grid;place-items:center;flex:0 0 24px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--theme-text-secondary)}
+.personal-api-key-team-control button:hover,.personal-api-key-team-control button:focus-visible{background:var(--theme-surface-hover);color:var(--theme-text-primary);outline:0}
+.personal-api-key-team-control button svg{width:11px;height:11px}
+.personal-api-key-team-chip{height:24px;display:inline-flex;align-items:center;gap:4px;max-width:220px;padding:0 3px 0 8px;border-radius:6px;background:var(--theme-surface-hover);color:var(--theme-text-primary);font-size:12px;line-height:18px}
+.personal-api-key-team-chip>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.personal-api-key-team-chip button{width:18px;height:18px;display:grid;place-items:center;padding:0;border:0;border-radius:4px;background:transparent;color:var(--theme-text-secondary);font-size:15px;line-height:15px}
+.personal-api-key-team-chip button:hover,.personal-api-key-team-chip button:focus-visible{background:var(--theme-control-hover);color:var(--theme-text-primary);outline:0}
+.personal-api-key-team-menu{position:absolute;z-index:1200;top:36px;left:0;min-width:150px;max-width:100%;max-height:220px;overflow:auto;padding:4px;border:.5px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-2);box-shadow:var(--shadow-control);color:var(--theme-text-primary)}
+.personal-api-key-team-menu [role=option]{width:100%;min-height:32px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--theme-text-primary);font-size:12px;text-align:left}
+.personal-api-key-team-menu [role=option]:hover,.personal-api-key-team-menu [role=option][aria-selected=true],.personal-api-key-team-menu [role=option][data-highlighted=true]{background:var(--theme-surface-hover)}
+.personal-api-key-team-menu [role=option] svg{width:14px;height:14px;color:var(--accent-primary)}
+.personal-api-key-team-empty{display:block;padding:8px;color:var(--theme-text-secondary);font-size:12px}
+.personal-api-key-error{margin:12px 0 0;color:var(--semantic-danger);font-size:12px;line-height:17px}
+.personal-api-key-footer{height:32px;display:flex;align-items:center;justify-content:flex-end;gap:12px;margin:0;padding:0}
+.personal-api-key-button{height:32px;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 12px;border:.5px solid var(--theme-border);border-radius:9999px;background:var(--theme-surface-2);color:var(--theme-text-primary);font:500 13px/19px var(--font);white-space:nowrap;transition:background .15s,border .15s,box-shadow .15s,opacity .15s}
+.personal-api-key-button:hover:not(:disabled){background:var(--theme-surface-hover);border-color:var(--theme-border-strong)}
+.personal-api-key-button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.personal-api-key-button.primary{border-color:transparent;background:var(--accent-primary);color:var(--on-accent);box-shadow:var(--shadow)}
+.personal-api-key-button.primary:hover:not(:disabled){background:var(--accent-primary-hover)}
+.personal-api-key-button:disabled{cursor:not-allowed;opacity:.45}
+.personal-api-key-button svg{width:14px;height:14px}
+.personal-api-key-secret{min-height:399px;display:flex;flex-direction:column}
+.personal-api-key-secret-warning{min-height:40px;display:flex;align-items:center;gap:8px;margin-bottom:18px;padding:0 10px;border:.5px solid color-mix(in srgb,var(--semantic-warning) 35%,var(--theme-border));border-radius:8px;background:color-mix(in srgb,var(--semantic-warning) 10%,transparent);color:var(--theme-text-primary);font-size:12px}
+.personal-api-key-secret-warning svg{width:16px;height:16px;color:var(--semantic-warning)}
+.personal-api-key-secret>label{display:flex;flex-direction:column;gap:6px;color:var(--theme-text-secondary);font-size:12px}
+.personal-api-key-secret-input{height:32px;display:flex;align-items:center;border:.5px solid var(--theme-border);border-radius:8px;background:var(--theme-surface-2)}
+.personal-api-key-secret-input input{min-width:0;flex:1;height:30px;padding:6px 10px;border:0;outline:0;background:transparent;color:var(--theme-text-primary);font:12px ui-monospace,SFMono-Regular,Menlo,monospace}
+.personal-api-key-secret-input button{width:30px;height:30px;display:grid;place-items:center;padding:0;border:0;border-left:.5px solid var(--theme-border);background:transparent;color:var(--theme-text-secondary)}
+.personal-api-key-secret-input button:hover,.personal-api-key-secret-input button:focus-visible{background:var(--theme-surface-hover);color:var(--theme-text-primary);outline:0}
+.personal-api-key-secret-input button svg{width:14px;height:14px}
+.personal-api-key-secret>footer{display:flex;justify-content:flex-end;margin-top:auto;padding-top:16px}
+.personal-api-key-dialog{width:min(440px,calc(100vw - 24px))}
+.personal-signing-key-dialog{width:min(520px,calc(100vw - 24px))}
+.personal-signing-key-dialog>label{display:flex;flex-direction:column;gap:6px;margin-top:14px;color:var(--personal-muted);font-size:13px}
+.personal-signing-key-dialog>label:first-of-type{margin-top:0}
+.personal-signing-key-dialog .personal-input{width:100%;height:32px}
+.personal-signing-key-input{box-sizing:border-box;width:100%;min-height:160px;resize:vertical;padding:10px 12px;border:.5px solid var(--personal-border);border-radius:8px;outline:0;background:var(--personal-control);color:var(--personal-text);font:12px/19px var(--font);font-family:var(--font-monospace,ui-monospace,SFMono-Regular,Menlo,monospace)}
+.personal-signing-key-input:focus{border-color:var(--focus-ring);box-shadow:0 0 0 2px color-mix(in srgb,var(--focus-ring) 25%,transparent)}
+.personal-signing-key-input::placeholder{color:var(--personal-faint)}
+.personal-signing-key-help{color:var(--personal-faint);font-size:11px;line-height:16px}
+.personal-api-key-detail-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.personal-api-key-detail-actions{display:flex;align-items:center;gap:4px;padding-top:2px}
+.personal-api-key-detail-card{min-height:0;padding:0;overflow:hidden}
+.personal-api-key-detail-row{box-sizing:border-box;min-height:64px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px;border-bottom:.5px solid var(--theme-border)}
+.personal-api-key-detail-row:last-child{border-bottom:0}
+.personal-api-key-detail-row>div:first-child{min-width:0;display:flex;flex-direction:column;gap:3px}
+.personal-api-key-detail-row strong{color:var(--theme-text-primary);font-size:13px;font-weight:500;line-height:18px}
+.personal-api-key-detail-row span{color:var(--theme-text-secondary);font-size:12px;line-height:17px}
+.personal-api-key-detail-column{display:flex;align-items:flex-start;flex-direction:column;gap:8px}
+.personal-api-key-detail-column>strong{width:100%}
+.personal-api-key-mono{font-family:var(--font-monospace,ui-monospace,SFMono-Regular,Menlo,monospace)!important}
+.personal-api-key-scope-summary{width:100%;display:grid;gap:7px}
+.personal-api-key-scope-summary>div{display:grid;grid-template-columns:120px minmax(0,1fr);gap:10px;align-items:baseline}
+.personal-api-key-scope-summary small{color:var(--theme-text-secondary);font-size:12px;line-height:17px}
+.personal-api-key-detail-teams{display:flex;flex-wrap:wrap;gap:6px}
+.personal-api-key-detail-teams span{padding:4px 8px;border-radius:6px;background:var(--theme-surface-hover);color:var(--theme-text-primary);font-size:12px}
+.personal-api-key-new-secret{min-width:0;display:flex;flex-direction:column;gap:5px;margin-top:3px}
+.personal-api-key-secret-inline{box-sizing:border-box;min-width:0;display:flex;align-items:center;gap:6px;padding:6px 8px;border:.5px solid color-mix(in srgb,var(--semantic-success) 38%,var(--theme-border));border-radius:7px;background:color-mix(in srgb,var(--semantic-success) 8%,transparent)}
+.personal-api-key-secret-inline>span{min-width:0;overflow-wrap:anywhere;color:var(--theme-text-primary);font-size:12px;line-height:17px}
+.personal-api-key-secret-inline button{width:24px;height:24px;display:grid;place-items:center;flex:0 0 24px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--theme-text-secondary)}
+.personal-api-key-secret-inline button:hover,.personal-api-key-secret-inline button:focus-visible{background:var(--theme-surface-hover);color:var(--theme-text-primary);outline:0}
+.personal-api-key-secret-inline button svg{width:14px;height:14px}
+.personal-api-key-new-secret small{color:var(--theme-text-secondary);font-size:11px;line-height:16px}
+@media(max-width:760px){.personal-api-key-detail-header{display:block}.personal-api-key-detail-actions{margin-top:12px}.personal-api-key-scope-summary>div{grid-template-columns:1fr}.personal-api-key-detail-row{padding:14px 12px}}
+
+/* Keep the nested API-key form aligned with the shared settings content. */
+.personal-api-key-page{margin-top:-2px}
+.personal-api-key-header{margin-bottom:32px}
+
+@media(max-width:760px){
+  .personal-api-key-page{max-width:none;margin:0 auto;padding-bottom:64px}
+  .personal-api-key-breadcrumb button{top:-38px;left:0;font-size:12px}
+  .personal-api-key-header{margin:0 0 20px}
+  .personal-api-key-header h1{font-size:22px;line-height:29px}
+  .personal-api-key-header p{font-size:13px;line-height:19px}
+  .personal-api-key-card{min-height:433px;padding:16px 12px}
+  .personal-api-key-scope-list{grid-template-columns:112px minmax(0,1fr);padding-left:8px}
+  .personal-api-key-scope>span{grid-template-columns:112px minmax(0,1fr);margin-left:24px}
+  .personal-api-key-scope small{white-space:normal}
+  .personal-api-key-footer{position:sticky;bottom:8px;margin-left:-4px;margin-right:-4px;padding:8px 4px;border:.5px solid var(--theme-border);border-radius:9999px;background:var(--theme-surface-1);box-shadow:var(--shadow)}
+}
+
+/* Keep API key metadata compact and interactive while portal content remains
+   above cards and dialogs. */
+.personal-security-api-key-metadata{min-width:0;display:flex;align-items:center;flex-wrap:wrap;column-gap:4px;row-gap:1px;color:var(--security-copy);font-size:12px;line-height:17px}
+.personal-security-metadata-separator{color:var(--theme-text-tertiary);user-select:none}
+.personal-security-metadata-trigger{min-width:0;display:inline-flex;align-items:center;gap:3px;height:20px;margin:-2px 0;padding:1px 3px;border:0;border-radius:4px;background:transparent;color:var(--security-copy);font:inherit;line-height:17px;text-align:left;white-space:nowrap}
+.personal-security-metadata-trigger:hover,.personal-security-metadata-trigger[data-state="open"],.personal-security-metadata-trigger:focus-visible{background:var(--security-hover);color:var(--security-text);outline:0}
+.personal-security-metadata-trigger svg{width:10px;height:10px;flex:0 0 10px;stroke-width:1.8}
+.personal-security-metadata-popover{z-index:1300;box-sizing:border-box;min-width:220px;max-width:min(400px,calc(100vw - 16px));padding:8px;border:.5px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-2);box-shadow:var(--shadow-control);color:var(--theme-text-primary);font-size:12px;line-height:17px}
+.personal-security-metadata-popover>strong{display:block;padding:2px 6px 6px;color:var(--theme-text-secondary);font-size:11px;font-weight:550;line-height:16px}
+.personal-security-metadata-list{display:grid;gap:2px}
+.personal-security-metadata-list>div{display:flex;flex-direction:column;gap:1px;padding:5px 6px;border-radius:6px}
+.personal-security-metadata-list>div:hover{background:var(--theme-surface-hover)}
+.personal-security-metadata-list>div>span{color:var(--theme-text-primary);font-size:12px;line-height:17px}
+.personal-security-metadata-list>div>small{color:var(--theme-text-secondary);font-size:11px;line-height:16px}
+@media(max-width:760px){
+  .personal-security-api-key-metadata{font-size:11px;line-height:16px}
+  .personal-security-metadata-popover{min-width:190px}
+}
+
+/* Dedicated signing-key editor: the upload is intentionally a page-level
+   form so a private key never lives in a modal portal or URL state. */
+.personal-signing-key-page{box-sizing:border-box;width:100%;max-width:640px;margin:0 auto;padding:0 0 96px;color:var(--theme-text-primary);font-family:var(--font);letter-spacing:0}
+.personal-signing-key-breadcrumb{position:relative;z-index:1;height:0;display:flex;align-items:center;margin:0;padding:0}
+.personal-signing-key-breadcrumb button{position:absolute;top:-54px;left:-280.5px;height:28px;display:inline-flex;align-items:center;gap:7px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--theme-text-secondary);font:500 13px/19px var(--font);white-space:nowrap}
+.personal-signing-key-breadcrumb button:hover,.personal-signing-key-breadcrumb button:focus-visible{background:var(--theme-surface-hover);color:var(--theme-text-primary);outline:0}
+.personal-signing-key-breadcrumb button:disabled{cursor:not-allowed;opacity:.5}
+.personal-signing-key-breadcrumb button svg{width:12px;height:12px;transform:rotate(90deg)}
+.personal-signing-key-header{margin:0 16px 32px}
+.personal-signing-key-header h1{margin:0;color:var(--theme-text-primary);font-size:24px;line-height:32px;font-weight:500}
+.personal-signing-key-header p{margin:4px 0 0;color:var(--theme-text-secondary);font-size:16px;line-height:22px}
+.personal-signing-key-card{box-sizing:border-box;width:100%;min-height:365px;padding:16px;border:0;border-radius:10px;background:var(--theme-surface-2);box-shadow:0 0 0 .5px var(--settings-card-outline,var(--theme-border)),var(--shadow);color:var(--theme-text-primary)}
+.personal-signing-key-card form{display:flex;min-height:0;flex-direction:column;gap:24px}
+.personal-signing-key-field{display:flex;min-width:0;flex-direction:column;gap:4px;color:var(--theme-text-secondary);font-size:13px;line-height:24px}
+.personal-signing-key-field>span{font-weight:500}
+.personal-signing-key-field input{box-sizing:border-box;width:100%;height:32px;padding:6px 12px;border:.5px solid var(--theme-border-strong);border-radius:8px;outline:0;background:var(--theme-surface-2);color:var(--theme-text-primary);font:13px/19px var(--font);transition:border .15s,box-shadow .15s}
+.personal-signing-key-field input::placeholder,.personal-signing-key-field textarea::placeholder{color:var(--theme-text-tertiary)}
+.personal-signing-key-field input:hover,.personal-signing-key-field textarea:hover{border-color:var(--theme-border-strong)}
+.personal-signing-key-field input:focus,.personal-signing-key-field textarea:focus{border-color:var(--focus-ring);box-shadow:0 0 0 2px color-mix(in srgb,var(--focus-ring) 25%,transparent)}
+.personal-signing-key-field textarea{box-sizing:border-box;width:100%;min-height:160px;resize:vertical;padding:10px 12px;border:.5px solid var(--theme-border-strong);border-radius:8px;outline:0;background:var(--theme-surface-2);color:var(--theme-text-primary);font:12px/19px var(--font-monospace,ui-monospace,SFMono-Regular,Menlo,monospace);transition:border .15s,box-shadow .15s}
+.personal-signing-key-field small{color:var(--theme-text-secondary);font-size:12px;line-height:17px}
+.personal-signing-key-drop.is-drag-active textarea{border-color:var(--focus-ring);background:color-mix(in srgb,var(--focus-ring) 8%,var(--theme-surface-2));box-shadow:0 0 0 2px color-mix(in srgb,var(--focus-ring) 20%,transparent)}
+.personal-signing-key-error{margin:-12px 0 0;color:var(--semantic-danger);font-size:12px;line-height:17px}
+.personal-signing-key-card footer{height:32px;display:flex;align-items:center;justify-content:flex-end;gap:12px;margin:0;padding:0}
+.personal-signing-key-button{height:32px;display:inline-flex;align-items:center;justify-content:center;padding:0 12px;border:.5px solid var(--theme-border);border-radius:9999px;background:var(--theme-surface-2);color:var(--theme-text-primary);font:500 13px/19px var(--font);white-space:nowrap;transition:background .15s,border .15s,box-shadow .15s,opacity .15s}
+.personal-signing-key-button:hover:not(:disabled){background:var(--theme-surface-hover);border-color:var(--theme-border-strong)}
+.personal-signing-key-button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.personal-signing-key-button.primary{border-color:transparent;background:var(--accent-primary);color:var(--on-accent);box-shadow:var(--shadow)}
+.personal-signing-key-button.primary:hover:not(:disabled){background:var(--accent-primary-hover)}
+.personal-signing-key-button:disabled{cursor:not-allowed;opacity:.45}
+@media(max-width:760px){
+  .personal-signing-key-page{max-width:none;margin:0 auto;padding-bottom:64px}
+  .personal-signing-key-breadcrumb button{top:-38px;left:0;font-size:12px}
+  .personal-signing-key-header{margin:0 0 20px}
+  .personal-signing-key-header h1{font-size:22px;line-height:29px}
+  .personal-signing-key-header p{font-size:13px;line-height:19px}
+  .personal-signing-key-card{min-height:365px;padding:16px 12px}
+}

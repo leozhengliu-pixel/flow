@@ -7,6 +7,7 @@ import type {
   AuthSession,
   BootstrapData,
   CodeReview,
+  CommitSigningKey,
   Comment,
   Customer,
   CustomerMutationInput,
@@ -45,6 +46,7 @@ import type {
   NotificationMutationInput,
   NotificationPreferences,
   OAuthApplication,
+  Passkey,
   Presence,
   Project,
   ProjectMilestone,
@@ -278,10 +280,10 @@ export function setTeamMembership(
   );
 }
 export function fetchBootstrap(workspaceKey?: string): Promise<BootstrapData> {
-  return request(
+  return request<BootstrapData>(
     "/api/bootstrap",
     workspaceKey ? { headers: { "X-Workspace-Key": workspaceKey } } : undefined,
-  );
+  ).then(normalizeBootstrapData);
 }
 export function createWorkspace(
   input: WorkspaceMutationInput & { name: string; urlKey: string },
@@ -477,18 +479,108 @@ export function updateWorkspaceIssueTemplate(
 export function deleteWorkspaceIssueTemplate(id: string): Promise<void> {
   return request(`/api/issue-templates/${id}`, { method: "DELETE" });
 }
+// Older persisted keys encode unrestricted permissions/team access as JSON
+// null.  Keep the UI collection total and array-shaped while retaining the
+// server-side nil semantics when a key is created or edited.
+function normalizeAPIKey(key: APIKey): APIKey {
+  return {
+    ...key,
+    // Keep null (full access) distinct from [] (explicit deny-all). The
+    // security settings editor relies on this distinction when a key is
+    // reopened or saved without changing its policy.
+    scopes: key.scopes === null
+      ? null
+      : Array.isArray(key.scopes)
+        ? key.scopes
+        : null,
+    teamIds: Array.isArray(key.teamIds) ? key.teamIds : [],
+    teamRestriction: key.teamRestriction || "all",
+  };
+}
+
+function normalizeBootstrapData(data: BootstrapData): BootstrapData {
+  return {
+    ...data,
+    apiKeys: Array.isArray(data.apiKeys)
+      ? data.apiKeys.map(normalizeAPIKey)
+      : [],
+  };
+}
+
 export function fetchAPIKeys(): Promise<APIKey[]> {
-  return request("/api/api-keys");
+  return request<APIKey[]>("/api/api-keys").then((keys) => keys.map(normalizeAPIKey));
 }
 export function createAPIKey(input: {
   name: string;
-  scopes: string[];
+  scopes?: string[] | null;
   teamIds: string[];
+  teamRestriction?: "all" | "selected";
+  expiresAt?: string;
 }): Promise<{ key: APIKey; secret: string }> {
-  return request("/api/api-keys", jsonRequest("POST", input));
+  return request<{ key: APIKey; secret: string }>(
+    "/api/api-keys",
+    jsonRequest("POST", input),
+  ).then((result) => ({ ...result, key: normalizeAPIKey(result.key) }));
+}
+export function updateAPIKey(
+  id: string,
+  input: {
+    name?: string;
+    scopes?: string[] | null;
+    teamIds?: string[] | null;
+    teamRestriction?: "all" | "selected" | null;
+    expiresAt?: string | null;
+  },
+): Promise<APIKey> {
+  return request<APIKey>(
+    `/api/api-keys/${encodeURIComponent(id)}`,
+    jsonRequest("PATCH", input),
+  ).then(normalizeAPIKey);
 }
 export function revokeAPIKey(id: string): Promise<void> {
   return request(`/api/api-keys/${id}`, { method: "DELETE" });
+}
+export function rotateAPIKey(id: string): Promise<{ key: APIKey; secret: string }> {
+  return request<{ key: APIKey; secret: string }>(`/api/api-keys/${id}/rotate-secret`, {
+    method: "POST",
+  }).then((result) => ({ ...result, key: normalizeAPIKey(result.key) }));
+}
+export function fetchPasskeys(): Promise<Passkey[]> {
+  return request("/api/account/passkeys");
+}
+export function beginPasskeyRegistration(): Promise<{
+  registrationId: string;
+  options: unknown;
+}> {
+  return request("/api/account/passkeys/register/start", { method: "POST" });
+}
+export function finishPasskeyRegistration(input: {
+  registrationId: string;
+  name?: string;
+  credential: unknown;
+}): Promise<Passkey> {
+  return request(
+    "/api/account/passkeys/register/finish",
+    jsonRequest("POST", input),
+  );
+}
+export function updatePasskey(id: string, name: string): Promise<Passkey> {
+  return request(`/api/account/passkeys/${id}`, jsonRequest("PATCH", { name }));
+}
+export function deletePasskey(id: string): Promise<void> {
+  return request(`/api/account/passkeys/${id}`, { method: "DELETE" });
+}
+export function fetchCommitSigningKey(): Promise<CommitSigningKey | null> {
+  return request("/api/account/signing-key");
+}
+export function addCommitSigningKey(input: {
+  name: string;
+  privateKey: string;
+}): Promise<CommitSigningKey> {
+  return request("/api/account/signing-key", jsonRequest("POST", input));
+}
+export function removeCommitSigningKey(): Promise<void> {
+  return request("/api/account/signing-key", { method: "DELETE" });
 }
 export function fetchOAuthApplications(): Promise<OAuthApplication[]> {
   return request("/api/oauth-applications");

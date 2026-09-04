@@ -1,5 +1,9 @@
 import * as SelectPrimitive from "@radix-ui/react-select";
-import type { ReactNode } from "react";
+import type {
+  KeyboardEventHandler,
+  MouseEventHandler,
+  ReactNode,
+} from "react";
 
 import { Toggle } from "@/components/ui/toggle";
 
@@ -33,6 +37,7 @@ export function SettingsSection({
   className = "",
   description,
   headerClassName = "",
+  id,
   title,
 }: {
   action?: ReactNode;
@@ -40,10 +45,14 @@ export function SettingsSection({
   className?: string;
   description?: ReactNode;
   headerClassName?: string;
+  id?: string;
   title?: ReactNode;
 }) {
   return (
-    <section className={`settings-section${className ? ` ${className}` : ""}`}>
+    <section
+      className={`settings-section${className ? ` ${className}` : ""}`}
+      id={id}
+    >
       {action ? (
         <header className={headerClassName || "settings-section-title"}>
           {title && <h3>{title}</h3>}
@@ -67,6 +76,10 @@ export function SettingsRow({
   danger = false,
   description,
   icon,
+  onClick,
+  onKeyDown,
+  role,
+  tabIndex,
   title,
 }: {
   children?: ReactNode;
@@ -75,11 +88,19 @@ export function SettingsRow({
   danger?: boolean;
   description?: ReactNode;
   icon?: ReactNode;
+  onClick?: MouseEventHandler<HTMLDivElement>;
+  onKeyDown?: KeyboardEventHandler<HTMLDivElement>;
+  role?: string;
+  tabIndex?: number;
   title: ReactNode;
 }) {
   return (
     <div
       className={`settings-row${danger ? " danger" : ""}${className ? ` ${className}` : ""}`}
+      onClick={onClick}
+      onKeyDown={onKeyDown}
+      role={role}
+      tabIndex={tabIndex}
     >
       {icon && <span className="settings-row-icon">{icon}</span>}
       <div>

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 func requestActor(s *server, r *http.Request) domain.User {
@@ -73,6 +74,11 @@ func (s *server) updateUserSettings(w http.ResponseWriter, r *http.Request) {
 		if input.GitAttachmentFormat == "" {
 			input.GitAttachmentFormat = current.GitAttachmentFormat
 		}
+		// Signing-key metadata is managed by the dedicated account endpoint;
+		// preserve it when callers patch unrelated preferences.
+		if input.CommitSigningKey == nil {
+			input.CommitSigningKey = current.CommitSigningKey
+		}
 		if input.PulseSchedule == "" {
 			input.PulseSchedule = current.PulseSchedule
 		}
@@ -125,12 +131,63 @@ func (s *server) updateAccountProfile(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) listAccountSessions(w http.ResponseWriter, r *http.Request) {
 	if s.authDisabled {
-		writeJSON(w, http.StatusOK, []domain.AccountSession{{ID: "development", Current: true, CreatedAt: time.Now().UTC(), LastSeenAt: time.Now().UTC(), ExpiresAt: time.Now().UTC().Add(30 * 24 * time.Hour)}})
+		item := domain.AccountSession{ID: "development", Current: true, CreatedAt: time.Now().UTC(), LastSeenAt: time.Now().UTC(), ExpiresAt: time.Now().UTC().Add(30 * 24 * time.Hour)}
+		decorateAccountSession(&item, r)
+		writeJSON(w, http.StatusOK, []domain.AccountSession{item})
 		return
 	}
 	cookie, _ := r.Cookie(sessionCookieName)
 	items, err := s.store.ListSessions(r.Context(), authUser(r).ID, cookie.Value)
+	for index := range items {
+		decorateAccountSession(&items[index], r)
+	}
 	respondMutation(w, err, http.StatusOK, items)
+}
+
+// decorateAccountSession supplies the device label shown in account security.
+// Legacy session rows do not persist user-agent metadata, so derive a
+// conservative browser/OS label from the current request and leave location
+// and IP unset rather than presenting fabricated values.
+func decorateAccountSession(item *domain.AccountSession, r *http.Request) {
+	ua := r.UserAgent()
+	browser := "Browser"
+	switch {
+	case strings.Contains(ua, "Edg/"):
+		browser = "Microsoft Edge"
+	case strings.Contains(ua, "Chrome/"):
+		browser = "Chrome"
+	case strings.Contains(ua, "Firefox/"):
+		browser = "Firefox"
+	case strings.Contains(ua, "Safari/"):
+		browser = "Safari"
+	}
+	osName := ""
+	switch {
+	case strings.Contains(ua, "Mac OS X"):
+		osName = "macOS"
+	case strings.Contains(ua, "Windows"):
+		osName = "Windows"
+	case strings.Contains(ua, "Android"):
+		osName = "Android"
+	case strings.Contains(ua, "iPhone") || strings.Contains(ua, "iPad"):
+		osName = "iOS"
+	}
+	// Newer session records may already carry the original device metadata.
+	// Only derive values for legacy rows; otherwise every device would be
+	// mislabeled with the browser that happens to request this page.
+	if item.BrowserType == "" {
+		item.BrowserType = browser
+	}
+	if item.OperatingSystem == "" {
+		item.OperatingSystem = osName
+	}
+	if item.Name == "" {
+		if item.OperatingSystem != "" {
+			item.Name = item.BrowserType + " on " + item.OperatingSystem
+		} else {
+			item.Name = item.BrowserType
+		}
+	}
 }
 
 func (s *server) revokeOtherSessions(w http.ResponseWriter, r *http.Request) {
@@ -898,13 +955,133 @@ func publicAPIKey(key domain.APIKey) domain.APIKey {
 	return key
 }
 
+// API key scopes intentionally use the compact names persisted by Flow. The
+// API also accepts the names used by clients of the public GraphQL API so an
+// exported key can be recreated without translating permission identifiers.
+var supportedAPIKeyScopes = []string{"read", "write", "admin", "create_issues", "create_comments"}
+
+func canonicalAPIKeyScope(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "issues:create", "issue:create", "create-issues":
+		return "create_issues"
+	case "comments:create", "comment:create", "create-comments":
+		return "create_comments"
+	default:
+		return strings.ToLower(strings.TrimSpace(value))
+	}
+}
+
+// normalizeAPIKeyScopes returns nil for full access. A nil slice is distinct
+// from a non-nil empty slice in persisted JSON and is the same representation
+// used by the public API for an unrestricted key.
+func normalizeAPIKeyScopes(values []string) []string {
+	if values == nil {
+		return nil
+	}
+	result := []string{}
+	for _, value := range values {
+		value = canonicalAPIKeyScope(value)
+		if value != "" && !slices.Contains(result, value) {
+			result = append(result, value)
+		}
+	}
+	// Preserve a non-nil empty input as an explicit deny-all policy. JSON
+	// decoding distinguishes an omitted/null scopes field (nil, full access)
+	// from an explicitly supplied empty array ([]), and collapsing the latter
+	// back to nil would accidentally widen a key's permissions.
+	return result
+}
+
+func validateAPIKeyScopes(data *domain.Bootstrap, scopes []string) error {
+	for _, scope := range scopes {
+		if !slices.Contains(supportedAPIKeyScopes, scope) {
+			return fmt.Errorf("%w: unsupported API key scope", errInvalid)
+		}
+		if scope == "admin" && !workspaceAdminRole(data.ViewerRole) {
+			return fmt.Errorf("%w: admin API key scope is limited to admins", errInvalid)
+		}
+	}
+	return nil
+}
+
+func validateAPIKeyName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	length := len([]rune(name))
+	if length == 0 {
+		return "", fmt.Errorf("%w: name is required", errInvalid)
+	}
+	if length < 2 || length > 40 {
+		return "", fmt.Errorf("%w: name must be between 2 and 40 characters", errInvalid)
+	}
+	return name, nil
+}
+
+func parseAPIKeyExpiry(value *string) (*time.Time, error) {
+	if value == nil || strings.TrimSpace(*value) == "" {
+		return nil, nil
+	}
+	parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(*value))
+	if err != nil || !parsed.After(time.Now().UTC()) {
+		return nil, fmt.Errorf("%w: expiresAt must be a future RFC3339 timestamp", errInvalid)
+	}
+	parsed = parsed.UTC()
+	return &parsed, nil
+}
+
+func apiKeyUpdateScopes(raw json.RawMessage) ([]string, bool, error) {
+	if len(raw) == 0 {
+		return nil, false, nil
+	}
+	if strings.TrimSpace(string(raw)) == "null" {
+		return nil, true, nil
+	}
+	var values []string
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return nil, true, fmt.Errorf("%w: scopes must be an array", errInvalid)
+	}
+	return normalizeAPIKeyScopes(values), true, nil
+}
+
+func apiKeyUpdateTeams(raw json.RawMessage) ([]string, bool, error) {
+	if len(raw) == 0 {
+		return nil, false, nil
+	}
+	if strings.TrimSpace(string(raw)) == "null" {
+		return nil, true, nil
+	}
+	var values []string
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return nil, true, fmt.Errorf("%w: teamIds must be an array", errInvalid)
+	}
+	return normalizedStrings(values), true, nil
+}
+
+func apiKeyUpdateString(raw json.RawMessage) (value string, present bool, isNull bool, err error) {
+	if len(raw) == 0 {
+		return "", false, false, nil
+	}
+	if strings.TrimSpace(string(raw)) == "null" {
+		return "", true, true, nil
+	}
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", true, false, fmt.Errorf("%w: value must be a string", errInvalid)
+	}
+	return strings.TrimSpace(value), true, false, nil
+}
+
 func (s *server) listAPIKeys(w http.ResponseWriter, r *http.Request) {
 	actor := requestActor(s, r)
 	data := s.workspaceData(r)
 	result := []domain.APIKey{}
 	admin := strings.EqualFold(data.ViewerRole, "admin") || strings.EqualFold(data.ViewerRole, "owner")
+	apiKeyID := ""
+	if token, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+		// A token-authenticated request must not enumerate the creator's other
+		// credentials, even when that creator is a workspace administrator.
+		apiKeyID = token.ID
+	}
 	for _, key := range data.APIKeys {
-		if key.RevokedAt == nil && (admin || key.CreatorID == actor.ID) {
+		if key.RevokedAt == nil && (apiKeyID != "" && key.ID == apiKeyID || apiKeyID == "" && (admin || key.CreatorID == actor.ID)) {
 			result = append(result, publicAPIKey(key))
 		}
 	}
@@ -919,10 +1096,15 @@ func (s *server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 		TeamRestriction string   `json:"teamRestriction"`
 		ExpiresAt       *string  `json:"expiresAt,omitempty"`
 	}
-	if !decodeJSON(w, r, &input) || strings.TrimSpace(input.Name) == "" {
-		writeError(w, http.StatusBadRequest, "name is required")
+	if !decodeJSON(w, r, &input) {
 		return
 	}
+	name, nameErr := validateAPIKeyName(input.Name)
+	if nameErr != nil {
+		respondMutation(w, nameErr, http.StatusBadRequest, nil)
+		return
+	}
+	input.Name = name
 	secret, err := randomSecret("flow_api_")
 	if err != nil {
 		respondMutation(w, err, http.StatusCreated, nil)
@@ -931,20 +1113,20 @@ func (s *server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 	actor := requestActor(s, r)
 	var created domain.APIKey
 	err = s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "api_key.created", input, func(data *domain.Bootstrap) (string, error) {
-		if data.WorkspaceSettings.APIKeyPermission == "admins" && !strings.EqualFold(data.ViewerRole, "admin") && !strings.EqualFold(data.ViewerRole, "owner") {
-			return "", errors.New("API key creation is limited to admins")
+		if strings.EqualFold(data.ViewerRole, "guest") {
+			return "", fmt.Errorf("%w: guest users cannot create personal API keys", store.ErrAuthForbidden)
 		}
-		scopes := normalizedStrings(input.Scopes)
-		if len(scopes) == 0 {
-			scopes = []string{"read", "write"}
+		if data.WorkspaceSettings.APIKeyPermission == "admins" && !workspaceAdminRole(data.ViewerRole) {
+			return "", fmt.Errorf("%w: API key creation is limited to admins", store.ErrAuthForbidden)
 		}
-		for _, scope := range scopes {
-			if !slices.Contains([]string{"read", "write", "admin", "create_issues", "create_comments"}, scope) {
-				return "", fmt.Errorf("%w: unsupported API key scope", errInvalid)
+		for _, existing := range data.APIKeys {
+			if existing.RevokedAt == nil && existing.CreatorID == actor.ID && strings.EqualFold(strings.TrimSpace(existing.Name), input.Name) {
+				return "", fmt.Errorf("%w: API key name already exists", errInvalid)
 			}
-			if scope == "admin" && !strings.EqualFold(data.ViewerRole, "admin") && !strings.EqualFold(data.ViewerRole, "owner") {
-				return "", errors.New("admin API key scope is limited to admins")
-			}
+		}
+		scopes := normalizeAPIKeyScopes(input.Scopes)
+		if err := validateAPIKeyScopes(data, scopes); err != nil {
+			return "", err
 		}
 		teamIDs := normalizedStrings(input.TeamIDs)
 		for _, id := range teamIDs {
@@ -963,19 +1145,21 @@ func (s *server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 		if restriction != "all" && restriction != "selected" {
 			return "", fmt.Errorf("%w: teamRestriction must be all or selected", errInvalid)
 		}
+		if restriction == "selected" && len(teamIDs) == 0 {
+			return "", fmt.Errorf("%w: selected team access requires at least one team", errInvalid)
+		}
 		if restriction == "all" {
 			teamIDs = nil
 		}
 		var expiresAt *time.Time
-		if input.ExpiresAt != nil && strings.TrimSpace(*input.ExpiresAt) != "" {
-			parsed, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(*input.ExpiresAt))
-			if parseErr != nil || !parsed.After(time.Now().UTC()) {
-				return "", fmt.Errorf("%w: expiresAt must be a future RFC3339 timestamp", errInvalid)
+		if input.ExpiresAt != nil {
+			var parseErr error
+			expiresAt, parseErr = parseAPIKeyExpiry(input.ExpiresAt)
+			if parseErr != nil {
+				return "", parseErr
 			}
-			parsed = parsed.UTC()
-			expiresAt = &parsed
 		}
-		created = domain.APIKey{ID: fmt.Sprintf("api_key_%d", time.Now().UnixNano()), Name: strings.TrimSpace(input.Name), Prefix: secret[:min(len(secret), 17)], SecretHash: secretHash(secret), CreatorID: actor.ID, Scopes: scopes, TeamIDs: teamIDs, TeamRestriction: restriction, CreatedAt: time.Now().UTC(), ExpiresAt: expiresAt}
+		created = domain.APIKey{ID: fmt.Sprintf("api_key_%d", time.Now().UnixNano()), Name: input.Name, Prefix: secret[:min(len(secret), 17)], SecretHash: secretHash(secret), CreatorID: actor.ID, Scopes: scopes, TeamIDs: teamIDs, TeamRestriction: restriction, CreatedAt: time.Now().UTC(), ExpiresAt: expiresAt}
 		data.APIKeys = append([]domain.APIKey{created}, data.APIKeys...)
 		return created.ID, nil
 	})
@@ -984,6 +1168,138 @@ func (s *server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"key": publicAPIKey(created), "secret": secret})
+}
+
+// updateAPIKey changes the non-secret metadata of an existing personal key.
+// Secrets are deliberately rotated through the dedicated endpoint so an edit
+// can never accidentally expose or replace credentials. Every field is
+// optional, which lets clients update a label without resetting permissions.
+func (s *server) updateAPIKey(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Name            *string         `json:"name,omitempty"`
+		Scopes          json.RawMessage `json:"scopes,omitempty"`
+		TeamIDs         json.RawMessage `json:"teamIds,omitempty"`
+		TeamRestriction json.RawMessage `json:"teamRestriction,omitempty"`
+		ExpiresAt       json.RawMessage `json:"expiresAt,omitempty"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" {
+		writeError(w, http.StatusNotFound, "resource not found")
+		return
+	}
+	name := ""
+	if input.Name != nil {
+		var err error
+		name, err = validateAPIKeyName(*input.Name)
+		if err != nil {
+			respondMutation(w, err, http.StatusBadRequest, nil)
+			return
+		}
+	}
+	scopes, scopesSet, err := apiKeyUpdateScopes(input.Scopes)
+	if err != nil {
+		respondMutation(w, err, http.StatusBadRequest, nil)
+		return
+	}
+	teamIDs, teamIDsSet, err := apiKeyUpdateTeams(input.TeamIDs)
+	if err != nil {
+		respondMutation(w, err, http.StatusBadRequest, nil)
+		return
+	}
+	restrictionValue, restrictionSet, restrictionNull, err := apiKeyUpdateString(input.TeamRestriction)
+	if err != nil {
+		respondMutation(w, err, http.StatusBadRequest, nil)
+		return
+	}
+	if restrictionNull {
+		restrictionValue = "all"
+	}
+	expiresSet := len(input.ExpiresAt) > 0
+	var expiresAt *time.Time
+	if expiresSet && strings.TrimSpace(string(input.ExpiresAt)) != "null" {
+		var value string
+		if err := json.Unmarshal(input.ExpiresAt, &value); err != nil {
+			respondMutation(w, fmt.Errorf("%w: expiresAt must be a string or null", errInvalid), http.StatusBadRequest, nil)
+			return
+		}
+		expiresAt, err = parseAPIKeyExpiry(&value)
+		if err != nil {
+			respondMutation(w, err, http.StatusBadRequest, nil)
+			return
+		}
+	}
+	actor := requestActor(s, r)
+	var updated domain.APIKey
+	err = s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "api_key.updated", map[string]any{
+		"id": id, "name": name, "scopes": scopes, "teamIds": teamIDs, "teamRestriction": restrictionValue, "expiresAt": expiresAt,
+	}, func(data *domain.Bootstrap) (string, error) {
+		index := slices.IndexFunc(data.APIKeys, func(key domain.APIKey) bool {
+			return key.ID == id && key.RevokedAt == nil && (key.CreatorID == actor.ID || workspaceAdminRole(data.ViewerRole))
+		})
+		if index < 0 {
+			return "", errNotFound
+		}
+		current := &data.APIKeys[index]
+		if input.Name != nil {
+			for _, existing := range data.APIKeys {
+				if existing.ID != id && existing.RevokedAt == nil && existing.CreatorID == current.CreatorID && strings.EqualFold(strings.TrimSpace(existing.Name), name) {
+					return "", fmt.Errorf("%w: API key name already exists", errInvalid)
+				}
+			}
+			current.Name = name
+		}
+		if scopesSet {
+			if err := validateAPIKeyScopes(data, scopes); err != nil {
+				return "", err
+			}
+			current.Scopes = scopes
+		}
+		if teamIDsSet || restrictionSet {
+			ids := slices.Clone(current.TeamIDs)
+			restriction := strings.ToLower(strings.TrimSpace(current.TeamRestriction))
+			if teamIDsSet {
+				ids = teamIDs
+			}
+			if restrictionSet {
+				restriction = strings.ToLower(restrictionValue)
+			}
+			if restriction == "" {
+				if len(ids) > 0 {
+					restriction = "selected"
+				} else {
+					restriction = "all"
+				}
+			}
+			if restriction != "all" && restriction != "selected" {
+				return "", fmt.Errorf("%w: teamRestriction must be all or selected", errInvalid)
+			}
+			for _, teamID := range ids {
+				if !teamExists(data, teamID) {
+					return "", fmt.Errorf("%w: unknown team", errInvalid)
+				}
+			}
+			if restriction == "selected" && len(ids) == 0 {
+				return "", fmt.Errorf("%w: selected team access requires at least one team", errInvalid)
+			}
+			if restriction == "all" {
+				ids = nil
+			}
+			current.TeamIDs, current.TeamRestriction = ids, restriction
+		}
+		if expiresSet {
+			current.ExpiresAt = expiresAt
+		}
+		updated = publicAPIKey(*current)
+		return id, nil
+	})
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
 }
 
 // rotateAPIKeySecret revokes the previous secret and returns a replacement
@@ -1155,7 +1471,8 @@ func (s *server) exchangeOAuthToken(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
-	key := domain.APIKey{ID: fmt.Sprintf("oauth_token_%d", time.Now().UnixNano()), Name: app.Name + " OAuth token", Prefix: secret[:min(len(secret), 19)], SecretHash: secretHash(secret), CreatorID: app.CreatorID, Scopes: app.Scopes, TeamIDs: []string{}, CreatedAt: time.Now().UTC()}
+	expiresAt := time.Now().UTC().Add(time.Hour)
+	key := domain.APIKey{ID: fmt.Sprintf("oauth_token_%d", time.Now().UnixNano()), Name: app.Name + " OAuth token", Prefix: secret[:min(len(secret), 19)], SecretHash: secretHash(secret), CreatorID: app.CreatorID, Scopes: normalizeAPIKeyScopes(app.Scopes), TeamIDs: []string{}, TeamRestriction: "all", CreatedAt: time.Now().UTC(), ExpiresAt: &expiresAt, OAuthClientID: app.ClientID}
 	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "oauth_token.created", app.ID, nil, func(next *domain.Bootstrap) error {
 		next.APIKeys = append([]domain.APIKey{key}, next.APIKeys...)
 		return nil
@@ -1164,7 +1481,7 @@ func (s *server) exchangeOAuthToken(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"access_token": secret, "token_type": "Bearer", "scope": strings.Join(app.Scopes, " ")})
+	writeJSON(w, http.StatusOK, map[string]any{"access_token": secret, "token_type": "Bearer", "expires_in": 3600, "scope": strings.Join(app.Scopes, " ")})
 }
 
 func (s *server) listIntegrations(w http.ResponseWriter, r *http.Request) {

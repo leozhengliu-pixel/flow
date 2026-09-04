@@ -226,7 +226,14 @@ func (s *server) mcpWorkspaceData(ctx context.Context, actor mcpActor) (domain.B
 	if err != nil || !ok {
 		return data, fmt.Errorf("workspace access denied")
 	}
-	if actor.APIKey.TeamRestriction == "" || actor.APIKey.TeamRestriction == "all" {
+	// Passkeys are account-scoped metadata. MCP callers may inspect workspace
+	// resources, but must not enumerate credentials belonging to other users.
+	data.Passkeys = slices.DeleteFunc(data.Passkeys, func(item domain.Passkey) bool { return item.UserID != actor.User.ID })
+	for index := range data.Passkeys {
+		data.Passkeys[index].CredentialJSON = ""
+	}
+	data.PasskeyRegistrationChallenges = nil
+	if !apiKeyTeamRestrictionSelected(actor.APIKey) {
 		return data, nil
 	}
 	allowed := func(id string) bool { return slices.Contains(actor.APIKey.TeamIDs, id) }
@@ -248,6 +255,23 @@ func (s *server) mcpWorkspaceData(ctx context.Context, actor mcpActor) (domain.B
 		}
 		return !slices.ContainsFunc(item.ContributingTeamIDs, allowed)
 	})
+	// Reviews are linked to issues rather than teams directly. Keep only
+	// reviews whose linked issues survived the team projection; unlinked
+	// reviews cannot be safely attributed to an allowed team.
+	visibleIssues := make(map[string]bool, len(data.Issues))
+	for _, issue := range data.Issues {
+		visibleIssues[issue.ID] = true
+	}
+	data.Reviews = slices.DeleteFunc(data.Reviews, func(review domain.CodeReview) bool {
+		if len(review.IssueIDs) == 0 {
+			return true
+		}
+		return !slices.ContainsFunc(review.IssueIDs, func(id string) bool { return visibleIssues[id] })
+	})
+	for index := range data.Reviews {
+		data.Reviews[index].IssueIDs = slices.DeleteFunc(data.Reviews[index].IssueIDs, func(id string) bool { return !visibleIssues[id] })
+		data.Reviews[index].TeamReviewers = slices.DeleteFunc(data.Reviews[index].TeamReviewers, func(id string) bool { return !allowed(id) })
+	}
 	return data, nil
 }
 
@@ -338,6 +362,69 @@ func (s *server) listMCPComments(data domain.Bootstrap, args map[string]any) (an
 		}
 	}
 	return nil, fmt.Errorf("comment parent not found")
+}
+
+func mcpCommentParentVisible(data domain.Bootstrap, id string) bool {
+	if _, err := mcpFindIssue(data, id); err == nil {
+		return true
+	}
+	if _, err := mcpFindProject(data, id); err == nil {
+		return true
+	}
+	if _, err := mcpFindInitiative(data, id); err == nil {
+		return true
+	}
+	if _, err := mcpFindDocument(data, id); err == nil {
+		return true
+	}
+	for _, project := range data.Projects {
+		for _, milestone := range project.Milestones {
+			if milestone.ID == id {
+				return true
+			}
+		}
+	}
+	for _, update := range appendProjectAndInitiativeUpdates(data) {
+		if update.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func mcpCommentVisible(data domain.Bootstrap, id string) bool {
+	if id == "" {
+		return false
+	}
+	for parentID, comments := range data.Comments {
+		if !mcpCommentParentVisible(data, parentID) {
+			continue
+		}
+		if slices.ContainsFunc(comments, func(comment domain.Comment) bool { return comment.ID == id }) {
+			return true
+		}
+	}
+	for _, project := range data.Projects {
+		if slices.ContainsFunc(project.Comments, func(comment domain.Comment) bool { return comment.ID == id }) {
+			return true
+		}
+		for _, update := range data.ProjectUpdates[project.ID] {
+			if slices.ContainsFunc(update.Comments, func(comment domain.Comment) bool { return comment.ID == id }) {
+				return true
+			}
+		}
+	}
+	for _, initiative := range data.Initiatives {
+		if slices.ContainsFunc(initiative.Comments, func(comment domain.Comment) bool { return comment.ID == id }) {
+			return true
+		}
+		for _, update := range data.InitiativeUpdates[initiative.ID] {
+			if slices.ContainsFunc(update.Comments, func(comment domain.Comment) bool { return comment.ID == id }) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 type mcpStatusUpdate struct {

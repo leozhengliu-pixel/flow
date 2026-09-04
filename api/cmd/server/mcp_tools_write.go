@@ -768,6 +768,17 @@ func (s *server) deleteMCPComment(ctx context.Context, actor mcpActor, id string
 }
 
 func (s *server) mutateAnyComment(ctx context.Context, actor mcpActor, data domain.Bootstrap, targetID, body, operation, _ string) (any, error) {
+	// The MCP write path invokes handlers directly, so the normal HTTP resource
+	// authorization middleware is not run. Validate the parent or comment
+	// against the already projected workspace before mutating the persisted
+	// aggregate; otherwise a team-restricted token could target a guessed ID.
+	if operation == "create" {
+		if !mcpCommentParentVisible(data, targetID) {
+			return nil, fmt.Errorf("comment parent not found")
+		}
+	} else if !mcpCommentVisible(data, targetID) {
+		return nil, fmt.Errorf("comment not found")
+	}
 	var result domain.Comment
 	err := s.store.MutateWorkspace(ctx, actor.WorkspaceKey, "comment."+operation, targetID, map[string]string{"body": body}, func(next *domain.Bootstrap) error {
 		findIn := func(items *[]domain.Comment) (bool, error) {
