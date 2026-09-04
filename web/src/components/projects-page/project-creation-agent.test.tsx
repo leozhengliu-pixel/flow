@@ -82,6 +82,35 @@ describe('ProjectCreationAgent', () => {
     await waitFor(() => expect(onApplyDraft).toHaveBeenCalledWith({ name: 'Launch', targetDate: '2027-06-30', milestones: ['Beta'] }))
   })
 
+  it('keeps structured manual milestones when the assistant adds milestones', async () => {
+    api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'test-model' })
+    streams.streamNewAgentSession.mockImplementation(async (_input, onEvent) => {
+      const completed = { ...session, messages: [{ id: 'assistant-2', role: 'assistant' as const, content: '```json\n{"milestones":["General availability"]}\n```', createdAt: session.createdAt }] }
+      onEvent({ type: 'session.completed', session: completed })
+      return completed
+    })
+    const user = userEvent.setup()
+    const onCreate = vi.fn().mockResolvedValue(undefined)
+    render(<I18nProvider><NewProjectDialog open onClose={vi.fn()} onCreate={onCreate} teams={[{ id: 'team-1', label: 'Team', color: '#5e6ad2' }]}/></I18nProvider>)
+
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.type(screen.getByRole('textbox', { name: 'Milestone name' }), 'Beta')
+    await user.type(screen.getByRole('textbox', { name: 'Milestone description' }), 'Manual milestone')
+    await user.click(screen.getByRole('button', { name: 'Add milestone' }))
+    await user.click(screen.getByRole('button', { name: 'Create with Agent' }))
+    const input = screen.getByRole('textbox', { name: 'Send a message to Linear AI' })
+    await user.type(input, 'Add the final milestone')
+    await user.click(screen.getByRole('button', { name: 'Submit comment' }))
+
+    await waitFor(() => expect(screen.getByText('General availability')).toBeVisible())
+    await user.type(screen.getByRole('textbox', { name: 'Project name' }), 'Mixed milestone project')
+    await user.click(screen.getByRole('button', { name: 'Create project' }))
+    expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({
+      milestones: ['Beta', 'General availability'],
+      milestoneDetails: [{ name: 'Beta', description: 'Manual milestone' }, { name: 'General availability' }],
+    }))
+  })
+
   it('exposes the create-skill action from the composer menu', async () => {
     api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'test-model' })
     const user = userEvent.setup()

@@ -55,9 +55,13 @@ describe('NewProjectDialog', () => {
       </I18nProvider>,
     )
 
-    await user.click(screen.getAllByRole('button', { name: 'Add' })[0])
-    await user.type(screen.getByPlaceholderText('Milestone name'), 'Launch')
-    await user.click(screen.getAllByRole('button', { name: 'Add' }).at(-1)!)
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.type(screen.getByRole('textbox', { name: 'Milestone name' }), 'Launch')
+    await user.type(screen.getByRole('textbox', { name: 'Milestone description' }), 'Launch criteria')
+    await user.click(screen.getByRole('button', { name: 'Choose date' }))
+    const today = new Date()
+    await user.click(screen.getByRole('gridcell', { name: new Intl.DateTimeFormat('en-US', { dateStyle: 'full' }).format(today) }))
+    await user.click(screen.getByRole('button', { name: 'Add milestone' }))
     await user.click(screen.getByRole('button', { name: 'Change project target date' }))
     await user.click(screen.getByRole('tab', { name: 'Month' }))
     await user.click(screen.getAllByRole('button', { name: 'Jan' })[0])
@@ -66,7 +70,51 @@ describe('NewProjectDialog', () => {
 
     expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({
       milestones: ['Launch'],
+      milestoneDetails: [{ name: 'Launch', description: 'Launch criteria', targetDate: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}` }],
       targetDateResolution: 'month',
+    }))
+  })
+
+  it('resets a cancelled milestone draft and ignores an empty milestone', async () => {
+    const user = userEvent.setup()
+    render(
+      <I18nProvider>
+        <NewProjectDialog open onClose={vi.fn()} onCreate={vi.fn()} teams={[{ id: 'team-1', label: 'Team', color: '#5e6ad2' }]} />
+      </I18nProvider>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.type(screen.getByRole('textbox', { name: 'Milestone name' }), 'Discard me')
+    await user.type(screen.getByRole('textbox', { name: 'Milestone description' }), 'Temporary details')
+    await user.click(screen.getByRole('button', { name: 'Discard changes' }))
+
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    expect(screen.getByRole('textbox', { name: 'Milestone name' })).toHaveValue('')
+    expect(screen.getByRole('textbox', { name: 'Milestone description' })).toHaveValue('')
+    await user.click(screen.getByRole('button', { name: 'Add milestone' }))
+    expect(screen.getByText('Create milestone')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Remove Discard me' })).not.toBeInTheDocument()
+  })
+
+  it('removes an added milestone from both create payload representations', async () => {
+    const user = userEvent.setup()
+    const onCreate = vi.fn().mockResolvedValue(undefined)
+    render(
+      <I18nProvider>
+        <NewProjectDialog open onClose={vi.fn()} onCreate={onCreate} teams={[{ id: 'team-1', label: 'Team', color: '#5e6ad2' }]} />
+      </I18nProvider>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.type(screen.getByRole('textbox', { name: 'Milestone name' }), 'Remove me')
+    await user.click(screen.getByRole('button', { name: 'Add milestone' }))
+    await user.click(screen.getByRole('button', { name: 'Remove Remove me' }))
+    await user.type(screen.getByRole('textbox', { name: 'Project name' }), 'No milestones')
+    await user.click(screen.getByRole('button', { name: 'Create project' }))
+
+    expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({
+      milestones: [],
+      milestoneDetails: [],
     }))
   })
 

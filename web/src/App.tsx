@@ -2556,6 +2556,7 @@ function App() {
       dependencyIds: draft.dependencyIds,
       dependencyRelations: draft.dependencyRelations,
       milestones: draft.milestones,
+      milestoneDetails: draft.milestoneDetails,
       initiatives: draft.initiativeIds,
       name: draft.name,
       priority: Math.max(
