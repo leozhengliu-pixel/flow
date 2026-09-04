@@ -1184,7 +1184,7 @@ function favoriteDescriptor(
       return {
         favorite,
         href: teamHomePath(workspaceSlug, team.key),
-        icon: <FlowIcon name="Team" style={{ color: team.color }} />,
+        icon: <ViewGlyph color={team.color} icon={team.icon || "Team"} />,
         title: team.name,
       };
   }
@@ -1559,7 +1559,7 @@ function TeamNavigation({
           aria-expanded={expanded}
           onClick={() => setExpanded((value) => !value)}
         >
-          <FlowIcon name="Team" style={{ color: team.color }} />
+          <ViewGlyph color={team.color} icon={team.icon || "Team"} />
           <strong>{team.name}</strong>
           <span className={`team-disclosure ${expanded ? "expanded" : ""}`}>
             <TeamDisclosureIcon />

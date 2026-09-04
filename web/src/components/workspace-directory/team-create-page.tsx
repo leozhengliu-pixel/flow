@@ -33,6 +33,7 @@ import {
 import { useMemo, useState, type FormEvent } from "react";
 
 import { ViewIconPicker } from "@/components/views/view-icon-picker";
+import { TeamIcon } from "@/components/issue/issue-icons";
 import { SelectControl } from "@/components/ui/select-control";
 import { ReleasesIcon } from "@/components/releases/release-icons";
 import type { Team } from "@/types/flow";
@@ -264,7 +265,7 @@ export function TeamCreatePage({
             </label>
             <label>
               <span>Parent team<small>Settings and workflows will be inherited from the parent team</small></span>
-              <SelectControl label="Parent team" value={parentTeamId} onChange={(value) => { setParentTeamId(value); if (value) setCopyFrom(value); }} options={[{ value: "", label: "No parent team" }, ...teams.map(team => ({ value: team.id, label: team.name, entityName: true }))]}/>
+              <SelectControl label="Parent team" value={parentTeamId} onChange={(value) => { setParentTeamId(value); if (value) setCopyFrom(value); }} options={[{ value: "", label: "No parent team" }, ...teams.map(team => ({ value: team.id, label: team.name, entityName: true, icon: <TeamIcon team={team} size={14}/> }))]}/>
             </label>
           </section>
           <h2>Team access</h2>
@@ -294,7 +295,7 @@ export function TeamCreatePage({
           <section className="workspace-settings-card">
             <label>
               <span>Copy from team</span>
-              <SelectControl label="Copy from team" disabled={Boolean(parentTeamId)} value={copyFrom} onChange={setCopyFrom} options={[{ value: "", label: "Don’t copy" }, ...teams.map(team => ({ value: team.id, label: team.name, entityName: true }))]}/>
+              <SelectControl label="Copy from team" disabled={Boolean(parentTeamId)} value={copyFrom} onChange={setCopyFrom} options={[{ value: "", label: "Don’t copy" }, ...teams.map(team => ({ value: team.id, label: team.name, entityName: true, icon: <TeamIcon team={team} size={14}/> }))]}/>
             </label>
           </section>
           <button

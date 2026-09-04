@@ -102,7 +102,7 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
   const saveTargets = useMemo<SavedViewTarget[]>(() => [
     { scope: 'personal', label: 'Personal' },
     { scope: 'workspace', label: 'Workspace' },
-    ...data.teams.map(team => ({ scope: 'team' as const, label: team.name, teamId: team.id })),
+    ...data.teams.map(team => ({ scope: 'team' as const, label: team.name, teamId: team.id, team })),
   ], [data.teams])
   const initialSaveTarget = saveTargets.find(target => target.scope === (sourceView?.scope ?? defaultSaveScope ?? scope.kind) && (target.scope !== 'team' || target.teamId === (sourceView?.teamId ?? (scope.kind === 'team' ? scope.team.id : undefined)))) ?? saveTargets[0]
 
@@ -202,7 +202,7 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
     void updateOne(row, update).catch(() => undefined)
   }
   const savedViewSnapshot = (): SavedViewMutationInput => ({ resource: 'issues', scope: scope.kind, teamId: scope.kind === 'team' ? scope.team.id : '', ownerId: data.viewer.id, view, filters, display: displaySnapshot(display), ...(draftInsights ? { insights: draftInsights as unknown as Record<string, unknown> } : {}) })
-  const previewTarget = initialSaveTarget ?? (scope.kind === 'team' ? { scope: 'team' as const, teamId: scope.team.id, label: scope.team.name } : { scope: 'workspace' as const, label: data.workspace.name })
+  const previewTarget = initialSaveTarget ?? (scope.kind === 'team' ? { scope: 'team' as const, teamId: scope.team.id, label: scope.team.name, team: scope.team } : { scope: 'workspace' as const, label: data.workspace.name })
   const insightsView: SavedView | undefined = savedView ?? (creatingView ? { id: '__new-view', name: 'All issues', description: '', resource: 'issues', scope: previewTarget.scope, teamId: previewTarget.scope === 'team' ? previewTarget.teamId : '', ownerId: data.viewer.id, view, filters, display: displaySnapshot(display), insights: draftInsights as unknown as Record<string, unknown> | undefined, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : undefined)
   const saveViewEditor = async (name: string, description: string, target: SavedViewTarget | undefined, visual: ViewVisual) => {
     if (viewSaving) return
@@ -236,6 +236,7 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
   return <>
     <IssueExplorerSurface
       scopeName={scope.kind === 'team' ? scope.team.name : data.workspace.name}
+      scopeTeam={scope.kind === 'team' ? scope.team : undefined}
       creatingView={creatingView}
       scopeHref={scope.kind === 'team' ? `/${data.workspace.urlKey}/team/${scope.team.key}/overview` : undefined}
       activeView={view}

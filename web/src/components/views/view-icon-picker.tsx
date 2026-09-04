@@ -18,12 +18,12 @@ const EMOJI_NAMES: Record<string, string> = { '👍': '+1', '👌': 'ok_hand', '
 
 export type ViewVisual = { icon: string; color: string }
 
-export function ViewGlyph({ className, color = DEFAULT_VIEW_COLOR, icon = DEFAULT_VIEW_ICON }: { className?: string; color?: string; icon?: string }) {
+export function ViewGlyph({ className, color = DEFAULT_VIEW_COLOR, icon = DEFAULT_VIEW_ICON, style }: { className?: string; color?: string; icon?: string; style?: CSSProperties }) {
   const assetIcon = FLOW_VIEW_ICON_ALIASES[icon] ?? icon
   if (!ICON_NAME_SET.has(assetIcon) && assetIcon !== 'Team') return isEmoji(icon)
-    ? <span aria-hidden="true" className={`${styles.glyph} ${styles.emojiGlyph} ${className ?? ''}`} style={{ color }}>{icon}</span>
-    : <svg aria-hidden="true" className={`${styles.glyph} ${className ?? ''}`} fill="currentColor" style={{ color }} viewBox="0 0 16 16"><use href="#CustomView"/></svg>
-  return <svg aria-hidden="true" className={`${styles.glyph} ${className ?? ''}`} fill="currentColor" style={{ color }} viewBox="0 0 16 16"><use href={`${FLOW_CORE_ICON_NAMES.has(assetIcon) ? '' : '/flow-view-icons.svg'}#${assetIcon}`}/></svg>
+    ? <span aria-hidden="true" className={`${styles.glyph} ${styles.emojiGlyph} ${className ?? ''}`} style={{ color, ...style }}>{icon}</span>
+    : <svg aria-hidden="true" className={`${styles.glyph} ${className ?? ''}`} fill="currentColor" style={{ color, ...style }} viewBox="0 0 16 16"><use href="#CustomView"/></svg>
+  return <svg aria-hidden="true" className={`${styles.glyph} ${className ?? ''}`} fill="currentColor" style={{ color, ...style }} viewBox="0 0 16 16"><use href={`${FLOW_CORE_ICON_NAMES.has(assetIcon) ? '' : '/flow-view-icons.svg'}#${assetIcon}`}/></svg>
 }
 
 export function ViewIconPicker({ align = 'start', ariaLabel, color = DEFAULT_VIEW_COLOR, icon = DEFAULT_VIEW_ICON, onChange, prependIcons = [], prependTeam = false, triggerClassName }: { align?: 'start' | 'center' | 'end'; ariaLabel?: string; color?: string; icon?: string; onChange: (visual: ViewVisual) => void; prependIcons?: string[]; prependTeam?: boolean; triggerClassName?: string }) {

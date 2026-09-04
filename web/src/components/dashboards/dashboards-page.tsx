@@ -1,5 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   BarChart3,
   ArrowDown,
@@ -1089,6 +1089,7 @@ function DashboardMenu({
                     key={team.id}
                     onSelect={() => onVisibility("team", [team.id])}
                   >
+                    <TeamIcon team={team} size={14} />
                     <span data-i18n-ignore>{team.name}</span>
                     {dashboard.visibility === "team" &&
                       dashboard.teamIds.includes(team.id) && (
@@ -1460,7 +1461,7 @@ function InsightFilterBuilder({ data, filters, onChange }: { data: BootstrapData
   return <section className="dashboard-insight-filter-builder">
     <header><Filter/><strong>{t("Filters")}</strong></header>
     <div>
-      <PropertyMenu compact multiple label={t("Teams")} value={(filters.teamIds?.length ?? 0) ? `${filters.teamIds!.length} ${t("Teams")}` : t("All teams")} selectedIds={filters.teamIds ?? []} triggerClassName="dashboard-filter-property" icon={<TeamIcon size={14}/>} options={data.teams.map((team) => ({ id: team.id, label: team.name, color: team.color, icon: <TeamIcon size={14}/>, i18nIgnore: true }))} onChange={(id) => toggle("teamIds", id)}/>
+      <PropertyMenu compact multiple label={t("Teams")} value={(filters.teamIds?.length ?? 0) ? `${filters.teamIds!.length} ${t("Teams")}` : t("All teams")} selectedIds={filters.teamIds ?? []} triggerClassName="dashboard-filter-property" icon={<TeamIcon size={14}/>} options={data.teams.map((team) => ({ id: team.id, label: team.name, color: team.color, icon: <TeamIcon team={team} size={14}/>, i18nIgnore: true }))} onChange={(id) => toggle("teamIds", id)}/>
       <PropertyMenu compact multiple label={t("Statuses")} value={(filters.stateIds?.length ?? 0) ? `${filters.stateIds!.length} ${t("Statuses")}` : t("All statuses")} selectedIds={filters.stateIds ?? []} triggerClassName="dashboard-filter-property" icon={<Filter size={14}/>} options={data.states.map((state) => ({ id: state.id, label: state.name, color: state.color, icon: <StatusIcon state={state}/>, i18nIgnore: true }))} onChange={(id) => toggle("stateIds", id)}/>
       <PropertyMenu compact multiple label={t("Assignees")} value={(filters.assigneeIds?.length ?? 0) ? `${filters.assigneeIds!.length} ${t("Assignees")}` : t("All assignees")} selectedIds={filters.assigneeIds ?? []} triggerClassName="dashboard-filter-property" icon={<NoAssigneeIcon size={14}/>} options={data.users.map((user) => ({ id: user.id, label: user.displayName, i18nIgnore: true }))} onChange={(id) => toggle("assigneeIds", id)}/>
       <PropertyMenu compact multiple kind="labels" label={t("Labels")} value={(filters.labelIds?.length ?? 0) ? `${filters.labelIds!.length} ${t("Labels")}` : t("All labels")} selectedIds={filters.labelIds ?? []} triggerClassName="dashboard-filter-property" icon={<LabelIcon size={14}/>} options={data.labels.filter((label) => label.resourceType === "issue").map((label) => { const group = label.groupId ? groupNames.get(label.groupId) : undefined; return { id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, groupId: label.groupId, groupLabel: group?.name, groupColor: group?.color, i18nIgnore: true }; })} onChange={(id) => toggle("labelIds", id)}/>
@@ -1694,6 +1695,7 @@ type DashboardSelectOption<T extends string> = {
   label: string;
   description?: string;
   i18nIgnore?: boolean;
+  icon?: ReactNode;
 };
 
 function DashboardSelect<T extends string>({
@@ -1716,8 +1718,9 @@ function DashboardSelect<T extends string>({
           className="dashboard-select-trigger"
           type="button"
         >
-          <span data-i18n-ignore={selected?.i18nIgnore || undefined}>
-            {selected?.label ?? value}
+          <span className="dashboard-select-value" data-i18n-ignore={selected?.i18nIgnore || undefined}>
+            {selected?.icon}
+            <span>{selected?.label ?? value}</span>
           </span>
           <ChevronDown />
         </button>
@@ -1739,6 +1742,7 @@ function DashboardSelect<T extends string>({
                 key={option.value}
                 value={option.value}
               >
+                {option.icon}
                 <span className="dashboard-select-copy">
                   <strong data-i18n-ignore={option.i18nIgnore || undefined}>
                     {option.label}
@@ -1833,6 +1837,7 @@ function CreateDashboardDialog({
                 value: team.id,
                 label: team.name,
                 i18nIgnore: true,
+                icon: <TeamIcon team={team} size={14} />,
               }))}
               value={teamId}
               onChange={onTeam}
