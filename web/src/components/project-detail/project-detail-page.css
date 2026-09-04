@@ -712,7 +712,7 @@
 .project-activity__composer > header > div { display: inline-flex; padding: 2px; border-radius: 9999px; background: var(--theme-control); }
 .project-activity__composer > header > div button { height: 25px; padding: 0 8px; border: 0; border-radius: 9999px; background: transparent; color: #85858a; font-size: 11px; }
 .project-activity__composer > header > div button[aria-selected=true] { background: var(--theme-border-strong); color: var(--theme-text-primary); }
-.project-activity__health { height: 27px; display: flex; align-items: center; gap: 5px; padding: 0 8px; border: .5px solid #333337; border-radius: 9999px; background: var(--theme-control); color: #8e8e93; font-size: 11px; }
+.project-activity__health { height: 27px; width: max-content; min-width: 24px; flex: 0 0 auto; display: flex; align-items: center; gap: 5px; padding: 0 8px; border: .5px solid #333337; border-radius: 9999px; background: var(--theme-control); color: #8e8e93; font-size: 11px; white-space: nowrap; overflow: visible; }
 .project-activity__health i { width: 8px; height: 8px; border: 1.5px solid currentColor; border-radius: 50%; }
 .project-activity__update-health i { width: 8px; height: 8px; border: 1.5px solid currentColor; border-radius: 50%; }
 .project-activity__health.is-onTrack { color: #5ea970; }
