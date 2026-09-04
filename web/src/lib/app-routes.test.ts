@@ -5,9 +5,13 @@ import {
   automationNewPath,
   automationPath,
   automationRunsPath,
+  apiKeyPath,
+  apiKeyEditPath,
   diaryPath,
   labelPath,
   meetingPath,
+  newAPIKeyPath,
+  newSigningKeyPath,
   parseAppRoute,
   projectPath,
   projectSavedViewEditPath,
@@ -60,6 +64,40 @@ describe("application routes", () => {
       workspaceSlug: "acme",
       page: "preferences",
     });
+    expect(
+      parseAppRoute("/acme/settings/account/security/api-keys/new"),
+    ).toEqual({
+      kind: "settings",
+      workspaceSlug: "acme",
+      page: "account-security",
+      apiKeyMode: "new",
+    });
+    expect(
+      parseAppRoute("/acme/settings/account/security/commit-signing-key"),
+    ).toEqual({
+      kind: "settings",
+      workspaceSlug: "acme",
+      page: "account-security",
+      signingKeyMode: "new",
+    });
+    expect(
+      parseAppRoute("/acme/settings/account/security/api-keys/key%2F1"),
+    ).toEqual({
+      kind: "settings",
+      workspaceSlug: "acme",
+      page: "account-security",
+      apiKeyMode: "detail",
+      apiKeyId: "key/1",
+    });
+    expect(
+      parseAppRoute("/acme/settings/account/security/api-keys/key%2F1/edit"),
+    ).toEqual({
+      kind: "settings",
+      workspaceSlug: "acme",
+      page: "account-security",
+      apiKeyMode: "edit",
+      apiKeyId: "key/1",
+    });
     expect(parseAppRoute("/")).toEqual({ kind: "root" });
   });
 
@@ -82,6 +120,18 @@ describe("application routes", () => {
     ).toBe("/acme/initiative/north-star/projects");
     expect(workspaceViewsNewPath("acme", "projects")).toBe(
       "/acme/views/projects/new",
+    );
+    expect(newAPIKeyPath("acme")).toBe(
+      "/acme/settings/account/security/api-keys/new",
+    );
+    expect(newSigningKeyPath("acme")).toBe(
+      "/acme/settings/account/security/commit-signing-key",
+    );
+    expect(apiKeyPath("acme", "key/1")).toBe(
+      "/acme/settings/account/security/api-keys/key%2F1",
+    );
+    expect(apiKeyEditPath("acme", "key/1")).toBe(
+      "/acme/settings/account/security/api-keys/key%2F1/edit",
     );
     expect(teamViewsNewPath("acme", "ENG", "issues")).toBe(
       "/acme/team/ENG/views/issues/new",

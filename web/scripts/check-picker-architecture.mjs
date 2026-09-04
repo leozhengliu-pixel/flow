@@ -8,6 +8,9 @@ const dedicated = new Set([
   'issue/issue-release-picker.tsx',
   'issue/editor/selection-toolbar.tsx',
   'issue/editor/slash-command-menu.tsx',
+  // Account security's team scope combobox owns filtering and multi-select
+  // semantics rather than using an issue property picker.
+  'settings/personal-settings.tsx',
 ])
 
 const files = await collect(root)
