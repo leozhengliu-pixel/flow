@@ -26,6 +26,7 @@ import { InitiativeResources } from './initiative-resources'
 import { formatTarget, titleCase } from './initiative-model'
 import { labelsForResource } from '@/lib/labels'
 import './initiatives.css'
+import './initiative-detail-overrides.css'
 
 type Props = {
   initiative: Initiative
