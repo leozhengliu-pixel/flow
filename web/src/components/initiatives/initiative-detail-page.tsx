@@ -200,7 +200,7 @@ export function InitiativeDetailPage(props: Props) {
       onCreate={async draft => { const project = await props.onCreateProject(projectDraftMutation(draft, props.projects, props.projectStatuses)); await update({ projectIds: [...new Set([...initiative.projectIds, project.id])] }); setProjectCreateOpen(false) }}
       open={projectCreateOpen}
       teamLabel={props.teams[0]?.name ?? 'Team'}
-      teams={props.teams.map(team => ({ id: team.id, label: team.name, color: team.color }))}
+      teams={props.teams.map(team => ({ id: team.id, label: team.name, color: team.color, icon: <ViewGlyph color={team.color} icon={team.icon || 'Team'} /> }))}
       workspaceName={props.teams[0]?.name ?? 'Team'}
     />
   </main>

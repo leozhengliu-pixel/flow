@@ -7,6 +7,7 @@ import { NewProjectDialog, type NewProjectDraft } from '@/components/projects-pa
 import { projectPeopleChoices } from '@/components/projects-page/project-people'
 import { ProjectStatusGlyph } from '@/components/projects-page/project-property-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
+import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { labelsForResource } from '@/lib/labels'
 import { createProject as createProjectRequest, createProjectMilestone as createProjectMilestoneRequest } from '@/lib/api'
 import { useI18n } from '@/i18n/i18n'
@@ -110,7 +111,7 @@ export function IssueProjectPicker({ data, issue, grouped = false, presence = []
       open={createOpen}
       agentSkills={data.agentSkills}
       teamLabel={issue.team.name}
-      teams={data.teams.filter(team => !team.retiredAt).map(team => ({ id: team.id, label: team.name, color: team.color }))}
+      teams={data.teams.filter(team => !team.retiredAt).map(team => ({ id: team.id, label: team.name, color: team.color, icon: <ViewGlyph color={team.color} icon={team.icon || 'Team'} /> }))}
       workspaceName={issue.team.name}
     />
   </>

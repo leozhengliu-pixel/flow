@@ -6,7 +6,7 @@ import { MyIssuesFilterMenu } from '@/components/my-issues/my-issues-filter-menu
 import type { MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-types'
 import type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption } from '@/components/my-issues/my-issues-surface'
 import type { TeamIssuesRouteView } from '@/lib/app-routes'
-import type { SavedView } from '@/types/flow'
+import type { SavedView, Team } from '@/types/flow'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import styles from './issue-explorer.module.css'
 import { useIssueSurfaceControls } from '@/components/my-issues/use-issue-surface-controls'
@@ -19,12 +19,13 @@ const VIEWS: { id: TeamIssuesRouteView; label: string }[] = [
 ]
 
 export function IssueExplorerSurface({
-  children, scopeName, scopeHref, activeView, viewHref, filters, filterBar, viewEditor, viewActions, displayOptions, detailsOpen, itemCount = 0,
+  children, scopeName, scopeHref, scopeTeam, activeView, viewHref, filters, filterBar, viewEditor, viewActions, displayOptions, detailsOpen, itemCount = 0,
   creatingView = false, favorite = false, filterOpenSignal = 0, filterOptions, insightsOpen = false, savedView, savedViews = [], savedViewHref, onAddView, onSavedViewSelect, onToggleFavorite, onFilterToggle, onDisplayOptionsChange, onDetailsOpenChange, onInsightsOpenChange, onNavigateView, onNewViewResourceChange, onOpenSidebar,
 }: {
   children: ReactNode
   scopeName: string
   scopeHref?: string
+  scopeTeam?: Team
   activeView: TeamIssuesRouteView
   viewHref: (view: TeamIssuesRouteView) => string
   filters: MyIssuesAppliedFilter[]
@@ -73,7 +74,7 @@ export function IssueExplorerSurface({
     <header className={styles.header}>
       <button className={styles.mobileSidebarButton} aria-label="Open sidebar" onClick={onOpenSidebar}><span/><span/><span/></button>
       {creatingView ? <><span className={styles.scope}>Views</span><ChevronRight className={styles.crumb} size={13}/><h2>All issues</h2><button className={`${styles.headerAction} ${styles.copyUrl}`} type="button" aria-label="Copy URL" onClick={() => void navigator.clipboard.writeText(window.location.href)}><Link2 size={14}/></button></> : savedView ? <><ViewGlyph className={styles.headerViewIcon} color={savedView.color} icon={savedView.icon}/><h2 data-i18n-ignore>{savedView.name}</h2>{onToggleFavorite && <button className={styles.headerAction} type="button" role="switch" aria-label={favorite ? 'Remove from favorites' : 'Add to favorites'} aria-checked={favorite} data-active={favorite} onClick={onToggleFavorite}><Star size={14} fill={favorite ? 'currentColor' : 'none'}/></button>}{viewActions && <span className={styles.headerViewActions}>{viewActions}</span>}</> : <>
-        {scopeHref ? <a className={styles.scope} data-i18n-ignore href={scopeHref}>{scopeName}</a> : <span className={styles.scope} data-i18n-ignore>{scopeName}</span>}
+        {scopeHref ? <a className={styles.scope} data-i18n-ignore href={scopeHref}>{scopeTeam && <ViewGlyph className={styles.scopeIcon} color={scopeTeam.color} icon={scopeTeam.icon || 'Team'} />}<span>{scopeName}</span></a> : <span className={styles.scope} data-i18n-ignore>{scopeTeam && <ViewGlyph className={styles.scopeIcon} color={scopeTeam.color} icon={scopeTeam.icon || 'Team'} />}<span>{scopeName}</span></span>}
         <ChevronRight className={styles.crumb} size={13}/><h2>Issues</h2>
       </>}
     </header>

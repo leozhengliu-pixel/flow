@@ -775,11 +775,11 @@ function ProjectTemplatePropertyMenus({
         valueIsEntityName={selectedTeams.length === 1}
         selectedIds={teamIds}
         triggerClassName="it-property"
-        icon={<TeamIcon size={14} />}
+        icon={<TeamIcon team={selectedTeams[0]} size={14} />}
         options={data.teams.map((item) => ({
           id: item.id,
           label: item.name,
-          icon: <TeamIcon size={14} />,
+          icon: <TeamIcon team={item} size={14} />,
           i18nIgnore: true,
         }))}
         onChange={(id) => onTeams(toggleTemplateId(teamIds, id))}
@@ -2010,13 +2010,13 @@ function IssueTemplatePropertyMenus({
         valueIsEntityName={Boolean(team)}
         selectedId={teamId}
         triggerClassName="it-property"
-        icon={<TeamIcon size={14} />}
+        icon={<TeamIcon team={team} size={14} />}
         options={[
           { id: "", label: t("Team"), icon: <TeamIcon size={14} /> },
           ...data.teams.map((item) => ({
             id: item.id,
             label: item.name,
-            icon: <TeamIcon size={14} />,
+            icon: <TeamIcon team={item} size={14} />,
             i18nIgnore: true,
           })),
         ]}
