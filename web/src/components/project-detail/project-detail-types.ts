@@ -23,6 +23,7 @@ import type {
   Team,
   User,
 } from "@/types/flow";
+import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-list";
 import type { ProjectMutationInput } from "@/components/projects-page/projects-page";
 
 export type ProjectDetailTab = "overview" | "activity" | "issues" | "new";
@@ -145,7 +146,7 @@ export type ProjectDetailProps = {
   onOpenIssue: (issue: Issue) => void;
   onUpdateIssue: (issueId: string, input: IssueUpdateInput) => Promise<Issue>;
   onDeleteIssues: (issueIds: string[]) => Promise<void>;
-  onCreateIssue: (projectId: string, projectMilestoneId?: string) => void;
+  onCreateIssue: (projectId: string, projectMilestoneId?: string, context?: MyIssuesCreateContext) => void;
   onOpenSidebar?: () => void;
 };
 

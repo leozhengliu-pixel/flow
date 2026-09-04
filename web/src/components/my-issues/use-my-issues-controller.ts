@@ -141,15 +141,19 @@ function projectGroups(groups: MyIssuesGroupData[], display: MyIssuesDisplayOpti
 
 function groupForIssue(issue: MyIssuesRowData, grouping: MyIssuesDisplayOptions['grouping']): Omit<MyIssuesGroupData, 'issues'> {
   if (grouping === 'status' || grouping === 'focus') {
-    return { id: grouping === 'focus' && issue.state.type === 'started' ? 'other-active' : issue.state.id, label: grouping === 'focus' && issue.state.type === 'started' ? 'Other active' : issue.state.name, stateType: issue.state.type, state: issue.state }
+    const focused = grouping === 'focus' && issue.state.type === 'started'
+    return { id: focused ? 'other-active' : issue.state.id, label: focused ? 'Other active' : issue.state.name, stateType: issue.state.type, state: issue.state, createContext: focused ? undefined : { stateId: issue.state.id } }
   }
-  if (grouping === 'priority') return { id: `priority-${issue.priority}`, label: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][issue.priority] }
-  if (grouping === 'project') return { id: `project-${issue.project?.id ?? 'none'}`, label: issue.project?.name ?? 'No project' }
-  if (grouping === 'assignee') return { id: `assignee-${issue.assignee?.id ?? 'none'}`, label: issue.assignee?.name ?? 'No assignee' }
+  if (grouping === 'priority') return { id: `priority-${issue.priority}`, label: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][issue.priority], createContext: { priority: issue.priority } }
+  if (grouping === 'project') return { id: `project-${issue.project?.id ?? 'none'}`, label: issue.project?.name ?? 'No project', createContext: issue.project ? { projectId: issue.project.id } : { projectId: '' } }
+  if (grouping === 'assignee') return { id: `assignee-${issue.assignee?.id ?? 'none'}`, label: issue.assignee?.name ?? 'No assignee', createContext: { assigneeId: issue.assignee?.id ?? '' } }
   if (grouping === 'label') {
     const label = issue.labels?.[0]
-    return { id: `label-${label?.id ?? 'none'}`, label: label?.name ?? 'No label' }
+    return { id: `label-${label?.id ?? 'none'}`, label: label?.name ?? 'No label', createContext: { labelIds: label ? [label.id] : [] } }
   }
+  if (grouping === 'cycle') return { id: `cycle-${issue.cycleId ?? 'none'}`, label: issue.cycleName ?? 'No cycle', createContext: { cycleId: issue.cycleId ?? '' } }
+  if (grouping === 'team') return { id: `team-${issue.teamId ?? 'none'}`, label: issue.teamName ?? 'No team', createContext: { teamId: issue.teamId } }
+  if (grouping === 'agent') return { id: `agent-${issue.agentSessionId ?? 'none'}`, label: issue.agentSessionId ? 'Agent session' : 'No agent', createContext: { } }
   return { id: `${grouping}-none`, label: grouping[0].toUpperCase() + grouping.slice(1) }
 }
 
