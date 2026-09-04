@@ -11,7 +11,7 @@ const api = vi.hoisted(() => ({
   updateAccountProfile: vi.fn(), removeMember: vi.fn(), fetchAccountIdentities: vi.fn(), fetchAccountSessions: vi.fn(),
   listPushSubscriptions: vi.fn(), deletePushSubscription: vi.fn(), revokeAccountSession: vi.fn(),
   revokeOtherAccountSessions: vi.fn(), revokeOAuthAuthorization: vi.fn(), updateNotificationPreferences: vi.fn(),
-  createAPIKey: vi.fn(), revokeAPIKey: vi.fn(), rotateAPIKey: vi.fn(), logoutAccount: vi.fn(),
+  createAPIKey: vi.fn(), updateAPIKey: vi.fn(), revokeAPIKey: vi.fn(), rotateAPIKey: vi.fn(), logoutAccount: vi.fn(),
   fetchPasskeys: vi.fn(), beginPasskeyRegistration: vi.fn(), finishPasskeyRegistration: vi.fn(),
   updatePasskey: vi.fn(), deletePasskey: vi.fn(), fetchCommitSigningKey: vi.fn(),
   addCommitSigningKey: vi.fn(), removeCommitSigningKey: vi.fn(),
@@ -50,6 +50,7 @@ describe('personal settings workflows', () => {
     api.listPushSubscriptions.mockResolvedValue([])
     api.fetchAccountSessions.mockResolvedValue([])
     api.createAPIKey.mockResolvedValue({ key: { id: 'key-1' }, secret: 'flow_test_secret' })
+    api.updateAPIKey.mockResolvedValue({ id: 'key-1', name: 'Updated key', scopes: ['read'], teamIds: [] })
     api.revokeAPIKey.mockResolvedValue(undefined)
     api.rotateAPIKey.mockResolvedValue({ key: { id: 'key-1' }, secret: 'flow_rotated_secret' })
     api.fetchAccountIdentities.mockResolvedValue([])
@@ -199,6 +200,48 @@ describe('personal settings workflows', () => {
     expect(await screen.findByRole('heading', { name: 'API key created' })).toBeVisible()
     expect(screen.getByRole('textbox', { name: 'API key' })).toHaveValue('flow_test_secret')
     expect(screen.getByRole('button', { name: 'Done' })).toBeVisible()
+  })
+
+  it('keeps full-access keys unrestricted and hands the one-time secret to the detail route', async () => {
+    const user = userEvent.setup()
+    const input = props('account-security')
+    const onOpenAPIKey = vi.fn()
+    input.onOpenAPIKey = onOpenAPIKey
+    api.createAPIKey.mockResolvedValue({
+      key: { id: 'key-full', name: 'Full access', scopes: null, teamIds: null },
+      secret: 'flow_full_secret',
+    })
+    input.apiKeyMode = 'new'
+    render(<MemoryRouter><I18nProvider><PersonalSettings {...input}/></I18nProvider></MemoryRouter>)
+    await user.type(screen.getByRole('textbox', { name: 'Key name' }), 'Full access')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(api.createAPIKey).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Full access', scopes: undefined, teamIds: [], teamRestriction: 'all',
+    })))
+    expect(onOpenAPIKey).toHaveBeenCalledWith(expect.objectContaining({ id: 'key-full' }))
+    expect(sessionStorage.getItem('flow.api-key-secret:key-full')).toBe('flow_full_secret')
+    sessionStorage.removeItem('flow.api-key-secret:key-full')
+  })
+
+  it('edits API-key permissions and team policy through the dedicated form', async () => {
+    const user = userEvent.setup()
+    const input = props('account-security')
+    const key = { id: 'key-edit', name: 'Scoped key', scopes: ['read'], teamIds: [], teamRestriction: 'all', creatorId: viewer.id, prefix: 'flow_api_test', createdAt: '2026-09-01T00:00:00.000Z' }
+    input.data = { ...input.data, apiKeys: [key] } as never
+    const onOpenAPIKey = vi.fn()
+    input.onOpenAPIKey = onOpenAPIKey
+    input.apiKeyId = key.id
+    input.apiKeyMode = 'edit'
+    render(<MemoryRouter><I18nProvider><PersonalSettings {...input}/></I18nProvider></MemoryRouter>)
+    const name = screen.getByRole('textbox', { name: 'Key name' })
+    await user.clear(name)
+    await user.type(name, 'Renamed key')
+    await user.click(screen.getByRole('radio', { name: 'Full access' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(api.updateAPIKey).toHaveBeenCalledWith('key-edit', expect.objectContaining({
+      name: 'Renamed key', scopes: null, teamIds: null, teamRestriction: 'all',
+    })))
+    expect(onOpenAPIKey).toHaveBeenCalledWith(expect.objectContaining({ id: 'key-1' }))
   })
 
   it('uses a dedicated signing-key route and uploads the key form', async () => {

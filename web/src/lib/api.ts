@@ -288,21 +288,21 @@ export function fetchBootstrap(workspaceKey?: string): Promise<BootstrapData> {
 export function createWorkspace(
   input: WorkspaceMutationInput & { name: string; urlKey: string },
 ): Promise<BootstrapData> {
-  return request("/api/workspaces", {
+  return request<BootstrapData>("/api/workspaces", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
-  });
+  }).then(normalizeBootstrapData);
 }
 export function updateWorkspace(
   workspaceKey: string,
   input: WorkspaceMutationInput,
 ): Promise<BootstrapData> {
-  return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}`, {
+  return request<BootstrapData>(`/api/workspaces/${encodeURIComponent(workspaceKey)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
-  });
+  }).then(normalizeBootstrapData);
 }
 export function uploadWorkspaceLogo(
   workspaceKey: string,
@@ -538,10 +538,10 @@ export function updateAPIKey(
   ).then(normalizeAPIKey);
 }
 export function revokeAPIKey(id: string): Promise<void> {
-  return request(`/api/api-keys/${id}`, { method: "DELETE" });
+  return request(`/api/api-keys/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 export function rotateAPIKey(id: string): Promise<{ key: APIKey; secret: string }> {
-  return request<{ key: APIKey; secret: string }>(`/api/api-keys/${id}/rotate-secret`, {
+  return request<{ key: APIKey; secret: string }>(`/api/api-keys/${encodeURIComponent(id)}/rotate-secret`, {
     method: "POST",
   }).then((result) => ({ ...result, key: normalizeAPIKey(result.key) }));
 }

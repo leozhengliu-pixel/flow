@@ -1107,12 +1107,15 @@ func (s *server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 	input.Name = name
 	secret, err := randomSecret("flow_api_")
 	if err != nil {
-		respondMutation(w, err, http.StatusCreated, nil)
+		respondMutation(w, err, http.StatusInternalServerError, nil)
 		return
 	}
 	actor := requestActor(s, r)
 	var created domain.APIKey
 	err = s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "api_key.created", input, func(data *domain.Bootstrap) (string, error) {
+		if s.authDisabled {
+			data.ViewerRole = "admin"
+		}
 		if strings.EqualFold(data.ViewerRole, "guest") {
 			return "", fmt.Errorf("%w: guest users cannot create personal API keys", store.ErrAuthForbidden)
 		}
@@ -1236,6 +1239,9 @@ func (s *server) updateAPIKey(w http.ResponseWriter, r *http.Request) {
 	err = s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "api_key.updated", map[string]any{
 		"id": id, "name": name, "scopes": scopes, "teamIds": teamIDs, "teamRestriction": restrictionValue, "expiresAt": expiresAt,
 	}, func(data *domain.Bootstrap) (string, error) {
+		if s.authDisabled {
+			data.ViewerRole = "admin"
+		}
 		index := slices.IndexFunc(data.APIKeys, func(key domain.APIKey) bool {
 			return key.ID == id && key.RevokedAt == nil && (key.CreatorID == actor.ID || workspaceAdminRole(data.ViewerRole))
 		})
