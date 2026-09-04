@@ -17,11 +17,12 @@ export function StatusHoverPreview({ state, activities, issueCreatedAt }: { stat
   </div>
 }
 
-export function AssigneeHoverPreview({ user, member, workspaceName, project }: { user: User; member?: WorkspaceMember; workspaceName: string; project?: ProjectSummary }) {
+export function AssigneeHoverPreview({ user, member, online = false, workspaceName, project }: { user: User; member?: WorkspaceMember; online?: boolean; workspaceName: string; project?: ProjectSummary }) {
+  const isOnline = online && user.active && member?.status !== 'suspended'
   return <div className="assignee-hover-preview">
     <header><Avatar name={user.displayName}/><div><strong>{user.displayName}</strong><span>{user.name}</span></div></header>
     <div className="assignee-hover-preview__details">
-      <span><i className={member?.status === 'suspended' || !user.active ? 'offline' : ''}/>{member?.status === 'suspended' || !user.active ? 'Offline' : 'Online'}</span>
+      <span><i className={isOnline ? undefined : 'offline'}/>{isOnline ? 'Online' : 'Offline'}</span>
       <span><Clock3/><time>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time><small>local time</small></span>
       <span><Building2/>{workspaceName}</span>
       <span><Layers3/>{project?.name ?? 'No project'}</span>

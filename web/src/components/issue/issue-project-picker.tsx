@@ -10,21 +10,23 @@ import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { labelsForResource } from '@/lib/labels'
 import { createProject as createProjectRequest, createProjectMilestone as createProjectMilestoneRequest } from '@/lib/api'
 import { useI18n } from '@/i18n/i18n'
-import type { BootstrapData, Issue, IssueUpdateInput, Project, ProjectMilestone } from '@/types/flow'
+import type { BootstrapData, Issue, IssueUpdateInput, Presence, Project, ProjectMilestone } from '@/types/flow'
 import type { ProjectCreateInput } from '@/components/projects-page/projects-page'
 
 import './issue-project-picker.css'
 
-export function IssueProjectPicker({ data, issue, grouped = false, onUpdate, onCreateProject, onCreateMilestone }: {
+export function IssueProjectPicker({ data, issue, grouped = false, presence = [], onUpdate, onCreateProject, onCreateMilestone }: {
   data: BootstrapData
   issue: Issue
   grouped?: boolean
+  presence?: Presence[]
   onUpdate: (input: IssueUpdateInput) => Promise<void>
   onCreateProject?: (draft: NewProjectDraft) => Promise<Project>
   onCreateMilestone?: (projectId: string, input: { name: string }) => Promise<ProjectMilestone>
 }) {
   const { t, formatDate } = useI18n()
-  const peopleChoices = projectPeopleChoices(data.users, data.invitations)
+  const onlineUserIds = new Set([data.viewer.id, ...presence.map(item => item.user.id)])
+  const peopleChoices = projectPeopleChoices(data.users, data.invitations, onlineUserIds)
   const rootRef = useRef<HTMLDivElement>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createdProjects, setCreatedProjects] = useState<Project[]>([])
