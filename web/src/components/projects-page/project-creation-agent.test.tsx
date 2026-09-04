@@ -27,6 +27,34 @@ const session: AgentSession = {
 }
 
 describe('ProjectCreationAgent', () => {
+  it('keeps the assistant background grid and featured gradient overlay separate', () => {
+    api.fetchAgentStatus.mockResolvedValue({ enabled: false, model: '' })
+    const { container } = render(<I18nProvider><ProjectCreationAgent onClose={vi.fn()} onHide={vi.fn()} /></I18nProvider>)
+
+    const background = container.querySelector<HTMLElement>('.project-creation-agent__background')
+    expect(background).toHaveAttribute('data-grid-count', '253')
+    const cells = background ? Array.from(background.querySelectorAll('[data-grid-index]')) : []
+    expect(cells).toHaveLength(253)
+    expect(cells.every(cell => cell.tagName === 'SPAN')).toBe(true)
+
+    const featuredSlot = cells.find(cell => cell.getAttribute('data-grid-index') === '241')
+    expect(featuredSlot).toHaveClass('is-featured-slot')
+    expect(featuredSlot).toHaveAttribute('aria-hidden', 'true')
+
+    const featured = container.querySelector<SVGSVGElement>('.project-creation-agent__featured')
+    expect(featured).toHaveAttribute('aria-hidden', 'true')
+    expect(featured).toHaveAttribute('viewBox', '0 0 16 16')
+    expect(featured?.querySelectorAll('use[href="#Project"]')).toHaveLength(3)
+    expect(featured?.querySelectorAll('g')).toHaveLength(2)
+    expect(featured?.querySelector('g[opacity=".15"]')).toHaveAttribute('filter', 'url(#project-agent-featured-blur-4)')
+    expect(featured?.querySelector('g[opacity=".3"]')).toHaveAttribute('filter', 'url(#project-agent-featured-blur-2)')
+    const gradient = featured?.querySelector('linearGradient#project-agent-featured-gradient')
+    expect(gradient).toBeInTheDocument()
+    expect(gradient?.querySelectorAll('stop')).toHaveLength(2)
+    expect(gradient?.querySelector('stop:first-child')).toHaveAttribute('stop-color', 'lch(10% 0 282)')
+    expect(gradient?.querySelector('stop:last-child')).toHaveAttribute('stop-color', 'lch(40% 1 282)')
+  })
+
   it('opens, hides, and closes from the new project dialog', async () => {
     api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'test-model' })
     const user = userEvent.setup()
