@@ -494,16 +494,40 @@ export function ProjectCreationAgent({
 }
 
 function AgentBackgroundGlyph() {
+  const featuredIndex = 241;
   return (
-    <div aria-hidden="true" className="project-creation-agent__background">
-      {Array.from({ length: 253 }, (_, index) => (
-        <span className={index === 241 ? "is-featured" : undefined} key={index}>
-          <svg viewBox="0 0 16 16">
-            <use href="#Project" />
-          </svg>
-        </span>
-      ))}
-    </div>
+    <>
+      <div aria-hidden="true" className="project-creation-agent__background" data-grid-count="253">
+        {Array.from({ length: 253 }, (_, index) => (
+          <span aria-hidden={index === featuredIndex || undefined} className={index === featuredIndex ? "is-featured-slot" : undefined} data-grid-index={index} key={index}>
+            <svg viewBox="0 0 16 16">
+              <use href="#Project" />
+            </svg>
+          </span>
+        ))}
+      </div>
+      <svg aria-hidden="true" className="project-creation-agent__featured" style={{ overflow: "visible" }} viewBox="0 0 16 16">
+        <defs>
+          <linearGradient id="project-agent-featured-gradient" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor="lch(10% 0 282)" />
+            <stop offset="1" stopColor="lch(40% 1 282)" />
+          </linearGradient>
+          <filter id="project-agent-featured-blur-4" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="4" />
+          </filter>
+          <filter id="project-agent-featured-blur-2" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="2" />
+          </filter>
+        </defs>
+        <g filter="url(#project-agent-featured-blur-4)" opacity=".15">
+          <use fill="url(#project-agent-featured-gradient)" href="#Project" />
+        </g>
+        <g filter="url(#project-agent-featured-blur-2)" opacity=".3">
+          <use fill="url(#project-agent-featured-gradient)" href="#Project" />
+        </g>
+        <use fill="url(#project-agent-featured-gradient)" href="#Project" />
+      </svg>
+    </>
   );
 }
 
