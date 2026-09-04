@@ -873,8 +873,6 @@ type WorkspaceSettings struct {
 	APIKeyPermission             string            `json:"apiKeyPermission"`
 	FeatureFlags                 map[string]bool   `json:"featureFlags"`
 	FeatureSettings              FeatureSettings   `json:"featureSettings"`
-	BillingEmail                 string            `json:"billingEmail,omitempty"`
-	Plan                         string            `json:"plan"`
 	InviteLinksEnabled           bool              `json:"inviteLinksEnabled"`
 	GoogleAuthEnabled            bool              `json:"googleAuthEnabled"`
 	EmailAuthEnabled             bool              `json:"emailAuthEnabled"`
@@ -883,7 +881,6 @@ type WorkspaceSettings struct {
 	LoopPermission               string            `json:"loopPermission,omitempty"`
 	AgentGuidancePermission      string            `json:"agentGuidancePermission,omitempty"`
 	PreventGuestAgents           bool              `json:"preventGuestAgents"`
-	AIUsageSharing               bool              `json:"aiUsageSharing"`
 	AgentWebSearch               bool              `json:"agentWebSearch"`
 	ExternalLoopTriggers         bool              `json:"externalLoopTriggers"`
 	MCPConnectorsEnabled         bool              `json:"mcpConnectorsEnabled"`
@@ -892,11 +889,6 @@ type WorkspaceSettings struct {
 	RestrictFileUploads          bool              `json:"restrictFileUploads"`
 	ReduceSupportPersonalInfo    bool              `json:"reduceSupportPersonalInfo"`
 	HIPAACompliance              bool              `json:"hipaaCompliance"`
-	AICreditBalanceCents         int64             `json:"aiCreditBalanceCents"`
-	AICreditAutoReload           bool              `json:"aiCreditAutoReload"`
-	AICreditReloadThresholdCents int64             `json:"aiCreditReloadThresholdCents"`
-	AICreditReloadAmountCents    int64             `json:"aiCreditReloadAmountCents"`
-	AIWorkspaceSpendLimitCents   int64             `json:"aiWorkspaceSpendLimitCents"`
 	SCIMEnabled                  bool              `json:"scimEnabled,omitempty"`
 	SCIMRoleClaim                string            `json:"scimRoleClaim,omitempty"`
 	SCIMRoleMapping              map[string]string `json:"scimRoleMapping,omitempty"`
@@ -919,7 +911,6 @@ type FeatureOption struct {
 }
 
 type FeatureSettings struct {
-	AIUsageFeedback          bool            `json:"aiUsageFeedback"`
 	InitiativeUpdateSchedule string          `json:"initiativeUpdateSchedule"`
 	CustomerDefaultTeamID    string          `json:"customerDefaultTeamId,omitempty"`
 	CustomerRevenueFormat    string          `json:"customerRevenueFormat"`
@@ -1621,8 +1612,6 @@ type Bootstrap struct {
 	AgentActivities               []AgentActivity                    `json:"agentActivities"`
 	AIConversations               []AIConversation                   `json:"aiConversations"`
 	AIPromptProgress              []AIPromptProgress                 `json:"aiPromptProgress"`
-	UsageAlerts                   []UsageAlert                       `json:"usageAlerts"`
-	PaidSubscriptions             []PaidSubscription                 `json:"paidSubscriptions"`
 	Projects                      []Project                          `json:"projects"`
 	ProjectStatuses               []ProjectStatus                    `json:"projectStatuses"`
 	ProjectDisplayDefault         json.RawMessage                    `json:"projectDisplayDefault,omitempty"`

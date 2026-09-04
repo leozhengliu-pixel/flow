@@ -4632,10 +4632,6 @@ function App() {
         {page === "new-team" && (
           <TeamCreatePage
             teams={data.teams}
-            businessEnabled={
-              data.workspaceSettings.plan === "business" ||
-              data.workspaceSettings.plan === "enterprise"
-            }
             onBack={() => navigateTo(teamsPath(data.workspace.urlKey))}
             onNavigateSettings={(settingsPage, teamKey) =>
               navigateTo(

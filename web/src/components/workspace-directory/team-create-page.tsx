@@ -8,10 +8,8 @@ import {
   Building2,
   CircleDot,
   Code2,
-  CreditCard,
   FileText,
   Flame,
-  Gauge,
   Goal,
   Import,
   KeyRound,
@@ -98,8 +96,6 @@ const SETTINGS_SECTIONS: {
       { label: "Security", icon: ShieldCheck },
       { label: "API", icon: Braces },
       { label: "Applications", icon: AppWindow },
-      { label: "Billing", icon: CreditCard },
-      { label: "Usage & limits", icon: Gauge },
       { label: "Import & export", icon: Import },
     ],
   },
@@ -110,18 +106,16 @@ const SETTINGS_DESTINATIONS: Record<string, SettingsPageId> = {
   "Issues/Labels":"issue-labels","Issues/Templates":"issue-templates","Issues/SLAs":"sla",
   "Projects/Labels":"project-labels","Projects/Templates":"project-templates","Projects/Statuses":"project-statuses","Projects/Updates":"project-updates",
   "Features/AI & Agents":"ai","Features/Initiatives":"initiatives","Features/Documents":"documents","Features/Customer requests":"customer-requests","Features/Releases":"releases","Features/Pulse":"pulse","Features/Asks":"asks","Features/Emojis":"emojis","Features/Integrations":"integrations",
-  "Administration/Workspace":"workspace","Administration/Teams":"teams","Administration/Members":"members","Administration/Security":"security","Administration/API":"api","Administration/Applications":"applications","Administration/Billing":"billing","Administration/Usage & limits":"usage","Administration/Import & export":"import-export",
+  "Administration/Workspace":"workspace","Administration/Teams":"teams","Administration/Members":"members","Administration/Security":"security","Administration/API":"api","Administration/Applications":"applications","Administration/Import & export":"import-export",
 };
 
 export function TeamCreatePage({
   teams,
-  businessEnabled,
   onBack,
   onNavigateSettings,
   onCreate,
 }: {
   teams: Team[];
-  businessEnabled: boolean;
   onBack: () => void;
   onNavigateSettings: (page: SettingsPageId, teamKey?: string) => void;
   onCreate: (input: {
@@ -270,7 +264,7 @@ export function TeamCreatePage({
             </label>
             <label>
               <span>Parent team<small>Settings and workflows will be inherited from the parent team</small></span>
-              <SelectControl label="Parent team" disabled={!businessEnabled} value={parentTeamId} onChange={(value) => { setParentTeamId(value); if (value) setCopyFrom(value); }} options={[{ value: "", label: businessEnabled ? "No parent team" : "Available on Business" }, ...teams.map(team => ({ value: team.id, label: team.name, entityName: true }))]}/>
+              <SelectControl label="Parent team" value={parentTeamId} onChange={(value) => { setParentTeamId(value); if (value) setCopyFrom(value); }} options={[{ value: "", label: "No parent team" }, ...teams.map(team => ({ value: team.id, label: team.name, entityName: true }))]}/>
             </label>
           </section>
           <h2>Team access</h2>
@@ -281,7 +275,7 @@ export function TeamCreatePage({
           <section className="workspace-settings-card">
             <label>
               <span>Team access</span>
-              <SelectControl label="Team access" disabled={!businessEnabled} value={privateTeam ? "private" : "public"} onChange={(value) => setPrivateTeam(value === "private")} options={[{ value: "public", label: businessEnabled ? "Public to workspace" : "Available on Business" }, ...(businessEnabled ? [{ value: "private", label: "Private" }] : [])]}/>
+              <SelectControl label="Team access" value={privateTeam ? "private" : "public"} onChange={(value) => setPrivateTeam(value === "private")} options={[{ value: "public", label: "Public to workspace" }, { value: "private", label: "Private" }]}/>
             </label>
           </section>
           <h2>Timezone</h2>

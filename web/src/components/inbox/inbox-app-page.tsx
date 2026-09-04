@@ -452,7 +452,6 @@ const notificationTypeOptions = [
   ['assignment', 'Assignments', 'assigned assignment'],
   ['comment', 'Comments and replies', 'commented reply comment'],
   ['apps', 'Apps and integrations', 'app integration'],
-  ['billing', 'Billing', 'invoice payment'],
   ['customerRequest', 'Customer requests', 'customer request'],
   ['document', 'Document changes', 'document change'],
   ['loop', 'Loops', 'loop'],

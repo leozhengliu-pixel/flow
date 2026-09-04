@@ -28,7 +28,6 @@ type FeaturePageId = Extract<SettingsPageId, "ai"|"initiatives"|"documents"|"cus
 type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onOpenReleasePipeline: (pipeline:ReleasePipeline) => void; onOpenIntegration:(provider:"github"|"gitlab")=>void; onReload: () => Promise<void> };
 
 const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
-  aiUsageFeedback: false,
   initiativeUpdateSchedule: "none",
   customerRevenueFormat: "annual",
   customerRevenueCurrency: "USD",
@@ -56,7 +55,7 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
   const setFeature = <K extends keyof FeatureSettings>(key: K, value: FeatureSettings[K]) =>
     save({ ...settings, featureSettings: { ...settings.featureSettings, [key]: value } });
 
-  if (page === "ai") return <AIPage settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature}/>;
+  if (page === "ai") return <AIPage settings={settings} busy={busy} setEnabled={setEnabled}/>;
   if (page === "initiatives") return <InitiativesFeatureSettings data={data} settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload}/>;
   if (page === "documents") return <DocumentsPage data={data} onReload={onReload}/>;
   if (page === "customer-requests") return <CustomerRequestsPage data={data} settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload}/>;
@@ -67,7 +66,7 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
   return <IntegrationsPage data={data} onOpen={onOpenIntegration} onReload={onReload}/>;
 }
 
-function AIPage({settings,busy,setEnabled,setFeature}:{settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void}) {
+function AIPage({settings,busy,setEnabled}:{settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void}) {
   const { t } = useI18n();
   const cards = [
     ["ai-agent", "Flow Agent", "Create issues and answer questions about your workspace", Bot],
@@ -77,7 +76,6 @@ function AIPage({settings,busy,setEnabled,setFeature}:{settings:WorkspaceSetting
     ["triage-intelligence", "Triage Intelligence", "Infer teams, projects, labels, and assignees", Inbox],
   ] as const;
   return <FeatureShell title="AI & Agents" description="Automate your product development processes and operations with AI">
-    <FeatureCard><FeatureRow title="Enable usage feedback" description="Improve AI functionality by sharing usage feedback. Never used to train models"><Toggle checked={settings.featureSettings.aiUsageFeedback} disabled={busy} label="Enable usage feedback" onChange={value=>setFeature("aiUsageFeedback",value)}/></FeatureRow></FeatureCard>
     <FeatureSection title="Flow Agent" description="Create issues and answer questions about your workspace.">
       <FeatureCard>{cards.map(([id,title,description,Icon])=><FeatureRow key={id} icon={Icon} title={title} businessTitle={id==="ai-agent"} description={description} badge={id==="code-intelligence"?"Beta":undefined}><Toggle checked={settings.featureFlags[id]??["ai-agent","coding-sessions","loops"].includes(id)} disabled={busy} label={title} onChange={value=>setEnabled(id,value)}/></FeatureRow>)}</FeatureCard>
     </FeatureSection>

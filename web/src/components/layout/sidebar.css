@@ -270,21 +270,6 @@
 .sidebar-help:hover,
 .sidebar-help[data-state="open"] { color: var(--theme-text-primary); background: var(--theme-control); }
 .sidebar-help svg { width: 15px; height: 15px; }
-.plan-pill {
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 0 8px 0 6px;
-  color: var(--theme-text-primary);
-  background: transparent;
-  border: .5px solid #333337;
-  border-radius: 999px;
-  font-size: 11px;
-}
-.plan-pill:hover { background: #1c1c1f; border-color: #48484c; }
-.plan-pill svg { width: 14px; height: 14px; color: var(--theme-text-secondary); }
-
 .sidebar-popover {
   z-index: 1100;
   min-width: 176px;
@@ -393,10 +378,8 @@
 .sidebar-customize-overlay { background: lch(0 0 0/.52); }
 .sidebar-customize-header { height: 71px; flex: 0 0 71px; display: flex; align-items: center; padding: 24px; }
 .sidebar-customize-body { min-height: 0; display: flex; flex-direction: column; gap: 24px; overflow: auto; padding: 0 24px 24px; }
-.sidebar-customize-dialog > .dialog-close,
-.sidebar-upgrade-dialog > .dialog-close { top: 21px; right: 16px; width: 28px; height: 28px; border: .5px solid transparent; border-radius: 9999px; color: var(--theme-text-secondary); }
-.sidebar-customize-dialog > .dialog-close:hover,
-.sidebar-upgrade-dialog > .dialog-close:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
+.sidebar-customize-dialog > .dialog-close { top: 21px; right: 16px; width: 28px; height: 28px; border: .5px solid transparent; border-radius: 9999px; color: var(--theme-text-secondary); }
+.sidebar-customize-dialog > .dialog-close:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
 .sidebar-customize-dialog h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 23px; }
 .sidebar-badge-style {
   height: 50px;
@@ -512,36 +495,6 @@
 .sidebar-customize-view-check svg { width: 10px; height: 10px; stroke-width: 2.5; }
 .sidebar-customize-view-empty { min-height: 54px; display: grid; place-items: center; color: var(--theme-text-secondary); font-size: 12px; }
 
-.sidebar-upgrade-dialog {
-  top: 50%;
-  width: min(560px, calc(100vw - 32px));
-  padding: 23px 24px 20px;
-  transform: translate(-50%, -50%);
-  color: var(--theme-text-primary);
-  background: var(--theme-control);
-  border: .5px solid #3a3a3e;
-  border-radius: 12px;
-}
-.sidebar-upgrade-dialog > svg { width: 28px; height: 28px; color: #6975e8; }
-.sidebar-upgrade-dialog h2 { margin: 10px 0 3px; font-size: 17px; font-weight: 550; }
-.sidebar-upgrade-dialog > p { margin: 0 0 30px; color: #99999e; font-size: 14px; }
-.upgrade-columns { display: grid; grid-template-columns: 1fr 1fr; }
-.upgrade-columns > div { min-height: 58px; display: flex; flex-direction: column; gap: 4px; padding: 0 0 0 0; }
-.upgrade-columns > div + div { padding-left: 23px; border-left: .5px solid var(--theme-border-strong); }
-.upgrade-columns strong { font-size: 14px; font-weight: 500; }
-.upgrade-columns span { color: #929297; font-size: 12px; }
-.upgrade-table { margin: 0 -24px; border-top: .5px solid var(--theme-border-strong); }
-.upgrade-table > div { height: 40px; display: grid; grid-template-columns: 1fr 1fr; border-bottom: .5px solid var(--theme-border-strong); }
-.upgrade-table span { display: flex; align-items: center; gap: 8px; padding-left: 24px; color: var(--theme-text-secondary); font-size: 12px; }
-.upgrade-table span + span { border-left: .5px solid var(--theme-border-strong); }
-.upgrade-table i { width: 15px; height: 15px; display: grid; place-items: center; border-radius: 50%; background: #55555a; color: var(--theme-control); font-size: 10px; font-style: normal; font-weight: 700; }
-.upgrade-table span + span i { background: #6772db; color: var(--theme-control); }
-.sidebar-upgrade-dialog footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
-.sidebar-upgrade-dialog footer button { height: 32px; padding: 0 12px; color: var(--theme-text-primary); background: transparent; border: 0; border-radius: 7px; }
-.sidebar-upgrade-dialog footer button:hover { background: var(--theme-control-active); }
-.sidebar-upgrade-dialog footer .upgrade-primary { color: white; background: #626ed7; }
-.sidebar-upgrade-dialog footer .upgrade-primary:hover { background: #6e79e1; }
-
 :root[data-theme="light"] .sidebar{color:var(--muted);background:var(--bg-sidebar)}
 :root[data-theme="light"] .sidebar .workspace-row>button.sidebar-top-action,:root[data-theme="light"] .workspace-menu-trigger>svg{color:var(--muted)}:root[data-theme="light"] .section-action,:root[data-theme="light"] .try-dismiss,:root[data-theme="light"] .sidebar-help{color:var(--faint)}
 :root[data-theme="light"] .sidebar .workspace-row>button.sidebar-compose{color:lch(9.444% 0 282);background:var(--bg-panel);box-shadow:none}
@@ -556,9 +509,7 @@
 :root[data-theme="light"] .section-heading:hover,:root[data-theme="light"] .section-heading:focus-within{background:lch(91.64% .5 282)}
 :root[data-theme="light"] .team-cycle-links>i{background:lch(80.94% 0 282)}
 :root[data-theme="light"] .sidebar-more-trigger,:root[data-theme="light"] .sidebar-popover [role="menuitem"]>svg,:root[data-theme="light"] .sidebar-help-menu kbd{color:var(--muted)}
-:root[data-theme="light"] .plan-pill{border-color:var(--border);background:transparent;color:var(--text)}
-:root[data-theme="light"] .plan-pill:hover{border-color:var(--border-strong);background:var(--bg-hover)}
-:root[data-theme="light"] .sidebar-popover,:root[data-theme="light"] .sidebar-help-menu,:root[data-theme="light"] .sidebar-customize-popover,:root[data-theme="light"] .sidebar-upgrade-dialog{border-color:var(--border-strong);background:var(--theme-surface-2);color:var(--text);box-shadow:var(--menu-shadow)}
+:root[data-theme="light"] .sidebar-popover,:root[data-theme="light"] .sidebar-help-menu,:root[data-theme="light"] .sidebar-customize-popover{border-color:var(--border-strong);background:var(--theme-surface-2);color:var(--text);box-shadow:var(--menu-shadow)}
 :root[data-theme="light"] .sidebar-customize-overlay{background:lch(0 0 0/.25)}
 :root[data-theme="light"] .sidebar-customize-dialog{border-color:lch(91.9% 0 282);background:lch(100% 0 282);box-shadow:0 9px 48px lch(0 0 0/.08),0 6px 24px lch(0 0 0/.1),0 1px 1px lch(0 0 0/.04)}
 :root[data-theme="light"] .sidebar-badge-style,:root[data-theme="light"] .sidebar-customize-group>div{border-color:lch(90.55% 0 282);background:var(--sidebar-customize-light-surface)}
@@ -567,8 +518,6 @@
 :root[data-theme="light"] .sidebar-customize-view-row:hover,:root[data-theme="light"] .sidebar-customize-view-row:focus-visible{background:var(--theme-control-hover)}
 :root[data-theme="light"] .sidebar-customize-select{color:var(--text)}
 :root[data-theme="light"] body .workspace-primary-menu{box-shadow:var(--sidebar-customize-light-shadow)}
-:root[data-theme="light"] .sidebar-upgrade-dialog>p,:root[data-theme="light"] .badge-preview,:root[data-theme="light"] .upgrade-columns span{color:var(--muted)}
-:root[data-theme="light"] .sidebar-upgrade-dialog footer button{color:var(--text)}
 :root[data-theme="light"] .workspace-menu-trigger>svg,:root[data-theme="light"] .team-disclosure,:root[data-theme="light"] .section-label svg{color:var(--text-placeholder)}
 :root[data-theme="light"] .sidebar-more-trigger,:root[data-theme="light"] .sidebar-popover [role="menuitem"]>svg,:root[data-theme="light"] .sidebar-help-menu kbd{color:var(--text-label)}
 

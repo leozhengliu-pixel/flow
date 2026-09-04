@@ -3774,7 +3774,6 @@ function defaultNotificationPreferences(
     reminders: true,
     loops: true,
     integrations: true,
-    billing: true,
     customerRequests: true,
     triage: true,
   };
