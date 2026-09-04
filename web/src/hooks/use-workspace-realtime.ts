@@ -17,7 +17,11 @@ export function useWorkspaceRealtime({ workspaceKey, issueId, route, onRemoteSyn
   syncRef.current = onRemoteSync
 
   useEffect(() => {
-    if (!workspaceKey) return
+    if (!workspaceKey) {
+      setPresence([])
+      return
+    }
+    setPresence([])
     const clientId = realtimeClientId()
     const stream = new EventSource(`/api/realtime/events?workspace=${encodeURIComponent(workspaceKey)}`)
     let initialized = false
@@ -60,6 +64,7 @@ export function useWorkspaceRealtime({ workspaceKey, issueId, route, onRemoteSyn
       stream.close()
       window.clearTimeout(timerRef.current)
       setConnected(false)
+      setPresence([])
     }
   }, [workspaceKey])
 
