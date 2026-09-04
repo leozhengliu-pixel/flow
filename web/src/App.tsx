@@ -148,6 +148,7 @@ import type {
 import type { NewProjectDraft } from "@/components/projects-page/new-project-dialog";
 import { lazyPage } from "@/lib/lazy-page";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
+import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-list";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   agentPath,
@@ -400,22 +401,23 @@ function App() {
     [createStateId, setCreateStateId] = useState<string>(),
     [createProjectId, setCreateProjectId] = useState<string>(),
     [createProjectMilestoneId, setCreateProjectMilestoneId] =
-      useState<string>();
+      useState<string>(),
+    [createContext, setCreateContext] = useState<MyIssuesCreateContext>();
   const createStateRef = useRef<string | undefined>(undefined);
   const openCreateIssue = useCallback(
-    (stateId?: string, preferBacklog = false) => {
+    (contextOrState?: MyIssuesCreateContext | string) => {
+      const context: MyIssuesCreateContext = typeof contextOrState === "string"
+        ? { stateId: contextOrState }
+        : contextOrState ?? {};
       const next =
-        stateId ||
-        (preferBacklog
-          ? data?.states.find(
-              (state) =>
-                state.id === "state_backlog" || state.type === "backlog",
-            )?.id || "state_backlog"
-          : data?.states.find((state) => state.type === "unstarted")?.id);
+        context.stateId || data?.states.find((state) => state.type === "unstarted")?.id;
       createStateRef.current = next;
+      setCreateContext({ ...context, stateId: next });
       setCreateDraftId(undefined);
-      setCreateTeamId(undefined);
+      setCreateTeamId(context.teamId);
       setCreateStateId(next);
+      setCreateProjectId(context.projectId);
+      setCreateProjectMilestoneId(context.projectMilestoneId);
       setCreateOpen(true);
     },
     [data],
@@ -4450,9 +4452,9 @@ function App() {
             }
             onNavigate={(path) => navigateTo(path)}
             onResumeDraft={(draft: Draft) => {
-              setCreateDraftId(
-                draft.id.startsWith("local:") ? undefined : draft.id,
-              );
+              // Keep local drafts addressable so the dialog only restores a
+              // draft when the user explicitly chooses it.
+              setCreateDraftId(draft.id);
               setCreateTeamId(
                 draft.id.startsWith("local:") &&
                   typeof draft.metadata?.teamId === "string"
@@ -4932,7 +4934,7 @@ function App() {
             onNavigateView={(_view, href) => navigateTo(href)}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
             onOpenIssue={openIssue}
-            onCreateIssue={() => openCreateIssue()}
+            onCreateIssue={(context) => openCreateIssue(context)}
             onUpdateIssue={updateIssueFromPage}
             onUpdateIssues={updateIssuesFromPage}
             onDeleteIssues={deleteIssuesFromPage}
@@ -4978,8 +4980,8 @@ function App() {
             onOpenSidebar={() => setMobileSidebarOpen(true)}
             onOpenIssue={openIssue}
             renderIssuePreview={renderIssuePreview}
-            onCreateIssue={(stateId) => {
-              openCreateIssue(stateId, true);
+            onCreateIssue={(context) => {
+              openCreateIssue(context);
             }}
             onUpdateIssue={updateIssueFromPage}
             onUpdateIssues={updateIssuesFromPage}
@@ -5040,8 +5042,8 @@ function App() {
             onOpenSidebar={() => setMobileSidebarOpen(true)}
             onOpenIssue={openIssue}
             renderIssuePreview={renderIssuePreview}
-            onCreateIssue={(stateId) => {
-              openCreateIssue(stateId, true);
+            onCreateIssue={(context) => {
+              openCreateIssue(context);
             }}
             onUpdateIssue={updateIssueFromPage}
             onUpdateIssues={updateIssuesFromPage}
@@ -5111,8 +5113,8 @@ function App() {
               onOpenSidebar={() => setMobileSidebarOpen(true)}
               onOpenIssue={openIssue}
               renderIssuePreview={renderIssuePreview}
-              onCreateIssue={(stateId) => {
-                openCreateIssue(stateId, true);
+              onCreateIssue={(context) => {
+                openCreateIssue(context);
               }}
               onUpdateIssue={updateIssueFromPage}
               onUpdateIssues={updateIssuesFromPage}
@@ -5201,8 +5203,8 @@ function App() {
               onOpenSidebar={() => setMobileSidebarOpen(true)}
               onOpenIssue={openIssue}
               renderIssuePreview={renderIssuePreview}
-              onCreateIssue={(stateId) => {
-                openCreateIssue(stateId, true);
+              onCreateIssue={(context) => {
+                openCreateIssue(context);
               }}
               onUpdateIssue={updateIssueFromPage}
               onUpdateIssues={updateIssuesFromPage}
@@ -5373,8 +5375,8 @@ function App() {
               onOpenSidebar={() => setMobileSidebarOpen(true)}
               onOpenIssue={openIssue}
               renderIssuePreview={renderIssuePreview}
-              onCreateIssue={(stateId) => {
-                openCreateIssue(stateId, true);
+              onCreateIssue={(context) => {
+                openCreateIssue(context);
               }}
               onUpdateIssue={updateIssueFromPage}
               onUpdateIssues={updateIssuesFromPage}
@@ -5747,10 +5749,11 @@ function App() {
               onOpenIssue={openIssue}
               onUpdateIssue={updateIssueFromPage}
               onDeleteIssues={deleteIssuesFromPage}
-              onCreateIssue={(projectId, projectMilestoneId) => {
+              onCreateIssue={(projectId, projectMilestoneId, context) => {
+                const projectTeamId = data.projects.find((item) => item.id === projectId)?.teamIds[0];
                 setCreateProjectId(projectId);
                 setCreateProjectMilestoneId(projectMilestoneId);
-                openCreateIssue();
+                openCreateIssue({ ...context, projectId, projectMilestoneId, teamId: context?.teamId ?? projectTeamId });
               }}
               onOpenSidebar={() => setMobileSidebarOpen(true)}
             />
@@ -5920,6 +5923,7 @@ function App() {
           <CreateIssueDialog
             open={createOpen}
             draftId={createDraftId}
+            initialContext={createContext}
             initialTeamId={createTeamId}
             initialProjectId={createProjectId}
             initialProjectMilestoneId={createProjectMilestoneId}
@@ -5931,6 +5935,7 @@ function App() {
               setCreateOpen(open);
               if (!open) {
                 setCreateDraftId(undefined);
+                setCreateContext(undefined);
                 setCreateTeamId(undefined);
                 setCreateProjectId(undefined);
                 setCreateProjectMilestoneId(undefined);

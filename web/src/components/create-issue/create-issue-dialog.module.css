@@ -42,7 +42,7 @@
 .attachButton { width: 28px; height: 28px; }
 .createMore { height: 28px; display: flex; align-items: center; gap: 7px; margin-left: auto; color: lch(64.805% 1.65 272); font-size: 12px; }
 .submit { height: 28px; padding: 0 11px; border: .5px solid transparent; border-radius: 9999px; background: lch(47.918% 59.303 288.421); box-shadow: 0 .5px 1px 1px #0005; color: lch(100% 5 288.421); font-size: 12px; font-weight: 500; }
-.submit:disabled { background: lch(28% 2 272); color: lch(55% 1.2 272); box-shadow: none; }
+.submit:disabled { opacity: .55; box-shadow: none; }
 .moreMenu, .dateMenu { z-index: 1000; padding: 5px; border: .5px solid var(--theme-border-strong); border-radius: 8px; background: var(--theme-surface-2); box-shadow: 0 12px 28px #0008; color: lch(91.201% 1.65 272); font-family: "Inter Variable", system-ui, sans-serif; }
 .moreMenu { width: 242px; }
 .dateMenu.dateMenu { width: 228px; padding: 0; border: 0; background: transparent; box-shadow: none; }

@@ -22,6 +22,8 @@ export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: 
   const issueReleases=data?.releases?.filter(release=>release.issueIds?.includes(issue.id))??[]
   return {
     id: issue.id,
+    teamId: issue.team.id,
+    teamName: issue.team.name,
     identifier: issue.identifier,
     title: issue.title,
     description: issue.description,
@@ -36,6 +38,7 @@ export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: 
     creatorName: issue.creator.displayName,
     isAssignedToViewer:issue.assignee?.id===data?.viewer.id,
     cycleId: issue.cycleId,
+    cycleName: issue.cycleId ? data?.cycles.find(cycle => cycle.id === issue.cycleId)?.name : undefined,
     addedToCycle:issue.addedToCycle,
     agentSessionId:issue.agentSessionId,
     suggestedLabelIds:issue.suggestedLabelIds??[],
@@ -311,7 +314,7 @@ export function buildExplorerIssueGroups(issues: MyIssuesRowData[], display: MyI
   }
   if (display.layout === 'board' && display.grouping === 'status' && display.showEmptyGroups) {
     for (const state of data.states.filter(state => stateVisibleInView(state.type, view, display.completedWindow))) {
-      if (!groups.has(state.id)) groups.set(state.id, { id: state.id, label: state.name, stateType: state.type, state, issues: [] })
+      if (!groups.has(state.id)) groups.set(state.id, { id: state.id, label: state.name, stateType: state.type, state, createContext: { stateId: state.id }, issues: [] })
     }
   }
   const stateOrder = new Map(data.states.map((state, index) => [state.id, index]))
@@ -353,11 +356,14 @@ function stateVisibleInView(type: string, view: TeamIssuesRouteView, completedWi
 }
 
 function groupForIssue(issue: MyIssuesRowData, grouping: MyIssuesGrouping): Omit<MyIssuesGroupData, 'issues'> {
-  if (grouping === 'status' || grouping === 'focus') return { id: issue.state.id, label: issue.state.name, stateType: issue.state.type, state: issue.state }
-  if (grouping === 'priority') return { id: `priority-${issue.priority}`, label: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][issue.priority] }
-  if (grouping === 'project') return { id: `project-${issue.project?.id ?? 'none'}`, label: issue.project?.name ?? 'No project' }
-  if (grouping === 'assignee') return { id: `assignee-${issue.assignee?.id ?? 'none'}`, label: issue.assignee?.name ?? 'No assignee' }
-  if (grouping === 'label') { const label = issue.labels?.[0]; return { id: `label-${label?.id ?? 'none'}`, label: label?.name ?? 'No label' } }
+  if (grouping === 'status' || grouping === 'focus') return { id: issue.state.id, label: issue.state.name, stateType: issue.state.type, state: issue.state, createContext: { stateId: issue.state.id } }
+  if (grouping === 'priority') return { id: `priority-${issue.priority}`, label: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][issue.priority], createContext: { priority: issue.priority } }
+  if (grouping === 'project') return { id: `project-${issue.project?.id ?? 'none'}`, label: issue.project?.name ?? 'No project', createContext: { projectId: issue.project?.id ?? '' } }
+  if (grouping === 'assignee') return { id: `assignee-${issue.assignee?.id ?? 'none'}`, label: issue.assignee?.name ?? 'No assignee', createContext: { assigneeId: issue.assignee?.id ?? '' } }
+  if (grouping === 'label') { const label = issue.labels?.[0]; return { id: `label-${label?.id ?? 'none'}`, label: label?.name ?? 'No label', createContext: { labelIds: label ? [label.id] : [] } } }
+  if (grouping === 'cycle') return { id: `cycle-${issue.cycleId ?? 'none'}`, label: issue.cycleName ?? 'No cycle', createContext: { cycleId: issue.cycleId ?? '' } }
+  if (grouping === 'team') return { id: `team-${issue.teamId ?? 'none'}`, label: issue.teamName ?? 'No team', createContext: { teamId: issue.teamId } }
+  if (grouping === 'agent') return { id: `agent-${issue.agentSessionId ?? 'none'}`, label: issue.agentSessionId ? 'Agent session' : 'No agent' }
   return { id: `${grouping}-none`, label: grouping[0].toUpperCase() + grouping.slice(1) }
 }
 

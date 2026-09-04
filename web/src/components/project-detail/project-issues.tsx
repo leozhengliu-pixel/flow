@@ -467,7 +467,7 @@ export function ProjectIssues({
             propertyOptions={propertyOptions}
             selectedIds={selected}
             onContextAction={contextAction}
-            onCreateIssue={() => onCreateIssue(project.id, milestoneScope?.id)}
+            onCreateIssue={(group) => onCreateIssue(project.id, milestoneScope?.id, group.createContext)}
             onGroupCollapsedChange={(groupId, isCollapsed) =>
               setCollapsed((current) => {
                 const next = new Set(current);
@@ -486,7 +486,7 @@ export function ProjectIssues({
         ) : (
           <IssueBoard
             groups={groups}
-            onCreateIssue={() => onCreateIssue(project.id, milestoneScope?.id)}
+            onCreateIssue={(group) => onCreateIssue(project.id, milestoneScope?.id, group.createContext)}
             onMove={move}
             onOpenIssue={(row) => {
               const issue = rowIssues.get(row.id);
@@ -668,6 +668,7 @@ function groupIssues(
           label: state.name,
           stateType: state.type,
           state,
+          createContext: { stateId: state.id },
           issues: [],
         });
   let result = [...groups.values()];
@@ -689,20 +690,23 @@ function groupForRow(
       label: issue.state.name,
       stateType: issue.state.type,
       state: issue.state,
+      createContext: { stateId: issue.state.id },
     };
   if (grouping === "priority")
     return {
       id: `priority-${issue.priority}`,
       label: PRIORITY_LABELS[issue.priority],
+      createContext: { priority: issue.priority },
     };
   if (grouping === "assignee")
     return {
       id: issue.assignee?.id ?? "unassigned",
       label: issue.assignee?.name ?? "No assignee",
+      createContext: { assigneeId: issue.assignee?.id ?? "" },
     };
   if (grouping === "label") {
     const label = issue.labels?.[0];
-    return { id: label?.id ?? "no-label", label: label?.name ?? "No label" };
+    return { id: label?.id ?? "no-label", label: label?.name ?? "No label", createContext: { labelIds: label ? [label.id] : [] } };
   }
   return { id: "project", label: issue.project?.name ?? "Project" };
 }
