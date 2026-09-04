@@ -249,6 +249,11 @@ export type AppRoute =
       kind: "settings";
       workspaceSlug: string;
       page: SettingsPageId;
+      /** Nested personal-security flows (for example API-key creation/detail). */
+      apiKeyMode?: "new" | "detail" | "edit";
+      /** Dedicated commit-signing-key upload flow. */
+      signingKeyMode?: "new";
+      apiKeyId?: string;
       teamKey?: string;
       teamSection?: TeamSettingsSection;
       issueTemplateMode?: "new" | "new-form" | "edit";
@@ -573,6 +578,65 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     return { kind: "workspace-teams", workspaceSlug };
   if (section === "settings" && third === "new-team" && segments.length === 3)
     return { kind: "new-team", workspaceSlug };
+  if (
+    section === "settings" &&
+    third === "account" &&
+    fourth === "security" &&
+    fifth === "commit-signing-key" &&
+    segments.length === 5
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "account-security",
+      signingKeyMode: "new",
+    };
+  if (
+    section === "settings" &&
+    third === "account" &&
+    fourth === "security" &&
+    fifth === "api-keys" &&
+    sixth &&
+    segments[6] === "edit" &&
+    segments.length === 7
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "account-security",
+      apiKeyMode: "edit",
+      apiKeyId: sixth,
+    };
+  if (
+    section === "settings" &&
+    third === "account" &&
+    fourth === "security" &&
+    fifth === "api-keys" &&
+    sixth &&
+    sixth !== "new" &&
+    segments.length === 6
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "account-security",
+      apiKeyMode: "detail",
+      apiKeyId: sixth,
+    };
+  if (
+    section === "settings" &&
+    third === "account" &&
+    fourth === "security" &&
+    fifth === "api-keys" &&
+    sixth === "new" &&
+    segments.length === 6
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "account-security",
+      apiKeyMode: "new",
+    };
   if (
     section === "settings" &&
     third === "account" &&
@@ -1517,6 +1581,20 @@ export function settingsPath(
   return ACCOUNT_SETTINGS.has(page)
     ? `${root}/account/${page}`
     : `${root}/${page}`;
+}
+/** Route for the dedicated personal API-key creation flow. */
+export function newAPIKeyPath(workspaceSlug: string) {
+  return `${workspaceRootPath(workspaceSlug)}/settings/account/security/api-keys/new`;
+}
+/** Route for the dedicated personal commit-signing-key upload flow. */
+export function newSigningKeyPath(workspaceSlug: string) {
+  return `${workspaceRootPath(workspaceSlug)}/settings/account/security/commit-signing-key`;
+}
+export function apiKeyPath(workspaceSlug: string, apiKeyId: string) {
+  return `${workspaceRootPath(workspaceSlug)}/settings/account/security/api-keys/${encode(apiKeyId)}`;
+}
+export function apiKeyEditPath(workspaceSlug: string, apiKeyId: string) {
+  return `${apiKeyPath(workspaceSlug, apiKeyId)}/edit`;
 }
 export function newIssueTemplatePath(workspaceSlug: string, form = false) {
   return `${workspaceRootPath(workspaceSlug)}/settings/templates/issue/new${form ? "/form" : ""}`;

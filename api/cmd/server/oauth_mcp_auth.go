@@ -279,7 +279,8 @@ func (s *server) revokeOAuthToken(w http.ResponseWriter, r *http.Request) {
 func (s *server) revokeOAuthAuthorization(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "oauth_authorization.revoked", id, nil, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.OAuthAuthorizations, func(item domain.OAuthAuthorization) bool { return item.ID == id && item.UserID == authUser(r).ID })
+		actor := requestActor(s, r)
+		index := slices.IndexFunc(data.OAuthAuthorizations, func(item domain.OAuthAuthorization) bool { return item.ID == id && item.UserID == actor.ID })
 		if index < 0 {
 			return errNotFound
 		}

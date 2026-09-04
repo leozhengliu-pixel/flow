@@ -521,9 +521,9 @@ func normalize(data *domain.Bootstrap) {
 		data.APIKeys = []domain.APIKey{}
 	}
 	for index := range data.APIKeys {
-		if len(data.APIKeys[index].Scopes) == 0 {
-			data.APIKeys[index].Scopes = []string{"read", "write"}
-		}
+		// A nil scope is the public API's full-access representation. Do not
+		// materialize it as read/write: doing so silently strips admin access
+		// from keys created before granular scopes were introduced.
 		if data.APIKeys[index].TeamRestriction == "" {
 			if len(data.APIKeys[index].TeamIDs) > 0 {
 				data.APIKeys[index].TeamRestriction = "selected"

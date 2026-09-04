@@ -224,10 +224,18 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PUT /api/account/last-workspace", s.setLastWorkspace)
 	mux.HandleFunc("GET /api/account/settings", s.getUserSettings)
 	mux.HandleFunc("PATCH /api/account/settings", s.updateUserSettings)
+	mux.HandleFunc("GET /api/account/signing-key", s.getCommitSigningKey)
+	mux.HandleFunc("POST /api/account/signing-key", s.addCommitSigningKey)
+	mux.HandleFunc("DELETE /api/account/signing-key", s.removeCommitSigningKey)
 	mux.HandleFunc("PATCH /api/account/profile", s.updateAccountProfile)
 	mux.HandleFunc("GET /api/account/sessions", s.listAccountSessions)
 	mux.HandleFunc("DELETE /api/account/sessions/others", s.revokeOtherSessions)
 	mux.HandleFunc("DELETE /api/account/sessions/{id}", s.revokeAccountSession)
+	mux.HandleFunc("GET /api/account/passkeys", s.listPasskeys)
+	mux.HandleFunc("POST /api/account/passkeys/register/start", s.beginPasskeyRegistration)
+	mux.HandleFunc("POST /api/account/passkeys/register/finish", s.finishPasskeyRegistration)
+	mux.HandleFunc("PATCH /api/account/passkeys/{id}", s.updatePasskey)
+	mux.HandleFunc("DELETE /api/account/passkeys/{id}", s.deletePasskey)
 	mux.HandleFunc("GET /api/account/identities", s.listAccountIdentities)
 	mux.HandleFunc("DELETE /api/account/identities/{id}", s.unlinkAccountIdentity)
 	mux.HandleFunc("POST /api/account/change-password", s.changeAccountPassword)
@@ -344,6 +352,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/workspace/preferences", s.updateWorkspacePreferences)
 	mux.HandleFunc("GET /api/api-keys", s.listAPIKeys)
 	mux.HandleFunc("POST /api/api-keys", s.createAPIKey)
+	mux.HandleFunc("PATCH /api/api-keys/{id}", s.updateAPIKey)
 	mux.HandleFunc("DELETE /api/api-keys/{id}", s.revokeAPIKey)
 	mux.HandleFunc("POST /api/api-keys/{id}/rotate-secret", s.rotateAPIKeySecret)
 	mux.HandleFunc("GET /api/oauth-applications", s.listOAuthApplications)
@@ -747,6 +756,16 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	data.AgentSkills = slices.DeleteFunc(data.AgentSkills, func(item domain.PersonalAgentSkill) bool { return item.UserID != data.Viewer.ID })
 	data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool { return item.UserID != data.Viewer.ID })
 	data.FavoriteFolders = slices.DeleteFunc(data.FavoriteFolders, func(item domain.FavoriteFolder) bool { return item.UserID != data.Viewer.ID })
+	// Passkey credentials are account-scoped. Expose only public metadata for
+	// the current viewer and never serialize in-flight registration sessions.
+	data.Passkeys = slices.DeleteFunc(data.Passkeys, func(item domain.Passkey) bool { return item.UserID != data.Viewer.ID })
+	for index := range data.Passkeys {
+		data.Passkeys[index].CredentialJSON = ""
+	}
+	data.PasskeyRegistrationChallenges = nil
+	// Connected OAuth applications are personal approvals, not workspace
+	// directory data. Keep only the viewer's records in account/bootstrap.
+	data.OAuthAuthorizations = slices.DeleteFunc(data.OAuthAuthorizations, func(item domain.OAuthAuthorization) bool { return item.UserID != data.Viewer.ID })
 	for index := range data.Cycles {
 		data.Cycles[index].CalendarToken = ""
 	}
@@ -771,6 +790,11 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	}
 	for index := range data.APIKeys {
 		data.APIKeys[index].SecretHash = ""
+		if data.APIKeys[index].Scopes != nil {
+			for scopeIndex, scope := range data.APIKeys[index].Scopes {
+				data.APIKeys[index].Scopes[scopeIndex] = canonicalAPIKeyScope(scope)
+			}
+		}
 	}
 	for index := range data.ReleasePipelines {
 		data.ReleasePipelines[index].AccessKeyHash = ""
@@ -818,13 +842,23 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	// Never expose other credentials through a token-authenticated bootstrap,
 	// even when the token owner is a workspace admin.
 	data.APIKeys = slices.DeleteFunc(data.APIKeys, func(item domain.APIKey) bool { return item.ID != key.ID })
-	if !slices.Contains(key.Scopes, "admin") {
+	data.Passkeys = slices.DeleteFunc(data.Passkeys, func(item domain.Passkey) bool { return item.UserID != key.CreatorID })
+	for index := range data.Passkeys {
+		data.Passkeys[index].CredentialJSON = ""
+	}
+	if !apiKeyHasScope(key, "admin") {
 		data.OAuthApplications = []domain.OAuthApplication{}
 		data.Webhooks = []domain.Webhook{}
 		data.IdentityProviders = []domain.IdentityProvider{}
 		data.IntegrationDeliveries = []domain.IntegrationDelivery{}
 	}
-	if key.TeamRestriction == "" || key.TeamRestriction == "all" {
+	// Personal authorizations belong to the user who approved them. A bearer
+	// key may only see the authorization that minted that key, never another
+	// user's connected applications.
+	data.OAuthAuthorizations = slices.DeleteFunc(data.OAuthAuthorizations, func(item domain.OAuthAuthorization) bool {
+		return key.AuthorizationID == "" || item.ID != key.AuthorizationID
+	})
+	if !apiKeyTeamRestrictionSelected(key) {
 		return
 	}
 	allowed := func(id string) bool { return slices.Contains(key.TeamIDs, id) }

@@ -996,14 +996,30 @@ export interface APIKey {
   name: string;
   prefix: string;
   creatorId: UUID;
-  scopes: string[];
+  // `null` is the persisted full-access representation; an explicit empty
+  // array is a deny-all policy and must remain distinguishable in the UI.
+  scopes: string[] | null;
   teamIds: UUID[];
+  teamRestriction?: "all" | "selected";
   createdAt: string;
   lastUsedAt?: string;
   revokedAt?: string;
   expiresAt?: string;
   oauthClientId?: string;
   authorizationId?: string;
+}
+export interface Passkey {
+  id: UUID;
+  userId: UUID;
+  name: string;
+  createdAt: string;
+  lastUsedAt?: string;
+}
+export interface CommitSigningKey {
+  name: string;
+  fingerprint: string;
+  type: "ssh" | "pgp";
+  addedAt: string;
 }
 export interface OAuthApplication {
   id: UUID;
@@ -1178,6 +1194,12 @@ export interface Webhook {
 export interface AccountSessionInfo {
   id: string;
   current: boolean;
+  name?: string;
+  operatingSystem?: string;
+  browserType?: string;
+  location?: string;
+  ip?: string;
+  countryCodes?: string[];
   createdAt: string;
   lastSeenAt: string;
   expiresAt: string;

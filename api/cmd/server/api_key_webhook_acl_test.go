@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -22,6 +23,12 @@ func TestAPIKeyGranularScopesAndRotation(t *testing.T) {
 	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
 	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap?workspace=test-workspace", nil, http.StatusOK)
 	teamID := bootstrap.Teams[0].ID
+	requestJSON[any](t, handler, http.MethodPost, "/api/api-keys?workspace=test-workspace", map[string]any{
+		"name": "x", "scopes": []string{"read"},
+	}, http.StatusBadRequest)
+	requestJSON[any](t, handler, http.MethodPost, "/api/api-keys?workspace=test-workspace", map[string]any{
+		"name": "empty selected", "scopes": []string{"read"}, "teamRestriction": "selected", "teamIds": []string{},
+	}, http.StatusBadRequest)
 	created := requestJSON[map[string]any](t, handler, http.MethodPost, "/api/api-keys?workspace=test-workspace", map[string]any{
 		"name": "issue importer", "scopes": []string{"create_issues"}, "teamIds": []string{teamID}, "teamRestriction": "selected",
 	}, http.StatusCreated)
@@ -41,6 +48,9 @@ func TestAPIKeyGranularScopesAndRotation(t *testing.T) {
 	if rotatedKey["teamRestriction"] != "selected" {
 		t.Fatalf("rotation changed key restriction: %#v", rotatedKey)
 	}
+	requestJSON[any](t, handler, http.MethodPost, "/api/api-keys?workspace=test-workspace", map[string]any{
+		"name": "issue importer", "scopes": []string{"read"},
+	}, http.StatusBadRequest)
 	requestJSON[any](t, handler, http.MethodPost, "/api/api-keys/"+key["id"].(string)+"/rotate-secret?workspace=test-workspace", nil, http.StatusOK)
 }
 
@@ -53,8 +63,23 @@ func TestAPIKeyScopeAuthorization(t *testing.T) {
 		t.Fatal("create_issues key cannot create an issue")
 	}
 	update := httptest.NewRequest(http.MethodPatch, "/api/issues/issue_1", nil)
-	if apiKeyAllowsRequest(update, domain.APIKey{Scopes: []string{"create_issues"}}) {
-		t.Fatal("create_issues key can update an issue")
+	if !apiKeyAllowsRequest(update, domain.APIKey{Scopes: []string{"create_issues"}}) {
+		t.Fatal("create_issues key cannot update an issue")
+	}
+	read := httptest.NewRequest(http.MethodGet, "/api/issues", nil)
+	if apiKeyAllowsRequest(read, domain.APIKey{Scopes: []string{"create_issues"}}) {
+		t.Fatal("create-only key can read workspace data")
+	}
+	if !apiKeyAllowsRequest(read, domain.APIKey{Scopes: []string{"read"}}) {
+		t.Fatal("read key cannot read workspace data")
+	}
+	comment := httptest.NewRequest(http.MethodPost, "/api/issues/issue_1/comments", nil)
+	if !apiKeyAllowsRequest(comment, domain.APIKey{Scopes: []string{"create_comments"}}) {
+		t.Fatal("create_comments key cannot create an issue comment")
+	}
+	projectComment := httptest.NewRequest(http.MethodPost, "/api/projects/project_1/comments", nil)
+	if apiKeyAllowsRequest(projectComment, domain.APIKey{Scopes: []string{"create_comments"}}) {
+		t.Fatal("create_comments key can create a project comment")
 	}
 	adminRead := httptest.NewRequest(http.MethodGet, "/api/webhooks", nil)
 	if apiKeyAllowsRequest(adminRead, domain.APIKey{Scopes: []string{"read"}}) {
@@ -62,6 +87,50 @@ func TestAPIKeyScopeAuthorization(t *testing.T) {
 	}
 	if !apiKeyAllowsRequest(adminRead, domain.APIKey{Scopes: []string{"admin"}}) {
 		t.Fatal("admin key cannot list webhooks")
+	}
+	if !mcpToolAllowed(flowMCPTool{Name: "save_issue", Access: "write"}, domain.APIKey{Scopes: []string{"create_issues"}}, false, map[string]any{"id": "issue_1"}) {
+		t.Fatal("create_issues key cannot update an issue through MCP")
+	}
+	// A nil scope is the API representation of full access. An explicitly
+	// empty array remains a deny-all policy and must not be widened.
+	if !apiKeyAllowsRequest(read, domain.APIKey{Scopes: nil}) || !apiKeyAllowsRequest(issueCreate, domain.APIKey{Scopes: nil}) {
+		t.Fatal("nil scopes should grant full API access")
+	}
+	if apiKeyAllowsRequest(read, domain.APIKey{Scopes: []string{}}) {
+		t.Fatal("an explicit empty scope list should not grant read access")
+	}
+}
+
+func TestAPIKeyFullAccessAndMetadataUpdate(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "api-key-update.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap?workspace=test-workspace", nil, http.StatusOK)
+	teamID := bootstrap.Teams[0].ID
+	created := requestJSON[map[string]any](t, handler, http.MethodPost, "/api/api-keys?workspace=test-workspace", map[string]any{
+		"name": "Full access key",
+	}, http.StatusCreated)
+	key := created["key"].(map[string]any)
+	if key["scopes"] != nil {
+		t.Fatalf("omitted scopes should persist as nil/full access: %#v", key)
+	}
+	id := key["id"].(string)
+	future := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+	updated := requestJSON[domain.APIKey](t, handler, http.MethodPatch, "/api/api-keys/"+id+"?workspace=test-workspace", map[string]any{
+		"name": "Scoped issue key", "scopes": []string{"issues:create", "comments:create"},
+		"teamIds": []string{teamID}, "teamRestriction": "selected", "expiresAt": future,
+	}, http.StatusOK)
+	if updated.Name != "Scoped issue key" || !slices.Equal(updated.Scopes, []string{"create_issues", "create_comments"}) || updated.TeamRestriction != "selected" || len(updated.TeamIDs) != 1 || updated.ExpiresAt == nil {
+		t.Fatalf("metadata patch was not applied: %#v", updated)
+	}
+	cleared := requestJSON[domain.APIKey](t, handler, http.MethodPatch, "/api/api-keys/"+id+"?workspace=test-workspace", map[string]any{
+		"scopes": nil, "teamIds": nil, "teamRestriction": "all", "expiresAt": nil,
+	}, http.StatusOK)
+	if cleared.Scopes != nil || cleared.TeamRestriction != "all" || len(cleared.TeamIDs) != 0 || cleared.ExpiresAt != nil {
+		t.Fatalf("metadata clear did not restore full access: %#v", cleared)
 	}
 }
 

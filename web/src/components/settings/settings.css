@@ -162,3 +162,6 @@ body .domain-label-row-menu .menu-separator:after,body .domain-label-group-subme
 :root[data-theme="light"] .settings-member-role-option:has(input:checked){border-color:var(--settings-role-selected-border);background:var(--settings-role-selected-bg)}
 :root:not([data-theme="light"]) .settings-member-role-option{border-color:var(--settings-role-border);border-radius:6px}
 :root:not([data-theme="light"]) .settings-member-role-option:has(input:checked){border-color:var(--settings-role-selected-border);background:var(--settings-role-selected-bg)}
+
+/* Reserve the compact agent bar below the settings surface on desktop. */
+@media(min-width:761px){.settings-main{height:calc(100vh - 44px)}}
