@@ -28,7 +28,7 @@ same row, select, toggle, menu, confirmation, empty, and save-state primitives.
 
 AI & Agents, Initiatives, Documents, Customer requests, Releases, Pulse, Asks,
 Emojis, and Integrations use a shared feature setting surface. Controls persist
-locally. Third-party authorization and remote billing/integration side effects
+locally. Third-party authorization and integration side effects
 remain represented by accurate connected/disconnected states.
 
 ## Administration
@@ -41,8 +41,6 @@ remain represented by accurate connected/disconnected states.
 | Security | Domain restrictions, guest policy, authentication toggles |
 | API | Personal API key CRUD with one-time key reveal |
 | Applications | OAuth application CRUD empty state |
-| Billing | Current plan, seats, invoices and plan actions |
-| Usage & limits | Usage meters and limits |
 | Import & export | JSON export and local import picker |
 | Team | Team identity and defaults |
 

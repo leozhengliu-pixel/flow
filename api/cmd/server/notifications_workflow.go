@@ -18,7 +18,7 @@ var teamIdentifierPattern = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,4}$`)
 
 var notificationCategories = []string{
 	"assignments", "statusChanges", "comments", "mentions", "reactions", "subscriptions",
-	"documents", "updates", "reminders", "loops", "integrations", "billing", "customerRequests", "triage",
+	"documents", "updates", "reminders", "loops", "integrations", "customerRequests", "triage",
 }
 
 func defaultPreferences(userID string) domain.NotificationPreferences {

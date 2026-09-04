@@ -165,7 +165,7 @@ Deliverables:
 - Git provider integration and webhook foundation
 - Workflow automation rules
 - Personal, team, and workspace settings
-- Member administration, API keys, applications, and usage pages
+- Member administration, API keys, and applications
 
 Exit criteria:
 

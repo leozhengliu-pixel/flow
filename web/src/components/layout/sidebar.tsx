@@ -178,7 +178,6 @@ export function Sidebar({
   const close = () => onOpenChange?.(false);
   const workspaceSlug = data.workspace.urlKey;
   const [customizeOpen, setCustomizeOpen] = useState(false);
-  const [planOpen, setPlanOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [favorites, setFavorites] = useState<Favorite[]>(() =>
     data.favorites.filter((item) => item.userId === data.viewer.id),
@@ -197,8 +196,6 @@ export function Sidebar({
     setPreferences,
   } = useSidebarCustomizationState();
   const [dismissedTry, setDismissedTry] = useState<string[]>(readDismissedTry);
-  const [navOverflowing, setNavOverflowing] = useState(false);
-  const navRef = useRef<HTMLElement>(null);
   const featureEnabled = (feature: string) =>
     data.workspaceSettings.featureFlags[feature] !== false;
 
@@ -233,24 +230,6 @@ export function Sidebar({
     window.addEventListener("keydown", openShortcuts);
     return () => window.removeEventListener("keydown", openShortcuts);
   }, []);
-  useEffect(() => {
-    const nav = navRef.current;
-    if (!nav) return;
-    const update = () =>
-      setNavOverflowing(nav.scrollHeight > nav.clientHeight + 1);
-    const observer = new ResizeObserver(update);
-    const mutationObserver = new MutationObserver(update);
-    observer.observe(nav);
-    mutationObserver.observe(nav, { childList: true, subtree: true });
-    update();
-    window.addEventListener("resize", update);
-    return () => {
-      observer.disconnect();
-      mutationObserver.disconnect();
-      window.removeEventListener("resize", update);
-    };
-  }, [dismissedTry, preferences, sidebarOrder]);
-
   const inboxUnread = data.notifications.filter(
     (item) =>
       item.recipientId === data.viewer.id &&
@@ -676,7 +655,7 @@ export function Sidebar({
           </button>
         </div>
 
-        <nav ref={navRef} className="sidebar-nav">
+        <nav className="sidebar-nav">
           <div className="sidebar-primary-links">
             {sidebarOrder.personal.map((entry) =>
               show(entry) ? (
@@ -840,18 +819,6 @@ export function Sidebar({
             onSettings={() => onOpenSettings("workspace")}
             onShortcuts={() => setShortcutsOpen(true)}
           />
-          {!navOverflowing && (
-            <button
-              className="plan-pill"
-              type="button"
-              aria-label="Free plan"
-              title="Your workspace is on a free plan"
-              onClick={() => setPlanOpen(true)}
-            >
-              <UpgradeIcon />
-              <span>Free plan</span>
-            </button>
-          )}
         </footer>
       </aside>
 
@@ -865,7 +832,6 @@ export function Sidebar({
         onChange={setPreferences}
         onReorder={reorderSidebar}
       />
-      <UpgradeDialog open={planOpen} onOpenChange={setPlanOpen} />
       <KeyboardShortcutsDialog
         open={shortcutsOpen}
         onOpenChange={setShortcutsOpen}
@@ -2592,72 +2558,6 @@ function KeyboardShortcutsDialog({
   );
 }
 
-function UpgradeDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const rows = [
-    ["Used 0 of 250 free issues", "Unlimited issues"],
-    ["Only 2 teams", "3 additional teams"],
-    ["10MB file limit", "Upload any file"],
-    ["Admin roles", "Admin roles"],
-  ];
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sidebar-upgrade-dialog">
-        <DialogTitle className="sr-only">
-          Your workspace is on the free plan
-        </DialogTitle>
-        <UpgradeIcon />
-        <h2>Your workspace is on the free plan</h2>
-        <p>Upgrade to keep creating issues and access more features.</p>
-        <div className="upgrade-columns">
-          <div>
-            <strong>Current plan</strong>
-            <span>Free</span>
-          </div>
-          <div>
-            <strong>Basic plan</strong>
-            <span>$10 per user/month, billed yearly</span>
-          </div>
-        </div>
-        <div className="upgrade-table">
-          {rows.map(([free, basic]) => (
-            <div key={free}>
-              <span>
-                <i>×</i>
-                {free}
-              </span>
-              <span>
-                <i>✓</i>
-                {basic}
-              </span>
-            </div>
-          ))}
-        </div>
-        <footer>
-          <button
-            type="button"
-            onClick={() => window.open("https://flow.app/pricing", "_blank")}
-          >
-            See all plans
-          </button>
-          <button
-            className="upgrade-primary"
-            type="button"
-            onClick={() => window.open("https://flow.app/pricing", "_blank")}
-          >
-            Upgrade to Basic
-          </button>
-        </footer>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 function FlowIcon({ name, style }: { name: string; style?: CSSProperties }) {
   return (
     <svg
@@ -2922,28 +2822,6 @@ function CustomizeIcon() {
         fill="none"
         stroke="currentColor"
         strokeWidth="1.35"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-function UpgradeIcon() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <circle
-        cx="8"
-        cy="8"
-        r="6.2"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      />
-      <path
-        d="m5.5 8 2.5-2.5L10.5 8M8 5.7v4.8"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
       />

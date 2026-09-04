@@ -43,10 +43,4 @@ func normalizeParity(data *domain.Bootstrap) {
 	if data.AIPromptProgress == nil {
 		data.AIPromptProgress = []domain.AIPromptProgress{}
 	}
-	if data.UsageAlerts == nil {
-		data.UsageAlerts = []domain.UsageAlert{}
-	}
-	if data.PaidSubscriptions == nil {
-		data.PaidSubscriptions = []domain.PaidSubscription{}
-	}
 }

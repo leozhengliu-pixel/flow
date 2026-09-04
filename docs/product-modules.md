@@ -343,7 +343,7 @@ Responsibilities:
 - Feature configuration for AI, initiatives, documents, customers, releases,
   Pulse, and integrations
 - Workspace, teams, members, security, API, and applications
-- Billing, usage limits, and import/export
+- Import/export
 
 Depends on: all configurable domain modules
 
@@ -376,7 +376,6 @@ The following primitives should be implemented before duplicating page UI:
 
 ## 4. Out of Scope for the First Release
 
-- Billing and payment processing
 - Enterprise SSO and SCIM
 - Full external integration marketplace
 - Native desktop and mobile applications
@@ -386,4 +385,3 @@ The following primitives should be implemented before duplicating page UI:
 
 These remain in the module map so the initial architecture does not prevent
 their later implementation.
-

@@ -76,7 +76,6 @@ import type {
   WorkspaceMutationInput,
   WorkspaceRole,
   WorkspaceSettings,
-  WorkspaceUsage,
 } from "@/types/flow";
 import { jsonRequest, request } from "@/lib/api-client";
 
@@ -804,9 +803,6 @@ export function submitReview(
 }
 export function commentOnReview(id: string, body: string): Promise<CodeReview> {
   return request(`/api/reviews/${id}/comments`, jsonRequest("POST", { body }));
-}
-export function fetchWorkspaceUsage(): Promise<WorkspaceUsage> {
-  return request("/api/usage");
 }
 export function fetchWebhooks(): Promise<Webhook[]> {
   return request("/api/webhooks");
@@ -1733,17 +1729,6 @@ export function createAIPromptProgress(
 ): Promise<import("@/types/flow").AIPromptProgress> {
   return request("/api/ai/prompt-progress", jsonRequest("POST", input));
 }
-export function listUsageAlerts(): Promise<
-  PageResult<import("@/types/flow").UsageAlert>
-> {
-  return request("/api/usage-alerts");
-}
-export function getPaidSubscription(): Promise<
-  import("@/types/flow").PaidSubscription | null
-> {
-  return request("/api/paid-subscription");
-}
-
 export function searchWorkspace(
   query: string,
   types: SearchResourceType[] = [],

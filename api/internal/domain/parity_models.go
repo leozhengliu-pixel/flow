@@ -119,25 +119,3 @@ type AIPromptProgress struct {
 	CreatedAt      time.Time `json:"createdAt"`
 	UpdatedAt      time.Time `json:"updatedAt"`
 }
-type UsageAlert struct {
-	ID         string         `json:"id"`
-	Type       string         `json:"type"`
-	Threshold  int64          `json:"threshold"`
-	Current    int64          `json:"current"`
-	Status     string         `json:"status"`
-	Metadata   map[string]any `json:"metadata,omitempty"`
-	CreatedAt  time.Time      `json:"createdAt"`
-	ResolvedAt *time.Time     `json:"resolvedAt,omitempty"`
-	ArchivedAt *time.Time     `json:"archivedAt,omitempty"`
-}
-type PaidSubscription struct {
-	ID                 string    `json:"id"`
-	Plan               string    `json:"plan"`
-	Status             string    `json:"status"`
-	Seats              int       `json:"seats"`
-	CurrentPeriodStart time.Time `json:"currentPeriodStart"`
-	CurrentPeriodEnd   time.Time `json:"currentPeriodEnd"`
-	CancelAtPeriodEnd  bool      `json:"cancelAtPeriodEnd"`
-	CreatedAt          time.Time `json:"createdAt"`
-	UpdatedAt          time.Time `json:"updatedAt"`
-}
