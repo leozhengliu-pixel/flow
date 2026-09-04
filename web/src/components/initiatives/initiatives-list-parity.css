@@ -96,6 +96,7 @@
 .li-initiative-command .property-command-option-background { inset: 0 6px; border-radius: 8px; }
 .li-initiative-command .avatar { width: 16px; height: 16px; font-size: 8px; }
 .li-initiative-label-command { box-sizing: border-box; width: 261px; border:.5px solid var(--theme-border-strong); border-radius:12px; background:var(--theme-surface-2); box-shadow:var(--shadow-control); }
+.li-initiative-label-command:has(.property-command-create) { width: max-content; min-width: 261px; max-width: min(401px, calc(100vw - 20px)); }
 .li-initiative-label-command .property-command-search { height:36.5px; padding:0 12px 0 14px; border-bottom:.5px solid var(--theme-border); }
 .li-initiative-label-command .property-command-search input { height:36px; padding:10px 0 9px; }
 .li-initiative-label-command .property-command-options { padding:6px 0; }
