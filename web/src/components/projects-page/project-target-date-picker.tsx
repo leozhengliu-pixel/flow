@@ -24,11 +24,12 @@ export function ProjectTargetDatePicker({ ariaLabel, buttonClassName = '', child
   return <ProjectDatePicker ariaLabel={ariaLabel} buttonClassName={buttonClassName} compactPeriods={compactPeriods} defaultMode={defaultMode} displayValue={displayValue} label="Target date" onChange={onChange} resolution={resolution} triggerRole={triggerRole} value={value}>{children}</ProjectDatePicker>
 }
 
-export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, compactPeriods = false, contentClassName = '', defaultMode = 'day', displayValue: _displayValue, label, max, min, onChange, portalled = true, resolution, side, align = 'center', triggerRef, triggerRole = 'button', value }: {
+export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, compactCalendar = false, compactPeriods = false, contentClassName = '', defaultMode = 'day', displayValue: _displayValue, label, max, min, onChange, onOpenChange, portalled = true, resolution, side, align = 'center', triggerRef, triggerRole = 'button', value }: {
   ariaLabel?: string
   buttonClassName?: string
   children: ReactNode
   compactPeriods?: boolean
+  compactCalendar?: boolean
   contentClassName?: string
   defaultMode?: DateMode
   displayValue?: string
@@ -36,6 +37,7 @@ export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, c
   max?: string
   min?: string
   onChange: (value: string, resolution?: DateResolution) => void
+  onOpenChange?: (open: boolean) => void
   portalled?: boolean
   resolution?: DateResolution
   side?: 'top' | 'right' | 'bottom' | 'left'
@@ -64,9 +66,10 @@ export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, c
   const choose = (date: Date, nextResolution?: DateResolution) => {
     onChange(isoDate(date), nextResolution)
     setOpen(false)
+    onOpenChange?.(false)
   }
   const submit = async () => {
-    if (!query.trim()) { onChange(''); setOpen(false); return }
+    if (!query.trim()) { onChange(''); setOpen(false); onOpenChange?.(false); return }
     const parsed = await parseNaturalTarget(query, mode, label)
     if (parsed && !isDateDisabled(parsed, minDate, maxDate)) choose(parsed, modeToResolution(mode))
   }
@@ -83,13 +86,13 @@ export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, c
     requestAnimationFrame(() => event.currentTarget.querySelectorAll<HTMLButtonElement>('[role=tab]')[next]?.focus())
   }
 
-  const content = <Popover.Content align={align} className={`${styles.datePicker}${compactPeriods && mode !== 'day' ? ` ${styles.compactPeriods}` : ''}${contentClassName ? ` ${contentClassName}` : ''}`} collisionPadding={8} onClick={event => event.stopPropagation()} onCloseAutoFocus={event => event.preventDefault()} side={side ?? (portalled ? 'bottom' : 'right')} sideOffset={4}>
-    <label className={styles.dateLabel}>{t(label)}<input autoFocus aria-label={t('Try: May 2027, Q4, 2027/05/20')} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void submit() } }} placeholder={t('Try: May 2027, Q4, 2027/05/20')} value={query}/></label>
-    <div aria-label={t('Date precision')} className={styles.dateModes} onKeyDown={onModeKeyDown} role="tablist">{MODES.map(item => <button aria-selected={mode === item.id} key={item.id} onClick={() => selectMode(item.id)} role="tab" tabIndex={mode === item.id ? 0 : -1} type="button">{t(item.label)}</button>)}</div>
-    {mode === 'day' ? <DayPanel cursor={cursor} locale={locale} max={maxDate} min={minDate} onChangeCursor={setCursor} onChoose={date => choose(date)} selected={selected}/> : <PeriodPanel cursor={cursor} label={label} locale={locale} max={maxDate} min={minDate} mode={mode} onChoose={(date, nextResolution) => choose(date, nextResolution)} selected={selected}/>}
+  const content = <Popover.Content align={align} className={`${styles.datePicker}${compactPeriods && mode !== 'day' ? ` ${styles.compactPeriods}` : ''}${compactCalendar ? ` ${styles.compactCalendar}` : ''}${contentClassName ? ` ${contentClassName}` : ''}`} collisionPadding={8} onClick={event => event.stopPropagation()} onCloseAutoFocus={event => event.preventDefault()} side={side ?? (portalled ? 'bottom' : 'right')} sideOffset={4}>
+    {!compactCalendar && <label className={styles.dateLabel}>{t(label)}<input autoFocus aria-label={t('Try: May 2027, Q4, 2027/05/20')} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void submit() } }} placeholder={t('Try: May 2027, Q4, 2027/05/20')} value={query}/></label>}
+    {!compactCalendar && <div aria-label={t('Date precision')} className={styles.dateModes} onKeyDown={onModeKeyDown} role="tablist">{MODES.map(item => <button aria-selected={mode === item.id} key={item.id} onClick={() => selectMode(item.id)} role="tab" tabIndex={mode === item.id ? 0 : -1} type="button">{t(item.label)}</button>)}</div>}
+    {compactCalendar || mode === 'day' ? <DayPanel cursor={cursor} locale={locale} max={maxDate} min={minDate} onChangeCursor={setCursor} onChoose={date => choose(date)} selected={selected}/> : <PeriodPanel cursor={cursor} label={label} locale={locale} max={maxDate} min={minDate} mode={mode} onChoose={(date, nextResolution) => choose(date, nextResolution)} selected={selected}/>}
   </Popover.Content>
 
-  return <Popover.Root open={open} onOpenChange={setOpen}>
+  return <Popover.Root open={open} onOpenChange={next => { setOpen(next); onOpenChange?.(next) }}>
     <Popover.Trigger asChild><button aria-expanded={open} aria-label={t(ariaLabel ?? `Change project ${label.toLowerCase()}`)} className={`lp-project-property-trigger ${buttonClassName}`} ref={triggerRef} role={triggerRole === 'combobox' ? 'combobox' : undefined} type="button">{children}</button></Popover.Trigger>
     {portalled ? <Popover.Portal>{content}</Popover.Portal> : content}
   </Popover.Root>

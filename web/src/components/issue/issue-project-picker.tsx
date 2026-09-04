@@ -139,6 +139,7 @@ async function createDirectProject(draft: NewProjectDraft, data: BootstrapData) 
     leadId: draft.leadId,
     memberIds: draft.memberIds,
     milestones: draft.milestones,
+    milestoneDetails: draft.milestoneDetails,
     labelIds: draft.labelIds,
     dependencyIds: draft.dependencyIds,
     dependencyRelations: draft.dependencyRelations,
