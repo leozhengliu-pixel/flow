@@ -33,6 +33,7 @@ import type {
   WorkflowRun,
 } from "@/types/flow";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { useI18n } from "@/i18n/i18n";
 import "./workspace-secondary-page.css";
 
@@ -80,9 +81,9 @@ export function WorkspaceSecondaryPage(props: Props) {
     <main className="secondary-page" aria-label={title}>
       <header className="secondary-page-header">
         <div className="secondary-breadcrumb">
-          {team && <span className="secondary-team-dot" style={{ background: team.color }} aria-hidden />}
+          {team && <ViewGlyph className="secondary-team-icon" color={team.color} icon={team.icon || "Team"} />}
           <h1>{title}</h1>
-          {team && <><ChevronRight aria-hidden size={14} /><span>{team.name}</span></>}
+          {team && <><ChevronRight aria-hidden size={14} /><span data-i18n-ignore>{team.name}</span></>}
         </div>
         <div className="secondary-header-actions" aria-hidden="true" />
       </header>

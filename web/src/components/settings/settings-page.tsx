@@ -1488,6 +1488,7 @@ export function MembersPage({
                                   )
                                 }
                               >
+                                <ViewGlyph color={team.color} icon={team.icon || "Team"} />
                                 {team.name}
                               </DropdownMenuCheckboxItem>
                             );
@@ -1675,6 +1676,7 @@ export function MembersPage({
                         )
                       }
                     >
+                      <ViewGlyph color={team.color} icon={team.icon || "Team"} />
                       {team.name}
                     </DropdownMenuCheckboxItem>
                   ))}
@@ -3049,6 +3051,7 @@ function ApiPage({
                         )
                       }
                     />
+                    <ViewGlyph color={team.color} icon={team.icon || "Team"} />
                     <span data-i18n-ignore>{team.name}</span>
                   </label>
                 ))}
@@ -3255,6 +3258,7 @@ function WebhookEditor({
                   )
                 }
               />
+              <ViewGlyph color={team.color} icon={team.icon || "Team"} />
               <span data-i18n-ignore>{team.name}</span>
             </label>
           ))}

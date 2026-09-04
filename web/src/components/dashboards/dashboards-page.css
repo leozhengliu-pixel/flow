@@ -681,6 +681,22 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.dashboard-select-trigger > .dashboard-select-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.dashboard-select-value > svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+}
+.dashboard-select-value > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .dashboard-select-trigger > svg {
   width: 14px;
   height: 14px;
@@ -716,6 +732,11 @@
   min-width: 0;
   display: grid;
   gap: 1px;
+}
+.dashboard-select-option > svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
 }
 .dashboard-select-copy strong {
   overflow: hidden;

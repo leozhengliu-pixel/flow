@@ -29,6 +29,8 @@ import { useI18n } from "@/i18n/i18n";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { SelectControl } from "@/components/ui/select-control";
+import { ViewGlyph } from "@/components/views/view-icon-picker";
+import { TeamIcon } from "@/components/issue/issue-icons";
 import { CustomerDialog } from "@/components/customer-detail/customer-dialog";
 import type {
   BootstrapData,
@@ -346,7 +348,7 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
                 type="button"
                 onClick={(event) => { event.preventDefault(); event.stopPropagation(); onOpenTeam(teams[0]) }}
               >
-                <TeamGlyph color={teams[0].color} />
+                <TeamGlyph team={teams[0]} />
                 {teams[0].key}{teams.length > 1 ? ` +${teams.length - 1}` : ""}
               </button>
             ) : null}
@@ -371,7 +373,7 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
           <div className="workspace-member-identity"><span className="workspace-directory-avatar is-invited">{initials(invitation.email)}</span><span><strong>{invitation.email}</strong><small>{invitation.email}</small></span></div>
           <span className={invitation.role==='admin'?'workspace-member-role':''}>{capitalize(invitation.role)} (Invited)</span>
           <time title="Invited to workspace">{new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric'}).format(new Date(invitation.createdAt))}</time>
-          <div className="workspace-member-teams">{team?<button type="button" onClick={()=>onOpenTeam(team)}><TeamGlyph color={team.color}/>{team.key}{invitation.teamIds.length>1?` +${invitation.teamIds.length-1}`:''}</button>:null}</div>
+          <div className="workspace-member-teams">{team?<button type="button" onClick={()=>onOpenTeam(team)}><TeamGlyph team={team}/>{team.key}{invitation.teamIds.length>1?` +${invitation.teamIds.length-1}`:''}</button>:null}</div>
           <span className="workspace-member-last-seen"/>
           <span className="workspace-members-end" aria-hidden="true"/>
         </div>
@@ -1024,7 +1026,7 @@ function TeamsDirectory({
                 }}
               >
                 <div className="workspace-team-identity">
-                  <TeamGlyph color={team.color} />
+                  <TeamGlyph team={team} />
                   <strong>{team.name}</strong>
                   <small>{team.key}</small>
                 </div>
@@ -1329,7 +1331,7 @@ function InviteMembersDialog({
         </label>
         <div className="workspace-invite-access">
           <label>Role<SelectControl label="Role" value={role} onChange={value => setRole(value as typeof role)} options={[{value:"member",label:"Member - Full access with limited permissions"},{value:"admin",label:"Admin - Full administrative access"},{value:"guest",label:"Guest - Limited access to teams"}]}/></label>
-          {role==='guest'&&<label>Team<SelectControl label="Team" value={teamId} onChange={setTeamId} options={[{value:"",label:"Select a team"},...teams.map(team=>({value:team.id,label:team.name,entityName:true}))]}/></label>}
+          {role==='guest'&&<label>Team<SelectControl label="Team" value={teamId} onChange={setTeamId} options={[{value:"",label:"Select a team"},...teams.map(team=>({value:team.id,label:team.name,entityName:true,icon:<TeamIcon team={team} size={14}/> }))]}/></label>}
         </div>
         <footer>
           <button type="button" disabled={sending} onClick={() => void send()}>
@@ -1351,17 +1353,8 @@ function CustomerMark({ customer }: { customer: Customer }) {
     <span className="workspace-customer-mark">{initials(customer.name)}</span>
   );
 }
-function TeamGlyph({ color }: { color: string }) {
-  return (
-    <svg
-      className="workspace-team-glyph"
-      viewBox="0 0 16 16"
-      aria-hidden="true"
-      style={{ color }}
-    >
-      <use href="#Team" />
-    </svg>
-  );
+function TeamGlyph({ team }: { team: Team }) {
+  return <ViewGlyph className="workspace-team-glyph" color={team.color} icon={team.icon || "Team"} />;
 }
 function FlowProjectIcon() {
   return (

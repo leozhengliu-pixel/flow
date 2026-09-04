@@ -313,7 +313,7 @@ export function ViewsPage({
             <div className={styles.group} key={group.id}>
               {scope.kind === "workspace" && (
                 <div className={styles.groupHeader}>
-                  <ScopeAvatar kind={group.kind} label={group.label} />
+                  <ScopeAvatar kind={group.kind} label={group.label} team={data.teams.find((team) => team.id === group.id)} />
                   <strong data-i18n-ignore>{group.label}</strong>
                   <span>
                     {group.kind === "personal"
@@ -611,7 +611,7 @@ function ViewRow({
                     key={team.id}
                     onSelect={() => onMove({ scope: "team", teamId: team.id })}
                   >
-                    <TeamIcon />
+                    <TeamIcon team={team} />
                     <span data-i18n-ignore>{team.name}</span>
                   </ContextMenu.Item>
                 ))}
@@ -929,16 +929,18 @@ function SortButton({
 function ScopeAvatar({
   kind,
   label,
+  team,
 }: {
   kind: SavedView["scope"];
   label: string;
+  team?: Team;
 }) {
   return (
     <span className={styles.scopeAvatar}>
       {kind === "personal" ? (
         <UserRound size={13} />
       ) : kind === "team" ? (
-        <TeamIcon size={13} />
+        <TeamIcon team={team} size={13} />
       ) : (
         label.slice(0, 2).toUpperCase()
       )}

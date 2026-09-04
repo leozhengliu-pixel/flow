@@ -69,7 +69,7 @@ export function SavedViewDetailsPanel({ favorite, menu, onClose, onSummaryItemSe
       {view.description && <p data-i18n-ignore>{view.description}</p>}
     </section>
     <section className={styles.metadataCard}>
-      <div><span>Visibility</span><strong>{view.scope === 'personal' ? <LockKeyhole/> : view.scope === 'team' ? <TeamIcon/> : <Building2/>}<span data-i18n-ignore={view.scope === 'personal' ? undefined : true}>{scopeLabel}</span></strong></div>
+      <div><span>Visibility</span><strong>{view.scope === 'personal' ? <LockKeyhole/> : view.scope === 'team' ? <TeamIcon team={team}/> : <Building2/>}<span data-i18n-ignore={view.scope === 'personal' ? undefined : true}>{scopeLabel}</span></strong></div>
       <div><span>Owner</span><strong data-i18n-ignore><InsightOwnerAvatar user={owner}/>{owner?.displayName ?? 'Unknown'}</strong></div>
     </section>
     <section className={styles.summaryCard}>

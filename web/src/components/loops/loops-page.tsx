@@ -14,6 +14,7 @@ import { DisplayIcon, FilterIcon, PlusIcon } from "@/components/ui/view-action-i
 import { SelectControl } from "@/components/ui/select-control";
 import { DateTimeControl, TimeControl } from "@/components/ui/date-time-control";
 import { ViewGlyph, ViewIconPicker } from "@/components/views/view-icon-picker";
+import { TeamIcon } from "@/components/issue/issue-icons";
 import {
   createLoop,
   createDraft,
@@ -810,7 +811,7 @@ function LoopEditor({
                             {scopeTeamIds.includes(team.id) && (
                               <Check size={12} />
                             )}
-                          </span>
+                          </span><TeamIcon team={team} size={14}/>
                           <span data-i18n-ignore>{team.name}</span>
                         </button>
                       ))}

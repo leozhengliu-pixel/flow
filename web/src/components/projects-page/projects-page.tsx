@@ -12,7 +12,7 @@ import { useProjectsViewState } from './use-projects-view-state'
 import { ProjectsFilterBar } from './projects-filter-bar'
 import { createProjectFilter, isProjectFilter, type ProjectFilter, type ProjectFilterField, type ProjectFilterOption } from './projects-filter-model'
 import { ProjectsBulkActionBar, type ProjectBulkAction } from './projects-bulk-action-bar'
-import type { ViewVisual } from '@/components/views/view-icon-picker'
+import { ViewGlyph, type ViewVisual } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { ProjectUpdatesPreview } from './project-updates-preview'
 import { labelsForResource } from '@/lib/labels'
@@ -222,7 +222,7 @@ export function ProjectsPage({
   const saveTargets = useMemo<SavedViewTarget[]>(() => [
     { scope: 'personal', label: 'Personal' },
     { scope: 'workspace', label: 'Workspace' },
-    ...teams.map(team => ({ scope: 'team' as const, label: team.name, teamId: team.id })),
+    ...teams.map(team => ({ scope: 'team' as const, label: team.name, teamId: team.id, team })),
   ], [teams])
   const initialSaveTarget = saveTargets.find(target => target.scope === (sourceView?.scope ?? defaultSaveScope ?? (scopeTeamId ? 'team' : 'workspace')) && (target.scope !== 'team' || target.teamId === (sourceView?.teamId ?? scopeTeamId))) ?? saveTargets[0]
 
@@ -519,7 +519,7 @@ export function ProjectsPage({
       open={createOpen}
       teamLabel={teams[0]?.name ?? 'Team'}
       workspaceName={teams[0]?.name ?? workspaceKey}
-      teams={teams.map(team => ({ id: team.id, label: team.name, color: team.color }))}
+      teams={teams.map(team => ({ id: team.id, label: team.name, color: team.color, icon: <ViewGlyph color={team.color} icon={team.icon || 'Team'} /> }))}
     />
     <ProjectsBulkActionBar
       onAction={(action, value) => { void runBulkAction(action, value).catch(() => undefined) }}
