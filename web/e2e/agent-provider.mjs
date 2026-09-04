@@ -14,9 +14,12 @@ http.createServer(async (request, response) => {
   let raw = ''
   for await (const chunk of request) raw += chunk
   const continued = raw.includes('function_call_output')
+  const projectDraft = raw.includes('Draft a new project from the request below.')
   response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' })
   send(response, 'response.created', { response: { id: continued ? 'resp_2' : 'resp_1' } })
-  if (!continued) {
+  if (projectDraft) {
+    send(response, 'response.output_text.delta', { delta: 'I drafted a project for you.\n\n```json\n{"name":"Agent launch","summary":"Launch planning","description":"A project drafted by the assistant.","targetDate":"2027-06-30","milestones":["Beta"]}\n```' })
+  } else if (!continued) {
     send(response, 'response.output_item.added', { item: { id: 'item_1', call_id: 'call_1', type: 'function_call', name: 'list_issues', arguments: '' } })
     send(response, 'response.function_call_arguments.done', { item_id: 'item_1', arguments: '{"limit":1}' })
   } else {

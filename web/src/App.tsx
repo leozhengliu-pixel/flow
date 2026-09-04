@@ -4796,6 +4796,7 @@ function App() {
               projectUpdates={data.projectUpdates}
               teams={data.teams}
               invitations={data.invitations}
+              agentSkills={data.agentSkills}
               users={data.users}
               labels={data.labels}
               labelGroups={data.labelGroups}
@@ -5361,6 +5362,7 @@ function App() {
                 users={data.users}
                 teams={data.teams}
                 invitations={data.invitations}
+                agentSkills={data.agentSkills}
                 labels={data.labels}
                 labelGroups={data.labelGroups}
                 workspaceKey={data.workspace.urlKey}
@@ -5480,6 +5482,7 @@ function App() {
                 users={data.users}
                 teams={data.teams}
                 invitations={data.invitations}
+                agentSkills={data.agentSkills}
                 labels={data.labels}
                 labelGroups={data.labelGroups}
                 workspaceKey={data.workspace.urlKey}
