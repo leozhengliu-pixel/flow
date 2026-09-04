@@ -298,8 +298,9 @@ func (s *server) updatePresence(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	workspace := workspaceKey(r)
+	actor := requestActor(s, r)
 	if s.coordinator != nil {
-		presence, err := s.coordinator.UpdatePresence(r.Context(), workspace, input.ClientID, domain.Presence{ClientID: input.ClientID, User: authUser(r), IssueID: input.IssueID, DocumentID: input.DocumentID, Route: input.Route, LastSeenAt: time.Now().UTC()}, presenceTTL)
+		presence, err := s.coordinator.UpdatePresence(r.Context(), workspace, input.ClientID, domain.Presence{ClientID: input.ClientID, User: actor, IssueID: input.IssueID, DocumentID: input.DocumentID, Route: input.Route, LastSeenAt: time.Now().UTC()}, presenceTTL)
 		if err != nil {
 			writeError(w, http.StatusServiceUnavailable, "Presence is temporarily unavailable")
 			return
@@ -308,7 +309,7 @@ func (s *server) updatePresence(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, presence)
 		return
 	}
-	writeJSON(w, http.StatusOK, s.realtime.updatePresenceWithDocument(workspace, input.ClientID, authUser(r), input.IssueID, input.DocumentID, input.Route))
+	writeJSON(w, http.StatusOK, s.realtime.updatePresenceWithDocument(workspace, input.ClientID, actor, input.IssueID, input.DocumentID, input.Route))
 }
 
 func (s *server) listPresence(w http.ResponseWriter, r *http.Request) {

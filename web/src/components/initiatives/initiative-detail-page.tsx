@@ -17,7 +17,7 @@ import { ProjectUpdatesPreview } from '@/components/projects-page/project-update
 import { NewProjectDialog, type NewProjectDraft } from '@/components/projects-page/new-project-dialog'
 import { projectPeopleChoices } from '@/components/projects-page/project-people'
 import type { ProjectCreateInput, ProjectMutationInput } from '@/components/projects-page/projects-page'
-import type { Draft, FlowDocument, Initiative, InitiativeMutationInput, InitiativeResource, InitiativeUpdate, Invitation, IssueLabel, LabelGroup, PersonalAgentSkill, Project, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
+import type { Draft, FlowDocument, Initiative, InitiativeMutationInput, InitiativeResource, InitiativeUpdate, Invitation, IssueLabel, LabelGroup, PersonalAgentSkill, Presence, Project, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
 import type { InitiativeRouteTab } from '@/lib/app-routes'
 import { InitiativeLabelsPicker, InitiativeProperties, ProjectAssociationPicker } from './initiative-shared'
 import { DisplayIcon as SlidersHorizontal, FilterIcon as Filter } from '@/components/ui/view-action-icons'
@@ -38,6 +38,7 @@ type Props = {
   projectUpdates: Record<string, ProjectUpdate[]>
   users: User[]
   invitations?: Invitation[]
+  presence?: Presence[]
   agentSkills?: PersonalAgentSkill[]
   teams: Team[]
   projectStatuses: ProjectStatus[]
@@ -85,7 +86,12 @@ type InitiativeViewDraft = Pick<InitiativeStoredView, 'name'|'description'|'icon
 
 export function InitiativeDetailPage(props: Props) {
   const { initiative, tab, onTabChange, onUpdate } = props
-  const peopleChoices = useMemo(() => projectPeopleChoices(props.users, props.invitations), [props.invitations, props.users])
+  const onlineUserIds = useMemo(() => {
+    const ids = new Set(props.presence?.map(item => item.user.id))
+    if (props.viewer.active) ids.add(props.viewer.id)
+    return ids
+  }, [props.presence, props.viewer.active, props.viewer.id])
+  const peopleChoices = useMemo(() => projectPeopleChoices(props.users, props.invitations, onlineUserIds), [onlineUserIds, props.invitations, props.users])
   const [detailsOpen, setDetailsOpen] = useStoredBoolean(`flow:initiative:${initiative.id}:details`, false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [projectCreateOpen, setProjectCreateOpen] = useState(false)

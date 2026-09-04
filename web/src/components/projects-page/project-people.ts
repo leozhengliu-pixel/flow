@@ -8,6 +8,7 @@ export type ProjectPersonChoice = {
   email?: string
   avatarUrl?: string
   active?: boolean
+  online?: boolean
   invited?: boolean
   disabled?: boolean
   end?: string
@@ -15,7 +16,7 @@ export type ProjectPersonChoice = {
 
 const INVITATION_PREFIX = 'invitation:'
 
-export function projectPeopleChoices(users: User[], invitations: Invitation[] = []): ProjectPersonChoice[] {
+export function projectPeopleChoices(users: User[], invitations: Invitation[] = [], onlineUserIds?: ReadonlySet<string>): ProjectPersonChoice[] {
   const knownEmails = new Set(users.map(user => user.email.trim().toLowerCase()))
   const choices: ProjectPersonChoice[] = users.map(user => ({
     id: user.id,
@@ -25,6 +26,8 @@ export function projectPeopleChoices(users: User[], invitations: Invitation[] = 
     avatarUrl: user.avatarUrl,
     color: avatarColor(user.id),
     active: user.active,
+    // Account activity controls eligibility; live presence controls the status dot.
+    online: user.active && Boolean(onlineUserIds?.has(user.id)) && !pendingInvitation(invitations, user.email),
     end: pendingInvitation(invitations, user.email) ? 'Invited' : undefined,
   }))
   for (const invitation of invitations) {
