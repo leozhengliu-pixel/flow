@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import type { Initiative, Invitation, IssueLabel, LabelGroup, Project, ProjectDependencyRelationInput, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
+import type { Initiative, Invitation, IssueLabel, LabelGroup, PersonalAgentSkill, Project, ProjectDependencyRelationInput, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
 import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from '@/components/issue-explorer/saved-view-editor'
 import { NewProjectDialog, type NewProjectDraft } from './new-project-dialog'
 import { projectPeopleChoices } from './project-people'
@@ -60,6 +60,7 @@ export type ProjectsPageProps = {
   users: User[]
   teams: Team[]
   invitations?: Invitation[]
+  agentSkills?: PersonalAgentSkill[]
   labels?: IssueLabel[]
   labelGroups?: LabelGroup[]
   loading?: boolean
@@ -120,6 +121,7 @@ export function ProjectsPage({
   users,
   teams,
   invitations = [],
+  agentSkills = [],
   labels = [],
   labelGroups = [],
   favoriteProjectIds = [],
@@ -480,6 +482,7 @@ export function ProjectsPage({
       viewer={viewer ?? users.find(user => user.id === viewerId)}
     />}
     <NewProjectDialog
+      agentSkills={agentSkills}
       initialTemplateId={initialTemplateId}
       defaultStatus={createStatus}
       dependencies={projects.filter(project => !project.archivedAt).map(project => ({ id: project.id, label: project.name, icon: normalizeProjectIcon(project.icon), color: project.color, group: viewerId && (project.lead?.id === viewerId || (project.memberIds ?? []).includes(viewerId)) ? 'your' : 'other', previewData: { summary: project.summary || project.description, status: project.status.name, milestone: (project.milestones ?? [])[0]?.name, team: (project.teamIds ?? []).map(id => teams.find(team => team.id === id)?.name).filter(Boolean).join(', '), lead: project.lead?.displayName, member: (project.memberIds ?? []).map(id => users.find(user => user.id === id)?.displayName).find(Boolean), memberAvatarUrl: (project.memberIds ?? []).map(id => users.find(user => user.id === id)?.avatarUrl).find(Boolean), priority: project.priorityLabel, targetDate: project.targetDate, progress: Math.round(project.progress * 100), issueCount: project.issueCount } }))}
@@ -507,6 +510,7 @@ export function ProjectsPage({
       onCreate={create}
       open={createOpen}
       teamLabel={teams[0]?.name ?? 'Team'}
+      workspaceName={teams[0]?.name ?? workspaceKey}
       teams={teams.map(team => ({ id: team.id, label: team.name, color: team.color }))}
     />
     <ProjectsBulkActionBar
