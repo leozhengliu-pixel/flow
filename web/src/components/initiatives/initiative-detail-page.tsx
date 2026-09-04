@@ -17,7 +17,7 @@ import { ProjectUpdatesPreview } from '@/components/projects-page/project-update
 import { NewProjectDialog, type NewProjectDraft } from '@/components/projects-page/new-project-dialog'
 import { projectPeopleChoices } from '@/components/projects-page/project-people'
 import type { ProjectCreateInput, ProjectMutationInput } from '@/components/projects-page/projects-page'
-import type { Draft, FlowDocument, Initiative, InitiativeMutationInput, InitiativeResource, InitiativeUpdate, Invitation, IssueLabel, LabelGroup, Project, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
+import type { Draft, FlowDocument, Initiative, InitiativeMutationInput, InitiativeResource, InitiativeUpdate, Invitation, IssueLabel, LabelGroup, PersonalAgentSkill, Project, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
 import type { InitiativeRouteTab } from '@/lib/app-routes'
 import { InitiativeLabelsPicker, InitiativeProperties, ProjectAssociationPicker } from './initiative-shared'
 import { DisplayIcon as SlidersHorizontal, FilterIcon as Filter } from '@/components/ui/view-action-icons'
@@ -37,6 +37,7 @@ type Props = {
   projectUpdates: Record<string, ProjectUpdate[]>
   users: User[]
   invitations?: Invitation[]
+  agentSkills?: PersonalAgentSkill[]
   teams: Team[]
   projectStatuses: ProjectStatus[]
   projectTemplates: ProjectTemplate[]
@@ -183,6 +184,7 @@ export function InitiativeDetailPage(props: Props) {
         },
       }))}
       labels={projectLabels.map(label => ({ id: label.id, label: label.name, color: label.color, groupId: label.groupId, groupLabel: label.groupId ? projectLabelGroupNames.get(label.groupId) : undefined }))}
+      agentSkills={props.agentSkills}
       leads={peopleChoices}
       members={peopleChoices}
       statuses={props.projectStatuses.map(status => ({ id: status.name, label: status.name, color: status.color, icon: <ProjectStatusGlyph color={status.color} name={status.name} type={status.type}/> }))}
@@ -192,6 +194,7 @@ export function InitiativeDetailPage(props: Props) {
       open={projectCreateOpen}
       teamLabel={props.teams[0]?.name ?? 'Team'}
       teams={props.teams.map(team => ({ id: team.id, label: team.name, color: team.color }))}
+      workspaceName={props.teams[0]?.name ?? 'Team'}
     />
   </main>
 }

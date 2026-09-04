@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { LayoutTemplate, X } from 'lucide-react'
 import { PlusIcon } from './projects-page-icons'
 import { PropertyMenu, type PropertyOption } from '@/components/property/property-menu'
@@ -11,8 +11,11 @@ import { ProjectStatusGlyph } from './project-property-picker'
 import { ProjectDatePicker } from './project-target-date-picker'
 import { formatProjectPropertyDate } from '@/components/project-detail/project-detail-helpers'
 import { useI18n } from '@/i18n/i18n'
-import type { ProjectDependencyRelationInput } from '@/types/flow'
+import type { PersonalAgentSkill, ProjectDependencyRelationInput } from '@/types/flow'
 import { UserAvatar } from '@/components/ui/user-avatar'
+import { ProjectCreationAgent } from './project-creation-agent'
+import type { ProjectAgentDraft } from './project-agent-draft'
+import { AgentPointerIcon } from '@/components/agent/agent-icons'
 import './projects-page.css'
 
 export type NewProjectDraft = {
@@ -66,6 +69,8 @@ export type NewProjectDialogProps = {
   initiatives?: NewProjectChoice[]
   labels?: NewProjectChoice[]
   dependencies?: NewProjectChoice[]
+  agentSkills?: PersonalAgentSkill[]
+  workspaceName?: string
   statuses?: NewProjectChoice[]
   templates?: NewProjectTemplateChoice[]
   onClose: () => void
@@ -90,6 +95,8 @@ export function NewProjectDialog({
   initiatives = EMPTY_CHOICES,
   labels = EMPTY_CHOICES,
   dependencies = EMPTY_CHOICES,
+  agentSkills = [],
+  workspaceName,
   statuses = DEFAULT_STATUSES,
   templates = EMPTY_TEMPLATES,
   onClose,
@@ -111,12 +118,25 @@ export function NewProjectDialog({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [nameError, setNameError] = useState(false)
+  const [agentOpen, setAgentOpen] = useState(false)
+  const [discardOpen, setDiscardOpen] = useState(false)
+  const initialDraftRef = useRef<NewProjectDraft | undefined>(undefined)
+  const dirty = initialDraftRef.current ? JSON.stringify(draft) !== JSON.stringify(initialDraftRef.current) : false
+  const requestClose = useCallback(() => {
+    if (submitting) return
+    if (dirty) setDiscardOpen(true)
+    else onClose()
+  }, [dirty, onClose, submitting])
 
   useEffect(() => {
     if (!open) return
-    setDraft(applyProjectTemplateDraft(emptyDraft(defaultStatus, defaultTeamId), initialTemplateId, templatesRef.current, labelsRef.current))
+    const nextDraft = applyProjectTemplateDraft(emptyDraft(defaultStatus, defaultTeamId), initialTemplateId, templatesRef.current, labelsRef.current)
+    initialDraftRef.current = nextDraft
+    setDraft(nextDraft)
     setError(null)
     setNameError(false)
+    setAgentOpen(false)
+    setDiscardOpen(false)
     requestAnimationFrame(() => nameRef.current?.focus())
   }, [defaultStatus, defaultTeamId, initialTemplateId, labelSignature, open, templateSignature])
 
@@ -125,11 +145,12 @@ export function NewProjectDialog({
     const keydown = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented) return
       if (event.key === 'Escape' && document.querySelector('[data-radix-popper-content-wrapper]')) return
-      if (event.key === 'Escape' && !submitting) onClose()
+      if (event.key === 'Escape' && discardOpen) { setDiscardOpen(false); return }
+      if (event.key === 'Escape' && !submitting) requestClose()
     }
     document.addEventListener('keydown', keydown)
     return () => document.removeEventListener('keydown', keydown)
-  }, [onClose, open, submitting])
+  }, [discardOpen, onClose, open, requestClose, submitting])
 
   if (!open) return null
 
@@ -157,13 +178,15 @@ export function NewProjectDialog({
     setDraft(current => applyProjectTemplateDraft(current, templateId, templates, labels))
   }
 
-  return <div aria-label="Create project" aria-modal="true" className="lp-new-project" onKeyDown={trapFocus} role="dialog">
+  return <div aria-label={t('Create project')} aria-modal="true" className={`lp-new-project${agentOpen ? ' lp-new-project--agent-open' : ''}`} onKeyDown={event => trapFocus(event, discardOpen ? '.lp-new-project__discard-dialog' : undefined)} role="dialog">
     <div className="lp-new-project__backdrop" />
-    <form className="lp-new-project__panel" onSubmit={submit} ref={panelRef}>
+    <div aria-hidden={discardOpen || undefined} className="lp-new-project__panel" inert={discardOpen || undefined}>
+    <form className="lp-new-project__form" onSubmit={submit} ref={panelRef}>
       <header className="lp-new-project__header">
         {teams.length<2?<button aria-label="Change project teams" className="lp-new-project__team" disabled type="button"><ViewIconPickerGlyph color={teams[0]?.color} icon="Team"/><span>{teamLabel}</span></button>:<PropertyMenu compact multiple label="Teams" value={draft.teamIds.length===1?teams.find(team=>team.id===draft.teamIds[0])?.label??teamLabel:`${draft.teamIds.length} teams`} selectedIds={draft.teamIds} options={teams.map(team=>({id:team.id,label:team.label,color:team.color,i18nIgnore:true}))} trigger={<><ViewIconPickerGlyph color={teams.find(team=>draft.teamIds.includes(team.id))?.color??teams[0]?.color} icon="Team"/><span data-i18n-ignore>{draft.teamIds.length===1?teams.find(team=>team.id===draft.teamIds[0])?.label??teamLabel:`${draft.teamIds.length} teams`}</span></>} triggerClassName="lp-new-project__team" ariaLabel="Change project teams" onChange={id=>{if(draft.teamIds.includes(id)&&draft.teamIds.length===1)return;set('teamIds',draft.teamIds.includes(id)?draft.teamIds.filter(value=>value!==id):[...draft.teamIds,id])}}/>}
         <span>›</span><span>New project</span>
-        <button aria-label="Discard project" className="lp-new-project__discard" disabled={submitting} onClick={onClose} type="button"><X size={16}/></button>
+        {!agentOpen && <button aria-expanded={agentOpen} aria-label={t('Create with Agent')} className="lp-new-project__agent-toggle" onClick={() => setAgentOpen(true)} type="button"><AgentPointerIcon size={14}/><span>{t('Create with Agent')}</span></button>}
+        <button aria-label="Discard project" className="lp-new-project__discard" disabled={submitting} onClick={requestClose} type="button"><X size={16}/></button>
       </header>
       <div className="lp-new-project__scroll">
         <div className="lp-new-project__identity">
@@ -200,11 +223,14 @@ export function NewProjectDialog({
         <MilestonesEditor milestones={draft.milestones} onChange={value => set('milestones', value)} />
       </div>
       <footer className="lp-new-project__footer">
-        <button disabled={submitting} onClick={onClose} type="button">Cancel</button>
+        <button disabled={submitting} onClick={requestClose} type="button">Cancel</button>
         <button className="is-primary" disabled={submitting} type="submit">{submitting ? <span className="lp-new-project__spinner" /> : null}{submitting ? 'Creating…' : 'Create project'}</button>
       </footer>
     </form>
+    <ProjectCreationAgent agentSkills={agentSkills} draft={draft} hidden={!agentOpen} onApplyDraft={patch => setDraft(current => mergeAgentDraft(current, patch, statuses, { dependencies, initiatives, labels, leads, members, teams }))} onClose={requestClose} onHide={() => setAgentOpen(false)} workspaceName={workspaceName ?? teamLabel} />
+    </div>
     {error && <div className="lp-new-project__toast" role="alert"><span>!</span><div><strong>{nameError ? 'Project name required' : 'Could not create project'}</strong><p>{error}</p></div></div>}
+    {discardOpen && <DiscardProjectDialog onCancel={() => setDiscardOpen(false)} onDiscard={() => { setDiscardOpen(false); onClose() }} />}
   </div>
 }
 
@@ -284,9 +310,25 @@ function MilestonesEditor({ milestones, onChange }: { milestones: string[], onCh
   }} placeholder="Milestone name" value={value} /><button onClick={add} type="button">Add</button></div>}</>}</section>
 }
 
-function trapFocus(event: KeyboardEvent<HTMLDivElement>) {
+function DiscardProjectDialog({ onCancel, onDiscard }: { onCancel: () => void; onDiscard: () => void }) {
+  const { t } = useI18n()
+  return <>
+    <div aria-hidden="true" className="lp-new-project__discard-overlay" />
+    <section aria-describedby="discard-project-description" aria-labelledby="discard-project-title" aria-modal="true" className="lp-new-project__discard-dialog" role="alertdialog">
+      <h2 id="discard-project-title">{t('Discard changes?')}</h2>
+      <p id="discard-project-description">{t('Are you sure you want to discard the changes you’ve made to this project?')}</p>
+      <footer>
+        <button onClick={onCancel} type="button">{t('Cancel')}</button>
+        <button autoFocus className="is-danger" onClick={onDiscard} type="button">{t('Discard')}</button>
+      </footer>
+    </section>
+  </>
+}
+
+function trapFocus(event: KeyboardEvent<HTMLDivElement>, scopeSelector?: string) {
   if (event.key !== 'Tab') return
-  const focusables = [...event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), [tabindex="0"]')].filter(element => element.offsetParent !== null)
+  const scope = scopeSelector ? event.currentTarget.querySelector<HTMLElement>(scopeSelector) ?? event.currentTarget : event.currentTarget
+  const focusables = [...scope.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), [tabindex="0"]')].filter(element => element.offsetParent !== null)
   if (!focusables.length) return
   const index = focusables.indexOf(document.activeElement as HTMLElement)
   if (!event.shiftKey && index === focusables.length - 1) {
@@ -312,3 +354,59 @@ function applyProjectTemplateDraft(current:NewProjectDraft,templateId:string|und
 }
 
 function projectStatusType(status: string) { return status === 'Backlog' ? 'backlog' : status === 'In Progress' ? 'started' : status === 'Completed' ? 'completed' : status === 'Canceled' ? 'canceled' : 'planned' }
+
+function mergeAgentDraft(current: NewProjectDraft, patch: ProjectAgentDraft, statuses: NewProjectChoice[], choices: Pick<NewProjectDialogProps, 'dependencies' | 'initiatives' | 'labels' | 'leads' | 'members' | 'teams'>) {
+  const next = { ...current }
+  if (patch.name?.trim()) next.name = patch.name.trim()
+  if (patch.summary?.trim()) next.summary = patch.summary.trim()
+  if (patch.description?.trim()) next.description = patch.description.trim()
+  if (patch.status?.trim()) {
+    const match = statuses.find(option => option.id.toLowerCase() === patch.status!.trim().toLowerCase() || option.label.toLowerCase() === patch.status!.trim().toLowerCase())
+    if (match) next.status = match.id
+  }
+  if (patch.priority?.trim()) {
+    const priority = patch.priority.trim().toLowerCase()
+    const normalizedPriority = priority === 'none' || priority === 'no priority' ? 'No priority' : patch.priority.trim()
+    const match = PRIORITY.find(value => value.toLowerCase() === normalizedPriority.toLowerCase())
+    if (match) next.priority = match
+  }
+  if (isIsoDate(patch.startDate)) next.startDate = patch.startDate
+  if (isIsoDate(patch.targetDate)) next.targetDate = patch.targetDate
+  if (patch.milestones?.length) next.milestones = [...new Set([...current.milestones, ...patch.milestones.map(item => item.trim()).filter(Boolean)])]
+  if (patch.team?.trim()) {
+    const team = findChoice(patch.team, choices.teams ?? [])
+    if (team) next.teamIds = [team.id]
+  }
+  if (patch.lead?.trim()) {
+    if (/^(none|no lead|unassigned)$/i.test(patch.lead.trim())) next.leadId = undefined
+    else {
+      const lead = findChoice(patch.lead, choices.leads ?? [])
+      if (lead) next.leadId = lead.id
+    }
+  }
+  const memberIds = resolveChoices(patch.members, choices.members ?? [])
+  if (memberIds.length) next.memberIds = memberIds
+  const initiativeIds = resolveChoices(patch.initiatives, choices.initiatives ?? [])
+  if (initiativeIds.length) next.initiativeIds = initiativeIds
+  const labelIds = resolveChoices(patch.labels, choices.labels ?? [])
+  if (labelIds.length) next.labelIds = labelIds
+  const dependencyIds = resolveChoices(patch.dependencies, choices.dependencies ?? [])
+  if (dependencyIds.length) {
+    next.dependencyIds = dependencyIds
+    next.dependencyRelations = dependencyIds.map(projectId => ({ projectId, type: 'blocked_by' as const }))
+  }
+  return next
+}
+
+function resolveChoices(values: string[] | undefined, options: NewProjectChoice[]) {
+  return [...new Set((values ?? []).map(value => findChoice(value, options)?.id).filter((id): id is string => Boolean(id)))]
+}
+
+function findChoice(value: string, options: NewProjectChoice[]) {
+  const needle = value.trim().toLocaleLowerCase()
+  return options.find(option => [option.id, option.label, option.name, option.email].some(candidate => candidate?.trim().toLocaleLowerCase() === needle))
+}
+
+function isIsoDate(value: string | undefined): value is string {
+  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00`)))
+}

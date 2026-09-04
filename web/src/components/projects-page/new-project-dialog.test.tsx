@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -100,5 +100,25 @@ describe('NewProjectDialog', () => {
       dependencyIds: ['project-1'],
       dependencyRelations: [{ projectId: 'project-1', type: 'blocked_by' }],
     }))
+  })
+
+  it('confirms before discarding a changed project draft', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(
+      <I18nProvider>
+        <NewProjectDialog open onClose={onClose} onCreate={vi.fn()} teams={[{ id: 'team-1', label: 'Team', color: '#5e6ad2' }]} />
+      </I18nProvider>,
+    )
+
+    await user.type(screen.getByRole('textbox', { name: 'Project name' }), 'Changed')
+    await user.click(screen.getByRole('button', { name: 'Discard project' }))
+    expect(screen.getByRole('alertdialog', { name: 'Discard changes?' })).toBeVisible()
+    const confirmation = screen.getByRole('alertdialog', { name: 'Discard changes?' })
+    await user.click(within(confirmation).getByRole('button', { name: 'Cancel' }))
+    expect(onClose).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Discard project' }))
+    await user.click(within(screen.getByRole('alertdialog', { name: 'Discard changes?' })).getByRole('button', { name: 'Discard' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })
