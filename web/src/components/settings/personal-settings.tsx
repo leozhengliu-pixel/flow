@@ -68,6 +68,7 @@ import type {
   Passkey,
 } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
+import { TeamIcon } from "@/components/issue/issue-icons";
 import {
   SettingsPageTitle,
   SettingsRow,
@@ -3058,6 +3059,7 @@ function APIKeyCreatePage({
                   <div className="personal-api-key-team-control">
                     {selectedTeamRecords.map((team) => (
                       <span className="personal-api-key-team-chip" key={team.id}>
+                        <TeamIcon team={team} size={14} />
                         <span data-i18n-ignore>{team.name}</span>
                         <button
                           type="button"
@@ -3177,7 +3179,7 @@ function APIKeyCreatePage({
                                 setTeamQuery("");
                               }}
                             >
-                              <span>{team.name}</span>
+                              <TeamIcon team={team} size={14} /><span data-i18n-ignore>{team.name}</span>
                               {checked && <Check aria-hidden="true" />}
                             </button>
                           );
@@ -3496,6 +3498,7 @@ function APIKeyDetailPage({
               {teams.length ? (
                 teams.map((team) => (
                   <span key={team.id} data-i18n-ignore>
+                    <TeamIcon team={team} size={14} />
                     {team.name}
                   </span>
                 ))
@@ -4018,7 +4021,8 @@ function APIKeyMetadata({
               <strong>{p("Teams")}</strong>
               <div className="personal-security-metadata-list">
                 {selectedTeams.map((team) => (
-                  <div key={team.id}>
+                  <div className="personal-security-metadata-team" key={team.id}>
+                    <TeamIcon team={team} size={14} />
                     <span data-i18n-ignore>{team.name}</span>
                   </div>
                 ))}

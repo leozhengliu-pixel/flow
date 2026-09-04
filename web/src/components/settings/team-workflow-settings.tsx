@@ -4,6 +4,7 @@ import {
   useState,
   type ComponentType,
   type KeyboardEvent,
+  type ReactNode,
 } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import {
@@ -438,6 +439,7 @@ function TeamOverview({
               data.teams.map((item) => [item.id, item.name]),
             ),
           }}
+          icons={Object.fromEntries(data.teams.map((item) => [item.id, <ViewGlyph key={item.id} color={item.color} icon={item.icon || "Team"} />]))}
           entityOptions={data.teams.map((item) => item.id)}
           onChange={(value) => save({ parentTeamId: value })}
         />
@@ -2978,6 +2980,7 @@ function SelectRow({
   value,
   options,
   labels = {},
+  icons = {},
   entityOptions = [],
   onChange,
 }: {
@@ -2986,6 +2989,7 @@ function SelectRow({
   value: string;
   options: string[];
   labels?: Record<string, string>;
+  icons?: Record<string, ReactNode>;
   entityOptions?: string[];
   onChange: (value: string) => void | Promise<void>;
 }) {
@@ -3001,7 +3005,8 @@ function SelectRow({
           label: entityOptions.includes(option)
             ? labels[option] ?? option
             : t(labels[option] ?? option),
-          entityName: entityOptions.includes(option),
+            entityName: entityOptions.includes(option),
+            icon: icons[option],
         }))}
       />
     </TeamRow>

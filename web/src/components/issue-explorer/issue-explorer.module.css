@@ -1,7 +1,7 @@
 .surface{position:relative;height:calc(100% - 16px);min-width:0;margin:8px 8px 8px 0;overflow:hidden;display:flex;flex-direction:column;background:var(--bg-panel);border:.5px solid var(--border);border-radius:12px;box-shadow:var(--shadow);color:var(--text);font-family:"Inter Variable","SF Pro Display",-apple-system,system-ui,"Segoe UI",sans-serif}
 :global(:root[data-theme="light"]) .surface{border-color:var(--theme-border)}
 .header{height:44px;flex:0 0 44px;display:flex;align-items:center;padding:0 11px 0 18px;border-bottom:1px solid var(--border)}
-.header h2,.scope,.savedParent{margin:0;color:var(--text);font-size:13px;font-weight:500;line-height:16px;text-decoration:none}.header h2{line-height:normal}.savedParent{color:var(--issue-muted)}.scope:hover{color:var(--text)}.crumb{margin:0 7px;color:var(--faint)}
+.header h2,.scope,.savedParent{margin:0;color:var(--text);font-size:13px;font-weight:500;line-height:16px;text-decoration:none}.scope{display:inline-flex;align-items:center;gap:6px;min-width:0}.scopeIcon{width:14px;height:14px;flex:0 0 14px}.scope>span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.header h2{line-height:normal}.savedParent{color:var(--issue-muted)}.scope:hover{color:var(--text)}.crumb{margin:0 7px;color:var(--faint)}
 .headerViewIcon{width:16px;height:16px;flex:0 0 16px;margin-right:8px}
 .headerViewActions{height:28px;display:flex;align-items:center;margin-left:4px}
 .headerAction{width:28px;height:28px;display:grid;place-items:center;padding:0;border:0;border-radius:9999px;background:transparent;color:var(--muted);cursor:pointer}.header h2+.headerAction{margin-left:8px}.headerAction:hover{background:var(--theme-surface-hover);color:var(--text)}

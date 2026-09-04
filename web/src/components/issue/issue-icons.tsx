@@ -1,6 +1,7 @@
 import { useId, type SVGProps } from 'react'
 import { useI18n } from '@/i18n/i18n'
-import type { Cycle, WorkflowState } from '@/types/flow'
+import type { Cycle, Team, WorkflowState } from '@/types/flow'
+import { ViewGlyph } from '@/components/views/view-icon-picker'
 
 export type FlowIconProps = Omit<SVGProps<SVGSVGElement>, 'width' | 'height'> & { size?: number }
 
@@ -81,8 +82,9 @@ export function LabelGroupIcon({ size = 16, color = 'currentColor', ...props }: 
   </svg>
 }
 
-export function TeamIcon(props: FlowIconProps) {
-  return <AssetIcon asset="Team" {...props}/>
+export function TeamIcon({ team, size = 16, className, style, ...props }: FlowIconProps & { team?: Pick<Team, 'icon' | 'color'> }) {
+  if (team) return <ViewGlyph className={className} color={team.color} icon={team.icon || 'Team'} style={{ width: size, height: size, ...style }} />
+  return <AssetIcon asset="Team" size={size} className={className} style={style} {...props}/>
 }
 
 export function MembersIcon(props: FlowIconProps) {
