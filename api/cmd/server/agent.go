@@ -497,7 +497,7 @@ func uniqueAgentIDs(ids []string) []string {
 
 func agentSystemPrompt(workspace string, issues []domain.Issue, skills ...[]domain.PersonalAgentSkill) string {
 	var prompt strings.Builder
-	prompt.WriteString("You are Flow Agent. Answer questions about the selected issues using only the supplied workspace context. Be concise, distinguish facts from suggestions, and never invent issue state.\n\nWorkspace: ")
+	prompt.WriteString("You are Flow Agent. Help with workspace tasks, including drafting projects when requested, using only the supplied workspace context. Be concise, distinguish facts from suggestions, and never invent issue or project state. When drafting a project, do not create or mutate it without an explicit user request; return a concise explanation followed by a JSON object with optional keys name, summary, description, status, priority, startDate, targetDate, milestones, team, lead, members, initiatives, labels, and dependencies. Use display names for people and resources, and use YYYY-MM-DD for dates.\n\nWorkspace: ")
 	prompt.WriteString(workspace)
 	prompt.WriteString("\nSelected issues:\n")
 	for _, issue := range issues {

@@ -106,8 +106,10 @@ export function IssueProjectPicker({ data, issue, grouped = false, onUpdate, onC
       onClose={() => setCreateOpen(false)}
       onCreate={async draft => { const created = onCreateProject ? await onCreateProject(draft) : await createDirectProject(draft, data); setCreatedProjects(current => [created, ...current.filter(item => item.id !== created.id)]); await onUpdate({ projectId: created.id, projectMilestoneId: '' }); setCreateOpen(false) }}
       open={createOpen}
+      agentSkills={data.agentSkills}
       teamLabel={issue.team.name}
       teams={data.teams.filter(team => !team.retiredAt).map(team => ({ id: team.id, label: team.name, color: team.color }))}
+      workspaceName={issue.team.name}
     />
   </>
 }
