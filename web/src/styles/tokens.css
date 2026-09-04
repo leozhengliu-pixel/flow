@@ -375,3 +375,8 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 /* Label-picker checks stay legible on both themes, matching the compact menu control. */
 .property-command-labels .property-command-checkbox{border:1px solid var(--label-picker-checkbox-border)}
 .property-command-labels [role=option][aria-selected=true] .property-command-checkbox{opacity:1}
+.property-command-labels .property-command-options .property-command-label-group-option{grid-template-columns:16px minmax(0,1fr) 14px;gap:8px;padding:0 15px}
+.property-command-labels .property-command-options .property-command-label-group-option .property-command-checkbox{display:none!important}
+.property-command-labels .property-command-options .property-command-label-group-option .property-command-icon{grid-column:1}
+.property-command-labels .property-command-options .property-command-label-group-option .property-command-group-copy{grid-column:2}
+.property-command-labels .property-command-options .property-command-label-group-option .property-command-group-chevron{grid-column:3}
