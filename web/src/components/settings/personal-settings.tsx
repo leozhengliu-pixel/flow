@@ -13,7 +13,6 @@ import {
   ChevronDown,
   CircleAlert,
   Clipboard,
-  Code2,
   ExternalLink,
   GitFork,
   KeyRound,
@@ -102,6 +101,11 @@ type Props = {
 };
 
 type PersonalTranslate = (source: string) => string;
+
+// Keeps the one-time secret available during the create -> detail navigation
+// even when a browser blocks sessionStorage. It is deleted as soon as the
+// detail page consumes it and is never sent back to the API.
+const pendingAPIKeySecrets = new Map<string, string>();
 
 // Personal settings are kept local until the shared catalog owns every key.
 // This avoids falling back to partially translated legacy DOM mutations.
@@ -305,6 +309,7 @@ const PERSONAL_ZH: Record<string, string> = {
     "在编码工具中打开事项或复制为提示词后，将事项状态移至团队的第一个已开始工作流状态。",
   Sessions: "会话",
   "Devices logged into your account": "已登录你账户的设备",
+  "No sessions": "没有会话",
   "Current session": "当前会话",
   "Log out": "退出登录",
   "Could not log out": "退出登录失败",
@@ -380,6 +385,7 @@ const PERSONAL_ZH: Record<string, string> = {
   "Select teams…": "选择团队…",
   "Remove team": "移除团队",
   "No teams found": "未找到团队",
+  "No teams selected": "未选择团队",
   "Toggle menu": "切换菜单",
   "Copy this key now. It will not be shown again.":
     "请立即复制此密钥，关闭后将不再显示。",
@@ -1503,6 +1509,7 @@ function Security(props: PersonalProps) {
         onCreated={
           props.onOpenAPIKey
             ? (created, secret) => {
+                pendingAPIKeySecrets.set(created.id, secret);
                 try {
                   window.sessionStorage.setItem(
                     `flow.api-key-secret:${created.id}`,
@@ -1780,9 +1787,10 @@ function SecurityOverview({
         title={p("Sessions")}
         description={p("Devices logged into your account")}
       >
-        {sessions
-          .filter((item) => item.current)
-          .map((item) => (
+        {sessions.filter((item) => item.current).length ? (
+          sessions
+            .filter((item) => item.current)
+            .map((item) => (
             <PersonalRow
               key={item.id}
               className="personal-security-device-row"
@@ -1823,7 +1831,13 @@ function SecurityOverview({
                 {p("Log out")}
               </Action>
             </PersonalRow>
-          ))}
+          ))
+        ) : (
+          <PersonalRow
+            className="personal-security-empty-row"
+            title={p("No sessions")}
+          />
+        )}
       </PersonalSection>
       {other.length > 0 && (
         <PersonalSection
@@ -2019,7 +2033,7 @@ function SecurityOverview({
                 onOpenAPIKey(item);
               }
             }}
-            icon={<Code2 />}
+            icon={<KeyRound />}
             title={<span data-i18n-ignore>{item.name}</span>}
             description={
               <APIKeyMetadata
@@ -2039,7 +2053,7 @@ function SecurityOverview({
                   void rotateAPIKey(item.id)
                     .then(async (result) => {
                       setRevealedSecret({ name: item.name, secret: result.secret });
-                      await onReload();
+                      await onReload().catch(() => undefined);
                     })
                     .catch((error) => toast.error(error instanceof Error ? error.message : p("Could not rotate API key")))
                     .finally(() => setRotatingKeyId(null));
@@ -2792,7 +2806,7 @@ function APIKeyCreatePage({
       return;
     }
     if (
-      data.apiKeys.some(
+      (data.apiKeys ?? []).some(
         (item) =>
           item.id !== apiKey?.id &&
           !item.revokedAt &&
@@ -2847,9 +2861,11 @@ function APIKeyCreatePage({
       else setSecret(result.secret);
     } catch (requestError) {
       setError(
-        requestError instanceof Error
-          ? requestError.message
-          : p("Could not create API key"),
+        apiKeyErrorMessage(
+          requestError,
+          p,
+          editing ? p("Could not update API key") : p("Could not create API key"),
+        ),
       );
     } finally {
       setBusy(false);
@@ -2917,6 +2933,7 @@ function APIKeyCreatePage({
               <input
                 id="label"
                 autoFocus
+                autoComplete="off"
                 maxLength={40}
                 value={name}
                 onChange={(event) => {
@@ -2936,7 +2953,10 @@ function APIKeyCreatePage({
                   name="api-key-permission-mode"
                   value="fullAccess"
                   checked={permissionMode === "fullAccess"}
-                  onChange={() => setPermissionMode("fullAccess")}
+                  onChange={() => {
+                    setPermissionMode("fullAccess");
+                    setSelectedScopes([]);
+                  }}
                 />
                 <span>{p("Full access")}</span>
               </label>
@@ -2955,6 +2975,7 @@ function APIKeyCreatePage({
                   {availableScopes.map((scope) => (
                     <label className="personal-api-key-scope" key={scope.value}>
                       <input
+                        id={`scope-${scope.value === "create_issues" ? "issues:create" : scope.value === "create_comments" ? "comments:create" : scope.value}`}
                         type="checkbox"
                         checked={
                           selectedScopes.includes(scope.value) ||
@@ -3053,8 +3074,10 @@ function APIKeyCreatePage({
                       </span>
                     ))}
                     <input
+                      id="team"
                       role="combobox"
                       aria-expanded={teamMenuOpen}
+                      aria-controls="api-key-team-options"
                       aria-label={p("Select teams…")}
                       placeholder={p("Select teams…")}
                       value={teamQuery}
@@ -3127,7 +3150,11 @@ function APIKeyCreatePage({
                     </button>
                   </div>
                   {teamMenuOpen && (
-                    <div className="personal-api-key-team-menu" role="listbox">
+                    <div
+                      id="api-key-team-options"
+                      className="personal-api-key-team-menu"
+                      role="listbox"
+                    >
                       {teamOptions.length ? (
                         teamOptions.map((team, index) => {
                           const checked = selectedTeams.includes(team.id);
@@ -3269,20 +3296,27 @@ function APIKeyDetailPage({
   const [newlyCreatedSecret, setNewlyCreatedSecret] = useState("");
   useEffect(() => {
     try {
-      const key = window.sessionStorage.getItem(
-        `flow.api-key-secret:${apiKey.id}`,
-      );
+      const key =
+        pendingAPIKeySecrets.get(apiKey.id) ??
+        window.sessionStorage.getItem(`flow.api-key-secret:${apiKey.id}`);
       if (key) {
         setNewlyCreatedSecret(key);
+        pendingAPIKeySecrets.delete(apiKey.id);
         window.sessionStorage.removeItem(`flow.api-key-secret:${apiKey.id}`);
       }
     } catch {
-      // Session storage may be disabled; the metadata page remains usable.
+      const key = pendingAPIKeySecrets.get(apiKey.id);
+      if (key) {
+        setNewlyCreatedSecret(key);
+        pendingAPIKeySecrets.delete(apiKey.id);
+      }
     }
   }, [apiKey.id]);
   const scopeList = current.scopes ?? [];
   const teamIdList = current.teamIds ?? [];
   const teams = data.teams.filter((team) => teamIdList.includes(team.id));
+  const selectedTeamAccess =
+    current.teamRestriction === "selected" || teamIdList.length > 0;
   const isFullAccess =
     current.scopes == null ||
     (scopeList.includes("write") &&
@@ -3372,7 +3406,7 @@ function APIKeyDetailPage({
       </nav>
       <header className="personal-api-key-header personal-api-key-detail-header">
         <div>
-          <h1>{current.name}</h1>
+          <h1 data-i18n-ignore>{current.name}</h1>
           <p>
             {p("Created")} {formatDate(current.createdAt, { dateStyle: "medium" })}
           </p>
@@ -3457,9 +3491,17 @@ function APIKeyDetailPage({
         </div>
         <div className="personal-api-key-detail-row personal-api-key-detail-column">
           <strong>{p("Team access")}</strong>
-          {teams.length ? (
+          {selectedTeamAccess ? (
             <div className="personal-api-key-detail-teams">
-              {teams.map((team) => <span key={team.id} data-i18n-ignore>{team.name}</span>)}
+              {teams.length ? (
+                teams.map((team) => (
+                  <span key={team.id} data-i18n-ignore>
+                    {team.name}
+                  </span>
+                ))
+              ) : (
+                <span>{p("No teams selected")}</span>
+              )}
             </div>
           ) : (
             <span>{p("All teams you have access to")}</span>
@@ -3765,7 +3807,13 @@ function apiKeyPermissionsLabel(
 ) {
   // Null/omitted means unrestricted; an explicit empty list means deny-all.
   if (key.scopes == null) return p("Full access");
-  const scopes = key.scopes;
+  const scopes = key.scopes.map((scope) =>
+    scope === "issues:create" || scope === "issue:create"
+      ? "create_issues"
+      : scope === "comments:create" || scope === "comment:create"
+        ? "create_comments"
+        : scope,
+  );
   if (
     scopes.includes("write") &&
     (scopes.includes("admin") ||
@@ -3781,6 +3829,29 @@ function apiKeyPermissionsLabel(
     admin: "Admin",
   };
   return scopes.map((scope) => p(labels[scope] ?? scope)).join(", ") || p("No permissions");
+}
+
+function apiKeyErrorMessage(
+  error: unknown,
+  p: PersonalTranslate,
+  fallback: string,
+) {
+  const message = error instanceof Error ? error.message : "";
+  const normalized = message.toLowerCase();
+  if (normalized.includes("name is required")) return p("Key name is required");
+  if (normalized.includes("name must be between") || normalized.includes("at least 2")) {
+    return p("Key name must be at least 2 characters");
+  }
+  if (normalized.includes("name already exists")) {
+    return p("An API key with this name already exists");
+  }
+  if (normalized.includes("selected team") || normalized.includes("team access")) {
+    return p("Select at least one team");
+  }
+  if (normalized.includes("permission") || normalized.includes("scope")) {
+    return p("Select at least one permission");
+  }
+  return message || fallback;
 }
 
 function apiKeyTeamAccessLabel(
@@ -3833,7 +3904,13 @@ function APIKeyMetadata({
   p: PersonalTranslate;
 }) {
   // Null/omitted means unrestricted; preserve an explicit [] as deny-all.
-  const scopes = apiKey.scopes ?? [];
+  const scopes = (apiKey.scopes ?? []).map((scope) =>
+    scope === "issues:create" || scope === "issue:create"
+      ? "create_issues"
+      : scope === "comments:create" || scope === "comment:create"
+        ? "create_comments"
+        : scope,
+  );
   const selectedTeams = data.teams.filter((team) =>
     (apiKey.teamIds ?? []).includes(team.id),
   );
@@ -3859,9 +3936,8 @@ function APIKeyMetadata({
   const scopeText = apiKeyPermissionsLabel(apiKey, p);
   const teamText = apiKeyTeamAccessLabel(apiKey, p);
   const selectedRestriction =
-    (apiKey.teamRestriction === "selected" ||
-      (!apiKey.teamRestriction && (apiKey.teamIds ?? []).length > 0)) &&
-    selectedTeams.length > 0;
+    apiKey.teamRestriction === "selected" ||
+    (!apiKey.teamRestriction && (apiKey.teamIds ?? []).length > 0);
   return (
     <span className="personal-security-api-key-metadata">
       <span>
@@ -3915,7 +3991,7 @@ function APIKeyMetadata({
         <span>{scopeText}</span>
       )}
       {separator}
-      {selectedRestriction ? (
+      {selectedRestriction && selectedTeams.length > 0 ? (
         <Popover.Root>
           <Popover.Trigger asChild>
             <button

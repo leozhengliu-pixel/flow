@@ -743,7 +743,13 @@ function SettingsBody(
     return <MembersPageV2 data={props.data} onReload={props.onReload} />;
   if (page === "audit-log") return <AuditLogSettings data={props.data} />;
   if (page === "api")
-    return <ApiPage data={props.data} onReload={props.onReload} />;
+    return (
+      <ApiPage
+        data={props.data}
+        onCreateAPIKey={props.onCreateAPIKey}
+        onReload={props.onReload}
+      />
+    );
   if (page === "applications")
     return <ApplicationsPage data={props.data} onReload={props.onReload} />;
   if (page === "billing")
@@ -2841,9 +2847,11 @@ function PermissionRow({
 }
 function ApiPage({
   data,
+  onCreateAPIKey,
   onReload,
 }: {
   data: BootstrapData;
+  onCreateAPIKey?: () => void;
   onReload: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
@@ -2857,7 +2865,7 @@ function ApiPage({
   const [editingWebhook, setEditingWebhook] = useState<
     Webhook | null | undefined
   >(undefined);
-  const items = data.apiKeys.filter(
+  const items = (data.apiKeys ?? []).filter(
     (item) => item.creatorId === data.viewer.id && !item.revokedAt,
   );
   const submit = async () => {
@@ -2959,7 +2967,7 @@ function ApiPage({
           <Row
             key={item.id}
             title={item.name}
-            description={`${item.prefix}… · ${item.scopes == null ? "Full access" : item.scopes.length ? item.scopes.join(", ") : "No permissions"} · ${item.teamIds.length ? `${item.teamIds.length} teams` : "all teams"} · ${item.lastUsedAt ? `last used ${formatDate(item.lastUsedAt)}` : "never used"}`}
+            description={`${item.prefix}… · ${item.scopes == null ? "Full access" : item.scopes.length ? item.scopes.join(", ") : "No permissions"} · ${(item.teamIds ?? []).length ? `${(item.teamIds ?? []).length} teams` : "all teams"} · ${item.lastUsedAt ? `last used ${formatDate(item.lastUsedAt)}` : "never used"}`}
           >
             <ActionButton
               danger
@@ -2977,7 +2985,11 @@ function ApiPage({
           </div>
         )}
         <div className="settings-section-action">
-          <ActionButton onClick={() => setOpen(true)}>
+          <ActionButton
+            onClick={() =>
+              onCreateAPIKey ? onCreateAPIKey() : setOpen(true)
+            }
+          >
             <Plus size={14} />
             New API key
           </ActionButton>

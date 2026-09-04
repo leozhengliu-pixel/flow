@@ -87,6 +87,10 @@ func webAuthnForRequest(r *http.Request) (*webauthn.WebAuthn, string, error) {
 func (s *server) beginPasskeyRegistration(w http.ResponseWriter, r *http.Request) {
 	actor := requestActor(s, r)
 	data := s.workspaceData(r)
+	if strings.EqualFold(data.ViewerRole, "guest") {
+		writeError(w, http.StatusForbidden, "guest users cannot register passkeys")
+		return
+	}
 	credentials := make([]webauthn.Credential, 0)
 	for _, item := range data.Passkeys {
 		if item.UserID != actor.ID || item.CredentialJSON == "" {

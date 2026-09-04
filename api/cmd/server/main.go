@@ -1667,6 +1667,11 @@ func (s *server) workspaceData(r *http.Request) domain.Bootstrap {
 		return data
 	}
 	data, _ := s.store.BootstrapFor(workspaceKey(r))
+	// Development mode emulates the seeded owner account. Keep the role on
+	// every handler-facing projection, not only on the bootstrap endpoint, so
+	// admin-only security controls (including API-key scopes) behave the same
+	// in the local stack.
+	data.ViewerRole = "admin"
 	return data
 }
 
