@@ -137,24 +137,77 @@ func mcpToolAllowed(tool flowMCPTool, key domain.APIKey, readonly bool, args map
 		return false
 	}
 	name := strings.ToLower(tool.Name)
-	if strings.Contains(name, "save_issue") && stringArg(args, "id") == "" {
-		return mcpAPIKeyHasScope(key, "create_issues")
+	if strings.Contains(name, "save_issue") {
+		if !mcpAPIKeyHasScope(key, "create_issues") {
+			return false
+		}
+		// Creating/updating an issue is a narrower capability than mutating
+		// links, relations, estimates, or release associations. Those
+		// secondary resources require the broad write scope.
+		return !mcpIssueNeedsWriteScope(args) || mcpAPIKeyHasScope(key, "write")
 	}
-	if strings.Contains(name, "save_comment") && stringArg(args, "id") == "" {
+	if strings.Contains(name, "save_comment") {
+		if mcpCommentNeedsWriteScope(args) {
+			return mcpAPIKeyHasScope(key, "write")
+		}
 		return mcpAPIKeyHasScope(key, "create_comments")
 	}
 	return mcpAPIKeyHasScope(key, "write")
 }
 
+func mcpIssueNeedsWriteScope(args map[string]any) bool {
+	for _, name := range []string{"links", "blockedBy", "blocks", "relatedTo", "removeBlockedBy", "removeBlocks", "removeRelatedTo", "duplicateOf", "estimate", "addReleases", "removeReleases", "setReleases"} {
+		if mcpArgumentHasValue(args, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func mcpCommentNeedsWriteScope(args map[string]any) bool {
+	// Updating/replying to an existing comment can target any resource, so
+	// keep those operations behind the broad write permission.
+	if mcpArgumentHasValue(args, "id") || mcpArgumentHasValue(args, "parentId") {
+		return true
+	}
+	for _, name := range []string{"projectId", "initiativeId", "documentId", "milestoneId", "statusUpdateId", "statusUpdateType"} {
+		if mcpArgumentHasValue(args, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func mcpArgumentHasValue(args map[string]any, name string) bool {
+	value, ok := args[name]
+	if !ok || value == nil {
+		return false
+	}
+	switch value := value.(type) {
+	case string:
+		return strings.TrimSpace(value) != ""
+	case []any:
+		return len(value) > 0
+	case []string:
+		return len(value) > 0
+	default:
+		return true
+	}
+}
+
 func mcpAPIKeyHasScope(key domain.APIKey, required string) bool {
-	if slices.Contains(key.Scopes, "admin") || slices.Contains(key.Scopes, required) {
+	// A nil scope is the full-access representation used by personal keys.
+	if key.Scopes == nil {
+		return true
+	}
+	if apiKeyHasScope(key, required) {
 		return true
 	}
 	if required == "read" {
-		return slices.Contains(key.Scopes, "write")
+		return apiKeyHasScope(key, "write")
 	}
 	if required == "create_issues" || required == "create_comments" {
-		return slices.Contains(key.Scopes, "write")
+		return apiKeyHasScope(key, "write")
 	}
 	return false
 }
@@ -166,8 +219,8 @@ func (s *server) authenticateMCP(w http.ResponseWriter, r *http.Request) (mcpAct
 		return mcpActor{}, false
 	}
 	workspaceKey, key, ok := s.store.FindAPIKey(secretHash(strings.TrimSpace(header[len("Bearer "):])))
-	if !ok || !slices.ContainsFunc(key.Scopes, func(scope string) bool {
-		return slices.Contains([]string{"read", "write", "admin", "create_issues", "create_comments"}, scope)
+	if !ok || key.RevokedAt != nil || key.ExpiresAt != nil && !key.ExpiresAt.After(time.Now().UTC()) || key.Scopes != nil && !slices.ContainsFunc(key.Scopes, func(scope string) bool {
+		return slices.Contains([]string{"read", "write", "admin", "create_issues", "create_comments"}, canonicalAPIKeyScope(scope))
 	}) {
 		s.mcpUnauthorized(w, r, "Token is invalid, expired, or lacks read access")
 		return mcpActor{}, false

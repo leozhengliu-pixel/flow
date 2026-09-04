@@ -2,19 +2,22 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import {
   Bot,
   CalendarDays,
+  Check,
   ChevronDown,
+  CircleAlert,
+  Clipboard,
   Code2,
   ExternalLink,
   GitFork,
-  Globe,
   KeyRound,
-  Laptop,
+  LoaderCircle,
   Mail,
   MessageCircle,
   MessageSquare,
@@ -23,26 +26,48 @@ import {
   Plus,
   Smartphone,
 } from "lucide-react";
+import * as Popover from "@radix-ui/react-popover";
 import { toast } from "sonner";
 import { NavLink } from "react-router-dom";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   deletePushSubscription,
+  addCommitSigningKey,
+  beginPasskeyRegistration,
+  createAPIKey,
+  deletePasskey,
   fetchAccountIdentities,
   fetchAccountSessions,
+  fetchCommitSigningKey,
+  fetchPasskeys,
+  finishPasskeyRegistration,
   listPushSubscriptions,
+  logoutAccount,
   removeMember,
+  removeCommitSigningKey,
   revokeAccountSession,
+  revokeAPIKey,
+  rotateAPIKey,
   revokeOtherAccountSessions,
   revokeOAuthAuthorization,
   updateAccountProfile,
+  updateAPIKey,
   updateNotificationPreferences,
   unlinkAccountIdentity,
+  updatePasskey,
 } from "@/lib/api";
 import type { SettingsPageId } from "@/lib/app-routes";
 import { agentSkillPath, newAgentSkillPath } from "@/lib/app-routes";
-import type { BootstrapData, NotificationPreferences } from "@/types/flow";
+import type {
+  APIKey,
+  AccountSessionInfo,
+  BootstrapData,
+  CommitSigningKey,
+  NotificationPreferences,
+  OAuthAuthorization,
+  Passkey,
+} from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
 import {
   SettingsPageTitle,
@@ -59,10 +84,18 @@ export type PersonalSettingsValues = Record<string, string | boolean>;
 
 type Props = {
   page: SettingsPageId;
+  apiKeyMode?: "new" | "detail" | "edit";
+  apiKeyId?: string;
+  signingKeyMode?: "new";
   data: BootstrapData;
   values: PersonalSettingsValues;
   setValue: (key: string, value: string | boolean) => void;
   onNavigate: (page: SettingsPageId) => void;
+  onCreateAPIKey?: () => void;
+  onCreateSigningKey?: () => void;
+  onOpenAPIKey?: (key: APIKey) => void;
+  onEditAPIKey?: (key: APIKey) => void;
+  onLogout?: () => Promise<void>;
   onReload: () => Promise<void>;
   onBack: () => void;
   onCustomizeSidebar: () => void;
@@ -149,6 +182,9 @@ const PERSONAL_ZH: Record<string, string> = {
   "Your job title or role": "你的职位或角色",
   "Software engineer": "软件工程师",
   Cancel: "取消",
+  "Security settings": "安全设置",
+  Breadcrumb: "面包屑导航",
+  Create: "创建",
   Update: "更新",
   "Saving…": "正在保存…",
   "Profile updated": "个人资料已更新",
@@ -198,7 +234,6 @@ const PERSONAL_ZH: Record<string, string> = {
   "Notification sounds": "通知声音",
   "Web browser": "网页浏览器",
   Remove: "移除",
-  Done: "完成",
   "No browser push devices": "没有浏览器推送设备",
   "Browser devices appear here after notification permission is granted.":
     "授予通知权限后，浏览器设备会显示在这里。",
@@ -271,9 +306,12 @@ const PERSONAL_ZH: Record<string, string> = {
   Sessions: "会话",
   "Devices logged into your account": "已登录你账户的设备",
   "Current session": "当前会话",
+  "Log out": "退出登录",
+  "Could not log out": "退出登录失败",
   "Signed-in session": "已登录会话",
   "Last active": "上次活动时间",
   expires: "到期时间",
+  teams: "个团队",
   "other session": "个其他会话",
   "other sessions": "个其他会话",
   "Revoke all": "全部撤销",
@@ -284,23 +322,148 @@ const PERSONAL_ZH: Record<string, string> = {
   "No passkeys registered": "尚未注册通行密钥",
   "Passkey enrollment is not available on this server.":
     "此服务器暂不支持注册通行密钥。",
+  "Passkey enrollment is not available on this browser.":
+    "当前浏览器暂不支持注册通行密钥。",
+  "Passkeys require a secure connection": "通行密钥需要安全连接。",
+  "Passkeys are unavailable on IP addresses; use localhost or HTTPS":
+    "IP 地址无法使用通行密钥，请改用 localhost 或 HTTPS。",
+  "Passkey registration was canceled": "通行密钥注册已取消",
+  "Passkey added": "通行密钥已添加",
+  "Unable to add passkey": "无法添加通行密钥",
+  "Passkey name": "通行密钥名称",
+  "Never used": "从未使用",
+  Rename: "重命名",
+  "Could not rename passkey": "无法重命名通行密钥",
+  "Press Enter to save or Escape to cancel":
+    "按 Enter 保存，按 Escape 取消",
+  "Revoke passkey?": "撤销通行密钥？",
+  "This passkey will no longer be able to sign in to Flow.":
+    "此通行密钥将无法再登录 Flow。",
+  "Unable to revoke passkey": "无法撤销通行密钥",
   "Personal API keys": "个人 API 密钥",
   "Use Flow’s API to build your own integrations":
     "使用 Flow API 构建自己的集成",
   "No API keys created": "尚未创建 API 密钥",
+  "Key name": "密钥名称",
+  "A descriptive name for this API key…": "为此 API 密钥填写描述性名称…",
+  "Key name is required": "请输入密钥名称",
+  "Key name must be at least 2 characters": "密钥名称至少需要 2 个字符",
+  "An API key with this name already exists": "已存在同名 API 密钥",
+  "Create API key": "创建 API 密钥",
+  "API key created": "API 密钥已创建",
+  "API key": "API 密钥",
+  "When using the API key all actions are attributed to you as an individual":
+    "使用 API 密钥时，所有操作都会归属于你个人",
+  "Only enable the minimum permissions required for your use case":
+    "仅启用用例所需的最低权限",
+  Permissions: "权限",
+  "Full access": "完全访问",
+  "No permissions": "无权限",
+  "Only select permissions…": "仅选择权限…",
+  Read: "读取",
+  "Read all workspace data available to you": "读取你可访问的全部工作区数据",
+  Write: "写入",
+  "Read and write all workspace data available to you":
+    "读取和写入你可访问的全部工作区数据",
+  "Create issues": "创建事项",
+  "Create and update issues": "创建和更新事项",
+  "Create comments": "创建评论",
+  "Create issue comments": "创建事项评论",
+  Admin: "管理员",
+  "Access admin-only API features": "访问仅限管理员的 API 功能",
+  "Team access": "团队访问权限",
+  "Set limits around which teams can be accessed via this API key":
+    "限制此 API 密钥可访问的团队",
+  "All teams you have access to": "你有权访问的所有团队",
+  Teams: "团队",
+  "Only select teams…": "仅选择团队…",
+  "Select teams…": "选择团队…",
+  "Remove team": "移除团队",
+  "No teams found": "未找到团队",
+  "Toggle menu": "切换菜单",
+  "Copy this key now. It will not be shown again.":
+    "请立即复制此密钥，关闭后将不再显示。",
+  "This secret is shown once. Store it somewhere safe before leaving this page.":
+    "此密钥只显示一次，请在离开页面前将其保存到安全位置。",
+  "This secret is shown once. Copy it before closing.":
+    "此密钥只显示一次，请在关闭前复制。",
+  "This API key will not be visible in the future. Please copy it now.":
+    "此 API 密钥之后将不再显示，请立即复制。",
+  "Copy to clipboard": "复制到剪贴板",
+  Copy: "复制",
+  Copied: "已复制",
+  Done: "完成",
+  "Could not copy API key": "无法复制 API 密钥",
+  "Personal API key copied to clipboard": "个人 API 密钥已复制到剪贴板",
+  "Select at least one permission": "至少选择一项权限",
+  "Select at least one team": "至少选择一个团队",
+  "Could not create API key": "无法创建 API 密钥",
+  Created: "创建于",
+  Edit: "编辑",
+  Save: "保存",
+  "Edit API key": "编辑 API 密钥",
+  "API key updated": "API 密钥已更新",
+  "Could not update API key": "无法更新 API 密钥",
+  "API key revoked": "API 密钥已撤销",
   "active API key": "个有效 API 密钥",
   "Manage API keys": "管理 API 密钥",
+  "New API key": "新建 API 密钥",
+  "New passkey": "新建通行密钥",
+  Rotate: "轮换",
+  "Could not rotate API key": "无法轮换 API 密钥",
+  "Could not revoke API key": "无法撤销 API 密钥",
+  "Revoke API key?": "撤销 API 密钥？",
+  "Applications using this key will no longer access Flow data.":
+    "使用此密钥的应用将无法再访问 Flow 数据。",
+  "Last used": "上次使用",
   "Commit signing key": "提交签名密钥",
   "Coding sessions use this key to sign your commits":
     "编码会话使用此密钥为提交签名",
+  "Add commit signing key": "添加提交签名密钥",
+  "Paste an unencrypted SSH or PGP private key. The private material is validated and never stored.":
+    "粘贴未加密的 SSH 或 PGP 私钥。私钥只会被验证，不会被保存。",
+  "Private key": "私钥",
+  "Private key is required": "请输入私钥",
+  "A descriptive name for this key…": "为此密钥填写描述性名称…",
+  "Paste your private key here…": "在此粘贴私钥…",
+  "Paste an unencrypted SSH or GPG private key or drop a key file here":
+    "粘贴未加密的 SSH 或 GPG 私钥，或将密钥文件拖到这里",
+  "You can also drop a key file here": "也可以将密钥文件拖到这里",
+  "Upload key": "上传密钥",
+  "Signing key uploaded": "签名密钥已上传",
+  "Signing key removed": "签名密钥已移除",
+  "Unable to upload signing key": "无法上传签名密钥",
+  "Unable to remove signing key": "无法移除签名密钥",
+  "Unable to read signing key": "无法读取签名密钥",
   "Authorized applications": "已授权应用",
+  "OAuth applications you’ve approved": "你已授权的 OAuth 应用",
   "No authorized applications": "没有已授权应用",
+  "Revoke authorized application?": "撤销已授权应用？",
+  "This application will no longer access your Flow account.":
+    "此应用将无法再访问你的 Flow 账户。",
+  "Could not revoke authorized application": "无法撤销已授权应用",
   "Revoke all other sessions?": "撤销所有其他会话？",
   "Every other device will need to sign in again.":
     "所有其他设备都需要重新登录。",
   "Could not load security information": "无法加载安全信息",
   "Other sessions revoked": "已撤销其他会话",
   "Could not revoke sessions": "无法撤销会话",
+  "Show all": "显示全部",
+  "Show less": "收起",
+  "Session revoked": "会话已撤销",
+  "Revoke access": "撤销访问权限",
+  "Log out?": "退出登录？",
+  "You will be logged out from this session": "你将从此会话退出登录",
+  "This device will no longer be able to access your account":
+    "此设备将无法再访问你的账户",
+  Device: "设备",
+  "IP address": "IP 地址",
+  "Last location": "上次位置",
+  "Original sign in": "首次登录",
+  Unknown: "未知",
+  "API key not found": "未找到 API 密钥",
+  "This API key may have been revoked or removed":
+    "此 API 密钥可能已被撤销或移除",
   "Connect your user accounts to sync attribution of your actions between apps":
     "连接用户账户，以同步你在不同应用中的操作归属",
   "Sync your message attribution, and receive notifications in Slack":
@@ -382,18 +545,29 @@ function PersonalPageTitle({
   );
 }
 function PersonalSection({
+  action,
+  className,
+  headerClassName,
+  id,
   title,
   description,
   children,
 }: {
+  action?: ReactNode;
+  className?: string;
+  headerClassName?: string;
+  id?: string;
   title?: string;
   description?: string;
   children: ReactNode;
 }) {
   return (
     <SettingsSection
-      className="personal-section"
+      action={action}
+      className={`personal-section${className ? ` ${className}` : ""}`}
       description={description}
+      id={id}
+      headerClassName={headerClassName}
       title={title}
     >
       {children}
@@ -431,6 +605,7 @@ function Action({
   primary,
   disabled,
   label,
+  title,
 }: {
   children: ReactNode;
   onClick?: () => void;
@@ -438,10 +613,12 @@ function Action({
   primary?: boolean;
   disabled?: boolean;
   label?: string;
+  title?: string;
 }) {
   return (
     <button
       aria-label={label}
+      title={title}
       disabled={disabled}
       className={`personal-action${danger ? " danger" : ""}${primary ? " primary" : ""}`}
       onClick={onClick}
@@ -1077,7 +1254,13 @@ function NotificationChannel({
   );
 }
 
-function CodeReviews({ values, setValue, p }: PersonalProps) {
+function CodeReviews({
+  values,
+  setValue,
+  onNavigate,
+  onCreateSigningKey,
+  p,
+}: PersonalProps) {
   return (
     <>
       <PersonalPageTitle
@@ -1235,8 +1418,19 @@ function CodeReviews({ values, setValue, p }: PersonalProps) {
             disabled
           />
         </PersonalRow>
-        <PersonalRow title={p("No signing key added")}>
-          <Action disabled>{p("Add key")}</Action>
+        <PersonalRow
+          title={p("Commit signing key")}
+          description={p("Coding sessions use this key to sign your commits")}
+        >
+          <Action
+            onClick={() =>
+              onCreateSigningKey
+                ? onCreateSigningKey()
+                : onNavigate("account-security")
+            }
+          >
+            {p("Add key")}
+          </Action>
         </PersonalRow>
       </PersonalSection>
       <PersonalSection title={p("External tools")}>
@@ -1292,12 +1486,124 @@ function CodeReviews({ values, setValue, p }: PersonalProps) {
   );
 }
 
-function Security({ data, onNavigate, onReload, p }: PersonalProps) {
-  const { formatDate } = useI18n();
+function Security(props: PersonalProps) {
+  if (props.signingKeyMode === "new") {
+    return (
+      <CommitSigningKeyCreatePage
+        onCancel={() => props.onNavigate("account-security")}
+        onReload={props.onReload}
+        p={props.p}
+      />
+    );
+  }
+  if (props.apiKeyMode === "new") {
+    return (
+      <APIKeyCreatePage
+        data={props.data}
+        onCreated={
+          props.onOpenAPIKey
+            ? (created, secret) => {
+                try {
+                  window.sessionStorage.setItem(
+                    `flow.api-key-secret:${created.id}`,
+                    secret,
+                  );
+                } catch {
+                  // The detail page still renders the created metadata when
+                  // session storage is unavailable.
+                }
+                props.onOpenAPIKey?.(created);
+              }
+            : undefined
+        }
+        onCancel={() => props.onNavigate("account-security")}
+        onReload={props.onReload}
+        p={props.p}
+      />
+    );
+  }
+  if (props.apiKeyMode === "edit") {
+    const key = (props.data.apiKeys ?? []).find(
+      (item) => item.id === props.apiKeyId && !item.revokedAt,
+    );
+    return key ? (
+      <APIKeyCreatePage
+        data={props.data}
+        apiKey={key}
+        onCancel={() => {
+          if (props.onOpenAPIKey) props.onOpenAPIKey(key);
+          else props.onNavigate("account-security");
+        }}
+        onSaved={(updated) => {
+          if (props.onOpenAPIKey) props.onOpenAPIKey(updated);
+          else props.onNavigate("account-security");
+        }}
+        onReload={props.onReload}
+        p={props.p}
+      />
+    ) : (
+      <div className="settings-not-found">
+        <strong>{props.p("API key not found")}</strong>
+        <span>{props.p("This API key may have been revoked or removed")}</span>
+      </div>
+    );
+  }
+  if (props.apiKeyMode === "detail") {
+    const key = (props.data.apiKeys ?? []).find(
+      (item) => item.id === props.apiKeyId && !item.revokedAt,
+    );
+    return key ? (
+      <APIKeyDetailPage
+        data={props.data}
+        apiKey={key}
+        onBack={() => props.onNavigate("account-security")}
+        onEdit={
+          props.onEditAPIKey
+            ? () => props.onEditAPIKey?.(key)
+            : undefined
+        }
+        onReload={props.onReload}
+        p={props.p}
+      />
+    ) : (
+      <div className="settings-not-found">
+        <strong>{props.p("API key not found")}</strong>
+        <span>{props.p("This API key may have been revoked or removed")}</span>
+      </div>
+    );
+  }
+  return <SecurityOverview {...props} />;
+}
+
+function SecurityOverview({
+  data,
+  onNavigate,
+  onCreateAPIKey,
+  onCreateSigningKey,
+  onOpenAPIKey,
+  onLogout,
+  onReload,
+  p,
+}: PersonalProps) {
+  const { formatDate, locale } = useI18n();
   const [sessions, setSessions] = useState<
     Awaited<ReturnType<typeof fetchAccountSessions>>
   >([]);
+  const [passkeys, setPasskeys] = useState<Passkey[]>([]);
+  const [signingKey, setSigningKey] = useState<CommitSigningKey | null>(null);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const [editingPasskeyId, setEditingPasskeyId] = useState<string | null>(null);
+  const [passkeyNameDraft, setPasskeyNameDraft] = useState("");
+  const [passkeyRevoke, setPasskeyRevoke] = useState<Passkey | null>(null);
+  const [signingKeyOpen, setSigningKeyOpen] = useState(false);
+  const [signingKeyName, setSigningKeyName] = useState("");
+  const [signingKeyValue, setSigningKeyValue] = useState("");
+  const [signingKeyBusy, setSigningKeyBusy] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [selectedSession, setSelectedSession] = useState<AccountSessionInfo | null>(null);
+  const [showAllSessions, setShowAllSessions] = useState(false);
+  const [sessionAction, setSessionAction] = useState<AccountSessionInfo | null>(null);
+  const [sessionActionBusy, setSessionActionBusy] = useState(false);
   useEffect(() => {
     void fetchAccountSessions()
       .then(setSessions)
@@ -1309,7 +1615,45 @@ function Security({ data, onNavigate, onReload, p }: PersonalProps) {
         ),
       );
   }, [p]);
-  const other = sessions.filter((item) => !item.current);
+  useEffect(() => {
+    void fetchPasskeys()
+      .then(setPasskeys)
+      .catch(() => setPasskeys([]));
+    void fetchCommitSigningKey()
+      .then(setSigningKey)
+      .catch(() => setSigningKey(null));
+  }, []);
+  // The account endpoint does not guarantee ordering; the settings page
+  // presents the most recently active devices first, just like the native
+  // security surface.
+  const other = [...sessions]
+    .filter((item) => !item.current)
+    .sort(
+      (left, right) =>
+        new Date(right.lastSeenAt).getTime() -
+        new Date(left.lastSeenAt).getTime(),
+    );
+  const visibleOther = showAllSessions ? other : other.slice(0, 5);
+  const apiKeys = (data.apiKeys ?? []).filter(
+    (item) => item.creatorId === data.viewer.id && !item.revokedAt,
+  );
+  const isWorkspaceAdmin =
+    data.viewerRole === "admin" || data.viewerRole === "owner";
+  const canCreateAPIKey =
+    data.viewerRole !== "guest" &&
+    (data.workspaceSettings?.apiKeyPermission !== "admins" || isWorkspaceAdmin);
+  const apiKeyCreateDisabledReason =
+    data.viewerRole === "guest"
+      ? p("Guest users cannot create personal API keys")
+      : p("Personal API keys are not enabled for this workspace");
+  const [revealedSecret, setRevealedSecret] = useState<{
+    name: string;
+    secret: string;
+  } | null>(null);
+  const [rotatingKeyId, setRotatingKeyId] = useState<string | null>(null);
+  const [revokeKey, setRevokeKey] = useState<APIKey | null>(null);
+  const [revokeAuthorization, setRevokeAuthorization] =
+    useState<OAuthAuthorization | null>(null);
   const revoke = async () => {
     try {
       await revokeOtherAccountSessions();
@@ -1322,10 +1666,117 @@ function Security({ data, onNavigate, onReload, p }: PersonalProps) {
       );
     }
   };
+  const confirmSessionAction = async () => {
+    const session = sessionAction;
+    if (!session || sessionActionBusy) return;
+    setSessionActionBusy(true);
+    try {
+      if (session.current) {
+        setSessionAction(null);
+        setSelectedSession(null);
+        await (onLogout ? onLogout() : logoutAccount());
+      } else {
+        await revokeAccountSession(session.id);
+        setSessions(await fetchAccountSessions());
+        setSessionAction(null);
+        setSelectedSession(null);
+        toast.success(p("Session revoked"));
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : p(session.current ? "Could not log out" : "Could not revoke session"),
+      );
+    } finally {
+      setSessionActionBusy(false);
+    }
+  };
+  const passkeyUnavailableReason = (() => {
+    if (typeof window === "undefined") {
+      return p("Passkey enrollment is not available on this server.");
+    }
+    if (
+      !("PublicKeyCredential" in window) ||
+      !("credentials" in navigator) ||
+      typeof navigator.credentials?.create !== "function"
+    ) {
+      return p("Passkey enrollment is not available on this browser.");
+    }
+    // WebAuthn forbids an IP literal as an RP ID. Chromium treats HTTP IP
+    // origins as secure contexts, so isSecureContext alone is not enough to
+    // prevent a registration that the server can never verify.
+    const host = window.location.hostname;
+    const isIPv4 = /^(?:\d{1,3}\.){3}\d{1,3}$/.test(host);
+    const isIPv6 = host.includes(":");
+    if (isIPv4 || isIPv6) {
+      return p(
+        "Passkeys are unavailable on IP addresses; use localhost or HTTPS",
+      );
+    }
+    if (!window.isSecureContext) {
+      return p("Passkeys require a secure connection");
+    }
+    return undefined;
+  })();
+  const canUsePasskeys = !passkeyUnavailableReason;
+  const registerPasskey = async () => {
+    if (!canUsePasskeys || passkeyBusy) return;
+    setPasskeyBusy(true);
+    try {
+      const started = await beginPasskeyRegistration();
+      const creationOptions = toCredentialCreationOptions(started.options);
+      const credential = await navigator.credentials.create({
+        publicKey: creationOptions,
+      });
+      if (!(credential instanceof PublicKeyCredential)) {
+        throw new Error(p("Passkey registration was canceled"));
+      }
+      const response = credential.response as AuthenticatorAttestationResponse;
+      const saved = await finishPasskeyRegistration({
+        registrationId: started.registrationId,
+        name: "Passkey",
+        credential: serializeCreationCredential(credential, response),
+      });
+      setPasskeys((current) => [...current, saved]);
+      toast.success(p("Passkey added"));
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : p("Unable to add passkey"),
+      );
+    } finally {
+      setPasskeyBusy(false);
+    }
+  };
+  const saveSigningKey = async () => {
+    if (!signingKeyName.trim() || !signingKeyValue.trim() || signingKeyBusy)
+      return;
+    setSigningKeyBusy(true);
+    try {
+      const saved = await addCommitSigningKey({
+        name: signingKeyName.trim(),
+        privateKey: signingKeyValue,
+      });
+      setSigningKey(saved);
+      setSigningKeyOpen(false);
+      setSigningKeyName("");
+      setSigningKeyValue("");
+      toast.success(p("Signing key uploaded"));
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : p("Unable to upload signing key"),
+      );
+    } finally {
+      setSigningKeyBusy(false);
+    }
+  };
   return (
     <>
+      <div className="personal-security-page">
       <PersonalPageTitle>{p("Security & access")}</PersonalPageTitle>
       <PersonalSection
+        id="sessions"
+        className="personal-security-section"
         title={p("Sessions")}
         description={p("Devices logged into your account")}
       >
@@ -1334,14 +1785,50 @@ function Security({ data, onNavigate, onReload, p }: PersonalProps) {
           .map((item) => (
             <PersonalRow
               key={item.id}
-              icon={<Globe />}
-              title={p("Current session")}
-              description={`${p("Last active")} ${formatDate(item.lastSeenAt, { dateStyle: "medium", timeStyle: "short" })} · ${p("expires")} ${formatDate(item.expiresAt, { dateStyle: "medium", timeStyle: "short" })}`}
-            />
+              className="personal-security-device-row"
+              role="button"
+              tabIndex={0}
+              onClick={(event) => {
+                if (event.target instanceof Element && event.target.closest("button")) return;
+                setSelectedSession(item);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setSelectedSession(item);
+                }
+              }}
+              icon={<BrowserSessionIcon browserType={item.browserType} />}
+              title={
+                <span data-i18n-ignore>
+                  {item.name || p("Current session")}
+                </span>
+              }
+              description={
+                <span>
+                  <span className="personal-security-current-dot" aria-hidden="true" />
+                  <span className="personal-security-current-label">
+                    {p("Current session")}
+                  </span>
+                  {item.location ? ` · ${item.location}` : ""}
+                  {item.countryCodes?.length
+                    ? ` · (${item.countryCodes.join(", ")})`
+                    : ""}
+                </span>
+              }
+            >
+              <Action
+                onClick={() => setSessionAction(item)}
+              >
+                {p("Log out")}
+              </Action>
+            </PersonalRow>
           ))}
       </PersonalSection>
       {other.length > 0 && (
         <PersonalSection
+          id="sessions-other"
+          className="personal-security-section"
           title={`${other.length} ${p(other.length === 1 ? "other session" : "other sessions")}`}
         >
           <div className="personal-section-action">
@@ -1349,68 +1836,314 @@ function Security({ data, onNavigate, onReload, p }: PersonalProps) {
               {p("Revoke all")}
             </Action>
           </div>
-          {other.map((item) => (
+          {visibleOther.map((item) => (
             <PersonalRow
               key={item.id}
-              icon={<Laptop />}
-              title={p("Signed-in session")}
-              description={`${p("Last active")} ${formatDate(item.lastSeenAt, { dateStyle: "medium", timeStyle: "short" })}`}
-            >
-              <Action
-                danger
-                onClick={() =>
-                  void revokeAccountSession(item.id).then(() =>
-                    fetchAccountSessions().then(setSessions),
-                  )
+              className="personal-security-device-row"
+              role="button"
+              tabIndex={0}
+              onClick={(event) => {
+                if (event.target instanceof Element && event.target.closest("button")) return;
+                setSelectedSession(item);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setSelectedSession(item);
                 }
-              >
+              }}
+              icon={<BrowserSessionIcon browserType={item.browserType} />}
+              title={
+                <span data-i18n-ignore>
+                  {item.name || p("Signed-in session")}
+                </span>
+              }
+              description={`${item.location ? `${item.location} · ` : ""}${p("Last active")} ${formatDate(item.lastSeenAt, { dateStyle: "medium", timeStyle: "short" })}`}
+            >
+              <Action danger onClick={() => setSessionAction(item)}>
                 {p("Revoke")}
               </Action>
             </PersonalRow>
           ))}
+          {other.length > 5 && (
+            <div className="personal-security-show-all">
+              <button
+                type="button"
+                className="personal-action"
+                onClick={() => setShowAllSessions((current) => !current)}
+              >
+                {p(showAllSessions ? "Show less" : "Show all")}
+              </button>
+            </div>
+          )}
         </PersonalSection>
       )}
       <PersonalSection
-        title={p("Passkeys")}
+        id="passkeys"
+        className="personal-security-section"
+        title={
+          passkeys.length
+            ? `${passkeys.length} ${
+                locale === "zh-CN"
+                  ? "个通行密钥"
+                  : passkeys.length === 1
+                    ? "passkey"
+                    : "passkeys"
+              }`
+            : p("Passkeys")
+        }
         description={p(
           "Passkeys are a secure way to sign in to your Flow account",
         )}
       >
-        <div className="personal-empty">
-          <KeyRound />
-          <h3>{p("No passkeys registered")}</h3>
-          <span>
-            {p("Passkey enrollment is not available on this server.")}
-          </span>
-        </div>
+        {passkeys.length === 0 ? (
+          <PersonalRow
+            className="personal-security-empty-row"
+            title={p("No passkeys registered")}
+            description={
+              canUsePasskeys
+                ? undefined
+                : passkeyUnavailableReason
+            }
+          >
+            <Action
+              onClick={() => void registerPasskey()}
+              disabled={!canUsePasskeys || passkeyBusy}
+              title={passkeyUnavailableReason}
+            >
+              {p("New passkey")}
+            </Action>
+          </PersonalRow>
+        ) : (
+          <>
+            {passkeys.map((item) =>
+              editingPasskeyId === item.id ? (
+                <PersonalRow
+                  key={item.id}
+                  className="personal-security-api-key-row"
+                  icon={<KeyRound />}
+                  title={
+                    <input
+                      className="personal-inline-input"
+                      aria-label={p("Passkey name")}
+                      maxLength={64}
+                      value={passkeyNameDraft}
+                      onChange={(event) => setPasskeyNameDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") setEditingPasskeyId(null);
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void updatePasskey(item.id, passkeyNameDraft.trim() || item.name)
+                            .then((updated) => {
+                              setPasskeys((current) => current.map((key) => key.id === updated.id ? updated : key));
+                              setEditingPasskeyId(null);
+                            })
+                            .catch((error) => toast.error(error instanceof Error ? error.message : p("Could not rename passkey")));
+                        }
+                      }}
+                      autoFocus
+                    />
+                  }
+                  description={p("Press Enter to save or Escape to cancel")}
+                >
+                  <Action onClick={() => setEditingPasskeyId(null)}>{p("Cancel")}</Action>
+                </PersonalRow>
+              ) : (
+                <PersonalRow
+                  key={item.id}
+                  className="personal-security-api-key-row"
+                  icon={<KeyRound />}
+                  title={<span data-i18n-ignore>{item.name}</span>}
+                  description={
+                    item.lastUsedAt
+                      ? `${p("Last used")} ${formatSecurityRelativeDate(
+                          item.lastUsedAt,
+                          locale,
+                        )}`
+                      : p("Never used")
+                  }
+                >
+                  <span className="personal-security-key-actions">
+                    <Action
+                      onClick={() => {
+                        setEditingPasskeyId(item.id);
+                        setPasskeyNameDraft(item.name);
+                      }}
+                    >
+                      {p("Rename")}
+                    </Action>
+                    <Action danger onClick={() => setPasskeyRevoke(item)}>
+                      {p("Revoke")}
+                    </Action>
+                  </span>
+                </PersonalRow>
+              ),
+            )}
+            <div className="personal-security-section-action">
+              <Action onClick={() => void registerPasskey()} disabled={!canUsePasskeys || passkeyBusy} title={passkeyUnavailableReason}>
+                {p("New passkey")}
+              </Action>
+            </div>
+          </>
+        )}
       </PersonalSection>
       <PersonalSection
-        title={p("Personal API keys")}
+        id="personal-api-keys"
+        className="personal-security-section"
+        title={
+          apiKeys.length
+            ? `${apiKeys.length} ${
+                locale === "zh-CN"
+                  ? "个 API 密钥"
+                  : apiKeys.length === 1
+                    ? "API key"
+                    : "API keys"
+              }`
+            : p("Personal API keys")
+        }
         description={p("Use Flow’s API to build your own integrations")}
       >
-        <div className="personal-empty">
-          <Code2 />
-          <h3>
-            {data.apiKeys.filter(
-              (k) => k.creatorId === data.viewer.id && !k.revokedAt,
-            ).length
-              ? `${data.apiKeys.filter((k) => k.creatorId === data.viewer.id && !k.revokedAt).length} ${p("active API key")}`
-              : p("No API keys created")}
-          </h3>
-          <Action onClick={() => onNavigate("api")}>
-            {p("Manage API keys")}
-          </Action>
-        </div>
+        {apiKeys.map((item) => (
+          <PersonalRow
+            key={item.id}
+            className="personal-security-api-key-row"
+            role="button"
+            tabIndex={0}
+            onClick={(event) => {
+              if (event.target instanceof Element && event.target.closest("button")) return;
+              onOpenAPIKey?.(item);
+            }}
+            onKeyDown={(event) => {
+              if ((event.key === "Enter" || event.key === " ") && onOpenAPIKey) {
+                event.preventDefault();
+                onOpenAPIKey(item);
+              }
+            }}
+            icon={<Code2 />}
+            title={<span data-i18n-ignore>{item.name}</span>}
+            description={
+              <APIKeyMetadata
+                apiKey={item}
+                data={data}
+                formatDate={formatDate}
+                locale={locale}
+                p={p}
+              />
+            }
+          >
+            <span className="personal-security-key-actions">
+              <Action
+                disabled={rotatingKeyId === item.id}
+                onClick={() => {
+                  setRotatingKeyId(item.id);
+                  void rotateAPIKey(item.id)
+                    .then(async (result) => {
+                      setRevealedSecret({ name: item.name, secret: result.secret });
+                      await onReload();
+                    })
+                    .catch((error) => toast.error(error instanceof Error ? error.message : p("Could not rotate API key")))
+                    .finally(() => setRotatingKeyId(null));
+                }}
+              >
+                {p("Rotate")}
+              </Action>
+              <Action
+                danger
+                onClick={() => setRevokeKey(item)}
+              >
+                {p("Revoke")}
+              </Action>
+            </span>
+          </PersonalRow>
+        ))}
+        {!apiKeys.length && (
+          <PersonalRow
+            className="personal-security-empty-row"
+            title={p("No API keys created")}
+          >
+            <Action
+              disabled={!canCreateAPIKey}
+              title={!canCreateAPIKey ? apiKeyCreateDisabledReason : undefined}
+              onClick={() =>
+                onCreateAPIKey ? onCreateAPIKey() : onNavigate("api")
+              }
+            >
+              {p("New API key")}
+            </Action>
+          </PersonalRow>
+        )}
+        {apiKeys.length > 0 && (
+          <div className="personal-security-section-action">
+            <Action
+              disabled={!canCreateAPIKey}
+              title={!canCreateAPIKey ? apiKeyCreateDisabledReason : undefined}
+              onClick={() =>
+                onCreateAPIKey ? onCreateAPIKey() : onNavigate("api")
+              }
+            >
+              {p("New API key")}
+            </Action>
+          </div>
+        )}
       </PersonalSection>
       <PersonalSection
+        id="commit-signing-key"
+        className="personal-security-section"
         title={p("Commit signing key")}
         description={p("Coding sessions use this key to sign your commits")}
       >
-        <PersonalRow title={p("No signing key added")}>
-          <Action disabled>{p("Add key")}</Action>
+        <PersonalRow
+          className="personal-security-empty-row"
+          title={
+            signingKey ? (
+              <span data-i18n-ignore>{signingKey.name}</span>
+            ) : (
+              p("No signing key added")
+            )
+          }
+          description={
+            signingKey
+              ? `${signingKey.type.toUpperCase()} · ${signingKey.fingerprint}`
+              : undefined
+          }
+        >
+          {signingKey ? (
+            <Action
+              danger
+              onClick={() =>
+                void removeCommitSigningKey()
+                  .then(() => setSigningKey(null))
+                  .then(() => toast.success(p("Signing key removed")))
+                  .catch((error) =>
+                    toast.error(
+                      error instanceof Error
+                        ? error.message
+                        : p("Unable to remove signing key"),
+                    ),
+                  )
+              }
+            >
+              {p("Remove")}
+            </Action>
+          ) : (
+            <Action
+              onClick={() =>
+                onCreateSigningKey
+                  ? onCreateSigningKey()
+                  : setSigningKeyOpen(true)
+              }
+            >
+              {p("Add key")}
+            </Action>
+          )}
         </PersonalRow>
       </PersonalSection>
-      <PersonalSection title={p("Authorized applications")}>
+      <PersonalSection
+        id="authorized-applications"
+        className="personal-security-section"
+        title={p("Authorized applications")}
+        description={p("OAuth applications you’ve approved")}
+      >
         {data.oauthAuthorizations
           .filter((item) => item.userId === data.viewer.id && !item.revokedAt)
           .map((item) => (
@@ -1426,9 +2159,7 @@ function Security({ data, onNavigate, onReload, p }: PersonalProps) {
             >
               <Action
                 danger
-                onClick={() =>
-                  void revokeOAuthAuthorization(item.id).then(onReload)
-                }
+                onClick={() => setRevokeAuthorization(item)}
               >
                 {p("Revoke")}
               </Action>
@@ -1437,12 +2168,109 @@ function Security({ data, onNavigate, onReload, p }: PersonalProps) {
         {!data.oauthAuthorizations.some(
           (item) => item.userId === data.viewer.id && !item.revokedAt,
         ) && (
-          <div className="personal-empty">
-            <ShieldCheck />
-            <h3>{p("No authorized applications")}</h3>
-          </div>
+          <PersonalRow
+            className="personal-security-empty-row"
+            title={p("No authorized applications")}
+          />
         )}
       </PersonalSection>
+      <Dialog
+        open={Boolean(selectedSession)}
+        onOpenChange={(open) => !open && setSelectedSession(null)}
+      >
+        <DialogContent className="personal-dialog personal-session-dialog">
+          {selectedSession && (
+            <>
+              <header className="personal-session-dialog-header">
+                <span className="personal-session-dialog-icon">
+                  <BrowserSessionIcon browserType={selectedSession.browserType} />
+                </span>
+                <div>
+                  <DialogTitle>
+                    {selectedSession.name || p("Signed-in session")}
+                  </DialogTitle>
+                  <p>
+                    {selectedSession.current
+                      ? p("Current session")
+                      : p("Signed-in session")}
+                  </p>
+                </div>
+              </header>
+              <dl className="personal-session-details">
+                <div>
+                  <dt>{p("Device")}</dt>
+                  <dd>
+                    {selectedSession.name ||
+                      [selectedSession.browserType, selectedSession.operatingSystem]
+                        .filter(Boolean)
+                        .join(" on ") ||
+                      p("Unknown")}
+                  </dd>
+                </div>
+                <div>
+                  <dt>{p("IP address")}</dt>
+                  <dd>{selectedSession.ip || p("Unknown")}</dd>
+                </div>
+                <div>
+                  <dt>{p("Last location")}</dt>
+                  <dd>{selectedSession.location || p("Unknown")}</dd>
+                </div>
+                <div>
+                  <dt>{p("Original sign in")}</dt>
+                  <dd>
+                    {formatDate(selectedSession.createdAt, {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </dd>
+                </div>
+              </dl>
+              <footer>
+                <Action
+                  danger
+                  disabled={sessionActionBusy}
+                  onClick={() => {
+                    setSessionAction(selectedSession);
+                    setSelectedSession(null);
+                  }}
+                >
+                  {selectedSession.current ? p("Log out") : p("Revoke access")}
+                </Action>
+              </footer>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(sessionAction)}
+        onOpenChange={(open) => !open && setSessionAction(null)}
+      >
+        <DialogContent className="personal-dialog">
+          <DialogTitle>
+            {sessionAction?.current ? p("Log out?") : p("Revoke access")}
+          </DialogTitle>
+          <p>
+            {sessionAction?.current
+              ? p("You will be logged out from this session")
+              : p("This device will no longer be able to access your account")}
+          </p>
+          <footer>
+            <Action
+              disabled={sessionActionBusy}
+              onClick={() => setSessionAction(null)}
+            >
+              {p("Cancel")}
+            </Action>
+            <Action
+              danger
+              disabled={sessionActionBusy}
+              onClick={() => void confirmSessionAction()}
+            >
+              {sessionAction?.current ? p("Log out") : p("Revoke")}
+            </Action>
+          </footer>
+        </DialogContent>
+      </Dialog>
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="personal-dialog">
           <DialogTitle>{p("Revoke all other sessions?")}</DialogTitle>
@@ -1455,7 +2283,1231 @@ function Security({ data, onNavigate, onReload, p }: PersonalProps) {
           </footer>
         </DialogContent>
       </Dialog>
+      <APIKeySecretDialog
+        secret={revealedSecret}
+        onClose={() => setRevealedSecret(null)}
+        p={p}
+      />
+      <Dialog open={Boolean(revokeKey)} onOpenChange={(open) => !open && setRevokeKey(null)}>
+        <DialogContent className="personal-dialog">
+          <DialogTitle>
+            {p("Revoke API key?")}
+          </DialogTitle>
+          <p>{p("Applications using this key will no longer access Flow data.")}</p>
+          <footer>
+            <Action onClick={() => setRevokeKey(null)}>{p("Cancel")}</Action>
+            <Action
+              danger
+              onClick={() => {
+                if (!revokeKey) return;
+                const id = revokeKey.id;
+                void revokeAPIKey(id)
+                  .then(onReload)
+                  .then(() => setRevokeKey(null))
+                  .catch((error) =>
+                    toast.error(
+                      error instanceof Error
+                        ? error.message
+                        : p("Could not revoke API key"),
+                    ),
+                  );
+              }}
+            >
+              {p("Revoke")}
+            </Action>
+          </footer>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(revokeAuthorization)}
+        onOpenChange={(open) => !open && setRevokeAuthorization(null)}
+      >
+        <DialogContent className="personal-dialog">
+          <DialogTitle>{p("Revoke authorized application?")}</DialogTitle>
+          <p>{p("This application will no longer access your Flow account.")}</p>
+          <footer>
+            <Action onClick={() => setRevokeAuthorization(null)}>
+              {p("Cancel")}
+            </Action>
+            <Action
+              danger
+              onClick={() => {
+                if (!revokeAuthorization) return;
+                const id = revokeAuthorization.id;
+                void revokeOAuthAuthorization(id)
+                  .then(onReload)
+                  .then(() => setRevokeAuthorization(null))
+                  .catch((error) =>
+                    toast.error(
+                      error instanceof Error
+                        ? error.message
+                        : p("Could not revoke authorized application"),
+                    ),
+                  );
+              }}
+            >
+              {p("Revoke")}
+            </Action>
+          </footer>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(passkeyRevoke)}
+        onOpenChange={(open) => !open && setPasskeyRevoke(null)}
+      >
+        <DialogContent className="personal-dialog">
+          <DialogTitle>{p("Revoke passkey?")}</DialogTitle>
+          <p>{p("This passkey will no longer be able to sign in to Flow.")}</p>
+          <footer>
+            <Action onClick={() => setPasskeyRevoke(null)}>{p("Cancel")}</Action>
+            <Action
+              danger
+              onClick={() => {
+                if (!passkeyRevoke) return;
+                const id = passkeyRevoke.id;
+                void deletePasskey(id)
+                  .then(() => setPasskeys((current) => current.filter((item) => item.id !== id)))
+                  .then(() => setPasskeyRevoke(null))
+                  .catch((error) =>
+                    toast.error(
+                      error instanceof Error
+                        ? error.message
+                        : p("Unable to revoke passkey"),
+                    ),
+                  );
+              }}
+            >
+              {p("Revoke")}
+            </Action>
+          </footer>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={signingKeyOpen} onOpenChange={setSigningKeyOpen}>
+        <DialogContent className="personal-dialog personal-signing-key-dialog">
+          <DialogTitle>{p("Add commit signing key")}</DialogTitle>
+          <p>{p("Paste an unencrypted SSH or PGP private key. The private material is validated and never stored.")}</p>
+          <label>
+            {p("Key name")}
+            <input
+              className="personal-input"
+              value={signingKeyName}
+              onChange={(event) => setSigningKeyName(event.target.value)}
+              placeholder={p("A descriptive name for this key…")}
+              autoFocus
+            />
+          </label>
+          <label>
+            {p("Private key")}
+            <textarea
+              className="personal-signing-key-input"
+              value={signingKeyValue}
+              onChange={(event) => setSigningKeyValue(event.target.value)}
+              placeholder={p("Paste your private key here…")}
+              spellCheck={false}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                const file = event.dataTransfer.files[0];
+                if (file) void file.text().then(setSigningKeyValue);
+              }}
+            />
+            <small className="personal-signing-key-help">
+              {p("You can also drop a key file here")}
+            </small>
+          </label>
+          <footer>
+            <Action onClick={() => setSigningKeyOpen(false)} disabled={signingKeyBusy}>
+              {p("Cancel")}
+            </Action>
+            <Action
+              primary
+              disabled={signingKeyBusy || !signingKeyName.trim() || !signingKeyValue.trim()}
+              onClick={() => void saveSigningKey()}
+            >
+              {p("Upload key")}
+            </Action>
+          </footer>
+        </DialogContent>
+      </Dialog>
+      </div>
     </>
+  );
+}
+
+type CommitSigningKeyCreateProps = {
+  onCancel: () => void;
+  onReload: () => Promise<void>;
+  p: PersonalTranslate;
+};
+
+/**
+ * The signing-key editor is a real settings route, not a confirmation modal.
+ * Keeping the upload state local means a private key is never placed in
+ * bootstrap data, browser history, or a React prop owned by the overview.
+ */
+function CommitSigningKeyCreatePage({
+  onCancel,
+  onReload,
+  p,
+}: CommitSigningKeyCreateProps) {
+  const [name, setName] = useState("");
+  const [privateKey, setPrivateKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [dragActive, setDragActive] = useState(false);
+  const [error, setError] = useState("");
+  const cancelRef = useRef(onCancel);
+  cancelRef.current = onCancel;
+
+  // Match the native flow: opening the add route while a key already exists
+  // returns to the security inventory instead of allowing a second key.
+  useEffect(() => {
+    let mounted = true;
+    void fetchCommitSigningKey()
+      .then((existing) => {
+        if (!mounted) return;
+        if (existing) {
+          cancelRef.current();
+          return;
+        }
+        setLoading(false);
+      })
+      .catch((requestError) => {
+        if (!mounted) return;
+        setLoading(false);
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : p("Unable to read signing key"),
+        );
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [p]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !busy) {
+        event.preventDefault();
+        cancelRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [busy]);
+
+  const readKeyFile = useCallback(
+    async (file: File) => {
+      try {
+        const contents = await file.text();
+        setPrivateKey(contents);
+        setName((current) =>
+          current.trim() ? current : keyNameFromFilename(file.name),
+        );
+        setError("");
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : p("Unable to read signing key"),
+        );
+      }
+    },
+    [p],
+  );
+
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (busy || loading) return;
+    const trimmedName = name.trim();
+    const trimmedKey = privateKey.trim();
+    if (!trimmedName) {
+      setError(p("Key name is required"));
+      return;
+    }
+    if (!trimmedKey) {
+      setError(p("Private key is required"));
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await addCommitSigningKey({ name: trimmedName, privateKey: trimmedKey });
+      toast.success(p("Signing key uploaded"));
+      await onReload().catch(() => undefined);
+      cancelRef.current();
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : p("Unable to upload signing key"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disabled = loading || busy;
+  return (
+    <div className="personal-signing-key-page">
+      <nav
+        className="personal-signing-key-breadcrumb"
+        aria-label={p("Breadcrumb")}
+      >
+        <button type="button" onClick={onCancel} disabled={busy}>
+          <ChevronDown aria-hidden="true" />
+          {p("Security settings")}
+        </button>
+      </nav>
+      <header className="personal-signing-key-header">
+        <h1>{p("Add commit signing key")}</h1>
+        <p>{p("Coding sessions use this key to sign your commits")}</p>
+      </header>
+      <section className="personal-signing-key-card">
+        <form onSubmit={submit}>
+          <label className="personal-signing-key-field">
+            <span>{p("Key name")}</span>
+            <input
+              aria-label={p("Key name")}
+              autoComplete="off"
+              autoFocus
+              disabled={disabled}
+              maxLength={255}
+              onChange={(event) => {
+                setName(event.target.value);
+                if (error) setError("");
+              }}
+              placeholder={p("A descriptive name for this key…")}
+              value={name}
+            />
+          </label>
+          <label
+            className={`personal-signing-key-field personal-signing-key-drop${dragActive ? " is-drag-active" : ""}`}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              setDragActive(true);
+            }}
+            onDragOver={(event) => event.preventDefault()}
+            onDragLeave={(event) => {
+              if (event.currentTarget === event.target) setDragActive(false);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragActive(false);
+              const file = event.dataTransfer.files[0];
+              if (file) void readKeyFile(file);
+            }}
+          >
+            <span>{p("Private key")}</span>
+            <textarea
+              aria-label={p("Private key")}
+              disabled={disabled}
+              onChange={(event) => {
+                setPrivateKey(event.target.value);
+                if (error) setError("");
+              }}
+              placeholder={p("Paste your private key here…")}
+              rows={8}
+              spellCheck={false}
+              value={privateKey}
+            />
+            <small>
+              {p(
+                "Paste an unencrypted SSH or GPG private key or drop a key file here",
+              )}
+            </small>
+          </label>
+          {error && (
+            <p className="personal-signing-key-error" role="alert">
+              {error}
+            </p>
+          )}
+          <footer>
+            <button
+              className="personal-signing-key-button"
+              type="button"
+              onClick={onCancel}
+              disabled={busy}
+            >
+              {p("Cancel")}
+            </button>
+            <button
+              className="personal-signing-key-button primary"
+              type="submit"
+              disabled={disabled || !name.trim() || !privateKey.trim()}
+            >
+              {p("Upload key")}
+            </button>
+          </footer>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function keyNameFromFilename(filename: string) {
+  const basename = filename.trim().split(/[\\/]/).pop() ?? "";
+  return basename.replace(/\.(pem|key|txt|asc|gpg|pgp)$/i, "");
+}
+
+type APIKeyCreateProps = {
+  data: BootstrapData;
+  apiKey?: APIKey;
+  onCancel: () => void;
+  onCreated?: (key: APIKey, secret: string) => void;
+  onSaved?: (key: APIKey) => void;
+  onReload: () => Promise<void>;
+  p: PersonalTranslate;
+};
+
+const API_KEY_SCOPES = [
+  {
+    value: "read",
+    label: "Read",
+    description: "Read all workspace data available to you",
+  },
+  {
+    value: "write",
+    label: "Write",
+    description: "Read and write all workspace data available to you",
+  },
+  {
+    value: "create_issues",
+    label: "Create issues",
+    description: "Create and update issues",
+  },
+  {
+    value: "create_comments",
+    label: "Create comments",
+    description: "Create issue comments",
+  },
+  {
+    value: "admin",
+    label: "Admin",
+    description: "Access admin-only API features",
+  },
+] as const;
+
+function APIKeyCreatePage({
+  data,
+  apiKey,
+  onCancel,
+  onCreated,
+  onSaved,
+  onReload,
+  p,
+}: APIKeyCreateProps) {
+  const editing = Boolean(apiKey);
+  // Preserve the server's tri-state policy: null means unrestricted, while
+  // an explicit [] means deny-all. Treat an omitted value like null for
+  // compatibility with older in-memory fixtures.
+  const initialScopes = apiKey?.scopes;
+  const initialTeamIds = apiKey?.teamIds ?? [];
+  const [name, setName] = useState(apiKey?.name ?? "");
+  const [permissionMode, setPermissionMode] = useState<
+    "fullAccess" | "selectScope"
+  >(apiKey && initialScopes !== null && initialScopes !== undefined
+    ? "selectScope"
+    : "fullAccess");
+  const [selectedScopes, setSelectedScopes] = useState<string[]>(
+    initialScopes ?? [],
+  );
+  const [teamMode, setTeamMode] = useState<"all" | "selectTeams">(
+    apiKey?.teamRestriction === "selected" || initialTeamIds.length
+      ? "selectTeams"
+      : "all",
+  );
+  const [selectedTeams, setSelectedTeams] = useState<string[]>(initialTeamIds);
+  const [teamQuery, setTeamQuery] = useState("");
+  const [teamMenuOpen, setTeamMenuOpen] = useState(false);
+  const [teamActiveIndex, setTeamActiveIndex] = useState(0);
+  const teamPickerRef = useRef<HTMLDivElement | null>(null);
+  const [secret, setSecret] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const teamOptions = useMemo(
+    () =>
+      data.teams.filter((team) =>
+        team.name.toLowerCase().includes(teamQuery.trim().toLowerCase()),
+      ),
+    [data.teams, teamQuery],
+  );
+  const isAdmin = data.viewerRole === "admin" || data.viewerRole === "owner";
+  const availableScopes = isAdmin
+    ? API_KEY_SCOPES
+    : API_KEY_SCOPES.filter((scope) => scope.value !== "admin");
+  const scopeValues =
+    permissionMode === "fullAccess"
+      ? []
+      : selectedScopes;
+  const selectedTeamRecords = data.teams.filter((team) =>
+    selectedTeams.includes(team.id),
+  );
+  useEffect(() => {
+    setTeamActiveIndex((current) =>
+      teamOptions.length ? Math.min(current, teamOptions.length - 1) : 0,
+    );
+  }, [teamOptions.length]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (teamMenuOpen) {
+          setTeamMenuOpen(false);
+          return;
+        }
+        onCancel();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onCancel, teamMenuOpen]);
+
+  useEffect(() => {
+    if (!teamMenuOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !teamPickerRef.current?.contains(event.target)
+      ) {
+        setTeamMenuOpen(false);
+        setTeamQuery("");
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [teamMenuOpen]);
+
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (busy || secret) return;
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setError(p("Key name is required"));
+      return;
+    }
+    if (trimmedName.length < 2) {
+      setError(p("Key name must be at least 2 characters"));
+      return;
+    }
+    if (
+      data.apiKeys.some(
+        (item) =>
+          item.id !== apiKey?.id &&
+          !item.revokedAt &&
+          item.creatorId === data.viewer.id &&
+          item.name.trim().toLowerCase() === trimmedName.toLowerCase(),
+      )
+    ) {
+      setError(p("An API key with this name already exists"));
+      return;
+    }
+    if (permissionMode === "selectScope" && !scopeValues.length) {
+      setError(p("Select at least one permission"));
+      return;
+    }
+    if (teamMode === "selectTeams" && !selectedTeams.length) {
+      setError(p("Select at least one team"));
+      return;
+    }
+    setError("");
+    setBusy(true);
+    try {
+      if (apiKey) {
+        const updated = await updateAPIKey(apiKey.id, {
+          name: trimmedName,
+          scopes: permissionMode === "fullAccess" ? null : scopeValues,
+          teamIds: teamMode === "selectTeams" ? selectedTeams : null,
+          teamRestriction: teamMode === "selectTeams" ? "selected" : "all",
+        });
+        await onReload().catch(() => undefined);
+        toast.success(p("API key updated"));
+        onSaved?.(updated);
+        return;
+      }
+      const result = await createAPIKey({
+        name: trimmedName,
+        // The public API represents full access with an omitted/null scope;
+        // retaining that distinction keeps the detail view and authorization
+        // behavior aligned with the account security flow.
+        scopes: permissionMode === "fullAccess" ? undefined : scopeValues,
+        teamIds: teamMode === "selectTeams" ? selectedTeams : [],
+        teamRestriction: teamMode === "selectTeams" ? "selected" : "all",
+      });
+      try {
+        await navigator.clipboard?.writeText(result.secret);
+        toast.success(p("Personal API key copied to clipboard"));
+      } catch {
+        // Clipboard permissions are optional; the one-time value remains
+        // visible in the confirmation state so it can be copied manually.
+      }
+      await onReload().catch(() => undefined);
+      if (onCreated) onCreated(result.key, result.secret);
+      else setSecret(result.secret);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : p("Could not create API key"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copySecret = async () => {
+    if (!secret) return;
+    try {
+      await navigator.clipboard.writeText(secret);
+      toast.success(p("Copied"));
+    } catch {
+      setError(p("Could not copy API key"));
+    }
+  };
+
+  return (
+    <div className="personal-api-key-page">
+      <nav className="personal-api-key-breadcrumb" aria-label={p("Breadcrumb")}>
+        <button type="button" onClick={onCancel}>
+          <ChevronDown aria-hidden="true" />
+          {p("Security settings")}
+        </button>
+      </nav>
+      <header className="personal-api-key-header">
+        <h1>
+          {secret
+            ? p("API key created")
+            : editing
+              ? p("Edit API key")
+              : p("Create API key")}
+        </h1>
+        <p>
+          {secret
+            ? p("This secret is shown once. Store it somewhere safe before leaving this page.")
+            : p("When using the API key all actions are attributed to you as an individual")}
+        </p>
+      </header>
+      <section className="personal-api-key-card">
+        {secret ? (
+          <div className="personal-api-key-secret">
+            <div className="personal-api-key-secret-warning" role="status">
+              <CircleAlert aria-hidden="true" />
+              <span>{p("Copy this key now. It will not be shown again.")}</span>
+            </div>
+            <label>
+              {p("API key")}
+              <div className="personal-api-key-secret-input">
+                <input readOnly value={secret} aria-label={p("API key")} />
+                <button type="button" onClick={() => void copySecret()} aria-label={p("Copy") }>
+                  <Clipboard aria-hidden="true" />
+                </button>
+              </div>
+            </label>
+            <footer>
+              <button type="button" className="personal-api-key-button primary" onClick={onCancel}>
+                {p("Done")}
+              </button>
+            </footer>
+          </div>
+        ) : (
+          <form onSubmit={(event) => void submit(event)}>
+            <label className="personal-api-key-field">
+              <span>{p("Key name")}</span>
+              <input
+                id="label"
+                autoFocus
+                maxLength={40}
+                value={name}
+                onChange={(event) => {
+                  setName(event.target.value);
+                  if (error) setError("");
+                }}
+                placeholder={p("A descriptive name for this API key…")}
+                aria-label={p("Key name")}
+              />
+            </label>
+            <fieldset className="personal-api-key-fieldset">
+              <legend>{p("Permissions")}</legend>
+              <p>{p("Only enable the minimum permissions required for your use case")}</p>
+              <label className="personal-api-key-radio">
+                <input
+                  type="radio"
+                  name="api-key-permission-mode"
+                  value="fullAccess"
+                  checked={permissionMode === "fullAccess"}
+                  onChange={() => setPermissionMode("fullAccess")}
+                />
+                <span>{p("Full access")}</span>
+              </label>
+              <label className="personal-api-key-radio">
+                <input
+                  type="radio"
+                  name="api-key-permission-mode"
+                  value="selectScope"
+                  checked={permissionMode === "selectScope"}
+                  onChange={() => setPermissionMode("selectScope")}
+                />
+                <span>{p("Only select permissions…")}</span>
+              </label>
+              {permissionMode === "selectScope" && (
+                <div className="personal-api-key-scope-list">
+                  {availableScopes.map((scope) => (
+                    <label className="personal-api-key-scope" key={scope.value}>
+                      <input
+                        type="checkbox"
+                        checked={
+                          selectedScopes.includes(scope.value) ||
+                          (selectedScopes.includes("write") &&
+                            (scope.value === "create_issues" ||
+                              scope.value === "create_comments"))
+                        }
+                        disabled={
+                          selectedScopes.includes("write") &&
+                            (scope.value === "create_issues" ||
+                              scope.value === "create_comments")
+                        }
+                        onChange={(event) => {
+                          if (scope.value === "write") {
+                            setSelectedScopes((current) =>
+                              event.target.checked
+                                ? [
+                                    ...current.filter(
+                                      (value) =>
+                                        value !== "create_issues" &&
+                                        value !== "create_comments",
+                                    ),
+                                    "write",
+                                  ]
+                                : current.filter(
+                                    (value) =>
+                                      value !== "write" &&
+                                      value !== "create_issues" &&
+                                      value !== "create_comments",
+                                  ),
+                            );
+                            return;
+                          }
+                          setSelectedScopes((current) =>
+                            event.target.checked
+                              ? [...current, scope.value]
+                              : current.filter((value) => value !== scope.value),
+                          );
+                        }}
+                      />
+                      <strong>{p(scope.label)}</strong>
+                      <small>{p(scope.description)}</small>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </fieldset>
+            <fieldset className="personal-api-key-fieldset">
+              <legend>{p("Team access")}</legend>
+              <p>{p("Set limits around which teams can be accessed via this API key")}</p>
+              <label className="personal-api-key-radio">
+                <input
+                  type="radio"
+                  name="api-key-team-mode"
+                  value="all"
+                  checked={teamMode === "all"}
+                  onChange={() => {
+                    setTeamMode("all");
+                    setSelectedTeams([]);
+                    setTeamMenuOpen(false);
+                  }}
+                />
+                <span>{p("All teams you have access to")}</span>
+              </label>
+              <label className="personal-api-key-radio">
+                <input
+                  type="radio"
+                  name="api-key-team-mode"
+                  value="selectTeams"
+                  checked={teamMode === "selectTeams"}
+                  onChange={() => setTeamMode("selectTeams")}
+                />
+                <span>{p("Only select teams…")}</span>
+              </label>
+              {teamMode === "selectTeams" && (
+                <div
+                  className="personal-api-key-team-picker"
+                  ref={teamPickerRef}
+                >
+                  <div className="personal-api-key-team-control">
+                    {selectedTeamRecords.map((team) => (
+                      <span className="personal-api-key-team-chip" key={team.id}>
+                        <span data-i18n-ignore>{team.name}</span>
+                        <button
+                          type="button"
+                          aria-label={`${p("Remove team")} ${team.name}`}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() =>
+                            setSelectedTeams((current) =>
+                              current.filter((id) => id !== team.id),
+                            )
+                          }
+                        >
+                          <span aria-hidden="true">×</span>
+                        </button>
+                      </span>
+                    ))}
+                    <input
+                      role="combobox"
+                      aria-expanded={teamMenuOpen}
+                      aria-label={p("Select teams…")}
+                      placeholder={p("Select teams…")}
+                      value={teamQuery}
+                      onFocus={() => {
+                        setTeamMenuOpen(true);
+                        setTeamActiveIndex(0);
+                      }}
+                      aria-activedescendant={
+                        teamMenuOpen && teamOptions[teamActiveIndex]
+                          ? `api-key-team-${teamOptions[teamActiveIndex].id}`
+                          : undefined
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === "ArrowDown") {
+                          event.preventDefault();
+                          if (teamMenuOpen && teamOptions.length) {
+                            setTeamActiveIndex((current) =>
+                              Math.min(current + 1, teamOptions.length - 1),
+                            );
+                          }
+                          setTeamMenuOpen(true);
+                        } else if (event.key === "ArrowUp") {
+                          event.preventDefault();
+                          if (teamMenuOpen && teamOptions.length) {
+                            setTeamActiveIndex((current) => Math.max(current - 1, 0));
+                          }
+                          setTeamMenuOpen(true);
+                        } else if (event.key === "Home") {
+                          event.preventDefault();
+                          setTeamActiveIndex(0);
+                        } else if (event.key === "End") {
+                          event.preventDefault();
+                          setTeamActiveIndex(Math.max(teamOptions.length - 1, 0));
+                        } else if (
+                          event.key === "Enter" &&
+                          teamMenuOpen &&
+                          teamOptions[teamActiveIndex]
+                        ) {
+                          event.preventDefault();
+                          const first = teamOptions[teamActiveIndex];
+                          setSelectedTeams((current) =>
+                            current.includes(first.id)
+                              ? current.filter((id) => id !== first.id)
+                              : [...current, first.id],
+                          );
+                          setTeamQuery("");
+                        } else if (
+                          event.key === "Backspace" &&
+                          !teamQuery &&
+                          selectedTeams.length
+                        ) {
+                          setSelectedTeams((current) => current.slice(0, -1));
+                        } else if (event.key === "Escape") {
+                          event.preventDefault();
+                          setTeamMenuOpen(false);
+                          setTeamQuery("");
+                        }
+                      }}
+                      onChange={(event) => {
+                        setTeamQuery(event.target.value);
+                        setTeamMenuOpen(true);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      aria-label={p("Toggle menu")}
+                      onClick={() => setTeamMenuOpen((open) => !open)}
+                    >
+                      <ChevronDown aria-hidden="true" />
+                    </button>
+                  </div>
+                  {teamMenuOpen && (
+                    <div className="personal-api-key-team-menu" role="listbox">
+                      {teamOptions.length ? (
+                        teamOptions.map((team, index) => {
+                          const checked = selectedTeams.includes(team.id);
+                          return (
+                            <button
+                              type="button"
+                              role="option"
+                              id={`api-key-team-${team.id}`}
+                              aria-selected={checked}
+                              data-highlighted={index === teamActiveIndex || undefined}
+                              key={team.id}
+                              onMouseDown={(event) => event.preventDefault()}
+                              onPointerMove={() => setTeamActiveIndex(index)}
+                              onClick={() => {
+                                setSelectedTeams((current) =>
+                                  checked
+                                    ? current.filter((id) => id !== team.id)
+                                    : [...current, team.id],
+                                );
+                                setTeamQuery("");
+                              }}
+                            >
+                              <span>{team.name}</span>
+                              {checked && <Check aria-hidden="true" />}
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <span className="personal-api-key-team-empty">{p("No teams found")}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </fieldset>
+            {error && (
+              <p className="personal-api-key-error" role="alert">
+                {error}
+              </p>
+            )}
+            <footer className="personal-api-key-footer">
+              <button type="button" className="personal-api-key-button" onClick={onCancel}>
+                {p("Cancel")}
+              </button>
+              <button
+                type="submit"
+                className="personal-api-key-button primary"
+                disabled={busy}
+                aria-busy={busy}
+              >
+                {busy && <LoaderCircle aria-hidden="true" />}
+                {editing ? p("Save") : p("Create")}
+              </button>
+            </footer>
+          </form>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function APIKeySecretDialog({
+  secret,
+  onClose,
+  p,
+}: {
+  secret: { name: string; secret: string } | null;
+  onClose: () => void;
+  p: PersonalTranslate;
+}) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => setCopied(false), [secret]);
+  if (!secret) return null;
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(secret.secret);
+      setCopied(true);
+      toast.success(p("Copied"));
+    } catch {
+      toast.error(p("Could not copy API key"));
+    }
+  };
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="personal-dialog personal-api-key-dialog">
+        <DialogTitle>{p("API key created")}</DialogTitle>
+        <p>{p("This secret is shown once. Copy it before closing.")}</p>
+        <label>
+          <span className="sr-only">{p("API key")}</span>
+          <input
+            className="personal-input"
+            readOnly
+            value={secret.secret}
+            onFocus={(event) => event.currentTarget.select()}
+            aria-label={p("API key")}
+          />
+        </label>
+        <footer>
+          <Action onClick={() => void copy()}>
+            {copied ? <Check size={14} /> : <Clipboard size={14} />}
+            {copied ? p("Copied") : p("Copy")}
+          </Action>
+          <Action primary onClick={onClose}>{p("Done")}</Action>
+        </footer>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type APIKeyDetailPageProps = {
+  data: BootstrapData;
+  apiKey: APIKey;
+  onBack: () => void;
+  onEdit?: () => void;
+  onReload: () => Promise<void>;
+  p: PersonalTranslate;
+};
+
+function APIKeyDetailPage({
+  data,
+  apiKey,
+  onBack,
+  onEdit,
+  onReload,
+  p,
+}: APIKeyDetailPageProps) {
+  const { formatDate } = useI18n();
+  const [current, setCurrent] = useState(() => ({
+    ...apiKey,
+    // Do not coerce null to []; null is full access, [] is deny-all.
+    scopes: apiKey.scopes,
+    teamIds: apiKey.teamIds ?? [],
+  }));
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(apiKey.name);
+  const [busy, setBusy] = useState(false);
+  const [revokeOpen, setRevokeOpen] = useState(false);
+  const [secret, setSecret] = useState<{ name: string; secret: string } | null>(null);
+  const [newlyCreatedSecret, setNewlyCreatedSecret] = useState("");
+  useEffect(() => {
+    try {
+      const key = window.sessionStorage.getItem(
+        `flow.api-key-secret:${apiKey.id}`,
+      );
+      if (key) {
+        setNewlyCreatedSecret(key);
+        window.sessionStorage.removeItem(`flow.api-key-secret:${apiKey.id}`);
+      }
+    } catch {
+      // Session storage may be disabled; the metadata page remains usable.
+    }
+  }, [apiKey.id]);
+  const scopeList = current.scopes ?? [];
+  const teamIdList = current.teamIds ?? [];
+  const teams = data.teams.filter((team) => teamIdList.includes(team.id));
+  const isFullAccess =
+    current.scopes == null ||
+    (scopeList.includes("write") &&
+      (scopeList.includes("admin") ||
+        (scopeList.includes("read") && scopeList.length === 2)));
+  const scopeDescription: Record<string, string> = {
+    read: "Read all workspace data available to you",
+    write: "Read and write all workspace data available to you",
+    create_issues: "Create and update issues",
+    create_comments: "Create issue comments",
+    admin: "Access admin-only API features",
+  };
+  const saveName = async () => {
+    const next = nameDraft.trim();
+    if (!next || next.length < 2 || next.length > 40 || busy) return;
+    setBusy(true);
+    try {
+      const updated = await updateAPIKey(current.id, { name: next });
+      const normalized = { ...updated, scopes: updated.scopes, teamIds: updated.teamIds ?? [] };
+      setCurrent(normalized);
+      setNameDraft(normalized.name);
+      setEditingName(false);
+      await onReload().catch(() => undefined);
+      toast.success(p("API key updated"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : p("Could not update API key"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const rotate = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const result = await rotateAPIKey(current.id);
+      const normalized = {
+        ...result.key,
+        scopes: result.key.scopes,
+        teamIds: result.key.teamIds ?? [],
+      };
+      setCurrent(normalized);
+      setSecret({ name: normalized.name, secret: result.secret });
+      await onReload().catch(() => undefined);
+      try {
+        await navigator.clipboard?.writeText(result.secret);
+        toast.success(p("Personal API key copied to clipboard"));
+      } catch {
+        // Keep the one-time secret visible in the dialog when clipboard access is unavailable.
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : p("Could not rotate API key"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const revoke = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await revokeAPIKey(current.id);
+      await onReload().catch(() => undefined);
+      setRevokeOpen(false);
+      toast.success(p("API key revoked"));
+      onBack();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : p("Could not revoke API key"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const copyNewSecret = async () => {
+    if (!newlyCreatedSecret) return;
+    try {
+      await navigator.clipboard.writeText(newlyCreatedSecret);
+      toast.success(p("Copied"));
+    } catch {
+      toast.error(p("Could not copy API key"));
+    }
+  };
+  return (
+    <div className="personal-api-key-page personal-api-key-detail-page">
+      <nav className="personal-api-key-breadcrumb" aria-label={p("Breadcrumb")}>
+        <button type="button" onClick={onBack}>
+          <ChevronDown aria-hidden="true" />
+          {p("Security settings")}
+        </button>
+      </nav>
+      <header className="personal-api-key-header personal-api-key-detail-header">
+        <div>
+          <h1>{current.name}</h1>
+          <p>
+            {p("Created")} {formatDate(current.createdAt, { dateStyle: "medium" })}
+          </p>
+        </div>
+        <div className="personal-api-key-detail-actions">
+          <Action
+            onClick={() => {
+              if (onEdit) onEdit();
+              else setEditingName(true);
+            }}
+            disabled={busy}
+          >
+            {p("Edit")}
+          </Action>
+          <Action onClick={() => void rotate()} disabled={busy}>{p("Rotate")}</Action>
+          <Action danger onClick={() => setRevokeOpen(true)} disabled={busy}>{p("Revoke")}</Action>
+        </div>
+      </header>
+      <section className="personal-api-key-card personal-api-key-detail-card">
+        <div className="personal-api-key-detail-row">
+          <div>
+            <strong>{p("Key name")}</strong>
+            <span data-i18n-ignore>{current.name}</span>
+          </div>
+          <Action
+            onClick={() => {
+              if (onEdit) onEdit();
+              else {
+                setNameDraft(current.name);
+                setEditingName(true);
+              }
+            }}
+            disabled={busy}
+          >
+            {p("Edit")}
+          </Action>
+        </div>
+        {current.prefix && (
+          <div className="personal-api-key-detail-row">
+            <div>
+              <strong>{p("API key")}</strong>
+              {newlyCreatedSecret ? (
+                <div className="personal-api-key-new-secret">
+                  <div className="personal-api-key-secret-inline">
+                    <span className="personal-api-key-mono" data-i18n-ignore>
+                      {newlyCreatedSecret}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={p("Copy to clipboard")}
+                      onClick={() => void copyNewSecret()}
+                    >
+                      <Clipboard aria-hidden="true" />
+                    </button>
+                  </div>
+                  <small>{p("This API key will not be visible in the future. Please copy it now.")}</small>
+                </div>
+              ) : (
+                <span className="personal-api-key-mono" data-i18n-ignore>
+                  {current.prefix}…
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+        <div className="personal-api-key-detail-row personal-api-key-detail-column">
+          <strong>{p("Permissions")}</strong>
+          {isFullAccess ? (
+            <span>{p("Full access")}</span>
+          ) : scopeList.length ? (
+            <div className="personal-api-key-scope-summary">
+              {scopeList.map((scope) => (
+                <div key={scope}>
+                  <span>{p(scope === "create_issues" ? "Create issues" : scope === "create_comments" ? "Create comments" : scope === "admin" ? "Admin" : scope === "write" ? "Write" : "Read")}</span>
+                  <small>{p(scopeDescription[scope] ?? scope)}</small>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <span>{p("No permissions")}</span>
+          )}
+        </div>
+        <div className="personal-api-key-detail-row personal-api-key-detail-column">
+          <strong>{p("Team access")}</strong>
+          {teams.length ? (
+            <div className="personal-api-key-detail-teams">
+              {teams.map((team) => <span key={team.id} data-i18n-ignore>{team.name}</span>)}
+            </div>
+          ) : (
+            <span>{p("All teams you have access to")}</span>
+          )}
+        </div>
+        {current.lastUsedAt && (
+          <div className="personal-api-key-detail-row">
+            <div><strong>{p("Last used")}</strong><span>{formatDate(current.lastUsedAt, { dateStyle: "medium", timeStyle: "short" })}</span></div>
+          </div>
+        )}
+        {current.expiresAt && (
+          <div className="personal-api-key-detail-row">
+            <div><strong>{p("expires")}</strong><span>{formatDate(current.expiresAt, { dateStyle: "medium", timeStyle: "short" })}</span></div>
+          </div>
+        )}
+      </section>
+      <Dialog open={editingName} onOpenChange={setEditingName}>
+        <DialogContent className="personal-dialog personal-api-key-dialog">
+          <DialogTitle>{p("Edit API key")}</DialogTitle>
+          <label>
+            <span>{p("Key name")}</span>
+            <input
+              className="personal-input"
+              value={nameDraft}
+              maxLength={40}
+              autoFocus
+              onChange={(event) => setNameDraft(event.target.value)}
+              onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void saveName(); } }}
+            />
+          </label>
+          <footer>
+            <Action onClick={() => setEditingName(false)} disabled={busy}>{p("Cancel")}</Action>
+            <Action primary onClick={() => void saveName()} disabled={busy || nameDraft.trim().length < 2}>{p("Save")}</Action>
+          </footer>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={revokeOpen} onOpenChange={setRevokeOpen}>
+        <DialogContent className="personal-dialog">
+          <DialogTitle>{p("Revoke API key?")}</DialogTitle>
+          <p>{p("Applications using this key will no longer access Flow data.")}</p>
+          <footer>
+            <Action onClick={() => setRevokeOpen(false)} disabled={busy}>{p("Cancel")}</Action>
+            <Action danger onClick={() => void revoke()} disabled={busy}>{p("Revoke")}</Action>
+          </footer>
+        </DialogContent>
+      </Dialog>
+      <APIKeySecretDialog secret={secret} onClose={() => setSecret(null)} p={p} />
+    </div>
   );
 }
 
@@ -1705,6 +3757,289 @@ function initials(value: string) {
       .map((part) => part[0]?.toUpperCase())
       .join("") || "?"
   );
+}
+
+function apiKeyPermissionsLabel(
+  key: { scopes?: string[] | null },
+  p: PersonalTranslate,
+) {
+  // Null/omitted means unrestricted; an explicit empty list means deny-all.
+  if (key.scopes == null) return p("Full access");
+  const scopes = key.scopes;
+  if (
+    scopes.includes("write") &&
+    (scopes.includes("admin") ||
+      (scopes.includes("read") && scopes.length === 2))
+  ) {
+    return p("Full access");
+  }
+  const labels: Record<string, string> = {
+    read: "Read",
+    write: "Write",
+    create_issues: "Create issues",
+    create_comments: "Create comments",
+    admin: "Admin",
+  };
+  return scopes.map((scope) => p(labels[scope] ?? scope)).join(", ") || p("No permissions");
+}
+
+function apiKeyTeamAccessLabel(
+  key: { teamIds?: string[] | null; teamRestriction?: "all" | "selected" },
+  p: PersonalTranslate,
+) {
+  const teamIds = key.teamIds ?? [];
+  const selected =
+    key.teamRestriction === "selected" ||
+    (!key.teamRestriction && teamIds.length > 0);
+  return selected
+    ? `${teamIds.length} ${p("teams")}`
+    : p("All teams you have access to");
+}
+
+function formatSecurityRelativeDate(value: string, locale: "en-US" | "zh-CN") {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return "—";
+  const seconds = (timestamp - Date.now()) / 1000;
+  const absolute = Math.abs(seconds);
+  const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+    ["year", 31_536_000],
+    ["month", 2_592_000],
+    ["week", 604_800],
+    ["day", 86_400],
+    ["hour", 3_600],
+    ["minute", 60],
+    ["second", 1],
+  ];
+  const [unit, divisor] =
+    units.find(([, size]) => absolute >= size) ?? units[units.length - 1];
+  const amount = Math.round(seconds / divisor);
+  return new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(
+    amount,
+    unit,
+  );
+}
+
+function APIKeyMetadata({
+  apiKey,
+  data,
+  formatDate,
+  locale,
+  p,
+}: {
+  apiKey: APIKey;
+  data: BootstrapData;
+  formatDate: (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => string;
+  locale: "en-US" | "zh-CN";
+  p: PersonalTranslate;
+}) {
+  // Null/omitted means unrestricted; preserve an explicit [] as deny-all.
+  const scopes = apiKey.scopes ?? [];
+  const selectedTeams = data.teams.filter((team) =>
+    (apiKey.teamIds ?? []).includes(team.id),
+  );
+  const scopeLabels: Record<string, string> = {
+    read: "Read",
+    write: "Write",
+    create_issues: "Create issues",
+    create_comments: "Create comments",
+    admin: "Admin",
+  };
+  const scopeDescriptions: Record<string, string> = {
+    read: "Read all workspace data available to you",
+    write: "Read and write all workspace data available to you",
+    create_issues: "Create and update issues",
+    create_comments: "Create issue comments",
+    admin: "Access admin-only API features",
+  };
+  const separator = (
+    <span className="personal-security-metadata-separator" aria-hidden="true">
+      ·
+    </span>
+  );
+  const scopeText = apiKeyPermissionsLabel(apiKey, p);
+  const teamText = apiKeyTeamAccessLabel(apiKey, p);
+  const selectedRestriction =
+    (apiKey.teamRestriction === "selected" ||
+      (!apiKey.teamRestriction && (apiKey.teamIds ?? []).length > 0)) &&
+    selectedTeams.length > 0;
+  return (
+    <span className="personal-security-api-key-metadata">
+      <span>
+        {p("Created")} {formatDate(apiKey.createdAt, { dateStyle: "medium" })}
+      </span>
+      {separator}
+      <span>
+        {apiKey.lastUsedAt
+          ? `${p("Last used")} ${formatSecurityRelativeDate(apiKey.lastUsedAt, locale)}`
+          : p("Never used")}
+      </span>
+      {separator}
+      {scopes.length > 0 ? (
+        <Popover.Root>
+          <Popover.Trigger asChild>
+            <button
+              type="button"
+              className="personal-security-metadata-trigger"
+              aria-label={`${p("Permissions")}: ${scopeText}`}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              <span>{scopeText}</span>
+              <ChevronDown aria-hidden="true" />
+            </button>
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Content
+              align="start"
+              side="bottom"
+              sideOffset={4}
+              collisionPadding={8}
+              className="personal-security-metadata-popover"
+              aria-label={p("Permissions")}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <strong>{p("Permissions")}</strong>
+              <div className="personal-security-metadata-list">
+                {scopes.map((scope) => (
+                  <div key={scope}>
+                    <span>{p(scopeLabels[scope] ?? scope)}</span>
+                    <small>{p(scopeDescriptions[scope] ?? scope)}</small>
+                  </div>
+                ))}
+              </div>
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
+      ) : (
+        <span>{scopeText}</span>
+      )}
+      {separator}
+      {selectedRestriction ? (
+        <Popover.Root>
+          <Popover.Trigger asChild>
+            <button
+              type="button"
+              className="personal-security-metadata-trigger"
+              aria-label={`${p("Teams")}: ${teamText}`}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              <span>{teamText}</span>
+              <ChevronDown aria-hidden="true" />
+            </button>
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Content
+              align="start"
+              side="bottom"
+              sideOffset={4}
+              collisionPadding={8}
+              className="personal-security-metadata-popover"
+              aria-label={p("Teams")}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <strong>{p("Teams")}</strong>
+              <div className="personal-security-metadata-list">
+                {selectedTeams.map((team) => (
+                  <div key={team.id}>
+                    <span data-i18n-ignore>{team.name}</span>
+                  </div>
+                ))}
+              </div>
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
+      ) : (
+        <span>{teamText}</span>
+      )}
+      {apiKey.expiresAt && (
+        <>
+          {separator}
+          <span>
+            {p("expires")} {formatDate(apiKey.expiresAt, { dateStyle: "medium" })}
+          </span>
+        </>
+      )}
+    </span>
+  );
+}
+
+function BrowserSessionIcon({ browserType }: { browserType?: string }) {
+  if (browserType === "Microsoft Edge") return <Monitor aria-hidden="true" />;
+  // Use a fixed 16px viewport so browser icons align with the session rows.
+  return (
+    <svg className="personal-browser-icon" aria-hidden="true" viewBox="0 0 16 16">
+      <path d="M8 11.5724C7.3 11.5724 6.64829 11.3793 6.06896 10.9931C5.48965 10.6069 5.05516 10.1241 4.76551 9.5207L1.86896 4.5C1.26551 5.5862 1 6.76896 1 8C1 9.76206 1.5793 11.2828 2.7138 12.5862C3.84829 13.8897 5.27241 14.6621 6.96209 14.9276L8.98968 11.4034C8.79655 11.4759 8.43449 11.5724 8 11.5724Z" />
+      <path d="M5.80345 5.10345C6.45516 4.59655 7.1793 4.3793 8 4.3793H14.0103C13.3828 3.31725 12.5379 2.54481 11.4759 1.94136C10.4138 1.3138 9.25516 1 8 1C6.9138 1 5.87586 1.24139 4.93449 1.7C3.99313 2.15861 3.1 2.83449 2.47241 3.70345L4.5 7.03449C4.6931 6.26206 5.15171 5.61035 5.80345 5.10345Z" />
+      <path d="M14.469 5.36896H10.4138C11.1138 6.06896 11.5966 6.9862 11.5966 8C11.5966 8.74829 11.3793 9.42414 10.969 10.0517L8.07241 15C9.97931 14.9759 11.6207 14.3 12.9724 12.9241C14.3241 11.5483 15 9.9069 15 8C15 7.1069 14.8552 6.16551 14.469 5.36896Z" />
+      <path d="M8 5.34484C9.44829 5.34484 10.6552 6.55174 10.6552 8C10.6552 9.44826 9.44829 10.6552 8 10.6552C6.55171 10.6552 5.34484 9.44829 5.34484 8C5.34484 6.55171 6.55171 5.34484 8 5.34484Z" />
+    </svg>
+  );
+}
+
+function decodeBase64Url(value: string): ArrayBuffer {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes.buffer;
+}
+
+function encodeBase64Url(value: ArrayBufferLike): string {
+  const bytes = new Uint8Array(value);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function toCredentialCreationOptions(raw: unknown): PublicKeyCredentialCreationOptions {
+  const wrapper = (raw ?? {}) as {
+    publicKey?: Record<string, unknown>;
+  };
+  const source = wrapper.publicKey ?? (raw as Record<string, unknown>) ?? {};
+  const user = (source.user ?? {}) as Record<string, unknown>;
+  const excludeCredentials = Array.isArray(source.excludeCredentials)
+    ? source.excludeCredentials.map((item) => {
+        const descriptor = item as Record<string, unknown>;
+        return {
+          ...descriptor,
+          id: decodeBase64Url(String(descriptor.id ?? "")),
+        } as PublicKeyCredentialDescriptor;
+      })
+    : undefined;
+  return {
+    ...source,
+    challenge: decodeBase64Url(String(source.challenge ?? "")),
+    user: {
+      ...user,
+      id: decodeBase64Url(String(user.id ?? "")),
+    },
+    excludeCredentials,
+  } as PublicKeyCredentialCreationOptions;
+}
+
+function serializeCreationCredential(
+  credential: PublicKeyCredential,
+  response: AuthenticatorAttestationResponse,
+) {
+  return {
+    id: credential.id,
+    type: credential.type,
+    rawId: encodeBase64Url(credential.rawId),
+    response: {
+      clientDataJSON: encodeBase64Url(response.clientDataJSON),
+      attestationObject: encodeBase64Url(response.attestationObject),
+      transports: response.getTransports?.() ?? [],
+    },
+  };
 }
 function localizedOptions(
   p: PersonalTranslate,

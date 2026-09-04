@@ -25,6 +25,7 @@ import {
   Flame,
   Gauge,
   FileClock,
+  History,
   Import,
   Upload,
   KeyRound,
@@ -101,6 +102,7 @@ import {
 } from "@/lib/api";
 import type { SettingsPageId, TeamSettingsSection } from "@/lib/app-routes";
 import type {
+  APIKey,
   BootstrapData,
   IdentityProvider,
   IssueTemplate,
@@ -200,6 +202,9 @@ type SettingListItem = {
 type SettingsPageProps = {
   data: BootstrapData;
   page: SettingsPageId;
+  apiKeyMode?: "new" | "detail" | "edit";
+  apiKeyId?: string;
+  signingKeyMode?: "new";
   teamKey?: string;
   teamSection?: TeamSettingsSection;
   releasePipelineMode?: "new" | "edit";
@@ -217,6 +222,13 @@ type SettingsPageProps = {
     teamKey?: string,
     teamSection?: TeamSettingsSection,
   ) => void;
+  onCreateAPIKey?: () => void;
+  onCreateSigningKey?: () => void;
+  onOpenAPIKey?: (key: APIKey) => void;
+  onEditAPIKey?: (key: APIKey) => void;
+  onLogout?: () => Promise<void>;
+  onNavigateAgent?: () => void;
+  onOpenAgentHistory?: () => void;
   onCreateReleasePipeline: () => void;
   onOpenReleasePipeline: (pipeline: ReleasePipeline) => void;
   onOpenIntegration: (provider: "github" | "gitlab") => void;
@@ -349,6 +361,7 @@ export function SettingsPage(props: SettingsPageProps) {
   const [mobileNav, setMobileNav] = useState(false);
   const [sidebarCustomizationOpen, setSidebarCustomizationOpen] =
     useState(false);
+  const mainRef = useRef<HTMLElement | null>(null);
   const sidebarCustomization = useSidebarCustomizationState();
   const [settings, setSettings] = useUserStoredSettings(props.data);
   const isAdmin =
@@ -378,6 +391,32 @@ export function SettingsPage(props: SettingsPageProps) {
       values: { ...current.values, [key]: value },
     }));
   };
+  // Nested settings routes should always start at the top of their content.
+  useEffect(() => {
+    const main = mainRef.current;
+    if (!main) return;
+    if (typeof main.scrollTo === "function") {
+      main.scrollTo({ top: 0, left: 0 });
+    } else {
+      main.scrollTop = 0;
+      main.scrollLeft = 0;
+    }
+  }, [
+    props.page,
+    props.apiKeyMode,
+    props.signingKeyMode,
+    props.teamKey,
+    props.teamSection,
+    props.issueTemplateMode,
+    props.issueTemplateId,
+    props.projectTemplateMode,
+    props.projectTemplateId,
+    props.agentSkillMode,
+    props.agentSkillId,
+    props.releasePipelineMode,
+    props.releasePipelineSlug,
+    props.integrationProvider,
+  ]);
   return (
     <>
       <div className="settings-app">
@@ -469,7 +508,7 @@ export function SettingsPage(props: SettingsPageProps) {
           aria-label={t("Close settings navigation")}
           onClick={() => setMobileNav(false)}
         />
-        <main className="settings-main">
+        <main ref={mainRef} className="settings-main">
           <button
             className="settings-mobile-menu"
             aria-label={t("Settings navigation")}
@@ -490,6 +529,21 @@ export function SettingsPage(props: SettingsPageProps) {
           </div>
         </main>
       </div>
+      {(props.onNavigateAgent || props.onOpenAgentHistory) && (
+        <div className="bottom-agent settings-bottom-agent">
+          {props.onNavigateAgent && (
+            <button type="button" aria-label="Agent" onClick={props.onNavigateAgent}>
+              <Bot />
+              <span>Agent</span>
+            </button>
+          )}
+          {props.onOpenAgentHistory && (
+            <button type="button" aria-label="Chat history" onClick={props.onOpenAgentHistory}>
+              <History />
+            </button>
+          )}
+        </div>
+      )}
       <SidebarCustomization
         open={sidebarCustomizationOpen}
         onOpenChange={setSidebarCustomizationOpen}
@@ -605,10 +659,18 @@ function SettingsBody(
     return (
       <PersonalSettings
         page={page}
+        apiKeyMode={props.apiKeyMode}
+        apiKeyId={props.apiKeyId}
+        signingKeyMode={props.signingKeyMode}
         data={props.data}
         values={props.settings.values}
         setValue={props.setValue}
         onNavigate={props.onNavigate}
+        onCreateAPIKey={props.onCreateAPIKey}
+        onCreateSigningKey={props.onCreateSigningKey}
+        onOpenAPIKey={props.onOpenAPIKey}
+        onEditAPIKey={props.onEditAPIKey}
+        onLogout={props.onLogout}
         onReload={props.onReload}
         onBack={props.onBack}
         onCustomizeSidebar={props.onCustomizeSidebar}
@@ -2897,7 +2959,7 @@ function ApiPage({
           <Row
             key={item.id}
             title={item.name}
-            description={`${item.prefix}… · ${item.scopes.join(", ")} · ${item.teamIds.length ? `${item.teamIds.length} teams` : "all teams"} · ${item.lastUsedAt ? `last used ${formatDate(item.lastUsedAt)}` : "never used"}`}
+            description={`${item.prefix}… · ${item.scopes == null ? "Full access" : item.scopes.length ? item.scopes.join(", ") : "No permissions"} · ${item.teamIds.length ? `${item.teamIds.length} teams` : "all teams"} · ${item.lastUsedAt ? `last used ${formatDate(item.lastUsedAt)}` : "never used"}`}
           >
             <ActionButton
               danger

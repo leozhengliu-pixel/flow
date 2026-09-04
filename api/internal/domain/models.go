@@ -153,11 +153,19 @@ type PersonalAgentSkill struct {
 }
 
 type AccountSession struct {
-	ID         string    `json:"id"`
-	Current    bool      `json:"current"`
-	CreatedAt  time.Time `json:"createdAt"`
-	LastSeenAt time.Time `json:"lastSeenAt"`
-	ExpiresAt  time.Time `json:"expiresAt"`
+	ID      string `json:"id"`
+	Current bool   `json:"current"`
+	// Device metadata is intentionally optional for legacy sessions. New
+	// sessions are decorated by the HTTP layer from the request user-agent.
+	Name            string    `json:"name,omitempty"`
+	OperatingSystem string    `json:"operatingSystem,omitempty"`
+	BrowserType     string    `json:"browserType,omitempty"`
+	Location        string    `json:"location,omitempty"`
+	IP              string    `json:"ip,omitempty"`
+	CountryCodes    []string  `json:"countryCodes,omitempty"`
+	CreatedAt       time.Time `json:"createdAt"`
+	LastSeenAt      time.Time `json:"lastSeenAt"`
+	ExpiresAt       time.Time `json:"expiresAt"`
 }
 
 type Workspace struct {
@@ -789,51 +797,65 @@ type TemplateMilestone struct {
 }
 
 type UserSettings struct {
-	UserID                   string    `json:"userId"`
-	Language                 string    `json:"language"`
-	HomeView                 string    `json:"homeView"`
-	DisplayNames             string    `json:"displayNames"`
-	FirstDay                 string    `json:"firstDay"`
-	Emoticons                bool      `json:"emoticons"`
-	SendComments             string    `json:"sendComments"`
-	FontSize                 string    `json:"fontSize"`
-	PointerCursor            bool      `json:"pointerCursor"`
-	UnderlineLinks           bool      `json:"underlineLinks"`
-	DisableAnimatedImages    bool      `json:"disableAnimatedImages"`
-	InterfaceTheme           string    `json:"interfaceTheme"`
-	LightTheme               string    `json:"lightTheme"`
-	DarkTheme                string    `json:"darkTheme"`
-	DesktopLinks             bool      `json:"desktopLinks"`
-	AutoAssign               bool      `json:"autoAssign"`
-	AssignStarted            bool      `json:"assignStarted"`
-	ReviewAutoAssign         bool      `json:"reviewAutoAssign"`
-	BranchFormat             string    `json:"branchFormat"`
-	PersonalSettingsVersion  int       `json:"personalSettingsVersion"`
-	CodeReviewsEnabled       bool      `json:"codeReviewsEnabled"`
-	AutoConvertDrafts        bool      `json:"autoConvertDrafts"`
-	MergeStrategy            string    `json:"mergeStrategy"`
-	CodeTheme                string    `json:"codeTheme"`
-	CodeFont                 string    `json:"codeFont"`
-	ReviewCommentsFilter     string    `json:"reviewCommentsFilter"`
-	ReviewRequests           bool      `json:"reviewRequests"`
-	GithubTeamReviewRequests bool      `json:"githubTeamReviewRequests"`
-	ChecksMergeQueue         bool      `json:"checksMergeQueue"`
-	RequireSignedCommits     bool      `json:"requireSignedCommits"`
-	GitAttachmentFormat      string    `json:"gitAttachmentFormat"`
-	GitBranchMoveStarted     bool      `json:"gitBranchMoveStarted"`
-	CodingToolMoveStarted    bool      `json:"codingToolMoveStarted"`
-	ChangelogUpdates         bool      `json:"changelogUpdates"`
-	ChangelogNewsletter      bool      `json:"changelogNewsletter"`
-	MarketingUpdates         bool      `json:"marketingUpdates"`
-	InviteAcceptedUpdates    bool      `json:"inviteAcceptedUpdates"`
-	PrivacyUpdates           bool      `json:"privacyUpdates"`
-	DPAUpdates               bool      `json:"dpaUpdates"`
-	AgentEnabled             bool      `json:"agentEnabled"`
-	AgentInstructions        string    `json:"agentInstructions"`
-	PulseSchedule            string    `json:"pulseSchedule"`
-	JobTitle                 string    `json:"jobTitle,omitempty"`
-	Username                 string    `json:"username,omitempty"`
-	UpdatedAt                time.Time `json:"updatedAt"`
+	UserID                   string `json:"userId"`
+	Language                 string `json:"language"`
+	HomeView                 string `json:"homeView"`
+	DisplayNames             string `json:"displayNames"`
+	FirstDay                 string `json:"firstDay"`
+	Emoticons                bool   `json:"emoticons"`
+	SendComments             string `json:"sendComments"`
+	FontSize                 string `json:"fontSize"`
+	PointerCursor            bool   `json:"pointerCursor"`
+	UnderlineLinks           bool   `json:"underlineLinks"`
+	DisableAnimatedImages    bool   `json:"disableAnimatedImages"`
+	InterfaceTheme           string `json:"interfaceTheme"`
+	LightTheme               string `json:"lightTheme"`
+	DarkTheme                string `json:"darkTheme"`
+	DesktopLinks             bool   `json:"desktopLinks"`
+	AutoAssign               bool   `json:"autoAssign"`
+	AssignStarted            bool   `json:"assignStarted"`
+	ReviewAutoAssign         bool   `json:"reviewAutoAssign"`
+	BranchFormat             string `json:"branchFormat"`
+	PersonalSettingsVersion  int    `json:"personalSettingsVersion"`
+	CodeReviewsEnabled       bool   `json:"codeReviewsEnabled"`
+	AutoConvertDrafts        bool   `json:"autoConvertDrafts"`
+	MergeStrategy            string `json:"mergeStrategy"`
+	CodeTheme                string `json:"codeTheme"`
+	CodeFont                 string `json:"codeFont"`
+	ReviewCommentsFilter     string `json:"reviewCommentsFilter"`
+	ReviewRequests           bool   `json:"reviewRequests"`
+	GithubTeamReviewRequests bool   `json:"githubTeamReviewRequests"`
+	ChecksMergeQueue         bool   `json:"checksMergeQueue"`
+	RequireSignedCommits     bool   `json:"requireSignedCommits"`
+	// CommitSigningKey contains only non-sensitive metadata. The private key is
+	// accepted once by the account API, validated, and never persisted or
+	// returned in workspace state.
+	CommitSigningKey      *CommitSigningKey `json:"commitSigningKey,omitempty"`
+	GitAttachmentFormat   string            `json:"gitAttachmentFormat"`
+	GitBranchMoveStarted  bool              `json:"gitBranchMoveStarted"`
+	CodingToolMoveStarted bool              `json:"codingToolMoveStarted"`
+	ChangelogUpdates      bool              `json:"changelogUpdates"`
+	ChangelogNewsletter   bool              `json:"changelogNewsletter"`
+	MarketingUpdates      bool              `json:"marketingUpdates"`
+	InviteAcceptedUpdates bool              `json:"inviteAcceptedUpdates"`
+	PrivacyUpdates        bool              `json:"privacyUpdates"`
+	DPAUpdates            bool              `json:"dpaUpdates"`
+	AgentEnabled          bool              `json:"agentEnabled"`
+	AgentInstructions     string            `json:"agentInstructions"`
+	PulseSchedule         string            `json:"pulseSchedule"`
+	JobTitle              string            `json:"jobTitle,omitempty"`
+	Username              string            `json:"username,omitempty"`
+	UpdatedAt             time.Time         `json:"updatedAt"`
+}
+
+// CommitSigningKey describes the key used by coding sessions to sign commits.
+// Private material is intentionally absent from this model so it cannot leak
+// through bootstrap/settings responses or event payloads.
+type CommitSigningKey struct {
+	Name        string    `json:"name"`
+	Fingerprint string    `json:"fingerprint"`
+	Type        string    `json:"type"`
+	AddedAt     time.Time `json:"addedAt"`
 }
 
 type WorkspaceSettings struct {
@@ -960,6 +982,27 @@ type APIKey struct {
 	ExpiresAt       *time.Time `json:"expiresAt,omitempty"`
 	OAuthClientID   string     `json:"oauthClientId,omitempty"`
 	AuthorizationID string     `json:"authorizationId,omitempty"`
+}
+
+// Passkey stores a WebAuthn credential owned by an account. CredentialJSON is
+// an opaque serialized credential record and is never returned to clients.
+type Passkey struct {
+	ID             string     `json:"id"`
+	UserID         string     `json:"userId"`
+	Name           string     `json:"name"`
+	CredentialJSON string     `json:"credentialJson,omitempty"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	LastUsedAt     *time.Time `json:"lastUsedAt,omitempty"`
+}
+
+// PasskeyRegistrationChallenge is short-lived state binding a registration
+// response to the authenticated account and browser origin.
+type PasskeyRegistrationChallenge struct {
+	ID          string    `json:"id"`
+	UserID      string    `json:"userId"`
+	SessionJSON string    `json:"sessionJson"`
+	CreatedAt   time.Time `json:"createdAt"`
+	ExpiresAt   time.Time `json:"expiresAt"`
 }
 
 type OAuthClient struct {
@@ -1532,93 +1575,95 @@ type NotificationList struct {
 }
 
 type Bootstrap struct {
-	Workspace               Workspace                          `json:"workspace"`
-	Viewer                  User                               `json:"viewer"`
-	Users                   []User                             `json:"users"`
-	Teams                   []Team                             `json:"teams"`
-	Customers               []Customer                         `json:"customers"`
-	States                  []WorkflowState                    `json:"states"`
-	Labels                  []IssueLabel                       `json:"labels"`
-	LabelGroups             []LabelGroup                       `json:"labelGroups"`
-	Issues                  []Issue                            `json:"issues"`
-	Cycles                  []Cycle                            `json:"cycles"`
-	CycleSettings           map[string]CycleSettings           `json:"cycleSettings"`
-	TeamSettings            map[string]TeamSettings            `json:"teamSettings"`
-	IssueTemplates          []IssueTemplate                    `json:"issueTemplates"`
-	ProjectTemplates        []ProjectTemplate                  `json:"projectTemplates"`
-	DocumentTemplates       []DocumentTemplate                 `json:"documentTemplates"`
-	Documents               []Document                         `json:"documents"`
-	CustomerRequests        []CustomerRequest                  `json:"customerRequests"`
-	Releases                []Release                          `json:"releases"`
-	ReleasePipelines        []ReleasePipeline                  `json:"releasePipelines"`
-	CustomEmojis            []CustomEmoji                      `json:"customEmojis"`
-	Asks                    []Ask                              `json:"asks"`
-	Loops                   []Loop                             `json:"loops"`
-	SLARules                []SLARule                          `json:"slaRules"`
-	IssueSLAs               []IssueSLA                         `json:"issueSlas"`
-	SLAEvents               []SLAEvent                         `json:"slaEvents"`
-	Drafts                  []Draft                            `json:"drafts"`
-	Favorites               []Favorite                         `json:"favorites"`
-	FavoriteFolders         []FavoriteFolder                   `json:"favoriteFolders"`
-	Subscriptions           []Subscription                     `json:"subscriptions"`
-	AuditLog                []AuditLogEntry                    `json:"auditLog"`
-	Trash                   []TrashEntry                       `json:"trash"`
-	ImportJobs              []ImportJob                        `json:"importJobs"`
-	ExportJobs              []ExportJob                        `json:"exportJobs"`
-	MigrationJobs           []MigrationJob                     `json:"migrationJobs"`
-	ProjectRelations        []ProjectRelation                  `json:"projectRelations"`
-	InitiativeRelations     []InitiativeRelation               `json:"initiativeRelations"`
-	DocumentContentDrafts   []DocumentContentDraft             `json:"documentContentDrafts"`
-	CustomerStatuses        []CustomerStatus                   `json:"customerStatuses"`
-	CustomerTiers           []CustomerTier                     `json:"customerTiers"`
-	ReleaseNotes            []ReleaseNote                      `json:"releaseNotes"`
-	ReleaseHistory          []ReleaseHistory                   `json:"releaseHistory"`
-	TeamResourceSections    []TeamResourceSection              `json:"teamResourceSections"`
-	TeamPinnedResources     []TeamPinnedResource               `json:"teamPinnedResources"`
-	AgentActivities         []AgentActivity                    `json:"agentActivities"`
-	AIConversations         []AIConversation                   `json:"aiConversations"`
-	AIPromptProgress        []AIPromptProgress                 `json:"aiPromptProgress"`
-	UsageAlerts             []UsageAlert                       `json:"usageAlerts"`
-	PaidSubscriptions       []PaidSubscription                 `json:"paidSubscriptions"`
-	Projects                []Project                          `json:"projects"`
-	ProjectStatuses         []ProjectStatus                    `json:"projectStatuses"`
-	ProjectDisplayDefault   json.RawMessage                    `json:"projectDisplayDefault,omitempty"`
-	ProjectUpdates          map[string][]ProjectUpdate         `json:"projectUpdates"`
-	Initiatives             []Initiative                       `json:"initiatives"`
-	InitiativeUpdates       map[string][]InitiativeUpdate      `json:"initiativeUpdates"`
-	Comments                map[string][]Comment               `json:"comments"`
-	Activities              map[string][]ActivityEvent         `json:"activities"`
-	SavedViews              []SavedView                        `json:"savedViews"`
-	Notifications           []Notification                     `json:"notifications"`
-	NotificationPreferences map[string]NotificationPreferences `json:"notificationPreferences"`
-	NotificationDeliveries  []NotificationDelivery             `json:"notificationDeliveries"`
-	PushSubscriptions       []PushSubscription                 `json:"pushSubscriptions"`
-	TriageResponsibilities  []TriageResponsibility             `json:"triageResponsibilities"`
-	TriageRoutingRules      []TriageRoutingRule                `json:"triageRoutingRules"`
-	TriageAssignments       []TriageAssignment                 `json:"triageAssignments"`
-	WorkflowDefinitions     []WorkflowDefinition               `json:"workflowDefinitions"`
-	WorkflowRuns            []WorkflowRun                      `json:"workflowRuns"`
-	EmailIntakeAddresses    []EmailIntakeAddress               `json:"emailIntakeAddresses"`
-	EmailIntakeMessages     []EmailIntakeMessage               `json:"emailIntakeMessages"`
-	UserSettings            map[string]UserSettings            `json:"userSettings"`
-	WorkspaceSettings       WorkspaceSettings                  `json:"workspaceSettings"`
-	APIKeys                 []APIKey                           `json:"apiKeys"`
-	OAuthApplications       []OAuthApplication                 `json:"oauthApplications"`
-	OAuthAuthorizations     []OAuthAuthorization               `json:"oauthAuthorizations"`
-	Webhooks                []Webhook                          `json:"webhooks"`
-	IntegrationConnections  []IntegrationConnection            `json:"integrationConnections"`
-	IdentityProviders       []IdentityProvider                 `json:"identityProviders"`
-	IntegrationDeliveries   []IntegrationDelivery              `json:"integrationDeliveries"`
-	GitAutomationStates     []GitAutomationState               `json:"gitAutomationStates"`
-	TargetBranches          []TargetBranch                     `json:"targetBranches"`
-	Reviews                 []CodeReview                       `json:"reviews"`
-	AgentSessions           []AgentSession                     `json:"agentSessions"`
-	AgentSkills             []PersonalAgentSkill               `json:"agentSkills"`
-	Settings                map[string]any                     `json:"settings"`
-	Members                 []WorkspaceMember                  `json:"members"`
-	TeamMembers             []TeamMember                       `json:"teamMembers"`
-	Invitations             []Invitation                       `json:"invitations"`
-	ViewerRole              string                             `json:"viewerRole"`
+	Workspace                     Workspace                          `json:"workspace"`
+	Viewer                        User                               `json:"viewer"`
+	Users                         []User                             `json:"users"`
+	Teams                         []Team                             `json:"teams"`
+	Customers                     []Customer                         `json:"customers"`
+	States                        []WorkflowState                    `json:"states"`
+	Labels                        []IssueLabel                       `json:"labels"`
+	LabelGroups                   []LabelGroup                       `json:"labelGroups"`
+	Issues                        []Issue                            `json:"issues"`
+	Cycles                        []Cycle                            `json:"cycles"`
+	CycleSettings                 map[string]CycleSettings           `json:"cycleSettings"`
+	TeamSettings                  map[string]TeamSettings            `json:"teamSettings"`
+	IssueTemplates                []IssueTemplate                    `json:"issueTemplates"`
+	ProjectTemplates              []ProjectTemplate                  `json:"projectTemplates"`
+	DocumentTemplates             []DocumentTemplate                 `json:"documentTemplates"`
+	Documents                     []Document                         `json:"documents"`
+	CustomerRequests              []CustomerRequest                  `json:"customerRequests"`
+	Releases                      []Release                          `json:"releases"`
+	ReleasePipelines              []ReleasePipeline                  `json:"releasePipelines"`
+	CustomEmojis                  []CustomEmoji                      `json:"customEmojis"`
+	Asks                          []Ask                              `json:"asks"`
+	Loops                         []Loop                             `json:"loops"`
+	SLARules                      []SLARule                          `json:"slaRules"`
+	IssueSLAs                     []IssueSLA                         `json:"issueSlas"`
+	SLAEvents                     []SLAEvent                         `json:"slaEvents"`
+	Drafts                        []Draft                            `json:"drafts"`
+	Favorites                     []Favorite                         `json:"favorites"`
+	FavoriteFolders               []FavoriteFolder                   `json:"favoriteFolders"`
+	Subscriptions                 []Subscription                     `json:"subscriptions"`
+	AuditLog                      []AuditLogEntry                    `json:"auditLog"`
+	Trash                         []TrashEntry                       `json:"trash"`
+	ImportJobs                    []ImportJob                        `json:"importJobs"`
+	ExportJobs                    []ExportJob                        `json:"exportJobs"`
+	MigrationJobs                 []MigrationJob                     `json:"migrationJobs"`
+	ProjectRelations              []ProjectRelation                  `json:"projectRelations"`
+	InitiativeRelations           []InitiativeRelation               `json:"initiativeRelations"`
+	DocumentContentDrafts         []DocumentContentDraft             `json:"documentContentDrafts"`
+	CustomerStatuses              []CustomerStatus                   `json:"customerStatuses"`
+	CustomerTiers                 []CustomerTier                     `json:"customerTiers"`
+	ReleaseNotes                  []ReleaseNote                      `json:"releaseNotes"`
+	ReleaseHistory                []ReleaseHistory                   `json:"releaseHistory"`
+	TeamResourceSections          []TeamResourceSection              `json:"teamResourceSections"`
+	TeamPinnedResources           []TeamPinnedResource               `json:"teamPinnedResources"`
+	AgentActivities               []AgentActivity                    `json:"agentActivities"`
+	AIConversations               []AIConversation                   `json:"aiConversations"`
+	AIPromptProgress              []AIPromptProgress                 `json:"aiPromptProgress"`
+	UsageAlerts                   []UsageAlert                       `json:"usageAlerts"`
+	PaidSubscriptions             []PaidSubscription                 `json:"paidSubscriptions"`
+	Projects                      []Project                          `json:"projects"`
+	ProjectStatuses               []ProjectStatus                    `json:"projectStatuses"`
+	ProjectDisplayDefault         json.RawMessage                    `json:"projectDisplayDefault,omitempty"`
+	ProjectUpdates                map[string][]ProjectUpdate         `json:"projectUpdates"`
+	Initiatives                   []Initiative                       `json:"initiatives"`
+	InitiativeUpdates             map[string][]InitiativeUpdate      `json:"initiativeUpdates"`
+	Comments                      map[string][]Comment               `json:"comments"`
+	Activities                    map[string][]ActivityEvent         `json:"activities"`
+	SavedViews                    []SavedView                        `json:"savedViews"`
+	Notifications                 []Notification                     `json:"notifications"`
+	NotificationPreferences       map[string]NotificationPreferences `json:"notificationPreferences"`
+	NotificationDeliveries        []NotificationDelivery             `json:"notificationDeliveries"`
+	PushSubscriptions             []PushSubscription                 `json:"pushSubscriptions"`
+	TriageResponsibilities        []TriageResponsibility             `json:"triageResponsibilities"`
+	TriageRoutingRules            []TriageRoutingRule                `json:"triageRoutingRules"`
+	TriageAssignments             []TriageAssignment                 `json:"triageAssignments"`
+	WorkflowDefinitions           []WorkflowDefinition               `json:"workflowDefinitions"`
+	WorkflowRuns                  []WorkflowRun                      `json:"workflowRuns"`
+	EmailIntakeAddresses          []EmailIntakeAddress               `json:"emailIntakeAddresses"`
+	EmailIntakeMessages           []EmailIntakeMessage               `json:"emailIntakeMessages"`
+	UserSettings                  map[string]UserSettings            `json:"userSettings"`
+	WorkspaceSettings             WorkspaceSettings                  `json:"workspaceSettings"`
+	APIKeys                       []APIKey                           `json:"apiKeys"`
+	Passkeys                      []Passkey                          `json:"passkeys,omitempty"`
+	PasskeyRegistrationChallenges []PasskeyRegistrationChallenge     `json:"passkeyRegistrationChallenges,omitempty"`
+	OAuthApplications             []OAuthApplication                 `json:"oauthApplications"`
+	OAuthAuthorizations           []OAuthAuthorization               `json:"oauthAuthorizations"`
+	Webhooks                      []Webhook                          `json:"webhooks"`
+	IntegrationConnections        []IntegrationConnection            `json:"integrationConnections"`
+	IdentityProviders             []IdentityProvider                 `json:"identityProviders"`
+	IntegrationDeliveries         []IntegrationDelivery              `json:"integrationDeliveries"`
+	GitAutomationStates           []GitAutomationState               `json:"gitAutomationStates"`
+	TargetBranches                []TargetBranch                     `json:"targetBranches"`
+	Reviews                       []CodeReview                       `json:"reviews"`
+	AgentSessions                 []AgentSession                     `json:"agentSessions"`
+	AgentSkills                   []PersonalAgentSkill               `json:"agentSkills"`
+	Settings                      map[string]any                     `json:"settings"`
+	Members                       []WorkspaceMember                  `json:"members"`
+	TeamMembers                   []TeamMember                       `json:"teamMembers"`
+	Invitations                   []Invitation                       `json:"invitations"`
+	ViewerRole                    string                             `json:"viewerRole"`
 }
 
 type SavedView struct {

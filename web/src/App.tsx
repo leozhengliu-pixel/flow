@@ -151,6 +151,8 @@ import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-m
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   agentPath,
+  apiKeyPath,
+  apiKeyEditPath,
   dashboardWidgetPath,
   dashboardsPath,
   dashboardsNewPath,
@@ -170,6 +172,8 @@ import {
   myIssuesPath,
   newReleasePipelinePath,
   newIssueTemplatePath,
+  newAPIKeyPath,
+  newSigningKeyPath,
   newProjectTemplatePath,
   newTeamPath,
   parseAppRoute,
@@ -3817,6 +3821,9 @@ function App() {
         <SettingsPage
           data={data}
           page={route.page}
+          apiKeyMode={route.apiKeyMode}
+          apiKeyId={route.apiKeyId}
+          signingKeyMode={route.signingKeyMode}
           teamKey={route.teamKey}
           teamSection={route.teamSection}
           releasePipelineMode={route.releasePipelineMode}
@@ -3841,6 +3848,29 @@ function App() {
             navigateTo(
               settingsPath(data.workspace.urlKey, page, teamKey, teamSection),
             )
+          }
+          onCreateAPIKey={() =>
+            navigateTo(newAPIKeyPath(data.workspace.urlKey))
+          }
+          onCreateSigningKey={() =>
+            navigateTo(newSigningKeyPath(data.workspace.urlKey))
+          }
+          onOpenAPIKey={(key) =>
+            navigateTo(apiKeyPath(data.workspace.urlKey, key.id))
+          }
+          onEditAPIKey={(key) =>
+            navigateTo(apiKeyEditPath(data.workspace.urlKey, key.id))
+          }
+          onLogout={async () => {
+            await logoutAccount();
+            setSession(null);
+            setAccount(null);
+            setData(null);
+            navigateTo("/login", { replace: true });
+          }}
+          onNavigateAgent={() => navigateTo(agentPath(data.workspace.urlKey))}
+          onOpenAgentHistory={() =>
+            navigateTo(`${agentPath(data.workspace.urlKey)}?history=1`)
           }
           onCreateReleasePipeline={() =>
             navigateTo(newReleasePipelinePath(data.workspace.urlKey))

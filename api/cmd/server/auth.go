@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -102,8 +103,16 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		// Never silently fall back to a browser cookie when an Authorization
+		// header was supplied. Otherwise a bearer token that lacks a required
+		// scope could be accidentally upgraded by an ambient cookie session.
+		authorizationHeader := strings.TrimSpace(r.Header.Get("Authorization"))
 		user, apiKey, apiWorkspace := s.authenticateAPIKey(r)
 		if apiKey == nil {
+			if authorizationHeader != "" {
+				writeError(w, http.StatusUnauthorized, "Invalid authorization credentials")
+				return
+			}
 			cookie, err := r.Cookie(sessionCookieName)
 			if err != nil || cookie.Value == "" {
 				writeError(w, http.StatusUnauthorized, "Sign in required")
@@ -115,6 +124,14 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 				writeError(w, http.StatusUnauthorized, "Your session has expired")
 				return
 			}
+		}
+		if apiKey != nil && apiKeyRestrictedPersonalPath(r.URL.Path) {
+			// Personal credentials, sessions, and account preferences must be
+			// managed from an interactive account session. Allowing a bearer key
+			// to mint or revoke credentials would turn a leaked scoped key into
+			// an account takeover primitive.
+			writeError(w, http.StatusForbidden, "Personal account security requires an interactive session")
+			return
 		}
 		ctx := context.WithValue(r.Context(), authUserContextKey{}, user)
 		if apiKey != nil {
@@ -129,6 +146,10 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func apiKeyRestrictedPersonalPath(path string) bool {
+	return path == "/api/api-keys" || strings.HasPrefix(path, "/api/api-keys/") || path == "/api/account" || strings.HasPrefix(path, "/api/account/")
 }
 
 func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKey, string) {
@@ -150,7 +171,7 @@ func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKe
 	}
 	hash := secretHash(secret)
 	for _, key := range data.APIKeys {
-		if key.SecretHash != hash || key.RevokedAt != nil || key.ExpiresAt != nil && time.Now().UTC().After(*key.ExpiresAt) {
+		if subtle.ConstantTimeCompare([]byte(key.SecretHash), []byte(hash)) != 1 || key.RevokedAt != nil || key.ExpiresAt != nil && !key.ExpiresAt.After(time.Now().UTC()) {
 			continue
 		}
 		if !apiKeyAllowsRequest(r, key) {
@@ -175,27 +196,76 @@ func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKe
 	return domain.User{}, nil, ""
 }
 
-// apiKeyAllowsRequest supports granular write scopes while retaining the
-// legacy read/write scopes. A key with no write scope is
-// read-only; admin implies every operation.
+// apiKeyAllowsRequest supports the granular scopes exposed by the API-key
+// settings flow while retaining the legacy read/write scopes. Read access is
+// not implied by create-only scopes: a caller must explicitly grant read (or
+// the broader write/admin scope) to query workspace data.
 func apiKeyAllowsRequest(r *http.Request, key domain.APIKey) bool {
-	if adminOnlyRequest(r) && !slices.Contains(key.Scopes, "admin") {
+	if adminOnlyRequest(r) && !apiKeyHasScope(key, "admin") {
 		return false
 	}
+	has := func(scope string) bool {
+		return apiKeyHasScope(key, scope) || apiKeyHasScope(key, "write")
+	}
 	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+		return has("read")
+	}
+	// A nil scope slice is the legacy full-access representation. Route it
+	// through the same helper used by read checks so old keys retain write
+	// access after granular scopes were introduced.
+	if apiKeyHasScope(key, "write") {
 		return true
 	}
-	if slices.Contains(key.Scopes, "admin") || slices.Contains(key.Scopes, "write") {
+	if apiKeyHasScope(key, "create_issues") && issueWriteRequest(r) {
 		return true
 	}
-	path := r.URL.Path
-	if slices.Contains(key.Scopes, "create_issues") && r.Method == http.MethodPost && (path == "/api/issues" || strings.HasSuffix(path, "/issues")) {
-		return true
-	}
-	if slices.Contains(key.Scopes, "create_comments") && r.Method == http.MethodPost && strings.Contains(path, "/comments") {
+	if apiKeyHasScope(key, "create_comments") && issueCommentCreateRequest(r) {
 		return true
 	}
 	return false
+}
+
+// A nil scope is how the public API represents a full-access personal key.
+// Keep an explicit empty (but non-nil) list restricted, so callers cannot
+// accidentally widen a deliberately empty policy by serializing [] instead
+// of null.
+func apiKeyHasScope(key domain.APIKey, scope string) bool {
+	if key.Scopes == nil {
+		return true
+	}
+	for _, value := range key.Scopes {
+		canonical := canonicalAPIKeyScope(value)
+		if canonical == scope || canonical == "admin" {
+			return true
+		}
+	}
+	return false
+}
+
+// issueWriteRequest covers the two operations described by the create-issues
+// permission: creating a new issue and updating an existing issue. It does
+// not grant access to issue comments, reactions, attachments, relations, or
+// destructive deletes.
+func issueWriteRequest(r *http.Request) bool {
+	path := strings.Trim(strings.TrimSpace(r.URL.Path), "/")
+	parts := strings.Split(path, "/")
+	if len(parts) == 2 && parts[0] == "api" && parts[1] == "issues" {
+		return r.Method == http.MethodPost
+	}
+	return len(parts) == 3 && parts[0] == "api" && parts[1] == "issues" && parts[2] != "" && r.Method == http.MethodPatch
+}
+
+func issueCommentCreateRequest(r *http.Request) bool {
+	path := strings.Trim(strings.TrimSpace(r.URL.Path), "/")
+	parts := strings.Split(path, "/")
+	return len(parts) == 4 && parts[0] == "api" && parts[1] == "issues" && parts[2] != "" && parts[3] == "comments" && r.Method == http.MethodPost
+}
+
+func apiKeyTeamRestrictionSelected(key domain.APIKey) bool {
+	// Older records predate TeamRestriction and encoded a selected policy by
+	// simply storing TeamIDs. Preserve that behavior while treating an
+	// explicit "selected" policy with no IDs as an empty allow-list.
+	return key.TeamRestriction == "selected" || key.TeamRestriction == "" && len(key.TeamIDs) > 0
 }
 
 func workspaceAdminRole(role string) bool {
@@ -207,7 +277,7 @@ func workspaceAdminRole(role string) bool {
 // projection. API keys are often narrower than the creator's membership, so
 // returning the unrestricted bootstrap would expose unrelated resources.
 func applyAPIKeyProjection(data *domain.Bootstrap, key domain.APIKey) {
-	if len(key.TeamIDs) == 0 {
+	if !apiKeyTeamRestrictionSelected(key) {
 		return
 	}
 	allowed := make(map[string]bool, len(key.TeamIDs))
@@ -512,7 +582,7 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	teamAllowed := func(teamID string) bool {
-		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && key.TeamRestriction == "selected" && !slices.Contains(key.TeamIDs, teamID) {
+		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) && !slices.Contains(key.TeamIDs, teamID) {
 			return false
 		}
 		return slices.ContainsFunc(data.Teams, func(item domain.Team) bool { return item.ID == teamID })
