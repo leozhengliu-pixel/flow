@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
-import { LayoutTemplate, X } from 'lucide-react'
+import { CalendarPlus, LayoutTemplate, X } from 'lucide-react'
 import { PlusIcon } from './projects-page-icons'
 import { PropertyMenu, type PropertyOption } from '@/components/property/property-menu'
 import { ViewIconPicker } from '@/components/views/view-icon-picker'
@@ -39,6 +39,13 @@ export type NewProjectDraft = {
   dependencyIds: string[]
   dependencyRelations: ProjectDependencyRelationInput[]
   milestones: string[]
+  milestoneDetails?: NewProjectMilestoneDraft[]
+}
+
+export type NewProjectMilestoneDraft = {
+  name: string
+  description?: string
+  targetDate?: string
 }
 
 export type NewProjectChoice = { id: string, label: string, color?: string, email?: string, name?: string, avatarUrl?: string, active?: boolean, invited?: boolean, disabled?: boolean, end?: string, groupId?: string, groupLabel?: string, group?: 'your' | 'other', icon?: ReactNode, initials?: string, hoverContent?: ReactNode, hoverClassName?: string, previewData?: ProjectDependencyPreviewData }
@@ -220,7 +227,10 @@ export function NewProjectDialog({
           <ProjectDependencyPicker ariaLabel="Add dependencies" onChange={value => setDraft(current => ({ ...current, dependencyIds: value.filter(item => item.type === 'blocked_by').map(item => item.projectId), dependencyRelations: value }))} projects={dependencies.filter(project => !project.id.startsWith('__')).map(project => ({ id: project.id, label: project.label, icon: typeof project.icon === 'string' ? project.icon : undefined, color: project.color, group: project.group, keywords: [project.name, project.email].filter(Boolean).join(' '), disabled: project.disabled, previewData: project.previewData }))} triggerClassName="lp-new-project-picker__trigger lp-new-project-dependency-trigger" value={draft.dependencyRelations as ProjectDependencyValue[]} />
         </div>
         <textarea aria-label="Project description" className="lp-new-project__description" onChange={event => set('description', event.target.value)} placeholder="Write a description, a project brief, or collect ideas…" value={draft.description} />
-        <MilestonesEditor milestones={draft.milestones} onChange={value => set('milestones', value)} />
+        <MilestonesEditor
+          milestones={draft.milestoneDetails ?? draft.milestones.map(name => ({ name }))}
+          onChange={milestones => setDraft(current => ({ ...current, milestoneDetails: milestones, milestones: milestones.map(item => item.name) }))}
+        />
       </div>
       <footer className="lp-new-project__footer">
         <button disabled={submitting} onClick={requestClose} type="button">Cancel</button>
@@ -295,19 +305,49 @@ function ViewIconPickerGlyph({ color = '#8a8f98', icon }: { color?: string, icon
   return <svg aria-hidden="true" className="lp-new-project-team-icon" fill="currentColor" style={{ color }} viewBox="0 0 16 16"><use href={`#${icon}`}/></svg>
 }
 
-function MilestonesEditor({ milestones, onChange }: { milestones: string[], onChange: (value: string[]) => void }) {
+function MilestonesEditor({ milestones, onChange }: { milestones: NewProjectMilestoneDraft[], onChange: (value: NewProjectMilestoneDraft[]) => void }) {
+  const { formatDate, locale, t } = useI18n()
+  const sectionRef = useRef<HTMLElement>(null)
   const [adding, setAdding] = useState(false)
-  const [open, setOpen] = useState(true)
-  const [value, setValue] = useState('')
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [targetDate, setTargetDate] = useState('')
+  const [dateOpen, setDateOpen] = useState(false)
+  useEffect(() => {
+    if (!adding) return
+    requestAnimationFrame(() => sectionRef.current?.scrollIntoView({ block: 'end' }))
+  }, [adding])
   const add = () => {
-    if (value.trim()) onChange([...milestones, value.trim()])
-    setValue('')
+    if (!name.trim()) return
+    onChange([...milestones, { name: name.trim(), description: description.trim() || undefined, targetDate: targetDate || undefined }])
+    setName('')
+    setDescription('')
+    setTargetDate('')
     setAdding(false)
   }
-  return <section className="lp-new-project__milestones"><header><button aria-expanded={open} className="lp-new-project__milestone-toggle" onClick={() => setOpen(value => !value)} type="button"><ViewIconPickerGlyph icon="MilestoneNone"/><strong>Milestones</strong></button><button aria-label="Add" onClick={() => { setOpen(true); setAdding(true) }} type="button"><PlusIcon /></button></header>{open&&<>{milestones.map((item, index) => <div key={`${item}-${index}`}><ViewIconPickerGlyph icon="MilestoneNone"/><span>{item}</span><button aria-label={`Remove ${item}`} onClick={() => onChange(milestones.filter((_, itemIndex) => itemIndex !== index))} type="button"><X size={13}/></button></div>)}{adding && <div><ViewIconPickerGlyph icon="MilestoneNone"/><input autoFocus onChange={event => setValue(event.target.value)} onKeyDown={event => {
-    if (event.key === 'Enter') add()
-    if (event.key === 'Escape') setAdding(false)
-  }} placeholder="Milestone name" value={value} /><button onClick={add} type="button">Add</button></div>}</>}</section>
+  const cancel = () => { setName(''); setDescription(''); setTargetDate(''); setAdding(false) }
+  if (adding) return <section className="lp-new-project__milestones lp-new-project__milestones--creating" ref={sectionRef}>
+    <header><span>{t('Create milestone')}</span></header>
+    <div className="lp-new-project__milestone-editor">
+      <div className="lp-new-project__milestone-fields">
+        <MilestoneOutline />
+        <input autoFocus aria-label={t('Milestone name')} className="lp-new-project__milestone-name" onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') cancel(); if (event.key === 'Enter' && name.trim()) { event.preventDefault(); add() } }} placeholder={t('Milestone name')} value={name} />
+        <ProjectDatePicker align="end" ariaLabel="Choose date" buttonClassName={`lp-new-project__milestone-date${dateOpen || targetDate ? ' has-value' : ''}`} compactCalendar contentClassName="lp-new-project__milestone-calendar" label="Target date" onChange={value => setTargetDate(value)} onOpenChange={setDateOpen} side="top" value={targetDate}>
+          {targetDate ? <span>{locale === 'en-US' ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(`${targetDate}T00:00:00`)) : formatDate(`${targetDate}T00:00:00`, { month: 'short', day: 'numeric' })}</span> : dateOpen ? <span>{t('Target date')}</span> : <CalendarPlus size={16}/>}
+        </ProjectDatePicker>
+        <textarea aria-label={t('Milestone description')} className="lp-new-project__milestone-description" onChange={event => setDescription(event.target.value)} placeholder={t('Add a description…')} value={description}/>
+      </div>
+      <footer><button aria-label={t('Discard changes')} onClick={cancel} type="button">{t('Cancel')}</button><button aria-label={t('Add milestone')} className="is-primary" onClick={add} type="button">{t('Add milestone')}</button></footer>
+    </div>
+  </section>
+  return <section className="lp-new-project__milestones" ref={sectionRef}>
+    <header><button aria-expanded="true" className="lp-new-project__milestone-toggle" type="button"><ViewIconPickerGlyph icon="MilestoneNone"/><strong>{t('Milestones')}</strong></button><button aria-label={t('Add')} onClick={() => setAdding(true)} type="button"><PlusIcon /></button></header>
+    {milestones.map((item, index) => <div className="lp-new-project__milestone-row" key={`${item.name}-${index}`}><MilestoneOutline/><span><strong>{item.name}</strong>{item.description && <small>{item.description}</small>}</span>{item.targetDate && <time dateTime={item.targetDate}>{formatDate(`${item.targetDate}T00:00:00`, { month: 'short', day: 'numeric' })}</time>}<button aria-label={`${t('Remove')} ${item.name}`} onClick={() => onChange(milestones.filter((_, itemIndex) => itemIndex !== index))} type="button"><X size={13}/></button></div>)}
+  </section>
+}
+
+function MilestoneOutline() {
+  return <svg aria-hidden="true" className="lp-new-project__milestone-outline" fill="none" viewBox="0 0 16 16"><path d="M7.341 2.32a.85.85 0 0 1 1.318 0l4.131 5.082a.95.95 0 0 1 0 1.196L8.659 13.68a.85.85 0 0 1-1.318 0L3.21 8.598a.95.95 0 0 1 0-1.196L7.341 2.32Z" stroke="currentColor" strokeWidth="2"/></svg>
 }
 
 function DiscardProjectDialog({ onCancel, onDiscard }: { onCancel: () => void; onDiscard: () => void }) {
@@ -372,7 +412,20 @@ function mergeAgentDraft(current: NewProjectDraft, patch: ProjectAgentDraft, sta
   }
   if (isIsoDate(patch.startDate)) next.startDate = patch.startDate
   if (isIsoDate(patch.targetDate)) next.targetDate = patch.targetDate
-  if (patch.milestones?.length) next.milestones = [...new Set([...current.milestones, ...patch.milestones.map(item => item.trim()).filter(Boolean)])]
+  if (patch.milestones?.length) {
+    const milestoneDetails = current.milestoneDetails ?? current.milestones.map(name => ({ name }))
+    const existingNames = new Set(milestoneDetails.map(item => item.name.toLocaleLowerCase()))
+    const additions: NewProjectMilestoneDraft[] = []
+    for (const value of patch.milestones) {
+      const name = value.trim()
+      const key = name.toLocaleLowerCase()
+      if (!name || existingNames.has(key)) continue
+      existingNames.add(key)
+      additions.push({ name })
+    }
+    next.milestoneDetails = [...milestoneDetails, ...additions]
+    next.milestones = next.milestoneDetails.map(item => item.name)
+  }
   if (patch.team?.trim()) {
     const team = findChoice(patch.team, choices.teams ?? [])
     if (team) next.teamIds = [team.id]

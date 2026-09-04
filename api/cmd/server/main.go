@@ -2455,7 +2455,11 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		for _, name := range input.Milestones {
+		legacyMilestones := input.Milestones
+		if len(input.MilestoneDetails) > 0 {
+			legacyMilestones = nil
+		}
+		for _, name := range legacyMilestones {
 			name = strings.TrimSpace(name)
 			if name == "" {
 				continue
@@ -2464,6 +2468,22 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 				ID: fmt.Sprintf("project_milestone_%d", time.Now().UnixNano()), ProjectID: created.ID,
 				Name: name, CreatedAt: now, UpdatedAt: now,
 			})
+		}
+		for _, milestone := range input.MilestoneDetails {
+			if milestone.Name == nil || strings.TrimSpace(*milestone.Name) == "" {
+				continue
+			}
+			item := domain.ProjectMilestone{
+				ID: fmt.Sprintf("project_milestone_%d", time.Now().UnixNano()), ProjectID: created.ID,
+				Name: strings.TrimSpace(*milestone.Name), CreatedAt: now, UpdatedAt: now,
+			}
+			if milestone.Description != nil {
+				item.Description = strings.TrimSpace(*milestone.Description)
+			}
+			if milestone.TargetDate != nil {
+				item.TargetDate = optionalString(*milestone.TargetDate)
+			}
+			created.Milestones = append(created.Milestones, item)
 		}
 		data.Projects = append([]domain.Project{created}, data.Projects...)
 		if input.TemplateID != "" {
