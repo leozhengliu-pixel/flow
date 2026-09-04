@@ -1032,9 +1032,9 @@ func TestProjectLifecycle(t *testing.T) {
 	}
 	createdWithMilestone := requestJSON[domain.Project](t, handler, http.MethodPost, "/api/projects", map[string]any{
 		"name": "Project milestone create test", "teamIds": []string{"team_test"},
-		"milestones": []string{"Launch", "  ", "Ship"}, "targetDate": "2026-09-30", "targetDateResolution": "month",
+		"milestoneDetails": []map[string]any{{"name": "Launch", "description": "Launch criteria", "targetDate": "2026-09-15"}, {"name": "  "}, {"name": "Ship"}}, "targetDate": "2026-09-30", "targetDateResolution": "month",
 	}, http.StatusCreated)
-	if len(createdWithMilestone.Milestones) != 2 || createdWithMilestone.Milestones[0].Name != "Launch" || createdWithMilestone.Milestones[1].Name != "Ship" || createdWithMilestone.TargetDateResolution != "month" {
+	if len(createdWithMilestone.Milestones) != 2 || createdWithMilestone.Milestones[0].Name != "Launch" || createdWithMilestone.Milestones[0].Description != "Launch criteria" || createdWithMilestone.Milestones[0].TargetDate == nil || *createdWithMilestone.Milestones[0].TargetDate != "2026-09-15" || createdWithMilestone.Milestones[1].Name != "Ship" || createdWithMilestone.TargetDateResolution != "month" {
 		t.Fatalf("project create milestones failed: %#v", createdWithMilestone.Milestones)
 	}
 

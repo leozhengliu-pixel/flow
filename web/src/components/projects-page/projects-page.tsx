@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import type { Initiative, Invitation, IssueLabel, LabelGroup, PersonalAgentSkill, Project, ProjectDependencyRelationInput, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
 import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from '@/components/issue-explorer/saved-view-editor'
-import { NewProjectDialog, type NewProjectDraft } from './new-project-dialog'
+import { NewProjectDialog, type NewProjectDraft, type NewProjectMilestoneDraft } from './new-project-dialog'
 import { projectPeopleChoices } from './project-people'
 import { ProjectsDataView, type ProjectAction, type ProjectPageItem, type ProjectProperty, type ProjectPropertyOptions } from './projects-data-view'
 import { ProjectsPageSurface } from './projects-page-surface'
@@ -49,7 +49,7 @@ export type ProjectMutationInput = {
 }
 
 export type ProjectCreateInput = Required<Pick<ProjectMutationInput, 'name'>> & ProjectMutationInput
-  & { milestones?: string[] }
+  & { milestones?: string[]; milestoneDetails?: NewProjectMilestoneDraft[] }
 
 export type ProjectsPageProps = {
   projects: Project[]
@@ -576,6 +576,7 @@ function draftMutation(projects: Project[], draft: NewProjectDraft, projectStatu
     leadId: draft.leadId,
     memberIds: draft.memberIds,
     milestones: draft.milestones,
+    milestoneDetails: draft.milestoneDetails,
     labelIds: draft.labelIds,
     dependencyIds: draft.dependencyIds,
     dependencyRelations: draft.dependencyRelations,

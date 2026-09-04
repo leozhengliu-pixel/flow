@@ -4,6 +4,10 @@
 .avatar{width:16px;height:16px;flex:0 0 16px;display:grid;place-items:center;border-radius:50%;object-fit:cover;color:white;font-size:8px;line-height:16px}
 .datePicker{box-sizing:border-box;z-index:1000;width:304px;height:427px;display:flex;flex-direction:column;padding:16px 16px 0;border-radius:8px;overflow:hidden;background:var(--theme-surface-2);box-shadow:0 3px 8px lch(0 0 0/.125),0 2px 5px lch(0 0 0/.125),0 1px 1px lch(0 0 0/.125)}
 .datePicker.compactPeriods{height:330px;background:var(--theme-control-hover)}
+.datePicker.compactCalendar{width:263px;height:300.5px;padding:8px;background:var(--theme-surface-2)}
+.compactCalendar .dayPanel{width:246px;height:283.5px;flex:0 0 283.5px;margin:0;padding:0;border:0}
+.compactCalendar .weekdays{width:246px;grid-template-columns:repeat(7,26px);column-gap:9px;margin:0;padding:0 5px}
+.compactCalendar .days{width:246px;grid-template-columns:repeat(7,26px);column-gap:9px;margin:0;padding:0 5px}
 .compactPeriods .dateLabel input,.compactPeriods .dateModes{background:var(--theme-control-hover)}
 .dateLabel{box-sizing:border-box;width:271px;height:55px;flex:0 0 55px;display:flex;flex-direction:column;gap:4px;padding:0;color:var(--theme-text-secondary);font-size:12px;line-height:18px}
 .dateLabel input{box-sizing:border-box;width:271px;height:32px;padding:6px 12px;border:.5px solid var(--theme-border-strong);border-radius:8px;outline:0;background:var(--theme-surface-2);color:var(--theme-text-primary);font-size:13px;letter-spacing:0}
