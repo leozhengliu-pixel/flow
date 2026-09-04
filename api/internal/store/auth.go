@@ -717,7 +717,7 @@ func (s *SQLiteStore) BootstrapForUser(ctx context.Context, workspaceKey, userID
 		return domain.Bootstrap{}, false, err
 	}
 	data.Viewer, data.ViewerRole = user, role
-	if !isWorkspaceAdminRole(role) || data.WorkspaceSettings.Plan != "enterprise" {
+	if !isWorkspaceAdminRole(role) {
 		data.AuditLog = []domain.AuditLogEntry{}
 	}
 	data.Members, _ = s.ListMembers(ctx, data.Workspace.ID)
@@ -1190,7 +1190,7 @@ func (s *SQLiteStore) workspaceByID(id string) (domain.Bootstrap, string, bool) 
 // team owner inherits owner access to descendants, but ordinary parent members
 // do not bypass a restricted child.
 func teamVisibleToUser(data domain.Bootstrap, teamID, userID, workspaceRole string) bool {
-	if isWorkspaceAdminRole(workspaceRole) && !strings.EqualFold(data.WorkspaceSettings.Plan, "enterprise") {
+	if isWorkspaceAdminRole(workspaceRole) {
 		return true
 	}
 	exists := false
@@ -1264,7 +1264,7 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 	// Documents can be scoped to private teams just like issues and projects.
 	// Keep unscoped documents workspace-visible, while preventing a member from
 	// discovering the title or content of a team document they cannot access.
-	if !isWorkspaceAdminRole(data.ViewerRole) || strings.EqualFold(data.WorkspaceSettings.Plan, "enterprise") {
+	if !isWorkspaceAdminRole(data.ViewerRole) {
 		data.Documents = slices.DeleteFunc(data.Documents, func(document domain.Document) bool {
 			if len(document.TeamIDs) == 0 {
 				// An unscoped document is workspace-visible until explicit
@@ -1598,7 +1598,7 @@ func filterSettingsByVisibility(data *domain.Bootstrap, allowed map[string]bool)
 }
 
 func issuePermissionAllows(data domain.Bootstrap, issue domain.Issue, allowed map[string]bool) bool {
-	if isWorkspaceAdminRole(data.ViewerRole) && !strings.EqualFold(data.WorkspaceSettings.Plan, "enterprise") {
+	if isWorkspaceAdminRole(data.ViewerRole) {
 		return true
 	}
 	seenIssues := map[string]bool{}

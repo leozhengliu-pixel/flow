@@ -2024,45 +2024,6 @@ func (s *server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *server) getWorkspaceUsage(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
-	storage := int64(0)
-	for _, issue := range data.Issues {
-		for _, attachment := range issue.Attachments {
-			storage += attachment.Size
-		}
-	}
-	limits := map[string]int64{"members": 250, "issues": 250, "storageBytes": 100 * 1024 * 1024}
-	if data.WorkspaceSettings.Plan == "business" {
-		limits = map[string]int64{"members": 1000, "issues": 100000, "storageBytes": 100 * 1024 * 1024 * 1024}
-	}
-	s.syncUsageAlerts(r, data, storage, limits)
-	data = s.workspaceData(r)
-	events := make([]map[string]any, 0)
-	for _, event := range data.AuditLog {
-		feature := ""
-		amount := int64(0)
-		action := strings.ToLower(event.Action)
-		if strings.Contains(action, "loop") {
-			feature, amount = "loops", 10
-		} else if strings.Contains(action, "agent") || strings.Contains(action, "coding") {
-			feature, amount = "coding-sessions", 25
-		}
-		if feature != "" {
-			events = append(events, map[string]any{"id": event.ID, "feature": feature, "userId": event.Actor.ID, "amountCents": amount, "createdAt": event.CreatedAt})
-		}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"plan": data.WorkspaceSettings.Plan, "members": len(data.Members), "issues": len(data.Issues), "storageBytes": storage, "limits": limits,
-		"aiCredits": map[string]any{
-			"balanceCents": data.WorkspaceSettings.AICreditBalanceCents, "autoReloadEnabled": data.WorkspaceSettings.AICreditAutoReload,
-			"autoReloadThresholdCents": data.WorkspaceSettings.AICreditReloadThresholdCents, "autoReloadAmountCents": data.WorkspaceSettings.AICreditReloadAmountCents,
-			"workspaceSpendLimitCents": data.WorkspaceSettings.AIWorkspaceSpendLimitCents,
-		},
-		"events": events,
-	})
-}
-
 type documentTemplateInput struct {
 	TeamID       *string        `json:"teamId,omitempty"`
 	Name         *string        `json:"name,omitempty"`

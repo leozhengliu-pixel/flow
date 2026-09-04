@@ -16,14 +16,10 @@ import {
   Braces,
   Building2,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   CircleDot,
   Code2,
-  CreditCard,
   FileText,
   Flame,
-  Gauge,
   FileClock,
   History,
   Import,
@@ -76,9 +72,6 @@ import {
   deleteOAuthApplication,
   deleteWebhook,
   disconnectIntegration,
-  fetchWorkspaceUsage,
-  getPaidSubscription,
-  listUsageAlerts,
   revokeAPIKey,
   revokeOAuthAuthorization,
   inviteMembers,
@@ -107,11 +100,9 @@ import type {
   IdentityProvider,
   IssueTemplate,
   OAuthApplication,
-  PaidSubscription,
   ProjectTemplate,
   ReleasePipeline,
   Team,
-  UsageAlert,
   UserSettings,
   Webhook,
   WorkspaceMutationInput,
@@ -302,8 +293,6 @@ const NAV: { title: string; items: NavItem[] }[] = [
       { id: "audit-log", label: "Audit log", icon: FileClock },
       { id: "api", label: "API", icon: Braces },
       { id: "applications", label: "Applications", icon: AppWindow },
-      { id: "billing", label: "Billing", icon: CreditCard },
-      { id: "usage", label: "Usage & limits", icon: Gauge },
       { id: "import-export", label: "Import & export", icon: Import },
     ],
   },
@@ -372,9 +361,6 @@ export function SettingsPage(props: SettingsPageProps) {
         ...section,
         items: section.items.filter(
           (item) =>
-            (item.id !== "audit-log" ||
-              (isAdmin &&
-                props.data.workspaceSettings.plan === "enterprise")) &&
             (isAdmin ||
               section.title === "Personal" ||
               memberCanManage(item.id, props.data.workspaceSettings)) &&
@@ -634,17 +620,6 @@ function SettingsBody(
         <p>{t("You don't have permission to manage this workspace setting.")}</p>
       </div>
     );
-  if (
-    page === "audit-log" &&
-    (!isWorkspaceAdmin ||
-      props.data.workspaceSettings.plan !== "enterprise")
-  )
-    return (
-      <div className="settings-not-found">
-        <strong>{t("Not found")}</strong>
-        <span>{t("We could not find the page you were looking for")}</span>
-      </div>
-    );
   if (props.agentSkillMode)
     return (
       <AgentSkillEditor
@@ -752,9 +727,6 @@ function SettingsBody(
     );
   if (page === "applications")
     return <ApplicationsPage data={props.data} onReload={props.onReload} />;
-  if (page === "billing")
-    return <BillingPage data={props.data} onReload={props.onReload} />;
-  if (page === "usage") return <UsagePage data={props.data} />;
   if (page === "import-export")
     return <ImportExportSettings data={props.data} onReload={props.onReload} />;
   if (page === "workflows")
@@ -1745,7 +1717,6 @@ function SecuritySupplement({
       );
     }
   };
-  const enterprise = settings.plan === "enterprise";
   return (
     <>
       <Section title="File uploads">
@@ -1753,9 +1724,7 @@ function SecuritySupplement({
           title="Restrict file uploads"
           description="Restrict uploaded file types. Images and videos remain allowed."
         >
-          <ActionButton disabled={!enterprise}>
-            {enterprise ? "Configure" : "Available on Enterprise"}
-          </ActionButton>
+          <ActionButton>Configure</ActionButton>
         </Row>
       </Section>
       <Section title="Application approvals">
@@ -1775,9 +1744,7 @@ function SecuritySupplement({
           title="Reduce personal information from support integrations"
           description="Personal information from support integrations will not be stored"
         >
-          <ActionButton disabled={!enterprise}>
-            {enterprise ? "Configure" : "Available on Enterprise"}
-          </ActionButton>
+          <ActionButton>Configure</ActionButton>
         </Row>
       </Section>
       <Section title="MCP connections">
@@ -1815,9 +1782,7 @@ function SecuritySupplement({
           title="HIPAA compliance"
           description="Enable privacy and security measures for protected health information"
         >
-          <ActionButton disabled={!enterprise}>
-            {enterprise ? "Configure" : "Available on Enterprise"}
-          </ActionButton>
+          <ActionButton>Configure</ActionButton>
         </Row>
       </Section>
     </>
@@ -2415,7 +2380,7 @@ function MembersPageV2({
                 <small>
                   {t(
                     value === "admin"
-                      ? "Full control of the workspace including security, billing, and all settings"
+                      ? "Full control of the workspace including security and all settings"
                       : value === "member"
                         ? "Standard workspace access with the ability to act within all public teams"
                         : "Access limited to specific teams, with no workspace views or features",
@@ -2798,11 +2763,6 @@ function SecurityPage({
           "Prevent guests from interacting with agents in the workspace",
           "preventGuestAgents",
           "Restrict agent invocation to full workspace members only",
-        )}
-        {toggle(
-          "Improve AI features by sharing usage data",
-          "aiUsageSharing",
-          "Feedback on AI results is used to enhance functionality",
         )}
         {toggle(
           "Enable Flow Agent web search",
@@ -3431,318 +3391,6 @@ function OAuthEditor({
     </Dialog>
   );
 }
-function BillingPage({
-  data,
-  onReload,
-}: {
-  data: BootstrapData;
-  onReload: () => Promise<void>;
-}) {
-  const settings = data.workspaceSettings;
-  const [email, setEmail] = useState(
-    settings.billingEmail || data.viewer.email,
-  );
-  const save = (patch: Partial<WorkspaceSettings>) =>
-    updateWorkspacePreferences({ ...settings, ...patch }).then(onReload);
-  return (
-    <>
-      <PageTitle>Billing</PageTitle>
-      <Section title="Current plan">
-        <Row
-          title={title(settings.plan)}
-          description={`${data.users.length} members`}
-        >
-          <span className="settings-static">Managed locally</span>
-        </Row>
-        <Row title="Billing email">
-          <input
-            className="settings-input"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            onBlur={() =>
-              email !== settings.billingEmail &&
-              void save({ billingEmail: email })
-            }
-          />
-        </Row>
-      </Section>
-      <Section title="Payments">
-        <div className="settings-empty compact">
-          <CreditCard size={24} />
-          <h3>Billing provider not configured</h3>
-          <p>Plan checkout and invoices require a payment provider.</p>
-        </div>
-      </Section>
-    </>
-  );
-}
-function UsagePage({ data }: { data: BootstrapData }) {
-  const { t } = useI18n();
-  const [usage, setUsage] = useState<Awaited<
-    ReturnType<typeof fetchWorkspaceUsage>
-  > | null>(null);
-  const [alerts, setAlerts] = useState<UsageAlert[]>([]);
-  const [subscription, setSubscription] = useState<PaidSubscription | null>(
-    null,
-  );
-  const [weekOffset, setWeekOffset] = useState(0);
-  const load = async () => {
-    const [value, alertPage, paid] = await Promise.all([
-      fetchWorkspaceUsage(),
-      listUsageAlerts(),
-      getPaidSubscription(),
-    ]);
-    setUsage(value);
-    setAlerts(alertPage.nodes);
-    setSubscription(paid);
-  };
-  useEffect(() => {
-    void load();
-  }, [data]);
-  if (!usage)
-    return (
-      <div className="settings-empty compact">
-        <Gauge size={24} />
-        <p>{t("Loading usage…")}</p>
-      </div>
-    );
-  const save = async (patch: Partial<WorkspaceSettings>) => {
-    await updateWorkspacePreferences({ ...data.workspaceSettings, ...patch });
-    await load();
-  };
-  const now = new Date();
-  const end = new Date(now);
-  end.setDate(now.getDate() + weekOffset * 7);
-  const start = new Date(end);
-  start.setDate(end.getDate() - 6);
-  const periodEvents = usage.events.filter((event) => {
-    const date = new Date(event.createdAt);
-    return (
-      date >= start &&
-      date <=
-        new Date(end.getFullYear(), end.getMonth(), end.getDate(), 23, 59, 59)
-    );
-  });
-  const coding = periodEvents
-    .filter((event) => event.feature === "coding-sessions")
-    .reduce((sum, event) => sum + event.amountCents, 0);
-  const loops = periodEvents
-    .filter((event) => event.feature === "loops")
-    .reduce((sum, event) => sum + event.amountCents, 0);
-  const maxSpend = Math.max(1, coding, loops);
-  return (
-    <div className="settings-usage-page">
-      <PageTitle
-        description={t(
-          "Track usage, manage credits, and set spend limits across your workspace",
-        )}
-      >
-        {t("Usage & limits")}
-      </PageTitle>
-      {alerts
-        .filter((alert) => alert.status === "active")
-        .map((alert) => (
-          <div className="settings-usage-alert" key={alert.id}>
-            <Gauge />
-            <span>
-              <strong>{t("Usage alert")}</strong>
-              <small>
-                {t(alert.type)}: {alert.current} / {alert.threshold}
-              </small>
-            </span>
-          </div>
-        ))}
-      <Section title={t("AI credits")}>
-        <div className="settings-credit-summary">
-          <span>{t("Workspace credits")}</span>
-          <strong>
-            {currency(usage.aiCredits.balanceCents)}{" "}
-            <small>{t("available")}</small>
-          </strong>
-        </div>
-        <Row
-          title={t("Automatic reload")}
-          description={t(
-            "Automatically top up credits when your balance runs low",
-          )}
-        >
-          <Toggle
-            label={t("Automatic credit reload")}
-            checked={usage.aiCredits.autoReloadEnabled}
-            onChange={(value) => void save({ aiCreditAutoReload: value })}
-          />
-        </Row>
-        {usage.aiCredits.autoReloadEnabled && (
-          <div className="settings-reload-controls">
-            <Row title={t("Reload threshold")}>
-              <NumberInput
-                value={usage.aiCredits.autoReloadThresholdCents}
-                onCommit={(value) =>
-                  save({ aiCreditReloadThresholdCents: value })
-                }
-              />
-            </Row>
-            <Row title={t("Reload amount")}>
-              <NumberInput
-                value={usage.aiCredits.autoReloadAmountCents}
-                onCommit={(value) => save({ aiCreditReloadAmountCents: value })}
-              />
-            </Row>
-          </div>
-        )}
-      </Section>
-      <Section>
-        <Row
-          title={t("Spend limits")}
-          description={t("Set workspace, user, and loop limits")}
-        >
-          <NumberInput
-            value={usage.aiCredits.workspaceSpendLimitCents}
-            onCommit={(value) => save({ aiWorkspaceSpendLimitCents: value })}
-          />
-        </Row>
-      </Section>
-      <section className="settings-usage-analytics">
-        <header>
-          <h3>{t("Analytics")}</h3>
-          <div>
-            <button type="button">{t("Week")}</button>
-            <button
-              aria-label={t("Previous period")}
-              type="button"
-              onClick={() => setWeekOffset((value) => value - 1)}
-            >
-              <ChevronLeft />
-            </button>
-            <span>
-              {start.toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              })}{" "}
-              –{" "}
-              {end.toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              })}
-            </span>
-            <button
-              aria-label={t("Next period")}
-              disabled={weekOffset === 0}
-              type="button"
-              onClick={() => setWeekOffset((value) => Math.min(0, value + 1))}
-            >
-              <ChevronRight />
-            </button>
-          </div>
-        </header>
-        <strong className="settings-usage-total">
-          {currency(coding + loops)}
-          <small>{t("total spend in this period")}</small>
-        </strong>
-        <div className="settings-usage-chart">
-          <i style={{ height: `${Math.max(2, (coding / maxSpend) * 100)}%` }} />
-          <i style={{ height: `${Math.max(2, (loops / maxSpend) * 100)}%` }} />
-        </div>
-        <div className="settings-usage-series">
-          <span>
-            <i />
-            {t("Coding sessions")}
-            <strong>{currency(coding)}</strong>
-          </span>
-          <span>
-            <i />
-            {t("Loops")}
-            <strong>{currency(loops)}</strong>
-          </span>
-        </div>
-        {!periodEvents.length && (
-          <div className="settings-usage-no-data">
-            <Activity />
-            <span>{t("No usage this week")}</span>
-          </div>
-        )}
-      </section>
-      <Section title={t("Plan usage")}>
-        {subscription && (
-          <Row
-            title={title(subscription.plan)}
-            description={`${subscription.seats} ${t("seats")} · ${subscription.status}`}
-          >
-            <span className="settings-static">
-              {subscription.cancelAtPeriodEnd
-                ? t("Cancels at period end")
-                : t("Active")}
-            </span>
-          </Row>
-        )}
-        <UsageRow
-          title={t("Members")}
-          value={usage.members}
-          limit={usage.limits.members}
-        />
-        <UsageRow
-          title={t("Issues")}
-          value={usage.issues}
-          limit={usage.limits.issues}
-        />
-        <UsageRow
-          title={t("File storage (MB)")}
-          value={Math.ceil(usage.storageBytes / 1048576)}
-          limit={Math.ceil(usage.limits.storageBytes / 1048576)}
-        />
-      </Section>
-    </div>
-  );
-}
-function NumberInput({
-  value,
-  onCommit,
-}: {
-  value: number;
-  onCommit: (value: number) => void | Promise<void>;
-}) {
-  const [draft, setDraft] = useState(String(value / 100));
-  useEffect(() => setDraft(String(value / 100)), [value]);
-  return (
-    <div className="settings-money-input">
-      <span>$</span>
-      <input
-        type="number"
-        min={0}
-        step={1}
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={() => {
-          const next = Math.round(Number(draft) * 100);
-          if (next !== value) void onCommit(next);
-        }}
-      />
-    </div>
-  );
-}
-function UsageRow({
-  title,
-  value,
-  limit,
-}: {
-  title: string;
-  value: number;
-  limit: number;
-}) {
-  return (
-    <div className="settings-usage">
-      <div>
-        <strong>{title}</strong>
-        <span>
-          {value} of {limit}
-        </span>
-      </div>
-      <i>
-        <b style={{ width: `${Math.min(100, (value / limit) * 100)}%` }} />
-      </i>
-    </div>
-  );
-}
 const FEATURE_COPY: Partial<
   Record<
     SettingsPageId,
@@ -4298,12 +3946,6 @@ function formatDate(value: string) {
     month: "short",
     day: "numeric",
   }).format(new Date(value));
-}
-function currency(cents: number) {
-  return new Intl.NumberFormat(document.documentElement.lang || "en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(cents / 100);
 }
 function slug(value: string) {
   return value

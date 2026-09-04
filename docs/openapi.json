@@ -7629,26 +7629,6 @@
         "x-flow-source": "main.go"
       }
     },
-    "/api/paid-subscription": {
-      "get": {
-        "operationId": "get_paid_subscription",
-        "tags": [
-          "paid-subscription"
-        ],
-        "summary": "GET /api/paid-subscription",
-        "responses": {
-          "default": {
-            "description": "Flow API response. See the domain model documentation for resource fields.",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        },
-        "x-flow-source": "main.go"
-      }
-    },
     "/api/posts": {
       "get": {
         "operationId": "get_posts",
@@ -11296,64 +11276,6 @@
             }
           }
         ],
-        "responses": {
-          "default": {
-            "description": "Flow API response. See the domain model documentation for resource fields.",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        },
-        "x-flow-source": "main.go"
-      }
-    },
-    "/api/usage": {
-      "get": {
-        "operationId": "get_usage",
-        "tags": [
-          "usage"
-        ],
-        "summary": "GET /api/usage",
-        "responses": {
-          "default": {
-            "description": "Flow API response. See the domain model documentation for resource fields.",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        },
-        "x-flow-source": "main.go"
-      }
-    },
-    "/api/usage-alerts": {
-      "get": {
-        "operationId": "get_usage_alerts",
-        "tags": [
-          "usage-alerts"
-        ],
-        "summary": "GET /api/usage-alerts",
-        "responses": {
-          "default": {
-            "description": "Flow API response. See the domain model documentation for resource fields.",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        },
-        "x-flow-source": "main.go"
-      },
-      "put": {
-        "operationId": "put_usage_alerts",
-        "tags": [
-          "usage-alerts"
-        ],
-        "summary": "PUT /api/usage-alerts",
         "responses": {
           "default": {
             "description": "Flow API response. See the domain model documentation for resource fields.",

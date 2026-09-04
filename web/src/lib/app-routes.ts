@@ -73,8 +73,6 @@ export type SettingsPageId =
   | "audit-log"
   | "api"
   | "applications"
-  | "billing"
-  | "usage"
   | "import-export"
   | "workflows"
   | "team";
@@ -1540,8 +1538,6 @@ const SETTINGS_PAGES = new Set<SettingsPageId>([
   "audit-log",
   "api",
   "applications",
-  "billing",
-  "usage",
   "import-export",
   "workflows",
 ]);

@@ -112,7 +112,6 @@ export function translateToChinese(source: string): string {
     [/^(\d+) warnings?$/, count => `${count} 条警告`],
     [/^(\d+) imported$/, count => `已导入 ${count} 条`],
     [/^(\d+) imported · (\d+) warnings?$/, (imported, warnings) => `已导入 ${imported} 条 · ${warnings} 条警告`],
-    [/^aiCredits: (\d+) \/ (\d+)$/, (used, total) => `AI 额度：${used} / ${total}`],
     [/^(\d+) projects? · (\d+) issues?$/, (projects, issues) => `${projects} 个项目 · ${issues} 个事项`],
     [/^(\d+) (seconds?|minutes?|hours?|days?|weeks?|months?|years?)$/, (count, unit) => `${count}${durationUnit(unit)}`],
     [/^(\d+) weekdays? left$/, count => `剩余 ${count} 个工作日`],

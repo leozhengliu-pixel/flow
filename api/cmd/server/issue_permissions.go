@@ -28,7 +28,7 @@ func issuePermissionRank(role string) int {
 // inherit permissions from their parent, while team membership still governs
 // the normal visibility of public and private team issues.
 func issueRole(s *server, data domain.Bootstrap, issue domain.Issue) string {
-	if s.authDisabled || issue.Creator.ID == data.Viewer.ID || (workspaceAdminRole(data.ViewerRole) && !strings.EqualFold(data.WorkspaceSettings.Plan, "enterprise")) {
+	if s.authDisabled || issue.Creator.ID == data.Viewer.ID || workspaceAdminRole(data.ViewerRole) {
 		return "owner"
 	}
 	if inheritedTeamOwner(data, issue.Team.ID, data.Viewer.ID) {

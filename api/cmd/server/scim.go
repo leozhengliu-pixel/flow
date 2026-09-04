@@ -70,10 +70,6 @@ func (s *server) createSCIMToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := s.workspaceData(r)
-	if !strings.EqualFold(data.WorkspaceSettings.Plan, "enterprise") {
-		writeError(w, http.StatusForbidden, "SCIM provisioning requires an Enterprise workspace")
-		return
-	}
 	item, err := s.store.CreateSCIMToken(r.Context(), data.Workspace.ID, input.Name)
 	if err == nil {
 		// Token issuance enables the SCIM surface for this workspace. The
@@ -132,10 +128,6 @@ func (s *server) authenticateSCIMRequest(w http.ResponseWriter, r *http.Request)
 	}
 	if !data.WorkspaceSettings.SCIMEnabled {
 		writeError(w, http.StatusForbidden, "SCIM provisioning is disabled")
-		return "", "", false
-	}
-	if !strings.EqualFold(data.WorkspaceSettings.Plan, "enterprise") {
-		writeError(w, http.StatusForbidden, "SCIM provisioning requires an Enterprise workspace")
 		return "", "", false
 	}
 	return workspaceKey, workspaceID, true
