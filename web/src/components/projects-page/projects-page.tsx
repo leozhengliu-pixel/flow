@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import type { Initiative, Invitation, IssueLabel, LabelGroup, PersonalAgentSkill, Project, ProjectDependencyRelationInput, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
+import type { Initiative, Invitation, IssueLabel, LabelGroup, PersonalAgentSkill, Presence, Project, ProjectDependencyRelationInput, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
 import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from '@/components/issue-explorer/saved-view-editor'
 import { NewProjectDialog, type NewProjectDraft, type NewProjectMilestoneDraft } from './new-project-dialog'
 import { projectPeopleChoices } from './project-people'
@@ -60,6 +60,7 @@ export type ProjectsPageProps = {
   users: User[]
   teams: Team[]
   invitations?: Invitation[]
+  presence?: Presence[]
   agentSkills?: PersonalAgentSkill[]
   labels?: IssueLabel[]
   labelGroups?: LabelGroup[]
@@ -121,6 +122,7 @@ export function ProjectsPage({
   users,
   teams,
   invitations = [],
+  presence = [],
   agentSkills = [],
   labels = [],
   labelGroups = [],
@@ -173,7 +175,13 @@ export function ProjectsPage({
   initialTemplateId,
 }: ProjectsPageProps) {
   const sourceView = savedView ?? duplicateFrom
-  const peopleChoices = useMemo(() => projectPeopleChoices(users, invitations), [invitations, users])
+  const currentViewerId = viewerId ?? viewer?.id
+  const onlineUserIds = useMemo(() => {
+    const ids = new Set(presence.map(item => item.user.id))
+    if (currentViewerId) ids.add(currentViewerId)
+    return ids
+  }, [currentViewerId, presence])
+  const peopleChoices = useMemo(() => projectPeopleChoices(users, invitations, onlineUserIds), [invitations, onlineUserIds, users])
   const scopedProjects = useMemo(() => scopeTeamId ? projects.filter(project => project.teamIds.includes(scopeTeamId)) : projects, [projects, scopeTeamId])
   const items = useMemo(() => scopedProjects.map(project => toPageItem(project, projectHref?.(project), teams, projectUpdates[project.id]?.[0], initiatives, labels, labelGroups)), [initiatives, labelGroups, labels, projectHref, projectUpdates, scopedProjects, teams])
   const [sidebarOpen, setSidebarOpen] = useState(false)

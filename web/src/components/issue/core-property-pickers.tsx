@@ -50,6 +50,7 @@ export type PersonPickerOption = {
   avatarUrl?: string
   color?: string
   active?: boolean
+  online?: boolean
   invited?: boolean
   disabled?: boolean
   end?: string
@@ -62,7 +63,7 @@ export type PersonPickerOption = {
 export function PersonHoverPreview({ person, projectName, workspaceName }: { person: PersonPickerOption; projectName?: string; workspaceName: string }) {
   const { t } = useI18n()
   const invited = person.invited || person.end === 'Invited'
-  const online = !invited && person.active !== false
+  const online = !invited && person.active !== false && person.online === true
   return <div className="assignee-hover-preview">
     <header><PersonAvatar person={person}/><div><strong data-i18n-ignore>{person.label}</strong><span data-i18n-ignore>{person.name || person.email || person.label}</span></div></header>
     <div className="assignee-hover-preview__details">
@@ -160,7 +161,7 @@ function avatarColor(value: string) {
   return colors[[...value].reduce((sum, character) => sum + character.charCodeAt(0), 0) % colors.length]
 }
 
-export function AssigneePicker({ value, users, onChange, hoverContext }: { value?: User; users: User[]; onChange: (id: string) => void | Promise<void>; hoverContext?: { member?: WorkspaceMember; workspaceName: string; project?: ProjectSummary } }) {
+export function AssigneePicker({ value, users, onChange, hoverContext }: { value?: User; users: User[]; onChange: (id: string) => void | Promise<void>; hoverContext?: { member?: WorkspaceMember; online?: boolean; workspaceName: string; project?: ProjectSummary } }) {
   return <div className="core-property-picker"><PersonPicker
     ariaLabel={`Change assignee. ${value ? `${value.displayName} is assigned` : 'Currently no one is assigned.'}`}
     emptyOptionLabel="No assignee"
