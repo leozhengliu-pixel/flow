@@ -29,8 +29,22 @@ export interface MyIssuesRowPropertyOptions {
   cycle?: MyIssuesContextOption[]
 }
 
+/** Values inherited from the group where an issue is being created. */
+export interface MyIssuesCreateContext {
+  teamId?: string
+  stateId?: string
+  priority?: 0 | 1 | 2 | 3 | 4
+  assigneeId?: string
+  projectId?: string
+  projectMilestoneId?: string
+  cycleId?: string
+  labelIds?: string[]
+}
+
 export interface MyIssuesRowData {
   id: string
+  teamId?: string
+  teamName?: string
   identifier: string
   title: string
   description?: string
@@ -45,6 +59,7 @@ export interface MyIssuesRowData {
   creatorName?: string
   isAssignedToViewer?: boolean
   cycleId?: string
+  cycleName?: string
   addedToCycle?: string
   agentSessionId?: string
   suggestedLabelIds?: string[]
@@ -89,7 +104,7 @@ export interface MyIssuesRowData {
   viewMatch?: boolean
 }
 
-export interface MyIssuesGroupData { id: string; label: string; stateType?: MyIssuesStateType; state?: MyIssuesRowData['state']; issues: MyIssuesRowData[] }
+export interface MyIssuesGroupData { id: string; label: string; stateType?: MyIssuesStateType; state?: MyIssuesRowData['state']; createContext?: MyIssuesCreateContext; issues: MyIssuesRowData[] }
 
 export interface MyIssuesListProps {
   groups: MyIssuesGroupData[]

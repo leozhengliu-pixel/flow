@@ -16,6 +16,7 @@ import { createDraft, deleteDraft, updateDraft } from '@/lib/api'
 import { labelsForResource, toggleGroupedLabelIds } from '@/lib/labels'
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
 import { Toggle } from '@/components/ui/toggle'
+import type { MyIssuesCreateContext } from '@/components/my-issues/my-issues-list'
 
 export interface CreateIssueInput {
   title: string
@@ -46,6 +47,7 @@ export interface CreateIssueDialogProps {
   initialProjectMilestoneId?: string
   initialTeamId?: string
   initialTemplateId?: string
+  initialContext?: MyIssuesCreateContext
   draftId?: string
   onOpenChange: (open: boolean) => void
   onCreate: (input: CreateIssueInput) => Promise<Issue>
@@ -75,20 +77,22 @@ interface StoredIssueDraft {
   updatedAt?: string
 }
 
-export function CreateIssueDialog({ data, draftId, initialProjectId, initialProjectMilestoneId, initialTeamId, initialStateId, initialTemplateId, onCreate, onDraftDeleted, onDraftSaved, onOpenChange, onUpload, open }: CreateIssueDialogProps) {
-  const [teamId, setTeamId] = useState(initialTeamId || data.teams[0]?.id || '')
+export function CreateIssueDialog({ data, draftId, initialContext, initialProjectId, initialProjectMilestoneId, initialTeamId, initialStateId, initialTemplateId, onCreate, onDraftDeleted, onDraftSaved, onOpenChange, onUpload, open }: CreateIssueDialogProps) {
+  const requestedTeamId = initialContext?.teamId ?? initialTeamId
+  const requestedStateId = initialContext?.stateId ?? initialStateId
+  const [teamId, setTeamId] = useState(requestedTeamId || data.teams[0]?.id || '')
   const availableStates = useMemo(() => {
     const specific = data.states.some(state => state.teamId === teamId)
     const states = data.states.filter(state => specific ? state.teamId === teamId : !state.teamId)
     // A grouped create action may target a workspace state that is not in the
     // team's custom state set. Keep that state available so the preset is both
     // visible in the picker and sent with the create request.
-    if (initialStateId && !states.some(state => state.id === initialStateId)) {
-      const requested = data.states.find(state => state.id === initialStateId)
+    if (requestedStateId && !states.some(state => state.id === requestedStateId)) {
+      const requested = data.states.find(state => state.id === requestedStateId)
       if (requested) return [...states, requested].sort((left, right) => (left.position??0) - (right.position??0))
     }
     return [...states].sort((left, right) => (left.position??0) - (right.position??0))
-  }, [data.states, initialStateId, teamId])
+  }, [data.states, requestedStateId, teamId])
   const defaultState = useMemo(() => {
     const configured = data.teamSettings[teamId]?.defaultStateId
     return availableStates.find(state => state.id === configured)
@@ -98,15 +102,15 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
   }, [availableStates, data.teamSettings, teamId])
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState<DescriptionSnapshot | null>(null)
-  const [stateId, setStateId] = useState(defaultState.id)
-  const [priority, setPriority] = useState(0)
+  const [stateId, setStateId] = useState(requestedStateId ?? defaultState.id)
+  const [priority, setPriority] = useState<number>(initialContext?.priority ?? 0)
   const [estimate, setEstimate] = useState(0)
-  const [assigneeId, setAssigneeId] = useState(data.viewer.id)
-  const [projectId, setProjectId] = useState('')
-  const [projectMilestoneId, setProjectMilestoneId] = useState('')
-  const [cycleId, setCycleId] = useState('')
+  const [assigneeId, setAssigneeId] = useState(initialContext?.assigneeId ?? data.viewer.id)
+  const [projectId, setProjectId] = useState(initialContext?.projectId ?? '')
+  const [projectMilestoneId, setProjectMilestoneId] = useState(initialContext?.projectMilestoneId ?? '')
+  const [cycleId, setCycleId] = useState(initialContext?.cycleId ?? '')
   const [dueDate, setDueDate] = useState('')
-  const [labelIds, setLabelIds] = useState<string[]>([])
+  const [labelIds, setLabelIds] = useState<string[]>(initialContext?.labelIds ?? [])
   const [templateId, setTemplateId] = useState('')
   const [recurrence, setRecurrence] = useState<'' | 'daily' | 'weekly' | 'monthly'>('')
   const [serverDraftId, setServerDraftId] = useState('')
@@ -121,14 +125,14 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
   const titleEditorRef = useRef<Editor | null>(null)
   const descriptionEditorRef = useRef<Editor | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
-  const initializationKey = [open, draftId ?? '', initialProjectId ?? '', initialProjectMilestoneId ?? '', initialStateId ?? '', initialTeamId ?? ''].join('\u001f')
+  const initializationKey = [open, draftId ?? '', initialProjectId ?? '', initialProjectMilestoneId ?? '', requestedStateId ?? '', requestedTeamId ?? '', JSON.stringify(initialContext ?? {})].join('\u001f')
   const initializedKeyRef = useRef('')
   const draftKey = `${draftStoragePrefix}${teamId || data.teams[0]?.key || 'default'}`
   useEffect(()=>{if(!open||!initialTemplateId)return;const template=data.issueTemplates.find(item=>item.id===initialTemplateId);if(!template)return;setTemplateId(template.id);setTitle(current=>current||template.title||template.name);setStateId(template.stateId||defaultState.id);setPriority(template.priority);setAssigneeId(template.assigneeId??data.viewer.id);setProjectId(template.projectId??'');setLabelIds(template.labelIds);const templateBody=template.body;if(templateBody)requestAnimationFrame(()=>descriptionEditorRef.current?.commands.setContent(templateBody,{contentType:'markdown'}))},[data.issueTemplates,data.viewer.id,defaultState.id,initialTemplateId,open])
   const hasDraftContent = Boolean(title.trim() || description?.markdown.trim() || files.length)
 
   useEffect(() => {
-    if (!open || draftId || !hasDraftContent) return
+    if (!open || (draftId && !draftId.startsWith('local:')) || !hasDraftContent) return
     const timer = window.setTimeout(() => writeStoredDraft(draftKey, {
       title, description, stateId, priority, estimate, assigneeId, projectId,
       projectMilestoneId, cycleId, dueDate, labelIds, templateId, recurrence, teamId,
@@ -143,12 +147,12 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
     }
     if (initializedKeyRef.current === initializationKey) return
     initializedKeyRef.current = initializationKey
-    const draft = draftId ? null : readStoredDraft(draftKey)
-    const remoteDraft = draftId
+    // A new issue action must always start clean. Drafts are restored only when
+    // the user explicitly resumes one from the drafts page (local or remote).
+    const draft = draftId?.startsWith('local:') ? readStoredDraft(draftKey) : null
+    const remoteDraft = draftId && !draftId.startsWith('local:')
       ? data.drafts.find(item => item.id === draftId)
-      : data.drafts
-        .filter(item => item.type === 'issue' && item.metadata?.teamId === teamId)
-        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0]
+      : undefined
     const remote = remoteDraft?.metadata as Partial<StoredIssueDraft> | undefined
     const requestedProject = initialProjectId ? data.projects.find(project => project.id === initialProjectId) : undefined
     const requestedMilestone = requestedProject?.milestones.find(milestone => milestone.id === initialProjectMilestoneId)
@@ -157,23 +161,23 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
       setTeamId(restored.teamId || (remoteDraft?.metadata?.teamId as string | undefined) || data.teams[0]?.id || '')
       setTitle(restored.title ?? remoteDraft?.title ?? '')
       setDescription(restored.description ?? null)
-      setStateId(restored.stateId || defaultState.id)
-      setPriority(restored.priority ?? 0)
+      setStateId(restored.stateId || requestedStateId || defaultState.id)
+      setPriority(restored.priority ?? initialContext?.priority ?? 0)
       setEstimate(restored.estimate ?? 0)
-      setAssigneeId(restored.assigneeId ?? data.viewer.id)
-      setProjectId(restored.projectId ?? '')
-      setProjectMilestoneId(restored.projectMilestoneId ?? '')
-      setCycleId(restored.cycleId ?? '')
+      setAssigneeId(restored.assigneeId ?? initialContext?.assigneeId ?? data.viewer.id)
+      setProjectId(restored.projectId ?? initialContext?.projectId ?? '')
+      setProjectMilestoneId(restored.projectMilestoneId ?? initialContext?.projectMilestoneId ?? '')
+      setCycleId(restored.cycleId ?? initialContext?.cycleId ?? '')
       setDueDate(restored.dueDate ?? '')
-      setLabelIds(restored.labelIds ?? [])
+      setLabelIds(restored.labelIds ?? initialContext?.labelIds ?? [])
       setTemplateId(restored.templateId ?? '')
       setRecurrence(restored.recurrence ?? '')
       setServerDraftId(remoteDraft?.id ?? '')
     } else {
-      setTitle(''); setDescription(null); setFiles([]); setError(undefined); setServerDraftId(''); setTeamId(initialTeamId || data.teams[0]?.id || '')
-      setStateId(defaultState.id); setPriority(0); setEstimate(0); setAssigneeId(data.viewer.id); setProjectId(''); setProjectMilestoneId(''); setCycleId(''); setDueDate(''); setLabelIds([]); setTemplateId(''); setRecurrence(''); setCreateMore(false); setExpanded(false)
+      setTitle(''); setDescription(null); setFiles([]); setError(undefined); setServerDraftId(''); setTeamId(requestedTeamId || data.teams[0]?.id || '')
+      setStateId(requestedStateId || defaultState.id); setPriority(initialContext?.priority ?? 0); setEstimate(0); setAssigneeId(initialContext?.assigneeId ?? data.viewer.id); setProjectId(initialContext?.projectId ?? ''); setProjectMilestoneId(initialContext?.projectMilestoneId ?? ''); setCycleId(initialContext?.cycleId ?? ''); setDueDate(''); setLabelIds(initialContext?.labelIds ?? []); setTemplateId(''); setRecurrence(''); setCreateMore(false); setExpanded(false)
       titleEditorRef.current?.commands.clearContent(); descriptionEditorRef.current?.commands.clearContent()
-      if (initialStateId && availableStates.some(state => state.id === initialStateId)) setStateId(initialStateId)
+      if (requestedStateId && availableStates.some(state => state.id === requestedStateId)) setStateId(requestedStateId)
     }
     if (requestedProject) {
       setProjectId(requestedProject.id)
@@ -181,14 +185,14 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
     }
     const frame = requestAnimationFrame(() => requestAnimationFrame(() => titleEditorRef.current?.commands.focus('end')))
     return () => cancelAnimationFrame(frame)
-  }, [availableStates, data.drafts, data.projects, data.teams, data.viewer.id, defaultState.id, draftId, draftKey, initialProjectId, initialProjectMilestoneId, initialStateId, initialTeamId, initializationKey, open, teamId])
+  }, [availableStates, data.drafts, data.projects, data.teams, data.viewer.id, defaultState.id, draftId, draftKey, initialContext, initialProjectId, initialProjectMilestoneId, initializationKey, open, requestedStateId, requestedTeamId, teamId])
 
   useEffect(() => { if (open && !availableStates.some(state => state.id === stateId)) setStateId(defaultState.id) }, [availableStates, defaultState.id, open, stateId])
 
   useEffect(() => {
-    if (!open || draftId || initialTemplateId || !initialStateId) return
-    if (availableStates.some(state => state.id === initialStateId)) setStateId(initialStateId)
-  }, [availableStates, draftId, initialStateId, initialTemplateId, open])
+    if (!open || draftId || initialTemplateId || !requestedStateId) return
+    if (availableStates.some(state => state.id === requestedStateId)) setStateId(requestedStateId)
+  }, [availableStates, draftId, initialTemplateId, open, requestedStateId])
 
   const state = availableStates.find(item => item.id === stateId) ?? defaultState
   const team = data.teams.find(item => item.id === teamId) ?? data.teams[0]
@@ -366,7 +370,7 @@ export function CreateIssueDialog({ data, draftId, initialProjectId, initialProj
             <button type="button" className={styles.attachButton} aria-label="Attach images, files, or videos" onClick={() => fileRef.current?.click()}><Paperclip/></button>
             <input ref={fileRef} type="file" hidden multiple onChange={addFiles}/>
             <label className={styles.createMore}><Toggle checked={createMore} label="Create more" onChange={setCreateMore}/><span>Create more</span></label>
-            <button className={styles.submit} type="submit" disabled={!title.trim() || saving}>{saving ? 'Creating…' : 'Create issue'}</button>
+            <button className={styles.submit} type="submit" disabled={saving}>{saving ? 'Creating…' : 'Create issue'}</button>
           </footer>
         </form>
       </Dialog.Content>
