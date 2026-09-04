@@ -48,7 +48,7 @@
 .personal-security-section:has(.personal-security-section-action) .personal-security-empty-row:after{background:transparent}
 
 /* Optional explicit rows used by the security implementation. */
-.personal-security-device-row{min-height:64px;display:grid!important;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:12px;padding:16px!important}
+.personal-security-device-row{min-height:65px;display:grid!important;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:12px;padding:14px 16px!important}
 .personal-security-device-row>.personal-security-device-icon{width:28px;height:28px;display:grid;place-items:center;border-radius:7px;background:var(--security-hover);color:var(--security-copy)}
 .personal-security-device-row>.personal-security-device-icon svg{width:14px;height:14px;stroke-width:1.65}
 .personal-security-device-row .personal-browser-icon{fill:currentColor;stroke:none}
@@ -73,7 +73,7 @@
 .personal-security-app-row>.personal-security-app-icon{width:28px;height:28px;display:grid;place-items:center;border-radius:7px;background:var(--security-hover);color:var(--security-copy)}
 .personal-security-app-row>.personal-security-app-icon svg{width:14px;height:14px}
 .personal-security-app-row:hover{background:var(--security-hover)}
-.personal-security-api-key-row{min-height:64px;display:grid!important;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:12px;padding:16px!important}
+.personal-security-api-key-row{min-height:65px;display:grid!important;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:12px;padding:14px 16px!important}
 .personal-security-api-key-row>.settings-row-icon{width:28px;min-width:28px;height:28px;border-radius:7px;background:var(--security-hover);color:var(--security-copy)!important}
 .personal-security-api-key-row>.settings-row-icon svg{width:14px;height:14px}
 .personal-security-api-key-row .personal-security-key-actions{display:flex;align-items:center;gap:4px;margin-left:auto;opacity:0;pointer-events:none;transition:opacity .15s ease}
@@ -112,12 +112,13 @@
   .personal-security-section .settings-row:not(:last-child):after{left:12px;right:12px}
   .personal-security-section-action{height:64px;margin-top:-64px;padding:0 12px}
   .personal-security-section .personal-section-action{position:absolute;right:0;top:-4px;margin:0}
-  .personal-security-device-row{min-height:64px;grid-template-columns:28px minmax(0,1fr) auto;padding:16px 12px!important}
+  .personal-security-device-row{min-height:65px;grid-template-columns:28px minmax(0,1fr) auto;padding:14px 12px!important}
   .personal-security-empty-row{min-height:64px;padding:0 12px}
   .personal-security-session-group>.personal-security-group-header{height:48px;padding:0 12px}
   .personal-security-app-row{min-height:64px;padding:16px 12px}
-  .personal-security-api-key-row{min-height:64px;grid-template-columns:28px minmax(0,1fr) auto;padding:16px 12px!important}
+  .personal-security-api-key-row{min-height:65px;grid-template-columns:28px minmax(0,1fr) auto;padding:14px 12px!important}
   .personal-security-device-row .settings-control{opacity:1;pointer-events:auto}
+  .personal-security-api-key-row .personal-security-key-actions{opacity:1;pointer-events:auto}
 }
 
 /* API-key creation is a dedicated settings route rather than a modal. */
@@ -228,9 +229,9 @@
   .personal-api-key-header h1{font-size:22px;line-height:29px}
   .personal-api-key-header p{font-size:13px;line-height:19px}
   .personal-api-key-card{min-height:433px;padding:16px 12px}
-  .personal-api-key-scope-list{grid-template-columns:112px minmax(0,1fr);padding-left:8px}
-  .personal-api-key-scope>span{grid-template-columns:112px minmax(0,1fr);margin-left:24px}
-  .personal-api-key-scope small{white-space:normal}
+  .personal-api-key-scope-list{padding-left:8px}
+  .personal-api-key-scope{height:auto;min-height:28px;grid-template-columns:16px 104px minmax(0,1fr);align-items:start;padding:4px 0}
+  .personal-api-key-scope small{white-space:normal;overflow:visible}
   .personal-api-key-footer{position:sticky;bottom:8px;margin-left:-4px;margin-right:-4px;padding:8px 4px;border:.5px solid var(--theme-border);border-radius:9999px;background:var(--theme-surface-1);box-shadow:var(--shadow)}
 }
 
