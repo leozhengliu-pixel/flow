@@ -858,6 +858,28 @@ func TestRealtimeHubWorkspaceIsolationAndPresence(t *testing.T) {
 	}
 }
 
+func TestRealtimePresenceUsesDevelopmentViewerIdentity(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	presence := requestJSON[[]domain.Presence](t, handler, http.MethodPost, "/api/realtime/presence", map[string]any{
+		"clientId": "development-client",
+		"route":    "/test-workspace/projects",
+	}, http.StatusOK)
+	item := slices.IndexFunc(presence, func(value domain.Presence) bool { return value.ClientID == "development-client" })
+	if item < 0 || presence[item].User.ID != bootstrap.Viewer.ID {
+		t.Fatalf("development presence user = %#v, want viewer %q", presence, bootstrap.Viewer.ID)
+	}
+	requestJSON[[]domain.Presence](t, handler, http.MethodPost, "/api/realtime/presence", map[string]any{
+		"clientId": "development-client",
+		"active":   false,
+	}, http.StatusOK)
+}
+
 func TestPulsePreferencesViewsAndUpdateAttachments(t *testing.T) {
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {

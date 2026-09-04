@@ -3141,6 +3141,7 @@ function App() {
         key={issue.id}
         issue={issue}
         data={data!}
+        workspacePresence={realtime.presence}
         onClose={onClose}
         onNavigateIssue={openIssue}
         onUpdate={async (input) => {
@@ -4801,6 +4802,7 @@ function App() {
               users={data.users}
               labels={data.labels}
               labelGroups={data.labelGroups}
+              presence={realtime.presence}
               viewer={data.viewer}
               savedViews={availableSavedViews.filter(
                 (view) => view.resource === "initiativeProjects",
@@ -4858,6 +4860,7 @@ function App() {
         {page === "inbox" && (
           <InboxAppPage
             data={data}
+            presence={realtime.presence}
             onReload={load}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
             onOpenIssue={openIssue}
@@ -5363,6 +5366,7 @@ function App() {
                 users={data.users}
                 teams={data.teams}
                 invitations={data.invitations}
+                presence={realtime.presence}
                 agentSkills={data.agentSkills}
                 labels={data.labels}
                 labelGroups={data.labelGroups}
@@ -5483,6 +5487,7 @@ function App() {
                 users={data.users}
                 teams={data.teams}
                 invitations={data.invitations}
+                presence={realtime.presence}
                 agentSkills={data.agentSkills}
                 labels={data.labels}
                 labelGroups={data.labelGroups}
@@ -5727,6 +5732,7 @@ function App() {
               issue={selectedIssue}
               data={data}
               full
+              workspacePresence={realtime.presence}
               issueOptionsActions={selectedIssueOptionsActions}
               presence={realtime.presence.filter(
                 (item) =>

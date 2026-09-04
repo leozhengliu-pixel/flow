@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import type { ActivityEvent, BootstrapData, CodeReview, Issue, IssueRelationType, IssueUpdateInput, Notification, Project, User } from '@/types/flow'
+import type { ActivityEvent, BootstrapData, CodeReview, Issue, IssueRelationType, IssueUpdateInput, Notification, Presence, Project, User } from '@/types/flow'
 import { DetailPane } from '@/components/detail/detail-pane'
 import { NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import type { SubIssueInput } from '@/components/issue/sub-issue-editor'
@@ -36,6 +36,7 @@ interface InboxProjection extends InboxNotificationRowData {
 
 export interface InboxAppPageProps {
   data: BootstrapData
+  presence?: Presence[]
   onReload: () => Promise<void> | void
   onOpenIssue: (issue: Issue) => void
   onOpenProject?: (project: Project) => void
@@ -57,7 +58,7 @@ export interface InboxAppPageProps {
   onOpenSidebar?: () => void
 }
 
-export function InboxAppPage({ data, onReload, onOpenIssue, onOpenProject, onOpenReview, onSubscriberChange, onUpdateIssue, onDeleteIssue, onCreateRelation, onDeleteRelation, onCreateSubIssue, onReactIssue, onCreateComment, onEditComment, onDeleteComment, onReactComment, onUploadAttachment, onDeleteAttachment, onCopyIssueLink, onOpenSidebar }: InboxAppPageProps) {
+export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpenProject, onOpenReview, onSubscriberChange, onUpdateIssue, onDeleteIssue, onCreateRelation, onDeleteRelation, onCreateSubIssue, onReactIssue, onCreateComment, onEditComment, onDeleteComment, onReactComment, onUploadAttachment, onDeleteAttachment, onCopyIssueLink, onOpenSidebar }: InboxAppPageProps) {
   const source = useMemo(() => projectInbox(data), [data])
   const issueById = useMemo(() => new Map(data.issues.map(issue => [issue.id, issue])), [data.issues])
   const [notifications, setNotifications] = useState<InboxProjection[]>(source)
@@ -212,6 +213,8 @@ export function InboxAppPage({ data, onReload, onOpenIssue, onOpenProject, onOpe
           key={issue.id}
           issue={issue}
           data={data}
+          presence={presence}
+          workspacePresence={presence}
           comments={data.comments[issue.id] ?? []}
           activities={data.activities[issue.id] ?? []}
           embedded
