@@ -77,8 +77,4 @@ func TestParityCoreEntityLifecycles(t *testing.T) {
 	if activity.ID == "" || progress.Progress != 50 {
 		t.Fatal("agent/AI lifecycle failed")
 	}
-	alert := requestJSON[domain.UsageAlert](t, handler, http.MethodPut, "/api/usage-alerts", map[string]any{"type": "aiCredits", "threshold": 100, "current": 110}, http.StatusOK)
-	if alert.Status != "active" {
-		t.Fatalf("usage alert=%#v", alert)
-	}
 }

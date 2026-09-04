@@ -23,7 +23,6 @@ function props(): ComponentProps<typeof SettingsPage> {
     data: makeBootstrap({
       viewerRole: "admin",
       workspaceSettings: {
-        plan: "enterprise",
         fiscalMonth: "January",
         defaultHomeView: "agent",
         welcomeMessage: "",

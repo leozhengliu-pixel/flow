@@ -27,7 +27,6 @@ func TestSCIMProvisioningSupportsExternalIdentifiersWithoutEmail(t *testing.T) {
 	handler, repository := enterpriseTestServer(t)
 	seed, _ := repository.BootstrapFor("test-workspace")
 	if err := repository.MutateWorkspace(t.Context(), "test-workspace", "scim.test.configured", "workspace", nil, func(data *domain.Bootstrap) error {
-		data.WorkspaceSettings.Plan = "enterprise"
 		data.WorkspaceSettings.SCIMRoleMapping = map[string]string{"employee": "guest"}
 		data.WorkspaceSettings.SCIMTeamGroupMapping = map[string]string{seed.Teams[0].ID: "engineering"}
 		data.WorkspaceSettings.SCIMDefaultRole = "member"
@@ -136,7 +135,6 @@ func TestSCIMRoleGroupsUseWorkspaceSettingsWithoutBrowserSession(t *testing.T) {
 	admin := authClient(t)
 	authRequest[domain.AuthSession](t, admin, http.MethodPost, httpServer.URL+"/api/auth/login", map[string]string{"email": "admin@example.test", "password": "test-password"}, "", http.StatusOK)
 	if err := repository.MutateWorkspace(t.Context(), "test-workspace", "scim.test.authenticated", "workspace", nil, func(data *domain.Bootstrap) error {
-		data.WorkspaceSettings.Plan = "enterprise"
 		data.WorkspaceSettings.SCIMRoleGroups = map[string]string{"owner": "Owners"}
 		return nil
 	}); err != nil {

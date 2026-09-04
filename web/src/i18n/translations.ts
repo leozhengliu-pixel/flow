@@ -613,24 +613,6 @@ export const zhCN: Record<string, string> = {
   "Issue count by slice": "按切片统计事项数量",
   "Export ready": "导出已就绪",
   "Download latest": "下载最新导出",
-  "Track usage, manage credits, and set spend limits across your workspace":
-    "跟踪用量、管理额度并设置工作区消费限制",
-  "Usage alert": "用量提醒",
-  "Workspace credits": "工作区额度",
-  available: "可用",
-  "Automatically top up credits when your balance runs low":
-    "余额不足时自动补充额度",
-  "Spend limits": "消费限制",
-  "Set workspace, user, and loop limits": "设置工作区、用户和 Loop 限制",
-  Analytics: "分析",
-  "Previous period": "上一周期",
-  "Next period": "下一周期",
-  "total spend in this period": "本周期总消费",
-  "Automatic credit reload": "自动充值",
-  "File storage (MB)": "文件存储（MB）",
-  "No usage this week": "本周暂无用量",
-  seats: "席位",
-  "Cancels at period end": "周期结束时取消",
   "Create a dashboard": "创建仪表板",
   "Combine live issue, project, cycle, and SLA metrics.":
     "组合实时事项、项目、周期和 SLA 指标。",
@@ -769,15 +751,6 @@ export const zhCN: Record<string, string> = {
   "Endpoint URL": "端点 URL",
   "Redirect URIs": "重定向 URI",
   "Managed locally": "本地管理",
-  "Billing provider not configured": "尚未配置计费服务商",
-  "Plan checkout and invoices require a payment provider.":
-    "套餐结算和发票功能需要配置支付服务商。",
-  "Loading usage…": "正在加载用量…",
-  "AI credits": "AI 额度",
-  "Automatic reload": "自动充值",
-  "Reload threshold": "充值阈值",
-  "Reload amount": "充值金额",
-  "Plan usage": "套餐用量",
   "Set response and resolution targets for issues.":
     "为事项设置响应和解决目标。",
   "Configure reminders and health update cadence.":
@@ -1259,8 +1232,6 @@ export const zhCN: Record<string, string> = {
   "Label color": "标签颜色",
   "Restore team": "恢复团队",
   "Restore…": "恢复…",
-  Payments: "支付",
-  aiCredits: "AI 额度",
   "Docs↗": "文档↗",
   "Connected as": "连接身份",
   "Could not save team settings": "无法保存团队设置",
@@ -1288,9 +1259,6 @@ export const zhCN: Record<string, string> = {
     "禁止访客与工作区中的智能助手交互",
   "Restrict agent invocation to full workspace members only":
     "仅允许正式工作区成员调用智能助手",
-  "Improve AI features by sharing usage data": "通过共享使用数据改进 AI 功能",
-  "Feedback on AI results is used to enhance functionality":
-    "对 AI 结果的反馈将用于改进功能",
   "Enable Flow Agent web search": "启用 Flow Agent 网页搜索",
   "Allow Flow Agent to search the public web for current information and cite sources":
     "允许 Flow Agent 搜索公开网页中的最新信息并引用来源",
@@ -1709,9 +1677,6 @@ export const zhCN: Record<string, string> = {
   "Allow guest accounts": "允许访客账户",
   "Require two-factor authentication": "要求双重身份验证",
   "Session duration": "会话时长",
-  "Billing email": "账单邮箱",
-  "Current plan": "当前套餐",
-  Upgrade: "升级",
   "Create an API key to access the Flow API.": "创建 API 密钥以访问 Flow API。",
   "Create key": "创建密钥",
   "Create an OAuth application to integrate with Flow.":
@@ -2003,15 +1968,6 @@ export const zhCN: Record<string, string> = {
   "Slack community": "Slack 社区",
   "Coding sessions on mobile": "移动端编码会话",
   "Team initiatives": "团队目标",
-  "Free plan": "免费套餐",
-  "Basic plan": "基础套餐",
-  "Your workspace is on a free plan": "你的工作区正在使用免费套餐",
-  "Your workspace is on the free plan": "你的工作区正在使用免费套餐",
-  "Upgrade to Basic": "升级到基础套餐",
-  "Upgrade to keep creating issues and access more features.":
-    "升级后可继续创建事项并使用更多功能。",
-  "See all plans": "查看所有套餐",
-  "$10 per user/month, billed yearly": "每位用户每月 10 美元，按年计费",
   Direction: "方向",
   "Copy team link": "复制团队链接",
   "Create new customer": "创建新客户",
@@ -2143,9 +2099,6 @@ export const zhCN: Record<string, string> = {
   "Import &amp; export": "导入与导出",
   Invite: "邀请",
   "Invite teammates to": "邀请队友加入",
-  Invoices: "账单发票",
-  "Invoices will appear here after your first paid billing period.":
-    "首次付费账期后，发票会显示在这里。",
   "Issue estimation": "事项估算",
   "Label name": "标签名称",
   "Lead reminders": "负责人提醒",
@@ -2160,7 +2113,6 @@ export const zhCN: Record<string, string> = {
   "No SLAs configured": "尚未配置 SLA",
   "No applications": "没有应用",
   "No expectation for updates": "不要求更新",
-  "No invoices yet": "暂无发票",
   "No issue templates": "没有事项模板",
   "No members found": "未找到成员",
   "No personal API keys": "没有个人 API 密钥",
@@ -2342,7 +2294,6 @@ export const zhCN: Record<string, string> = {
   "Back to app": "返回应用",
   "Back to Flow": "返回 Flow",
   Backlog: "待规划",
-  Billing: "账单",
   Block: "阻塞",
   Blocked: "被阻塞",
   Blocking: "正在阻塞",
@@ -3069,7 +3020,6 @@ export const zhCN: Record<string, string> = {
   "Update password": "更新密码",
   Updates: "更新",
   Urgent: "紧急",
-  "Usage & limits": "用量与限制",
   Username: "用户名",
   "Verify email": "验证邮箱",
   "Verify your email": "验证你的邮箱",
@@ -3103,9 +3053,6 @@ export const zhCN: Record<string, string> = {
     "工作区洞察默认值需要管理员权限",
   "Automate your product development processes and operations with AI":
     "使用 AI 自动化产品研发流程与运营",
-  "Enable usage feedback": "启用使用反馈",
-  "Improve AI functionality by sharing usage feedback. Never used to train models":
-    "通过分享使用反馈改进 AI 功能，数据绝不会用于训练模型",
   "Create issues and answer questions about your workspace.":
     "创建事项并回答有关工作区的问题。",
   "Create issues and answer questions about your workspace":
@@ -3336,8 +3283,6 @@ Object.assign(zhCN, {
   "Manage teams…": "管理团队…",
   "Remove from workspace…": "从工作区移除…",
   "Workspace admin": "工作区管理员",
-  "Full control of the workspace including security, billing, and all settings":
-    "完全控制工作区，包括安全、账单及全部设置",
   "Standard workspace access with the ability to act within all public teams":
     "拥有标准工作区访问权限，可在所有公开团队中操作",
   "Access limited to specific teams, with no workspace views or features":
@@ -3500,23 +3445,6 @@ Object.assign(zhCN, {
   "Endpoint URL": "端点 URL",
   Resources: "资源",
   "All teams": "所有团队",
-  "Current workspace usage, credits, and plan limits.":
-    "当前工作区用量、额度和方案限制。",
-  "AI credits": "AI 额度",
-  "Credit balance": "额度余额",
-  "Available workspace credits": "工作区可用额度",
-  "Automatic reload": "自动充值",
-  "Add credits when the balance reaches the threshold":
-    "余额达到阈值时自动添加额度",
-  "Reload threshold": "充值阈值",
-  "Reload amount": "充值金额",
-  "Workspace spend limit": "工作区消费上限",
-  "Maximum credit spend per billing period": "每个账单周期的最大额度消费",
-  "Plan usage": "方案用量",
-  "Credit activity": "额度活动",
-  "Coding sessions": "编码会话",
-  "No usage in this period": "本周期没有用量",
-  "Credit-consuming activity will appear here.": "消耗额度的活动会显示在这里。",
   "Workspace access": "工作区访问",
   "Invite links": "邀请链接",
   "Allow members to invite people with a workspace link.":
@@ -3555,9 +3483,6 @@ Object.assign(zhCN, {
   "Prevent guests from using agents": "阻止访客使用智能助手",
   "Restrict agent sessions to full workspace members.":
     "仅允许正式工作区成员使用智能助手会话。",
-  "Share AI usage data": "共享 AI 使用数据",
-  "Share anonymized AI usage to improve workspace insights.":
-    "共享匿名 AI 使用数据以改进工作区洞察。",
   "Agent web search": "智能助手网络搜索",
   "Allow agents to search the public web.": "允许智能助手搜索公共网络。",
   "External Loop triggers": "外部 Loop 触发器",

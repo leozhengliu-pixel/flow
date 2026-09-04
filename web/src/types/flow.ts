@@ -417,7 +417,6 @@ export type NotificationCategory =
   | "reminders"
   | "loops"
   | "integrations"
-  | "billing"
   | "customerRequests"
   | "triage";
 export interface NotificationChannelPreferences {
@@ -897,7 +896,6 @@ export interface FeatureOption {
   color?: string;
 }
 export interface FeatureSettings {
-  aiUsageFeedback: boolean;
   initiativeUpdateSchedule: string;
   customerDefaultTeamId?: UUID;
   customerRevenueFormat: string;
@@ -925,8 +923,6 @@ export interface WorkspaceSettings {
   apiKeyPermission: string;
   featureFlags: Record<string, boolean>;
   featureSettings: FeatureSettings;
-  billingEmail?: string;
-  plan: string;
   updatedAt: string;
   inviteLinksEnabled?: boolean;
   googleAuthEnabled?: boolean;
@@ -936,7 +932,6 @@ export interface WorkspaceSettings {
   loopPermission?: string;
   agentGuidancePermission?: string;
   preventGuestAgents?: boolean;
-  aiUsageSharing?: boolean;
   agentWebSearch?: boolean;
   externalLoopTriggers?: boolean;
   mcpConnectorsEnabled?: boolean;
@@ -945,11 +940,6 @@ export interface WorkspaceSettings {
   restrictFileUploads?: boolean;
   reduceSupportPersonalInfo?: boolean;
   hipaaCompliance?: boolean;
-  aiCreditBalanceCents?: number;
-  aiCreditAutoReload?: boolean;
-  aiCreditReloadThresholdCents?: number;
-  aiCreditReloadAmountCents?: number;
-  aiWorkspaceSpendLimitCents?: number;
   scimEnabled?: boolean;
   scimRoleClaim?: string;
   scimRoleMapping?: Record<string, string>;
@@ -1203,28 +1193,6 @@ export interface AccountSessionInfo {
   createdAt: string;
   lastSeenAt: string;
   expiresAt: string;
-}
-export interface WorkspaceUsageEvent {
-  id: UUID;
-  feature: "coding-sessions" | "loops";
-  userId?: UUID;
-  amountCents: number;
-  createdAt: string;
-}
-export interface WorkspaceUsage {
-  plan: string;
-  members: number;
-  issues: number;
-  storageBytes: number;
-  limits: { members: number; issues: number; storageBytes: number };
-  aiCredits: {
-    balanceCents: number;
-    autoReloadEnabled: boolean;
-    autoReloadThresholdCents: number;
-    autoReloadAmountCents: number;
-    workspaceSpendLimitCents: number;
-  };
-  events: WorkspaceUsageEvent[];
 }
 export interface SLARule {
   id: UUID;
@@ -1527,28 +1495,6 @@ export interface AIPromptProgress {
   createdAt: string;
   updatedAt: string;
 }
-export interface UsageAlert {
-  id: UUID;
-  type: string;
-  threshold: number;
-  current: number;
-  status: string;
-  metadata?: Record<string, unknown>;
-  createdAt: string;
-  resolvedAt?: string;
-  archivedAt?: string;
-}
-export interface PaidSubscription {
-  id: UUID;
-  plan: string;
-  status: string;
-  seats: number;
-  currentPeriodStart: string;
-  currentPeriodEnd: string;
-  cancelAtPeriodEnd: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
 export interface InitiativeUpdate {
   id: UUID;
   initiativeId: UUID;
@@ -1650,8 +1596,6 @@ export interface BootstrapData {
   agentActivities: AgentActivity[];
   aiConversations: AIConversation[];
   aiPromptProgress: AIPromptProgress[];
-  usageAlerts: UsageAlert[];
-  paidSubscriptions: PaidSubscription[];
   settings?: Record<string, unknown>;
   labelGroups: LabelGroup[];
   userSettings: Record<UUID, UserSettings>;
