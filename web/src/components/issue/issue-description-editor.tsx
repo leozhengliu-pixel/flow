@@ -1,10 +1,13 @@
-import { Code2, Heading2, Heading3, List, ListOrdered, Minus, Pilcrow, Quote } from 'lucide-react'
+import { Code2, Heading2, Heading3, List, ListOrdered, Minus, Pilcrow, Quote, Table2 } from 'lucide-react'
 import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCaret from '@tiptap/extension-collaboration-caret'
 import StarterKit from '@tiptap/starter-kit'
+import { TableKit } from '@tiptap/extension-table'
 import { Markdown } from '@tiptap/markdown'
 import { getSchema } from '@tiptap/core'
+import type { EditorState } from '@tiptap/pm/state'
+import type { EditorView } from '@tiptap/pm/view'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -15,6 +18,8 @@ import { getSlashCommandState, SlashCommandExtension, type SlashCommandState } f
 import { SlashCommandMenu, type EditorCommand } from './editor/slash-command-menu'
 import { filterEditorCommands } from './editor/editor-commands'
 import { SelectionToolbar } from './editor/selection-toolbar'
+import { MentionExtension } from './editor/mention-extension'
+import { MentionMenu } from './editor/mention-menu'
 import { useI18n } from '@/i18n/i18n'
 import { handleEditorSubmit } from './editor/editor-keyboard'
 import { IssueCollaborationProvider } from '@/lib/issue-collaboration'
@@ -30,6 +35,7 @@ interface DescriptionEditorProps {
   className?: string
   placeholder?: string
   ariaLabel?: string
+  users?: User[]
   collaboration?: {
     workspaceKey: string
     issueId?: string
@@ -42,8 +48,10 @@ interface DescriptionEditorProps {
 }
 
 const closedSlash: SlashCommandState = { active: false, query: '', range: null }
+type MentionState = { active: boolean; query: string; range: { from: number; to: number } | null }
+const closedMention: MentionState = { active: false, query: '', range: null }
 
-export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmit, editorRef, className, collaboration, placeholder = 'Add description...', ariaLabel }: DescriptionEditorProps) {
+export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmit, editorRef, className, collaboration, placeholder = 'Add description...', ariaLabel, users = [] }: DescriptionEditorProps) {
   const { t } = useI18n()
   const descriptionLabel = ariaLabel ?? t('Issue description')
   const initial = useMemo(() => parseDescriptionContent(value, state), []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -52,6 +60,7 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
   const slashRef = useRef<SlashCommandState>(closedSlash)
   const selectedRef = useRef(0)
   const dismissedRef = useRef<number | null>(null)
+  const dismissedMentionRef = useRef<number | null>(null)
   const submitRef = useRef(onSubmit)
   const persistTimerRef = useRef<number | undefined>(undefined)
   const startTimerRef = useRef<number | undefined>(undefined)
@@ -65,6 +74,11 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
   const [slash, setSlash] = useState<SlashCommandState>(closedSlash)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [menuPosition, setMenuPosition] = useState({ left: 14, top: 44 })
+  const [mention, setMention] = useState<MentionState>(closedMention)
+  const [mentionIndex, setMentionIndex] = useState(0)
+  const [mentionPosition, setMentionPosition] = useState({ left: 14, top: 44 })
+  const mentionRef = useRef<MentionState>(closedMention)
+  const mentionSelectedRef = useRef(0)
 
   const collaborationSession = useMemo(() => {
     if (!collaboration) return undefined
@@ -103,8 +117,10 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
     immediatelyRender: false,
     extensions: [
       StarterKit.configure({ heading: { levels: [2, 3] }, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: collaborationSession ? false : undefined }),
+      TableKit.configure({ table: { resizable: true } }),
       Placeholder.configure({ placeholder }),
       Markdown,
+      MentionExtension,
       SlashCommandExtension,
       ...(collaborationSession ? [
         Collaboration.configure({ document: collaborationSession.document, field: 'prosemirror' }),
@@ -126,6 +142,31 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
       handleKeyDown: (view, event) => {
         if (handleEditorSubmit(event, submitRef.current)) return true
         const current = getSlashCommandState(view.state)
+        const currentMention = getMentionState(view.state)
+        if (currentMention.active && currentMention.range?.from !== dismissedMentionRef.current) {
+          const matches = matchingUsers(users, currentMention.query)
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault()
+            if (!matches.length) return true
+            const movement = event.key === 'ArrowDown' ? 1 : -1
+            const next = (mentionSelectedRef.current + movement + matches.length) % matches.length
+            mentionSelectedRef.current = next
+            setMentionIndex(next)
+            return true
+          }
+          if ((event.key === 'Enter' || event.key === 'Tab') && matches.length) {
+            event.preventDefault()
+            insertMention(view, currentMention.range, matches[Math.min(mentionSelectedRef.current, matches.length - 1)])
+            return true
+          }
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            dismissedMentionRef.current = currentMention.range?.from ?? null
+            mentionRef.current = closedMention
+            setMention(closedMention)
+            return true
+          }
+        }
         if (!current.active || current.range?.from === dismissedRef.current) return false
         const filtered = filterEditorCommands(commandsRef.current, current.query)
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -155,11 +196,12 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
     onUpdate: ({ editor: current, transaction }) => {
       const snapshot = serializeDescription(current, collaborationSession?.document)
       onChange?.(snapshot)
+      syncMentionState(current)
       if (collaborationSession && !transaction.getMeta(ySyncPluginKey)?.isChangeOrigin) scheduleCollaborativePersist()
     },
-    onTransaction: ({ editor: current }) => syncSlashState(current),
-    onSelectionUpdate: ({ editor: current }) => syncSlashState(current),
-    onBlur: () => { setSlash(closedSlash); if (collaborationSession) void persistRef.current(); onBlur?.() },
+    onTransaction: ({ editor: current }) => { syncSlashState(current); syncMentionState(current) },
+    onSelectionUpdate: ({ editor: current }) => { syncSlashState(current); syncMentionState(current) },
+    onBlur: () => { setSlash(closedSlash); mentionRef.current = closedMention; setMention(closedMention); if (collaborationSession) void persistRef.current(); onBlur?.() },
   })
 
   persistRef.current = async () => {
@@ -200,6 +242,7 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
       { id: 'quote', group: 'Basic blocks', label: 'Quote', description: 'Capture a quote or callout', keywords: 'blockquote citation', shortcut: '>', icon: Quote, run: execute(() => editor.chain().focus().toggleBlockquote().run()) },
       { id: 'code-block', group: 'Basic blocks', label: 'Code block', description: 'Add a formatted code block', keywords: 'source snippet', shortcut: '```', icon: Code2, run: execute(() => editor.chain().focus().toggleCodeBlock().run()) },
       { id: 'divider', group: 'Basic blocks', label: 'Divider', description: 'Separate sections visually', keywords: 'horizontal rule separator', shortcut: '---', icon: Minus, run: execute(() => editor.chain().focus().setHorizontalRule().run()) },
+      { id: 'table', group: 'Basic blocks', label: 'Table', description: 'Insert a 3 by 3 table', keywords: 'grid cells spreadsheet', shortcut: 'table', icon: Table2, run: execute(() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()) },
     ]
   }, [editor])
   commandsRef.current = commands
@@ -275,6 +318,37 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
     })
   }
 
+  function syncMentionState(current: NonNullable<typeof editor>) {
+    if (!users.length || !current.isFocused || !current.state.selection.empty) {
+      mentionRef.current = closedMention
+      setMention(closedMention)
+      return
+    }
+    const next = getMentionState(current.state)
+    if (!next.active || next.range?.from === dismissedMentionRef.current) {
+      mentionRef.current = closedMention
+      setMention(closedMention)
+      return
+    }
+    if (dismissedMentionRef.current !== null && next.range?.from !== dismissedMentionRef.current) dismissedMentionRef.current = null
+    mentionRef.current = next
+    setMention(next)
+    mentionSelectedRef.current = 0
+    setMentionIndex(0)
+    requestAnimationFrame(() => {
+      const root = rootRef.current
+      const live = getMentionState(current.state)
+      if (!root || current.isDestroyed || !next.range || !live.active || live.range?.to !== next.range.to) return
+      const caret = current.view.coordsAtPos(next.range.to)
+      const bounds = root.getBoundingClientRect()
+      const width = 292
+      setMentionPosition({
+        left: Math.max(0, Math.min(caret.left - bounds.left, bounds.width - width)),
+        top: caret.bottom - bounds.top + 6,
+      })
+    })
+  }
+
   if (!editor) return <div className="issue-description-skeleton" aria-label="Loading issue description"/>
   return <div className={['issue-description-root', className].filter(Boolean).join(' ')} ref={rootRef}>
     <EditorContent editor={editor}/>
@@ -286,13 +360,16 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
       query={slash.query}
       onSelect={command => command.run()}
     />}
+    {mention.active && <MentionMenu users={matchingUsers(users, mention.query)} selectedIndex={mentionIndex} position={mentionPosition} query={mention.query} onSelect={user => insertMention(editor.view, mention.range, user)}/>}
   </div>
 }
 
 function schemaExtensions() {
   return [
     StarterKit.configure({ heading: { levels: [2, 3] }, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: false }),
+    TableKit.configure({ table: { resizable: true } }),
     Markdown,
+    MentionExtension,
     SlashCommandExtension,
   ]
 }
@@ -329,4 +406,33 @@ function collaborationColor(value: string) {
   let hash = 0
   for (let index = 0; index < value.length; index++) hash = (hash * 31 + value.charCodeAt(index)) >>> 0
   return colors[hash % colors.length]
+}
+
+function getMentionState(state: EditorState): MentionState {
+  if (!state.selection.empty) return closedMention
+  const { $from } = state.selection
+  const text = $from.parent.textContent.slice(0, $from.pos - $from.start($from.depth))
+  const match = text.match(/(?:^|\s)@([^\s@]*)$/)
+  if (!match) return closedMention
+  const query = match[1] ?? ''
+  const from = $from.pos - query.length - 1
+  return { active: true, query, range: { from, to: $from.pos } }
+}
+
+function matchingUsers(users: User[], query: string) {
+  const normalized = query.trim().toLocaleLowerCase()
+  return users.filter(user => {
+    if (!user.active) return false
+    const name = `${user.displayName || user.name} ${user.email || ''}`.toLocaleLowerCase()
+    return !normalized || name.includes(normalized)
+  }).slice(0, 8)
+}
+
+function insertMention(view: EditorView, range: MentionState['range'], user: User) {
+  if (!range) return
+  const node = view.state.schema.nodes.mention?.create({ id: user.id, label: user.displayName || user.name })
+  if (!node) return
+  const transaction = view.state.tr.replaceWith(range.from, range.to, node)
+  transaction.insertText(' ', range.from + node.nodeSize)
+  view.dispatch(transaction)
 }

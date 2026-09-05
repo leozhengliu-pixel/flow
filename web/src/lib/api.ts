@@ -29,6 +29,7 @@ import type {
   Invitation,
   InvitationPreview,
   Issue,
+  IssueQueryPage,
   IssueLabel,
   IssueRelation,
   IssueRelationType,
@@ -283,6 +284,34 @@ export function fetchBootstrap(workspaceKey?: string): Promise<BootstrapData> {
     "/api/bootstrap",
     workspaceKey ? { headers: { "X-Workspace-Key": workspaceKey } } : undefined,
   ).then(normalizeBootstrapData);
+}
+export type IssueQueryInput = {
+  q?: string;
+  teamId?: string | string[];
+  stateId?: string | string[];
+  projectId?: string | string[];
+  archived?: "true" | "false" | "all";
+  filter?: Record<string, unknown>;
+  cursor?: string;
+  limit?: number;
+  sort?: "priority" | "createdAt" | "updatedAt" | "title" | "sortOrder";
+  direction?: "asc" | "desc";
+};
+export function listIssues(filters: IssueQueryInput = {}): Promise<IssueQueryPage> {
+  const query = new URLSearchParams();
+  if (filters.q) query.set("q", filters.q);
+  for (const key of ["teamId", "stateId", "projectId"] as const) {
+    const value = filters[key];
+    if (Array.isArray(value) && value.length) query.set(key, value.join(","));
+    else if (typeof value === "string" && value) query.set(key, value);
+  }
+  if (filters.archived) query.set("archived", filters.archived);
+  if (filters.filter) query.set("filter", JSON.stringify(filters.filter));
+  if (filters.cursor) query.set("cursor", filters.cursor);
+  if (filters.limit) query.set("limit", String(filters.limit));
+  if (filters.sort) query.set("sort", filters.sort);
+  if (filters.direction) query.set("direction", filters.direction);
+  return request<IssueQueryPage>(`/api/issues${query.size ? `?${query}` : ""}`);
 }
 export function createWorkspace(
   input: WorkspaceMutationInput & { name: string; urlKey: string },
@@ -801,8 +830,15 @@ export function submitReview(
 ): Promise<CodeReview> {
   return request(`/api/reviews/${id}/submit`, jsonRequest("POST", input));
 }
-export function commentOnReview(id: string, body: string): Promise<CodeReview> {
-  return request(`/api/reviews/${id}/comments`, jsonRequest("POST", { body }));
+export function commentOnReview(
+  id: string,
+  body: string,
+  location?: { path: string; line: number },
+): Promise<CodeReview> {
+  return request(
+    `/api/reviews/${id}/comments`,
+    jsonRequest("POST", { body, ...location }),
+  );
 }
 export function fetchWebhooks(): Promise<Webhook[]> {
   return request("/api/webhooks");
@@ -1800,6 +1836,16 @@ export function deleteAgentSession(id: string): Promise<void> {
   return request(`/api/agent/sessions/${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
+}
+export function resolveAgentApproval(
+  sessionId: string,
+  approvalId: string,
+  decision: "approve" | "reject",
+): Promise<{ approvalId: string; decision: "approved" | "rejected" }> {
+  return request(
+    `/api/agent/sessions/${encodeURIComponent(sessionId)}/approvals/${encodeURIComponent(approvalId)}`,
+    jsonRequest("POST", { decision }),
+  );
 }
 export function listAgentSkills(): Promise<
   import("@/types/flow").PersonalAgentSkill[]

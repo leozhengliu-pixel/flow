@@ -177,6 +177,62 @@ it("uses merge-request identifiers and actions for GitLab reviews", async () => 
   expect(screen.getByText("platform/api!27")).toBeVisible();
 });
 
+it("renders split and unified diff rows and posts an inline comment", async () => {
+  const user = userEvent.setup();
+  api.commentOnReview.mockResolvedValue(review);
+  const reviewWithDiff: CodeReview = {
+    ...review,
+    files: [
+      {
+        path: "src/index.ts",
+        status: "modified",
+        additions: 1,
+        deletions: 1,
+        patch: "@@ -1,2 +1,2 @@\n const value = 1;\n-const answer = value;\n+const answer = value + 1;",
+      },
+    ],
+  };
+  render(
+    <I18nProvider>
+      <ReviewsPage
+        data={makeBootstrap({
+          viewer,
+          users: [viewer, teammate],
+          reviews: [reviewWithDiff],
+          userSettings: {},
+          integrationConnections: [{ id: "github", provider: "github" }] as never[],
+        })}
+        view="for-you"
+        review={reviewWithDiff}
+        tab="changes"
+        onNavigate={vi.fn()}
+        onReload={vi.fn().mockResolvedValue(undefined)}
+        onOpenSidebar={vi.fn()}
+      />
+    </I18nProvider>,
+  );
+
+  expect(screen.getByRole("button", { name: "Split" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(screen.getByText("const answer = value + 1;")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Unified" }));
+  expect(screen.getByRole("button", { name: "Unified" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await user.click(screen.getAllByRole("button", { name: /Comment on line/ })[0]);
+  await user.type(screen.getByRole("textbox", { name: "Inline comment" }), "Please add a test");
+  await user.click(screen.getByRole("button", { name: "Comment" }));
+  await waitFor(() =>
+    expect(api.commentOnReview).toHaveBeenCalledWith(review.id, "Please add a test", {
+      path: "src/index.ts",
+      line: 1,
+    }),
+  );
+});
+
 it("reports quick-approve failures and unlocks the action", async () => {
   const user = userEvent.setup();
   api.submitReview.mockRejectedValueOnce(new Error("provider unavailable"));

@@ -80,6 +80,7 @@ export function DetailPane({issue,data,comments,activities,presence=[],workspace
           <StatusPicker value={issue.state} states={availableStates} onChange={stateId=>onUpdate({stateId})}/><PriorityPicker value={issue.priority} onChange={priority=>onUpdate({priority})}/>{estimateType!=='notUsed'&&<EstimatePicker value={issue.estimate} estimateType={estimateType} onChange={estimate=>onUpdate({estimate})}/>}<AssigneePicker value={issue.assignee} users={data.users} hoverContext={{ member: issue.assignee ? data.members.find(item=>item.user.id===issue.assignee?.id) : undefined, online: Boolean(issue.assignee && (issue.assignee.id===data.viewer.id || peoplePresence.some(item=>item.user.id===issue.assignee?.id))), workspaceName: issue.team.name }} onChange={assigneeId=>onUpdate({assigneeId})}/><CyclePicker valueId={issue.cycleId} cycles={data.cycles} issues={data.issues} teamId={issue.team.id} onChange={cycleId=>onUpdate({cycleId})}/><LabelPicker value={issue.labels} labels={availableLabels} labelGroups={data.labelGroups} onToggle={toggleLabel}/><IssueProjectPicker data={data} issue={issue} presence={peoplePresence} onCreateMilestone={onCreateProjectMilestone} onCreateProject={onCreateProject} onUpdate={onUpdate}/>{releasesEnabled&&<IssueReleasePicker data={data} issue={issue}/>}
         </div>
         <IssueDescriptionEditor
+          users={data.users}
           value={description}
           state={issue.documentContent?.contentData?JSON.stringify(issue.documentContent.contentData):issue.descriptionState}
           onBlur={()=>void flush()}

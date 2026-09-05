@@ -188,6 +188,7 @@ Implemented HTTP surface:
 
 ```text
 GET    /api/bootstrap
+GET    /api/issues?q=&teamId=&stateId=&projectId=&archived=&filter=&cursor=&limit=&sort=&direction=
 POST   /api/issues
 PATCH  /api/issues/{id}
 DELETE /api/issues/{id}
@@ -199,6 +200,14 @@ POST   /api/issues/{id}/attachments
 DELETE /api/issues/{id}/attachments/{attachmentId}
 GET    /api/events
 ```
+
+`GET /api/issues` returns a cursor page (`items`, `nextCursor`, `hasMore`,
+`total`). The optional `filter` parameter is a JSON expression tree: use
+`{"and":[...]}` or `{"or":[...]}` groups containing `{field, operator,
+values}` leaves. Supported operators include `is`, `isNot`, `in`, `notIn`,
+`contains`, `doesNotContain`, `within`, `before`, `after`, `between`,
+`isEmpty`, and `isNotEmpty`. Cursors are opaque to clients and should be sent
+back unchanged when loading the next page.
 
 The Detail Pane and full detail view share a selected Issue ID. Both derive the
 current aggregate from the bootstrap store; neither keeps an independent Issue

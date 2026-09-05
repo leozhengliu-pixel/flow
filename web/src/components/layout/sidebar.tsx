@@ -18,6 +18,8 @@ import {
   MessageCircle,
   MessageCircleQuestion,
   MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Search,
   Settings,
@@ -179,6 +181,11 @@ export function Sidebar({
   const workspaceSlug = data.workspace.urlKey;
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth);
+  const sidebarWidthRef = useRef(sidebarWidth);
+  const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const [resizing, setResizing] = useState(false);
+  const sidebarCollapsed = sidebarWidth <= 64;
   const [favorites, setFavorites] = useState<Favorite[]>(() =>
     data.favorites.filter((item) => item.userId === data.viewer.id),
   );
@@ -198,6 +205,60 @@ export function Sidebar({
   const [dismissedTry, setDismissedTry] = useState<string[]>(readDismissedTry);
   const featureEnabled = (feature: string) =>
     data.workspaceSettings.featureFlags[feature] !== false;
+
+  useEffect(() => {
+    sidebarWidthRef.current = sidebarWidth;
+    try {
+      localStorage.setItem("flow.sidebar.width", String(sidebarWidth));
+    } catch {
+      // Preferences remain in memory when storage is unavailable.
+    }
+    const root = document.documentElement;
+    const media = window.matchMedia("(max-width: 800px)");
+    const syncGrid = () => {
+      if (media.matches) root.style.removeProperty("--sidebar");
+      else root.style.setProperty("--sidebar", `${sidebarWidth}px`);
+    };
+    syncGrid();
+    media.addEventListener("change", syncGrid);
+    return () => {
+      media.removeEventListener("change", syncGrid);
+      root.style.removeProperty("--sidebar");
+    };
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    if (!resizing) return;
+    const move = (event: PointerEvent) => {
+      const current = resizeRef.current;
+      if (!current) return;
+      const next = clampSidebarWidth(current.startWidth + event.clientX - current.startX);
+      sidebarWidthRef.current = next;
+      setSidebarWidth(next);
+    };
+    const finish = () => {
+      resizeRef.current = null;
+      setResizing(false);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", finish, { once: true });
+    window.addEventListener("pointercancel", finish, { once: true });
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+    };
+  }, [resizing]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.key !== "[" || isEditableSidebarTarget(event.target)) return;
+      event.preventDefault();
+      setSidebarWidth(current => current <= 64 ? 244 : 52);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   useEffect(
     () =>
@@ -622,9 +683,10 @@ export function Sidebar({
         onClick={close}
       />
       <aside
-        className={`sidebar ${open ? "open" : ""}`}
+        className={`sidebar ${open ? "open" : ""}${sidebarCollapsed ? " is-collapsed" : ""}${resizing ? " is-resizing" : ""}`}
         aria-label="Workspace navigation"
         data-badge-style={badgeStyle}
+        data-sidebar-width={sidebarWidth}
       >
         <div className="workspace-row">
           <WorkspaceMenu
@@ -652,6 +714,15 @@ export function Sidebar({
             onClick={onCreate}
           >
             <ComposeIcon />
+          </button>
+          <button
+            className="sidebar-top-action sidebar-collapse"
+            type="button"
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            onClick={() => setSidebarWidth(sidebarCollapsed ? 244 : 52)}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
           </button>
         </div>
 
@@ -820,6 +891,23 @@ export function Sidebar({
             onShortcuts={() => setShortcutsOpen(true)}
           />
         </footer>
+        <button
+          className="sidebar-resize-handle"
+          type="button"
+          role="separator"
+          aria-label="Resize sidebar"
+          aria-orientation="vertical"
+          aria-valuemin={220}
+          aria-valuemax={330}
+          aria-valuenow={sidebarWidth}
+          onDoubleClick={() => setSidebarWidth(244)}
+          onPointerDown={(event) => {
+            if (event.button !== 0 || sidebarCollapsed) return;
+            event.preventDefault();
+            resizeRef.current = { startX: event.clientX, startWidth: sidebarWidthRef.current };
+            setResizing(true);
+          }}
+        />
       </aside>
 
       <SidebarCustomization
@@ -2869,6 +2957,23 @@ function readDismissedTry(): string[] {
   } catch {
     return [];
   }
+}
+function readSidebarWidth() {
+  try {
+    const parsed = Number(localStorage.getItem("flow.sidebar.width"));
+    return Number.isFinite(parsed) ? clampSidebarWidth(parsed) : 244;
+  } catch {
+    return 244;
+  }
+}
+function clampSidebarWidth(value: number) {
+  // 52px is the compact icon rail; expanded sidebars follow the measured
+  // 220-330px range used by the desktop client.
+  if (value <= 64) return 52;
+  return Math.max(220, Math.min(330, value));
+}
+function isEditableSidebarTarget(target: EventTarget | null) {
+  return target instanceof HTMLElement && (target.isContentEditable || target.matches("input, textarea, select, [role=\"textbox\"], [role=\"searchbox\"]"));
 }
 function readExpandedSection(key: string) {
   try {

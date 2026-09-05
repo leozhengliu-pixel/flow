@@ -1167,6 +1167,7 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 		s.mu.RUnlock()
 	}
 	var event domain.DomainEvent
+	var realtimePayload json.RawMessage
 	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(workspaceKey)
 	apply := func() error {
 		s.mu.Lock()
@@ -1220,6 +1221,10 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 			return err
 		}
 		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, PreviousValues: previousValues, CreatedAt: time.Now().UTC()}
+		// Keep the persisted domain event backward compatible while enriching the
+		// realtime envelope with the post-mutation entity. Clients can apply a
+		// delta for common entities without downloading another full bootstrap.
+		realtimePayload = enrichRealtimePayload(payloadRaw, aggregateJSONValue(next, aggregateID), eventType)
 		if err := s.persistWorkspace(ctx, workspaceKey, next, &event); err != nil {
 			return err
 		}
@@ -1241,9 +1246,39 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 	}
 	if sink := s.realtime(); sink != nil {
 		actor, _ := actorFromContext(ctx)
-		sink(workspaceKey, domain.RealtimeEvent{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, ActorID: actor.ID, ClientID: realtimeClientFromContext(ctx), Payload: event.Payload, CreatedAt: event.CreatedAt})
+		if len(realtimePayload) == 0 {
+			realtimePayload = event.Payload
+		}
+		sink(workspaceKey, domain.RealtimeEvent{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, ActorID: actor.ID, ClientID: realtimeClientFromContext(ctx), Payload: realtimePayload, CreatedAt: event.CreatedAt})
 	}
 	return nil
+}
+
+// enrichRealtimePayload adds the post-mutation entity only to the transient
+// realtime event. Domain event payloads and webhooks continue to contain the
+// original mutation input so existing consumers remain compatible.
+func enrichRealtimePayload(payload json.RawMessage, entity any, eventType string) json.RawMessage {
+	var fields map[string]any
+	if len(payload) > 0 && json.Unmarshal(payload, &fields) != nil {
+		var input any
+		if json.Unmarshal(payload, &input) == nil {
+			fields = map[string]any{"input": input}
+		}
+	}
+	if fields == nil {
+		fields = map[string]any{}
+	}
+	if entity != nil {
+		fields["entity"] = entity
+	}
+	if strings.HasSuffix(eventType, ".deleted") {
+		fields["deleted"] = true
+	}
+	encoded, err := json.Marshal(fields)
+	if err != nil {
+		return payload
+	}
+	return encoded
 }
 
 func aggregatePreviousValues(previous, next domain.Bootstrap, aggregateID string) json.RawMessage {

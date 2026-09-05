@@ -8,6 +8,7 @@ import {
   apiKeyPath,
   apiKeyEditPath,
   diaryPath,
+  inboxPath,
   labelPath,
   meetingPath,
   newAPIKeyPath,
@@ -99,9 +100,13 @@ describe("application routes", () => {
       apiKeyId: "key/1",
     });
     expect(parseAppRoute("/")).toEqual({ kind: "root" });
+    expect(parseAppRoute("/acme/inbox/priority")).toEqual({ kind: "inbox", workspaceSlug: "acme", tab: "priority" });
+    expect(parseAppRoute("/acme/inbox/other")).toEqual({ kind: "inbox", workspaceSlug: "acme", tab: "other" });
   });
 
   it("generates encoded entity and view paths", () => {
+    expect(inboxPath("acme", "priority")).toBe("/acme/inbox/priority");
+    expect(inboxPath("acme", "other")).toBe("/acme/inbox/other");
     expect(
       issuePath("acme", {
         identifier: "ENG-42",
