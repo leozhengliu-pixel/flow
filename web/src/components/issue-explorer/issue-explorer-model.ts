@@ -7,7 +7,7 @@ import type { MyIssuesFilterKey, MyIssuesFilterOption } from '@/components/my-is
 import type { MyIssuesDisplayOptions, MyIssuesGrouping } from '@/components/my-issues/my-issues-surface'
 import type { TeamIssuesRouteView } from '@/lib/app-routes'
 import { filterValues } from '@/components/my-issues/my-issues-filter-types'
-import { labelsForResource, setGroupedLabelSelected } from '@/lib/labels'
+import { labelsForResource, setGroupedLabelSelected, toggleGroupedLabelIds } from '@/lib/labels'
 
 export const ISSUE_FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = {
   ai:'AI filter',advanced:'Advanced filter',status:'Status',assignee:'Assignee',agent:'Agent',agentSession:'Agent Session',creator:'Creator',priority:'Priority',labels:'Labels',relations:'Relations',suggestedLabel:'Suggested label',dates:'Dates',project:'Project',projectProperties:'Project properties',initiative:'Initiative',cycle:'Cycle',addedToCycle:'Added to cycle',releases:'Releases',subscribers:'Subscribers',externalSource:'External source',autoClosed:'Auto-closed',content:'Content',links:'Links',template:'Template',
@@ -132,7 +132,7 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
     project: [{ id: '', label: 'No project', count: count(issue => !issue.project), kind: 'project' as const }, ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, count: count(issue => issue.project?.id === project.id), kind: 'project' as const }))],
     projectProperties:projectPropertyFilterOptions(data,issues),
     initiative:[{id:'',label:'No initiative',count:count(issue=>{const project=data.projects.find(project=>project.id===issue.project?.id);return !project?.initiatives?.length})},...data.initiatives.map(initiative=>({id:initiative.id,label:initiative.name,count:count(issue=>data.projects.find(project=>project.id===issue.project?.id)?.initiatives?.includes(initiative.id)??false)}))],
-    cycle: [{ id: '', label: 'No cycle', count: count(issue => !issue.cycleId) }, ...data.cycles.map(cycle => ({ id: cycle.id, label: cycle.name, count: count(issue => issue.cycleId === cycle.id) }))],
+    cycle: [{ id: '', label: 'No cycle', count: count(issue => !issue.cycleId), kind: 'cycle' as const }, ...data.cycles.map(cycle => ({ id: cycle.id, label: cycle.name, count: count(issue => issue.cycleId === cycle.id), kind: 'cycle' as const }))],
     addedToCycle:[{id:'planned',label:'Planned',count:count(issue=>issue.addedToCycle==='planned')},{id:'during',label:'During cycle',count:count(issue=>issue.addedToCycle==='during')},{id:'after',label:'After cycle',count:count(issue=>issue.addedToCycle==='after')}],
     releases: releaseFilterCategories(data,issues),
     subscribers: [{ id: '', label: 'No subscribers', count: count(issue => !issue.subscriberIds?.length), kind: 'subscribers' as const }, ...data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: count(issue => issue.subscriberIds?.includes(user.id)??false), kind: 'subscribers' as const }))],
@@ -208,6 +208,21 @@ export function explorerUpdateForProperty(property: MyIssuesEditableProperty, va
   if (property === 'assignee') return { assigneeId: value }
   if (property === 'project') return { projectId: value }
   if (property === 'dueDate') return { dueDate: value }
+}
+
+/** Build the persisted property change when a card is moved between board groups. */
+export function explorerBoardGroupUpdate(row: MyIssuesRowData, grouping: MyIssuesGrouping, targetGroupId: string, data: BootstrapData): IssueUpdateInput {
+  if ((grouping === 'status' || grouping === 'focus') && data.states.some(state => state.id === targetGroupId)) return { stateId: targetGroupId }
+  if (grouping === 'priority' && targetGroupId.startsWith('priority-')) return { priority: Number(targetGroupId.slice('priority-'.length)) }
+  if (grouping === 'project' && targetGroupId.startsWith('project-')) return { projectId: targetGroupId === 'project-none' ? '' : targetGroupId.slice('project-'.length) }
+  if (grouping === 'assignee' && targetGroupId.startsWith('assignee-')) return { assigneeId: targetGroupId === 'assignee-none' ? '' : targetGroupId.slice('assignee-'.length) }
+  if (grouping === 'label' && targetGroupId.startsWith('label-')) {
+    if (targetGroupId === 'label-none') return { labelIds: [] }
+    const labelId = targetGroupId.slice('label-'.length)
+    return { labelIds: toggleGroupedLabelIds((row.labels ?? []).map(label => label.id), labelId, data.labels) }
+  }
+  if (grouping === 'cycle' && targetGroupId.startsWith('cycle-')) return { cycleId: targetGroupId === 'cycle-none' ? '' : targetGroupId.slice('cycle-'.length) }
+  return {}
 }
 
 export function optimisticExplorerRow(row: MyIssuesRowData, input: IssueUpdateInput, data: BootstrapData): MyIssuesRowData {

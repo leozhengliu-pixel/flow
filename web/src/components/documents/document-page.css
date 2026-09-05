@@ -620,6 +620,7 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+.document-history-preview pre.history-highlight{padding:0}.document-history-preview .history-line{display:block;min-height:20px;padding:0 12px}.document-history-preview .history-line.is-changed{background:color-mix(in srgb,var(--accent-primary) 12%,transparent);box-shadow:inset 2px 0 var(--accent-primary)}
 .document-delete {
   width: min(420px, calc(100vw - 32px));
   padding: 18px;

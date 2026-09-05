@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Command } from 'cmdk'
 import {
-  Building2, Clipboard, FilePlus2, FileText, FolderKanban, Inbox, Layers3, Lightbulb,
+  Bot, Building2, Clipboard, FilePlus2, FileText, FolderKanban, GitPullRequest, Inbox, Layers3, Lightbulb,
   Plus, Search, SquareDot, UserRound,
 } from 'lucide-react'
 
@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { ReleasesIcon } from '@/components/releases/release-icons'
 import { searchWorkspace } from '@/lib/api'
+import { ActionRegistry } from '@/lib/action-registry'
 import type { SearchResult } from '@/types/flow'
 
 type CommandAction = {
@@ -39,6 +40,7 @@ export function CommandMenu({
   onNavigateMembers,
   onNavigateCustomers,
   onNavigateAgent,
+  onNavigateReviews,
   onOpenResult,
 }: {
   open: boolean
@@ -58,6 +60,7 @@ export function CommandMenu({
   onNavigateMembers: () => void
   onNavigateCustomers: () => void
   onNavigateAgent: () => void
+  onNavigateReviews?: () => void
   onOpenResult: (result: SearchResult) => void
 }) {
   const [query, setQuery] = useState('')
@@ -79,8 +82,14 @@ export function CommandMenu({
     { id: 'go-initiatives', group: 'Navigation', label: 'Go to Initiatives', icon: <Lightbulb/>, run: closeAnd(onNavigateInitiatives) },
     { id: 'go-views', group: 'Navigation', label: 'Go to Views', icon: <Layers3/>, run: closeAnd(onNavigateViews) },
     { id: 'go-members', group: 'Navigation', label: 'Go to Members', icon: <UserRound/>, run: closeAnd(onNavigateMembers) },
+    { id: 'go-agent', group: 'Navigation', label: 'Go to Agent', icon: <Bot/>, shortcut: ['G', 'then', 'J'], run: closeAnd(onNavigateAgent) },
+    ...(onNavigateReviews ? [{ id: 'go-reviews', group: 'Navigation', label: 'Go to Reviews', icon: <GitPullRequest/>, shortcut: ['G', 'then', 'R'], run: closeAnd(onNavigateReviews) }] : []),
     { id: 'copy-url', group: 'Other', label: 'Copy current page link', icon: <Clipboard/>, run: closeAnd(() => void navigator.clipboard.writeText(window.location.href)) },
   ]
+  // Register every command once so keyboard, menu and future contextual
+  // surfaces dispatch through the same action path.
+  const registry = useRef(new ActionRegistry()).current
+  actions.forEach(action => registry.register(action))
 
   useEffect(() => {
     if (!open) { setQuery(''); setResults([]); return }
@@ -98,7 +107,7 @@ export function CommandMenu({
 
   const groups = [...new Set(actions.map(action => action.group))]
   return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="command-dialog" onOpenAutoFocus={event => event.preventDefault()}>
+    <DialogContent className="command-dialog" overlayClassName="command-overlay" onOpenAutoFocus={event => event.preventDefault()}>
       <DialogTitle className="sr-only">Command menu</DialogTitle>
       <Command shouldFilter loop>
         <div className="command-input">
@@ -115,7 +124,7 @@ export function CommandMenu({
             </Command.Item>)}
           </Command.Group>}
           {groups.map(group => <Command.Group key={group} heading={group}>
-            {actions.filter(action => action.group === group).map(action => <Command.Item key={action.id} value={`${action.label} ${action.keywords ?? ''}`} onSelect={action.run}>
+            {actions.filter(action => action.group === group).map(action => <Command.Item key={action.id} value={`${action.label} ${action.keywords ?? ''}`} onSelect={() => void registry.execute(action.id, { source: 'command-menu' })}>
               <span className="command-item-icon">{action.icon}</span>
               <span>{action.label}</span>
               {action.shortcut && <span className="command-shortcut">{action.shortcut.map((part, index) => part === 'then' ? <small key={index}>then</small> : <kbd key={index}>{part}</kbd>)}</span>}

@@ -16,12 +16,107 @@ import (
 const maxAgentToolTurns = 8
 
 type agentStreamEvent struct {
-	Type      string                   `json:"type"`
-	Session   *domain.AgentSession     `json:"session,omitempty"`
-	MessageID string                   `json:"messageId,omitempty"`
-	Delta     string                   `json:"delta,omitempty"`
-	Part      *domain.AgentMessagePart `json:"part,omitempty"`
-	Error     string                   `json:"error,omitempty"`
+	Type       string                   `json:"type"`
+	Session    *domain.AgentSession     `json:"session,omitempty"`
+	MessageID  string                   `json:"messageId,omitempty"`
+	Delta      string                   `json:"delta,omitempty"`
+	Part       *domain.AgentMessagePart `json:"part,omitempty"`
+	ApprovalID string                   `json:"approvalId,omitempty"`
+	Decision   string                   `json:"decision,omitempty"`
+	Error      string                   `json:"error,omitempty"`
+}
+
+// agentApproval coordinates a pending write tool call with the browser. The
+// stream remains open while the user makes a decision, just like the native
+// agent client. The channel is buffered so resolving an approval never blocks
+// the HTTP handler while the stream is unwinding.
+type agentApproval struct {
+	WorkspaceKey string
+	SessionID    string
+	UserID       string
+	Decision     chan string
+}
+
+type agentApprovalInput struct {
+	Decision string `json:"decision"`
+}
+
+func (s *server) registerAgentApproval(approvalID string, approval *agentApproval) {
+	s.agentApprovalsMu.Lock()
+	if s.agentApprovals == nil {
+		s.agentApprovals = make(map[string]*agentApproval)
+	}
+	s.agentApprovals[approvalID] = approval
+	s.agentApprovalsMu.Unlock()
+}
+
+func (s *server) takeAgentApproval(approvalID string) *agentApproval {
+	s.agentApprovalsMu.Lock()
+	defer s.agentApprovalsMu.Unlock()
+	approval := s.agentApprovals[approvalID]
+	if approval != nil {
+		delete(s.agentApprovals, approvalID)
+	}
+	return approval
+}
+
+func (s *server) resolveAgentApproval(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAgent(w) {
+		return
+	}
+	var input agentApprovalInput
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	decision := strings.ToLower(strings.TrimSpace(input.Decision))
+	switch decision {
+	case "approve", "approved", "allow":
+		decision = "approved"
+	case "reject", "rejected", "deny", "decline":
+		decision = "rejected"
+	default:
+		writeError(w, http.StatusBadRequest, "decision must be approve or reject")
+		return
+	}
+	approvalID, sessionID := r.PathValue("approvalId"), r.PathValue("id")
+	if approvalID == "" || sessionID == "" {
+		writeError(w, http.StatusNotFound, "agent approval not found")
+		return
+	}
+	data := s.workspaceData(r)
+	if _, err := ownedAgentSession(&data, sessionID); err != nil {
+		writeError(w, http.StatusNotFound, "agent approval not found")
+		return
+	}
+	approval := s.takeAgentApproval(approvalID)
+	if approval == nil || approval.SessionID != sessionID || approval.WorkspaceKey != workspaceKey(r) || approval.UserID != data.Viewer.ID {
+		writeError(w, http.StatusNotFound, "agent approval not found")
+		return
+	}
+	approval.Decision <- decision
+	writeJSON(w, http.StatusOK, map[string]string{"approvalId": approvalID, "decision": decision})
+}
+
+func (s *server) waitForAgentApproval(ctx context.Context, approvalID string, approval *agentApproval) string {
+	defer func() {
+		// A timed-out/cancelled stream can leave an approval in the map. Removing
+		// it here also makes a late browser click a harmless 404.
+		s.agentApprovalsMu.Lock()
+		if s.agentApprovals != nil {
+			delete(s.agentApprovals, approvalID)
+		}
+		s.agentApprovalsMu.Unlock()
+	}()
+	timer := time.NewTimer(30 * time.Minute)
+	defer timer.Stop()
+	select {
+	case decision := <-approval.Decision:
+		return decision
+	case <-ctx.Done():
+		return "rejected"
+	case <-timer.C:
+		return "rejected"
+	}
 }
 
 type agentEventWriter struct {
@@ -201,8 +296,56 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		}
 		messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, ToolCalls: turn.ToolCalls})
 		for _, toolCall := range turn.ToolCalls {
-			result, callErr := s.executeAgentTool(r, data, toolCall)
 			call := toolCall
+			if s.agentToolRequiresApproval(call.Name) {
+				approvalID := fmt.Sprintf("agent_approval_%d", time.Now().UnixNano())
+				call.ApprovalID = approvalID
+				call.Status = "pending"
+				key := "tool:" + call.ID
+				index, ok := partIndex[key]
+				if !ok {
+					index = len(parts)
+					partIndex[key] = index
+					parts = append(parts, domain.AgentMessagePart{ID: fmt.Sprintf("%s_tool_%d", messageID, index), Type: "toolCall", Status: "pending", ToolCall: cloneToolCall(&call)})
+				} else {
+					parts[index].Status = "pending"
+					parts[index].ToolCall = cloneToolCall(&call)
+				}
+				approval := &agentApproval{WorkspaceKey: workspaceKey(r), SessionID: session.ID, UserID: session.UserID, Decision: make(chan string, 1)}
+				s.registerAgentApproval(approvalID, approval)
+				if writer != nil {
+					part := parts[index]
+					if err := writer.send(agentStreamEvent{Type: "tool.approval_required", MessageID: messageID, ApprovalID: approvalID, Part: &part}); err != nil {
+						return domain.AgentSession{}, err
+					}
+				}
+				decision := s.waitForAgentApproval(r.Context(), approvalID, approval)
+				if decision != "approved" {
+					call.Status = "error"
+					call.Error = "Action declined by user"
+					call.Result = json.RawMessage(`{"error":"Action declined by user"}`)
+					parts[index].Status = "error"
+					parts[index].ToolCall = cloneToolCall(&call)
+					if writer != nil {
+						part := parts[index]
+						if err := writer.send(agentStreamEvent{Type: "tool.approval_resolved", MessageID: messageID, ApprovalID: approvalID, Decision: "rejected", Part: &part}); err != nil {
+							return domain.AgentSession{}, err
+						}
+					}
+					messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: "Action declined by user", IsError: true}})
+					continue
+				}
+				call.Status = "running"
+				parts[index].Status = "running"
+				parts[index].ToolCall = cloneToolCall(&call)
+				if writer != nil {
+					part := parts[index]
+					if err := writer.send(agentStreamEvent{Type: "tool.approval_resolved", MessageID: messageID, ApprovalID: approvalID, Decision: "approved", Part: &part}); err != nil {
+						return domain.AgentSession{}, err
+					}
+				}
+			}
+			result, callErr := s.executeAgentTool(r, data, call)
 			call.Status = "completed"
 			if callErr != nil {
 				call.Status, call.Error = "error", callErr.Error()
@@ -241,6 +384,23 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		return s.persistAgentFailure(r, *session, messageID, finalText, parts, started, fmt.Errorf("Flow Agent provider returned an empty response"))
 	}
 	return s.persistAgentCompletion(r, *session, domain.AgentMessage{ID: messageID, Role: "assistant", Content: strings.TrimSpace(finalText), Parts: parts, DurationMS: time.Since(started).Milliseconds(), CreatedAt: time.Now().UTC()})
+}
+
+func (s *server) agentToolRequiresApproval(name string) bool {
+	if !s.agent.WriteTools || !s.agent.ToolsEnabled {
+		return false
+	}
+	var inventory []flowMCPTool
+	if err := json.Unmarshal(flowMCPToolInventory, &inventory); err != nil {
+		return false
+	}
+	name = strings.TrimPrefix(name, "mcp__flow.")
+	for _, item := range inventory {
+		if strings.TrimPrefix(item.Name, "mcp__flow.") == name {
+			return item.Access == "write"
+		}
+	}
+	return false
 }
 
 func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call domain.AgentToolCall) ([]byte, error) {

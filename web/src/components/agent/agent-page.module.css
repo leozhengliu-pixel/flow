@@ -442,6 +442,41 @@
   border-radius: 6px;
   background: var(--theme-surface-1);
 }
+.approvalPrompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -2px 0 8px;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+}
+.approvalActions {
+  display: inline-flex;
+  gap: 6px;
+}
+.approvalActions button {
+  min-height: 26px;
+  padding: 0 9px;
+  border: 0.5px solid var(--theme-border);
+  border-radius: 6px;
+  background: var(--theme-surface-2);
+  color: var(--theme-text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+.approvalActions button:last-child {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary);
+  color: white;
+}
+.approvalActions button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.approvalActions button:disabled {
+  cursor: wait;
+  opacity: .55;
+}
 .toolCall code {
   display: block;
   max-height: 180px;

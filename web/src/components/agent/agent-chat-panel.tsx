@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import {
   fetchAgentStatus,
+  resolveAgentApproval,
 } from "@/lib/api";
 import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from "@/lib/agent-stream";
 import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus } from "@/types/flow";
@@ -45,6 +46,7 @@ export function AgentChatPanel({
   const [error, setError] = useState<string>();
   const [minimized, setMinimized] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [approvalBusy, setApprovalBusy] = useState<string>();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | undefined>(undefined);
   useEffect(() => {
@@ -87,7 +89,19 @@ export function AgentChatPanel({
     setStreamParts([]);
     setMinimized(false);
     setFullscreen(false);
+    setApprovalBusy(undefined);
     onClose();
+  };
+  const decideToolApproval = async (call: AgentMessagePart["toolCall"] | undefined, decision: "approve" | "reject") => {
+    if (!session || !call?.approvalId || approvalBusy) return;
+    setApprovalBusy(call.approvalId);
+    try {
+      await resolveAgentApproval(session.id, call.approvalId, decision);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t("Flow Agent is unavailable"));
+    } finally {
+      setApprovalBusy(undefined);
+    }
   };
   const submit = async () => {
     const message = input.trim();
@@ -211,7 +225,7 @@ export function AgentChatPanel({
                 <strong>
                   {message.role === "user" ? t("You") : t("Flow Agent")}
                 </strong>
-                {message.role === "assistant" && <PanelMessageActivity parts={message.parts ?? []}/>}
+                {message.role === "assistant" && <PanelMessageActivity parts={message.parts ?? []} onToolApproval={decideToolApproval} approvalBusy={approvalBusy}/>}
                 {message.content && <AgentRichText ariaLabel={message.role === "user" ? t("Your message") : t("AI message")} className={styles.messageDocument} content={message.content}/>}
               </article>
             ))}
@@ -221,7 +235,7 @@ export function AgentChatPanel({
                 {t("Thinking…")}
               </div>
             )}
-            {streamParts.map(part => <div className={styles.streamPart} key={part.id}>{part.type === "toolCall" ? `${part.status === "completed" ? "✓" : "…"} ${part.toolCall?.name.replaceAll("_", " ")}` : part.type === "reasoning" ? `Thinking: ${part.text ?? ""}` : part.text}</div>)}
+            {streamParts.map(part => <div className={styles.streamPart} key={part.id}>{part.type === "toolCall" ? <><span>{`${part.status === "completed" ? "✓" : part.status === "pending" ? "!" : "…"} ${part.toolCall?.name.replaceAll("_", " ")}`}</span>{part.status === "pending" && part.toolCall?.approvalId && <span className={styles.approvalActions}><button disabled={approvalBusy === part.toolCall.approvalId} onClick={() => void decideToolApproval(part.toolCall, "reject")} type="button">{t("Reject tool")}</button><button disabled={approvalBusy === part.toolCall.approvalId} onClick={() => void decideToolApproval(part.toolCall, "approve")} type="button">{t("Approve tool")}</button></span>}</> : part.type === "reasoning" ? `Thinking: ${part.text ?? ""}` : part.text}</div>)}
           </div>
           <div className={styles.composer}>
             <div className={styles.context}>
@@ -268,13 +282,13 @@ export function AgentChatPanel({
   );
 }
 
-function PanelMessageActivity({ parts }: { parts: AgentMessagePart[] }) {
+function PanelMessageActivity({ parts, onToolApproval, approvalBusy }: { parts: AgentMessagePart[]; onToolApproval: (call: AgentMessagePart["toolCall"] | undefined, decision: "approve" | "reject") => void; approvalBusy?: string }) {
   const { t } = useI18n()
   const work = parts.filter(part => part.type === 'reasoning' || part.type === 'toolCall')
   if (!work.length) return null
   const running = work.some(part => part.status === 'running' || part.status === 'pending' || part.toolCall?.status === 'running' || part.toolCall?.status === 'pending')
   return <details className={styles.messageActivity} open={running || undefined}>
     <summary>{running ? <LoaderCircle/> : <Check/>}<span>{running ? t('Thinking…') : t('Work completed')}</span><ChevronRight/></summary>
-    <div>{work.map(part => <div key={part.id}>{part.type === 'reasoning' ? <><strong>{t('Reasoning')}</strong><p>{part.text}</p></> : <span>{part.toolCall?.name.replaceAll('_', ' ')}</span>}</div>)}</div>
+    <div>{work.map(part => <div key={part.id}>{part.type === 'reasoning' ? <><strong>{t('Reasoning')}</strong><p>{part.text}</p></> : <><span>{part.toolCall?.name.replaceAll('_', ' ')}</span>{part.status === "pending" && part.toolCall?.approvalId && <span className={styles.approvalActions}><button disabled={approvalBusy === part.toolCall.approvalId} onClick={() => void onToolApproval(part.toolCall, "reject")} type="button">{t("Reject tool")}</button><button disabled={approvalBusy === part.toolCall.approvalId} onClick={() => void onToolApproval(part.toolCall, "approve")} type="button">{t("Approve tool")}</button></span>}</>}</div>)}</div>
   </details>
 }

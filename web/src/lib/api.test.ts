@@ -6,6 +6,7 @@ import {
   deleteProject,
   fetchBootstrap,
   fetchInboxNotifications,
+  listIssues,
   realtimeClientId,
   searchWorkspace,
   updateInboxNotification,
@@ -79,6 +80,17 @@ describe('API client contract', () => {
     await expect(updateIssue('issue-1', { title: 'Next', expectedVersion: 3 })).rejects.toMatchObject({
       name: 'ApiError', message: 'Version conflict', status: 409, code: 'conflict', current: { version: 4 },
     })
+  })
+
+  it('serializes cursor issue queries and structured filters', async () => {
+    fetchMock.mockResolvedValue(response({ items: [], nextCursor: '', hasMore: false, total: 0 }))
+    await listIssues({ teamId: ['team-1', 'team-2'], archived: 'all', limit: 25, cursor: 'next/page', sort: 'updatedAt', direction: 'desc', filter: { and: [{ field: 'priority', operator: 'is', values: ['1'] }] } })
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const parsed = new URL(url, 'http://flow.local')
+    expect(parsed.pathname).toBe('/api/issues')
+    expect(parsed.searchParams.get('teamId')).toBe('team-1,team-2')
+    expect(parsed.searchParams.get('cursor')).toBe('next/page')
+    expect(JSON.parse(parsed.searchParams.get('filter') ?? '{}')).toEqual({ and: [{ field: 'priority', operator: 'is', values: ['1'] }] })
   })
 
   it('does not infer a workspace header from authentication routes', async () => {

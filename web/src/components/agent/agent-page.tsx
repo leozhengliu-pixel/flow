@@ -21,11 +21,12 @@ import {
 import {
   deleteAgentSession,
   fetchAgentStatus,
+  resolveAgentApproval,
   updateAgentSession,
 } from "@/lib/api";
 import { streamAgentSessionMessage, streamAgentSessionMessageEdit, streamNewAgentSession, type AgentStreamEvent } from "@/lib/agent-stream";
 import { agentPath, newAgentSkillPath } from "@/lib/app-routes";
-import type { AgentMessage, AgentSession, AgentStatus, BootstrapData } from "@/types/flow";
+import type { AgentMessage, AgentSession, AgentStatus, AgentToolCall, BootstrapData } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
 import { usePropertyCommand } from "@/components/property/use-property-command";
 import {
@@ -63,6 +64,7 @@ export function AgentPage({
     [selectedSkills, setSelectedSkills] = useState<string[]>([]),
     [deleteTarget, setDeleteTarget] = useState<AgentSession>(),
     [editingId, setEditingId] = useState<string>(),
+    [approvalBusy, setApprovalBusy] = useState<string>(),
     [activeStreamId, setActiveStreamId] = useState<string>(),
     [examplesVisible, setExamplesVisible] = useState(true),
     [attachments, setAttachments] = useState<File[]>([]);
@@ -178,6 +180,18 @@ export function AgentPage({
 	  streamAbortRef.current = undefined;
       setBusy(false);
       requestAnimationFrame(() => editorRef.current?.focus());
+    }
+  };
+  const decideToolApproval = async (call: AgentToolCall | undefined, decision: "approve" | "reject") => {
+    if (!current || !call?.approvalId || approvalBusy) return;
+    setApprovalBusy(call.approvalId);
+    setError(undefined);
+    try {
+      await resolveAgentApproval(current.id, call.approvalId, decision);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t("Flow Agent is unavailable"));
+    } finally {
+      setApprovalBusy(undefined);
     }
   };
   const historyOptions = useMemo(
@@ -416,6 +430,8 @@ export function AgentPage({
             session={current}
             editingId={editingId}
             onRetry={(message) => void send(message)}
+            onToolApproval={decideToolApproval}
+            approvalBusy={approvalBusy}
             onEdit={(message) => {
               setEditingId(message.id);
               writeInput(message.content);
@@ -625,12 +641,16 @@ function Conversation({
   editingId,
   onEdit,
   onRetry,
+  onToolApproval,
+  approvalBusy,
   session,
 }: {
   busy: boolean;
   editingId?: string;
   onEdit: (message: AgentSession["messages"][number]) => void;
   onRetry: (message: string) => void;
+  onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void;
+  approvalBusy?: string;
   session: AgentSession;
 }) {
   const { t } = useI18n();
@@ -668,7 +688,7 @@ function Conversation({
                 {waiting
                   ? <div aria-live="polite" className={styles.thinkingPlaceholder}><LoaderCircle className={styles.spin}/><span>{t("Thinking…")}</span></div>
                   : message.parts?.length
-                    ? <AgentMessageParts message={message} onRetry={lastUserMessage(session.messages, index) ? () => onRetry(lastUserMessage(session.messages, index)) : undefined}/>
+                    ? <AgentMessageParts message={message} onRetry={lastUserMessage(session.messages, index) ? () => onRetry(lastUserMessage(session.messages, index)) : undefined} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>
                     : <AgentRichText className={styles.messageDocument} content={message.content}/>}
               </div>
               <div className={styles.messageActions}>
@@ -697,13 +717,13 @@ function Conversation({
   );
 }
 
-function AgentMessageParts({ message, onRetry }: { message: AgentMessage; onRetry?: () => void }) {
+function AgentMessageParts({ message, onRetry, onToolApproval, approvalBusy }: { message: AgentMessage; onRetry?: () => void; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string }) {
   const { t } = useI18n();
   const text = message.parts?.filter(part => part.type === "text").map(part => part.text ?? "").join("") || message.content;
   const work = message.parts?.filter(part => part.type === "reasoning" || part.type === "toolCall") ?? [];
   const other = message.parts?.filter(part => !["text", "reasoning", "toolCall"].includes(part.type)) ?? [];
   return <div className={styles.messageParts}>
-    {work.length > 0 && <AgentWorkGroup message={message} parts={work}/>}
+    {work.length > 0 && <AgentWorkGroup message={message} parts={work} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>}
     {other.map(part => part.type === "error"
       ? <div className={styles.partError} key={part.id} role="alert"><AlertCircle/><span>{part.text}</span>{onRetry && <button onClick={onRetry} type="button">{t("Retry")}</button>}</div>
       : <div className={styles.eventPart} key={part.id}><span>{part.text}</span></div>)}
@@ -711,7 +731,7 @@ function AgentMessageParts({ message, onRetry }: { message: AgentMessage; onRetr
   </div>;
 }
 
-function AgentWorkGroup({ message, parts }: { message: AgentMessage; parts: NonNullable<AgentMessage["parts"]> }) {
+function AgentWorkGroup({ message, parts, onToolApproval, approvalBusy }: { message: AgentMessage; parts: NonNullable<AgentMessage["parts"]>; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string }) {
   const { t } = useI18n();
   const running = parts.some(part => part.status === "running" || part.status === "pending" || part.toolCall?.status === "running" || part.toolCall?.status === "pending");
   const failed = parts.some(part => part.status === "error" || part.toolCall?.status === "error");
@@ -733,18 +753,20 @@ function AgentWorkGroup({ message, parts }: { message: AgentMessage; parts: NonN
     <div className={styles.workItems}>
       {parts.map(part => part.type === "reasoning"
         ? <div className={styles.reasoningRow} key={part.id}><span>{part.status === "running" ? t("Thinking…") : t("Reasoning")}</span>{part.text && <p>{part.text}</p>}</div>
-        : part.toolCall ? <AgentToolCallItem key={part.id} part={part}/> : null)}
+        : part.toolCall ? <AgentToolCallItem key={part.id} part={part} onApproval={onToolApproval} approvalBusy={approvalBusy}/> : null)}
     </div>
   </details>;
 }
 
-function AgentToolCallItem({ part }: { part: NonNullable<AgentMessage["parts"]>[number] }) {
+function AgentToolCallItem({ part, onApproval, approvalBusy }: { part: NonNullable<AgentMessage["parts"]>[number]; onApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string }) {
+  const { t } = useI18n();
   const call = part.toolCall!;
   const running = call.status === "running" || call.status === "pending";
   const detail = readableToolDetail(call.arguments);
-  return <details className={`${styles.toolCall} ${call.status === "error" ? styles.toolCallError : ""}`} open={call.status === "error" || undefined}>
+  const approvalPending = call.status === "pending" && Boolean(call.approvalId);
+  return <details className={`${styles.toolCall} ${call.status === "error" ? styles.toolCallError : ""}`} open={approvalPending || call.status === "error" || undefined}>
     <summary>{running ? <LoaderCircle className={styles.spin}/> : call.status === "error" ? <AlertCircle/> : <Check/>}<span>{toolStatusLabel(call.name, running)}</span>{detail && <small>{detail}</small>}<ChevronRight/></summary>
-    <div>{call.error && <p role="alert">{call.error}</p>}<code>{JSON.stringify(call.result ?? call.arguments ?? {}, null, 2)}</code></div>
+    <div>{approvalPending && <div className={styles.approvalPrompt}><span>{t("Waiting for approval")}</span><span className={styles.approvalActions}><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "reject")} type="button">{t("Reject tool")}</button><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "approve")} type="button">{t("Approve tool")}</button></span></div>}{call.error && <p role="alert">{call.error}</p>}<code>{JSON.stringify(call.result ?? call.arguments ?? {}, null, 2)}</code></div>
   </details>;
 }
 

@@ -8,6 +8,7 @@ import './inbox.css'
 import { CheckIcon, DisplayIcon, FilterIcon, SidebarIcon } from '@/components/ui/view-action-icons'
 
 export type InboxOrdering = 'newest' | 'oldest' | 'priority'
+export type InboxTab = 'all' | 'priority' | 'other'
 
 export interface InboxDisplayOptions {
   ordering: InboxOrdering
@@ -30,6 +31,9 @@ export interface InboxPageShellProps {
   onDeleteAllRead: () => void
   onDeleteAllReadCompleted: () => void
   onOpenSidebar?: () => void
+  activeTab?: InboxTab
+  onTabChange?: (tab: InboxTab) => void
+  tabCounts?: Partial<Record<InboxTab, number>>
 }
 
 const INBOX_LIST_WIDTH_KEY = 'flow.inbox.list-width'
@@ -51,6 +55,9 @@ export function InboxPageShell({
   onDeleteAllRead,
   onDeleteAllReadCompleted,
   onOpenSidebar,
+  activeTab = 'all',
+  onTabChange,
+  tabCounts,
 }: InboxPageShellProps) {
   const shellRef = useRef<HTMLElement>(null)
   const dragRef = useRef({ active: false, pointerId: -1 })
@@ -134,6 +141,9 @@ export function InboxPageShell({
           onDeleteAllRead={onDeleteAllRead}
           onDeleteAllReadCompleted={onDeleteAllReadCompleted}
           onOpenSidebar={onOpenSidebar}
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          tabCounts={tabCounts}
         />
         <div className="flow-inbox__list">
           {children}
@@ -199,6 +209,9 @@ export function InboxHeader({
   onDeleteAllRead,
   onDeleteAllReadCompleted,
   onOpenSidebar,
+  activeTab = 'all',
+  onTabChange,
+  tabCounts,
 }: InboxHeaderProps) {
   return (
     <header className="flow-inbox__header">
@@ -214,6 +227,23 @@ export function InboxHeader({
       ) : null}
       <div className="flow-inbox__header-title-actions">
         <h2>Inbox</h2>
+        {onTabChange ? (
+          <nav className="flow-inbox__tabs" aria-label="Inbox sections" role="tablist">
+            {(['priority', 'other'] as InboxTab[]).map(tab => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab}
+                data-active={activeTab === tab || undefined}
+                onClick={() => onTabChange(tab)}
+              >
+                {tab === 'priority' ? 'Priority' : 'Other'}
+                {tabCounts?.[tab] ? <span className="flow-inbox__tab-count">{tabCounts[tab]! > 99 ? '99+' : tabCounts[tab]}</span> : null}
+              </button>
+            ))}
+          </nav>
+        ) : null}
         <NotificationActionsMenu
           pending={bulkPending}
           onDeleteAll={onDeleteAll}

@@ -69,7 +69,7 @@ export function SubIssueEditor({ parent, data, onCancel, onCreate }: { parent: I
       <PropertyMenu ariaLabel={`Change status. ${state.name} is selected`} compact label="Status" value={state.name} selectedId={stateId} icon={<StatusIcon state={state}/>} options={teamStates.map(item => ({ id: item.id, label: item.name, icon: <StatusIcon state={item}/> }))} onChange={setStateId} trigger={<StatusIcon state={state} size={14}/>} triggerClassName="sub-issue-status-trigger"/>
       <IssueTitleEditor autoFocus value={title} onChange={setTitle} onEnter={() => document.querySelector<HTMLElement>('.sub-issue-description-editor')?.focus()} onSubmit={() => void submit()} className="sub-issue-title-editor"/>
     </div>
-    <IssueDescriptionEditor value={description?.markdown ?? ''} state={description?.documentJSON} onChange={setDescription} onSubmit={() => void submit()} className="sub-issue-description-editor"/>
+    <IssueDescriptionEditor users={data.users} value={description?.markdown ?? ''} state={description?.documentJSON} onChange={setDescription} onSubmit={() => void submit()} className="sub-issue-description-editor"/>
     <div className="sub-issue-actions"><div className="sub-issue-properties">
       <button type="button" className="sub-issue-team" aria-label="Set team" disabled><TeamIcon team={parent.team} /><span data-i18n-ignore>{parent.team.key}</span></button>
       <PropertyMenu compact label="Priority" value={priority ? ['', 'Urgent', 'High', 'Medium', 'Low'][priority] : 'Priority'} selectedId={String(priority)} icon={<PriorityIcon priority={priority}/>} options={['No priority', 'Urgent', 'High', 'Medium', 'Low'].map((label, id) => ({ id: String(id), label, icon: <PriorityIcon priority={id}/> }))} onChange={id => setPriority(Number(id))}/>

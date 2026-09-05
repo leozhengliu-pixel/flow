@@ -5848,6 +5848,24 @@
       }
     },
     "/api/issues": {
+      "get": {
+        "operationId": "get_issues",
+        "tags": [
+          "issues"
+        ],
+        "summary": "GET /api/issues",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
       "post": {
         "operationId": "post_issues",
         "tags": [

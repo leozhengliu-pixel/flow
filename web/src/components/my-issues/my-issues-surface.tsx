@@ -10,7 +10,7 @@ import styles from './my-issues.module.css'
 
 export type MyIssuesView = 'assigned' | 'created' | 'subscribed' | 'activity'
 export type MyIssuesGrouping = 'focus' | 'status' | 'priority' | 'project' | 'assignee' | 'agent' | 'cycle' | 'label' | 'team' | 'customer' | 'none'
-export type MyIssuesProperty = 'id' | 'status' | 'assignee' | 'priority' | 'project' | 'dueDate' | 'milestone' | 'labels' | 'links' | 'customers' | 'customerRevenue' | 'timeInStatus' | 'created' | 'updated'
+export type MyIssuesProperty = 'id' | 'status' | 'assignee' | 'priority' | 'project' | 'cycle' | 'dueDate' | 'milestone' | 'labels' | 'links' | 'customers' | 'customerRevenue' | 'timeInStatus' | 'created' | 'updated'
 
 export interface MyIssuesDisplayOptions {
   layout: 'list' | 'board'

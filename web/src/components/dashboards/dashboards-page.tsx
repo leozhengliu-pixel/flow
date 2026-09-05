@@ -150,7 +150,7 @@ export function DashboardsPage({
       do {
         const page = await fetchDashboards(cursor);
         loaded.push(...page.items);
-        cursor = page.hasMore ? page.nextCursor : "";
+        cursor = page.hasMore ? page.nextCursor ?? "" : "";
       } while (cursor);
       setItems(loaded);
       setSelectedId((current) =>
