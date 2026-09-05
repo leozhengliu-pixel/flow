@@ -154,7 +154,9 @@ function LabelGroupOption({ group, open, selectedIds, listboxId, onOpenChange, o
   const [query, setQuery] = useState('')
   const [activeId, setActiveId] = useState<string>()
   const inputRef = useRef<HTMLInputElement>(null)
+  const openTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const filtered = query.trim() ? group.options.filter(option => option.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())) : group.options
+  useEffect(() => () => { if (openTimer.current) clearTimeout(openTimer.current) }, [])
   const changeOpen = (next: boolean) => {
     onOpenChange(next)
     if (!next) return
@@ -163,6 +165,13 @@ function LabelGroupOption({ group, open, selectedIds, listboxId, onOpenChange, o
     requestAnimationFrame(() => inputRef.current?.focus())
   }
   const choose = (option: PropertyOption) => { onChoose(option); onOpenChange(false) }
+  const openFromHover = () => {
+    if (open || openTimer.current) return
+    openTimer.current = setTimeout(() => { openTimer.current = undefined; changeOpen(true) }, 300)
+  }
+  const cancelHoverOpen = () => {
+    if (openTimer.current) { clearTimeout(openTimer.current); openTimer.current = undefined }
+  }
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onOpenChange(false); return }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -178,7 +187,7 @@ function LabelGroupOption({ group, open, selectedIds, listboxId, onOpenChange, o
       if (option) { event.preventDefault(); choose(option) }
     }
   }
-  return <Popover.Root open={open} onOpenChange={changeOpen}><Popover.Anchor asChild><button type="button" className="property-command-label-group-option" role="option" aria-selected={open} aria-haspopup="listbox" aria-expanded={open} onPointerEnter={() => changeOpen(true)} onFocus={() => changeOpen(true)} onClick={() => changeOpen(true)}>
+  return <Popover.Root open={open} onOpenChange={changeOpen}><Popover.Anchor asChild><button type="button" className="property-command-label-group-option" role="option" aria-selected={open} aria-haspopup="listbox" aria-expanded={open} onPointerEnter={openFromHover} onPointerLeave={cancelHoverOpen} onFocus={() => changeOpen(true)} onClick={() => changeOpen(true)}>
     <span className="property-command-option-background"/><span className="property-command-checkbox"/><span className="property-command-icon"><LabelGroupIcon color={group.color ?? group.options[0]?.color ?? 'currentColor'} size={16}/></span><span className="property-command-group-copy"><span className="property-command-label">{group.label}</span></span><ChevronRight className="property-command-group-chevron" size={13}/>
   </button></Popover.Anchor><Popover.Portal><Popover.Content className="property-command-label-submenu" side="right" align="start" alignOffset={-6} sideOffset={-2} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}><div onKeyDown={onKeyDown}><div className="property-command-search"><input ref={inputRef} value={query} onChange={event=>{setQuery(event.target.value);const normalized=event.target.value.trim().toLocaleLowerCase();setActiveId(group.options.find(option=>option.label.toLocaleLowerCase().includes(normalized))?.id)}} aria-label={group.label} placeholder={group.label} autoComplete="off" spellCheck={false}/></div><div className="property-command-options" role="listbox" aria-label={group.label}>{filtered.map(option => <CommandOption key={option.id} option={option} active={option.id === activeId} checked={selectedIds.has(option.id)} listboxId={`${listboxId}-${group.id}`} icon={<LabelIcon size={14}/>} onChoose={() => choose(option)} onActive={() => setActiveId(option.id)}/>)}{!filtered.length&&<div className="core-property-empty">No results</div>}</div></div></Popover.Content></Popover.Portal></Popover.Root>
 }
@@ -196,9 +205,11 @@ function OptionHover({ children, className, content }: { children: ReactNode; cl
   const anchorRef = useRef<HTMLSpanElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const showTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [open, setOpen] = useState(false)
   const [position, setPosition] = useState({ left: 0, top: 0 })
-  const show = () => {
+  const showNow = () => {
+    if (showTimer.current) clearTimeout(showTimer.current)
     if (hideTimer.current) clearTimeout(hideTimer.current)
     const rect = anchorRef.current?.getBoundingClientRect()
     if (rect) {
@@ -208,7 +219,12 @@ function OptionHover({ children, className, content }: { children: ReactNode; cl
     }
     setOpen(true)
   }
+  const show = () => {
+    if (showTimer.current) clearTimeout(showTimer.current)
+    showTimer.current = setTimeout(() => { showTimer.current = undefined; showNow() }, 450)
+  }
   const hide = () => {
+    if (showTimer.current) clearTimeout(showTimer.current)
     if (hideTimer.current) clearTimeout(hideTimer.current)
     hideTimer.current = setTimeout(() => setOpen(false), 100)
   }
@@ -236,10 +252,11 @@ function OptionHover({ children, className, content }: { children: ReactNode; cl
   }, [open])
   useEffect(() => () => {
     if (hideTimer.current) clearTimeout(hideTimer.current)
+    if (showTimer.current) clearTimeout(showTimer.current)
   }, [])
   return <>
-    <span className="property-option-hover-trigger" onBlur={hide} onFocus={show} onPointerEnter={show} onPointerLeave={hide} ref={anchorRef} role="presentation">{children}</span>
-    {open && createPortal(<div className={`property-option-hover-card ${className ?? 'property-rich-hover'}`} onPointerEnter={show} onPointerLeave={hide} ref={cardRef} role="tooltip" style={{ left: position.left, top: position.top }}>{content}</div>, document.body)}
+    <span className="property-option-hover-trigger" onBlur={hide} onFocus={showNow} onPointerEnter={show} onPointerLeave={hide} ref={anchorRef} role="presentation">{children}</span>
+    {open && createPortal(<div className={`property-option-hover-card ${className ?? 'property-rich-hover'}`} onPointerEnter={showNow} onPointerLeave={hide} ref={cardRef} role="tooltip" style={{ left: position.left, top: position.top }}>{content}</div>, document.body)}
   </>
 }
 
