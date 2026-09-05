@@ -34,6 +34,7 @@ export function PriorityPicker({ value, onChange }: { value: number; onChange: (
     selectedId={String(value)}
     options={options}
     searchPlaceholder="Change priority…"
+    searchShortcut="P"
     ariaLabel={`Change priority. ${value ? `${labels[value]} is selected` : 'No priority is selected'}`}
     triggerClassName={`core-property-trigger${value === 0 ? ' muted' : ''}`}
     trigger={<><PriorityIcon priority={value}/><span>{value ? labels[value] : 'Set priority'}</span></>}
@@ -165,13 +166,14 @@ export function AssigneePicker({ value, users, onChange, hoverContext }: { value
   return <div className="core-property-picker"><PersonPicker
     ariaLabel={`Change assignee. ${value ? `${value.displayName} is assigned` : 'Currently no one is assigned.'}`}
     emptyOptionLabel="No assignee"
-    emptyTriggerLabel="Assign to…"
+    emptyTriggerLabel="Assignee"
     hoverContent={value&&hoverContext?<AssigneeHoverPreview user={value} {...hoverContext}/>:undefined}
     hoverClassName="property-rich-hover assignee-hover-surface"
     label="Assignee"
     onChange={onChange}
     people={users.map(user => ({ id: user.id, label: user.displayName, email: user.email, name: user.name, avatarUrl: user.avatarUrl, active: user.active }))}
     searchPlaceholder="Change assignee…"
+    searchShortcut="A"
     selectedId={value?.id}
     triggerClassName={`core-property-trigger${value ? '' : ' muted'}`}
   /></div>

@@ -1,6 +1,7 @@
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
 import { useCallback, useRef, useState, type CSSProperties, type FocusEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { MoreHorizontal } from 'lucide-react'
 
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { DateTimeControl } from '@/components/ui/date-time-control'
@@ -162,6 +163,7 @@ export function InboxNotificationRow(props: InboxNotificationRowProps) {
               onBlur={handleBlur}
             >
               <div className="flow-inbox-row__inner">
+                <span className="flow-inbox-row__unread-dot" aria-hidden="true" data-visible={!notification.read || undefined} />
                 <ActorVisual notification={notification} />
                 <div className="flow-inbox-row__content">
                   <div className="flow-inbox-row__headline" title={notification.title}>
@@ -174,6 +176,11 @@ export function InboxNotificationRow(props: InboxNotificationRowProps) {
                     <time title={notification.timestamp}>{notification.timeLabel}</time>
                   </div>
                 </div>
+              </div>
+              <div className="flow-inbox-row__actions" aria-hidden="false">
+                <button aria-label={notification.read ? 'Mark as unread' : 'Mark as read'} title={notification.read ? 'Mark as unread' : 'Mark as read'} type="button" onClick={event => { event.stopPropagation(); toggleRead() }}><UnreadIcon /></button>
+                <button aria-label="Snooze notification" title="Snooze notification" type="button" onClick={event => { event.stopPropagation(); setKeyboardSnoozeOpen(true) }}><SnoozeIcon /></button>
+                <button aria-label="More notification actions" title="More actions" type="button" onClick={event => { event.preventDefault(); event.stopPropagation(); rowRef.current?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: event.clientX, clientY: event.clientY })) }}><MoreHorizontal size={14}/></button>
               </div>
               {pending ? <span className="flow-inbox-row__pending" aria-hidden="true" /> : null}
               {actionError ? <span id={`${notification.id}-action-error`} className={styles.actionError} role="alert">{actionError}</span> : null}

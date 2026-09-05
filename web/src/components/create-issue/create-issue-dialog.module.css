@@ -26,8 +26,8 @@
 .descriptionField :global(.description-editor:focus), .descriptionField :global(.description-editor:focus-visible) { outline: 0; background: transparent; box-shadow: none; }
 .descriptionField :global(.description-editor p + p) { margin-top: 10px; }
 .properties { height: 38px; flex: 0 0 38px; display: flex; align-items: flex-start; gap: 6px; padding: 2px 12px 0; overflow-x: auto; scrollbar-width: none; }
-.properties :global(.mini-property-trigger) { height: 24px; flex: 0 0 auto; padding: 0 8px 0 6px; border: .5px solid transparent; border-radius: 9999px; background: lch(17.574% 1.589 272); color: lch(64.805% 1.65 272); font-size: 12px; font-weight: 500; }
-.properties :global(.mini-property-trigger:hover), .properties :global(.mini-property-trigger[aria-expanded="true"]) { background: lch(22% 1.5 272); color: lch(91.201% 1.65 272); }
+.properties :global(.mini-property-trigger) { height: 24px; flex: 0 0 auto; padding: 0 8px 0 6px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--theme-text-secondary); font-size: 12px; font-weight: 500; }
+.properties :global(.mini-property-trigger:hover), .properties :global(.mini-property-trigger[aria-expanded="true"]) { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
 .properties :global(.mini-property-trigger svg) { width: 14px; height: 14px; }
 .properties :global(.avatar) { width: 16px; height: 16px; font-size: 7px; }
 .moreButton, .attachButton { width: 24px; height: 24px; flex: 0 0 24px; display: grid; place-items: center; padding: 0; border: .5px solid transparent; border-radius: 9999px; background: lch(17.574% 1.589 272); color: lch(91.201% 1.65 272); }
@@ -89,7 +89,7 @@
 :global(:root[data-theme="light"]) .overlay { background: var(--theme-overlay); }
 :global(:root[data-theme="light"]) .dialog { background: var(--theme-surface-2); color: var(--theme-text-primary); box-shadow: var(--menu-shadow); }
 :global(:root[data-theme="light"]) .header h2, :global(:root[data-theme="light"]) .iconButton { color: var(--theme-text-primary); }
-:global(:root[data-theme="light"]) .team, :global(:root[data-theme="light"]) .saveDraft, :global(:root[data-theme="light"]) .moreButton, :global(:root[data-theme="light"]) .attachButton, :global(:root[data-theme="light"]) .properties :global(.mini-property-trigger) { border-color: var(--border); background: var(--theme-surface-2); color: var(--theme-text-secondary); }
+:global(:root[data-theme="light"]) .team, :global(:root[data-theme="light"]) .saveDraft, :global(:root[data-theme="light"]) .moreButton, :global(:root[data-theme="light"]) .attachButton { border-color: var(--border); background: var(--theme-surface-2); color: var(--theme-text-secondary); }
 :global(:root[data-theme="light"]) .saveDraft:hover, :global(:root[data-theme="light"]) .iconButton:hover, :global(:root[data-theme="light"]) .moreButton:hover, :global(:root[data-theme="light"]) .moreButton[data-state="open"], :global(:root[data-theme="light"]) .attachButton:hover, :global(:root[data-theme="light"]) .properties :global(.mini-property-trigger:hover), :global(:root[data-theme="light"]) .properties :global(.mini-property-trigger[aria-expanded="true"]) { background: var(--theme-control-hover); color: var(--theme-text-primary); }
 :global(:root[data-theme="light"]) .breadcrumb, :global(:root[data-theme="light"]) .createMore { color: var(--theme-text-secondary); }
 :global(:root[data-theme="light"]) .titleField :global(.title-editor) { color: var(--theme-text-primary); }

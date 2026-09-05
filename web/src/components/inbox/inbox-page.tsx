@@ -51,6 +51,7 @@ export interface InboxPageProps {
   loading?: boolean
   loadError?: boolean
   onRetryLoad: () => void
+  onShowAllNotifications?: () => void
   hasMore?: boolean
   loadingMore?: boolean
   onLoadMore?: () => void
@@ -139,7 +140,7 @@ export function InboxPage(props: InboxPageProps) {
         onDeleteAllRead={() => void runPageAction('read', props.adapter.deleteAllRead)}
         onDeleteAllReadCompleted={() => void runPageAction('completed', props.adapter.deleteAllReadCompleted)}
       >
-        <InboxListBoundary loading={Boolean(props.loading)} error={props.loadError} empty={!props.notifications.length} retry={props.onRetryLoad}>
+        <InboxListBoundary loading={Boolean(props.loading)} error={props.loadError} empty={!props.notifications.length} onShowAll={props.onShowAllNotifications} retry={props.onRetryLoad}>
           <InboxNotificationList
             notifications={props.notifications}
             selectedId={props.selectedId}
