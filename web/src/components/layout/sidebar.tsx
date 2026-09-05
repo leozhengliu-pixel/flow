@@ -2079,6 +2079,7 @@ function Nav({
       <button
         type="button"
         className={`nav-item ${active ? "active" : ""}`}
+        title={label}
         onClick={onClick}
       >
         {content}
@@ -2091,6 +2092,7 @@ function Nav({
         `nav-item ${active || isActive ? "active" : ""}`
       }
       to={to}
+      title={label}
       onClick={onClick}
     >
       {content}

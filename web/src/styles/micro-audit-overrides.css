@@ -1,0 +1,29 @@
+/* Small interaction primitives measured against the desktop and compact clients. */
+
+/* Native title tooltips are the fallback for collapsed navigation rows. */
+.sidebar .nav-item[title] { position: relative; }
+
+/* Delay hover hints, while keyboard focus remains immediate. */
+.issue-command-button[data-tooltip]:hover::after { transition-delay: 450ms; }
+
+.menu-item:focus-visible,
+[role="menuitem"]:focus-visible,
+[role="menuitemcheckbox"]:focus-visible,
+[role="option"]:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* Selected rows are intentionally one step deeper than a hover row. */
+.flow-inbox-row[data-selected="true"] { background: var(--theme-surface-active); }
+.issue-row.selected { background: var(--bg-active); }
+
+/* Numeric identifiers use the same tabular rhythm as list cells. */
+.issue-identifier,
+[class*="identifier"] { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 760px) {
+  .settings-row { flex-direction: row; align-items: center; }
+  .settings-row > div:first-child { flex: 1 1 auto; }
+  .settings-control { width: auto; }
+}

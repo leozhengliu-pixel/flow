@@ -134,7 +134,7 @@ export function SettingsToggle({
       disabled={disabled}
       label={label}
       onChange={onChange}
-      size="regular"
+      size="compact"
     />
   );
 }

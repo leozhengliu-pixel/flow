@@ -183,6 +183,10 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
     onFiltersChange={setFilters}
     onOpenSidebar={onOpenSidebar}
     onRetryLoad={() => void onReload()}
+    onShowAllNotifications={() => {
+      setFilters([])
+      setDisplayOptions(current => ({ ...current, showRead: true, showSnoozed: true, showUnreadFirst: false }))
+    }}
     onOpenIssue={notification => {
       const projection = notifications.find(item => item.id === notification.id)
       const issue = projection ? issueById.get(projection.issueId) : undefined

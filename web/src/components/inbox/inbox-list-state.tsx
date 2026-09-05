@@ -8,12 +8,13 @@ export function InboxListLoading({ count = 7 }: { count?: number }) {
   )
 }
 
-export function InboxListEmpty({ title = 'All caught up', description = 'No notifications to show.' }: { title?: string; description?: string }) {
+export function InboxListEmpty({ title = 'All caught up', description = 'No notifications to show.', onShowAll }: { title?: string; description?: string; onShowAll?: () => void }) {
   return (
     <div className="flow-inbox-list-state flow-inbox-list-state--message" role="status" aria-live="polite">
       <EmptyInboxIcon />
       <strong>{title}</strong>
       <span>{description}</span>
+      {onShowAll && <button type="button" onClick={onShowAll}>Show all notifications</button>}
     </div>
   )
 }
@@ -28,10 +29,10 @@ export function InboxListError({ onRetry, title = 'Unable to load notifications'
   )
 }
 
-export function InboxListBoundary({ loading, error, empty, retry, children }: { loading: boolean; error?: boolean; empty?: boolean; retry: () => void; children: ReactNode }) {
+export function InboxListBoundary({ loading, error, empty, retry, onShowAll, children }: { loading: boolean; error?: boolean; empty?: boolean; retry: () => void; onShowAll?: () => void; children: ReactNode }) {
   if (loading) return <InboxListLoading />
   if (error) return <InboxListError onRetry={retry} />
-  if (empty) return <InboxListEmpty />
+  if (empty) return <InboxListEmpty onShowAll={onShowAll} />
   return <>{children}</>
 }
 
