@@ -9,7 +9,7 @@ import { batchNotifications, updateInboxNotification } from '@/lib/api'
 import { type InboxFilterCondition, type InboxFilterOptions } from './inbox-filter-builder'
 import { INBOX_REVIEW_STATUS_OPTIONS, normalizeInboxFilters } from './inbox-filter-types'
 import { InboxPage, type InboxPageAdapter } from './inbox-page'
-import type { InboxDisplayOptions } from './inbox-page-shell'
+import type { InboxDisplayOptions, InboxTab } from './inbox-page-shell'
 import type { InboxNotificationKind, InboxNotificationRowData, InboxSnoozePreset } from './notification-row'
 
 const initialDisplayOptions: InboxDisplayOptions = {
@@ -56,9 +56,11 @@ export interface InboxAppPageProps {
   onDeleteAttachment: (issue: Issue, attachmentId: string) => Promise<void>
   onCopyIssueLink?: (issue: Issue) => Promise<void> | void
   onOpenSidebar?: () => void
+  activeTab?: InboxTab
+  onTabChange?: (tab: InboxTab) => void
 }
 
-export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpenProject, onOpenReview, onSubscriberChange, onUpdateIssue, onDeleteIssue, onCreateRelation, onDeleteRelation, onCreateSubIssue, onReactIssue, onCreateComment, onEditComment, onDeleteComment, onReactComment, onUploadAttachment, onDeleteAttachment, onCopyIssueLink, onOpenSidebar }: InboxAppPageProps) {
+export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpenProject, onOpenReview, onSubscriberChange, onUpdateIssue, onDeleteIssue, onCreateRelation, onDeleteRelation, onCreateSubIssue, onReactIssue, onCreateComment, onEditComment, onDeleteComment, onReactComment, onUploadAttachment, onDeleteAttachment, onCopyIssueLink, onOpenSidebar, activeTab = 'all', onTabChange }: InboxAppPageProps) {
   const source = useMemo(() => projectInbox(data), [data])
   const issueById = useMemo(() => new Map(data.issues.map(issue => [issue.id, issue])), [data.issues])
   const [notifications, setNotifications] = useState<InboxProjection[]>(source)
@@ -130,9 +132,13 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
     },
   }), [data.issues])
 
+  const tabNotifications = useMemo(() => notifications.filter(notification => matchesInboxTab(notification, activeTab)), [activeTab, notifications])
+  useEffect(() => {
+    setSelectedId(current => current && tabNotifications.some(notification => notification.id === current) ? current : null)
+  }, [tabNotifications])
   const visibleNotifications = useMemo(() => {
     const now = Date.now()
-    let visible = notifications.filter(notification => {
+    let visible = tabNotifications.filter(notification => {
       if (!displayOptions.showSnoozed && notification.snoozedUntil && new Date(notification.snoozedUntil).getTime() > now) return false
       return (displayOptions.showRead || !notification.read) && filters.every(filter => notificationMatchesFilter(notification, filter))
     })
@@ -143,11 +149,16 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
       return displayOptions.ordering === 'newest' ? delta : -delta
     })
     return visible
-  }, [displayOptions, filters, notifications])
+  }, [displayOptions, filters, tabNotifications])
   const filterHiddenCount = useMemo(() => {
-    const withoutFilters = notifications.filter(notification => notificationVisibleForDisplay(notification, displayOptions))
+    const withoutFilters = tabNotifications.filter(notification => notificationVisibleForDisplay(notification, displayOptions))
     return Math.max(0, withoutFilters.length - withoutFilters.filter(notification => filters.every(filter => notificationMatchesFilter(notification, filter))).length)
-  }, [displayOptions, filters, notifications])
+  }, [displayOptions, filters, tabNotifications])
+
+  const tabCounts = useMemo(() => ({
+    priority: notifications.filter(item => matchesInboxTab(item, 'priority') && !item.read && (!item.snoozedUntil || new Date(item.snoozedUntil).getTime() <= Date.now())).length,
+    other: notifications.filter(item => matchesInboxTab(item, 'other') && !item.read && (!item.snoozedUntil || new Date(item.snoozedUntil).getTime() <= Date.now())).length,
+  }), [notifications])
 
   const updateVisible = (nextVisible: InboxNotificationRowData[]) => {
     const visibleIds = new Set(visibleNotifications.map(item => item.id))
@@ -184,6 +195,9 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
       }
     }}
     onCopyIdentifier={notification => void copyText(notification.identifier)}
+    activeTab={activeTab}
+    onTabChange={onTabChange}
+    tabCounts={tabCounts}
     onCopyLink={onCopyIssueLink ? notification => {
       const projection = notifications.find(item => item.id === notification.id)
       const issue = projection ? issueById.get(projection.issueId) : undefined
@@ -446,6 +460,16 @@ function notificationMatchesFilter(notification: InboxProjection, filter: InboxF
 function notificationVisibleForDisplay(notification: InboxProjection, display: InboxDisplayOptions) {
   if (!display.showRead && notification.read) return false
   return display.showSnoozed || !notification.snoozedUntil || new Date(notification.snoozedUntil).getTime() <= Date.now()
+}
+
+/** Keep the two inbox scopes deterministic until user-specific rules are available. */
+function matchesInboxTab(notification: InboxProjection, tab: InboxTab) {
+  if (tab === 'all') return true
+  const priorityTypes = ['assignment', 'mention', 'comment', 'review', 'reminder', 'triage', 'project', 'status']
+  const otherTypes = ['reaction', 'reactions', 'subscription', 'subscriptions', 'pulse', 'apps', 'integration', 'customerRequest', 'customerRequests', 'document', 'documents', 'loop', 'loops', 'system']
+  const priority = priorityTypes.includes(notification.notificationType)
+    || (!otherTypes.includes(notification.notificationType) && ['assignment', 'mention', 'comment', 'project'].includes(notification.kind))
+  return tab === 'priority' ? priority : !priority
 }
 
 const notificationTypeOptions = [

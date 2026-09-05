@@ -5,13 +5,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Avatar } from '@/components/issue/issue-row'
 import { NoAssigneeIcon, PriorityIcon } from '@/components/issue/issue-icons'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
-import type { Initiative, InitiativeUpdate, Project, ProjectUpdate } from '@/types/flow'
+import type { Initiative, InitiativeUpdate, Project, ProjectUpdate, User } from '@/types/flow'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
 import type { DescriptionSnapshot } from '@/components/issue/editor/editor-content'
 
 type Source = { kind: 'project'; entity: Project } | { kind: 'initiative'; entity: Initiative }
 
-export function PulseComposer({ initiatives, onCreateInitiative, onCreateProject, onUploadInitiativeAttachment, onUploadProjectAttachment, onOpenChange, open, projects }: {
+export function PulseComposer({ initiatives, onCreateInitiative, onCreateProject, onUploadInitiativeAttachment, onUploadProjectAttachment, onOpenChange, open, projects, users }: {
   initiatives: Initiative[]
   onCreateInitiative: (id: string, input: { body: string;bodyData?:Record<string,unknown>;health?: Project['health'] }) => Promise<InitiativeUpdate>
   onCreateProject: (id: string, input: { body: string;bodyData?:Record<string,unknown>;health?: Project['health'] }) => Promise<ProjectUpdate>
@@ -20,6 +20,7 @@ export function PulseComposer({ initiatives, onCreateInitiative, onCreateProject
   onOpenChange: (open: boolean) => void
   open: boolean
   projects: Project[]
+  users: User[]
 }) {
   const sources: Source[] = useMemo(() => [...projects.map(entity => ({ kind: 'project' as const, entity })), ...initiatives.map(entity => ({ kind: 'initiative' as const, entity }))], [initiatives, projects])
   const [source, setSource] = useState<Source | undefined>(sources[0])
@@ -46,7 +47,7 @@ export function PulseComposer({ initiatives, onCreateInitiative, onCreateProject
       <PulseHealthMenu health={health} onChange={setHealth}/>
       <Dialog.Close asChild><button aria-label="Close dialog" className="pulse-composer-close" type="button"><X size={15}/></button></Dialog.Close>
     </header>
-    <IssueDescriptionEditor ariaLabel={source?.kind==='initiative'?'Initiative update':'Project update'} className="pulse-composer-editor" placeholder={source?.kind==='initiative'?'Write an initiative update…':'Write a project update…'} value={body?.markdown??''} state={body?.documentJSON} onChange={setBody} onSubmit={()=>void submit()}/>
+    <IssueDescriptionEditor users={users} ariaLabel={source?.kind==='initiative'?'Initiative update':'Project update'} className="pulse-composer-editor" placeholder={source?.kind==='initiative'?'Write an initiative update…':'Write a project update…'} value={body?.markdown??''} state={body?.documentJSON} onChange={setBody} onSubmit={()=>void submit()}/>
     {source && <ChangeSummary source={source}/>} 
     {files.length>0&&<div className="pulse-composer-files">{files.map((file,index)=><span key={`${file.name}:${index}`}>{file.name}<button aria-label={`Remove ${file.name}`} onClick={()=>setFiles(current=>current.filter((_,itemIndex)=>itemIndex!==index))}><X size={11}/></button></span>)}</div>}
     <footer><button aria-label="Attach images, files, or videos" onClick={()=>fileRef.current?.click()} type="button"><Paperclip size={15}/></button><input ref={fileRef} type="file" hidden multiple onChange={event=>{setFiles(Array.from(event.target.files??[]));event.target.value=''}}/><span/><button className="pulse-post-button" disabled={!body?.markdown.trim() || !source || saving} onClick={() => void submit()} type="button">{saving ? 'Posting…' : 'Post update'}</button></footer>

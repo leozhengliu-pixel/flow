@@ -203,7 +203,7 @@ function readBoolean(key: string, fallback: boolean) { try { const value = globa
 function readNumber(key: string, fallback: number) { try { const value = Number(globalThis.localStorage?.getItem(key)); return Number.isFinite(value) && value > 0 ? value : fallback } catch { return fallback } }
 function writeValue(key: string, value: string) { try { globalThis.localStorage?.setItem(key, value) } catch { /* Persistence is best-effort in private browsing. */ } }
 function isDisplayProperty(value: unknown): value is MyIssuesProperty { return typeof value === 'string' && DISPLAY_PROPERTIES.has(value as MyIssuesProperty) }
-const DISPLAY_PROPERTIES = new Set<MyIssuesProperty>(['id', 'status', 'assignee', 'priority', 'project', 'dueDate', 'milestone', 'labels', 'links', 'customers', 'customerRevenue', 'timeInStatus', 'created', 'updated'])
+const DISPLAY_PROPERTIES = new Set<MyIssuesProperty>(['id', 'status', 'assignee', 'priority', 'project', 'cycle', 'dueDate', 'milestone', 'labels', 'links', 'customers', 'customerRevenue', 'timeInStatus', 'created', 'updated'])
 function replaceIssues(groups: MyIssuesGroupData[], replacements: MyIssuesRowData[]) {
   const byId = new Map(replacements.map(issue => [issue.id, issue]))
   return groups.map(group => ({ ...group, issues: group.issues.map(issue => byId.get(issue.id) ?? issue) }))

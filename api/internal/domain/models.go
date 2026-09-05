@@ -127,6 +127,9 @@ type AgentToolCall struct {
 	Result    json.RawMessage `json:"result,omitempty"`
 	Status    string          `json:"status"`
 	Error     string          `json:"error,omitempty"`
+	// ApprovalID is set while a write tool is waiting for the user decision.
+	// It is intentionally transient and omitted from normal tool calls.
+	ApprovalID string `json:"approvalId,omitempty"`
 }
 
 type AgentSession struct {

@@ -78,6 +78,27 @@ func TestSQLiteStorePersistsStateAndDomainEvents(t *testing.T) {
 	}
 }
 
+func TestEnrichRealtimePayloadPreservesMutationAndAddsEntity(t *testing.T) {
+	input := json.RawMessage(`{"changes":{"priority":2}}`)
+	entity := map[string]any{"id": "issue_1", "priority": 2}
+	encoded := enrichRealtimePayload(input, entity, "issue.updated")
+	var payload map[string]any
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["entity"].(map[string]any)["id"] != "issue_1" {
+		t.Fatalf("missing realtime entity: %#v", payload)
+	}
+	if payload["changes"].(map[string]any)["priority"] != float64(2) {
+		t.Fatalf("mutation payload was not preserved: %#v", payload)
+	}
+	deleted := enrichRealtimePayload(nil, nil, "issue.deleted")
+	var deletedPayload map[string]any
+	if err := json.Unmarshal(deleted, &deletedPayload); err != nil || deletedPayload["deleted"] != true {
+		t.Fatalf("deleted marker = %#v err=%v", deletedPayload, err)
+	}
+}
+
 func TestProjectProgressHistoriesPersistAndRefreshOnIssueMutation(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "flow.db")
 	store, err := OpenSQLiteTestFixture(path)

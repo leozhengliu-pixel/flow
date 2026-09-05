@@ -19,6 +19,7 @@ export type ReleasePipelineTab = "releases" | "changelog" | "archive";
 export type ReleaseRouteTab = "issues" | "release-notes";
 export type PulseRouteView = "following" | "popular" | "all";
 export type ReviewRouteTab = "overview" | "review" | "changes";
+export type InboxRouteTab = "priority" | "other";
 export type WorkspaceSecondaryRouteKind =
   | "diary"
   | "meeting"
@@ -98,7 +99,7 @@ export type AppRoute =
   | { kind: "root" }
   | { kind: "workspace-onboarding" }
   | { kind: "workspace-root"; workspaceSlug: string }
-  | { kind: "inbox"; workspaceSlug: string }
+  | { kind: "inbox"; workspaceSlug: string; tab?: InboxRouteTab }
   | { kind: "search"; workspaceSlug: string }
   | { kind: "diary"; workspaceSlug: string }
   | { kind: "meeting"; workspaceSlug: string; meetingId: string }
@@ -368,6 +369,8 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
   if (!section) return { kind: "workspace-root", workspaceSlug };
   if (section === "inbox" && segments.length === 2)
     return { kind: "inbox", workspaceSlug };
+  if (section === "inbox" && (third === "priority" || third === "other") && segments.length === 3)
+    return { kind: "inbox", workspaceSlug, tab: third };
   if (section === "search" && segments.length === 2)
     return { kind: "search", workspaceSlug };
   if (section === "diary" && segments.length === 2)
@@ -1290,8 +1293,8 @@ export function workspaceRootPath(workspaceSlug: string) {
 export function workspaceOnboardingPath() {
   return "/join";
 }
-export function inboxPath(workspaceSlug: string) {
-  return `${workspaceRootPath(workspaceSlug)}/inbox`;
+export function inboxPath(workspaceSlug: string, tab?: InboxRouteTab) {
+  return `${workspaceRootPath(workspaceSlug)}/inbox${tab ? `/${tab}` : ""}`;
 }
 export function searchPath(workspaceSlug: string) {
   return `${workspaceRootPath(workspaceSlug)}/search`;

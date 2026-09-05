@@ -2,14 +2,14 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { BootstrapData, Issue, IssueUpdateInput, SavedView, SavedViewMutationInput, Team } from '@/types/flow'
 import type { TeamIssuesRouteView } from '@/lib/app-routes'
 import { MyIssuesBulkActionBar } from '@/components/my-issues/my-issues-bulk-action-bar'
-import { toggleGroupedLabelIds } from '@/lib/labels'
 import { MyIssuesDetailsPane, type MyIssuesDetailsSummary, type MyIssuesSummaryItem, type MyIssuesSummaryTab } from '@/components/my-issues/my-issues-details-pane'
 import { MyIssuesFilterBar, type MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-bar'
 import { MyIssuesList, type MyIssuesContextAction, type MyIssuesCreateContext, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import { defaultMyIssuesDisplayOptions } from '@/components/my-issues/my-issues-display-defaults'
-import type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption, MyIssuesGrouping, MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
+import type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption, MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
 import { useMyIssuesSelection } from '@/components/my-issues/use-my-issues-state'
-import { toggleFilterOption, updateFilterOperator, updateFilterValues } from '@/components/my-issues/my-issues-filter-types'
+import { issueFiltersToQueryAst, toggleFilterOption, updateFilterOperator, updateFilterValues } from '@/components/my-issues/my-issues-filter-types'
+import { listIssues } from '@/lib/api'
 import { IssueExplorerSurface } from './issue-explorer-surface'
 import { IssueBoard } from './issue-board'
 import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from './saved-view-editor'
@@ -17,7 +17,7 @@ import { SavedViewDetailsPanel, SavedViewInsightsPanel, type SavedViewInsightsCo
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import type { ViewVisual } from '@/components/views/view-icon-picker'
 import {
-  ISSUE_FILTER_LABELS, applyExplorerFilters, buildExplorerIssueGroups, executeExplorerBulkAction, explorerBulkOptions, explorerFilterOptions,
+  ISSUE_FILTER_LABELS, applyExplorerFilters, buildExplorerIssueGroups, executeExplorerBulkAction, explorerBoardGroupUpdate, explorerBulkOptions, explorerFilterOptions,
   explorerPropertyOptions, explorerUpdateForAction, explorerUpdateForProperty, issueToExplorerRow, optimisticExplorerRow,
   stateIdForExplorerGroup, withMapKey, withoutMapKey,
 } from './issue-explorer-model'
@@ -77,6 +77,7 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
   const [previewIssueId, setPreviewIssueId] = useState<string>()
   const [viewEditor, setViewEditor] = useState<'create' | 'edit' | undefined>(creatingView ? 'create' : editingView ? 'edit' : undefined)
   const [viewSaving, setViewSaving] = useState(false)
+  const [serverIssues, setServerIssues] = useState<Issue[] | null>(null)
   const hydratedSavedViewId = useRef(savedView?.id)
   const mutationSequence = useRef(new Map<string, number>())
   const mutationQueues = useRef(new Map<string, Promise<Issue>>())
@@ -88,11 +89,55 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
 
   useEffect(() => { const onKey = (event: KeyboardEvent) => { if (!event.altKey || event.metaKey || event.ctrlKey || event.key.toLowerCase() !== 'v' || savedView || creatingView || viewEditor || (event.target as HTMLElement | null)?.closest('input,textarea,[contenteditable=true],[role=textbox]')) return; event.preventDefault(); setViewEditor('create') }; addEventListener('keydown', onKey); return () => removeEventListener('keydown', onKey) }, [creatingView, savedView, viewEditor])
 
+  const scopeTeamId = scope.kind === 'team' ? scope.team.id : ''
   const scopedIssues = useMemo(() => filterInsightTeams(issuesForScope(data.issues, scope, view), initialInsightFilters?.teamIds), [data.issues, initialInsightFilters?.teamIds, scope, view])
+  // Keep the bootstrap path for small workspaces and tests, while switching
+  // larger lists to a cursor-capable server query so the browser does not scan
+  // every issue on each filter or view change.
+  useEffect(() => {
+    if (data.issues.length <= 100) {
+      setServerIssues(null)
+      return
+    }
+    let cancelled = false
+    const ast = issueFiltersToQueryAst(filters)
+    const viewNode = view === 'backlog'
+      ? { field: 'status', operator: 'is', values: ['backlog'] }
+      : view === 'active'
+        ? { field: 'status', operator: 'notIn', values: ['completed', 'canceled'] }
+        : undefined
+    const filter = viewNode ? { and: [...(ast.and ?? []), viewNode] } : ast
+    const query = {
+      teamId: scopeTeamId || initialInsightFilters?.teamIds,
+      archived: view === 'all' ? 'all' : 'false',
+      filter: filter as Record<string, unknown>,
+      limit: 100,
+      sort: 'sortOrder',
+      direction: 'asc',
+    } as const
+    void (async () => {
+      try {
+        const items: Issue[] = []
+        let cursor: string | undefined
+        let pageCount = 0
+        do {
+          const page = await listIssues({ ...query, ...(cursor ? { cursor } : {}) })
+          items.push(...page.items)
+          cursor = page.nextCursor
+          pageCount += 1
+        } while (cursor && pageCount < 100 && !cancelled)
+        if (!cancelled) setServerIssues(items)
+      } catch {
+        if (!cancelled) setServerIssues(null)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [data.issues.length, filters, initialInsightFilters?.teamIds, scopeTeamId, view])
+  const sourceIssues = serverIssues ?? scopedIssues
   const insightIssues = useMemo(() => filterInsightTeams(issuesForScope(data.issues, scope, view, true), initialInsightFilters?.teamIds), [data.issues, initialInsightFilters?.teamIds, scope, view])
   const issuesById = useMemo(() => new Map(data.issues.map(issue => [issue.id, issue])), [data.issues])
   const rowOptions = useMemo(() => explorerPropertyOptions(data, scopedIssues), [data, scopedIssues])
-  const visibleIssues = useMemo(() => applyExplorerFilters(scopedIssues, filters, data), [data, filters, scopedIssues])
+  const visibleIssues = useMemo(() => applyExplorerFilters(sourceIssues, filters, data), [data, filters, sourceIssues])
   const rows = useMemo(() => visibleIssues.map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)), [data, rowOverrides, visibleIssues])
   const insightRows = useMemo(() => applyExplorerFilters(insightIssues, filters, data).map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)), [data, filters, insightIssues, rowOverrides])
   const groups = useMemo(() => buildExplorerIssueGroups(rows, display, data, view, manualOrder), [data, display, manualOrder, rows, view])
@@ -355,19 +400,6 @@ function exportIssuesCsv(rows: MyIssuesRowData[], name: string) {
 
 function issuesForScope(issues: Issue[], scope: IssueExplorerPageProps['scope'], view: TeamIssuesRouteView, includeArchived = false) {
   return issues.filter(issue => (includeArchived || !issue.archivedAt) && (scope.kind === 'workspace' || issue.team.id === scope.team.id) && (view === 'all' || (view === 'backlog' ? issue.state.type === 'backlog' : issue.state.type === 'unstarted' || issue.state.type === 'started')))
-}
-
-function explorerBoardGroupUpdate(row: MyIssuesRowData, grouping: MyIssuesGrouping, targetGroupId: string, data: BootstrapData): IssueUpdateInput {
-  if ((grouping === 'status' || grouping === 'focus') && data.states.some(state => state.id === targetGroupId)) return { stateId: targetGroupId }
-  if (grouping === 'priority' && targetGroupId.startsWith('priority-')) return { priority: Number(targetGroupId.slice('priority-'.length)) }
-  if (grouping === 'project' && targetGroupId.startsWith('project-')) return { projectId: targetGroupId === 'project-none' ? '' : targetGroupId.slice('project-'.length) }
-  if (grouping === 'assignee' && targetGroupId.startsWith('assignee-')) return { assigneeId: targetGroupId === 'assignee-none' ? '' : targetGroupId.slice('assignee-'.length) }
-  if (grouping === 'label' && targetGroupId.startsWith('label-')) {
-    if (targetGroupId === 'label-none') return { labelIds: [] }
-    const labelId = targetGroupId.slice('label-'.length)
-    return { labelIds: toggleGroupedLabelIds((row.labels ?? []).map(label => label.id), labelId, data.labels) }
-  }
-  return {}
 }
 
 function deriveSummary(groups: MyIssuesGroupData[]): MyIssuesDetailsSummary {

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { realtimeClientId, updatePresence } from '@/lib/api'
-import type { Presence, RealtimeEvent } from '@/types/flow'
+import { loadRealtimeCache, saveRealtimeCache, saveRealtimeCursor } from '@/lib/realtime-cache'
+import type { BootstrapData, Presence, RealtimeEvent } from '@/types/flow'
 
-export function useWorkspaceRealtime({ workspaceKey, issueId, route, onRemoteSync }: {
+export function useWorkspaceRealtime({ workspaceKey, issueId, route, snapshot, onRemoteSync }: {
   workspaceKey?: string
   issueId?: string
   route: string
+  snapshot?: BootstrapData | null
   onRemoteSync: (event: RealtimeEvent) => Promise<void>
 }) {
   const [presence, setPresence] = useState<Presence[]>([])
@@ -23,8 +25,10 @@ export function useWorkspaceRealtime({ workspaceKey, issueId, route, onRemoteSyn
     }
     setPresence([])
     const clientId = realtimeClientId()
-    const stream = new EventSource(`/api/realtime/events?workspace=${encodeURIComponent(workspaceKey)}`)
-    let initialized = false
+    let stream: EventSource | undefined
+    let disposed = false
+    let cursorTimer: number | undefined
+    let latestCursor = ''
     const drain = async () => {
       if (syncingRef.current || !queuedRef.current.length) return
       syncingRef.current = true
@@ -45,28 +49,56 @@ export function useWorkspaceRealtime({ workspaceKey, issueId, route, onRemoteSyn
       window.clearTimeout(timerRef.current)
       timerRef.current = window.setTimeout(() => void drain(), 80)
     }
-    stream.onopen = () => setConnected(true)
-    stream.onerror = () => setConnected(false)
-    stream.onmessage = message => {
-      let event: RealtimeEvent
-      try { event = JSON.parse(message.data) as RealtimeEvent }
-      catch { return }
-      if (event.payload?.presence) setPresence(event.payload.presence)
-      if (event.type === 'connected') {
-        if (initialized) schedule(event)
-        else initialized = true
-        return
+    const connect = (cursor?: string) => {
+      if (disposed) return
+      const params = new URLSearchParams({ workspace: workspaceKey })
+      if (cursor) params.set('since', cursor)
+      stream = new EventSource(`/api/realtime/events?${params.toString()}`)
+      stream.onopen = () => setConnected(true)
+      stream.onerror = () => setConnected(false)
+      stream.onmessage = message => {
+        if (message.lastEventId) {
+          latestCursor = message.lastEventId
+          window.clearTimeout(cursorTimer)
+          cursorTimer = window.setTimeout(() => {
+            if (latestCursor) void saveRealtimeCursor(workspaceKey, latestCursor)
+          }, 300)
+        }
+        let event: RealtimeEvent
+        try { event = JSON.parse(message.data) as RealtimeEvent }
+        catch { return }
+        if (event.payload?.presence) setPresence(event.payload.presence)
+        if (event.type === 'connected') {
+          return
+        }
+        if (event.type === 'presence.updated' || event.clientId === clientId) return
+        schedule(event)
       }
-      if (event.type === 'presence.updated' || event.clientId === clientId) return
-      schedule(event)
     }
+    void loadRealtimeCache(workspaceKey).then(cache => connect(cache?.cursor))
     return () => {
-      stream.close()
+      disposed = true
+      stream?.close()
       window.clearTimeout(timerRef.current)
+      window.clearTimeout(cursorTimer)
       setConnected(false)
       setPresence([])
+      queuedRef.current = []
     }
   }, [workspaceKey])
+
+  useEffect(() => {
+    if (!workspaceKey || !snapshot) return
+    const timer = window.setTimeout(() => {
+      void loadRealtimeCache(workspaceKey).then(cache => saveRealtimeCache({
+        workspaceKey,
+        cursor: cache?.cursor,
+        snapshot,
+        updatedAt: new Date().toISOString(),
+      }))
+    }, 1200)
+    return () => window.clearTimeout(timer)
+  }, [snapshot, workspaceKey])
 
   useEffect(() => {
     if (!workspaceKey) return

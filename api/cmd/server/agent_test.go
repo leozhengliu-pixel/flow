@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	appconfig "flow/api/internal/config"
 	"flow/api/internal/domain"
@@ -148,5 +149,77 @@ func TestAgentSessionStreamsResponsesAndExecutesReadTools(t *testing.T) {
 	sessions := requestJSON[[]domain.AgentSession](t, handler, http.MethodGet, "/api/agent/sessions", nil, http.StatusOK)
 	if len(sessions) != 1 || len(sessions[0].Messages) != 2 || sessions[0].Messages[1].Content != "Found the issue." || len(sessions[0].Messages[1].Parts) < 2 || sessions[0].Messages[1].Parts[0].ToolCall == nil || sessions[0].Messages[1].Parts[0].ToolCall.Status != "completed" {
 		t.Fatalf("streamed session not persisted: %#v", sessions)
+	}
+}
+
+func TestAgentSessionWriteToolsRequireApproval(t *testing.T) {
+	providerCalls := 0
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		providerCalls++
+		w.Header().Set("Content-Type", "text/event-stream")
+		if providerCalls == 1 {
+			_, _ = w.Write([]byte("event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"item_write\",\"call_id\":\"call_write\",\"type\":\"function_call\",\"name\":\"save_issue\",\"arguments\":\"{}\"}}\n\n" +
+				"event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"item_id\":\"item_write\",\"arguments\":\"{}\"}\n\n" +
+				"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"))
+			return
+		}
+		_, _ = w.Write([]byte("event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"Write approved.\"}\n\n" +
+			"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"))
+	}))
+	defer provider.Close()
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true, agent: appconfig.AgentConfig{Enabled: true, Protocol: "openai-responses", BaseURL: provider.URL, Model: "flow-test", MaxOutputTokens: 256, ToolsEnabled: true, WriteTools: true}, agentClient: provider.Client()})
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/agent/sessions/stream", strings.NewReader(`{"message":"Update the issue","location":"page"}`))
+	request.Header.Set("Content-Type", "application/json")
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(recorder, request)
+		close(done)
+	}()
+	var approvalID string
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		body := recorder.Body.String()
+		marker := `"approvalId":"agent_approval_`
+		if index := strings.Index(body, marker); index >= 0 {
+			start := index + len(`"approvalId":"`)
+			if end := strings.IndexByte(body[start:], '"'); end >= 0 {
+				approvalID = body[start : start+end]
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if approvalID == "" {
+		t.Fatalf("approval event not emitted: %s", recorder.Body.String())
+	}
+	resolve := httptest.NewRecorder()
+	approvalRequest := httptest.NewRequest(http.MethodPost, "/api/agent/sessions/agent_session_pending/approvals/"+approvalID, strings.NewReader(`{"decision":"approve"}`))
+	approvalRequest.Header.Set("Content-Type", "application/json")
+	// The session id is supplied by the session.started event. Resolve against
+	// the actual persisted session rather than relying on an invented id.
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	sessions := requestJSON[[]domain.AgentSession](t, handler, http.MethodGet, "/api/agent/sessions", nil, http.StatusOK)
+	if len(sessions) != 1 || sessions[0].UserID != bootstrap.Viewer.ID {
+		t.Fatalf("stream did not create a session: %#v", sessions)
+	}
+	approvalRequest = httptest.NewRequest(http.MethodPost, "/api/agent/sessions/"+sessions[0].ID+"/approvals/"+approvalID, strings.NewReader(`{"decision":"approve"}`))
+	approvalRequest.Header.Set("Content-Type", "application/json")
+	handler.ServeHTTP(resolve, approvalRequest)
+	if resolve.Code != http.StatusOK {
+		t.Fatalf("approval response status=%d body=%s", resolve.Code, resolve.Body.String())
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream did not resume after approval")
+	}
+	if providerCalls != 2 || !strings.Contains(recorder.Body.String(), "tool.approval_required") || !strings.Contains(recorder.Body.String(), "tool.approval_resolved") || !strings.Contains(recorder.Body.String(), "Write approved.") {
+		t.Fatalf("approval stream incomplete calls=%d body=%s", providerCalls, recorder.Body.String())
 	}
 }

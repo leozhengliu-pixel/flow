@@ -63,7 +63,7 @@ export function ProjectOverview({ project, projects, initiatives, documents, pro
 
     <section className="project-overview__description">
       <h3>Description</h3>
-      <ProjectDescriptionEditor value={project.description} onCommit={description => save({ description })}/>
+      <ProjectDescriptionEditor users={users} value={project.description} onCommit={description => save({ description })}/>
     </section>
 
     <section className="project-overview__milestones">
@@ -219,10 +219,10 @@ function ProjectEditableText({ ariaLabel, className, multiline, onCommit, placeh
   return <input aria-label={ariaLabel} className={className} onBlur={commit} onChange={event => setDraft(event.target.value)} placeholder={placeholder} value={draft}/>
 }
 
-function ProjectDescriptionEditor({ value, onCommit }: { value: string; onCommit: (value: string) => Promise<void> }) {
+function ProjectDescriptionEditor({ users, value, onCommit }: { users: Props['users']; value: string; onCommit: (value: string) => Promise<void> }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
-  return <IssueDescriptionEditor ariaLabel="Project description" className="project-overview__description-editor" placeholder="Add description…" value={value} onChange={snapshot => setDraft(snapshot.markdown)} onBlur={() => { const next = draft.trim(); if (next !== value) void onCommit(next) }}/>
+  return <IssueDescriptionEditor users={users} ariaLabel="Project description" className="project-overview__description-editor" placeholder="Add description…" value={value} onChange={snapshot => setDraft(snapshot.markdown)} onBlur={() => { const next = draft.trim(); if (next !== value) void onCommit(next) }}/>
 }
 
 function uniqueById<T extends { id: string }>(items: T[]) { return [...new Map(items.map(item => [item.id, item])).values()] }

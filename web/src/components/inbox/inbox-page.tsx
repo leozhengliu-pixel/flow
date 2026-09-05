@@ -5,7 +5,7 @@ import type { Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 import { InboxDetailError, InboxDetailLoading, InboxDetailPreview } from './inbox-detail-preview'
 import { InboxListBoundary } from './inbox-list-state'
 import { InboxNotificationList } from './notification-list'
-import { InboxPageShell, type InboxDisplayOptions } from './inbox-page-shell'
+import { InboxPageShell, type InboxDisplayOptions, type InboxTab } from './inbox-page-shell'
 import { useInboxController, type InboxPersistenceAdapter } from './inbox-controller'
 import type { InboxFilterCondition, InboxFilterOptions } from './inbox-filter-builder'
 import type { InboxNotificationRowData } from './notification-row'
@@ -54,6 +54,9 @@ export interface InboxPageProps {
   hasMore?: boolean
   loadingMore?: boolean
   onLoadMore?: () => void
+  activeTab?: InboxTab
+  onTabChange?: (tab: InboxTab) => void
+  tabCounts?: Partial<Record<InboxTab, number>>
 }
 
 export function InboxPage(props: InboxPageProps) {
@@ -129,6 +132,9 @@ export function InboxPage(props: InboxPageProps) {
         onFiltersChange={props.onFiltersChange}
         onDisplayOptionsChange={props.onDisplayOptionsChange}
         onOpenSidebar={props.onOpenSidebar}
+        activeTab={props.activeTab}
+        onTabChange={props.onTabChange}
+        tabCounts={props.tabCounts}
         onDeleteAll={() => void runPageAction('all', props.adapter.deleteAll)}
         onDeleteAllRead={() => void runPageAction('read', props.adapter.deleteAllRead)}
         onDeleteAllReadCompleted={() => void runPageAction('completed', props.adapter.deleteAllReadCompleted)}

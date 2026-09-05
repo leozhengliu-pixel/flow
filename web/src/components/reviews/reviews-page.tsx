@@ -784,7 +784,7 @@ function ReviewDetail({
       ) : tab === "review" ? (
         <ReviewGuide review={review} />
       ) : (
-        <ReviewChanges review={review} />
+        <ReviewChanges review={review} onReload={onReload} />
       )}
     </>
   );
@@ -849,6 +849,11 @@ function ReviewEvent({
       </span>
       <p>
         {content}
+        {event.path && event.line ? (
+          <code className="review-event-location" data-i18n-ignore>
+            {event.path}:{event.line}
+          </code>
+        ) : null}
         <small> · {timeLabel}</small>
       </p>
     </div>
@@ -1738,27 +1743,231 @@ function ReviewGuide({ review }: { review: CodeReview }) {
     </div>
   );
 }
-function ReviewChanges({ review }: { review: CodeReview }) {
+type DiffLine = {
+  kind: "add" | "remove" | "context";
+  content: string;
+  oldNumber?: number;
+  newNumber?: number;
+};
+
+function ReviewChanges({
+  review,
+  onReload,
+}: {
+  review: CodeReview;
+  onReload: () => Promise<void>;
+}) {
   const { t } = useI18n();
+  const [mode, setMode] = useState<"split" | "unified">("split");
+  const [commentLine, setCommentLine] = useState<{
+    path: string;
+    line: number;
+  } | null>(null);
+  const [commentBody, setCommentBody] = useState("");
+  const [commentBusy, setCommentBusy] = useState(false);
+  const submitInlineComment = async () => {
+    if (!commentLine || !commentBody.trim()) return;
+    setCommentBusy(true);
+    try {
+      await commentOnReview(review.id, commentBody.trim(), commentLine);
+      await onReload();
+      setCommentBody("");
+      setCommentLine(null);
+      toast.success(t("Comment added"));
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("Could not submit review"),
+      );
+    } finally {
+      setCommentBusy(false);
+    }
+  };
   return (
     <div className="review-changes">
-      <header>
-        <h2>{t("Files changed")}</h2>
-        <span>{review.files.length}</span>
+      <header className="review-changes-toolbar">
+        <div>
+          <h2>{t("Files changed")}</h2>
+          <span>{review.files.length}</span>
+        </div>
+        <div className="review-diff-mode" role="group" aria-label={t("Diff view") }>
+          {(["split", "unified"] as const).map((value) => (
+            <button
+              aria-pressed={mode === value}
+              key={value}
+              onClick={() => setMode(value)}
+              type="button"
+            >
+              {t(value === "split" ? "Split" : "Unified")}
+            </button>
+          ))}
+        </div>
       </header>
-      {review.files.map((file) => (
-        <article key={file.path}>
-          <header>
-            <FileCode2 />
-            <strong data-i18n-ignore>{file.path}</strong>
-            <b>+{file.additions}</b>
-            <i>-{file.deletions}</i>
-          </header>
-          <pre data-i18n-ignore>{file.patch}</pre>
-        </article>
-      ))}
+      {review.files.length === 0 ? (
+        <div className="review-diff-empty">{t("No files changed")}</div>
+      ) : (
+        review.files.map((file) => {
+          const lines = parseDiff(file.patch);
+          return (
+            <article key={file.path}>
+              <header>
+                <FileCode2 />
+                <strong data-i18n-ignore>{file.path}</strong>
+                <b>+{file.additions}</b>
+                <i>-{file.deletions}</i>
+              </header>
+              {!lines.length ? (
+                <div className="review-diff-empty">{t("No diff available")}</div>
+              ) : mode === "split" ? (
+                <div className="review-diff-table is-split">
+                  {pairDiffLines(lines).map((row, index) => (
+                    <div className="review-diff-row" key={`${file.path}-${index}`}>
+                      <DiffLineCell
+                        line={row.left}
+                        side="old"
+                        path={file.path}
+                        onComment={setCommentLine}
+                        t={t}
+                      />
+                      <DiffLineCell
+                        line={row.right}
+                        side="new"
+                        path={file.path}
+                        onComment={setCommentLine}
+                        t={t}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="review-diff-table is-unified">
+                  {lines.map((line, index) => (
+                    <div className="review-diff-row" key={`${file.path}-${index}`}>
+                      <DiffLineCell
+                        line={line}
+                        side="unified"
+                        path={file.path}
+                        onComment={setCommentLine}
+                        t={t}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {commentLine?.path === file.path && (
+                <form
+                  className="review-inline-comment"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void submitInlineComment();
+                  }}
+                >
+                  <label>
+                    {t("Comment on line")} {commentLine.line}
+                    <textarea
+                      autoFocus
+                      aria-label={t("Inline comment")}
+                      value={commentBody}
+                      onChange={(event) => setCommentBody(event.target.value)}
+                      placeholder={t("Leave a comment…")}
+                    />
+                  </label>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCommentLine(null);
+                        setCommentBody("");
+                      }}
+                    >
+                      {t("Cancel")}
+                    </button>
+                    <button disabled={commentBusy || !commentBody.trim()} type="submit">
+                      {t("Comment")}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </article>
+          );
+        })
+      )}
     </div>
   );
+}
+
+function DiffLineCell({
+  line,
+  side,
+  path,
+  onComment,
+  t,
+}: {
+  line?: DiffLine;
+  side: "old" | "new" | "unified";
+  path: string;
+  onComment: (value: { path: string; line: number }) => void;
+  t: (source: string) => string;
+}) {
+  const lineNumber = side === "old" ? line?.oldNumber : line?.newNumber;
+  const commentNumber = line?.newNumber ?? line?.oldNumber;
+  return (
+    <div className={`review-diff-cell is-${line?.kind ?? "empty"}`}>
+      <span className="review-diff-number">{lineNumber ?? ""}</span>
+      {line ? <span className="review-diff-marker">{line.kind === "add" ? "+" : line.kind === "remove" ? "−" : " "}</span> : null}
+      <code data-i18n-ignore>{line?.content ?? ""}</code>
+      {commentNumber ? (
+        <button
+          aria-label={`${t("Comment on line")} ${commentNumber}`}
+          className="review-diff-comment-button"
+          onClick={() => onComment({ path, line: commentNumber })}
+          type="button"
+        >
+          <Plus />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function parseDiff(patch: string): DiffLine[] {
+  let oldNumber = 0;
+  let newNumber = 0;
+  return patch.split("\n").flatMap((raw) => {
+    if (raw.startsWith("@@")) {
+      const match = raw.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+      if (match) {
+        oldNumber = Number(match[1]);
+        newNumber = Number(match[2]);
+      }
+      return [];
+    }
+    if (raw.startsWith("diff ") || raw.startsWith("index ") || raw.startsWith("--- ") || raw.startsWith("+++ ") || raw.startsWith("\\ No newline")) return [];
+    if (raw.startsWith("+")) return [{ kind: "add", content: raw.slice(1), newNumber: newNumber++ }];
+    if (raw.startsWith("-")) return [{ kind: "remove", content: raw.slice(1), oldNumber: oldNumber++ }];
+    const content = raw.startsWith(" ") ? raw.slice(1) : raw;
+    const line: DiffLine = { kind: "context", content, oldNumber: oldNumber++, newNumber: newNumber++ };
+    return [line];
+  });
+}
+
+function pairDiffLines(lines: DiffLine[]) {
+  const rows: Array<{ left?: DiffLine; right?: DiffLine }> = [];
+  for (let index = 0; index < lines.length; ) {
+    const line = lines[index];
+    if (line.kind === "context") {
+      rows.push({ left: line, right: line });
+      index += 1;
+      continue;
+    }
+    const removed: DiffLine[] = [];
+    const added: DiffLine[] = [];
+    while (lines[index]?.kind === "remove") removed.push(lines[index++]);
+    while (lines[index]?.kind === "add") added.push(lines[index++]);
+    const count = Math.max(removed.length, added.length);
+    for (let offset = 0; offset < count; offset += 1)
+      rows.push({ left: removed[offset], right: added[offset] });
+  }
+  return rows;
 }
 function statusLabel(status: string) {
   return status === "inReview"

@@ -611,11 +611,28 @@ function App() {
         navigateTo(myIssuesPath(data.workspace.urlKey));
         return;
       }
+      if (inSequence && sequence.key === "g" && pressed === "j" && data) {
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        navigateTo(agentPath(data.workspace.urlKey));
+        return;
+      }
+      if (inSequence && sequence.key === "g" && pressed === "r" && data) {
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        navigateTo(reviewsPath(data.workspace.urlKey));
+        return;
+      }
       if (pressed === "n" || pressed === "g") {
         shortcutSequence.current = { key: pressed, at: now };
         return;
       }
       shortcutSequence.current = { key: "", at: 0 };
+      if (pressed === "/" && data) {
+        e.preventDefault();
+        navigateTo(searchPath(data.workspace.urlKey));
+        return;
+      }
       if (pressed === "q" || pressed === "c") {
         e.preventDefault();
         openCreateIssue();
@@ -766,20 +783,37 @@ function App() {
   }, [data, viewedResourceId, viewedResourceType]);
   const realtime = useWorkspaceRealtime({
     workspaceKey: data?.workspace.urlKey,
+    snapshot: data,
     issueId: selectedIssue?.id,
     route: location.pathname,
     onRemoteSync: async (event) => {
       const workspace = data?.workspace.urlKey;
       if (!workspace) return;
-      if (event.type === "issue.updated" && event.payload?.issue) {
-        const issue = event.payload.issue;
+      const entity = event.payload?.entity;
+      const issue = event.payload?.issue ?? (
+        entity && typeof entity === "object" && "identifier" in entity
+          ? (entity as Issue)
+          : undefined
+      );
+      if ((event.type === "issue.updated" || event.type === "issue.created") && issue) {
         setData((current) =>
           current?.workspace.urlKey === workspace
             ? deriveResourceCounts({
                 ...current,
-                issues: current.issues.map((item) =>
-                  item.id === issue.id ? issue : item,
-                ),
+                issues: current.issues.some((item) => item.id === issue.id)
+                  ? current.issues.map((item) => item.id === issue.id ? issue : item)
+                  : [issue, ...current.issues],
+              })
+            : current,
+        );
+        return;
+      }
+      if (event.type === "issue.deleted" && event.aggregateId) {
+        setData((current) =>
+          current?.workspace.urlKey === workspace
+            ? deriveResourceCounts({
+                ...current,
+                issues: current.issues.filter((item) => item.id !== event.aggregateId),
               })
             : current,
         );
@@ -3406,8 +3440,8 @@ function App() {
       navigateTo(workspaceViewsPath(workspace, "issues"), { replace: true });
       return;
     }
-    if (route.kind === "inbox" && location.pathname !== inboxPath(workspace))
-      navigateTo(inboxPath(workspace), { replace: true });
+    if (route.kind === "inbox" && location.pathname !== inboxPath(workspace, route.tab))
+      navigateTo(inboxPath(workspace, route.tab), { replace: true });
     if (route.kind === "search" && location.pathname !== searchPath(workspace))
       navigateTo(searchPath(workspace), { replace: true });
     if (
@@ -4888,6 +4922,8 @@ function App() {
         {page === "inbox" && (
           <InboxAppPage
             data={data}
+            activeTab={route.kind === "inbox" && route.tab ? route.tab : "all"}
+            onTabChange={(tab) => navigateTo(inboxPath(data.workspace.urlKey, tab === "all" ? undefined : tab))}
             presence={realtime.presence}
             onReload={load}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
@@ -5910,6 +5946,7 @@ function App() {
               navigateTo(`${customersPath(data.workspace.urlKey)}?create=1`)
             }
             onNavigateAgent={() => navigateTo(agentPath(data.workspace.urlKey))}
+            onNavigateReviews={() => navigateTo(reviewsPath(data.workspace.urlKey))}
             onOpenResult={openSearchResult}
           />
         )}

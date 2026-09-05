@@ -83,9 +83,9 @@ export function PulsePage(props: Props) {
       onSave={()=>void saveView()}
     />}
     <section className="pulse-content">
-      {feed.length === 0 ? <PulseEmptyState copy={emptyCopy(activeSavedView, view)} onCreate={() => setComposerOpen(true)}/> : <div className="pulse-feed"><div className="pulse-feed-actions"><button onClick={() => setComposerOpen(true)} type="button"><SquarePen size={13}/>New update</button></div>{feed.map(item => <PulseUpdateCard {...props} item={item} key={item.id} viewerId={data.viewer.id} workspaceSlug={data.workspace.urlKey}/>)}</div>}
+      {feed.length === 0 ? <PulseEmptyState copy={emptyCopy(activeSavedView, view)} onCreate={() => setComposerOpen(true)}/> : <div className="pulse-feed"><div className="pulse-feed-actions"><button onClick={() => setComposerOpen(true)} type="button"><SquarePen size={13}/>New update</button></div>{feed.map(item => <PulseUpdateCard {...props} item={item} key={item.id} users={data.users} viewerId={data.viewer.id} workspaceSlug={data.workspace.urlKey}/>)}</div>}
     </section>
-    <PulseComposer initiatives={data.initiatives} onCreateInitiative={props.onCreateInitiative} onCreateProject={props.onCreateProject} onUploadInitiativeAttachment={props.onUploadInitiativeAttachment} onUploadProjectAttachment={props.onUploadProjectAttachment} onOpenChange={setComposerOpen} open={composerOpen} projects={data.projects}/>
+    <PulseComposer initiatives={data.initiatives} onCreateInitiative={props.onCreateInitiative} onCreateProject={props.onCreateProject} onUploadInitiativeAttachment={props.onUploadInitiativeAttachment} onUploadProjectAttachment={props.onUploadProjectAttachment} onOpenChange={setComposerOpen} open={composerOpen} projects={data.projects} users={data.users}/>
   </main>
 }
 

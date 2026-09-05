@@ -34,6 +34,36 @@ func TestRealtimeOverflowCollapsesToResync(t *testing.T) {
 	}
 }
 
+func TestRealtimeHubReplaysEventsAfterCursor(t *testing.T) {
+	hub := newRealtimeHub()
+	hub.publish("workspace", domain.RealtimeEvent{ID: "event_1", Type: "issue.updated"})
+	hub.publish("workspace", domain.RealtimeEvent{ID: "event_2", Type: "project.updated"})
+	channel, unsubscribe := hub.subscribeSince("workspace", "event_1")
+	defer unsubscribe()
+	select {
+	case event := <-channel:
+		if event.ID != "event_2" || event.Type != "project.updated" {
+			t.Fatalf("replayed event = %#v", event)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("replay did not deliver the event after the cursor")
+	}
+}
+
+func TestRealtimeHubRequestsResyncWhenCursorExpired(t *testing.T) {
+	hub := newRealtimeHub()
+	channel, unsubscribe := hub.subscribeSince("workspace", "missing")
+	defer unsubscribe()
+	select {
+	case event := <-channel:
+		if event.Type != "workspace.resync_required" {
+			t.Fatalf("expired cursor event = %#v", event)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expired cursor did not request a resync")
+	}
+}
+
 func TestCollaborationSocketBroadcastsAndPersistsDocumentUpdates(t *testing.T) {
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {

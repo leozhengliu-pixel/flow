@@ -49,6 +49,7 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
   { value: 'assignee', label: 'Assignee' },
   { value: 'priority', label: 'Priority' },
   { value: 'project', label: 'Project' },
+  { value: 'cycle', label: 'Cycle' },
   { value: 'dueDate', label: 'Due date' },
   { value: 'milestone', label: 'Milestone' },
   { value: 'labels', label: 'Labels' },
