@@ -123,6 +123,13 @@
 .conversationComposer .editorScroll {
   min-height: 72px;
 }
+.conversationComposer > footer {
+  grid-template-columns: auto 1fr 28px 28px;
+}
+.conversationComposer > footer > button:not(.skillsButton) {
+  width: 28px;
+  height: 28px;
+}
 .editor {
   min-height: 24px;
   padding: 0;
