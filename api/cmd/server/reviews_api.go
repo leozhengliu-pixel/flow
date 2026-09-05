@@ -151,6 +151,8 @@ func (s *server) submitReview(w http.ResponseWriter, r *http.Request) {
 func (s *server) commentOnReview(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Body string `json:"body"`
+		Path string `json:"path,omitempty"`
+		Line int    `json:"line,omitempty"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
@@ -168,7 +170,7 @@ func (s *server) commentOnReview(w http.ResponseWriter, r *http.Request) {
 		}
 		now := time.Now().UTC()
 		review := data.Reviews[index]
-		review.Events = append(review.Events, domain.ReviewEvent{ID: fmt.Sprintf("review_event_%d", now.UnixNano()), Type: "commented", Body: strings.TrimSpace(input.Body), Actor: actor, CreatedAt: now})
+		review.Events = append(review.Events, domain.ReviewEvent{ID: fmt.Sprintf("review_event_%d", now.UnixNano()), Type: "commented", Body: strings.TrimSpace(input.Body), Path: strings.TrimSpace(input.Path), Line: input.Line, Actor: actor, CreatedAt: now})
 		review.UpdatedAt = now
 		data.Reviews[index], updated = review, review
 		return nil

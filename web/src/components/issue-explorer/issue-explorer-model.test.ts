@@ -6,6 +6,7 @@ import { backlog, completed, label, makeBootstrap, makeIssue, project, started, 
 import {
   applyExplorerFilters,
   buildExplorerIssueGroups,
+  explorerBoardGroupUpdate,
   executeExplorerBulkAction,
   explorerPropertyOptions,
   explorerUpdateForAction,
@@ -109,6 +110,16 @@ describe('issue explorer workflow model', () => {
     expect(priorityGroups[0].createContext).toEqual({ priority: parent.priority })
     expect(stateIdForExplorerGroup({ id: 'other-active', label: 'Other active', issues: [] }, data)).toBe(started.id)
     expect(stateIdForExplorerGroup({ id: 'missing', label: 'Backlog', stateType: 'backlog', issues: [] }, data)).toBe(backlog.id)
+  })
+
+  it('maps board moves to persisted property updates', () => {
+    const data = makeBootstrap({ issues: [makeIssue({ labels: [label] })] })
+    const row = issueToExplorerRow(data.issues[0], 'workspace', data.issues, data)
+    expect(explorerBoardGroupUpdate(row, 'status', backlog.id, data)).toEqual({ stateId: backlog.id })
+    expect(explorerBoardGroupUpdate(row, 'priority', 'priority-4', data)).toEqual({ priority: 4 })
+    expect(explorerBoardGroupUpdate(row, 'project', 'project-none', data)).toEqual({ projectId: '' })
+    expect(explorerBoardGroupUpdate(row, 'cycle', 'cycle-none', data)).toEqual({ cycleId: '' })
+    expect(explorerBoardGroupUpdate(row, 'team', 'team-other', data)).toEqual({})
   })
 
   it('executes bulk label, subscriber, batch, and clipboard actions', async () => {

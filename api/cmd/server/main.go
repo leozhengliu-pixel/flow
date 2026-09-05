@@ -62,6 +62,8 @@ type server struct {
 	workspaceDefaultRegion         string
 	mcpUploadMu                    sync.Mutex
 	mcpUploads                     map[string]*mcpPendingUpload
+	agentApprovalsMu               sync.Mutex
+	agentApprovals                 map[string]*agentApproval
 }
 
 func main() {
@@ -258,6 +260,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/agent/sessions/{id}/messages/stream", s.createAgentSessionMessageStream)
 	mux.HandleFunc("PATCH /api/agent/sessions/{id}/messages/{messageId}", s.updateAgentSessionMessage)
 	mux.HandleFunc("PATCH /api/agent/sessions/{id}/messages/{messageId}/stream", s.updateAgentSessionMessageStream)
+	mux.HandleFunc("POST /api/agent/sessions/{id}/approvals/{approvalId}", s.resolveAgentApproval)
 	mux.HandleFunc("GET /api/agent/skills", s.listAgentSkillsHTTP)
 	mux.HandleFunc("POST /api/agent/skills", s.createAgentSkill)
 	mux.HandleFunc("PATCH /api/agent/skills/{id}", s.updateAgentSkill)
@@ -552,6 +555,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/issues/{id}/share", s.shareIssue)
 	mux.HandleFunc("DELETE /api/issues/{id}/share", s.unshareIssue)
 	mux.HandleFunc("GET /api/shared/issues/{token}", s.getSharedIssue)
+	mux.HandleFunc("GET /api/issues", s.listIssues)
 	mux.HandleFunc("POST /api/issues", s.createIssue)
 	mux.HandleFunc("GET /api/issues/{id}/permissions", s.listIssuePermissions)
 	mux.HandleFunc("PUT /api/issues/{id}/permissions", s.replaceIssuePermissions)

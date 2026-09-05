@@ -4,6 +4,7 @@ export {
   InboxPageShell,
   type InboxDisplayOptions,
   type InboxOrdering,
+  type InboxTab,
   type InboxPageShellProps,
 } from './inbox-page-shell'
 export {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"testing"
 
 	"flow/api/internal/domain"
@@ -26,5 +27,23 @@ func TestRealtimeVisibilityFiltersHiddenResources(t *testing.T) {
 	}
 	if realtimeEventVisible(data, domain.RealtimeEvent{Type: "issue.updated", AggregateID: "hidden"}) {
 		t.Fatal("hidden issue event leaked")
+	}
+}
+
+func TestRealtimeVisibilityAllowsVisibleCreateEntity(t *testing.T) {
+	data := domain.Bootstrap{
+		Teams: []domain.Team{{ID: "team-visible"}},
+	}
+	payload, _ := json.Marshal(map[string]any{"entity": map[string]any{
+		"id": "issue-new", "team": map[string]string{"id": "team-visible"},
+	}})
+	if !realtimeEventVisible(data, domain.RealtimeEvent{Type: "issue.created", AggregateID: "issue-new", Payload: payload}) {
+		t.Fatal("visible issue create was filtered")
+	}
+	hidden, _ := json.Marshal(map[string]any{"entity": map[string]any{
+		"id": "issue-hidden", "team": map[string]string{"id": "team-private"},
+	}})
+	if realtimeEventVisible(data, domain.RealtimeEvent{Type: "issue.created", AggregateID: "issue-hidden", Payload: hidden}) {
+		t.Fatal("hidden issue create leaked")
 	}
 }

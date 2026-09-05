@@ -19,12 +19,16 @@ type realtimeHub struct {
 	mu          sync.Mutex
 	nextID      uint64
 	subscribers map[string]map[uint64]chan domain.RealtimeEvent
-	presence    map[string]map[string]domain.Presence
-	sockets     map[string]map[uint64]*realtimeSocketClient
+	// history keeps a short per-workspace replay window for reconnecting SSE
+	// clients. It is intentionally bounded: clients that fall outside the
+	// window receive workspace.resync_required and fetch a fresh snapshot.
+	history  map[string][]domain.RealtimeEvent
+	presence map[string]map[string]domain.Presence
+	sockets  map[string]map[uint64]*realtimeSocketClient
 }
 
 func newRealtimeHub() *realtimeHub {
-	return &realtimeHub{subscribers: map[string]map[uint64]chan domain.RealtimeEvent{}, presence: map[string]map[string]domain.Presence{}, sockets: map[string]map[uint64]*realtimeSocketClient{}}
+	return &realtimeHub{subscribers: map[string]map[uint64]chan domain.RealtimeEvent{}, history: map[string][]domain.RealtimeEvent{}, presence: map[string]map[string]domain.Presence{}, sockets: map[string]map[uint64]*realtimeSocketClient{}}
 }
 
 func (h *realtimeHub) subscribe(workspace string) (<-chan domain.RealtimeEvent, func()) {
@@ -49,9 +53,59 @@ func (h *realtimeHub) subscribe(workspace string) (<-chan domain.RealtimeEvent, 
 	}
 }
 
+// subscribeSince subscribes to live events and replays events published after
+// sinceID while holding the same lock used by publish. This closes the small
+// reconnect race between registering a listener and receiving the first live
+// event. A missing cursor means the replay window has rolled over, so callers
+// can safely fall back to a full bootstrap.
+func (h *realtimeHub) subscribeSince(workspace, sinceID string) (<-chan domain.RealtimeEvent, func()) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.nextID++
+	id := h.nextID
+	if h.subscribers[workspace] == nil {
+		h.subscribers[workspace] = map[uint64]chan domain.RealtimeEvent{}
+	}
+	channel := make(chan domain.RealtimeEvent, 64)
+	h.subscribers[workspace][id] = channel
+	if sinceID != "" {
+		history := h.history[workspace]
+		index := slices.IndexFunc(history, func(event domain.RealtimeEvent) bool { return event.ID == sinceID })
+		if index < 0 {
+			channel <- domain.RealtimeEvent{ID: fmt.Sprintf("resync_%d", time.Now().UnixNano()), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}
+		} else {
+			for _, event := range history[index+1:] {
+				select {
+				case channel <- event:
+				default:
+					for len(channel) > 0 {
+						<-channel
+					}
+					channel <- domain.RealtimeEvent{ID: fmt.Sprintf("resync_%d", time.Now().UnixNano()), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}
+				}
+			}
+		}
+	}
+	return channel, func() {
+		h.mu.Lock()
+		if subscribers := h.subscribers[workspace]; subscribers != nil {
+			delete(subscribers, id)
+			if len(subscribers) == 0 {
+				delete(h.subscribers, workspace)
+			}
+		}
+		h.mu.Unlock()
+	}
+}
+
 func (h *realtimeHub) publish(workspace string, event domain.RealtimeEvent) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	history := append(h.history[workspace], event)
+	if len(history) > 256 {
+		history = history[len(history)-256:]
+	}
+	h.history[workspace] = history
 	for _, channel := range h.subscribers[workspace] {
 		select {
 		case channel <- event:
@@ -146,7 +200,16 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache, no-transform")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
-	channel, unsubscribe := s.realtime.subscribe(workspace)
+	since := strings.TrimSpace(r.Header.Get("Last-Event-ID"))
+	if since == "" {
+		since = strings.TrimSpace(r.URL.Query().Get("since"))
+	}
+	// The handshake marker is not part of the replay ring. Treat it as an
+	// initial connection rather than forcing a needless resync on reload.
+	if strings.HasPrefix(since, "connected_") {
+		since = ""
+	}
+	channel, unsubscribe := s.realtime.subscribeSince(workspace, since)
 	defer unsubscribe()
 	presence = filterPresenceForViewer(data, presence)
 	initial, _ := json.Marshal(map[string]any{"presence": presence})
@@ -217,10 +280,12 @@ func realtimeEventVisible(data domain.Bootstrap, event domain.RealtimeEvent) boo
 		return true
 	}
 	if strings.HasPrefix(event.Type, "issue.") || strings.HasPrefix(event.Type, "comment.") || strings.HasPrefix(event.Type, "attachment.") {
-		return slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == id }) || slices.ContainsFunc(data.Documents, func(document domain.Document) bool { return document.ID == id })
+		visible := slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == id }) || slices.ContainsFunc(data.Documents, func(document domain.Document) bool { return document.ID == id })
+		return visible || strings.HasSuffix(event.Type, ".created") && realtimeEntityVisible(data, event)
 	}
 	if strings.HasPrefix(event.Type, "project.") || strings.HasPrefix(event.Type, "project_update.") || strings.HasPrefix(event.Type, "release.") {
-		return slices.ContainsFunc(data.Projects, func(project domain.Project) bool { return project.ID == id }) || slices.ContainsFunc(data.Releases, func(release domain.Release) bool { return release.ID == id })
+		visible := slices.ContainsFunc(data.Projects, func(project domain.Project) bool { return project.ID == id }) || slices.ContainsFunc(data.Releases, func(release domain.Release) bool { return release.ID == id })
+		return visible || strings.HasSuffix(event.Type, ".created") && realtimeEntityVisible(data, event)
 	}
 	if strings.HasPrefix(event.Type, "initiative.") || strings.HasPrefix(event.Type, "initiative_update.") {
 		return slices.ContainsFunc(data.Initiatives, func(initiative domain.Initiative) bool { return initiative.ID == id })
@@ -238,6 +303,37 @@ func realtimeEventVisible(data domain.Bootstrap, event domain.RealtimeEvent) boo
 		return slices.ContainsFunc(data.Asks, func(item domain.Ask) bool { return item.ID == id })
 	}
 	return true
+}
+
+// realtimeEntityVisible authorizes create events whose aggregate is not in the
+// viewer's snapshot yet. The entity is supplied only on the transient realtime
+// envelope, so this does not alter persisted event payloads.
+func realtimeEntityVisible(data domain.Bootstrap, event domain.RealtimeEvent) bool {
+	var payload struct {
+		Entity struct {
+			Team struct {
+				ID string `json:"id"`
+			} `json:"team"`
+			TeamID  string   `json:"teamId"`
+			TeamIDs []string `json:"teamIds"`
+		} `json:"entity"`
+	}
+	if json.Unmarshal(event.Payload, &payload) != nil {
+		return false
+	}
+	teamIDs := append([]string{}, payload.Entity.TeamIDs...)
+	if payload.Entity.Team.ID != "" {
+		teamIDs = append(teamIDs, payload.Entity.Team.ID)
+	}
+	if payload.Entity.TeamID != "" {
+		teamIDs = append(teamIDs, payload.Entity.TeamID)
+	}
+	if len(teamIDs) == 0 {
+		return false
+	}
+	return slices.ContainsFunc(teamIDs, func(id string) bool {
+		return slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == id })
+	})
 }
 
 func writeSSE(w http.ResponseWriter, event domain.RealtimeEvent) bool {

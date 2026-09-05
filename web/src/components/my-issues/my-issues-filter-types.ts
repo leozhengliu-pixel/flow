@@ -15,6 +15,35 @@ export interface MyIssuesAppliedFilter {
   values?: MyIssuesFilterValue[]
 }
 
+/** JSON-compatible query AST sent to the server-backed issue list endpoint. */
+export interface IssueQueryAstNode {
+  [key: string]: unknown
+  and?: IssueQueryAstNode[]
+  or?: IssueQueryAstNode[]
+  field?: string
+  operator?: string
+  values?: string[]
+}
+
+const QUERY_FIELDS: Partial<Record<MyIssuesFilterKey, string>> = {
+  assignee: 'assigneeId', creator: 'creatorId', labels: 'labelId', project: 'projectId',
+  projectProperties: 'project', status: 'status', priority: 'priority', cycle: 'cycleId',
+  subscribers: 'subscriberId', externalSource: 'externalSource', autoClosed: 'autoClosed',
+  template: 'templateId', relations: 'relation', links: 'links', content: 'content',
+  initiative: 'initiativeId', releases: 'releaseId', dates: 'dateFilter',
+}
+
+/** Convert the existing filter-bar state into a composable AND expression. */
+export function issueFiltersToQueryAst(filters: MyIssuesAppliedFilter[]): IssueQueryAstNode {
+  return {
+    and: filters.map(filter => ({
+      field: QUERY_FIELDS[filter.field] ?? filter.field,
+      operator: filter.operator,
+      values: filterValues(filter).map(item => item.value),
+    })),
+  }
+}
+
 export function filterValues(filter: MyIssuesAppliedFilter): MyIssuesFilterValue[] {
   const persistedValues = Array.isArray(filter.values) ? filter.values as unknown[] : []
   const values = persistedValues.flatMap(value => {

@@ -1134,6 +1134,9 @@ export interface ReviewEvent {
   id: UUID;
   type: string;
   body?: string;
+  path?: string;
+  line?: number;
+  resolved?: boolean;
   actor: User;
   createdAt: string;
 }
@@ -1833,10 +1836,12 @@ export interface Meeting {
 }
 export interface CursorPage<T> {
   items: T[];
-  nextCursor: string;
+  nextCursor?: string;
   hasMore: boolean;
   total: number;
 }
+/** A server-backed page of issues. Filters are encoded as a JSON query AST. */
+export interface IssueQueryPage extends CursorPage<Issue> {}
 export interface SemanticSearchFacet {
   key: string;
   value: string;
@@ -1995,6 +2000,7 @@ export interface AgentToolCall {
   result?: unknown;
   status: "pending" | "running" | "completed" | "error";
   error?: string;
+  approvalId?: string;
 }
 export interface AgentSession {
   id: UUID;
@@ -2057,6 +2063,9 @@ export interface RealtimeEvent {
     presence?: Presence[];
     issue?: Issue;
     changes?: IssueUpdateInput;
+    /** Post-mutation snapshot for incremental cache updates. */
+    entity?: unknown;
+    deleted?: boolean;
   };
   createdAt: string;
 }

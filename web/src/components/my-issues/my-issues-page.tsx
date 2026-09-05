@@ -7,8 +7,9 @@ import { MyIssuesList, type MyIssuesContextAction, type MyIssuesCreateContext, t
 import { defaultMyIssuesDisplayOptions } from './my-issues-display-defaults'
 import { MyIssuesSurface, type MyIssuesDisplayOptions, type MyIssuesFilterKey, type MyIssuesFilterOption, type MyIssuesView } from './my-issues-surface'
 import { useMyIssuesController } from './use-my-issues-controller'
-import { applyExplorerFilters, explorerFilterOptions, explorerPropertyOptions, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
+import { applyExplorerFilters, explorerBoardGroupUpdate, explorerFilterOptions, explorerPropertyOptions, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import { SavedViewInsightsPanel, type SavedViewInsightsConfig } from '@/components/issue-explorer/saved-view-panels'
+import { IssueBoard } from '@/components/issue-explorer/issue-board'
 import type { SavedView } from '@/types/flow'
 import { setGroupedLabelSelected } from '@/lib/labels'
 import { confirmAction } from '@/components/ui/action-dialog-service'
@@ -110,11 +111,34 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
     const update = updateForAction(action, value)
     if (update) await updateOne(row, update)
   }
+  const moveIssue = (row: MyIssuesRowData, sourceGroupId: string, targetGroupId: string, targetIndex: number) => {
+    const targetGroup = controller.visibleGroups.find(group => group.id === targetGroupId)
+    if (!targetGroup) return
+    const targetIssues = targetGroup.issues.filter(issue => issue.id !== row.id)
+    const before = targetIssues[targetIndex]
+    const after = targetIssues[targetIndex - 1]
+    const sortOrder = before
+      ? (before.sortOrder ?? 0) - 1
+      : after
+        ? (after.sortOrder ?? 0) + 1
+        : (row.sortOrder ?? 0)
+    const grouping = controller.display.grouping
+    const groupUpdate = explorerBoardGroupUpdate(row, grouping, targetGroupId, data)
+    if (!Object.keys(groupUpdate).length && sourceGroupId !== targetGroupId) return
+    const update: IssueUpdateInput = { ...groupUpdate, sortOrder }
+    const snapshot = controller.groups
+    const optimistic = optimisticRow(row, update, data)
+    controller.replaceGroups(current => reorderMyIssuesGroups(current, optimistic, grouping, targetGroupId, targetIndex))
+    void onUpdateIssue(row.id, update).then(updated => {
+      controller.replaceGroups(current => reorderMyIssuesGroups(current, toRow(updated, workspaceSlug, data, issueMatchesView(updated, data, projectedView)), grouping, targetGroupId, targetIndex))
+    }).catch(() => controller.replaceGroups(() => snapshot))
+  }
   const summaryFilter = (tab: MyIssuesSummaryTab, item: MyIssuesSummaryItem) => {
     const field = tab === 'labels' ? 'labels' : tab === 'projects' ? 'project' : 'priority'
     addFilter(field, { id: item.id, label: item.label, color: item.color })
   }
   const insightRows=controller.visibleGroups.flatMap(group=>group.issues)
+  const boardGroups = useMemo(() => myIssuesBoardGroups(controller.visibleGroups, controller.display, data), [controller.display, controller.visibleGroups, data])
   const allInsightRows=useMemo(()=>applyExplorerFilters(issuesForView(data,projectedView,true),controller.filters,data).map(issue=>issueToExplorerRow(issue,workspaceSlug,data.issues,data)),[controller.filters,data,projectedView,workspaceSlug])
   const insightsView:SavedView={id:`my-issues-${controller.view}`,name:({assigned:'Assigned to me',created:'Created by me',subscribed:'Subscribed',activity:'Activity'} as const)[controller.view],description:'',resource:'issues',scope:'personal',ownerId:data.viewer.id,view:'all',filters:controller.filters,display:{},insights:insightsConfig,createdAt:'',updatedAt:''}
 
@@ -148,7 +172,20 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onValuesChange={controller.changeFilterValues}
       />}
     >
-      <MyIssuesList
+      {controller.display.layout === 'board' ? <IssueBoard
+        groups={boardGroups}
+        hiddenGroupIds={controller.display.hiddenGroupIds}
+        properties={controller.display.properties}
+        propertyOptions={rowOptions}
+        selectedIds={controller.selectedIds}
+        onCreateIssue={group => onCreateIssue?.(group.createContext ?? (stateIdForGroup(group, data) ? { stateId: stateIdForGroup(group, data) } : undefined))}
+        onHideGroup={groupId => controller.changeDisplay({ ...controller.display, hiddenGroupIds: [...new Set([...controller.display.hiddenGroupIds, groupId])] })}
+        onShowGroup={groupId => controller.changeDisplay({ ...controller.display, hiddenGroupIds: controller.display.hiddenGroupIds.filter(id => id !== groupId) })}
+        onMove={moveIssue}
+        onOpenIssue={row => { const issue = issuesById.get(row.id); if (issue) onOpenIssue(issue) }}
+        onPropertyChange={changeProperty}
+        onSelectIssue={controller.selectIssue}
+      /> : <MyIssuesList
         groups={controller.visibleGroups}
         loading={loading}
         error={error}
@@ -166,7 +203,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onRetryMutation={row => { const input = retryUpdates.current.get(row.id); if (input) void updateOne(row, input).catch(() => undefined) }}
         onSelectIssue={controller.selectIssue}
         onContextAction={(row, action) => { void contextAction(row, action) }}
-      />
+      />}
       <MyIssuesDetailsPane open={controller.detailsOpen} width={controller.detailsWidth} onWidthChange={controller.setDetailsWidth} onClose={() => controller.setDetailsOpen(false)} summary={controller.summary} onSummaryItemSelect={summaryFilter}/>
       {insightsOpen && <SavedViewInsightsPanel
         allRows={allInsightRows}
@@ -213,6 +250,17 @@ function groupIssues(issues: Issue[], workspaceSlug: string, data: BootstrapData
     group.issues.push(toRow(issue, workspaceSlug, data, viewMatches.has(issue.id))); groups.set(id, group)
   }
   return [...groups.values()]
+}
+
+function myIssuesBoardGroups(groups: MyIssuesGroupData[], display: MyIssuesDisplayOptions, data: BootstrapData) {
+  if (display.layout !== 'board' || !display.showEmptyGroups || display.grouping !== 'status') return groups
+  const byId = new Map(groups.map(group => [group.id, group]))
+  for (const state of data.states) {
+    if (!byId.has(state.id)) byId.set(state.id, { id: state.id, label: state.name, stateType: state.type, state, createContext: { stateId: state.id }, issues: [] })
+  }
+  const order = new Map(data.states.map((state, index) => [state.id, index]))
+  const sorted = [...byId.values()].sort((left, right) => (order.get(left.id) ?? 99) - (order.get(right.id) ?? 99))
+  return display.groupOrder === 'desc' ? sorted.reverse() : sorted
 }
 
 function toRow(issue: Issue, workspaceSlug: string, data: BootstrapData, viewMatch = true): MyIssuesRowData {
@@ -274,11 +322,24 @@ function optimisticRow(row: MyIssuesRowData, input: IssueUpdateInput, data: Boot
     cycleId: input.cycleId === undefined ? row.cycleId : input.cycleId || undefined,
     dueDate: input.dueDate === undefined ? row.dueDate : input.dueDate || undefined,
     labels: input.labelIds === undefined ? row.labels : input.labelIds.map(id => data.labels.find(label => label.id === id)).filter((label): label is NonNullable<typeof label> => Boolean(label)),
+    sortOrder: input.sortOrder === undefined ? row.sortOrder : input.sortOrder,
     updatedAt: new Date().toISOString(),
   }
 }
 
 function replaceRow(groups: MyIssuesGroupData[], row: MyIssuesRowData) { return groups.map(group => ({ ...group, issues: group.issues.map(issue => issue.id === row.id ? row : issue) })) }
+function reorderMyIssuesGroups(groups: MyIssuesGroupData[], row: MyIssuesRowData, grouping: MyIssuesDisplayOptions['grouping'], targetGroupId: string, targetIndex: number) {
+  const replaced = groups.map(group => ({ ...group, issues: group.issues.filter(issue => issue.id !== row.id) }))
+  const target = replaced.find(group => group.id === targetGroupId || (grouping === 'focus' && targetGroupId === 'other-active' && group.id === 'other-active'))
+  if (target) {
+    const issues = [...target.issues]
+    issues.splice(Math.max(0, Math.min(targetIndex, issues.length)), 0, row)
+    target.issues = issues
+    return replaced
+  }
+  if (replaced[0]) replaced[0].issues = [...replaced[0].issues, row]
+  return replaced
+}
 function withoutKey(map: Map<string, string>, key: string) { const next = new Map(map); next.delete(key); return next }
 function withKey(map: Map<string, string>, key: string, value: string) { const next = new Map(map); next.set(key, value); return next }
 function readInsights(key:string):Record<string,unknown>{try{const value=JSON.parse(localStorage.getItem(key)??'{}');return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}catch{return {}}}

@@ -2,11 +2,13 @@ import type { AgentMessagePart, AgentSession } from '@/types/flow'
 import { ApiError, apiFetch, jsonRequest } from '@/lib/api-client'
 
 export interface AgentStreamEvent {
-  type: 'session.started' | 'text.delta' | 'reasoning.delta' | 'tool.started' | 'tool.delta' | 'tool.completed' | 'session.completed' | 'error'
+  type: 'session.started' | 'text.delta' | 'reasoning.delta' | 'tool.started' | 'tool.delta' | 'tool.completed' | 'tool.approval_required' | 'tool.approval_resolved' | 'session.completed' | 'error'
   session?: AgentSession
   messageId?: string
   delta?: string
   part?: AgentMessagePart
+  approvalId?: string
+  decision?: 'approved' | 'rejected'
   error?: string
 }
 

@@ -347,7 +347,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
 
           <div className={styles.document}>
             <IssueTitleEditor value={title} onChange={setTitle} onEnter={() => descriptionEditorRef.current?.commands.focus('start')} onSubmit={() => void submit()} autoFocus={open} className={styles.titleField} editorRef={editor => { titleEditorRef.current = editor }}/>
-            <IssueDescriptionEditor value={description?.markdown ?? ''} state={description?.documentJSON} onChange={setDescription} onSubmit={() => void submit()} className={styles.descriptionField} editorRef={editor => { descriptionEditorRef.current = editor }}/>
+            <IssueDescriptionEditor users={data.users} value={description?.markdown ?? ''} state={description?.documentJSON} onChange={setDescription} onSubmit={() => void submit()} className={styles.descriptionField} editorRef={editor => { descriptionEditorRef.current = editor }}/>
           </div>
 
           <div className={styles.properties}>
