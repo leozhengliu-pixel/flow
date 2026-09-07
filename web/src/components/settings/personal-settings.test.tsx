@@ -175,6 +175,47 @@ describe('personal settings workflows', () => {
     expect(input.onNavigate).toHaveBeenCalledWith('api')
   })
 
+  it('keeps the create action in the API-key card header and existing-key actions in a menu', async () => {
+    const user = userEvent.setup()
+    const input = props('account-security')
+    const key = { id: 'key-existing', name: 'CI key', scopes: null, teamIds: null, creatorId: viewer.id, prefix: 'flow_api_test', createdAt: '2026-09-01T00:00:00.000Z' }
+    input.data = { ...input.data, apiKeys: [key] } as never
+    input.onEditAPIKey = vi.fn()
+    render(<MemoryRouter><I18nProvider><PersonalSettings {...input}/></I18nProvider></MemoryRouter>)
+
+    expect(await screen.findByRole('heading', { name: 'Personal API keys' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: '1 API key' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'New API key' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Rotate' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Open menu' }))
+    const menu = screen.getByRole('dialog', { name: 'API key menu' })
+    expect(within(menu).getAllByRole('option').map(button => button.textContent)).toEqual(['Edit API key', 'Revoke API key'])
+    expect(within(menu).getAllByRole('option').every(option => option.getAttribute('aria-selected') === 'false')).toBe(true)
+    await user.click(within(menu).getByRole('option', { name: 'Edit API key' }))
+    expect(input.onEditAPIKey).toHaveBeenCalledWith(expect.objectContaining({ id: 'key-existing' }))
+  })
+
+  it('uses the compact two-item menu on an existing API-key detail page', async () => {
+    const user = userEvent.setup()
+    const input = props('account-security')
+    const key = { id: 'key-detail', name: 'Detail key', scopes: null, teamIds: null, creatorId: viewer.id, prefix: 'flow_api_hidden', createdAt: '2026-09-01T00:00:00.000Z' }
+    input.data = { ...input.data, apiKeys: [key] } as never
+    input.apiKeyMode = 'detail'
+    input.apiKeyId = key.id
+    input.onEditAPIKey = vi.fn()
+    render(<MemoryRouter><I18nProvider><PersonalSettings {...input}/></I18nProvider></MemoryRouter>)
+
+    expect(screen.getByRole('heading', { name: 'Detail key' })).toBeVisible()
+    expect(screen.queryByText(/flow_api_hidden/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Rotate' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Open menu' }))
+    const menu = screen.getByRole('dialog', { name: 'API key menu' })
+    expect(within(menu).getAllByRole('option').map(option => option.textContent)).toEqual(['Edit API key', 'Revoke API key'])
+    await user.click(within(menu).getByRole('option', { name: 'Edit API key' }))
+    expect(input.onEditAPIKey).toHaveBeenCalledWith(expect.objectContaining({ id: 'key-detail' }))
+  })
+
   it('completes the API key creation flow with scoped team access', async () => {
     const user = userEvent.setup()
     const input = props('account-security')

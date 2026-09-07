@@ -73,12 +73,33 @@
 .personal-security-app-row>.personal-security-app-icon{width:28px;height:28px;display:grid;place-items:center;border-radius:7px;background:var(--security-hover);color:var(--security-copy)}
 .personal-security-app-row>.personal-security-app-icon svg{width:14px;height:14px}
 .personal-security-app-row:hover{background:var(--security-hover)}
-.personal-security-api-key-row{min-height:65px;display:grid!important;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:12px;padding:14px 16px!important}
-.personal-security-api-key-row>.settings-row-icon{width:28px;min-width:28px;height:28px;border-radius:7px;background:var(--security-hover);color:var(--security-copy)!important}
-.personal-security-api-key-row>.settings-row-icon svg{width:14px;height:14px}
-.personal-security-api-key-row .personal-security-key-actions{display:flex;align-items:center;gap:4px;margin-left:auto;opacity:0;pointer-events:none;transition:opacity .15s ease}
-.personal-security-api-key-row:hover .personal-security-key-actions,.personal-security-api-key-row:focus-within .personal-security-key-actions{opacity:1;pointer-events:auto}
-.personal-security-api-key-row:hover{background:var(--security-hover)}
+.personal-security-api-keys>.settings-card{background:var(--security-card)}
+.personal-security-api-key-header{box-sizing:border-box;height:64.5px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px}
+.personal-security-api-key-header h3{margin:0;color:var(--security-text);font-size:13px;font-weight:500;line-height:15.5px}
+.personal-security-api-key-header>span{display:flex;align-items:center;flex:0 0 auto}
+.personal-security-api-key-header .personal-action{color:var(--security-api-key-action-fg);font-family:var(--font);font-size:13px;font-weight:500;line-height:normal}
+.personal-security-api-key-list{margin:0;padding:0;box-shadow:inset 0 .5px var(--security-border);list-style:none}
+.personal-security-api-key-row{position:relative;box-sizing:border-box;height:66px;display:grid;grid-template-columns:32px minmax(0,1fr) 32px;align-items:center;gap:12px;padding:16px;color:var(--security-text);outline:0}
+.personal-security-api-key-row:not(:last-child){border-bottom:.5px solid var(--security-border)}
+.personal-security-api-key-row:last-child{border-radius:0 0 10px 10px}
+.personal-security-api-key-row:hover,.personal-security-api-key-row:focus-visible{background:var(--security-api-key-row-hover)}
+.personal-security-api-key-icon{width:32px;height:32px;display:grid;place-items:center;border-radius:6px;background:var(--security-api-key-icon-bg);color:var(--security-api-key-icon-fg)!important}
+.personal-security-api-key-icon svg{width:16px;height:16px;fill:currentColor}
+.personal-security-api-key-copy{min-width:0;display:flex;flex-direction:column;gap:3px}
+.personal-security-api-key-copy>strong{overflow:hidden;color:var(--security-api-key-title-fg);font-size:13px;font-weight:500;line-height:15.5px;text-overflow:ellipsis;white-space:nowrap}
+.personal-security-api-key-copy>.personal-security-api-key-metadata{min-width:0;overflow:hidden;flex-wrap:nowrap;text-overflow:ellipsis;white-space:nowrap}
+.personal-security-api-key-menu-trigger{position:relative;z-index:1;width:32px;height:32px;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--security-api-key-action-fg)}
+.personal-security-api-key-menu-trigger:hover,.personal-security-api-key-menu-trigger[data-state=open]{background:var(--security-api-key-action-active);color:var(--bright)}
+.personal-security-api-key-menu-trigger:focus-visible{outline:1px solid var(--focus-ring);outline-offset:1px}
+.personal-security-api-key-menu-trigger svg{width:16px;height:16px;fill:currentColor;stroke:none}
+.personal-security-api-key-menu-trigger.compact{width:24px;height:24px}
+.personal-security-api-key-menu{z-index:1200;box-sizing:border-box;width:175px;height:77px;overflow:hidden;padding:6px 0;border:.5px solid var(--security-api-key-menu-border);border-radius:12px;background:var(--theme-surface-2);box-shadow:var(--shadow-control);color:var(--theme-text-primary);outline:0}
+.personal-security-api-key-menu-search{position:absolute;left:-99999px;width:1px;height:1px;overflow:hidden;opacity:0}
+.personal-security-api-key-menu-list{padding:0}
+.personal-security-api-key-menu-list>button{position:relative;width:100%;height:32px;display:flex;align-items:center;padding:0 18px 0 14px;border:0;background:transparent;color:inherit;font:450 13px/19.5px var(--font);text-align:left;isolation:isolate}
+.personal-security-api-key-menu-list>button::before{position:absolute;z-index:-1;inset:0 6px;border-radius:8px;background:transparent;content:""}
+.personal-security-api-key-menu-list>button:hover::before,.personal-security-api-key-menu-list>button[aria-selected=true]::before{background:var(--theme-surface-active)}
+.personal-security-api-key-menu-list>button:focus-visible{outline:0}
 .personal-security-show-all{display:flex;justify-content:center;align-items:center;min-height:48px;border-top:.5px solid var(--security-border)}
 .personal-security-show-all .personal-action{height:32px;padding:0 12px;color:var(--security-copy)}
 .personal-security-device-row[role=button]{cursor:pointer;outline:0}
@@ -116,9 +137,9 @@
   .personal-security-empty-row{min-height:64px;padding:0 12px}
   .personal-security-session-group>.personal-security-group-header{height:48px;padding:0 12px}
   .personal-security-app-row{min-height:64px;padding:16px 12px}
-  .personal-security-api-key-row{min-height:65px;grid-template-columns:28px minmax(0,1fr) auto;padding:14px 12px!important}
+  .personal-security-api-key-header{padding:16px 12px}
+  .personal-security-api-key-row{height:66px;grid-template-columns:32px minmax(0,1fr) 32px;padding:16px 12px}
   .personal-security-device-row .settings-control{opacity:1;pointer-events:auto}
-  .personal-security-api-key-row .personal-security-key-actions{opacity:1;pointer-events:auto}
 }
 
 /* API-key creation is a dedicated settings route rather than a modal. */
@@ -194,7 +215,7 @@
 .personal-signing-key-input::placeholder{color:var(--personal-faint)}
 .personal-signing-key-help{color:var(--personal-faint);font-size:11px;line-height:16px}
 .personal-api-key-detail-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
-.personal-api-key-detail-actions{display:flex;align-items:center;gap:4px;padding-top:2px}
+.personal-api-key-detail-actions{display:flex;align-items:center;gap:4px;padding-top:4px}
 .personal-api-key-detail-card{min-height:0;padding:0;overflow:hidden}
 .personal-api-key-detail-row{box-sizing:border-box;min-height:64px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px;border-bottom:.5px solid var(--theme-border)}
 .personal-api-key-detail-row:last-child{border-bottom:0}
