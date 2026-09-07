@@ -4,6 +4,8 @@ import { InboxNotificationRow, type InboxNotificationRowData, type InboxNotifica
 
 export interface InboxNotificationListProps extends Pick<InboxNotificationRowProps, 'onOpen' | 'onReadChange' | 'onDelete' | 'onSnooze' | 'onFavoriteChange' | 'onCopyLink' | 'onCopyIdentifier'> {
   notifications: InboxNotificationRowData[]
+  filterHiddenCount?: number
+  onClearFilters?: () => void
   selectedId?: string | null
   pending?: Record<string, unknown>
   hasMore?: boolean
@@ -11,7 +13,7 @@ export interface InboxNotificationListProps extends Pick<InboxNotificationRowPro
   onLoadMore?: () => void
 }
 
-export function InboxNotificationList({ notifications, selectedId = null, pending, hasMore = false, loadingMore = false, onLoadMore, ...rowActions }: InboxNotificationListProps) {
+export function InboxNotificationList({ notifications, selectedId = null, pending, hasMore = false, loadingMore = false, onLoadMore, filterHiddenCount = 0, onClearFilters, ...rowActions }: InboxNotificationListProps) {
   const listRef = useRef<HTMLDivElement>(null)
   const loadingRef = useRef(loadingMore)
   const focusedRowRef = useRef<{ id: string; index: number } | null>(null)
@@ -72,8 +74,16 @@ export function InboxNotificationList({ notifications, selectedId = null, pendin
         </div>
       ))}
       {loadingMore ? <div className="flow-inbox-notification-list__loading" role="status">Loading…</div> : null}
+      {filterHiddenCount > 0 && notifications.length > 0 ? <InboxFilterNotice hiddenCount={filterHiddenCount} onClear={onClearFilters} /> : null}
     </div>
   )
+}
+
+function InboxFilterNotice({ hiddenCount, onClear }: { hiddenCount: number; onClear?: () => void }) {
+  return <div className="flow-inbox-filter-notice" role="status">
+    <div><span className="flow-inbox-filter-notice__count">{hiddenCount} {hiddenCount === 1 ? 'notification' : 'notifications'}</span><span> hidden by filters</span></div>
+    {onClear ? <button type="button" onClick={onClear}>Clear Filters <span aria-hidden="true">×</span></button> : null}
+  </div>
 }
 
 function focusRow(list: HTMLDivElement | null, id: string) {

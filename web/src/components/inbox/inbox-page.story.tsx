@@ -6,9 +6,9 @@ import type { InboxDisplayOptions } from './inbox-page-shell'
 import type { InboxNotificationRowData } from './notification-row'
 import { inboxStoryNotifications } from './inbox-story-fixtures'
 
-const defaultDisplay: InboxDisplayOptions = { ordering:'newest', showSnoozed:false, showRead:true, showUnreadFirst:false }
+const defaultDisplay: InboxDisplayOptions = { ordering:'newest', showSnoozed:false, showRead:true, showUnreadFirst:false, priorityInbox:false, unreadGrouping:'none' }
 const wait = () => new Promise<void>(resolve => window.setTimeout(resolve, 180))
-const storyAdapter: InboxPageAdapter = { setRead:wait, delete:wait, snooze:wait, setFavorite:wait, deleteAll:wait, deleteAllRead:wait, deleteAllReadCompleted:wait }
+const storyAdapter: InboxPageAdapter = { setRead:wait, delete:wait, snooze:wait, setFavorite:wait, markAllRead:wait, deleteAll:wait, deleteAllRead:wait, deleteAllReadCompleted:wait }
 
 export function InboxPageStory({ initialSelectedId = null }: { initialSelectedId?: string | null }) {
   const [notifications,setNotifications]=useState(inboxStoryNotifications)

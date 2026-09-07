@@ -32,3 +32,4 @@
 .badges>.propertyTrigger{flex:0 1 auto}
 .badges>.propertyTrigger:last-of-type{flex:0 0 auto}
 .checkbox[data-checked=true]{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}
+.rowDate{display:flex;align-items:center;justify-content:center;gap:4px}.rowDate svg{flex:0 0 12px}

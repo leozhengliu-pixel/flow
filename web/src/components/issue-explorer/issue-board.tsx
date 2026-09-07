@@ -1,11 +1,12 @@
 import { useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as ContextMenu from '@radix-ui/react-context-menu'
-import { Ellipsis, Minus, Plus } from 'lucide-react'
+import { Clock3, Ellipsis, GitPullRequest, Link2, Minus, PackageOpen, Plus } from 'lucide-react'
 import { IssueContextMenu, IssueParentTrail, RowCommandPicker, SubIssueProgress, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData, type MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
 import type { MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
 import { CalendarIcon, NoAssigneeIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { DueDatePicker } from '@/components/issue/due-date-picker'
+import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
 import { useI18n } from '@/i18n/i18n'
 import styles from './issue-board.module.css'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
@@ -101,11 +102,17 @@ function CardProperties({ issue, properties, propertyOptions, onPropertyChange }
   const labels = properties.has('labels') ? issue.labels ?? [] : []
   const shownLabels = labels.slice(0, 4)
   const hiddenLabelCount = labels.length - shownLabels.length
-  const visible = properties.has('priority') || Boolean(issue.estimate) || Boolean(properties.has('project') && issue.project) || shownLabels.length > 0 || Boolean(properties.has('dueDate') && issue.dueDate)
+  const visible = properties.has('priority') || Boolean(properties.has('estimate') && issue.estimate) || Boolean(properties.has('sla') && issue.sla) || Boolean(properties.has('project') && issue.project) || shownLabels.length > 0 || Boolean(properties.has('dueDate') && issue.dueDate) || Boolean(properties.has('release') && issue.releaseCount) || Boolean(properties.has('links') && issue.linkCount) || Boolean(properties.has('pullRequests') && issue.pullRequestCount) || Boolean(properties.has('timeInStatus') && issue.timeInStatusMinutes != null) || Boolean(properties.has('myActivity') && issue.myActivityAt)
   if (!visible) return null
   return <div className={styles.cardMeta}>
     {properties.has('priority') && <RowCommandPicker propertyLabel="Priority" label={`${priorityName(issue.priority)} priority`} searchLabel="Change priority to..." selectedIds={[String(issue.priority)]} options={propertyOptions.priority} onSelect={value => onPropertyChange('priority', value)} triggerClassName={`${styles.metaTrigger} ${styles.iconBadge}`} trigger={<PriorityIcon priority={issue.priority} size={14}/>}/>}
-    {issue.estimate != null && issue.estimate > 0 && <span className={styles.badge}><span className={styles.estimateIcon}><Minus size={10}/></span><span>{issue.estimate}</span></span>}
+    {properties.has('estimate') && issue.estimate != null && issue.estimate > 0 && <span className={styles.badge}><span className={styles.estimateIcon}><Minus size={10}/></span><span>{issue.estimate}</span></span>}
+    {properties.has('sla') && issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
+    {properties.has('release') && issue.releaseCount ? <span className={styles.badge}><PackageOpen size={12}/><span>{issue.releaseCount}</span></span> : null}
+    {properties.has('links') && issue.linkCount ? <span className={styles.badge}><Link2 size={12}/><span>{issue.linkCount}</span></span> : null}
+    {properties.has('pullRequests') && issue.pullRequestCount ? <span className={styles.badge}><GitPullRequest size={12}/><span>{issue.pullRequestCount}</span></span> : null}
+    {properties.has('timeInStatus') && issue.timeInStatusMinutes != null ? <span className={styles.badge}><Clock3 size={12}/><span>{formatTimeInStatus(issue.timeInStatusMinutes)}</span></span> : null}
+    {properties.has('myActivity') && issue.myActivityAt ? <span className={styles.badge}><span>{formatDate(issue.myActivityAt)}</span></span> : null}
     {properties.has('project') && issue.project && <RowCommandPicker propertyLabel="Project" kind="project" label={`Change project. Current project is ${issue.project.name}`} searchLabel="Set project..." selectedIds={[issue.project.id]} options={propertyOptions.project} onSelect={value => onPropertyChange('project', value)} triggerClassName={`${styles.metaTrigger} ${styles.projectBadge}`} trigger={<><ProjectIcon size={14}/><span data-i18n-ignore>{issue.project.name}</span></>}/>}
     {shownLabels.length > 0 && <RowCommandPicker propertyLabel="Labels" kind="labels" multi label={`Change labels. ${labels.map(label => label.name).join(', ')} selected`} searchLabel="Change or add labels..." selectedIds={labels.map(label => label.id)} options={propertyOptions.labels} onSelect={value => onPropertyChange('labels', toggleGroupedLabelIds(labels.map(label => label.id), value, propertyOptions.labels))} triggerClassName={styles.labelsTrigger} trigger={<>{shownLabels.map(label => <Badge key={label.id} color={label.color}>{label.name}</Badge>)}{hiddenLabelCount > 0 && <span className={styles.badge}><span className={styles.labelStack}>{labels.slice(4, 6).map((label, index) => <i key={label.id} style={{ '--dot-index': index, backgroundColor: label.color } as CSSProperties}/>)}</span><span>+{hiddenLabelCount} labels</span></span>}</>}/>}
     {properties.has('dueDate') && issue.dueDate && <DueDatePicker value={issue.dueDate} onChange={value => onPropertyChange('dueDate', value)} ariaLabel={`Change due date. Current due date is ${formatDate(issue.dueDate)}`} triggerClassName={styles.metaTrigger} trigger={<><CalendarIcon size={13}/><span>{formatDate(issue.dueDate)}</span></>}/>}
@@ -115,4 +122,5 @@ function CardProperties({ issue, properties, propertyOptions, onPropertyChange }
 function Badge({ children, color }: { children: string; color: string }) { return <span className={styles.badge}><i className={styles.labelDot} style={{ backgroundColor: color }}/><span data-i18n-ignore>{children}</span></span> }
 function BoardAssigneeAvatar({ assignee }: { assignee: NonNullable<MyIssuesRowData['assignee']> }) { return <UserAvatar avatarUrl={assignee.avatarUrl} className={styles.avatar} color={assignee.color ?? 'var(--avatar-fallback)'} name={assignee.name}/> }
 function formatDate(value: string) { return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value.length === 10 ? `${value}T00:00:00` : value)) }
+function formatTimeInStatus(minutes: number) { if (minutes < 60) return `${Math.max(0, minutes)}m`; const hours = minutes / 60; if (hours < 24) return `${Math.round(hours * 10) / 10}h`; return `${Math.round((hours / 24) * 10) / 10}d` }
 function priorityName(priority: number) { return ['No', 'Urgent', 'High', 'Medium', 'Low'][priority] ?? 'No' }

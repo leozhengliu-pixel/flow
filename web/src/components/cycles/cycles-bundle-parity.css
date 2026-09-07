@@ -1,0 +1,48 @@
+/* Measured against the directory surface at a 1470px viewport. */
+.flow-cycles-header {
+  height: 44px;
+  flex: 0 0 44px;
+  padding-inline: 8px;
+}
+
+.flow-cycles-empty {
+  height: calc(100% - 44px);
+}
+
+/* The date occupies the left side of the timeline rail; the rail itself is
+   anchored at 73.5px and the cycle affordance starts at 126px. */
+.flow-cycle-row-link {
+  grid-template-columns: 126px 32px minmax(180px, 1fr) 80px 130px 72px 36px;
+  padding-left: 0;
+  position: relative;
+}
+
+.flow-cycle-row-link::after {
+  background: var(--theme-border);
+  content: "";
+  height: 65.5px;
+  left: 73.5px;
+  position: absolute;
+  top: 0;
+  width: 1px;
+}
+
+.flow-cycle-date {
+  left: -26px;
+  position: relative;
+}
+
+@media (max-width: 800px) {
+  .flow-cycle-row-link {
+    grid-template-columns: 48px 28px minmax(0, 1fr) 78px 36px;
+    padding-left: 4px;
+  }
+
+  .flow-cycle-row-link::after {
+    display: none;
+  }
+
+  .flow-cycle-date {
+    left: 0;
+  }
+}

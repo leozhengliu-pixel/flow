@@ -20,6 +20,11 @@ const PRIORITIES: MyIssuesContextOption[] = ['No priority', 'Urgent', 'High', 'M
 export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: Issue[] = [], data?: BootstrapData): MyIssuesRowData {
   const fullProject = data?.projects.find(project => project.id === issue.project?.id)
   const issueReleases=data?.releases?.filter(release=>release.issueIds?.includes(issue.id))??[]
+  const issuePullRequests=data?.reviews?.filter(review=>review.issueIds?.includes(issue.id))??[]
+  const issueSla=data?.issueSlas?.find(item=>item.issueId===issue.id&&item.status!=='removed')
+  const slaRule=issueSla ? data?.slaRules?.find(rule=>rule.id===issueSla.ruleId) : undefined
+  const myActivityAt=data?.viewer?.id ? data.activities?.[issue.id]?.filter(event=>event.actor.id===data.viewer.id).sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt))[0]?.createdAt : undefined
+  const statusIntervals = issueStatusIntervals(issue, data)
   return {
     id: issue.id,
     teamId: issue.team.id,
@@ -55,9 +60,13 @@ export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: 
     projectLeadId:fullProject?.lead?.id,
     projectMilestoneNames:fullProject?.milestones?.map(milestone=>milestone.name)??[],
     releaseIds:issueReleases.map(release=>release.id),releasePipelineIds:issueReleases.map(release=>release.pipelineId).filter((id):id is string=>Boolean(id)),releaseStages:issueReleases.map(release=>release.stage).filter((stage):stage is string=>Boolean(stage)),releaseStatuses:issueReleases.map(release=>release.status),hasReleasedRelease:issueReleases.some(release=>Boolean(release.releasedAt)),
+    releaseCount: issueReleases.length,
+    sla: issueSla ? { ...issueSla, ruleName: slaRule?.name } : undefined,
     subscriberIds: issue.subscriberIds??[],
     relationTypes: issue.relations?.map(relation => relation.type)??[],
     hasLinks: (issue.attachments?.length??0) > 0,
+    linkCount: issue.attachments?.length ?? 0,
+    pullRequestCount: issuePullRequests.length,
     hasContent: Boolean(issue.title?.trim() || issue.description?.trim()),
     estimate: issue.estimate,
     dueDate: issue.dueDate,
@@ -66,13 +75,22 @@ export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: 
     completedAt: issue.completedAt,
     startedAt: issue.startedAt,
     statusChangedAt: issue.statusChangedAt,
-    statusIntervals: issueStatusIntervals(issue, data),
+    statusIntervals,
+    timeInStatusMinutes: timeInStatusMinutes(statusIntervals),
+    myActivityAt,
     canceledAt: issue.canceledAt,
     archivedAt: issue.archivedAt,
     parentId: issue.parentId,
     ...issueHierarchyFields(issue, issues),
     sortOrder: issue.sortOrder,
   }
+}
+
+function timeInStatusMinutes(intervals: NonNullable<MyIssuesRowData['statusIntervals']>) {
+  const current = intervals.at(-1)
+  if (!current?.enteredAt || current.exitedAt) return undefined
+  const elapsed = Math.floor((Date.now() - Date.parse(current.enteredAt)) / 60000)
+  return Number.isFinite(elapsed) && elapsed >= 0 ? elapsed : undefined
 }
 
 function issueStatusIntervals(issue: Issue, data?: BootstrapData): NonNullable<MyIssuesRowData['statusIntervals']> {

@@ -52,13 +52,18 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
   { value: 'cycle', label: 'Cycle' },
   { value: 'dueDate', label: 'Due date' },
   { value: 'milestone', label: 'Milestone' },
+  { value: 'sla', label: 'SLA' },
+  { value: 'estimate', label: 'Estimate' },
+  { value: 'release', label: 'Release' },
   { value: 'labels', label: 'Labels' },
   { value: 'links', label: 'Links' },
   { value: 'customers', label: 'Customers' },
   { value: 'customerRevenue', label: 'Customer revenue' },
   { value: 'timeInStatus', label: 'Time in status' },
+  { value: 'myActivity', label: 'My activity date' },
   { value: 'created', label: 'Created' },
   { value: 'updated', label: 'Updated' },
+  { value: 'pullRequests', label: 'Pull requests' },
 ]
 
 export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, hideSubGrouping = false, open, onOpenChange, options, onChange }: MyIssuesDisplayMenuProps) {
@@ -83,7 +88,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
       <Popover.Content className={styles.popover} side="bottom" align="end" sideOffset={3} collisionPadding={11} aria-label={t('Display options')}>
         <div className={styles.layoutTabs} role="tablist" aria-label="Layout">
           <button type="button" role="tab" aria-selected={options.layout === 'list'} onClick={() => change({ layout: 'list' })}><List size={14} />{t('List')}</button>
-          <button type="button" role="tab" aria-selected={options.layout === 'board'} onClick={() => change({ layout: 'board' })}><LayoutGrid size={13} />{t('Board')}</button>
+          <button type="button" role="tab" aria-selected={options.layout === 'board'} disabled={options.grouping === 'focus'} onClick={() => change({ layout: 'board' })}><LayoutGrid size={13} />{t('Board')}</button>
         </div>
 
         <section className={styles.section} aria-label={t('Grouping options')}>
@@ -98,11 +103,11 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
                 data-order={options.groupOrder}
                 onClick={() => change({ groupOrder: options.groupOrder === 'asc' ? 'desc' : 'asc' })}
               ><ArrowDownUp size={14} /></button>
-              <SelectControl ariaLabel="Grouping" value={options.grouping} options={visibleGroupingOptions} onChange={grouping => change({ grouping })} />
+              <SelectControl ariaLabel="Grouping" value={options.grouping} options={visibleGroupingOptions} onChange={grouping => change({ grouping, layout: grouping === 'focus' ? 'list' : options.layout })} />
             </div>
           </div>
           {!hideSubGrouping && <SelectField label={options.layout === 'board' ? 'Rows' : 'Sub-grouping'} value={options.subGrouping} options={visibleSubGroupingOptions} onChange={subGrouping => change({ subGrouping })} />}
-          <SelectField label="Ordering" value={options.ordering} options={[{ value: 'importance' as const, label: 'Importance' }, { value: 'priority' as const, label: 'Priority' }, { value: 'created' as const, label: 'Created' }, { value: 'updated' as const, label: 'Updated' }]} onChange={ordering => change({ ordering })} />
+          <SelectField disabled={options.grouping === 'focus'} label="Ordering" value={options.ordering} options={[{ value: 'importance' as const, label: 'Importance' }, { value: 'priority' as const, label: 'Priority' }, { value: 'created' as const, label: 'Created' }, { value: 'updated' as const, label: 'Updated' }]} onChange={ordering => change({ ordering })} />
           <SwitchRow label="Order completed by recency" checked={options.orderCompletedByRecency} onChange={orderCompletedByRecency => change({ orderCompletedByRecency })} />
           <SelectField label="Completed issues" value={options.completedWindow} options={completedOptions} onChange={completedWindow => change({ completedWindow })} />
           <SwitchRow label="Show sub-issues" checked={options.showSubIssues} onChange={showSubIssues => change({ showSubIssues, nestedSubIssues: showSubIssues ? options.nestedSubIssues : false })} />

@@ -1612,17 +1612,28 @@ function SecurityOverview({
   const [showAllSessions, setShowAllSessions] = useState(false);
   const [sessionAction, setSessionAction] = useState<AccountSessionInfo | null>(null);
   const [sessionActionBusy, setSessionActionBusy] = useState(false);
-  useEffect(() => {
-    void fetchAccountSessions()
-      .then(setSessions)
-      .catch((error) =>
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : p("Could not load security information"),
-        ),
+  const [sessionsBusy, setSessionsBusy] = useState(false);
+  const sessionsBusyRef = useRef(false);
+  const refreshSessions = useCallback(async () => {
+    if (sessionsBusyRef.current) return;
+    sessionsBusyRef.current = true;
+    setSessionsBusy(true);
+    try {
+      setSessions(await fetchAccountSessions());
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : p("Could not load security information"),
       );
+    } finally {
+      sessionsBusyRef.current = false;
+      setSessionsBusy(false);
+    }
   }, [p]);
+  useEffect(() => {
+    void refreshSessions();
+  }, [refreshSessions]);
   useEffect(() => {
     void fetchPasskeys()
       .then(setPasskeys)
@@ -1788,6 +1799,11 @@ function SecurityOverview({
         title={p("Sessions")}
         description={p("Devices logged into your account")}
       >
+        <div className="personal-section-action">
+          <Action onClick={() => void refreshSessions()} disabled={sessionsBusy}>
+            {sessionsBusy ? p("Refreshing…") : p("Refresh")}
+          </Action>
+        </div>
         {sessions.filter((item) => item.current).length ? (
           sessions
             .filter((item) => item.current)

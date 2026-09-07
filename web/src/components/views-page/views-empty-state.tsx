@@ -9,6 +9,7 @@ type ViewsEmptyStateProps = {
 
 export function ViewsEmptyState({ onCreate, resource }: ViewsEmptyStateProps) {
   const { locale, t } = useI18n()
+  const resourceLabel = resource === 'issues' ? 'Issues' : 'Projects'
   const description = resource === 'issues'
     ? 'Create custom views using filters to show only the issues you want to see. You can save, share, and favorite these views for easy access and faster team collaboration.'
     : 'Create custom views using filters to show only the projects you want to see. You can save, share, and favorite these views for easy access and faster team collaboration.'
@@ -19,7 +20,7 @@ export function ViewsEmptyState({ onCreate, resource }: ViewsEmptyStateProps) {
     </div>
     <div className={styles.emptyBody}>
       <div className={styles.emptyCopy}>
-        <span className={styles.emptyTitle}>Views</span>
+        <span className={styles.emptyTitle}>{t(resourceLabel)}</span>
         <div className={styles.emptyParagraphs}>
           <span data-i18n-ignore>{t(description)}</span>
           <span data-i18n-ignore>{locale === 'zh-CN' ? <>你也可以点击 <SaveViewIcon /> 图标，或按下 <ViewShortcut/> 保存任何现有视图。</> : <>You can also save any existing view by clicking the <SaveViewIcon /> icon or by pressing <ViewShortcut/>.</>}</span>
