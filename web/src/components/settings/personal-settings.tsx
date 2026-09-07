@@ -14,6 +14,7 @@ import {
   CircleAlert,
   Clipboard,
   ExternalLink,
+  Ellipsis,
   GitFork,
   KeyRound,
   LoaderCircle,
@@ -47,7 +48,6 @@ import {
   removeCommitSigningKey,
   revokeAccountSession,
   revokeAPIKey,
-  rotateAPIKey,
   revokeOtherAccountSessions,
   revokeOAuthAuthorization,
   updateAccountProfile,
@@ -409,6 +409,9 @@ const PERSONAL_ZH: Record<string, string> = {
   Edit: "编辑",
   Save: "保存",
   "Edit API key": "编辑 API 密钥",
+  "Revoke API key": "撤销 API 密钥",
+  "Open menu": "打开菜单",
+  "API key menu": "API 密钥菜单",
   "API key updated": "API 密钥已更新",
   "Could not update API key": "无法更新 API 密钥",
   "API key revoked": "API 密钥已撤销",
@@ -1588,6 +1591,7 @@ function SecurityOverview({
   onNavigate,
   onCreateAPIKey,
   onCreateSigningKey,
+  onEditAPIKey,
   onOpenAPIKey,
   onLogout,
   onReload,
@@ -1665,11 +1669,6 @@ function SecurityOverview({
     data.viewerRole === "guest"
       ? p("Guest users cannot create personal API keys")
       : p("Personal API keys are not enabled for this workspace");
-  const [revealedSecret, setRevealedSecret] = useState<{
-    name: string;
-    secret: string;
-  } | null>(null);
-  const [rotatingKeyId, setRotatingKeyId] = useState<string | null>(null);
   const [revokeKey, setRevokeKey] = useState<APIKey | null>(null);
   const [revokeAuthorization, setRevokeAuthorization] =
     useState<OAuthAuthorization | null>(null);
@@ -2020,102 +2019,76 @@ function SecurityOverview({
       </PersonalSection>
       <PersonalSection
         id="personal-api-keys"
-        className="personal-security-section"
-        title={
-          apiKeys.length
-            ? `${apiKeys.length} ${
-                locale === "zh-CN"
-                  ? "个 API 密钥"
-                  : apiKeys.length === 1
-                    ? "API key"
-                    : "API keys"
-              }`
-            : p("Personal API keys")
-        }
+        className="personal-security-section personal-security-api-keys"
+        title={p("Personal API keys")}
         description={p("Use Flow’s API to build your own integrations")}
       >
-        {apiKeys.map((item) => (
-          <PersonalRow
-            key={item.id}
-            className="personal-security-api-key-row"
-            role="button"
-            tabIndex={0}
-            onClick={(event) => {
-              if (event.target instanceof Element && event.target.closest("button")) return;
-              onOpenAPIKey?.(item);
-            }}
-            onKeyDown={(event) => {
-              if ((event.key === "Enter" || event.key === " ") && onOpenAPIKey) {
-                event.preventDefault();
-                onOpenAPIKey(item);
+        <header className="personal-security-api-key-header">
+          <h3>
+            {apiKeys.length
+              ? `${apiKeys.length} ${
+                  locale === "zh-CN"
+                    ? "个 API 密钥"
+                    : apiKeys.length === 1
+                      ? "API key"
+                      : "API keys"
+                }`
+              : p("No API keys created")}
+          </h3>
+          <span>
+            <Action
+              disabled={!canCreateAPIKey}
+              title={!canCreateAPIKey ? apiKeyCreateDisabledReason : undefined}
+              onClick={() =>
+                onCreateAPIKey ? onCreateAPIKey() : onNavigate("api")
               }
-            }}
-            icon={<KeyRound />}
-            title={<span data-i18n-ignore>{item.name}</span>}
-            description={
-              <APIKeyMetadata
+            >
+              {p("New API key")}
+            </Action>
+          </span>
+        </header>
+        {apiKeys.length > 0 && <ul className="personal-security-api-key-list">
+          {apiKeys.map((item) => (
+            <li
+              key={item.id}
+              className="personal-security-api-key-row"
+              role="button"
+              tabIndex={0}
+              onClick={(event) => {
+                if (event.target instanceof Element && event.target.closest("button")) return;
+                onOpenAPIKey?.(item);
+              }}
+              onKeyDown={(event) => {
+                if (event.target instanceof Element && event.target.closest("button, input")) return;
+                if ((event.key === "Enter" || event.key === " ") && onOpenAPIKey) {
+                  event.preventDefault();
+                  onOpenAPIKey(item);
+                }
+              }}
+            >
+              <span className="personal-security-api-key-icon"><APIKeyGlyph /></span>
+              <span className="personal-security-api-key-copy">
+                <strong data-i18n-ignore>{item.name}</strong>
+                <APIKeyMetadata
+                  apiKey={item}
+                  data={data}
+                  formatDate={formatDate}
+                  locale={locale}
+                  p={p}
+                />
+              </span>
+              <APIKeyActionsMenu
                 apiKey={item}
-                data={data}
-                formatDate={formatDate}
-                locale={locale}
+                onEdit={() => {
+                  if (onEditAPIKey) onEditAPIKey(item);
+                  else onOpenAPIKey?.(item);
+                }}
+                onRevoke={() => setRevokeKey(item)}
                 p={p}
               />
-            }
-          >
-            <span className="personal-security-key-actions">
-              <Action
-                disabled={rotatingKeyId === item.id}
-                onClick={() => {
-                  setRotatingKeyId(item.id);
-                  void rotateAPIKey(item.id)
-                    .then(async (result) => {
-                      setRevealedSecret({ name: item.name, secret: result.secret });
-                      await onReload().catch(() => undefined);
-                    })
-                    .catch((error) => toast.error(error instanceof Error ? error.message : p("Could not rotate API key")))
-                    .finally(() => setRotatingKeyId(null));
-                }}
-              >
-                {p("Rotate")}
-              </Action>
-              <Action
-                danger
-                onClick={() => setRevokeKey(item)}
-              >
-                {p("Revoke")}
-              </Action>
-            </span>
-          </PersonalRow>
-        ))}
-        {!apiKeys.length && (
-          <PersonalRow
-            className="personal-security-empty-row"
-            title={p("No API keys created")}
-          >
-            <Action
-              disabled={!canCreateAPIKey}
-              title={!canCreateAPIKey ? apiKeyCreateDisabledReason : undefined}
-              onClick={() =>
-                onCreateAPIKey ? onCreateAPIKey() : onNavigate("api")
-              }
-            >
-              {p("New API key")}
-            </Action>
-          </PersonalRow>
-        )}
-        {apiKeys.length > 0 && (
-          <div className="personal-security-section-action">
-            <Action
-              disabled={!canCreateAPIKey}
-              title={!canCreateAPIKey ? apiKeyCreateDisabledReason : undefined}
-              onClick={() =>
-                onCreateAPIKey ? onCreateAPIKey() : onNavigate("api")
-              }
-            >
-              {p("New API key")}
-            </Action>
-          </div>
-        )}
+            </li>
+          ))}
+        </ul>}
       </PersonalSection>
       <PersonalSection
         id="commit-signing-key"
@@ -2314,11 +2287,6 @@ function SecurityOverview({
           </footer>
         </DialogContent>
       </Dialog>
-      <APIKeySecretDialog
-        secret={revealedSecret}
-        onClose={() => setRevealedSecret(null)}
-        p={p}
-      />
       <Dialog open={Boolean(revokeKey)} onOpenChange={(open) => !open && setRevokeKey(null)}>
         <DialogContent className="personal-dialog">
           <DialogTitle>
@@ -3234,54 +3202,6 @@ function APIKeyCreatePage({
   );
 }
 
-function APIKeySecretDialog({
-  secret,
-  onClose,
-  p,
-}: {
-  secret: { name: string; secret: string } | null;
-  onClose: () => void;
-  p: PersonalTranslate;
-}) {
-  const [copied, setCopied] = useState(false);
-  useEffect(() => setCopied(false), [secret]);
-  if (!secret) return null;
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(secret.secret);
-      setCopied(true);
-      toast.success(p("Copied"));
-    } catch {
-      toast.error(p("Could not copy API key"));
-    }
-  };
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="personal-dialog personal-api-key-dialog">
-        <DialogTitle>{p("API key created")}</DialogTitle>
-        <p>{p("This secret is shown once. Copy it before closing.")}</p>
-        <label>
-          <span className="sr-only">{p("API key")}</span>
-          <input
-            className="personal-input"
-            readOnly
-            value={secret.secret}
-            onFocus={(event) => event.currentTarget.select()}
-            aria-label={p("API key")}
-          />
-        </label>
-        <footer>
-          <Action onClick={() => void copy()}>
-            {copied ? <Check size={14} /> : <Clipboard size={14} />}
-            {copied ? p("Copied") : p("Copy")}
-          </Action>
-          <Action primary onClick={onClose}>{p("Done")}</Action>
-        </footer>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 type APIKeyDetailPageProps = {
   data: BootstrapData;
   apiKey: APIKey;
@@ -3310,7 +3230,6 @@ function APIKeyDetailPage({
   const [nameDraft, setNameDraft] = useState(apiKey.name);
   const [busy, setBusy] = useState(false);
   const [revokeOpen, setRevokeOpen] = useState(false);
-  const [secret, setSecret] = useState<{ name: string; secret: string } | null>(null);
   const [newlyCreatedSecret, setNewlyCreatedSecret] = useState("");
   useEffect(() => {
     try {
@@ -3365,31 +3284,6 @@ function APIKeyDetailPage({
       setBusy(false);
     }
   };
-  const rotate = async () => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const result = await rotateAPIKey(current.id);
-      const normalized = {
-        ...result.key,
-        scopes: result.key.scopes,
-        teamIds: result.key.teamIds ?? [],
-      };
-      setCurrent(normalized);
-      setSecret({ name: normalized.name, secret: result.secret });
-      await onReload().catch(() => undefined);
-      try {
-        await navigator.clipboard?.writeText(result.secret);
-        toast.success(p("Personal API key copied to clipboard"));
-      } catch {
-        // Keep the one-time secret visible in the dialog when clipboard access is unavailable.
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : p("Could not rotate API key"));
-    } finally {
-      setBusy(false);
-    }
-  };
   const revoke = async () => {
     if (busy) return;
     setBusy(true);
@@ -3430,17 +3324,17 @@ function APIKeyDetailPage({
           </p>
         </div>
         <div className="personal-api-key-detail-actions">
-          <Action
-            onClick={() => {
+          <APIKeyActionsMenu
+            apiKey={current}
+            compact
+            disabled={busy}
+            onEdit={() => {
               if (onEdit) onEdit();
               else setEditingName(true);
             }}
-            disabled={busy}
-          >
-            {p("Edit")}
-          </Action>
-          <Action onClick={() => void rotate()} disabled={busy}>{p("Rotate")}</Action>
-          <Action danger onClick={() => setRevokeOpen(true)} disabled={busy}>{p("Revoke")}</Action>
+            onRevoke={() => setRevokeOpen(true)}
+            p={p}
+          />
         </div>
       </header>
       <section className="personal-api-key-card personal-api-key-detail-card">
@@ -3449,44 +3343,26 @@ function APIKeyDetailPage({
             <strong>{p("Key name")}</strong>
             <span data-i18n-ignore>{current.name}</span>
           </div>
-          <Action
-            onClick={() => {
-              if (onEdit) onEdit();
-              else {
-                setNameDraft(current.name);
-                setEditingName(true);
-              }
-            }}
-            disabled={busy}
-          >
-            {p("Edit")}
-          </Action>
         </div>
-        {current.prefix && (
+        {newlyCreatedSecret && (
           <div className="personal-api-key-detail-row">
             <div>
               <strong>{p("API key")}</strong>
-              {newlyCreatedSecret ? (
-                <div className="personal-api-key-new-secret">
-                  <div className="personal-api-key-secret-inline">
-                    <span className="personal-api-key-mono" data-i18n-ignore>
-                      {newlyCreatedSecret}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={p("Copy to clipboard")}
-                      onClick={() => void copyNewSecret()}
-                    >
-                      <Clipboard aria-hidden="true" />
-                    </button>
-                  </div>
-                  <small>{p("This API key will not be visible in the future. Please copy it now.")}</small>
+              <div className="personal-api-key-new-secret">
+                <div className="personal-api-key-secret-inline">
+                  <span className="personal-api-key-mono" data-i18n-ignore>
+                    {newlyCreatedSecret}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={p("Copy to clipboard")}
+                    onClick={() => void copyNewSecret()}
+                  >
+                    <Clipboard aria-hidden="true" />
+                  </button>
                 </div>
-              ) : (
-                <span className="personal-api-key-mono" data-i18n-ignore>
-                  {current.prefix}…
-                </span>
-              )}
+                <small>{p("This API key will not be visible in the future. Please copy it now.")}</small>
+              </div>
             </div>
           </div>
         )}
@@ -3567,7 +3443,6 @@ function APIKeyDetailPage({
           </footer>
         </DialogContent>
       </Dialog>
-      <APIKeySecretDialog secret={secret} onClose={() => setSecret(null)} p={p} />
     </div>
   );
 }
@@ -3905,6 +3780,112 @@ function formatSecurityRelativeDate(value: string, locale: "en-US" | "zh-CN") {
   return new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(
     amount,
     unit,
+  );
+}
+
+function APIKeyGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M8.88988 8.41959C8.85635 8.19776 8.96598 7.9475 9.17655 8.009L9.9596 8.24531C10.2634 8.33403 10.571 8.1547 10.6468 7.84478L10.6343 7.15935C10.7101 6.84943 11.0178 6.67011 11.3215 6.75882L11.9033 7.11244C12.2071 7.20116 12.5148 7.02184 12.5905 6.71192L12.5781 6.02649C12.6538 5.71657 12.9615 5.53724 13.2653 5.62596L13.847 5.97958C14.1508 6.0683 14.4585 5.88897 14.5342 5.57905L14.9828 3.74436C15.0765 3.36133 14.7748 2.98345 14.389 3.00056L12.7791 3.07195C12.6913 3.07584 12.6064 3.10076 12.5309 3.14473L8.37023 5.56972C7.94026 5.82032 7.39892 5.7287 6.96521 5.45409C5.75524 4.68801 4.20962 4.59206 2.92533 5.34059C1.04673 6.4355 0.438645 8.92267 1.56714 10.8958C2.69563 12.869 5.13335 13.581 7.01195 12.4861C8.43802 11.6549 9.13195 10.0215 8.88988 8.41959ZM5.1402 11.7371C4.12988 11.8226 3.09688 11.3049 2.53904 10.3295C1.9812 9.35414 2.0536 8.1922 2.63206 7.35165C2.98815 6.83422 3.7149 7.04615 4.03733 7.60991L5.62128 10.3795C5.94371 10.9432 5.76213 11.6845 5.1402 11.7371Z"
+      />
+    </svg>
+  );
+}
+
+function APIKeyActionsMenu({
+  apiKey,
+  compact = false,
+  disabled = false,
+  onEdit,
+  onRevoke,
+  p,
+}: {
+  apiKey: APIKey;
+  compact?: boolean;
+  disabled?: boolean;
+  onEdit: () => void;
+  onRevoke: () => void;
+  p: PersonalTranslate;
+}) {
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const actions = [
+    { label: p("Edit API key"), run: onEdit },
+    { label: p("Revoke API key"), run: onRevoke },
+  ];
+  const choose = (index: number) => {
+    const action = actions[index];
+    if (!action) return;
+    setOpen(false);
+    action.run();
+  };
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <button
+          className={`personal-security-api-key-menu-trigger${compact ? " compact" : ""}`}
+          type="button"
+          aria-label={p("Open menu")}
+          disabled={disabled}
+        >
+          <Ellipsis aria-hidden="true" />
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          className="personal-security-api-key-menu"
+          side="bottom"
+          align="end"
+          sideOffset={compact ? 4.5 : 4}
+          collisionPadding={10}
+          aria-label={p("API key menu")}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            setActiveIndex(-1);
+            requestAnimationFrame(() => searchRef.current?.focus());
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+              event.preventDefault();
+              setActiveIndex((current) => {
+                if (event.key === "ArrowDown") return current < 0 ? 0 : (current + 1) % actions.length;
+                return current < 0 ? actions.length - 1 : (current - 1 + actions.length) % actions.length;
+              });
+            } else if (event.key === "Enter" && activeIndex >= 0) {
+              event.preventDefault();
+              choose(activeIndex);
+            }
+          }}
+        >
+          <input
+            ref={searchRef}
+            className="personal-security-api-key-menu-search"
+            type="search"
+            aria-label={p("Filter…")}
+            value=""
+            readOnly
+          />
+          <div className="personal-security-api-key-menu-list" role="listbox" aria-label={`${apiKey.name} ${p("actions")}`}>
+            {actions.map((action, index) => (
+              <button
+                key={action.label}
+                type="button"
+                role="option"
+                aria-selected={activeIndex === index}
+                onMouseMove={() => setActiveIndex(index)}
+                onClick={() => choose(index)}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }
 
