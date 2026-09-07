@@ -96,7 +96,7 @@ export function CustomerDetailPage({
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content
+              <DropdownMenu.Content data-flow-motion="floating"
                 className="customer-detail-menu"
                 align="end"
               >
@@ -178,7 +178,7 @@ export function CustomerDetailPage({
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content
+              <DropdownMenu.Content data-flow-motion="floating"
                 className="customer-detail-menu"
                 align="start"
               >
@@ -221,7 +221,7 @@ export function CustomerDetailPage({
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content
+              <DropdownMenu.Content data-flow-motion="floating"
                 className="customer-detail-menu"
                 align="start"
               >
@@ -439,7 +439,7 @@ function CustomerRequestRow({
           </button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
-          <DropdownMenu.Content className="customer-detail-menu" align="end">
+          <DropdownMenu.Content data-flow-motion="floating" className="customer-detail-menu" align="end">
             <DropdownMenu.Item onSelect={() => fileRef.current?.click()}>
               <Paperclip size={14} />
               Attach file

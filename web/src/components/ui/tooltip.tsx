@@ -17,7 +17,7 @@ export function TooltipContent({
 }: TooltipPrimitive.TooltipContentProps) {
   return (
     <TooltipPrimitive.Portal>
-      <TooltipPrimitive.Content
+      <TooltipPrimitive.Content data-flow-motion="tooltip"
         className={cn('flow-tooltip-content', className)}
         collisionPadding={8}
         side={side}

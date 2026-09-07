@@ -237,7 +237,7 @@ function Control({
           </button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
-          <DropdownMenu.Content
+          <DropdownMenu.Content data-flow-motion="floating"
             className="insights-menu"
             align="start"
             sideOffset={4}
@@ -271,7 +271,7 @@ function DisplayMenu({
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content
+        <DropdownMenu.Content data-flow-motion="floating"
           className="insights-menu"
           align="end"
           sideOffset={4}
@@ -312,7 +312,7 @@ function ActionsMenu({
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content
+        <DropdownMenu.Content data-flow-motion="floating"
           className="insights-menu"
           align="end"
           sideOffset={4}

@@ -13,12 +13,14 @@ import { ThemedToaster } from './components/ui/themed-toaster'
 import { ActionDialogHost } from './components/ui/action-dialogs'
 import { TooltipProvider } from './components/ui/tooltip'
 import './i18n/i18n.css'
+import { FlowMotionProvider } from './components/ui/motion'
+import './styles/motion.css'
 
 initializeTheme()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <I18nProvider>
+    <FlowMotionProvider><I18nProvider>
       <BrowserRouter>
         <TooltipProvider delayDuration={450} skipDelayDuration={300}>
           <App />
@@ -26,6 +28,6 @@ createRoot(document.getElementById('root')!).render(
         <ThemedToaster />
         <ActionDialogHost />
       </BrowserRouter>
-    </I18nProvider>
+    </I18nProvider></FlowMotionProvider>
   </StrictMode>,
 )

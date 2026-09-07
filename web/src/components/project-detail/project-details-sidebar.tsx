@@ -1,3 +1,4 @@
+import { AppLink } from '@/components/ui/app-link'
 import { Component, useId, useEffect, useMemo, useState, type DragEvent, type ErrorInfo, type KeyboardEvent, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
@@ -82,11 +83,11 @@ export function ProjectDetailsSidebar({ initiatives, integrationConnections, lab
 
     <SidebarSection onToggle={() => setMilestonesOpen(value => !value)} open={milestonesOpen} title="Milestones" action={<button aria-label="Add milestone" data-project-milestone-add onClick={() => { setMilestonesOpen(true); setMilestoneEditor('new') }} type="button"><svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16"><use href="#plus"/></svg></button>}>
       <div className="project-details-sidebar__milestones">
-        {(project.milestones ?? []).map((milestone) => {
+        <AnimatedMilestones items={project.milestones ?? []}>{(milestone) => {
           const stats = milestoneStats(projectIssues, milestone.id)
           if (milestoneEditor !== 'new' && milestoneEditor?.id === milestone.id) return <MilestoneEditor key={milestone.id} milestone={milestone} onCancel={() => setMilestoneEditor(undefined)} onSubmit={async input => { await onUpdateMilestone(project.id, milestone.id, input); setMilestoneEditor(undefined) }} progress={stats.progress}/>
           return <MilestoneRow disabled={Boolean(milestoneEditor)} dragging={draggingMilestoneId === milestone.id} dropEdge={milestoneDrop?.id === milestone.id ? milestoneDrop.edge : undefined} key={milestone.id} milestone={milestone} onConvert={async () => { await onConvertMilestone(project.id, milestone.id); toast.success('Milestone converted to project') }} onDelete={() => onDeleteMilestone(project.id, milestone.id)} onDragEnd={() => { setDraggingMilestoneId(undefined); setMilestoneDrop(undefined) }} onDragOver={(event) => { if (!draggingMilestoneId || draggingMilestoneId === milestone.id) return; event.preventDefault(); event.dataTransfer.dropEffect = 'move'; const rect = event.currentTarget.getBoundingClientRect(); setMilestoneDrop({ id: milestone.id, edge: event.clientY < rect.top + rect.height / 2 ? 'before' : 'after' }) }} onDragStart={(event) => { setDraggingMilestoneId(milestone.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', milestone.id) }} onDrop={(event) => { event.preventDefault(); const sourceId = draggingMilestoneId ?? event.dataTransfer.getData('text/plain'); if (sourceId && milestoneDrop) reorderMilestone(sourceId, milestone.id, milestoneDrop.edge); setDraggingMilestoneId(undefined); setMilestoneDrop(undefined) }} onEdit={() => setMilestoneEditor(milestone)} onMove={async targetProjectId => { await onMoveMilestone(project.id, milestone.id, targetProjectId); toast.success('Milestone moved') }} onOpenIssues={() => onOpenMilestoneIssues(milestone.id)} onUpdateDate={targetDate => onUpdateMilestone(project.id, milestone.id, { targetDate })} projects={projects.filter(item => item.id !== project.id)} stats={stats}/>
-        })}
+        }}</AnimatedMilestones>
         {milestoneEditor === 'new' && <MilestoneEditor onCancel={() => setMilestoneEditor(undefined)} onSubmit={async input => { await onCreateMilestone(project.id, input as { name: string; description?: string; targetDate?: string }); setMilestoneEditor(undefined) }} progress={0}/>}
         {(project.milestones?.length ?? 0) > 0 && <div aria-label={`No milestone ${unassignedMilestoneStats.count} issues`} className="project-details-sidebar__milestone is-unassigned" role="button" tabIndex={0} onClick={() => onOpenMilestoneIssues()} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpenMilestoneIssues() } }}><MilestoneProgressIcon unassigned/><strong>No milestone</strong><span>{unassignedMilestoneStats.count}</span></div>}
         {!project.milestones?.length && !milestoneEditor && <div className="project-details-sidebar__milestone-empty"><p>Add milestones to organize work within your project and break it into more granular stages.</p><a href="https://flow.app/docs/project-milestones" rel="noreferrer" target="_blank">Learn more</a></div>}
@@ -199,7 +200,7 @@ function ProjectDependencyRows({ blockedBy, blocking, onUpdate, onUpdateProject,
     <h4>{label}</h4>
     {items.map(item => <div className="project-dependency-row" key={`${direction}-${item.id}`}>
       <a aria-label={item.name} href={`/${workspaceKey}/project/${item.slugId}/overview`}><ViewGlyph color={item.color} icon={normalizeProjectIcon(item.icon)}/><span data-i18n-ignore>{item.name}</span></a>
-      <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Menu" className="project-dependency-row__menu-trigger" type="button"><MoreHorizontal size={12}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className="project-detail-page__menu project-dependency-row__menu" collisionPadding={10} onCloseAutoFocus={event => event.preventDefault()} sideOffset={-2}>
+      <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Menu" className="project-dependency-row__menu-trigger" type="button"><MoreHorizontal size={12}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="project-detail-page__menu project-dependency-row__menu" collisionPadding={10} onCloseAutoFocus={event => event.preventDefault()} sideOffset={-2}>
         <DropdownMenu.Item onSelect={() => void changeDirection(item, direction)}><ProjectIcon size={16}/><span>{direction === 'blockedBy' ? 'Change to blocking' : 'Change to blocked by'}</span></DropdownMenu.Item>
         <DropdownMenu.Item onSelect={() => void remove(item, direction)}><X size={16}/><span>Remove dependency</span></DropdownMenu.Item>
       </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
@@ -254,16 +255,16 @@ function MilestoneRow({ disabled, dragging, dropEdge, milestone, onConvert, onDe
   return <div aria-disabled={disabled} aria-label={`${milestone.name} ${stats.progress}% of ${stats.count}`} className="project-details-sidebar__milestone" data-disabled={disabled || undefined} data-dragging={dragging || undefined} data-drop-edge={dropEdge} draggable={!disabled} onClick={event => { if (!disabled && !(event.target as HTMLElement).closest('button,[role=menuitem]')) onOpenIssues() }} onDragEnd={onDragEnd} onDragOver={onDragOver} onDragStart={onDragStart} onDrop={onDrop} role="button" tabIndex={disabled ? -1 : 0} onKeyDown={event => { if (!disabled && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpenIssues() } }}>
     <div className="project-details-sidebar__milestone-summary"><MilestoneProgressIcon progress={stats.progress}/><strong data-i18n-ignore>{milestone.name}</strong><span className="project-details-sidebar__milestone-stats"><span>{stats.progress}% of</span><button aria-label={`View ${stats.count} issues in ${milestone.name}`} onClick={event => { event.stopPropagation(); onOpenIssues() }} tabIndex={-1} type="button">{stats.count}</button></span><button className="project-details-sidebar__milestone-see-issues" onClick={event => { event.stopPropagation(); onOpenIssues() }} tabIndex={-1} type="button">See issues</button></div>
     <ProjectDatePicker buttonClassName="project-details-sidebar__milestone-date" contentClassName="project-details-sidebar__date-menu" label="Target date" onChange={targetDate => void onUpdateDate(targetDate)} side="left" value={milestone.targetDate}><span>{milestone.targetDate ? format(new Date(`${milestone.targetDate}T00:00:00`), 'MMM d') : 'No date'}</span></ProjectDatePicker>
-    <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={`${milestone.name} actions`} className="project-details-sidebar__milestone-actions" onClick={event => event.stopPropagation()} type="button"><MilestoneMenuIcon name="more-horizontal"/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" alignOffset={-25} className="project-milestone-menu" collisionPadding={8} onCloseAutoFocus={event => event.preventDefault()} sideOffset={4}>
+    <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={`${milestone.name} actions`} className="project-details-sidebar__milestone-actions" onClick={event => event.stopPropagation()} type="button"><MilestoneMenuIcon name="more-horizontal"/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" alignOffset={-25} className="project-milestone-menu" collisionPadding={8} onCloseAutoFocus={event => event.preventDefault()} sideOffset={4}>
       <MilestoneMenuItem icon="edit" label="Edit…" onSelect={onEdit}/>
       <MilestoneMenuItem end={milestone.targetDate ? format(new Date(`${milestone.targetDate}T00:00:00`), 'MMM d') : 'No date'} icon="calendar" label="Edit target date…" onSelect={() => setDateDialogOpen(true)}/>
-      <DropdownMenu.Sub><MilestoneSubTrigger icon="copy" label="Copy"/><DropdownMenu.Portal><DropdownMenu.SubContent alignOffset={-7} className="project-milestone-menu project-milestone-copy-menu" collisionPadding={8} sideOffset={-2}>
+      <DropdownMenu.Sub><MilestoneSubTrigger icon="copy" label="Copy"/><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" alignOffset={-7} className="project-milestone-menu project-milestone-copy-menu" collisionPadding={8} sideOffset={-2}>
         <MilestoneMenuItem icon="link" label="Copy link" onSelect={() => copy(link, 'Milestone link copied')}/>
         <MilestoneMenuItem end="⌘ C" icon="link-name" label="Copy name as link" onSelect={() => copy(`[${milestone.name}](${link})`, 'Milestone name and link copied')}/>
         <MilestoneMenuItem icon="issues" label="Copy link to issues" onSelect={() => copy(link, 'Issues link copied')}/>
       </DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
       <DropdownMenu.Separator/>
-      <DropdownMenu.Sub><MilestoneSubTrigger icon="milestone" label="Move milestone to"/><DropdownMenu.Portal><DropdownMenu.SubContent alignOffset={-7} className="project-milestone-menu project-milestone-move-menu" collisionPadding={8} sideOffset={-2}>
+      <DropdownMenu.Sub><MilestoneSubTrigger icon="milestone" label="Move milestone to"/><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" alignOffset={-7} className="project-milestone-menu project-milestone-move-menu" collisionPadding={8} sideOffset={-2}>
         {projects.map(project => <MilestoneMenuItem icon="project" key={project.id} label={project.name} onSelect={() => void onMove(project.id)}/>)}
         {!projects.length && <DropdownMenu.Label>No other projects</DropdownMenu.Label>}
       </DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
@@ -299,7 +300,7 @@ function MilestoneProgressIcon({ progress = 0, unassigned = false }: { progress?
 }
 
 function SidebarSection({ action, children, compact, onToggle, open, title }: { action?: ReactNode; children: ReactNode; compact?: boolean; onToggle: () => void; open: boolean; title: string }) {
-  return <section className={`project-details-sidebar__section ${compact ? 'is-compact' : ''}`}><header><button aria-expanded={open} aria-label={`${open ? 'Collapse' : 'Expand'} ${title.toLowerCase()} section`} onClick={onToggle} type="button"><span>{title}</span>{open ? <ChevronDown size={11}/> : <ChevronRight size={11}/>}</button>{action}</header>{open && children}</section>
+  return <section className={`project-details-sidebar__section ${compact ? 'is-compact' : ''}`}><header><button aria-expanded={open} aria-label={`${open ? 'Collapse' : 'Expand'} ${title.toLowerCase()} section`} onClick={onToggle} type="button"><span>{title}</span>{open ? <ChevronDown size={11}/> : <ChevronRight size={11}/>}</button>{action}</header><AnimatedCollapse open={open}>{children}</AnimatedCollapse></section>
 }
 
 type ProjectDependencyDirection = 'blockedBy' | 'blocking'
@@ -323,11 +324,11 @@ function ProjectDependencyMenu({ onUpdate, onUpdateProject, project, projectRela
   const reset = () => { setDirection(undefined); setQuery('') }
   return <DropdownMenu.Root open={open} onOpenChange={next => { setOpen(next); if (!next) reset() }}>
     <DropdownMenu.Trigger asChild><button aria-label="Add dependency" type="button"><Plus size={13}/></button></DropdownMenu.Trigger>
-    <DropdownMenu.Portal><DropdownMenu.Content align="end" className="project-detail-page__menu project-dependency-menu" collisionPadding={10} sideOffset={4}>
+    <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="project-detail-page__menu project-dependency-menu" collisionPadding={10} sideOffset={4}>
       <div className="project-dependency-menu__search"><input aria-label="Dependencies…" autoFocus onChange={event => setQuery(event.target.value)} onKeyDown={event => event.stopPropagation()} placeholder="Dependencies…" value={query}/></div>
       <div className="project-dependency-menu__directions">{directions.map(item => <DropdownMenu.Sub key={item.id} open={direction === item.id} onOpenChange={next => setDirection(current => next ? item.id : current === item.id ? undefined : current)}>
           <DropdownMenu.SubTrigger className="project-dependency-menu__direction"><span className="project-dependency-menu__item-background"/>{item.icon}<span>{item.label}</span><ChevronRight size={13}/></DropdownMenu.SubTrigger>
-          <DropdownMenu.Portal><DropdownMenu.SubContent alignOffset={-61} className="project-detail-page__menu project-dependency-projects" collisionPadding={10} sideOffset={3}>
+          <DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" alignOffset={-61} className="project-detail-page__menu project-dependency-projects" collisionPadding={10} sideOffset={3}>
           <DependencyProjectPicker direction={item.id} onUpdate={onUpdate} onUpdateProject={onUpdateProject} project={project} projectRelations={projectRelations} projects={projects} viewer={viewer}/>
           </DropdownMenu.SubContent></DropdownMenu.Portal>
         </DropdownMenu.Sub>)}
@@ -423,14 +424,11 @@ function SidebarProperties({ initiatives, integrationConnections, labelGroups, l
 
 function ProjectSlackMenu({ integrationConnections, onUpdate, project }: { integrationConnections: IntegrationConnection[]; onUpdate: (input: ProjectMutationInput) => Promise<void>; project: Project }) {
   const channels = [...new Set(integrationConnections.filter(connection => connection.provider.toLowerCase() === 'slack' && connection.status === 'connected').flatMap(connection => connection.channels))]
-  const openIntegrations = () => {
-    const workspace = location.pathname.split('/').filter(Boolean)[0]
-    if (workspace) location.assign(`/${workspace}/settings/integrations`)
-  }
-  return <div className="project-details-sidebar__property"><span className="project-details-sidebar__property-label">Slack</span><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Slack channel" className="project-details-sidebar__property-trigger" type="button"><SlackIcon size={16}/><span data-i18n-ignore={project.slackChannelName ? true : undefined}>{project.slackChannelName ? `#${project.slackChannelName}` : 'Slack channel'}</span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="start" alignOffset={-4} className="project-detail-page__menu project-details-sidebar__slack-menu" side="left" sideOffset={4}>
-    {channels.length ? channels.map(channel => <DropdownMenu.CheckboxItem checked={project.slackChannelId === channel} key={channel} onCheckedChange={() => void onUpdate({ slackChannelId: channel, slackChannelName: channel })}><SlackIcon size={16}/><span data-i18n-ignore>{channel}</span>{project.slackChannelId === channel && <CheckboxMark/>}</DropdownMenu.CheckboxItem>) : <DropdownMenu.Item onSelect={openIntegrations}><SlackIcon size={16}/><span>Connect channel</span></DropdownMenu.Item>}
+  const integrationsHref = `/${location.pathname.split('/').filter(Boolean)[0]}/settings/integrations`
+  return <div className="project-details-sidebar__property"><span className="project-details-sidebar__property-label">Slack</span><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Slack channel" className="project-details-sidebar__property-trigger" type="button"><SlackIcon size={16}/><span data-i18n-ignore={project.slackChannelName ? true : undefined}>{project.slackChannelName ? `#${project.slackChannelName}` : 'Slack channel'}</span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" alignOffset={-4} className="project-detail-page__menu project-details-sidebar__slack-menu" side="left" sideOffset={4}>
+    {channels.length ? channels.map(channel => <DropdownMenu.CheckboxItem checked={project.slackChannelId === channel} key={channel} onCheckedChange={() => void onUpdate({ slackChannelId: channel, slackChannelName: channel })}><SlackIcon size={16}/><span data-i18n-ignore>{channel}</span>{project.slackChannelId === channel && <CheckboxMark/>}</DropdownMenu.CheckboxItem>) : <DropdownMenu.Item asChild><AppLink href={integrationsHref}><SlackIcon size={16}/><span>Connect channel</span></AppLink></DropdownMenu.Item>}
     {project.slackChannelId && <DropdownMenu.Item onSelect={() => void onUpdate({ slackChannelId: '', slackChannelName: '' })}><X size={16}/><span>Disconnect channel</span></DropdownMenu.Item>}
-    <DropdownMenu.Separator/><DropdownMenu.Item onSelect={openIntegrations}><SlackIcon size={16}/><span>Manage Slack settings…</span></DropdownMenu.Item>
+    <DropdownMenu.Separator/><DropdownMenu.Item asChild><AppLink href={integrationsHref}><SlackIcon size={16}/><span>Manage Slack settings…</span></AppLink></DropdownMenu.Item>
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></div>
 }
 
@@ -478,8 +476,8 @@ function MilestoneDateDialog({ milestone, onOpenChange, onSubmit, open }: { mile
     } finally { setSaving(false) }
   }
   return <Dialog.Root onOpenChange={onOpenChange} open={open}><Dialog.Portal>
-    <Dialog.Overlay className="project-milestone-date-dialog__overlay"/>
-    <Dialog.Content aria-describedby={undefined} className="project-milestone-date-dialog" onOpenAutoFocus={event => event.preventDefault()}>
+    <Dialog.Overlay data-flow-motion="backdrop" className="project-milestone-date-dialog__overlay"/>
+    <Dialog.Content data-flow-motion="dialog" aria-describedby={undefined} className="project-milestone-date-dialog" onOpenAutoFocus={event => event.preventDefault()}>
       <div className="project-milestone-date-dialog__surface"><form onSubmit={event => { event.preventDefault(); void save() }}>
         <div className="project-milestone-date-dialog__body">
           <Dialog.Title>Set {milestone.name} target date</Dialog.Title>
@@ -677,3 +675,4 @@ const formatProjectDate = formatProjectPropertyDate
 function milestoneStats(issues: Issue[], milestoneId?: string) { const items = issues.filter(issue => (issue.projectMilestoneId ?? '') === (milestoneId ?? '')); const completed = items.filter(issue => issue.state.type === 'completed').length; return { count: items.length, progress: items.length ? Math.round(completed / items.length * 100) : 0 } }
 function toggleId(values: string[], value: string) { return values.includes(value) ? values.filter(item => item !== value) : [...values, value] }
 function uniqueById<T extends { id: string }>(values: T[]) { return [...new Map(values.map(value => [value.id, value])).values()] }
+import { AnimatedCollapse, AnimatedMilestones } from '@/components/ui/motion';

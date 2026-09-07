@@ -22,7 +22,7 @@ export function LabelHoverPreview({ label, children, side='left', align='start' 
     <Tooltip.Root>
       <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
       <Tooltip.Portal>
-        <Tooltip.Content className="label-hover-preview" side={side} align={align} sideOffset={5} collisionPadding={8}>
+        <Tooltip.Content data-flow-motion="tooltip" className="label-hover-preview" side={side} align={align} sideOffset={5} collisionPadding={8}>
           <div className="label-hover-preview-inner">
             <div className="label-hover-preview-summary">
               <div className="label-hover-preview-title"><i style={{ backgroundColor: label.color }}/><strong data-i18n-ignore>{label.name}</strong></div>

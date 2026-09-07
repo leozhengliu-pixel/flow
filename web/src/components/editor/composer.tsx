@@ -45,7 +45,7 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
       <button type="button" aria-label="Code" aria-pressed={editor?.isActive('code')} onClick={() => editor?.chain().focus().toggleCode().run()}><Code2 size={14}/></button>
       <Popover.Root open={linkOpen} onOpenChange={open => { setLinkOpen(open); if (open) setLinkUrl((editor?.getAttributes('link').href as string | undefined) ?? '') }}>
         <Popover.Trigger asChild><button type="button" aria-label="Link" aria-pressed={editor?.isActive('link')}><Link2 size={14}/></button></Popover.Trigger>
-        <Popover.Portal><Popover.Content align="start" className="composer-link-popover" sideOffset={5}>
+        <Popover.Portal><Popover.Content data-flow-motion="floating" align="start" className="composer-link-popover" sideOffset={5}>
           <input autoFocus aria-label="Link URL" onChange={event => setLinkUrl(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); applyLink() } }} placeholder="Paste or type a link…" type="url" value={linkUrl}/>
           <button disabled={!linkUrl.trim()} onClick={applyLink} type="button">Apply</button>
         </Popover.Content></Popover.Portal>

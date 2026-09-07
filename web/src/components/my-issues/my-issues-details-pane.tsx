@@ -31,7 +31,8 @@ export function MyIssuesDetailsPane({ open, selectedIssue, summary, loading = fa
   const [dragging, setDragging] = useState(false)
   const pointerStart = useRef({ x: 0, width })
   useEffect(() => { if (!open) setDragging(false) }, [open])
-  if (!open) return null
+  const present = useExitPresence(open, 320)
+  if (!present) return null
 
   const startResize = (event: PointerEvent<HTMLButtonElement>) => {
     pointerStart.current = { x: event.clientX, width }
@@ -54,7 +55,7 @@ export function MyIssuesDetailsPane({ open, selectedIssue, summary, loading = fa
     onWidthChange?.(clamp(next, MIN_DETAILS_WIDTH, MAX_DETAILS_WIDTH))
   }
 
-  return <aside className={styles.pane} data-dragging={dragging} style={{ '--details-width': `${width}px` } as CSSProperties} aria-label={selectedIssue ? `Issue preview ${selectedIssue.identifier}` : 'Issue view details'}>
+  return <aside data-flow-motion="panel" data-state={open ? 'open' : 'closed'} inert={!open || undefined} aria-hidden={!open || undefined} className={styles.pane} data-dragging={dragging} style={{ '--details-width': `${width}px` } as CSSProperties} aria-label={selectedIssue ? `Issue preview ${selectedIssue.identifier}` : 'Issue view details'}>
     <button className={styles.resizer} role="separator" aria-label="Resize details" aria-orientation="vertical" aria-valuemin={MIN_DETAILS_WIDTH} aria-valuemax={MAX_DETAILS_WIDTH} aria-valuenow={Math.round(width)} onKeyDown={resizeWithKeyboard} onPointerDown={startResize} onPointerMove={resize} onPointerUp={stopResize} onPointerCancel={stopResize}/>
     {selectedIssue && !previewContent && <IssuePreviewHeader issue={selectedIssue} onClose={onClose}/>}
     <div className={previewContent ? styles.fullPreview : styles.scroller}>
@@ -118,3 +119,4 @@ function PreviewProperty({ children, label }: { children: ReactNode; label: stri
 function DetailsSkeleton() { return <div className={styles.detailsSkeleton} aria-busy="true" aria-label="Loading details"><i/><i/><i/><i/><i/></div> }
 function DetailsError({ message, onRetry }: { message: string; onRetry?: () => void }) { return <div className={styles.detailsError} role="alert"><AlertCircle size={18}/><strong>Could not load details</strong><span>{message}</span>{onRetry && <button onClick={onRetry}>Try again</button>}</div> }
 function clamp(value: number, minimum: number, maximum: number) { return Math.min(maximum, Math.max(minimum, value)) }
+import { useExitPresence } from '@/components/ui/motion'

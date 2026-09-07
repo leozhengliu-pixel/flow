@@ -39,7 +39,7 @@ export function ProjectsBulkActionBar({ projects, options, onAction, onAsk, onCl
   const count = projects.length
   return <>
     <div aria-label={`${count} selected projects`} className={styles.bar} role="toolbar"><span className={styles.count}>{count}&nbsp;selected</span><button aria-expanded={open} aria-label="Open project command menu" className={styles.actionsButton} onClick={() => setOpen(true)}>Actions<ChevronRight size={12} /></button><button aria-label="Ask Flow" className={styles.iconButton} onClick={onAsk}><Sparkles size={15} /></button><button aria-label="Clear selected projects" className={styles.clearButton} onClick={onClear}><X size={15} /></button></div>
-    <Dialog.Root open={open} onOpenChange={setOpen}><Dialog.Portal><Dialog.Overlay className={styles.overlay} /><Dialog.Content aria-describedby={undefined} className={styles.commandDialog}>
+    <Dialog.Root open={open} onOpenChange={setOpen}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className={styles.overlay} /><Dialog.Content data-flow-motion="dialog" aria-describedby={undefined} className={styles.commandDialog}>
       <Dialog.Title className={styles.commandTitle}>{pending ? ACTIONS.find(action => action.id === pending)?.label : count === 1 ? `Project · ${projects[0].name}` : `${count} selected projects`}</Dialog.Title>
       {pending && <button aria-label="Back to project actions" className={styles.commandBack} onClick={() => setPending(undefined)} type="button"><ChevronLeft size={13} />Back</button>}
       <Dialog.Close aria-label="Close project command menu" className={styles.commandClose}><span>Backspace</span><kbd>⌫</kbd></Dialog.Close>

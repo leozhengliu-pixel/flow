@@ -948,7 +948,7 @@ function DashboardDirectoryMenu({
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content
+        <DropdownMenu.Content data-flow-motion="floating"
           align="end"
           className="dashboard-menu"
           sideOffset={4}
@@ -1031,7 +1031,7 @@ function DashboardMenu({
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content
+        <DropdownMenu.Content data-flow-motion="floating"
           align="start"
           className="dashboard-menu"
           sideOffset={5}
@@ -1043,7 +1043,7 @@ function DashboardMenu({
               <ChevronDown className="end" />
             </DropdownMenu.SubTrigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.SubContent
+              <DropdownMenu.SubContent data-flow-motion="floating"
                 className="dashboard-menu"
                 sideOffset={5}
               >
@@ -1066,7 +1066,7 @@ function DashboardMenu({
               <ChevronDown className="end" />
             </DropdownMenu.SubTrigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.SubContent
+              <DropdownMenu.SubContent data-flow-motion="floating"
                 className="dashboard-menu"
                 sideOffset={5}
               >
@@ -1185,7 +1185,7 @@ function DashboardCard({
             </button>
           </DropdownMenu.Trigger>
           <DropdownMenu.Portal>
-            <DropdownMenu.Content
+            <DropdownMenu.Content data-flow-motion="floating"
               align="end"
               className="dashboard-menu"
               sideOffset={4}
@@ -1391,7 +1391,7 @@ function InsightEditorPage({
       if (!link || allowNavigationRef.current) return;
       event.preventDefault();
       event.stopPropagation();
-      void confirmAction(t("Discard unsaved insight changes?"),{confirmLabel:t("Discard")}).then(confirmed=>{if(confirmed){allowNavigationRef.current=true;location.assign((link as HTMLAnchorElement).href)}});
+      void confirmAction(t("Discard unsaved insight changes?"),{confirmLabel:t("Discard")}).then(confirmed=>{if(confirmed){allowNavigationRef.current=true;(link as HTMLAnchorElement).click()}});
     };
     const guardHistory = () => {
       if (allowNavigationRef.current) return;
@@ -1726,7 +1726,7 @@ function DashboardSelect<T extends string>({
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content
+        <DropdownMenu.Content data-flow-motion="floating"
           align="start"
           className="dashboard-menu dashboard-select-menu"
           collisionPadding={8}

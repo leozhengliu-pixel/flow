@@ -220,7 +220,7 @@ export function IssueOptionsMenu({
         {trigger ?? <button className="issue-header-icon" type="button" aria-label="Issue options"><FlowOptionsIcon/></button>}
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content className="issue-options-popover" side="bottom" align="start" sideOffset={3.75} collisionPadding={{ right: 11 }} role="dialog" aria-label="Issue options" onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => event.preventDefault()}>
+        <Popover.Content data-flow-motion="floating" className="issue-options-popover" side="bottom" align="start" sideOffset={3.75} collisionPadding={{ right: 11 }} role="dialog" aria-label="Issue options" onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => event.preventDefault()}>
           <Command loop>
             <Command.Input ref={parentFilterRef} className="issue-options-filter" aria-label="Filter..." placeholder="Filter..." autoFocus/>
             <Command.List>
@@ -362,8 +362,8 @@ export function IssueOptionsMenu({
     </ActionDialog>
     <Dialog.Root open={dialog === 'history'} onOpenChange={value => !value && setDialog(null)}>
       <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay"/>
-        <Dialog.Content className="issue-description-history" aria-label={`Description history for ${issue.identifier}`}>
+        <Dialog.Overlay data-flow-motion="backdrop" className="dialog-overlay"/>
+        <Dialog.Content data-flow-motion="dialog" className="issue-description-history" aria-label={`Description history for ${issue.identifier}`}>
           <Dialog.Title>Restore version for {issue.identifier} {issue.title}</Dialog.Title>
           <button className="issue-description-history__close" aria-label="Close modal dialog" onClick={() => setDialog(null)}><X size={15}/></button>
           <div className="issue-description-history__body">
@@ -393,7 +393,7 @@ export function IssueOptionsMenu({
 const SubmenuSurface = ({ label, top, children, innerRef, searchable = false }: { label: string; top: number; children: ReactNode; innerRef: React.Ref<HTMLDivElement>; searchable?: boolean }) => <div className="issue-options-submenu" ref={innerRef} role="dialog" aria-label={label} style={{ top }}><Command loop><Command.Input className={searchable ? 'issue-options-submenu-search' : 'issue-options-filter'} placeholder={searchable ? `Search ${label.toLowerCase()}...` : undefined} aria-label={`Filter ${label.toLowerCase()}`}/><Command.List>{children}</Command.List></Command></div>
 
 function ActionDialog({ open, title, onOpenChange, children }: { open: boolean; title: string; onOpenChange: (open: boolean) => void; children: ReactNode }) {
-  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="dialog-overlay"/><Dialog.Content className="issue-action-dialog" aria-label={title}><Dialog.Title>{title}</Dialog.Title>{children}</Dialog.Content></Dialog.Portal></Dialog.Root>
+  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="dialog-overlay"/><Dialog.Content data-flow-motion="dialog" className="issue-action-dialog" aria-label={title}><Dialog.Title>{title}</Dialog.Title>{children}</Dialog.Content></Dialog.Portal></Dialog.Root>
 }
 
 function IssueOptionsDialogFooter({ busy, disabled, action, onCancel, onSubmit }: { busy: boolean; disabled: boolean; action: string; onCancel: () => void; onSubmit: () => void }) {

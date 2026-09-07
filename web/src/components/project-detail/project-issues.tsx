@@ -252,6 +252,8 @@ export function ProjectNewView({
 }
 
 export function ProjectIssues({
+  workflowStates,
+  cycles,
   display,
   filters,
   issues,
@@ -296,14 +298,17 @@ export function ProjectIssues({
   );
   const allStates = useMemo(
     () =>
-      uniqueById(issues.map((issue) => issue.state)).sort(
+      uniqueById(workflowStates ?? issues.map((issue) => issue.state)).filter(state => !state.teamId || project.teamIds.includes(state.teamId)).sort(
         (left, right) => left.position - right.position,
       ),
-    [issues],
+    [issues, workflowStates, project.teamIds],
   );
   const groups = useMemo(
-    () => groupIssues(visible, display, allStates),
-    [allStates, display, visible],
+    () => {
+      const cycleNames = new Map((cycles ?? []).map(cycle => [cycle.id, cycle.name]));
+      return groupIssues(visible, display, allStates).map(group => ({ ...group, issues: group.issues.map(row => ({ ...row, cycleName: cycleNames.get(row.cycleId ?? '') })) }));
+    },
+    [allStates, cycles, display, visible],
   );
   const rowIssues = useMemo(
     () => new Map(projectIssues.map((issue) => [issue.id, issue])),
@@ -322,6 +327,7 @@ export function ProjectIssues({
     () => ({
       status: allStates.map((state) => ({
         id: state.id,
+        teamId: state.teamId,
         label: state.name,
         kind: "status",
         stateType: state.type,
@@ -345,6 +351,7 @@ export function ProjectIssues({
           })),
       ],
       dueDate: dueDateOptions(),
+      cycle: [{ id: '', label: 'No cycle', kind: 'cycle' as const }, ...(cycles ?? []).map(cycle => ({ id: cycle.id, teamId: cycle.teamId, label: cycle.name, kind: 'cycle' as const }))],
       labels: labels.map((label) => ({
         id: label.id,
         label: label.name,
@@ -369,7 +376,7 @@ export function ProjectIssues({
         })),
       ],
     }),
-    [allStates, labelGroupNames, labels, projects, users],
+    [allStates, cycles, labelGroupNames, labels, projects, users],
   );
   const changeProperty = async (
     row: MyIssuesRowData,
@@ -388,6 +395,8 @@ export function ProjectIssues({
       await onUpdateIssue(row.id, { dueDate: String(value) });
     else if (property === "project")
       await onUpdateIssue(row.id, { projectId: String(value) });
+    else if (property === "cycle")
+      await onUpdateIssue(row.id, { cycleId: String(value) });
   };
   const contextAction = (
     row: MyIssuesRowData,
@@ -539,8 +548,8 @@ export function ProjectIssues({
         open={Boolean(deleteTarget)}
       >
         <Dialog.Portal>
-          <Dialog.Overlay className="project-detail-page__dialog-overlay" />
-          <Dialog.Content
+          <Dialog.Overlay data-flow-motion="backdrop" className="project-detail-page__dialog-overlay" />
+          <Dialog.Content data-flow-motion="dialog"
             aria-describedby={undefined}
             className="project-detail-page__delete-dialog"
           >
@@ -775,6 +784,8 @@ function uniqueById<T extends { id: string }>(items: T[]) {
 function toRowData(issue: Issue, issues: Issue[]): MyIssuesRowData {
   return {
     id: issue.id,
+    teamId: issue.team.id,
+    cycleId: issue.cycleId,
     identifier: issue.identifier,
     title: issue.title,
     href: `/${location.pathname.split("/")[1]}/issue/${issue.identifier}`,

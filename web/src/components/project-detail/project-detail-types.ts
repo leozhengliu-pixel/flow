@@ -1,6 +1,7 @@
 import type {
   ActivityEvent,
   Comment,
+  Cycle,
   Draft,
   Favorite,
   FlowDocument,
@@ -22,6 +23,7 @@ import type {
   Subscription,
   Team,
   User,
+  WorkflowState,
 } from "@/types/flow";
 import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-list";
 import type { ProjectMutationInput } from "@/components/projects-page/projects-page";
@@ -39,6 +41,8 @@ export type ProjectDetailProps = {
   projectUpdates: ProjectUpdate[];
   drafts?: Draft[];
   issues: Issue[];
+  workflowStates?: WorkflowState[];
+  cycles?: Cycle[];
   users: User[];
   teams: Team[];
   labels: IssueLabel[];

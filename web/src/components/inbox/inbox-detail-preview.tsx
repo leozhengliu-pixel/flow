@@ -90,7 +90,7 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
 
 function DetailOptionsFallback(props: InboxDetailPreviewProps) {
   const { notification } = props
-  return <DropdownMenu.Root modal={false}><DropdownMenu.Trigger asChild><DetailIconButton data-detail-action="issue-options" disabled={props.pending} label="Issue options"><MoreDetailIcon /></DetailIconButton></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="flow-inbox-menu flow-inbox-detail-menu" align="end" sideOffset={4}>
+  return <DropdownMenu.Root modal={false}><DropdownMenu.Trigger asChild><DetailIconButton data-detail-action="issue-options" disabled={props.pending} label="Issue options"><MoreDetailIcon /></DetailIconButton></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="flow-inbox-menu flow-inbox-detail-menu" align="end" sideOffset={4}>
     <DetailMenuItem shortcut="U" onSelect={() => props.onReadChange(notification, !notification.read)}>{notification.read ? 'Mark as unread' : 'Mark as read'}</DetailMenuItem>
     {props.onCopyLink ? <DetailMenuItem onSelect={() => props.onCopyLink?.(notification)}>Copy issue URL</DetailMenuItem> : null}
     {props.onCopyIdentifier ? <DetailMenuItem onSelect={() => props.onCopyIdentifier?.(notification)}>Copy issue ID</DetailMenuItem> : null}
@@ -107,7 +107,7 @@ function DetailSnoozeMenu({ notification, onSnooze, pending, open, onOpenChange 
   useEffect(() => {
     setCustom(false)
   }, [notification.id])
-  return <DropdownMenu.Root modal={false} open={open} onOpenChange={(nextOpen) => { onOpenChange(nextOpen); if (!nextOpen) setCustom(false) }}><DropdownMenu.Trigger asChild><DetailIconButton data-detail-action="snooze" disabled={pending} label="Snooze notification"><ClockIcon /></DetailIconButton></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="flow-inbox-menu flow-inbox-detail-snooze" align="end" sideOffset={4}>
+  return <DropdownMenu.Root modal={false} open={open} onOpenChange={(nextOpen) => { onOpenChange(nextOpen); if (!nextOpen) setCustom(false) }}><DropdownMenu.Trigger asChild><DetailIconButton data-detail-action="snooze" disabled={pending} label="Snooze notification"><ClockIcon /></DetailIconButton></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="flow-inbox-menu flow-inbox-detail-snooze" align="end" sideOffset={4}>
     {custom ? <InboxCustomSnoozeForm disabled={pending} onCancel={() => setCustom(false)} onConfirm={(preset) => { onSnooze(notification, preset); close() }} /> : <>
       <div className="flow-inbox-menu__search-wrap flow-inbox-menu__search-wrap--passive"><span>Try: 4 pm, 2 days, in 5 weeks…</span></div>
       <div className="flow-inbox-menu__separator" />
@@ -121,8 +121,8 @@ function InboxDescriptionHistoryDialog({ issue, open, onOpenChange }: { issue?: 
   if (!issue) return null
   return <Dialog.Root open={open} onOpenChange={onOpenChange}>
     <Dialog.Portal>
-      <Dialog.Overlay className="dialog-overlay"/>
-      <Dialog.Content className="inbox-description-history" aria-label="Description history">
+      <Dialog.Overlay data-flow-motion="backdrop" className="dialog-overlay"/>
+      <Dialog.Content data-flow-motion="dialog" className="inbox-description-history" aria-label="Description history">
         <Dialog.Title>Description history</Dialog.Title>
         <p className="inbox-description-history__timestamp">Current version · {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(issue.updatedAt))}</p>
         <article>{issue.description || 'No description'}</article>

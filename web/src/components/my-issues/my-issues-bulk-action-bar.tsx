@@ -49,7 +49,7 @@ export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, 
       <button className={styles.clearButton} aria-label="Clear selected" disabled={loading} onClick={onClear}><X size={15}/></button>
       {error && <span className={styles.error} role="alert">{error}</span>}
     </div>
-    <Dialog.Root open={open} onOpenChange={setOpen}><Dialog.Portal><Dialog.Overlay className={styles.overlay}/><Dialog.Content className={styles.commandDialog} aria-describedby={undefined}>
+    <Dialog.Root open={open} onOpenChange={setOpen}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className={styles.overlay}/><Dialog.Content data-flow-motion="dialog" className={styles.commandDialog} aria-describedby={undefined}>
       <Dialog.Title className={styles.commandTitle}>{pendingAction ? actions.find(action => action.id === pendingAction)?.label : count === 1 ? `${selectedIssues[0].identifier} · ${selectedIssues[0].title}` : `${count} selected issues`}</Dialog.Title>
       {pendingAction && <button type="button" className={styles.commandBack} aria-label="Back to actions" onClick={() => setPendingAction(undefined)}><ChevronLeft size={13}/>Back</button>}
       <Dialog.Close className={styles.commandClose} aria-label="Close command menu"><span>Backspace</span><kbd>⌫</kbd></Dialog.Close>

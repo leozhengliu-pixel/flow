@@ -80,7 +80,7 @@ export function DirectoryFilterMenu({
         )}
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content
+        <DropdownMenu.Content data-flow-motion="floating"
           align="end"
           className="workspace-directory-filter-menu"
           sideOffset={3.5}
@@ -162,7 +162,7 @@ function FilterGroup({
             <ChevronRight />
           </DropdownMenu.SubTrigger>
           <DropdownMenu.Portal>
-            <DropdownMenu.SubContent
+            <DropdownMenu.SubContent data-flow-motion="floating"
               className="workspace-directory-filter-submenu"
               sideOffset={5}
             >
@@ -266,7 +266,7 @@ export function DirectoryDisplayMenu<
         </button>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content
+        <Popover.Content data-flow-motion="floating"
           align="end"
           className="workspace-directory-display-menu"
           sideOffset={3.5}
@@ -294,7 +294,7 @@ export function DirectoryDisplayMenu<
                 </button>
               </DropdownMenu.Trigger>
               <DropdownMenu.Portal>
-                <DropdownMenu.Content
+                <DropdownMenu.Content data-flow-motion="floating"
                   align="end"
                   className="workspace-directory-ordering-menu"
                   sideOffset={5}

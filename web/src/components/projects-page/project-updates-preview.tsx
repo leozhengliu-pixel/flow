@@ -107,8 +107,8 @@ export function ProjectUpdatesPreview({ onClose, onComment, onCreate, onDelete, 
     </div>
     <Dialog.Root open={Boolean(deleteTarget)} onOpenChange={open => { if (!open && !deleting) setDeleteTarget(undefined) }}>
       <Dialog.Portal>
-        <Dialog.Overlay className="lp-project-update-delete__overlay"/>
-        <Dialog.Content aria-describedby={undefined} aria-label="Delete this project update?" className="lp-project-update-delete" onOpenAutoFocus={event => { event.preventDefault(); deleteButtonRef.current?.focus() }}>
+        <Dialog.Overlay data-flow-motion="backdrop" className="lp-project-update-delete__overlay"/>
+        <Dialog.Content data-flow-motion="dialog" aria-describedby={undefined} aria-label="Delete this project update?" className="lp-project-update-delete" onOpenAutoFocus={event => { event.preventDefault(); deleteButtonRef.current?.focus() }}>
           <Dialog.Title>Delete this project update?</Dialog.Title>
           <footer><Dialog.Close asChild><button disabled={deleting} type="button">Cancel</button></Dialog.Close><button className="is-danger" disabled={deleting} onClick={() => void confirmDelete()} ref={deleteButtonRef} type="button">{deleting ? 'Deleting…' : 'Delete'}</button></footer>
         </Dialog.Content>
@@ -153,7 +153,7 @@ function ProjectUpdateArticle({ active, dataIndex, menuRef, onComment, onDelete,
     <header>
       <span className={`lp-project-updates-preview__health is-${update.health}`}><i/>{healthLabel(update.health)}</span>
       <UpdateAuthorAvatar user={update.user}/><strong>{update.user.displayName}</strong><time title={new Date(update.createdAt).toLocaleString()}>{formatRelative(update.createdAt)}{update.editedAt ? ' · edited' : ''}</time>
-      <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open menu" className="lp-project-updates-preview__item-menu" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="end" className="lp-project-update-menu" ref={menuRef} sideOffset={4}>
+      <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open menu" className="lp-project-updates-preview__item-menu" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="lp-project-update-menu" ref={menuRef} sideOffset={4}>
         <DropdownMenu.Item onSelect={() => void copyUpdateLink(project, update)}><Copy size={14}/><span>Copy link</span></DropdownMenu.Item>
         <DropdownMenu.Item onSelect={() => void navigator.clipboard?.writeText(`**${healthLabel(update.health)}** — ${update.body}`)}><Copy size={14}/><span>Copy as markdown</span></DropdownMenu.Item>
         {canModify && <><DropdownMenu.Separator/><DropdownMenu.Item onSelect={onEdit}><Pencil size={14}/><span>Edit</span></DropdownMenu.Item><DropdownMenu.Item className="is-danger" onSelect={onDelete}><Trash2 size={14}/><span>Delete</span></DropdownMenu.Item></>}

@@ -194,7 +194,7 @@ export function InboxNotificationRow(props: InboxNotificationRowProps) {
         />
       </ContextMenu.Root>
       <Popover.Portal>
-        <Popover.Content
+        <Popover.Content data-flow-motion="floating"
           className="flow-inbox-menu flow-inbox-snooze-menu"
           aria-label="Snooze notification"
           side="right"
@@ -247,7 +247,7 @@ function NotificationContextMenu(props: InboxNotificationRowProps) {
   const { notification, disabled = false } = props
   return (
     <ContextMenu.Portal>
-      <ContextMenu.Content className="flow-inbox-menu flow-inbox-row-menu" aria-label="Notification actions" onEscapeKeyDown={(event) => event.stopPropagation()}>
+      <ContextMenu.Content data-flow-motion="floating" className="flow-inbox-menu flow-inbox-row-menu" aria-label="Notification actions" onEscapeKeyDown={(event) => event.stopPropagation()}>
         <RowMenuItem
           shortcut="U"
           icon={<UnreadIcon />}
@@ -267,7 +267,7 @@ function NotificationContextMenu(props: InboxNotificationRowProps) {
             <span className="flow-inbox-menu__trailing">▶</span>
           </ContextMenu.SubTrigger>
           <ContextMenu.Portal>
-            <ContextMenu.SubContent className="flow-inbox-menu flow-inbox-snooze-menu" sideOffset={4}>
+            <ContextMenu.SubContent data-flow-motion="floating" className="flow-inbox-menu flow-inbox-snooze-menu" sideOffset={4}>
               <RowSnoozeMenu notification={notification} disabled={disabled} onSnooze={props.onSnooze} />
             </ContextMenu.SubContent>
           </ContextMenu.Portal>
@@ -291,7 +291,7 @@ function NotificationContextMenu(props: InboxNotificationRowProps) {
               <span className="flow-inbox-menu__trailing">▶</span>
             </ContextMenu.SubTrigger>
             <ContextMenu.Portal>
-              <ContextMenu.SubContent className="flow-inbox-menu flow-inbox-copy-menu" sideOffset={4}>
+              <ContextMenu.SubContent data-flow-motion="floating" className="flow-inbox-menu flow-inbox-copy-menu" sideOffset={4}>
                 {props.onCopyLink ? <RowMenuItem disabled={disabled} onSelect={() => props.onCopyLink?.(notification)}>Copy link</RowMenuItem> : null}
                 {props.onCopyIdentifier ? <RowMenuItem disabled={disabled} onSelect={() => props.onCopyIdentifier?.(notification)}>Copy issue ID</RowMenuItem> : null}
               </ContextMenu.SubContent>

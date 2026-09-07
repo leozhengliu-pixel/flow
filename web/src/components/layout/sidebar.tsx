@@ -1057,8 +1057,7 @@ export function FavoritesSection({
           <Plus />
         </button>
       </div>
-      {expanded && (
-        <div
+        <AnimatedCollapse open={expanded}
           className="sidebar-favorites-content"
           onDragOver={(event) => event.preventDefault()}
           onDrop={dropRoot}
@@ -1174,7 +1173,7 @@ export function FavoritesSection({
                       </button>
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Portal>
-                      <DropdownMenu.Content
+                      <DropdownMenu.Content data-flow-motion="floating"
                         align="start"
                         className="sidebar-popover sidebar-favorite-folder-popover"
                         side="right"
@@ -1219,8 +1218,7 @@ export function FavoritesSection({
               </div>
             );
           })}
-        </div>
-      )}
+        </AnimatedCollapse>
     </section>
   );
 }
@@ -1461,7 +1459,7 @@ function FavoriteLink({
     <ContextMenu.Root>
       <ContextMenu.Trigger asChild>{link}</ContextMenu.Trigger>
       <ContextMenu.Portal>
-        <ContextMenu.Content className="sidebar-popover sidebar-favorite-context-menu">
+        <ContextMenu.Content data-flow-motion="floating" className="sidebar-popover sidebar-favorite-context-menu">
           <ContextMenu.Item
             onSelect={() =>
               void navigator.clipboard.writeText(
@@ -1480,7 +1478,7 @@ function FavoriteLink({
                 <TeamDisclosureIcon />
               </ContextMenu.SubTrigger>
               <ContextMenu.Portal>
-                <ContextMenu.SubContent
+                <ContextMenu.SubContent data-flow-motion="floating"
                   className="sidebar-popover sidebar-favorite-context-menu"
                   sideOffset={4}
                 >
@@ -1548,7 +1546,7 @@ function Section({
         </button>
         {action}
       </div>
-      {expanded ? <div className="section-content">{children}</div> : null}
+      <AnimatedCollapse open={expanded} className="section-content">{children}</AnimatedCollapse>
     </section>
   );
 }
@@ -1661,7 +1659,7 @@ function TeamNavigation({
             </button>
           </DropdownMenu.Trigger>
           <DropdownMenu.Portal>
-            <DropdownMenu.Content
+            <DropdownMenu.Content data-flow-motion="floating"
               className="sidebar-popover sidebar-team-menu"
               side="right"
               align="start"
@@ -1728,7 +1726,7 @@ function TeamNavigation({
                     <ChevronRight className="menu-chevron" />
                   </DropdownMenu.SubTrigger>
                   <DropdownMenu.Portal>
-                    <DropdownMenu.SubContent
+                    <DropdownMenu.SubContent data-flow-motion="floating"
                       className="sidebar-popover sidebar-team-subscribe-menu"
                       sideOffset={-2}
                     >
@@ -1809,8 +1807,7 @@ function TeamNavigation({
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
       </div>
-      {expanded && (
-        <div className="team-links">
+      <AnimatedCollapse open={expanded} className="team-links">
           <Nav
             active={onOverview}
             icon={<HomeIcon />}
@@ -1873,8 +1870,7 @@ function TeamNavigation({
             to={teamViewsPath(workspaceSlug, team.key)}
             onClick={onNavigate}
           />
-        </div>
-      )}
+      </AnimatedCollapse>
     </div>
   );
 }
@@ -1955,7 +1951,7 @@ function MoreMenu({
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content
+        <DropdownMenu.Content data-flow-motion="floating"
           className="sidebar-popover sidebar-more-menu"
           side="bottom"
           align="start"
@@ -2420,7 +2416,7 @@ function SidebarSelect({
         </Select.Icon>
       </Select.Trigger>
       <Select.Portal>
-        <Select.Content
+        <Select.Content data-flow-motion="floating"
           align="start"
           alignOffset={-2}
           className={`sidebar-customize-select-menu${compact ? " is-compact" : ""}`}
@@ -2487,7 +2483,7 @@ function HelpMenu({
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content
+        <DropdownMenu.Content data-flow-motion="floating"
           className="sidebar-popover sidebar-help-menu"
           side="top"
           align="start"
@@ -2992,3 +2988,4 @@ function menuMatches(query: string, label: string) {
     !query.trim() || label.toLowerCase().includes(query.trim().toLowerCase())
   );
 }
+import { AnimatedCollapse } from '@/components/ui/motion';

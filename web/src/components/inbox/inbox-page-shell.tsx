@@ -291,7 +291,7 @@ function NotificationActionsMenu({
         </IconButton>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content
+        <DropdownMenu.Content data-flow-motion="floating"
           className="flow-inbox-menu flow-inbox-menu--actions"
           side="bottom"
           align="start"
@@ -332,7 +332,7 @@ function DisplayOptionsMenu({
         </IconButton>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content
+        <DropdownMenu.Content data-flow-motion="floating"
           className="flow-inbox-menu flow-inbox-menu--display"
           side="bottom"
           align="end"
@@ -384,7 +384,7 @@ function UnreadGroupingSelect({ value, onChange }: { value: InboxUnreadGrouping;
     <Select.Trigger className="flow-inbox-grouping-select" aria-label="Change unread grouping">
       <Select.Value>{labels[value]}</Select.Value><Select.Icon><ChevronDownIcon /></Select.Icon>
     </Select.Trigger>
-    <Select.Portal><Select.Content className="flow-inbox-grouping-options" position="popper" sideOffset={5} align="end"><Select.Viewport>{(Object.keys(labels) as InboxUnreadGrouping[]).map(option => <Select.Item className="flow-inbox-ordering-option" value={option} key={option}><Select.ItemText>{labels[option]}</Select.ItemText><Select.ItemIndicator><CheckIcon /></Select.ItemIndicator></Select.Item>)}</Select.Viewport></Select.Content></Select.Portal>
+    <Select.Portal><Select.Content data-flow-motion="floating" className="flow-inbox-grouping-options" position="popper" sideOffset={5} align="end"><Select.Viewport>{(Object.keys(labels) as InboxUnreadGrouping[]).map(option => <Select.Item className="flow-inbox-ordering-option" value={option} key={option}><Select.ItemText>{labels[option]}</Select.ItemText><Select.ItemIndicator><CheckIcon /></Select.ItemIndicator></Select.Item>)}</Select.Viewport></Select.Content></Select.Portal>
   </Select.Root>
 }
 
@@ -397,7 +397,7 @@ function OrderingSelect({ value, onChange }: { value: InboxOrdering; onChange: (
         <Select.Icon><ChevronDownIcon /></Select.Icon>
       </Select.Trigger>
     <Select.Portal>
-        <Select.Content className="flow-inbox-ordering-options" position="popper" sideOffset={5} align="end">
+        <Select.Content data-flow-motion="floating" className="flow-inbox-ordering-options" position="popper" sideOffset={5} align="end">
           <Select.Viewport>
             {(Object.keys(labels) as InboxOrdering[]).map(option => (
               <Select.Item className="flow-inbox-ordering-option" value={option} key={option}>

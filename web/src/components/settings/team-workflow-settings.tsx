@@ -2602,9 +2602,7 @@ function IssueStateRow({
 }) {
   const { t } = useI18n(),
     [menuOpen, setMenuOpen] = useState(false);
-  const view = () => {
-    location.href = `/${encodeURIComponent(workspaceKey)}/team/${encodeURIComponent(teamKey)}/all?status=${encodeURIComponent(state.id)}`;
-  };
+  const viewHref = `/${encodeURIComponent(workspaceKey)}/team/${encodeURIComponent(teamKey)}/all?status=${encodeURIComponent(state.id)}`;
   const menuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const items = [
         ...event.currentTarget.querySelectorAll<HTMLButtonElement>(
@@ -2631,16 +2629,16 @@ function IssueStateRow({
   const usageControl =
     usage > 0 ? (
       canModify ? (
-        <button
+        <AppLink
           className="ip-status-usage"
           aria-label={t("View issues")}
+          href={viewHref}
           onClick={(event) => {
             event.stopPropagation();
-            view();
           }}
         >
           {usage} {t(usage === 1 ? "issue" : "issues")}
-        </button>
+        </AppLink>
       ) : (
         <span className="ip-status-usage is-disabled">
           {usage} {t(usage === 1 ? "issue" : "issues")}
@@ -2711,7 +2709,7 @@ function IssueStateRow({
             </button>
           </Popover.Trigger>
           <Popover.Portal>
-            <Popover.Content
+            <Popover.Content data-flow-motion="floating"
               className="ip-status-menu"
               align="end"
               sideOffset={4}
@@ -3216,3 +3214,4 @@ function message(error: unknown) {
 function titleCase(value: string) {
   return value.slice(0, 1).toUpperCase() + value.slice(1);
 }
+import { AppLink } from '@/components/ui/app-link';

@@ -45,7 +45,7 @@ export function SelectControl({
       <Select.Icon><ChevronIcon/></Select.Icon>
     </Select.Trigger>
     <Select.Portal>
-      <Select.Content align={align} className="select-control-menu" collisionPadding={8} position="popper" sideOffset={4}>
+      <Select.Content data-flow-motion="floating" align={align} className="select-control-menu" collisionPadding={8} position="popper" sideOffset={4}>
         <Select.Viewport>
           {options.filter(option => !option.groupLabel).map(renderOption)}
           {groups.map(group => <Select.Group key={group}>

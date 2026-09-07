@@ -1,4 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { AppLink } from '@/components/ui/app-link';
 import {
   ArrowDown,
   ArrowUp,
@@ -255,7 +256,7 @@ function TeamsOptions({ onOpenSettings }: { onOpenSettings: () => void }) {
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content
+        <DropdownMenu.Content data-flow-motion="floating"
           className="workspace-directory__menu"
           align="start"
           sideOffset={6}
@@ -699,7 +700,7 @@ function CustomersDirectory({
                   </button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Portal>
-                  <DropdownMenu.Content
+                  <DropdownMenu.Content data-flow-motion="floating"
                     className="workspace-directory__menu"
                     align="end"
                   >
@@ -1149,10 +1150,10 @@ function TeamRowMenu({
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content className="workspace-directory__menu" align="end">
+        <DropdownMenu.Content data-flow-motion="floating" className="workspace-directory__menu" align="end">
           <DropdownMenu.Item onSelect={()=>void (favorite?removeFavorite('team',team.id):addFavorite('team',team.id)).then(onReload)}>{favorite?'Unfavorite':'Favorite'}</DropdownMenu.Item>
           <DropdownMenu.Separator />
-          <DropdownMenu.Item onSelect={()=>{location.href=`/${encodeURIComponent(workspaceKey)}/settings/teams/${encodeURIComponent(team.key)}`}}>Team settings</DropdownMenu.Item>
+          <DropdownMenu.Item asChild><AppLink href={`/${encodeURIComponent(workspaceKey)}/settings/teams/${encodeURIComponent(team.key)}`}>Team settings</AppLink></DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() =>
               void navigator.clipboard.writeText(
@@ -1162,10 +1163,10 @@ function TeamRowMenu({
           >
             Copy URL
           </DropdownMenu.Item>
-          <DropdownMenu.Item onSelect={()=>{location.href=`/${encodeURIComponent(workspaceKey)}/team/${encodeURIComponent(team.key)}/archive/issues`}}>Open archive</DropdownMenu.Item>
+          <DropdownMenu.Item asChild><AppLink href={`/${encodeURIComponent(workspaceKey)}/team/${encodeURIComponent(team.key)}/archive/issues`}>Open archive</AppLink></DropdownMenu.Item>
           <DropdownMenu.Separator />
           <DropdownMenu.Item onSelect={()=>void (subscribed?removeSubscription('team',team.id):addSubscription('team',team.id)).then(onReload)}>{subscribed?'Unsubscribe':'Subscribe'}</DropdownMenu.Item>
-          <DropdownMenu.Item onSelect={()=>{location.href=`/${encodeURIComponent(workspaceKey)}/settings/teams/${encodeURIComponent(team.key)}/notifications`}}>Configure Slack notifications…</DropdownMenu.Item>
+          <DropdownMenu.Item asChild><AppLink href={`/${encodeURIComponent(workspaceKey)}/settings/teams/${encodeURIComponent(team.key)}/notifications`}>Configure Slack notifications…</AppLink></DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>

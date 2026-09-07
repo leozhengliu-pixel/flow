@@ -255,7 +255,7 @@ export function CodeIntegrationSettings({
                 </button>
               </DropdownMenu.Trigger>
               <DropdownMenu.Portal>
-                <DropdownMenu.Content
+                <DropdownMenu.Content data-flow-motion="floating"
                   className="code-manage-menu"
                   sideOffset={5}
                   align="end"
