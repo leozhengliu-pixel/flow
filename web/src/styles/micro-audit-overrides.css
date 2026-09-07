@@ -1,6 +1,14 @@
 /* Small interaction primitives measured against the desktop and compact clients. */
 
 /* Native title tooltips are the fallback for collapsed navigation rows. */
+.issue-view.full,
+.project-detail-page { animation: flow-detail-enter 140ms ease-out; }
+@keyframes flow-detail-enter { from { opacity: .65; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .issue-view.full,
+  .project-detail-page { animation: none; }
+}
+
 .sidebar .nav-item[title] { position: relative; }
 
 /* Delay hover hints, while keyboard focus remains immediate. */

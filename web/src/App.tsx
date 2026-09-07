@@ -429,6 +429,29 @@ function App() {
   const recordedResource = useRef("");
   const requestedWorkspaceKey =
     "workspaceSlug" in route ? route.workspaceSlug : "";
+  const loadedWorkspaceKey = data?.workspace.urlKey;
+  useEffect(() => {
+    if (!loadedWorkspaceKey) return;
+    const warmDetails = () => {
+      void DetailPane.preload().catch(() => undefined);
+      void ProjectDetailPage.preload().catch(() => undefined);
+    };
+    const onIntent = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest('a[href*="/issue/"], .flow-inbox-row')) void DetailPane.preload().catch(() => undefined);
+      if (target.closest('a[href*="/project/"], .lp-project-row, .lp-project-card')) void ProjectDetailPage.preload().catch(() => undefined);
+    };
+    const idle = 'requestIdleCallback' in window;
+    const timer = idle ? window.requestIdleCallback(warmDetails, { timeout: 1500 }) : window.setTimeout(warmDetails, 500);
+    document.addEventListener('pointerover', onIntent, { passive: true });
+    document.addEventListener('focusin', onIntent);
+    return () => {
+      if (idle) window.cancelIdleCallback(timer); else window.clearTimeout(timer);
+      document.removeEventListener('pointerover', onIntent);
+      document.removeEventListener('focusin', onIntent);
+    };
+  }, [loadedWorkspaceKey]);
   const loadAccount = async () => {
     setError(false);
     try {
@@ -558,14 +581,17 @@ function App() {
       setError(true);
       return;
     }
+    if (loadedWorkspaceKey === requestedWorkspaceKey) return;
+    let cancelled = false;
     setData((current) =>
       current?.workspace.urlKey === requestedWorkspaceKey ? current : null,
     );
     setError(false);
     fetchBootstrap(requestedWorkspaceKey)
-      .then(setData)
-      .catch(() => setError(true));
-  }, [account, navigateTo, oauthPath, requestedWorkspaceKey, route.kind]);
+      .then(next => { if (!cancelled) setData(next); })
+      .catch(() => { if (!cancelled) setError(true); });
+    return () => { cancelled = true; };
+  }, [account, loadedWorkspaceKey, navigateTo, oauthPath, requestedWorkspaceKey, route.kind]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return;
