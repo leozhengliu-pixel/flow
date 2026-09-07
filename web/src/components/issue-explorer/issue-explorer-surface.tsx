@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react'
+import { Virtuoso } from 'react-virtuoso'
 import { ChevronRight, Link2, Star } from 'lucide-react'
 import { DetailsIcon, FilterIcon } from '@/components/my-issues/my-issues-icons'
 import { MyIssuesDisplayMenu } from '@/components/my-issues/my-issues-display-menu'
@@ -17,6 +18,7 @@ const VIEWS: { id: TeamIssuesRouteView; label: string }[] = [
   { id: 'backlog', label: 'Backlog' },
   { id: 'all', label: 'All issues' },
 ]
+const SAVED_VIEW_VIRTUALIZATION_THRESHOLD = 40
 
 export function IssueExplorerSurface({
   children, scopeName, scopeHref, scopeTeam, activeView, viewHref, filters, filterBar, viewEditor, viewActions, displayOptions, detailsOpen, itemCount = 0,
@@ -55,11 +57,12 @@ export function IssueExplorerSurface({
   onOpenSidebar?: () => void
 }) {
   const {changeDisplayOpen,changeFilterOpen,displayOpen,filterOpen}=useIssueSurfaceControls(filterOpenSignal,detailsOpen,onDetailsOpenChange)
+  const renderSavedView = (item: SavedView) => <a key={item.id} href={savedViewHref?.(item) ?? '#'} className={`${styles.savedTab} ui-pill`} onClick={event => { event.preventDefault(); onSavedViewSelect?.(item) }}><ViewGlyph color={item.color} icon={item.icon}/><span data-i18n-ignore>{item.name}</span></a>
 
   const toolbar = <div className={styles.toolbar}>
     {creatingView ? <nav className={styles.tabs} aria-label="View resource"><button className={`${styles.tab} ui-pill`} data-active="true" type="button">Issues</button><button className={`${styles.tab} ui-pill`} type="button" onClick={() => onNewViewResourceChange?.('projects')}>Projects</button></nav> : savedView ? <span className={styles.viewCount}>{itemCount} {itemCount === 1 ? 'issue' : 'issues'}</span> : <nav className={styles.tabs} aria-label={`${scopeName} issue views`}>
       {VIEWS.map(view => <a key={view.id} href={viewHref(view.id)} className={`${styles.tab} ui-pill`} data-active={activeView === view.id} aria-current={activeView === view.id ? 'page' : undefined} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onNavigateView(view.id) }}>{view.label}</a>)}
-      {savedViews.map(item => <a key={item.id} href={savedViewHref?.(item) ?? '#'} className={`${styles.savedTab} ui-pill`} onClick={event => { event.preventDefault(); onSavedViewSelect?.(item) }}><ViewGlyph color={item.color} icon={item.icon}/><span data-i18n-ignore>{item.name}</span></a>)}
+      {savedViews.length > SAVED_VIEW_VIRTUALIZATION_THRESHOLD ? <Virtuoso horizontalDirection className={styles.savedTabs} data={savedViews} computeItemKey={(_index, item) => item.id} increaseViewportBy={360} itemContent={(_index, item) => renderSavedView(item)}/> : savedViews.map(renderSavedView)}
       <button className={styles.addView} type="button" aria-label="Add new view" title="Add new view" onClick={onAddView}><AddViewIcon/></button>
     </nav>}
     <div className={styles.actions}>

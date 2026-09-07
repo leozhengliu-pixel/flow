@@ -23,6 +23,7 @@
 .sortButton>svg{width:12px;height:12px;flex:0 0 12px;opacity:0}
 .sortButton[data-active]>svg,.sortButton:hover>svg,.sortButton:focus-visible>svg{opacity:1}
 .content{min-height:0;flex:1;overflow:auto}
+.virtualContent{width:100%;overscroll-behavior:contain;scrollbar-gutter:stable}
 .group{width:100%}
 .groupHeader{height:38px;display:flex;align-items:center;gap:8px;padding:0 34px 0 18px;color:var(--muted)}
 .groupHeader strong{font-size:12px;font-weight:500;color:var(--text)}

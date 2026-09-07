@@ -1,5 +1,6 @@
 import { FileText, Plus, Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { Virtuoso } from 'react-virtuoso'
 import { createDocument } from '@/lib/api'
 import type { BootstrapData, FlowDocument } from '@/types/flow'
 import { documentPath } from '@/lib/app-routes'
@@ -26,10 +27,12 @@ export function DocumentsIndexPage({ data, onOpen, onNavigate, onReload }: { dat
     setCreating(true)
     try { const document = await createDocument({ title: 'Untitled document' }); await onReload(); open(document) } finally { setCreating(false) }
   }
-  return <main className="main-panel documents-index">
+  const virtualized = documents.length > 80
+  const renderDocument = (document: FlowDocument) => <button className="documents-index__row" key={document.id} onClick={() => open(document)} type="button"><DocumentGlyph document={document}/><span><strong>{document.title || 'Untitled document'}</strong><small>{new Date(document.updatedAt).toLocaleString()}</small></span><em>{document.teamIds.map(id => data.teams.find(team => team.id === id)?.name).filter(Boolean).join(', ') || 'Workspace'}</em></button>
+  return <main className={`main-panel documents-index${virtualized ? ' is-virtualized' : ''}`}>
     <header className="documents-index__header"><div><h1>Documents</h1><p>Shared workspace documents and project briefs.</p></div><button className="documents-index__create" disabled={creating} onClick={() => void add()} type="button"><Plus size={14}/>New document</button></header>
     <div className="documents-index__toolbar"><label className="documents-index__search"><Search size={14}/><input aria-label="Search documents" placeholder="Search documents" value={query} onChange={event => setQuery(event.target.value)}/></label><SelectControl label="Filter by team" value={teamId} onChange={setTeamId} options={[{value:'',label:'All teams'},...data.teams.map(team=>({value:team.id,label:team.name,entityName:true,icon:<TeamIcon team={team} size={14}/> }))]}/><label className="documents-index__archived"><input type="checkbox" checked={showArchived} onChange={event => setShowArchived(event.target.checked)}/>Show archived</label></div>
-    {documents.length ? <div className="documents-index__list">{documents.map(document => <button className="documents-index__row" key={document.id} onClick={() => open(document)} type="button"><DocumentGlyph document={document}/><span><strong>{document.title || 'Untitled document'}</strong><small>{new Date(document.updatedAt).toLocaleString()}</small></span><em>{document.teamIds.map(id => data.teams.find(team => team.id === id)?.name).filter(Boolean).join(', ') || 'Workspace'}</em></button>)}</div> : <div className="documents-index__empty"><FileText size={24}/><strong>{showArchived ? 'No archived documents' : 'No documents'}</strong><span>Create a document to share knowledge with your team.</span></div>}
+    {documents.length ? virtualized ? <Virtuoso className="documents-index__list is-virtualized" data={documents} computeItemKey={(_index, document) => document.id} increaseViewportBy={{ top: 174, bottom: 464 }} itemContent={(_index, document) => renderDocument(document)}/> : <div className="documents-index__list">{documents.map(renderDocument)}</div> : <div className="documents-index__empty"><FileText size={24}/><strong>{showArchived ? 'No archived documents' : 'No documents'}</strong><span>Create a document to share knowledge with your team.</span></div>}
   </main>
 }
 
