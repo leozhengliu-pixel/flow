@@ -103,7 +103,9 @@
 .lp-projects__views,
 .lp-projects__actions { align-items: center; display: flex; gap: 6px; min-width: 0; }
 
-.lp-projects__views { overflow: hidden; }
+.lp-projects__views { flex: 1; overflow: hidden; }
+.lp-projects__virtual-views { height: 32px; min-width: 0; flex: 1; overflow: hidden; }
+.lp-projects__virtual-views > div > div { display: flex; align-items: center; gap: 6px; }
 .lp-projects__actions { flex: none; }
 :root .lp-projects__toolbar .lp-projects__icon-button { --ui-pill-bg: var(--project-toolbar-bg); color: var(--project-toolbar-icon-fg); }
 
@@ -391,6 +393,25 @@
   min-width: 1020px;
   padding-bottom: 8px;
 }
+
+.lp-project-table.is-virtual {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-bottom: 0;
+}
+.lp-project-table.is-virtual > .lp-project-table__header { flex: 0 0 32px; width: 100%; }
+.lp-project-table__virtual { min-height: 0; flex: 1 1 auto; width: 100%; scrollbar-color: var(--scrollbar-thumb) transparent; }
+.lp-project-table.is-virtual :is(.lp-project-group__header,.lp-project-row,.lp-project-subgroup) {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: var(--lp-project-grid);
+  column-gap: 6px;
+  min-width: 1020px;
+}
+.lp-project-table.is-virtual .lp-project-subgroup__header { grid-column: 3 / -1; }
+.lp-projects__data:has(.lp-project-table.is-virtual) { overflow-x: auto; overflow-y: hidden; }
 
 .lp-project-table__header,
 .lp-project-group,

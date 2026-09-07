@@ -16,6 +16,8 @@
 .li-page button:focus-visible,.li-page a:focus-visible { outline:2px solid var(--focus-ring); outline-offset:1px; }
 
 .li-list-body>.li-table { box-sizing: border-box; width: 100%; min-width: 0; flex: none; padding: 0; overflow: auto; }
+.li-list-body>.li-table.is-virtualized { display: flex; flex-direction: column; overflow: hidden; }
+.li-virtual-list { min-width: 0; min-height: 0; width: 100%; flex: 1; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .li-list-body>.li-table.has-details { width: calc(100% - 126px); }
 .li-columns {font-size:11px;grid-template-columns:minmax(360px,1fr) repeat(var(--li-extra-columns),minmax(84px,auto)); box-sizing: border-box; width: 100%; min-width: 0; height: 32px; display: grid; align-items: center; column-gap: 6px; padding: 0; background: var(--bg-panel); color: var(--theme-text-primary); font: 500 12px var(--font); }
 .li-columns button,

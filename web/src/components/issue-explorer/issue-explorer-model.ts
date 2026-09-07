@@ -17,12 +17,17 @@ const PRIORITIES: MyIssuesContextOption[] = ['No priority', 'Urgent', 'High', 'M
   id: String(id), label, kind: 'priority', priority: id as 0 | 1 | 2 | 3 | 4,
 }))
 
+const ISSUE_INDEX_CACHE = new WeakMap<Issue[], Map<string, Issue>>()
+const DATA_INDEX_CACHE = new WeakMap<BootstrapData, ReturnType<typeof buildExplorerDataIndex>>()
+
 export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: Issue[] = [], data?: BootstrapData): MyIssuesRowData {
-  const fullProject = data?.projects.find(project => project.id === issue.project?.id)
-  const issueReleases=data?.releases?.filter(release=>release.issueIds?.includes(issue.id))??[]
-  const issuePullRequests=data?.reviews?.filter(review=>review.issueIds?.includes(issue.id))??[]
-  const issueSla=data?.issueSlas?.find(item=>item.issueId===issue.id&&item.status!=='removed')
-  const slaRule=issueSla ? data?.slaRules?.find(rule=>rule.id===issueSla.ruleId) : undefined
+  const issuesById = issueIndex(issues)
+  const index = data ? explorerDataIndex(data) : undefined
+  const fullProject = index?.projectsById.get(issue.project?.id ?? '')
+  const issueReleases=index?.releasesByIssueId.get(issue.id)??[]
+  const issuePullRequests=index?.reviewsByIssueId.get(issue.id)??[]
+  const issueSla=index?.slaByIssueId.get(issue.id)
+  const slaRule=issueSla ? index?.slaRulesById.get(issueSla.ruleId) : undefined
   const myActivityAt=data?.viewer?.id ? data.activities?.[issue.id]?.filter(event=>event.actor.id===data.viewer.id).sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt))[0]?.createdAt : undefined
   const statusIntervals = issueStatusIntervals(issue, data)
   return {
@@ -43,7 +48,7 @@ export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: 
     creatorName: issue.creator.displayName,
     isAssignedToViewer:issue.assignee?.id===data?.viewer.id,
     cycleId: issue.cycleId,
-    cycleName: issue.cycleId ? data?.cycles.find(cycle => cycle.id === issue.cycleId)?.name : undefined,
+    cycleName: issue.cycleId ? index?.cyclesById.get(issue.cycleId)?.name : undefined,
     addedToCycle:issue.addedToCycle,
     agentSessionId:issue.agentSessionId,
     suggestedLabelIds:issue.suggestedLabelIds??[],
@@ -81,9 +86,46 @@ export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: 
     canceledAt: issue.canceledAt,
     archivedAt: issue.archivedAt,
     parentId: issue.parentId,
-    ...issueHierarchyFields(issue, issues),
+    ...issueHierarchyFields(issue, issues, issuesById),
     sortOrder: issue.sortOrder,
   }
+}
+
+function issueIndex(issues: Issue[]) {
+  const cached = ISSUE_INDEX_CACHE.get(issues)
+  if (cached) return cached
+  const index = new Map(issues.map(issue => [issue.id, issue]))
+  ISSUE_INDEX_CACHE.set(issues, index)
+  return index
+}
+
+function explorerDataIndex(data: BootstrapData) {
+  const cached = DATA_INDEX_CACHE.get(data)
+  if (cached) return cached
+  const index = buildExplorerDataIndex(data)
+  DATA_INDEX_CACHE.set(data, index)
+  return index
+}
+
+function buildExplorerDataIndex(data: BootstrapData) {
+  const releasesByIssueId = new Map<string, BootstrapData['releases']>()
+  for (const release of data.releases ?? []) for (const issueId of release.issueIds ?? []) pushToArrayMap(releasesByIssueId, issueId, release)
+  const reviewsByIssueId = new Map<string, BootstrapData['reviews']>()
+  for (const review of data.reviews ?? []) for (const issueId of review.issueIds ?? []) pushToArrayMap(reviewsByIssueId, issueId, review)
+  return {
+    projectsById: new Map(data.projects.map(project => [project.id, project])),
+    cyclesById: new Map(data.cycles.map(cycle => [cycle.id, cycle])),
+    releasesByIssueId,
+    reviewsByIssueId,
+    slaByIssueId: new Map((data.issueSlas ?? []).filter(sla => sla.status !== 'removed').map(sla => [sla.issueId, sla])),
+    slaRulesById: new Map((data.slaRules ?? []).map(rule => [rule.id, rule])),
+  }
+}
+
+function pushToArrayMap<T>(values: Map<string, T[]>, key: string, value: T) {
+  const current = values.get(key) ?? []
+  current.push(value)
+  values.set(key, current)
 }
 
 function timeInStatusMinutes(intervals: NonNullable<MyIssuesRowData['statusIntervals']>) {
@@ -110,8 +152,7 @@ function issueStatusIntervals(issue: Issue, data?: BootstrapData): NonNullable<M
   return intervals
 }
 
-export function issueHierarchyFields(issue: Issue, issues: Issue[]): Pick<MyIssuesRowData,'parent'|'ancestors'|'subIssueProgress'|'subIssues'> {
-  const byId = new Map(issues.map(item => [item.id,item]))
+export function issueHierarchyFields(issue: Issue, issues: Issue[], byId = issueIndex(issues)): Pick<MyIssuesRowData,'parent'|'ancestors'|'subIssueProgress'|'subIssues'> {
   const ancestors: NonNullable<MyIssuesRowData['ancestors']> = []
   const seen = new Set<string>([issue.id])
   let parentId = issue.parentId
@@ -132,36 +173,62 @@ export function issueHierarchyFields(issue: Issue, issues: Issue[]): Pick<MyIssu
 }
 
 export function explorerPropertyOptions(data: BootstrapData, issues = data.issues) {
-  const count = (predicate: (issue: Issue) => boolean) => issues.filter(predicate).length
   const issueLabels = labelsForResource(data.labels, 'issue', data.labelGroups)
   const labelGroupNames = new Map(data.labelGroups.filter(group => group.resourceType === 'issue').map(group => [group.id, group.name]))
   const issueTeamIds = [...new Set(issues.map(issue => issue.team.id))]
   const scopedStates = issueTeamIds.length === 1 && data.states.some(state => state.teamId === issueTeamIds[0]) ? data.states.filter(state => state.teamId === issueTeamIds[0]) : data.states
+  const projectsById = new Map(data.projects.map(project => [project.id, project]))
+  const statusCounts = new Map<string, number>(), priorityCounts = new Map<string, number>(), assigneeCounts = new Map<string, number>(), creatorCounts = new Map<string, number>(), agentCounts = new Map<string, number>(), labelCounts = new Map<string, number>(), projectCounts = new Map<string, number>(), initiativeCounts = new Map<string, number>(), cycleCounts = new Map<string, number>(), addedToCycleCounts = new Map<string, number>(), subscriberCounts = new Map<string, number>(), externalSourceCounts = new Map<string, number>(), templateCounts = new Map<string, number>(), suggestedLabelCounts = new Map<string, number>()
+  let noAssignee = 0, noAgent = 0, anyAgent = 0, noAgentSession = 0, anyAgentSession = 0, noProject = 0, noInitiative = 0, noCycle = 0, noSubscribers = 0, noExternalSource = 0, autoClosed = 0, notAutoClosed = 0, noTemplate = 0, noSuggestedLabel = 0, withLinks = 0
+  for (const issue of issues) {
+    incrementCount(statusCounts, issue.state.id)
+    incrementCount(priorityCounts, String(issue.priority))
+    if (issue.assignee) incrementCount(assigneeCounts, issue.assignee.id); else noAssignee += 1
+    incrementCount(creatorCounts, issue.creator.id)
+    if (issue.delegate) { incrementCount(agentCounts, issue.delegate.id); anyAgent += 1 } else noAgent += 1
+    if (issue.agentSessionId) anyAgentSession += 1; else noAgentSession += 1
+    for (const label of issue.labels ?? []) incrementCount(labelCounts, label.id)
+    const project = projectsById.get(issue.project?.id ?? '')
+    if (issue.project) incrementCount(projectCounts, issue.project.id); else noProject += 1
+    if (project?.initiatives?.length) for (const initiativeId of project.initiatives) incrementCount(initiativeCounts, initiativeId); else noInitiative += 1
+    if (issue.cycleId) incrementCount(cycleCounts, issue.cycleId); else noCycle += 1
+    if (issue.addedToCycle) incrementCount(addedToCycleCounts, issue.addedToCycle)
+    if (issue.subscriberIds?.length) for (const subscriberId of issue.subscriberIds) incrementCount(subscriberCounts, subscriberId); else noSubscribers += 1
+    if (issue.externalSource) incrementCount(externalSourceCounts, issue.externalSource); else noExternalSource += 1
+    if (issue.autoClosed) autoClosed += 1; else notAutoClosed += 1
+    if (issue.templateId) incrementCount(templateCounts, issue.templateId); else noTemplate += 1
+    if (issue.suggestedLabelIds?.length) for (const labelId of issue.suggestedLabelIds) incrementCount(suggestedLabelCounts, labelId); else noSuggestedLabel += 1
+    if (issue.attachments?.length) withLinks += 1
+  }
   return {
-    status: [...scopedStates].sort((a, b) => (a.position??0) - (b.position??0)).map(state => ({ id: state.id, label: state.name, color: state.color, count: count(issue => issue.state.id === state.id), kind: 'status' as const, stateType: state.type })),
-    priority: PRIORITIES.map(priority => ({ ...priority, count: count(issue => String(issue.priority) === priority.id) })),
-    assignee: [{ id: '', label: 'No assignee', count: count(issue => !issue.assignee), kind: 'assignee' as const }, ...data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: count(issue => issue.assignee?.id === user.id), kind: 'assignee' as const }))],
-    creator: data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: count(issue => issue.creator.id === user.id), kind: 'creator' as const })),
-    agent: [{ id: '', label: 'No agent', count: count(issue => !issue.delegate) }, { id: '*', label: 'Any agent', count: count(issue => Boolean(issue.delegate)) }, ...data.users.filter(user => user.active && issues.some(issue => issue.delegate?.id === user.id)).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: count(issue => issue.delegate?.id === user.id) }))],
-    agentSession:[{id:'',label:'No agent session',count:count(issue=>!issue.agentSessionId)},{id:'*',label:'Any agent session',count:count(issue=>Boolean(issue.agentSessionId))}],
+    status: [...scopedStates].sort((a, b) => (a.position??0) - (b.position??0)).map(state => ({ id: state.id, label: state.name, color: state.color, count: statusCounts.get(state.id) ?? 0, kind: 'status' as const, stateType: state.type })),
+    priority: PRIORITIES.map(priority => ({ ...priority, count: priorityCounts.get(priority.id) ?? 0 })),
+    assignee: [{ id: '', label: 'No assignee', count: noAssignee, kind: 'assignee' as const }, ...data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: assigneeCounts.get(user.id) ?? 0, kind: 'assignee' as const }))],
+    creator: data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: creatorCounts.get(user.id) ?? 0, kind: 'creator' as const })),
+    agent: [{ id: '', label: 'No agent', count: noAgent }, { id: '*', label: 'Any agent', count: anyAgent }, ...data.users.filter(user => user.active && agentCounts.has(user.id)).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: agentCounts.get(user.id) ?? 0 }))],
+    agentSession:[{id:'',label:'No agent session',count:noAgentSession},{id:'*',label:'Any agent session',count:anyAgentSession}],
     dueDate: explorerDueDateOptions().map(option => ({ ...option, kind: 'dueDate' as const })),
     dates: dateFilterCategories(issues),
-    labels: issueLabels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined, count: count(issue => issue.labels?.some(item => item.id === label.id)??false), kind: 'labels' as const })),
-    project: [{ id: '', label: 'No project', count: count(issue => !issue.project), kind: 'project' as const }, ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, count: count(issue => issue.project?.id === project.id), kind: 'project' as const }))],
+    labels: issueLabels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined, count: labelCounts.get(label.id) ?? 0, kind: 'labels' as const })),
+    project: [{ id: '', label: 'No project', count: noProject, kind: 'project' as const }, ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, count: projectCounts.get(project.id) ?? 0, kind: 'project' as const }))],
     projectProperties:projectPropertyFilterOptions(data,issues),
-    initiative:[{id:'',label:'No initiative',count:count(issue=>{const project=data.projects.find(project=>project.id===issue.project?.id);return !project?.initiatives?.length})},...data.initiatives.map(initiative=>({id:initiative.id,label:initiative.name,count:count(issue=>data.projects.find(project=>project.id===issue.project?.id)?.initiatives?.includes(initiative.id)??false)}))],
-    cycle: [{ id: '', label: 'No cycle', count: count(issue => !issue.cycleId), kind: 'cycle' as const }, ...data.cycles.map(cycle => ({ id: cycle.id, label: cycle.name, count: count(issue => issue.cycleId === cycle.id), kind: 'cycle' as const }))],
-    addedToCycle:[{id:'planned',label:'Planned',count:count(issue=>issue.addedToCycle==='planned')},{id:'during',label:'During cycle',count:count(issue=>issue.addedToCycle==='during')},{id:'after',label:'After cycle',count:count(issue=>issue.addedToCycle==='after')}],
+    initiative:[{id:'',label:'No initiative',count:noInitiative},...data.initiatives.map(initiative=>({id:initiative.id,label:initiative.name,count:initiativeCounts.get(initiative.id) ?? 0}))],
+    cycle: [{ id: '', label: 'No cycle', count: noCycle, kind: 'cycle' as const }, ...data.cycles.map(cycle => ({ id: cycle.id, label: cycle.name, count: cycleCounts.get(cycle.id) ?? 0, kind: 'cycle' as const }))],
+    addedToCycle:[{id:'planned',label:'Planned',count:addedToCycleCounts.get('planned') ?? 0},{id:'during',label:'During cycle',count:addedToCycleCounts.get('during') ?? 0},{id:'after',label:'After cycle',count:addedToCycleCounts.get('after') ?? 0}],
     releases: releaseFilterCategories(data,issues),
-    subscribers: [{ id: '', label: 'No subscribers', count: count(issue => !issue.subscriberIds?.length), kind: 'subscribers' as const }, ...data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: count(issue => issue.subscriberIds?.includes(user.id)??false), kind: 'subscribers' as const }))],
-    externalSource:[{id:'',label:'No external source',count:count(issue=>!issue.externalSource)},...uniqueStrings(issues.map(issue=>issue.externalSource)).map(source=>({id:source,label:source,count:count(issue=>issue.externalSource===source)}))],
-    autoClosed:[{id:'true',label:'Auto-closed',count:count(issue=>Boolean(issue.autoClosed))},{id:'false',label:'Not auto-closed',count:count(issue=>!issue.autoClosed)}],
-    template:[{id:'',label:'No template',count:count(issue=>!issue.templateId)},...data.issueTemplates.map(template=>({id:template.id,label:template.name,count:count(issue=>issue.templateId===template.id)}))],
-    suggestedLabel:[{id:'',label:'No suggested label',count:count(issue=>!issue.suggestedLabelIds?.length)},...issueLabels.map(label=>({id:label.id,label:label.name,color:label.color,count:count(issue=>issue.suggestedLabelIds?.includes(label.id)??false)}))],
+    subscribers: [{ id: '', label: 'No subscribers', count: noSubscribers, kind: 'subscribers' as const }, ...data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: subscriberCounts.get(user.id) ?? 0, kind: 'subscribers' as const }))],
+    externalSource:[{id:'',label:'No external source',count:noExternalSource},...[...externalSourceCounts].map(([source,count])=>({id:source,label:source,count}))],
+    autoClosed:[{id:'true',label:'Auto-closed',count:autoClosed},{id:'false',label:'Not auto-closed',count:notAutoClosed}],
+    template:[{id:'',label:'No template',count:noTemplate},...data.issueTemplates.map(template=>({id:template.id,label:template.name,count:templateCounts.get(template.id) ?? 0}))],
+    suggestedLabel:[{id:'',label:'No suggested label',count:noSuggestedLabel},...issueLabels.map(label=>({id:label.id,label:label.name,color:label.color,count:suggestedLabelCounts.get(label.id) ?? 0}))],
     relations: relationFilterOptions(issues),
-    links: [{ id: 'has-links', label: 'Has links', count: count(issue => Boolean(issue.attachments?.length)), kind: 'links' as const }, { id: 'no-links', label: 'No links', count: count(issue => !issue.attachments?.length), kind: 'links' as const }],
+    links: [{ id: 'has-links', label: 'Has links', count: withLinks, kind: 'links' as const }, { id: 'no-links', label: 'No links', count: issues.length - withLinks, kind: 'links' as const }],
     content: [{ id: 'content-prompt', label: 'Filter by content…' }],
   }
+}
+
+function incrementCount(counts: Map<string, number>, key: string, amount = 1) {
+  counts.set(key, (counts.get(key) ?? 0) + amount)
 }
 
 export type ExplorerPropertyOptions = ReturnType<typeof explorerPropertyOptions>
@@ -434,13 +501,13 @@ function dateFilterCategories(issues:Issue[]):MyIssuesFilterOption[]{const simpl
   {id:'triaged-date',label:'Triaged date',children:[{id:'triaged-any',label:'Has triaged date'}]},
   {id:'time-current-status',label:'Time in current status',children:[{id:'status-over-week',label:'More than one week'}]},
 ]}
-function releaseFilterCategories(data:BootstrapData,issues:Issue[]):MyIssuesFilterOption[]{const count=(predicate:(issue:Issue)=>boolean)=>issues.filter(predicate).length;return[
-  {id:'release',label:'Release',children:data.releases.map(release=>({id:`release:${release.id}`,label:release.name,count:count(issue=>release.issueIds.includes(issue.id))}))},
-  {id:'release-pipeline',label:'Release pipeline',children:data.releasePipelines.map(pipeline=>({id:`release-pipeline:${pipeline.id}`,label:pipeline.name,count:count(issue=>data.releases.some(release=>release.pipelineId===pipeline.id&&release.issueIds.includes(issue.id)))}))},
-  {id:'release-stage',label:'Release stage',children:uniqueStrings(data.releases.map(release=>release.stage)).map(stage=>({id:`release-stage:${stage}`,label:stage,count:count(issue=>data.releases.some(release=>release.stage===stage&&release.issueIds.includes(issue.id)))}))},
-  {id:'release-stage-type',label:'Release stage type',children:['planned','inProgress','released','canceled'].map(status=>({id:`release-stage-type:${status}`,label:status,count:count(issue=>data.releases.some(release=>release.status===status&&release.issueIds.includes(issue.id)))}))},
+function releaseFilterCategories(data:BootstrapData,issues:Issue[]):MyIssuesFilterOption[]{const issueIds=new Set(issues.map(issue=>issue.id)),releaseCounts=new Map<string,number>(),pipelineIssues=new Map<string,Set<string>>(),stageIssues=new Map<string,Set<string>>(),statusIssues=new Map<string,Set<string>>(),releasedIssueIds=new Set<string>();for(const release of data.releases){for(const issueId of release.issueIds){if(!issueIds.has(issueId))continue;incrementCount(releaseCounts,release.id);releasedIssueIds.add(issueId);addToSetMap(pipelineIssues,release.pipelineId,issueId);addToSetMap(stageIssues,release.stage,issueId);addToSetMap(statusIssues,release.status,issueId)}}return[
+  {id:'release',label:'Release',children:data.releases.map(release=>({id:`release:${release.id}`,label:release.name,count:releaseCounts.get(release.id)??0}))},
+  {id:'release-pipeline',label:'Release pipeline',children:data.releasePipelines.map(pipeline=>({id:`release-pipeline:${pipeline.id}`,label:pipeline.name,count:pipelineIssues.get(pipeline.id)?.size??0}))},
+  {id:'release-stage',label:'Release stage',children:uniqueStrings(data.releases.map(release=>release.stage)).map(stage=>({id:`release-stage:${stage}`,label:stage,count:stageIssues.get(stage)?.size??0}))},
+  {id:'release-stage-type',label:'Release stage type',children:['planned','inProgress','released','canceled'].map(status=>({id:`release-stage-type:${status}`,label:status,count:statusIssues.get(status)?.size??0}))},
   {id:'released-date',label:'Released date',children:[{id:'released-any',label:'Has released date'}]},
-  {id:'no-releases',label:'No releases',count:count(issue=>!data.releases.some(release=>release.issueIds.includes(issue.id)))},
+  {id:'no-releases',label:'No releases',count:issues.length-releasedIssueIds.size},
 ]}
 
 
@@ -454,14 +521,15 @@ function relationFilterOptions(issues:Issue[]):MyIssuesFilterOption[]{const coun
   {id:'has-relations',label:'Issues with relations',count:count(issue=>issue.relations.length>0)},
   {id:'duplicate',label:'Duplicates',count:count(issue=>issue.relations.some(relation=>relation.type==='duplicate'))},
 ]}
-function projectPropertyFilterOptions(data:BootstrapData,issues:Issue[]):MyIssuesFilterOption[]{const projects=data.projects;const issueProject=(issue:Issue)=>projects.find(project=>project.id===issue.project?.id);const count=(predicate:(issue:Issue)=>boolean)=>issues.filter(predicate).length;return[
-  {id:'project-status',label:'Project status',kind:'projectStatusCategory',children:data.projectStatuses.map(status=>({id:`project-status:${status.id}`,label:status.name,color:status.color,projectType:status.type,kind:'projectStatus',filterLabel:'Project status',count:count(issue=>issueProject(issue)?.status.id===status.id)}))},
-  {id:'project-status-type',label:'Project status type',kind:'projectStatusTypeCategory',children:uniqueStrings(projects.map(project=>project.status.type)).map(type=>({id:`project-status-type:${type}`,label:projectStatusTypeLabel(type),projectType:type,kind:'projectStatusType',filterLabel:'Project status type',count:count(issue=>issueProject(issue)?.status.type===type)}))},
-  {id:'project-priority',label:'Project priority',kind:'projectPriorityCategory',children:['0','1','2','3','4'].map(value=>{const priority=Number(value) as 0|1|2|3|4;return{id:`project-priority:${value}`,label:['No priority','Urgent','High','Medium','Low'][priority],priority,kind:'projectPriority',filterLabel:'Project priority',count:count(issue=>issueProject(issue)?.priority===priority)}})},
-  {id:'project-labels',label:'Project labels',kind:'projectLabels',children:labelsForResource(data.labels,'project',data.labelGroups).map(label=>({id:`project-label:${label.id}`,label:label.name,color:label.color,kind:'projectLabels',filterLabel:'Project labels',count:count(issue=>issueProject(issue)?.labelIds?.includes(label.id)??false)}))},
-  {id:'project-lead',label:'Project lead',kind:'projectLeadCategory',children:[{id:'project-lead:',label:'No lead',kind:'projectLead',filterLabel:'Project lead',count:count(issue=>Boolean(issueProject(issue)&&!issueProject(issue)?.lead))},{id:`project-lead:${data.viewer.id}`,label:'Current user',kind:'projectLead',filterLabel:'Project lead',avatarUrl:data.viewer.avatarUrl,count:count(issue=>issueProject(issue)?.lead?.id===data.viewer.id)},...data.users.filter(user=>user.active&&user.id!==data.viewer.id).map(user=>({id:`project-lead:${user.id}`,label:user.displayName,kind:'projectLead',filterLabel:'Project lead',avatarUrl:user.avatarUrl,count:count(issue=>issueProject(issue)?.lead?.id===user.id)}))]},
+function projectPropertyFilterOptions(data:BootstrapData,issues:Issue[]):MyIssuesFilterOption[]{const projects=data.projects,projectsById=new Map(projects.map(project=>[project.id,project])),statusCounts=new Map<string,number>(),statusTypeCounts=new Map<string,number>(),priorityCounts=new Map<string,number>(),labelCounts=new Map<string,number>(),leadCounts=new Map<string,number>();let noLead=0;for(const issue of issues){const project=projectsById.get(issue.project?.id??'');if(!project)continue;incrementCount(statusCounts,project.status.id);incrementCount(statusTypeCounts,project.status.type);incrementCount(priorityCounts,String(project.priority));for(const labelId of project.labelIds??[])incrementCount(labelCounts,labelId);if(project.lead)incrementCount(leadCounts,project.lead.id);else noLead+=1}return[
+  {id:'project-status',label:'Project status',kind:'projectStatusCategory',children:data.projectStatuses.map(status=>({id:`project-status:${status.id}`,label:status.name,color:status.color,projectType:status.type,kind:'projectStatus',filterLabel:'Project status',count:statusCounts.get(status.id)??0}))},
+  {id:'project-status-type',label:'Project status type',kind:'projectStatusTypeCategory',children:uniqueStrings(projects.map(project=>project.status.type)).map(type=>({id:`project-status-type:${type}`,label:projectStatusTypeLabel(type),projectType:type,kind:'projectStatusType',filterLabel:'Project status type',count:statusTypeCounts.get(type)??0}))},
+  {id:'project-priority',label:'Project priority',kind:'projectPriorityCategory',children:['0','1','2','3','4'].map(value=>{const priority=Number(value) as 0|1|2|3|4;return{id:`project-priority:${value}`,label:['No priority','Urgent','High','Medium','Low'][priority],priority,kind:'projectPriority',filterLabel:'Project priority',count:priorityCounts.get(value)??0}})},
+  {id:'project-labels',label:'Project labels',kind:'projectLabels',children:labelsForResource(data.labels,'project',data.labelGroups).map(label=>({id:`project-label:${label.id}`,label:label.name,color:label.color,kind:'projectLabels',filterLabel:'Project labels',count:labelCounts.get(label.id)??0}))},
+  {id:'project-lead',label:'Project lead',kind:'projectLeadCategory',children:[{id:'project-lead:',label:'No lead',kind:'projectLead',filterLabel:'Project lead',count:noLead},{id:`project-lead:${data.viewer.id}`,label:'Current user',kind:'projectLead',filterLabel:'Project lead',avatarUrl:data.viewer.avatarUrl,count:leadCounts.get(data.viewer.id)??0},...data.users.filter(user=>user.active&&user.id!==data.viewer.id).map(user=>({id:`project-lead:${user.id}`,label:user.displayName,kind:'projectLead',filterLabel:'Project lead',avatarUrl:user.avatarUrl,count:leadCounts.get(user.id)??0}))]},
   {id:'project-milestone',label:'Project milestone name',kind:'projectMilestoneCategory',children:[{id:'project-milestone-name-contains',label:'Milestone name contains…',kind:'textCondition',filterLabel:'Project milestone name',operatorLabel:'contains',negativeOperatorLabel:'does not contain',textConditionPrefix:'project-milestone-name-contains:'}]},
 ]}
+function addToSetMap(values:Map<string,Set<string>>,key:string|undefined,value:string){if(!key)return;const current=values.get(key)??new Set<string>();current.add(value);values.set(key,current)}
 function projectStatusTypeLabel(type:string){return({backlog:'Backlog',planned:'Planned',started:'In Progress',completed:'Completed',canceled:'Canceled'} as Record<string,string>)[type]??type}
 
 export function stateIdForExplorerGroup(group: MyIssuesGroupData, data: BootstrapData) {

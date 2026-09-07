@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  Fragment,
   useEffect,
   useMemo,
   useState,
@@ -22,6 +23,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
+import { Virtuoso } from "react-virtuoso";
 import { toast } from "sonner";
 import { addFavorite, addSubscription, inviteMembers, removeFavorite, removeSubscription, setTeamMembership } from "@/lib/api";
 import { useI18n } from "@/i18n/i18n";
@@ -36,8 +38,11 @@ import type {
   BootstrapData,
   Customer,
   CustomerMutationInput,
+  Invitation,
+  OAuthApplication,
   Team,
   User,
+  WorkspaceMember,
 } from "@/types/flow";
 
 import "./workspace-directory.css";
@@ -64,6 +69,12 @@ type CustomerColumn =
   | "domains"
   | "source";
 type CustomerOrdering = "created" | "updated" | "name" | "requests" | "revenue" | "size" | "status" | "tier";
+const DIRECTORY_VIRTUALIZATION_THRESHOLD = 80;
+
+function DirectoryRows<T>({ items, itemKey, render }: { items: readonly T[]; itemKey: (item: T) => string; render: (item: T) => ReactNode }) {
+  if (items.length <= DIRECTORY_VIRTUALIZATION_THRESHOLD) return <>{items.map((item) => <Fragment key={itemKey(item)}>{render(item)}</Fragment>)}</>;
+  return <Virtuoso className="workspace-directory__virtual-list" data={items} computeItemKey={(_index, item) => itemKey(item)} increaseViewportBy={{ top: 196, bottom: 490 }} itemContent={(_index, item) => render(item)}/>;
+}
 
 export function WorkspaceDirectoryPage({
   kind,
@@ -281,6 +292,24 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
       }),
     [data.members, direction, sort],
   );
+  const teamsByUserId = useMemo(() => {
+    const teamsById = new Map(data.teams.map(team => [team.id, team]));
+    const result = new Map<string, Team[]>();
+    for (const membership of data.teamMembers) {
+      const team = teamsById.get(membership.teamId);
+      if (!team) continue;
+      const teams = result.get(membership.userId) ?? [];
+      teams.push(team);
+      result.set(membership.userId, teams);
+    }
+    return result;
+  }, [data.teamMembers, data.teams]);
+  type MemberEntry = { kind: "member"; member: WorkspaceMember } | { kind: "invitation"; invitation: Invitation } | { kind: "application"; application: OAuthApplication };
+  const entries = useMemo<MemberEntry[]>(() => [
+    ...members.map(member => ({ kind: "member" as const, member })),
+    ...data.invitations.filter(invitation => invitation.status === "pending").map(invitation => ({ kind: "invitation" as const, invitation })),
+    ...data.oauthApplications.map(application => ({ kind: "application" as const, application })),
+  ], [data.invitations, data.oauthApplications, members]);
   const changeSort = (next: typeof sort) => {
     if (sort === next) setDirection((value) => (value === 1 ? -1 : 1));
     else {
@@ -288,8 +317,43 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
       setDirection(1);
     }
   };
+  const renderEntry = (entry: MemberEntry) => {
+    if (entry.kind === "application") return <div className="workspace-directory-member-row is-application">
+      <span className="workspace-members-indent" aria-hidden="true"/>
+      <div className="workspace-member-identity"><span className="workspace-directory-avatar">AP</span><span><strong>{entry.application.name}</strong><small>application</small></span></div>
+      <span>Application</span><time/><div/><span className="workspace-member-last-seen"/><span className="workspace-members-end"/>
+    </div>;
+    if (entry.kind === "invitation") {
+      const invitation = entry.invitation;
+      const team = data.teams.find(item => invitation.teamIds.includes(item.id));
+      return <div className="workspace-directory-member-row is-invited">
+        <span className="workspace-members-indent" aria-hidden="true"/>
+        <div className="workspace-member-identity"><span className="workspace-directory-avatar is-invited">{initials(invitation.email)}</span><span><strong>{invitation.email}</strong><small>{invitation.email}</small></span></div>
+        <span className={invitation.role === "admin" ? "workspace-member-role" : ""}>{capitalize(invitation.role)} (Invited)</span>
+        <time title="Invited to workspace">{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(invitation.createdAt))}</time>
+        <div className="workspace-member-teams">{team ? <button type="button" onClick={() => onOpenTeam(team)}><TeamGlyph team={team}/>{team.key}{invitation.teamIds.length > 1 ? ` +${invitation.teamIds.length - 1}` : ""}</button> : null}</div>
+        <span className="workspace-member-last-seen"/><span className="workspace-members-end" aria-hidden="true"/>
+      </div>;
+    }
+    const member = entry.member;
+    const user = member.user;
+    const teams = teamsByUserId.get(user.id) ?? [];
+    return <a
+      className="workspace-directory-member-row"
+      href={`/${encodeURIComponent(data.workspace.urlKey)}/profiles/${encodeURIComponent(user.name)}`}
+      onClick={event => { event.preventDefault(); onOpen(user) }}
+    >
+      <span className="workspace-members-indent" aria-hidden="true" />
+      <div className="workspace-member-identity"><DirectoryUserAvatar user={user} /><span><strong>{user.displayName}</strong><small>{user.name || user.email.split("@")[0]}</small></span></div>
+      <span className={member.role === "admin" ? "workspace-member-role" : ""}>{member.role[0].toUpperCase() + member.role.slice(1)}</span>
+      <time title="Joined workspace">{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(member.joinedAt))}</time>
+      <div className="workspace-member-teams">{member.status === "active" && teams[0] ? <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onOpenTeam(teams[0]) }}><TeamGlyph team={teams[0]} />{teams[0].key}{teams.length > 1 ? ` +${teams.length - 1}` : ""}</button> : null}</div>
+      <span className="workspace-member-last-seen">{user.id === data.viewer.id ? <><i />Online</> : member.status === "suspended" ? "Suspended" : member.lastSeenAt ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(member.lastSeenAt)) : "Never"}</span>
+      <span className="workspace-members-end" aria-hidden="true" />
+    </a>;
+  };
   return (
-    <div className="workspace-directory__table workspace-members-table">
+    <div className={`workspace-directory__table workspace-members-table${entries.length > DIRECTORY_VIRTUALIZATION_THRESHOLD ? " is-virtualized" : ""}`}>
       <div className="workspace-members-columns">
         <span className="workspace-members-indent" />
         <DirectorySortHeader
@@ -314,75 +378,7 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
         <span>Last seen</span>
         <span className="workspace-members-end" />
       </div>
-      {members.map((member) => {
-        const user = member.user;
-        const teams = data.teamMembers.filter(value => value.userId === user.id).map(value => data.teams.find(team => team.id === value.teamId)).filter((team): team is Team => Boolean(team));
-        return (
-        <a
-          className="workspace-directory-member-row"
-          key={user.id}
-          href={`/${encodeURIComponent(data.workspace.urlKey)}/profiles/${encodeURIComponent(user.name)}`}
-          onClick={event => { event.preventDefault(); onOpen(user) }}
-        >
-          <span className="workspace-members-indent" aria-hidden="true" />
-          <div className="workspace-member-identity">
-            <DirectoryUserAvatar user={user} />
-            <span>
-              <strong>{user.displayName}</strong>
-              <small>{user.name || user.email.split("@")[0]}</small>
-            </span>
-          </div>
-          <span
-            className={
-              member.role === "admin"
-                ? "workspace-member-role"
-                : ""
-            }
-          >
-            {member.role[0].toUpperCase() + member.role.slice(1)}
-          </span>
-          <time title="Joined workspace">{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(member.joinedAt))}</time>
-          <div className="workspace-member-teams">
-            {member.status === "active" && teams[0] ? (
-              <button
-                type="button"
-                onClick={(event) => { event.preventDefault(); event.stopPropagation(); onOpenTeam(teams[0]) }}
-              >
-                <TeamGlyph team={teams[0]} />
-                {teams[0].key}{teams.length > 1 ? ` +${teams.length - 1}` : ""}
-              </button>
-            ) : null}
-          </div>
-          <span className="workspace-member-last-seen">
-            {user.id === data.viewer.id ? (
-              <>
-                <i />
-                Online
-              </>
-            ) : (
-              member.status === "suspended" ? "Suspended" : member.lastSeenAt ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(member.lastSeenAt)) : "Never"
-            )}
-          </span>
-          <span className="workspace-members-end" aria-hidden="true" />
-        </a>
-      )})}
-      {data.invitations.filter(invitation=>invitation.status==='pending').map(invitation=>{
-        const team=data.teams.find(item=>invitation.teamIds.includes(item.id))
-        return <div className="workspace-directory-member-row is-invited" key={invitation.id}>
-          <span className="workspace-members-indent" aria-hidden="true"/>
-          <div className="workspace-member-identity"><span className="workspace-directory-avatar is-invited">{initials(invitation.email)}</span><span><strong>{invitation.email}</strong><small>{invitation.email}</small></span></div>
-          <span className={invitation.role==='admin'?'workspace-member-role':''}>{capitalize(invitation.role)} (Invited)</span>
-          <time title="Invited to workspace">{new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric'}).format(new Date(invitation.createdAt))}</time>
-          <div className="workspace-member-teams">{team?<button type="button" onClick={()=>onOpenTeam(team)}><TeamGlyph team={team}/>{team.key}{invitation.teamIds.length>1?` +${invitation.teamIds.length-1}`:''}</button>:null}</div>
-          <span className="workspace-member-last-seen"/>
-          <span className="workspace-members-end" aria-hidden="true"/>
-        </div>
-      })}
-      {data.oauthApplications.map(application=><div className="workspace-directory-member-row is-application" key={application.id}>
-        <span className="workspace-members-indent" aria-hidden="true"/>
-        <div className="workspace-member-identity"><span className="workspace-directory-avatar">AP</span><span><strong>{application.name}</strong><small>application</small></span></div>
-        <span>Application</span><time/><div/><span className="workspace-member-last-seen"/><span className="workspace-members-end"/>
-      </div>)}
+      <DirectoryRows items={entries} itemKey={entry => entry.kind === "member" ? `member:${entry.member.user.id}` : entry.kind === "invitation" ? `invitation:${entry.invitation.id}` : `application:${entry.application.id}`} render={renderEntry}/>
     </div>
   );
 }
@@ -437,13 +433,14 @@ function CustomersDirectory({
     new Set(["requests", "revenue", "size", "owner", "status", "tier"]),
   );
   const requestCounts = useMemo(() => requests.reduce((counts, request) => counts.set(request.customerId, (counts.get(request.customerId) ?? 0) + 1), new Map<string, number>()), [requests]);
+  const usersById = useMemo(() => new Map(users.map(user => [user.id, user])), [users]);
   const filtersActive =
     advanced ||
     ownerIds.size > 0 ||
     statuses.size > 0 ||
     revenue.size > 0 ||
     size.size > 0;
-  const visible = customers
+  const visible = useMemo(() => customers
     .filter((customer) => {
       const minimumRevenue = Number([...revenue][0] ?? 0);
       const minimumSize = Number([...size][0] ?? 0);
@@ -461,7 +458,7 @@ function CustomersDirectory({
     .sort(
       (left, right) =>
         (ordering === "requests" ? (requestCounts.get(left.id) ?? 0) - (requestCounts.get(right.id) ?? 0) : compareCustomers(left, right, ordering)) * (descending ? -1 : 1),
-    );
+    ), [customers, descending, ordering, ownerIds, query, requestCounts, revenue, size, statuses]);
   useEffect(() => {
     onResultCount(query || filtersActive ? visible.length : undefined);
     return () => onResultCount(undefined);
@@ -631,7 +628,7 @@ function CustomersDirectory({
         />
       ) : (
         <div
-          className="workspace-directory__table workspace-customers-table"
+          className={`workspace-directory__table workspace-customers-table${visible.length > DIRECTORY_VIRTUALIZATION_THRESHOLD ? " is-virtualized" : ""}`}
           style={
             {
               "--customer-columns": customerColumns(columns),
@@ -650,7 +647,7 @@ function CustomersDirectory({
             {columns.has("source") && <span>Data source</span>}
             <span />
           </div>
-          {visible.map((customer) => (
+          <DirectoryRows items={visible} itemKey={customer => customer.id} render={(customer) => (
             <div className="workspace-customer-row" key={customer.id} role="button" tabIndex={0} onClick={() => onOpen(customer)} onKeyDown={event => { if (event.key === 'Enter') onOpen(customer) }}>
               <div>
                 <CustomerMark customer={customer} />
@@ -683,8 +680,7 @@ function CustomersDirectory({
               {columns.has("tier") && <span>{customer.tier || "No tier"}</span>}
               {columns.has("owner") && (
                 <span>
-                  {users.find((user) => user.id === customer.ownerId)
-                    ?.displayName ?? "No owner"}
+                  {usersById.get(customer.ownerId ?? "")?.displayName ?? "No owner"}
                 </span>
               )}
               {columns.has("domains") && (
@@ -718,7 +714,7 @@ function CustomersDirectory({
                 </DropdownMenu.Portal>
               </DropdownMenu.Root>
             </div>
-          ))}
+          )}/>
         </div>
       )}
     </>
@@ -792,22 +788,63 @@ function TeamsDirectory({
   const [columns, setColumns] = useState<Set<TeamColumn>>(
     new Set(["membership", "members", "cycle", "projects"]),
   );
+  const teamMetrics = useMemo(() => {
+    const usersById = new Map(data.users.map(user => [user.id, user]));
+    const metrics = new Map(data.teams.map(team => [team.id, {
+      memberIds: new Set<string>(),
+      users: [] as User[],
+      owner: undefined as User | undefined,
+      viewerMember: false,
+      cycleCount: 0,
+      projectCount: 0,
+      favorite: false,
+      subscribed: false,
+    }]));
+    for (const membership of data.teamMembers) {
+      const metric = metrics.get(membership.teamId);
+      if (!metric) continue;
+      metric.memberIds.add(membership.userId);
+      const user = usersById.get(membership.userId);
+      if (user) metric.users.push(user);
+      if (membership.role === "owner") metric.owner = user;
+      if (membership.userId === data.viewer.id) metric.viewerMember = true;
+    }
+    for (const cycle of data.cycles) if (cycle.status === "current") {
+      const metric = metrics.get(cycle.teamId);
+      if (metric) metric.cycleCount = cycle.number;
+    }
+    for (const project of data.projects) if (project.status.type !== "completed" && project.status.type !== "canceled") {
+      for (const teamId of project.teamIds) {
+        const metric = metrics.get(teamId);
+        if (metric) metric.projectCount += 1;
+      }
+    }
+    for (const favorite of data.favorites) if (favorite.userId === data.viewer.id && favorite.resourceType === "team") {
+      const metric = metrics.get(favorite.resourceId);
+      if (metric) metric.favorite = true;
+    }
+    for (const subscription of data.subscriptions) if (subscription.userId === data.viewer.id && subscription.resourceType === "team") {
+      const metric = metrics.get(subscription.resourceId);
+      if (metric) metric.subscribed = true;
+    }
+    return metrics;
+  }, [data.cycles, data.favorites, data.projects, data.subscriptions, data.teamMembers, data.teams, data.users, data.viewer.id]);
   const filtersActive =
     advanced ||
     memberIds.size > 0 ||
     ownerIds.size > 0 ||
     privateOnly ||
     createdWindow.size > 0;
-  const teams = data.teams
+  const teams = useMemo(() => data.teams
     .filter((team) => {
       if(team.retiredAt)return false;
-      const teamMemberIds = new Set(data.teamMembers.filter(member=>member.teamId===team.id).map(member=>member.userId));
+      const teamMemberIds = teamMetrics.get(team.id)?.memberIds ?? new Set<string>();
       const createdDays = Number([...createdWindow][0] ?? 0);
       const createdAt = teamCreatedAt(team);
       return (
         (!memberIds.size ||
           [...memberIds].some((id) => teamMemberIds.has(id))) &&
-        (!ownerIds.size || data.teamMembers.some(member=>member.teamId===team.id&&member.role==='owner'&&ownerIds.has(member.userId))) &&
+        (!ownerIds.size || Boolean(teamMetrics.get(team.id)?.owner && ownerIds.has(teamMetrics.get(team.id)?.owner?.id ?? ""))) &&
         (!privateOnly || team.private) &&
         (!createdDays ||
           Date.now() - createdAt.getTime() <= createdDays * 86400000)
@@ -816,7 +853,7 @@ function TeamsDirectory({
     .sort(
       (left, right) =>
         compareTeams(left, right, ordering) * (descending ? -1 : 1),
-    );
+    ), [createdWindow, data.teams, descending, memberIds, ordering, ownerIds, privateOnly, teamMetrics]);
   const toggleColumn = (column: TeamColumn) =>
     setColumns((current) => {
       const next = new Set(current);
@@ -977,7 +1014,7 @@ function TeamsDirectory({
         />
       ) : (
         <div
-          className="workspace-directory__table workspace-teams-table"
+          className={`workspace-directory__table workspace-teams-table${teams.length > DIRECTORY_VIRTUALIZATION_THRESHOLD ? " is-virtualized" : ""}`}
           style={
             { "--team-columns": teamColumns(columns) } as React.CSSProperties
           }
@@ -1002,18 +1039,13 @@ function TeamsDirectory({
             {columns.has("updated") && <span>Updated</span>}
             <span />
           </div>
-          {teams.map((team) => {
-            const viewerMembership=data.teamMembers.find(member=>member.teamId===team.id&&member.userId===data.viewer.id);
-            const teamUsers=data.teamMembers.filter(member=>member.teamId===team.id).map(member=>data.users.find(user=>user.id===member.userId)).filter((user):user is User=>Boolean(user));
-            const ownerMember=data.teamMembers.find(member=>member.teamId===team.id&&member.role==='owner');
-            const owner=ownerMember?data.users.find(user=>user.id===ownerMember.userId):undefined;
-            const cycleCount=data.cycles.find(cycle=>cycle.teamId===team.id&&cycle.status==='current')?.number??0;
-            const projectCount = data.projects.filter(
-              (project) =>
-                project.teamIds.includes(team.id) &&
-                project.status.type !== "completed" &&
-                project.status.type !== "canceled",
-            ).length;
+          <DirectoryRows items={teams} itemKey={team => team.id} render={(team) => {
+            const metric = teamMetrics.get(team.id);
+            const viewerMembership = metric?.viewerMember;
+            const teamUsers = metric?.users ?? [];
+            const owner = metric?.owner;
+            const cycleCount = metric?.cycleCount ?? 0;
+            const projectCount = metric?.projectCount ?? 0;
             return (
               <div
                 className="workspace-team-row"
@@ -1078,13 +1110,13 @@ function TeamsDirectory({
                 <TeamRowMenu
                   team={team}
                   workspaceKey={data.workspace.urlKey}
-                  favorite={data.favorites.some(item=>item.resourceType==='team'&&item.resourceId===team.id&&item.userId===data.viewer.id)}
-                  subscribed={data.subscriptions.some(item=>item.resourceType==='team'&&item.resourceId===team.id&&item.userId===data.viewer.id)}
+                  favorite={Boolean(metric?.favorite)}
+                  subscribed={Boolean(metric?.subscribed)}
                   onReload={onReload}
                 />
               </div>
             );
-          })}
+          }}/>
         </div>
       )}
     </>

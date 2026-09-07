@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -206,6 +207,14 @@ export function Sidebar({
   const [dismissedTry, setDismissedTry] = useState<string[]>(readDismissedTry);
   const featureEnabled = (feature: string) =>
     data.workspaceSettings.featureFlags[feature] !== false;
+  const sidebarTeams = useMemo(() => {
+    const viewerTeamIds = new Set(data.teamMembers.filter(member => member.userId === data.viewer.id).map(member => member.teamId));
+    return data.teams.filter(team => !team.retiredAt && viewerTeamIds.has(team.id));
+  }, [data.teamMembers, data.teams, data.viewer.id]);
+  const currentCycleTeamIds = useMemo(() => new Set(data.cycles.filter(cycle => cycle.status === "current").map(cycle => cycle.teamId)), [data.cycles]);
+  const upcomingCycleTeamIds = useMemo(() => new Set(data.cycles.filter(cycle => cycle.status === "upcoming").map(cycle => cycle.teamId)), [data.cycles]);
+  const favoriteTeamIds = useMemo(() => new Set(favorites.filter(item => item.userId === data.viewer.id && item.resourceType === "team").map(item => item.resourceId)), [data.viewer.id, favorites]);
+  const subscriptionByTeamId = useMemo(() => new Map(data.subscriptions.filter(item => item.userId === data.viewer.id && item.resourceType === "team").map(item => [item.resourceId, item])), [data.subscriptions, data.viewer.id]);
 
   useEffect(() => {
     sidebarWidthRef.current = sidebarWidth;
@@ -794,45 +803,24 @@ export function Sidebar({
             }
           >
             <div className="sidebar-team-list">
-              {data.teams
-                .filter((team) => !team.retiredAt)
-                .map((team) => (
+              {sidebarTeams.map((team) => {
+                const subscription = subscriptionByTeamId.get(team.id);
+                return (
                   <TeamNavigation
                     key={team.id}
                     cyclesEnabled={Boolean(
                       data.cycleSettings[team.id]?.enabled,
                     )}
-                    current={data.cycles.some(
-                      (cycle) =>
-                        cycle.teamId === team.id && cycle.status === "current",
-                    )}
-                    upcoming={data.cycles.some(
-                      (cycle) =>
-                        cycle.teamId === team.id && cycle.status === "upcoming",
-                    )}
+                    current={currentCycleTeamIds.has(team.id)}
+                    upcoming={upcomingCycleTeamIds.has(team.id)}
                     initiativesEnabled={
                       data.viewerRole !== "guest" &&
                       featureEnabled("initiatives")
                     }
                     team={team}
-                    favorite={favorites.some(
-                      (item) =>
-                        item.userId === data.viewer.id &&
-                        item.resourceType === "team" &&
-                        item.resourceId === team.id,
-                    )}
-                    subscribed={data.subscriptions.some(
-                      (item) =>
-                        item.userId === data.viewer.id &&
-                        item.resourceType === "team" &&
-                        item.resourceId === team.id,
-                    )}
-                    subscriptionEvents={data.subscriptions.find(
-                      (item) =>
-                        item.userId === data.viewer.id &&
-                        item.resourceType === "team" &&
-                        item.resourceId === team.id,
-                    )?.events}
+                    favorite={favoriteTeamIds.has(team.id)}
+                    subscribed={Boolean(subscription)}
+                    subscriptionEvents={subscription?.events}
                     onSubscriptionEvents={async (events) => {
                       if (events.length) {
                         await addSubscription("team", team.id, events);
@@ -843,7 +831,7 @@ export function Sidebar({
                     }}
                     viewerId={data.viewer.id}
                     canLeave={
-                      data.teams.filter((item) => !item.retiredAt).length > 1
+                      sidebarTeams.length > 1
                     }
                     workspaceSlug={workspaceSlug}
                     page={page}
@@ -852,7 +840,8 @@ export function Sidebar({
                       void toggleSidebarFavorite("team", team.id)
                     }
                   />
-                ))}
+                );
+              })}
             </div>
           </Section>
 
