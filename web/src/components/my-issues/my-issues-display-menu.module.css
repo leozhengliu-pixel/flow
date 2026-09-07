@@ -17,3 +17,4 @@
 :global(:root[data-theme="light"]) .selectTrigger{background:var(--theme-surface-2);box-shadow:0 0 0 .5px var(--shadow-color-outline),0 3px 6px -2px var(--shadow-color-faint),0 1px 1px var(--shadow-color-soft)}
 .popover,.selectMenu{z-index:600}
 :global(:root[data-theme="light"]) .selectTrigger:hover:not(:disabled),:global(:root[data-theme="light"]) .selectTrigger[data-state=open],:global(:root[data-theme="light"]) .selectItem[data-highlighted],:global(:root[data-theme="light"]) .selectItem[data-state=checked]{background:var(--theme-surface-hover)}
+.layoutTabs button:disabled{opacity:.45;cursor:not-allowed}

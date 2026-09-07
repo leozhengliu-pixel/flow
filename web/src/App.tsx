@@ -4927,6 +4927,7 @@ function App() {
             presence={realtime.presence}
             onReload={load}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
+            onOpenSettings={() => navigateTo(settingsPath(data.workspace.urlKey, data.viewerRole === "admin" ? "workspace" : "preferences"))}
             onOpenIssue={openIssue}
             onOpenProject={openProject}
             onOpenReview={(review) =>

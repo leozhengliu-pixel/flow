@@ -165,7 +165,7 @@ export function IssueOptionsMenu({
     const onKeyDown = (event: KeyboardEvent) => {
       if (isEditableTarget(event.target)) return
       const key = event.key.toLowerCase()
-      if (event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey && key === 'd') {
+      if (!event.metaKey && !event.ctrlKey && !event.altKey && key === 'd') {
         event.preventDefault()
         setSubmenu(null)
         setOpen(true)
@@ -225,7 +225,7 @@ export function IssueOptionsMenu({
             <Command.Input ref={parentFilterRef} className="issue-options-filter" aria-label="Filter..." placeholder="Filter..." autoFocus/>
             <Command.List>
               <Command.Empty className="issue-options-empty">No results found.</Command.Empty>
-              <Option icon={<CalendarIcon/>} label="Due date" shortcut="Shift D" nested onHover={() => { setSubmenu(null); setDatePickerOpen(true) }} onSelect={() => { setSubmenu(null); setDatePickerOpen(true) }}/>
+              <Option icon={<CalendarIcon/>} label="Due date" shortcut="D" nested onHover={() => { setSubmenu(null); setDatePickerOpen(true) }} onSelect={() => { setSubmenu(null); setDatePickerOpen(true) }}/>
               <Option icon={<ReleasesIcon/>} label="Release" shortcut="Option R" nested onHover={() => { setDatePickerOpen(false); setSubmenu('release') }} onSelect={() => setSubmenu('release')}/>
               <Option icon={<Link/>} label="Add link..." shortcut="Ctrl L" onSelect={beginAddLink}/>
               <Option icon={<UserRoundPlus/>} label="Add customer request..." shortcut="Ctrl R" onSelect={() => {

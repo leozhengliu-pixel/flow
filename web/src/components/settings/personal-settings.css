@@ -26,7 +26,7 @@
 .personal-security-page{--security-card:var(--theme-surface-1);--security-border:var(--theme-border);--security-hover:var(--theme-surface-hover);--security-copy:var(--theme-text-secondary);--security-text:var(--theme-text-primary);--security-outline:color-mix(in srgb,var(--theme-text-primary) 9%,transparent)}
 .personal-security-page .personal-page-header{margin-bottom:28px}
 .personal-security-section{margin-bottom:43px}
-.personal-security-section>h3{height:23px;margin:0 16px 16px;color:var(--security-text);font-size:15px;line-height:23px;font-weight:500}
+.personal-security-section>h3{display:inline-block;width:max-content;height:23px;margin:0 16px 16px;color:var(--security-text);font-size:15px;line-height:23px;font-weight:500}
 .personal-security-section>.settings-section-description{margin:-12px 16px 16px;color:var(--security-copy);font-size:13px;line-height:19px}
 .personal-security-section>.settings-card{overflow:hidden;border:0;border-radius:10px;background:var(--security-card);box-shadow:0 0 0 .5px var(--security-outline),var(--shadow)}
 .personal-security-section .settings-row{min-height:64px;padding:16px;gap:12px;border-bottom:0}
@@ -39,12 +39,12 @@
 .personal-security-section .settings-row-icon svg{width:14px;height:14px;stroke-width:1.65}
 .personal-security-section .settings-control{margin-left:auto;flex:0 0 auto}
 .personal-security-section .personal-section-action{position:absolute;right:8px;top:-5px;display:flex;align-items:center}
-.personal-security-section .personal-action{height:28px;padding:0 8px;border-radius:6px;font-size:12px}
+.personal-security-section .personal-action{height:32px;padding:0 12px;border-radius:9999px;font-size:13px}
 .personal-security-section .personal-action.danger{color:var(--semantic-danger)}
 .personal-security-section .personal-action.danger:hover:not(:disabled){background:color-mix(in srgb,var(--semantic-danger) 12%,transparent)}
 .personal-security-section .personal-action:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
 .personal-security-section-action{position:relative;z-index:1;height:64px;display:flex;align-items:center;justify-content:flex-end;margin-top:-64px;padding:0 16px;pointer-events:none}
-.personal-security-section-action .personal-action{height:28px;pointer-events:auto}
+.personal-security-section-action .personal-action{height:32px;pointer-events:auto}
 .personal-security-section:has(.personal-security-section-action) .personal-security-empty-row:after{background:transparent}
 
 /* Optional explicit rows used by the security implementation. */
@@ -80,7 +80,7 @@
 .personal-security-api-key-row:hover .personal-security-key-actions,.personal-security-api-key-row:focus-within .personal-security-key-actions{opacity:1;pointer-events:auto}
 .personal-security-api-key-row:hover{background:var(--security-hover)}
 .personal-security-show-all{display:flex;justify-content:center;align-items:center;min-height:48px;border-top:.5px solid var(--security-border)}
-.personal-security-show-all .personal-action{height:28px;padding:0 10px;color:var(--security-copy)}
+.personal-security-show-all .personal-action{height:32px;padding:0 12px;color:var(--security-copy)}
 .personal-security-device-row[role=button]{cursor:pointer;outline:0}
 .personal-security-device-row[role=button]:focus-visible{box-shadow:inset 0 0 0 2px var(--focus-ring)}
 .personal-session-dialog{width:min(420px,calc(100vw - 24px));padding:20px}

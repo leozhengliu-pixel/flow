@@ -7,7 +7,7 @@ import type { BootstrapData } from '@/types/flow'
 
 import { ViewsPage } from './views-page'
 
-function renderViews(dashboards: boolean) {
+function renderViews(dashboards: boolean, resource: 'issues' | 'projects' = 'issues') {
   const data = makeBootstrap({ workspaceSettings: { featureFlags: { dashboards } } as unknown as BootstrapData['workspaceSettings'] })
   return render(<I18nProvider><ViewsPage
     dashboardsHref="/workspace/dashboards"
@@ -22,7 +22,7 @@ function renderViews(dashboards: boolean) {
     onSetSubscriptionEvents={vi.fn()}
     onToggleFavorite={vi.fn()}
     onUpdate={vi.fn()}
-    resource="issues"
+    resource={resource}
     resourceHref={resource => `/workspace/views/${resource}`}
     scope={{ kind: 'workspace' }}
     viewHref={view => `/workspace/view/${view.id}`}
@@ -41,5 +41,10 @@ describe('ViewsPage directory tabs', () => {
   it('hides dashboards when the workspace feature is disabled', () => {
     renderViews(false)
     expect(screen.queryByRole('link', { name: 'Dashboards' })).not.toBeInTheDocument()
+  })
+
+  it('labels the empty state for the selected resource', () => {
+    renderViews(false, 'projects')
+    expect(screen.getByText('Projects', { selector: 'span' })).toBeVisible()
   })
 })

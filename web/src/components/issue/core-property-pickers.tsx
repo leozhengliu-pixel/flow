@@ -30,14 +30,14 @@ export function PriorityPicker({ value, onChange }: { value: number; onChange: (
   const options = labels.map((label, priority) => ({ id: String(priority), label, icon: <PriorityIcon priority={priority}/>, shortcut: String(priority) }))
   return <div className="core-property-picker"><PropertyMenu
     label="Priority"
-    value={value ? labels[value] : 'Set priority'}
+    value={value ? labels[value] : 'Priority'}
     selectedId={String(value)}
     options={options}
     searchPlaceholder="Change priority…"
     searchShortcut="P"
     ariaLabel={`Change priority. ${value ? `${labels[value]} is selected` : 'No priority is selected'}`}
     triggerClassName={`core-property-trigger${value === 0 ? ' muted' : ''}`}
-    trigger={<><PriorityIcon priority={value}/><span>{value ? labels[value] : 'Set priority'}</span></>}
+    trigger={<><PriorityIcon priority={value}/><span>{value ? labels[value] : 'Priority'}</span></>}
     hoverContent={<PropertyShortcutTooltip label="Change priority" shortcut="P"/>}
     onChange={id => onChange(Number(id))}
   /></div>

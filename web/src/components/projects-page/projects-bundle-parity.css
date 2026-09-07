@@ -1,0 +1,11 @@
+/* In the reference list the selection affordance is discoverable on hover,
+   but does not leave an empty square in every idle row. */
+.lp-project-row__select > span {
+  opacity: 0;
+}
+
+.lp-project-row:hover .lp-project-row__select > span,
+.lp-project-row:focus-within .lp-project-row__select > span,
+.lp-project-row.is-selected .lp-project-row__select > span {
+  opacity: 1;
+}

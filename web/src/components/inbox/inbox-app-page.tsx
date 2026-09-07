@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { ActivityEvent, BootstrapData, CodeReview, Issue, IssueRelationType, IssueUpdateInput, Notification, Presence, Project, User } from '@/types/flow'
 import { DetailPane } from '@/components/detail/detail-pane'
-import { NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
+import { NoProjectIcon, PriorityIcon, ProjectIcon, WorkflowStatusGlyph } from '@/components/issue/issue-icons'
 import type { SubIssueInput } from '@/components/issue/sub-issue-editor'
 import { batchNotifications, updateInboxNotification } from '@/lib/api'
 
@@ -17,6 +17,8 @@ const initialDisplayOptions: InboxDisplayOptions = {
   showSnoozed: false,
   showRead: true,
   showUnreadFirst: false,
+  priorityInbox: false,
+  unreadGrouping: 'none',
 }
 
 interface InboxProjection extends InboxNotificationRowData {
@@ -41,6 +43,7 @@ export interface InboxAppPageProps {
   onOpenIssue: (issue: Issue) => void
   onOpenProject?: (project: Project) => void
   onOpenReview?: (review: CodeReview) => void
+  onOpenSettings?: () => void
   onSubscriberChange?: (issue: Issue, subscribed: boolean) => Promise<void> | void
   onUpdateIssue?: (issue: Issue, input: IssueUpdateInput) => Promise<void>
   onDeleteIssue?: (issue: Issue) => Promise<void>
@@ -60,7 +63,7 @@ export interface InboxAppPageProps {
   onTabChange?: (tab: InboxTab) => void
 }
 
-export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpenProject, onOpenReview, onSubscriberChange, onUpdateIssue, onDeleteIssue, onCreateRelation, onDeleteRelation, onCreateSubIssue, onReactIssue, onCreateComment, onEditComment, onDeleteComment, onReactComment, onUploadAttachment, onDeleteAttachment, onCopyIssueLink, onOpenSidebar, activeTab = 'all', onTabChange }: InboxAppPageProps) {
+export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpenProject, onOpenReview, onOpenSettings, onSubscriberChange, onUpdateIssue, onDeleteIssue, onCreateRelation, onDeleteRelation, onCreateSubIssue, onReactIssue, onCreateComment, onEditComment, onDeleteComment, onReactComment, onUploadAttachment, onDeleteAttachment, onCopyIssueLink, onOpenSidebar, activeTab = 'all', onTabChange }: InboxAppPageProps) {
   const source = useMemo(() => projectInbox(data), [data])
   const issueById = useMemo(() => new Map(data.issues.map(issue => [issue.id, issue])), [data.issues])
   const [notifications, setNotifications] = useState<InboxProjection[]>(source)
@@ -114,6 +117,11 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
     setFavorite: async (id, favorite) => {
       await updateInboxNotification(id, { favorite })
     },
+    markAllRead: async () => {
+      const snapshot = notificationsRef.current
+      setNotifications(current => current.map(notification => ({ ...notification, read: true })))
+      try { await batchNotifications('markAllRead') } catch (error) { setNotifications(snapshot); throw error }
+    },
     deleteAll: async () => {
       const snapshot = notificationsRef.current
       setNotifications([])
@@ -132,7 +140,10 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
     },
   }), [data.issues])
 
-  const tabNotifications = useMemo(() => notifications.filter(notification => matchesInboxTab(notification, activeTab)), [activeTab, notifications])
+  const tabNotifications = useMemo(() => {
+    const scope = activeTab === 'all' && displayOptions.priorityInbox ? 'priority' : activeTab
+    return notifications.filter(notification => matchesInboxTab(notification, scope))
+  }, [activeTab, displayOptions.priorityInbox, notifications])
   useEffect(() => {
     setSelectedId(current => current && tabNotifications.some(notification => notification.id === current) ? current : null)
   }, [tabNotifications])
@@ -143,7 +154,7 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
       return (displayOptions.showRead || !notification.read) && filters.every(filter => notificationMatchesFilter(notification, filter))
     })
     visible = [...visible].sort((left, right) => {
-      if (displayOptions.showUnreadFirst && left.read !== right.read) return left.read ? 1 : -1
+      if ((displayOptions.showUnreadFirst || displayOptions.unreadGrouping === 'focus') && left.read !== right.read) return left.read ? 1 : -1
       if (displayOptions.ordering === 'priority') return sortablePriority(left.issuePriority) - sortablePriority(right.issuePriority) || new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime()
       const delta = new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime()
       return displayOptions.ordering === 'newest' ? delta : -delta
@@ -182,10 +193,11 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
     filterHiddenCount={filterHiddenCount}
     onFiltersChange={setFilters}
     onOpenSidebar={onOpenSidebar}
+    onOpenSettings={onOpenSettings}
     onRetryLoad={() => void onReload()}
     onShowAllNotifications={() => {
       setFilters([])
-      setDisplayOptions(current => ({ ...current, showRead: true, showSnoozed: true, showUnreadFirst: false }))
+      setDisplayOptions(current => ({ ...current, priorityInbox: false, showRead: true, showSnoozed: true, showUnreadFirst: false, unreadGrouping: 'none' }))
     }}
     onOpenIssue={notification => {
       const projection = notifications.find(item => item.id === notification.id)
@@ -295,7 +307,7 @@ function readInboxDisplayOptions(): InboxDisplayOptions {
   try {
     const value = JSON.parse(window.localStorage.getItem('flow.inbox.display-options') ?? '') as Partial<InboxDisplayOptions>
     if ((value.ordering === 'newest' || value.ordering === 'oldest' || value.ordering === 'priority') && typeof value.showSnoozed === 'boolean' && typeof value.showRead === 'boolean' && typeof value.showUnreadFirst === 'boolean') {
-      return value as InboxDisplayOptions
+      return { ...initialDisplayOptions, ...value, priorityInbox: value.priorityInbox === true, unreadGrouping: value.unreadGrouping === 'focus' ? 'focus' : 'none' }
     }
   } catch {
     // Keep the known-good defaults when an older or malformed preference exists.
@@ -305,11 +317,17 @@ function readInboxDisplayOptions(): InboxDisplayOptions {
 
 function projectInbox(data: BootstrapData): InboxProjection[] {
   const issues = new Map(data.issues.map(issue => [issue.id, issue]))
-  return data.notifications.flatMap<InboxProjection>(notification => {
+  // Bootstrap may contain workspace-wide notification history in development
+  // mode; Inbox itself is strictly recipient-scoped so every mutation maps to
+  // a notification the current viewer can update.
+  return data.notifications.filter(notification => notification.recipientId === data.viewer.id).flatMap<InboxProjection>(notification => {
+    // Billing/usage alerts are intentionally excluded from Flow's product
+    // surface; they belong to the removed commercial account area.
+    if (notification.type === 'usageAlert') return []
     if (notification.reviewId) {
       const review = data.reviews.find(item => item.id === notification.reviewId)
       if (!review || notification.deletedAt || notification.archivedAt) return []
-      return [{ id: notification.id, href: `/${data.workspace.urlKey}/review/${review.slugId}`, issueId: '', sourceType: 'activity' as const, sourceId: notification.sourceId, notificationType: 'review', actorId: notification.actor.id, actor: notification.actor.displayName, actorAvatarUrl: notification.actor.avatarUrl, kind: 'generic' as const, identifier: `${review.provider}#${review.number}`, title: review.title, body: `${notification.actor.displayName} requested your review`, timeLabel: relativeTime(notification.updatedAt), timestamp: notification.updatedAt, read: Boolean(notification.readAt), favorite: notification.favorite, initiativeIds: [], issuePriority: 0, issueStatusType: 'started' as const, reviewId: review.id, reviewStatus: review.draft ? 'draft' : review.status }]
+      return [{ id: notification.id, href: `/${data.workspace.urlKey}/review/${review.slugId}`, issueId: '', sourceType: 'activity' as const, sourceId: notification.sourceId, notificationType: 'review', actorId: notification.actor.id, actor: notification.actor.displayName, actorAvatarUrl: notification.actor.avatarUrl, kind: 'review' as const, identifier: `${review.provider}#${review.number}`, title: review.title, body: `${notification.actor.displayName} requested your review`, timeLabel: relativeTime(notification.updatedAt), timestamp: notification.updatedAt, read: Boolean(notification.readAt), favorite: notification.favorite, initiativeIds: [], issuePriority: 0, issueStatusType: 'started' as const, reviewId: review.id, reviewStatus: review.draft ? 'draft' : review.status }]
     }
     const issue = notification.issueId ? issues.get(notification.issueId) : undefined
     const reminderProject = notification.projectId ? data.projects.find(project => project.id === notification.projectId) : undefined
@@ -334,6 +352,35 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
         snoozedUntil: notification.snoozedUntil,
         projectId: reminderProject.id,
         initiativeIds: data.initiatives.filter(initiative => initiative.projectIds.includes(reminderProject.id)).map(initiative => initiative.id),
+        issuePriority: 0,
+        issueStatusType: 'started' as const,
+      }]
+    }
+    // Notifications can target resources that are not represented in the
+    // issue bootstrap (documents, loops, customer requests, integrations,
+    // and product announcements). Keep them visible instead of silently
+    // dropping them from the inbox; the detail surface can still be opened by
+    // a future resource-specific handler.
+    if (!issue && !reminderProject && !notification.deletedAt && !notification.archivedAt) {
+      return [{
+        id: notification.id,
+        issueId: '',
+        sourceType: 'activity' as const,
+        sourceId: notification.sourceId,
+        notificationType: notification.type,
+        actorId: notification.actor.id,
+        actor: notification.actor.displayName,
+        actorAvatarUrl: notification.actor.avatarUrl,
+        kind: 'generic' as const,
+        identifier: notification.type,
+        title: genericNotificationTitle(notification),
+        body: withOccurrence(genericNotificationBody(notification), notification.occurrenceCount),
+        timeLabel: relativeTime(notification.updatedAt),
+        timestamp: notification.updatedAt,
+        read: Boolean(notification.readAt),
+        favorite: notification.favorite,
+        snoozedUntil: notification.snoozedUntil,
+        initiativeIds: [],
         issuePriority: 0,
         issueStatusType: 'started' as const,
       }]
@@ -391,6 +438,17 @@ function describeNotification(notification: Notification, issue: Issue) {
   if (notification.type === 'assignment') return `${notification.actor.displayName} assigned the issue to you`
   if (notification.type === 'mention') return `${notification.actor.displayName} mentioned you in ${issue.identifier}`
   return `${notification.actor.displayName} updated the issue`
+}
+
+function genericNotificationTitle(notification: Notification) {
+  const type = notification.type.replaceAll(/([a-z])([A-Z])/g, '$1 $2').replaceAll(/[._-]+/g, ' ').trim()
+  return type ? type.charAt(0).toUpperCase() + type.slice(1) : 'Notification'
+}
+
+function genericNotificationBody(notification: Notification) {
+  const actor = notification.actor.displayName || 'Someone'
+  const category = notification.category.replaceAll(/([a-z])([A-Z])/g, '$1 $2').replaceAll(/[._-]+/g, ' ').trim()
+  return category ? `${actor} sent a ${category} notification` : `${actor} sent a notification`
 }
 
 function describeActivity(event: ActivityEvent, issue: Issue, viewer: User) {
@@ -504,13 +562,13 @@ function buildInboxFilterOptions(notifications: InboxProjection[], filters: Inbo
     id: 'count', property, operator: 'is', values: [{ value, valueLabel: value }],
   })).length
   const statusDefinitions = [
-    { id: 'triage', label: 'Triage', type: 'backlog' as const, color: 'var(--status-neutral)' },
-    { id: 'backlog', label: 'Backlog', type: 'backlog' as const, color: 'var(--status-neutral)' },
-    { id: 'unstarted', label: 'Unstarted', type: 'unstarted' as const, color: 'var(--status-neutral)' },
-    { id: 'started', label: 'Started', type: 'started' as const, color: 'var(--data-vis-3)' },
-    { id: 'completed', label: 'Completed', type: 'completed' as const, color: 'var(--accent-primary)' },
-    { id: 'canceled', label: 'Canceled', type: 'canceled' as const, color: 'var(--status-neutral)' },
-    { id: 'duplicate', label: 'Duplicate', type: 'canceled' as const, color: 'var(--status-neutral)' },
+    { id: 'triage', label: 'Triage', type: 'backlog' as const, color: 'var(--inbox-status-triage)' },
+    { id: 'backlog', label: 'Backlog', type: 'backlog' as const, color: 'var(--inbox-status-backlog)' },
+    { id: 'unstarted', label: 'Unstarted', type: 'unstarted' as const, color: 'var(--inbox-status-unstarted)' },
+    { id: 'started', label: 'Started', type: 'started' as const, color: 'var(--inbox-status-started)' },
+    { id: 'completed', label: 'Completed', type: 'completed' as const, color: 'var(--inbox-status-completed)' },
+    { id: 'canceled', label: 'Canceled', type: 'canceled' as const, color: 'var(--inbox-status-canceled)' },
+    { id: 'duplicate', label: 'Duplicate', type: 'canceled' as const, color: 'var(--inbox-status-canceled)' },
   ]
 
   return {
@@ -526,11 +584,10 @@ function buildInboxFilterOptions(notifications: InboxProjection[], filters: Inbo
     ],
     issuePriority: ['No priority', 'Urgent', 'High', 'Medium', 'Low'].map((label, priority) => ({ id: String(priority), label, icon: <PriorityIcon priority={priority} size={15} />, count: count('issuePriority', String(priority)) })),
     issueStatusType: statusDefinitions.map(status => {
-      const workspaceState = data.states.find(state => state.type === status.type)
       const state = status.id === 'duplicate'
         ? { id: 'duplicate', name: 'Duplicate', type: 'canceled' as const, color: status.color }
-        : { id: status.id, name: status.label, type: status.type, color: workspaceState?.color ?? status.color }
-      return { id: status.id, label: status.label, icon: <StatusIcon state={state} size={14} />, count: count('issueStatusType', status.id) }
+        : { id: status.id, name: status.label, type: status.type, color: status.color }
+      return { id: status.id, label: status.label, color: status.color, icon: <WorkflowStatusGlyph state={state} size={14} />, count: count('issueStatusType', status.id) }
     }),
     reviewStatus: INBOX_REVIEW_STATUS_OPTIONS.map(status => ({ id: status.id, label: status.label, color: status.color, count: count('reviewStatus', status.id) })),
   }
