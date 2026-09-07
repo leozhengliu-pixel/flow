@@ -7,6 +7,7 @@ import { CycleActions } from './cycle-menus'
 import { cycleStats, formatCycleDay } from './cycle-model'
 
 import './cycles.css'
+import './cycles-bundle-parity.css'
 
 export function CyclesPage({cycles,issues,settings,onOpen,onUpdateCycle,onStartCycle,onCompleteCycle,onUpdateSettings,onReload,onOpenSidebar}:{cycles:Cycle[];issues:Issue[];settings:{enabled:boolean;durationWeeks:number;cooldownWeeks:number;upcomingCount:number;favoriteView?:boolean};team:Team;onOpen:(cycle:Cycle)=>void;onUpdateCycle:(cycle:Cycle,input:CycleMutationInput)=>Promise<unknown>;onStartCycle:(cycle:Cycle)=>Promise<unknown>;onCompleteCycle:(cycle:Cycle)=>Promise<unknown>;onUpdateSettings:(input:CycleSettingsMutationInput)=>Promise<unknown>;onReload:()=>Promise<void>;onOpenSidebar:()=>void}){
   const {t}=useI18n()

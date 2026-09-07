@@ -10,6 +10,7 @@ import { ProjectPropertyPicker, ProjectStatusGlyph, type ProjectPropertyOption }
 import { ProjectDatePicker, ProjectTargetDatePicker } from './project-target-date-picker'
 import { projectLabelGroupProperty } from './projects-display-model'
 import './projects-page.css'
+import './projects-bundle-parity.css'
 
 export type ProjectPageItem = {
   id: string
@@ -498,7 +499,7 @@ function LeadPropertyButton({ lead, onChange, options }: {
 }) {
   const property = <ProjectPropertyPicker label={lead?.name ?? 'No lead'} onChange={onChange} options={options ?? PROPERTY_OPTIONS.lead} property="lead" value={lead?.id ?? ''}><ProjectAvatar lead={lead} /></ProjectPropertyPicker>
   if (lead) return property
-  return <Tooltip.Provider delayDuration={500} skipDelayDuration={0}>
+  return <Tooltip.Provider delayDuration={450} skipDelayDuration={300}>
     <Tooltip.Root>
       <Tooltip.Trigger asChild><span className="lp-project-lead-trigger">{property}</span></Tooltip.Trigger>
       <Tooltip.Portal>

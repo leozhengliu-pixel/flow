@@ -18,7 +18,7 @@ export function LabelHoverPreview({ label, children, side='left', align='start' 
   const issueCount = label.issueCount ?? 0
   const resource = label.resourceType === 'project' ? 'project' : label.resourceType === 'initiative' ? 'initiative' : 'issue'
   const issueCountLabel = t(`${issueCount} labeled ${resource}${issueCount === 1 ? '' : 's'}`)
-  return <Tooltip.Provider delayDuration={500} skipDelayDuration={0}>
+  return <Tooltip.Provider delayDuration={450} skipDelayDuration={300}>
     <Tooltip.Root>
       <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
       <Tooltip.Portal>

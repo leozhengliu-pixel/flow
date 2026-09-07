@@ -42,10 +42,7 @@ export interface InboxFilterValue {
   avatarUrl?: string
 }
 
-/**
- * A field is represented once, with one or more values. This mirrors Flow's
- * multi-select pickers and keeps filtering inexpensive for the list projection.
- */
+/** A predicate block with one or more values. Multiple blocks may use the same property. */
 export interface InboxFilterCondition {
   id: string
   property: InboxFilterProperty
@@ -55,34 +52,27 @@ export interface InboxFilterCondition {
 
 export type InboxFilterOptions = Partial<Record<InboxFilterProperty, InboxFilterOption[]>>
 
-/**
- * Make controlled input resilient to stale duplicate conditions or values.
- * A filter property is represented once, exactly as the Inbox filter bar does.
- */
+/** Remove empty conditions and duplicate values without collapsing independent predicates. */
 export function normalizeInboxFilters(filters: InboxFilterCondition[]): InboxFilterCondition[] {
-  const byProperty = new Map<InboxFilterProperty, InboxFilterCondition>()
-
-  for (const filter of filters) {
-    const existing = byProperty.get(filter.property)
+  return filters.flatMap(filter => {
     const values = dedupeValues(filter.values)
-    if (!values.length) continue
+    if (!values.length) return []
+    return [{
+      ...filter,
+      operator: filter.operator === 'isNot' ? 'isNot' as const : 'is' as const,
+      values,
+    }]
+  })
+}
 
-    if (!existing) {
-      byProperty.set(filter.property, {
-        ...filter,
-        operator: filter.operator === 'isNot' ? 'isNot' : 'is',
-        values,
-      })
-      continue
-    }
-
-    byProperty.set(filter.property, {
-      ...existing,
-      values: dedupeValues([...existing.values, ...values]),
-    })
-  }
-
-  return [...byProperty.values()]
+/** Add a new predicate block, even when another block already uses the property. */
+export function appendInboxFilterValue(filters: InboxFilterCondition[], property: InboxFilterProperty, option: InboxFilterOption): InboxFilterCondition[] {
+  return [...normalizeInboxFilters(filters), {
+    id: createFilterId(property),
+    property,
+    operator: 'is',
+    values: [toInboxFilterValue(option)],
+  }]
 }
 
 /** Toggle one option while preserving the filter's existing operator. */
@@ -110,6 +100,19 @@ export function toggleInboxFilterValue(
 
   if (!values.length) return normalized.filter((_, index) => index !== targetIndex)
   return normalized.map((filter, index) => index === targetIndex ? { ...filter, values } : filter)
+}
+
+/** Toggle a value in one existing predicate block without touching sibling blocks. */
+export function toggleInboxFilterConditionValue(filters: InboxFilterCondition[], conditionId: string, option: InboxFilterOption): InboxFilterCondition[] {
+  const normalized = normalizeInboxFilters(filters)
+  const target = normalized.find(filter => filter.id === conditionId)
+  if (!target) return normalized
+  const selected = target.values.some(value => value.value === option.id)
+  const values = selected
+    ? target.values.filter(value => value.value !== option.id)
+    : [...target.values, toInboxFilterValue(option)]
+  if (!values.length) return normalized.filter(filter => filter.id !== conditionId)
+  return normalized.map(filter => filter.id === conditionId ? { ...filter, values } : filter)
 }
 
 export function updateInboxFilterOperator(

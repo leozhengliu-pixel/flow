@@ -1,7 +1,7 @@
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
+import { GitPullRequest } from 'lucide-react'
 import { useCallback, useRef, useState, type CSSProperties, type FocusEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
-import { MoreHorizontal } from 'lucide-react'
 
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { DateTimeControl } from '@/components/ui/date-time-control'
@@ -10,7 +10,7 @@ import type { WorkflowState } from '@/types/flow'
 import styles from './notification-row.module.css'
 import './inbox-date-control.css'
 
-export type InboxNotificationKind = 'comment' | 'assignment' | 'mention' | 'status' | 'project' | 'generic'
+export type InboxNotificationKind = 'comment' | 'assignment' | 'mention' | 'status' | 'project' | 'review' | 'generic'
 export type InboxSnoozePreset = 'hour' | 'tomorrow' | 'nextWeek' | 'month' | {
   kind: 'custom'
   snoozedUntil: string
@@ -32,6 +32,7 @@ export interface InboxNotificationRowData {
   read: boolean
   favorite?: boolean
   issueState?: Pick<WorkflowState, 'id' | 'name' | 'color' | 'type'>
+  reviewStatus?: string
 }
 
 export interface InboxNotificationRowProps {
@@ -163,24 +164,19 @@ export function InboxNotificationRow(props: InboxNotificationRowProps) {
               onBlur={handleBlur}
             >
               <div className="flow-inbox-row__inner">
-                <span className="flow-inbox-row__unread-dot" aria-hidden="true" data-visible={!notification.read || undefined} />
                 <ActorVisual notification={notification} />
                 <div className="flow-inbox-row__content">
                   <div className="flow-inbox-row__headline" title={notification.title}>
+                    <span className="flow-inbox-row__unread-dot" aria-hidden="true" data-visible={!notification.read || undefined} />
                     <span className="flow-inbox-row__identifier">{notification.identifier}</span>
                     <span className="flow-inbox-row__title">{notification.title}</span>
-                    {notification.issueState ? <span aria-label={notification.issueState.name} className="flow-inbox-row__issue-state" title={notification.issueState.name}><StatusIcon size={14} state={notification.issueState} /></span> : null}
+                    {notification.issueState ? <span aria-label={notification.issueState.name} className="flow-inbox-row__issue-state" title={notification.issueState.name}><StatusIcon size={14} state={notification.issueState} /></span> : notification.reviewStatus ? <span aria-label={`Review ${notification.reviewStatus}`} className="flow-inbox-row__issue-state is-review" title={`Review ${notification.reviewStatus}`}><ReviewStatusIcon status={notification.reviewStatus} /></span> : null}
                   </div>
                   <div className="flow-inbox-row__summary">
                     <span className="flow-inbox-row__body">{notification.body}</span>
                     <time title={notification.timestamp}>{notification.timeLabel}</time>
                   </div>
                 </div>
-              </div>
-              <div className="flow-inbox-row__actions" aria-hidden="false">
-                <button aria-label={notification.read ? 'Mark as unread' : 'Mark as read'} title={notification.read ? 'Mark as unread' : 'Mark as read'} type="button" onClick={event => { event.stopPropagation(); toggleRead() }}><UnreadIcon /></button>
-                <button aria-label="Snooze notification" title="Snooze notification" type="button" onClick={event => { event.stopPropagation(); setKeyboardSnoozeOpen(true) }}><SnoozeIcon /></button>
-                <button aria-label="More notification actions" title="More actions" type="button" onClick={event => { event.preventDefault(); event.stopPropagation(); rowRef.current?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: event.clientX, clientY: event.clientY })) }}><MoreHorizontal size={14}/></button>
               </div>
               {pending ? <span className="flow-inbox-row__pending" aria-hidden="true" /> : null}
               {actionError ? <span id={`${notification.id}-action-error`} className={styles.actionError} role="alert">{actionError}</span> : null}
@@ -241,7 +237,7 @@ function ActorVisual({ notification }: { notification: InboxNotificationRowData 
         </span>
       )}
       <span className="flow-inbox-row__kind" aria-hidden="true">
-        <KindIcon kind={notification.kind} />
+        <span className="flow-inbox-row__kind-bg"><KindIcon kind={notification.kind} state={notification.issueState} /></span>
       </span>
     </div>
   )
@@ -472,11 +468,20 @@ function actorColor(value: string) {
   return colors[index]
 }
 
-function KindIcon({ kind }: { kind: InboxNotificationKind }) {
+function KindIcon({ kind, state }: { kind: InboxNotificationKind; state?: Pick<WorkflowState, 'id' | 'name' | 'color' | 'type'> }) {
+  if (kind === 'review') return <svg viewBox="0 0 16 16"><path d="M9.897 1.085a.75.75 0 0 1 .588.883l-2.5 12.5a.75.75 0 0 1-1.47-.295l2.5-12.5a.75.75 0 0 1 .882-.588m1.844 3.185a.75.75 0 0 1 1.06.042l3 3.25a.75.75 0 0 1 0 1.017l-3 3.25a.75.75 0 1 1-1.102-1.017l2.53-2.742L11.7 5.33a.75.75 0 0 1 .042-1.06m-7.543.042A.75.75 0 1 1 5.3 5.329L2.771 8.07l2.53 2.742A.75.75 0 1 1 4.2 11.829l-3-3.25a.75.75 0 0 1 0-1.017z" /></svg>
+  if (kind === 'status' && state) return <StatusIcon state={state} size={16} />
+  if (kind === 'project') return <svg viewBox="0 0 16 16"><path d="m8 1.8 5.2 3v6.4L8 14.2l-5.2-3V4.8L8 1.8Z M2.8 4.8 8 7.9l5.2-3.1M8 7.9v6.3" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" /></svg>
   if (kind === 'comment') return <svg viewBox="0 0 16 16"><path d="M6.27246 4.61328C6.34825 4.59068 6.4363 4.6001 6.5127 4.63477C6.58913 4.66988 6.64925 4.72787 6.68164 4.7998C6.71377 4.8718 6.716 4.95477 6.69141 5.03516C6.66653 5.1151 6.61688 5.18691 6.5498 5.22852C6.49137 5.26498 6.43537 5.30181 6.38086 5.33984C5.63535 5.83563 5.24006 6.55883 5.17773 7.29395C5.29094 7.27427 5.40754 7.26274 5.52637 7.2627C6.64457 7.2627 7.55148 8.16897 7.55176 9.28711C7.55176 10.4055 6.64474 11.3125 5.52637 11.3125C4.40834 11.3121 3.50195 10.4052 3.50195 9.28711V8.4873L3.50098 8.48828C3.499 8.39852 3.49934 8.30601 3.50293 8.2168C3.51156 6.5902 4.7032 5.09714 6.05078 4.6875C6.12397 4.66097 6.19724 4.6368 6.27246 4.61328ZM11.2725 4.61328C11.3482 4.59068 11.4363 4.6001 11.5127 4.63477C11.5891 4.66988 11.6492 4.72787 11.6816 4.7998C11.7138 4.8718 11.716 4.95477 11.6914 5.03516C11.6665 5.1151 11.6169 5.18691 11.5498 5.22852C11.4914 5.26498 11.4354 5.30181 11.3809 5.33984C10.6353 5.83563 10.2401 6.55883 10.1777 7.29395C10.2909 7.27427 10.4075 7.26274 10.5264 7.2627C11.6446 7.2627 12.5515 8.16897 12.5518 9.28711C12.5518 10.4055 11.6447 11.3125 10.5264 11.3125C9.40834 11.3121 8.50195 10.4052 8.50195 9.28711V8.4873L8.50098 8.48828C8.499 8.39852 8.49934 8.30601 8.50293 8.2168C8.51156 6.5902 9.7032 5.09714 11.0508 4.6875C11.124 4.66097 11.1972 4.6368 11.2725 4.61328Z" /></svg>
   if (kind === 'assignment') return <svg viewBox="0 0 16 16"><path d="M10.0252 4.76263C10.3259 4.51725 10.7602 4.54391 11.0291 4.81243L11.0808 4.86907L13.2478 7.52435C13.4727 7.80025 13.4728 8.19669 13.2478 8.47259L11.0808 11.1288C10.8192 11.4496 10.3471 11.4976 10.0261 11.2363C9.70516 10.9745 9.65691 10.5016 9.91872 10.1806L11.0838 8.75188H8.00173C7.18183 8.75183 6.17912 8.6165 5.28981 8.17083C4.43401 7.74179 3.68415 7.02179 3.33864 5.9052L3.27517 5.67669L3.26052 5.60149C3.20657 5.22513 3.44514 4.86208 3.82204 4.76849C4.19896 4.67511 4.58054 4.88422 4.70876 5.24212L4.73024 5.31536L4.76931 5.45403C4.97617 6.12866 5.41212 6.55408 5.96267 6.83001C6.57335 7.13596 7.32185 7.25183 8.00173 7.25188H11.0886L9.91872 5.81829L9.87282 5.75579C9.66379 5.43863 9.72463 5.0081 10.0252 4.76263Z" /></svg>
   if (kind === 'mention') return <svg viewBox="0 0 16 16"><path d="M8 2a6 6 0 1 0 3.7 10.72.75.75 0 1 0-.93-1.18A4.5 4.5 0 1 1 12.5 8v.75a.75.75 0 0 1-1.5 0V8a3 3 0 1 0-1.03 2.27A2.25 2.25 0 0 0 14 8 6 6 0 0 0 8 2Zm0 4.5A1.5 1.5 0 1 1 8 9.5a1.5 1.5 0 0 1 0-3Z" /></svg>
   return <svg viewBox="0 0 16 16"><path d="M8 2.25a.75.75 0 0 1 .75.75v4.69l2.78 1.6a.75.75 0 1 1-.75 1.3l-3.15-1.82A.75.75 0 0 1 7.25 8V3A.75.75 0 0 1 8 2.25Z" /></svg>
+}
+
+function ReviewStatusIcon({ status }: { status: string }) {
+  const normalized = status.toLowerCase()
+  const color = normalized === 'merged' ? '#a56de2' : normalized === 'closed' ? '#e06b72' : '#4cb782'
+  return <GitPullRequest aria-hidden="true" size={14} strokeWidth={1.7} style={{ color }} />
 }
 
 function UnreadIcon() { return <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.75" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg> }

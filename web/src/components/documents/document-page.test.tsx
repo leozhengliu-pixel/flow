@@ -98,6 +98,19 @@ describe('DocumentPage edited details', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${location.origin}/workspace/document/document-one`))
   })
 
+  it('uses the canonical document URL from the options menu too', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    const data = makeBootstrap({ comments: { [flowDocument.id]: [] }, documents: [flowDocument], favorites: [], subscriptions: [] })
+    render(<I18nProvider><DocumentPage data={data} document={flowDocument} onBack={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+
+    await user.click(screen.getByRole('button', { name: 'Document options' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Copy link' }))
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${location.origin}/workspace/document/document-one`))
+  })
+
   it('persists direct subscribe and unsubscribe actions before refreshing data', async () => {
     const user = userEvent.setup()
     const onReload = vi.fn().mockResolvedValue(undefined)

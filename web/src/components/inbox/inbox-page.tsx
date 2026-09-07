@@ -3,7 +3,7 @@ import { useRef, useState } from 'react'
 import type { Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 
 import { InboxDetailError, InboxDetailLoading, InboxDetailPreview } from './inbox-detail-preview'
-import { InboxListBoundary } from './inbox-list-state'
+import { InboxListBoundary, InboxListFilteredEmpty } from './inbox-list-state'
 import { InboxNotificationList } from './notification-list'
 import { InboxPageShell, type InboxDisplayOptions, type InboxTab } from './inbox-page-shell'
 import { useInboxController, type InboxPersistenceAdapter } from './inbox-controller'
@@ -11,6 +11,7 @@ import type { InboxFilterCondition, InboxFilterOptions } from './inbox-filter-bu
 import type { InboxNotificationRowData } from './notification-row'
 
 export interface InboxPageAdapter extends InboxPersistenceAdapter {
+  markAllRead: () => Promise<void>
   deleteAll: () => Promise<void>
   deleteAllRead: () => Promise<void>
   deleteAllReadCompleted: () => Promise<void>
@@ -44,6 +45,7 @@ export interface InboxPageProps {
   renderDetail: (notification: InboxNotificationRowData) => InboxDetailRenderResult
   onOpenIssue: (notification: InboxNotificationRowData) => void
   onOpenSidebar?: () => void
+  onOpenSettings?: () => void
   onCopyLink?: (notification: InboxNotificationRowData) => void
   onCopyIdentifier?: (notification: InboxNotificationRowData) => void
   subscribed?: (notification: InboxNotificationRowData) => boolean
@@ -129,10 +131,12 @@ export function InboxPage(props: InboxPageProps) {
         filters={props.filters}
         filterOptions={props.filterOptions}
         filterHiddenCount={props.filterHiddenCount}
+        showFilterFooter={false}
         bulkPending={Boolean(bulkPending)}
         onFiltersChange={props.onFiltersChange}
         onDisplayOptionsChange={props.onDisplayOptionsChange}
         onOpenSidebar={props.onOpenSidebar}
+        onOpenSettings={props.onOpenSettings}
         activeTab={props.activeTab}
         onTabChange={props.onTabChange}
         tabCounts={props.tabCounts}
@@ -140,23 +144,29 @@ export function InboxPage(props: InboxPageProps) {
         onDeleteAllRead={() => void runPageAction('read', props.adapter.deleteAllRead)}
         onDeleteAllReadCompleted={() => void runPageAction('completed', props.adapter.deleteAllReadCompleted)}
       >
-        <InboxListBoundary loading={Boolean(props.loading)} error={props.loadError} empty={!props.notifications.length} onShowAll={props.onShowAllNotifications} retry={props.onRetryLoad}>
-          <InboxNotificationList
-            notifications={props.notifications}
-            selectedId={props.selectedId}
-            pending={controller.pending}
-            hasMore={props.hasMore}
-            loadingMore={props.loadingMore}
-            onLoadMore={props.onLoadMore}
-            onOpen={controller.actions.open}
-            onReadChange={(notification, read) => void controller.actions.setRead(notification, read).catch(() => undefined)}
-            onDelete={notification => void controller.actions.delete(notification).catch(() => undefined)}
-            onSnooze={(notification, preset) => void controller.actions.snooze(notification, preset).catch(() => undefined)}
-            onFavoriteChange={(notification, favorite) => void controller.actions.setFavorite(notification, favorite).catch(() => undefined)}
-            onCopyLink={props.onCopyLink}
-            onCopyIdentifier={props.onCopyIdentifier}
-          />
-        </InboxListBoundary>
+        {(props.filterHiddenCount ?? 0) > 0 && !props.notifications.length ? (
+          <InboxListFilteredEmpty hiddenCount={props.filterHiddenCount ?? 0} onClear={() => props.onFiltersChange?.([])} />
+        ) : (
+          <InboxListBoundary loading={Boolean(props.loading)} error={props.loadError} empty={!props.notifications.length} onShowAll={props.onShowAllNotifications} retry={props.onRetryLoad}>
+            <InboxNotificationList
+              notifications={props.notifications}
+              filterHiddenCount={props.filterHiddenCount}
+              onClearFilters={() => props.onFiltersChange?.([])}
+              selectedId={props.selectedId}
+              pending={controller.pending}
+              hasMore={props.hasMore}
+              loadingMore={props.loadingMore}
+              onLoadMore={props.onLoadMore}
+              onOpen={controller.actions.open}
+              onReadChange={(notification, read) => void controller.actions.setRead(notification, read).catch(() => undefined)}
+              onDelete={notification => void controller.actions.delete(notification).catch(() => undefined)}
+              onSnooze={(notification, preset) => void controller.actions.snooze(notification, preset).catch(() => undefined)}
+              onFavoriteChange={(notification, favorite) => void controller.actions.setFavorite(notification, favorite).catch(() => undefined)}
+              onCopyLink={props.onCopyLink}
+              onCopyIdentifier={props.onCopyIdentifier}
+            />
+          </InboxListBoundary>
+        )}
       </InboxPageShell>
       {mutationError ? (
         <div className="flow-inbox-mutation-error" role="alert">

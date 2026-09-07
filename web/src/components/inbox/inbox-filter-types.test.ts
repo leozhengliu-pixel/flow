@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { normalizeInboxFilters, removeInboxFilter, toggleInboxFilterValue, updateInboxFilterOperator, type InboxFilterCondition } from './inbox-filter-types'
+import { appendInboxFilterValue, normalizeInboxFilters, removeInboxFilter, toggleInboxFilterValue, updateInboxFilterOperator, type InboxFilterCondition } from './inbox-filter-types'
 
 const base: InboxFilterCondition = {
   id: 'from-filter', property: 'from', operator: 'is',
@@ -7,12 +7,22 @@ const base: InboxFilterCondition = {
 }
 
 describe('inbox filters', () => {
-  it('normalizes duplicate properties and values', () => {
+  it('normalizes values without collapsing predicates that use the same property', () => {
     const normalized = normalizeInboxFilters([
       base,
       { ...base, id: 'duplicate', operator: 'isNot', values: [{ value: 'user-1', valueLabel: 'Viewer' }, { value: 'user-2', valueLabel: 'Teammate' }, { value: '', valueLabel: '' }] },
     ])
-    expect(normalized).toEqual([{ ...base, values: [{ value: 'user-1', valueLabel: 'Viewer' }, { value: 'user-2', valueLabel: 'Teammate' }] }])
+    expect(normalized).toEqual([
+      base,
+      { ...base, id: 'duplicate', operator: 'isNot', values: [{ value: 'user-1', valueLabel: 'Viewer' }, { value: 'user-2', valueLabel: 'Teammate' }] },
+    ])
+  })
+
+  it('appends a separate predicate when the property is already filtered', () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-000000000002')
+    const appended = appendInboxFilterValue([base], 'from', { id: 'user-2', label: 'Teammate' })
+    expect(appended).toHaveLength(2)
+    expect(appended[1]).toMatchObject({ id: 'from-00000000-0000-4000-8000-000000000002', property: 'from', values: [{ value: 'user-2' }] })
   })
 
   it('adds, toggles, removes, and changes operators immutably', () => {

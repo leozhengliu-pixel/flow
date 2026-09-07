@@ -1,7 +1,7 @@
 import { useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { Check, ChevronDown, ChevronRight, Plus } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Clock3, GitPullRequest, Link2, PackageOpen, Plus } from 'lucide-react'
 import type { MyIssuesProperty } from './my-issues-surface'
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { PropertyMenu, type PropertyMenuKind } from '@/components/property/property-menu'
@@ -83,6 +83,9 @@ export interface MyIssuesRowData {
   subscriberIds?: string[]
   relationTypes?: string[]
   hasLinks?: boolean
+  linkCount?: number
+  pullRequestCount?: number
+  releaseCount?: number
   hasContent?: boolean
   estimate?: number
   dueDate?: string
@@ -93,6 +96,8 @@ export interface MyIssuesRowData {
   startedAt?: string
   statusChangedAt?: string
   statusIntervals?: { stateId: string; stateType?: string; enteredAt: string; exitedAt?: string }[]
+  timeInStatusMinutes?: number
+  myActivityAt?: string
   canceledAt?: string
   archivedAt?: string
   parentId?: string
@@ -161,7 +166,7 @@ export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAU
     if ((event.target as Element).closest('button,input,[role="checkbox"]')) { event.preventDefault(); return }
     if (onOpen && !event.metaKey && !event.ctrlKey && !event.shiftKey && event.button === 0) { event.preventDefault(); open() }
   }
-  const columns = ['8px', '18px', displayProperties.has('priority') && '16px', displayProperties.has('id') && 'var(--issue-identifier-width, 52px)', displayProperties.has('status') && '16px', 'minmax(80px,1fr)', displayProperties.has('created') && '60px', displayProperties.has('updated') && '60px', '18px'].filter(Boolean).join(' ')
+  const columns = ['8px', '18px', displayProperties.has('priority') && '16px', displayProperties.has('id') && 'var(--issue-identifier-width, 52px)', displayProperties.has('status') && '16px', 'minmax(80px,1fr)', displayProperties.has('created') && '60px', displayProperties.has('updated') && '60px', displayProperties.has('myActivity') && '60px', displayProperties.has('timeInStatus') && '72px', displayProperties.has('release') && '52px', displayProperties.has('links') && '52px', displayProperties.has('pullRequests') && '52px', '18px'].filter(Boolean).join(' ')
   const change = (property: MyIssuesEditableProperty, value: string | string[]) => onPropertyChange?.(issue, property, value)
   return <ContextMenu.Root>
     <ContextMenu.Trigger asChild>
@@ -201,13 +206,19 @@ export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAU
         {displayProperties.has('project') && issue.project ? <RowCommandPicker propertyLabel="Project" kind="project" label={`Change project. Current project is ${issue.project.name}`} searchLabel="Set project..." selectedIds={[issue.project.id]} options={propertyOptions.project} onSelect={value => change('project', value)} trigger={<PropertyBadge color={issue.project.color}>{issue.project.name}</PropertyBadge>}/> : null}
             {displayProperties.has('cycle') && issue.cycleId ? <RowCommandPicker propertyLabel="Cycle" label={`Change cycle. Current cycle is ${issue.cycleName ?? issue.cycleId}`} searchLabel="Add to cycle..." selectedIds={[issue.cycleId]} options={propertyOptions.cycle ?? []} onSelect={value => change('cycle', value)} trigger={<span className={styles.dueDate}><CycleIcon size={13}/><span data-i18n-ignore>{issue.cycleName ?? issue.cycleId}</span></span>}/> : null}
             {displayProperties.has('dueDate') && issue.dueDate ? <DueDatePicker value={issue.dueDate} onChange={value => change('dueDate', value)} ariaLabel={`Change due date. Current due date is ${formatDueDate(issue.dueDate)}`} triggerClassName={styles.propertyTrigger} trigger={<time className={styles.dueDate} dateTime={issue.dueDate}><CalendarIcon size={13}/>{formatDueDate(issue.dueDate)}</time>}/> : null}
-            {issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
+            {displayProperties.has('sla') && issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
+            {displayProperties.has('estimate') && issue.estimate != null && <span className={styles.badge} aria-label={`Estimate ${issue.estimate}`}>{issue.estimate}</span>}
             {displayProperties.has('assignee') && issue.assignee ? <RowCommandPicker propertyLabel="Assignee" label={`Assign to. Current assignee is ${issue.assignee.name}`} searchLabel="Assign to..." selectedIds={[issue.assignee.id]} options={propertyOptions.assignee} onSelect={value => change('assignee', value)} trigger={<MyIssuesAssigneeAvatar assignee={issue.assignee}/>}/> : null}
             {mutationError && <button type="button" className={styles.rowError} title={mutationError} onClick={() => onRetryMutation?.(issue)}>Retry</button>}
           </span>
         </div>
         {displayProperties.has('created') && <time className={styles.rowDate} aria-label={`Created ${formatFullDate(issue.createdAt)}`} dateTime={issue.createdAt}>{formatRowDate(issue.createdAt)}</time>}
         {displayProperties.has('updated') && <time className={styles.rowDate} aria-label={`Updated ${formatFullDate(issue.updatedAt)}`} dateTime={issue.updatedAt}>{formatRowDate(issue.updatedAt)}</time>}
+        {displayProperties.has('myActivity') && <time className={styles.rowDate} aria-label={issue.myActivityAt ? `My activity ${formatFullDate(issue.myActivityAt)}` : 'No activity'} dateTime={issue.myActivityAt}>{issue.myActivityAt ? formatRowDate(issue.myActivityAt) : null}</time>}
+        {displayProperties.has('timeInStatus') && <time className={styles.rowDate} aria-label={issue.timeInStatusMinutes == null ? 'Time in status unavailable' : `${formatTimeInStatus(issue.timeInStatusMinutes)} in status`}>{issue.timeInStatusMinutes == null ? null : <><Clock3 size={12}/>{formatTimeInStatus(issue.timeInStatusMinutes)}</>}</time>}
+        {displayProperties.has('release') && <span className={styles.rowDate} aria-label={issue.releaseCount ? `${issue.releaseCount} releases` : 'No releases'}>{issue.releaseCount ? <><PackageOpen size={12}/>{issue.releaseCount}</> : null}</span>}
+        {displayProperties.has('links') && <span className={styles.rowDate} aria-label={issue.linkCount ? `${issue.linkCount} links` : 'No links'}>{issue.linkCount ? <><Link2 size={12}/>{issue.linkCount}</> : null}</span>}
+        {displayProperties.has('pullRequests') && <span className={styles.rowDate} aria-label={issue.pullRequestCount ? `${issue.pullRequestCount} pull requests` : 'No pull requests'}>{issue.pullRequestCount ? <><GitPullRequest size={12}/>{issue.pullRequestCount}</> : null}</span>}
         <span aria-hidden="true"/>
       </a>
     </ContextMenu.Trigger>
@@ -303,6 +314,13 @@ function rowAriaLabel(issue: MyIssuesRowData) { return `Select issue ${priorityN
 function formatRowDate(value: string) { return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value)) }
 function formatFullDate(value: string) { return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(new Date(value)) }
 function formatDueDate(value: string) { return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(`${value}T00:00:00`)) }
+function formatTimeInStatus(minutes: number) {
+  if (minutes < 60) return `${Math.max(0, minutes)}m`
+  const hours = minutes / 60
+  if (hours < 24) return `${Math.round(hours * 10) / 10}h`
+  const days = hours / 24
+  return `${Math.round(days * 10) / 10}d`
+}
 function initials(value: string) { return value.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() }
 function groupContextOptions(options: MyIssuesContextOption[]) {
   const sections: { id: string; label?: string; options: MyIssuesContextOption[] }[] = []

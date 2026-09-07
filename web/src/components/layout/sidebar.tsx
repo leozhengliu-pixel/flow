@@ -49,6 +49,7 @@ import {
 } from "@/lib/api";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { FlowTooltip } from "@/components/ui/tooltip";
 import { DocumentGlyph } from "@/components/documents/document-icon";
 import {
   CycleIcon as FlowCycleIcon,
@@ -697,33 +698,36 @@ export function Sidebar({
             onCreate={onCreateWorkspace}
             onLogout={onLogout}
           />
-          <button
-            className="sidebar-top-action"
-            type="button"
-            aria-label="Search workspace"
-            title="Search workspace"
-            onClick={onSearch}
-          >
-            <FlowIcon name="Search" />
-          </button>
-          <button
-            className="sidebar-top-action sidebar-compose"
-            type="button"
-            aria-label="Create new issue"
-            title="Create new issue"
-            onClick={onCreate}
-          >
-            <ComposeIcon />
-          </button>
-          <button
-            className="sidebar-top-action sidebar-collapse"
-            type="button"
-            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            onClick={() => setSidebarWidth(sidebarCollapsed ? 244 : 52)}
-          >
-            {sidebarCollapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
-          </button>
+          <FlowTooltip label="Search workspace" shortcut="⌘ K">
+            <button
+              className="sidebar-top-action"
+              type="button"
+              aria-label="Search workspace"
+              onClick={onSearch}
+            >
+              <FlowIcon name="Search" />
+            </button>
+          </FlowTooltip>
+          <FlowTooltip label="Create new issue" shortcut="C">
+            <button
+              className="sidebar-top-action sidebar-compose"
+              type="button"
+              aria-label="Create new issue"
+              onClick={onCreate}
+            >
+              <ComposeIcon />
+            </button>
+          </FlowTooltip>
+          <FlowTooltip label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} shortcut="[">
+            <button
+              className="sidebar-top-action sidebar-collapse"
+              type="button"
+              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              onClick={() => setSidebarWidth(sidebarCollapsed ? 244 : 52)}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+            </button>
+          </FlowTooltip>
         </div>
 
         <nav className="sidebar-nav">
