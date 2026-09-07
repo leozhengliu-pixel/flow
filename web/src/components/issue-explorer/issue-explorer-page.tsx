@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { BootstrapData, Issue, IssueUpdateInput, SavedView, SavedViewMutationInput, Team } from '@/types/flow'
 import type { TeamIssuesRouteView } from '@/lib/app-routes'
 import { MyIssuesBulkActionBar } from '@/components/my-issues/my-issues-bulk-action-bar'
@@ -59,6 +59,8 @@ export interface IssueExplorerPageProps {
   onDeleteIssues: (issueIds: string[]) => Promise<void>
 }
 
+const EMPTY_ISSUES: Issue[] = []
+
 export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initialInsightFilters, scope, view, viewHref, savedView, duplicateFrom, creatingView = false, editingView = false, defaultSaveScope, savedViews = [], savedViewHref, onNavigateView, onNavigateSavedView, onCreateSavedView, onUpdateSavedView, onDeleteSavedView, onToggleSavedViewFavorite, onSetSavedViewSubscriptionEvents, onShareSavedView, onDuplicateSavedView, onCancelCreateSavedView, onBeginEditSavedView, onFinishEditSavedView, onNewViewResourceChange, onOpenIssue, renderIssuePreview, onOpenSidebar, onCreateIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues }: IssueExplorerPageProps) {
   const storageScope = scope.kind === 'team' ? `team:${scope.team.id}` : 'workspace'
   const preferencesKey = `${data.workspace.urlKey}:issue-explorer:${storageScope}:${view}`
@@ -77,7 +79,11 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
   const [previewIssueId, setPreviewIssueId] = useState<string>()
   const [viewEditor, setViewEditor] = useState<'create' | 'edit' | undefined>(creatingView ? 'create' : editingView ? 'edit' : undefined)
   const [viewSaving, setViewSaving] = useState(false)
-  const [serverIssues, setServerIssues] = useState<Issue[] | null>(null)
+  const [serverPage, setServerPage] = useState<{ items: Issue[]; nextCursor?: string; hasMore: boolean; total: number } | null>(null)
+  const [serverLoading, setServerLoading] = useState(false)
+  const serverLoadingRef = useRef(false)
+  const serverQueryRef = useRef<Parameters<typeof listIssues>[0] | undefined>(undefined)
+  const serverGenerationRef = useRef(0)
   const hydratedSavedViewId = useRef(savedView?.id)
   const mutationSequence = useRef(new Map<string, number>())
   const mutationQueues = useRef(new Map<string, Promise<Issue>>())
@@ -91,12 +97,14 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
 
   const scopeTeamId = scope.kind === 'team' ? scope.team.id : ''
   const scopedIssues = useMemo(() => filterInsightTeams(issuesForScope(data.issues, scope, view), initialInsightFilters?.teamIds), [data.issues, initialInsightFilters?.teamIds, scope, view])
-  // Keep the bootstrap path for small workspaces and tests, while switching
-  // larger lists to a cursor-capable server query so the browser does not scan
-  // every issue on each filter or view change.
+  const serverBacked = data.issues.length > 100 && display.layout === 'list'
   useEffect(() => {
-    if (data.issues.length <= 100) {
-      setServerIssues(null)
+    const generation = ++serverGenerationRef.current
+    if (!serverBacked) {
+      setServerPage(null)
+      setServerLoading(false)
+      serverLoadingRef.current = false
+      serverQueryRef.current = undefined
       return
     }
     let cancelled = false
@@ -115,31 +123,50 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
       sort: 'sortOrder',
       direction: 'asc',
     } as const
-    void (async () => {
-      try {
-        const items: Issue[] = []
-        let cursor: string | undefined
-        let pageCount = 0
-        do {
-          const page = await listIssues({ ...query, ...(cursor ? { cursor } : {}) })
-          items.push(...page.items)
-          cursor = page.nextCursor
-          pageCount += 1
-        } while (cursor && pageCount < 100 && !cancelled)
-        if (!cancelled) setServerIssues(items)
-      } catch {
-        if (!cancelled) setServerIssues(null)
+    serverQueryRef.current = query
+    setServerPage(null)
+    serverLoadingRef.current = true
+    setServerLoading(true)
+    void listIssues(query).then(page => {
+      if (!cancelled && generation === serverGenerationRef.current) setServerPage(page)
+    }).catch(() => {
+      if (!cancelled && generation === serverGenerationRef.current) setServerPage({ items: [], hasMore: false, total: 0 })
+    }).finally(() => {
+      if (!cancelled && generation === serverGenerationRef.current) {
+        serverLoadingRef.current = false
+        setServerLoading(false)
       }
-    })()
+    })
     return () => { cancelled = true }
-  }, [data.issues.length, filters, initialInsightFilters?.teamIds, scopeTeamId, view])
-  const sourceIssues = serverIssues ?? scopedIssues
-  const insightIssues = useMemo(() => filterInsightTeams(issuesForScope(data.issues, scope, view, true), initialInsightFilters?.teamIds), [data.issues, initialInsightFilters?.teamIds, scope, view])
+  }, [filters, initialInsightFilters?.teamIds, scopeTeamId, serverBacked, view])
+  const loadMoreServerIssues = useCallback(() => {
+    const current = serverPage
+    const query = serverQueryRef.current
+    if (!current?.hasMore || !current.nextCursor || !query || serverLoadingRef.current) return
+    const generation = serverGenerationRef.current
+    serverLoadingRef.current = true
+    setServerLoading(true)
+    void listIssues({ ...query, cursor: current.nextCursor }).then(page => {
+      if (generation !== serverGenerationRef.current) return
+      setServerPage(previous => {
+        if (!previous) return page
+        const known = new Set(previous.items.map(issue => issue.id))
+        return { ...page, items: [...previous.items, ...page.items.filter(issue => !known.has(issue.id))] }
+      })
+    }).catch(() => undefined).finally(() => {
+      if (generation === serverGenerationRef.current) {
+        serverLoadingRef.current = false
+        setServerLoading(false)
+      }
+    })
+  }, [serverPage])
+  const sourceIssues = serverBacked ? serverPage?.items ?? EMPTY_ISSUES : scopedIssues
+  const insightIssues = useMemo(() => insightsOpen ? filterInsightTeams(issuesForScope(data.issues, scope, view, true), initialInsightFilters?.teamIds) : [], [data.issues, initialInsightFilters?.teamIds, insightsOpen, scope, view])
   const issuesById = useMemo(() => new Map(data.issues.map(issue => [issue.id, issue])), [data.issues])
   const rowOptions = useMemo(() => explorerPropertyOptions(data, scopedIssues), [data, scopedIssues])
   const visibleIssues = useMemo(() => applyExplorerFilters(sourceIssues, filters, data), [data, filters, sourceIssues])
   const rows = useMemo(() => visibleIssues.map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)), [data, rowOverrides, visibleIssues])
-  const insightRows = useMemo(() => applyExplorerFilters(insightIssues, filters, data).map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)), [data, filters, insightIssues, rowOverrides])
+  const insightRows = useMemo(() => insightsOpen ? applyExplorerFilters(insightIssues, filters, data).map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)) : [], [data, filters, insightIssues, insightsOpen, rowOverrides])
   const groups = useMemo(() => buildExplorerIssueGroups(rows, display, data, view, manualOrder), [data, display, manualOrder, rows, view])
   const selection = useMyIssuesSelection(groups)
   const summary = useMemo(() => deriveSummary(groups), [groups])
@@ -294,7 +321,7 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
       displayOptions={display}
       detailsOpen={detailsOpen}
       insightsOpen={insightsOpen}
-      itemCount={rows.length}
+      itemCount={serverBacked ? serverPage?.total ?? rows.length : rows.length}
       filterOpenSignal={filterOpenSignal}
       filterOptions={field => explorerFilterOptions(field, rowOptions)}
       onFilterToggle={addFilter}
@@ -324,6 +351,8 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
     >
       {display.layout === 'list' ? <MyIssuesList
         groups={groups}
+        loading={serverBacked && !serverPage}
+        loadingMore={serverLoading && Boolean(serverPage)}
         selectedIds={selection.selectedIds}
         collapsedGroupIds={collapsedGroups}
         displayProperties={display.properties}
@@ -332,6 +361,7 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
         mutationErrors={mutationErrors}
         onCreateIssue={group => { const stateId = stateIdForExplorerGroup(group, data); const context = group.createContext ?? (stateId ? { stateId } : undefined); onCreateIssue?.(scope.kind === 'team' ? { ...context, teamId: scope.team.id } : context) }}
         onGroupCollapsedChange={(id, collapsed) => setCollapsedGroups(current => { const next = new Set(current); if (collapsed) next.add(id); else next.delete(id); return next })}
+        onEndReached={loadMoreServerIssues}
         onOpenIssue={openIssueFromExplorer}
         onPropertyChange={changeProperty}
         onRetryMutation={row => { const input = retryUpdates.current.get(row.id); if (input) void updateOne(row, input).catch(() => undefined) }}

@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { Virtuoso } from "react-virtuoso";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Popover from "@radix-ui/react-popover";
@@ -44,6 +45,11 @@ type ViewsScope = { kind: "workspace" } | { kind: "team"; team: Team };
 type Ordering = "created" | "name" | "owner" | "updated";
 type Direction = "asc" | "desc";
 type DisplayProperty = "created" | "owner" | "updated";
+type ViewListEntry =
+  | { key: string; kind: "group"; group: { id: string; kind: "personal" | "workspace" | "team"; label: string } }
+  | { key: string; kind: "view"; view: SavedView };
+
+const VIEW_VIRTUALIZATION_THRESHOLD = 80;
 
 export type ViewsPageProps = {
   data: BootstrapData;
@@ -154,6 +160,21 @@ export function ViewsPage({
           ].filter((group) => group.views.length),
     [data.workspace.name, orderedViews, scope],
   );
+  const favoriteViewIds = useMemo(
+    () => new Set((data.favorites ?? []).filter((item) => item.userId === data.viewer.id && item.resourceType === "view").map((item) => item.resourceId)),
+    [data.favorites, data.viewer.id],
+  );
+  const subscriptionByViewId = useMemo(
+    () => new Map((data.subscriptions ?? []).filter((item) => item.userId === data.viewer.id && item.resourceType === "view").map((item) => [item.resourceId, item])),
+    [data.subscriptions, data.viewer.id],
+  );
+  const listEntries = useMemo<ViewListEntry[]>(
+    () => groups.flatMap((group) => [
+      ...(scope.kind === "workspace" ? [{ key: `group:${group.id}`, kind: "group" as const, group: { id: group.id, kind: group.kind, label: group.label } }] : []),
+      ...group.views.map((view) => ({ key: `view:${view.id}`, kind: "view" as const, view })),
+    ]),
+    [groups, scope.kind],
+  );
 
   const updateOrdering = (next: Ordering) => {
     const nextDirection =
@@ -197,6 +218,49 @@ export function ViewsPage({
     )
       return;
     await onDelete(view);
+  };
+  const renderGroupHeader = (group: Extract<ViewListEntry, { kind: "group" }>['group']) => <div className={styles.groupHeader}>
+    <ScopeAvatar kind={group.kind} label={group.label} team={data.teams.find((team) => team.id === group.id)} />
+    <strong data-i18n-ignore>{group.label}</strong>
+    <span>{group.kind === "personal" ? `· ${t("Only visible to you")}` : `· ${t("Workspace")}`}</span>
+    <button
+      aria-label={t(`Create ${resource === "issues" ? "issue" : "project"} view in ${group.label}`)}
+      onClick={onCreate}
+      type="button"
+    >
+      <FlowPlusIcon />
+    </button>
+  </div>;
+  const renderView = (view: SavedView) => {
+    const subscription = subscriptionByViewId.get(view.id);
+    return <ViewRow
+      key={view.id}
+      data={data}
+      favorite={view.favorite || favoriteViewIds.has(view.id)}
+      href={viewHref(view)}
+      onCopy={() => { void copyLink(view); }}
+      onDelete={() => { void deleteView(view); }}
+      onDuplicate={() => onDuplicate(view)}
+      onEdit={() => onEdit(view)}
+      onMove={(destination) => { void moveView(view, destination); }}
+      onOpen={() => onOpen(view)}
+      onSetSubscriptionEvents={(events) => { void onSetSubscriptionEvents(view, events); }}
+      onShare={onShare ? async () => {
+        const sharedURL = await onShare(view);
+        if (sharedURL) {
+          await navigator.clipboard.writeText(`${window.location.origin}${sharedURL}`);
+          toast.success(t("Shared view link copied"));
+        }
+      } : undefined}
+      onToggleFavorite={() => { void onToggleFavorite(view); }}
+      onUpdate={(input) => { void onUpdate(view.id, input); }}
+      properties={properties}
+      resource={resource}
+      subscribed={view.subscribed || Boolean(subscription)}
+      subscription={subscription}
+      usersById={usersById}
+      view={view}
+    />;
   };
 
   return (
@@ -305,107 +369,30 @@ export function ViewsPage({
           )}
         </div>
       )}
-      <section
+      {listEntries.length > VIEW_VIRTUALIZATION_THRESHOLD ? <Virtuoso
+        className={`${styles.content} ${styles.virtualContent}`}
+        role="list"
+        aria-label={t("Views")}
+        data={listEntries}
+        computeItemKey={(_index, entry) => entry.key}
+        increaseViewportBy={{ top: 180, bottom: 480 }}
+        itemContent={(_index, entry) => entry.kind === "group" ? renderGroupHeader(entry.group) : renderView(entry.view)}
+      /> : <section
         className={`${styles.content} ${!orderedViews.length ? styles.contentEmpty : ""}`}
       >
         {orderedViews.length > 0 &&
           groups.map((group) => (
             <div className={styles.group} key={group.id}>
               {scope.kind === "workspace" && (
-                <div className={styles.groupHeader}>
-                  <ScopeAvatar kind={group.kind} label={group.label} team={data.teams.find((team) => team.id === group.id)} />
-                  <strong data-i18n-ignore>{group.label}</strong>
-                  <span>
-                    {group.kind === "personal"
-                      ? `· ${t("Only visible to you")}`
-                      : `· ${t("Workspace")}`}
-                  </span>
-                  <button
-                    aria-label={t(
-                      `Create ${resource === "issues" ? "issue" : "project"} view in ${group.label}`,
-                    )}
-                    onClick={onCreate}
-                    type="button"
-                  >
-                    <FlowPlusIcon />
-                  </button>
-                </div>
+                renderGroupHeader(group)
               )}
-              {group.views.map((view) => (
-                <ViewRow
-                  data={data}
-                  favorite={
-                    view.favorite ||
-                    data.favorites.some(
-                      (item) =>
-                        item.userId === data.viewer.id &&
-                        item.resourceType === "view" &&
-                        item.resourceId === view.id,
-                    )
-                  }
-                  href={viewHref(view)}
-                  key={view.id}
-                  onCopy={() => {
-                    void copyLink(view);
-                  }}
-                  onDelete={() => {
-                    void deleteView(view);
-                  }}
-                  onDuplicate={() => onDuplicate(view)}
-                  onEdit={() => onEdit(view)}
-                  onMove={(destination) => {
-                    void moveView(view, destination);
-                  }}
-                  onOpen={() => onOpen(view)}
-                  onSetSubscriptionEvents={(events) => {
-                    void onSetSubscriptionEvents(view, events);
-                  }}
-                  onShare={
-                    onShare
-                      ? async () => {
-                          const sharedURL = await onShare(view);
-                          if (sharedURL) {
-                            await navigator.clipboard.writeText(
-                              `${window.location.origin}${sharedURL}`,
-                            );
-                            toast.success(t("Shared view link copied"));
-                          }
-                        }
-                      : undefined
-                  }
-                  onToggleFavorite={() => {
-                    void onToggleFavorite(view);
-                  }}
-                  onUpdate={(input) => {
-                    void onUpdate(view.id, input);
-                  }}
-                  properties={properties}
-                  resource={resource}
-                  subscribed={
-                    view.subscribed ||
-                    data.subscriptions.some(
-                      (item) =>
-                        item.userId === data.viewer.id &&
-                        item.resourceType === "view" &&
-                        item.resourceId === view.id,
-                    )
-                  }
-                  subscription={data.subscriptions.find(
-                    (item) =>
-                      item.userId === data.viewer.id &&
-                      item.resourceType === "view" &&
-                      item.resourceId === view.id,
-                  )}
-                  usersById={usersById}
-                  view={view}
-                />
-              ))}
+              {group.views.map(renderView)}
             </div>
           ))}
         {!orderedViews.length && (
           <ViewsEmptyState onCreate={onCreate} resource={resource} />
         )}
-      </section>
+      </section>}
     </div>
   );
 }

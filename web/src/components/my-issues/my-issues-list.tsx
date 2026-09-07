@@ -1,4 +1,5 @@
-import { useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { Virtuoso, type Components } from 'react-virtuoso'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
 import { Check, ChevronDown, ChevronRight, Clock3, GitPullRequest, Link2, PackageOpen, Plus } from 'lucide-react'
@@ -130,27 +131,69 @@ export interface MyIssuesListProps {
   onRetryMutation?: (issue: MyIssuesRowData) => void
   onSelectIssue?: (issueId: string, selected: boolean, range: boolean) => void
   createIssueLabel?: string
+  loadingMore?: boolean
+  onEndReached?: () => void
 }
 
-export function MyIssuesList({ groups, loading = false, error, selectedIds = EMPTY_SET, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues=false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue' }: MyIssuesListProps) {
+type MyIssuesListEntry =
+  | { key: string; kind: 'group'; group: MyIssuesGroupData; collapsed: boolean }
+  | { key: string; kind: 'issue'; issue: MyIssuesRowData; nestedLines: readonly boolean[] }
+
+const VIRTUALIZATION_THRESHOLD = 80
+type MyIssuesListContext = { loadingMore: boolean }
+const MY_ISSUES_VIRTUAL_COMPONENTS: Components<MyIssuesListEntry, MyIssuesListContext> = { Footer: MyIssuesVirtualFooter }
+
+function MyIssuesVirtualFooter({ context }: { context: MyIssuesListContext }) {
+  return context.loadingMore ? <div className={styles.loadingMore}>Loading more…</div> : null
+}
+
+export function MyIssuesList({ groups, loading = false, error, selectedIds = EMPTY_SET, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues=false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue', loadingMore = false, onEndReached }: MyIssuesListProps) {
+  const entries = useMemo<MyIssuesListEntry[]>(() => groups.flatMap(group => {
+    const collapsed = collapsedGroupIds.has(group.id)
+    const header: MyIssuesListEntry = { key: `group:${group.id}`, kind: 'group', group, collapsed }
+    if (collapsed) return [header]
+    const nestedLines = nestedSubIssues ? nestedLinesByIssue(group.issues) : EMPTY_LINE_MAP
+    return [header, ...group.issues.map(issue => ({ key: `issue:${issue.id}`, kind: 'issue' as const, issue, nestedLines: nestedLines.get(issue.id) ?? EMPTY_LINES }))]
+  }), [collapsedGroupIds, groups, nestedSubIssues])
   if (loading) return <MyIssuesListSkeleton/>
   if (error) return <MyIssuesListError message={error} onRetry={onClearError}/>
   if (!groups.some(group => group.issues.length)) return <MyIssuesListEmpty/>
-  const identifierLength = Math.max(6, ...groups.flatMap(group => group.issues.map(issue => [...issue.identifier].length)))
+  let identifierLength = 6
+  for (const group of groups) for (const issue of group.issues) identifierLength = Math.max(identifierLength, [...issue.identifier].length)
+  const renderEntry = (entry: MyIssuesListEntry) => entry.kind === 'group'
+    ? <MyIssuesGroupHeader collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/>
+    : <MyIssuesRow issue={entry.issue} selected={selectedIds.has(entry.issue.id)} displayProperties={displayProperties} nestedLines={entry.nestedLines} showSubIssueProgress={!nestedSubIssues} propertyOptions={propertyOptions} mutationError={mutationErrors.get(entry.issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>
+  if (entries.length > VIRTUALIZATION_THRESHOLD) return <Virtuoso
+    className={styles.virtualList}
+    role="list"
+    aria-label="Issues"
+    data={entries}
+    computeItemKey={(_index, entry) => entry.key}
+    components={MY_ISSUES_VIRTUAL_COMPONENTS}
+    context={{ loadingMore }}
+    increaseViewportBy={{ top: 176, bottom: 440 }}
+    itemContent={(_index, entry) => renderEntry(entry)}
+    endReached={() => onEndReached?.()}
+    style={{ '--issue-identifier-width': `${identifierLength}ch` } as CSSProperties}
+  />
   return <div className={styles.list} role="list" aria-label="Issues" style={{ '--issue-identifier-width': `${identifierLength}ch` } as CSSProperties}>
     {groups.map(group => {
       const collapsed = collapsedGroupIds.has(group.id)
       const nestedLines = nestedSubIssues ? nestedLinesByIssue(group.issues) : EMPTY_LINE_MAP
       return <section className={styles.group} key={group.id} aria-labelledby={`my-issues-group-${group.id}`}>
-        <header className={styles.groupHeader}>
-          <button className={styles.collapseButton} aria-label={collapsed ? 'Expand group' : 'Collapse group'} aria-expanded={!collapsed} onClick={() => onGroupCollapsedChange?.(group.id, !collapsed)}><ChevronDown size={12}/></button>
-          <GroupStateIcon state={group.state ?? group.issues[0]?.state} type={group.stateType}/><span data-i18n-ignore id={`my-issues-group-${group.id}`} className={styles.groupName}>{group.label}</span><span className={styles.groupCount}>{group.issues.length}</span>
-          {onCreateIssue && <button className={styles.createButton} aria-label={createIssueLabel} onClick={() => onCreateIssue(group)}><Plus size={16}/></button>}
-        </header>
+        <MyIssuesGroupHeader collapsed={collapsed} createIssueLabel={createIssueLabel} group={group} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/>
         {!collapsed && <div>{group.issues.map(issue => <MyIssuesRow key={issue.id} issue={issue} selected={selectedIds.has(issue.id)} displayProperties={displayProperties} nestedLines={nestedLines.get(issue.id)??EMPTY_LINES} showSubIssueProgress={!nestedSubIssues} propertyOptions={propertyOptions} mutationError={mutationErrors.get(issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>)}</div>}
       </section>
     })}
   </div>
+}
+
+function MyIssuesGroupHeader({ collapsed, createIssueLabel, group, onCreateIssue, onGroupCollapsedChange }: { collapsed: boolean; createIssueLabel: string; group: MyIssuesGroupData; onCreateIssue?: (group: MyIssuesGroupData) => void; onGroupCollapsedChange?: (groupId: string, collapsed: boolean) => void }) {
+  return <header className={styles.groupHeader}>
+    <button className={styles.collapseButton} aria-label={collapsed ? 'Expand group' : 'Collapse group'} aria-expanded={!collapsed} onClick={() => onGroupCollapsedChange?.(group.id, !collapsed)}><ChevronDown size={12}/></button>
+    <GroupStateIcon state={group.state ?? group.issues[0]?.state} type={group.stateType}/><span data-i18n-ignore id={`my-issues-group-${group.id}`} className={styles.groupName}>{group.label}</span><span className={styles.groupCount}>{group.issues.length}</span>
+    {onCreateIssue && <button className={styles.createButton} aria-label={createIssueLabel} onClick={() => onCreateIssue(group)}><Plus size={16}/></button>}
+  </header>
 }
 
 export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAULT_PROPERTIES, nestedLines=EMPTY_LINES, showSubIssueProgress=true, propertyOptions = EMPTY_OPTIONS, mutationError, onContextAction, onOpen, onPropertyChange, onRetryMutation, onSelect }: {

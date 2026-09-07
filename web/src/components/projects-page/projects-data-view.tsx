@@ -1,7 +1,8 @@
 import * as Tooltip from '@radix-ui/react-tooltip'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Bell, Box, CalendarPlus, Clipboard, FileText, LayoutGrid, Link2, MessageCirclePlus, MoreHorizontal, Move, Package, Search, Star, Tag, Trash2, UserRound } from 'lucide-react'
-import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { Virtuoso } from 'react-virtuoso'
 import { MembersIcon, NoAssigneeIcon } from '@/components/issue/issue-icons'
 import { ViewGlyph, ViewIconPicker } from '@/components/views/view-icon-picker'
 import { CheckIcon, ChevronRightIcon, PlusIcon } from './projects-page-icons'
@@ -121,6 +122,13 @@ const PROPERTY_OPTIONS: Record<ProjectProperty, ProjectPropertyOption[]> = {
   ],
 }
 
+type ProjectListEntry =
+  | { key: string; kind: 'group'; group: ProjectDataGroup; collapsed: boolean }
+  | { key: string; kind: 'subgroup'; group: ProjectDataGroup }
+  | { key: string; kind: 'project'; project: ProjectPageItem }
+
+const PROJECT_VIRTUALIZATION_THRESHOLD = 80
+
 export function ProjectsDataView({
   groups,
   layout = 'list',
@@ -151,6 +159,22 @@ export function ProjectsDataView({
   useEffect(() => {
     if (externalSort) setSort(externalSort)
   }, [externalSort])
+
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
+  const listEntries = useMemo<ProjectListEntry[]>(() => groups.flatMap(group => {
+    const isCollapsed = collapsed.includes(group.id)
+    const entries: ProjectListEntry[] = [{ key: `group:${group.id}`, kind: 'group', group, collapsed: isCollapsed }]
+    if (isCollapsed) return entries
+    if (group.subgroups?.length) {
+      for (const subgroup of group.subgroups) {
+        entries.push({ key: `subgroup:${group.id}:${subgroup.id}`, kind: 'subgroup', group: subgroup })
+        entries.push(...subgroup.projects.map(project => ({ key: `project:${project.id}`, kind: 'project' as const, project })))
+      }
+    } else {
+      entries.push(...group.projects.map(project => ({ key: `project:${project.id}`, kind: 'project' as const, project })))
+    }
+    return entries
+  }), [collapsed, groups])
 
   const toggleSelection = (id: string, range = false) => {
     const next = selectedIds.includes(id) ? selectedIds.filter(item => item !== id) : range ? [...new Set([...selectedIds, id])] : [...selectedIds, id]
@@ -202,6 +226,46 @@ export function ProjectsDataView({
 
   if (layout === 'timeline') return <ProjectTimeline groups={groups} onOpenProject={onOpenProject} onUpdateProject={onUpdateProject} propertyOptions={propertyOptions}/>
 
+  const renderProject = (project: ProjectPageItem) => <ProjectListRow
+    onOpen={onOpenProject}
+    onOpenIssues={onOpenProjectIssues}
+    onOpenUpdates={onOpenProjectUpdates}
+    onProjectAction={onProjectAction}
+    manualOrdering={manualOrdering}
+    onProjectVisualChange={onProjectVisualChange}
+    onPropertyChange={onPropertyChange}
+    onSelect={toggleSelection}
+    propertyOptions={propertyOptions}
+    projectMenu={projectMenu}
+    labelGroupProperties={labelGroupProperties}
+    project={project}
+    selected={selectedSet.has(project.id)}
+    visible={visible}
+  />
+
+  if (listEntries.length > PROJECT_VIRTUALIZATION_THRESHOLD) return <div className="lp-project-table is-virtual" role="grid" style={{ '--lp-project-grid': projectGrid(visible, labelGroupProperties) } as CSSProperties}>
+    <ProjectTableHeader labelGroupProperties={labelGroupProperties} sort={sort} onSort={changeSort} visible={visible} />
+    <Virtuoso
+      className="lp-project-table__virtual"
+      data={listEntries}
+      computeItemKey={(_index, entry) => entry.key}
+      increaseViewportBy={{ top: 192, bottom: 480 }}
+      itemContent={(_index, entry) => {
+        if (entry.kind === 'project') return renderProject(entry.project)
+        if (entry.kind === 'subgroup') return <div className="lp-project-subgroup"><div className="lp-project-subgroup__header"><ProjectGroupStatus color={entry.group.color} compact name={entry.group.name} propertyOptions={propertyOptions}/><span data-i18n-ignore>{entry.group.name}</span><small>{projectCount(entry.group)}</small></div></div>
+        return <ProjectGroupHeader
+          collapsed={entry.collapsed}
+          color={entry.group.color}
+          count={projectCount(entry.group)}
+          name={entry.group.name}
+          onCreate={() => onCreateProject?.(projectCreateStatus(entry.group.name))}
+          onToggle={() => setCollapsed(current => current.includes(entry.group.id) ? current.filter(id => id !== entry.group.id) : [...current, entry.group.id])}
+          propertyOptions={propertyOptions}
+        />
+      }}
+    />
+  </div>
+
   return <div className="lp-project-table" role="grid" style={{ '--lp-project-grid': projectGrid(visible, labelGroupProperties) } as CSSProperties}>
     <ProjectTableHeader labelGroupProperties={labelGroupProperties} sort={sort} onSort={changeSort} visible={visible} />
     {groups.map(group => {
@@ -246,7 +310,7 @@ export function ProjectsDataView({
           projectMenu={projectMenu}
           labelGroupProperties={labelGroupProperties}
           project={project}
-          selected={selectedIds.includes(project.id)}
+          selected={selectedSet.has(project.id)}
           visible={visible}
         />))}
       </section>

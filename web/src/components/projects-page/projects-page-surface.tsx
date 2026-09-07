@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { Virtuoso } from 'react-virtuoso'
 import { ChevronRight, Link2 } from 'lucide-react'
 import {
   AddViewIcon,
@@ -60,6 +61,7 @@ const FILTER_GROUPS = [
 ]
 const FILTER_CHILDREN = new Set(['Status', 'Priority', 'Labels', 'Lead', 'Members', 'Creator', 'Health', 'Dates', 'Initiatives', 'Milestones', 'Relations', 'Customers', 'Template', 'Title & summary', 'Specific project'])
 type Surface = { kind: 'filter' | 'display'; origin: 'toolbar' | 'editor' } | null
+const VIEW_VIRTUALIZATION_THRESHOLD = 40
 
 export function ProjectsPageSurface({
   activeViewId,
@@ -136,6 +138,19 @@ export function ProjectsPageSurface({
       settings={settings}
     />}
   </>
+  const renderView = (view: ProjectsView) => <a
+    aria-current={view.id === activeViewId ? 'page' : undefined}
+    className="lp-projects__view ui-pill"
+    href={view.href ?? '#'}
+    key={view.id}
+    onClick={event => {
+      if (onChangeView) event.preventDefault()
+      onChangeView?.(view)
+    }}
+  >
+    {(view.kind ?? 'saved') === 'saved' && <ViewGlyph color={view.color} icon={view.icon}/>}
+    <span>{view.label}</span>
+  </a>
 
   return <div className="lp-projects">
     <header className="lp-projects__header">
@@ -145,19 +160,7 @@ export function ProjectsPageSurface({
     {creatingView && viewEditor?.(editorActions)}
     <div className="lp-projects__toolbar">
       {creatingView ? <nav aria-label="View resource" className="lp-projects__views"><button className="lp-projects__view ui-pill" type="button" onClick={() => onNewViewResourceChange?.('issues')}>Issues</button><button aria-current="page" className="lp-projects__view ui-pill" type="button">Projects</button></nav> : <nav aria-label="Project views" className="lp-projects__views">
-        {views.map(view => <a
-          aria-current={view.id === activeViewId ? 'page' : undefined}
-          className="lp-projects__view ui-pill"
-          href={view.href ?? '#'}
-          key={view.id}
-          onClick={event => {
-            if (onChangeView) event.preventDefault()
-            onChangeView?.(view)
-          }}
-        >
-          {(view.kind ?? 'saved') === 'saved' && <ViewGlyph color={view.color} icon={view.icon}/>}
-          <span>{view.label}</span>
-        </a>)}
+        {views.length > VIEW_VIRTUALIZATION_THRESHOLD ? <Virtuoso horizontalDirection className="lp-projects__virtual-views" data={views} computeItemKey={(_index, view) => view.id} increaseViewportBy={360} itemContent={(_index, view) => renderView(view)}/> : views.map(renderView)}
         <IconButton className="lp-projects__add-view" label="Add new view" onClick={onAddView}><AddViewIcon /></IconButton>
       </nav>}
 

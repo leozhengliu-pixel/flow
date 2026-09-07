@@ -3,6 +3,7 @@ import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
 import { Bell, Check, ChevronRight, Clock3, Copy, Edit3, MessageSquare, MoreHorizontal, MousePointer2, Plus, Search, Send, Star, Trash2, X } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Virtuoso } from 'react-virtuoso'
 import { Avatar } from '@/components/issue/issue-row'
 import { PriorityIcon } from '@/components/issue/issue-icons'
 import { ViewGlyph, ViewIconPicker } from '@/components/views/view-icon-picker'
@@ -48,6 +49,11 @@ const DEFAULT_PROPERTIES: Property[] = ['description', 'status', 'priority', 'ow
 type Sort = 'manual' | 'name' | 'status' | 'priority' | 'target' | 'health' | 'created' | 'updated'
 type Grouping = 'none'|'contributingTeam'|'leadTeam'|'owner'|'health'|'status'|'priority'|'label'
 type FilterState = { status?: InitiativeStatus; priority?: number; ownerId?: string; creatorId?: string; leadTeamId?: string; teamId?: string; health?: Project['health']; labelId?: string; date?: 'created7'|'updated7'|'targetMonth'|'completed' }
+type InitiativeListEntry =
+  | { key: string; kind: 'group'; label: string; count: number; entityName: boolean }
+  | { key: string; kind: 'initiative'; initiative: Initiative }
+
+const INITIATIVE_VIRTUALIZATION_THRESHOLD = 80
 
 export function InitiativesPage(props: Props) {
   const { t } = useI18n()
@@ -92,7 +98,11 @@ export function InitiativesPage(props: Props) {
   const showDetails = detailsOpen && view !== 'planned'
   const columnGrid = `8px 20px minmax(280px,1fr) ${columns.map(property => columnWidth(property, showDetails)).join(' ')} 12px`
   const workspaceSlug = location.pathname.split('/').filter(Boolean)[0] ?? ''
-  const grouped = groupInitiatives(visible, grouping, teams, labels)
+  const grouped = useMemo(() => groupInitiatives(visible, grouping, teams, labels), [grouping, labels, teams, visible])
+  const listEntries = useMemo<InitiativeListEntry[]>(() => grouped.flatMap(group => [
+    ...(grouping !== 'none' ? [{ key: `group:${group.key}`, kind: 'group' as const, label: group.label, count: group.items.length, entityName: ['owner','leadTeam','contributingTeam','label'].includes(grouping) }] : []),
+    ...group.items.map(initiative => ({ key: `initiative:${initiative.id}`, kind: 'initiative' as const, initiative })),
+  ]), [grouped, grouping])
   const displayDirty = grouping !== defaultGrouping || sort !== defaultSort || showTeamInitiatives !== defaultShowTeam || !sameStringSet(properties, new Set(defaultProperties))
   const resetDisplay = () => { setGrouping(defaultGrouping); setSort(defaultSort); setShowTeamInitiatives(defaultShowTeam); setProperties(new Set(defaultProperties)) }
   const toggleProperty = (property: Property) => setProperties(current => {
@@ -131,6 +141,7 @@ export function InitiativesPage(props: Props) {
     localStorage.setItem('flow:initiatives:details-open', String(!open))
     return !open
   })
+  const renderInitiative = (initiative: Initiative) => <InitiativeRow columns={columns} grid={columnGrid} href={initiativePath(workspaceSlug, initiative)} initiative={initiative} initiativeUpdates={initiativeUpdates[initiative.id] ?? []} labels={labels} projects={projects} projectUpdates={projectUpdates} properties={properties} selected={selected.has(initiative.id)} teams={teams} users={users} onCreateLabel={onCreateLabel} onCreateReminder={remindAt => onCreateReminder(initiative.id, remindAt)} onDelete={onDelete} onOpen={onOpen} onOpenUpdates={() => setUpdatesInitiative(initiative)} onSelect={() => toggleSelected(initiative.id)} onUpdate={input => onUpdate(initiative.id, input)}/>
 
   return <main className="main-panel li-page">
     <header className="li-page-header">
@@ -148,10 +159,18 @@ export function InitiativesPage(props: Props) {
     </div>
     {advancedFilterEnabled ? <AdvancedFilterBar filters={filters} initiatives={initiatives} labels={labels} mode={filterMode} open={advancedFilterOpen} teams={teams} users={users} onChange={setFilters} onMode={setFilterMode} onOpenChange={setAdvancedFilterOpen} onRemove={() => { setFilters({}); setAdvancedFilterEnabled(false); setAdvancedFilterOpen(false) }}/> : Object.keys(filters).length > 0 && <div className="li-filter-chips">{Object.entries(filters).map(([key, value]) => <button key={key} onClick={() => setFilters(current => { const next = { ...current }; delete next[key as keyof FilterState]; return next })} type="button"><span>{filterLabel(key, value, users, teams, labels)}</span><X size={11}/></button>)}<button onClick={() => setFilters({})} type="button">Clear all</button></div>}
     <div className={`li-list-body${showDetails ? ' has-details' : ''}`}>
-      <div className={`li-table${showDetails ? ' has-details' : ''}`} style={{ '--li-extra-columns': columns.length } as React.CSSProperties}>
+      <div className={`li-table${showDetails ? ' has-details' : ''}${listEntries.length > INITIATIVE_VIRTUALIZATION_THRESHOLD ? ' is-virtualized' : ''}`} style={{ '--li-extra-columns': columns.length } as React.CSSProperties}>
         {visible.length > 0 && <div className="li-columns" style={{ gridTemplateColumns: columnGrid }}><span aria-hidden="true"/><span aria-hidden="true"/><button aria-label="Order by Name" onClick={() => setSort('name')} style={{ gridColumn: 3 }} type="button">Name<InitiativeSortIcon/></button>{columns.map((property, index) => <ColumnHeader gridColumn={index + 4} key={property} property={property} onSort={setSort}/>)}</div>}
         {creating && <InitiativeCreateRow labels={labels} teams={teams} users={users} viewer={viewer} view={view} onCancel={() => setCreating(false)} onCreate={async input => { await onCreate(input); setCreating(false) }} onCreateLabel={onCreateLabel}/>}
-        {grouped.map(group => <Fragment key={group.key}>{grouping !== 'none' && <div className="li-group-heading"><span data-i18n-ignore={['owner','leadTeam','contributingTeam','label'].includes(grouping) ? true : undefined}>{group.label}</span><small>{group.items.length}</small></div>}{group.items.map(initiative => <InitiativeRow columns={columns} grid={columnGrid} href={initiativePath(workspaceSlug, initiative)} initiative={initiative} initiativeUpdates={initiativeUpdates[initiative.id] ?? []} key={initiative.id} labels={labels} projects={projects} projectUpdates={projectUpdates} properties={properties} selected={selected.has(initiative.id)} teams={teams} users={users} onCreateLabel={onCreateLabel} onCreateReminder={remindAt => onCreateReminder(initiative.id, remindAt)} onDelete={onDelete} onOpen={onOpen} onOpenUpdates={() => setUpdatesInitiative(initiative)} onSelect={() => toggleSelected(initiative.id)} onUpdate={input => onUpdate(initiative.id, input)}/>)}</Fragment>)}
+        {listEntries.length > INITIATIVE_VIRTUALIZATION_THRESHOLD ? <Virtuoso
+          className="li-virtual-list"
+          data={listEntries}
+          computeItemKey={(_index, entry) => entry.key}
+          increaseViewportBy={{ top: 208, bottom: 520 }}
+          itemContent={(_index, entry) => entry.kind === 'group'
+            ? <div className="li-group-heading"><span data-i18n-ignore={entry.entityName || undefined}>{entry.label}</span><small>{entry.count}</small></div>
+            : renderInitiative(entry.initiative)}
+        /> : grouped.map(group => <Fragment key={group.key}>{grouping !== 'none' && <div className="li-group-heading"><span data-i18n-ignore={['owner','leadTeam','contributingTeam','label'].includes(grouping) ? true : undefined}>{group.label}</span><small>{group.items.length}</small></div>}{group.items.map(initiative => <Fragment key={initiative.id}>{renderInitiative(initiative)}</Fragment>)}</Fragment>)}
         {!creating && !visible.length && <InitiativesEmpty filtered={Object.keys(filters).length > 0} onCreate={() => setCreating(true)} view={view}/>} 
       </div>
       {showDetails && <InitiativesListSidebar initiatives={visible} teams={teams} users={users} view={view}/>}

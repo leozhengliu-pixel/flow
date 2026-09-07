@@ -137,9 +137,9 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
     const field = tab === 'labels' ? 'labels' : tab === 'projects' ? 'project' : 'priority'
     addFilter(field, { id: item.id, label: item.label, color: item.color })
   }
-  const insightRows=controller.visibleGroups.flatMap(group=>group.issues)
+  const insightRows=useMemo(()=>insightsOpen?controller.visibleGroups.flatMap(group=>group.issues):[],[controller.visibleGroups,insightsOpen])
   const boardGroups = useMemo(() => myIssuesBoardGroups(controller.visibleGroups, controller.display, data), [controller.display, controller.visibleGroups, data])
-  const allInsightRows=useMemo(()=>applyExplorerFilters(issuesForView(data,projectedView,true),controller.filters,data).map(issue=>issueToExplorerRow(issue,workspaceSlug,data.issues,data)),[controller.filters,data,projectedView,workspaceSlug])
+  const allInsightRows=useMemo(()=>insightsOpen?applyExplorerFilters(issuesForView(data,projectedView,true),controller.filters,data).map(issue=>issueToExplorerRow(issue,workspaceSlug,data.issues,data)):[],[controller.filters,data,insightsOpen,projectedView,workspaceSlug])
   const insightsView:SavedView={id:`my-issues-${controller.view}`,name:({assigned:'Assigned to me',created:'Created by me',subscribed:'Subscribed',activity:'Activity'} as const)[controller.view],description:'',resource:'issues',scope:'personal',ownerId:data.viewer.id,view:'all',filters:controller.filters,display:{},insights:insightsConfig,createdAt:'',updatedAt:''}
 
   return <>
