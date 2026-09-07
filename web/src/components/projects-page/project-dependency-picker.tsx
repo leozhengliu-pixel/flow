@@ -121,7 +121,7 @@ export function ProjectDependencyPicker({
     <Popover.Root onOpenChange={setOpen} open={open}>
     {menuTrigger}
     <Popover.Portal>
-      <Popover.Content
+      <Popover.Content data-flow-motion="floating"
         align="start"
         className={`project-dependency-picker__surface${hasSelection ? ' has-selection' : ''}`}
         collisionPadding={10}
@@ -172,7 +172,7 @@ export function ProjectDependencyPicker({
     </Popover.Portal>
     </Popover.Root>
     {value.length > 0 && <Tooltip.Portal>
-        <Tooltip.Content className="project-dependency-picker__summary" collisionPadding={8} side="top" sideOffset={6}>
+        <Tooltip.Content data-flow-motion="tooltip" className="project-dependency-picker__summary" collisionPadding={8} side="top" sideOffset={6}>
           {(['blocked_by', 'blocks'] as const).map(type => {
             const selected = selectedFor(type)
             if (!selected.length) return null
@@ -234,7 +234,7 @@ function DirectionPicker({ active, closeOnSelect, direction, label, onChange, on
       </button>
     </Popover.Anchor>
     <Popover.Portal>
-      <Popover.Content
+      <Popover.Content data-flow-motion="floating"
         align="start"
         alignOffset={-30}
         className="project-dependency-picker__projects"
@@ -321,7 +321,7 @@ function ProjectOptionRow({ active = false, checked, disabled = false, id, onAct
   </button>
   const preview = renderPreview?.(project) ?? (project.previewData ? <ProjectDependencyPreview project={project}/> : undefined)
   if (!preview) return row
-  return <Tooltip.Provider delayDuration={450} skipDelayDuration={300}><Tooltip.Root><Tooltip.Trigger asChild>{row}</Tooltip.Trigger><Tooltip.Portal><Tooltip.Content className="project-dependency-picker__preview" collisionPadding={8} side="left" sideOffset={6}>{preview}</Tooltip.Content></Tooltip.Portal></Tooltip.Root></Tooltip.Provider>
+  return <Tooltip.Provider delayDuration={450} skipDelayDuration={300}><Tooltip.Root><Tooltip.Trigger asChild>{row}</Tooltip.Trigger><Tooltip.Portal><Tooltip.Content data-flow-motion="tooltip" className="project-dependency-picker__preview" collisionPadding={8} side="left" sideOffset={6}>{preview}</Tooltip.Content></Tooltip.Portal></Tooltip.Root></Tooltip.Provider>
 }
 
 function ProjectDependencyIcon({ project, size }: { project?: ProjectDependencyOption; size: number }) {

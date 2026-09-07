@@ -88,6 +88,8 @@ describe('issue explorer workflow model', () => {
     expect(explorerUpdateForAction('priority', '4')).toEqual({ priority: 4 })
     expect(explorerUpdateForProperty('labels', [label.id])).toEqual({ labelIds: [label.id] })
     expect(explorerUpdateForProperty('status', backlog.id)).toEqual({ stateId: backlog.id })
+    expect(explorerUpdateForProperty('cycle', 'cycle-2')).toEqual({ cycleId: 'cycle-2' })
+    expect(explorerUpdateForProperty('cycle', '')).toEqual({ cycleId: '' })
 
     const updated = optimisticExplorerRow(row, { stateId: backlog.id, priority: 8, assigneeId: '', projectId: '', dueDate: '', labelIds: [], sortOrder: 20 }, data)
     expect(updated).toMatchObject({ state: backlog, priority: 4, assignee: undefined, project: undefined, dueDate: undefined, labels: [], sortOrder: 20 })

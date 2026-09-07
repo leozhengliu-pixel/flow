@@ -320,6 +320,7 @@ function optimisticRow(row: MyIssuesRowData, input: IssueUpdateInput, data: Boot
     assignee: input.assigneeId === undefined ? row.assignee : input.assigneeId ? (() => { const user = data.users.find(item => item.id === input.assigneeId); return user ? { id: user.id, name: user.displayName, avatarUrl: user.avatarUrl } : row.assignee })() : undefined,
     project: input.projectId === undefined ? row.project : input.projectId ? data.projects.find(project => project.id === input.projectId) : undefined,
     cycleId: input.cycleId === undefined ? row.cycleId : input.cycleId || undefined,
+    cycleName: input.cycleId === undefined ? row.cycleName : data.cycles.find(cycle => cycle.id === input.cycleId)?.name,
     dueDate: input.dueDate === undefined ? row.dueDate : input.dueDate || undefined,
     labels: input.labelIds === undefined ? row.labels : input.labelIds.map(id => data.labels.find(label => label.id === id)).filter((label): label is NonNullable<typeof label> => Boolean(label)),
     sortOrder: input.sortOrder === undefined ? row.sortOrder : input.sortOrder,

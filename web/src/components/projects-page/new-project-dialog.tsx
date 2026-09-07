@@ -159,7 +159,9 @@ export function NewProjectDialog({
     return () => document.removeEventListener('keydown', keydown)
   }, [discardOpen, onClose, open, requestClose, submitting])
 
-  if (!open) return null
+  const present = useExitPresence(open);
+  const createMotionRef = useCreateMotion(open);
+  if (!present) return null
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -185,9 +187,9 @@ export function NewProjectDialog({
     setDraft(current => applyProjectTemplateDraft(current, templateId, templates, labels))
   }
 
-  return <div aria-label={t('Create project')} aria-modal="true" className={`lp-new-project${agentOpen ? ' lp-new-project--agent-open' : ''}`} onKeyDown={event => trapFocus(event, discardOpen ? '.lp-new-project__discard-dialog' : undefined)} role="dialog">
-    <div className="lp-new-project__backdrop" />
-    <div aria-hidden={discardOpen || undefined} className="lp-new-project__panel" inert={discardOpen || undefined}>
+  return <div aria-label={t('Create project')} aria-modal={open || undefined} aria-hidden={!open || undefined} inert={!open || undefined} className={`lp-new-project${agentOpen ? ' lp-new-project--agent-open' : ''}`} onKeyDown={event => { if (open) trapFocus(event, discardOpen ? '.lp-new-project__discard-dialog' : undefined) }} role="dialog">
+    <div data-flow-motion="backdrop" data-state={open ? 'open' : 'closed'} className="lp-new-project__backdrop" />
+    <div ref={createMotionRef} data-flow-motion="create" data-state={open ? 'open' : 'closed'} aria-hidden={discardOpen || undefined} className="lp-new-project__panel" inert={discardOpen || undefined}>
     <form className="lp-new-project__form" onSubmit={submit} ref={panelRef}>
       <header className="lp-new-project__header">
         {teams.length<2?<button aria-label="Change project teams" className="lp-new-project__team" disabled type="button">{teams[0]?.icon ?? <ViewIconPickerGlyph color={teams[0]?.color} icon="Team"/>}<span>{teamLabel}</span></button>:<PropertyMenu compact multiple label="Teams" value={draft.teamIds.length===1?teams.find(team=>team.id===draft.teamIds[0])?.label??teamLabel:`${draft.teamIds.length} teams`} selectedIds={draft.teamIds} options={teams.map(team=>({id:team.id,label:team.label,color:team.color,icon:team.icon,i18nIgnore:true}))} trigger={<>{teams.find(team=>draft.teamIds.includes(team.id))?.icon ?? <ViewIconPickerGlyph color={teams[0]?.color} icon="Team"/>}<span data-i18n-ignore>{draft.teamIds.length===1?teams.find(team=>team.id===draft.teamIds[0])?.label??teamLabel:`${draft.teamIds.length} teams`}</span></>} triggerClassName="lp-new-project__team" ariaLabel="Change project teams" onChange={id=>{if(draft.teamIds.includes(id)&&draft.teamIds.length===1)return;set('teamIds',draft.teamIds.includes(id)?draft.teamIds.filter(value=>value!==id):[...draft.teamIds,id])}}/>}
@@ -306,6 +308,7 @@ function ViewIconPickerGlyph({ color = '#8a8f98', icon }: { color?: string, icon
 }
 
 function MilestonesEditor({ milestones, onChange }: { milestones: NewProjectMilestoneDraft[], onChange: (value: NewProjectMilestoneDraft[]) => void }) {
+  const [collapsed, setCollapsed] = useState(false)
   const { formatDate, locale, t } = useI18n()
   const sectionRef = useRef<HTMLElement>(null)
   const [adding, setAdding] = useState(false)
@@ -341,8 +344,10 @@ function MilestonesEditor({ milestones, onChange }: { milestones: NewProjectMile
     </div>
   </section>
   return <section className="lp-new-project__milestones" ref={sectionRef}>
-    <header><button aria-expanded="true" className="lp-new-project__milestone-toggle" type="button"><ViewIconPickerGlyph icon="MilestoneNone"/><strong>{t('Milestones')}</strong></button><button aria-label={t('Add')} onClick={() => setAdding(true)} type="button"><PlusIcon /></button></header>
+    <header><button aria-expanded={!collapsed} onClick={() => setCollapsed(value => !value)} className="lp-new-project__milestone-toggle" type="button"><ViewIconPickerGlyph icon="MilestoneNone"/><strong>{t('Milestones')}</strong></button><button aria-label={t('Add')} onClick={() => setAdding(true)} type="button"><PlusIcon /></button></header>
+    <AnimatedCollapse open={!collapsed}>
     {milestones.map((item, index) => <div className="lp-new-project__milestone-row" key={`${item.name}-${index}`}><MilestoneOutline/><span><strong>{item.name}</strong>{item.description && <small>{item.description}</small>}</span>{item.targetDate && <time dateTime={item.targetDate}>{formatDate(`${item.targetDate}T00:00:00`, { month: 'short', day: 'numeric' })}</time>}<button aria-label={`${t('Remove')} ${item.name}`} onClick={() => onChange(milestones.filter((_, itemIndex) => itemIndex !== index))} type="button"><X size={13}/></button></div>)}
+    </AnimatedCollapse>
   </section>
 }
 
@@ -463,3 +468,4 @@ function findChoice(value: string, options: NewProjectChoice[]) {
 function isIsoDate(value: string | undefined): value is string {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00`)))
 }
+import { useCreateMotion, useExitPresence, AnimatedCollapse } from '@/components/ui/motion';

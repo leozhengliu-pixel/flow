@@ -128,7 +128,7 @@ export function IssueReleasePicker({ data, issue, grouped = false }: { data: Boo
 
   return <Popover.Root open={open} onOpenChange={value => { if (value) setOpen(true); else close() }}>
     <Popover.Anchor asChild>{anchor}</Popover.Anchor>
-    <Popover.Portal><Popover.Content className="issue-release-picker issue-release-picker--root" align="start" side="bottom" sideOffset={grouped ? -36 : 4} collisionPadding={8} onOpenAutoFocus={event => event.preventDefault()} onKeyDown={onKeyDown}>
+    <Popover.Portal><Popover.Content data-flow-motion="floating" className="issue-release-picker issue-release-picker--root" align="start" side="bottom" sideOffset={grouped ? -36 : 4} collisionPadding={8} onOpenAutoFocus={event => event.preventDefault()} onKeyDown={onKeyDown}>
       <ReleaseSearch autoFocus value={query} placeholder={t('Add to release…')} shortcut="⌥ R" activeId={activeId} onChange={value => { setQuery(value); setPipelinesOpen(false); setCreateOpen(false) }}/>
       <div className="issue-release-results" role="listbox" aria-multiselectable="true">
         {selectedOptions.map(item => <ReleaseOption active={activeId === item.id} checked disabled={saving} item={item} key={item.id} pipeline={pipelines.find(value => value.id === item.pipelineId)} onActive={() => { setActiveId(item.id); setPipelinesOpen(false) }} onChoose={() => void toggle(item.id)}/>)}
@@ -161,7 +161,7 @@ function AllPipelinesOption({ active, open, pipelines, releases, selected, savin
     <Popover.Trigger asChild><button type="button" className="issue-release-option issue-release-submenu-trigger" role="option" aria-selected={active} aria-expanded={open} onPointerEnter={() => { onActive(); onOpenChange(true) }} onFocus={onActive} onClick={event => { event.preventDefault(); onOpenChange(true) }}>
       <span className="issue-release-option-bg"/><ReleasePipelineIcon/><span>{t('All pipelines…')}</span><MenuChevron/>
     </button></Popover.Trigger>
-    <Popover.Portal><Popover.Content className="issue-release-picker issue-release-submenu issue-release-pipelines-menu" side="right" align="end" sideOffset={-2} collisionPadding={8} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { event.preventDefault(); onOpenChange(false) }}>
+    <Popover.Portal><Popover.Content data-flow-motion="floating" className="issue-release-picker issue-release-submenu issue-release-pipelines-menu" side="right" align="end" sideOffset={-2} collisionPadding={8} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { event.preventDefault(); onOpenChange(false) }}>
       <div className="issue-release-results" role="listbox">{pipelines.map(pipeline => <PipelineOption key={pipeline.id} pipeline={pipeline} releases={releases.filter(item => item.pipelineId === pipeline.id)} selected={selected} saving={saving} onCreate={onCreate} onToggle={onToggle}/>)}</div>
     </Popover.Content></Popover.Portal>
   </Popover.Root>
@@ -193,7 +193,7 @@ function PipelineReleaseMenu({ open, pipeline, releases, selected, saving, onCre
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); const offset = event.key === 'ArrowDown' ? 1 : -1; setActiveId(ids[(index + offset + ids.length) % ids.length] ?? '') }
     else if (event.key === 'Enter') { event.preventDefault(); if (activeId === '__create') setCreateOpen(true); else if (activeId) void onToggle(activeId) }
   }
-  return <Popover.Content className="issue-release-picker issue-release-submenu issue-release-pipeline-releases" side="right" align="start" sideOffset={-2} collisionPadding={8} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { event.preventDefault(); onOpenChange(false) }} onKeyDown={onKeyDown}>
+  return <Popover.Content data-flow-motion="floating" className="issue-release-picker issue-release-submenu issue-release-pipeline-releases" side="right" align="start" sideOffset={-2} collisionPadding={8} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { event.preventDefault(); onOpenChange(false) }} onKeyDown={onKeyDown}>
     <ReleaseSearch autoFocus value={query} placeholder={t('Add to {pipeline} releases…').replace('{pipeline}', pipeline.name)} activeId={activeId} onChange={value => { setQuery(value); setCreateOpen(false) }}/>
     <div className="issue-release-results" role="listbox" aria-multiselectable="true">{groups.map(group => <div className="issue-release-section" key={group.status}><div className="issue-release-group-label" role="group">{t(groupLabel(group.status))}</div>{group.items.map(item => <ReleaseOption active={activeId === item.id} checked={selected.includes(item.id)} disabled={saving || Boolean(item.stageFrozenAt && !selected.includes(item.id))} item={item} key={item.id} onActive={() => setActiveId(item.id)} onChoose={() => void onToggle(item.id)}/>)}</div>)}
       {canCreate && <CreateReleaseOption active={activeId === '__create'} name={query.trim()} open={createOpen} pipeline={pipeline} saving={saving} onActive={() => setActiveId('__create')} onCreate={onCreate} onOpenChange={setCreateOpen}/>} {!groups.length && !canCreate && <p>{t('No releases found')}</p>}
@@ -215,7 +215,7 @@ function VersionMenu({ name, pipeline, saving, onCreate, onOpenChange }: { name:
   const { t } = useI18n()
   const [query, setQuery] = useState('')
   const version = query.trim() || name
-  return <Popover.Content className="issue-release-picker issue-release-submenu issue-release-version-menu" side="right" align="end" sideOffset={-2} collisionPadding={8} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { event.preventDefault(); onOpenChange(false) }}>
+  return <Popover.Content data-flow-motion="floating" className="issue-release-picker issue-release-submenu issue-release-version-menu" side="right" align="end" sideOffset={-2} collisionPadding={8} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { event.preventDefault(); onOpenChange(false) }}>
     <ReleaseSearch autoFocus value={query} placeholder={t('Type to set version…')} onChange={setQuery}/>
     <div className="issue-release-results" role="listbox" onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void onCreate(pipeline, name, version) } }}>
       <button type="button" className="issue-release-option issue-release-version-option" role="option" disabled={saving} onClick={() => void onCreate(pipeline, name, version)}><span className="issue-release-option-bg"/><span>{t('Use "{version}" as version').replace('{version}', version)}</span></button>

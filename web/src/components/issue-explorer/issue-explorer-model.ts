@@ -201,7 +201,7 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
     if (issue.attachments?.length) withLinks += 1
   }
   return {
-    status: [...scopedStates].sort((a, b) => (a.position??0) - (b.position??0)).map(state => ({ id: state.id, label: state.name, color: state.color, count: statusCounts.get(state.id) ?? 0, kind: 'status' as const, stateType: state.type })),
+    status: [...scopedStates].sort((a, b) => (a.position??0) - (b.position??0)).map(state => ({ id: state.id, teamId: state.teamId, label: state.name, color: state.color, count: statusCounts.get(state.id) ?? 0, kind: 'status' as const, stateType: state.type })),
     priority: PRIORITIES.map(priority => ({ ...priority, count: priorityCounts.get(priority.id) ?? 0 })),
     assignee: [{ id: '', label: 'No assignee', count: noAssignee, kind: 'assignee' as const }, ...data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: assigneeCounts.get(user.id) ?? 0, kind: 'assignee' as const }))],
     creator: data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: creatorCounts.get(user.id) ?? 0, kind: 'creator' as const })),
@@ -213,7 +213,7 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
     project: [{ id: '', label: 'No project', count: noProject, kind: 'project' as const }, ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, count: projectCounts.get(project.id) ?? 0, kind: 'project' as const }))],
     projectProperties:projectPropertyFilterOptions(data,issues),
     initiative:[{id:'',label:'No initiative',count:noInitiative},...data.initiatives.map(initiative=>({id:initiative.id,label:initiative.name,count:initiativeCounts.get(initiative.id) ?? 0}))],
-    cycle: [{ id: '', label: 'No cycle', count: noCycle, kind: 'cycle' as const }, ...data.cycles.map(cycle => ({ id: cycle.id, label: cycle.name, count: cycleCounts.get(cycle.id) ?? 0, kind: 'cycle' as const }))],
+    cycle: [{ id: '', label: 'No cycle', count: noCycle, kind: 'cycle' as const }, ...data.cycles.map(cycle => ({ id: cycle.id, teamId: cycle.teamId, label: cycle.name, count: cycleCounts.get(cycle.id) ?? 0, kind: 'cycle' as const }))],
     addedToCycle:[{id:'planned',label:'Planned',count:addedToCycleCounts.get('planned') ?? 0},{id:'during',label:'During cycle',count:addedToCycleCounts.get('during') ?? 0},{id:'after',label:'After cycle',count:addedToCycleCounts.get('after') ?? 0}],
     releases: releaseFilterCategories(data,issues),
     subscribers: [{ id: '', label: 'No subscribers', count: noSubscribers, kind: 'subscribers' as const }, ...data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: subscriberCounts.get(user.id) ?? 0, kind: 'subscribers' as const }))],
@@ -293,6 +293,7 @@ export function explorerUpdateForProperty(property: MyIssuesEditableProperty, va
   if (property === 'assignee') return { assigneeId: value }
   if (property === 'project') return { projectId: value }
   if (property === 'dueDate') return { dueDate: value }
+  if (property === 'cycle') return { cycleId: value }
 }
 
 /** Build the persisted property change when a card is moved between board groups. */
@@ -318,6 +319,8 @@ export function optimisticExplorerRow(row: MyIssuesRowData, input: IssueUpdateIn
     assignee: input.assigneeId === undefined ? row.assignee : input.assigneeId ? (() => { const user = data.users.find(item => item.id === input.assigneeId); return user ? { id: user.id, name: user.displayName, avatarUrl: user.avatarUrl } : row.assignee })() : undefined,
     project: input.projectId === undefined ? row.project : input.projectId ? data.projects.find(project => project.id === input.projectId) : undefined,
     dueDate: input.dueDate === undefined ? row.dueDate : input.dueDate || undefined,
+    cycleId: input.cycleId === undefined ? row.cycleId : input.cycleId || undefined,
+    cycleName: input.cycleId === undefined ? row.cycleName : data.cycles.find(cycle => cycle.id === input.cycleId)?.name,
     labels: input.labelIds === undefined ? row.labels : input.labelIds.map(id => data.labels.find(label => label.id === id)).filter((label): label is NonNullable<typeof label> => Boolean(label)),
     updatedAt: new Date().toISOString(),
     sortOrder: input.sortOrder === undefined ? row.sortOrder : input.sortOrder,

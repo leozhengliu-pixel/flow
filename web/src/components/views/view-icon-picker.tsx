@@ -68,7 +68,7 @@ export function ViewIconPicker({ align = 'start', ariaLabel, color = DEFAULT_VIE
 
   return <Popover.Root open={open} onOpenChange={setOpen}>
     <Popover.Trigger asChild><button aria-label={ariaLabel ?? t('Choose icon')} className={`${styles.trigger} ${triggerClassName ?? ''}`} data-state={open ? 'open' : 'closed'} style={{ '--view-color': color } as CSSProperties} type="button"><ViewGlyph color={color} icon={icon}/></button></Popover.Trigger>
-    <Popover.Portal><Popover.Content align={align} className={styles.content} collisionPadding={8} onCloseAutoFocus={event => event.preventDefault()} onOpenAutoFocus={event => { event.preventDefault(); requestAnimationFrame(() => searchRef.current?.focus()) }} side="bottom" sideOffset={4}>
+    <Popover.Portal><Popover.Content data-flow-motion="floating" align={align} className={styles.content} collisionPadding={8} onCloseAutoFocus={event => event.preventDefault()} onOpenAutoFocus={event => { event.preventDefault(); requestAnimationFrame(() => searchRef.current?.focus()) }} side="bottom" sideOffset={4}>
       <div aria-label={t('Icon type')} className={styles.tabs} role="tablist">
         <button aria-controls="view-icons-panel" aria-selected={tab === 'icons'} className={styles.tab} onClick={() => { setTab('icons'); setQuery(''); requestAnimationFrame(() => searchRef.current?.focus()) }} role="tab" type="button">{t('Icons')}</button>
         <button aria-controls="view-emojis-panel" aria-selected={tab === 'emojis'} className={styles.tab} onClick={() => { setTab('emojis'); setQuery(''); requestAnimationFrame(() => searchRef.current?.focus()) }} role="tab" type="button">{t('Emojis')}</button>

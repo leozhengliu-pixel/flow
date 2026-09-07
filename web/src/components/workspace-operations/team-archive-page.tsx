@@ -80,7 +80,7 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
 function ArchiveRow({icon,title,meta,onRestore,onPurge}:{icon:ReactNode;title:ReactNode;meta:ReactNode;onRestore?:()=>void|Promise<void>;onPurge?:()=>void|Promise<void>}){
   return <div className="archive-row">
     <span className="archive-drag"><MoreHorizontal/></span><span className="archive-type-icon">{icon}</span><div><strong>{title}</strong><small>{meta}</small></div><span/><time/>
-    <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className="operations-row-menu" aria-label="Open actions"><MoreHorizontal/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="operations-menu" align="end" sideOffset={5}>{onRestore&&<DropdownMenu.Item onSelect={()=>void onRestore()}><ArchiveRestore/><span>Restore</span></DropdownMenu.Item>}{onPurge&&<DropdownMenu.Item className="danger" onSelect={()=>void onPurge()}><Trash2/><span>Delete permanently</span></DropdownMenu.Item>}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+    <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className="operations-row-menu" aria-label="Open actions"><MoreHorizontal/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="operations-menu" align="end" sideOffset={5}>{onRestore&&<DropdownMenu.Item onSelect={()=>void onRestore()}><ArchiveRestore/><span>Restore</span></DropdownMenu.Item>}{onPurge&&<DropdownMenu.Item className="danger" onSelect={()=>void onPurge()}><Trash2/><span>Delete permanently</span></DropdownMenu.Item>}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
   </div>
 }
 

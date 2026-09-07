@@ -20,7 +20,7 @@ export function EmojiPicker({ children, contentRef, label = 'Add reaction', alig
   }
   return <Popover.Root open={open} onOpenChange={value => { setOpen(value); if (!value) setQuery('') }}>
     <Popover.Trigger asChild>{children ?? <button type="button" aria-label={label}><SmilePlus size={14}/>{label}</button>}</Popover.Trigger>
-    <Popover.Portal><Popover.Content className="emoji-picker" ref={contentRef} side="bottom" align={align} sideOffset={4} collisionPadding={10} onOpenAutoFocus={event => event.preventDefault()}>
+    <Popover.Portal><Popover.Content data-flow-motion="floating" className="emoji-picker" ref={contentRef} side="bottom" align={align} sideOffset={4} collisionPadding={10} onOpenAutoFocus={event => event.preventDefault()}>
       <div className="emoji-search"><Search size={13}/><input autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder="Search emoji…" aria-label="Search emoji…"/></div>
       <div className="emoji-scroll">
         {!normalized && <EmojiGroup name="Frequently used" emojis={frequentlyUsed} onSelect={emoji => void choose(emoji)}/>}

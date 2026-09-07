@@ -161,7 +161,7 @@ export function InboxFilterBuilder({
         <Popover.Root open={open} onOpenChange={setOpen}>
           <Popover.Trigger asChild>{toolbarTrigger}</Popover.Trigger>
           <Popover.Portal>
-            <Popover.Content
+            <Popover.Content data-flow-motion="floating"
               className={styles.propertyMenu}
               data-keyboard-mode={keyboardMode}
               side="bottom"
@@ -376,7 +376,7 @@ function ValuePicker({
 
   return (
     <Popover.Portal>
-        <Popover.Content
+        <Popover.Content data-flow-motion="floating"
           className={`${styles.valueMenu} ${property.id === 'reviewStatus' ? styles.reviewStatusMenu : ''}`}
         data-property={property.id}
         side="right"
@@ -505,7 +505,7 @@ function AppliedCondition({
         </button>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content
+        <Popover.Content data-flow-motion="floating"
           className={styles.conditionValueMenu}
           data-property={property.id}
           side="bottom"
@@ -601,7 +601,7 @@ function OperatorMenu({
       <button className={styles.conditionOperator} type="button" aria-label={`${t(label)} ${t('operator')}`} aria-expanded={open}>{operatorLabel}</button>
     </Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content
+      <Popover.Content data-flow-motion="floating"
         className={styles.operatorMenu}
         side="bottom"
         align="start"

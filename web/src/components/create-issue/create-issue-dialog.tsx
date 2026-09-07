@@ -332,10 +332,11 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     event.target.value = ''
   }
 
+  const createMotionRef = useCreateMotion(open);
   return <Dialog.Root open={open} onOpenChange={changeOpen}>
     <Dialog.Portal>
-      <Dialog.Overlay className={styles.overlay} onPointerDown={() => changeOpen(false)}/>
-      <Dialog.Content className={styles.dialog} data-expanded={expanded} aria-label="Create issue" onPointerDownOutside={event => event.preventDefault()} onInteractOutside={event => event.preventDefault()} onEscapeKeyDown={event => { if (saving) event.preventDefault() }}>
+      <Dialog.Overlay data-flow-motion="backdrop" className={styles.overlay} onPointerDown={() => changeOpen(false)}/>
+      <Dialog.Content data-flow-motion="create" ref={createMotionRef} className={styles.dialog} data-expanded={expanded} aria-label="Create issue" onPointerDownOutside={event => event.preventDefault()} onInteractOutside={event => event.preventDefault()} onEscapeKeyDown={event => { if (saving) event.preventDefault() }}>
         <form onSubmit={event => { event.preventDefault(); void submit() }}>
           <header className={styles.header}>
             <PropertyMenu compact label="Team" value={team?.key ?? 'Team'} selectedId={teamId} options={data.teams.filter(item=>!item.retiredAt).map(item=>({id:item.id,label:item.name,keywords:item.key,icon:<TeamIcon team={item}/>,i18nIgnore:true}))} trigger={<><TeamIcon team={team}/><span data-i18n-ignore>{team?.key ?? 'Team'}</span></>} triggerClassName={styles.team} ariaLabel="Set team" onChange={id=>{setTeamId(id);setCycleId('');setLabelIds([]);setTemplateId('')}}/>
@@ -416,12 +417,12 @@ function MoreActions({ active, dueDate, recurrence, onDueDateChange, onRecurrenc
   }, [active, onInsertLink])
   return <DropdownMenu.Root open={open} onOpenChange={setOpen}>
     <DropdownMenu.Trigger asChild><button type="button" className={styles.moreButton} aria-label="More actions"><MoreHorizontal/></button></DropdownMenu.Trigger>
-    <DropdownMenu.Portal><DropdownMenu.Content className={styles.moreMenu} align="start" sideOffset={4} collisionPadding={10}>
+    <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className={styles.moreMenu} align="start" sideOffset={4} collisionPadding={10}>
       <DropdownMenu.Sub open={dateOpen} onOpenChange={setDateOpen}>
         <DropdownMenu.SubTrigger className={styles.menuItem}><CalendarIcon/><span>Set due date</span><kbd>⇧ D</kbd><ChevronRight/></DropdownMenu.SubTrigger>
-        <DropdownMenu.Portal><DropdownMenu.SubContent className={styles.dateMenu} sideOffset={3} alignOffset={-5}><DueDateCommand value={dueDate} onSelect={async value => onDueDateChange(value)}/></DropdownMenu.SubContent></DropdownMenu.Portal>
+        <DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={styles.dateMenu} sideOffset={3} alignOffset={-5}><DueDateCommand value={dueDate} onSelect={async value => onDueDateChange(value)}/></DropdownMenu.SubContent></DropdownMenu.Portal>
       </DropdownMenu.Sub>
-      <DropdownMenu.Sub><DropdownMenu.SubTrigger className={styles.menuItem}><Repeat2/><span>Make recurring…</span><ChevronRight/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent className={styles.moreMenu} sideOffset={3}>{(['daily','weekly','monthly'] as const).map(value=><DropdownMenu.CheckboxItem className={styles.menuItem} checked={recurrence===value} key={value} onCheckedChange={()=>onRecurrenceChange(recurrence===value?'':value)}><Repeat2/><span>{value[0].toUpperCase()+value.slice(1)}</span>{recurrence===value&&<span>✓</span>}</DropdownMenu.CheckboxItem>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
+      <DropdownMenu.Sub><DropdownMenu.SubTrigger className={styles.menuItem}><Repeat2/><span>Make recurring…</span><ChevronRight/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={styles.moreMenu} sideOffset={3}>{(['daily','weekly','monthly'] as const).map(value=><DropdownMenu.CheckboxItem className={styles.menuItem} checked={recurrence===value} key={value} onCheckedChange={()=>onRecurrenceChange(recurrence===value?'':value)}><Repeat2/><span>{value[0].toUpperCase()+value.slice(1)}</span>{recurrence===value&&<span>✓</span>}</DropdownMenu.CheckboxItem>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
       <DropdownMenu.Item className={styles.menuItem} onSelect={onInsertLink}><Link2/><span>Add link…</span><kbd>Ctrl L</kbd></DropdownMenu.Item>
     </DropdownMenu.Content></DropdownMenu.Portal>
   </DropdownMenu.Root>
@@ -440,8 +441,8 @@ function AddLinkDialog({ issueLabel, onAdd, onOpenChange, open }: { issueLabel: 
   }
   return <Dialog.Root open={open} onOpenChange={onOpenChange}>
     <Dialog.Portal>
-      <Dialog.Overlay className={styles.linkOverlay}/>
-      <Dialog.Content className={styles.linkDialog} aria-label={`Add link to ${issueLabel}`}>
+      <Dialog.Overlay data-flow-motion="backdrop" className={styles.linkOverlay}/>
+      <Dialog.Content data-flow-motion="dialog" className={styles.linkDialog} aria-label={`Add link to ${issueLabel}`}>
         <Dialog.Title><ExternalLink/><span>Add link to {issueLabel}</span></Dialog.Title>
         <label><span>URL</span><input autoFocus aria-label="URL" placeholder="https://…" value={url} onChange={event => setUrl(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submitLink() } }}/></label>
         <label><span>Title <small>(optional)</small></span><input aria-label="Title (optional)" value={label} onChange={event => setLabel(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submitLink() } }}/></label>
@@ -457,7 +458,7 @@ function DraftConfirmDialog({ onCancel, onDiscard, onSave, open, saving }: { onC
 }
 
 function DraftDialogFrame({ children, description, descriptionId, escapeLocked = false, focusRef, onCancel, open, title }: { children: ReactNode; description: string; descriptionId: string; escapeLocked?: boolean; focusRef: RefObject<HTMLButtonElement | null>; onCancel: () => void; open: boolean; title: string }) {
-  return <Dialog.Root open={open} onOpenChange={next => { if (!next) onCancel() }}><Dialog.Portal><Dialog.Overlay className={styles.confirmOverlay}/><Dialog.Content className={styles.confirmDialog} aria-describedby={descriptionId} onOpenAutoFocus={event => { event.preventDefault(); focusRef.current?.focus() }} onEscapeKeyDown={escapeLocked ? event => { event.preventDefault(); onCancel() } : undefined} onPointerDownOutside={event => event.preventDefault()}><Dialog.Title>{title}</Dialog.Title><Dialog.Description id={descriptionId}>{description}</Dialog.Description>{children}</Dialog.Content></Dialog.Portal></Dialog.Root>
+  return <Dialog.Root open={open} onOpenChange={next => { if (!next) onCancel() }}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className={styles.confirmOverlay}/><Dialog.Content data-flow-motion="dialog" className={styles.confirmDialog} aria-describedby={descriptionId} onOpenAutoFocus={event => { event.preventDefault(); focusRef.current?.focus() }} onEscapeKeyDown={escapeLocked ? event => { event.preventDefault(); onCancel() } : undefined} onPointerDownOutside={event => event.preventDefault()}><Dialog.Title>{title}</Dialog.Title><Dialog.Description id={descriptionId}>{description}</Dialog.Description>{children}</Dialog.Content></Dialog.Portal></Dialog.Root>
 }
 
 function readStoredDraft(key: string): StoredIssueDraft | null {
@@ -479,3 +480,4 @@ function removeStoredDraft(key: string) {
 
 function escapeHtml(value: string) { return value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!) }
 function escapeAttribute(value: string) { return escapeHtml(value) }
+import { useCreateMotion } from '@/components/ui/motion';

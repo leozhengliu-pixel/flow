@@ -85,7 +85,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
       </button>
     </Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content className={styles.popover} side="bottom" align="end" sideOffset={3} collisionPadding={11} aria-label={t('Display options')}>
+      <Popover.Content data-flow-motion="floating" className={styles.popover} side="bottom" align="end" sideOffset={3} collisionPadding={11} aria-label={t('Display options')}>
         <div className={styles.layoutTabs} role="tablist" aria-label="Layout">
           <button type="button" role="tab" aria-selected={options.layout === 'list'} onClick={() => change({ layout: 'list' })}><List size={14} />{t('List')}</button>
           <button type="button" role="tab" aria-selected={options.layout === 'board'} disabled={options.grouping === 'focus'} onClick={() => change({ layout: 'board' })}><LayoutGrid size={13} />{t('Board')}</button>
@@ -159,7 +159,7 @@ function SelectControl<T extends string>({ ariaLabel, disabled = false, onChange
       <Select.Value /><Select.Icon><ChevronDown size={12} aria-hidden="true" /></Select.Icon>
     </Select.Trigger>
     <Select.Portal>
-      <Select.Content className={styles.selectMenu} position="popper" side="bottom" align="end" sideOffset={5} collisionPadding={10}>
+      <Select.Content data-flow-motion="floating" className={styles.selectMenu} position="popper" side="bottom" align="end" sideOffset={5} collisionPadding={10}>
         <Select.Viewport className={styles.selectViewport}>
           {options.map(option => <Select.Item className={styles.selectItem} key={option.value} value={option.value}>
             <Select.ItemText>{t(option.label)}</Select.ItemText>

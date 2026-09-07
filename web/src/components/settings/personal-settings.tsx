@@ -3836,7 +3836,7 @@ function APIKeyActionsMenu({
         </button>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content
+        <Popover.Content data-flow-motion="floating"
           className="personal-security-api-key-menu"
           side="bottom"
           align="end"
@@ -3965,7 +3965,7 @@ function APIKeyMetadata({
             </button>
           </Popover.Trigger>
           <Popover.Portal>
-            <Popover.Content
+            <Popover.Content data-flow-motion="floating"
               align="start"
               side="bottom"
               sideOffset={4}
@@ -4006,7 +4006,7 @@ function APIKeyMetadata({
             </button>
           </Popover.Trigger>
           <Popover.Portal>
-            <Popover.Content
+            <Popover.Content data-flow-motion="floating"
               align="start"
               side="bottom"
               sideOffset={4}

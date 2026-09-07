@@ -526,7 +526,7 @@ function ViewRow({
     <ContextMenu.Root>
       <ContextMenu.Trigger asChild>{row}</ContextMenu.Trigger>
       <ContextMenu.Portal>
-        <ContextMenu.Content
+        <ContextMenu.Content data-flow-motion="floating"
           className={styles.contextMenu}
           onKeyDown={(event) => {
             if (event.altKey && event.key.toLowerCase() === "f") {
@@ -552,7 +552,7 @@ function ViewRow({
               <ChevronRight className={styles.chevron} />
             </ContextMenu.SubTrigger>
             <ContextMenu.Portal>
-              <ContextMenu.SubContent
+              <ContextMenu.SubContent data-flow-motion="floating"
                 className={styles.contextMenu}
                 sideOffset={-3}
               >
@@ -577,7 +577,7 @@ function ViewRow({
               <ChevronRight className={styles.chevron} />
             </ContextMenu.SubTrigger>
             <ContextMenu.Portal>
-              <ContextMenu.SubContent
+              <ContextMenu.SubContent data-flow-motion="floating"
                 className={styles.contextMenu}
                 sideOffset={-3}
               >
@@ -619,7 +619,7 @@ function ViewRow({
               <ChevronRight className={styles.chevron} />
             </ContextMenu.SubTrigger>
             <ContextMenu.Portal>
-              <ContextMenu.SubContent
+              <ContextMenu.SubContent data-flow-motion="floating"
                 className={`${styles.contextMenu} ${styles.subscriptionMenu}`}
                 sideOffset={-3}
               >
@@ -695,7 +695,7 @@ function ViewsDisplayMenu({
         </button>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content
+        <Popover.Content data-flow-motion="floating"
           align="end"
           className={styles.displayPopover}
           collisionPadding={11}
@@ -729,7 +729,7 @@ function ViewsDisplayMenu({
                     </Select.Icon>
                   </Select.Trigger>
                   <Select.Portal>
-                    <Select.Content
+                    <Select.Content data-flow-motion="floating"
                       align="end"
                       className={styles.orderingList}
                       collisionPadding={11}
@@ -814,7 +814,7 @@ function OwnerMenu({
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content
+        <DropdownMenu.Content data-flow-motion="floating"
           align="end"
           className={styles.contextMenu}
           sideOffset={4}

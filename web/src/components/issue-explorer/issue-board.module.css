@@ -82,6 +82,8 @@
   box-shadow:0 0 0 1px var(--accent-soft);
 }
 .card{
+  display:block;
+  text-decoration:none;
   position:relative;
   width:322px;
   min-height:0;
@@ -97,6 +99,7 @@
   transition:background-color .1s,box-shadow .1s,opacity .1s;
 }
 .card:hover,.card[data-selected=true]{background:var(--board-card-hover);box-shadow:0 0 0 .5px var(--board-card-border-hover),var(--board-card-shadow)}
+.card[data-selected=true]{box-shadow:0 0 0 1px var(--selection-border),var(--board-card-shadow)}
 .card:focus-visible{box-shadow:0 0 0 1px var(--accent-primary),var(--board-card-shadow)}
 .card[data-dragging=true]{opacity:.38;cursor:grabbing}
 .board[data-dragging=true] .card{cursor:grabbing}
@@ -121,13 +124,17 @@
   font-weight:450;
   line-height:14.5px;
 }
+.card:has(.assigneeTrigger) .cardTop{padding-right:28px;min-width:0;overflow:hidden}
 .cardTop>span:first-child{flex:none}.cardFooter{display:flex;align-items:flex-end;gap:5px}.cardFooter>.cardMeta{min-width:0;flex:1}.cardFooter>button{margin-top:10px}
 .assigneeTrigger{
+  position:absolute;
+  top:8px;
+  right:12px;
   width:18px;
   height:18px;
   display:grid;
   place-items:center;
-  margin:-1px 0 0 auto;
+  margin:0;
   padding:0;
   border:0;
   border-radius:50%;
@@ -146,30 +153,25 @@
   margin-top:6px;
   padding:0 34px 0 4px;
 }
-.titleRow[data-has-status=false]{padding-left:24px}
-.status,.checkbox{
-  width:14px;
-  height:14px;
-  flex:0 0 14px;
-  margin-top:1px;
-}
-.status{display:grid;place-items:center}
-.checkbox{
-  position:absolute;
-  left:4px;
-  top:0;
+.titleRow[data-has-heading=false]{margin-top:0}
+.titleRow[data-has-assignee=false]{padding-right:4px}
+.title[data-single-line=true]{-webkit-line-clamp:1}
+.status{
+  width:20px;
+  height:20px;
+  flex:0 0 20px;
+  margin:-1px -3px -3px;
   display:grid;
   place-items:center;
-  padding:0;
-  border:1px solid var(--issue-dim);
-  border-radius:3px;
-  background:var(--theme-surface-1);
-  color:var(--on-accent);
-  opacity:0;
+  padding:3px;
+  border:0;
+  border-radius:4px;
+  background:transparent;
+  cursor:pointer;
 }
-.card:hover .checkbox,.checkbox[data-checked=true]{opacity:1}
-.titleRow:has(.checkbox:hover) .status,.titleRow:has(.checkbox[data-checked=true]) .status{opacity:0}
-.checkbox[data-checked=true]{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}
+.status:hover,.status[aria-expanded=true]{background:var(--theme-surface-active)}
+.status:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.dateBadges{display:flex;flex-wrap:wrap;gap:4px 12px}
 .title{
   min-width:0;
   display:-webkit-box;
