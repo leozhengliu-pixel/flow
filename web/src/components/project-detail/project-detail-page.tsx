@@ -352,7 +352,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
                 </button>
               </ContextMenu.Trigger>
               <ContextMenu.Portal>
-                <ContextMenu.Content className="project-detail-page__menu">
+                <ContextMenu.Content data-flow-motion="floating" className="project-detail-page__menu">
                   <ContextMenu.Item
                     onSelect={() => {
                       if (props.onEditSavedView) props.onEditSavedView(view);
@@ -549,8 +549,8 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
 
       <Dialog.Root onOpenChange={setDeleteOpen} open={deleteOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="project-detail-page__dialog-overlay" />
-          <Dialog.Content
+          <Dialog.Overlay data-flow-motion="backdrop" className="project-detail-page__dialog-overlay" />
+          <Dialog.Content data-flow-motion="dialog"
             aria-describedby="project-delete-description"
             className="project-detail-page__delete-dialog"
           >

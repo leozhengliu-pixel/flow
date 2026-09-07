@@ -1143,7 +1143,7 @@ function ReviewFilterMenu({
         </button>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content
+        <Popover.Content data-flow-motion="floating"
           className="reviews-command"
           align="end"
           sideOffset={5}
@@ -1253,7 +1253,7 @@ function ReviewDisplayMenu({
         </button>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content className="reviews-display" align="end" sideOffset={5}>
+        <Popover.Content data-flow-motion="floating" className="reviews-display" align="end" sideOffset={5}>
           <SelectLine
             label={t("Grouping")}
             value={display.grouping}
@@ -1396,7 +1396,7 @@ function ReviewActions({
         </button>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content
+        <Popover.Content data-flow-motion="floating"
           className="review-actions-menu"
           align="end"
           sideOffset={5}
@@ -1489,7 +1489,7 @@ function ChecksMenu({ checks }: { checks: CodeReview["checks"] }) {
         </button>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content
+        <Popover.Content data-flow-motion="floating"
           className="review-checks-menu"
           align="start"
           sideOffset={5}

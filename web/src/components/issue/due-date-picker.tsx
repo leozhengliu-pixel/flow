@@ -23,7 +23,7 @@ export function DueDatePicker({ value, onChange, trigger, triggerClassName = 'du
       </button>
     </Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content className="due-date-popover" side="bottom" align="start" sideOffset={4} onCloseAutoFocus={event => event.preventDefault()}>
+      <Popover.Content data-flow-motion="floating" className="due-date-popover" side="bottom" align="start" sideOffset={4} onCloseAutoFocus={event => event.preventDefault()}>
         <DueDateCommand value={value} onSelect={async next => { await onChange(next); setOpen(false) }}/>
       </Popover.Content>
     </Popover.Portal>

@@ -290,7 +290,7 @@ export function AgentPage({
             </button>
           </Popover.Trigger>
           <Popover.Portal>
-            <Popover.Content
+            <Popover.Content data-flow-motion="floating"
               align="start"
               alignOffset={8}
               className={styles.historyMenu}
@@ -377,7 +377,7 @@ export function AgentPage({
                 </button>
               </DropdownMenu.Trigger>
               <DropdownMenu.Portal>
-                <DropdownMenu.Content
+                <DropdownMenu.Content data-flow-motion="floating"
                   align="end"
                   className={styles.optionsMenu}
                   sideOffset={4}
@@ -507,7 +507,7 @@ export function AgentPage({
                 </button>
               </Popover.Trigger>
               <Popover.Portal>
-                <Popover.Content
+                <Popover.Content data-flow-motion="floating"
                   align="start"
                   className={styles.skillsMenu}
                   side="bottom"

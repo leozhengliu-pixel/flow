@@ -319,7 +319,7 @@ function ProjectTemplateList({
                 </button>
               </Popover.Trigger>
               <Popover.Portal>
-                <Popover.Content
+                <Popover.Content data-flow-motion="floating"
                   align="end"
                   className="it-menu pt-list-menu"
                   sideOffset={4}
@@ -496,7 +496,7 @@ function ProjectTemplateEditor({
                 </button>
               </Popover.Trigger>
               <Popover.Portal>
-                <Popover.Content
+                <Popover.Content data-flow-motion="floating"
                   align="end"
                   className="it-menu pt-editor-menu"
                   sideOffset={4}
@@ -1063,7 +1063,7 @@ function IssueTemplateList({
                 </button>
               </Popover.Trigger>
               <Popover.Portal>
-                <Popover.Content
+                <Popover.Content data-flow-motion="floating"
                   align="end"
                   className="it-menu it-list-menu"
                   sideOffset={4}
@@ -1174,8 +1174,8 @@ function TemplateTypeDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="it-dialog-overlay" />
-        <Dialog.Content
+        <Dialog.Overlay data-flow-motion="backdrop" className="it-dialog-overlay" />
+        <Dialog.Content data-flow-motion="dialog"
           className="it-type-dialog"
           aria-describedby={undefined}
           data-i18n-ignore
@@ -1384,7 +1384,7 @@ function IssueTemplateEditor({
               </button>
             </Popover.Trigger>
             <Popover.Portal>
-              <Popover.Content
+              <Popover.Content data-flow-motion="floating"
                 align="end"
                 className="it-menu it-editor-menu"
                 sideOffset={4}
@@ -1772,7 +1772,7 @@ function AddTemplateFieldMenu({
         </button>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content
+        <Popover.Content data-flow-motion="floating"
           align="end"
           className="it-menu it-field-menu"
           sideOffset={4}
@@ -1830,7 +1830,7 @@ function TemplateFormFieldEditor({
             </button>
           </Popover.Trigger>
           <Popover.Portal>
-            <Popover.Content
+            <Popover.Content data-flow-motion="floating"
               className="it-menu it-field-type-menu"
               sideOffset={4}
             >
@@ -2168,7 +2168,7 @@ function TemplateDefaults({
               </button>
             </Popover.Trigger>
             <Popover.Portal>
-              <Popover.Content
+              <Popover.Content data-flow-motion="floating"
                 align="end"
                 className="it-menu it-subissue-menu"
                 sideOffset={4}
@@ -2418,7 +2418,7 @@ function TemplateVisibility({
         </button>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content
+        <Popover.Content data-flow-motion="floating"
           className="it-menu it-visibility-menu"
           side={showSelection ? "bottom" : "right"}
           align="start"
@@ -2469,8 +2469,8 @@ function DiscardTemplateDialog({
   return (
     <Dialog.Root open={open} onOpenChange={(value) => !value && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="it-dialog-overlay" />
-        <Dialog.Content
+        <Dialog.Overlay data-flow-motion="backdrop" className="it-dialog-overlay" />
+        <Dialog.Content data-flow-motion="dialog"
           className="it-confirm-dialog"
           aria-describedby={undefined}
         >
@@ -2502,8 +2502,8 @@ function ConfirmTemplateDelete({
       onOpenChange={(value) => !value && onClose()}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className="it-dialog-overlay" />
-        <Dialog.Content
+        <Dialog.Overlay data-flow-motion="backdrop" className="it-dialog-overlay" />
+        <Dialog.Content data-flow-motion="dialog"
           className="it-confirm-dialog it-delete-confirm"
           aria-describedby={undefined}
           data-i18n-ignore
@@ -2547,8 +2547,8 @@ function ConfirmProjectTemplateDelete({
       onOpenChange={(value) => !value && onClose()}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className="it-dialog-overlay" />
-        <Dialog.Content
+        <Dialog.Overlay data-flow-motion="backdrop" className="it-dialog-overlay" />
+        <Dialog.Content data-flow-motion="dialog"
           className="it-confirm-dialog it-delete-confirm"
           aria-describedby={undefined}
           data-i18n-ignore
@@ -3304,8 +3304,8 @@ function MilestoneDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="ip-dialog-overlay" />
-        <Dialog.Content
+        <Dialog.Overlay data-flow-motion="backdrop" className="ip-dialog-overlay" />
+        <Dialog.Content data-flow-motion="dialog"
           className="ip-dialog"
           data-i18n-ignore
           onCloseAutoFocus={(event) => {
@@ -3679,7 +3679,7 @@ function CadenceMenu({
         </button>
       </Dropdown.Trigger>
       <Dropdown.Portal>
-        <Dropdown.Content
+        <Dropdown.Content data-flow-motion="floating"
           className="ip-cadence-menu"
           align="end"
           sideOffset={5}
@@ -3970,9 +3970,7 @@ function StatusRow({
 }) {
   const { t } = useI18n(),
     [menuOpen, setMenuOpen] = useState(false);
-  const view = () => {
-    location.href = `/${location.pathname.split("/")[1]}/projects/all?status=${encodeURIComponent(status.id)}`;
-  };
+  const viewHref = `/${location.pathname.split("/")[1]}/projects/all?status=${encodeURIComponent(status.id)}`;
   const menuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const items = [
         ...event.currentTarget.querySelectorAll<HTMLButtonElement>(
@@ -3999,16 +3997,16 @@ function StatusRow({
   const usageControl =
     usage > 0 ? (
       canReorder ? (
-        <button
+        <AppLink
           className="ip-status-usage"
           aria-label={t("View projects")}
+          href={viewHref}
           onClick={(event) => {
             event.stopPropagation();
-            view();
           }}
         >
           {usage} {t(usage === 1 ? "project" : "projects")}
-        </button>
+        </AppLink>
       ) : (
         <span className="ip-status-usage is-disabled">
           {usage} {t(usage === 1 ? "project" : "projects")}
@@ -4066,7 +4064,7 @@ function StatusRow({
             </button>
           </Popover.Trigger>
           <Popover.Portal>
-            <Popover.Content
+            <Popover.Content data-flow-motion="floating"
               className="ip-status-menu"
               align="end"
               sideOffset={4}
@@ -4267,7 +4265,7 @@ export function StatusColorPicker({
         </button>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content
+        <Popover.Content data-flow-motion="floating"
           align="start"
           className="ip-status-color-menu"
           collisionPadding={8}
@@ -4426,3 +4424,4 @@ function formatDuration(minutes: number, t: (value: string) => string) {
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Could not save setting";
 }
+import { AppLink } from '@/components/ui/app-link';

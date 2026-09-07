@@ -74,8 +74,8 @@ export function ReleaseEditorDialog({ data, pipeline, release, onClose, onSaved 
   }
   return <Dialog.Root open onOpenChange={open => { if (!open && !saving) onClose() }}>
     <Dialog.Portal>
-      <Dialog.Overlay className="flow-release-dialog-overlay"/>
-      <Dialog.Content aria-describedby={undefined} className={`flow-release-editor${scopeOpen ? ' is-scope-open' : ''}`}>
+      <Dialog.Overlay data-flow-motion="backdrop" className="flow-release-dialog-overlay"/>
+      <Dialog.Content data-flow-motion="dialog" aria-describedby={undefined} className={`flow-release-editor${scopeOpen ? ' is-scope-open' : ''}`}>
         <Dialog.Title className="flow-release-editor__title"><span data-i18n-ignore>{pipeline.name}</span><ChevronRight/><strong>{t(release ? 'Edit release' : 'New release')}</strong></Dialog.Title>
         <Dialog.Close className="flow-release-editor__close" aria-label={t('Close')}><X/></Dialog.Close>
         <div className="flow-release-editor__copy">
@@ -86,14 +86,14 @@ export function ReleaseEditorDialog({ data, pipeline, release, onClose, onSaved 
         <div className="flow-release-editor__properties">
           <DropdownMenu.Root open={stageMenuOpen} onOpenChange={setStageMenuOpen}>
             <DropdownMenu.Trigger asChild><button className="flow-release-pill" aria-label={t('Change release stage')}><CircleDashed/><span data-i18n-ignore={stage ? true : undefined}>{stage || t('Stage')}</span><ChevronDown/></button></DropdownMenu.Trigger>
-            <DropdownMenu.Portal><DropdownMenu.Content className="flow-release-stage-menu" align="start" onCloseAutoFocus={() => setStageQuery('')} sideOffset={5}><div className="flow-release-stage-search"><Search/><input aria-label={t('Search stages')} autoFocus value={stageQuery} onChange={event => setStageQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setStageMenuOpen(false); return } if (event.key === 'ArrowDown') { event.preventDefault(); event.currentTarget.closest('[role=menu]')?.querySelector<HTMLElement>('[role=menuitem]')?.focus(); return } event.stopPropagation() }} placeholder={t('Search stages…')}/></div>{stageOptions.map(option => <DropdownMenu.Item className="flow-release-menu-item" key={option} onSelect={() => setStage(option)}><span data-i18n-ignore>{option}</span>{option === stage && <Check/>}</DropdownMenu.Item>)}{!stageOptions.length&&<div className="flow-release-menu-empty">{t('No stages found')}</div>}</DropdownMenu.Content></DropdownMenu.Portal>
+            <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="flow-release-stage-menu" align="start" onCloseAutoFocus={() => setStageQuery('')} sideOffset={5}><div className="flow-release-stage-search"><Search/><input aria-label={t('Search stages')} autoFocus value={stageQuery} onChange={event => setStageQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setStageMenuOpen(false); return } if (event.key === 'ArrowDown') { event.preventDefault(); event.currentTarget.closest('[role=menu]')?.querySelector<HTMLElement>('[role=menuitem]')?.focus(); return } event.stopPropagation() }} placeholder={t('Search stages…')}/></div>{stageOptions.map(option => <DropdownMenu.Item className="flow-release-menu-item" key={option} onSelect={() => setStage(option)}><span data-i18n-ignore>{option}</span>{option === stage && <Check/>}</DropdownMenu.Item>)}{!stageOptions.length&&<div className="flow-release-menu-empty">{t('No stages found')}</div>}</DropdownMenu.Content></DropdownMenu.Portal>
           </DropdownMenu.Root>
           <DropdownMenu.Root open={dateMenuOpen} onOpenChange={setDateMenuOpen}>
             <DropdownMenu.Trigger asChild><button className="flow-release-pill flow-release-date-trigger" aria-label={t('Target date')}><CalendarIcon/><span>{targetDate ? formatDate(targetDate, { month: 'short', day: 'numeric' }) : t('Target date')}</span><ChevronDown/></button></DropdownMenu.Trigger>
-            <DropdownMenu.Portal><DropdownMenu.Content className="flow-release-date-menu" align="start" sideOffset={5}>
+            <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="flow-release-date-menu" align="start" sideOffset={5}>
               <DropdownMenu.Sub>
                 <DropdownMenu.SubTrigger className="flow-release-menu-item"><CalendarDays/><span>{t('Custom')}</span><ChevronRight/></DropdownMenu.SubTrigger>
-                <DropdownMenu.Portal><DropdownMenu.SubContent className="flow-release-calendar-surface" sideOffset={8} alignOffset={-5}><ReleaseCalendar value={targetDate} onCancel={() => setDateMenuOpen(false)} onSave={value => { setTargetDate(value); setDateMenuOpen(false) }}/></DropdownMenu.SubContent></DropdownMenu.Portal>
+                <DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="flow-release-calendar-surface" sideOffset={8} alignOffset={-5}><ReleaseCalendar value={targetDate} onCancel={() => setDateMenuOpen(false)} onSave={value => { setTargetDate(value); setDateMenuOpen(false) }}/></DropdownMenu.SubContent></DropdownMenu.Portal>
               </DropdownMenu.Sub>
               <DropdownMenu.Item className="flow-release-menu-item" onSelect={() => setQuickDate(1)}>{t('Tomorrow')}</DropdownMenu.Item>
               <DropdownMenu.Item className="flow-release-menu-item" onSelect={() => setQuickDate(7)}>{t('1 week')}</DropdownMenu.Item>

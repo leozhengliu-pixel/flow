@@ -146,10 +146,11 @@ import type {
   ProjectMutationInput,
 } from "@/components/projects-page/projects-page";
 import type { NewProjectDraft } from "@/components/projects-page/new-project-dialog";
-import { lazyPage } from "@/lib/lazy-page";
+import { WorkspaceOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, OAuthAuthorizePage, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, DocumentsIndexPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
 import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-list";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
+import { useRouteNavigation } from "@/hooks/use-route-navigation";
 import {
   agentPath,
   apiKeyPath,
@@ -228,158 +229,15 @@ function mergeProjectRelations(data: BootstrapData, projectId: string, relations
   return [...unrelated, ...relations]
 }
 
-const WorkspaceOnboarding = lazyPage(
-  () => import("@/components/workspace/workspace-onboarding"),
-  "WorkspaceOnboarding",
-);
-const WorkspaceDirectoryPage = lazyPage(
-  () => import("@/components/workspace-directory/workspace-directory-page"),
-  "WorkspaceDirectoryPage",
-);
-const MemberProfilePage = lazyPage(
-  () => import("@/components/workspace-directory/member-profile-page"),
-  "MemberProfilePage",
-);
-const TeamCreatePage = lazyPage(
-  () => import("@/components/workspace-directory/team-create-page"),
-  "TeamCreatePage",
-);
-const TeamOverviewPage = lazyPage(
-  () => import("@/components/team-overview/team-overview-page"),
-  "TeamOverviewPage",
-);
-const SettingsPage = lazyPage(
-  () => import("@/components/settings/settings-page"),
-  "SettingsPage",
-);
-const AuthPage = lazyPage(
-  () => import("@/components/auth/auth-page"),
-  "AuthPage",
-);
-const OAuthAuthorizePage = lazyPage(
-  () => import("@/components/auth/oauth-authorize-page"),
-  "OAuthAuthorizePage",
-);
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { useDesktopNotifications } from "@/hooks/use-desktop-notifications";
-const WorkspaceSearchPage = lazyPage(
-  () => import("@/components/search/workspace-search-page"),
-  "WorkspaceSearchPage",
-);
-const WorkspaceOperationsPage = lazyPage(
-  () => import("@/components/workspace-operations/workspace-operations-page"),
-  "WorkspaceOperationsPage",
-);
-const DocumentPage = lazyPage(
-  () => import("@/components/documents/document-page"),
-  "DocumentPage",
-);
-const DocumentsIndexPage = lazyPage(
-  () => import("@/components/documents/documents-index-page"),
-  "DocumentsIndexPage",
-);
-const WorkspaceSecondaryPage = lazyPage(
-  () => import("@/components/workspace/workspace-secondary-page"),
-  "WorkspaceSecondaryPage",
-);
-const AnalyticsDashboardPage = lazyPage(
-  () => import("@/components/analytics/analytics-dashboard-page"),
-  "AnalyticsDashboardPage",
-);
-const DashboardsPage = lazyPage(
-  () => import("@/components/dashboards/dashboards-page"),
-  "DashboardsPage",
-);
-const CustomerDetailPage = lazyPage(
-  () => import("@/components/customer-detail/customer-detail-page"),
-  "CustomerDetailPage",
-);
-const InboxAppPage = lazyPage(
-  () => import("@/components/inbox/inbox-app-page"),
-  "InboxAppPage",
-);
-const ProjectsPage = lazyPage(
-  () => import("@/components/projects-page/projects-page"),
-  "ProjectsPage",
-);
-const ProjectDetailPage = lazyPage(
-  () => import("@/components/project-detail/project-detail-page"),
-  "ProjectDetailPage",
-);
-const MyIssuesPage = lazyPage(
-  () => import("@/components/my-issues"),
-  "MyIssuesPage",
-);
-const IssueExplorerPage = lazyPage(
-  () => import("@/components/issue-explorer"),
-  "IssueExplorerPage",
-);
-const ViewsPage = lazyPage(
-  () => import("@/components/views-page/views-page"),
-  "ViewsPage",
-);
-const InitiativesPage = lazyPage(
-  () => import("@/components/initiatives/initiatives-page"),
-  "InitiativesPage",
-);
-const InitiativeDetailPage = lazyPage(
-  () => import("@/components/initiatives/initiative-detail-page"),
-  "InitiativeDetailPage",
-);
-const CyclesPage = lazyPage(
-  () => import("@/components/cycles/cycles-page"),
-  "CyclesPage",
-);
-const CycleDetailPage = lazyPage(
-  () => import("@/components/cycles/cycle-detail-page"),
-  "CycleDetailPage",
-);
-const PulsePage = lazyPage(
-  () => import("@/components/pulse/pulse-page"),
-  "PulsePage",
-);
-const TeamArchivePage = lazyPage(
-  () => import("@/components/workspace-operations/team-archive-page"),
-  "TeamArchivePage",
-);
-const ReviewsPage = lazyPage(
-  () => import("@/components/reviews/reviews-page"),
-  "ReviewsPage",
-);
-const AgentPage = lazyPage(
-  () => import("@/components/agent/agent-page"),
-  "AgentPage",
-);
-const AgentChatPanel = lazyPage(
-  () => import("@/components/agent/agent-chat-panel"),
-  "AgentChatPanel",
-);
-const LoopsPage = lazyPage(
-  () => import("@/components/loops/loops-page"),
-  "LoopsPage",
-);
-const DetailPane = lazyPage(
-  () => import("@/components/detail/detail-pane"),
-  "DetailPane",
-);
-const CommandMenu = lazyPage(
-  () => import("@/components/command/command-menu"),
-  "CommandMenu",
-);
-const BulkActionBar = lazyPage(
-  () => import("@/components/issue/bulk-action-bar"),
-  "BulkActionBar",
-);
-const CreateIssueDialog = lazyPage(
-  () => import("@/components/create-issue/create-issue-dialog"),
-  "CreateIssueDialog",
-);
 import { labelsForResource, setGroupedLabelSelected } from "@/lib/labels";
 import { applyTheme } from "@/lib/theme";
+import { useExitPresence } from '@/components/ui/motion';
 
 function App() {
   const location = useLocation(),
-    navigateTo = useNavigate(),
+    navigateTo = useRouteNavigation(),
     route = useMemo(
       () => parseAppRoute(location.pathname, location.search),
       [location.pathname, location.search],
@@ -388,6 +246,7 @@ function App() {
     [data, setData] = useState<BootstrapData | null>(null),
     [error, setError] = useState(false);
   const [session, setSession] = useState<AuthSession | null>(null);
+  const bootstrapRequest = useRef<{ key: string; promise: Promise<BootstrapData> } | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [closedAgentSessionIds, setClosedAgentSessionIds] = useState<
@@ -404,6 +263,7 @@ function App() {
       useState<string>(),
     [createContext, setCreateContext] = useState<MyIssuesCreateContext>();
   const createStateRef = useRef<string | undefined>(undefined);
+  const createPresent = useExitPresence(createOpen);
   const openCreateIssue = useCallback(
     (contextOrState?: MyIssuesCreateContext | string) => {
       const context: MyIssuesCreateContext = typeof contextOrState === "string"
@@ -587,7 +447,15 @@ function App() {
       current?.workspace.urlKey === requestedWorkspaceKey ? current : null,
     );
     setError(false);
-    fetchBootstrap(requestedWorkspaceKey)
+    // Clearing the previous workspace reruns this effect; share its in-flight request.
+    const requestKey = `${account.viewer.id}:${requestedWorkspaceKey}`;
+    if (bootstrapRequest.current?.key !== requestKey) {
+      const request = { key: requestKey, promise: fetchBootstrap(requestedWorkspaceKey) };
+      bootstrapRequest.current = request;
+      const clear = () => { if (bootstrapRequest.current === request) bootstrapRequest.current = null; };
+      void request.promise.then(clear, clear);
+    }
+    bootstrapRequest.current.promise
       .then(next => { if (!cancelled) setData(next); })
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
@@ -5718,6 +5586,8 @@ function App() {
             <ProjectDetailPage
               key={`${selectedProject.id}:${selectedProjectFacetView?.id ?? "base"}`}
               project={selectedProject}
+              workflowStates={data.states}
+              cycles={data.cycles}
               projects={data.projects}
               projectRelations={data.projectRelations}
               initiatives={data.initiatives}
@@ -5979,7 +5849,7 @@ function App() {
         )}
       </Suspense>
       <Suspense fallback={null}>
-        {createOpen && (
+        {createPresent && (
           <CreateIssueDialog
             open={createOpen}
             draftId={createDraftId}

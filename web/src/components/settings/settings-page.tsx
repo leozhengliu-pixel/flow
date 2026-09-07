@@ -110,6 +110,7 @@ import type {
   WorkspaceSettings,
 } from "@/types/flow";
 import { lazyPage } from "@/lib/lazy-page";
+import { TeamCreatePage } from '@/lib/route-pages';
 import {
   SettingsPageTitle as PageTitle,
   SettingsRow as Row,
@@ -178,6 +179,24 @@ const WorkflowAutomationSettings = lazyPage(
   () => import("./workflow-automation-settings"),
   "WorkflowAutomationSettings",
 );
+
+// oxlint-disable-next-line react/only-export-components -- Preloading must share the lazy instances used by SettingsBody.
+export async function preloadSettingsPage(page: SettingsPageProps['page'], options: Pick<SettingsPageProps, 'releasePipelineMode' | 'integrationProvider' | 'agentSkillMode'> = {}) {
+  if (options.agentSkillMode) return
+  if (['preferences', 'profile', 'notifications', 'code-and-reviews', 'account-security', 'connections', 'agents'].includes(page)) return PersonalSettings.preload()
+  if (page === 'issue-labels' || page === 'project-labels') return DomainLabelsSettings.preload()
+  if (page === 'project-statuses') return ProjectStatusesSettings.preload()
+  if (page === 'issue-templates' || page === 'project-templates') return TemplateSettings.preload()
+  if (page === 'sla') return SLASettings.preload()
+  if (page === 'project-updates') return ProjectUpdateSettings.preload()
+  if (page === 'team') return TeamWorkflowSettings.preload()
+  if (page === 'audit-log') return AuditLogSettings.preload()
+  if (page === 'import-export') return ImportExportSettings.preload()
+  if (page === 'workflows') return WorkflowAutomationSettings.preload()
+  if (page === 'releases' && options.releasePipelineMode) return PipelineEditorPage.preload()
+  if (page === 'integrations' && options.integrationProvider) return CodeIntegrationSettings.preload()
+  if (['ai', 'initiatives', 'documents', 'customer-requests', 'releases', 'pulse', 'asks', 'emojis', 'integrations'].includes(page)) return FeatureSettingsPage.preload()
+}
 
 type StoredSettings = {
   values: Record<string, string | boolean>;
@@ -466,6 +485,8 @@ export function SettingsPage(props: SettingsPageProps) {
                           : ""
                       }
                       onClick={() => props.onNavigate("team", team.key)}
+                      onPointerEnter={() => { void TeamWorkflowSettings.preload().catch(() => undefined); }}
+                      onFocus={() => { void TeamWorkflowSettings.preload().catch(() => undefined); }}
                     >
                       <span
                         className="settings-team-icon"
@@ -480,7 +501,7 @@ export function SettingsPage(props: SettingsPageProps) {
                     </button>
                   ))}
                 {isAdmin && (
-                  <button onClick={props.onCreateTeam}>
+                  <button onPointerEnter={() => { void TeamCreatePage.preload().catch(() => undefined); }} onFocus={() => { void TeamCreatePage.preload().catch(() => undefined); }} onClick={props.onCreateTeam}>
                     <Plus size={16} />
                       <span>{t("Create a team")}</span>
                   </button>
@@ -567,7 +588,7 @@ function SettingsNavButton({
   const { t } = useI18n();
   const Icon = item.icon;
   return (
-    <button aria-current={active ? "page" : undefined} className={active ? "active" : ""} onClick={onClick}>
+    <button aria-current={active ? "page" : undefined} className={active ? "active" : ""} onPointerEnter={() => { void preloadSettingsPage(item.id).catch(() => undefined); }} onFocus={() => { void preloadSettingsPage(item.id).catch(() => undefined); }} onClick={onClick}>
       <Icon size={16} />
       <span>{t(item.label)}</span>
     </button>

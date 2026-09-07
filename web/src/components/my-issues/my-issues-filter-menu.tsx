@@ -69,7 +69,7 @@ export function MyIssuesFilterMenu({ availableFields, filters = [], onOpenChange
   return <><Popover.Root open={open} onOpenChange={close}>
     <Popover.Trigger asChild>{isValidElement(trigger) ? cloneElement(trigger, { 'aria-expanded': open } as object) : trigger}</Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content className={styles.rootMenu} side="bottom" align="center" alignOffset={-15} sideOffset={3} collisionPadding={11} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={() => close(false)} onKeyDownCapture={event=>{if(event.key==='Escape'&&!activeField){event.preventDefault();close(false)}}}>
+      <Popover.Content data-flow-motion="floating" className={styles.rootMenu} side="bottom" align="center" alignOffset={-15} sideOffset={3} collisionPadding={11} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={() => close(false)} onKeyDownCapture={event=>{if(event.key==='Escape'&&!activeField){event.preventDefault();close(false)}}}>
         <Command className={styles.rootCommand} loop>
           <div className={styles.rootSearch}>
             <Command.Input aria-label={t('Add Filter…')} placeholder={t('Add Filter…')} autoFocus/>
@@ -116,7 +116,7 @@ function ValueMenu({ field, filters, label, onClose, onToggle, options }: { fiel
   const command = usePropertyCommand({ closeOnSelect: false, onOpenChange: open => { if (!open) onClose() }, onSelect: option => onToggle(field, option), open: true, options, selectedIds })
 
   return <Popover.Portal>
-    <Popover.Content className={styles.valueMenu} data-field={field} side="left" align="start" alignOffset={-43} sideOffset={-2} collisionPadding={11} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { event.preventDefault(); onClose() }} onKeyDown={command.onKeyDown}>
+    <Popover.Content data-flow-motion="floating" className={styles.valueMenu} data-field={field} side="left" align="start" alignOffset={-43} sideOffset={-2} collisionPadding={11} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { event.preventDefault(); onClose() }} onKeyDown={command.onKeyDown}>
       <div className={styles.valueSearch}>
         <input ref={command.inputRef} role="searchbox" aria-label={`${t('Filter')} ${t(label)}`} placeholder={field==='content'?t('Filter by content…'):field==='ai'?t('AI filter'):t('Filter…')} value={command.query} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={event=>{if(event.key!=='Enter'||!command.query.trim())return;if(field==='content'){event.preventDefault();event.stopPropagation();onToggle(field,{id:`query:${command.query.trim()}`,label:command.query.trim()})}else if(field==='ai'){event.preventDefault();event.stopPropagation();onToggle(field,interpretAIQuery(command.query))}}}/>
       </div>
@@ -143,7 +143,7 @@ function FilterValueItem({ field, option, active, selected, nestedOpen, onActive
 function NestedValueMenu({ field, label, onChoose, onClose, options }: { field: MyIssuesFilterKey; label: string; onChoose: (option: MyIssuesFilterOption) => void; onClose: () => void; options: MyIssuesFilterOption[] }) {
   const { t } = useI18n()
   const command = usePropertyCommand({ autoFocus: false, closeOnSelect: false, onOpenChange: open => { if (!open) onClose() }, onSelect: onChoose, open: true, options })
-  return <Popover.Content className={`${styles.valueMenu} ${styles.nestedValueMenu}`} side="left" align="start" sideOffset={-2} collisionPadding={11} onOpenAutoFocus={event=>event.preventDefault()} onCloseAutoFocus={event=>event.preventDefault()} onEscapeKeyDown={event=>{event.preventDefault();onClose()}} onKeyDown={command.onKeyDown}>
+  return <Popover.Content data-flow-motion="floating" className={`${styles.valueMenu} ${styles.nestedValueMenu}`} side="left" align="start" sideOffset={-2} collisionPadding={11} onOpenAutoFocus={event=>event.preventDefault()} onCloseAutoFocus={event=>event.preventDefault()} onEscapeKeyDown={event=>{event.preventDefault();onClose()}} onKeyDown={command.onKeyDown}>
     <div className={styles.valueSearch}><input ref={command.inputRef} role="searchbox" aria-label={`${t('Filter')} ${t(label)}`} placeholder={t('Filter…')} value={command.query} onChange={event=>command.onQueryChange(event.target.value)}/></div>
     <div className={styles.valueList} role="listbox" aria-label={t(label)}><FilterValueItems field={field} options={command.filteredOptions} activeId={command.activeId} onActive={command.setActiveId} onChoose={command.choose}/>{!command.filteredOptions.length&&<div className={styles.empty}>{t('No results')}</div>}</div>
   </Popover.Content>
@@ -161,8 +161,8 @@ function TextConditionDialog({ condition, onApply, onClose }: { condition?: { fi
     setValue('')
   }
   return <Dialog.Root open={open} onOpenChange={next => { if (!next) close() }}><Dialog.Portal>
-    <Dialog.Overlay className={styles.conditionOverlay}/>
-    <Dialog.Content className={styles.conditionDialog} aria-describedby={undefined} onOpenAutoFocus={event => { event.preventDefault(); requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`.${styles.conditionInput}`)?.focus()) }}>
+    <Dialog.Overlay data-flow-motion="backdrop" className={styles.conditionOverlay}/>
+    <Dialog.Content data-flow-motion="dialog" className={styles.conditionDialog} aria-describedby={undefined} onOpenAutoFocus={event => { event.preventDefault(); requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`.${styles.conditionInput}`)?.focus()) }}>
       <form onSubmit={event => { event.preventDefault(); apply() }}>
         <div className={styles.conditionBody}><Dialog.Title>{t(condition?.option.label ?? '')}</Dialog.Title><input className={styles.conditionInput} aria-label={t(condition?.option.label ?? '')} value={value} onChange={event => setValue(event.target.value)}/></div>
         <footer><button type="button" onClick={close}>{t('Cancel')}</button><button type="submit" className={styles.conditionApply}>{t('Apply')}</button></footer>

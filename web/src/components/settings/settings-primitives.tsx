@@ -193,7 +193,7 @@ export function SettingsSelect({
         </SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
       <SelectPrimitive.Portal>
-        <SelectPrimitive.Content
+        <SelectPrimitive.Content data-flow-motion="floating"
           align={align}
           className={menuClassName || "settings-select-menu"}
           collisionPadding={8}

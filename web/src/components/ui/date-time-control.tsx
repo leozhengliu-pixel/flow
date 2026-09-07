@@ -53,7 +53,7 @@ export function DateTimeControl({
       </button>
     </Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content align="start" className="date-time-popover" collisionPadding={8} sideOffset={4}>
+      <Popover.Content data-flow-motion="floating" align="start" className="date-time-popover" collisionPadding={8} sideOffset={4}>
         <header><button aria-label="Previous month" onClick={() => setView(new Date(view.getFullYear(), view.getMonth() - 1, 1))}><ChevronIcon direction="left"/></button><strong>{view.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</strong><button aria-label="Next month" onClick={() => setView(new Date(view.getFullYear(), view.getMonth() + 1, 1))}><ChevronIcon direction="right"/></button></header>
         <div className="date-time-weekdays">{['S','M','T','W','T','F','S'].map((day,index)=><span key={`${day}-${index}`}>{day}</span>)}</div>
         <div className="date-time-grid">{days.map(day => {

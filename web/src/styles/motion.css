@@ -1,0 +1,58 @@
+/* Spring curves sampled with React Spring (precision .01, friction 100). */
+:root {
+  --flow-popover-enter: linear(0,.13765,.33732,.50642,.63577,.73198,.80295,.85517,.89356,.92177,.94251,.95775,.96895,.97718,.98323,.98767,1);
+  --flow-popover-exit: linear(0,.18141,.43264,.6277,.76073,.84751,.90314,.93857,.96106,.97532,.98436,.99009,1);
+  --flow-surface-ease: linear(0,.07881,.23607,.40298,.55091,.67107,.76377,.83289,.88319,.91914,.94448,.96213,.97432,.98267,.98836,.99221,.99481,.99655,.99771,.99848,1);
+}
+
+[data-flow-motion="floating"] {
+  transform-origin: var(--radix-popper-transform-origin, center);
+  animation: flow-floating-enter 267ms var(--flow-popover-enter) both !important;
+}
+[data-flow-motion="floating"][data-state="closed"] {
+  animation: flow-floating-exit 200ms var(--flow-popover-exit) both !important;
+  pointer-events: none;
+}
+[data-flow-motion="dialog"] { animation: flow-dialog-enter 300ms var(--flow-surface-ease) both !important; }
+[data-flow-motion="dialog"][data-state="closed"] { animation: flow-dialog-exit 300ms var(--flow-surface-ease) both !important; pointer-events: none; }
+[data-flow-motion="backdrop"] { animation: flow-fade-enter 150ms ease-out both !important; }
+[data-flow-motion="backdrop"][data-state="closed"] { animation: flow-fade-exit 200ms ease-out both !important; pointer-events: none; }
+[data-flow-motion="tooltip"] { animation: flow-floating-enter 150ms ease-out both !important; transform-origin: var(--radix-popper-transform-origin, center); }
+[data-flow-motion="tooltip"][data-state="closed"] { animation: flow-floating-exit 100ms ease-out both !important; }
+
+[data-flow-motion="create"] {
+  animation: flow-create-enter var(--flow-create-enter-duration,300ms) var(--flow-surface-ease) both !important;
+  transition: width 300ms var(--flow-surface-ease), height 300ms var(--flow-surface-ease), max-width 300ms var(--flow-surface-ease), top 300ms var(--flow-surface-ease) !important;
+}
+[data-flow-motion="create"][data-state="closed"] {
+  animation: flow-create-exit var(--flow-create-exit-duration,400ms) var(--flow-surface-ease) both !important;
+  pointer-events: none;
+}
+
+@keyframes flow-floating-enter { from { opacity: 0; scale: .98; } to { opacity: 1; scale: 1; } }
+@keyframes flow-floating-exit { from { opacity: 1; scale: 1; } to { opacity: 0; scale: .98; } }
+@keyframes flow-dialog-enter { from { opacity: 0; scale: .95; } to { opacity: 1; scale: 1; } }
+@keyframes flow-dialog-exit { from { opacity: 1; scale: 1; } to { opacity: 0; scale: .95; } }
+@keyframes flow-fade-enter { from { opacity: 0; } to { opacity: 1; } }
+@keyframes flow-fade-exit { from { opacity: 1; } to { opacity: 0; } }
+@keyframes flow-create-enter {
+  from { opacity: 0; scale: var(--flow-create-enter-scale,.95); translate: calc(var(--flow-create-x,0px) * .2) calc(var(--flow-create-y,0px) * .2); }
+  to { opacity: 1; scale: 1; translate: 0 0; }
+}
+@keyframes flow-create-exit {
+  from { opacity: 1; scale: 1; translate: 0 0; }
+  to { opacity: 0; scale: var(--flow-create-exit-scale,.95); translate: calc(var(--flow-create-x,0px) * .8) calc(var(--flow-create-y,0px) * .8); }
+}
+
+/* Lightweight interaction feedback only; virtual-list rows do not animate layout. */
+:where(button, a, [role="menuitem"], [role="option"]) { transition: background-color 150ms ease-out, color 150ms ease-out, border-color 150ms ease-out; }
+[data-flow-motion="milestone"][data-exiting] { pointer-events: none; }
+[data-flow-motion="collapse"][aria-hidden="true"], .lp-new-project[aria-hidden="true"] { pointer-events: none; }
+[data-flow-motion="panel"] { animation: flow-panel-enter 300ms var(--flow-surface-ease) both; overflow: hidden; }
+[data-flow-motion="panel"][data-state="closed"] { animation: flow-panel-exit 300ms var(--flow-surface-ease) both; pointer-events: none; }
+@keyframes flow-panel-enter { from { opacity: 0; width: 0; min-width: 0; } to { opacity: 1; } }
+@keyframes flow-panel-exit { from { opacity: 1; } to { opacity: 0; width: 0; min-width: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  [data-flow-motion] { animation: none !important; transition: none !important; }
+  :where(button, a, [role="menuitem"], [role="option"]) { transition: none !important; }
+}

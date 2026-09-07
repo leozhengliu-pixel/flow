@@ -131,8 +131,6 @@ export function ProjectCreationAgent({
       onCreateSkill();
       return;
     }
-    const workspaceKey = window.location.pathname.split("/").filter(Boolean)[0];
-    if (workspaceKey) window.location.assign(`/${workspaceKey}/settings/skill/new`);
   };
 
   const visibleSkills = agentSkills.filter((skill) =>
@@ -443,16 +441,16 @@ export function ProjectCreationAgent({
                       {selectedSkills.includes(skill.id) && <Check />}
                     </button>
                   ))}
-                  <button className="project-creation-agent__create-skill" onClick={createSkill} role="menuitem" type="button">
+                  <AppLink href={`/${window.location.pathname.split('/').filter(Boolean)[0]}/settings/skill/new`} className="project-creation-agent__create-skill" onClick={event => { if (onCreateSkill) event.preventDefault(); createSkill(); }} role="menuitem">
                     <Plus size={14} />
                     <span>{t("Create skill")}</span>
-                  </button>
+                  </AppLink>
                   </>
                 ) : (
-                  <button className="project-creation-agent__create-skill" onClick={createSkill} role="menuitem" type="button">
+                  <AppLink href={`/${window.location.pathname.split('/').filter(Boolean)[0]}/settings/skill/new`} className="project-creation-agent__create-skill" onClick={event => { if (onCreateSkill) event.preventDefault(); createSkill(); }} role="menuitem">
                     <Plus size={14} />
                     <span>{t("Create skill")}</span>
-                  </button>
+                  </AppLink>
                 )}
               </div>
             )}
@@ -578,3 +576,4 @@ function formatConversationTime(value: string | undefined, todayLabel: string) {
   if (Number.isNaN(date.getTime())) return todayLabel;
   return `${todayLabel} ${new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hour12: false }).format(date)}`;
 }
+import { AppLink } from '@/components/ui/app-link';

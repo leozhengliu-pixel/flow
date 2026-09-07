@@ -7,6 +7,8 @@ import {
   Link2,
   Menu,
   Plus,
+  Pin,
+  Pencil,
   Search,
   Trash2,
   X,
@@ -15,10 +17,13 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { toast } from "sonner";
+import { confirmAction } from '@/components/ui/action-dialog-service';
+import { isToday, isYesterday, isThisWeek, isSameWeek, subWeeks, isThisMonth, isSameMonth, subMonths, format } from 'date-fns';
 
 import {
   addFavorite,
@@ -88,8 +93,30 @@ export function TeamOverviewPage({
   const [resources, setResources] = useState<TeamPinnedResource[]>([]);
   const [loading, setLoading] = useState(true);
   const [resourceOpen, setResourceOpen] = useState(false);
+  const [resourceSectionId, setResourceSectionId] = useState('');
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(`flow:team:${team.id}:collapsed-sections`) ?? '[]')); } catch { return new Set(); }
+  });
+  const toggleSection = (id: string, all = false) => setCollapsedSections(current => {
+    const next = all ? new Set(current.size ? [] : sections.map(section => section.id)) : new Set(current);
+    if (!all) { if (next.has(id)) next.delete(id); else next.add(id); }
+    try { localStorage.setItem(`flow:team:${team.id}:collapsed-sections`, JSON.stringify([...next])); } catch { /* Storage is optional. */ }
+    return next;
+  });
   const [sectionOpen, setSectionOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
+  const lastSectionHash = useRef('');
+  useEffect(() => {
+    const reveal = () => {
+      const target = sections.find(section => location.hash === `#section-${section.id}`);
+      if (!target || lastSectionHash.current === location.hash) return;
+      lastSectionHash.current = location.hash;
+      setCollapsedSections(current => { const next = new Set(current); next.delete(target.id); return next; });
+      requestAnimationFrame(() => document.getElementById(`section-${target.id}`)?.scrollIntoView({ block: 'start' }));
+    };
+    reveal(); window.addEventListener('hashchange', reveal);
+    return () => window.removeEventListener('hashchange', reveal);
+  }, [sections]);
   const favorite = data.favorites.some(
     (item) =>
       item.resourceType === "team" &&
@@ -97,7 +124,6 @@ export function TeamOverviewPage({
       item.userId === data.viewer.id,
   );
   const load = useCallback(async () => {
-    setLoading(true);
     try {
       const result = await fetchTeamResources(team.id);
       setSections(result.sections);
@@ -107,8 +133,10 @@ export function TeamOverviewPage({
     }
   }, [team.id]);
   useEffect(() => {
+    setLoading(true);
+    try { setCollapsedSections(new Set(JSON.parse(localStorage.getItem(`flow:team:${team.id}:collapsed-sections`) ?? '[]'))); } catch { setCollapsedSections(new Set()); }
     void load();
-  }, [load]);
+  }, [load, team.id]);
   const teamMembers = data.teamMembers
     .filter((item) => item.teamId === team.id)
     .map((item) => data.users.find((user) => user.id === item.userId))
@@ -133,12 +161,12 @@ export function TeamOverviewPage({
           updatedAt: "",
           teamId: team.id,
         },
-        ...sections,
+        ...[...sections].sort((a, b) => a.position - b.position),
       ].map((section) => ({
         section,
         items: resources.filter(
           (item) => (item.sectionId ?? "") === section.id,
-        ),
+        ).sort((a, b) => a.position - b.position),
       })),
     [resources, sections, team.id],
   );
@@ -160,13 +188,14 @@ export function TeamOverviewPage({
       );
     }
   };
-  const newPinnedDocument = async () => {
+  const newPinnedDocument = async (sectionId = '') => {
     try {
       const document = await createDocument({
         title: "New document",
         teamIds: [team.id],
       });
       await pinTeamResource(team.id, {
+        sectionId,
         resourceType: "document",
         resourceId: document.id,
         title: document.title,
@@ -278,7 +307,7 @@ export function TeamOverviewPage({
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content
+              <DropdownMenu.Content data-flow-motion="floating"
                 align="start"
                 className="team-home-menu"
                 sideOffset={4}
@@ -369,7 +398,7 @@ export function TeamOverviewPage({
                 <span />
                 <ResourceCommandMenu
                   documents={documents}
-                  onLink={() => setResourceOpen(true)}
+                  onLink={() => { setResourceSectionId(''); setResourceOpen(true); }}
                   onNew={() => void newPinnedDocument()}
                   onSaved={reloadResources}
                   resources={resources}
@@ -395,6 +424,12 @@ export function TeamOverviewPage({
                   ({ section, items }) =>
                     (section.id || items.length > 0) && (
                       <ResourceSection
+                        documents={documents.filter(document => !document.archivedAt)}
+                        resources={resources}
+                        collapsed={collapsedSections.has(section.id)}
+                        onToggle={all => toggleSection(section.id, all)}
+                        onNew={() => void newPinnedDocument(section.id)}
+                        onLink={() => { setResourceSectionId(section.id); setResourceOpen(true); }}
                         data={data}
                         items={items}
                         key={section.id || "unsectioned"}
@@ -548,6 +583,7 @@ export function TeamOverviewPage({
       )}
       {resourceOpen && (
         <AddLinkDialog
+          sectionId={resourceSectionId}
           team={team}
           onClose={() => setResourceOpen(false)}
           onSaved={async () => {
@@ -642,6 +678,10 @@ function TeamMoreIcon() {
       <path d="M3 6.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z" />
     </SvgIcon>
   );
+}
+
+function ResourceChevronIcon() {
+  return <SvgIcon size={16}><path d="M7.00194 10.6239C6.66861 10.8183 6.25 10.5779 6.25 10.192V5.80802C6.25 5.42212 6.66861 5.18169 7.00194 5.37613L10.7596 7.56811C11.0904 7.76105 11.0904 8.23895 10.7596 8.43189L7.00194 10.6239Z"/></SvgIcon>;
 }
 
 function CopyLinkIcon() {
@@ -766,6 +806,7 @@ function SelectChevronIcon() {
 }
 
 function ResourceSection({
+  documents, resources, collapsed, onToggle, onNew, onLink,
   data,
   items,
   onNavigate,
@@ -774,6 +815,12 @@ function ResourceSection({
   section,
   team,
 }: {
+  documents: FlowDocument[];
+  resources: TeamPinnedResource[];
+  collapsed: boolean;
+  onToggle: (all: boolean) => void;
+  onNew: () => void;
+  onLink: () => void;
   data: BootstrapData;
   items: TeamPinnedResource[];
   onNavigate: (path: string) => void;
@@ -784,65 +831,97 @@ function ResourceSection({
 }) {
   const [editing, setEditing] = useState(false),
     [name, setName] = useState(section?.name ?? "");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { t } = useI18n();
+  const saving = useRef(false), cancelled = useRef(false);
+  const beginRename = () => { cancelled.current = false; setName(section?.name ?? ''); setEditing(true); };
   const save = async () => {
-    if (!section || !name.trim()) return;
-    await updateTeamResourceSection(team.id, section.id, { name: name.trim() });
-    setEditing(false);
-    await onReload();
+    if (!section || saving.current || cancelled.current) return;
+    if (!name.trim() || name.trim() === section.name) { setEditing(false); return; }
+    saving.current = true;
+    try { await updateTeamResourceSection(team.id, section.id, { name: name.trim() }); setEditing(false); await onReload(); }
+    catch (error) { toast.error(error instanceof Error ? error.message : t('Could not rename section')); }
+    finally { saving.current = false; }
+  };
+  const remove = async () => {
+    if (!section) return;
+    if (items.length && !await confirmAction(`Delete "${section.name}"?`, { description: t('Resources in this section will stay pinned to the page.'), confirmLabel: t('Delete section'), danger: true })) return;
+    try { await deleteTeamResourceSection(team.id, section.id); await onReload(); }
+    catch (error) { toast.error(error instanceof Error ? error.message : t('Could not delete section')); }
   };
   return (
-    <div className="team-resource-section">
+    <div className={`team-resource-section${section ? ' is-named' : ''}`} id={section ? `section-${section.id}` : undefined}
+      onDragOver={event => { if (event.dataTransfer.types.some(type => type === 'application/x-flow-team-resource' || type === 'application/x-flow-team-section')) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } }}
+      onDrop={event => {
+        const resourceId = event.dataTransfer.getData('application/x-flow-team-resource');
+        const sectionId = event.dataTransfer.getData('application/x-flow-team-section');
+        if (resourceId && resources.some(resource => resource.id === resourceId)) {
+          event.preventDefault(); event.stopPropagation();
+          void updateTeamResource(team.id, resourceId, { sectionId: section?.id ?? '', position: Math.max(-1, ...items.map(item => item.position)) + 1 }).then(onReload).catch(() => toast.error(t('Could not move resource')));
+        } else if (section && sectionId !== section.id && sections.some(item => item.id === sectionId)) {
+          event.preventDefault(); event.stopPropagation();
+          const ordered = sections.filter(item => item.id !== sectionId).sort((a, b) => a.position - b.position);
+          const after = event.clientY > event.currentTarget.getBoundingClientRect().top + event.currentTarget.clientHeight / 2;
+          const index = ordered.findIndex(item => item.id === section.id) + (after ? 1 : 0);
+          const before = ordered[index - 1]?.position, next = ordered[index]?.position;
+          const position = before === undefined ? (next ?? 0) - 1 : next === undefined ? before + 1 : (before + next) / 2;
+          void updateTeamResourceSection(team.id, sectionId, { position }).then(onReload).catch(() => toast.error(t('Could not move section')));
+        }
+      }}>
       {section && (
-        <header>
+        <header draggable={!editing} onDragStart={event => { event.dataTransfer.setData('application/x-flow-team-section', section.id); event.dataTransfer.effectAllowed = 'move'; }} onContextMenu={event => { event.preventDefault(); setMenuOpen(true); }}>
           {editing ? (
             <input
               autoFocus
-              aria-label="Section name"
+              aria-label={t('Rename section')}
               value={name}
               onChange={(event) => setName(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter") void save();
-                if (event.key === "Escape") setEditing(false);
+                if (event.nativeEvent.isComposing) return;
+                if (event.key === "Enter") { event.preventDefault(); void save(); }
+                if (event.key === "Escape") { cancelled.current = true; setEditing(false); }
               }}
               onBlur={() => void save()}
             />
           ) : (
-            <button onClick={() => setEditing(true)}>{section.name}</button>
+            <span className="team-resource-section-name" data-i18n-ignore onDoubleClick={beginRename}>{section.name}</span>
           )}
-          <DropdownMenu.Root>
+          <button className="team-resource-collapse" aria-label={t(collapsed ? 'Expand section' : 'Collapse section')} aria-expanded={!collapsed} onClick={event => onToggle(event.altKey)}><ResourceChevronIcon/></button>
+          <span className="team-resource-section-rule"/>
+          <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenu.Trigger asChild>
               <button aria-label={`Open menu ${section.name}`}>
                 <TeamMoreIcon />
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content className="team-home-menu" align="end">
-                <DropdownMenu.Item onSelect={() => setEditing(true)}>
-                  Rename
+              <DropdownMenu.Content data-flow-motion="floating" className="team-home-menu team-section-menu" align="end" sideOffset={4} onCloseAutoFocus={event => event.preventDefault()}>
+                <ResourceCommandMenu nested documents={documents} resources={resources} sectionId={section.id} team={team} onNew={onNew} onLink={onLink} onSaved={onReload}/>
+                <DropdownMenu.Item onSelect={() => { void navigator.clipboard.writeText(`${location.origin}/${data.workspace.urlKey}/team/${team.key}/overview#section-${section.id}`).then(() => toast.success(t('Link copied'))).catch(() => toast.error(t('Could not copy link'))); }}><CopyLinkIcon/><span>{t('Copy link')}</span></DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={() => { setMenuOpen(false); setTimeout(beginRename, 100); }}>
+                  <Pencil/><span>{t('Rename…')}</span>
                 </DropdownMenu.Item>
                 <DropdownMenu.Separator />
                 <DropdownMenu.Item
                   className="danger"
-                  onSelect={() =>
-                    void deleteTeamResourceSection(team.id, section.id).then(
-                      onReload,
-                    )
-                  }
+                  onSelect={() => void remove()}
                 >
                   <Trash2 />
-                  Delete section
+                  <span>{t(items.length ? 'Delete…' : 'Delete')}</span>
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
         </header>
       )}
+      <AnimatedCollapse open={!collapsed}>
+      {section && !items.length && <ResourceCommandMenu documents={documents} resources={resources} sectionId={section.id} team={team} onNew={onNew} onLink={onLink} onSaved={onReload} empty/>}
       {items.map((item) => {
         const resourceDocument = item.resourceType === "document"
           ? data.documents.find((value) => value.id === item.resourceId)
           : undefined;
         return (
-        <div className="team-resource-row" key={item.id}>
+        <div className="team-resource-row" key={item.id} draggable onDragStart={event => { event.stopPropagation(); event.dataTransfer.setData('application/x-flow-team-resource', item.id); event.dataTransfer.effectAllowed = 'move'; }}>
           {resourceDocument ? <DocumentGlyph document={resourceDocument} /> : item.resourceType === "document" ? <FileText /> : <Link2 />}
           <button
             data-i18n-ignore
@@ -864,14 +943,14 @@ function ResourceSection({
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content className="team-home-menu" align="end">
+              <DropdownMenu.Content data-flow-motion="floating" className="team-home-menu" align="end">
                 <DropdownMenu.Sub>
                   <DropdownMenu.SubTrigger>
                     Move to
                     <ChevronRight />
                   </DropdownMenu.SubTrigger>
                   <DropdownMenu.Portal>
-                    <DropdownMenu.SubContent
+                    <DropdownMenu.SubContent data-flow-motion="floating"
                       className="team-home-menu"
                       sideOffset={4}
                     >
@@ -915,17 +994,13 @@ function ResourceSection({
           </DropdownMenu.Root>
         </div>
       )})}
+      </AnimatedCollapse>
     </div>
   );
 }
 
 function ResourceCommandMenu({
-  documents,
-  onLink,
-  onNew,
-  onSaved,
-  resources,
-  team,
+  documents, onLink, onNew, onSaved, resources, team, sectionId, nested = false, empty = false,
 }: {
   documents: FlowDocument[];
   onLink: () => void;
@@ -933,124 +1008,75 @@ function ResourceCommandMenu({
   onSaved: () => Promise<void>;
   resources: TeamPinnedResource[];
   team: Team;
+  sectionId?: string;
+  nested?: boolean;
+  empty?: boolean;
 }) {
   const { t } = useI18n();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState('');
   const [saving, setSaving] = useState(false);
-  const pinnedIds = new Set(
-    resources
-      .filter((resource) => resource.resourceType === "document")
-      .map((resource) => resource.resourceId),
-  );
-  const visible = documents
-    .filter((document) =>
-      document.title.toLowerCase().includes(query.trim().toLowerCase()),
-    )
-    .slice(0, 25);
-  const pin = async (document: FlowDocument) => {
-    if (saving || pinnedIds.has(document.id)) return;
-    setSaving(true);
+  const pending = useRef(false);
+  const visible = [...new Map(documents.filter(document => !document.archivedAt && document.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).map(document => [document.id, document])).values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const groups = new Map<string, FlowDocument[]>();
+  for (const document of visible) {
+    const date = new Date(document.createdAt);
+    const label = !Number.isFinite(date.getTime()) ? 'Earlier' : isToday(date) ? 'Today' : isYesterday(date) ? 'Yesterday' : isThisWeek(date) ? 'This week' : isSameWeek(date, subWeeks(new Date(), 1)) ? 'Last week' : isThisMonth(date) ? 'This month' : isSameMonth(date, subMonths(new Date(), 1)) ? 'Last month' : format(date, 'MMMM yyyy');
+    const group = groups.get(label) ?? []; group.push(document); groups.set(label, group);
+  }
+  const pinned = (document: FlowDocument) => resources.find(item => item.resourceType === 'document' && item.resourceId === document.id);
+  const selected = (document: FlowDocument) => { const item = pinned(document); return Boolean(item && (!sectionId || item.sectionId === sectionId)); };
+  const toggle = async (document: FlowDocument) => {
+    if (pending.current) return;
+    pending.current = true; setSaving(true);
     try {
-      await pinTeamResource(team.id, {
-        resourceType: "document",
-        resourceId: document.id,
-        title: document.title,
-      });
+      const item = pinned(document);
+      if (item && selected(document)) await deleteTeamResource(team.id, item.id);
+      else if (item) await updateTeamResource(team.id, item.id, { sectionId: sectionId ?? '' });
+      else await pinTeamResource(team.id, { resourceType: 'document', resourceId: document.id, title: document.title, sectionId: sectionId ?? '' });
       await onSaved();
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not add resource",
-      );
-    } finally {
-      setSaving(false);
-    }
+    } catch (error) { toast.error(error instanceof Error ? error.message : t('Could not update resource')); }
+    finally { pending.current = false; setSaving(false); }
   };
-  return (
-    <DropdownMenu.Root onOpenChange={(open) => !open && setQuery("")}>
-      <DropdownMenu.Trigger asChild>
-        <button
-          aria-label={t("Add resources")}
-          className="team-resource-command"
-          title={t("Add resources")}
-        >
-          <PlusIcon />
-        </button>
-      </DropdownMenu.Trigger>
+  const content = <>
+    <DropdownMenu.Item onSelect={onNew}><NewDocumentIcon/><span>{t('New document')}</span></DropdownMenu.Item>
+    <DropdownMenu.Sub onOpenChange={open => { if (!open) setQuery(''); }}>
+      <DropdownMenu.SubTrigger><PageIcon/><span>{t('Existing documents')}</span><ResourceChevronIcon/></DropdownMenu.SubTrigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          align="end"
-          className="team-resource-command-menu"
-          sideOffset={4}
-        >
-          <DropdownMenu.Item onSelect={onNew}>
-            <NewDocumentIcon />
-            <span>{t("New document")}</span>
-          </DropdownMenu.Item>
-          <DropdownMenu.Sub>
-            <DropdownMenu.SubTrigger>
-              <PageIcon />
-              <span>{t("Existing documents")}</span>
-              <ChevronHomeIcon />
-            </DropdownMenu.SubTrigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.SubContent
-                alignOffset={-6}
-                className="team-resource-command-menu team-resource-existing-menu"
-                sideOffset={4}
-              >
-                <label className="team-resource-existing-search">
-                  <input
-                    aria-label={t("Search documents…")}
-                    autoFocus
-                    placeholder={t("Search documents…")}
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    onKeyDown={(event) => event.stopPropagation()}
-                  />
-                  <Search />
-                </label>
-                <div className="team-resource-existing-list">
-                  {visible.map((document) => (
-                    <DropdownMenu.CheckboxItem
-                      checked={pinnedIds.has(document.id)}
-                      disabled={saving || pinnedIds.has(document.id)}
-                      key={document.id}
-                      onSelect={(event) => {
-                        event.preventDefault();
-                        void pin(document);
-                      }}
-                    >
-                      <span className="team-resource-checkbox">
-                        {pinnedIds.has(document.id) && <Check />}
-                      </span>
-                      <DocumentGlyph document={document} />
-                      <span data-i18n-ignore>{document.title}</span>
-                    </DropdownMenu.CheckboxItem>
-                  ))}
-                  {!visible.length && (
-                    <p>{t("No documents found")}</p>
-                  )}
-                </div>
-              </DropdownMenu.SubContent>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Sub>
-          <DropdownMenu.Separator />
-          <DropdownMenu.Item onSelect={onLink}>
-            <NewLinkIcon />
-            <span>{t("New link…")}</span>
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
+        <DropdownMenu.SubContent data-flow-motion="floating" collisionPadding={8} alignOffset={-6} className="team-resource-command-menu team-resource-existing-menu" sideOffset={-2}>
+          <label className="team-resource-existing-search"><input aria-label={t('Search documents…')} autoFocus placeholder={t('Search documents…')} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key.length === 1) event.stopPropagation(); }}/><Search/></label>
+          <div className="team-resource-existing-list">
+            {[...groups].map(([label, items]) => <DropdownMenu.Group key={label}>
+              <DropdownMenu.Label className="team-resource-date-group">{t(label)}</DropdownMenu.Label>
+              {items.map(document => <DropdownMenu.CheckboxItem checked={selected(document)} disabled={saving} key={document.id} onSelect={event => { event.preventDefault(); void toggle(document); }}>
+                <span className="team-resource-checkbox">{selected(document) && <Check/>}</span><DocumentGlyph document={document}/><span data-i18n-ignore>{document.title || t('Untitled document')}</span>
+              </DropdownMenu.CheckboxItem>)}
+            </DropdownMenu.Group>)}
+            {!visible.length && <p>{t('No matching documents')}</p>}
+          </div>
+        </DropdownMenu.SubContent>
       </DropdownMenu.Portal>
-    </DropdownMenu.Root>
-  );
+    </DropdownMenu.Sub>
+    <DropdownMenu.Separator/>
+    <DropdownMenu.Item onSelect={onLink}><NewLinkIcon/><span>{t('New link…')}</span></DropdownMenu.Item>
+  </>;
+  if (nested) return <DropdownMenu.Sub>
+    <DropdownMenu.SubTrigger><Pin/><span>{t('Add resources')}</span><ResourceChevronIcon/></DropdownMenu.SubTrigger>
+    <DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" collisionPadding={8} className="team-resource-command-menu" sideOffset={-2} alignOffset={-6}>{content}</DropdownMenu.SubContent></DropdownMenu.Portal>
+  </DropdownMenu.Sub>;
+  return <DropdownMenu.Root onOpenChange={open => { if (!open) setQuery(''); }}>
+    <DropdownMenu.Trigger asChild><button aria-label={t('Add resources')} className={empty ? 'team-resource-empty-add' : 'team-resource-command'} title={t('Add resources')}><PlusIcon/>{empty && <span>{t('Add resources')}</span>}</button></DropdownMenu.Trigger>
+    <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align={empty ? 'start' : 'end'} className="team-resource-command-menu" sideOffset={4}>{content}</DropdownMenu.Content></DropdownMenu.Portal>
+  </DropdownMenu.Root>;
 }
 
 function AddLinkDialog({
   team,
+  sectionId = '',
   onClose,
   onSaved,
 }: {
   team: Team;
+  sectionId?: string;
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
@@ -1067,6 +1093,7 @@ function AddLinkDialog({
     setSaving(true);
     try {
       await pinTeamResource(team.id, {
+        sectionId,
         resourceType: "link",
         title: title.trim() || normalized,
         url: normalized,
@@ -1082,8 +1109,8 @@ function AddLinkDialog({
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="team-home-overlay" />
-        <Dialog.Content
+        <Dialog.Overlay data-flow-motion="backdrop" className="team-home-overlay" />
+        <Dialog.Content data-flow-motion="dialog"
           aria-describedby={undefined}
           className="team-link-dialog"
         >
@@ -1138,12 +1165,16 @@ function NewSectionRow({
   const { t } = useI18n();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
+  const cancelled = useRef(false), pending = useRef(false);
   const save = async () => {
-    if (!name.trim() || saving) return;
+    if (pending.current || cancelled.current) return;
+    if (!name.trim()) { onCancel(); return; }
+    pending.current = true;
     setSaving(true);
     try {
       await onSave(name.trim());
     } catch (error) {
+      pending.current = false;
       setSaving(false);
       toast.error(
         error instanceof Error ? error.message : t("Could not add section"),
@@ -1159,14 +1190,15 @@ function NewSectionRow({
         maxLength={80}
         placeholder={t("Section name")}
         value={name}
-        onBlur={() => !name.trim() && onCancel()}
+        onBlur={() => void save()}
         onChange={(event) => setName(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Enter") void save();
-          if (event.key === "Escape") onCancel();
+          if (event.nativeEvent.isComposing) return;
+          if (event.key === "Enter") { event.preventDefault(); void save(); }
+          if (event.key === "Escape") { cancelled.current = true; onCancel(); }
         }}
       />
-      <span aria-hidden="true">▾</span>
+      <span aria-hidden="true"><ResourceChevronIcon/></span>
       <i />
     </div>
   );
@@ -1217,8 +1249,8 @@ function AddMembersDialog({
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="team-home-overlay" />
-        <Dialog.Content
+        <Dialog.Overlay data-flow-motion="backdrop" className="team-home-overlay" />
+        <Dialog.Content data-flow-motion="dialog"
           aria-describedby={undefined}
           className="team-members-dialog"
         >
@@ -1246,7 +1278,7 @@ function AddMembersDialog({
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content
+              <DropdownMenu.Content data-flow-motion="floating"
                 align="start"
                 className="team-members-picker"
                 sideOffset={4}
@@ -1358,7 +1390,7 @@ function TeamMembersDirectory({
           <span className="team-members-role">{t(value.workspaceMember?.role === "admin" ? "Workspace admin" : "Member")}</span>
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild><button aria-label={t("Open menu")} onClick={event => { event.preventDefault(); event.stopPropagation() }}><TeamMoreIcon/></button></DropdownMenu.Trigger>
-            <DropdownMenu.Portal><DropdownMenu.Content align="end" className="team-home-menu" sideOffset={4}>
+            <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="team-home-menu" sideOffset={4}>
               <DropdownMenu.Item onSelect={() => onNavigate(profile)}>{t("View profile")}</DropdownMenu.Item>
               <DropdownMenu.Separator/>
               <DropdownMenu.Item className="danger" onSelect={() => void setTeamMembership(data.workspace.urlKey, team.id, value.user.id, false).then(onReload)}>{t("Remove from team")}</DropdownMenu.Item>
@@ -1411,7 +1443,7 @@ function TeamDocuments({
         {!collapsed.has(group.id)&&group.items.map(document => <a className="team-document-row" href={documentPath(data.workspace.urlKey, document)} key={document.id} onClick={event => { if ((event.target as HTMLElement).closest("button,input")) { event.preventDefault(); return } event.preventDefault(); onNavigate(documentPath(data.workspace.urlKey, document)) }}>
           <label aria-label="Select document"><input checked={selected.includes(document.id)} onChange={() => setSelected(current => current.includes(document.id) ? current.filter(id => id !== document.id) : [...current, document.id])} type="checkbox"/><span><Check size={10}/></span></label>
           <DocumentGlyph document={document}/><strong data-i18n-ignore>{document.title}</strong><time>{relativeDocumentDate(document.createdAt)}</time><time>{relativeDocumentDate(document.updatedAt)}</time><button className="team-document-owner" type="button"><span>{document.creator.displayName.slice(0,2).toUpperCase()}</span><i data-i18n-ignore>{document.creator.displayName}</i></button>
-          <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open menu" className="team-document-more" type="button"><TeamMoreIcon/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="team-home-menu"><DropdownMenu.Item onSelect={() => onNavigate(documentPath(data.workspace.urlKey, document))}>Open document</DropdownMenu.Item><DropdownMenu.Item onSelect={() => void navigator.clipboard.writeText(`${location.origin}${documentPath(data.workspace.urlKey, document)}`)}>Copy link</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+          <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open menu" className="team-document-more" type="button"><TeamMoreIcon/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="team-home-menu"><DropdownMenu.Item onSelect={() => onNavigate(documentPath(data.workspace.urlKey, document))}>Open document</DropdownMenu.Item><DropdownMenu.Item onSelect={() => void navigator.clipboard.writeText(`${location.origin}${documentPath(data.workspace.urlKey, document)}`)}>Copy link</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
         </a>)}
       </section>)}
       {!visible.length && (
@@ -1430,3 +1462,4 @@ function TeamDocuments({
 }
 
 function relativeDocumentDate(value: string) { const days = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 86400000)); return days < 1 ? "today" : `${days}d ago` }
+import { AnimatedCollapse } from '@/components/ui/motion';
