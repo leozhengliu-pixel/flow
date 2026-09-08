@@ -52,6 +52,7 @@ export function useWorkspaceRealtime({ workspaceKey, issueId, route, snapshot, o
     const connect = (cursor?: string) => {
       if (disposed) return
       const params = new URLSearchParams({ workspace: workspaceKey })
+      if (import.meta.env.VITE_PAGED_ISSUES === 'true') params.set('issues', 'paged')
       if (cursor) params.set('since', cursor)
       stream = new EventSource(`/api/realtime/events?${params.toString()}`)
       stream.onopen = () => setConnected(true)
@@ -109,7 +110,7 @@ export function useWorkspaceRealtime({ workspaceKey, issueId, route, snapshot, o
     return () => {
       window.clearInterval(timer)
       const body = new Blob([JSON.stringify({ clientId, issueId, route, active: false })], { type: 'application/json' })
-      navigator.sendBeacon(`/api/realtime/presence?workspace=${encodeURIComponent(workspaceKey)}`, body)
+      navigator.sendBeacon(`/api/realtime/presence?workspace=${encodeURIComponent(workspaceKey)}${import.meta.env.VITE_PAGED_ISSUES === 'true' ? '&issues=paged' : ''}`, body)
     }
   }, [issueId, route, workspaceKey])
 

@@ -2,6 +2,8 @@ import * as Select from '@radix-ui/react-select'
 import type { ReactNode } from 'react'
 
 import './select-control.css'
+import { isPeopleProperty } from '@/lib/people'
+import { PropertyMenu } from '@/components/property/property-menu'
 
 export type SelectControlOption = {
   value: string
@@ -32,6 +34,7 @@ export function SelectControl({
   value: string
 }) {
   const selected = options.find(option => option.value === value)
+  if (!disabled && isPeopleProperty(label)) return <PropertyMenu label={label} ariaLabel={label} value={selected?.label} selectedId={value} options={options.map(option => ({ id: option.value, label: option.label, icon: option.icon, disabled: option.disabled, i18nIgnore: option.entityName, groupLabel: option.groupLabel }))} onChange={onChange} triggerClassName={`select-control ${className}`} trigger={<><span>{selected?.icon}{selected?.label ?? value}</span><ChevronIcon/></>} searchPlaceholder="Search people…"/>
   const groups = [...new Set(options.map(option => option.groupLabel).filter(Boolean))] as string[]
   const renderOption = (option: SelectControlOption) => <Select.Item className="select-control-option" disabled={option.disabled} key={option.value || EMPTY_VALUE} value={option.value || EMPTY_VALUE}>
     <Select.ItemText><span data-i18n-ignore={option.entityName || undefined}>{option.icon}{option.label}</span></Select.ItemText>

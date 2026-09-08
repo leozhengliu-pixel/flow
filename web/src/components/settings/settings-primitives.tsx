@@ -6,6 +6,8 @@ import type {
 } from "react";
 
 import { Toggle } from "@/components/ui/toggle";
+import { isPeopleProperty } from '@/lib/people'
+import { PropertyMenu } from '@/components/property/property-menu'
 
 export function SettingsPageTitle({
   action,
@@ -170,6 +172,7 @@ export function SettingsSelect({
       : option,
   );
   const selected = normalized.find((option) => option.value === value);
+  if (!disabled && isPeopleProperty(label)) return <PropertyMenu label={label} ariaLabel={label} value={selected?.label} selectedId={value} options={normalized.map(option => ({ id: option.value, label: option.label, icon: option.icon, disabled: option.disabled, i18nIgnore: option.entityName }))} onChange={onChange} triggerClassName={className || 'settings-select'} surfaceClassName={menuClassName} searchPlaceholder="Search people…" trigger={<span className="settings-select-value">{selected?.icon}{selected?.label ?? value}</span>}/>
   return (
     <SelectPrimitive.Root
       disabled={disabled}

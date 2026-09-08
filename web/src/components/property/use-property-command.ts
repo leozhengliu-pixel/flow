@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { directoryPerson, isPeopleProperty, personMatchesQuery, type PersonIdentity } from '@/lib/people'
+import { usePeopleDirectory } from './people-context'
 
 export interface PropertyCommandOption {
   id: string
@@ -6,9 +8,11 @@ export interface PropertyCommandOption {
   keywords?: string
   shortcut?: string
   disabled?: boolean
+  kind?: string
+  person?: PersonIdentity
 }
 
-export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus = true, closeOnSelect = true, keepSelectedVisible = false, onOpenChange, onSelect, open, options, resetKey, selectedIds = [] }: {
+export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus = true, closeOnSelect = true, keepSelectedVisible = false, onOpenChange, onSelect, open, options, resetKey, selectedIds = [], personOptions = false }: {
   autoFocus?: boolean
   closeOnSelect?: boolean
   keepSelectedVisible?: boolean
@@ -18,7 +22,13 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
   options: T[]
   resetKey?: string
   selectedIds?: string[]
+  personOptions?: boolean
 }) {
+  const directory = usePeopleDirectory()
+  const matchesOption = useCallback((option: T, query: string) => {
+    const person = option.person ?? (personOptions || isPeopleProperty(option.kind ?? '') ? directoryPerson(directory.users, option.id) : undefined)
+    return person ? personMatchesQuery({ ...person, ...directoryPerson(directory.users, person.id), label: option.label }, query) : matchesQuery(`${option.label} ${option.keywords ?? ''}`, query)
+  }, [directory.users, personOptions])
   const [query, setQuery] = useState('')
   const [activeId, setActiveId] = useState<string>()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -27,7 +37,7 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
   const selectedIdsRef = useRef(selectedIds)
   selectedIdsRef.current = selectedIds
   const normalizedQuery = query.trim().toLocaleLowerCase()
-  const filteredOptions = useMemo(() => normalizedQuery ? options.filter(option => (keepSelectedVisible && selectedIds.includes(option.id)) || matchesQuery(`${option.label} ${option.keywords ?? ''}`, normalizedQuery)) : options, [keepSelectedVisible, normalizedQuery, options, selectedIds])
+  const filteredOptions = useMemo(() => normalizedQuery ? options.filter(option => (keepSelectedVisible && selectedIds.includes(option.id)) || matchesOption(option, normalizedQuery)) : options, [keepSelectedVisible, normalizedQuery, options, selectedIds, matchesOption])
 
   useEffect(() => {
     if (!open) return
@@ -79,7 +89,7 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
   const onQueryChange = (value: string) => {
     setQuery(value)
     const normalized = value.trim().toLocaleLowerCase()
-    setActiveId(options.find(option => !option.disabled && matchesQuery(`${option.label} ${option.keywords ?? ''}`, normalized))?.id)
+    setActiveId(options.find(option => !option.disabled && matchesOption(option, normalized))?.id)
   }
 
   return {

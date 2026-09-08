@@ -1,7 +1,8 @@
-import { Building2, Clock3, Layers3 } from 'lucide-react'
+import { Building2, Layers3 } from 'lucide-react'
 import type { ActivityEvent, ProjectSummary, User, WorkspaceMember, WorkflowState } from '@/types/flow'
 import { Avatar } from '@/components/issue/issue-row'
 import { StatusIcon } from '@/components/issue/issue-icons'
+import { PersonIdentityDetails } from './person-info'
 
 export function StatusHoverPreview({ state, activities, issueCreatedAt }: { state: WorkflowState; activities: ActivityEvent[]; issueCreatedAt: string }) {
   const changes = activities
@@ -17,15 +18,15 @@ export function StatusHoverPreview({ state, activities, issueCreatedAt }: { stat
   </div>
 }
 
-export function AssigneeHoverPreview({ user, member, online = false, workspaceName, project }: { user: User; member?: WorkspaceMember; online?: boolean; workspaceName: string; project?: ProjectSummary }) {
+export function AssigneeHoverPreview({ user, member, online, workspaceName, project }: { user: User; member?: WorkspaceMember; online?: boolean; workspaceName: string; project?: ProjectSummary }) {
   const isOnline = online && user.active && member?.status !== 'suspended'
   return <div className="assignee-hover-preview">
-    <header><Avatar name={user.displayName}/><div><strong>{user.displayName}</strong><span>{user.name}</span></div></header>
+    <header><Avatar name={user.displayName}/><div><strong data-i18n-ignore>{user.displayName}</strong><span data-i18n-ignore>{user.name}</span></div></header>
+    <PersonIdentityDetails person={user}/>
     <div className="assignee-hover-preview__details">
-      <span><i className={isOnline ? undefined : 'offline'}/>{isOnline ? 'Online' : 'Offline'}</span>
-      <span><Clock3/><time>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time><small>local time</small></span>
+      {member?.status === 'suspended' ? <span>Suspended</span> : !user.active ? <span>Inactive</span> : online !== undefined ? <span><i className={isOnline ? undefined : 'offline'}/>{isOnline ? 'Online' : 'Offline'}</span> : null}
       <span><Building2/>{workspaceName}</span>
-      <span><Layers3/>{project?.name ?? 'No project'}</span>
+      {project && <span><Layers3/>{project.name}</span>}
     </div>
   </div>
 }

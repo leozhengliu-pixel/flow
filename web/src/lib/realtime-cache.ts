@@ -16,6 +16,13 @@ const databaseName = 'flow-realtime-cache'
 const storeName = 'workspaces'
 const databaseVersion = 1
 const storagePrefix = 'flow:realtime:'
+const memorySnapshots = new Map<string, BootstrapData | undefined>()
+
+function withCursor(record: RealtimeCacheRecord | undefined, workspaceKey: string): RealtimeCacheRecord | undefined {
+  const checkpoint = readLocal(workspaceKey)
+  if (!record && !checkpoint) return undefined
+  return { ...(record ?? checkpoint!), cursor: checkpoint?.cursor ?? record?.cursor, snapshot: record?.snapshot ?? memorySnapshots.get(workspaceKey) }
+}
 
 function storageKey(workspaceKey: string) {
   return `${storagePrefix}${workspaceKey}`
@@ -34,7 +41,7 @@ function readLocal(workspaceKey: string): RealtimeCacheRecord | undefined {
 function writeLocal(record: RealtimeCacheRecord) {
   if (typeof localStorage === 'undefined') return
   try {
-    localStorage.setItem(storageKey(record.workspaceKey), JSON.stringify(record))
+    localStorage.setItem(storageKey(record.workspaceKey), JSON.stringify({ workspaceKey: record.workspaceKey, cursor: record.cursor, updatedAt: record.updatedAt }))
   } catch {
     // Quota/private-mode failures should never interrupt the live stream.
   }
@@ -62,20 +69,25 @@ function openDatabase(): Promise<IDBDatabase | undefined> {
 export async function loadRealtimeCache(workspaceKey: string): Promise<RealtimeCacheRecord | undefined> {
   if (!workspaceKey) return undefined
   const database = await openDatabase()
-  if (!database) return readLocal(workspaceKey)
+  if (!database) return withCursor(undefined, workspaceKey)
   return new Promise((resolve) => {
     const request = database.transaction(storeName, 'readonly').objectStore(storeName).get(workspaceKey)
-    request.onsuccess = () => resolve((request.result as RealtimeCacheRecord | undefined) ?? readLocal(workspaceKey))
-    request.onerror = () => resolve(readLocal(workspaceKey))
+    request.onsuccess = () => resolve(withCursor(request.result as RealtimeCacheRecord | undefined, workspaceKey))
+    request.onerror = () => resolve(withCursor(undefined, workspaceKey))
     database.close()
   })
 }
 
 export async function saveRealtimeCache(record: RealtimeCacheRecord): Promise<void> {
   if (!record.workspaceKey) return
-  writeLocal(record)
+  writeLocal({ ...record, cursor: readLocal(record.workspaceKey)?.cursor ?? record.cursor })
   const database = await openDatabase()
-  if (!database) return
+  if (!database) {
+    memorySnapshots.delete(record.workspaceKey)
+    memorySnapshots.set(record.workspaceKey, record.snapshot)
+    while (memorySnapshots.size > 2) memorySnapshots.delete(memorySnapshots.keys().next().value!)
+    return
+  }
   await new Promise<void>((resolve) => {
     const request = database.transaction(storeName, 'readwrite').objectStore(storeName).put(record)
     request.onsuccess = request.onerror = () => resolve()
@@ -85,17 +97,13 @@ export async function saveRealtimeCache(record: RealtimeCacheRecord): Promise<vo
 
 export async function saveRealtimeCursor(workspaceKey: string, cursor: string): Promise<void> {
   if (!workspaceKey || !cursor) return
-  const existing = await loadRealtimeCache(workspaceKey)
-  await saveRealtimeCache({
-    workspaceKey,
-    cursor,
-    snapshot: existing?.snapshot,
-    updatedAt: new Date().toISOString(),
-  })
+  // Cursor checkpoints must not read, serialize, or rewrite a workspace snapshot.
+  writeLocal({ workspaceKey, cursor, updatedAt: new Date().toISOString() })
 }
 
 export async function clearRealtimeCache(workspaceKey: string): Promise<void> {
   if (!workspaceKey) return
+  memorySnapshots.delete(workspaceKey)
   if (typeof localStorage !== 'undefined') {
     try {
       localStorage.removeItem(storageKey(workspaceKey))

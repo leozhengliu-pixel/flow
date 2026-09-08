@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { PeopleMenuItems } from '@/components/property/people-menu-items'
 import { VirtualColumnList } from '@/components/ui/virtual-column-list';
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -10,7 +11,6 @@ import {
   Bell,
   BellOff,
   Building2,
-  Check,
   ChevronRight,
   Copy,
   Ellipsis,
@@ -548,17 +548,7 @@ function ViewRow({
                 className={styles.contextMenu}
                 sideOffset={-3}
               >
-                {data.users.map((user) => (
-                  <ContextMenu.Item
-                    className={styles.menuItem}
-                    key={user.id}
-                    onSelect={() => onUpdate({ ownerId: user.id })}
-                  >
-                    <ViewOwnerAvatar user={user} />
-                    <span data-i18n-ignore>{user.displayName}</span>
-                    {owner.id === user.id && <Check className={styles.check} />}
-                  </ContextMenu.Item>
-                ))}
+                <PeopleMenuItems contextMenu users={data.users} selectedId={owner.id} onSelect={id => onUpdate({ ownerId: id })} itemClassName={styles.menuItem}/>
               </ContextMenu.SubContent>
             </ContextMenu.Portal>
           </ContextMenu.Sub>
@@ -811,17 +801,7 @@ function OwnerMenu({
           className={styles.contextMenu}
           sideOffset={4}
         >
-          {users.map((user) => (
-            <DropdownMenu.Item
-              className={styles.menuItem}
-              key={user.id}
-              onSelect={() => onChange(user.id)}
-            >
-              <ViewOwnerAvatar user={user} />
-              <span data-i18n-ignore>{user.displayName}</span>
-              {user.id === owner.id && <Check className={styles.check} />}
-            </DropdownMenu.Item>
-          ))}
+          <PeopleMenuItems users={users} selectedId={owner.id} onSelect={onChange} itemClassName={styles.menuItem}/>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>

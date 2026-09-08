@@ -47,15 +47,7 @@ export function IssueBoard({ groups, hiddenGroupIds = [], properties, propertyOp
   const hiddenGroups=groups.filter(group=>hiddenGroupIds.includes(group.id))
   return <div className={styles.board} role="list" aria-label={t('Issue board')} data-dragging={Boolean(draggingId)}>
     {groups.filter(group=>!hiddenGroupIds.includes(group.id)).map(group => <section className={styles.column} role="listitem" key={group.id} aria-label={group.label}>
-      <header className={styles.columnHeader}>
-        {group.stateType && <StatusIcon
-          state={{ id: group.id, name: group.label, type: group.stateType, color: group.state?.color ?? 'var(--status-neutral)' }}
-          size={14}
-        />}
-        <strong data-i18n-ignore>{group.label}</strong><button className={styles.count} type="button" aria-label={t(`${group.issues.length} issues`)}>{group.issues.length}</button>
-        <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={styles.headerButton} type="button" aria-label={t('Open menu')}><Ellipsis size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" aria-label={t('Open menu')} className={styles.columnMenu} align="end" sideOffset={4}><DropdownMenu.Item className={styles.columnMenuItem} onSelect={()=>group.issues.forEach(issue=>onSelectIssue(issue.id,true,false))}>{t('Select all in column')}</DropdownMenu.Item><DropdownMenu.Item className={styles.columnMenuItem} onSelect={()=>onHideGroup?.(group.id)}>{t('Hide column')}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
-        <button className={styles.headerButton} type="button" aria-label={t(createIssueLabel)} onClick={() => onCreateIssue?.(group)}><Plus size={15}/></button>
-      </header>
+      <IssueBoardGroupHeader group={group} createIssueLabel={createIssueLabel} onCreateIssue={onCreateIssue} onHideGroup={onHideGroup} onSelectIssue={onSelectIssue}/>
       <div className={styles.cards} data-over={over?.groupId === group.id} data-over-end={over?.groupId === group.id && over.index === group.issues.length} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; if (event.target === event.currentTarget) setOver({ groupId: group.id, index: group.issues.length }) }} onDrop={event => { event.stopPropagation(); drop(event, group, group.issues.length) }}>
         {group.issues.map((issue, index) => <IssueBoardCard
           key={issue.id} issue={issue} properties={properties} propertyOptions={propertyOptions} selected={selectedIds.has(issue.id)} dragging={draggingId === issue.id}
@@ -67,11 +59,25 @@ export function IssueBoard({ groups, hiddenGroupIds = [], properties, propertyOp
         <button className={styles.addIssue} type="button" onClick={() => onCreateIssue?.(group)}><Plus size={14}/>{t(createIssueLabel)}</button>
       </div>
     </section>)}
-    {hiddenGroups.length>0&&<section className={styles.hiddenColumns} aria-label={t('Hidden columns')}><strong>{t('Hidden columns')}</strong>{hiddenGroups.map(group=><button key={group.id} type="button" onClick={()=>onShowGroup?.(group.id)}><StatusIcon state={{id:group.id,name:group.label,type:group.stateType??'unstarted',color:group.state?.color??'var(--status-neutral)'}} size={14}/><span data-i18n-ignore>{group.label}</span><b>{group.issues.length}</b></button>)}</section>}
+    {hiddenGroups.length>0&&<section className={styles.hiddenColumns} aria-label={t('Hidden columns')}><strong>{t('Hidden columns')}</strong>{hiddenGroups.map(group=><button key={group.id} type="button" onClick={()=>onShowGroup?.(group.id)}><StatusIcon state={{id:group.id,name:group.label,type:group.stateType??'unstarted',color:group.state?.color??'var(--status-neutral)'}} size={14}/><span data-i18n-ignore>{group.label}</span><b>{group.totalCount ?? group.issues.length}</b></button>)}</section>}
   </div>
 }
 
-function IssueBoardCard({ issue, properties, propertyOptions, selected, dragging, dropBefore, onDragStart, onDragEnd, onDragOver, onDrop, onOpen, onOpenSubIssue, onPropertyChange, onSelect }: {
+export function IssueBoardGroupHeader({group,createIssueLabel='Add new issue',onCreateIssue,onHideGroup,onSelectIssue}:{group:MyIssuesGroupData;createIssueLabel?:string;onCreateIssue?:(group:MyIssuesGroupData)=>void;onHideGroup?:(id:string)=>void;onSelectIssue?:(id:string,selected:boolean,range:boolean)=>void}){
+  const {t}=useI18n()
+  const count=group.totalCount??group.issues.length
+  return <header className={styles.columnHeader}>
+        {group.stateType && <StatusIcon
+          state={{ id: group.id, name: group.label, type: group.stateType, color: group.state?.color ?? 'var(--status-neutral)' }}
+          size={14}
+        />}
+        <strong data-i18n-ignore>{group.label}</strong><button className={styles.count} type="button" aria-label={t(`${count} issues`)}>{count}</button>
+        <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={styles.headerButton} type="button" aria-label={t('Open menu')}><Ellipsis size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" aria-label={t('Open menu')} className={styles.columnMenu} align="end" sideOffset={4}><DropdownMenu.Item className={styles.columnMenuItem} onSelect={()=>group.issues.forEach(issue=>onSelectIssue?.(issue.id,true,false))}>{t(count>group.issues.length?'Select loaded issues':'Select all in column')}</DropdownMenu.Item><DropdownMenu.Item className={styles.columnMenuItem} onSelect={()=>onHideGroup?.(group.id)}>{t('Hide column')}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+        <button className={styles.headerButton} type="button" aria-label={t(createIssueLabel)} onClick={() => onCreateIssue?.(group)}><Plus size={15}/></button>
+      </header>
+}
+
+export function IssueBoardCard({ issue, properties, propertyOptions, selected, dragging, dropBefore, onDragStart, onDragEnd, onDragOver, onDrop, onOpen, onOpenSubIssue, onPropertyChange, onSelect }: {
   issue: MyIssuesRowData; properties: ReadonlySet<MyIssuesProperty>; propertyOptions: MyIssuesRowPropertyOptions; selected: boolean; dragging: boolean; dropBefore: boolean
   onDragStart: () => void; onDragEnd: () => void; onDragOver: (event: DragEvent<HTMLElement>) => void; onDrop: (event: DragEvent<HTMLElement>) => void; onOpen: () => void; onOpenSubIssue:(issue:MyIssuesRowData)=>void; onPropertyChange: (property: MyIssuesEditableProperty, value: string | string[]) => void | Promise<void>; onSelect: (selected: boolean, range: boolean) => void
 }) {

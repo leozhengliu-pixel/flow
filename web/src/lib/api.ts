@@ -280,10 +280,15 @@ export function setTeamMembership(
   );
 }
 export function fetchBootstrap(workspaceKey?: string): Promise<BootstrapData> {
+  if (import.meta.env.VITE_PAGED_ISSUES === 'true') return fetchPagedBootstrap(workspaceKey)
   return request<BootstrapData>(
     "/api/bootstrap",
     workspaceKey ? { headers: { "X-Workspace-Key": workspaceKey } } : undefined,
   ).then(normalizeBootstrapData);
+}
+
+export function fetchPagedBootstrap(workspaceKey?: string): Promise<BootstrapData> {
+  return request<BootstrapData>('/api/issue-records/bootstrap', workspaceKey ? { headers: { 'X-Workspace-Key': workspaceKey } } : undefined).then(normalizeBootstrapData)
 }
 export type IssueQueryInput = {
   q?: string;
@@ -296,7 +301,40 @@ export type IssueQueryInput = {
   limit?: number;
   sort?: "priority" | "createdAt" | "updatedAt" | "title" | "sortOrder";
   direction?: "asc" | "desc";
+  groupBy?: string;
+  groupValue?: string;
+  includeTotal?: boolean;
 };
+
+export function listIssueRecords(filters: IssueQueryInput = {}, signal?: AbortSignal): Promise<IssueQueryPage> {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) {
+    if (value === undefined) continue
+    params.set(key, key === 'filter' ? JSON.stringify(value) : Array.isArray(value) ? value.join(',') : String(value))
+  }
+  return request<IssueQueryPage>(`/api/issue-records?${params}`, { signal })
+}
+
+export function listIssueRecordGroups(filters: IssueQueryInput, signal?: AbortSignal): Promise<{ groups: { value: string; count: number }[] }> {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) {
+    if (value === undefined || key === 'cursor' || key === 'groupValue') continue
+    params.set(key, key === 'filter' ? JSON.stringify(value) : Array.isArray(value) ? value.join(',') : String(value))
+  }
+  return request(`/api/issue-records/groups?${params}`, { signal })
+}
+
+export function fetchIssueRecord(id: string, signal?: AbortSignal): Promise<Issue> {
+  return request(`/api/issue-records/${encodeURIComponent(id)}`, { signal })
+}
+
+export function updateIssueRecord(id: string, input: IssueUpdateInput): Promise<Issue> {
+  return request(`/api/issue-records/${encodeURIComponent(id)}`, jsonRequest('PATCH', input))
+}
+
+export function fetchIssueRecordContext(id: string, signal?: AbortSignal): Promise<{ issue: Issue; relatedIssues: Issue[]; comments: Comment[]; activities: BootstrapData['activities'][string] }> {
+  return request(`/api/issue-records/${encodeURIComponent(id)}/context`, { signal })
+}
 export function listIssues(filters: IssueQueryInput = {}): Promise<IssueQueryPage> {
   const query = new URLSearchParams();
   if (filters.q) query.set("q", filters.q);
@@ -1888,7 +1926,7 @@ export function updatePresence(
   active = true,
 ): Promise<Presence[]> {
   return request(
-    "/api/realtime/presence",
+    import.meta.env.VITE_PAGED_ISSUES === 'true' ? '/api/realtime/presence?issues=paged' : '/api/realtime/presence',
     jsonRequest("POST", { clientId, issueId, route, active }),
   );
 }
@@ -1925,7 +1963,7 @@ export async function createIssue(input: {
   recurrence?: "" | "daily" | "weekly" | "monthly";
   nextOccurrenceAt?: string;
 }): Promise<Issue> {
-  return request("/api/issues", {
+  return request(import.meta.env.VITE_PAGED_ISSUES === 'true' ? '/api/issue-records' : '/api/issues', {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -1936,7 +1974,7 @@ export function updateIssue(
   issueId: string,
   input: IssueUpdateInput,
 ): Promise<Issue> {
-  return request(`/api/issues/${issueId}`, {
+  return request(`${import.meta.env.VITE_PAGED_ISSUES === 'true' ? '/api/issue-records' : '/api/issues'}/${issueId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

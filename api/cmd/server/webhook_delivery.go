@@ -23,9 +23,14 @@ type flowWebhookEnvelope struct {
 }
 
 func (s *server) dispatchWebhookEvent(workspace string, event domain.DomainEvent) {
-	data, ok := s.store.BootstrapFor(workspace)
+	data, ok := s.store.WorkspaceMetadata(workspace)
 	if !ok || len(data.Webhooks) == 0 {
 		return
+	}
+	if strings.HasPrefix(event.Type, "issue.") {
+		if issue, err := s.store.IssueRecord(context.Background(), workspace, event.AggregateID); err == nil {
+			data.Issues = []domain.Issue{issue}
+		}
 	}
 	resourceType := webhookResourceType(event.Type)
 	action := webhookAction(event.Type)

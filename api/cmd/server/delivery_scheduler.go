@@ -73,7 +73,7 @@ func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error 
 			return err
 		}
 		s.dispatchNotificationEmails(ctx, key)
-		data, ok := s.store.BootstrapFor(key)
+		data, ok := s.store.WorkspaceMetadata(key)
 		if !ok {
 			continue
 		}
@@ -91,9 +91,13 @@ func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error 
 }
 
 func (s *server) prepareDueNotificationDeliveries(ctx context.Context, key string, now time.Time) error {
-	snapshot, ok := s.store.BootstrapFor(key)
-	if !ok {
-		return nil
+	statuses := []string{"failed"}
+	if s.mailer != nil {
+		statuses = append(statuses, "pending-disabled")
+	}
+	snapshot, err := s.store.NotificationDeliverySnapshot(ctx, key, statuses, now)
+	if err != nil {
+		return err
 	}
 	needsUpdate := slices.ContainsFunc(snapshot.NotificationDeliveries, func(delivery domain.NotificationDelivery) bool {
 		return delivery.Channel == "email" && (delivery.Status == "failed" && delivery.NextAttemptAt != nil && !delivery.NextAttemptAt.After(now) || delivery.Status == "pending-disabled" && s.mailer != nil)
@@ -101,21 +105,24 @@ func (s *server) prepareDueNotificationDeliveries(ctx context.Context, key strin
 	if !needsUpdate {
 		return nil
 	}
-	return s.store.MutateWorkspace(ctx, key, "notification.deliveries_scheduled", "scheduler", nil, func(data *domain.Bootstrap) error {
-		for index := range data.NotificationDeliveries {
-			delivery := &data.NotificationDeliveries[index]
+	for _, item := range snapshot.NotificationDeliveries {
+		err := s.store.MutateNotificationDelivery(ctx, key, item.ID, func(delivery *domain.NotificationDelivery) error {
 			if delivery.Channel != "email" {
-				continue
+				return nil
 			}
 			dueFailure := delivery.Status == "failed" && delivery.NextAttemptAt != nil && !delivery.NextAttemptAt.After(now)
 			deliveryEnabled := delivery.Status == "pending-disabled" && s.mailer != nil
 			if !dueFailure && !deliveryEnabled {
-				continue
+				return nil
 			}
 			delivery.Status, delivery.NextAttemptAt, delivery.UpdatedAt = "pending", nil, now
+			return nil
+		})
+		if err != nil {
+			return err
 		}
-		return nil
-	})
+	}
+	return nil
 }
 
 func dueDeliveryIDs(values []domain.IntegrationDelivery, now time.Time) []string {

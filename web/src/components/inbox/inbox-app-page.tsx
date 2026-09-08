@@ -7,7 +7,8 @@ import type { SubIssueInput } from '@/components/issue/sub-issue-editor'
 import { batchNotifications, updateInboxNotification } from '@/lib/api'
 
 import { type InboxFilterCondition, type InboxFilterOptions } from './inbox-filter-builder'
-import { INBOX_REVIEW_STATUS_OPTIONS, normalizeInboxFilters } from './inbox-filter-types'
+import { INBOX_NOTIFICATION_TYPE_OPTIONS, INBOX_REVIEW_STATUS_OPTIONS, normalizeInboxFilters } from './inbox-filter-types'
+import { inboxActorOptions, inboxNotificationCategory, matchesInboxFilter as notificationMatchesFilter } from './inbox-filter-model'
 import { InboxPage, type InboxPageAdapter } from './inbox-page'
 import type { InboxDisplayOptions, InboxTab } from './inbox-page-shell'
 import type { InboxNotificationKind, InboxNotificationRowData, InboxSnoozePreset } from './notification-row'
@@ -31,7 +32,7 @@ interface InboxProjection extends InboxNotificationRowData {
   projectId?: string
   initiativeIds: string[]
   issuePriority: number
-  issueStatusType: Issue['state']['type']
+  issueStatusType: string
   reviewId?: string
   reviewStatus?: string
 }
@@ -71,8 +72,8 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
   const [displayOptions, setDisplayOptions] = useState(readInboxDisplayOptions)
   const [filters, setFilters] = useState<InboxFilterCondition[]>(readInboxFilters)
   const filterOptions = useMemo<InboxFilterOptions>(
-    () => buildInboxFilterOptions(notifications, filters, displayOptions, data),
-    [data, displayOptions, filters, notifications],
+    () => buildInboxFilterOptions(notifications, displayOptions, data),
+    [data, displayOptions, notifications],
   )
   const notificationsRef = useRef(notifications)
   notificationsRef.current = notifications
@@ -247,6 +248,7 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
           workspacePresence={presence}
           comments={data.comments[issue.id] ?? []}
           activities={data.activities[issue.id] ?? []}
+          highlightTarget={{ kind: projection.sourceType, id: projection.sourceId, key: projection.id }}
           embedded
           onClose={() => setSelectedId(null)}
           onNavigateIssue={onOpenIssue}
@@ -327,7 +329,7 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
     if (notification.reviewId) {
       const review = data.reviews.find(item => item.id === notification.reviewId)
       if (!review || notification.deletedAt || notification.archivedAt) return []
-      return [{ id: notification.id, href: `/${data.workspace.urlKey}/review/${review.slugId}`, issueId: '', sourceType: 'activity' as const, sourceId: notification.sourceId, notificationType: 'review', actorId: notification.actor.id, actor: notification.actor.displayName, actorAvatarUrl: notification.actor.avatarUrl, kind: 'review' as const, identifier: `${review.provider}#${review.number}`, title: review.title, body: `${notification.actor.displayName} requested your review`, timeLabel: relativeTime(notification.updatedAt), timestamp: notification.updatedAt, read: Boolean(notification.readAt), favorite: notification.favorite, initiativeIds: [], issuePriority: 0, issueStatusType: 'started' as const, reviewId: review.id, reviewStatus: review.draft ? 'draft' : review.status }]
+      return [{ id: notification.id, href: `/${data.workspace.urlKey}/review/${review.slugId}`, issueId: '', sourceType: 'activity' as const, sourceId: notification.sourceId, notificationType: 'review', actorId: notification.actor.id, actor: notification.actor.displayName, actorAvatarUrl: notification.actor.avatarUrl, kind: 'review' as const, identifier: `${review.provider}#${review.number}`, title: review.title, body: `${notification.actor.displayName} requested your review`, timeLabel: relativeTime(notification.updatedAt), timestamp: notification.updatedAt, read: Boolean(notification.readAt), favorite: notification.favorite, snoozedUntil: notification.snoozedUntil, initiativeIds: [], issuePriority: 0, issueStatusType: 'started' as const, reviewId: review.id, reviewStatus: review.draft ? 'draft' : review.status }]
     }
     const issue = notification.issueId ? issues.get(notification.issueId) : undefined
     const reminderProject = notification.projectId ? data.projects.find(project => project.id === notification.projectId) : undefined
@@ -367,7 +369,7 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
         issueId: '',
         sourceType: 'activity' as const,
         sourceId: notification.sourceId,
-        notificationType: notification.type,
+        notificationType: inboxNotificationCategory(notification),
         actorId: notification.actor.id,
         actor: notification.actor.displayName,
         actorAvatarUrl: notification.actor.avatarUrl,
@@ -388,14 +390,14 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
     if (!issue || issue.archivedAt || notification.deletedAt || notification.archivedAt) return []
     const comment = notification.commentId ? (data.comments[issue.id] ?? []).find(item => item.id === notification.commentId) : undefined
     const event = notification.activityId ? (data.activities[issue.id] ?? []).find(item => item.id === notification.activityId) : undefined
-    const sourceType = notification.sourceType === 'comment' ? 'comment' : 'activity'
+    const sourceType = notification.commentId || notification.sourceType === 'comment' ? 'comment' : 'activity'
     const sourceId = sourceType === 'comment' ? notification.commentId ?? notification.sourceId : notification.activityId ?? notification.sourceId
     return [{
       id: notification.id,
       issueId: issue.id,
       sourceType,
       sourceId,
-      notificationType: comment ? 'comment' : event ? activityKind(event) : notification.type,
+      notificationType: inboxNotificationCategory(notification, comment ? 'comment' : event ? activityKind(event) : notification.type),
       actorId: notification.actor.id,
       actor: notification.actor.displayName,
       actorAvatarUrl: notification.actor.avatarUrl,
@@ -412,7 +414,7 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
       initiativeIds: issue.project ? data.initiatives.filter(initiative => initiative.projectIds.includes(issue.project!.id)).map(initiative => initiative.id) : [],
       issuePriority: issue.priority,
       issueState: issue.state,
-      issueStatusType: issue.state.type,
+      issueStatusType: issue.state.name.toLowerCase() === 'triage' ? 'triage' : issue.state.name.toLowerCase() === 'duplicate' ? 'duplicate' : issue.state.type,
     }]
   })
 }
@@ -421,7 +423,7 @@ function withOccurrence(body: string, count: number) { return count > 1 ? `${bod
 
 function activityKind(event: ActivityEvent): InboxNotificationKind {
   if (event.type.startsWith('comment.')) return 'comment'
-  if (event.type === 'issue.updated' && 'assigneeId' in event.metadata) return 'assignment'
+  if (event.type === 'issue.updated' && ('assigneeId' in event.metadata || 'assignee' in event.metadata)) return 'assignment'
   if (event.type.startsWith('project.')) return 'project'
   return 'status'
 }
@@ -505,20 +507,6 @@ function sortablePriority(priority: number) {
   return priority === 0 ? Number.MAX_SAFE_INTEGER : priority
 }
 
-function notificationMatchesFilter(notification: InboxProjection, filter: InboxFilterCondition) {
-  const values = new Set(filter.values.map(value => value.value))
-  if (!values.size) return true
-  let match = false
-  if (filter.property === 'notificationType') match = values.has(notification.notificationType)
-  if (filter.property === 'from') match = values.has(notification.actorId)
-  if (filter.property === 'project') match = notification.projectId ? values.has(notification.projectId) : values.has('__none__')
-  if (filter.property === 'initiative') match = notification.initiativeIds.length ? notification.initiativeIds.some(id => values.has(id)) : values.has('__none__')
-  if (filter.property === 'issuePriority') match = values.has(String(notification.issuePriority))
-  if (filter.property === 'issueStatusType') match = values.has(notification.issueStatusType)
-  if (filter.property === 'reviewStatus') match = notification.reviewStatus ? values.has(notification.reviewStatus) : values.has('__none__')
-  return filter.operator === 'is' ? match : !match
-}
-
 function notificationVisibleForDisplay(notification: InboxProjection, display: InboxDisplayOptions) {
   if (!display.showRead && notification.read) return false
   return display.showSnoozed || !notification.snoozedUntil || new Date(notification.snoozedUntil).getTime() <= Date.now()
@@ -534,31 +522,11 @@ function matchesInboxTab(notification: InboxProjection, tab: InboxTab) {
   return tab === 'priority' ? priority : !priority
 }
 
-const notificationTypeOptions = [
-  ['assignment', 'Assignments', 'assigned assignment'],
-  ['comment', 'Comments and replies', 'commented reply comment'],
-  ['apps', 'Apps and integrations', 'app integration'],
-  ['customerRequest', 'Customer requests', 'customer request'],
-  ['document', 'Document changes', 'document change'],
-  ['loop', 'Loops', 'loop'],
-  ['mention', 'Mentions', 'mentioned mention'],
-  ['pulse', 'Pulse summaries', 'pulse summary'],
-  ['reaction', 'Reactions', 'reaction emoji'],
-  ['reminder', 'Reminders and deadlines', 'reminder deadline due date'],
-  ['review', 'Reviews', 'review'],
-  ['status', 'Status changes', 'status state issue'],
-  ['subscription', 'Subscriptions', 'subscription subscribed'],
-  ['system', 'System notifications', 'system'],
-  ['triage', 'Triage', 'triage'],
-  ['project', 'Updates', 'project update'],
-] as const
-
-function buildInboxFilterOptions(notifications: InboxProjection[], filters: InboxFilterCondition[], display: InboxDisplayOptions, data: BootstrapData): InboxFilterOptions {
-  const candidatesFor = (property: InboxFilterCondition['property']) => notifications.filter(notification =>
-    notificationVisibleForDisplay(notification, display)
-    && filters.filter(filter => filter.property !== property).every(filter => notificationMatchesFilter(notification, filter)),
-  )
-  const count = (property: InboxFilterCondition['property'], value: string) => candidatesFor(property).filter(notification => notificationMatchesFilter(notification, {
+function buildInboxFilterOptions(notifications: InboxProjection[], display: InboxDisplayOptions, data: BootstrapData): InboxFilterOptions {
+  // Menu counts describe the Inbox collection before user predicates, so a
+  // zero-result filter never hides the options needed to change it.
+  const candidates = notifications.filter(notification => notificationVisibleForDisplay(notification, display))
+  const count = (property: InboxFilterCondition['property'], value: string) => candidates.filter(notification => notificationMatchesFilter(notification, {
     id: 'count', property, operator: 'is', values: [{ value, valueLabel: value }],
   })).length
   const statusDefinitions = [
@@ -572,8 +540,8 @@ function buildInboxFilterOptions(notifications: InboxProjection[], filters: Inbo
   ]
 
   return {
-    notificationType: notificationTypeOptions.map(([id, label, keywords]) => ({ id, label, keywords, count: count('notificationType', id) })),
-    from: data.users.map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, keywords: `${user.name} ${user.email}`, count: count('from', user.id), i18nIgnore: true })),
+    notificationType: INBOX_NOTIFICATION_TYPE_OPTIONS.map(option => ({ ...option, count: count('notificationType', option.id) })),
+    from: inboxActorOptions(candidates, data.users),
     project: [
       { id: '__none__', label: 'No project', keywords: 'none empty', icon: <NoProjectIcon size={15} />, count: count('project', '__none__') },
       ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, icon: <ProjectIcon size={15} style={{ color: project.color }} />, count: count('project', project.id), i18nIgnore: true })),

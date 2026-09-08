@@ -7,6 +7,7 @@ import (
 
 type User struct {
 	ID            string `json:"id"`
+	UserID        string `json:"userId,omitempty"`
 	Name          string `json:"name"`
 	DisplayName   string `json:"displayName"`
 	Email         string `json:"email"`
@@ -1569,6 +1570,8 @@ type NotificationList struct {
 }
 
 type Bootstrap struct {
+	NextIssueNumber               int                                `json:"-"`
+	IssueCollectionPaged          bool                               `json:"issueCollectionPaged,omitempty"`
 	Workspace                     Workspace                          `json:"workspace"`
 	Viewer                        User                               `json:"viewer"`
 	Users                         []User                             `json:"users"`

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import type { PersonIdentity } from '@/lib/people'
 
 /** The predicates exposed by Flow's Inbox filter picker. */
 export type InboxFilterProperty =
@@ -13,6 +14,7 @@ export type InboxFilterProperty =
 export type InboxFilterOperator = 'is' | 'isNot'
 
 export interface InboxFilterOption {
+  person?: PersonIdentity
   id: string
   label: string
   color?: string
@@ -25,6 +27,25 @@ export interface InboxFilterOption {
   /** Entity names are never translated by the UI compatibility translator. */
   i18nIgnore?: boolean
 }
+
+export const INBOX_NOTIFICATION_TYPE_OPTIONS = [
+  { id: 'apps', label: 'Apps and integrations', keywords: 'app integration' },
+  { id: 'assignment', label: 'Assignments', keywords: 'assigned assignment' },
+  { id: 'comment', label: 'Comments and replies', keywords: 'commented reply comment' },
+  { id: 'customerRequest', label: 'Customer requests', keywords: 'customer request' },
+  { id: 'document', label: 'Document changes', keywords: 'document change' },
+  { id: 'loop', label: 'Loops', keywords: 'loop' },
+  { id: 'mention', label: 'Mentions', keywords: 'mentioned mention' },
+  { id: 'pulse', label: 'Pulse summaries', keywords: 'pulse summary' },
+  { id: 'reaction', label: 'Reactions', keywords: 'reaction emoji' },
+  { id: 'reminder', label: 'Reminders and deadlines', keywords: 'reminder deadline due date' },
+  { id: 'review', label: 'Reviews', keywords: 'review' },
+  { id: 'status', label: 'Status changes', keywords: 'status state issue' },
+  { id: 'subscription', label: 'Subscriptions', keywords: 'subscription subscribed' },
+  { id: 'system', label: 'System notifications', keywords: 'system' },
+  { id: 'triage', label: 'Triage', keywords: 'triage' },
+  { id: 'project', label: 'Updates', keywords: 'project update' },
+] satisfies InboxFilterOption[]
 
 export const INBOX_REVIEW_STATUS_OPTIONS = [
   { id: 'draft', label: 'Draft', color: 'var(--status-neutral)' },

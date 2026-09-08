@@ -2,6 +2,7 @@ import type { Invitation, User } from '@/types/flow'
 
 export type ProjectPersonChoice = {
   id: string
+  userId?: string
   label: string
   color?: string
   name?: string
@@ -20,6 +21,7 @@ export function projectPeopleChoices(users: User[], invitations: Invitation[] = 
   const knownEmails = new Set(users.map(user => user.email.trim().toLowerCase()))
   const choices: ProjectPersonChoice[] = users.map(user => ({
     id: user.id,
+    userId: user.userId,
     label: user.displayName || user.name || user.email,
     name: user.name,
     email: user.email,
@@ -27,7 +29,7 @@ export function projectPeopleChoices(users: User[], invitations: Invitation[] = 
     color: avatarColor(user.id),
     active: user.active,
     // Account activity controls eligibility; live presence controls the status dot.
-    online: user.active && Boolean(onlineUserIds?.has(user.id)) && !pendingInvitation(invitations, user.email),
+    online: pendingInvitation(invitations, user.email) ? false : onlineUserIds ? user.active && onlineUserIds.has(user.id) : undefined,
     end: pendingInvitation(invitations, user.email) ? 'Invited' : undefined,
   }))
   for (const invitation of invitations) {

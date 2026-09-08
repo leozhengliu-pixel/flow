@@ -6,6 +6,8 @@ import { PropertyMenu } from '@/components/property/property-menu'
 import { AssigneeHoverPreview, PropertyShortcutTooltip, StatusHoverPreview } from '@/components/property/issue-property-hover'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
+import { PersonIdentityDetails } from '@/components/property/person-info'
+import { personSearchText } from '@/lib/people'
 
 export function StatusPicker({ value, states, onChange, hoverHistory }: { value: WorkflowState; states: WorkflowState[]; onChange: (id: string) => void | Promise<void>; hoverHistory?: { activities: ActivityEvent[]; issueCreatedAt: string } }) {
   const options = [...states].sort((left,right)=>(left.position??0)-(right.position??0)).map((state, index) => ({ id: state.id, label: state.name, icon: <StatusIcon state={state}/>, shortcut: String(index + 1) }))
@@ -45,6 +47,7 @@ export function PriorityPicker({ value, onChange }: { value: number; onChange: (
 
 export type PersonPickerOption = {
   id: string
+  userId?: string
   label: string
   email?: string
   name?: string
@@ -67,9 +70,10 @@ export function PersonHoverPreview({ person, projectName, workspaceName }: { per
   const online = !invited && person.active !== false && person.online === true
   return <div className="assignee-hover-preview">
     <header><PersonAvatar person={person}/><div><strong data-i18n-ignore>{person.label}</strong><span data-i18n-ignore>{person.name || person.email || person.label}</span></div></header>
+    {!invited && <PersonIdentityDetails person={person}/>}
     <div className="assignee-hover-preview__details">
-      <span><i className={online ? undefined : 'offline'}/>{invited ? t('Invited') : online ? t('Online') : t('Offline')}</span>
-      {!invited && <><span><Clock3/><time>{new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())}</time><small>{t('local time')}</small></span><span><Building2/><span data-i18n-ignore>{workspaceName}</span></span><span><Layers3/><span data-i18n-ignore>{projectName ?? t('No project')}</span></span></>}
+      {invited ? <span>{t('Invited')}</span> : person.active === false ? <span>{t('Inactive')}</span> : person.online !== undefined ? <span><i className={online ? undefined : 'offline'}/>{online ? t('Online') : t('Offline')}</span> : null}
+      {!invited && <>{workspaceName && <span><Building2/><span data-i18n-ignore>{workspaceName}</span></span>}{projectName && <span><Layers3/><span data-i18n-ignore>{projectName}</span></span>}</>}
       {invited && <span><Clock3/><time>{t('Invitation pending')}</time></span>}
     </div>
   </div>
@@ -117,7 +121,8 @@ export function PersonPicker({ ariaLabel, closeOnSelect, emptyOptionLabel, empty
       return {
         id: person.id,
         label: person.label,
-        keywords: [person.name, person.email].filter(Boolean).join(' '),
+        keywords: personSearchText(person),
+        person,
         icon: <PersonAvatar person={person}/>,
         end: person.end ?? (person.invited ? 'Invited' : undefined),
         disabled: person.disabled,
@@ -135,7 +140,6 @@ export function PersonPicker({ ariaLabel, closeOnSelect, emptyOptionLabel, empty
     compact
     hoverClassName={hoverClassName}
     hoverContent={hoverContent}
-    keepSelectedVisible={Boolean(selectedId) || multiple}
     label={t(label)}
     multiple={multiple}
     onChange={onChange}
@@ -171,7 +175,7 @@ export function AssigneePicker({ value, users, onChange, hoverContext }: { value
     hoverClassName="property-rich-hover assignee-hover-surface"
     label="Assignee"
     onChange={onChange}
-    people={users.map(user => ({ id: user.id, label: user.displayName, email: user.email, name: user.name, avatarUrl: user.avatarUrl, active: user.active }))}
+    people={users.map(user => ({ ...user, label: user.displayName }))}
     searchPlaceholder="Change assignee…"
     searchShortcut="A"
     selectedId={value?.id}

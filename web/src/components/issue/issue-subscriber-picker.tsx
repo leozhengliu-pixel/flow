@@ -8,13 +8,15 @@ import { useI18n } from '@/i18n/i18n'
 import type { Issue, User } from '@/types/flow'
 
 import './issue-subscriber-picker.css'
+import { personSearchText } from '@/lib/people'
+import { PersonHover } from '@/components/property/person-info'
 
 export function IssueSubscriberPicker({ issue, users, onToggle }: { issue: Issue; users: User[]; onToggle: (id: string) => void | Promise<void> }) {
   const { t } = useI18n()
   const rootRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const selectedSet = useMemo(() => new Set(issue.subscriberIds), [issue.subscriberIds])
-  const options = useMemo(() => users.filter(user => user.active).sort((left, right) => Number(selectedSet.has(right.id)) - Number(selectedSet.has(left.id))).map(user => ({ id: user.id, label: user.displayName, keywords: `${user.name} ${user.email}` })), [selectedSet, users])
+  const options = useMemo(() => users.filter(user => user.active).sort((left, right) => Number(selectedSet.has(right.id)) - Number(selectedSet.has(left.id))).map(user => ({ id: user.id, label: user.displayName, keywords: personSearchText(user), person: user })), [selectedSet, users])
   const command = usePropertyCommand({ closeOnSelect: false, open, options, selectedIds: issue.subscriberIds, onOpenChange: setOpen, onSelect: option => onToggle(option.id) })
   const selected = command.filteredOptions.filter(option => selectedSet.has(option.id))
   const available = command.filteredOptions.filter(option => !selectedSet.has(option.id))
@@ -52,9 +54,9 @@ export function IssueSubscriberPicker({ issue, users, onToggle }: { issue: Issue
 
 function SubscriberOption({ active, assignee, checked, option, user, onActive, onChoose }: { active: boolean; assignee: boolean; checked: boolean; option: { id: string; label: string }; user: User; onActive: () => void; onChoose: () => void }) {
   const { t } = useI18n()
-  return <button id={`subscriber-${option.id}`} type="button" className="issue-subscriber-option" role="option" aria-selected={active} aria-checked={checked} onPointerMove={onActive} onFocus={onActive} onClick={onChoose}>
+  return <PersonHover person={user}><button id={`subscriber-${option.id}`} type="button" className="issue-subscriber-option" role="option" aria-selected={active} aria-checked={checked} onPointerMove={onActive} onFocus={onActive} onClick={onChoose}>
     <span className="issue-subscriber-option-bg"/><span className="issue-subscriber-checkbox" role="checkbox" aria-checked={checked}>{checked && <CheckboxMark/>}</span><Avatar name={user.displayName}/><span className="issue-subscriber-name" data-i18n-ignore>{user.displayName}</span>{assignee && <small>{t('Assignee')}</small>}
-  </button>
+  </button></PersonHover>
 }
 
 function isEditable(target: EventTarget | null) { return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLElement && target.isContentEditable }

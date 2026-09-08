@@ -5,6 +5,8 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import styles from './applied-filter-bar.module.css'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
+import { PersonHover } from '@/components/property/person-info'
+import { isPeopleProperty } from '@/lib/people'
 
 export type AppliedFilterOperator = 'is' | 'isNot'
 export type AppliedFilterOption = { id: string; label: string; color?: string; count?: number }
@@ -48,10 +50,10 @@ function OperatorMenu<TOption extends AppliedFilterOption>({ filter, onChange, t
 
 function ValueMenu<TOption extends AppliedFilterOption>({ countLabel, filter, onChange, options }: { countLabel?: (count: number) => string; filter: AppliedFilterItem<TOption>; onChange: (values: TOption[]) => void; options: TOption[] }) {
   const [open,setOpen]=useState(false),selectedIds=useMemo(()=>filter.values.map(value=>value.id),[filter.values])
-  const command=usePropertyCommand({closeOnSelect:false,onOpenChange:setOpen,open,options,selectedIds,onSelect:option=>onChange(selectedIds.includes(option.id)?filter.values.filter(value=>value.id!==option.id):[...filter.values,option])})
+  const command=usePropertyCommand({personOptions:isPeopleProperty(filter.fieldLabel),closeOnSelect:false,onOpenChange:setOpen,open,options,selectedIds,onSelect:option=>onChange(selectedIds.includes(option.id)?filter.values.filter(value=>value.id!==option.id):[...filter.values,option])})
   return <Popover.Root open={open} onOpenChange={setOpen}><Popover.Trigger asChild><button aria-label={`${filter.fieldLabel} values`} className={styles.value} type="button"><ValueSummary values={filter.values}/></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" align="start" className={styles.valueMenu} collisionPadding={8} onKeyDown={command.onKeyDown} onOpenAutoFocus={event=>event.preventDefault()} sideOffset={4}>
     <div className={styles.search}><input aria-label="Filter values" onChange={event=>command.onQueryChange(event.target.value)} placeholder="Filter..." ref={command.inputRef} value={command.query}/></div>
-    <div className={styles.options} role="listbox" aria-multiselectable="true">{command.filteredOptions.map(option=><button aria-checked={command.isSelected(option.id)} aria-selected={command.activeId===option.id} key={option.id||'none'} onClick={()=>command.choose(option)} onMouseMove={()=>command.setActiveId(option.id)} role="option" type="button"><span className={styles.checkbox}>{command.isSelected(option.id)&&<CheckboxMark/>}</span><i style={{background:option.color??'var(--theme-text-secondary)'}}/><span data-i18n-ignore>{option.label}</span>{option.count!==undefined&&<small>{option.count} {countLabel?.(option.count)}</small>}</button>)}{!command.filteredOptions.length&&<span className={styles.empty}>No results</span>}</div>
+    <div className={styles.options} role="listbox" aria-multiselectable="true">{command.filteredOptions.map(option=><PersonHover key={option.id||'none'} userId={isPeopleProperty(filter.fieldLabel)?option.id:undefined}><button aria-checked={command.isSelected(option.id)} aria-selected={command.activeId===option.id} onClick={()=>command.choose(option)} onMouseMove={()=>command.setActiveId(option.id)} role="option" type="button"><span className={styles.checkbox}>{command.isSelected(option.id)&&<CheckboxMark/>}</span><i style={{background:option.color??'var(--theme-text-secondary)'}}/><span data-i18n-ignore>{option.label}</span>{option.count!==undefined&&<small>{option.count} {countLabel?.(option.count)}</small>}</button></PersonHover>)}{!command.filteredOptions.length&&<span className={styles.empty}>No results</span>}</div>
   </Popover.Content></Popover.Portal></Popover.Root>
 }
 

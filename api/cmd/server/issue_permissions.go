@@ -35,7 +35,9 @@ func issueRole(s *server, data domain.Bootstrap, issue domain.Issue) string {
 		return "owner"
 	}
 	best := ""
-	for current := &issue; current != nil; {
+	seen := map[string]bool{}
+	for current := &issue; current != nil && !seen[current.ID]; {
+		seen[current.ID] = true
 		for _, permission := range current.Permissions {
 			matched := permission.SubjectType == "user" && permission.SubjectID == data.Viewer.ID
 			if !matched && permission.SubjectType == "workspace" {
@@ -50,7 +52,7 @@ func issueRole(s *server, data domain.Bootstrap, issue domain.Issue) string {
 				best = strings.ToLower(strings.TrimSpace(permission.Role))
 			}
 		}
-		if issue.ParentID == nil || *issue.ParentID == "" {
+		if current.ParentID == nil || *current.ParentID == "" {
 			break
 		}
 		parent := slices.IndexFunc(data.Issues, func(candidate domain.Issue) bool { return candidate.ID == *current.ParentID })
