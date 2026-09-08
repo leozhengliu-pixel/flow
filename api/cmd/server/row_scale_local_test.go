@@ -43,7 +43,7 @@ func TestLocalRowScale(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	s := &server{store: repo, authDisabled: true}
+	s := &server{store: repo, authDisabled: true, staticPath: os.Getenv("FLOW_ROW_SCALE_WEB")}
 	handler := newHandler(s)
 	defer s.stopDeliveryScheduler(context.Background())
 	host := httptest.NewUnstartedServer(handler)
@@ -62,6 +62,9 @@ func TestLocalRowScale(t *testing.T) {
 	if exists {
 		previous = 1000000
 		counts = []int{1000000}
+	}
+	if os.Getenv("FLOW_ROW_SCALE_SERVE_ONLY") == "1" {
+		counts = nil
 	}
 	for _, count := range counts {
 		start := time.Now()
