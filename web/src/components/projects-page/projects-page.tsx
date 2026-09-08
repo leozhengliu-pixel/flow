@@ -16,6 +16,7 @@ import { ViewGlyph, type ViewVisual } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { ProjectUpdatesPreview } from './project-updates-preview'
 import { labelsForResource } from '@/lib/labels'
+import { projectLabelOptions } from '@/components/property/project-label-menu-model'
 import { ProjectStatusGlyph } from './project-property-picker'
 import { confirmAction, promptAction } from '@/components/ui/action-dialog-service'
 
@@ -214,10 +215,10 @@ export function ProjectsPage({
   const propertyOptions: ProjectPropertyOptions = useMemo(() => ({
     lead: [{ label: 'No lead', shortcut: '0', value: '' }, ...users.filter(user => user.active).map(user => ({ avatarUrl: user.avatarUrl, group: 'Users from the project team', keywords: `${user.name} ${user.email}`, label: user.displayName, value: user.id }))],
     members: users.filter(user => user.active).map(user => ({ avatarUrl: user.avatarUrl, keywords: `${user.name} ${user.email}`, label: user.displayName, value: user.id })),
-    labels: projectLabels.map(label => ({ color: label.color, group: label.groupId ? projectLabelGroupNames.get(label.groupId) : undefined, label: label.name, value: label.id })),
+    labels: projectLabels.map(label => ({ color: label.color, group: label.groupId ? projectLabelGroupNames.get(label.groupId) : undefined, groupId: label.groupId, groupColor: labelGroups.find(group => group.id === label.groupId)?.color, label: label.name, value: label.id })),
     status: statusOptions,
     targetDate: targetDateOptions(),
-  }), [projectLabelGroupNames, projectLabels, statusOptions, users])
+  }), [labelGroups, projectLabelGroupNames, projectLabels, statusOptions, users])
   const filterOptions = useMemo(() => projectFilterOptions(items, users, availableProjectStatuses, projectLabels, teams), [availableProjectStatuses, items, projectLabels, teams, users])
   const saveTargets = useMemo<SavedViewTarget[]>(() => [
     { scope: 'personal', label: 'Personal' },
@@ -495,7 +496,7 @@ export function ProjectsPage({
       defaultStatus={createStatus}
       dependencies={projects.filter(project => !project.archivedAt).map(project => ({ id: project.id, label: project.name, icon: normalizeProjectIcon(project.icon), color: project.color, group: viewerId && (project.lead?.id === viewerId || (project.memberIds ?? []).includes(viewerId)) ? 'your' : 'other', previewData: { summary: project.summary || project.description, status: project.status.name, milestone: (project.milestones ?? [])[0]?.name, team: (project.teamIds ?? []).map(id => teams.find(team => team.id === id)?.name).filter(Boolean).join(', '), lead: project.lead?.displayName, member: (project.memberIds ?? []).map(id => users.find(user => user.id === id)?.displayName).find(Boolean), memberAvatarUrl: (project.memberIds ?? []).map(id => users.find(user => user.id === id)?.avatarUrl).find(Boolean), priority: project.priorityLabel, targetDate: project.targetDate, progress: Math.round(project.progress * 100), issueCount: project.issueCount } }))}
       initiatives={initiatives.map(initiative => ({ id: initiative.id, label: initiative.name, color: initiative.color }))}
-      labels={projectLabels.map(label => ({ id: label.id, label: label.name, color: label.color, groupId: label.groupId, groupLabel: label.groupId ? projectLabelGroupNames.get(label.groupId) : undefined }))}
+      labels={projectLabelOptions(projectLabels, labelGroups)}
       leads={peopleChoices}
       members={peopleChoices}
       statuses={availableProjectStatuses.map(status=>({id:status.name,label:status.name,color:status.color,icon:<ProjectStatusGlyph color={status.color} name={status.name} type={status.type}/> }))}

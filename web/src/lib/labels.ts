@@ -13,6 +13,11 @@ export function labelsForIssueTeam(labels: IssueLabel[], teamId?: string, groups
   return labelsForResource(labels, 'issue', groups).filter(label => isWorkspaceLabel(label) || label.scope === teamId)
 }
 
+export function labelsForProject(labels: IssueLabel[], teamIds: string[], groups: LabelGroup[] = [], selectedIds: string[] = []) {
+  const available = new Set(labelsForResource(labels, 'project', groups).map(label => label.id))
+  return labels.filter(label => labelResourceType(label) === 'project' && (available.has(label.id) || selectedIds.includes(label.id)) && (isWorkspaceLabel(label) || teamIds.includes(label.scope ?? '')))
+}
+
 export function toggleGroupedLabelIds<T extends { id: string; groupId?: string }>(selectedIds: string[], labelId: string, labels: T[]) {
   if (selectedIds.includes(labelId)) return selectedIds.filter(id => id !== labelId)
   const target = labels.find(label => label.id === labelId)

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { BootstrapData, Issue, IssueUpdateInput, SavedView, SavedViewMutationInput, Team } from '@/types/flow'
 import type { TeamIssuesRouteView } from '@/lib/app-routes'
 import { MyIssuesBulkActionBar } from '@/components/my-issues/my-issues-bulk-action-bar'
@@ -8,8 +8,7 @@ import { MyIssuesList, type MyIssuesContextAction, type MyIssuesCreateContext, t
 import { defaultMyIssuesDisplayOptions } from '@/components/my-issues/my-issues-display-defaults'
 import type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption, MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
 import { useMyIssuesSelection } from '@/components/my-issues/use-my-issues-state'
-import { issueFiltersToQueryAst, toggleFilterOption, updateFilterOperator, updateFilterValues } from '@/components/my-issues/my-issues-filter-types'
-import { listIssues } from '@/lib/api'
+import { toggleFilterOption, updateFilterOperator, updateFilterValues } from '@/components/my-issues/my-issues-filter-types'
 import { IssueExplorerSurface } from './issue-explorer-surface'
 import { IssueBoard } from './issue-board'
 import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from './saved-view-editor'
@@ -59,8 +58,6 @@ export interface IssueExplorerPageProps {
   onDeleteIssues: (issueIds: string[]) => Promise<void>
 }
 
-const EMPTY_ISSUES: Issue[] = []
-
 export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initialInsightFilters, scope, view, viewHref, savedView, duplicateFrom, creatingView = false, editingView = false, defaultSaveScope, savedViews = [], savedViewHref, onNavigateView, onNavigateSavedView, onCreateSavedView, onUpdateSavedView, onDeleteSavedView, onToggleSavedViewFavorite, onSetSavedViewSubscriptionEvents, onShareSavedView, onDuplicateSavedView, onCancelCreateSavedView, onBeginEditSavedView, onFinishEditSavedView, onNewViewResourceChange, onOpenIssue, renderIssuePreview, onOpenSidebar, onCreateIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues }: IssueExplorerPageProps) {
   const storageScope = scope.kind === 'team' ? `team:${scope.team.id}` : 'workspace'
   const preferencesKey = `${data.workspace.urlKey}:issue-explorer:${storageScope}:${view}`
@@ -79,11 +76,6 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
   const [previewIssueId, setPreviewIssueId] = useState<string>()
   const [viewEditor, setViewEditor] = useState<'create' | 'edit' | undefined>(creatingView ? 'create' : editingView ? 'edit' : undefined)
   const [viewSaving, setViewSaving] = useState(false)
-  const [serverPage, setServerPage] = useState<{ items: Issue[]; nextCursor?: string; hasMore: boolean; total: number } | null>(null)
-  const [serverLoading, setServerLoading] = useState(false)
-  const serverLoadingRef = useRef(false)
-  const serverQueryRef = useRef<Parameters<typeof listIssues>[0] | undefined>(undefined)
-  const serverGenerationRef = useRef(0)
   const hydratedSavedViewId = useRef(savedView?.id)
   const mutationSequence = useRef(new Map<string, number>())
   const mutationQueues = useRef(new Map<string, Promise<Issue>>())
@@ -95,76 +87,13 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
 
   useEffect(() => { const onKey = (event: KeyboardEvent) => { if (!event.altKey || event.metaKey || event.ctrlKey || event.key.toLowerCase() !== 'v' || savedView || creatingView || viewEditor || (event.target as HTMLElement | null)?.closest('input,textarea,[contenteditable=true],[role=textbox]')) return; event.preventDefault(); setViewEditor('create') }; addEventListener('keydown', onKey); return () => removeEventListener('keydown', onKey) }, [creatingView, savedView, viewEditor])
 
-  const scopeTeamId = scope.kind === 'team' ? scope.team.id : ''
   const scopedIssues = useMemo(() => filterInsightTeams(issuesForScope(data.issues, scope, view), initialInsightFilters?.teamIds), [data.issues, initialInsightFilters?.teamIds, scope, view])
-  const serverBacked = data.issues.length > 100 && display.layout === 'list'
-  useEffect(() => {
-    const generation = ++serverGenerationRef.current
-    if (!serverBacked) {
-      setServerPage(null)
-      setServerLoading(false)
-      serverLoadingRef.current = false
-      serverQueryRef.current = undefined
-      return
-    }
-    let cancelled = false
-    const ast = issueFiltersToQueryAst(filters)
-    const viewNode = view === 'backlog'
-      ? { field: 'status', operator: 'is', values: ['backlog'] }
-      : view === 'active'
-        ? { field: 'status', operator: 'notIn', values: ['completed', 'canceled'] }
-        : undefined
-    const filter = viewNode ? { and: [...(ast.and ?? []), viewNode] } : ast
-    const query = {
-      teamId: scopeTeamId || initialInsightFilters?.teamIds,
-      archived: view === 'all' ? 'all' : 'false',
-      filter: filter as Record<string, unknown>,
-      limit: 100,
-      sort: 'sortOrder',
-      direction: 'asc',
-    } as const
-    serverQueryRef.current = query
-    setServerPage(null)
-    serverLoadingRef.current = true
-    setServerLoading(true)
-    void listIssues(query).then(page => {
-      if (!cancelled && generation === serverGenerationRef.current) setServerPage(page)
-    }).catch(() => {
-      if (!cancelled && generation === serverGenerationRef.current) setServerPage({ items: [], hasMore: false, total: 0 })
-    }).finally(() => {
-      if (!cancelled && generation === serverGenerationRef.current) {
-        serverLoadingRef.current = false
-        setServerLoading(false)
-      }
-    })
-    return () => { cancelled = true }
-  }, [filters, initialInsightFilters?.teamIds, scopeTeamId, serverBacked, view])
-  const loadMoreServerIssues = useCallback(() => {
-    const current = serverPage
-    const query = serverQueryRef.current
-    if (!current?.hasMore || !current.nextCursor || !query || serverLoadingRef.current) return
-    const generation = serverGenerationRef.current
-    serverLoadingRef.current = true
-    setServerLoading(true)
-    void listIssues({ ...query, cursor: current.nextCursor }).then(page => {
-      if (generation !== serverGenerationRef.current) return
-      setServerPage(previous => {
-        if (!previous) return page
-        const known = new Set(previous.items.map(issue => issue.id))
-        return { ...page, items: [...previous.items, ...page.items.filter(issue => !known.has(issue.id))] }
-      })
-    }).catch(() => undefined).finally(() => {
-      if (generation === serverGenerationRef.current) {
-        serverLoadingRef.current = false
-        setServerLoading(false)
-      }
-    })
-  }, [serverPage])
-  const sourceIssues = serverBacked ? serverPage?.items ?? EMPTY_ISSUES : scopedIssues
   const insightIssues = useMemo(() => insightsOpen ? filterInsightTeams(issuesForScope(data.issues, scope, view, true), initialInsightFilters?.teamIds) : [], [data.issues, initialInsightFilters?.teamIds, insightsOpen, scope, view])
   const issuesById = useMemo(() => new Map(data.issues.map(issue => [issue.id, issue])), [data.issues])
   const rowOptions = useMemo(() => explorerPropertyOptions(data, scopedIssues), [data, scopedIssues])
-  const visibleIssues = useMemo(() => applyExplorerFilters(sourceIssues, filters, data), [data, filters, sourceIssues])
+  // Bootstrap/sync owns the complete visible collection. Group before virtualizing;
+  // replacing it with one query page truncates both group counts and membership.
+  const visibleIssues = useMemo(() => applyExplorerFilters(scopedIssues, filters, data), [data, filters, scopedIssues])
   const rows = useMemo(() => visibleIssues.map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)), [data, rowOverrides, visibleIssues])
   const insightRows = useMemo(() => insightsOpen ? applyExplorerFilters(insightIssues, filters, data).map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)) : [], [data, filters, insightIssues, insightsOpen, rowOverrides])
   const groups = useMemo(() => buildExplorerIssueGroups(rows, display, data, view, manualOrder), [data, display, manualOrder, rows, view])
@@ -321,7 +250,7 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
       displayOptions={display}
       detailsOpen={detailsOpen}
       insightsOpen={insightsOpen}
-      itemCount={serverBacked ? serverPage?.total ?? rows.length : rows.length}
+      itemCount={rows.length}
       filterOpenSignal={filterOpenSignal}
       filterOptions={field => explorerFilterOptions(field, rowOptions)}
       onFilterToggle={addFilter}
@@ -351,8 +280,6 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
     >
       {display.layout === 'list' ? <MyIssuesList
         groups={groups}
-        loading={serverBacked && !serverPage}
-        loadingMore={serverLoading && Boolean(serverPage)}
         selectedIds={selection.selectedIds}
         collapsedGroupIds={collapsedGroups}
         displayProperties={display.properties}
@@ -361,7 +288,6 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
         mutationErrors={mutationErrors}
         onCreateIssue={group => { const stateId = stateIdForExplorerGroup(group, data); const context = group.createContext ?? (stateId ? { stateId } : undefined); onCreateIssue?.(scope.kind === 'team' ? { ...context, teamId: scope.team.id } : context) }}
         onGroupCollapsedChange={(id, collapsed) => setCollapsedGroups(current => { const next = new Set(current); if (collapsed) next.add(id); else next.delete(id); return next })}
-        onEndReached={loadMoreServerIssues}
         onOpenIssue={openIssueFromExplorer}
         onPropertyChange={changeProperty}
         onRetryMutation={row => { const input = retryUpdates.current.get(row.id); if (input) void updateOne(row, input).catch(() => undefined) }}

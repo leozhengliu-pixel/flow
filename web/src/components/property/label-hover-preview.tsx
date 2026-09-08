@@ -14,27 +14,31 @@ export interface LabelHoverPreviewData {
 }
 
 export function LabelHoverPreview({ label, children, side='left', align='start' }: { label: LabelHoverPreviewData; children: ReactElement; side?:'top'|'right'|'bottom'|'left'; align?:'start'|'center'|'end' }) {
-  const { t } = useI18n()
-  const issueCount = label.issueCount ?? 0
-  const resource = label.resourceType === 'project' ? 'project' : label.resourceType === 'initiative' ? 'initiative' : 'issue'
-  const issueCountLabel = t(`${issueCount} labeled ${resource}${issueCount === 1 ? '' : 's'}`)
   return <Tooltip.Provider delayDuration={450} skipDelayDuration={300}>
     <Tooltip.Root>
       <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
       <Tooltip.Portal>
         <Tooltip.Content data-flow-motion="tooltip" className="label-hover-preview" side={side} align={align} sideOffset={5} collisionPadding={8}>
-          <div className="label-hover-preview-inner">
+          <LabelHoverPreviewContent label={label}/>
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
+  </Tooltip.Provider>
+}
+
+export function LabelHoverPreviewContent({ label }: { label: LabelHoverPreviewData }) {
+  const { t } = useI18n()
+  const issueCount = label.issueCount
+  const resource = label.resourceType === 'project' ? 'project' : label.resourceType === 'initiative' ? 'initiative' : 'issue'
+  const issueCountLabel = issueCount === undefined ? undefined : t(`${issueCount} labeled ${resource}${issueCount === 1 ? '' : 's'}`)
+  return <div className="label-hover-preview-inner">
             <div className="label-hover-preview-summary">
               <div className="label-hover-preview-title"><i style={{ backgroundColor: label.color }}/><strong data-i18n-ignore>{label.name}</strong></div>
               <span data-i18n-ignore={label.description?true:undefined}>{label.description || 'No description'}</span>
             </div>
             <div className="label-hover-preview-footer">
-              <span><Copy size={12}/>{issueCountLabel}</span>
+              <span>{issueCountLabel && <><Copy size={12}/>{issueCountLabel}</>}</span>
               <span><Building2 size={12}/>{label.scope || 'Workspace'}</span>
             </div>
           </div>
-        </Tooltip.Content>
-      </Tooltip.Portal>
-    </Tooltip.Root>
-  </Tooltip.Provider>
 }

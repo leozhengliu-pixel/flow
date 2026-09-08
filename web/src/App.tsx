@@ -1791,6 +1791,14 @@ function App() {
     );
     return label;
   };
+  const addProjectLabel = async (name: string, groupId?: string): Promise<IssueLabel> => {
+    const label = await run(
+      () => createWorkspaceLabel({ name, resourceType: "project", groupId }),
+      "Could not create project label",
+    );
+    setData(current => current ? { ...current, labels: [...current.labels, label] } : current);
+    return label;
+  };
   const addInitiativeReminder = async (
     initiativeId: string,
     remindAt: string,
@@ -5584,6 +5592,7 @@ function App() {
               selectedProjectFacetView)) &&
           selectedProject && (
             <ProjectDetailPage
+              onCreateLabel={addProjectLabel}
               key={`${selectedProject.id}:${selectedProjectFacetView?.id ?? "base"}`}
               project={selectedProject}
               workflowStates={data.states}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { IssueLabel, LabelGroup, Team } from '@/types/flow'
-import { groupsForResource, isWorkspaceLabel, labelResourceType, labelScopeName, labelsForIssueTeam, labelsForResource, setGroupedLabelSelected, toggleGroupedLabelIds } from './labels'
+import { groupsForResource, isWorkspaceLabel, labelResourceType, labelScopeName, labelsForIssueTeam, labelsForProject, labelsForResource, setGroupedLabelSelected, toggleGroupedLabelIds } from './labels'
 
 const labels = [
   { id: 'issue-a', name: 'A', scope: 'Workspace', resourceType: 'issue', groupId: 'issue-group' },
@@ -16,6 +16,15 @@ const groups = [
 ] as LabelGroup[]
 
 describe('label helpers', () => {
+  it('only offers project labels from the workspace and the project teams', () => {
+    const options = [...labels, { id: 'project-team-a', name: 'Team A', resourceType: 'project', scope: 'team-a' }, { id: 'project-team-b', name: 'Team B', resourceType: 'project', scope: 'team-b' }] as IssueLabel[]
+    expect(labelsForProject(options, ['team-a'], groups).map(label => label.id)).toEqual(['project-a', 'project-team-a'])
+  })
+  it('retains applied archived project labels so other edits do not silently remove them', () => {
+    const archived = { id: 'old', name: 'Old', resourceType: 'project', archivedAt: '2026-01-01' } as IssueLabel
+    expect(labelsForProject([archived], [], [], []).length).toBe(0)
+    expect(labelsForProject([archived], [], [], ['old'])).toEqual([archived])
+  })
   it('normalizes resource types and excludes archived records', () => {
     expect(labelResourceType({ resourceType: 'initiative' } as IssueLabel)).toBe('initiative')
     expect(labelResourceType({ resourceType: 'unknown' } as unknown as IssueLabel)).toBe('issue')

@@ -1,0 +1,62 @@
+.property-command-surface.property-command-project-labels,
+.project-label-submenu {
+  box-sizing: border-box;
+  width: 252px;
+  max-width: calc(100vw - 20px);
+  max-height: min(490px, calc(100dvh - 20px));
+  border: .5px solid var(--popover-border);
+  border-radius: 12px;
+  background: var(--theme-surface-2);
+  color: var(--label-menu-text);
+  box-shadow: var(--shadow-control);
+  overflow: hidden;
+}
+.project-label-submenu,
+.property-command-surface.property-command-project-labels.is-label-group { width: 175px; }
+.project-label-submenu { z-index: 1001; outline: none; box-shadow: 0 9px 48px var(--shadow-color-medium), 0 6px 24px var(--shadow-color), 0 1px 1px var(--shadow-color-soft); }
+.project-label-search { display: flex; align-items: center; height: 36.5px; flex: none; gap: 14px; padding: 0 12px 0 14px; border-bottom: .5px solid var(--theme-border); }
+.project-label-search input { min-width: 0; flex: 1; width: 100%; height: 36px; padding: 10px 0 9px; border: 0; outline: none; color: inherit; background: transparent; font-size: 13px; }
+.project-label-search input::placeholder { color: var(--label-menu-muted); }
+.project-label-search kbd { flex: none; color: var(--label-menu-muted); font-family: inherit; font-size: 11px; line-height: normal; white-space: nowrap; }
+.project-label-search.is-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); }
+.project-label-options { min-height: 0; max-height: min(440px, calc(100dvh - 60px)); overflow-y: auto; overscroll-behavior: contain; padding: 6px 0; scrollbar-width: thin; }
+.project-label-option { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 18px 0 14px; border: 0; background: transparent; color: inherit; font-size: 13px; font-weight: 400; text-align: left; outline: none; cursor: default; }
+.project-label-option > :not(.project-label-option-bg) { position: relative; z-index: 1; }
+.project-label-option-bg { position: absolute; inset: 0 6px; border-radius: 8px; }
+.project-label-option:hover > .project-label-option-bg,
+.project-label-option[data-active=true] > .project-label-option-bg { background: var(--label-menu-hover); }
+.project-label-option.is-multiple,
+.project-label-option.is-group { padding-left: 36px; }
+.project-label-option-icon { width: 16px; height: 16px; flex: 0 0 16px; display: grid; place-items: center; }
+.project-label-option-icon > i { width: 9px; height: 9px; border-radius: 50%; }
+.project-label-option-icon svg { width: 16px; height: 16px; }
+.project-label-option-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 450; line-height: normal; }
+.project-label-option-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--theme-text-secondary); }
+.project-label-chevron,
+.project-label-check { flex: none; margin-left: auto; color: var(--theme-text-secondary); }
+.project-label-chevron { width: 8px; font-size: 9px; }
+.project-label-option .project-label-checkbox { position: absolute; left: 15px; width: 14px; height: 14px; display: grid; place-items: center; border: .5px solid var(--checkbox-border); border-radius: 3px; opacity: 0; color: var(--on-accent); }
+.project-label-option.is-multiple:hover .project-label-checkbox,
+.project-label-option.is-multiple[data-active=true] .project-label-checkbox,
+.project-label-option[aria-checked=true] .project-label-checkbox { opacity: 1; }
+.project-label-option[aria-checked=true] .project-label-checkbox { border-color: var(--checkbox-selected-border); background: var(--checkbox-selected-fill); }
+.project-label-option:disabled { opacity: .5; }
+.project-label-separator { height: 12px; padding: 6px 0; }
+.project-label-separator::after { content: ''; display: block; height: .5px; background: var(--theme-border); }
+.project-label-control { min-width: 0; display: flex; align-items: flex-start; flex-wrap: wrap; gap: 4px; }
+.project-label-control.is-sidebar { gap: 6px; padding: 0 0 0 2px; }
+.project-label-chip { min-width: 0; max-width: 100%; height: 25px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border: 1px solid var(--theme-border-strong); border-radius: 9999px; background: transparent; color: var(--theme-text-secondary); font-size: 12px; font-weight: 450; }
+.project-label-chip > i { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; }
+.project-label-chip > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.project-label-chip > svg { flex: 0 0 12px; width: 12px; height: 12px; }
+.project-label-chip .project-label-chip-chevron { width: 8px; flex: 0 0 8px; display: flex; justify-content: center; overflow: visible; }
+.project-label-chip-chevron svg { width: 16px; height: 16px; flex: 0 0 16px; }
+.project-label-chip:hover,
+.project-label-chip[aria-expanded=true] { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
+.project-label-last { max-width: 100%; display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.project-label-add { height: 28px; max-width: 100%; display: inline-flex; align-items: center; gap: 6px; padding: 0 6px; border: 0; border-radius: 9999px; background: transparent; color: var(--theme-text-secondary); font-size: 13px; font-weight: 500; white-space: nowrap; }
+.project-label-add.is-icon { width: 25px; height: 25px; flex: 0 0 25px; padding: 0; justify-content: center; }
+.project-label-add:hover,
+.project-label-add[aria-expanded=true] { background: var(--theme-surface-hover); }
+.project-label-chip:focus-visible,
+.project-label-add:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
