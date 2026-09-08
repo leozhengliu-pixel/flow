@@ -6621,6 +6621,26 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/issue-records/project-summary": {
+      "get": {
+        "operationId": "get_issue_records_project_summary",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "GET /api/issue-records/project-summary",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/issue-templates": {
       "get": {
         "operationId": "get_issue_templates",

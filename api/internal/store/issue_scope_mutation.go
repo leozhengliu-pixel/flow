@@ -113,6 +113,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 			if err := json.Unmarshal(raw, &issue); err != nil {
 				return err
 			}
+			normalizeIssueRecord(&issue)
 			loaded[id] = issue
 			if needsFamily && slices.Contains(ids, id) {
 				if issue.ParentID != nil {
@@ -239,7 +240,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 			if err := writeIssueStats(ctx, tx, workspace, deltas); err != nil {
 				return err
 			}
-			for _, table := range []string{"issue_label_records", "issue_permission_records", "issue_subscriber_records", "issue_actor_records"} {
+			for _, table := range []string{"issue_label_records", "issue_permission_records", "issue_subscriber_records", "issue_actor_records", "issue_attribute_records"} {
 				if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE workspace_key=? AND issue_id=?", workspace, id); err != nil {
 					return err
 				}

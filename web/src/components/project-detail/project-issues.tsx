@@ -8,6 +8,7 @@ import { FilterIcon as Filter } from "@/components/ui/view-action-icons";
 import { MyIssuesFilterBar } from "@/components/my-issues/my-issues-filter-bar";
 import {
   filterValues,
+  issueFiltersToQueryAst,
   toggleFilterOption,
   updateFilterOperator,
   updateFilterValues,
@@ -29,12 +30,15 @@ import type {
   MyIssuesProperty,
 } from "@/components/my-issues/my-issues-surface";
 import { IssueBoard } from "@/components/issue-explorer/issue-board";
+import { PagedIssueList } from "@/components/issue-explorer/paged-issue-list";
+import type { IssueQueryInput } from "@/lib/api";
 import {
   issueHierarchyFields,
   nestedIssueProjection,
 } from "@/components/issue-explorer/issue-explorer-model";
 import { ViewIconPicker } from "@/components/views/view-icon-picker";
 import type {
+  BootstrapData,
   Issue,
   IssueUpdateInput,
   ProjectMilestone,
@@ -48,16 +52,18 @@ export type ProjectIssueFilters = MyIssuesAppliedFilter[];
 export type ProjectIssueProperty = MyIssuesProperty;
 
 export function ProjectIssueFilterMenu({
+  issueData,
   filters,
   issues,
   onChange,
 }: {
+  issueData?: BootstrapData;
   filters: ProjectIssueFilters;
   issues: Issue[];
   onChange: (filters: ProjectIssueFilters) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const options = useMemo(() => projectFilterOptions(issues), [issues]);
+  const options = useMemo(() => projectFilterOptions(issues, issueData), [issues, issueData]);
   const toggle = (field: MyIssuesFilterKey, option: MyIssuesFilterOption) => {
     const label = FILTER_LABELS[field];
     if (label) onChange(toggleFilterOption(filters, field, label, option));
@@ -105,15 +111,17 @@ export function ProjectIssueDisplayMenu({
 }
 
 export function ProjectIssueFilterBar({
+  issueData,
   filters,
   issues,
   onChange,
 }: {
+  issueData?: BootstrapData;
   filters: ProjectIssueFilters;
   issues: Issue[];
   onChange: (filters: ProjectIssueFilters) => void;
 }) {
-  const options = useMemo(() => projectFilterOptions(issues), [issues]);
+  const options = useMemo(() => projectFilterOptions(issues, issueData), [issues, issueData]);
   return (
     <MyIssuesFilterBar
       filters={filters}
@@ -190,7 +198,7 @@ export function ProjectNewView({
     }
   };
   return (
-    <div className="project-new-view">
+    <div className="project-new-view" data-paged={props.issueData?.issueCollectionPaged || undefined}>
       <div className="project-new-view__name">
         <ViewIconPicker
           color={visual.color}
@@ -229,6 +237,7 @@ export function ProjectNewView({
       </div>
       <div className="project-new-view__tools">
         <ProjectIssueFilterMenu
+          issueData={props.issueData}
           filters={filters}
           issues={projectIssues}
           onChange={onFiltersChange}
@@ -252,6 +261,7 @@ export function ProjectNewView({
 }
 
 export function ProjectIssues({
+  issueData,
   workflowStates,
   cycles,
   display,
@@ -281,6 +291,16 @@ export function ProjectIssues({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<Issue>();
+  const [loadedIssues, setLoadedIssues] = useState<Issue[]>([]);
+  const pagedQuery = useMemo<IssueQueryInput>(() => {
+    const conditions: Record<string, unknown>[] = [issueFiltersToQueryAst(filters)];
+    if (milestoneScope) conditions.push({ field: 'projectMilestoneId', values: [milestoneScope.id] });
+    if (!display.showSubIssues) conditions.push({ field: 'parent', operator: 'isEmpty' });
+    if (display.completedWindow === 'none') conditions.push({ field: 'status', operator: 'notIn', values: ['completed', 'canceled'] });
+    return { projectId: project.id, groupBy: display.grouping === 'focus' ? 'status' : display.grouping,
+      sort: display.ordering === 'created' ? 'createdAt' : display.ordering === 'updated' ? 'updatedAt' : display.ordering === 'priority' ? 'priority' : 'sortOrder',
+      direction: display.ordering === 'created' || display.ordering === 'updated' ? 'desc' : 'asc', filter: { and: conditions } };
+  }, [project.id, milestoneScope, filters, display]);
   const visible = useMemo(
     () =>
       sortIssues(
@@ -311,8 +331,8 @@ export function ProjectIssues({
     [allStates, cycles, display, visible],
   );
   const rowIssues = useMemo(
-    () => new Map(projectIssues.map((issue) => [issue.id, issue])),
-    [projectIssues],
+    () => new Map([...projectIssues, ...loadedIssues].map((issue) => [issue.id, issue])),
+    [projectIssues, loadedIssues],
   );
   const labelGroupNames = useMemo(
     () =>
@@ -447,7 +467,7 @@ export function ProjectIssues({
   };
 
   return (
-    <div className="project-issues" data-layout={display.layout}>
+    <div className="project-issues" data-layout={display.layout} data-paged={issueData?.issueCollectionPaged || undefined}>
       {milestoneScope && (
         <div className="project-issues__milestone-scope">
           <Diamond size={13} />
@@ -462,11 +482,21 @@ export function ProjectIssues({
         </div>
       )}
       <ProjectIssueFilterBar
+        issueData={issueData}
         filters={filters}
         issues={projectIssues}
         onChange={onFiltersChange}
       />
-      {groups.length > 0 &&
+      {issueData?.issueCollectionPaged ? <PagedIssueList
+        data={issueData} query={pagedQuery} layout={display.layout}
+        onLoadedIssuesChange={setLoadedIssues} onOpenIssueRecord={onOpenIssue}
+        onMoveIssueRecord={(issue, input) => onUpdateIssue(issue.id, input)}
+        collapsedGroupIds={collapsed} displayProperties={display.properties}
+        propertyOptions={propertyOptions} selectedIds={selected}
+        onContextAction={contextAction} onPropertyChange={changeProperty} onSelectIssue={select}
+        onCreateIssue={group => onCreateIssue(project.id, milestoneScope?.id, group.createContext)}
+        onGroupCollapsedChange={(id, value) => setCollapsed(current => { const next = new Set(current); if (value) next.add(id); else next.delete(id); return next })}
+      /> : groups.length > 0 &&
         (display.layout === "list" ? (
           <MyIssuesList
             collapsedGroupIds={collapsed}
@@ -508,7 +538,7 @@ export function ProjectIssues({
             selectedIds={selected}
           />
         ))}
-      {!groups.length && (
+      {!issueData?.issueCollectionPaged && !groups.length && (
         <div className="project-issues__empty">
           <strong>No matching issues</strong>
           <span>Change the filters or create a new issue.</span>
@@ -589,10 +619,11 @@ const FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = {
 };
 function projectFilterOptions(
   issues: Issue[],
+  data?: BootstrapData,
 ): Partial<Record<MyIssuesFilterKey, MyIssuesFilterOption[]>> {
   const count = (predicate: (issue: Issue) => boolean) =>
-    issues.filter(predicate).length;
-  const statuses = uniqueById(issues.map((issue) => issue.state)).map(
+    data?.issueCollectionPaged ? undefined : issues.filter(predicate).length;
+  const statuses = uniqueById(data?.states ?? issues.map((issue) => issue.state)).map(
     (state) => ({
       id: state.id,
       label: state.name,
@@ -601,13 +632,13 @@ function projectFilterOptions(
     }),
   );
   const assignees = uniqueById(
-    issues.flatMap((issue) => (issue.assignee ? [issue.assignee] : [])),
+    data?.users ?? issues.flatMap((issue) => (issue.assignee ? [issue.assignee] : [])),
   ).map((user) => ({
     id: user.id,
     label: user.displayName,
     count: count((issue) => issue.assignee?.id === user.id),
   }));
-  const labels = uniqueById(issues.flatMap((issue) => issue.labels)).map(
+  const labels = uniqueById(data?.labels.filter(label => label.resourceType !== 'project') ?? issues.flatMap((issue) => issue.labels)).map(
     (label) => ({
       id: label.id,
       label: label.name,

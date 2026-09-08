@@ -25,7 +25,8 @@ func requestActor(s *server, r *http.Request) domain.User {
 	if user := authUser(r); user.ID != "" {
 		return user
 	}
-	return s.workspaceData(r).Viewer
+	data, _ := s.store.WorkspaceMetadata(workspaceKey(r))
+	return data.Viewer
 }
 
 func (s *server) getUserSettings(w http.ResponseWriter, r *http.Request) {

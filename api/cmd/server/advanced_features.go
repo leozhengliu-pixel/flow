@@ -1731,8 +1731,13 @@ func (s *server) createDraft(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	validate, err := s.draftRecordValidator(r)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	var created domain.Draft
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "draft.created", input, func(data *domain.Bootstrap) (string, error) {
+	err = s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "draft.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
 		kind := "issue"
 		if input.Type != nil && *input.Type != "" {
@@ -1740,7 +1745,7 @@ func (s *server) createDraft(w http.ResponseWriter, r *http.Request) {
 		}
 		created = domain.Draft{ID: fmt.Sprintf("draft_%d", now.UnixNano()), UserID: data.Viewer.ID, Type: kind, ContentData: input.ContentData, Metadata: input.Metadata, CreatedAt: now, UpdatedAt: now}
 		applyDraftInput(&created, input)
-		if err := validateDraft(data, created); err != nil {
+		if err := validate(data, created); err != nil {
 			return "", err
 		}
 		data.Drafts = append([]domain.Draft{created}, data.Drafts...)
@@ -1755,16 +1760,21 @@ func (s *server) updateDraft(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	validate, err := s.draftRecordValidator(r)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	id := r.PathValue("id")
 	var updated domain.Draft
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "draft.updated", id, input, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "draft.updated", id, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Drafts, func(item domain.Draft) bool { return item.ID == id && item.UserID == data.Viewer.ID })
 		if index < 0 {
 			return errNotFound
 		}
 		candidate := data.Drafts[index]
 		applyDraftInput(&candidate, input)
-		if err := validateDraft(data, candidate); err != nil {
+		if err := validate(data, candidate); err != nil {
 			return err
 		}
 		candidate.UpdatedAt = time.Now().UTC()
@@ -1840,6 +1850,10 @@ func draftBelongsToResource(item domain.Draft, resourceType, resourceID string) 
 }
 
 func validateDraft(data *domain.Bootstrap, item domain.Draft) error {
+	return validateDraftResource(data, item, resourceExists)
+}
+
+func validateDraftResource(data *domain.Bootstrap, item domain.Draft, exists func(*domain.Bootstrap, string, string) bool) error {
 	if !slices.Contains([]string{"issue", "comment", "document", "loop", "project_update", "initiative_update", "customer_need", "pull_request_comment"}, item.Type) {
 		return fmt.Errorf("%w: unsupported draft type", errInvalid)
 	}
@@ -1860,20 +1874,20 @@ func validateDraft(data *domain.Bootstrap, item domain.Draft) error {
 		} else if parentType == "pull_request_comment" {
 			parentType = "review"
 		}
-		if item.ResourceID == "" || !resourceExists(data, parentType, item.ResourceID) {
+		if item.ResourceID == "" || !exists(data, parentType, item.ResourceID) {
 			return fmt.Errorf("%w: comment draft requires a valid parent resource", errInvalid)
 		}
 	}
-	if item.Type == "project_update" && (item.ResourceID == "" || !resourceExists(data, "project", item.ResourceID)) {
+	if item.Type == "project_update" && (item.ResourceID == "" || !exists(data, "project", item.ResourceID)) {
 		return fmt.Errorf("%w: project update draft requires a project", errInvalid)
 	}
-	if item.Type == "initiative_update" && (item.ResourceID == "" || !resourceExists(data, "initiative", item.ResourceID)) {
+	if item.Type == "initiative_update" && (item.ResourceID == "" || !exists(data, "initiative", item.ResourceID)) {
 		return fmt.Errorf("%w: initiative update draft requires an initiative", errInvalid)
 	}
-	if item.Type == "customer_need" && (item.ResourceID == "" || !resourceExists(data, "customer", item.ResourceID)) {
+	if item.Type == "customer_need" && (item.ResourceID == "" || !exists(data, "customer", item.ResourceID)) {
 		return fmt.Errorf("%w: customer request draft requires a customer", errInvalid)
 	}
-	if item.Type == "pull_request_comment" && (item.ResourceID == "" || !resourceExists(data, "review", item.ResourceID)) {
+	if item.Type == "pull_request_comment" && (item.ResourceID == "" || !exists(data, "review", item.ResourceID)) {
 		return fmt.Errorf("%w: pull request comment draft requires a review", errInvalid)
 	}
 	resourceType := item.Type
@@ -1886,7 +1900,7 @@ func validateDraft(data *domain.Bootstrap, item domain.Draft) error {
 	} else if item.Type == "pull_request_comment" {
 		resourceType = "review"
 	}
-	if item.ResourceID != "" && item.Type != "comment" && item.Type != "project_update" && item.Type != "initiative_update" && item.Type != "customer_need" && item.Type != "pull_request_comment" && !resourceExists(data, resourceType, item.ResourceID) {
+	if item.ResourceID != "" && item.Type != "comment" && item.Type != "project_update" && item.Type != "initiative_update" && item.Type != "customer_need" && item.Type != "pull_request_comment" && !exists(data, resourceType, item.ResourceID) {
 		return fmt.Errorf("%w: draft resource does not exist", errInvalid)
 	}
 	return nil

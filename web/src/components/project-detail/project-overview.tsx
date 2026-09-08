@@ -28,7 +28,7 @@ import { formatProjectPropertyDate, initiativeStatusLabel, inviteProjectMember }
 
 type Props = ProjectDetailProps & { projectIssues: Issue[]; save: (input: ProjectMutationInput) => Promise<void> }
 
-export function ProjectOverview({ project, projects, initiatives, documents, projectStatuses, projectUpdates, users, teams, labels, labelGroups, projectIssues, save, onCreateLabel, onCreateResource, onUpdateResource, onDeleteResource, onCreateMilestone, onUpdateMilestone, onDeleteMilestone, onOpenMilestoneIssues = () => onTabChange('issues'), onTabChange }: Props & { onOpenMilestoneIssues?: (milestoneId?: string) => void }) {
+export function ProjectOverview({ issueSummary, project, projects, initiatives, documents, projectStatuses, projectUpdates, users, teams, labels, labelGroups, projectIssues, save, onCreateLabel, onCreateResource, onUpdateResource, onDeleteResource, onCreateMilestone, onUpdateMilestone, onDeleteMilestone, onOpenMilestoneIssues = () => onTabChange('issues'), onTabChange }: Props & { onOpenMilestoneIssues?: (milestoneId?: string) => void }) {
   const statuses = useMemo(() => uniqueById(projectStatuses.length ? projectStatuses : projects.map(item => item.status)), [projectStatuses, projects])
   const members = users.filter(user => (project.memberIds ?? []).includes(user.id))
   const selectedMemberIds = [...new Set([...(project.memberIds ?? []), ...(project.lead?.id ? [project.lead.id] : [])])]
@@ -71,7 +71,7 @@ export function ProjectOverview({ project, projects, initiatives, documents, pro
 
     <section className="project-overview__milestones">
       {(project.milestones?.length ?? 0) > 0 && <h3>Milestones</h3>}
-      <AnimatedMilestones items={project.milestones ?? []}>{milestone => <OverviewMilestone issues={projectIssues.filter(issue => issue.projectMilestoneId === milestone.id)} milestone={milestone} onDelete={() => onDeleteMilestone(project.id, milestone.id)} onOpenIssues={() => onOpenMilestoneIssues(milestone.id)} onUpdate={input => onUpdateMilestone(project.id, milestone.id, input)}/>}</AnimatedMilestones>
+      <AnimatedMilestones items={project.milestones ?? []}>{milestone => <OverviewMilestone totals={issueSummary ? issueSummary.milestones[milestone.id] ?? {total:0, completed:0} : undefined} issues={projectIssues.filter(issue => issue.projectMilestoneId === milestone.id)} milestone={milestone} onDelete={() => onDeleteMilestone(project.id, milestone.id)} onOpenIssues={() => onOpenMilestoneIssues(milestone.id)} onUpdate={input => onUpdateMilestone(project.id, milestone.id, input)}/>}</AnimatedMilestones>
       {creatingMilestone && <OverviewMilestoneCreator
         onCancel={() => setCreatingMilestone(false)}
         onCreate={async input => { await onCreateMilestone(project.id, input); setCreatingMilestone(false) }}
@@ -82,11 +82,12 @@ export function ProjectOverview({ project, projects, initiatives, documents, pro
   </div>
 }
 
-function OverviewMilestone({ issues, milestone, onDelete, onOpenIssues, onUpdate }: { issues: Issue[]; milestone: Props['project']['milestones'][number]; onDelete: () => Promise<void>; onOpenIssues: () => void; onUpdate: (input: { name?: string; description?: string; targetDate?: string }) => Promise<unknown> }) {
+function OverviewMilestone({ totals, issues, milestone, onDelete, onOpenIssues, onUpdate }: { totals?: { total: number; completed: number }; issues: Issue[]; milestone: Props['project']['milestones'][number]; onDelete: () => Promise<void>; onOpenIssues: () => void; onUpdate: (input: { name?: string; description?: string; targetDate?: string }) => Promise<unknown> }) {
   const { formatDate, locale } = useI18n()
   const [expanded, setExpanded] = useState(true)
-  const completed = issues.filter(issue => issue.state.type === 'completed').length
-  const progress = issues.length ? Math.round(completed / issues.length * 100) : 0
+  const count = totals?.total ?? issues.length
+  const completed = totals?.completed ?? issues.filter(issue => issue.state.type === 'completed').length
+  const progress = count ? Math.round(completed / count * 100) : 0
   const link = `${location.origin}${location.pathname.replace(/\/overview$/, '/issues')}?projectMilestoneId=${encodeURIComponent(milestone.id)}`
   const copy = (value: string, message: string) => void navigator.clipboard.writeText(value).then(() => toast.success(message))
   return <article className="project-overview__milestone" data-expanded={expanded} id={`milestone-${milestone.id}`}>
@@ -97,7 +98,7 @@ function OverviewMilestone({ issues, milestone, onDelete, onOpenIssues, onUpdate
       <span className="project-overview__milestone-spacer"/>
       <ProjectDatePicker buttonClassName="project-overview__milestone-date" label="Target date" onChange={targetDate => void onUpdate({ targetDate })} value={milestone.targetDate}><span>{milestone.targetDate ? locale === 'en-US' ? format(new Date(`${milestone.targetDate}T00:00:00`), 'MMM d') : formatDate(`${milestone.targetDate}T00:00:00`, { month: 'short', day: 'numeric' }) : 'Choose date'}</span></ProjectDatePicker>
       <span aria-hidden="true" className="project-overview__milestone-dot">·</span>
-      <a aria-label="Open issues" className="project-overview__milestone-issues" href={link} onClick={event => { event.preventDefault(); onOpenIssues() }}>{issues.length} {issues.length === 1 ? 'issue' : 'issues'}<span>·</span>{progress}%</a>
+      <a aria-label="Open issues" className="project-overview__milestone-issues" href={link} onClick={event => { event.preventDefault(); onOpenIssues() }}>{count} {count === 1 ? 'issue' : 'issues'}<span>·</span>{progress}%</a>
       <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open menu" className="project-overview__milestone-menu-trigger" type="button"><MoreHorizontal size={12}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="project-detail-page__menu project-overview__milestone-menu" sideOffset={4}>
         <DropdownMenu.Item onSelect={() => copy(link, 'Milestone link copied')}><Link2 size={14}/><span>Copy link</span></DropdownMenu.Item>
         <DropdownMenu.Item onSelect={() => copy(`[${milestone.name}](${link})`, 'Milestone name and link copied')}><Link2 size={14}/><span>Copy name as link</span></DropdownMenu.Item>

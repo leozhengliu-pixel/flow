@@ -142,6 +142,16 @@ func (s *SQLiteStore) issueGroupsFromStats(ctx context.Context, q IssueRecordQue
 	}
 	var clauses []string
 	var args []any
+	scope, ids := "workspace", []string{""}
+	if len(q.TeamIDs) > 0 {
+		scope, ids = "team", q.TeamIDs
+	}
+	if len(q.ProjectIDs) > 0 {
+		if scope != "workspace" {
+			return nil, false, nil
+		}
+		scope, ids = "project", q.ProjectIDs
+	}
 	var addFilter func(IssueFilter) bool
 	addFilter = func(f IssueFilter) bool {
 		if len(f.Or) > 0 {
@@ -153,6 +163,40 @@ func (s *SQLiteStore) issueGroupsFromStats(ctx context.Context, q IssueRecordQue
 			}
 		}
 		if f.Field == "" {
+			return true
+		}
+		field := strings.ToLower(f.Field)
+		if field == "assigneeid" {
+			field = "assignee"
+		}
+		if field == "teamid" {
+			field = "team"
+		}
+		if field == "projectid" {
+			field = "project"
+		}
+		if field == "assignee" || field == "team" || field == "project" {
+			op := strings.ToLower(f.Operator)
+			if op != "" && op != "is" && op != "in" {
+				return false
+			}
+			if scope == "workspace" {
+				scope, ids = field, f.Values
+				return true
+			}
+			if scope != field {
+				return false
+			}
+			intersection := []string{}
+			for _, id := range ids {
+				for _, value := range f.Values {
+					if id == value {
+						intersection = append(intersection, id)
+						break
+					}
+				}
+			}
+			ids = intersection
 			return true
 		}
 		if f.Field != "status" && f.Field != "statusType" && f.Field != "priority" {
@@ -169,16 +213,6 @@ func (s *SQLiteStore) issueGroupsFromStats(ctx context.Context, q IssueRecordQue
 	}
 	if !addFilter(q.Filter) {
 		return nil, false, nil
-	}
-	scope, ids := "workspace", []string{""}
-	if len(q.TeamIDs) > 0 {
-		scope, ids = "team", q.TeamIDs
-	}
-	if len(q.ProjectIDs) > 0 {
-		if scope != "workspace" {
-			return nil, false, nil
-		}
-		scope, ids = "project", q.ProjectIDs
 	}
 	base, baseArgs := bindList("i.scope_id", ids)
 	where := `i.workspace_key=? AND i.scope_type=? AND ` + base + ` AND i.total>0`
