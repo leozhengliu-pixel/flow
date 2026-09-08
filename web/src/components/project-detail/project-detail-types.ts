@@ -47,6 +47,7 @@ export type ProjectDetailProps = {
   teams: Team[];
   labels: IssueLabel[];
   labelGroups: LabelGroup[];
+  onCreateLabel?: (name: string, groupId?: string) => Promise<IssueLabel>;
   viewer: User;
   activities: ActivityEvent[];
   favorite?: Favorite;

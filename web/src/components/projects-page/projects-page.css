@@ -715,20 +715,24 @@
 .lp-project-context__search input::placeholder,
 .lp-project-context__nested-search input::placeholder { color: #7d7d82; }
 .lp-project-context > div[role="group"] + div[role="group"] { border-top: .5px solid var(--theme-border-strong); margin-top: 3px; padding-top: 3px; }
-.lp-project-context button { align-items: center; background: transparent; border: 0; border-radius: 5px; color: inherit; display: flex; font: inherit; gap: 8px; height: 30px; min-width: 0; padding: 0 8px; text-align: left; width: 100%; }
-.lp-project-context button:hover,
-.lp-project-context button:focus-visible { background: var(--theme-control-active); outline: none; }
+.lp-project-context button:not(.project-label-option) { align-items: center; background: transparent; border: 0; border-radius: 5px; color: inherit; display: flex; font: inherit; gap: 8px; height: 30px; min-width: 0; padding: 0 8px; text-align: left; width: 100%; }
+.lp-project-context button:not(.project-label-option):hover,
+.lp-project-context button:not(.project-label-option):focus-visible { background: var(--theme-control-active); outline: none; }
 .lp-project-context button:disabled { color: #5f5f64; cursor: not-allowed; }
 .lp-project-context__icon { align-items: center; color: #8a8a90; display: inline-flex; flex: 0 0 16px; height: 16px; justify-content: center; width: 16px; }
 .lp-project-context__icon svg,
-.lp-project-context button > svg { color: currentColor; flex: 0 0 14px; height: 14px; width: 14px; }
+.lp-project-context button:not(.project-label-option) > svg { color: currentColor; flex: 0 0 14px; height: 14px; width: 14px; }
 .lp-project-context__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lp-project-context__label small { color: #707075; display: block; font-size: 10px; line-height: 12px; }
-.lp-project-context kbd { color: #77777c; flex: none; font-family: inherit; font-size: 10px; white-space: nowrap; }
+.lp-project-context :not(.project-label-search) > kbd { color: #77777c; flex: none; font-family: inherit; font-size: 10px; white-space: nowrap; }
 .lp-project-context button.is-danger { color: #ef6b68; }
 .lp-project-context__nested { background: var(--theme-control); border: .5px solid var(--theme-border-strong) !important; border-radius: 10px; box-shadow: 0 3px 8px rgb(0 0 0 / 20%); left: calc(100% - 3px); margin: 0 !important; max-height: min(410px, calc(100vh - 16px)); min-width: 240px; overflow: auto; padding: 5px !important; position: absolute; top: 5px; width: max-content; z-index: 2; }
 .lp-project-context__nested-search { border-bottom: .5px solid var(--theme-border-strong); margin: -5px -5px 5px; min-width: 242px; padding: 0 12px; }
 .lp-project-context__nested-list { display: grid; }
+.lp-project-context__nested.is-project-labels { width: 252px; min-width: 252px; padding: 0 !important; overflow: visible; border-radius: 12px; background: var(--theme-surface-2); border-color: var(--popover-border) !important; color: var(--label-menu-text); box-shadow: var(--shadow-control); }
+.lp-project-context__nested.is-project-labels > div { display: flex; flex-direction: column; max-height: inherit; }
+.lp-project-context__nested.is-project-labels .project-label-options { flex: 1; }
+.lp-project-context__nested.is-project-labels button { min-width: 0; }
 .lp-project-context__group-label { align-items: center; color: var(--muted); display: flex; font-size: 12px; font-weight: 500; height: 28px; padding: 7px 8px 3px; }
 .lp-project-context__nested-list button { min-width: 242px; }
 .lp-project-context__nested-list button:has(.lp-project-context__label small) { height: 42px; }

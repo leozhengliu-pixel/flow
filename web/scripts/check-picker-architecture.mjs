@@ -14,6 +14,9 @@ const dedicated = new Set([
   // Account security's team scope combobox owns filtering and multi-select
   // semantics rather than using an issue property picker.
   'settings/personal-settings.tsx',
+  // Project labels render selected groups as actions, not selected leaf rows.
+  // This is the shared hierarchical content used inside PropertyMenu and context menus.
+  'property/project-label-menu-content.tsx',
 ])
 
 const files = await collect(root)

@@ -48,7 +48,7 @@ export type NewProjectMilestoneDraft = {
   targetDate?: string
 }
 
-export type NewProjectChoice = { id: string, label: string, color?: string, email?: string, name?: string, avatarUrl?: string, active?: boolean, online?: boolean, invited?: boolean, disabled?: boolean, end?: string, groupId?: string, groupLabel?: string, group?: 'your' | 'other', icon?: ReactNode, initials?: string, hoverContent?: ReactNode, hoverClassName?: string, previewData?: ProjectDependencyPreviewData }
+export type NewProjectChoice = { id: string, label: string, color?: string, email?: string, name?: string, avatarUrl?: string, active?: boolean, online?: boolean, invited?: boolean, disabled?: boolean, end?: string, groupId?: string, groupLabel?: string, groupColor?: string, scope?: string, group?: 'your' | 'other', icon?: ReactNode, initials?: string, hoverContent?: ReactNode, hoverClassName?: string, previewData?: ProjectDependencyPreviewData }
 export type NewProjectTemplateChoice = {
   id: string
   label: string
@@ -182,7 +182,11 @@ export function NewProjectDialog({
     }
   }
 
-  const set = <K extends keyof NewProjectDraft>(key: K, value: NewProjectDraft[K]) => setDraft(current => ({ ...current, [key]: value }))
+  const set = <K extends keyof NewProjectDraft>(key: K, value: NewProjectDraft[K]) => setDraft(current => {
+    const next = { ...current, [key]: value }
+    if (key === 'teamIds') next.labelIds = next.labelIds.filter(id => labels.some(label => label.id === id && projectLabelInTeams(label, next.teamIds)))
+    return next
+  })
   const applyTemplate = (templateId: string) => {
     setDraft(current => applyProjectTemplateDraft(current, templateId, templates, labels))
   }
@@ -225,7 +229,7 @@ export function NewProjectDialog({
           <DateChip kind="start" max={draft.targetDate} placeholder="Start" resolution={draft.startDateResolution} value={draft.startDate} onChange={(value, resolution) => setDraft(current => ({ ...current, startDate: value || undefined, startDateResolution: resolution }))} />
           <DateChip kind="target" min={draft.startDate} placeholder="Target" resolution={draft.targetDateResolution} value={draft.targetDate} onChange={(value, resolution) => setDraft(current => ({ ...current, targetDate: value || undefined, targetDateResolution: resolution }))} />
           <ProjectDraftProperty icon={<LayoutTemplate size={14}/>} label="Change project initiatives" multiple options={initiatives} placeholder="Initiatives" value={draft.initiativeIds} onChange={value => set('initiativeIds', value)} />
-          <ProjectDraftProperty icon={<LabelIcon size={14}/>} label="Change labels" multiple options={labels} placeholder="Labels" value={draft.labelIds} onChange={value => set('labelIds', value)} />
+          <ProjectDraftProperty icon={<LabelIcon size={14}/>} label="Change labels" multiple options={labels.filter(label => projectLabelInTeams(label, draft.teamIds))} placeholder="Labels" value={draft.labelIds} onChange={value => set('labelIds', value)} />
           <ProjectDependencyPicker ariaLabel="Add dependencies" onChange={value => setDraft(current => ({ ...current, dependencyIds: value.filter(item => item.type === 'blocked_by').map(item => item.projectId), dependencyRelations: value }))} projects={dependencies.filter(project => !project.id.startsWith('__')).map(project => ({ id: project.id, label: project.label, icon: typeof project.icon === 'string' ? project.icon : undefined, color: project.color, group: project.group, keywords: [project.name, project.email].filter(Boolean).join(' '), disabled: project.disabled, previewData: project.previewData }))} triggerClassName="lp-new-project-picker__trigger lp-new-project-dependency-trigger" value={draft.dependencyRelations as ProjectDependencyValue[]} />
         </div>
         <textarea aria-label="Project description" className="lp-new-project__description" onChange={event => set('description', event.target.value)} placeholder="Write a description, a project brief, or collect ideas…" value={draft.description} />
@@ -268,7 +272,7 @@ function ProjectDraftProperty(props: {
   const selected = Array.isArray(value) ? options.filter(option => value.includes(option.id)) : options.find(option => option.id === value)
   const selectedIds = Array.isArray(value) ? value : [value]
   const display = Array.isArray(selected) ? selected.length ? `${placeholder} · ${selected.length}` : placeholder : selected?.label ?? placeholder ?? label
-  const propertyOptions: PropertyOption[] = options.map(option => ({ id: option.id, label: option.label, color: option.color, groupId: option.groupId, groupLabel: option.groupLabel, icon: option.icon, i18nIgnore: Boolean(option.id) }))
+  const propertyOptions: PropertyOption[] = options.map(option => ({ id: option.id, label: option.label, color: option.color, groupId: option.groupId, groupLabel: option.groupLabel, groupColor: option.groupColor, icon: option.icon, i18nIgnore: Boolean(option.id) }))
   const choose = (id: string) => {
     if (Array.isArray(value)) {
       if (props.multiple) { const target = options.find(option => option.id === id); const next = target?.groupId ? value.filter(selectedId => options.find(option => option.id === selectedId)?.groupId !== target.groupId) : value; props.onChange(value.includes(id) ? value.filter(item => item !== id) : [...next, id]) }
@@ -278,6 +282,7 @@ function ProjectDraftProperty(props: {
     ariaLabel={label}
     compact
     label={placeholder ?? label}
+    kind={placeholder === 'Labels' ? 'project-labels' : undefined}
     multiple={multiple}
     onChange={choose}
     options={propertyOptions}
@@ -383,6 +388,10 @@ function trapFocus(event: KeyboardEvent<HTMLDivElement>, scopeSelector?: string)
     event.preventDefault()
     focusables[focusables.length - 1].focus()
   }
+}
+
+function projectLabelInTeams(label: NewProjectChoice, teamIds: string[]) {
+  return !label.scope || label.scope.toLowerCase() === 'workspace' || teamIds.includes(label.scope)
 }
 
 function emptyDraft(status: string, teamId?: string): NewProjectDraft {

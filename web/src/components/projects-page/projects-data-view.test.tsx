@@ -12,6 +12,16 @@ const project: ProjectPageItem = {
 }
 
 describe('ProjectsDataView project menu', () => {
+  it('reuses grouped labels in the context menu and replaces a peer before saving', async () => {
+    const user = userEvent.setup()
+    const onPropertyChange = vi.fn()
+    render(<I18nProvider><ProjectsDataView groups={[{ id: 'status-progress', name: 'In Progress', projects: [{ ...project, labelIds: ['alpha', 'plain'] }] }]} propertyOptions={{ labels: [{ value: 'alpha', label: 'Alpha', group: 'Delivery', groupId: 'delivery' }, { value: 'beta', label: 'Beta', group: 'Delivery', groupId: 'delivery' }, { value: 'plain', label: 'Public' }] }} onPropertyChange={onPropertyChange}/></I18nProvider>)
+    fireEvent.contextMenu(screen.getByRole('row', { name: 'Project one' }), { clientX: 40, clientY: 40 })
+    await user.hover(screen.getByRole('menuitem', { name: /Labels/ }))
+    await user.click(screen.getByRole('option', { name: 'Delivery Alpha' }))
+    await user.click(screen.getByRole('option', { name: 'Beta' }))
+    expect(onPropertyChange).toHaveBeenCalledWith(expect.objectContaining({ id: project.id }), 'labels', 'plain,beta')
+  })
   it('supports the same project in multiple virtualized groups without duplicate keys', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {

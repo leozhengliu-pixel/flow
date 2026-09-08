@@ -10,6 +10,8 @@ import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
 import { ProjectPropertyPicker, ProjectStatusGlyph, type ProjectPropertyOption } from './project-property-picker'
 import { ProjectDatePicker, ProjectTargetDatePicker } from './project-target-date-picker'
 import { projectLabelGroupProperty } from './projects-display-model'
+import { ProjectLabelMenuContent } from '@/components/property/project-label-menu-content'
+import { toggleGroupedLabelIds } from '@/lib/labels'
 import './projects-page.css'
 import './projects-bundle-parity.css'
 
@@ -584,13 +586,14 @@ function ProjectContextMenu({ integration, manualOrdering = false, point, onActi
   const [nested, setNested] = useState<ProjectContextKind | null>(null)
   const [query, setQuery] = useState('')
   const [nestedQuery, setNestedQuery] = useState('')
+  const [labelMenuPosition, setLabelMenuPosition] = useState({ top: 5, flip: false, maxHeight: 410 })
   const favorite = integration?.isFavorite(project.id) ?? false
   const subscriptionEvents = new Set(integration?.subscriptionEvents(project.id) ?? [])
   const subscriptions = Object.fromEntries(Object.keys(SUBSCRIPTION_LABELS).map(event => [event, subscriptionEvents.has(event)]))
   useEffect(() => { ref.current?.querySelector<HTMLInputElement>('.lp-project-context__search input')?.focus() }, [])
   useEffect(() => setNestedQuery(''), [nested])
-  useDismissibleLayer({ open: true, refs: [ref], onDismiss: onClose })
-  useDismissibleLayer({ open: nested !== null, refs: [nestedRef], onDismiss: () => setNested(null) })
+  useDismissibleLayer({ open: true, refs: [ref], onDismiss: onClose, closeOnEscape: nested !== 'labels' })
+  useDismissibleLayer({ open: nested !== null, refs: nested === 'labels' ? [nestedRef, ref] : [nestedRef], onDismiss: () => setNested(null), closeOnEscape: nested !== 'labels' })
 
   const items: ProjectContextItem[][] = [
     [
@@ -612,8 +615,16 @@ function ProjectContextMenu({ integration, manualOrdering = false, point, onActi
   const left = Math.max(8, Math.min(point.x, window.innerWidth - 244))
   const top = Math.max(8, Math.min(point.y, window.innerHeight - 536))
 
-  const invoke = (item: ProjectContextItem) => {
-    if (item.kind) { setNested(item.kind); return }
+  const openNested = (kind: ProjectContextKind | null, anchor: HTMLElement) => {
+    if (kind === 'labels' && ref.current) {
+      const root = ref.current.getBoundingClientRect()
+      const row = anchor.getBoundingClientRect()
+      setLabelMenuPosition({ top: row.top - root.top - 6.5, flip: root.right + 252 > window.innerWidth - 8, maxHeight: Math.max(80, window.innerHeight - row.top - 1.5) })
+    }
+    setNested(kind)
+  }
+  const invoke = (item: ProjectContextItem, anchor: HTMLElement) => {
+    if (item.kind) { openNested(item.kind, anchor); return }
     if (item.label === 'Favorite' || item.label === 'Unfavorite') {
       void integration?.onFavoriteChange(project.id, !favorite)
       onClose()
@@ -639,14 +650,15 @@ function ProjectContextMenu({ integration, manualOrdering = false, point, onActi
         aria-haspopup={item.kind ? 'menu' : undefined}
         className={`lp-project-context__item ${item.danger ? 'is-danger' : ''}`}
         key={item.label}
-        onClick={() => invoke(item)}
-        onMouseEnter={() => setNested(item.kind ?? null)}
+        onClick={event => invoke(item, event.currentTarget)}
+        onMouseEnter={event => openNested(item.kind ?? null, event.currentTarget)}
         role="menuitem"
         type="button"
       ><ContextItemContent item={item}/></button>)}</div>
     })}
-    {nested && <div className="lp-project-context__nested" onKeyDown={event => menuKeyboard(event, () => setNested(null))} ref={nestedRef} role="menu">
+    {nested && <div className={`lp-project-context__nested${nested === 'labels' ? ' is-project-labels' : ''}`} style={nested === 'labels' ? { top: labelMenuPosition.top, left: labelMenuPosition.flip ? 'auto' : undefined, right: labelMenuPosition.flip ? 'calc(100% - 3px)' : undefined, maxHeight: labelMenuPosition.maxHeight } : undefined} onKeyDown={event => menuKeyboard(event, () => setNested(null))} ref={nestedRef} role="menu">
       <ProjectContextSubmenu
+        submenuPortalContainer={ref.current}
         kind={nested}
         manualOrdering={manualOrdering}
         onAction={onAction}
@@ -668,7 +680,7 @@ function ContextItemContent({ item }: { item: ProjectContextItem }) {
   return <><span className="lp-project-context__icon">{item.icon}</span><span className="lp-project-context__label">{item.label}</span>{item.shortcut && <kbd>{item.shortcut}</kbd>}{(item.kind || item.date) && <ChevronRightIcon />}</>
 }
 
-function ProjectContextSubmenu({ kind, manualOrdering, onAction, onClose, onPropertyChange, options, project, query, setQuery, setSubscriptions, subscriptions, onCreateReminder }: {
+function ProjectContextSubmenu({ kind, manualOrdering, onAction, onClose, onPropertyChange, options, project, query, setQuery, setSubscriptions, subscriptions, onCreateReminder, submenuPortalContainer }: {
   kind: ProjectContextKind
   manualOrdering: boolean
   onAction: (action: ProjectAction) => void
@@ -681,6 +693,7 @@ function ProjectContextSubmenu({ kind, manualOrdering, onAction, onClose, onProp
   setSubscriptions: (value: Record<string, boolean>) => void
   subscriptions: Record<string, boolean>
   onCreateReminder?: (remindAt: string) => Promise<unknown>
+  submenuPortalContainer?: HTMLElement | null
 }) {
   if (kind === 'copy-menu') return <SimpleSubmenu searchable items={[
     { icon: <Link2/>, label: 'Copy URL', shortcut: '⌘ ⇧ ,' },
@@ -706,11 +719,14 @@ function ProjectContextSubmenu({ kind, manualOrdering, onAction, onClose, onProp
 
   const property = kind as ProjectProperty
   const propertyOptions = options?.[property] ?? PROPERTY_OPTIONS[property]
-  const multiple = property === 'members' || property === 'labels'
-  const optionValues = new Set(propertyOptions.map(option => option.value))
-  const selected = new Set(property === 'members' ? project.memberIds ?? [] : property === 'labels' ? (project.labelIds ?? []).filter(id => optionValues.has(id)) : [contextPropertyValue(project, property)])
+  if (property === 'labels') {
+    const labels = propertyOptions.map(option => ({ id: option.value, label: option.label, color: option.color, groupId: option.groupId, groupLabel: option.group, groupColor: option.groupColor }))
+    return <ProjectLabelMenuContent options={labels} selectedIds={project.labelIds ?? []} onChoose={id => onPropertyChange('labels', toggleGroupedLabelIds(project.labelIds ?? [], id, labels).join(','))} onClose={onClose} submenuPortalContainer={submenuPortalContainer}/>
+  }
+  const multiple = property === 'members'
+  const selected = new Set(property === 'members' ? project.memberIds ?? [] : [contextPropertyValue(project, property)])
   const filtered = propertyOptions.filter(option => `${option.label} ${option.keywords ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()))
-  const sections = property === 'labels' ? groupProjectOptions(filtered) : [{ id: 'all', options: filtered }]
+  const sections: Array<{ id: string; label?: string; options: ProjectPropertyOption[] }> = [{ id: 'all', options: filtered }]
   return <>
     <label className="lp-project-context__nested-search"><Search size={13}/><input autoFocus aria-label={contextSearchPlaceholder(property)} onChange={event => setQuery(event.target.value)} placeholder={contextSearchPlaceholder(property)} value={query}/></label>
     <div className="lp-project-context__nested-list">{sections.map(section => <div key={section.id}>{section.label && <div className="lp-project-context__group-label">{section.label}</div>}{section.options.map(option => <button aria-checked={selected.has(option.value)} key={option.value || '__empty'} onClick={() => {
@@ -726,7 +742,6 @@ function ProjectContextSubmenu({ kind, manualOrdering, onAction, onClose, onProp
       {multiple && <span className={`lp-project-context__checkbox ${selected.has(option.value) ? 'is-checked' : ''}`}>{selected.has(option.value) && <CheckIcon/>}</span>}
       <ContextOptionIcon option={option} property={property}/><span className="lp-project-context__label">{option.label}</span>{!multiple && selected.has(option.value) && <CheckIcon/>}
     </button>)}</div>)}</div>
-    {property === 'labels' && !filtered.length && <div className="lp-project-context__empty">{query ? `Create “${query}”` : 'Start typing to create a new label'}</div>}
   </>
 }
 
@@ -763,22 +778,6 @@ function contextSearchPlaceholder(property: ProjectProperty) {
   if (property === 'priority') return 'Change priority…'
   if (property === 'status') return 'Change status…'
   return 'Filter…'
-}
-
-function groupProjectOptions(options: ProjectPropertyOption[]) {
-  const sections: { id: string; label?: string; options: ProjectPropertyOption[] }[] = []
-  const indexes = new Map<string, number>()
-  for (const option of options) {
-    const id = option.group || 'ungrouped'
-    let index = indexes.get(id)
-    if (index === undefined) {
-      index = sections.length
-      indexes.set(id, index)
-      sections.push({ id, label: id === 'ungrouped' ? undefined : option.group, options: [] })
-    }
-    sections[index].options.push(option)
-  }
-  return sections
 }
 
 function menuKeyboard(event: KeyboardEvent<HTMLDivElement>, closeNested: () => void) {

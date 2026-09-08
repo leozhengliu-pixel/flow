@@ -9,6 +9,8 @@ export type ProjectPropertyOption = {
   avatarUrl?: string
   color?: string
   group?: string
+  groupId?: string
+  groupColor?: string
   keywords?: string
   label: string
   shortcut?: string
