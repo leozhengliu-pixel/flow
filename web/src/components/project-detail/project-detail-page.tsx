@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { normalizeProjectIcon } from "@/components/views/project-icon";
 import { ProjectOverview } from "./project-overview";
+import { useLabelSelection } from "@/components/property/use-label-selection";
 import { ProjectActivity } from "./project-activity";
 import {
   ProjectIssueDisplayMenu,
@@ -26,7 +27,7 @@ import type {
   ProjectDetailProps,
   ProjectDetailTab,
 } from "./project-detail-types";
-import { labelsForResource } from "@/lib/labels";
+import { labelsForProject, labelsForResource } from "@/lib/labels";
 import {
   AddViewIcon,
   InsightsIcon,
@@ -66,6 +67,8 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const labelSelection = useLabelSelection(project.labelIds ?? []);
+  const displayedProject = { ...project, labelIds: labelSelection.selectedIds };
   const issueStateKey = `flow:project:${project.id}:issues`;
   const [issueFilters, setIssueFilters] = useState<ProjectIssueFilters>(() =>
     readIssueFilters(issueStateKey),
@@ -100,8 +103,8 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
     [labelGroups, labels],
   );
   const projectLabels = useMemo(
-    () => labelsForResource(labels, "project", labelGroups),
-    [labelGroups, labels],
+    () => labelsForProject(labels, project.teamIds ?? [], labelGroups, labelSelection.selectedIds),
+    [labelGroups, labels, project.teamIds, labelSelection.selectedIds],
   );
   const projectSavedViews = useMemo(
     () =>
@@ -203,7 +206,8 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
 
   const save = async (input: Parameters<ProjectDetailProps["onUpdate"]>[1]) => {
     try {
-      await onUpdate(project.id, input);
+      if (input.labelIds !== undefined) await labelSelection.save(input.labelIds, () => onUpdate(project.id, input));
+      else await onUpdate(project.id, input);
     } catch (error) {
       toast.error("Could not update project", {
         description: error instanceof Error ? error.message : undefined,
@@ -466,6 +470,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
           {tab === "overview" && (
             <ProjectOverview
               {...props}
+              project={displayedProject}
               labels={projectLabels}
               onOpenMilestoneIssues={openMilestoneIssues}
               projectIssues={projectIssues}
@@ -512,6 +517,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
         </div>
         {detailsOpen && (
           <ProjectDetailsSidebar
+            onCreateLabel={props.onCreateLabel}
             initiatives={props.initiatives}
             integrationConnections={props.integrationConnections}
             labelGroups={labelGroups}
@@ -527,7 +533,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
             onUpdate={save}
             onUpdateProject={props.onUpdate}
             onUpdateMilestone={props.onUpdateMilestone}
-            project={project}
+            project={displayedProject}
             projectRelations={props.projectRelations}
             projectIssues={projectIssues}
             projects={projects}

@@ -5084,12 +5084,21 @@ func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input d
 		project.MemberIDs = slices.Clone(input.MemberIDs)
 	}
 	if input.LabelIDs != nil {
-		selectedLabels := labelsByIDForResource(data, input.LabelIDs, "project")
+		selectedLabels := []domain.IssueLabel{}
+		for _, label := range data.Labels {
+			if slices.Contains(input.LabelIDs, label.ID) && labelResourceType(label) == "project" && (labelAvailableForResource(data, label, "project") || slices.Contains(project.LabelIDs, label.ID)) {
+				selectedLabels = append(selectedLabels, label)
+			}
+		}
 		if len(selectedLabels) != len(input.LabelIDs) || !validLabelGroupSelection(selectedLabels) {
 			return errInvalid
 		}
-		for _, id := range input.LabelIDs {
-			if !labelExistsForResource(data, id, "project") {
+		teamIDs := project.TeamIDs
+		if input.TeamIDs != nil {
+			teamIDs = input.TeamIDs
+		}
+		for _, label := range selectedLabels {
+			if !labelScopeIsWorkspace(label.Scope) && !slices.Contains(teamIDs, label.Scope) {
 				return errInvalid
 			}
 		}

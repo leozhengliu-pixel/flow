@@ -16,6 +16,7 @@ import { ProjectPropertyPicker, ProjectStatusGlyph, type ProjectPropertyOption }
 import { ProjectUpdatesPreview } from '@/components/projects-page/project-updates-preview'
 import { NewProjectDialog, type NewProjectDraft } from '@/components/projects-page/new-project-dialog'
 import { projectPeopleChoices } from '@/components/projects-page/project-people'
+import { projectLabelOptions } from '@/components/property/project-label-menu-model'
 import type { ProjectCreateInput, ProjectMutationInput } from '@/components/projects-page/projects-page'
 import type { Draft, FlowDocument, Initiative, InitiativeMutationInput, InitiativeResource, InitiativeUpdate, Invitation, IssueLabel, LabelGroup, PersonalAgentSkill, Presence, Project, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
 import type { InitiativeRouteTab } from '@/lib/app-routes'
@@ -107,7 +108,6 @@ export function InitiativeDetailPage(props: Props) {
   const update = (input: InitiativeMutationInput) => onUpdate(initiative.id, input)
   const initiativeLabels = useMemo(() => labelsForResource(props.labels, 'initiative', props.labelGroups), [props.labelGroups, props.labels])
   const projectLabels = useMemo(() => labelsForResource(props.labels, 'project', props.labelGroups), [props.labelGroups, props.labels])
-  const projectLabelGroupNames = useMemo(() => new Map(props.labelGroups.filter(group => group.resourceType === 'project').map(group => [group.id, group.name])), [props.labelGroups])
 
   useEffect(() => {
     if (!activeView) return
@@ -190,7 +190,7 @@ export function InitiativeDetailPage(props: Props) {
           issueCount: project.issueCount,
         },
       }))}
-      labels={projectLabels.map(label => ({ id: label.id, label: label.name, color: label.color, groupId: label.groupId, groupLabel: label.groupId ? projectLabelGroupNames.get(label.groupId) : undefined }))}
+      labels={projectLabelOptions(projectLabels, props.labelGroups)}
       agentSkills={props.agentSkills}
       leads={peopleChoices}
       members={peopleChoices}

@@ -9,6 +9,7 @@ import { ProjectStatusGlyph } from '@/components/projects-page/project-property-
 import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { labelsForResource } from '@/lib/labels'
+import { projectLabelOptions } from '@/components/property/project-label-menu-model'
 import { createProject as createProjectRequest, createProjectMilestone as createProjectMilestoneRequest } from '@/lib/api'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData, Issue, IssueUpdateInput, Presence, Project, ProjectMilestone } from '@/types/flow'
@@ -38,7 +39,6 @@ export function IssueProjectPicker({ data, issue, grouped = false, presence = []
   const milestones = [...(project?.milestones ?? []), ...(project ? createdMilestones[project.id] ?? [] : [])].filter((item, index, values) => values.findIndex(value => value.id === item.id) === index)
   const milestone = milestones.find(item => item.id === issue.projectMilestoneId)
   const projectLabels = labelsForResource(data.labels, 'project', data.labelGroups)
-  const labelGroupNames = new Map(data.labelGroups.map(group => [group.id, group.name]))
   const projectOptions = [
     { id: '', label: t('No project'), shortcut: '0', icon: <NoProjectIcon size={16}/> },
     ...projects.map(item => ({ id: item.id, label: item.name, icon: <ProjectIcon size={16} style={{ color: item.color }}/>, i18nIgnore: true })),
@@ -101,7 +101,7 @@ export function IssueProjectPicker({ data, issue, grouped = false, presence = []
     <NewProjectDialog
       dependencies={data.projects.filter(item => !item.archivedAt && item.id !== issue.project?.id).map(item => ({ id: item.id, label: item.name, icon: normalizeProjectIcon(item.icon), color: item.color, group: data.viewer?.id && (item.lead?.id === data.viewer.id || (item.memberIds ?? []).includes(data.viewer.id)) ? 'your' : 'other', previewData: { summary: item.summary || item.description, status: item.status.name, milestone: (item.milestones ?? [])[0]?.name, team: (item.teamIds ?? []).map(id => data.teams.find(team => team.id === id)?.name).filter(Boolean).join(', '), lead: item.lead?.displayName, member: (item.memberIds ?? []).map(id => data.users.find(user => user.id === id)?.displayName).find(Boolean), memberAvatarUrl: (item.memberIds ?? []).map(id => data.users.find(user => user.id === id)?.avatarUrl).find(Boolean), priority: item.priorityLabel, targetDate: item.targetDate, progress: Math.round(item.progress * 100), issueCount: item.issueCount } }))}
       initiatives={data.initiatives.map(item => ({ id: item.id, label: item.name, color: item.color }))}
-      labels={projectLabels.map(label => ({ id: label.id, label: label.name, color: label.color, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined }))}
+      labels={projectLabelOptions(projectLabels, data.labelGroups)}
       leads={peopleChoices}
       members={peopleChoices}
       statuses={data.projectStatuses.map(status => ({ id: status.name, label: status.name, color: status.color, icon: <ProjectStatusGlyph color={status.color} name={status.name} type={status.type}/> }))}

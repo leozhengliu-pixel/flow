@@ -44,6 +44,8 @@
 :root[data-theme="light"]{--toggle-compact-off:lch(82.484% .054 281.837);--toggle-compact-off-hover:lch(76.978% .076 281.838);--toggle-compact-on:lch(47% 50.26 286.91);--toggle-regular-off:var(--toggle-compact-off);--toggle-regular-off-hover:var(--toggle-compact-off-hover);--toggle-regular-on:lch(53% 52.26 286.91);--toggle-knob-color:lch(100% 5 286.91);--toggle-regular-knob-shadow:0 1px 2px lch(0 0 0/.27)}
 :root{--popover-border:var(--theme-border-strong)}
 :root[data-theme="light"]{--popover-border:lch(91.9% 0 282)}
+:root{--label-menu-text:var(--theme-text-primary);--label-menu-muted:var(--theme-text-secondary);--label-menu-hover:var(--theme-surface-active)}
+:root[data-theme="light"]{--label-menu-text:lch(20% 1 282);--label-menu-muted:lch(40% 1 282);--label-menu-hover:lch(95% 0 282)}
 :root[data-theme="light"][data-theme-variant="light-high-contrast"]{--border:lch(80% 0 282);--border-strong:lch(72% 0 282);--theme-border:lch(80% 0 282);--theme-border-strong:lch(72% 0 282);--muted:lch(28% 1.25 282);--faint:lch(48% 1.25 282)}
 :root[data-theme="light"]{accent-color:#5e6ad2}
 :root[data-theme="light"] .flow-button-default{color:white}

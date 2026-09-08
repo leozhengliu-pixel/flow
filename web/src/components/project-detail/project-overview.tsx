@@ -21,11 +21,14 @@ import type { Issue, ProjectResource, Team } from '@/types/flow'
 import type { ProjectDetailProps } from './project-detail-types'
 import { PRIORITY_LABELS } from './project-detail-types'
 import { toggleGroupedLabelIds } from '@/lib/labels'
+import { ProjectLabelControl } from '@/components/property/project-label-control'
+import { projectLabelOptions } from '@/components/property/project-label-menu-model'
+import { ProjectLabelMenuContent } from '@/components/property/project-label-menu-content'
 import { formatProjectPropertyDate, initiativeStatusLabel, inviteProjectMember } from './project-detail-helpers'
 
 type Props = ProjectDetailProps & { projectIssues: Issue[]; save: (input: ProjectMutationInput) => Promise<void> }
 
-export function ProjectOverview({ project, projects, initiatives, documents, projectStatuses, projectUpdates, users, teams, labels, labelGroups, projectIssues, save, onCreateResource, onUpdateResource, onDeleteResource, onCreateMilestone, onUpdateMilestone, onDeleteMilestone, onOpenMilestoneIssues = () => onTabChange('issues'), onTabChange }: Props & { onOpenMilestoneIssues?: (milestoneId?: string) => void }) {
+export function ProjectOverview({ project, projects, initiatives, documents, projectStatuses, projectUpdates, users, teams, labels, labelGroups, projectIssues, save, onCreateLabel, onCreateResource, onUpdateResource, onDeleteResource, onCreateMilestone, onUpdateMilestone, onDeleteMilestone, onOpenMilestoneIssues = () => onTabChange('issues'), onTabChange }: Props & { onOpenMilestoneIssues?: (milestoneId?: string) => void }) {
   const statuses = useMemo(() => uniqueById(projectStatuses.length ? projectStatuses : projects.map(item => item.status)), [projectStatuses, projects])
   const members = users.filter(user => (project.memberIds ?? []).includes(user.id))
   const selectedMemberIds = [...new Set([...(project.memberIds ?? []), ...(project.lead?.id ? [project.lead.id] : [])])]
@@ -47,13 +50,13 @@ export function ProjectOverview({ project, projects, initiatives, documents, pro
           {project.startDate && <><DateProperty label="Start date" max={project.targetDate} placeholder="Start date" resolution={project.startDateResolution} value={project.startDate} onChange={(startDate, startDateResolution) => void save({ startDate, startDateResolution: startDateResolution ?? '' })}/><span aria-hidden="true" className="project-overview__date-arrow">→</span></>}
           <DateProperty label="Target date" min={project.startDate} placeholder="Target date" resolution={project.targetDateResolution} value={project.targetDate} onChange={(targetDate, targetDateResolution) => void save({ targetDate, targetDateResolution: targetDateResolution ?? '' })}/>
           <button className="project-overview__team" data-i18n-ignore={projectTeams.length ? true : undefined} disabled type="button"><TeamIcon team={projectTeams[0]} size={14}/>{projectTeams.map(team => team.name).join(', ') || 'Team'}</button>
-          <ProjectMoreMenu initiatives={initiatives} labelGroups={labelGroups} labels={labels} project={project} projects={projects} save={save}/>
+          <ProjectMoreMenu initiatives={initiatives} labelGroups={labelGroups} labels={labels} onCreateLabel={onCreateLabel} project={project} projects={projects} save={save}/>
         </div>
       </div>
     </section>
 
     <InitiativeSection initiatives={initiatives} project={project} save={save}/>
-    <ProjectLabelSection labels={labels} labelGroups={labelGroups} project={project} save={save}/>
+    <ProjectLabelSection labels={labels} labelGroups={labelGroups} project={project} save={save} onCreateLabel={onCreateLabel}/>
     <ResourceSection documents={documents} onCreate={input => onCreateResource(project.id, input)} onDelete={resourceId => onDeleteResource(project.id, resourceId)} onUpdate={(resourceId, input) => onUpdateResource(project.id, resourceId, input)} resources={project.resources ?? []} teams={teams}/>
     <InlineStringSection addLabel="Add customer request" items={project.customers ?? []} onChange={customers => void save({ customers })} title="Customers"/>
 
@@ -172,14 +175,14 @@ function StringInputDialog({ label, onOpenChange, onSubmit, open }: { label: str
   return <Dialog.Root onOpenChange={onOpenChange} open={open}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="project-detail-page__dialog-overlay"/><Dialog.Content data-flow-motion="dialog" aria-describedby={undefined} className="project-detail-page__form-dialog project-detail-page__string-dialog"><Dialog.Title>{label.replace('…','')}</Dialog.Title><input autoFocus aria-label={label} onChange={event => setValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && value.trim()) onSubmit(value.trim()) }} placeholder="Name" value={value}/><footer><Dialog.Close asChild><button type="button">Cancel</button></Dialog.Close><button className="is-primary" disabled={!value.trim()} onClick={() => onSubmit(value.trim())} type="button">Add</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
 }
 
-function ProjectMoreMenu({ initiatives, labels, labelGroups, project, projects, save }: { initiatives: Props['initiatives']; labels: Props['labels']; labelGroups: Props['labelGroups']; project: Props['project']; projects: Props['projects']; save: Props['save'] }) {
+function ProjectMoreMenu({ initiatives, labels, labelGroups, project, projects, save, onCreateLabel }: { initiatives: Props['initiatives']; labels: Props['labels']; labelGroups: Props['labelGroups']; project: Props['project']; projects: Props['projects']; save: Props['save']; onCreateLabel?: Props['onCreateLabel'] }) {
+  const [open, setOpen] = useState(false)
   const projectLabelIds = (project.labelIds ?? []).filter(id => labels.some(label => label.id === id))
-  const groupNames = new Map(labelGroups.filter(group => group.resourceType === 'project').map(group => [group.id, group.name]))
   const toggleProjectLabel = (id: string) => { void save({ labelIds: toggleGroupedLabelIds(projectLabelIds, id, labels) }) }
-  return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="More project properties" className="project-overview__more" type="button">•••</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="project-detail-page__menu project-overview__more-menu" sideOffset={4}>
+  return <DropdownMenu.Root open={open} onOpenChange={setOpen}><DropdownMenu.Trigger asChild><button aria-label="More project properties" className="project-overview__more" type="button">•••</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="project-detail-page__menu project-overview__more-menu" sideOffset={4}>
     <MultiSubmenu icon={<Flag size={14}/>} label="Initiatives" shortcut="P then N" options={initiatives.map(initiative => ({ id: initiative.id, label: initiative.name, color: initiative.color }))} selected={project.initiatives ?? []} onToggle={id => void save({ initiatives: toggleString(project.initiatives ?? [], id) })}/>
     <MultiSubmenu icon={<Link2 size={14}/>} label="Dependencies" options={projects.filter(item => item.id !== project.id).map(item => ({ id: item.id, label: item.name, color: item.color }))} selected={project.dependencyIds ?? []} onToggle={id => void save({ dependencyIds: toggleString(project.dependencyIds ?? [], id) })}/>
-    <MultiSubmenu icon={<LabelIcon size={14}/>} label="Labels" shortcut="P then L" options={labels.map(label => ({ id: label.id, label: label.name, color: label.color, groupId: label.groupId, groupLabel: label.groupId ? groupNames.get(label.groupId) : undefined }))} selected={projectLabelIds} onToggle={toggleProjectLabel}/>
+    <DropdownMenu.Sub><DropdownMenu.SubTrigger><LabelIcon size={14}/><span>Labels</span><kbd>P then L</kbd><ChevronRight size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="property-command-surface property-command-project-labels" sideOffset={6} onKeyDown={event => event.stopPropagation()}><ProjectLabelMenuContent options={projectLabelOptions(labels, labelGroups)} selectedIds={projectLabelIds} onChoose={toggleProjectLabel} onCreate={onCreateLabel ? async (name, groupId) => { const created = await onCreateLabel(name, groupId); await save({ labelIds: toggleGroupedLabelIds(projectLabelIds, created.id, [...labels, created]) }) } : undefined} onClose={() => setOpen(false)}/></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 
@@ -197,12 +200,8 @@ function InitiativeSection({ initiatives, project, save }: { initiatives: Props[
   </div></section>
 }
 
-function ProjectLabelSection({ labels, labelGroups, project, save }: { labels: Props['labels']; labelGroups: Props['labelGroups']; project: Props['project']; save: Props['save'] }) {
-  const selectedIds = (project.labelIds ?? []).filter(id => labels.some(label => label.id === id))
-  const selected = labels.filter(label => selectedIds.includes(label.id))
-  const groups = new Map(labelGroups.filter(group => group.resourceType === 'project').map(group => [group.id, group]))
-  const toggle = (id: string) => { void save({ labelIds: toggleGroupedLabelIds(selectedIds, id, labels) }) }
-  return <section className="project-overview__row-section"><h3>Labels</h3><div className="project-overview__row-content">{selected.map(label=><span className="project-overview__string-item" key={label.id}><i style={{background:label.color}}/><span data-i18n-ignore>{label.name}</span></span>)}<PropertyMenu compact multiple label="Labels" value="Add label…" selectedIds={selectedIds} options={labels.map(label=>({id:label.id,label:label.name,color:label.color,description:label.description,issueCount:label.issueCount,scope:label.scope,resourceType:label.resourceType,groupId:label.groupId,groupLabel:label.groupId?groups.get(label.groupId)?.name:undefined,groupColor:label.groupId?groups.get(label.groupId)?.color:undefined,i18nIgnore:true}))} icon={<Plus size={13}/>} searchPlaceholder="Change labels…" searchShortcut="P, then L" showGroupHeadings={false} surfaceClassName="project-details-sidebar__property-menu is-labels" onChange={toggle}/></div></section>
+function ProjectLabelSection({ labels, labelGroups, project, save, onCreateLabel }: { labels: Props['labels']; labelGroups: Props['labelGroups']; project: Props['project']; save: Props['save']; onCreateLabel: Props['onCreateLabel'] }) {
+  return <section className="project-overview__row-section"><h3>Labels</h3><div className="project-overview__row-content"><ProjectLabelControl labels={labels} labelGroups={labelGroups} selectedIds={project.labelIds ?? []} onChange={labelIds => void save({ labelIds })} onCreateLabel={onCreateLabel}/></div></section>
 }
 
 function DateProperty({ label, max, min, onChange, placeholder, resolution, value }: { label: 'Start date'|'Target date'; max?: string; min?: string; onChange: (value: string, resolution?: 'halfYear'|'month'|'quarter'|'year') => void; placeholder: string; resolution?: 'halfYear'|'month'|'quarter'|'year'; value?: string }) {
