@@ -62,6 +62,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		if err := json.Unmarshal(raw, &original); err != nil {
 			return err
 		}
+		normalizeIssueRecord(&original)
 		result = original
 		if expected != nil && original.Version != *expected {
 			return ErrIssueVersion
@@ -137,6 +138,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 					rows.Close()
 					return err
 				}
+				normalizeIssueRecord(&issue)
 				if _, seen := previous[issue.ID]; !seen {
 					previous[issue.ID] = issue
 					metadata.Issues = append(metadata.Issues, issue)

@@ -119,7 +119,7 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "workspace and clientId are required")
 		return
 	}
-	if _, ok := s.store.BootstrapFor(workspace); !ok {
+	if _, ok := s.store.WorkspaceMetadata(workspace); !ok {
 		writeError(w, http.StatusNotFound, "Workspace not found")
 		return
 	}
@@ -188,9 +188,27 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 	if err := json.Unmarshal(raw, &command); err != nil || command.Type != "document.join" {
 		return errors.New("unsupported collaboration command")
 	}
-	data := s.workspaceData(r)
+	data, query, err := s.issueRecordsQuery(r)
+	if err != nil {
+		return err
+	}
+	if !s.authDisabled {
+		data, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
+		if err != nil {
+			return err
+		}
+		filterBootstrapForAPIKey(&data, r)
+	}
 	var contentState string
 	if command.IssueID != "" {
+		query.Filter = store.IssueFilter{Field: "id", Values: []string{command.IssueID}}
+		query.Archived = "all"
+		query.Limit = 1
+		page, err := s.store.QueryIssueRecords(r.Context(), query)
+		if err != nil {
+			return err
+		}
+		data.Issues = page.Items
 		issueIndex := slices.IndexFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == command.IssueID })
 		if issueIndex < 0 {
 			return errors.New("issue is outside your teams")

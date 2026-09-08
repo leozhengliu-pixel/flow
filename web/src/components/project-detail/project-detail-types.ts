@@ -1,4 +1,5 @@
 import type {
+  BootstrapData,
   ActivityEvent,
   Comment,
   Cycle,
@@ -27,10 +28,13 @@ import type {
 } from "@/types/flow";
 import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-list";
 import type { ProjectMutationInput } from "@/components/projects-page/projects-page";
+import type { IssueRecordSummary } from '@/lib/api';
 
 export type ProjectDetailTab = "overview" | "activity" | "issues" | "new";
 
 export type ProjectDetailProps = {
+  issueData?: BootstrapData;
+  issueSummary?: IssueRecordSummary;
   project: Project;
   projectRelations?: ProjectRelation[];
   projects: Project[];

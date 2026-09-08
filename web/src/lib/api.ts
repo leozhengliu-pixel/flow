@@ -328,6 +328,12 @@ export function fetchIssueRecord(id: string, signal?: AbortSignal): Promise<Issu
   return request(`/api/issue-records/${encodeURIComponent(id)}`, { signal })
 }
 
+export type IssueRecordTotals = { total: number; started: number; completed: number }
+export type IssueRecordSummary = IssueRecordTotals & { milestones: Record<string, IssueRecordTotals>; assignees: Record<string, IssueRecordTotals>; labels: Record<string, IssueRecordTotals> }
+export function fetchProjectIssueSummary(projectId: string, signal?: AbortSignal): Promise<IssueRecordSummary> {
+  return request(`/api/issue-records/project-summary?projectId=${encodeURIComponent(projectId)}`, { signal })
+}
+
 export function updateIssueRecord(id: string, input: IssueUpdateInput): Promise<Issue> {
   return request(`/api/issue-records/${encodeURIComponent(id)}`, jsonRequest('PATCH', input))
 }

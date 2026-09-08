@@ -117,6 +117,7 @@ export class IssueCollaborationProvider {
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
     url.searchParams.set('workspace', this.workspaceKey)
     url.searchParams.set('clientId', realtimeClientId())
+    if (import.meta.env.VITE_PAGED_ISSUES === 'true') url.searchParams.set('issues', 'paged')
     const socket = new WebSocket(url)
     socket.binaryType = 'arraybuffer'
     this.socket = socket

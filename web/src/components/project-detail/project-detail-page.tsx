@@ -3,6 +3,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { Layers2, Link2, Pencil, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { fetchProjectIssueSummary, type IssueRecordSummary } from '@/lib/api';
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { normalizeProjectIcon } from "@/components/views/project-icon";
 import { ProjectOverview } from "./project-overview";
@@ -68,7 +69,16 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const labelSelection = useLabelSelection(project.labelIds ?? []);
-  const displayedProject = { ...project, labelIds: labelSelection.selectedIds };
+  const [issueSummary, setIssueSummary] = useState<IssueRecordSummary>();
+  useEffect(() => {
+    if (!props.issueData?.issueCollectionPaged) return;
+    const abort = new AbortController();
+    void fetchProjectIssueSummary(project.id, abort.signal).then(setIssueSummary).catch(error => {
+      if (!abort.signal.aborted) toast.error('Could not load project issue totals', { description: error.message });
+    });
+    return () => abort.abort();
+  }, [project.id, props.issueData?.issueCollectionPaged, props.issueData?.issueCollectionRevision, issues]);
+  const displayedProject = { ...project, labelIds: labelSelection.selectedIds, ...(issueSummary ? { issueCount: issueSummary.total, progress: issueSummary.total ? issueSummary.completed / issueSummary.total * 100 : 0 } : {}) };
   const issueStateKey = `flow:project:${project.id}:issues`;
   const [issueFilters, setIssueFilters] = useState<ProjectIssueFilters>(() =>
     readIssueFilters(issueStateKey),
@@ -421,6 +431,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
           {tab === "issues" && (
             <>
               <ProjectIssueFilterMenu
+                issueData={props.issueData}
                 filters={issueFilters}
                 issues={projectIssues}
                 onChange={changeIssueFilters}
@@ -470,6 +481,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
           {tab === "overview" && (
             <ProjectOverview
               {...props}
+              issueSummary={issueSummary}
               project={displayedProject}
               labels={projectLabels}
               onOpenMilestoneIssues={openMilestoneIssues}
@@ -517,6 +529,8 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
         </div>
         {detailsOpen && (
           <ProjectDetailsSidebar
+            issueSummary={issueSummary}
+            availableIssueLabels={issueLabels}
             onCreateLabel={props.onCreateLabel}
             initiatives={props.initiatives}
             integrationConnections={props.integrationConnections}

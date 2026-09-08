@@ -1203,7 +1203,7 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 		if !ok {
 			return fmt.Errorf("workspace %q: %w", workspaceKey, errors.New("not found"))
 		}
-		metadataOnly := eventType == "api_key.used"
+		metadataOnly := metadataOnlyMutation(eventType, payload)
 		if current.Issues == nil && !metadataOnly {
 			issues, err := s.readIssueRecords(ctx, workspaceKey)
 			if err != nil {
@@ -1245,7 +1245,7 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 		if webhookEnabled {
 			previousValues = aggregatePreviousValues(current, next, aggregateID)
 		}
-		if progressEvent(eventType) {
+		if !metadataOnly && progressEvent(eventType) {
 			refreshProjectProgressHistories(&next, time.Now().UTC())
 		}
 		if !metadataOnly {

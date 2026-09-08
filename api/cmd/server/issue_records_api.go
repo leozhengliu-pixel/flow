@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"slices"
 	"strconv"
@@ -202,6 +203,24 @@ func (s *server) listIssueRecordGroups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"groups": groups})
 }
 
+func (s *server) issueRecordProjectSummary(w http.ResponseWriter, r *http.Request) {
+	metadata, query, err := s.issueRecordsQuery(r)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
+	if len(query.ProjectIDs) != 1 || !slices.ContainsFunc(metadata.Projects, func(project domain.Project) bool { return project.ID == query.ProjectIDs[0] }) {
+		writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+	summary, err := s.store.QueryIssueRecordSummary(r.Context(), query)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
+}
+
 func (s *server) getIssueRecord(w http.ResponseWriter, r *http.Request) {
 	metadata, query, err := s.issueRecordsQuery(r)
 	if err != nil {
@@ -237,6 +256,10 @@ func (s *server) getIssueRecord(w http.ResponseWriter, r *http.Request) {
 func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 	var input domain.IssueUpdateInput
 	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if len(input.DocumentUpdateIDs) > 10_000 || slices.ContainsFunc(input.DocumentUpdateIDs, func(id string) bool { return len(id) > 191 }) {
+		writeError(w, http.StatusBadRequest, "Too many document updates")
 		return
 	}
 	metadata, query, err := s.issueRecordsQuery(r)
@@ -344,6 +367,11 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, store.ErrAuthForbidden) {
 		issueRecordsError(w, err)
 		return
+	}
+	if err == nil && updated.DocumentContent != nil && len(input.DocumentUpdateIDs) > 0 {
+		if deleteErr := s.store.DeleteDocumentCollaborationUpdates(r.Context(), query.Workspace, updated.DocumentContent.ID, input.DocumentUpdateIDs); deleteErr != nil {
+			log.Printf("compact collaboration updates document=%s: %v", updated.DocumentContent.ID, deleteErr)
+		}
 	}
 	respondMutation(w, err, http.StatusOK, updated)
 }

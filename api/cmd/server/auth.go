@@ -99,6 +99,9 @@ type workspaceKeyContextKey struct{}
 
 func (s *server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.authDisabled {
+			r = r.WithContext(store.ContextWithRealtimeClient(r.Context(), r.Header.Get("X-Client-ID")))
+		}
 		if s.authDisabled || publicAuthPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
@@ -383,13 +386,9 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	if key == "" || r.URL.Path == "/api/account/bootstrap" || r.URL.Path == "/api/invitations/accept" || (r.Method == http.MethodPost && r.URL.Path == "/api/workspaces") {
 		return true
 	}
-	var data domain.Bootstrap
-	var ok bool
-	if isIssueRecordsRequest(r) {
-		data, ok = s.store.WorkspaceMetadata(key)
-	} else {
-		data, ok = s.store.BootstrapFor(key)
-	}
+	// Workspace membership and feature gates require metadata only. Resource
+	// authorization below loads the entities required by the specific route.
+	data, ok := s.store.WorkspaceMetadata(key)
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return false
@@ -582,6 +581,10 @@ func guestRestrictedPath(path string) bool {
 }
 
 func (s *server) resourceAllowed(r *http.Request, workspace string, userID string) bool {
+	if r.URL.Path == "/api/recent" {
+		_, _, err := s.store.IssueQueryAccess(r.Context(), workspace, userID)
+		return err == nil
+	}
 	if isIssueRecordsRequest(r) && issueRecordQueryOnly(r) {
 		_, _, err := s.store.IssueQueryAccess(r.Context(), workspace, userID)
 		return err == nil
@@ -591,6 +594,9 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 	var err error
 	if isIssueRecordsRequest(r) {
 		data, err = s.issueRecordAuthorizationData(r)
+		ok = err == nil
+	} else if metadataAuthorizationRequest(r) {
+		data, err = s.store.PagedWorkspaceMetadata(r.Context(), workspace, userID)
 		ok = err == nil
 	} else {
 		data, ok, err = s.store.BootstrapForUser(r.Context(), workspace, userID)

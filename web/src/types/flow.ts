@@ -1536,6 +1536,7 @@ export interface InitiativeMutationInput {
 }
 export interface BootstrapData {
   issueCollectionPaged?: boolean;
+  issueCollectionRevision?: number;
   workspace: Workspace;
   viewer: User;
   users: User[];

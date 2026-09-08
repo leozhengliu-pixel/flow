@@ -24,7 +24,7 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
   onShowGroup?: (id: string) => void
   onMoveIssueRecord?: (issue: Issue, input: IssueUpdateInput) => Promise<unknown>
 }) {
-  const signature = JSON.stringify([data.workspace.id, query])
+  const signature = JSON.stringify([data.workspace.id, query, data.issueCollectionRevision])
   const [retry, setRetry] = useState(0)
   const cache = useMemo(() => new PagedIssueCache(), [signature, retry])
   const [groups, setGroups] = useState<Group[]>([])
@@ -58,12 +58,17 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
   const observedIssues = useRef(data.issues)
   useEffect(() => {
     if (observedIssues.current === data.issues) return
+    const oldRecords = new Map(observedIssues.current.map(issue => [issue.id, issue]))
     observedIssues.current = data.issues
     let refresh = false
     for (const issue of data.issues) {
+      const oldRecord = oldRecords.get(issue.id)
+      oldRecords.delete(issue.id)
+      if (oldRecord === issue) continue
       const previous = cache.update(issue)
       if (!previous || issueQueryChanged(previous, issue, queryRef.current)) refresh = true
     }
+    if (oldRecords.size) refresh = true
     if (refresh) setRetry(value => value + 1)
     else { recordsRef.current?.(cache.records()); setRevision(value => value + 1) }
   }, [cache, data.issues])
@@ -84,9 +89,9 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
   const descriptor = useCallback((group: Group): MyIssuesGroupData => {
     const field = query.groupBy ?? 'status'
     const state = field === 'status' ? data.states.find(state => state.id === group.value) : undefined
-    const label = state?.name ?? (field === 'none' ? 'All issues' : field === 'priority' ? ['No priority', 'Urgent', 'High', 'Medium', 'Low'][Number(group.value)] : field === 'assignee' || field === 'creator' ? data.users.find(user => user.id === group.value)?.displayName : field === 'project' ? data.projects.find(project => project.id === group.value)?.name : field === 'team' ? data.teams.find(team => team.id === group.value)?.name : field === 'cycle' ? data.cycles.find(cycle => cycle.id === group.value)?.name : undefined) ?? (group.value || `No ${field}`)
-    return { id: group.value, label, state, stateType: state?.type, issues: [], totalCount: group.count, createContext: state ? { stateId: state.id } : field === 'priority' ? { priority: Number(group.value) as 0|1|2|3|4 } : field === 'project' ? { projectId: group.value } : field === 'assignee' ? { assigneeId: group.value } : undefined }
-  }, [data.states, data.users, data.projects, data.teams, data.cycles, query.groupBy])
+    const label = state?.name ?? (field === 'none' ? 'All issues' : field === 'priority' ? ['No priority', 'Urgent', 'High', 'Medium', 'Low'][Number(group.value)] : field === 'assignee' || field === 'creator' ? data.users.find(user => user.id === group.value)?.displayName : field === 'project' ? data.projects.find(project => project.id === group.value)?.name : field === 'team' ? data.teams.find(team => team.id === group.value)?.name : field === 'cycle' ? data.cycles.find(cycle => cycle.id === group.value)?.name : field === 'label' ? data.labels.find(label => label.id === group.value)?.name : field === 'milestone' ? data.projects.flatMap(project => project.milestones ?? []).find(milestone => milestone.id === group.value)?.name : undefined) ?? (group.value || `No ${field}`)
+    return { id: group.value, label, state, stateType: state?.type, issues: [], totalCount: group.count, createContext: state ? { stateId: state.id } : field === 'priority' ? { priority: Number(group.value) as 0|1|2|3|4 } : field === 'project' ? { projectId: group.value } : field === 'assignee' ? { assigneeId: group.value } : field === 'team' ? { teamId: group.value } : field === 'cycle' ? { cycleId: group.value } : field === 'label' ? { labelIds: group.value ? [group.value] : [] } : undefined }
+  }, [data.states, data.users, data.projects, data.teams, data.cycles, data.labels, query.groupBy])
   const counts = groups.map(group => collapsedGroupIds?.has(group.value) ? 0 : group.loaded + (group.hasMore ? 1 : 0))
   const offsets: number[] = []; let offset = 0
   for (const count of counts) { offsets.push(offset); offset += count }
@@ -151,6 +156,7 @@ function issueQueryChanged(before: Issue, after: Issue, query: IssueQueryInput) 
   }
   visit(query.filter)
   if (before.archivedAt !== after.archivedAt || before.team.id !== after.team.id) return true
+  if (query.projectId && before.project?.id !== after.project?.id || query.stateId && before.state.id !== after.state.id) return true
   const value = (issue: Issue, field: string | undefined) => field === 'status' ? issue.state.id : field === 'project' ? issue.project?.id : field === 'assignee' ? issue.assignee?.id : field === 'creator' ? issue.creator.id : field === 'cycle' ? issue.cycleId : field === 'label' || field === 'labels' ? (issue.labels ?? []).map(label => label.id).sort().join(',') : field === 'parent' ? issue.parentId : field ? issue[field as keyof Issue] : undefined
   return [...fields].some(field => value(before, field) !== value(after, field)) || Boolean(query.q && (before.title !== after.title || before.description !== after.description))
 }

@@ -752,7 +752,9 @@ function App() {
       current
         ? deriveResourceCounts({
             ...current,
-            issues: current.issues.map((i) => (i.id === issue.id ? issue : i)),
+            issues: current.issueCollectionPaged
+              ? [issue, ...current.issues.filter(item => item.id !== issue.id)].slice(0, 2000)
+              : current.issues.map((i) => (i.id === issue.id ? issue : i)),
           })
         : current,
     );
@@ -925,6 +927,16 @@ function App() {
   };
   const refreshActivity = async () => {
     if (!data) return;
+    if (data.issueCollectionPaged && selectedIssue) {
+      const context = await fetchIssueRecordContext(selectedIssue.id);
+      setData(current => current?.workspace.id === data.workspace.id ? {
+        ...current,
+        issues: current.issues.map(issue => issue.id === context.issue.id && issue.version <= context.issue.version ? context.issue : issue),
+        comments: { ...current.comments, [context.issue.id]: context.comments ?? [] },
+        activities: { ...current.activities, [context.issue.id]: context.activities ?? [] },
+      } : current);
+      return;
+    }
     const next = await fetchBootstrap(data.workspace.urlKey);
     setData(next);
   };
@@ -2839,7 +2851,7 @@ function App() {
       current
         ? {
             ...current,
-            issues: current.issues.map(
+            issues: current.issueCollectionPaged ? [...issues, ...current.issues.filter(issue => !issues.some(updated => updated.id === issue.id))].slice(0, 2000) : current.issues.map(
               (issue) =>
                 issues.find((updated) => updated.id === issue.id) ?? issue,
             ),
@@ -2857,6 +2869,7 @@ function App() {
       current
         ? {
             ...current,
+            issueCollectionRevision: (current.issueCollectionRevision ?? 0) + 1,
             issues: current.issues.filter((issue) => !ids.includes(issue.id)),
           }
         : current,
@@ -5621,6 +5634,7 @@ function App() {
               selectedProjectFacetView)) &&
           selectedProject && (
             <ProjectDetailPage
+              issueData={data.issueCollectionPaged ? data : undefined}
               onCreateLabel={addProjectLabel}
               key={`${selectedProject.id}:${selectedProjectFacetView?.id ?? "base"}`}
               project={selectedProject}

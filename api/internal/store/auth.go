@@ -694,7 +694,7 @@ func (s *SQLiteStore) AccountForUser(ctx context.Context, userID string) (domain
 }
 
 func (s *SQLiteStore) SetLastWorkspace(ctx context.Context, userID, workspaceKey string) error {
-	data, ok := s.BootstrapFor(workspaceKey)
+	data, ok := s.WorkspaceMetadata(workspaceKey)
 	if !ok {
 		return ErrAuthForbidden
 	}
