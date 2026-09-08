@@ -15,6 +15,11 @@ By participating, you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 Small fixes may go directly to a pull request. Larger changes should have an
 accepted issue that documents scope, user impact, and implementation direction.
 
+Keep local audit reports, UI measurement records, replication checklists, and
+load-test results outside the repository. Do not commit these artifacts or
+include them in Git history; `docs/` is for maintained product and contributor
+documentation.
+
 ## Development Setup
 
 Fork the repository, then clone your fork:
