@@ -190,7 +190,17 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	workspace := workspaceKey(r)
-	data := s.workspaceData(r)
+	var data domain.Bootstrap
+	if pagedRealtimeRequest(r) {
+		var err error
+		data, _, err = s.pagedRealtimeMetadata(r)
+		if err != nil {
+			issueRecordsError(w, err)
+			return
+		}
+	} else {
+		data = s.workspaceData(r)
+	}
 	presence, err := s.snapshotPresence(r.Context(), workspace)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "Presence is temporarily unavailable")
@@ -211,7 +221,15 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	channel, unsubscribe := s.realtime.subscribeSince(workspace, since)
 	defer unsubscribe()
-	presence = filterPresenceForViewer(data, presence)
+	if pagedRealtimeRequest(r) {
+		presence, err = s.pagedPresence(r, presence)
+		if err != nil {
+			issueRecordsError(w, err)
+			return
+		}
+	} else {
+		presence = filterPresenceForViewer(data, presence)
+	}
 	initial, _ := json.Marshal(map[string]any{"presence": presence})
 	if !writeSSE(w, domain.RealtimeEvent{ID: fmt.Sprintf("connected_%d", time.Now().UnixNano()), Type: "connected", Payload: initial, CreatedAt: time.Now().UTC()}) {
 		return
@@ -224,6 +242,19 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case event := <-channel:
+			if pagedRealtimeRequest(r) {
+				projected, visible, err := s.pagedRealtimeEvent(r, event)
+				if err != nil {
+					return
+				}
+				if visible {
+					if !writeSSE(w, projected) {
+						return
+					}
+					flusher.Flush()
+				}
+				continue
+			}
 			if !realtimeEventVisible(data, event) {
 				continue
 			}
@@ -370,15 +401,21 @@ func (s *server) updatePresence(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			s.publishPresence(workspace, presence)
-			writeJSON(w, http.StatusOK, presence)
+			s.writePresenceResponse(w, r, presence)
 			return
 		}
-		writeJSON(w, http.StatusOK, s.realtime.removePresence(workspace, input.ClientID))
+		s.writePresenceResponse(w, r, s.realtime.removePresence(workspace, input.ClientID))
 		return
 	}
 	if input.IssueID != "" {
-		data := s.workspaceData(r)
-		if !slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == input.IssueID }) {
+		visible := false
+		if pagedRealtimeRequest(r) {
+			visible = s.pagedIssueVisible(r, input.IssueID)
+		} else {
+			data := s.workspaceData(r)
+			visible = slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == input.IssueID })
+		}
+		if !visible {
 			writeError(w, http.StatusForbidden, "Issue is outside your teams")
 			return
 		}
@@ -402,10 +439,10 @@ func (s *server) updatePresence(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.publishPresence(workspace, presence)
-		writeJSON(w, http.StatusOK, presence)
+		s.writePresenceResponse(w, r, presence)
 		return
 	}
-	writeJSON(w, http.StatusOK, s.realtime.updatePresenceWithDocument(workspace, input.ClientID, actor, input.IssueID, input.DocumentID, input.Route))
+	s.writePresenceResponse(w, r, s.realtime.updatePresenceWithDocument(workspace, input.ClientID, actor, input.IssueID, input.DocumentID, input.Route))
 }
 
 func (s *server) listPresence(w http.ResponseWriter, r *http.Request) {
@@ -419,8 +456,14 @@ func (s *server) listPresence(w http.ResponseWriter, r *http.Request) {
 	documentID := strings.TrimSpace(r.URL.Query().Get("documentId"))
 	route := strings.TrimSpace(r.URL.Query().Get("route"))
 	if issueID != "" {
-		data := s.workspaceData(r)
-		if !slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == issueID }) {
+		visible := false
+		if pagedRealtimeRequest(r) {
+			visible = s.pagedIssueVisible(r, issueID)
+		} else {
+			data := s.workspaceData(r)
+			visible = slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == issueID })
+		}
+		if !visible {
 			writeError(w, http.StatusForbidden, "Issue is outside your teams")
 			return
 		}
@@ -438,7 +481,7 @@ func (s *server) listPresence(w http.ResponseWriter, r *http.Request) {
 			return issueID != "" && item.IssueID != issueID || documentID != "" && item.DocumentID != documentID || route != "" && item.Route != route
 		})
 	}
-	writeJSON(w, http.StatusOK, presence)
+	s.writePresenceResponse(w, r, presence)
 }
 
 func (s *server) snapshotPresence(ctx context.Context, workspace string) ([]domain.Presence, error) {

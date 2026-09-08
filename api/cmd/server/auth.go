@@ -159,11 +159,11 @@ func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKe
 	}
 	secret := strings.TrimSpace(header[len("Bearer "):])
 	key := workspaceKey(r)
-	data, ok := s.store.BootstrapFor(key)
+	data, ok := s.store.WorkspaceMetadata(key)
 	if !ok {
 		if resolved, _, found := s.store.FindAPIKey(secretHash(secret)); found {
 			key = resolved
-			data, ok = s.store.BootstrapFor(key)
+			data, ok = s.store.WorkspaceMetadata(key)
 		}
 	}
 	if !ok {
@@ -249,16 +249,16 @@ func apiKeyHasScope(key domain.APIKey, scope string) bool {
 func issueWriteRequest(r *http.Request) bool {
 	path := strings.Trim(strings.TrimSpace(r.URL.Path), "/")
 	parts := strings.Split(path, "/")
-	if len(parts) == 2 && parts[0] == "api" && parts[1] == "issues" {
+	if len(parts) == 2 && parts[0] == "api" && (parts[1] == "issues" || parts[1] == "issue-records") {
 		return r.Method == http.MethodPost
 	}
-	return len(parts) == 3 && parts[0] == "api" && parts[1] == "issues" && parts[2] != "" && r.Method == http.MethodPatch
+	return len(parts) == 3 && parts[0] == "api" && (parts[1] == "issues" || parts[1] == "issue-records") && parts[2] != "" && r.Method == http.MethodPatch
 }
 
 func issueCommentCreateRequest(r *http.Request) bool {
 	path := strings.Trim(strings.TrimSpace(r.URL.Path), "/")
 	parts := strings.Split(path, "/")
-	return len(parts) == 4 && parts[0] == "api" && parts[1] == "issues" && parts[2] != "" && parts[3] == "comments" && r.Method == http.MethodPost
+	return len(parts) == 4 && parts[0] == "api" && (parts[1] == "issues" || parts[1] == "issue-records") && parts[2] != "" && parts[3] == "comments" && r.Method == http.MethodPost
 }
 
 func apiKeyTeamRestrictionSelected(key domain.APIKey) bool {
@@ -383,7 +383,13 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	if key == "" || r.URL.Path == "/api/account/bootstrap" || r.URL.Path == "/api/invitations/accept" || (r.Method == http.MethodPost && r.URL.Path == "/api/workspaces") {
 		return true
 	}
-	data, ok := s.store.BootstrapFor(key)
+	var data domain.Bootstrap
+	var ok bool
+	if isIssueRecordsRequest(r) {
+		data, ok = s.store.WorkspaceMetadata(key)
+	} else {
+		data, ok = s.store.BootstrapFor(key)
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return false
@@ -576,11 +582,26 @@ func guestRestrictedPath(path string) bool {
 }
 
 func (s *server) resourceAllowed(r *http.Request, workspace string, userID string) bool {
-	data, ok, err := s.store.BootstrapForUser(r.Context(), workspace, userID)
+	if isIssueRecordsRequest(r) && issueRecordQueryOnly(r) {
+		_, _, err := s.store.IssueQueryAccess(r.Context(), workspace, userID)
+		return err == nil
+	}
+	var data domain.Bootstrap
+	var ok bool
+	var err error
+	if isIssueRecordsRequest(r) {
+		data, err = s.issueRecordAuthorizationData(r)
+		ok = err == nil
+	} else {
+		data, ok, err = s.store.BootstrapForUser(r.Context(), workspace, userID)
+	}
 	if err != nil || !ok {
 		return false
 	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) > 1 && parts[1] == "issue-records" {
+		parts[1] = "issues"
+	}
 	teamAllowed := func(teamID string) bool {
 		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) && !slices.Contains(key.TeamIDs, teamID) {
 			return false
@@ -773,6 +794,11 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		if parts[2] == "batch" {
 			var input domain.BatchIssueUpdateInput
 			if !peekRequestJSON(r, &input) || slices.ContainsFunc(input.IssueIDs, func(id string) bool { return !issueAllowed(id) }) {
+				return false
+			}
+			if isIssueRecordsRequest(r) && slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool {
+				return slices.Contains(input.IssueIDs, issue.ID) && issuePermissionRank(issueRole(s, data, issue)) < issuePermissionRank("editor")
+			}) {
 				return false
 			}
 			return mutationAllowed(input.Update)

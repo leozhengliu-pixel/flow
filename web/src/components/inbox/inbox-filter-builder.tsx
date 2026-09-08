@@ -1,4 +1,4 @@
-import { cloneElement, forwardRef, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type KeyboardEvent as ReactKeyboardEvent, type ReactElement, type RefObject } from 'react'
+import { cloneElement, forwardRef, Fragment, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type KeyboardEvent as ReactKeyboardEvent, type ReactElement, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import * as Popover from '@radix-ui/react-popover'
 import { Plus, X } from 'lucide-react'
@@ -7,6 +7,10 @@ import { PriorityIcon, ProjectIcon, ReviewStatusGlyph, ReviewStatusValueGlyph, W
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import { useI18n } from '@/i18n/i18n'
+import { UserAvatar } from '@/components/ui/user-avatar'
+import { PersonHover } from '@/components/property/person-info'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { inboxValueMenuHeight, partitionInboxOptions, UNMATCHED_OPTION_ID } from './inbox-filter-model'
 
 import {
   appendInboxFilterValue,
@@ -15,6 +19,7 @@ import {
   toggleInboxFilterConditionValue,
   updateInboxFilterOperator,
   INBOX_REVIEW_STATUS_OPTIONS,
+  INBOX_NOTIFICATION_TYPE_OPTIONS,
   type InboxFilterCondition,
   type InboxFilterOption,
   type InboxFilterOptions,
@@ -60,13 +65,7 @@ const operatorOptions: Array<{ id: InboxFilterOperator; label: string }> = [
 ]
 
 const standardOptions: InboxFilterOptions = {
-  notificationType: [
-    { id: 'assignment', label: 'Assignments', keywords: 'assigned assignment' },
-    { id: 'comment', label: 'Comments and replies', keywords: 'commented reply comment' },
-    { id: 'mention', label: 'Mentions', keywords: 'mentioned mention' },
-    { id: 'status', label: 'Issue updates', keywords: 'status state issue' },
-    { id: 'project', label: 'Project updates', keywords: 'project' },
-  ],
+  notificationType: INBOX_NOTIFICATION_TYPE_OPTIONS,
   issuePriority: [
     { id: '0', label: 'No priority', keywords: 'none', icon: <PriorityIcon priority={0} /> },
     { id: '1', label: 'Urgent', icon: <PriorityIcon priority={1} /> },
@@ -96,15 +95,17 @@ export function InboxFilterBuilder({
   open: controlledOpen,
   onOpenChange,
 }: InboxFilterBuilderProps) {
+  const { t } = useI18n()
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
   const [activeProperty, setActiveProperty] = useState<InboxFilterProperty>()
-  const [keyboardMode, setKeyboardMode] = useState(false)
+  const [commandOpen, setCommandOpen] = useState(false)
   const [filterBarHost, setFilterBarHost] = useState<HTMLElement | null>(null)
   const triggerAnchorRef = useRef<HTMLSpanElement>(null)
   const propertySearchRef = useRef<HTMLInputElement>(null)
   const open = controlledOpen ?? uncontrolledOpen
   const normalizedFilters = useMemo(() => normalizeInboxFilters(filters), [filters])
   const fieldOptions = useMemo<InboxFilterOptions>(() => ({ ...standardOptions, ...options }), [options])
+  const itemCount = fieldOptions.notificationType?.reduce((sum, option) => sum + (option.count ?? 0), 0) ?? 0
 
   const setOpen = useCallback((next: boolean) => {
     if (!next) setActiveProperty(undefined)
@@ -123,8 +124,9 @@ export function InboxFilterBuilder({
       const target = event.target as HTMLElement | null
       if (target?.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]')) return
       event.preventDefault()
-      setKeyboardMode(true)
-      setOpen(true)
+      if (target?.closest('[role="dialog"], [role="menu"]')) return
+      setOpen(false)
+      setCommandOpen(true)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -144,26 +146,19 @@ export function InboxFilterBuilder({
     requestAnimationFrame(() => propertySearchRef.current?.focus())
   }, [])
 
-  const addAnotherFilter = useCallback(() => {
-    setActiveProperty(undefined)
-    setKeyboardMode(false)
-    setOpen(true)
-    requestAnimationFrame(() => propertySearchRef.current?.focus())
-  }, [setOpen])
-
   const updateFilters = useCallback((nextFilters: InboxFilterCondition[]) => {
     onFiltersChange(normalizeInboxFilters(nextFilters))
   }, [onFiltersChange])
 
   return (
     <>
-      <span className={styles.triggerAnchor} ref={triggerAnchorRef} onPointerDown={() => setKeyboardMode(false)}>
+      <span className={styles.triggerAnchor} ref={triggerAnchorRef}>
         <Popover.Root open={open} onOpenChange={setOpen}>
           <Popover.Trigger asChild>{toolbarTrigger}</Popover.Trigger>
           <Popover.Portal>
             <Popover.Content data-flow-motion="floating"
               className={styles.propertyMenu}
-              data-keyboard-mode={keyboardMode}
+              data-additional={normalizedFilters.length > 0}
               side="bottom"
               align="start"
               sideOffset={3.5}
@@ -173,16 +168,13 @@ export function InboxFilterBuilder({
                 event.preventDefault()
                 requestAnimationFrame(() => propertySearchRef.current?.focus())
               }}
-              onEscapeKeyDown={event => {
-                if (!activeProperty) return
-                event.preventDefault()
-                returnToPropertyPicker()
-              }}
+              onEscapeKeyDown={() => setOpen(false)}
             >
               <PropertyPicker
                 activeProperty={activeProperty}
-                keyboardMode={keyboardMode}
+                showShortcut={!normalizedFilters.length}
                 options={fieldOptions}
+                itemCount={itemCount}
                 searchRef={propertySearchRef}
                 onActivate={setActiveProperty}
                 onToggleValue={(property, option) => updateFilters(appendInboxFilterValue(normalizedFilters, property, option))}
@@ -193,11 +185,21 @@ export function InboxFilterBuilder({
           </Popover.Portal>
         </Popover.Root>
       </span>
+      <Dialog open={commandOpen} onOpenChange={setCommandOpen}>
+        <DialogContent className={styles.commandMenu} overlayClassName="command-overlay" aria-describedby={undefined}>
+          <DialogTitle className="sr-only">{t('Filter notifications')}</DialogTitle>
+          {commandOpen && <FilterCommand options={fieldOptions} itemCount={itemCount} onClose={() => setCommandOpen(false)} onSelect={(property, option) => {
+            updateFilters(appendInboxFilterValue(normalizedFilters, property, option))
+            setCommandOpen(false)
+          }} />}
+        </DialogContent>
+      </Dialog>
       {filterBarHost && normalizedFilters.length ? createPortal(
         <AppliedFilterBar
           filters={normalizedFilters}
           options={fieldOptions}
-          onAdd={addAnotherFilter}
+          itemCount={itemCount}
+          addButton={<FilterBarAdd options={fieldOptions} itemCount={itemCount} onSelect={(property, option) => updateFilters(appendInboxFilterValue(normalizedFilters, property, option))}/>}
           onClear={() => updateFilters([])}
           onOperatorChange={(id, operator) => updateFilters(updateInboxFilterOperator(normalizedFilters, id, operator))}
           onRemove={id => updateFilters(removeInboxFilter(normalizedFilters, id))}
@@ -209,10 +211,71 @@ export function InboxFilterBuilder({
   )
 }
 
+function FilterBarAdd({ options, itemCount, onSelect }: { options: InboxFilterOptions; itemCount: number; onSelect: (property: InboxFilterProperty, option: InboxFilterOption) => void }) {
+  const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+  const [property, setProperty] = useState<InboxFilterProperty>()
+  const searchRef = useRef<HTMLInputElement>(null)
+  return <Popover.Root open={open} onOpenChange={next => { setOpen(next); setProperty(undefined) }}>
+    <Popover.Trigger asChild><button className={styles.addCondition} type="button" aria-label={t('Add another filter')} title={t('Add another filter')}><Plus aria-hidden="true"/></button></Popover.Trigger>
+    <Popover.Portal><Popover.Content data-flow-motion="floating" className={styles.propertyMenu} side="bottom" align="start" sideOffset={4} collisionPadding={16} aria-label={t('Add filter')} onOpenAutoFocus={event => { event.preventDefault(); requestAnimationFrame(() => searchRef.current?.focus()) }}>
+      <PropertyPicker activeProperty={property} showShortcut searchPlaceholder="Filter notifications by…" options={options} itemCount={itemCount} searchRef={searchRef} onActivate={setProperty} onToggleValue={onSelect} onValueSelected={() => setOpen(false)} onReturnToProperties={() => { setProperty(undefined); requestAnimationFrame(() => searchRef.current?.focus()) }}/>
+    </Popover.Content></Popover.Portal>
+  </Popover.Root>
+}
+
+function FilterCommand({ options, itemCount, onSelect, onClose }: {
+  options: InboxFilterOptions
+  itemCount: number
+  onSelect: (property: InboxFilterProperty, option: InboxFilterOption) => void
+  onClose: () => void
+}) {
+  const [property, setProperty] = useState<InboxFilterProperty>()
+  return <FilterCommandStage key={property ?? 'properties'} property={property} options={options} itemCount={itemCount} onActivate={setProperty} onSelect={onSelect} onClose={onClose}/>
+}
+
+function FilterCommandStage({ property, options, itemCount, onActivate, onSelect, onClose }: {
+  property?: InboxFilterProperty
+  options: InboxFilterOptions
+  itemCount: number
+  onActivate: (property: InboxFilterProperty | undefined) => void
+  onSelect: (property: InboxFilterProperty, option: InboxFilterOption) => void
+  onClose: () => void
+}) {
+  const { t } = useI18n()
+  const [searching, setSearching] = useState(false)
+  const values = property ? options[property] ?? [] : []
+  const ordered = property === 'notificationType' ? [...values].sort((a, b) => a.label.localeCompare(b.label)) : values
+  const command = usePropertyCommand<InboxFilterOption>({
+    open: true,
+    closeOnSelect: false,
+    options: property
+      ? (searching ? ordered : partitionInboxOptions(ordered, itemCount).matching)
+      : properties.map(item => ({ ...item, keywords: t(item.label) })),
+    personOptions: property === 'from',
+    onOpenChange: next => { if (!next) onClose() },
+    onSelect: option => property ? onSelect(property, option) : onActivate(option.id as InboxFilterProperty),
+  })
+  return <div onKeyDown={event => {
+    if (property && (event.key === 'ArrowLeft' || (event.key === 'Backspace' && !command.query))) {
+      event.preventDefault()
+      onActivate(undefined)
+    } else command.onKeyDown(event)
+  }}>
+    <div className={styles.commandSearch}><input ref={command.inputRef} aria-label={t('Command menu')} placeholder={t(property ? 'Filter…' : 'Filter notifications by…')} value={command.query} onChange={event => { setSearching(Boolean(event.target.value.trim())); command.onQueryChange(event.target.value) }}/></div>
+    <div className={styles.commandList} role="listbox" aria-label={t(property ? properties.find(item => item.id === property)!.label : 'Filter property')}>
+      {command.filteredOptions.map(option => property ? <FilterValueOption key={option.id} active={command.activeId === option.id} checked={false} option={option} property={property} onActive={() => command.setActiveId(option.id)} onChoose={() => command.choose(option)}/> : <button key={option.id} className={styles.propertyItem} type="button" role="option" aria-selected={command.activeId === option.id} onMouseMove={() => command.setActiveId(option.id)} onClick={() => command.choose(option)}><PropertyIcon property={option.id as InboxFilterProperty}/><span>{t(option.label)}</span></button>)}
+      {!command.filteredOptions.length && <div className={styles.empty}>{t('No results')}</div>}
+    </div>
+  </div>
+}
+
 function PropertyPicker({
   activeProperty,
-  keyboardMode,
+  showShortcut,
+  searchPlaceholder = 'Add Filter…',
   options,
+  itemCount,
   searchRef,
   onActivate,
   onToggleValue,
@@ -220,8 +283,10 @@ function PropertyPicker({
   onReturnToProperties,
 }: {
   activeProperty?: InboxFilterProperty
-  keyboardMode: boolean
+  showShortcut: boolean
+  searchPlaceholder?: string
   options: InboxFilterOptions
+  itemCount: number
   searchRef: RefObject<HTMLInputElement | null>
   onActivate: (property: InboxFilterProperty | undefined) => void
   onToggleValue: (property: InboxFilterProperty, option: InboxFilterOption) => void
@@ -230,10 +295,11 @@ function PropertyPicker({
 }) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
-  const [activeIndex, setActiveIndex] = useState(keyboardMode ? 0 : -1)
+  const [activeIndex, setActiveIndex] = useState(-1)
   const [focusValuePicker, setFocusValuePicker] = useState(false)
   const hoverTimerRef = useRef<number | undefined>(undefined)
-  const visibleProperties = properties.filter(property => property.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+  const propertyRefs = useRef(new Map<string, HTMLButtonElement>())
+  const visibleProperties = properties.filter(property => `${property.label} ${t(property.label)}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
 
   useEffect(() => () => window.clearTimeout(hoverTimerRef.current), [])
 
@@ -268,7 +334,7 @@ function PropertyPicker({
       const next = activeIndex < 0 ? visibleProperties.length - 1 : (activeIndex - 1 + visibleProperties.length) % visibleProperties.length
       setActiveIndex(next)
       openProperty(visibleProperties[next].id, false)
-    } else if (event.key === 'Enter') {
+    } else if (event.key === 'Enter' || event.key === 'ArrowRight') {
       event.preventDefault()
       openProperty(visibleProperties[Math.max(0, Math.min(activeIndex, visibleProperties.length - 1))].id)
     } else if (event.key === 'Home') {
@@ -288,15 +354,16 @@ function PropertyPicker({
         ref={searchRef}
         type="search"
         aria-label="Add Filter"
-        placeholder="Add Filter..."
+        placeholder={t(searchPlaceholder)}
         value={query}
         onChange={event => {
           setQuery(event.target.value)
           setActiveIndex(0)
+          onActivate(undefined)
         }}
         onKeyDown={onKeyDown}
       />
-      {keyboardMode ? <kbd aria-hidden="true">F</kbd> : null}
+      {showShortcut && <kbd aria-hidden="true">F</kbd>}
     </div>
     <div className={styles.propertyList} role="listbox" aria-label="Filter property">
       {visibleProperties.map((property, index) => {
@@ -305,6 +372,7 @@ function PropertyPicker({
           <Popover.Root key={property.id} open={activeProperty === property.id} onOpenChange={next => onActivate(next ? property.id : undefined)}>
             <Popover.Anchor asChild>
               <button
+                ref={node => { if (node) propertyRefs.current.set(property.id, node); else propertyRefs.current.delete(property.id) }}
                 className={styles.propertyItem}
                 type="button"
                 role="option"
@@ -325,8 +393,11 @@ function PropertyPicker({
               <ValuePicker
                 property={property}
                 options={valueOptions}
+                itemCount={itemCount}
+                anchorTop={propertyRefs.current.get(property.id)?.getBoundingClientRect().top ?? 0}
                 autoFocus={focusValuePicker}
                 onClose={() => onActivate(undefined)}
+                onCloseAll={onValueSelected}
                 onToggle={option => {
                   onToggleValue(property.id, option)
                   onValueSelected()
@@ -347,58 +418,120 @@ function ValuePicker({
   options,
   autoFocus,
   onClose,
+  onCloseAll,
   onToggle,
   onReturnToProperties,
+  itemCount,
+  anchorTop = 0,
+  selectedIds = [],
+  variant = 'nested',
 }: {
   property: { id: InboxFilterProperty; label: string }
   options: InboxFilterOption[]
   autoFocus: boolean
   onClose: () => void
+  onCloseAll: () => void
   onToggle: (option: InboxFilterOption) => void
   onReturnToProperties: () => void
+  itemCount: number
+  anchorTop?: number
+  selectedIds?: string[]
+  variant?: 'nested' | 'condition'
 }) {
   const { t } = useI18n()
   const [showUnmatched, setShowUnmatched] = useState(false)
+  const [searching, setSearching] = useState(false)
+  const [highlight, setHighlight] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [measuredWidth, setMeasuredWidth] = useState<number>()
+  const [viewportHeight, setViewportHeight] = useState(window.innerHeight)
+  useEffect(() => {
+    const resize = () => setViewportHeight(window.innerHeight)
+    window.addEventListener('resize', resize)
+    return () => window.removeEventListener('resize', resize)
+  }, [])
+  const ordered = property.id === 'notificationType' ? [...options].sort((a, b) => a.label.localeCompare(b.label)) : options
+  const split = partitionInboxOptions(ordered, itemCount, selectedIds)
+  const collapsed = !showUnmatched && !searching && split.unmatched.length > 0
+  const unmatchedLabel = `${split.unmatched.length} ${t('options not matching any notifications')}`
+  const commandOptions: InboxFilterOption[] = collapsed ? [...split.matching, { id: UNMATCHED_OPTION_ID, label: unmatchedLabel }] : [...split.matching, ...split.unmatched]
   const command = usePropertyCommand({
     autoFocus,
     closeOnSelect: false,
     open: true,
-    options,
-    selectedIds: [],
+    options: commandOptions,
+    personOptions: property.id === 'from',
+    selectedIds,
     onOpenChange: open => { if (!open) onClose() },
-    onSelect: onToggle,
+    onSelect: option => {
+      if (option.id === UNMATCHED_OPTION_ID) {
+        setShowUnmatched(true)
+        setHighlight(false)
+        requestAnimationFrame(() => command.inputRef.current?.focus())
+      } else onToggle(option)
+    },
   })
-  const canCollapseUnmatched = property.id === 'notificationType' && !command.query.trim() && !showUnmatched
-  const matchingOptions = canCollapseUnmatched ? command.filteredOptions.filter(option => (option.count ?? 0) > 0) : command.filteredOptions
-  const unmatchedCount = canCollapseUnmatched ? command.filteredOptions.length - matchingOptions.length : 0
-  const showSearch = options.length > 2
-  const visibleSearch = showSearch && property.id !== 'notificationType'
+  const filtered = command.filteredOptions.filter(option => option.id !== UNMATCHED_OPTION_ID)
+  const displayed = variant === 'condition' ? [...filtered.filter(option => selectedIds.includes(option.id)), ...filtered.filter(option => !selectedIds.includes(option.id))] : filtered
+  const visibleSearch = showUnmatched || searching || commandOptions.length > 2
+  const initialSearch = useRef(visibleSearch)
+  const separators = new Set<string>()
+  if (!command.query) {
+    if (showUnmatched && split.matching.length && split.unmatched.length) separators.add(split.unmatched[0].id)
+    if (variant === 'condition' && displayed.some(option => selectedIds.includes(option.id))) {
+      const firstUnselected = displayed.find(option => !selectedIds.includes(option.id))
+      if (firstUnselected) separators.add(firstUnselected.id)
+    }
+  }
+  const rowHeights = displayed.flatMap((option, index) => index > 0 && separators.has(option.id) ? [12, 32] : [32])
+  if (collapsed) rowHeights.push(...(displayed.length ? [12, 32] : [32]))
+  const height = rowHeights.length ? inboxValueMenuHeight(rowHeights, visibleSearch, viewportHeight, anchorTop) : (visibleSearch ? 79.5 : 43)
+  useLayoutEffect(() => {
+    const menu = menuRef.current
+    if (!menu) return
+    // Counts and real entity names participate in sizing. Fixed widths alone
+    // can squeeze short labels to zero when a notification count is present.
+    let overflow = 0
+    for (const label of menu.querySelectorAll<HTMLElement>(`.${styles.valueLabel}`)) {
+      overflow = Math.max(overflow, label.scrollWidth - label.clientWidth)
+    }
+    if (overflow <= 0) return
+    const width = Math.min(400, window.innerWidth - 32, Math.ceil(menu.offsetWidth + overflow))
+    if (width > menu.offsetWidth) setMeasuredWidth(width)
+  }, [options, command.query, showUnmatched, measuredWidth, t])
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onCloseAll(); return }
+    if (event.key === 'ArrowLeft') { event.preventDefault(); event.stopPropagation(); onReturnToProperties(); return }
+    if (['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) setHighlight(true)
+    command.onKeyDown(event)
+  }
 
   return (
     <Popover.Portal>
         <Popover.Content data-flow-motion="floating"
-          className={`${styles.valueMenu} ${property.id === 'reviewStatus' ? styles.reviewStatusMenu : ''}`}
+          ref={menuRef}
+          className={`${variant === 'condition' ? styles.conditionValueMenu : styles.valueMenu} ${property.id === 'reviewStatus' ? styles.reviewStatusMenu : ''}`}
+        style={{ height, width: measuredWidth }}
         data-property={property.id}
-        side="right"
+        side={variant === 'condition' ? 'bottom' : 'right'}
         align="start"
         // Menus with a visible search header align that header above the
         // property row; compact menus align directly with the row itself.
-        alignOffset={visibleSearch ? -43 : -6.5}
-        sideOffset={-1.5}
+        alignOffset={variant === 'condition' ? 0 : initialSearch.current ? -43 : -6.5}
+        sideOffset={variant === 'condition' ? 4.5 : -1.5}
         collisionPadding={10}
         aria-label={`${t('Filter')} ${t(property.label)}`}
         onOpenAutoFocus={event => event.preventDefault()}
         onEscapeKeyDown={event => {
           event.preventDefault()
-          onClose()
-          onReturnToProperties()
+          onCloseAll()
         }}
-        onKeyDown={command.onKeyDown}
+        onKeyDown={onKeyDown}
       >
-        <FilterValueList activeId={command.activeId} inputRef={command.inputRef} isSelected={command.isSelected} onActive={command.setActiveId} onChoose={command.choose} onQuery={command.onQueryChange} options={matchingOptions} placeholder={showUnmatched && property.id === 'notificationType' ? t(property.label) : t('Filter…')} property={property} query={command.query} showSearch={showSearch} hideSearch={property.id === 'notificationType'} footer={unmatchedCount ? <>
-            <div className={styles.valueSeparator} role="separator" />
-            <button className={styles.unmatchedItem} type="button" role="option" aria-selected="false" onClick={() => setShowUnmatched(true)}>
-              <span>{unmatchedCount} {t('options not matching any notifications')}</span>
+        <FilterValueList activeId={highlight ? command.activeId : undefined} inputRef={command.inputRef} isSelected={command.isSelected} onActive={id => { setHighlight(true); command.setActiveId(id) }} onChoose={command.choose} onQuery={value => { setSearching(Boolean(value.trim())); setHighlight(Boolean(value)); command.onQueryChange(value) }} options={displayed} separatorBeforeIds={[...separators]} placeholder={variant === 'condition' || showUnmatched ? t(property.label) : t('Filter…')} property={property} query={command.query} hideSearch={!visibleSearch} footer={collapsed ? <>
+            {displayed.length > 0 && <div className={styles.valueSeparator} role="separator" />}
+            <button className={styles.unmatchedItem} type="button" role="option" aria-selected={highlight && command.activeId === UNMATCHED_OPTION_ID} onMouseMove={() => { setHighlight(true); command.setActiveId(UNMATCHED_OPTION_ID) }} onClick={() => command.choose({ id: UNMATCHED_OPTION_ID, label: unmatchedLabel })}>
+              <span>{unmatchedLabel}</span>
             </button>
           </> : undefined}/>
       </Popover.Content>
@@ -409,7 +542,8 @@ function ValuePicker({
 function AppliedFilterBar({
   filters,
   options,
-  onAdd,
+  itemCount,
+  addButton,
   onClear,
   onOperatorChange,
   onRemove,
@@ -417,7 +551,8 @@ function AppliedFilterBar({
 }: {
   filters: InboxFilterCondition[]
   options: InboxFilterOptions
-  onAdd: () => void
+  itemCount: number
+  addButton: ReactElement
   onClear: () => void
   onOperatorChange: (id: string, operator: InboxFilterOperator) => void
   onRemove: (id: string) => void
@@ -448,15 +583,14 @@ function AppliedFilterBar({
           condition={filter}
           key={filter.id}
           options={options[filter.property] ?? []}
+          itemCount={itemCount}
           property={property}
           onOperatorChange={onOperatorChange}
           onRemove={onRemove}
           onToggleValue={onToggleValue}
         />
       })}
-      <button className={styles.addCondition} type="button" aria-label={t('Add another filter')} title={t('Add another filter')} onClick={onAdd}>
-        <Plus aria-hidden="true" />
-      </button>
+      {addButton}
     </div>
     {filters.length > 1 ? <button className={styles.clearAll} type="button" onClick={onClear}>{t('Clear')}</button> : null}
   </section>
@@ -466,6 +600,7 @@ function AppliedCondition({
   condition,
   options,
   property,
+  itemCount,
   onOperatorChange,
   onRemove,
   onToggleValue,
@@ -473,21 +608,15 @@ function AppliedCondition({
   condition: InboxFilterCondition
   options: InboxFilterOption[]
   property: { id: InboxFilterProperty; label: string }
+  itemCount: number
   onOperatorChange: (id: string, operator: InboxFilterOperator) => void
   onRemove: (id: string) => void
   onToggleValue: (conditionId: string, option: InboxFilterOption) => void
 }) {
   const { t } = useI18n()
   const [valuesOpen, setValuesOpen] = useState(false)
+  const valueTrigger = useRef<HTMLButtonElement>(null)
   const selectedIds = useMemo(() => condition.values.map(value => value.value), [condition.values])
-  const command = usePropertyCommand({
-    closeOnSelect: true,
-    open: valuesOpen,
-    options,
-    selectedIds,
-    onOpenChange: setValuesOpen,
-    onSelect: option => onToggleValue(condition.id, option),
-  })
 
   return <div className={styles.condition}>
       <span className={styles.conditionField}>
@@ -500,25 +629,11 @@ function AppliedCondition({
     />
     <Popover.Root open={valuesOpen} onOpenChange={setValuesOpen}>
       <Popover.Trigger asChild>
-        <button className={styles.conditionValue} type="button" aria-label={property.label}>
+        <button ref={valueTrigger} className={styles.conditionValue} type="button" aria-label={property.label}>
           <FilterValueSummary property={property.id} values={condition.values} />
         </button>
       </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content data-flow-motion="floating"
-          className={styles.conditionValueMenu}
-          data-property={property.id}
-          side="bottom"
-          align="start"
-          sideOffset={4.5}
-          collisionPadding={10}
-          aria-label={`${t('Filter')} ${t(property.label)}`}
-          onOpenAutoFocus={event => event.preventDefault()}
-          onKeyDown={command.onKeyDown}
-        >
-          <FilterValueList activeId={command.activeId} groupSelected inputRef={command.inputRef} isSelected={command.isSelected} onActive={command.setActiveId} onChoose={command.choose} onQuery={command.onQueryChange} options={command.filteredOptions} placeholder="Filter..." property={property} query={command.query}/>
-        </Popover.Content>
-      </Popover.Portal>
+      {valuesOpen && <ValuePicker variant="condition" property={property} options={options} selectedIds={selectedIds} itemCount={itemCount} anchorTop={valueTrigger.current?.getBoundingClientRect().bottom ?? 0} autoFocus onClose={() => setValuesOpen(false)} onCloseAll={() => setValuesOpen(false)} onReturnToProperties={() => setValuesOpen(false)} onToggle={option => { onToggleValue(condition.id, option); setValuesOpen(false) }}/>}
     </Popover.Root>
     <button className={styles.removeCondition} type="button" aria-label={`${t('Remove')} ${t(property.label)} ${t('filter')}`} title={`${t('Remove')} ${t(property.label)} ${t('filter')}`} onClick={() => onRemove(condition.id)}>
       <X aria-hidden="true" />
@@ -526,22 +641,20 @@ function AppliedCondition({
   </div>
 }
 
-function FilterValueList({ activeId, footer, groupSelected = false, hideSearch = false, inputRef, isSelected, onActive, onChoose, onQuery, options, placeholder, property, query, showSearch = true }: { activeId?: string; footer?: ReactElement; groupSelected?: boolean; hideSearch?: boolean; inputRef: RefObject<HTMLInputElement | null>; isSelected: (id:string)=>boolean; onActive:(id:string)=>void; onChoose:(option:InboxFilterOption)=>void; onQuery:(value:string)=>void; options:InboxFilterOption[]; placeholder:string; property:{id:InboxFilterProperty;label:string}; query:string; showSearch?:boolean }) {
+function FilterValueList({ activeId, footer, hideSearch = false, inputRef, isSelected, onActive, onChoose, onQuery, options, placeholder, property, query, separatorBeforeIds = [] }: { activeId?: string; footer?: ReactElement; hideSearch?: boolean; inputRef: RefObject<HTMLInputElement | null>; isSelected: (id:string)=>boolean; onActive:(id:string)=>void; onChoose:(option:InboxFilterOption)=>void; onQuery:(value:string)=>void; options:InboxFilterOption[]; placeholder:string; property:{id:InboxFilterProperty;label:string}; query:string; separatorBeforeIds?: string[] }) {
   const { t } = useI18n()
   const label = t(property.label)
-  const selectedOptions = groupSelected ? options.filter(option => isSelected(option.id)) : []
-  const remainingOptions = groupSelected ? options.filter(option => !isSelected(option.id)) : options
-  const renderOption = (option: InboxFilterOption) => <FilterValueOption active={activeId===option.id} checked={isSelected(option.id)} key={option.id} onActive={()=>onActive(option.id)} onChoose={()=>onChoose(option)} option={option} property={property.id}/>
-  return <>{showSearch&&<div className={`${styles.valueSearch} ${hideSearch ? styles.valueSearchHidden : ''}`}><input ref={inputRef} role="searchbox" aria-label={label} placeholder={placeholder} value={query} onChange={event=>onQuery(event.target.value)}/></div>}<div className={styles.valueList} role="listbox" aria-label={label} aria-multiselectable="true">{!options.length&&!footer?<div className={styles.empty}>{t('No results')}</div>:null}{selectedOptions.map(renderOption)}{selectedOptions.length > 0 && remainingOptions.length > 0 ? <div className={styles.valueSeparator} role="separator" /> : null}{remainingOptions.map(renderOption)}{footer}</div></>
+  return <><div className={`${styles.valueSearch} ${hideSearch ? styles.valueSearchHidden : ''}`}><input ref={inputRef} role="searchbox" aria-label={label} placeholder={placeholder} value={query} onChange={event=>onQuery(event.target.value)}/></div><div className={styles.valueList} role="listbox" aria-label={label} aria-multiselectable="true">{!options.length&&!footer?<div className={styles.empty}>{t('No results')}</div>:null}{options.map((option,index)=><Fragment key={option.id}>{index > 0 && separatorBeforeIds.includes(option.id) && <div className={styles.valueSeparator} role="separator"/>}<FilterValueOption active={activeId===option.id} checked={isSelected(option.id)} onActive={()=>onActive(option.id)} onChoose={()=>onChoose(option)} option={option} property={property.id}/></Fragment>)}{footer}</div></>
 }
 
 function FilterValueOption({ active, checked, option, property, onActive, onChoose }: { active: boolean; checked: boolean; option: InboxFilterOption; property: InboxFilterProperty; onActive: () => void; onChoose: () => void }) {
-  return <button className={styles.valueItem} type="button" role="option" aria-selected={active} aria-checked={checked} disabled={option.disabled} onMouseMove={onActive} onClick={onChoose}>
+  const { t } = useI18n()
+  return <PersonHover person={property === 'from' ? option.person : undefined}><button className={styles.valueItem} data-property={property} type="button" role="option" aria-selected={active} aria-checked={checked} disabled={option.disabled} onMouseMove={onActive} onClick={onChoose}>
     <span className={styles.checkbox}>{checked ? <CheckboxMark/> : null}</span>
-    <OptionVisual option={option} property={property}/>
-    <span className={styles.valueLabel} data-i18n-ignore={option.i18nIgnore || undefined}>{option.label}</span>
-    {option.count ? <span className={styles.valueCount}>{option.count} {option.count === 1 ? 'notification' : 'notifications'}</span> : null}
-  </button>
+    {property !== 'notificationType' && <OptionVisual option={option} property={property}/>}
+    <span className={styles.valueLabel} data-i18n-ignore={option.i18nIgnore || undefined}>{option.i18nIgnore ? option.label : t(option.label)}</span>
+    {option.count ? <span className={styles.valueCount}>{option.count} {t(option.count === 1 ? 'notification' : 'notifications')}</span> : null}
+  </button></PersonHover>
 }
 
 function OperatorMenu({
@@ -691,6 +804,7 @@ function InboxFilterPropertyGlyph({ property }: { property: InboxFilterProperty 
 }
 
 function OptionVisual({ option, property }: { option: InboxFilterOption; property: InboxFilterProperty }) {
+  if (property === 'from') return <UserAvatar className={styles.avatar} avatarUrl={option.avatarUrl} name={option.label}/>
   if (option.avatarUrl) return <img className={styles.avatar} src={option.avatarUrl} alt="" />
   if (option.icon) return <span className={styles.optionIcon} aria-hidden="true">{option.icon}</span>
   // Review status values use the filled branch glyph from the review bundle,

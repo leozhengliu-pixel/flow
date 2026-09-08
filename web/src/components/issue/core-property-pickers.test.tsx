@@ -26,11 +26,10 @@ describe('PersonHoverPreview presence status', () => {
   it('does not infer online from an active account', () => {
     renderPreview({ active: true })
 
-    const details = screen.getByText('Offline').closest('.assignee-hover-preview__details') as HTMLElement | null
-    expect(details).not.toBeNull()
-    expect(within(details!).getByText('Offline')).toBeVisible()
-    expect(within(details!).queryByText('Online')).not.toBeInTheDocument()
-    expect(within(details!).queryByText('Invited')).not.toBeInTheDocument()
+    expect(screen.queryByText('Offline')).not.toBeInTheDocument()
+    expect(screen.queryByText('Online')).not.toBeInTheDocument()
+    expect(screen.queryByText('local time')).not.toBeInTheDocument()
+    expect(screen.queryByText('No project')).not.toBeInTheDocument()
   })
 
   it('shows online only when the picker option carries explicit presence', () => {
@@ -42,13 +41,11 @@ describe('PersonHoverPreview presence status', () => {
     expect(within(details!).queryByText('Offline')).not.toBeInTheDocument()
   })
 
-  it('keeps inactive accounts offline when a stale presence flag is supplied', () => {
+  it('shows inactive account status instead of stale presence', () => {
     renderPreview({ active: false, online: true })
 
-    const details = screen.getByText('Offline').closest('.assignee-hover-preview__details') as HTMLElement | null
-    expect(details).not.toBeNull()
-    expect(within(details!).getByText('Offline')).toBeVisible()
-    expect(within(details!).queryByText('Online')).not.toBeInTheDocument()
+    expect(screen.getByText('Inactive')).toBeVisible()
+    expect(screen.queryByText('Online')).not.toBeInTheDocument()
   })
 
   it('gives pending invitations precedence over stale presence', () => {

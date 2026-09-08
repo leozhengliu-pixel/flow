@@ -8,7 +8,8 @@ import { MyIssuesList, type MyIssuesContextAction, type MyIssuesCreateContext, t
 import { defaultMyIssuesDisplayOptions } from '@/components/my-issues/my-issues-display-defaults'
 import type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption, MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
 import { useMyIssuesSelection } from '@/components/my-issues/use-my-issues-state'
-import { toggleFilterOption, updateFilterOperator, updateFilterValues } from '@/components/my-issues/my-issues-filter-types'
+import { issueFiltersToQueryAst, toggleFilterOption, updateFilterOperator, updateFilterValues } from '@/components/my-issues/my-issues-filter-types'
+import { PagedIssueList } from './paged-issue-list'
 import { IssueExplorerSurface } from './issue-explorer-surface'
 import { IssueBoard } from './issue-board'
 import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from './saved-view-editor'
@@ -74,6 +75,8 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
   const [rowOverrides, setRowOverrides] = useState<Map<string, MyIssuesRowData>>(new Map())
   const [manualOrder, setManualOrder] = useState<string[]>(() => readOrder(`${preferencesKey}:order`))
   const [previewIssueId, setPreviewIssueId] = useState<string>()
+  const [pagedTotal, setPagedTotal] = useState(0)
+  const [pagedIssues, setPagedIssues] = useState<Issue[]>([])
   const [viewEditor, setViewEditor] = useState<'create' | 'edit' | undefined>(creatingView ? 'create' : editingView ? 'edit' : undefined)
   const [viewSaving, setViewSaving] = useState(false)
   const hydratedSavedViewId = useRef(savedView?.id)
@@ -89,14 +92,22 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
 
   const scopedIssues = useMemo(() => filterInsightTeams(issuesForScope(data.issues, scope, view), initialInsightFilters?.teamIds), [data.issues, initialInsightFilters?.teamIds, scope, view])
   const insightIssues = useMemo(() => insightsOpen ? filterInsightTeams(issuesForScope(data.issues, scope, view, true), initialInsightFilters?.teamIds) : [], [data.issues, initialInsightFilters?.teamIds, insightsOpen, scope, view])
-  const issuesById = useMemo(() => new Map(data.issues.map(issue => [issue.id, issue])), [data.issues])
+  const issuesById = useMemo(() => new Map([...data.issues, ...pagedIssues].map(issue => [issue.id, issue])), [data.issues, pagedIssues])
   const rowOptions = useMemo(() => explorerPropertyOptions(data, scopedIssues), [data, scopedIssues])
   // Bootstrap/sync owns the complete visible collection. Group before virtualizing;
   // replacing it with one query page truncates both group counts and membership.
-  const visibleIssues = useMemo(() => applyExplorerFilters(scopedIssues, filters, data), [data, filters, scopedIssues])
+  const visibleIssues = useMemo(() => data.issueCollectionPaged ? pagedIssues : applyExplorerFilters(scopedIssues, filters, data), [data, filters, scopedIssues, pagedIssues])
   const rows = useMemo(() => visibleIssues.map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)), [data, rowOverrides, visibleIssues])
   const insightRows = useMemo(() => insightsOpen ? applyExplorerFilters(insightIssues, filters, data).map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)) : [], [data, filters, insightIssues, insightsOpen, rowOverrides])
   const groups = useMemo(() => buildExplorerIssueGroups(rows, display, data, view, manualOrder), [data, display, manualOrder, rows, view])
+  const pagedQuery = useMemo(() => {
+    const conditions: Record<string, unknown>[] = []
+    if (view === 'backlog') conditions.push({ field: 'status', operator: 'is', values: ['backlog'] })
+    if (view === 'active') conditions.push({ field: 'status', operator: 'in', values: ['unstarted', 'started'] })
+    if (!display.showSubIssues) conditions.push({ field: 'parent', operator: 'isEmpty' })
+    if (display.completedWindow === 'none') conditions.push({ field: 'status', operator: 'notIn', values: ['completed', 'canceled'] })
+    return { teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds, archived: 'false' as const, groupBy: display.grouping === 'focus' ? 'status' : display.grouping, sort: (display.ordering === 'created' ? 'createdAt' : display.ordering === 'updated' ? 'updatedAt' : display.ordering === 'priority' ? 'priority' : 'sortOrder') as 'priority'|'createdAt'|'updatedAt'|'sortOrder', direction: (display.ordering === 'created' || display.ordering === 'updated' ? 'desc' : 'asc') as 'asc'|'desc', filter: { and: [issueFiltersToQueryAst(filters), ...conditions] } }
+  }, [display.grouping, display.ordering, display.showSubIssues, display.completedWindow, filters, initialInsightFilters?.teamIds, scope, view])
   const selection = useMyIssuesSelection(groups)
   const summary = useMemo(() => deriveSummary(groups), [groups])
   const previewIssue = previewIssueId ? issuesById.get(previewIssueId) : undefined
@@ -250,7 +261,7 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
       displayOptions={display}
       detailsOpen={detailsOpen}
       insightsOpen={insightsOpen}
-      itemCount={rows.length}
+      itemCount={data.issueCollectionPaged ? pagedTotal : rows.length}
       filterOpenSignal={filterOpenSignal}
       filterOptions={field => explorerFilterOptions(field, rowOptions)}
       onFilterToggle={addFilter}
@@ -278,7 +289,28 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
       />}
       filterBar={(!savedView || viewEditor) && <MyIssuesFilterBar filters={filters} filterOptions={filter => explorerFilterOptions(filter.field, rowOptions)} onAdd={() => setFilterOpenSignal(value => value + 1)} onClear={() => persistFilters([])} onOperatorChange={(id, operator) => persistFilters(updateFilterOperator(filters, id, operator))} onRemove={id => persistFilters(filters.filter(filter => filter.id !== id))} onValuesChange={(id, options) => persistFilters(updateFilterValues(filters, id, options))}/>}
     >
-      {display.layout === 'list' ? <MyIssuesList
+      {data.issueCollectionPaged ? <PagedIssueList
+        data={data}
+        query={pagedQuery}
+        layout={display.layout}
+        hiddenGroupIds={display.hiddenGroupIds}
+        onHideGroup={id => changeDisplay({ ...display, hiddenGroupIds: [...display.hiddenGroupIds, id] })}
+        onShowGroup={id => changeDisplay({ ...display, hiddenGroupIds: display.hiddenGroupIds.filter(value => value !== id) })}
+        onMoveIssueRecord={(issue, input) => onUpdateIssue(issue.id, input)}
+        onTotalChange={setPagedTotal}
+        onLoadedIssuesChange={setPagedIssues}
+        collapsedGroupIds={collapsedGroups}
+        displayProperties={display.properties}
+        propertyOptions={rowOptions}
+        selectedIds={selection.selectedIds}
+        mutationErrors={mutationErrors}
+        onOpenIssueRecord={onOpenIssue}
+        onCreateIssue={group => onCreateIssue?.(scope.kind === 'team' ? { ...group.createContext, teamId: scope.team.id } : group.createContext)}
+        onGroupCollapsedChange={(id, collapsed) => setCollapsedGroups(current => { const next = new Set(current); if (collapsed) next.add(id); else next.delete(id); return next })}
+        onPropertyChange={changeProperty}
+        onSelectIssue={selection.selectIssue}
+        onContextAction={(row, action) => { void contextAction(row, action) }}
+      /> : display.layout === 'list' ? <MyIssuesList
         groups={groups}
         selectedIds={selection.selectedIds}
         collapsedGroupIds={collapsedGroups}

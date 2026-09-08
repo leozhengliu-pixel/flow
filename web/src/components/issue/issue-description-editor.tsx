@@ -1,4 +1,5 @@
 import { Code2, Heading2, Heading3, List, ListOrdered, Minus, Pilcrow, Quote, Table2 } from 'lucide-react'
+import { personSearchText } from '@/lib/people'
 import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCaret from '@tiptap/extension-collaboration-caret'
@@ -423,7 +424,7 @@ function matchingUsers(users: User[], query: string) {
   const normalized = query.trim().toLocaleLowerCase()
   return users.filter(user => {
     if (!user.active) return false
-    const name = `${user.displayName || user.name} ${user.email || ''}`.toLocaleLowerCase()
+    const name = personSearchText(user).toLocaleLowerCase()
     return !normalized || name.includes(normalized)
   }).slice(0, 8)
 }

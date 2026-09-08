@@ -556,6 +556,34 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/issues/{id}/share", s.unshareIssue)
 	mux.HandleFunc("GET /api/shared/issues/{token}", s.getSharedIssue)
 	mux.HandleFunc("GET /api/issues", s.listIssues)
+	mux.HandleFunc("GET /api/issue-records", s.listIssueRecords)
+	mux.HandleFunc("POST /api/issue-records", s.createIssueRecord)
+	mux.HandleFunc("POST /api/issue-records/batch", s.issueRecordAlias(s.batchUpdate))
+	mux.HandleFunc("GET /api/issue-records/bootstrap", s.issueRecordsBootstrap)
+	mux.HandleFunc("GET /api/issue-records/groups", s.listIssueRecordGroups)
+	mux.HandleFunc("GET /api/issue-records/{id}", s.getIssueRecord)
+	mux.HandleFunc("GET /api/issue-records/{id}/context", s.getIssueRecordContext)
+	mux.HandleFunc("PATCH /api/issue-records/{id}", s.updateIssueRecord)
+	mux.HandleFunc("DELETE /api/issue-records/{id}", s.issueRecordAlias(s.deleteIssue))
+	mux.HandleFunc("POST /api/issue-records/{id}/share", s.issueRecordAlias(s.shareIssue))
+	mux.HandleFunc("DELETE /api/issue-records/{id}/share", s.issueRecordAlias(s.unshareIssue))
+	mux.HandleFunc("GET /api/issue-records/{id}/permissions", s.issueRecordAlias(s.listIssuePermissions))
+	mux.HandleFunc("PUT /api/issue-records/{id}/permissions", s.issueRecordAlias(s.replaceIssuePermissions))
+	mux.HandleFunc("PATCH /api/issue-records/{id}/permissions/{permissionId}", s.issueRecordAlias(s.updateIssuePermission))
+	mux.HandleFunc("DELETE /api/issue-records/{id}/permissions/{permissionId}", s.issueRecordAlias(s.deleteIssuePermission))
+	mux.HandleFunc("POST /api/issue-records/{id}/reactions", s.issueRecordAlias(s.toggleIssueReaction))
+	mux.HandleFunc("POST /api/issue-records/{id}/comments", s.issueRecordAlias(s.createComment))
+	mux.HandleFunc("PATCH /api/issue-records/{id}/comments/{commentId}", s.issueRecordAlias(s.updateComment))
+	mux.HandleFunc("DELETE /api/issue-records/{id}/comments/{commentId}", s.issueRecordAlias(s.deleteComment))
+	mux.HandleFunc("POST /api/issue-records/{id}/comments/{commentId}/reactions", s.issueRecordAlias(s.toggleCommentReaction))
+	mux.HandleFunc("POST /api/issue-records/{id}/relations", s.issueRecordAlias(s.createRelation))
+	mux.HandleFunc("DELETE /api/issue-records/{id}/relations/{relationId}", s.issueRecordAlias(s.deleteRelation))
+	mux.HandleFunc("POST /api/issue-records/{id}/attachments", s.issueRecordAlias(s.createAttachment))
+	mux.HandleFunc("POST /api/issue-records/{id}/links", s.issueRecordAlias(s.createIssueLink))
+	mux.HandleFunc("DELETE /api/issue-records/{id}/attachments/{attachmentId}", s.issueRecordAlias(s.deleteAttachment))
+	mux.HandleFunc("POST /api/issue-records/{id}/reminders", s.issueRecordAlias(s.createIssueReminder))
+	mux.HandleFunc("POST /api/issue-records/{id}/loop-runs", s.issueRecordAlias(s.createIssueLoopRun))
+	mux.HandleFunc("PUT /api/issue-records/{id}/releases", s.issueRecordAlias(s.setIssueReleases))
 	mux.HandleFunc("POST /api/issues", s.createIssue)
 	mux.HandleFunc("GET /api/issues/{id}/permissions", s.listIssuePermissions)
 	mux.HandleFunc("PUT /api/issues/{id}/permissions", s.replaceIssuePermissions)
@@ -1659,6 +1687,13 @@ func workspaceKey(r *http.Request) string {
 }
 
 func (s *server) workspaceData(r *http.Request) domain.Bootstrap {
+	if data, ok := r.Context().Value(issueRecordAuthorizationContext{}).(domain.Bootstrap); ok {
+		return data
+	}
+	if pagedRealtimeRequest(r) {
+		data, _, _ := s.pagedRealtimeMetadata(r)
+		return data
+	}
 	if !s.authDisabled {
 		data, _, _ := s.store.BootstrapForUser(r.Context(), workspaceKey(r), authUser(r).ID)
 		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
@@ -2275,10 +2310,25 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 	var created domain.Issue
 	var templateSubIssues []domain.TemplateSubIssue
 	if !s.authDisabled && input.TeamID == "" {
-		projected, ok, err := s.store.BootstrapForUser(r.Context(), workspaceKey(r), authUser(r).ID)
+		var projected domain.Bootstrap
+		var ok bool
+		var err error
+		if store.UsesIssueRecordMutations(r.Context()) {
+			projected, err = s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
+			ok = err == nil
+		} else {
+			projected, ok, err = s.store.BootstrapForUser(r.Context(), workspaceKey(r), authUser(r).ID)
+		}
 		if err != nil || !ok || len(projected.Teams) == 0 {
 			writeError(w, http.StatusForbidden, "Join a team before creating an issue")
 			return
+		}
+		if store.UsesIssueRecordMutations(r.Context()) {
+			filterBootstrapForAPIKey(&projected, r)
+			if len(projected.Teams) == 0 {
+				writeError(w, 403, "Join a permitted team before creating an issue")
+				return
+			}
 		}
 		input.TeamID = projected.Teams[0].ID
 	}
@@ -2321,7 +2371,10 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		if strings.TrimSpace(input.Title) == "" {
 			return "", errInvalid
 		}
-		number := nextIssueNumber(data.Issues)
+		number := data.NextIssueNumber
+		if number == 0 {
+			number = nextIssueNumber(data.Issues)
+		}
 		now := time.Now().UTC()
 		team := data.Teams[0]
 		if input.TeamID != "" {

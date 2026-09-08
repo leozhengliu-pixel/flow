@@ -132,6 +132,18 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := s.ensureIssueRecords(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.ensureContentRecords(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.ensureIssueStats(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
 	// Keep the SCIM token table available for databases created before SCIM
 	// support. It is idempotent and does not alter the versioned base schema.
 	if err := s.ensureSCIMSchema(context.Background()); err != nil {
@@ -148,6 +160,22 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 			return nil, err
 		}
 	} else if err := s.ensureSeedWorkspaceOwners(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.migrateIssueCollections(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.migrateContentIndexes(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.migrateIssueStats(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.migrateIssueSequences(context.Background()); err != nil {
 		db.Close()
 		return nil, err
 	}

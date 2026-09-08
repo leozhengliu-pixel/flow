@@ -11,8 +11,13 @@ import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import type { LabelResourceType } from '@/types/flow'
 import { useI18n } from '@/i18n/i18n'
 import { ProjectLabelMenuContent } from './project-label-menu-content'
+import { directoryPerson, isPeopleProperty, personSearchText, type PersonIdentity } from '@/lib/people'
+import { usePeopleDirectory } from './people-context'
+import { PersonInfo } from './person-info'
+import { UserAvatar } from '@/components/ui/user-avatar'
 
 export interface PropertyOption {
+  person?: PersonIdentity
   id: string
   label: string
   color?: string
@@ -73,6 +78,11 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   labelGroupId?: string
 }) {
   const { t } = useI18n()
+  const directory = usePeopleDirectory()
+  const menuOptions = options.map(option => {
+    const person = option.person ?? (isPeopleProperty(label) && option.id && !option.id.startsWith('__') && !['*','me','none','all'].includes(option.id) ? directoryPerson(directory.users, option.id) ?? { id: option.id, label: option.label } : undefined)
+    return person ? { ...option, person, icon: <span aria-hidden="true">{option.icon ?? <UserAvatar className="people-menu-avatar" avatarUrl={person.avatarUrl} name={person.displayName || ('label' in person ? person.label : undefined) || person.name || person.id}/>}</span>, keywords: `${option.keywords ?? ''} ${personSearchText({ ...person, ...directoryPerson(directory.users, person.id) })}`, hoverContent: option.hoverContent ?? <PersonInfo person={person}/>, hoverClassName: option.hoverClassName ?? 'person-info-surface' } : option
+  })
   const [localOpen, setLocalOpen] = useState(false)
   const open = controlledOpen ?? localOpen
   const setOpen = (next: boolean) => { setLocalOpen(next); onOpenChange?.(next) }
@@ -82,8 +92,13 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   const listboxId = useId()
   const selected = multiple ? selectedIds : [selectedId ?? options.find(option => option.label === value)?.id ?? '']
   const selectedSet = new Set(selected)
+  const selectedPerson = selected.length === 1 ? menuOptions.find(option => option.id === selected[0])?.person : undefined
+  if (!hoverContent && selectedPerson) {
+    hoverContent = <PersonInfo person={selectedPerson}/>
+    hoverClassName = 'person-info-surface'
+  }
   const kind = explicitKind ?? (multiple && label === 'Labels' ? 'labels' : label === 'Project' ? 'project' : 'standard')
-  const orderedOptions = multiple && kind !== 'labels' ? [...options].sort((left, right) => Number(selectedSet.has(right.id)) - Number(selectedSet.has(left.id))) : options
+  const orderedOptions = multiple && kind !== 'labels' ? [...menuOptions].sort((left, right) => Number(selectedSet.has(right.id)) - Number(selectedSet.has(left.id))) : menuOptions
   const command = usePropertyCommand({
     autoFocus: kind !== 'project-labels',
     closeOnSelect: closeOnSelect ?? !multiple,
@@ -221,7 +236,7 @@ function OptionHover({ children, className, content }: { children: ReactNode; cl
     if (hideTimer.current) clearTimeout(hideTimer.current)
     const rect = anchorRef.current?.getBoundingClientRect()
     if (rect) {
-      const estimatedWidth = className?.includes('lp-new-project-person-hover') ? 278 : 198
+      const estimatedWidth = className?.includes('person-info-surface') ? 300 : className?.includes('lp-new-project-person-hover') ? 278 : 198
       const left = rect.right + estimatedWidth + 6 > window.innerWidth - 8 ? Math.max(8, rect.left - estimatedWidth - 6) : rect.right + 6
       setPosition({ left, top: rect.top })
     }

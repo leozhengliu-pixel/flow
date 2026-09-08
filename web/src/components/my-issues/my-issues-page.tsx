@@ -1,4 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
+import { PagedIssueList } from '@/components/issue-explorer/paged-issue-list'
+import { issueFiltersToQueryAst } from './my-issues-filter-types'
 import type { BootstrapData, Issue, IssueUpdateInput } from '@/types/flow'
 import { MyIssuesBulkActionBar, type MyIssuesBulkAction, type MyIssuesBulkActionOption } from './my-issues-bulk-action-bar'
 import { MyIssuesDetailsPane, type MyIssuesSummaryItem, type MyIssuesSummaryTab } from './my-issues-details-pane'
@@ -37,6 +39,7 @@ const FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = { ai:'AI filte
 export function MyIssuesPage({ data, initialView = 'assigned', loading = false, error, workspaceSlug = data.workspace.urlKey, onClearError, onCreateIssue, onDeleteIssues, onNavigateView, onOpenIssue, onOpenSidebar, onPersistDisplay, onPersistFilters, onUpdateIssue, onUpdateIssues }: MyIssuesPageProps) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [projectedView, setProjectedView] = useState(initialView)
+  const [pagedIssues, setPagedIssues] = useState<Issue[]>([])
   const [filterOpenSignal, setFilterOpenSignal] = useState(0)
   const [insightsOpen,setInsightsOpen]=useState(false)
   const [insightsConfig,setInsightsConfig]=useState<Record<string,unknown>>(()=>readInsights(`${workspaceSlug}:my-issues:${initialView}:insights`))
@@ -44,11 +47,11 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const mutationSequence = useRef(new Map<string, number>())
   const mutationQueues = useRef(new Map<string, Promise<Issue>>())
   const retryUpdates = useRef(new Map<string, IssueUpdateInput>())
-  const sourceIssues = useMemo(() => issuesForView(data, projectedView), [data, projectedView])
+  const sourceIssues = useMemo(() => data.issueCollectionPaged ? pagedIssues : issuesForView(data, projectedView), [data, projectedView, pagedIssues])
   const sourceIssueIds = useMemo(() => new Set(sourceIssues.map(issue => issue.id)), [sourceIssues])
-  const hierarchyIssues = useMemo(() => issuesWithHierarchyContext(sourceIssues, data.issues), [data.issues, sourceIssues])
+  const hierarchyIssues = useMemo(() => data.issueCollectionPaged ? sourceIssues : issuesWithHierarchyContext(sourceIssues, data.issues), [data.issueCollectionPaged, data.issues, sourceIssues])
   const initialGroups = useMemo(() => groupIssues(hierarchyIssues, workspaceSlug, data, sourceIssueIds), [data, hierarchyIssues, sourceIssueIds, workspaceSlug])
-  const issuesById = useMemo(() => new Map(data.issues.map(issue => [issue.id, issue])), [data.issues])
+  const issuesById = useMemo(() => new Map([...data.issues, ...pagedIssues].map(issue => [issue.id, issue])), [data.issues, pagedIssues])
   const rowOptions = useMemo(() => explorerPropertyOptions(data, sourceIssues), [data, sourceIssues])
 
   const controller = useMyIssuesController({
@@ -151,7 +154,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
       filterOpenSignal={filterOpenSignal}
       filters={controller.filters}
       filterOptions={field => explorerFilterOptions(field, rowOptions)}
-      viewCounts={controller.counts}
+      viewCounts={data.issueCollectionPaged ? undefined : controller.counts}
       viewHref={controller.viewHref}
       onDetailsOpenChange={open=>{controller.setDetailsOpen(open);if(open)setInsightsOpen(false)}}
       onInsightsOpenChange={open=>{setInsightsOpen(open);if(open){controller.setDetailsOpen(false);setInsightsConfig(readInsights(`${workspaceSlug}:my-issues:${controller.view}:insights`))}}}
@@ -172,7 +175,27 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onValuesChange={controller.changeFilterValues}
       />}
     >
-      {controller.display.layout === 'board' ? <IssueBoard
+      {data.issueCollectionPaged ? <PagedIssueList
+        data={data}
+        onLoadedIssuesChange={setPagedIssues}
+        layout={controller.display.layout}
+        hiddenGroupIds={controller.display.hiddenGroupIds}
+        onHideGroup={id => controller.changeDisplay({ ...controller.display, hiddenGroupIds: [...controller.display.hiddenGroupIds, id] })}
+        onShowGroup={id => controller.changeDisplay({ ...controller.display, hiddenGroupIds: controller.display.hiddenGroupIds.filter(value => value !== id) })}
+        onMoveIssueRecord={(issue, input) => onUpdateIssue(issue.id, input)}
+        query={{ archived: 'false', groupBy: controller.display.grouping === 'focus' ? 'status' : controller.display.grouping, sort: controller.display.ordering === 'created' ? 'createdAt' : controller.display.ordering === 'updated' ? 'updatedAt' : controller.display.ordering === 'priority' ? 'priority' : 'sortOrder', direction: controller.display.ordering === 'created' || controller.display.ordering === 'updated' ? 'desc' : 'asc', filter: { and: [issueFiltersToQueryAst(controller.filters), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : 'assignee', values: [data.viewer.id] }] } }}
+        collapsedGroupIds={collapsedGroups}
+        displayProperties={controller.display.properties}
+        propertyOptions={rowOptions}
+        selectedIds={controller.selectedIds}
+        mutationErrors={mutationErrors}
+        onOpenIssueRecord={onOpenIssue}
+        onCreateIssue={group => onCreateIssue?.(group.createContext)}
+        onGroupCollapsedChange={(id, collapsed) => setCollapsedGroups(current => { const next = new Set(current); if (collapsed) next.add(id); else next.delete(id); return next })}
+        onPropertyChange={changeProperty}
+        onSelectIssue={controller.selectIssue}
+        onContextAction={(row, action) => { void contextAction(row, action) }}
+      /> : controller.display.layout === 'board' ? <IssueBoard
         groups={boardGroups}
         hiddenGroupIds={controller.display.hiddenGroupIds}
         properties={controller.display.properties}

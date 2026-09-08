@@ -12,6 +12,9 @@ import { ProjectDatePicker, ProjectTargetDatePicker } from './project-target-dat
 import { projectLabelGroupProperty } from './projects-display-model'
 import { ProjectLabelMenuContent } from '@/components/property/project-label-menu-content'
 import { toggleGroupedLabelIds } from '@/lib/labels'
+import { PersonHover } from '@/components/property/person-info'
+import { usePeopleDirectory } from '@/components/property/people-context'
+import { directoryPerson, personMatchesQuery } from '@/lib/people'
 import './projects-page.css'
 import './projects-bundle-parity.css'
 
@@ -695,6 +698,7 @@ function ProjectContextSubmenu({ kind, manualOrdering, onAction, onClose, onProp
   onCreateReminder?: (remindAt: string) => Promise<unknown>
   submenuPortalContainer?: HTMLElement | null
 }) {
+  const directory = usePeopleDirectory()
   if (kind === 'copy-menu') return <SimpleSubmenu searchable items={[
     { icon: <Link2/>, label: 'Copy URL', shortcut: '⌘ ⇧ ,' },
     { icon: <Clipboard/>, label: 'Copy title', shortcut: "⌘ ⇧ '" },
@@ -725,11 +729,11 @@ function ProjectContextSubmenu({ kind, manualOrdering, onAction, onClose, onProp
   }
   const multiple = property === 'members'
   const selected = new Set(property === 'members' ? project.memberIds ?? [] : [contextPropertyValue(project, property)])
-  const filtered = propertyOptions.filter(option => `${option.label} ${option.keywords ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()))
+  const filtered = propertyOptions.filter(option => { const person = property === 'lead' || property === 'members' ? directoryPerson(directory.users, option.value) : undefined; return person ? personMatchesQuery(person, query) : `${option.label} ${option.keywords ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()) })
   const sections: Array<{ id: string; label?: string; options: ProjectPropertyOption[] }> = [{ id: 'all', options: filtered }]
   return <>
     <label className="lp-project-context__nested-search"><Search size={13}/><input autoFocus aria-label={contextSearchPlaceholder(property)} onChange={event => setQuery(event.target.value)} placeholder={contextSearchPlaceholder(property)} value={query}/></label>
-    <div className="lp-project-context__nested-list">{sections.map(section => <div key={section.id}>{section.label && <div className="lp-project-context__group-label">{section.label}</div>}{section.options.map(option => <button aria-checked={selected.has(option.value)} key={option.value || '__empty'} onClick={() => {
+    <div className="lp-project-context__nested-list">{sections.map(section => <div key={section.id}>{section.label && <div className="lp-project-context__group-label">{section.label}</div>}{section.options.map(option => <PersonHover key={option.value || '__empty'} userId={property === 'lead' || property === 'members' ? option.value : undefined}><button aria-checked={selected.has(option.value)} onClick={() => {
       if (multiple) {
         const next = new Set(selected)
         if (next.has(option.value)) next.delete(option.value); else next.add(option.value)
@@ -741,7 +745,7 @@ function ProjectContextSubmenu({ kind, manualOrdering, onAction, onClose, onProp
     }} role={multiple ? 'menuitemcheckbox' : 'menuitemradio'} type="button">
       {multiple && <span className={`lp-project-context__checkbox ${selected.has(option.value) ? 'is-checked' : ''}`}>{selected.has(option.value) && <CheckIcon/>}</span>}
       <ContextOptionIcon option={option} property={property}/><span className="lp-project-context__label">{option.label}</span>{!multiple && selected.has(option.value) && <CheckIcon/>}
-    </button>)}</div>)}</div>
+    </button></PersonHover>)}</div>)}</div>
   </>
 }
 

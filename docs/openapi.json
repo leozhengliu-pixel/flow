@@ -715,6 +715,44 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/agent/sessions/{id}/approvals/{approvalId}": {
+      "post": {
+        "operationId": "post_agent_sessions_id_approvals_approvalId",
+        "tags": [
+          "agent"
+        ],
+        "summary": "POST /api/agent/sessions/{id}/approvals/{approvalId}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "approvalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/agent/sessions/{id}/messages": {
       "post": {
         "operationId": "post_agent_sessions_id_messages",
@@ -5738,6 +5776,838 @@
             }
           }
         ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records": {
+      "get": {
+        "operationId": "get_issue_records",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "GET /api/issue-records",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "post": {
+        "operationId": "post_issue_records",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "POST /api/issue-records",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}": {
+      "delete": {
+        "operationId": "delete_issue_records_id",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "DELETE /api/issue-records/{id}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "get": {
+        "operationId": "get_issue_records_id",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "GET /api/issue-records/{id}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "patch": {
+        "operationId": "patch_issue_records_id",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "PATCH /api/issue-records/{id}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/attachments": {
+      "post": {
+        "operationId": "post_issue_records_id_attachments",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "POST /api/issue-records/{id}/attachments",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/attachments/{attachmentId}": {
+      "delete": {
+        "operationId": "delete_issue_records_id_attachments_attachmentId",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "DELETE /api/issue-records/{id}/attachments/{attachmentId}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "attachmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/comments": {
+      "post": {
+        "operationId": "post_issue_records_id_comments",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "POST /api/issue-records/{id}/comments",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/comments/{commentId}": {
+      "delete": {
+        "operationId": "delete_issue_records_id_comments_commentId",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "DELETE /api/issue-records/{id}/comments/{commentId}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "commentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "patch": {
+        "operationId": "patch_issue_records_id_comments_commentId",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "PATCH /api/issue-records/{id}/comments/{commentId}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "commentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/comments/{commentId}/reactions": {
+      "post": {
+        "operationId": "post_issue_records_id_comments_commentId_reactions",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "POST /api/issue-records/{id}/comments/{commentId}/reactions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "commentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/context": {
+      "get": {
+        "operationId": "get_issue_records_id_context",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "GET /api/issue-records/{id}/context",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/links": {
+      "post": {
+        "operationId": "post_issue_records_id_links",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "POST /api/issue-records/{id}/links",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/loop-runs": {
+      "post": {
+        "operationId": "post_issue_records_id_loop_runs",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "POST /api/issue-records/{id}/loop-runs",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/permissions": {
+      "get": {
+        "operationId": "get_issue_records_id_permissions",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "GET /api/issue-records/{id}/permissions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "put": {
+        "operationId": "put_issue_records_id_permissions",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "PUT /api/issue-records/{id}/permissions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/permissions/{permissionId}": {
+      "delete": {
+        "operationId": "delete_issue_records_id_permissions_permissionId",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "DELETE /api/issue-records/{id}/permissions/{permissionId}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "permissionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "patch": {
+        "operationId": "patch_issue_records_id_permissions_permissionId",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "PATCH /api/issue-records/{id}/permissions/{permissionId}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "permissionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/reactions": {
+      "post": {
+        "operationId": "post_issue_records_id_reactions",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "POST /api/issue-records/{id}/reactions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/relations": {
+      "post": {
+        "operationId": "post_issue_records_id_relations",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "POST /api/issue-records/{id}/relations",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/relations/{relationId}": {
+      "delete": {
+        "operationId": "delete_issue_records_id_relations_relationId",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "DELETE /api/issue-records/{id}/relations/{relationId}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "relationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/releases": {
+      "put": {
+        "operationId": "put_issue_records_id_releases",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "PUT /api/issue-records/{id}/releases",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/reminders": {
+      "post": {
+        "operationId": "post_issue_records_id_reminders",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "POST /api/issue-records/{id}/reminders",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/share": {
+      "delete": {
+        "operationId": "delete_issue_records_id_share",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "DELETE /api/issue-records/{id}/share",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "post": {
+        "operationId": "post_issue_records_id_share",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "POST /api/issue-records/{id}/share",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/batch": {
+      "post": {
+        "operationId": "post_issue_records_batch",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "POST /api/issue-records/batch",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/bootstrap": {
+      "get": {
+        "operationId": "get_issue_records_bootstrap",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "GET /api/issue-records/bootstrap",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/groups": {
+      "get": {
+        "operationId": "get_issue_records_groups",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "GET /api/issue-records/groups",
         "responses": {
           "default": {
             "description": "Flow API response. See the domain model documentation for resource fields.",

@@ -110,10 +110,13 @@ export function MyIssuesFilterMenu({ availableFields, filters = [], onOpenChange
   </Popover.Root><TextConditionDialog condition={textCondition} onClose={() => setTextCondition(undefined)} onApply={(field, option) => { onToggle(field, option); setTextCondition(undefined) }}/></>
 }
 
+import { PersonHover } from '@/components/property/person-info'
+import { isPeopleProperty } from '@/lib/people'
+
 function ValueMenu({ field, filters, label, onClose, onToggle, options }: { field: MyIssuesFilterKey; filters: MyIssuesAppliedFilter[]; label: string; onClose: () => void; onToggle: MyIssuesFilterMenuProps['onToggle']; options: MyIssuesFilterOption[] }) {
   const { t } = useI18n()
   const selectedIds = useMemo(() => filters.filter(filter => filter.field === field).flatMap(filter => filter.values?.map(value => value.value) ?? [filter.value]), [field, filters])
-  const command = usePropertyCommand({ closeOnSelect: false, onOpenChange: open => { if (!open) onClose() }, onSelect: option => onToggle(field, option), open: true, options, selectedIds })
+  const command = usePropertyCommand({ personOptions: isPeopleProperty(field), closeOnSelect: false, onOpenChange: open => { if (!open) onClose() }, onSelect: option => onToggle(field, option), open: true, options, selectedIds })
 
   return <Popover.Portal>
     <Popover.Content data-flow-motion="floating" className={styles.valueMenu} data-field={field} side="left" align="start" alignOffset={-43} sideOffset={-2} collisionPadding={11} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { event.preventDefault(); onClose() }} onKeyDown={command.onKeyDown}>
@@ -137,12 +140,12 @@ function FilterValueItem({ field, option, active, selected, nestedOpen, onActive
   const {t}=useI18n()
   if(option.children?.length)return <Popover.Root open={nestedOpen} onOpenChange={onNestedOpen}><Popover.Trigger asChild><button type="button" role="option" aria-selected={active} aria-expanded={nestedOpen} aria-haspopup="listbox" className={styles.valueItem} onMouseMove={()=>{onActive();onNestedOpen(true)}}><span className={styles.optionSpacer}/><OptionMark field={field} option={option}/><span className={styles.valueLabel}>{t(option.label)}</span><ChevronRightIcon/></button></Popover.Trigger><Popover.Portal><NestedValueMenu field={field} label={option.label} options={option.children} onChoose={onChoose} onClose={()=>onNestedOpen(false)}/></Popover.Portal></Popover.Root>
   if(option.textConditionPrefix)return <button type="button" role="option" aria-selected={active} className={`${styles.valueItem} ${styles.textConditionItem}`} onMouseMove={onActive} onClick={()=>onChoose(option)}><span className={styles.optionSpacer}/><span className={styles.valueLabel}>{t(option.label)}</span></button>
-  return <button type="button" role="option" aria-selected={active} aria-checked={selected} className={styles.valueItem} onMouseMove={onActive} onClick={()=>onChoose(option)}><span className={styles.checkbox} role="checkbox" aria-checked={selected}>{selected&&<CheckboxMark/>}</span><OptionMark field={field} option={option}/><span className={styles.valueLabel} data-i18n-ignore>{option.label}</span>{optionCount(option)!=null&&<span className={styles.count}>{optionCount(option)} {t(optionCount(option)===1?'issue':'issues')}</span>}</button>
+  return <PersonHover userId={isPeopleProperty(option.kind ?? field) ? option.id : undefined}><button type="button" role="option" aria-selected={active} aria-checked={selected} className={styles.valueItem} onMouseMove={onActive} onClick={()=>onChoose(option)}><span className={styles.checkbox} role="checkbox" aria-checked={selected}>{selected&&<CheckboxMark/>}</span><OptionMark field={field} option={option}/><span className={styles.valueLabel} data-i18n-ignore>{option.label}</span>{optionCount(option)!=null&&<span className={styles.count}>{optionCount(option)} {t(optionCount(option)===1?'issue':'issues')}</span>}</button></PersonHover>
 }
 
 function NestedValueMenu({ field, label, onChoose, onClose, options }: { field: MyIssuesFilterKey; label: string; onChoose: (option: MyIssuesFilterOption) => void; onClose: () => void; options: MyIssuesFilterOption[] }) {
   const { t } = useI18n()
-  const command = usePropertyCommand({ autoFocus: false, closeOnSelect: false, onOpenChange: open => { if (!open) onClose() }, onSelect: onChoose, open: true, options })
+  const command = usePropertyCommand({ personOptions: isPeopleProperty(field), autoFocus: false, closeOnSelect: false, onOpenChange: open => { if (!open) onClose() }, onSelect: onChoose, open: true, options })
   return <Popover.Content data-flow-motion="floating" className={`${styles.valueMenu} ${styles.nestedValueMenu}`} side="left" align="start" sideOffset={-2} collisionPadding={11} onOpenAutoFocus={event=>event.preventDefault()} onCloseAutoFocus={event=>event.preventDefault()} onEscapeKeyDown={event=>{event.preventDefault();onClose()}} onKeyDown={command.onKeyDown}>
     <div className={styles.valueSearch}><input ref={command.inputRef} role="searchbox" aria-label={`${t('Filter')} ${t(label)}`} placeholder={t('Filter…')} value={command.query} onChange={event=>command.onQueryChange(event.target.value)}/></div>
     <div className={styles.valueList} role="listbox" aria-label={t(label)}><FilterValueItems field={field} options={command.filteredOptions} activeId={command.activeId} onActive={command.setActiveId} onChoose={command.choose}/>{!command.filteredOptions.length&&<div className={styles.empty}>{t('No results')}</div>}</div>

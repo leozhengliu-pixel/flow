@@ -1,6 +1,7 @@
 import type { BootstrapData, IssueLabel } from '@/types/flow'
 
 export function deriveResourceCounts(data: BootstrapData): BootstrapData {
+  if (data.issueCollectionPaged) return { ...data, issues: data.issues.slice(0, 2000) }
   const labelCounts = new Map<string, number>()
   const projectIssueCounts = new Map<string, number>()
   const increment = (ids: string[]) => {
