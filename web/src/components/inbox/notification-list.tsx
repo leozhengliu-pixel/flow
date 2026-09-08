@@ -15,7 +15,9 @@ export interface InboxNotificationListProps extends Pick<InboxNotificationRowPro
 }
 
 type InboxListContext = { filterHiddenCount: number; loadingMore: boolean; onClearFilters?: () => void }
-const INBOX_VIRTUAL_COMPONENTS: Components<InboxNotificationRowData, InboxListContext> = { Footer: InboxVirtualFooter }
+const INBOX_VIRTUAL_COMPONENTS: Components<InboxNotificationRowData, InboxListContext> = { Header: InboxVirtualHeader, Footer: InboxVirtualFooter }
+
+function InboxVirtualHeader() { return <div aria-hidden style={{ height: 8 }}/> }
 
 function InboxVirtualFooter({ context }: { context: InboxListContext }) {
   return <>{context.loadingMore ? <div className="flow-inbox-notification-list__loading" role="status">Loading…</div> : null}{context.filterHiddenCount > 0 ? <InboxFilterNotice hiddenCount={context.filterHiddenCount} onClear={context.onClearFilters} /> : null}</>

@@ -2,7 +2,7 @@ import * as Tooltip from '@radix-ui/react-tooltip'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Bell, Box, CalendarPlus, Clipboard, FileText, LayoutGrid, Link2, MessageCirclePlus, MoreHorizontal, Move, Package, Search, Star, Tag, Trash2, UserRound } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
-import { Virtuoso } from 'react-virtuoso'
+import { VirtualColumnList } from '@/components/ui/virtual-column-list'
 import { MembersIcon, NoAssigneeIcon } from '@/components/issue/issue-icons'
 import { ViewGlyph, ViewIconPicker } from '@/components/views/view-icon-picker'
 import { CheckIcon, ChevronRightIcon, PlusIcon } from './projects-page-icons'
@@ -168,10 +168,10 @@ export function ProjectsDataView({
     if (group.subgroups?.length) {
       for (const subgroup of group.subgroups) {
         entries.push({ key: `subgroup:${group.id}:${subgroup.id}`, kind: 'subgroup', group: subgroup })
-        entries.push(...subgroup.projects.map(project => ({ key: `project:${project.id}`, kind: 'project' as const, project })))
+        entries.push(...subgroup.projects.map(project => ({ key: `project:${group.id}:${subgroup.id}:${project.id}`, kind: 'project' as const, project })))
       }
     } else {
-      entries.push(...group.projects.map(project => ({ key: `project:${project.id}`, kind: 'project' as const, project })))
+      entries.push(...group.projects.map(project => ({ key: `project:${group.id}:${project.id}`, kind: 'project' as const, project })))
     }
     return entries
   }), [collapsed, groups])
@@ -244,8 +244,8 @@ export function ProjectsDataView({
   />
 
   if (listEntries.length > PROJECT_VIRTUALIZATION_THRESHOLD) return <div className="lp-project-table is-virtual" role="grid" style={{ '--lp-project-grid': projectGrid(visible, labelGroupProperties) } as CSSProperties}>
-    <ProjectTableHeader labelGroupProperties={labelGroupProperties} sort={sort} onSort={changeSort} visible={visible} />
-    <Virtuoso
+    <VirtualColumnList
+      header={<ProjectTableHeader labelGroupProperties={labelGroupProperties} sort={sort} onSort={changeSort} visible={visible}/>}
       className="lp-project-table__virtual"
       data={listEntries}
       computeItemKey={(_index, entry) => entry.key}
