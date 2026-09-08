@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Virtuoso } from "react-virtuoso";
+import { VirtualColumnList } from '@/components/ui/virtual-column-list';
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Popover from "@radix-ui/react-popover";
@@ -263,6 +263,47 @@ export function ViewsPage({
     />;
   };
 
+  const tableHeader = orderedViews.length > 0 && (
+        <div
+          className={styles.columns}
+          style={
+            {
+              "--views-columns": columnTemplate(properties),
+            } as React.CSSProperties
+          }
+        >
+          <SortButton
+            active={ordering === "name"}
+            direction={direction}
+            label="Name"
+            onClick={() => updateOrdering("name")}
+          />
+          {properties.has("created") && (
+            <SortButton
+              active={ordering === "created"}
+              direction={direction}
+              label="Created"
+              onClick={() => updateOrdering("created")}
+            />
+          )}
+          {properties.has("updated") && (
+            <SortButton
+              active={ordering === "updated"}
+              direction={direction}
+              label="Updated"
+              onClick={() => updateOrdering("updated")}
+            />
+          )}
+          {properties.has("owner") && (
+            <SortButton
+              active={ordering === "owner"}
+              direction={direction}
+              label="Owner"
+              onClick={() => updateOrdering("owner")}
+            />
+          )}
+        </div>
+      );
   return (
     <div className={styles.page}>
       <ViewsDirectoryHeader
@@ -328,51 +369,11 @@ export function ViewsPage({
           />
         }
       />
-      {orderedViews.length > 0 && (
-        <div
-          className={styles.columns}
-          style={
-            {
-              "--views-columns": columnTemplate(properties),
-            } as React.CSSProperties
-          }
-        >
-          <SortButton
-            active={ordering === "name"}
-            direction={direction}
-            label="Name"
-            onClick={() => updateOrdering("name")}
-          />
-          {properties.has("created") && (
-            <SortButton
-              active={ordering === "created"}
-              direction={direction}
-              label="Created"
-              onClick={() => updateOrdering("created")}
-            />
-          )}
-          {properties.has("updated") && (
-            <SortButton
-              active={ordering === "updated"}
-              direction={direction}
-              label="Updated"
-              onClick={() => updateOrdering("updated")}
-            />
-          )}
-          {properties.has("owner") && (
-            <SortButton
-              active={ordering === "owner"}
-              direction={direction}
-              label="Owner"
-              onClick={() => updateOrdering("owner")}
-            />
-          )}
-        </div>
-      )}
-      {listEntries.length > VIEW_VIRTUALIZATION_THRESHOLD ? <Virtuoso
+      {orderedViews.length > 0 ? <VirtualColumnList
+        virtualize={listEntries.length > VIEW_VIRTUALIZATION_THRESHOLD}
+        header={tableHeader}
         className={`${styles.content} ${styles.virtualContent}`}
-        role="list"
-        aria-label={t("Views")}
+        ariaLabel={t("Views")}
         data={listEntries}
         computeItemKey={(_index, entry) => entry.key}
         increaseViewportBy={{ top: 180, bottom: 480 }}
@@ -380,15 +381,6 @@ export function ViewsPage({
       /> : <section
         className={`${styles.content} ${!orderedViews.length ? styles.contentEmpty : ""}`}
       >
-        {orderedViews.length > 0 &&
-          groups.map((group) => (
-            <div className={styles.group} key={group.id}>
-              {scope.kind === "workspace" && (
-                renderGroupHeader(group)
-              )}
-              {group.views.map(renderView)}
-            </div>
-          ))}
         {!orderedViews.length && (
           <ViewsEmptyState onCreate={onCreate} resource={resource} />
         )}

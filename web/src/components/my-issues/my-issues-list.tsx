@@ -137,7 +137,7 @@ export interface MyIssuesListProps {
 
 type MyIssuesListEntry =
   | { key: string; kind: 'group'; group: MyIssuesGroupData; collapsed: boolean }
-  | { key: string; kind: 'issue'; issue: MyIssuesRowData; nestedLines: readonly boolean[] }
+  | { key: string; kind: 'issue'; issue: MyIssuesRowData; nestedLines: readonly boolean[]; groupEnd: boolean }
 
 const VIRTUALIZATION_THRESHOLD = 80
 type MyIssuesListContext = { loadingMore: boolean }
@@ -153,7 +153,7 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
     const header: MyIssuesListEntry = { key: `group:${group.id}`, kind: 'group', group, collapsed }
     if (collapsed) return [header]
     const nestedLines = nestedSubIssues ? nestedLinesByIssue(group.issues) : EMPTY_LINE_MAP
-    return [header, ...group.issues.map(issue => ({ key: `issue:${issue.id}`, kind: 'issue' as const, issue, nestedLines: nestedLines.get(issue.id) ?? EMPTY_LINES }))]
+    return [header, ...group.issues.map((issue, index) => ({ key: `issue:${group.id}:${issue.id}`, kind: 'issue' as const, issue, nestedLines: nestedLines.get(issue.id) ?? EMPTY_LINES, groupEnd: index === group.issues.length - 1 }))]
   }), [collapsedGroupIds, groups, nestedSubIssues])
   if (loading) return <MyIssuesListSkeleton/>
   if (error) return <MyIssuesListError message={error} onRetry={onClearError}/>
@@ -161,8 +161,8 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
   let identifierLength = 6
   for (const group of groups) for (const issue of group.issues) identifierLength = Math.max(identifierLength, [...issue.identifier].length)
   const renderEntry = (entry: MyIssuesListEntry) => entry.kind === 'group'
-    ? <MyIssuesGroupHeader collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/>
-    : <MyIssuesRow issue={entry.issue} selected={selectedIds.has(entry.issue.id)} displayProperties={displayProperties} nestedLines={entry.nestedLines} showSubIssueProgress={!nestedSubIssues} propertyOptions={propertyOptions} mutationError={mutationErrors.get(entry.issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>
+    ? <div style={{ paddingBottom: !entry.collapsed && !entry.group.issues.length ? 4 : 2 }}><MyIssuesGroupHeader collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/></div>
+    : <div style={{ paddingBottom: entry.groupEnd ? 2 : 0 }}><MyIssuesRow issue={entry.issue} selected={selectedIds.has(entry.issue.id)} displayProperties={displayProperties} nestedLines={entry.nestedLines} showSubIssueProgress={!nestedSubIssues} propertyOptions={propertyOptions} mutationError={mutationErrors.get(entry.issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/></div>
   if (entries.length > VIRTUALIZATION_THRESHOLD) return <Virtuoso
     className={styles.virtualList}
     role="list"

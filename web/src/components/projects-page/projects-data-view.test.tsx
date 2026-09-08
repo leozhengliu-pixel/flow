@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { VirtuosoMockContext } from 'react-virtuoso'
 import { describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
@@ -11,6 +12,14 @@ const project: ProjectPageItem = {
 }
 
 describe('ProjectsDataView project menu', () => {
+  it('supports the same project in multiple virtualized groups without duplicate keys', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      render(<I18nProvider><VirtuosoMockContext.Provider value={{ viewportHeight: 440, itemHeight: 36 }}><ProjectsDataView groups={Array.from({ length: 50 }, (_, index) => ({ id: `group-${index}`, name: `Group ${index}`, projects: [project] }))}/></VirtuosoMockContext.Provider></I18nProvider>)
+      await waitFor(() => expect(screen.getAllByRole('row', { name: 'Project one' }).length).toBeGreaterThan(1))
+      expect(errors.mock.calls.flat().join(' ')).not.toContain('same key')
+    } finally { errors.mockRestore() }
+  })
   it('keeps hidden table columns in the subgrid so later columns do not shift', () => {
     render(<I18nProvider><ProjectsDataView groups={[{ id: 'status-progress', name: 'In Progress', projects: [project] }]}/></I18nProvider>)
 
