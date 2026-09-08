@@ -1,15 +1,69 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
 )
+
+func TestDevelopmentDraftRetainsClientIDWithoutIssueHydration(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	s := &server{store: repository, authDisabled: true, uploadPath: t.TempDir()}
+	handler := newHandler(s)
+	var event domain.RealtimeEvent
+	repository.SetRealtimeSink(func(_ string, received domain.RealtimeEvent) { event = received })
+	r := httptest.NewRequest("POST", "/api/drafts", strings.NewReader(`{"type":"issue","title":"Unsent"}`))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("X-Client-ID", "draft-owner-client")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+	if w.Code != 201 || event.ClientID != "draft-owner-client" {
+		t.Fatalf("draft echo would remount the editor: status=%d event=%+v", w.Code, event)
+	}
+}
+
+func TestIssueRecordSnapshotCompactsOnlyAcknowledgedCollaborationUpdates(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, authDisabled: true, uploadPath: t.TempDir()})
+	issue := requestJSON[domain.Issue](t, handler, "POST", "/api/issue-records", map[string]any{"title": "Collaboration snapshot"}, 201)
+	documentID := "document_content_" + issue.ID
+	for _, id := range []string{"collab-included", "collab-concurrent"} {
+		_, err := repository.AppendDocumentCollaborationUpdate(context.Background(), "test-workspace", store.DocumentCollaborationUpdate{ID: id, DocumentID: documentID, ClientID: "client", Data: []byte{1, 2, 3}, CreatedAt: time.Now().UTC()})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	requestJSON[domain.Issue](t, handler, "PATCH", "/api/issue-records/"+issue.ID, map[string]any{
+		"description": "Saved", "descriptionData": map[string]any{"type": "doc"}, "expectedDocumentVersion": 0, "documentUpdateIds": []string{"collab-included"},
+	}, 200)
+	updates, err := repository.DocumentCollaborationUpdates(context.Background(), "test-workspace", documentID)
+	if err != nil || len(updates) != 1 || updates[0].ID != "collab-concurrent" {
+		t.Fatalf("snapshot lost concurrent updates or retained acknowledged updates: %+v %v", updates, err)
+	}
+	requestJSON[any](t, handler, "PATCH", "/api/issue-records/"+issue.ID, map[string]any{
+		"descriptionData": map[string]any{"type": "doc"}, "expectedDocumentVersion": 0, "documentUpdateIds": []string{"collab-concurrent"},
+	}, 409)
+	updates, err = repository.DocumentCollaborationUpdates(context.Background(), "test-workspace", documentID)
+	if err != nil || len(updates) != 1 {
+		t.Fatal("conflicting snapshot pruned uncommitted updates")
+	}
+}
 
 func TestIssueRecordsCreateUpdateAndContext(t *testing.T) {
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))

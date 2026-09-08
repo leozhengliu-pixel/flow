@@ -559,6 +559,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/issue-records", s.listIssueRecords)
 	mux.HandleFunc("POST /api/issue-records", s.createIssueRecord)
 	mux.HandleFunc("POST /api/issue-records/batch", s.issueRecordAlias(s.batchUpdate))
+	mux.HandleFunc("GET /api/issue-records/project-summary", s.issueRecordProjectSummary)
 	mux.HandleFunc("GET /api/issue-records/bootstrap", s.issueRecordsBootstrap)
 	mux.HandleFunc("GET /api/issue-records/groups", s.listIssueRecordGroups)
 	mux.HandleFunc("GET /api/issue-records/{id}", s.getIssueRecord)
@@ -1687,6 +1688,16 @@ func workspaceKey(r *http.Request) string {
 }
 
 func (s *server) workspaceData(r *http.Request) domain.Bootstrap {
+	if r.URL.Path == "/api/workspace/preferences" || r.URL.Path == "/api/account/settings" || r.URL.Path == "/api/views" || strings.HasPrefix(r.URL.Path, "/api/views/") {
+		if !s.authDisabled {
+			data, _ := s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
+			filterBootstrapForAPIKey(&data, r)
+			return data
+		}
+		data, _ := s.store.WorkspaceMetadata(workspaceKey(r))
+		data.ViewerRole = "admin"
+		return data
+	}
 	if data, ok := r.Context().Value(issueRecordAuthorizationContext{}).(domain.Bootstrap); ok {
 		return data
 	}
@@ -2466,8 +2477,8 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 	}
 	var created domain.Project
 	if !s.authDisabled && len(input.TeamIDs) == 0 {
-		projected, ok, err := s.store.BootstrapForUser(r.Context(), workspaceKey(r), authUser(r).ID)
-		if err != nil || !ok || len(projected.Teams) == 0 {
+		projected, err := s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
+		if err != nil || len(projected.Teams) == 0 {
 			writeError(w, http.StatusForbidden, "Join a team before creating a project")
 			return
 		}
@@ -3780,7 +3791,7 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var updated []domain.Issue
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.batch_updated", strings.Join(input.IssueIDs, ","), input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.batch_updated", fmt.Sprintf("issue_batch_%d", time.Now().UnixNano()), input, func(data *domain.Bootstrap) error {
 		for _, id := range input.IssueIDs {
 			issue, err := issueByID(data, id)
 			if err != nil {

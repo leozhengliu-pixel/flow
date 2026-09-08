@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
 
 FROM --platform=$BUILDPLATFORM node:26-alpine AS web-build
+ARG VITE_PAGED_ISSUES=false
+ENV VITE_PAGED_ISSUES=${VITE_PAGED_ISSUES}
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \

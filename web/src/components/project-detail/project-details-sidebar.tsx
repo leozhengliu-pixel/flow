@@ -24,7 +24,9 @@ import { useI18n } from '@/i18n/i18n'
 import { formatProjectPropertyDate, initiativeStatusLabel, inviteProjectMember } from './project-detail-helpers'
 import { buildProgressData, shouldShowProgressGraph, type PersistedProgressHistory, type ProgressSeries } from './project-progress-data'
 
-export function ProjectDetailsSidebar({ initiatives, integrationConnections, labelGroups, labels, onCreateLabel, onConvertMilestone, onCreateMilestone, onDeleteMilestone, onMoveMilestone, onOpenIssueFilter, onOpenMilestoneIssues, onReorderMilestones, onTabChange, onUpdate, onUpdateProject, onUpdateMilestone, project, projectIssues, projectRelations, projects, projectStatuses, projectUpdates, teams, users, viewer }: {
+export function ProjectDetailsSidebar({ issueSummary, availableIssueLabels, initiatives, integrationConnections, labelGroups, labels, onCreateLabel, onConvertMilestone, onCreateMilestone, onDeleteMilestone, onMoveMilestone, onOpenIssueFilter, onOpenMilestoneIssues, onReorderMilestones, onTabChange, onUpdate, onUpdateProject, onUpdateMilestone, project, projectIssues, projectRelations, projects, projectStatuses, projectUpdates, teams, users, viewer }: {
+  issueSummary?: ProjectDetailProps['issueSummary']
+  availableIssueLabels?: IssueLabel[]
   initiatives: Initiative[]
   integrationConnections: IntegrationConnection[]
   labelGroups: LabelGroup[]
@@ -60,11 +62,12 @@ export function ProjectDetailsSidebar({ initiatives, integrationConnections, lab
   const [milestoneDrop, setMilestoneDrop] = useState<{ id: string; edge: 'before'|'after' }>()
   const [progressTab, setProgressTab] = useState<'assignees'|'labels'>('assignees')
   const { blockedBy: blockedByProjects, blocking: blockingProjects } = dependencyProjects(project, projects, projectRelations)
-  const started = projectIssues.filter(issue => issue.state.type === 'started').length
-  const completed = projectIssues.filter(issue => issue.state.type === 'completed').length
-  const issueLabels = labels.filter(label => projectIssues.some(issue => issue.labels.some(item => item.id === label.id))).sort((left, right) => left.name.localeCompare(right.name))
-  const assignees = users.filter(user => projectIssues.some(issue => issue.assignee?.id === user.id)).sort((left, right) => left.displayName.localeCompare(right.displayName))
-  const unassignedMilestoneStats = milestoneStats(projectIssues)
+  const started = issueSummary?.started ?? projectIssues.filter(issue => issue.state.type === 'started').length
+  const completed = issueSummary?.completed ?? projectIssues.filter(issue => issue.state.type === 'completed').length
+  const issueLabels = (availableIssueLabels ?? labels).filter(label => issueSummary ? issueSummary.labels[label.id]?.total : projectIssues.some(issue => issue.labels.some(item => item.id === label.id))).sort((left, right) => left.name.localeCompare(right.name))
+  const assignees = users.filter(user => issueSummary ? issueSummary.assignees[user.id]?.total : projectIssues.some(issue => issue.assignee?.id === user.id)).sort((left, right) => left.displayName.localeCompare(right.displayName))
+  const milestoneSummary = (id = '') => { const totals = issueSummary?.milestones[id]; return issueSummary ? { count: totals?.total ?? 0, progress: totals?.total ? Math.round(totals.completed / totals.total * 100) : 0 } : milestoneStats(projectIssues, id) }
+  const unassignedMilestoneStats = milestoneSummary()
   const events = useMemo(() => projectEvents(project, projectUpdates, viewer), [project, projectUpdates, viewer])
   const reorderMilestone = (sourceId: string, targetId: string, edge: 'before'|'after') => {
     const ids = (project.milestones ?? []).map(item => item.id)
@@ -85,7 +88,7 @@ export function ProjectDetailsSidebar({ initiatives, integrationConnections, lab
     <SidebarSection onToggle={() => setMilestonesOpen(value => !value)} open={milestonesOpen} title="Milestones" action={<button aria-label="Add milestone" data-project-milestone-add onClick={() => { setMilestonesOpen(true); setMilestoneEditor('new') }} type="button"><svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16"><use href="#plus"/></svg></button>}>
       <div className="project-details-sidebar__milestones">
         <AnimatedMilestones items={project.milestones ?? []}>{(milestone) => {
-          const stats = milestoneStats(projectIssues, milestone.id)
+          const stats = milestoneSummary(milestone.id)
           if (milestoneEditor !== 'new' && milestoneEditor?.id === milestone.id) return <MilestoneEditor key={milestone.id} milestone={milestone} onCancel={() => setMilestoneEditor(undefined)} onSubmit={async input => { await onUpdateMilestone(project.id, milestone.id, input); setMilestoneEditor(undefined) }} progress={stats.progress}/>
           return <MilestoneRow disabled={Boolean(milestoneEditor)} dragging={draggingMilestoneId === milestone.id} dropEdge={milestoneDrop?.id === milestone.id ? milestoneDrop.edge : undefined} key={milestone.id} milestone={milestone} onConvert={async () => { await onConvertMilestone(project.id, milestone.id); toast.success('Milestone converted to project') }} onDelete={() => onDeleteMilestone(project.id, milestone.id)} onDragEnd={() => { setDraggingMilestoneId(undefined); setMilestoneDrop(undefined) }} onDragOver={(event) => { if (!draggingMilestoneId || draggingMilestoneId === milestone.id) return; event.preventDefault(); event.dataTransfer.dropEffect = 'move'; const rect = event.currentTarget.getBoundingClientRect(); setMilestoneDrop({ id: milestone.id, edge: event.clientY < rect.top + rect.height / 2 ? 'before' : 'after' }) }} onDragStart={(event) => { setDraggingMilestoneId(milestone.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', milestone.id) }} onDrop={(event) => { event.preventDefault(); const sourceId = draggingMilestoneId ?? event.dataTransfer.getData('text/plain'); if (sourceId && milestoneDrop) reorderMilestone(sourceId, milestone.id, milestoneDrop.edge); setDraggingMilestoneId(undefined); setMilestoneDrop(undefined) }} onEdit={() => setMilestoneEditor(milestone)} onMove={async targetProjectId => { await onMoveMilestone(project.id, milestone.id, targetProjectId); toast.success('Milestone moved') }} onOpenIssues={() => onOpenMilestoneIssues(milestone.id)} onUpdateDate={targetDate => onUpdateMilestone(project.id, milestone.id, { targetDate })} projects={projects.filter(item => item.id !== project.id)} stats={stats}/>
         }}</AnimatedMilestones>
@@ -97,15 +100,15 @@ export function ProjectDetailsSidebar({ initiatives, integrationConnections, lab
 
     <SidebarSection onToggle={() => setProgressOpen(value => !value)} open={progressOpen} title="Progress">
       <div className="project-details-sidebar__progress">
-        <div className="project-details-sidebar__stats"><span><i className="is-scope"/>Scope<strong>{projectIssues.length}</strong></span><span><i className="is-started"/>Started<strong>{started}</strong></span><span><i className="is-completed"/>Completed<strong>{completed}</strong></span></div>
+        <div className="project-details-sidebar__stats"><span><i className="is-scope"/>Scope<strong>{issueSummary?.total ?? projectIssues.length}</strong></span><span><i className="is-started"/>Started<strong>{started}</strong></span><span><i className="is-completed"/>Completed<strong>{completed}</strong></span></div>
         {shouldShowProgressGraph(project) && <ProgressChart issues={projectIssues} progress={project.progress} start={project.startDate} target={project.targetDate} persistedHistory={project}/>}
         <div aria-label="Progress grouping" className="project-details-sidebar__segments" role="tablist"><button aria-selected={progressTab === 'assignees'} onClick={() => setProgressTab('assignees')} role="tab" type="button">Assignees</button><button aria-selected={progressTab === 'labels'} onClick={() => setProgressTab('labels')} role="tab" type="button">Labels</button></div>
         <div className="project-details-sidebar__breakdown">{progressTab === 'assignees' ? assignees.map(user => {
           const userIssues = projectIssues.filter(issue => issue.assignee?.id === user.id)
-          return <ProgressBreakdownRow icon={<Avatar name={user.displayName}/>} issues={userIssues} key={user.id} label={user.displayName} onOpen={() => onOpenIssueFilter('assignee', user.id, user.displayName)}/>
+          return <ProgressBreakdownRow totals={issueSummary?.assignees[user.id]} icon={<Avatar name={user.displayName}/>} issues={userIssues} key={user.id} label={user.displayName} onOpen={() => onOpenIssueFilter('assignee', user.id, user.displayName)}/>
         }) : issueLabels.map(label => {
           const labelIssues = projectIssues.filter(issue => issue.labels.some(item => item.id === label.id))
-          return <ProgressBreakdownRow icon={<i className="project-details-sidebar__label-dot" style={{ background: label.color }}/>} issues={labelIssues} key={label.id} label={label.name} onOpen={() => onOpenIssueFilter('labels', label.id, label.name)}/>
+          return <ProgressBreakdownRow totals={issueSummary?.labels[label.id]} icon={<i className="project-details-sidebar__label-dot" style={{ background: label.color }}/>} issues={labelIssues} key={label.id} label={label.name} onOpen={() => onOpenIssueFilter('labels', label.id, label.name)}/>
         })}{progressTab === 'assignees' && !assignees.length && <p>No assigned issues</p>}{progressTab === 'labels' && !issueLabels.length && <p>No labels in scope</p>}</div>
       </div>
     </SidebarSection>
@@ -641,14 +644,15 @@ function ProgressSliceTooltip({ slice }: SliceTooltipProps<ProgressSeries>) {
   return <div className="project-details-sidebar__chart-tooltip"><time>{date ? format(date, 'MMM d, yyyy') : ''}</time>{slice.points.slice().reverse().map(point => <div key={point.id}><i className={`is-${String(point.seriesId).toLowerCase()}`}/><span>{point.seriesId}</span><strong>{point.data.y}</strong></div>)}</div>
 }
 
-function ProgressBreakdownRow({ icon, issues, label, onOpen }: { icon: ReactNode; issues: Issue[]; label: string; onOpen: () => void }) {
-  const completed = issues.filter(issue => issue.state.type === 'completed').length
-  const engaged = issues.filter(issue => ['started','completed'].includes(issue.state.type)).length
-  const percent = issues.length ? Math.round(completed / issues.length * 100) : 0
+function ProgressBreakdownRow({ totals, icon, issues, label, onOpen }: { totals?: { total: number; started: number; completed: number }; icon: ReactNode; issues: Issue[]; label: string; onOpen: () => void }) {
+  const count = totals?.total ?? issues.length
+  const completed = totals?.completed ?? issues.filter(issue => issue.state.type === 'completed').length
+  const engaged = totals ? totals.started + totals.completed : issues.filter(issue => ['started','completed'].includes(issue.state.type)).length
+  const percent = count ? Math.round(completed / count * 100) : 0
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen() } }
-  return <div aria-label={`${label} ${percent}% of ${issues.length}`} className="project-details-sidebar__breakdown-row" onClick={onOpen} onKeyDown={onKeyDown} role="button" tabIndex={0}>
+  return <div aria-label={`${label} ${percent}% of ${count}`} className="project-details-sidebar__breakdown-row" onClick={onOpen} onKeyDown={onKeyDown} role="button" tabIndex={0}>
     <div className="project-details-sidebar__breakdown-name">{icon}<span data-i18n-ignore>{label}</span><button onClick={event => { event.stopPropagation(); onOpen() }} tabIndex={-1} type="button">See issues</button></div>
-    <ProgressRing completed={completed} engaged={engaged} total={issues.length}/><span className="project-details-sidebar__breakdown-percent">{percent}% of</span><button className="project-details-sidebar__breakdown-count" onClick={event => { event.stopPropagation(); onOpen() }} tabIndex={-1} type="button">{issues.length}</button>
+    <ProgressRing completed={completed} engaged={engaged} total={count}/><span className="project-details-sidebar__breakdown-percent">{percent}% of</span><button className="project-details-sidebar__breakdown-count" onClick={event => { event.stopPropagation(); onOpen() }} tabIndex={-1} type="button">{count}</button>
   </div>
 }
 

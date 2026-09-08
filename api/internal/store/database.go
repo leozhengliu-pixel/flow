@@ -179,6 +179,10 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := s.migrateIssueAttributes(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -276,21 +280,19 @@ func (tx *sqlTx) QueryRowContext(ctx context.Context, query string, args ...any)
 }
 
 var excludedColumn = regexp.MustCompile(`excluded\.([a-zA-Z_][a-zA-Z0-9_]*)`)
+var conflictUpdateClause = regexp.MustCompile(`(?i)\s+ON\s+CONFLICT\s*\([^)]*\)\s+DO\s+UPDATE\s+SET\s+`)
+var conflictIgnoreClause = regexp.MustCompile(`(?i)\s+ON\s+CONFLICT\s+DO\s+NOTHING$`)
 
 func rewriteSQL(query, dialect string) string {
 	query = strings.TrimSpace(query)
 	if dialect == "mysql" {
-		if strings.HasSuffix(query, " ON CONFLICT DO NOTHING") {
-			query = strings.TrimSuffix(query, " ON CONFLICT DO NOTHING")
+		if index := conflictIgnoreClause.FindStringIndex(query); index != nil {
+			query = query[:index[0]]
 			query = strings.Replace(query, "INSERT INTO ", "INSERT IGNORE INTO ", 1)
 		}
-		if index := strings.Index(query, " ON CONFLICT("); index >= 0 {
-			rest := query[index+len(" ON CONFLICT("):]
-			if closeIndex := strings.Index(rest, ") DO UPDATE SET "); closeIndex >= 0 {
-				updates := rest[closeIndex+len(") DO UPDATE SET "):]
-				updates = excludedColumn.ReplaceAllString(updates, "VALUES($1)")
-				query = query[:index] + " ON DUPLICATE KEY UPDATE " + updates
-			}
+		if index := conflictUpdateClause.FindStringIndex(query); index != nil {
+			updates := excludedColumn.ReplaceAllString(query[index[1]:], "VALUES($1)")
+			query = query[:index[0]] + " ON DUPLICATE KEY UPDATE " + updates
 		}
 	}
 	if dialect == "postgres" {

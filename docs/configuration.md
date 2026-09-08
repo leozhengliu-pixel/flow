@@ -347,3 +347,41 @@ domains and use TLS plus ACL credentials.
 
 The app service uses `restart: unless-stopped`, so it retries while a selected
 database service completes its first-time initialization.
+
+## Row-Backed Issue Collections
+
+The API stores issues in `issue_records`, with separate indexed label,
+subscriber, permission, and activity references. Comments, activity events,
+notifications, and notification deliveries use entity records instead of the
+workspace JSON. Existing workspace collections migrate when the API opens the
+database. Back up the database and stop older API instances before upgrading;
+mixed old/new binaries are not supported. Rollback requires restoring the backup.
+
+The bounded API is `/api/issue-records`, including `/groups`, `/bootstrap`,
+`/{id}/context`, and the issue mutation subroutes. Cursors are tied to their
+query and access scope. Clients must not reuse a cursor after changing filters.
+Group counts describe the entire matching collection, independently of pages.
+Project issue tabs and milestone filters use the same paged list/board. The
+`/api/issue-records/project-summary?projectId=...` endpoint returns server-side
+totals for milestones, assignees, labels, and project progress; these totals
+must not be computed from the browser's retained pages.
+
+Optional issue properties use sparse indexed rows, including milestone,
+estimate, due date, completion dates, template, and external source. Existing
+records are backfilled in checkpointed batches of 250 on upgrade. Allow this
+migration to finish before sending traffic to the upgraded instance.
+
+Set `VITE_PAGED_ISSUES=true` when building the web client to opt into the new
+issue list and board path. Docker builds accept
+`--build-arg VITE_PAGED_ISSUES=true`. The default remains `false` during rollout.
+The browser retains at most 40 pages of issue records and reloads evicted pages
+using their cursors. Cursor checkpoints do not serialize workspace snapshots
+into localStorage.
+
+This is a staged migration, not a claim that every Flow module has completed
+large-workspace support. Projects and several other modules still use complete
+metadata collections; some advanced issue filters are not implemented in the
+SQL compiler and return an explicit query error. Compatibility APIs can still
+materialize complete collections. Keep the new UI mode limited to validated
+workflows until those remaining paths migrate. Synchronous issue graph mutations
+are bounded to 1,000 records; larger graph operations require batch processing.

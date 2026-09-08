@@ -68,7 +68,7 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 		event.Payload, _ = json.Marshal(payload)
 		return event, true, nil
 	}
-	if strings.HasPrefix(event.Type, "attachment.") || event.Type == "issue.deleted" || strings.Contains(event.Type, "permission") {
+	if strings.HasPrefix(event.Type, "attachment.") || event.Type == "issue.deleted" || event.Type == "issue.batch_updated" || strings.Contains(event.Type, "permission") {
 		return domain.RealtimeEvent{ID: event.ID, Type: "workspace.resync_required", CreatedAt: event.CreatedAt}, true, nil
 	}
 	if strings.HasPrefix(event.Type, "issue.") || strings.HasPrefix(event.Type, "comment.") {

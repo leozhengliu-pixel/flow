@@ -18,6 +18,13 @@ func TestDatabaseDialectRewriting(t *testing.T) {
 	if ignore != "INSERT IGNORE INTO auth_users(id) VALUES(?)" {
 		t.Fatalf("mysql ignore rewrite = %q", ignore)
 	}
+	multiline := rewriteSQL("INSERT INTO recently_viewed(user_id,last_viewed_at) VALUES(?,?)\n\t\tON CONFLICT (user_id)\n DO UPDATE\n SET last_viewed_at=excluded.last_viewed_at", "mysql")
+	if multiline != "INSERT INTO recently_viewed(user_id,last_viewed_at) VALUES(?,?) ON DUPLICATE KEY UPDATE last_viewed_at=VALUES(last_viewed_at)" {
+		t.Fatalf("multiline mysql upsert rewrite = %q", multiline)
+	}
+	if rewriteSQL("INSERT INTO auth_users(id) VALUES(?)\n\tON CONFLICT\nDO NOTHING", "mysql") != ignore {
+		t.Fatal("multiline mysql ignore was not rewritten")
+	}
 }
 
 func TestMySQLURLConversion(t *testing.T) {

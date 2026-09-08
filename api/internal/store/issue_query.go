@@ -184,6 +184,15 @@ func compileIssueFilter(node IssueFilter, depth int, remaining *int) (string, []
 		}
 	}
 	if node.Field != "" {
+		if issueAttributeFields[node.Field] {
+			clause, values, err := compileIssueAttribute(node)
+			if err != nil {
+				return "", nil, err
+			}
+			clauses = append(clauses, clause)
+			args = append(args, values...)
+			return "(" + strings.Join(clauses, " AND ") + ")", args, nil
+		}
 		if node.Field == "createdAt" || node.Field == "updatedAt" {
 			values := make([]string, len(node.Values))
 			for i, value := range node.Values {
@@ -328,6 +337,15 @@ func issueRecordWhere(query IssueRecordQuery) (string, []any, error) {
 	clauses = append(clauses, filter)
 	args = append(args, values...)
 	if query.GroupValue != nil && query.GroupBy != "none" {
+		if field := issueGroupAttribute(query.GroupBy); field != "" {
+			clause, values, err := compileIssueAttribute(IssueFilter{Field: field, Values: []string{*query.GroupValue}})
+			if err != nil {
+				return "", nil, err
+			}
+			clauses = append(clauses, clause)
+			args = append(args, values...)
+			return strings.Join(clauses, " AND "), args, nil
+		}
 		column, err := issueGroupColumn(query.GroupBy)
 		if err != nil {
 			return "", nil, err
@@ -356,6 +374,18 @@ func issueGroupColumn(group string) (string, error) {
 		return "cycle_id", nil
 	}
 	return "", fmt.Errorf("%w: unsupported grouping", ErrIssueQuery)
+}
+
+func issueGroupAttribute(group string) string {
+	switch group {
+	case "label":
+		return "firstLabel"
+	case "milestone":
+		return "projectMilestoneId"
+	case "estimate":
+		return "estimate"
+	}
+	return ""
 }
 
 func (s *SQLiteStore) QueryIssueRecords(ctx context.Context, query IssueRecordQuery) (IssueRecordPage, error) {
@@ -447,6 +477,7 @@ func (s *SQLiteStore) QueryIssueRecords(ctx context.Context, query IssueRecordQu
 		if err := json.Unmarshal(raw, &issue); err != nil {
 			return page, err
 		}
+		normalizeIssueRecord(&issue)
 		page.Items = append(page.Items, issue)
 		lastValue = sortValue
 	}
@@ -486,15 +517,22 @@ func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQue
 		return []IssueRecordGroup{{Value: "all", Count: total}}, nil
 	}
 	column, err := issueGroupColumn(query.GroupBy)
-	if err != nil {
+	from := "issue_records i"
+	if attribute := issueGroupAttribute(query.GroupBy); attribute != "" {
+		// The field comes from the fixed allowlist above, never from input SQL.
+		from += " LEFT JOIN issue_attribute_records g ON g.workspace_key=i.workspace_key AND g.issue_id=i.id AND g.field='" + attribute + "'"
+		column = "COALESCE(g.value,'')"
+	} else if err != nil {
 		return nil, err
+	} else {
+		column = "i." + column
 	}
 	where, args, err := issueRecordWhere(query)
 	if err != nil {
 		return nil, err
 	}
 	prefix, prefixArgs := issueAccessCTE(query)
-	rows, err := s.db.QueryContext(ctx, prefix+"SELECT i."+column+",COUNT(*) FROM issue_records i WHERE "+where+" GROUP BY i."+column+" ORDER BY i."+column, append(prefixArgs, args...)...)
+	rows, err := s.db.QueryContext(ctx, prefix+"SELECT "+column+",COUNT(*) FROM "+from+" WHERE "+where+" GROUP BY "+column+" ORDER BY "+column, append(prefixArgs, args...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -521,5 +559,6 @@ func (s *SQLiteStore) IssueRecord(ctx context.Context, workspace, id string) (do
 	}
 	var issue domain.Issue
 	err = json.Unmarshal(raw, &issue)
+	normalizeIssueRecord(&issue)
 	return issue, err
 }

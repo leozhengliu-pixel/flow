@@ -781,6 +781,10 @@
 .project-activity__edit-health button.is-active { background: #3a3a3e; color: var(--theme-text-primary); }
 
 .project-issues { min-width: 720px; padding: 0 0 70px; }
+.project-issues[data-paged=true] { display: flex; flex-direction: column; min-width: 0; height: 100%; min-height: 0; padding: 0; overflow: hidden; }
+.project-issues[data-paged=true] > [role=list] { flex: 1; min-height: 0; min-width: 0; }
+.project-new-view[data-paged=true] { display: flex; flex-direction: column; box-sizing: border-box; min-width: 0; height: 100%; min-height: 0; }
+.project-new-view[data-paged=true] > .project-issues { flex: 1; }
 .project-issues__group { margin-bottom: 12px; }
 .project-issues__group > header { height: 38px; display: flex; align-items: center; gap: 6px; padding: 0 16px; }
 .project-issues__group > header > button { width: 22px; height: 22px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 5px; background: transparent; color: #77777c; }

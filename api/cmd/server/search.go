@@ -55,8 +55,23 @@ func (s *server) recordRecentResource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input.Type, input.ID = strings.TrimSpace(input.Type), strings.TrimSpace(input.ID)
-	data := s.workspaceData(r)
-	if !searchResourceVisible(data, input.Type, input.ID) {
+	data, query, err := s.issueRecordsQuery(r)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
+	visible := false
+	if input.Type == "issue" {
+		ids, err := s.store.VisibleIssueRecordIDs(r.Context(), query, []string{input.ID})
+		if err != nil {
+			issueRecordsError(w, err)
+			return
+		}
+		visible = ids[input.ID]
+	} else {
+		visible = searchResourceVisible(data, input.Type, input.ID)
+	}
+	if !visible {
 		writeError(w, http.StatusForbidden, "Resource is outside your workspace")
 		return
 	}
