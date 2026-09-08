@@ -215,9 +215,6 @@ round-trip tests against PostgreSQL, MySQL, Redis, and S3-compatible storage.
 - [Testing](docs/testing.md)
 - [Operations and backup](docs/operations.md)
 - [Routing system](docs/routing-system.md)
-- [Issue modules](docs/issue-page-modules.md)
-- [Project modules](docs/projects-page-modules.md)
-- [Workspace modules](docs/workspace-modules.md)
 
 ## Community
 
