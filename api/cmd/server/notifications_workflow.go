@@ -259,8 +259,8 @@ func (s *server) retryNotificationDelivery(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *server) dispatchNotificationEmails(ctx context.Context, key string) {
-	data, ok := s.store.BootstrapFor(key)
-	if !ok {
+	data, snapshotErr := s.store.NotificationDeliverySnapshot(ctx, key, []string{"pending"}, time.Now().UTC())
+	if snapshotErr != nil {
 		return
 	}
 	for _, delivery := range data.NotificationDeliveries {
@@ -268,14 +268,13 @@ func (s *server) dispatchNotificationEmails(ctx context.Context, key string) {
 			continue
 		}
 		claimed := false
-		claimErr := s.store.MutateWorkspace(ctx, key, "notification.delivery_claimed", delivery.ID, nil, func(next *domain.Bootstrap) error {
-			index := slices.IndexFunc(next.NotificationDeliveries, func(item domain.NotificationDelivery) bool { return item.ID == delivery.ID })
-			if index < 0 || next.NotificationDeliveries[index].Status != "pending" {
+		claimErr := s.store.MutateNotificationDelivery(ctx, key, delivery.ID, func(next *domain.NotificationDelivery) error {
+			if next.Status != "pending" {
 				return nil
 			}
-			next.NotificationDeliveries[index].Status = "delivering"
-			next.NotificationDeliveries[index].UpdatedAt = time.Now().UTC()
-			delivery, claimed = next.NotificationDeliveries[index], true
+			next.Status = "delivering"
+			next.UpdatedAt = time.Now().UTC()
+			delivery, claimed = *next, true
 			return nil
 		})
 		if claimErr != nil || !claimed {
@@ -313,13 +312,11 @@ func (s *server) dispatchNotificationEmails(ctx context.Context, key string) {
 			}
 		}
 		persistCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		_ = s.store.MutateWorkspace(persistCtx, key, "notification.delivery_updated", delivery.ID, map[string]string{"status": status}, func(next *domain.Bootstrap) error {
-			index := slices.IndexFunc(next.NotificationDeliveries, func(item domain.NotificationDelivery) bool { return item.ID == delivery.ID })
-			if index < 0 || next.NotificationDeliveries[index].Status != "delivering" {
+		_ = s.store.MutateNotificationDelivery(persistCtx, key, delivery.ID, func(item *domain.NotificationDelivery) error {
+			if item.Status != "delivering" {
 				return nil
 			}
 			now := time.Now().UTC()
-			item := &next.NotificationDeliveries[index]
 			item.Attempts++
 			item.Status, item.Error, item.UpdatedAt = status, message, now
 			if status == "delivered" {

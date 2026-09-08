@@ -15,6 +15,9 @@ import { SubIssueProgressRing } from '@/components/issue/sub-issue-progress-ring
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import type { IssueSLA } from '@/types/flow'
 import { toggleGroupedLabelIds } from '@/lib/labels'
+import { PersonHover } from '@/components/property/person-info'
+import { isPeopleProperty } from '@/lib/people'
+import { usePropertyCommand } from '@/components/property/use-property-command'
 
 export type MyIssuesStateType = 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled'
 export type MyIssuesContextAction = 'status' | 'priority' | 'assignee' | 'dueDate' | 'labels' | 'project' | 'cycle' | 'moreProperties' | 'createRelated' | 'markAs' | 'copy' | 'copyUrl' | 'copyId' | 'copyTitle' | 'convertTo' | 'move' | 'openIn' | 'runLoop' | 'favorite' | 'remind' | 'delete'
@@ -110,7 +113,7 @@ export interface MyIssuesRowData {
   viewMatch?: boolean
 }
 
-export interface MyIssuesGroupData { id: string; label: string; stateType?: MyIssuesStateType; state?: MyIssuesRowData['state']; createContext?: MyIssuesCreateContext; issues: MyIssuesRowData[] }
+export interface MyIssuesGroupData { id: string; label: string; stateType?: MyIssuesStateType; state?: MyIssuesRowData['state']; createContext?: MyIssuesCreateContext; issues: MyIssuesRowData[]; totalCount?: number }
 
 export interface MyIssuesListProps {
   groups: MyIssuesGroupData[]
@@ -188,10 +191,10 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
   </div>
 }
 
-function MyIssuesGroupHeader({ collapsed, createIssueLabel, group, onCreateIssue, onGroupCollapsedChange }: { collapsed: boolean; createIssueLabel: string; group: MyIssuesGroupData; onCreateIssue?: (group: MyIssuesGroupData) => void; onGroupCollapsedChange?: (groupId: string, collapsed: boolean) => void }) {
+export function MyIssuesGroupHeader({ collapsed, createIssueLabel, group, onCreateIssue, onGroupCollapsedChange }: { collapsed: boolean; createIssueLabel: string; group: MyIssuesGroupData; onCreateIssue?: (group: MyIssuesGroupData) => void; onGroupCollapsedChange?: (groupId: string, collapsed: boolean) => void }) {
   return <header className={styles.groupHeader}>
     <button className={styles.collapseButton} aria-label={collapsed ? 'Expand group' : 'Collapse group'} aria-expanded={!collapsed} onClick={() => onGroupCollapsedChange?.(group.id, !collapsed)}><ChevronDown size={12}/></button>
-    <GroupStateIcon state={group.state ?? group.issues[0]?.state} type={group.stateType}/><span data-i18n-ignore id={`my-issues-group-${group.id}`} className={styles.groupName}>{group.label}</span><span className={styles.groupCount}>{group.issues.length}</span>
+    <GroupStateIcon state={group.state ?? group.issues[0]?.state} type={group.stateType}/><span data-i18n-ignore id={`my-issues-group-${group.id}`} className={styles.groupName}>{group.label}</span><span className={styles.groupCount}>{group.totalCount ?? group.issues.length}</span>
     {onCreateIssue && <button className={styles.createButton} aria-label={createIssueLabel} onClick={() => onCreateIssue(group)}><Plus size={16}/></button>}
   </header>
 }
@@ -312,10 +315,14 @@ export function IssueContextMenu({ editable, issue, options, onPropertyChange, o
 }
 
 function ContextPropertySub({ label, multi = false, onSelect, options, selectedIds, shortcut }: { label: string; multi?: boolean; onSelect: (id: string) => void | Promise<void>; options: MyIssuesContextOption[]; selectedIds: string[]; shortcut?: string }) {
+  const [open, setOpen] = useState(false)
+  const people = isPeopleProperty(label)
+  const command = usePropertyCommand({ open: open && people, options, personOptions: people, selectedIds, onSelect: option => onSelect(option.id), onOpenChange: setOpen })
   const selected = new Set(selectedIds)
-  const sections = multi && label === 'Labels' ? groupContextOptions(options) : [{ id: 'all', options }]
-  return <ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}>
-    {sections.map(section => <ContextMenu.Group key={section.id}>{section.label && <ContextMenu.Label className={styles.groupLabel}>{section.label}</ContextMenu.Label>}{section.options.map(option => multi ? <ContextMenu.CheckboxItem className={styles.submenuItem} key={option.id} checked={selected.has(option.id)} onSelect={event => event.preventDefault()} onCheckedChange={() => void onSelect(option.id)}><span className={styles.optionCheckbox}>{selected.has(option.id) && <CheckboxMark/>}</span><MyIssuesOptionIcon option={option}/><span>{option.label}</span></ContextMenu.CheckboxItem> : <ContextMenu.Item className={styles.submenuItem} key={option.id || 'none'} onSelect={() => void onSelect(option.id)}><MyIssuesOptionIcon option={option}/><span>{option.label}</span>{selected.has(option.id) && <Check className={styles.optionCheck} size={13}/>}</ContextMenu.Item>)}</ContextMenu.Group>)}
+  const sections = multi && label === 'Labels' ? groupContextOptions(options) : [{ id: 'all', options: people ? command.filteredOptions : options }]
+  return <ContextMenu.Sub open={open} onOpenChange={setOpen}><ContextMenu.SubTrigger className={styles.menuItem}><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}>
+    {people && <div className="property-command-search"><input ref={command.inputRef} aria-label="Search people" placeholder="Search people…" value={command.query} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={event => { event.stopPropagation(); command.onKeyDown(event) }}/></div>}
+    {sections.map(section => <ContextMenu.Group key={section.id}>{section.label && <ContextMenu.Label className={styles.groupLabel}>{section.label}</ContextMenu.Label>}{section.options.map(option => <PersonHover key={option.id || 'none'} userId={people ? option.id : undefined}>{multi ? <ContextMenu.CheckboxItem className={styles.submenuItem} checked={selected.has(option.id)} onSelect={event => event.preventDefault()} onCheckedChange={() => void onSelect(option.id)}><span className={styles.optionCheckbox}>{selected.has(option.id) && <CheckboxMark/>}</span><MyIssuesOptionIcon option={option}/><span>{option.label}</span></ContextMenu.CheckboxItem> : <ContextMenu.Item className={styles.submenuItem} onSelect={() => void onSelect(option.id)}><MyIssuesOptionIcon option={option}/><span>{option.label}</span>{selected.has(option.id) && <Check className={styles.optionCheck} size={13}/>}</ContextMenu.Item>}</PersonHover>)}</ContextMenu.Group>)}
   </ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
 }
 

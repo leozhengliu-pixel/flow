@@ -148,7 +148,7 @@ func (s *SQLiteStore) ReloadAllWorkspaces(ctx context.Context) error {
 		if err := json.Unmarshal(raw, &data); err != nil {
 			return err
 		}
-		normalize(&data)
+		normalizeStoredMetadata(&data)
 		workspaces[key] = data
 	}
 	if err := rows.Err(); err != nil {
@@ -175,7 +175,7 @@ func (s *SQLiteStore) loadWorkspaceState(ctx context.Context, workspaceKey strin
 	if err := json.Unmarshal(raw, &data); err != nil {
 		return data, err
 	}
-	normalize(&data)
+	normalizeStoredMetadata(&data)
 	return data, nil
 }
 
@@ -365,8 +365,11 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 			rows.Close()
 			return err
 		}
-		normalize(&data)
-		historyChanged[key] = refreshProjectProgressHistories(&data, time.Now().UTC())
+		externalIssues := data.Issues == nil
+		normalizeStoredMetadata(&data)
+		if !externalIssues {
+			historyChanged[key] = refreshProjectProgressHistories(&data, time.Now().UTC())
+		}
 		s.workspaces[key] = data
 	}
 	if err := rows.Close(); err != nil {
@@ -1110,6 +1113,16 @@ func (s *SQLiteStore) BootstrapFor(workspaceKey string) (domain.Bootstrap, bool)
 	raw, _ := json.Marshal(data)
 	var clone domain.Bootstrap
 	_ = json.Unmarshal(raw, &clone)
+	if data.Issues == nil {
+		issues, err := s.readIssueRecords(context.Background(), data.Workspace.URLKey)
+		if err != nil {
+			return domain.Bootstrap{}, false
+		}
+		clone.Issues = issues
+	}
+	if err := s.hydrateContentRecords(context.Background(), data.Workspace.URLKey, &clone); err != nil {
+		return domain.Bootstrap{}, false
+	}
 	refreshResourceCounts(&clone)
 	return clone, true
 }
@@ -1128,6 +1141,7 @@ func (s *SQLiteStore) CycleForCalendar(id, token string) (domain.Cycle, bool) {
 }
 
 func (s *SQLiteStore) Account() domain.AccountBootstrap {
+	counts, _ := s.issueCollectionCounts(context.Background())
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	result := domain.AccountBootstrap{Viewer: s.viewer, Workspaces: []domain.WorkspaceMembership{}, LastWorkspaceKey: s.lastWorkspaceKey}
@@ -1136,7 +1150,7 @@ func (s *SQLiteStore) Account() domain.AccountBootstrap {
 		if joined.IsZero() {
 			joined = time.Now().UTC()
 		}
-		result.Workspaces = append(result.Workspaces, domain.WorkspaceMembership{Workspace: data.Workspace, Role: "Admin", JoinedAt: joined, IssueCount: len(data.Issues)})
+		result.Workspaces = append(result.Workspaces, domain.WorkspaceMembership{Workspace: data.Workspace, Role: "Admin", JoinedAt: joined, IssueCount: counts[data.Workspace.URLKey]})
 	}
 	slices.SortFunc(result.Workspaces, func(a, b domain.WorkspaceMembership) int {
 		return strings.Compare(strings.ToLower(a.Workspace.Name), strings.ToLower(b.Workspace.Name))
@@ -1161,6 +1175,12 @@ func (s *SQLiteStore) MutateWithAggregate(ctx context.Context, eventType string,
 }
 
 func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
+	if eventType == "issue.created" && UsesIssueRecordMutations(ctx) {
+		return s.createIssueRecords(ctx, workspaceKey, payload, mutate)
+	}
+	if UsesIssueRecordMutations(ctx) {
+		return s.mutateIssueScope(ctx, workspaceKey, eventType, payload, mutate)
+	}
 	if workspaceKey == "" {
 		s.mu.RLock()
 		workspaceKey = s.lastWorkspaceKey
@@ -1182,6 +1202,19 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 		current, ok := s.workspaces[workspaceKey]
 		if !ok {
 			return fmt.Errorf("workspace %q: %w", workspaceKey, errors.New("not found"))
+		}
+		metadataOnly := eventType == "api_key.used"
+		if current.Issues == nil && !metadataOnly {
+			issues, err := s.readIssueRecords(ctx, workspaceKey)
+			if err != nil {
+				return err
+			}
+			current.Issues = issues
+		}
+		if !metadataOnly {
+			if err := s.hydrateContentRecords(ctx, workspaceKey, &current); err != nil {
+				return err
+			}
 		}
 		raw, _ := json.Marshal(current)
 		var next domain.Bootstrap
@@ -1215,7 +1248,9 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 		if progressEvent(eventType) {
 			refreshProjectProgressHistories(&next, time.Now().UTC())
 		}
-		refreshResourceCounts(&next)
+		if !metadataOnly {
+			refreshResourceCounts(&next)
+		}
 		payloadRaw, err := json.Marshal(payload)
 		if err != nil {
 			return err
@@ -1228,6 +1263,11 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 		if err := s.persistWorkspace(ctx, workspaceKey, next, &event); err != nil {
 			return err
 		}
+		next.Issues = nil
+		next.Activities = nil
+		next.Comments = nil
+		next.Notifications = nil
+		next.NotificationDeliveries = nil
 		s.workspaces[workspaceKey] = next
 		s.lastWorkspaceKey = workspaceKey
 		return nil
@@ -1351,6 +1391,15 @@ func (s *SQLiteStore) persist(ctx context.Context, data domain.Bootstrap, event 
 }
 
 func (s *SQLiteStore) persistWorkspace(ctx context.Context, workspaceKey string, data domain.Bootstrap, event *domain.DomainEvent) error {
+	issues := data.Issues
+	activities, comments := data.Activities, data.Comments
+	notifications := data.Notifications
+	deliveries := data.NotificationDeliveries
+	data.Issues = nil
+	data.Activities = nil
+	data.Comments = nil
+	data.Notifications = nil
+	data.NotificationDeliveries = nil
 	raw, err := json.Marshal(data)
 	if err != nil {
 		return err
@@ -1363,6 +1412,31 @@ func (s *SQLiteStore) persistWorkspace(ctx context.Context, workspaceKey string,
 		return err
 	}
 	defer tx.Rollback()
+	if deliveries != nil {
+		if err := syncContentRecords(ctx, tx, workspaceKey, "delivery", map[string][]domain.NotificationDelivery{"": deliveries}); err != nil {
+			return err
+		}
+	}
+	if notifications != nil {
+		if err := syncContentRecords(ctx, tx, workspaceKey, "notification", notificationRecords(notifications)); err != nil {
+			return err
+		}
+	}
+	if activities != nil {
+		if err := syncContentRecords(ctx, tx, workspaceKey, "activity", activities); err != nil {
+			return err
+		}
+	}
+	if comments != nil {
+		if err := syncContentRecords(ctx, tx, workspaceKey, "comment", comments); err != nil {
+			return err
+		}
+	}
+	if issues != nil {
+		if err := s.replaceIssueRecords(ctx, tx, workspaceKey, issues); err != nil {
+			return err
+		}
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := tx.ExecContext(ctx, `INSERT INTO workspace_states(workspace_key,workspace_id,data,updated_at) VALUES(?,?,?,?) ON CONFLICT(workspace_key) DO UPDATE SET workspace_id=excluded.workspace_id,data=excluded.data,updated_at=excluded.updated_at`, workspaceKey, data.Workspace.ID, raw, now); err != nil {
 		return err
@@ -1428,7 +1502,7 @@ func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region 
 	if err := s.persistWorkspace(ctx, urlKey, data, event); err != nil {
 		return domain.Bootstrap{}, err
 	}
-	s.workspaces[urlKey] = data
+	s.workspaces[urlKey] = collectionMetadata(data)
 	s.lastWorkspaceKey = urlKey
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, _ = s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,status=excluded.status,joined_at=excluded.joined_at,last_seen_at=excluded.last_seen_at`, data.Workspace.ID, viewer.ID, "owner", "active", now, now)
@@ -1491,6 +1565,13 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 	defer tx.Rollback()
 	raw, _ := json.Marshal(data)
 	now := time.Now().UTC()
+	if workspace.URLKey != workspaceKey {
+		for _, table := range workspaceRecordTables {
+			if _, err := tx.ExecContext(ctx, "UPDATE "+table+" SET workspace_key=? WHERE workspace_key=?", workspace.URLKey, workspaceKey); err != nil {
+				return domain.Bootstrap{}, err
+			}
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_states WHERE workspace_key = ?`, workspaceKey); err != nil {
 		return domain.Bootstrap{}, err
 	}
@@ -1544,13 +1625,23 @@ func (s *SQLiteStore) deleteWorkspace(ctx context.Context, workspaceKey string) 
 	if !ok {
 		return fmt.Errorf("workspace not found")
 	}
-	delete(s.workspaces, workspaceKey)
-	s.lastWorkspaceKey = firstWorkspaceKey(s.workspaces)
+	remaining := map[string]domain.Bootstrap{}
+	for key, value := range s.workspaces {
+		if key != workspaceKey {
+			remaining[key] = value
+		}
+	}
+	nextWorkspaceKey := firstWorkspaceKey(remaining)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	for _, table := range workspaceRecordTables {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE workspace_key=?", workspaceKey); err != nil {
+			return err
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_states WHERE workspace_key = ?`, workspaceKey); err != nil {
 		return err
 	}
@@ -1568,13 +1659,18 @@ func (s *SQLiteStore) deleteWorkspace(ctx context.Context, workspaceKey string) 
 	}
 	now := time.Now().UTC()
 	viewerRaw, _ := json.Marshal(s.viewer)
-	if _, err := tx.ExecContext(ctx, `INSERT INTO account_state(id,last_workspace_key,viewer,updated_at) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,viewer=excluded.viewer,updated_at=excluded.updated_at`, s.lastWorkspaceKey, viewerRaw, now.Format(time.RFC3339Nano)); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO account_state(id,last_workspace_key,viewer,updated_at) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,viewer=excluded.viewer,updated_at=excluded.updated_at`, nextWorkspaceKey, viewerRaw, now.Format(time.RFC3339Nano)); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,created_at) VALUES(?,?,?,?,?)`, fmt.Sprintf("evt_%d", now.UnixNano()), "workspace.deleted", data.Workspace.ID, []byte(`{}`), now.Format(time.RFC3339Nano)); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.workspaces = remaining
+	s.lastWorkspaceKey = nextWorkspaceKey
+	return nil
 }
 
 func (s *SQLiteStore) publishWorkspaceEvent(ctx context.Context, workspaceKey, eventType, aggregateID string, payload any) {

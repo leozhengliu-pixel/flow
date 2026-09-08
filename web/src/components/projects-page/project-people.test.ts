@@ -25,6 +25,9 @@ const invitation = (email: string, id = 'invite-1'): Invitation => ({
 })
 
 describe('projectPeopleChoices', () => {
+  it('keeps presence unknown when no live presence collection was provided', () => {
+    expect(projectPeopleChoices([user('person@example.test')])[0].online).toBeUndefined()
+  })
   it('keeps pending users visible and adds unmatched invitees as disabled rows', () => {
     const choices = projectPeopleChoices([user('member@example.com')], [invitation('MEMBER@example.com'), invitation('invitee@example.com', 'invite-2')])
 

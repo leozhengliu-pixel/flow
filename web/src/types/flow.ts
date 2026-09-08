@@ -2,6 +2,7 @@ export type UUID = string;
 
 export interface User {
   id: UUID;
+  userId?: string;
   name: string;
   displayName: string;
   email: string;
@@ -1534,6 +1535,7 @@ export interface InitiativeMutationInput {
   updateSchedule?: InitiativeUpdateSchedule;
 }
 export interface BootstrapData {
+  issueCollectionPaged?: boolean;
   workspace: Workspace;
   viewer: User;
   users: User[];

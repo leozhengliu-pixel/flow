@@ -1,0 +1,18 @@
+.person-info-surface { z-index: 1300; box-sizing: border-box; width: 300px; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow: auto; border: .5px solid var(--popover-border); border-radius: 8px; background: var(--theme-surface-2); color: var(--theme-text-primary); box-shadow: var(--shadow-control); outline: none; }
+.person-info { padding: 14px; font-size: 12px; user-select: text; }
+.person-info header { display: flex; gap: 10px; align-items: center; }
+.person-info header > div { min-width: 0; }
+.person-info header strong { display: block; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.person-info header > div > span { color: var(--theme-text-secondary); overflow-wrap: anywhere; }
+.person-info-badge { display: inline-block; margin-top: 3px; padding: 0 5px; border: .5px solid var(--theme-border-strong); border-radius: 4px; color: var(--theme-text-secondary); font-size: 11px; }
+.person-info-avatar { flex: 0 0 36px; width: 36px; height: 36px; border-radius: 50%; object-fit: cover; display: grid; place-items: center; background: var(--avatar-fallback); color: var(--on-accent); font-size: 13px; }
+.person-identity-details { margin: 12px 0 0; display: grid; gap: 8px; font-size: 12px; line-height: 18px; user-select: text; }
+.person-identity-details > div { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 8px; }
+.person-identity-details dt { color: var(--theme-text-secondary); }
+.person-identity-details dd { margin: 0; min-width: 0; overflow-wrap: anywhere; white-space: normal; color: var(--theme-text-primary); }
+.person-info footer { margin-top: 12px; padding-top: 10px; border-top: .5px solid var(--theme-border); color: var(--theme-text-secondary); overflow-wrap: anywhere; }
+.assignee-hover-preview > .person-identity-details { margin: 0 14px 12px; }
+.person-info-surface .assignee-hover-preview { width: 100%; }
+.property-rich-hover.assignee-hover-surface { width: 300px; max-width: calc(100vw - 16px); }
+.people-menu-options { max-height: 320px; overflow-y: auto; }
+.people-menu-avatar { width: 16px; height: 16px; flex: 0 0 16px; display: grid; place-items: center; border-radius: 50%; background: var(--avatar-fallback); color: var(--on-accent); font-size: 8px; object-fit: cover; }

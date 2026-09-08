@@ -37,6 +37,7 @@ export async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export function apiFetch(url: string, init?: RequestInit) {
+  if (import.meta.env.VITE_PAGED_ISSUES === 'true') url = url.replace(/^\/api\/issues(?=\/|\?|$)/, '/api/issue-records')
   const workspaceKey = currentWorkspaceKey()
   const headers = new Headers(init?.headers)
   if (workspaceKey && !headers.has('X-Workspace-Key')) headers.set('X-Workspace-Key', workspaceKey)

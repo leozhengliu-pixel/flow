@@ -1,4 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { PeopleMenuItems } from '@/components/property/people-menu-items'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   BarChart3,
@@ -1047,15 +1048,7 @@ function DashboardMenu({
                 className="dashboard-menu"
                 sideOffset={5}
               >
-                {data.users.map((user) => (
-                  <DropdownMenu.Item
-                    key={user.id}
-                    onSelect={() => onOwner(user.id)}
-                  >
-                    <Owner owner={user} />
-                    {dashboard.ownerId === user.id && <Check className="end" />}
-                  </DropdownMenu.Item>
-                ))}
+                <PeopleMenuItems users={data.users} selectedId={dashboard.ownerId} onSelect={onOwner}/>
               </DropdownMenu.SubContent>
             </DropdownMenu.Portal>
           </DropdownMenu.Sub>

@@ -720,7 +720,7 @@ func (s *server) startWorkflowScheduler() {
 		for range ticker.C {
 			now := time.Now().UTC()
 			for _, key := range s.store.WorkspaceKeys() {
-				data, ok := s.store.BootstrapFor(key)
+				data, ok := s.store.WorkspaceMetadata(key)
 				if !ok {
 					continue
 				}

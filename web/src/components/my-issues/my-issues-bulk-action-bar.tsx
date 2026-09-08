@@ -6,6 +6,9 @@ import type { MyIssuesRowData } from './my-issues-list'
 import { AgentChatPanel } from '@/components/agent/agent-chat-panel'
 import { AgentPointerIcon } from '@/components/agent/agent-icons'
 import styles from './my-issues-bulk-action-bar.module.css'
+import { PersonHover } from '@/components/property/person-info'
+import { usePeopleDirectory } from '@/components/property/people-context'
+import { directoryPerson, personMatchesQuery, personSearchText } from '@/lib/people'
 
 export type MyIssuesBulkAction = 'assign' | 'unassignMe' | 'status' | 'priority' | 'project' | 'labels' | 'dueDate' | 'copyId' | 'copyUrl' | 'copyTitle' | 'copyTitleLink' | 'copyDescriptionMarkdown' | 'copyContentMarkdown' | 'copyBranch' | 'copyPrompt' | 'subscribers' | 'removeSubscribers' | 'markAs'
 export interface MyIssuesBulkActionOption { id: string; label: string; color?: string }
@@ -33,6 +36,7 @@ const actions: { id: MyIssuesBulkAction; label: string; shortcut?: string }[] = 
 ]
 
 export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, actionOptions, onAction, onAskFlow, onClear }: MyIssuesBulkActionBarProps) {
+  const directory = usePeopleDirectory()
   const [open, setOpen] = useState(false)
   const [pendingAction, setPendingAction] = useState<MyIssuesBulkAction>()
   const [agentIssues, setAgentIssues] = useState<MyIssuesRowData[]>([])
@@ -53,10 +57,10 @@ export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, 
       <Dialog.Title className={styles.commandTitle}>{pendingAction ? actions.find(action => action.id === pendingAction)?.label : count === 1 ? `${selectedIssues[0].identifier} · ${selectedIssues[0].title}` : `${count} selected issues`}</Dialog.Title>
       {pendingAction && <button type="button" className={styles.commandBack} aria-label="Back to actions" onClick={() => setPendingAction(undefined)}><ChevronLeft size={13}/>Back</button>}
       <Dialog.Close className={styles.commandClose} aria-label="Close command menu"><span>Backspace</span><kbd>⌫</kbd></Dialog.Close>
-      <Command className={styles.command} loop>
+      <Command label={pendingAction ? `Search ${actions.find(action => action.id === pendingAction)?.label}` : 'Command menu'} className={styles.command} loop filter={pendingAction && ['assign','subscribers','removeSubscribers'].includes(pendingAction) ? (value, query) => { const person = directoryPerson(directory.users, value); return person ? Number(personMatchesQuery(person, query)) : Number((actionOptions?.(pendingAction)?.find(option => (option.id || 'none') === value)?.label ?? value).toLowerCase().includes(query.toLowerCase())) } : undefined}>
         <div className={styles.commandInput}><Command.Input key={pendingAction ?? 'actions'} aria-label={pendingAction ? `Search ${actions.find(action => action.id === pendingAction)?.label}` : 'Command menu'} placeholder={pendingAction ? 'Search...' : 'Type a command...'} autoFocus/>{!pendingAction && <><span>Ask Flow</span><kbd>Tab</kbd></>}</div>
         <Command.List className={styles.commandList}><Command.Empty className={styles.commandEmpty}>No commands found</Command.Empty>{pendingAction
-          ? actionOptions?.(pendingAction)?.map(option => <Command.Item key={option.id || 'none'} value={option.label} className={styles.commandItem} onSelect={() => { onAction(pendingAction, selectedIssues, option.id); setOpen(false) }}><span className={styles.optionLabel}>{option.color && <i style={{ backgroundColor: option.color }}/>}<span>{option.label}</span></span></Command.Item>)
+          ? actionOptions?.(pendingAction)?.map(option => { const person = ['assign','subscribers','removeSubscribers'].includes(pendingAction) ? directoryPerson(directory.users, option.id) : undefined; return <PersonHover key={option.id || 'none'} person={person}><Command.Item value={option.id || 'none'} keywords={[option.label, ...(person ? [personSearchText(person)] : [])]} className={styles.commandItem} onSelect={() => { onAction(pendingAction, selectedIssues, option.id); setOpen(false) }}><span className={styles.optionLabel}>{option.color && <i style={{ backgroundColor: option.color }}/>}<span>{option.label}</span></span></Command.Item></PersonHover> })
           : actions.map(action => <Command.Item key={action.id} value={action.label} className={styles.commandItem} onSelect={() => { const options = actionOptions?.(action.id); if (options?.length) setPendingAction(action.id); else { onAction(action.id, selectedIssues); setOpen(false) } }}><span>{action.label}</span>{action.shortcut && <kbd>{action.shortcut}</kbd>}</Command.Item>)}</Command.List>
       </Command>
     </Dialog.Content></Dialog.Portal></Dialog.Root>

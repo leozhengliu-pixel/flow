@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { AssigneeHoverPreview } from './issue-property-hover'
+import { I18nProvider } from '@/i18n/i18n'
 
 const user = {
   id: 'user-1',
@@ -13,17 +14,16 @@ const user = {
 }
 
 describe('AssigneeHoverPreview presence status', () => {
-  it('defaults active users to offline until explicit presence is supplied', () => {
-    render(<AssigneeHoverPreview user={user} workspaceName="Workspace" />)
+  it('omits unknown presence and timezone information', () => {
+    render(<I18nProvider><AssigneeHoverPreview user={user} workspaceName="Workspace" /></I18nProvider>)
 
-    const details = screen.getByText('Offline').closest('.assignee-hover-preview__details') as HTMLElement | null
-    expect(details).not.toBeNull()
-    expect(within(details!).getByText('Offline')).toBeVisible()
-    expect(within(details!).queryByText('Online')).not.toBeInTheDocument()
+    expect(screen.queryByText('Offline')).not.toBeInTheDocument()
+    expect(screen.queryByText('Online')).not.toBeInTheDocument()
+    expect(screen.queryByText('local time')).not.toBeInTheDocument()
   })
 
   it('shows online only for an explicit live presence flag', () => {
-    render(<AssigneeHoverPreview online user={user} workspaceName="Workspace" />)
+    render(<I18nProvider><AssigneeHoverPreview online user={user} workspaceName="Workspace" /></I18nProvider>)
 
     const details = screen.getByText('Online').closest('.assignee-hover-preview__details') as HTMLElement | null
     expect(details).not.toBeNull()
@@ -31,10 +31,10 @@ describe('AssigneeHoverPreview presence status', () => {
     expect(within(details!).queryByText('Offline')).not.toBeInTheDocument()
   })
 
-  it('keeps suspended users offline even when presence is stale', () => {
-    render(<AssigneeHoverPreview online member={{ user, role: 'member', status: 'suspended', joinedAt: '2026-01-01T00:00:00Z' }} user={user} workspaceName="Workspace" />)
+  it('shows suspension instead of stale presence', () => {
+    render(<I18nProvider><AssigneeHoverPreview online member={{ user, role: 'member', status: 'suspended', joinedAt: '2026-01-01T00:00:00Z' }} user={user} workspaceName="Workspace" /></I18nProvider>)
 
-    expect(screen.getByText('Offline')).toBeVisible()
+    expect(screen.getByText('Suspended')).toBeVisible()
     expect(screen.queryByText('Online')).not.toBeInTheDocument()
   })
 })

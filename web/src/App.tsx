@@ -59,6 +59,8 @@ import {
   fetchAccountBootstrap,
   fetchAuthSession,
   fetchBootstrap,
+  fetchIssueRecord,
+  fetchIssueRecordContext,
   logoutAccount,
   listProjectRelations,
   recordRecentResource,
@@ -234,6 +236,8 @@ import { useDesktopNotifications } from "@/hooks/use-desktop-notifications";
 import { labelsForResource, setGroupedLabelSelected } from "@/lib/labels";
 import { applyTheme } from "@/lib/theme";
 import { useExitPresence } from '@/components/ui/motion';
+
+import { PeopleProvider } from '@/components/property/people-provider'
 
 function App() {
   const location = useLocation(),
@@ -550,6 +554,29 @@ function App() {
           (i) => i.identifier.toUpperCase() === route.identifier.toUpperCase(),
         ) || null
       : null;
+  const [issueContextLoading, setIssueContextLoading] = useState(false);
+  const issueContextKey = useRef('');
+  const recordIdentifier = route.kind === 'issue' ? route.identifier : '';
+  const missingIssueRecord = Boolean(data?.issueCollectionPaged && recordIdentifier && !selectedIssue);
+  useEffect(() => {
+    if (!data?.issueCollectionPaged || !recordIdentifier) return;
+    const key = `${data.workspace.urlKey}:${recordIdentifier}`;
+    if (!missingIssueRecord && issueContextKey.current === key) return;
+    const controller = new AbortController();
+    setIssueContextLoading(true);
+    void fetchIssueRecordContext(recordIdentifier, controller.signal).then(context => {
+      if (controller.signal.aborted) return;
+      issueContextKey.current = key;
+      setData(current => {
+        if (current?.workspace.urlKey !== data.workspace.urlKey) return current;
+        const fetched = [context.issue, ...context.relatedIssues.filter(issue => issue.id !== context.issue.id)];
+        const ids = new Set(fetched.map(issue => issue.id));
+        return { ...current, issues: [...fetched, ...current.issues.filter(issue => !ids.has(issue.id))].slice(0, 2000), comments: { ...current.comments, [context.issue.id]: context.comments ?? [] }, activities: { ...current.activities, [context.issue.id]: context.activities ?? [] } };
+      });
+    }).catch(error => { if (!controller.signal.aborted) { issueContextKey.current = key; toast.error('Could not load issue', { description: error.message }); } })
+      .finally(() => { if (!controller.signal.aborted) setIssueContextLoading(false); });
+    return () => controller.abort();
+  }, [data?.issueCollectionPaged, data?.workspace.urlKey, recordIdentifier, missingIssueRecord]);
   const selectedProject =
     route.kind === "project" || route.kind === "project-saved-view"
       ? data?.projects.find(
@@ -2753,7 +2780,7 @@ function App() {
     setSelected(new Set());
   };
   const updateIssueFromPage = async (id: string, input: IssueUpdateInput) => {
-    const issue = data?.issues.find((item) => item.id === id);
+    const issue = data?.issues.find((item) => item.id === id) ?? (data?.issueCollectionPaged ? await fetchIssueRecord(id) : undefined);
     if (!issue) throw new Error("Issue not found");
     return updateIssueById(issue, input);
   };
@@ -3746,6 +3773,7 @@ function App() {
     );
   if (route.kind === "settings")
     return (
+      <PeopleProvider users={data.users} workspaceName={data.workspace.name} members={data.members} teams={data.teams} teamMembers={data.teamMembers} projects={data.projects}>
       <Suspense
         fallback={
           <div className="app loading-app">
@@ -3858,7 +3886,7 @@ function App() {
             setData(await fetchBootstrap(data.workspace.urlKey));
           }}
         />
-      </Suspense>
+      </Suspense></PeopleProvider>
     );
   const workspaceValid = routeBelongsToWorkspace(route, data.workspace.urlKey);
   const routeTeamKey = "teamKey" in route ? route.teamKey : undefined;
@@ -3885,6 +3913,7 @@ function App() {
     void recordRecentResource(type, id).catch(() => undefined);
   };
   const openIssue = (issue: Issue) => {
+    if (data.issueCollectionPaged) setData(current => current ? { ...current, issues: [issue, ...current.issues.filter(item => item.id !== issue.id)].slice(0, 2000) } : current);
     rememberResult("issue", issue.id);
     navigateTo(issuePath(data.workspace.urlKey, issue), {
       state: { returnTo: location.pathname },
@@ -4104,7 +4133,7 @@ function App() {
       )
     : issueSavedViews.filter((view) => view.scope !== "team");
   return (
-    <div className="app">
+    <PeopleProvider users={data.users} workspaceName={data.workspace.name} members={data.members} teams={data.teams} teamMembers={data.teamMembers} projects={data.projects}><div className="app">
       <Sidebar
         account={account}
         data={data}
@@ -5738,7 +5767,7 @@ function App() {
         )}
         {routeScopeValid && page === "not-found" && <RouteNotFound />}
         {routeScopeValid && page === "issue-detail" && !selectedIssue && (
-          <RouteNotFound
+          issueContextLoading || (missingIssueRecord && issueContextKey.current !== `${data.workspace.urlKey}:${recordIdentifier}`) ? <main className="main-panel issue-panel" role="status">Loading issue…</main> : <RouteNotFound
             title="Issue not found"
             description="This issue does not exist or is no longer available."
           />
@@ -5976,7 +6005,7 @@ function App() {
           <History />
         </button>
       </div>
-    </div>
+    </div></PeopleProvider>
   );
 }
 

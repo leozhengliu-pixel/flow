@@ -17,6 +17,8 @@ import { usePropertyCommand } from '@/components/property/use-property-command'
 import type { ProjectFilterOption } from './projects-filter-model'
 import { DEFAULT_PROJECTS_DISPLAY, type ProjectsDisplaySettings } from './projects-display-model'
 import './projects-page.css'
+import { PersonHover } from '@/components/property/person-info'
+import { isPeopleProperty } from '@/lib/people'
 
 export type ProjectsView = {
   id: string
@@ -261,6 +263,6 @@ function ProjectsFilterMenu({ filterOptions = {}, onSelect, rootRef }: { filterO
 }
 
 function ProjectFilterValues({ field, onSelect, options }: { field: string; onSelect: (option: ProjectFilterOption) => void; options: ProjectFilterOption[] }) {
-  const command=usePropertyCommand({open:true,options,onOpenChange:()=>{},onSelect:option=>{const selected=options.find(item=>item.id===option.id);if(selected)onSelect(selected)}})
-  return <div aria-label={`${field} filters`} className="lp-projects-filter__nested" role="dialog"><div className="lp-projects-filter__search"><input ref={command.inputRef} aria-label="Filter…" autoFocus onChange={event=>command.onQueryChange(event.target.value)} onKeyDown={command.onKeyDown} placeholder="Filter…" value={command.query}/></div><div className="lp-projects-filter__values" role="listbox" onKeyDown={command.onKeyDown}>{command.filteredOptions.map(option=><button aria-selected={command.activeId===option.id} key={option.id} onPointerMove={()=>command.setActiveId(option.id)} onFocus={()=>command.setActiveId(option.id)} onClick={()=>command.choose(option)} role="option" type="button"><span className="lp-projects-filter__checkbox"/><i style={{background:option.color??'#77777c'}}/><span>{option.label}</span>{option.count!==undefined&&<small>{option.count} {option.count===1?'project':'projects'}</small>}</button>)}{!command.filteredOptions.length&&<div className="lp-projects-filter__empty">No results</div>}</div></div>
+  const command=usePropertyCommand({personOptions:isPeopleProperty(field),open:true,options,onOpenChange:()=>{},onSelect:option=>{const selected=options.find(item=>item.id===option.id);if(selected)onSelect(selected)}})
+  return <div aria-label={`${field} filters`} className="lp-projects-filter__nested" role="dialog"><div className="lp-projects-filter__search"><input ref={command.inputRef} aria-label="Filter…" autoFocus onChange={event=>command.onQueryChange(event.target.value)} onKeyDown={command.onKeyDown} placeholder="Filter…" value={command.query}/></div><div className="lp-projects-filter__values" role="listbox" onKeyDown={command.onKeyDown}>{command.filteredOptions.map(option=><PersonHover key={option.id} userId={isPeopleProperty(field)?option.id:undefined}><button aria-selected={command.activeId===option.id} onPointerMove={()=>command.setActiveId(option.id)} onFocus={()=>command.setActiveId(option.id)} onClick={()=>command.choose(option)} role="option" type="button"><span className="lp-projects-filter__checkbox"/><i style={{background:option.color??'#77777c'}}/><span>{option.label}</span>{option.count!==undefined&&<small>{option.count} {option.count===1?'project':'projects'}</small>}</button></PersonHover>)}{!command.filteredOptions.length&&<div className="lp-projects-filter__empty">No results</div>}</div></div>
 }

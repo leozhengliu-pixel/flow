@@ -217,6 +217,13 @@ FLOW_OIDC_IDENTITY_CLAIM=employeeNumber
 The token must still contain a stable `sub` fallback or the configured claim;
 Flow never derives an email address from the employee number.
 
+Workspace member and bootstrap user records include an optional `userId` for the
+enterprise identity subject (for example, the configured OIDC employee-number
+claim). A SCIM identifier is only used in its own workspace.
+People pickers display this identifier alongside the internal `id` and optional
+email, and search all of them. Assignment payloads continue to use the internal
+`id`, so adding this profile field does not change existing relationships.
+
 SCIM role groups and team groups are configured in the workspace settings API.
 Set `scimRoleGroups` for role group display names and
 `scimTeamGroupMapping` as a map from Flow team ID to IdP group display name.
