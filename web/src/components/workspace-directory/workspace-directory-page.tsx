@@ -24,7 +24,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
-import { Virtuoso } from "react-virtuoso";
+import { VirtualColumnList } from '@/components/ui/virtual-column-list';
 import { toast } from "sonner";
 import { addFavorite, addSubscription, inviteMembers, removeFavorite, removeSubscription, setTeamMembership } from "@/lib/api";
 import { useI18n } from "@/i18n/i18n";
@@ -72,9 +72,9 @@ type CustomerColumn =
 type CustomerOrdering = "created" | "updated" | "name" | "requests" | "revenue" | "size" | "status" | "tier";
 const DIRECTORY_VIRTUALIZATION_THRESHOLD = 80;
 
-function DirectoryRows<T>({ items, itemKey, render }: { items: readonly T[]; itemKey: (item: T) => string; render: (item: T) => ReactNode }) {
-  if (items.length <= DIRECTORY_VIRTUALIZATION_THRESHOLD) return <>{items.map((item) => <Fragment key={itemKey(item)}>{render(item)}</Fragment>)}</>;
-  return <Virtuoso className="workspace-directory__virtual-list" data={items} computeItemKey={(_index, item) => itemKey(item)} increaseViewportBy={{ top: 196, bottom: 490 }} itemContent={(_index, item) => render(item)}/>;
+function DirectoryRows<T>({ header, items, itemKey, render }: { header: ReactNode; items: readonly T[]; itemKey: (item: T) => string; render: (item: T) => ReactNode }) {
+  if (items.length <= DIRECTORY_VIRTUALIZATION_THRESHOLD) return <>{header}{items.map((item) => <Fragment key={itemKey(item)}>{render(item)}</Fragment>)}</>;
+  return <VirtualColumnList header={header} scrollerClassName="workspace-directory__virtual-list" data={items} computeItemKey={(_index, item) => itemKey(item)} increaseViewportBy={{ top: 196, bottom: 490 }} itemContent={(_index, item) => render(item)}/>;
 }
 
 export function WorkspaceDirectoryPage({
@@ -355,7 +355,7 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
   };
   return (
     <div className={`workspace-directory__table workspace-members-table${entries.length > DIRECTORY_VIRTUALIZATION_THRESHOLD ? " is-virtualized" : ""}`}>
-      <div className="workspace-members-columns">
+      <DirectoryRows header={<div className="workspace-members-columns">
         <span className="workspace-members-indent" />
         <DirectorySortHeader
           active={sort === "name"}
@@ -378,8 +378,7 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
         <span>Teams</span>
         <span>Last seen</span>
         <span className="workspace-members-end" />
-      </div>
-      <DirectoryRows items={entries} itemKey={entry => entry.kind === "member" ? `member:${entry.member.user.id}` : entry.kind === "invitation" ? `invitation:${entry.invitation.id}` : `application:${entry.application.id}`} render={renderEntry}/>
+      </div>} items={entries} itemKey={entry => entry.kind === "member" ? `member:${entry.member.user.id}` : entry.kind === "invitation" ? `invitation:${entry.invitation.id}` : `application:${entry.application.id}`} render={renderEntry}/>
     </div>
   );
 }
@@ -636,7 +635,7 @@ function CustomersDirectory({
             } as React.CSSProperties
           }
         >
-          <div className="workspace-customer-columns">
+      <DirectoryRows header={<div className="workspace-customer-columns">
             <button onClick={() => changeCustomerOrder("name")}>Name</button>
             {columns.has("requests") && <button onClick={() => changeCustomerOrder("requests")}>Requests</button>}
             {columns.has("revenue") && <button onClick={() => changeCustomerOrder("revenue")}>Annual revenue</button>}
@@ -647,8 +646,7 @@ function CustomersDirectory({
             {columns.has("domains") && <span>Domains</span>}
             {columns.has("source") && <span>Data source</span>}
             <span />
-          </div>
-          <DirectoryRows items={visible} itemKey={customer => customer.id} render={(customer) => (
+          </div>} items={visible} itemKey={customer => customer.id} render={(customer) => (
             <div className="workspace-customer-row" key={customer.id} role="button" tabIndex={0} onClick={() => onOpen(customer)} onKeyDown={event => { if (event.key === 'Enter') onOpen(customer) }}>
               <div>
                 <CustomerMark customer={customer} />
@@ -1020,7 +1018,7 @@ function TeamsDirectory({
             { "--team-columns": teamColumns(columns) } as React.CSSProperties
           }
         >
-          <div className="workspace-team-columns">
+      <DirectoryRows header={<div className="workspace-team-columns">
             <button
               aria-label="Order by Name"
               type="button"
@@ -1039,8 +1037,7 @@ function TeamsDirectory({
             {columns.has("created") && <span>Created</span>}
             {columns.has("updated") && <span>Updated</span>}
             <span />
-          </div>
-          <DirectoryRows items={teams} itemKey={team => team.id} render={(team) => {
+          </div>} items={teams} itemKey={team => team.id} render={(team) => {
             const metric = teamMetrics.get(team.id);
             const viewerMembership = metric?.viewerMember;
             const teamUsers = metric?.users ?? [];

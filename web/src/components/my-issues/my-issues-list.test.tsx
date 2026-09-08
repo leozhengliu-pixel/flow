@@ -1,11 +1,20 @@
 import { render, waitFor } from '@testing-library/react'
 import { VirtuosoMockContext } from 'react-virtuoso'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
 import { MyIssuesList, type MyIssuesGroupData } from './my-issues-list'
 
 describe('MyIssuesList virtualization', () => {
+  it('keeps repeated issues in separate groups independently keyed', async () => {
+    const row: MyIssuesGroupData['issues'][number] = { id: 'shared', identifier: 'FLOW-1', title: 'Shared issue', href: '#shared', priority: 0, state: { id: 'started', name: 'In progress', type: 'started', color: '#f2c94c' }, createdAt: '', updatedAt: '' }
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const { container } = render(<I18nProvider><VirtuosoMockContext.Provider value={{ viewportHeight: 440, itemHeight: 44 }}><MyIssuesList groups={Array.from({ length: 50 }, (_, index) => ({ id: `group-${index}`, label: `Group ${index}`, issues: [row] }))} displayProperties={new Set(['id'])}/></VirtuosoMockContext.Provider></I18nProvider>)
+      await waitFor(() => expect(container.querySelectorAll('a').length).toBeGreaterThan(1))
+      expect(errors.mock.calls.flat().join(' ')).not.toContain('same key')
+    } finally { errors.mockRestore() }
+  })
   it('keeps large lists bounded to the visible viewport', async () => {
     const groups: MyIssuesGroupData[] = [{
       id: 'started',

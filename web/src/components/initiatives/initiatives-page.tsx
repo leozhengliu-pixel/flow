@@ -3,7 +3,7 @@ import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
 import { Bell, Check, ChevronRight, Clock3, Copy, Edit3, MessageSquare, MoreHorizontal, MousePointer2, Plus, Search, Send, Star, Trash2, X } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { Virtuoso } from 'react-virtuoso'
+import { VirtualColumnList } from '@/components/ui/virtual-column-list'
 import { Avatar } from '@/components/issue/issue-row'
 import { PriorityIcon } from '@/components/issue/issue-icons'
 import { ViewGlyph, ViewIconPicker } from '@/components/views/view-icon-picker'
@@ -101,7 +101,7 @@ export function InitiativesPage(props: Props) {
   const grouped = useMemo(() => groupInitiatives(visible, grouping, teams, labels), [grouping, labels, teams, visible])
   const listEntries = useMemo<InitiativeListEntry[]>(() => grouped.flatMap(group => [
     ...(grouping !== 'none' ? [{ key: `group:${group.key}`, kind: 'group' as const, label: group.label, count: group.items.length, entityName: ['owner','leadTeam','contributingTeam','label'].includes(grouping) }] : []),
-    ...group.items.map(initiative => ({ key: `initiative:${initiative.id}`, kind: 'initiative' as const, initiative })),
+    ...group.items.map(initiative => ({ key: `initiative:${group.key}:${initiative.id}`, kind: 'initiative' as const, initiative })),
   ]), [grouped, grouping])
   const displayDirty = grouping !== defaultGrouping || sort !== defaultSort || showTeamInitiatives !== defaultShowTeam || !sameStringSet(properties, new Set(defaultProperties))
   const resetDisplay = () => { setGrouping(defaultGrouping); setSort(defaultSort); setShowTeamInitiatives(defaultShowTeam); setProperties(new Set(defaultProperties)) }
@@ -143,6 +143,7 @@ export function InitiativesPage(props: Props) {
   })
   const renderInitiative = (initiative: Initiative) => <InitiativeRow columns={columns} grid={columnGrid} href={initiativePath(workspaceSlug, initiative)} initiative={initiative} initiativeUpdates={initiativeUpdates[initiative.id] ?? []} labels={labels} projects={projects} projectUpdates={projectUpdates} properties={properties} selected={selected.has(initiative.id)} teams={teams} users={users} onCreateLabel={onCreateLabel} onCreateReminder={remindAt => onCreateReminder(initiative.id, remindAt)} onDelete={onDelete} onOpen={onOpen} onOpenUpdates={() => setUpdatesInitiative(initiative)} onSelect={() => toggleSelected(initiative.id)} onUpdate={input => onUpdate(initiative.id, input)}/>
 
+  const tableHeader = visible.length > 0 && <div className="li-columns" style={{ gridTemplateColumns: columnGrid }}><span aria-hidden="true"/><span aria-hidden="true"/><button aria-label="Order by Name" onClick={() => setSort('name')} style={{ gridColumn: 3 }} type="button">Name<InitiativeSortIcon/></button>{columns.map((property, index) => <ColumnHeader gridColumn={index + 4} key={property} property={property} onSort={setSort}/>)}</div>
   return <main className="main-panel li-page">
     <header className="li-page-header">
       <button className="li-mobile-menu" onClick={onOpenSidebar} type="button">☰</button>
@@ -160,10 +161,11 @@ export function InitiativesPage(props: Props) {
     {advancedFilterEnabled ? <AdvancedFilterBar filters={filters} initiatives={initiatives} labels={labels} mode={filterMode} open={advancedFilterOpen} teams={teams} users={users} onChange={setFilters} onMode={setFilterMode} onOpenChange={setAdvancedFilterOpen} onRemove={() => { setFilters({}); setAdvancedFilterEnabled(false); setAdvancedFilterOpen(false) }}/> : Object.keys(filters).length > 0 && <div className="li-filter-chips">{Object.entries(filters).map(([key, value]) => <button key={key} onClick={() => setFilters(current => { const next = { ...current }; delete next[key as keyof FilterState]; return next })} type="button"><span>{filterLabel(key, value, users, teams, labels)}</span><X size={11}/></button>)}<button onClick={() => setFilters({})} type="button">Clear all</button></div>}
     <div className={`li-list-body${showDetails ? ' has-details' : ''}`}>
       <div className={`li-table${showDetails ? ' has-details' : ''}${listEntries.length > INITIATIVE_VIRTUALIZATION_THRESHOLD ? ' is-virtualized' : ''}`} style={{ '--li-extra-columns': columns.length } as React.CSSProperties}>
-        {visible.length > 0 && <div className="li-columns" style={{ gridTemplateColumns: columnGrid }}><span aria-hidden="true"/><span aria-hidden="true"/><button aria-label="Order by Name" onClick={() => setSort('name')} style={{ gridColumn: 3 }} type="button">Name<InitiativeSortIcon/></button>{columns.map((property, index) => <ColumnHeader gridColumn={index + 4} key={property} property={property} onSort={setSort}/>)}</div>}
+        {listEntries.length <= INITIATIVE_VIRTUALIZATION_THRESHOLD && tableHeader}
         {creating && <InitiativeCreateRow labels={labels} teams={teams} users={users} viewer={viewer} view={view} onCancel={() => setCreating(false)} onCreate={async input => { await onCreate(input); setCreating(false) }} onCreateLabel={onCreateLabel}/>}
-        {listEntries.length > INITIATIVE_VIRTUALIZATION_THRESHOLD ? <Virtuoso
-          className="li-virtual-list"
+        {listEntries.length > INITIATIVE_VIRTUALIZATION_THRESHOLD ? <VirtualColumnList
+          header={tableHeader}
+          scrollerClassName="li-virtual-list"
           data={listEntries}
           computeItemKey={(_index, entry) => entry.key}
           increaseViewportBy={{ top: 208, bottom: 520 }}
