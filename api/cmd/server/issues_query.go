@@ -180,9 +180,34 @@ func decodeIssueQuery(raw string) (issueQueryNode, error) {
 	if strings.TrimSpace(raw) == "" {
 		return issueQueryNode{}, nil
 	}
+	if len(raw) > 64<<10 {
+		return issueQueryNode{}, store.ErrIssueQuery
+	}
 	var node issueQueryNode
 	if err := json.Unmarshal([]byte(raw), &node); err != nil {
 		return issueQueryNode{}, err
+	}
+	budget := 1000
+	var validate func(issueQueryNode, int) bool
+	validate = func(n issueQueryNode, depth int) bool {
+		budget--
+		if depth > 8 || budget < 0 {
+			return false
+		}
+		for _, child := range n.And {
+			if !validate(child, depth+1) {
+				return false
+			}
+		}
+		for _, child := range n.Or {
+			if !validate(child, depth+1) {
+				return false
+			}
+		}
+		return true
+	}
+	if !validate(node, 0) {
+		return issueQueryNode{}, store.ErrIssueQuery
 	}
 	return node, nil
 }

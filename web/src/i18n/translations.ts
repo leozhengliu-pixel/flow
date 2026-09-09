@@ -1,4 +1,7 @@
 export const zhCN: Record<string, string> = {
+  "Older activity": "更早的动态",
+  "Newer activity": "更新的动态",
+  "Activity pagination": "动态分页",
   "Frequency": "频率",
   "Selected": "已选择",
   "Day of week": "星期",

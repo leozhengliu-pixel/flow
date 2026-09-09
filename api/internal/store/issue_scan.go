@@ -15,12 +15,12 @@ func (s *SQLiteStore) WalkIssueRecords(ctx context.Context, q IssueRecordQuery, 
 		return err
 	}
 	prefix, prefixArgs := issueAccessCTE(q)
-	metadata, ok := s.WorkspaceMetadata(q.Workspace)
+	reader, metadata, ok := s.workspaceReadSource(ctx, q.Workspace)
 	if !ok {
 		return ErrAuthForbidden
 	}
 	refs := newIssueReferences(metadata)
-	rows, err := s.db.QueryContext(ctx, prefix+"SELECT i.data FROM issue_records i WHERE "+where+" ORDER BY i.id", append(prefixArgs, args...)...)
+	rows, err := reader.QueryContext(ctx, prefix+"SELECT i.data FROM issue_records i WHERE "+where+" ORDER BY i.collection_order,i.id", append(prefixArgs, args...)...)
 	if err != nil {
 		return err
 	}

@@ -31,7 +31,12 @@ func (s *server) createPulseUpdateAttachment(kind string) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "storage unavailable")
 			return
 		}
-		size, err := storage.Put(r.Context(), objectKey, io.LimitReader(file, (20<<20)+1), header.Header.Get("Content-Type"))
+		upload, policyErr := s.checkUploadPolicy(workspaceKey(r), header.Filename, file)
+		if policyErr != nil {
+			writeError(w, http.StatusForbidden, policyErr.Error())
+			return
+		}
+		size, err := storage.Put(r.Context(), objectKey, io.LimitReader(upload, (20<<20)+1), header.Header.Get("Content-Type"))
 		if err != nil || size > 20<<20 {
 			_ = storage.Delete(r.Context(), objectKey)
 			if size > 20<<20 {

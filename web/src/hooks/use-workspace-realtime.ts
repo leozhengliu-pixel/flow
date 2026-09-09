@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { realtimeClientId, updatePresence } from '@/lib/api'
 import { loadRealtimeCursor, saveRealtimeCursor } from '@/lib/realtime-cache'
+import { RealtimeEventQueue } from '@/lib/realtime-event-queue'
 import type { BootstrapData, Presence, RealtimeEvent } from '@/types/flow'
 
 export function useWorkspaceRealtime({ workspaceKey, issueId, route, onRemoteSync }: {
@@ -13,9 +14,6 @@ export function useWorkspaceRealtime({ workspaceKey, issueId, route, onRemoteSyn
   const [presence, setPresence] = useState<Presence[]>([])
   const [connected, setConnected] = useState(false)
   const syncRef = useRef(onRemoteSync)
-  const timerRef = useRef<number | undefined>(undefined)
-  const queuedRef = useRef<RealtimeEvent[]>([])
-  const syncingRef = useRef(false)
   syncRef.current = onRemoteSync
 
   useEffect(() => {
@@ -27,27 +25,29 @@ export function useWorkspaceRealtime({ workspaceKey, issueId, route, onRemoteSyn
     const clientId = realtimeClientId()
     let stream: EventSource | undefined
     let disposed = false
+    let timer: number | undefined
+    let syncing = false
+    const queue = new RealtimeEventQueue()
     let cursorTimer: number | undefined
     let latestCursor = ''
     const drain = async () => {
-      if (syncingRef.current || !queuedRef.current.length) return
-      syncingRef.current = true
-      const event = queuedRef.current.shift()!
+      timer = undefined
+      if (disposed || syncing || !queue.length) return
+      syncing = true
+      const event = queue.shift()!
+      let failed = false
       try { await syncRef.current(event) }
-      finally { syncingRef.current = false; if (queuedRef.current.length) void drain() }
-    }
-    const schedule = (event: RealtimeEvent) => {
-      if (event.type === 'issue.updated' && event.aggregateId && queuedRef.current.every(item => item.type === 'issue.updated')) {
-        const index = queuedRef.current.findIndex(item => item.aggregateId === event.aggregateId)
-        if (index >= 0) queuedRef.current[index] = event
-        else queuedRef.current.push(event)
-      } else {
-        // A bootstrap resync for a broad event also includes any earlier issue
-        // patches, so it safely replaces the pending queue.
-        queuedRef.current = [event]
+      catch {
+        failed = true
+        queue.push({ id: event.id, type: 'resync', createdAt: event.createdAt }, 0)
+      } finally {
+        syncing = false
+        if (!disposed && queue.length) timer = window.setTimeout(() => void drain(), failed ? 1000 : 0)
       }
-      window.clearTimeout(timerRef.current)
-      timerRef.current = window.setTimeout(() => void drain(), 80)
+    }
+    const schedule = (event: RealtimeEvent, wireLength: number) => {
+      queue.push(event, wireLength)
+      if (timer === undefined && !syncing) timer = window.setTimeout(() => void drain(), 80)
     }
     const connect = (cursor?: string) => {
       if (disposed) return
@@ -73,18 +73,17 @@ export function useWorkspaceRealtime({ workspaceKey, issueId, route, onRemoteSyn
           return
         }
         if (event.type === 'presence.updated' || event.clientId === clientId) return
-        schedule(event)
+        schedule(event, message.data.length)
       }
     }
     connect(loadRealtimeCursor(workspaceKey))
     return () => {
       disposed = true
       stream?.close()
-      window.clearTimeout(timerRef.current)
+      window.clearTimeout(timer)
       window.clearTimeout(cursorTimer)
       setConnected(false)
       setPresence([])
-      queuedRef.current = []
     }
   }, [workspaceKey])
 

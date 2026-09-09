@@ -35,53 +35,20 @@ func (s *server) getUserSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) updateUserSettings(w http.ResponseWriter, r *http.Request) {
-	var input domain.UserSettings
-	if !decodeJSON(w, r, &input) {
+	var patch map[string]json.RawMessage
+	if !decodeJSON(w, r, &patch) {
 		return
 	}
 	actor := requestActor(s, r)
 	var updated domain.UserSettings
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "user_settings.updated", actor.ID, input, func(data *domain.Bootstrap) error {
-		current := data.UserSettings[actor.ID]
-		input.UserID = actor.ID
-		input.UpdatedAt = time.Now().UTC()
-		if input.Language == "" {
-			input.Language = current.Language
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "user_settings.updated", actor.ID, patch, func(data *domain.Bootstrap) error {
+		input, err := mergeSettingsPatch(data.UserSettings[actor.ID], patch, "userId", "updatedAt", "commitSigningKey", "personalSettingsVersion")
+		if err != nil {
+			return err
 		}
-		if input.HomeView == "" {
-			input.HomeView = current.HomeView
-		}
-		if input.FirstDay == "" {
-			input.FirstDay = current.FirstDay
-		}
-		if input.BranchFormat == "" {
-			input.BranchFormat = current.BranchFormat
-		}
-		if input.PersonalSettingsVersion == 0 {
-			input.PersonalSettingsVersion = current.PersonalSettingsVersion
-		}
-		if input.MergeStrategy == "" {
-			input.MergeStrategy = current.MergeStrategy
-		}
-		if input.CodeTheme == "" {
-			input.CodeTheme = current.CodeTheme
-		}
-		if input.CodeFont == "" {
-			input.CodeFont = current.CodeFont
-		}
-		if input.ReviewCommentsFilter == "" {
-			input.ReviewCommentsFilter = current.ReviewCommentsFilter
-		}
-		if input.GitAttachmentFormat == "" {
-			input.GitAttachmentFormat = current.GitAttachmentFormat
-		}
-		// Signing-key metadata is managed by the dedicated account endpoint;
-		// preserve it when callers patch unrelated preferences.
-		if input.CommitSigningKey == nil {
-			input.CommitSigningKey = current.CommitSigningKey
-		}
+		input.UserID, input.UpdatedAt = actor.ID, time.Now().UTC()
 		if input.PulseSchedule == "" {
-			input.PulseSchedule = current.PulseSchedule
+			input.PulseSchedule = "daily"
 		}
 		if !slices.Contains([]string{"daily", "weekly", "never"}, input.PulseSchedule) {
 			return errInvalid
@@ -226,12 +193,16 @@ func (s *server) getWorkspacePreferences(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Request) {
-	var input domain.WorkspaceSettings
-	if !decodeJSON(w, r, &input) {
+	var patch map[string]json.RawMessage
+	if !decodeJSON(w, r, &patch) {
 		return
 	}
 	var updated domain.WorkspaceSettings
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "workspace_preferences.updated", "workspace", input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "workspace_preferences.updated", "workspace", patch, func(data *domain.Bootstrap) error {
+		input, err := mergeSettingsPatch(data.WorkspaceSettings, patch, "updatedAt")
+		if err != nil {
+			return err
+		}
 		if input.SessionDurationDays < 1 || input.SessionDurationDays > 365 {
 			return errInvalid
 		}

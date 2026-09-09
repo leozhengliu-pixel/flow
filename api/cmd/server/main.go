@@ -160,6 +160,7 @@ func runHealthcheck() int {
 }
 
 func newHandler(s *server) http.Handler {
+	legacyReadGate := make(chan struct{}, 1)
 	if s.importSlots == nil {
 		s.importSlots = make(chan struct{}, 2)
 	}
@@ -452,7 +453,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/exports", s.listExports)
 	mux.HandleFunc("GET /api/exports/{id}", s.getExport)
 	mux.HandleFunc("POST /api/exports/{id}/retry", s.retryExport)
-	mux.HandleFunc("GET /api/exports/{id}/download", s.downloadExport)
+	mux.Handle("GET /api/exports/{id}/download", serializeLegacyBootstrap(http.HandlerFunc(s.downloadExport), legacyReadGate))
 	mux.HandleFunc("GET /api/migrations", s.listMigrations)
 	mux.HandleFunc("POST /api/migrations/preview", s.previewMigration)
 	mux.HandleFunc("GET /api/migrations/{id}", s.getMigration)
@@ -531,7 +532,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/ai/conversations", s.createAIConversation)
 	mux.HandleFunc("PATCH /api/ai/conversations/{id}", s.updateAIConversation)
 	mux.HandleFunc("POST /api/ai/prompt-progress", s.createAIPromptProgress)
-	mux.Handle("GET /api/bootstrap", serializeLegacyBootstrap(http.HandlerFunc(s.bootstrap)))
+	mux.Handle("GET /api/bootstrap", serializeLegacyBootstrap(http.HandlerFunc(s.bootstrap), legacyReadGate))
 	mux.HandleFunc("PUT /api/workspace/project-display-default", s.updateProjectDisplayDefault)
 	mux.HandleFunc("PUT /api/workspace/settings", s.updateWorkspaceSettings)
 	mux.HandleFunc("GET /api/notifications", s.listNotifications)
@@ -748,34 +749,32 @@ func (s *server) defaultWorkspaceRegion() string {
 func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 	s.maintainCycleSchedule(r.Context(), workspaceKey(r))
 	s.maintainAdvancedSchedules(r.Context(), workspaceKey(r))
+	ctx, release, err := s.store.BeginWorkspaceRead(r.Context(), workspaceKey(r))
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
+	defer release()
+	r = r.WithContext(ctx)
+	userID := ""
 	if !s.authDisabled {
-		data, ok, err := s.store.BootstrapForUser(r.Context(), workspaceKey(r), authUser(r).ID)
-		if err != nil {
-			writeError(w, http.StatusForbidden, "You don't have access to this workspace")
-			return
-		}
-		if !ok {
-			writeError(w, http.StatusNotFound, "workspace not found")
-			return
-		}
-		filterBootstrapForAPIKey(&data, r)
-		if err := s.filterPreferenceIssueTeams(r, &data); err != nil {
-			issueRecordsError(w, err)
-			return
-		}
-		sanitizeBootstrap(&data)
-		writeBootstrapJSON(w, data)
+		userID = authUser(r).ID
+	}
+	data, err := s.store.BootstrapOutline(r.Context(), workspaceKey(r), userID)
+	if err != nil {
+		issueRecordsError(w, err)
 		return
 	}
-	data, ok := s.store.BootstrapFor(workspaceKey(r))
-	if !ok {
-		writeError(w, http.StatusNotFound, "workspace not found")
+	filterBootstrapForAPIKey(&data, r)
+	if err := s.filterPreferenceIssueTeams(r, &data); err != nil {
+		issueRecordsError(w, err)
 		return
 	}
-	data.ViewerRole = "admin"
-	materializeDevelopmentMembers(&data)
+	if s.authDisabled {
+		materializeDevelopmentMembers(&data)
+	}
 	sanitizeBootstrap(&data)
-	writeBootstrapJSON(w, data)
+	s.writeStoredBootstrap(w, r, data)
 }
 
 func sanitizeBootstrap(data *domain.Bootstrap) {
@@ -4088,7 +4087,12 @@ func (s *server) createAttachment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "storage unavailable")
 		return
 	}
-	size, copyErr := storage.Put(r.Context(), safeName, io.LimitReader(file, (20<<20)+1), header.Header.Get("Content-Type"))
+	upload, policyErr := s.checkUploadPolicy(workspaceKey(r), header.Filename, file)
+	if policyErr != nil {
+		writeError(w, http.StatusForbidden, policyErr.Error())
+		return
+	}
+	size, copyErr := storage.Put(r.Context(), safeName, io.LimitReader(upload, (20<<20)+1), header.Header.Get("Content-Type"))
 	if copyErr != nil {
 		_ = storage.Delete(r.Context(), safeName)
 		writeError(w, http.StatusInternalServerError, "upload failed")
@@ -4474,6 +4478,15 @@ func applyNotificationUpdate(notification *domain.Notification, input domain.Not
 }
 
 func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.IssueUpdateInput) (map[string]string, error) {
+	if input.StateID != nil && issue.State.Type == "triage" && teamSettings(data, issue.Team.ID).TriageRequirePriority {
+		priority := issue.Priority
+		if input.Priority != nil {
+			priority = *input.Priority
+		}
+		if next := stateForTeam(data, issue.Team.ID, *input.StateID); next != nil && next.Type != "triage" && priority == 0 {
+			return nil, fmt.Errorf("%w: set a priority before leaving triage", errInvalid)
+		}
+	}
 	if index := slices.IndexFunc(data.Teams, func(team domain.Team) bool { return team.ID == issue.Team.ID }); index >= 0 && data.Teams[index].RetiredAt != nil {
 		return nil, fmt.Errorf("%w: team is retired", errInvalid)
 	}

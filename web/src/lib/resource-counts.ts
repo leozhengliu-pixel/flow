@@ -18,12 +18,15 @@ export function deriveResourceCounts(data: BootstrapData): BootstrapData {
   }
   for (const initiative of data.initiatives) increment(initiative.labelIds ?? [])
 
-  const labels = data.labels.map(label => ({ ...label, issueCount: labelCounts.get(label.id) ?? 0 }))
+  const labels = data.labels.map(label => { const count = labelCounts.get(label.id) ?? 0; return label.issueCount === count ? label : { ...label, issueCount: count } })
   const labelsById = new Map<string, IssueLabel>(labels.map(label => [label.id, label]))
   return {
     ...data,
     labels,
-    issues: data.issues.map(issue => ({ ...issue, labels: issue.labels.map(label => labelsById.get(label.id) ?? label) })),
-    projects: data.projects.map(project => ({ ...project, issueCount: projectIssueCounts.get(project.id) ?? 0 })),
+    issues: data.issues.map(issue => {
+      if (issue.labels.every(label => !labelsById.has(label.id) || labelsById.get(label.id) === label)) return issue
+      return { ...issue, labels: issue.labels.map(label => labelsById.get(label.id) ?? label) }
+    }),
+    projects: data.projects.map(project => { const count = projectIssueCounts.get(project.id) ?? 0; return project.issueCount === count ? project : { ...project, issueCount: count } }),
   }
 }

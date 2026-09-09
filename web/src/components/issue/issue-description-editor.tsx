@@ -9,6 +9,7 @@ import { Markdown } from '@tiptap/markdown'
 import { getSchema } from '@tiptap/core'
 import type { EditorState } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
+import { handleEmoticonInput } from '@/components/editor/emoticon-input'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -131,6 +132,7 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
     content: collaborationSession ? undefined : initial.content,
     contentType: initial.contentType,
     editorProps: {
+      handleTextInput: handleEmoticonInput,
       attributes: {
         class: 'flow-prosemirror description-editor',
         role: 'textbox',

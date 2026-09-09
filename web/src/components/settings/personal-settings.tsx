@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import * as Popover from "@radix-ui/react-popover";
 import { toast } from "sonner";
+import { NotificationChannelSettings } from './notification-channel-settings';
 import { NavLink } from "react-router-dom";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -84,6 +85,8 @@ export type PersonalSettingsValues = Record<string, string | boolean>;
 
 type Props = {
   page: SettingsPageId;
+  notificationChannel?: 'desktop'|'mobile'|'email'|'slack';
+  onNavigateNotification?: (channel?: 'desktop'|'mobile'|'email'|'slack') => void;
   apiKeyMode?: "new" | "detail" | "edit";
   apiKeyId?: string;
   signingKeyMode?: "new";
@@ -234,6 +237,30 @@ const PERSONAL_ZH: Record<string, string> = {
   "Email when our DPA changes": "DPA 变更时发送邮件",
   "Email notifications": "邮件通知",
   "Desktop notifications": "桌面通知",
+  "Applies across your browsers with notifications enabled": "适用于所有已启用通知的浏览器",
+  "Notifications delivered to your email address": "发送至你的邮箱的通知",
+  "General notifications": "通用通知",
+  "Feature notifications": "功能通知",
+  "Assignments, unassignments, and membership changes": "指派、取消指派和成员变更",
+  "Changes to status, priority, and blocking relationships": "状态、优先级和阻塞关系变更",
+  "Comments, replies, and thread resolutions": "评论、回复和讨论解决状态",
+  "Mentions in comments or content": "评论或正文中的提及",
+  "Emoji reactions to your content": "对你发布内容的表情回应",
+  "Activity on resources you subscribe to": "你订阅的资源动态",
+  "Changes to document content and subscriptions": "文档内容和订阅变更",
+  "Project and initiative updates": "项目和目标更新",
+  "Reminders, due dates, and SLA updates": "提醒、截止日期和 SLA 更新",
+  "Messages and failures from loops": "Loops 的消息和运行失败通知",
+  "OAuth apps and integrations": "OAuth 应用和集成",
+  "Requests from your customers": "来自客户的需求",
+  "Issues added to triage": "进入分流的事项",
+  "Browser notification permission": "浏览器通知权限",
+  "Enable browser notifications": "启用浏览器通知",
+  "Email delivery": "邮件投递方式",
+  "Immediately": "立即发送",
+  "Digest": "摘要",
+  "Send urgent notifications immediately": "立即发送紧急通知",
+  "Devices": "设备",
   "Enable email notifications": "启用邮件通知",
   "Enable desktop notifications": "启用桌面通知",
   "Notification sounds": "通知声音",
@@ -992,7 +1019,7 @@ function Profile({ data, onReload, onBack, p }: PersonalProps) {
   );
 }
 
-function Notifications({ data, values, setValue, onReload, p }: PersonalProps) {
+function Notifications({ data, values, setValue, onReload, p, notificationChannel, onNavigateNotification }: PersonalProps) {
   const { formatDate } = useI18n();
   const initial = useMemo(
     () =>
@@ -1006,7 +1033,9 @@ function Notifications({ data, values, setValue, onReload, p }: PersonalProps) {
   );
   const [channel, setChannel] = useState<
     "desktop" | "mobile" | "email" | "slack" | null
-  >(null);
+  >(notificationChannel ?? null);
+  useEffect(() => setChannel(notificationChannel ?? null),[notificationChannel]);
+  const openChannel = (next: 'desktop'|'mobile'|'email'|'slack'|null) => { setChannel(next); onNavigateNotification?.(next ?? undefined) };
   useEffect(() => setPreferences(initial), [initial]);
   useEffect(() => {
     void listPushSubscriptions()
@@ -1028,6 +1057,17 @@ function Notifications({ data, values, setValue, onReload, p }: PersonalProps) {
       );
     }
   };
+  if (channel === 'desktop' || channel === 'email') return <>
+    <NotificationChannelSettings channel={channel} preferences={preferences} save={save} onBack={()=>openChannel(null)} p={p}/>
+    {channel === 'desktop' && <PersonalSection title={p('Devices')}>
+      {pushSubscriptions.map(item => <PersonalRow key={item.id} icon={<Monitor />} title={<span data-i18n-ignore>{item.userAgent || p('Web browser')}</span>} description={`${p('Enabled')} ${formatDate(item.createdAt, { dateStyle: 'medium' })}`}>
+        <Action danger onClick={() => void deletePushSubscription(item.id)
+          .then(() => listPushSubscriptions().then(setPushSubscriptions))
+          .catch(error => toast.error(error instanceof Error ? error.message : p('Could not remove device')))}>{p('Remove')}</Action>
+      </PersonalRow>)}
+      {!pushSubscriptions.length && <PersonalRow title={p('No browser push devices')} description={p('Browser devices appear here after notification permission is granted.')} />}
+    </PersonalSection>}
+  </>;
   return (
     <>
       <PersonalPageTitle>{p("Notifications")}</PersonalPageTitle>
@@ -1041,7 +1081,7 @@ function Notifications({ data, values, setValue, onReload, p }: PersonalProps) {
           icon={<Monitor />}
           title={p("Desktop")}
           status={p(preferences.desktop.enabled ? "Enabled" : "Disabled")}
-          onClick={() => setChannel("desktop")}
+          onClick={() => openChannel("desktop")}
         />
         <NotificationChannel
           icon={<Smartphone />}
@@ -1057,7 +1097,7 @@ function Notifications({ data, values, setValue, onReload, p }: PersonalProps) {
               ? "Enabled for all notifications"
               : "Disabled",
           )}
-          onClick={() => setChannel("email")}
+          onClick={() => openChannel("email")}
         />
         <NotificationChannel
           icon={<MessageCircle />}
@@ -1146,93 +1186,6 @@ function Notifications({ data, values, setValue, onReload, p }: PersonalProps) {
           />
         </PersonalRow>
       </PersonalSection>
-      <Dialog
-        open={channel !== null}
-        onOpenChange={(open) => {
-          if (!open) setChannel(null);
-        }}
-      >
-        <DialogContent className="personal-dialog notification-dialog">
-          <DialogTitle>
-            {channel === "email"
-              ? p("Email notifications")
-              : p("Desktop notifications")}
-          </DialogTitle>
-          {channel && channel !== "mobile" && channel !== "slack" && (
-            <>
-              <PersonalRow title={p(`Enable ${channel} notifications`)}>
-                <SettingsToggle
-                  label={p(`Enable ${channel} notifications`)}
-                  checked={preferences[channel].enabled}
-                  onChange={(enabled) =>
-                    void save({
-                      ...preferences,
-                      [channel]: { ...preferences[channel], enabled },
-                    })
-                  }
-                />
-              </PersonalRow>
-              {channel === "desktop" && (
-                <>
-                  <PersonalRow title={p("Notification sounds")}>
-                    <SettingsToggle
-                      label={p("Notification sounds")}
-                      checked={preferences.soundEnabled}
-                      onChange={(soundEnabled) =>
-                        void save({ ...preferences, soundEnabled })
-                      }
-                    />
-                  </PersonalRow>
-                  {pushSubscriptions.map((item) => (
-                    <PersonalRow
-                      key={item.id}
-                      icon={<Monitor />}
-                      title={
-                        <span data-i18n-ignore>
-                          {item.userAgent || p("Web browser")}
-                        </span>
-                      }
-                      description={`${p("Enabled")} ${formatDate(item.createdAt, { dateStyle: "medium" })}`}
-                    >
-                      <Action
-                        danger
-                        onClick={() =>
-                          void deletePushSubscription(item.id)
-                            .then(() =>
-                              listPushSubscriptions().then(
-                                setPushSubscriptions,
-                              ),
-                            )
-                            .catch((error) =>
-                              toast.error(
-                                error instanceof Error
-                                  ? error.message
-                                  : p("Could not remove device"),
-                              ),
-                            )
-                        }
-                      >
-                        {p("Remove")}
-                      </Action>
-                    </PersonalRow>
-                  ))}
-                  {!pushSubscriptions.length && (
-                    <PersonalRow
-                      title={p("No browser push devices")}
-                      description={p(
-                        "Browser devices appear here after notification permission is granted.",
-                      )}
-                    />
-                  )}
-                </>
-              )}
-              <footer>
-                <Action onClick={() => setChannel(null)}>{p("Done")}</Action>
-              </footer>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

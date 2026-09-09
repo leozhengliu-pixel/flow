@@ -9,6 +9,7 @@ coverage/
 .playwright-cli/
 artifacts/
 docs-audit/
+docs/audits/
 # Keep local audit reports outside the repository.
 docs/*-audit*.md
 docs/*-measurement*.md

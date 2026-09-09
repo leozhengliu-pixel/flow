@@ -121,7 +121,7 @@ func (s *server) agentChat(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "one or more selected issues were not found")
 		return
 	}
-	messages := []agentChatMessage{{Role: "system", Content: agentSystemPrompt(data.Workspace.Name, issues)}}
+	messages := []agentChatMessage{{Role: "system", Content: workspaceAgentSystemPrompt(data, issues, nil)}}
 	for _, message := range input.History {
 		message.Role = strings.ToLower(strings.TrimSpace(message.Role))
 		message.Content = strings.TrimSpace(message.Content)

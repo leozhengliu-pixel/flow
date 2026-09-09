@@ -237,11 +237,13 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	data.Issues = contextData.Issues
 	issues := selectedAgentIssues(data.Issues, session.IssueIDs)
 	skills := selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)
-	messages := agentProviderHistory(*session, agentSystemPrompt(data.Workspace.Name, issues, skills))
+	messages := agentProviderHistory(*session, workspaceAgentSystemPrompt(data, issues, skills))
 	messageID := fmt.Sprintf("agent_message_%d", time.Now().UnixNano())
 	started := time.Now()
 	parts := []domain.AgentMessagePart{}
 	partIndex := map[string]int{}
+	partText := map[string]*strings.Builder{}
+	streamBytes := 0
 	if writer != nil {
 		snapshot := *session
 		if err := writer.send(agentStreamEvent{Type: "session.started", Session: &snapshot, MessageID: messageID}); err != nil {
@@ -250,6 +252,10 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	}
 
 	emit := func(event agentProviderEvent) error {
+		streamBytes += len(event.Delta)
+		if streamBytes > 8<<20 || len(parts) > 1024 {
+			return fmt.Errorf("agent response exceeds the stream budget")
+		}
 		switch event.Type {
 		case "text.delta", "reasoning.delta":
 			partType := strings.TrimSuffix(event.Type, ".delta")
@@ -259,9 +265,18 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				partIndex[partType] = index
 				parts = append(parts, domain.AgentMessagePart{ID: fmt.Sprintf("%s_%s", messageID, partType), Type: partType, Status: "running"})
 			}
-			parts[index].Text += event.Delta
+			builder := partText[partType]
+			if builder == nil {
+				builder = &strings.Builder{}
+				partText[partType] = builder
+			}
+			builder.WriteString(event.Delta)
+			parts[index].Text = builder.String()
 			if writer != nil {
 				part := parts[index]
+				if event.Type == "text.delta" {
+					part.Text = ""
+				}
 				return writer.send(agentStreamEvent{Type: event.Type, MessageID: messageID, Delta: event.Delta, Part: &part})
 			}
 		case "tool.started", "tool.delta":
@@ -439,7 +454,17 @@ func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call d
 
 func agentProviderHistory(session domain.AgentSession, system string) []agentProviderMessage {
 	messages := []agentProviderMessage{{Role: "system", Content: system}}
-	for _, message := range session.Messages {
+	start := len(session.Messages)
+	bytes := len(system)
+	for start > 0 && len(session.Messages)-start < 32 {
+		raw, _ := json.Marshal(session.Messages[start-1])
+		if start < len(session.Messages) && bytes+len(raw) > 8<<20 {
+			break
+		}
+		bytes += len(raw)
+		start--
+	}
+	for _, message := range session.Messages[start:] {
 		providerMessage := agentProviderMessage{Role: message.Role, Content: message.Content}
 		for _, part := range message.Parts {
 			if part.ToolCall != nil {
