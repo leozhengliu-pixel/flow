@@ -23,7 +23,7 @@ jobs:
           expected="v$(node -p "require('./web/package.json').version")"
           test "${GITHUB_REF_NAME}" = "${expected}" || { echo "Tag ${GITHUB_REF_NAME} does not match ${expected}"; exit 1; }
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           fail_on_unmatched_files: true
