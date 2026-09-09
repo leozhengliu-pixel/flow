@@ -83,7 +83,7 @@ func applyLoopInput(loop *domain.Loop, input loopInput) {
 }
 
 func (s *server) listLoops(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.BootstrapFor(workspaceKey(r))
+	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -92,7 +92,7 @@ func (s *server) listLoops(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) getLoop(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.BootstrapFor(workspaceKey(r))
+	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return

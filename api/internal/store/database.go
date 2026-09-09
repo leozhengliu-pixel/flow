@@ -149,11 +149,24 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		maxTransactionBytes = 32 << 20
 	}
 	s := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: driver, maxTransactionBytes: maxTransactionBytes}, dialect: driver, fixtureProfile: strings.TrimSpace(config.FixtureProfile), fixturePassword: config.FixturePassword, maxStateBytes: maxStateBytes}
+	s.lifecycle, s.stopLifecycle = context.WithCancel(context.Background())
 	if err := s.migrate(context.Background()); err != nil {
 		db.Close()
 		return nil, err
 	}
 	if err := s.ensureIssueRecords(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.ensureAttachmentIndex(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.ensureIssueListProjection(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.ensureIssueSearchIndex(context.Background()); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -209,6 +222,18 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		return nil, err
 	}
 	if err := s.migrateIssueAttributes(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.migrateAttachmentIndex(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.migrateIssueListProjection(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.migrateIssueSearchIndex(context.Background()); err != nil {
 		db.Close()
 		return nil, err
 	}

@@ -230,6 +230,11 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	if err != nil {
 		return domain.AgentSession{}, err
 	}
+	contextData, err := s.agentIssueContext(r, session.IssueIDs)
+	if err != nil {
+		return domain.AgentSession{}, err
+	}
+	data.Issues = contextData.Issues
 	issues := selectedAgentIssues(data.Issues, session.IssueIDs)
 	skills := selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)
 	messages := agentProviderHistory(*session, agentSystemPrompt(data.Workspace.Name, issues, skills))

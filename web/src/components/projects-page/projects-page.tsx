@@ -46,6 +46,7 @@ export type ProjectMutationInput = {
   slackChannelId?: string
   slackChannelName?: string
   updateCadence?: Project['updateCadence']
+  updateSchedule?: Project['updateSchedule']
   archived?: boolean
 }
 

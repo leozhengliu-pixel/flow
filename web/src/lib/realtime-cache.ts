@@ -38,6 +38,10 @@ function readLocal(workspaceKey: string): RealtimeCacheRecord | undefined {
   }
 }
 
+export function loadRealtimeCursor(workspaceKey: string): string | undefined {
+  return readLocal(workspaceKey)?.cursor
+}
+
 function writeLocal(record: RealtimeCacheRecord) {
   if (typeof localStorage === 'undefined') return
   try {

@@ -338,6 +338,7 @@ type DocumentTemplate struct {
 
 // Issue follows Flow's public GraphQL entity naming and relationship shape.
 type Issue struct {
+	IsSummary          bool                `json:"isSummary,omitempty"`
 	ID                 string              `json:"id"`
 	Version            int64               `json:"version"`
 	Identifier         string              `json:"identifier"`
@@ -607,6 +608,7 @@ type Project struct {
 	Comments             []Comment                    `json:"comments"`
 	DescriptionRevisions []ProjectDescriptionRevision `json:"descriptionRevisions"`
 	UpdateCadence        string                       `json:"updateCadence"`
+	UpdateSchedule       *ProjectUpdateSchedule       `json:"updateSchedule,omitempty"`
 	StartDate            *string                      `json:"startDate,omitempty"`
 	StartDateResolution  string                       `json:"startDateResolution,omitempty"`
 	TargetDate           *string                      `json:"targetDate,omitempty"`
@@ -1755,6 +1757,7 @@ type ProjectMutationInput struct {
 	SlackChannelID       *string                          `json:"slackChannelId,omitempty"`
 	SlackChannelName     *string                          `json:"slackChannelName,omitempty"`
 	UpdateCadence        *string                          `json:"updateCadence,omitempty"`
+	UpdateSchedule       *ProjectUpdateSchedule           `json:"updateSchedule,omitempty"`
 	Archived             *bool                            `json:"archived,omitempty"`
 	TemplateID           string                           `json:"templateId,omitempty"`
 }

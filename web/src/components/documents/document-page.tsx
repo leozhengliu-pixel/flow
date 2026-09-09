@@ -2,6 +2,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
 import { Bell, Check, ChevronDown, Copy, FileText, History, Link2, MessageCircle, MoreHorizontal, Send, SlidersHorizontal, Star, Trash2, Users, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { refreshResourcePreferences } from '@/lib/resource-preferences'
 import { toast } from 'sonner'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -65,8 +66,8 @@ export function DocumentPage({ data, document, onReload, onBack }: { data: Boots
   const restoreRevision=async()=>{if(!selectedRevision||selectedRevisionCurrent)return;const restored=await restoreDocumentRevision(document.id,selectedRevision.id);setTitle(restored.title);setBody({value:restored.content,state:restored.contentData?JSON.stringify(restored.contentData):restored.contentState});setEditorVersion(value=>value+1);setHistoryOpen(false);await onReload();toast.success('Content has been restored.')}
   const toggleProject=async(id:string)=>{const next=document.projectIds.includes(id)?document.projectIds.filter(value=>value!==id):[...document.projectIds,id];await updateDocument(document.id,{projectIds:next});await onReload()}
   const copyDocumentURL=async()=>{if(copyBusy)return;setCopyBusy(true);try{await navigator.clipboard.writeText(new URL(documentPath(data.workspace.urlKey,document),location.origin).href);toast.success(t('Copied document link to clipboard'))}catch(error){toast.error(error instanceof Error?error.message:t('Could not copy document link'))}finally{setCopyBusy(false)}}
-  const toggleFavorite=async()=>{if(favoriteBusy)return;setFavoriteBusy(true);try{if(favorite)await removeFavorite('document',document.id);else await addFavorite('document',document.id);await onReload()}catch(error){toast.error(error instanceof Error?error.message:t('Could not update favorite'))}finally{setFavoriteBusy(false)}}
-  const toggleSubscription=async()=>{if(subscriptionBusy)return;setSubscriptionBusy(true);try{if(subscribed)await removeSubscription('document',document.id);else await addSubscription('document',document.id);await onReload();toast.success(t(subscribed?'Unsubscribed from document':'Subscribed to document'))}catch(error){toast.error(error instanceof Error?error.message:t('Could not update document subscription'))}finally{setSubscriptionBusy(false)}}
+  const toggleFavorite=async()=>{if(favoriteBusy)return;setFavoriteBusy(true);try{if(favorite)await removeFavorite('document',document.id);else await addFavorite('document',document.id);await refreshResourcePreferences(data.workspace.urlKey)}catch(error){toast.error(error instanceof Error?error.message:t('Could not update favorite'))}finally{setFavoriteBusy(false)}}
+  const toggleSubscription=async()=>{if(subscriptionBusy)return;setSubscriptionBusy(true);try{if(subscribed)await removeSubscription('document',document.id);else await addSubscription('document',document.id);await refreshResourcePreferences(data.workspace.urlKey);toast.success(t(subscribed?'Unsubscribed from document':'Subscribed to document'))}catch(error){toast.error(error instanceof Error?error.message:t('Could not update document subscription'))}finally{setSubscriptionBusy(false)}}
   const canManageAccess=data.viewer.id===document.creator.id||data.viewerRole==='admin'||String(data.viewerRole)==='owner'
   const documentMembers=data.members??[]
   const accessSubjects=[{type:'workspace',id:data.workspace.id,label:t('Everyone in workspace'),entity:false},...data.teams.map(team=>({type:'team',id:team.id,label:team.name,entity:true})),...documentMembers.map(member=>({type:'user',id:member.user.id,label:member.user.displayName,entity:true}))]

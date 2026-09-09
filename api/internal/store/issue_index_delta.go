@@ -11,6 +11,12 @@ import (
 // Index changes are set differences, not delete-and-reinsert operations. A
 // title edit must not generate row events for every label and subscriber.
 func syncIssueIndexes(ctx context.Context, tx *sqlTx, workspace string, issues []domain.Issue) error {
+	if err := writeIssueSearchIndex(ctx, tx, workspace, issues); err != nil {
+		return err
+	}
+	if err := writeAttachmentIndex(ctx, tx, workspace, issues); err != nil {
+		return err
+	}
 	specs := []struct {
 		table      string
 		columns    []string

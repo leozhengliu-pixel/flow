@@ -94,7 +94,8 @@ func TestLegacyWritesAndRealtimeDoNotReadUnrelatedIssues(t *testing.T) {
 // Explicit opt-in keeps the normal test suite and developer disks small.
 // Run with GOMEMLIMIT=650MiB FLOW_TEST_ISSUE_MEMORY=1 and -count=1.
 func TestLegacyIssueMemoryAt75675Rows(t *testing.T) {
-	if os.Getenv("FLOW_TEST_ISSUE_MEMORY") != "1" {
+	preferencesOnly := os.Getenv("FLOW_TEST_PREFERENCE_MEMORY") == "1"
+	if os.Getenv("FLOW_TEST_ISSUE_MEMORY") != "1" && !preferencesOnly {
 		t.Skip("opt-in memory regression")
 	}
 	repo, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "memory.db"))
@@ -103,6 +104,14 @@ func TestLegacyIssueMemoryAt75675Rows(t *testing.T) {
 	}
 	defer repo.Close()
 	data := repo.Bootstrap()
+	if preferencesOnly {
+		if err := repo.MutateWorkspace(context.Background(), data.Workspace.URLKey, "test.notification", "", nil, func(next *domain.Bootstrap) error {
+			next.Notifications = append(next.Notifications, domain.Notification{ID: "memory-notification", RecipientID: data.Viewer.ID, CreatedAt: time.Now().UTC()})
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	base := data.Issues[0]
 	base.Description = strings.Repeat("x", 2048)
 	base.Labels, base.SubscriberIDs, base.SubIssueIDs, base.Relations = nil, nil, nil, nil
@@ -148,12 +157,34 @@ func TestLegacyIssueMemoryAt75675Rows(t *testing.T) {
 		var held runtime.MemStats
 		runtime.ReadMemStats(&held)
 		start := time.Now()
+		jobs := []struct{ method, path, body string }{
+			{"PATCH", "/api/issues/memory-000000000", `{"title":"Bounded memory update"}`},
+			{"POST", "/api/realtime/presence", `{"clientId":"memory-client","issueId":"memory-000000000"}`},
+			{"GET", "/api/search?q=Test&types=project", ""},
+			{"GET", "/api/notifications", ""},
+			{"GET", "/api/teams/" + data.Teams[0].ID + "/settings", ""},
+			{"PATCH", "/api/projects/" + data.Projects[0].ID, `{"summary":"Bounded project summary"}`},
+			{"GET", "/api/issues?limit=1&projection=list", ""},
+		}
+		if preferencesOnly {
+			jobs = []struct{ method, path, body string }{
+				{"PUT", "/api/favorites/issue/memory-000000000", `{}`},
+				{"PATCH", "/api/favorites/issue/memory-000000000", `{"position":2}`},
+				{"PUT", "/api/subscriptions/issue/memory-000000000", `{}`},
+				{"GET", "/api/resource-preferences", ``},
+				{"DELETE", "/api/favorites/issue/memory-000000000", ``},
+				{"DELETE", "/api/subscriptions/issue/memory-000000000", ``},
+				{"PATCH", "/api/notifications/memory-notification", `{"favorite":true}`},
+				{"PATCH", "/api/notifications/memory-notification", `{"favorite":false}`},
+			}
+		}
 		for i := 0; i < 20; i++ {
-			for _, job := range []struct{ method, path, body string }{
-				{"PATCH", "/api/issues/memory-000000000", `{"title":"Bounded memory update"}`},
-				{"POST", "/api/realtime/presence", `{"clientId":"memory-client","issueId":"memory-000000000"}`},
-			} {
-				r, _ := http.NewRequest(job.method, host.URL+job.path+"?workspace=test-workspace", strings.NewReader(job.body))
+			for _, job := range jobs {
+				separator := "?"
+				if strings.Contains(job.path, "?") {
+					separator = "&"
+				}
+				r, _ := http.NewRequest(job.method, host.URL+job.path+separator+"workspace=test-workspace", strings.NewReader(job.body))
 				r.Header.Set("Content-Type", "application/json")
 				response, err := client.Do(r)
 				if err != nil {
@@ -161,14 +192,14 @@ func TestLegacyIssueMemoryAt75675Rows(t *testing.T) {
 				}
 				io.Copy(io.Discard, response.Body)
 				response.Body.Close()
-				if response.StatusCode != 200 {
+				if response.StatusCode != 200 && response.StatusCode != 204 {
 					t.Fatalf("%s status=%d", job.path, response.StatusCode)
 				}
 			}
 		}
 		var after runtime.MemStats
 		runtime.ReadMemStats(&after)
-		t.Logf("rows=%d SSE_connections=4 heap_before=%d heap_with_SSE=%d allocated_40_requests=%d elapsed=%s", total, before.HeapAlloc, held.HeapAlloc, after.TotalAlloc-held.TotalAlloc, time.Since(start))
+		t.Logf("rows=%d SSE_connections=4 heap_before=%d heap_with_SSE=%d requests=%d allocated_bytes=%d elapsed=%s", total, before.HeapAlloc, held.HeapAlloc, 20*len(jobs), after.TotalAlloc-held.TotalAlloc, time.Since(start))
 		for _, response := range streams {
 			response.Body.Close()
 		}
@@ -176,7 +207,7 @@ func TestLegacyIssueMemoryAt75675Rows(t *testing.T) {
 		if held.HeapAlloc > before.HeapAlloc+32<<20 {
 			t.Fatal("SSE retained a workspace-sized collection")
 		}
-		if total == 75675 {
+		if total == 75675 && !preferencesOnly {
 			start := time.Now()
 			response, err := client.Get(host.URL + "/api/bootstrap?workspace=test-workspace")
 			if err != nil {
@@ -188,6 +219,11 @@ func TestLegacyIssueMemoryAt75675Rows(t *testing.T) {
 				t.Fatalf("bootstrap status=%d error=%v", response.StatusCode, err)
 			}
 			t.Logf("legacy_bootstrap_bytes=%d elapsed=%s", bytes, time.Since(start))
+			if peak, err := os.ReadFile("/sys/fs/cgroup/memory.peak"); err == nil {
+				t.Logf("container_memory_peak_bytes=%s", strings.TrimSpace(string(peak)))
+			}
+		}
+		if preferencesOnly {
 			if peak, err := os.ReadFile("/sys/fs/cgroup/memory.peak"); err == nil {
 				t.Logf("container_memory_peak_bytes=%s", strings.TrimSpace(string(peak)))
 			}

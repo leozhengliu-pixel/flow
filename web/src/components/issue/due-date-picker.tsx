@@ -30,7 +30,7 @@ export function DueDatePicker({ value, onChange, trigger, triggerClassName = 'du
   </Popover.Root>
 }
 
-export function DueDateCommand({ value, onSelect, className = '' }: { value?: string; onSelect: (value: string) => Promise<void>; className?: string }) {
+export function DueDateCommand({ value, onSelect, className = '', autoFocus = true, extraOptions = [] }: { value?: string; onSelect: (value: string) => Promise<void>; className?: string; autoFocus?: boolean; extraOptions?: {label: string; value: string}[] }) {
   const [query, setQuery] = useState('')
   const [custom, setCustom] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -58,7 +58,7 @@ export function DueDateCommand({ value, onSelect, className = '' }: { value?: st
   }
 
   return <div className={`due-date-command ${className}`} role="dialog" aria-label="Due date">
-    <input autoFocus className="due-date-search" aria-label="Try: 24h, 7 days, Feb 9" placeholder="Try: 24h, 7 days, Feb 9" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && query.trim()) { event.preventDefault(); submitQuery() } }}/>
+    <input autoFocus={autoFocus} className="due-date-search" aria-label="Try: 24h, 7 days, Feb 9" placeholder="Try: 24h, 7 days, Feb 9" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && query.trim()) { event.preventDefault(); submitQuery() } }}/>
     {error ? <p className="due-date-error" role="alert">{error}</p> : null}
     {custom ? <div className="due-date-custom">
       <label><CalendarRange size={15}/><DateTimeControl label="Custom due date" value={value ?? isoDate(new Date())} onChange={next => void choose(next)}/></label>
@@ -68,6 +68,7 @@ export function DueDateCommand({ value, onSelect, className = '' }: { value?: st
       <button type="button" role="option" aria-selected="false" disabled={busy} onPointerDown={stopCommandEvent} onClick={event => { stopCommandEvent(event); void choose(dates.tomorrow) }}><span>Tomorrow</span><small>{formatShortDate(dates.tomorrow)}</small></button>
       <button type="button" role="option" aria-selected="false" disabled={busy} onPointerDown={stopCommandEvent} onClick={event => { stopCommandEvent(event); void choose(dates.endOfWeek) }}><span>End of this week</span><small>{formatShortDate(dates.endOfWeek)}</small></button>
       <button type="button" role="option" aria-selected="false" disabled={busy} onPointerDown={stopCommandEvent} onClick={event => { stopCommandEvent(event); void choose(dates.week) }}><span>In one week</span><small>{formatShortDate(dates.week)}</small></button>
+      {extraOptions.map(option => <button key={option.label} type="button" role="option" aria-selected="false" disabled={busy} onPointerDown={stopCommandEvent} onClick={event => { stopCommandEvent(event); void choose(option.value) }}><span>{option.label}</span><small>{formatShortDate(option.value)}</small></button>)}
       {value && <button className="due-date-remove" type="button" role="option" aria-selected="false" disabled={busy} onPointerDown={stopCommandEvent} onClick={event => { stopCommandEvent(event); void choose('') }}><X size={14}/><span>Remove due date</span></button>}
     </div>}
   </div>

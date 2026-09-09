@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -96,13 +98,15 @@ func (s *server) issueRecordAuthorizationData(r *http.Request) (domain.Bootstrap
 			parent = ancestor.ParentID
 		}
 	}
-	if len(parts) > 2 {
-		comments, activities, err := s.store.IssueContent(r.Context(), query.Workspace, parts[2])
+	if len(parts) > 4 && parts[3] == "comments" {
+		comment, err := s.store.ResourceComment(r.Context(), query.Workspace, parts[2], parts[4])
+		if errors.Is(err, sql.ErrNoRows) {
+			return metadata, nil
+		}
 		if err != nil {
 			return metadata, err
 		}
-		metadata.Comments[parts[2]] = comments
-		metadata.Activities[parts[2]] = activities
+		metadata.Comments[parts[2]] = []domain.Comment{comment}
 	}
 	return metadata, nil
 }
@@ -145,6 +149,18 @@ func (s *server) issueRecordAlias(handler http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 		ctx := store.WithIssueRecordMutations(r.Context(), ids...)
+		if strings.Contains(r.URL.Path, "/comments") {
+			commentID := r.PathValue("commentId")
+			if commentID == "" {
+				var input struct {
+					ParentID string `json:"parentId"`
+				}
+				if peekRequestJSON(r, &input) {
+					commentID = input.ParentID
+				}
+			}
+			ctx = store.WithIssueDiscussionMutation(r.Context(), r.PathValue("id"), commentID)
+		}
 		ctx = context.WithValue(ctx, issueRecordAuthorizationContext{}, data)
 		handler(w, r.WithContext(ctx))
 	}

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"slices"
 	"strings"
@@ -56,6 +58,20 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 	data, query, err := s.pagedRealtimeMetadata(r)
 	if err != nil {
 		return event, false, err
+	}
+	if strings.HasPrefix(event.Type, "favorite.") || strings.HasPrefix(event.Type, "favorite_folder.") || strings.HasPrefix(event.Type, "subscription.") || strings.HasPrefix(event.Type, "notifications.") {
+		return event, event.ActorID == data.Viewer.ID || s.authDisabled && event.ActorID == "", nil
+	}
+	if strings.HasPrefix(event.Type, "notification.") && event.Type != "notification.desktop_acknowledged" && event.Type != "notification.delivery_retried" {
+		notification, err := s.store.NotificationRecord(r.Context(), query.Workspace, data.Viewer.ID, event.AggregateID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return event, false, nil
+		}
+		if err != nil {
+			return event, false, err
+		}
+		event.Payload = enrichNotificationEvent(event.Payload, notification)
+		return event, true, nil
 	}
 	if event.Type == "presence.updated" {
 		var payload struct {
@@ -125,4 +141,15 @@ func (s *server) writePresenceResponse(w http.ResponseWriter, r *http.Request, p
 		}
 	}
 	writeJSON(w, http.StatusOK, presence)
+}
+
+func enrichNotificationEvent(raw json.RawMessage, notification domain.Notification) json.RawMessage {
+	var payload map[string]any
+	_ = json.Unmarshal(raw, &payload)
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	payload["entity"] = notification
+	encoded, _ := json.Marshal(payload)
+	return encoded
 }

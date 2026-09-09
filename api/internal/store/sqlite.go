@@ -29,6 +29,8 @@ type SQLiteStore struct {
 	fixtureProfile   string
 	fixturePassword  string
 	maxStateBytes    int
+	lifecycle        context.Context
+	stopLifecycle    context.CancelFunc
 }
 
 // WorkspaceKeys returns a stable snapshot for background workers. Callers do
@@ -58,7 +60,18 @@ func OpenSQLiteTestFixture(path string) (*SQLiteStore, error) {
 	return OpenDatabase(DatabaseConfig{Driver: "sqlite", Path: path, FixtureProfile: "test", FixturePassword: "test-password", MaxOpenConns: 1})
 }
 
-func (s *SQLiteStore) Close() error { return s.db.Close() }
+func (s *SQLiteStore) Close() error {
+	if s.stopLifecycle != nil {
+		s.stopLifecycle()
+	}
+	return s.db.Close()
+}
+func (s *SQLiteStore) WorkerContext() context.Context {
+	if s.lifecycle != nil {
+		return s.lifecycle
+	}
+	return context.Background()
+}
 
 func (s *SQLiteStore) SetRealtimeSink(sink func(string, domain.RealtimeEvent)) {
 	s.mu.Lock()
@@ -1173,9 +1186,7 @@ func (s *SQLiteStore) BootstrapForContext(ctx context.Context, workspaceKey stri
 	// Workspace snapshots are replaced atomically by MutateWorkspace; they are
 	// never edited in place. Clone after releasing the lock so JSON encoding and
 	// resource-count derivation do not block writers or other readers.
-	raw, _ := json.Marshal(data)
-	var clone domain.Bootstrap
-	_ = json.Unmarshal(raw, &clone)
+	clone := cloneBootstrap(data)
 	if data.Issues == nil {
 		issues, err := s.readIssueRecords(ctx, data.Workspace.URLKey)
 		if err != nil {
@@ -1269,6 +1280,7 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 			return fmt.Errorf("workspace %q: %w", workspaceKey, errors.New("not found"))
 		}
 		metadataOnly := metadataOnlyMutation(eventType, payload)
+		current = cloneBootstrap(current)
 		if current.Issues == nil && !metadataOnly {
 			issues, err := s.readIssueRecords(ctx, workspaceKey)
 			if err != nil {
@@ -1281,10 +1293,11 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 				return err
 			}
 		}
-		raw, _ := json.Marshal(current)
-		var next domain.Bootstrap
-		if err := json.Unmarshal(raw, &next); err != nil {
-			return err
+		// Freshly loaded collections are owned by this transaction. Rollback
+		// discards them; only webhook before/after comparison needs a second copy.
+		next := current
+		if webhookEnabled {
+			next = cloneBootstrap(current)
 		}
 		refreshDisplayReferences(&next)
 		refreshIssueReferences(&next)
@@ -1421,7 +1434,11 @@ func aggregatePreviousValues(previous, next domain.Bootstrap, aggregateID string
 
 func aggregateJSONValue(data domain.Bootstrap, aggregateID string) any {
 	data = compactImportInputs(data)
-	raw, err := json.Marshal(data)
+	entity := findAggregateValue(reflect.ValueOf(data), aggregateID)
+	if entity == nil {
+		return nil
+	}
+	raw, err := json.Marshal(entity)
 	if err != nil {
 		return nil
 	}
@@ -1429,7 +1446,64 @@ func aggregateJSONValue(data domain.Bootstrap, aggregateID string) any {
 	if json.Unmarshal(raw, &value) != nil {
 		return nil
 	}
-	return findJSONObjectByID(value, aggregateID)
+	return value
+}
+
+// Locate the entity in the typed snapshot before serializing. Walking it does
+// not allocate a second workspace-sized JSON/map representation.
+func findAggregateValue(value reflect.Value, id string) any {
+	if !value.IsValid() || id == "" {
+		return nil
+	}
+	for value.Kind() == reflect.Interface || value.Kind() == reflect.Pointer {
+		if value.IsNil() {
+			return nil
+		}
+		value = value.Elem()
+	}
+	switch value.Kind() {
+	case reflect.Struct:
+		if field := value.FieldByName("ID"); field.IsValid() && field.Kind() == reflect.String && field.String() == id {
+			return value.Interface()
+		}
+		for i := 0; i < value.NumField(); i++ {
+			if value.Type().Field(i).PkgPath != "" || value.Type().Field(i).Tag.Get("json") == "-" {
+				continue
+			}
+			if found := findAggregateValue(value.Field(i), id); found != nil {
+				return found
+			}
+		}
+	case reflect.Map:
+		if value.Type().Key().Kind() == reflect.String {
+			key := reflect.ValueOf("id").Convert(value.Type().Key())
+			field := value.MapIndex(key)
+			if field.IsValid() {
+				for field.Kind() == reflect.Interface {
+					field = field.Elem()
+				}
+				if field.IsValid() && field.Kind() == reflect.String && field.String() == id {
+					return value.Interface()
+				}
+			}
+		}
+		iter := value.MapRange()
+		for iter.Next() {
+			if found := findAggregateValue(iter.Value(), id); found != nil {
+				return found
+			}
+		}
+	case reflect.Slice, reflect.Array:
+		if value.Type().Elem().Kind() == reflect.Uint8 {
+			return nil
+		}
+		for i := 0; i < value.Len(); i++ {
+			if found := findAggregateValue(value.Index(i), id); found != nil {
+				return found
+			}
+		}
+	}
+	return nil
 }
 
 func findJSONObjectByID(value any, aggregateID string) any {

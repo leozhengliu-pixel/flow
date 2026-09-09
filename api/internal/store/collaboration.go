@@ -42,6 +42,27 @@ func (s *SQLiteStore) DocumentCollaborationUpdates(ctx context.Context, workspac
 	return updates, rows.Err()
 }
 
+func (s *SQLiteStore) WalkDocumentUpdates(ctx context.Context, workspace, document string, visit func(DocumentCollaborationUpdate) error) error {
+	rows, err := s.db.QueryContext(ctx, `SELECT update_id,client_id,update_data,created_at FROM document_collaboration_updates WHERE workspace_key=? AND document_id=? ORDER BY created_at,update_id`, workspace, document)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var update DocumentCollaborationUpdate
+		var created string
+		if err := rows.Scan(&update.ID, &update.ClientID, &update.Data, &created); err != nil {
+			return err
+		}
+		update.DocumentID = document
+		update.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+		if err := visit(update); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
 func (s *SQLiteStore) DeleteDocumentCollaborationUpdates(ctx context.Context, workspaceKey, documentID string, updateIDs []string) error {
 	if len(updateIDs) == 0 {
 		return nil

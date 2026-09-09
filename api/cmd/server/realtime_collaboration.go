@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"flow/api/internal/domain"
@@ -30,15 +31,39 @@ const (
 type realtimeSocketMessage struct {
 	binary bool
 	data   []byte
+	sent   chan error
 }
 
 type realtimeSocketClient struct {
-	id        uint64
-	clientID  string
-	workspace string
-	documents map[string]struct{}
-	send      chan realtimeSocketMessage
-	cancel    context.CancelFunc
+	id          uint64
+	clientID    string
+	workspace   string
+	documents   map[string]struct{}
+	send        chan realtimeSocketMessage
+	queuedBytes atomic.Int64
+	cancel      context.CancelFunc
+}
+
+const maxSocketQueueBytes = 8 << 20
+
+func (client *realtimeSocketClient) enqueue(message realtimeSocketMessage, copyData bool) bool {
+	size := int64(len(message.data))
+	if client.queuedBytes.Add(size) > maxSocketQueueBytes {
+		client.queuedBytes.Add(-size)
+		client.cancel()
+		return false
+	}
+	if copyData {
+		message.data = slices.Clone(message.data)
+	}
+	select {
+	case client.send <- message:
+		return true
+	default:
+		client.queuedBytes.Add(-size)
+		client.cancel()
+		return false
+	}
 }
 
 type collaborationEventPayload struct {
@@ -58,6 +83,7 @@ type collaborationSyncMessage struct {
 	DocumentID   string                    `json:"documentId"`
 	ContentState string                    `json:"contentState,omitempty"`
 	Updates      []collaborationSyncUpdate `json:"updates"`
+	More         bool                      `json:"more,omitempty"`
 }
 
 func (h *realtimeHub) addSocket(workspace, clientID string, cancel context.CancelFunc) *realtimeSocketClient {
@@ -104,12 +130,7 @@ func (h *realtimeHub) broadcastDocument(workspace, documentID string, excludedSo
 		if _, joined := client.documents[documentID]; !joined {
 			continue
 		}
-		copyOfMessage := realtimeSocketMessage{binary: message.binary, data: slices.Clone(message.data)}
-		select {
-		case client.send <- copyOfMessage:
-		default:
-			client.cancel()
-		}
+		client.enqueue(message, true)
 	}
 }
 
@@ -144,6 +165,7 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 			case <-ctx.Done():
 				return
 			case message := <-client.send:
+				client.queuedBytes.Add(-int64(len(message.data)))
 				messageType := websocket.MessageText
 				if message.binary {
 					messageType = websocket.MessageBinary
@@ -151,6 +173,9 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 				writeCtx, writeCancel := context.WithTimeout(ctx, 5*time.Second)
 				err := connection.Write(writeCtx, messageType, message.data)
 				writeCancel()
+				if message.sent != nil {
+					message.sent <- err
+				}
 				if err != nil {
 					cancel()
 					return
@@ -237,18 +262,51 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 		}
 		contentState = document.ContentState
 	}
-	updates, err := s.store.DocumentCollaborationUpdates(r.Context(), client.workspace, command.DocumentID)
-	if err != nil {
-		return fmt.Errorf("load collaboration updates: %w", err)
-	}
-	message := collaborationSyncMessage{Type: "document.sync", DocumentID: command.DocumentID, Updates: make([]collaborationSyncUpdate, 0, len(updates))}
-	message.ContentState = contentState
-	for _, update := range updates {
-		message.Updates = append(message.Updates, collaborationSyncUpdate{ID: update.ID, Data: base64.StdEncoding.EncodeToString(update.Data)})
-	}
 	s.realtime.joinDocument(client, command.DocumentID)
-	sendSocketJSON(client, message)
-	return nil
+	message := collaborationSyncMessage{Type: "document.sync", DocumentID: command.DocumentID, ContentState: contentState, Updates: []collaborationSyncUpdate{}}
+	bytes := len(contentState)
+	flush := func(more bool) error {
+		message.More = more
+		raw, err := json.Marshal(message)
+		if err != nil {
+			return err
+		}
+		sent := make(chan error, 1)
+		if !client.enqueue(realtimeSocketMessage{data: raw, sent: sent}, false) {
+			return errors.New("collaboration queue exceeded")
+		}
+		timer := time.NewTimer(6 * time.Second)
+		defer timer.Stop()
+		select {
+		case err := <-sent:
+			message.ContentState = ""
+			message.Updates = nil
+			bytes = 0
+			return err
+		case <-timer.C:
+			return errors.New("collaboration writer timed out")
+		case <-r.Context().Done():
+			return r.Context().Err()
+		}
+	}
+	err = s.store.WalkDocumentUpdates(r.Context(), client.workspace, command.DocumentID, func(update store.DocumentCollaborationUpdate) error {
+		if len(message.Updates) > 0 && (bytes+len(update.Data)*4/3 > 1<<20 || len(message.Updates) >= 128) {
+			if err := flush(true); err != nil {
+				return err
+			}
+		}
+		encoded := base64.StdEncoding.EncodeToString(update.Data)
+		message.Updates = append(message.Updates, collaborationSyncUpdate{ID: update.ID, Data: encoded})
+		bytes += len(encoded)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if message.Updates == nil {
+		message.Updates = []collaborationSyncUpdate{}
+	}
+	return flush(false)
 }
 
 func (s *server) handleCollaborationFrame(ctx context.Context, client *realtimeSocketClient, raw []byte) error {
@@ -328,11 +386,7 @@ func sendSocketJSON(client *realtimeSocketClient, value any) {
 	if err != nil {
 		return
 	}
-	select {
-	case client.send <- realtimeSocketMessage{data: raw}:
-	default:
-		client.cancel()
-	}
+	client.enqueue(realtimeSocketMessage{data: raw}, false)
 }
 
 func encodeCollaborationFrame(kind byte, documentID, updateID string, payload []byte) []byte {

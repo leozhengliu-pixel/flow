@@ -1,6 +1,6 @@
 import * as Popover from '@radix-ui/react-popover'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type Ref, type RefObject } from 'react'
 import { useI18n, type AppLocale } from '@/i18n/i18n'
 import styles from './project-row-menus.module.css'
 
@@ -24,7 +24,7 @@ export function ProjectTargetDatePicker({ ariaLabel, buttonClassName = '', child
   return <ProjectDatePicker ariaLabel={ariaLabel} buttonClassName={buttonClassName} compactPeriods={compactPeriods} defaultMode={defaultMode} displayValue={displayValue} label="Target date" onChange={onChange} resolution={resolution} triggerRole={triggerRole} value={value}>{children}</ProjectDatePicker>
 }
 
-export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, compactCalendar = false, compactPeriods = false, contentClassName = '', defaultMode = 'day', displayValue: _displayValue, label, max, min, onChange, onOpenChange, portalled = true, resolution, side, align = 'center', triggerRef, triggerRole = 'button', value }: {
+export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, compactCalendar = false, compactPeriods = false, contentClassName = '', defaultMode = 'day', displayValue: _displayValue, label, max, min, onChange, onOpenChange, portalled = true, resolution, side, align = 'center', triggerRef, triggerRole = 'button', value, open: controlledOpen, externalAnchor }: {
   ariaLabel?: string
   buttonClassName?: string
   children: ReactNode
@@ -45,9 +45,12 @@ export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, c
   triggerRef?: Ref<HTMLButtonElement>
   triggerRole?: 'button' | 'combobox'
   value?: string
+  open?: boolean
+  externalAnchor?: RefObject<HTMLElement | null>
 }) {
   const { locale, t } = useI18n()
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setOpen] = useState(false)
+  const open = controlledOpen ?? internalOpen
   const [mode, setMode] = useState<DateMode>('day')
   const [query, setQuery] = useState('')
   const [cursor, setCursor] = useState(() => parseDate(value) ?? startOfDay(new Date()))
@@ -93,7 +96,7 @@ export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, c
   </Popover.Content>
 
   return <Popover.Root open={open} onOpenChange={next => { setOpen(next); onOpenChange?.(next) }}>
-    <Popover.Trigger asChild><button aria-expanded={open} aria-label={t(ariaLabel ?? `Change project ${label.toLowerCase()}`)} className={`lp-project-property-trigger ${buttonClassName}`} ref={triggerRef} role={triggerRole === 'combobox' ? 'combobox' : undefined} type="button">{children}</button></Popover.Trigger>
+    {externalAnchor ? <Popover.Anchor virtualRef={externalAnchor}/> : <Popover.Trigger asChild><button aria-expanded={open} aria-label={t(ariaLabel ?? `Change project ${label.toLowerCase()}`)} className={`lp-project-property-trigger ${buttonClassName}`} ref={triggerRef} role={triggerRole === 'combobox' ? 'combobox' : undefined} type="button">{children}</button></Popover.Trigger>}
     {portalled ? <Popover.Portal>{content}</Popover.Portal> : content}
   </Popover.Root>
 }

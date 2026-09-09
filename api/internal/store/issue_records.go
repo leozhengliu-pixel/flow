@@ -18,7 +18,7 @@ func isDuplicateIndex(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "duplicate key name")
 }
 
-var workspaceRecordTables = []string{"issue_records", "issue_label_records", "issue_subscriber_records", "issue_actor_records", "issue_permission_records", "issue_attribute_records", "issue_attribute_migrations", "issue_collection_counts", "issue_records_migrations", "issue_scope_counts", "issue_stats_migrations", "issue_number_sequences", "workspace_content_records", "workspace_metadata_records"}
+var workspaceRecordTables = []string{"issue_records", "issue_label_records", "issue_subscriber_records", "issue_actor_records", "issue_permission_records", "issue_attribute_records", "issue_attribute_migrations", "issue_collection_counts", "issue_records_migrations", "issue_scope_counts", "issue_stats_migrations", "issue_number_sequences", "workspace_content_records", "workspace_metadata_records", "issue_attachment_records", "issue_attachment_migrations", "issue_list_migrations", "issue_search_documents", "issue_search_migrations"}
 
 func (s *SQLiteStore) migrateIssueCollections(ctx context.Context) error {
 	for key, data := range s.workspaces {
@@ -45,21 +45,20 @@ func (s *SQLiteStore) replaceIssueRecords(ctx context.Context, tx *sqlTx, worksp
 	refs := newIssueReferences(metadata)
 	// Compatibility mutations supply the full collection; compare the existing
 	// row payloads so unchanged entities never become database writes.
-	rows, err := tx.QueryContext(ctx, `SELECT id,data,collection_order FROM issue_records WHERE workspace_key=?`, workspace)
+	rows, err := tx.QueryContext(ctx, `SELECT id,collection_order FROM issue_records WHERE workspace_key=?`, workspace)
 	if err != nil {
 		return err
 	}
-	previous := map[string]string{}
+	previous := map[string]bool{}
 	positions := map[string]int{}
 	for rows.Next() {
 		var id string
-		var raw []byte
 		var position int
-		if err := rows.Scan(&id, &raw, &position); err != nil {
+		if err := rows.Scan(&id, &position); err != nil {
 			rows.Close()
 			return err
 		}
-		previous[id] = string(raw)
+		previous[id] = true
 		positions[id] = position
 	}
 	if err := rows.Err(); err != nil {
@@ -68,37 +67,64 @@ func (s *SQLiteStore) replaceIssueRecords(ctx context.Context, tx *sqlTx, worksp
 	}
 	rows.Close()
 	order := issueCollectionOrder(issues, positions)
-	changed := []domain.Issue{}
 	deltas := map[issueStatsKey]int64{}
-	for _, issue := range issues {
-		position := order[issue.ID]
-		values, err := issueRecordValues(workspace, issue)
+	for start := 0; start < len(issues); start += 64 {
+		batch := issues[start:min(start+64, len(issues))]
+		ids := make([]string, len(batch))
+		for i, issue := range batch {
+			ids[i] = issue.ID
+		}
+		clause, args := bindList("id", ids)
+		rows, err := tx.QueryContext(ctx, `SELECT id,data FROM issue_records WHERE workspace_key=? AND `+clause, append([]any{workspace}, args...)...)
 		if err != nil {
 			return err
 		}
-		raw := values[len(values)-1].([]byte)
-		if !equalIssueRecordData([]byte(previous[issue.ID]), raw) && !refs.equalOwned([]byte(previous[issue.ID]), issue) {
-			if old := previous[issue.ID]; old != "" {
-				var previousIssue domain.Issue
-				if err := json.Unmarshal([]byte(old), &previousIssue); err != nil {
-					return err
-				}
-				addIssueStats(deltas, issueStatsOf(previousIssue), -1)
-			}
-			addIssueStats(deltas, issueStatsOf(issue), 1)
-			changed = append(changed, issue)
-		} else if old, ok := positions[issue.ID]; !ok || old != position {
-			if _, err := tx.ExecContext(ctx, `UPDATE issue_records SET collection_order=? WHERE workspace_key=? AND id=?`, position, workspace, issue.ID); err != nil {
+		payloads := map[string][]byte{}
+		for rows.Next() {
+			var id string
+			var raw []byte
+			if err := rows.Scan(&id, &raw); err != nil {
+				rows.Close()
 				return err
 			}
+			payloads[id] = raw
 		}
-		delete(previous, issue.ID)
-	}
-	if err := s.importIssueRecordBatch(ctx, tx, workspace, changed, order); err != nil {
-		return err
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return err
+		}
+		changed := []domain.Issue{}
+		for _, issue := range batch {
+			position := order[issue.ID]
+			values, err := issueRecordValues(workspace, issue)
+			if err != nil {
+				return err
+			}
+			raw := values[len(values)-1].([]byte)
+			if !equalIssueRecordData(payloads[issue.ID], raw) && !refs.equalOwned(payloads[issue.ID], issue) {
+				if old := payloads[issue.ID]; len(old) > 0 {
+					var previousIssue domain.Issue
+					if err := json.Unmarshal(old, &previousIssue); err != nil {
+						return err
+					}
+					addIssueStats(deltas, issueStatsOf(previousIssue), -1)
+				}
+				addIssueStats(deltas, issueStatsOf(issue), 1)
+				changed = append(changed, issue)
+			} else if old, ok := positions[issue.ID]; !ok || old != position {
+				if _, err := tx.ExecContext(ctx, `UPDATE issue_records SET collection_order=? WHERE workspace_key=? AND id=?`, position, workspace, issue.ID); err != nil {
+					return err
+				}
+			}
+			delete(previous, issue.ID)
+		}
+		if err := s.importIssueRecordBatch(ctx, tx, workspace, changed, order); err != nil {
+			return err
+		}
 	}
 	for id := range previous {
-		for _, table := range []string{"issue_subscriber_records", "issue_actor_records", "issue_attribute_records"} {
+		for _, table := range []string{"issue_subscriber_records", "issue_actor_records", "issue_attribute_records", "issue_attachment_records", "issue_search_documents"} {
 			if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE workspace_key=? AND issue_id=?", workspace, id); err != nil {
 				return err
 			}
@@ -204,10 +230,10 @@ func (s *SQLiteStore) ensureIssueRecords(ctx context.Context) error {
 	return nil
 }
 
-const issueRecordInsert = `INSERT INTO issue_records(workspace_key,id,identifier,team_id,state_id,state_type,project_id,assignee_id,creator_id,cycle_id,parent_id,priority,sort_order,title,created_at,updated_at,archived,version,data) VALUES `
-const issueRecordValuesSQL = `(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+const issueRecordInsert = `INSERT INTO issue_records(workspace_key,id,identifier,team_id,state_id,state_type,project_id,assignee_id,creator_id,cycle_id,parent_id,priority,sort_order,title,created_at,updated_at,archived,version,list_data,data) VALUES `
+const issueRecordValuesSQL = `(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 const issueRecordTimestamp = "2006-01-02T15:04:05.000000000Z"
-const issueRecordUpdate = ` ON CONFLICT(workspace_key,id) DO UPDATE SET identifier=excluded.identifier,team_id=excluded.team_id,state_id=excluded.state_id,state_type=excluded.state_type,project_id=excluded.project_id,assignee_id=excluded.assignee_id,creator_id=excluded.creator_id,cycle_id=excluded.cycle_id,parent_id=excluded.parent_id,priority=excluded.priority,sort_order=excluded.sort_order,title=excluded.title,created_at=excluded.created_at,updated_at=excluded.updated_at,archived=excluded.archived,version=excluded.version,data=excluded.data`
+const issueRecordUpdate = ` ON CONFLICT(workspace_key,id) DO UPDATE SET identifier=excluded.identifier,team_id=excluded.team_id,state_id=excluded.state_id,state_type=excluded.state_type,project_id=excluded.project_id,assignee_id=excluded.assignee_id,creator_id=excluded.creator_id,cycle_id=excluded.cycle_id,parent_id=excluded.parent_id,priority=excluded.priority,sort_order=excluded.sort_order,title=excluded.title,created_at=excluded.created_at,updated_at=excluded.updated_at,archived=excluded.archived,version=excluded.version,list_data=excluded.list_data,data=excluded.data`
 
 func equalIssueRecordData(previous, next []byte) bool {
 	if bytes.Equal(previous, next) {
@@ -253,7 +279,11 @@ func issueRecordValues(workspace string, issue domain.Issue) ([]any, error) {
 	if issue.ArchivedAt != nil {
 		archived = 1
 	}
-	return []any{workspace, issue.ID, issue.Identifier, issue.Team.ID, issue.State.ID, issue.State.Type, project, assignee, issue.Creator.ID, cycle, parent, issue.Priority, issue.SortOrder, issue.Title, issue.CreatedAt.UTC().Format(issueRecordTimestamp), issue.UpdatedAt.UTC().Format(issueRecordTimestamp), archived, issue.Version, raw}, nil
+	list, err := json.Marshal(issueListProjection(issue))
+	if err != nil {
+		return nil, err
+	}
+	return []any{workspace, issue.ID, issue.Identifier, issue.Team.ID, issue.State.ID, issue.State.Type, project, assignee, issue.Creator.ID, cycle, parent, issue.Priority, issue.SortOrder, issue.Title, issue.CreatedAt.UTC().Format(issueRecordTimestamp), issue.UpdatedAt.UTC().Format(issueRecordTimestamp), archived, issue.Version, list, raw}, nil
 }
 
 func (s *SQLiteStore) writeIssueRecord(ctx context.Context, tx *sqlTx, workspace string, issue domain.Issue, metadata ...domain.Bootstrap) error {
@@ -547,14 +577,7 @@ func (s *SQLiteStore) WorkspaceMetadata(workspace string) (domain.Bootstrap, boo
 	data.Comments = nil
 	data.Notifications = nil
 	data.NotificationDeliveries = nil
-	raw, err := json.Marshal(data)
-	if err != nil {
-		return domain.Bootstrap{}, false
-	}
-	var clone domain.Bootstrap
-	if json.Unmarshal(raw, &clone) != nil {
-		return domain.Bootstrap{}, false
-	}
+	clone := cloneBootstrap(data)
 	clone.Issues = []domain.Issue{}
 	clone.Activities = map[string][]domain.ActivityEvent{}
 	clone.Comments = map[string][]domain.Comment{}

@@ -61,7 +61,7 @@ export function filterValues(data: BootstrapData, field: PulseFilterField) {
 }
 
 function follows(data: BootstrapData, item: PulseUpdateItem) {
-  if (item.kind === 'project') return item.project.lead?.id === data.viewer.id || item.project.memberIds.includes(data.viewer.id) || data.subscriptions.some(subscription => subscription.userId === data.viewer.id && subscription.resourceType === 'project' && subscription.resourceId === item.project.id)
+  if (item.kind === 'project') return item.project.lead?.id === data.viewer.id || item.project.memberIds.includes(data.viewer.id) || data.subscriptions.some(subscription => subscription.userId === data.viewer.id && subscription.resourceType === 'project' && subscription.resourceId === item.project.id && (!subscription.events?.length || subscription.events.includes('pulse')))
   return item.initiative.owner?.id === data.viewer.id || item.initiative.subscribed || item.initiative.projectIds.some(projectId => data.projects.find(project => project.id === projectId)?.memberIds.includes(data.viewer.id))
 }
 

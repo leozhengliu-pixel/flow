@@ -581,6 +581,10 @@ func guestRestrictedPath(path string) bool {
 }
 
 func (s *server) resourceAllowed(r *http.Request, workspace string, userID string) bool {
+	if r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/api/notifications/") && len(strings.Split(strings.Trim(r.URL.Path, "/"), "/")) == 3 {
+		_, err := s.store.NotificationRecord(r.Context(), workspace, userID, strings.TrimPrefix(r.URL.Path, "/api/notifications/"))
+		return err == nil
+	}
 	// Bootstrap performs the viewer projection itself. Repeating it here loads
 	// every issue and discussion once before the handler loads them again.
 	if r.URL.Path == "/api/bootstrap" {
@@ -604,14 +608,25 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		data, err = s.store.PagedWorkspaceMetadata(r.Context(), workspace, userID)
 		ok = err == nil
 	} else {
-		data, ok, err = s.store.BootstrapForUser(r.Context(), workspace, userID)
+		data, err = s.store.PagedWorkspaceMetadata(r.Context(), workspace, userID)
+		ok = err == nil
 	}
 	if err != nil || !ok {
 		return false
 	}
+	if resourcePreferenceRequest(r) {
+		filterBootstrapForAPIKey(&data, r)
+	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	if len(parts) > 1 && parts[1] == "issue-records" {
 		parts[1] = "issues"
+	}
+	if len(parts) >= 5 && parts[1] == "documents" && parts[3] == "comments" && (r.Method == http.MethodPatch || r.Method == http.MethodDelete) {
+		comment, readErr := s.store.ResourceComment(r.Context(), data.Workspace.URLKey, parts[2], parts[4])
+		if readErr != nil {
+			return false
+		}
+		data.Comments[parts[2]] = []domain.Comment{comment}
 	}
 	teamAllowed := func(teamID string) bool {
 		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) && !slices.Contains(key.TeamIDs, teamID) {
@@ -620,12 +635,12 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		return slices.ContainsFunc(data.Teams, func(item domain.Team) bool { return item.ID == teamID })
 	}
 	issueAllowed := func(issueID string) bool {
-		return slices.ContainsFunc(data.Issues, func(item domain.Issue) bool {
-			if item.ID != issueID {
-				return false
-			}
-			return teamAllowed(item.Team.ID) || issueRole(s, data, item) != "none"
-		})
+		if isIssueRecordsRequest(r) {
+			return slices.ContainsFunc(data.Issues, func(item domain.Issue) bool {
+				return item.ID == issueID && (teamAllowed(item.Team.ID) || issueRole(s, data, item) != "none")
+			})
+		}
+		return s.pagedIssueVisible(r, issueID)
 	}
 	projectAllowed := func(projectID string) bool {
 		return slices.ContainsFunc(data.Projects, func(item domain.Project) bool {
@@ -758,6 +773,19 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		switch kind {
 		case "issue":
 			return issueAllowed(id)
+		case "team":
+			return teamAllowed(id) && slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == id && team.RetiredAt == nil })
+		case "label":
+			return slices.ContainsFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id && label.ArchivedAt == nil })
+		case "release_pipeline":
+			return pipelineAllowed(id)
+		case "review":
+			if resourcePreferenceRequest(r) {
+				return s.preferenceReviewVisible(r, id)
+			}
+			return slices.ContainsFunc(data.Reviews, func(review domain.CodeReview) bool {
+				return (review.ID == id || review.SlugID == id) && (len(review.IssueIDs) == 0 || slices.ContainsFunc(review.IssueIDs, issueAllowed))
+			})
 		case "project":
 			return projectAllowed(id)
 		case "initiative":
@@ -1087,6 +1115,9 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		}
 		return resourceReferenceAllowed(parts[2], parts[3])
 	case "reviews":
+		if embeddedFavoriteRequest(r) {
+			return s.preferenceReviewVisible(r, parts[2])
+		}
 		if len(parts) < 3 {
 			return true
 		}
@@ -1227,7 +1258,8 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		if parts[2] == "batch" {
 			return true
 		}
-		return slices.ContainsFunc(data.Notifications, func(item domain.Notification) bool { return item.ID == parts[2] })
+		_, err := s.store.NotificationRecord(r.Context(), data.Workspace.URLKey, userID, parts[2])
+		return err == nil
 	case "workspaces":
 		if len(parts) >= 5 && parts[3] == "teams" {
 			return teamAllowed(parts[4])
@@ -1411,7 +1443,7 @@ func (s *server) resetPassword(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.BootstrapFor(r.PathValue("workspaceKey"))
+	data, ok := s.store.WorkspaceMetadata(r.PathValue("workspaceKey"))
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -1501,7 +1533,7 @@ func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 func (s *server) invitationPreview(w http.ResponseWriter, r *http.Request) {
 	if s.authDisabled {
 		for _, key := range s.store.WorkspaceKeys() {
-			data, ok := s.store.BootstrapFor(key)
+			data, ok := s.store.WorkspaceMetadata(key)
 			if !ok {
 				continue
 			}
@@ -1528,7 +1560,7 @@ func (s *server) invitationPreview(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) revokeInvitation(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.BootstrapFor(r.PathValue("workspaceKey"))
+	data, ok := s.store.WorkspaceMetadata(r.PathValue("workspaceKey"))
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -1551,7 +1583,7 @@ func (s *server) revokeInvitation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) resendInvitation(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.BootstrapFor(r.PathValue("workspaceKey"))
+	data, ok := s.store.WorkspaceMetadata(r.PathValue("workspaceKey"))
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -1638,7 +1670,7 @@ func (s *server) acceptInvitation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.BootstrapFor(r.PathValue("workspaceKey"))
+	data, ok := s.store.WorkspaceMetadata(r.PathValue("workspaceKey"))
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -1854,7 +1886,7 @@ func cascadeUserIdentity(data *domain.Bootstrap, user domain.User) {
 }
 
 func (s *server) suspendMember(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.BootstrapFor(r.PathValue("workspaceKey"))
+	data, ok := s.store.WorkspaceMetadata(r.PathValue("workspaceKey"))
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -1893,7 +1925,7 @@ func (s *server) suspendMember(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) resumeMember(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.BootstrapFor(r.PathValue("workspaceKey"))
+	data, ok := s.store.WorkspaceMetadata(r.PathValue("workspaceKey"))
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -1921,7 +1953,7 @@ func (s *server) resumeMember(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) removeMember(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.BootstrapFor(r.PathValue("workspaceKey"))
+	data, ok := s.store.WorkspaceMetadata(r.PathValue("workspaceKey"))
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -1961,7 +1993,7 @@ func (s *server) removeMember(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) updateTeamMember(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.BootstrapFor(r.PathValue("workspaceKey"))
+	data, ok := s.store.WorkspaceMetadata(r.PathValue("workspaceKey"))
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return

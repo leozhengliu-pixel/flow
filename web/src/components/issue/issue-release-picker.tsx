@@ -1,6 +1,6 @@
 import * as Popover from '@radix-ui/react-popover'
 import { Plus } from 'lucide-react'
-import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useState, type KeyboardEvent, type RefObject, type SetStateAction } from 'react'
 import { toast } from 'sonner'
 
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
@@ -14,9 +14,11 @@ import './issue-release-picker.css'
 
 const groupOrder: Release['status'][] = ['inProgress', 'planned', 'released', 'canceled']
 
-export function IssueReleasePicker({ data, issue, grouped = false }: { data: BootstrapData; issue: Issue; grouped?: boolean }) {
+export function IssueReleasePicker({ data, issue, grouped = false, externalAnchor, popoverOpen, onPopoverOpenChange, onMenuEscape }: { data: BootstrapData; issue: Issue; grouped?: boolean; externalAnchor?: RefObject<HTMLElement | null>; popoverOpen?: boolean; onPopoverOpenChange?: (open: boolean) => void; onMenuEscape?: () => void }) {
   const { t, formatDate } = useI18n()
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = popoverOpen ?? internalOpen
+  const setOpen = (next: SetStateAction<boolean>) => { const value = typeof next === 'function' ? next(open) : next; setInternalOpen(value); onPopoverOpenChange?.(value) }
   const [query, setQuery] = useState('')
   const [activeId, setActiveId] = useState('')
   const [pipelinesOpen, setPipelinesOpen] = useState(false)
@@ -127,8 +129,8 @@ export function IssueReleasePicker({ data, issue, grouped = false }: { data: Boo
     : <div className="issue-release-property">{trigger}{values}</div>
 
   return <Popover.Root open={open} onOpenChange={value => { if (value) setOpen(true); else close() }}>
-    <Popover.Anchor asChild>{anchor}</Popover.Anchor>
-    <Popover.Portal><Popover.Content data-flow-motion="floating" className="issue-release-picker issue-release-picker--root" align="start" side="bottom" sideOffset={grouped ? -36 : 4} collisionPadding={8} onOpenAutoFocus={event => event.preventDefault()} onKeyDown={onKeyDown}>
+    {externalAnchor ? <Popover.Anchor virtualRef={externalAnchor}/> : <Popover.Anchor asChild>{anchor}</Popover.Anchor>}
+    <Popover.Portal><Popover.Content data-flow-motion="floating" className="issue-release-picker issue-release-picker--root" align="start" side={externalAnchor ? 'right' : 'bottom'} alignOffset={externalAnchor ? -43 : 0} sideOffset={externalAnchor ? -1.5 : grouped ? -36 : 4} collisionPadding={16} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { if (onMenuEscape) { event.preventDefault(); onMenuEscape() } }} onKeyDown={event => { if (externalAnchor && event.key === 'ArrowLeft') { event.preventDefault(); onPopoverOpenChange?.(false); return }; onKeyDown(event) }}>
       <ReleaseSearch autoFocus value={query} placeholder={t('Add to release…')} shortcut="⌥ R" activeId={activeId} onChange={value => { setQuery(value); setPipelinesOpen(false); setCreateOpen(false) }}/>
       <div className="issue-release-results" role="listbox" aria-multiselectable="true">
         {selectedOptions.map(item => <ReleaseOption active={activeId === item.id} checked disabled={saving} item={item} key={item.id} pipeline={pipelines.find(value => value.id === item.pipelineId)} onActive={() => { setActiveId(item.id); setPipelinesOpen(false) }} onChoose={() => void toggle(item.id)}/>)}

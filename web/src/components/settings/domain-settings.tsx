@@ -1,4 +1,5 @@
 import { AppLink } from '@/components/ui/app-link'
+import { refreshResourcePreferences } from '@/lib/resource-preferences'
 import { Archive, Check, ChevronDown, ChevronRight, MoreHorizontal, Plus, RotateCcw, Search, Star, Trash2, X } from 'lucide-react'
 import * as Popover from '@radix-ui/react-popover'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -48,8 +49,8 @@ export function DomainLabelsSettings({ data, resourceType, onReload }: { data: B
     [sortedLabels, groups, query, scope],
   )
   const scopes = useMemo(() => scopeSections(sortedLabels, data), [sortedLabels, data])
-  const run = async <T,>(action: () => Promise<T>): Promise<T | undefined> => {
-    try { const result = await action(); await onReload(); return result } catch (error) { toast.error(message(error)); return undefined }
+  const run = async <T,>(action: () => Promise<T>, preferencesOnly = false): Promise<T | undefined> => {
+    try { const result = await action(); if (preferencesOnly) await refreshResourcePreferences(data.workspace.urlKey); else await onReload(); return result } catch (error) { toast.error(message(error)); return undefined }
   }
   const saveLabel = async (label: IssueLabel, input: Partial<IssueLabel>) => { await run(() => isWorkspaceLabel(label) ? updateWorkspaceLabel(label.id, input) : updateTeamLabel(label.scope!, label.id, input)) }
   const deleteLabel = async (label: IssueLabel) => { await run(() => isWorkspaceLabel(label) ? deleteWorkspaceLabel(label.id) : deleteTeamLabel(label.scope!, label.id)) }
@@ -87,7 +88,7 @@ export function DomainLabelsSettings({ data, resourceType, onReload }: { data: B
     const selectedLabels = data.labels.filter(label => selected.includes(label.id))
     if (action === 'favorite') {
       const existing = new Set(data.favorites.filter(item => item.resourceType === 'label').map(item => item.resourceId))
-      await run(() => Promise.all(selected.filter(id => !existing.has(id)).map(id => addFavorite('label', id))))
+      await run(() => Promise.all(selected.filter(id => !existing.has(id)).map(id => addFavorite('label', id))), true)
     } else if (action === 'archive') {
       const archivedAt = scope === 'archived' ? '' : new Date().toISOString()
       await run(() => Promise.all([

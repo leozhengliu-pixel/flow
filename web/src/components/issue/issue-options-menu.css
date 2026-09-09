@@ -1,0 +1,40 @@
+.issue-options-popover,.issue-options-submenu{z-index:600;box-sizing:border-box;width:max-content;max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px);padding:0;border:.5px solid var(--popover-border);border-radius:12px;background:var(--theme-surface-2);box-shadow:var(--shadow-control);outline:0;color:var(--theme-text-primary);font-family:var(--font)}
+.issue-options-popover{min-width:243px;overflow:hidden}
+.issue-options-popover>[cmdk-root],.issue-options-submenu>[cmdk-root]{display:flex;flex-direction:column;max-height:inherit;min-height:0}
+.issue-options-popover [cmdk-list],.issue-options-submenu [cmdk-list]{padding:6px 0;overflow:auto;min-height:0;scrollbar-width:none}
+.issue-options-filter{position:absolute;left:-99999px;width:1px;height:1px;padding:0;opacity:0}
+.issue-options-item{position:relative;display:flex;align-items:center;gap:8px;height:32px;min-width:0;padding:0 18px 0 14px;border:0;background:transparent;color:var(--issue-menu-text);font-size:13px;font-weight:450;line-height:normal;outline:0;cursor:default}
+.issue-options-item::before{content:"";position:absolute;inset:0 6px;border-radius:8px;background:transparent;pointer-events:none}
+.issue-options-item>*{position:relative;z-index:1}
+[data-highlight=true]>.issue-options-item[data-selected=true]::before,.issue-options-popover[data-highlight=true] .issue-options-item[data-selected=true]::before,.issue-options-submenu[data-highlight=true] .issue-options-item[data-selected=true]::before,.issue-options-item[data-submenu-open=true]::before{background:var(--issue-menu-active-bg)}
+.issue-options-popover[data-highlight=true] .issue-options-item[data-selected=true],.issue-options-submenu[data-highlight=true] .issue-options-item[data-selected=true],.issue-options-item[data-submenu-open=true]{color:var(--issue-menu-active-text)}
+.issue-options-icon{display:grid;place-items:center;width:16px;height:16px;flex:0 0 16px;color:var(--issue-menu-muted)}
+.issue-options-icon svg{width:16px;height:16px;flex:none}
+.issue-options-icon svg[data-action-glyph=duplicateOf]{width:14px;height:14px}
+.issue-options-popover[data-highlight=true] .issue-options-item[data-selected=true] .issue-options-icon,.issue-options-submenu[data-highlight=true] .issue-options-item[data-selected=true] .issue-options-icon,.issue-options-item[data-submenu-open=true] .issue-options-icon{color:var(--issue-menu-active-text)}
+.issue-options-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.issue-options-detail{margin-left:auto;padding-left:12px;color:var(--issue-menu-muted);font-size:12px;white-space:nowrap}
+.issue-options-shortcut{display:flex;align-items:center;gap:2px;flex:none;margin-left:auto;padding-left:8px;color:var(--issue-menu-muted);white-space:nowrap}
+.issue-options-shortcut kbd{min-width:17px;height:17px;display:grid;place-items:center;padding:2px;border:.5px solid var(--theme-border-strong);border-radius:4px;background:var(--theme-surface-hover);font:400 11px/12.1px var(--font)}
+.issue-options-submenu .issue-options-shortcut{gap:1px;padding-left:0}
+.issue-options-submenu .issue-options-shortcut kbd{padding:0;min-width:0;height:auto;border:0;background:transparent;box-shadow:none}
+.issue-options-chevron{margin-left:auto;display:grid;place-items:center;flex:0 0 16px;width:16px;height:16px;color:var(--theme-text-tertiary);font-size:6px;line-height:7.5px}
+.issue-options-shortcut+.issue-options-chevron{margin-left:0}
+.issue-options-separator{height:12px;position:relative}
+.issue-options-separator::after{content:"";position:absolute;top:5.5px;left:0;right:0;height:.5px;background:var(--theme-border-strong)}
+.issue-options-empty{height:42px;display:grid;place-items:center;padding:0 14px;color:var(--theme-text-secondary);font-size:12px}
+.issue-options-submenu{min-width:175px;box-shadow:var(--shadow-dialog);overflow:hidden}
+:root:not([data-theme=light]) .issue-options-submenu{box-shadow:var(--shadow-dialog),0 1px 1px var(--shadow-color-heavy)}
+.issue-options-submenu[data-menu="Create related"]{min-width:176px}
+.issue-options-submenu[data-menu="Mark as"]{min-width:200px}
+.issue-options-submenu[data-menu="Copy"]{min-width:271px}
+.issue-options-submenu[data-menu="Remind me"]{min-width:286px}
+.issue-options-submenu-search{box-sizing:border-box;display:block;flex:none;width:100%;height:36.5px;margin:0;padding:10px 12px 9px 14px;border:0;border-bottom:.5px solid var(--theme-border);outline:0;background:transparent;color:var(--theme-text-primary);font:400 13px/normal var(--font)}
+.issue-options-submenu-search::placeholder{color:var(--theme-text-secondary);opacity:1}
+.issue-options-due-date{z-index:600;outline:0}
+.issue-options-due-date .due-date-command{width:231px;max-width:calc(100vw - 32px);box-shadow:var(--shadow-dialog);border-radius:12px}
+.issue-options-due-date .due-date-search{color:var(--issue-menu-text)}
+.issue-options-due-date .due-date-options{padding:6px}
+.issue-options-due-date .due-date-options button{padding:0 8px;border-radius:8px;color:var(--issue-menu-text)}
+.issue-options-due-date .due-date-options button:hover,.issue-options-due-date .due-date-options button:focus-visible{background:var(--issue-menu-active-bg);color:var(--issue-menu-active-text)}
+.issue-options-due-date .due-date-options button small{font-size:12px;color:var(--issue-menu-muted)}

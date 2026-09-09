@@ -22,9 +22,11 @@ type realtimeHub struct {
 	// history keeps a short per-workspace replay window for reconnecting SSE
 	// clients. It is intentionally bounded: clients that fall outside the
 	// window receive workspace.resync_required and fetch a fresh snapshot.
-	history  map[string][]domain.RealtimeEvent
-	presence map[string]map[string]domain.Presence
-	sockets  map[string]map[uint64]*realtimeSocketClient
+	history      map[string][]domain.RealtimeEvent
+	historyBytes map[string]int
+	historyTotal int
+	presence     map[string]map[string]domain.Presence
+	sockets      map[string]map[uint64]*realtimeSocketClient
 }
 
 func newRealtimeHub() *realtimeHub {
@@ -101,11 +103,39 @@ func (h *realtimeHub) subscribeSince(workspace, sinceID string) (<-chan domain.R
 func (h *realtimeHub) publish(workspace string, event domain.RealtimeEvent) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if len(event.Payload) > 256<<10 {
+		event = domain.RealtimeEvent{ID: event.ID, Type: "workspace.resync_required", ClientID: event.ClientID, ActorID: event.ActorID, CreatedAt: event.CreatedAt}
+	}
 	history := append(h.history[workspace], event)
-	if len(history) > 256 {
-		history = history[len(history)-256:]
+	if h.historyBytes == nil {
+		h.historyBytes = map[string]int{}
+	}
+	previousBytes := h.historyBytes[workspace]
+	bytes := previousBytes + len(event.Payload) + 256
+	for len(history) > 256 || bytes > 8<<20 {
+		bytes -= len(history[0].Payload) + 256
+		history[0] = domain.RealtimeEvent{}
+		history = history[1:]
 	}
 	h.history[workspace] = history
+	h.historyBytes[workspace] = bytes
+	h.historyTotal += bytes - previousBytes
+	for h.historyTotal > 64<<20 {
+		oldest := ""
+		var date time.Time
+		for key, items := range h.history {
+			if len(items) > 0 && (oldest == "" || items[len(items)-1].CreatedAt.Before(date)) {
+				oldest = key
+				date = items[len(items)-1].CreatedAt
+			}
+		}
+		if oldest == "" {
+			break
+		}
+		h.historyTotal -= h.historyBytes[oldest]
+		delete(h.history, oldest)
+		delete(h.historyBytes, oldest)
+	}
 	for _, channel := range h.subscribers[workspace] {
 		select {
 		case channel <- event:

@@ -787,7 +787,29 @@ func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.B
 	}
 	data.Drafts = slices.DeleteFunc(data.Drafts, func(item domain.Draft) bool { return item.UserID != userID })
 	data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool { return item.UserID != userID })
+	data.FavoriteFolders = slices.DeleteFunc(data.FavoriteFolders, func(item domain.FavoriteFolder) bool { return item.UserID != userID })
 	data.Subscriptions = slices.DeleteFunc(data.Subscriptions, func(item domain.Subscription) bool { return item.UserID != userID })
+	// The persisted flag is a compatibility field. The viewer's own favorite
+	// records determine its value, never another member's last toggle.
+	favoriteIDs := map[string]bool{}
+	for _, favorite := range data.Favorites {
+		favoriteIDs[favorite.ResourceType+":"+favorite.ResourceID] = true
+	}
+	for i := range data.Documents {
+		data.Documents[i].Favorite = favoriteIDs["document:"+data.Documents[i].ID]
+	}
+	for i := range data.Cycles {
+		data.Cycles[i].Favorite = favoriteIDs["cycle:"+data.Cycles[i].ID]
+	}
+	for i := range data.Initiatives {
+		data.Initiatives[i].Favorite = favoriteIDs["initiative:"+data.Initiatives[i].ID]
+	}
+	for i := range data.SavedViews {
+		data.SavedViews[i].Favorite = favoriteIDs["view:"+data.SavedViews[i].ID]
+	}
+	for i := range data.Reviews {
+		data.Reviews[i].Favorite = favoriteIDs["review:"+data.Reviews[i].ID] || favoriteIDs["review:"+data.Reviews[i].SlugID]
+	}
 	data.ImportJobs = slices.DeleteFunc(data.ImportJobs, func(item domain.ImportJob) bool { return item.UserID != userID })
 	data.ExportJobs = slices.DeleteFunc(data.ExportJobs, func(item domain.ExportJob) bool { return item.UserID != userID })
 	if !isWorkspaceAdminRole(role) {
@@ -1403,14 +1425,14 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 	}
 	// Recompute project issue counts from the visible issue projection so a
 	// public project shell cannot reveal the size of a private team's backlog.
-	for index := range data.Projects {
-		count := 0
-		for _, issue := range data.Issues {
-			if issue.Project != nil && issue.Project.ID == data.Projects[index].ID {
-				count++
-			}
+	projectCounts := map[string]int{}
+	for _, issue := range data.Issues {
+		if issue.Project != nil {
+			projectCounts[issue.Project.ID]++
 		}
-		data.Projects[index].IssueCount = count
+	}
+	for index := range data.Projects {
+		data.Projects[index].IssueCount = projectCounts[data.Projects[index].ID]
 	}
 	data.ReleasePipelines = slices.DeleteFunc(data.ReleasePipelines, func(pipeline domain.ReleasePipeline) bool {
 		return len(pipeline.TeamIDs) > 0 && !slices.ContainsFunc(pipeline.TeamIDs, func(teamID string) bool { return allowed[teamID] })
@@ -1513,6 +1535,10 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 			return slices.ContainsFunc(data.SavedViews, func(view domain.SavedView) bool { return view.ID == id || view.SlugID == id })
 		case "team":
 			return allowed[id]
+		case "label":
+			return slices.ContainsFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id && label.ArchivedAt == nil })
+		case "review":
+			return slices.ContainsFunc(data.Reviews, func(review domain.CodeReview) bool { return review.ID == id || review.SlugID == id })
 		case "cycle":
 			return slices.ContainsFunc(data.Cycles, func(cycle domain.Cycle) bool { return cycle.ID == id })
 		case "release":

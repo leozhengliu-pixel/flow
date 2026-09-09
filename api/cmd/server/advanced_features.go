@@ -452,7 +452,7 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.Document
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.updated", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), favoriteMutationEvent("document.updated", input), id, input, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
 			return err
@@ -1962,6 +1962,10 @@ func resourceExists(data *domain.Bootstrap, kind, id string) bool {
 
 func setResourceFavoriteFlag(data *domain.Bootstrap, kind, id string, favorite bool) {
 	switch kind {
+	case "review":
+		if index := reviewIndex(*data, id); index >= 0 {
+			data.Reviews[index].Favorite = favorite
+		}
 	case "document":
 		if index := slices.IndexFunc(data.Documents, func(item domain.Document) bool { return item.ID == id }); index >= 0 {
 			data.Documents[index].Favorite = favorite
@@ -2015,9 +2019,13 @@ func setFavoriteRecord(data *domain.Bootstrap, kind, id string, favorite bool) {
 
 func (s *server) addFavorite(w http.ResponseWriter, r *http.Request) {
 	kind, id := r.PathValue("type"), r.PathValue("id")
+	if err := s.checkPreferenceIssue(r); err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
 	var created domain.Favorite
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "favorite.added", id, map[string]string{"type": kind}, func(data *domain.Bootstrap) error {
-		if !resourceExists(data, kind, id) {
+		if kind != "issue" && !resourceExists(data, kind, id) {
 			return errNotFound
 		}
 		if kind == "document" {
@@ -2203,13 +2211,17 @@ func (s *server) deleteFavoriteFolder(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) addSubscription(w http.ResponseWriter, r *http.Request) {
 	kind, id := r.PathValue("type"), r.PathValue("id")
+	if err := s.checkPreferenceIssue(r); err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
 	var input domain.SubscriptionMutationInput
 	if r.ContentLength > 0 && !decodeJSON(w, r, &input) {
 		return
 	}
 	var created domain.Subscription
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "subscription.added", id, map[string]string{"type": kind}, func(data *domain.Bootstrap) error {
-		if !resourceExists(data, kind, id) {
+		if kind != "issue" && !resourceExists(data, kind, id) {
 			return errNotFound
 		}
 		if kind == "document" {
@@ -2404,13 +2416,21 @@ func (s *server) purgeTrashEntry(w http.ResponseWriter, r *http.Request) {
 
 func parseImportFile(filename string, reader io.Reader) (string, []string, []map[string]string, error) {
 	if strings.HasSuffix(strings.ToLower(filename), ".json") {
-		var raw []map[string]any
-		if err := json.NewDecoder(io.LimitReader(reader, 20<<20)).Decode(&raw); err != nil {
-			return "", nil, nil, err
+		decoder := json.NewDecoder(io.LimitReader(reader, 20<<20))
+		token, err := decoder.Token()
+		if err != nil || token != json.Delim('[') {
+			return "", nil, nil, errInvalid
 		}
 		headers := []string{}
-		rows := make([]map[string]string, 0, len(raw))
-		for _, item := range raw {
+		rows := []map[string]string{}
+		for decoder.More() {
+			if len(rows) >= 5000 {
+				return "", nil, nil, fmt.Errorf("imports are limited to 5000 rows")
+			}
+			var item map[string]any
+			if err := decoder.Decode(&item); err != nil {
+				return "", nil, nil, err
+			}
 			row := map[string]string{}
 			for key, value := range item {
 				if !slices.Contains(headers, key) {
@@ -2420,16 +2440,29 @@ func parseImportFile(filename string, reader io.Reader) (string, []string, []map
 			}
 			rows = append(rows, row)
 		}
+		if _, err := decoder.Token(); err != nil {
+			return "", nil, nil, err
+		}
 		sort.Strings(headers)
 		return "json", headers, rows, nil
 	}
-	records, err := csv.NewReader(io.LimitReader(reader, 20<<20)).ReadAll()
-	if err != nil || len(records) == 0 {
+	csvReader := csv.NewReader(io.LimitReader(reader, 20<<20))
+	headers, err := csvReader.Read()
+	if err != nil {
 		return "", nil, nil, errInvalid
 	}
-	headers := records[0]
-	rows := make([]map[string]string, 0, len(records)-1)
-	for _, record := range records[1:] {
+	rows := []map[string]string{}
+	for {
+		record, err := csvReader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", nil, nil, err
+		}
+		if len(rows) >= 5000 {
+			return "", nil, nil, fmt.Errorf("imports are limited to 5000 rows")
+		}
 		row := map[string]string{}
 		for index, header := range headers {
 			if index < len(record) {
@@ -2480,6 +2513,19 @@ func (s *server) previewImport(w http.ResponseWriter, r *http.Request) {
 // The worker uses a detached context so a browser closing the mapping dialog
 // cannot abort a job that was already accepted.
 func (s *server) commitImport(w http.ResponseWriter, r *http.Request) {
+	select {
+	case s.importSlots <- struct{}{}:
+	default:
+		w.Header().Set("Retry-After", "2")
+		writeError(w, http.StatusTooManyRequests, "Import workers are busy; retry shortly")
+		return
+	}
+	release := true
+	defer func() {
+		if release {
+			<-s.importSlots
+		}
+	}()
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid import request")
@@ -2520,8 +2566,14 @@ func (s *server) commitImport(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusBadRequest, nil)
 		return
 	}
+	release = false
 	go func() {
-		request := r.Clone(context.WithoutCancel(r.Context()))
+		defer func() { <-s.importSlots }()
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 30*time.Minute)
+		defer cancel()
+		stop := context.AfterFunc(s.store.WorkerContext(), cancel)
+		defer stop()
+		request := r.Clone(ctx)
 		request.Body = io.NopCloser(bytes.NewReader(body))
 		s.commitImportSync(httptest.NewRecorder(), request)
 	}()
@@ -2971,14 +3023,14 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 	leadReminders := boolFromAny(settings["reminders"])
 	missingNotifications := settings["missingNotifications"] == nil || boolFromAny(settings["missingNotifications"])
 	for _, project := range data.Projects {
-		cadence := projectCadenceDays(project.UpdateCadence, defaultCadence)
+		cadence := projectScheduleDays(project, defaultCadence)
 		if cadence > 0 {
 			updates := data.ProjectUpdates[project.ID]
 			reference := project.CreatedAt
 			if len(updates) > 0 && updates[0].CreatedAt.After(reference) {
 				reference = updates[0].CreatedAt
 			}
-			dueAt := reference.AddDate(0, 0, cadence)
+			dueAt := projectNextUpdateDue(project, reference, cadence)
 			missing := now.After(dueAt)
 			dueSoon := leadReminders && !missing && now.After(dueAt.Add(-24*time.Hour))
 			latestOutdated := len(updates) > 0 && (updates[0].DueAt == nil || !updates[0].DueAt.Equal(dueAt) || updates[0].Missing != missing)
@@ -3001,7 +3053,7 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 		}
 		for projectIndex := range next.Projects {
 			project := &next.Projects[projectIndex]
-			cadence := projectCadenceDays(project.UpdateCadence, defaultCadence)
+			cadence := projectScheduleDays(*project, defaultCadence)
 			if cadence <= 0 {
 				continue
 			}
@@ -3010,7 +3062,7 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 			if len(updates) > 0 && updates[0].CreatedAt.After(reference) {
 				reference = updates[0].CreatedAt
 			}
-			dueAt := reference.AddDate(0, 0, cadence)
+			dueAt := projectNextUpdateDue(*project, reference, cadence)
 			missing := now.After(dueAt)
 			dueSoon := leadReminders && !missing && now.After(dueAt.Add(-24*time.Hour))
 			if len(updates) > 0 {

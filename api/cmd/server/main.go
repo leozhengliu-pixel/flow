@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -64,6 +65,7 @@ type server struct {
 	mcpUploads                     map[string]*mcpPendingUpload
 	agentApprovalsMu               sync.Mutex
 	agentApprovals                 map[string]*agentApproval
+	importSlots                    chan struct{}
 }
 
 func main() {
@@ -158,6 +160,9 @@ func runHealthcheck() int {
 }
 
 func newHandler(s *server) http.Handler {
+	if s.importSlots == nil {
+		s.importSlots = make(chan struct{}, 2)
+	}
 	if s.authLimiter == nil {
 		if s.coordinator != nil {
 			s.authLimiter = s.coordinator
@@ -426,6 +431,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/drafts/{id}", s.updateDraft)
 	mux.HandleFunc("DELETE /api/drafts/{id}", s.deleteDraft)
 	mux.HandleFunc("PUT /api/favorites/{type}/{id}", s.addFavorite)
+	mux.HandleFunc("GET /api/resource-preferences", s.resourcePreferences)
 	mux.HandleFunc("PATCH /api/favorites/{type}/{id}", s.updateFavorite)
 	mux.HandleFunc("DELETE /api/favorites/{type}/{id}", s.removeFavorite)
 	mux.HandleFunc("POST /api/favorite-folders", s.createFavoriteFolder)
@@ -685,7 +691,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /uploads/{name}", s.serveUpload)
 
 	handler := s.withStaticFiles(boundedLegacyIssueWrites(s.authenticate(mux)))
-	return requestLog(s.cors(handler))
+	return requestLog(s.cors(requestBodyBudget(handler)))
 }
 
 func (s *server) withStaticFiles(next http.Handler) http.Handler {
@@ -753,6 +759,10 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		filterBootstrapForAPIKey(&data, r)
+		if err := s.filterPreferenceIssueTeams(r, &data); err != nil {
+			issueRecordsError(w, err)
+			return
+		}
 		sanitizeBootstrap(&data)
 		writeBootstrapJSON(w, data)
 		return
@@ -1322,7 +1332,7 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 		input.Color = "#5E6AD2"
 	}
 	var persistedTeamMembers []domain.TeamMember
-	if data, ok := s.store.BootstrapFor(workspaceKey); ok {
+	if data, ok := s.store.WorkspaceMetadata(workspaceKey); ok {
 		persistedTeamMembers, _ = s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
 	}
 	team := domain.Team{ID: fmt.Sprintf("team_%d", time.Now().UnixNano()), Name: input.Name, Key: input.Key, Color: input.Color, Icon: input.Icon, Private: input.Private}
@@ -1415,7 +1425,7 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var persistedTeamMembers []domain.TeamMember
-	if data, ok := s.store.BootstrapFor(workspaceKey); ok {
+	if data, ok := s.store.WorkspaceMetadata(workspaceKey); ok {
 		persistedTeamMembers, _ = s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
 	}
 	var updated domain.Team
@@ -1688,7 +1698,7 @@ func workspaceKey(r *http.Request) string {
 }
 
 func (s *server) workspaceData(r *http.Request) domain.Bootstrap {
-	if r.URL.Path == "/api/workspace/preferences" || r.URL.Path == "/api/account/settings" || r.URL.Path == "/api/views" || strings.HasPrefix(r.URL.Path, "/api/views/") {
+	if metadataReadRequest(r) || r.URL.Path == "/api/views" || strings.HasPrefix(r.URL.Path, "/api/views/") {
 		if !s.authDisabled {
 			data, _ := s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
 			filterBootstrapForAPIKey(&data, r)
@@ -1768,33 +1778,17 @@ func (s *server) listNotifications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := time.Now().UTC()
-	data := s.workspaceData(r)
-	result := domain.NotificationList{Notifications: []domain.Notification{}}
-	for _, notification := range data.Notifications {
-		if notification.RecipientID != data.Viewer.ID {
-			continue
-		}
-		if !includeArchived && notification.ArchivedAt != nil {
-			continue
-		}
-		if !includeDeleted && notification.DeletedAt != nil {
-			continue
-		}
-		if !includeSnoozed && notification.SnoozedUntil != nil && notification.SnoozedUntil.After(now) {
-			continue
-		}
-		if notification.ReadAt == nil {
-			result.UnreadCount++
-		}
-		if read != nil && (notification.ReadAt != nil) != *read {
-			continue
-		}
-		result.Notifications = append(result.Notifications, notification)
+	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	if !ok {
+		writeError(w, 404, "workspace not found")
+		return
 	}
-	slices.SortFunc(result.Notifications, func(left, right domain.Notification) int {
-		return right.CreatedAt.Compare(left.CreatedAt)
-	})
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	result, err := s.store.QueryNotifications(r.Context(), store.NotificationQuery{Workspace: data.Workspace.URLKey, UserID: requestActor(s, r).ID, IncludeArchived: includeArchived, IncludeDeleted: includeDeleted, IncludeSnoozed: includeSnoozed, Read: read, Cursor: r.URL.Query().Get("cursor"), Limit: limit})
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -1814,19 +1808,17 @@ func (s *server) updateNotification(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := r.PathValue("id")
-	var updated domain.Notification
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), notificationEventType(input), id, input, func(data *domain.Bootstrap) error {
-		notification, err := notificationByID(data, id)
-		if err != nil {
-			return err
-		}
-		if notification.RecipientID != data.Viewer.ID {
-			return errNotFound
-		}
+	metadata, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	if !ok {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+	updated, err := s.store.UpdateNotificationRecord(r.Context(), metadata.Workspace.URLKey, requestActor(s, r).ID, id, notificationEventType(input), input, func(notification *domain.Notification) {
 		applyNotificationUpdate(notification, input, snoozeProvided, snoozedUntil)
-		updated = *notification
-		return nil
 	})
+	if errors.Is(err, sql.ErrNoRows) {
+		err = errNotFound
+	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
@@ -1861,7 +1853,7 @@ func (s *server) updateSavedView(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.SavedView
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "view.updated", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), favoriteMutationEvent("view.updated", input), id, input, func(data *domain.Bootstrap) error {
 		view, err := savedViewByID(data, id)
 		if err != nil {
 			return err
@@ -2063,7 +2055,7 @@ func (s *server) updateCycle(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.Cycle
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "cycle.updated", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), favoriteMutationEvent("cycle.updated", input), id, input, func(data *domain.Bootstrap) error {
 		cycle, err := cycleByID(data, id)
 		if err != nil {
 			return err
@@ -2694,7 +2686,7 @@ func (s *server) updateInitiative(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.Initiative
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.updated", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), favoriteMutationEvent("initiative.updated", input), id, input, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -3464,11 +3456,10 @@ func (s *server) createProjectUpdate(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		created = domain.ProjectUpdate{ID: fmt.Sprintf("project_update_%d", time.Now().UnixNano()), ProjectID: id, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, Health: health, CreatedAt: now, User: data.Viewer, Comments: []domain.Comment{}, Reactions: map[string][]string{}, Attachments: []domain.Attachment{}}
-		if settings, ok := data.Settings["projectUpdates"].(map[string]any); ok {
-			if cadence := intFromAny(settings["cadenceDays"]); cadence > 0 {
-				dueAt := now.AddDate(0, 0, cadence)
-				created.DueAt = &dueAt
-			}
+		settings, _ := data.Settings["projectUpdates"].(map[string]any)
+		if cadence := projectScheduleDays(*project, intFromAny(settings["cadenceDays"])); cadence > 0 {
+			dueAt := projectNextUpdateDue(*project, now, cadence)
+			created.DueAt = &dueAt
 		}
 		if data.ProjectUpdates == nil {
 			data.ProjectUpdates = map[string][]domain.ProjectUpdate{}
@@ -4324,14 +4315,17 @@ func safeInlineUploadType(value, name string) bool {
 
 func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBootstrap, userID, url string) bool {
 	for _, membership := range account.Workspaces {
-		data, ok, err := s.store.BootstrapForUser(ctx, membership.Workspace.URLKey, userID)
-		if err != nil || !ok {
+		data, access, err := s.store.IssueQueryAccess(ctx, membership.Workspace.URLKey, userID)
+		if err != nil {
 			continue
 		}
-		for _, issue := range data.Issues {
-			if slices.ContainsFunc(issue.Attachments, func(attachment domain.Attachment) bool { return attachment.URL == url }) {
-				return true
-			}
+		visible, err := s.store.IssueAttachmentVisible(ctx, store.IssueRecordQuery{Workspace: data.Workspace.URLKey, Access: &access}, url)
+		if err == nil && visible {
+			return true
+		}
+		data, err = s.store.PagedWorkspaceMetadata(ctx, data.Workspace.URLKey, userID)
+		if err != nil {
+			continue
 		}
 		for _, request := range data.CustomerRequests {
 			if slices.ContainsFunc(request.Attachments, func(attachment domain.Attachment) bool { return attachment.URL == url }) {
@@ -5118,6 +5112,26 @@ func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input d
 			return errInvalid
 		}
 		project.UpdateCadence = *input.UpdateCadence
+		project.UpdateSchedule = nil
+	}
+	if input.UpdateSchedule != nil {
+		if !validProjectUpdateSchedule(*input.UpdateSchedule) {
+			return errInvalid
+		}
+		schedule := *input.UpdateSchedule
+		project.UpdateSchedule = &schedule
+		if schedule.Mode == "never" {
+			now := time.Now().UTC()
+			archiveProjectUpdateReminders(data, project.ID, "projectUpdateReminder", now)
+			archiveProjectUpdateReminders(data, project.ID, "projectUpdateDueReminder", now)
+			updates := data.ProjectUpdates[project.ID]
+			for index := range updates {
+				updates[index].DueAt, updates[index].Missing = nil, false
+			}
+			if data.ProjectUpdates != nil {
+				data.ProjectUpdates[project.ID] = updates
+			}
+		}
 	}
 	if input.Archived != nil {
 		if *input.Archived {
@@ -5594,8 +5608,9 @@ func priorityLabel(priority int) string {
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, target any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONRequestBytes)
 	if err := json.NewDecoder(r.Body).Decode(target); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON")
+		requestDecodeError(w, err)
 		return false
 	}
 	return true
