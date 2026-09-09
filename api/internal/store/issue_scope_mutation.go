@@ -218,6 +218,8 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		for _, delivery := range data.NotificationDeliveries {
 			oldDeliveries[delivery.ID] = true
 		}
+		refreshDisplayReferences(&data)
+		refreshIssueReferences(&data)
 		aggregate, err := mutate(&data)
 		if err != nil {
 			return err
@@ -225,7 +227,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		remaining := map[string]bool{}
 		for _, issue := range data.Issues {
 			remaining[issue.ID] = true
-			if err := s.writeIssueRecord(ctx, tx, workspace, issue); err != nil {
+			if err := s.writeIssueRecord(ctx, tx, workspace, issue, data); err != nil {
 				return err
 			}
 		}
@@ -254,13 +256,13 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 				return err
 			}
 		}
-		if err := syncContentRecords(ctx, tx, workspace, "comment", data.Comments, keys); err != nil {
+		if err := syncContentRecords(ctx, tx, workspace, "comment", data.Comments, data, keys); err != nil {
 			return err
 		}
-		if err := syncContentRecords(ctx, tx, workspace, "activity", data.Activities, keys); err != nil {
+		if err := syncContentRecords(ctx, tx, workspace, "activity", data.Activities, data, keys); err != nil {
 			return err
 		}
-		if err := syncContentRecords(ctx, tx, workspace, "notification", notificationRecords(data.Notifications), keys); err != nil {
+		if err := syncContentRecords(ctx, tx, workspace, "notification", notificationRecords(data.Notifications), data, keys); err != nil {
 			return err
 		}
 		for _, delivery := range data.NotificationDeliveries {
@@ -281,6 +283,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: aggregate, Payload: payloadRaw, CreatedAt: time.Now().UTC()}
 		realtime = enrichRealtimePayload(payloadRaw, aggregateJSONValue(data, aggregate), eventType)
 		data.ViewerRole = originalRole
+		data.Viewer = current.Viewer
 		data = collectionMetadata(data)
 		encoded, err := json.Marshal(data)
 		if err != nil {
@@ -289,7 +292,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		if len(encoded) > s.maxStateBytes {
 			return fmt.Errorf("workspace metadata exceeds %d bytes", s.maxStateBytes)
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE workspace_states SET data=?,updated_at=? WHERE workspace_key=?`, encoded, event.CreatedAt.Format(time.RFC3339Nano), workspace); err != nil {
+		if err := writeWorkspaceMetadata(ctx, tx, workspace, data.Workspace.ID, encoded); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,created_at) VALUES(?,?,?,?,?)`, event.ID, event.Type, aggregate, payloadRaw, event.CreatedAt.Format(time.RFC3339Nano)); err != nil {
@@ -302,6 +305,9 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		return nil
 	}()
 	if err != nil {
+		if errors.Is(err, ErrNoMutation) {
+			return nil
+		}
 		return err
 	}
 	if sink := s.webhook(); sink != nil {

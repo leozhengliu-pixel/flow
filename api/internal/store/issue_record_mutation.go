@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -14,16 +15,21 @@ import (
 
 var ErrIssueVersion = errors.New("issue version conflict")
 
+// ErrNoMutation discards an idempotent operation without persisting an event.
+var ErrNoMutation = errors.New("no mutation")
+
 type IssueMutationScope struct {
 	RelatedIDs    []string
 	IncludeFamily bool
 	NewParentID   string
+	Payload       any
 }
 
 // UpdateIssueRecord is a bounded entity transaction. The callback may update
 // the target, its immediate family, and the supplied related IDs. Large graph
 // changes must be scheduled as batches rather than materialized in a request.
 func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id string, expected *int64, scope IssueMutationScope, mutate func(*domain.Bootstrap, *domain.Issue) error) (domain.Issue, error) {
+	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(workspace)
 	metadata, ok := s.WorkspaceMetadata(workspace)
 	if !ok {
 		return domain.Issue{}, sql.ErrNoRows
@@ -199,7 +205,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		result = *target
 		for _, issue := range metadata.Issues {
 			if !reflect.DeepEqual(previous[issue.ID], issue) {
-				if err := s.writeIssueRecord(ctx, tx, workspace, issue); err != nil {
+				if err := s.writeIssueRecord(ctx, tx, workspace, issue, metadata); err != nil {
 					return err
 				}
 			}
@@ -223,8 +229,35 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 				return err
 			}
 		}
-		payload, _ := json.Marshal(map[string]any{"issue": result})
-		before, _ := json.Marshal(original)
+		oldRaw, _ := json.Marshal(original)
+		newRaw, _ := json.Marshal(result)
+		var oldFields, newFields map[string]json.RawMessage
+		_ = json.Unmarshal(oldRaw, &oldFields)
+		_ = json.Unmarshal(newRaw, &newFields)
+		changed, previousFields := map[string]json.RawMessage{}, map[string]json.RawMessage{}
+		for field, value := range newFields {
+			if !bytes.Equal(value, oldFields[field]) {
+				changed[field] = value
+				previousFields[field] = oldFields[field]
+			}
+		}
+		for field, value := range oldFields {
+			if _, exists := newFields[field]; !exists {
+				changed[field] = json.RawMessage("null")
+				previousFields[field] = value
+			}
+		}
+		payload, _ := json.Marshal(changed)
+		if scope.Payload != nil {
+			payload, err = json.Marshal(scope.Payload)
+			if err != nil {
+				return err
+			}
+		}
+		var before []byte
+		if webhookEnabled {
+			before, _ = json.Marshal(previousFields)
+		}
 		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: "issue.updated", AggregateID: id, Payload: payload, PreviousValues: before, CreatedAt: time.Now().UTC()}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at) VALUES(?,?,?,?,?,?)`, event.ID, event.Type, id, payload, before, event.CreatedAt.Format(time.RFC3339Nano)); err != nil {
 			return err

@@ -12,6 +12,7 @@ func metadataOnlyMutation(event string, payload any) bool {
 	}
 	switch event {
 	case "api_key.used", "view.created", "view.updated", "view.deleted", "view.shared", "view.unshared",
+		"import.previewed", "import.queued", "import.cancelled", "import.retried", "import.resumed", "import.failed",
 		"project_display_default.updated", "workspace_preferences.updated", "user_settings.updated", "draft.created", "draft.updated", "draft.deleted", "drafts.deleted":
 		return true
 	}

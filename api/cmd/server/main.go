@@ -3790,23 +3790,46 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "issueIds are required")
 		return
 	}
+	if len(input.IssueIDs) > 1000 {
+		writeError(w, http.StatusBadRequest, "batch updates are limited to 1000 issues")
+		return
+	}
+	seenIDs := make(map[string]bool, len(input.IssueIDs))
+	input.IssueIDs = slices.DeleteFunc(input.IssueIDs, func(id string) bool {
+		if seenIDs[id] {
+			return true
+		}
+		seenIDs[id] = true
+		return false
+	})
 	var updated []domain.Issue
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.batch_updated", fmt.Sprintf("issue_batch_%d", time.Now().UnixNano()), input, func(data *domain.Bootstrap) error {
+		changed := false
 		for _, id := range input.IssueIDs {
 			issue, err := issueByID(data, id)
 			if err != nil {
 				return err
 			}
+			before, _ := json.Marshal(issue)
 			changes, err := applyUpdate(data, issue, input.Update)
 			if err != nil {
 				return err
 			}
+			after, _ := json.Marshal(issue)
+			if bytes.Equal(before, after) {
+				updated = append(updated, *issue)
+				continue
+			}
+			changed = true
 			issue.UpdatedAt = time.Now().UTC()
 			applySLARules(data, issue, issue.UpdatedAt)
 			issue.Version++
 			updated = append(updated, *issue)
 			activity := appendActivity(data, id, "issue.updated", data.Viewer, changes)
 			appendIssueNotifications(data, *issue, activity, nil)
+		}
+		if !changed {
+			return store.ErrNoMutation
 		}
 		return nil
 	})

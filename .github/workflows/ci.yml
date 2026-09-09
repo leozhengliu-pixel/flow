@@ -203,6 +203,18 @@ jobs:
           FLOW_TEST_REDIS_ADDR: 127.0.0.1:6379
         run: go test -tags=integration ./internal/coordination -run TestExternalRedisCoordinationRoundTrip
 
+      - name: Create isolated binlog regression database
+        run: >-
+          docker exec -e MYSQL_PWD=root ${{ job.services.mysql.id }} mysql -uroot -e
+          "CREATE DATABASE flow_write_audit; GRANT ALL ON flow_write_audit.* TO 'flow'@'%'; GRANT REPLICATION CLIENT ON *.* TO 'flow'@'%';"
+
+      - name: Verify bounded MySQL import writes
+        working-directory: api
+        env:
+          FLOW_TEST_WRITE_MYSQL_DSN: flow:flow@tcp(127.0.0.1:3306)/flow_write_audit?parseTime=true
+          FLOW_ASSERT_WRITE_BOUNDS: '1'
+        run: go test ./cmd/server -run '^TestMySQLImportWriteAmplification$' -count=1 -v
+
       - name: Start MinIO
         run: |
           docker run -d --name flow-minio -p 9000:9000 \

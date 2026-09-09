@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -18,25 +20,40 @@ import (
 )
 
 type DatabaseConfig struct {
-	Driver          string
-	URL             string
-	Path            string
-	FixtureProfile  string
-	FixturePassword string
-	MaxOpenConns    int
-	MaxIdleConns    int
-	ConnMaxLifetime time.Duration
-	MaxStateBytes   int
+	Driver              string
+	URL                 string
+	Path                string
+	FixtureProfile      string
+	FixturePassword     string
+	MaxOpenConns        int
+	MaxIdleConns        int
+	ConnMaxLifetime     time.Duration
+	MaxStateBytes       int
+	MaxTransactionBytes int
 }
 
 type sqlDatabase struct {
 	*sql.DB
-	dialect string
+	dialect             string
+	maxTransactionBytes int
 }
 
 type sqlTx struct {
 	*sql.Tx
-	dialect string
+	dialect             string
+	maxTransactionBytes int
+	writtenBytes        int
+	writeErr            error
+}
+
+var ErrTransactionWriteBudget = errors.New("transaction write budget exceeded")
+
+func (tx *sqlTx) Commit() error {
+	if tx.writeErr != nil {
+		_ = tx.Tx.Rollback()
+		return tx.writeErr
+	}
+	return tx.Tx.Commit()
 }
 
 func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
@@ -127,7 +144,11 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 	if maxStateBytes <= 0 {
 		maxStateBytes = 64 << 20
 	}
-	s := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: driver}, dialect: driver, fixtureProfile: strings.TrimSpace(config.FixtureProfile), fixturePassword: config.FixturePassword, maxStateBytes: maxStateBytes}
+	maxTransactionBytes := config.MaxTransactionBytes
+	if maxTransactionBytes <= 0 {
+		maxTransactionBytes = 32 << 20
+	}
+	s := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: driver, maxTransactionBytes: maxTransactionBytes}, dialect: driver, fixtureProfile: strings.TrimSpace(config.FixtureProfile), fixturePassword: config.FixturePassword, maxStateBytes: maxStateBytes}
 	if err := s.migrate(context.Background()); err != nil {
 		db.Close()
 		return nil, err
@@ -150,6 +171,10 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := s.ensureWorkspaceMetadataRecords(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := s.loadOrSeed(context.Background()); err != nil {
 		db.Close()
 		return nil, err
@@ -164,6 +189,10 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		return nil, err
 	}
 	if err := s.migrateIssueCollections(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.migrateWorkspaceMetadataRecords(context.Background()); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -264,10 +293,31 @@ func (d *sqlDatabase) BeginTx(ctx context.Context, options *sql.TxOptions) (*sql
 	if err != nil {
 		return nil, err
 	}
-	return &sqlTx{Tx: tx, dialect: d.dialect}, nil
+	return &sqlTx{Tx: tx, dialect: d.dialect, maxTransactionBytes: d.maxTransactionBytes}, nil
 }
 
 func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	if tx.writeErr != nil {
+		return nil, tx.writeErr
+	}
+	bytes := len(query)
+	for _, arg := range args {
+		switch value := arg.(type) {
+		case string:
+			bytes += len(value)
+		case []byte:
+			bytes += len(value)
+		case json.RawMessage:
+			bytes += len(value)
+		default:
+			bytes += 16
+		}
+	}
+	if tx.maxTransactionBytes > 0 && bytes > tx.maxTransactionBytes-tx.writtenBytes {
+		tx.writeErr = fmt.Errorf("%w: maximum %d bytes; split the import into smaller batches", ErrTransactionWriteBudget, tx.maxTransactionBytes)
+		return nil, tx.writeErr
+	}
+	tx.writtenBytes += bytes
 	return tx.Tx.ExecContext(ctx, rewriteSQL(query, tx.dialect), args...)
 }
 

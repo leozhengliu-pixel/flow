@@ -129,12 +129,18 @@ func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) 
 }
 
 func (s *SQLiteStore) ReloadAllWorkspaces(ctx context.Context) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT workspace_key,data FROM workspace_states`)
+	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, `SELECT workspace_key,data FROM workspace_states`)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	workspaces := map[string]domain.Bootstrap{}
+	stored := map[string][]byte{}
 	for rows.Next() {
 		var key string
 		var raw []byte
@@ -144,14 +150,25 @@ func (s *SQLiteStore) ReloadAllWorkspaces(ctx context.Context) error {
 		if len(raw) > s.maxStateBytes {
 			return fmt.Errorf("workspace %q state exceeds %d bytes", key, s.maxStateBytes)
 		}
+		stored[key] = raw
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+	for key, raw := range stored {
+		full, err := s.expandWorkspaceMetadata(ctx, key, raw, tx)
+		if err != nil {
+			return err
+		}
 		var data domain.Bootstrap
-		if err := json.Unmarshal(raw, &data); err != nil {
+		if err := json.Unmarshal(full, &data); err != nil {
 			return err
 		}
 		normalizeStoredMetadata(&data)
 		workspaces[key] = data
 	}
-	if err := rows.Err(); err != nil {
+	if err := tx.Commit(); err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -164,18 +181,30 @@ func (s *SQLiteStore) ReloadAllWorkspaces(ctx context.Context) error {
 }
 
 func (s *SQLiteStore) loadWorkspaceState(ctx context.Context, workspaceKey string) (domain.Bootstrap, error) {
+	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
+	if err != nil {
+		return domain.Bootstrap{}, err
+	}
+	defer tx.Rollback()
 	var raw []byte
-	if err := s.db.QueryRowContext(ctx, `SELECT data FROM workspace_states WHERE workspace_key=?`, workspaceKey).Scan(&raw); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT data FROM workspace_states WHERE workspace_key=?`, workspaceKey).Scan(&raw); err != nil {
 		return domain.Bootstrap{}, err
 	}
 	if len(raw) > s.maxStateBytes {
 		return domain.Bootstrap{}, fmt.Errorf("workspace state exceeds %d bytes", s.maxStateBytes)
+	}
+	raw, err = s.expandWorkspaceMetadata(ctx, workspaceKey, raw, tx)
+	if err != nil {
+		return domain.Bootstrap{}, err
 	}
 	var data domain.Bootstrap
 	if err := json.Unmarshal(raw, &data); err != nil {
 		return data, err
 	}
 	normalizeStoredMetadata(&data)
+	if err := tx.Commit(); err != nil {
+		return data, err
+	}
 	return data, nil
 }
 
@@ -345,10 +374,20 @@ func (s *SQLiteStore) makeAuthEmailNullable(ctx context.Context) error {
 func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	s.workspaces = map[string]domain.Bootstrap{}
 	historyChanged := map[string]bool{}
-	rows, err := s.db.QueryContext(ctx, `SELECT workspace_key,data FROM workspace_states ORDER BY updated_at ASC`)
+	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, `SELECT workspace_key,data FROM workspace_states ORDER BY updated_at ASC`)
+	if err != nil {
+		return err
+	}
+	type storedWorkspace struct {
+		key string
+		raw []byte
+	}
+	stored := []storedWorkspace{}
 	for rows.Next() {
 		var key string
 		var raw []byte
@@ -359,6 +398,21 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 		if len(raw) > s.maxStateBytes {
 			rows.Close()
 			return fmt.Errorf("workspace %q state exceeds %d bytes", key, s.maxStateBytes)
+		}
+		stored = append(stored, storedWorkspace{key, raw})
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, item := range stored {
+		key := item.key
+		raw, err := s.expandWorkspaceMetadata(ctx, key, item.raw, tx)
+		if err != nil {
+			return err
 		}
 		var data domain.Bootstrap
 		if err := json.Unmarshal(raw, &data); err != nil {
@@ -371,6 +425,9 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 			historyChanged[key] = refreshProjectProgressHistories(&data, time.Now().UTC())
 		}
 		s.workspaces[key] = data
+	}
+	if err := tx.Commit(); err != nil {
+		return err
 	}
 	if err := rows.Close(); err != nil {
 		return err
@@ -1129,6 +1186,8 @@ func (s *SQLiteStore) BootstrapForContext(ctx context.Context, workspaceKey stri
 	if err := s.hydrateContentRecords(ctx, data.Workspace.URLKey, &clone); err != nil {
 		return domain.Bootstrap{}, false
 	}
+	refreshDisplayReferences(&clone)
+	refreshIssueReferences(&clone)
 	refreshResourceCounts(&clone)
 	return clone, true
 }
@@ -1227,6 +1286,8 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 		if err := json.Unmarshal(raw, &next); err != nil {
 			return err
 		}
+		refreshDisplayReferences(&next)
+		refreshIssueReferences(&next)
 		originalViewerRole := next.ViewerRole
 		if actor, ok := actorFromContext(ctx); ok {
 			next.Viewer = actor
@@ -1269,11 +1330,7 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 		if err := s.persistWorkspace(ctx, workspaceKey, next, &event); err != nil {
 			return err
 		}
-		next.Issues = nil
-		next.Activities = nil
-		next.Comments = nil
-		next.Notifications = nil
-		next.NotificationDeliveries = nil
+		next = collectionMetadata(next)
 		s.workspaces[workspaceKey] = next
 		s.lastWorkspaceKey = workspaceKey
 		return nil
@@ -1285,6 +1342,9 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 		err = apply()
 	}
 	if err != nil {
+		if errors.Is(err, ErrNoMutation) {
+			return nil
+		}
 		return err
 	}
 	if sink := s.webhook(); sink != nil {
@@ -1360,6 +1420,7 @@ func aggregatePreviousValues(previous, next domain.Bootstrap, aggregateID string
 }
 
 func aggregateJSONValue(data domain.Bootstrap, aggregateID string) any {
+	data = compactImportInputs(data)
 	raw, err := json.Marshal(data)
 	if err != nil {
 		return nil
@@ -1397,6 +1458,8 @@ func (s *SQLiteStore) persist(ctx context.Context, data domain.Bootstrap, event 
 }
 
 func (s *SQLiteStore) persistWorkspace(ctx context.Context, workspaceKey string, data domain.Bootstrap, event *domain.DomainEvent) error {
+	inputData := data
+	data = compactImportInputs(data)
 	issues := data.Issues
 	activities, comments := data.Activities, data.Comments
 	notifications := data.Notifications
@@ -1418,40 +1481,42 @@ func (s *SQLiteStore) persistWorkspace(ctx context.Context, workspaceKey string,
 		return err
 	}
 	defer tx.Rollback()
+	if err := writeImportInputs(ctx, tx, workspaceKey, inputData); err != nil {
+		return err
+	}
 	if deliveries != nil {
-		if err := syncContentRecords(ctx, tx, workspaceKey, "delivery", map[string][]domain.NotificationDelivery{"": deliveries}); err != nil {
+		if err := syncContentRecords(ctx, tx, workspaceKey, "delivery", map[string][]domain.NotificationDelivery{"": deliveries}, data); err != nil {
 			return err
 		}
 	}
 	if notifications != nil {
-		if err := syncContentRecords(ctx, tx, workspaceKey, "notification", notificationRecords(notifications)); err != nil {
+		if err := syncContentRecords(ctx, tx, workspaceKey, "notification", notificationRecords(notifications), data); err != nil {
 			return err
 		}
 	}
 	if activities != nil {
-		if err := syncContentRecords(ctx, tx, workspaceKey, "activity", activities); err != nil {
+		if err := syncContentRecords(ctx, tx, workspaceKey, "activity", activities, data); err != nil {
 			return err
 		}
 	}
 	if comments != nil {
-		if err := syncContentRecords(ctx, tx, workspaceKey, "comment", comments); err != nil {
+		if err := syncContentRecords(ctx, tx, workspaceKey, "comment", comments, data); err != nil {
 			return err
 		}
 	}
 	if issues != nil {
-		if err := s.replaceIssueRecords(ctx, tx, workspaceKey, issues); err != nil {
+		if err := s.replaceIssueRecords(ctx, tx, workspaceKey, issues, data); err != nil {
 			return err
 		}
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := tx.ExecContext(ctx, `INSERT INTO workspace_states(workspace_key,workspace_id,data,updated_at) VALUES(?,?,?,?) ON CONFLICT(workspace_key) DO UPDATE SET workspace_id=excluded.workspace_id,data=excluded.data,updated_at=excluded.updated_at`, workspaceKey, data.Workspace.ID, raw, now); err != nil {
+	if err := writeWorkspaceMetadata(ctx, tx, workspaceKey, data.Workspace.ID, raw); err != nil {
 		return err
 	}
 	viewerRaw, _ := json.Marshal(s.viewer)
 	if len(viewerRaw) == 0 || string(viewerRaw) == "{}" {
 		viewerRaw, _ = json.Marshal(data.Viewer)
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO account_state(id,last_workspace_key,viewer,updated_at) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,viewer=excluded.viewer,updated_at=excluded.updated_at`, workspaceKey, viewerRaw, now); err != nil {
+	if err := writeAccountMetadata(ctx, tx, workspaceKey, viewerRaw); err != nil {
 		return err
 	}
 	if event != nil {
@@ -1578,14 +1643,16 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 			}
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_states WHERE workspace_key = ?`, workspaceKey); err != nil {
-		return domain.Bootstrap{}, err
+	if workspace.URLKey != workspaceKey {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_states WHERE workspace_key = ?`, workspaceKey); err != nil {
+			return domain.Bootstrap{}, err
+		}
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO workspace_states(workspace_key,workspace_id,data,updated_at) VALUES(?,?,?,?)`, workspace.URLKey, workspace.ID, raw, now.Format(time.RFC3339Nano)); err != nil {
+	if err := writeWorkspaceMetadata(ctx, tx, workspace.URLKey, workspace.ID, raw); err != nil {
 		return domain.Bootstrap{}, err
 	}
 	viewerRaw, _ := json.Marshal(s.viewer)
-	if _, err := tx.ExecContext(ctx, `INSERT INTO account_state(id,last_workspace_key,viewer,updated_at) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,viewer=excluded.viewer,updated_at=excluded.updated_at`, workspace.URLKey, viewerRaw, now.Format(time.RFC3339Nano)); err != nil {
+	if err := writeAccountMetadata(ctx, tx, workspace.URLKey, viewerRaw); err != nil {
 		return domain.Bootstrap{}, err
 	}
 	payload, _ := json.Marshal(workspace)
