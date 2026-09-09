@@ -1263,6 +1263,7 @@ func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	issueScores := map[string]semanticResult{}
 	if searchTypes(r.URL.Query().Get("types"))["issue"] {
 		scope.Filter = store.IssueFilter{}
 		scope.Archived = "all"
@@ -1276,6 +1277,17 @@ func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
 			err := s.store.SearchIssueCandidates(ctx, scope, term, nil, 250, func(issue domain.Issue) error {
 				if !seen[issue.ID] {
 					seen[issue.ID] = true
+					labels := []string{}
+					for _, label := range issue.Labels {
+						labels = append(labels, label.Name)
+					}
+					score, matched := semanticTextScore(query, issue.Title, issue.Description, issue.Identifier, issue.Team.Name, issue.State.Name, strings.Join(labels, " "))
+					issueScores[issue.ID] = semanticResult{SemanticScore: score, MatchedTerms: matched}
+					issue.Description = ""
+					issue.DescriptionState = ""
+					issue.DocumentContent = nil
+					issue.Attachments = nil
+					issue.Relations = nil
 					data.Issues = append(data.Issues, issue)
 				}
 				return nil
@@ -1317,7 +1329,16 @@ func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
 			for _, label := range item.Labels {
 				labels = append(labels, label.Name)
 			}
-			add(domain.SearchResult{ID: item.ID, Type: "issue", Title: item.Title, Subtitle: item.Team.Name, Identifier: item.Identifier, Color: item.State.Color, UpdatedAt: item.UpdatedAt}, item.Title, item.Description, item.Identifier, item.Team.Name, item.State.Name, strings.Join(labels, " "))
+			result := domain.SearchResult{ID: item.ID, Type: "issue", Title: item.Title, Subtitle: item.Team.Name, Identifier: item.Identifier, Color: item.State.Color, UpdatedAt: item.UpdatedAt}
+			if scored, ok := issueScores[item.ID]; ok {
+				if scored.SemanticScore > 0 {
+					result.Score = scored.SemanticScore
+					scored.SearchResult = result
+					results = append(results, scored)
+				}
+			} else {
+				add(result, item.Title, item.Description, item.Identifier, item.Team.Name, item.State.Name, strings.Join(labels, " "))
+			}
 		}
 	}
 	if types["project"] {
