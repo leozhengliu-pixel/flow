@@ -36,6 +36,7 @@ func scopedContent[T any](ctx context.Context, tx *sqlTx, workspace, kind string
 }
 
 func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
+	discussion, discussionOnly := ctx.Value(discussionMutationKey{}).(discussionMutation)
 	ids, _ := ctx.Value(issueRecordMutationContext{}).([]string)
 	if len(ids) == 0 || len(ids) > 1000 {
 		return fmt.Errorf("invalid issue mutation scope")
@@ -65,14 +66,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		if !ok {
 			return fmt.Errorf("workspace not found")
 		}
-		raw, err := json.Marshal(collectionMetadata(current))
-		if err != nil {
-			return err
-		}
-		var data domain.Bootstrap
-		if err := json.Unmarshal(raw, &data); err != nil {
-			return err
-		}
+		data := cloneBootstrap(collectionMetadata(current))
 		originalRole := data.ViewerRole
 		if actor, ok := actorFromContext(ctx); ok {
 			data.Viewer = actor
@@ -194,15 +188,25 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 			keys = append(keys, id)
 			data.Issues = append(data.Issues, issue)
 		}
-		data.Comments, err = scopedContent[domain.Comment](ctx, tx, workspace, "comment", keys)
-		if err != nil {
-			return err
+		var notifications map[string][]domain.Notification
+		if discussionOnly {
+			data.Comments, err = loadDiscussionComment(ctx, tx, workspace, ids[0], discussion.CommentID)
+			if err != nil {
+				return err
+			}
+			data.Activities = map[string][]domain.ActivityEvent{}
+			notifications, err = s.activeDiscussionNotifications(ctx, tx, workspace, ids[0])
+		} else {
+			data.Comments, err = scopedContent[domain.Comment](ctx, tx, workspace, "comment", keys)
+			if err != nil {
+				return err
+			}
+			data.Activities, err = scopedContent[domain.ActivityEvent](ctx, tx, workspace, "activity", keys)
+			if err != nil {
+				return err
+			}
+			notifications, err = scopedContent[domain.Notification](ctx, tx, workspace, "notification", keys)
 		}
-		data.Activities, err = scopedContent[domain.ActivityEvent](ctx, tx, workspace, "activity", keys)
-		if err != nil {
-			return err
-		}
-		notifications, err := scopedContent[domain.Notification](ctx, tx, workspace, "notification", keys)
 		if err != nil {
 			return err
 		}
@@ -242,7 +246,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 			if err := writeIssueStats(ctx, tx, workspace, deltas); err != nil {
 				return err
 			}
-			for _, table := range []string{"issue_label_records", "issue_permission_records", "issue_subscriber_records", "issue_actor_records", "issue_attribute_records"} {
+			for _, table := range []string{"issue_label_records", "issue_permission_records", "issue_subscriber_records", "issue_actor_records", "issue_attribute_records", "issue_attachment_records", "issue_search_documents"} {
 				if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE workspace_key=? AND issue_id=?", workspace, id); err != nil {
 					return err
 				}
@@ -256,14 +260,20 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 				return err
 			}
 		}
-		if err := syncContentRecords(ctx, tx, workspace, "comment", data.Comments, data, keys); err != nil {
-			return err
-		}
-		if err := syncContentRecords(ctx, tx, workspace, "activity", data.Activities, data, keys); err != nil {
-			return err
-		}
-		if err := syncContentRecords(ctx, tx, workspace, "notification", notificationRecords(data.Notifications), data, keys); err != nil {
-			return err
+		if discussionOnly {
+			if err := persistDiscussion(ctx, tx, workspace, ids[0], discussion.CommentID, data); err != nil {
+				return err
+			}
+		} else {
+			if err := syncContentRecords(ctx, tx, workspace, "comment", data.Comments, data, keys); err != nil {
+				return err
+			}
+			if err := syncContentRecords(ctx, tx, workspace, "activity", data.Activities, data, keys); err != nil {
+				return err
+			}
+			if err := syncContentRecords(ctx, tx, workspace, "notification", notificationRecords(data.Notifications), data, keys); err != nil {
+				return err
+			}
 		}
 		for _, delivery := range data.NotificationDeliveries {
 			delete(oldDeliveries, delivery.ID)

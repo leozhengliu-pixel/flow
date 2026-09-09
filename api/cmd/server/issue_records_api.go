@@ -26,6 +26,7 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 	key := workspaceKey(r)
 	query := store.IssueRecordQuery{Workspace: key, Archived: r.URL.Query().Get("archived"), Sort: r.URL.Query().Get("sort"), Direction: r.URL.Query().Get("direction"), Cursor: r.URL.Query().Get("cursor"), Text: r.URL.Query().Get("q"), IncludeTotal: r.URL.Query().Get("includeTotal") == "true", GroupBy: r.URL.Query().Get("groupBy")}
 	query.Limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
+	query.Summary = r.URL.Query().Get("projection") == "list"
 	data, ok := s.store.WorkspaceMetadata(key)
 	if !ok {
 		return data, query, store.ErrAuthForbidden
@@ -121,6 +122,10 @@ func (s *server) issueRecordsBootstrap(w http.ResponseWriter, r *http.Request) {
 		filterBootstrapForAPIKey(&data, r)
 	}
 	data.IssueCollectionPaged = true
+	if err := s.filterPreferenceIssueTeams(r, &data); err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	sanitizeBootstrap(&data)
 	writeJSON(w, 200, data)
 }
@@ -410,7 +415,7 @@ func (s *server) getIssueRecordContext(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	issue = page.Items[0]
-	comments, activities, err := s.store.IssueContent(r.Context(), query.Workspace, issue.ID)
+	history, err := s.store.IssueHistoryPage(r.Context(), query.Workspace, issue.ID, r.URL.Query().Get("commentsCursor"), r.URL.Query().Get("activitiesCursor"))
 	if err != nil {
 		issueRecordsError(w, err)
 		return
@@ -438,7 +443,7 @@ func (s *server) getIssueRecordContext(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	writeJSON(w, 200, map[string]any{"issue": issue, "relatedIssues": related, "comments": comments, "activities": activities})
+	writeJSON(w, 200, map[string]any{"issue": issue, "relatedIssues": related, "comments": history.Comments, "activities": history.Activities, "commentsCursor": history.CommentsCursor, "activitiesCursor": history.ActivitiesCursor})
 }
 
 func (s *server) projectIssueRecordReferences(r *http.Request, metadata domain.Bootstrap, query store.IssueRecordQuery, issues []domain.Issue) ([]domain.Issue, error) {

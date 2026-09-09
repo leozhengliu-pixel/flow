@@ -107,7 +107,11 @@ func (s *server) agentChat(w http.ResponseWriter, r *http.Request) {
 	if !validAgentIssueCount(w, input.IssueIDs) {
 		return
 	}
-	data := s.workspaceData(r)
+	data, contextErr := s.agentIssueContext(r, input.IssueIDs)
+	if contextErr != nil {
+		writeError(w, 400, contextErr.Error())
+		return
+	}
 	if data.Workspace.ID == "" {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -189,14 +193,14 @@ func (s *server) createAgentSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) beginAgentSession(r *http.Request, input agentSessionInput) (domain.AgentSession, error) {
+	if _, err := s.agentIssueContext(r, input.IssueIDs); err != nil {
+		return domain.AgentSession{}, err
+	}
 	now := time.Now().UTC()
 	sessionID := fmt.Sprintf("agent_session_%d", now.UnixNano())
 	title := agentSessionTitle(input.Message)
 	session := domain.AgentSession{ID: sessionID, SlugID: agentSessionSlug(title, now), Title: title, Location: input.Location, IssueIDs: uniqueAgentIDs(input.IssueIDs), SkillIDs: uniqueAgentIDs(input.SkillIDs), Messages: []domain.AgentMessage{{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: input.Message, CreatedAt: now}}, CreatedAt: now, UpdatedAt: now}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.session_created", sessionID, input, func(data *domain.Bootstrap) error {
-		if len(selectedAgentIssues(data.Issues, session.IssueIDs)) != len(session.IssueIDs) {
-			return fmt.Errorf("%w: one or more selected issues were not found", errInvalid)
-		}
 		session.UserID = data.Viewer.ID
 		if len(selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)) != len(session.SkillIDs) {
 			return fmt.Errorf("%w: one or more selected skills were not found", errInvalid)

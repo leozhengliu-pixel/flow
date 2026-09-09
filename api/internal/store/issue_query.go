@@ -44,6 +44,7 @@ type IssueRecordQuery struct {
 	GroupBy        string
 	GroupValue     *string
 	IncludeTotal   bool
+	Summary        bool
 }
 
 type IssueRecordAccess struct {
@@ -58,6 +59,17 @@ func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, use
 	if !ok {
 		return data, ErrAuthForbidden
 	}
+	favorites, subscriptions := slices.Clone(data.Favorites), slices.Clone(data.Subscriptions)
+	releases := slices.Clone(data.Releases)
+	for i := range releases {
+		releases[i].IssueIDs = slices.Clone(releases[i].IssueIDs)
+		releases[i].ProjectIDs = slices.Clone(releases[i].ProjectIDs)
+	}
+	reviews := slices.Clone(data.Reviews)
+	for i := range reviews {
+		reviews[i].IssueIDs = slices.Clone(reviews[i].IssueIDs)
+		reviews[i].TeamReviewers = slices.Clone(reviews[i].TeamReviewers)
+	}
 	data, ok, err := s.projectBootstrapForUser(ctx, data, userID)
 	if err != nil {
 		return data, err
@@ -65,7 +77,102 @@ func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, use
 	if !ok {
 		return data, ErrAuthForbidden
 	}
+	ids := []string{}
+	for _, release := range releases {
+		ids = append(ids, release.IssueIDs...)
+	}
+	for _, review := range reviews {
+		ids = append(ids, review.IssueIDs...)
+	}
+	for _, item := range favorites {
+		if item.UserID == userID && item.ResourceType == "issue" {
+			ids = append(ids, item.ResourceID)
+		}
+	}
+	for _, item := range subscriptions {
+		if item.UserID == userID && item.ResourceType == "issue" {
+			ids = append(ids, item.ResourceID)
+		}
+	}
+	if len(ids) > 0 {
+		_, access, err := s.IssueQueryAccess(ctx, data.Workspace.URLKey, userID)
+		if err != nil {
+			return data, err
+		}
+		visible, err := s.VisibleIssueRecordIDs(ctx, IssueRecordQuery{Workspace: data.Workspace.URLKey, Access: &access}, ids)
+		if err != nil {
+			return data, err
+		}
+		data.Reviews = []domain.CodeReview{}
+		data.Releases = []domain.Release{}
+		for _, release := range releases {
+			if release.PipelineID != "" && !slices.ContainsFunc(data.ReleasePipelines, func(p domain.ReleasePipeline) bool { return p.ID == release.PipelineID }) {
+				continue
+			}
+			if slices.ContainsFunc(release.ProjectIDs, func(id string) bool {
+				return !slices.ContainsFunc(data.Projects, func(p domain.Project) bool { return p.ID == id })
+			}) || slices.ContainsFunc(release.IssueIDs, func(id string) bool { return !visible[id] }) {
+				continue
+			}
+			data.Releases = append(data.Releases, release)
+		}
+		for _, review := range reviews {
+			if len(review.IssueIDs) > 0 && !slices.ContainsFunc(review.IssueIDs, func(id string) bool { return visible[id] }) {
+				continue
+			}
+			review.IssueIDs = slices.DeleteFunc(review.IssueIDs, func(id string) bool { return !visible[id] })
+			review.TeamReviewers = slices.DeleteFunc(review.TeamReviewers, func(id string) bool {
+				return !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == id })
+			})
+			review.Favorite = slices.ContainsFunc(favorites, func(item domain.Favorite) bool {
+				return item.UserID == userID && item.ResourceType == "review" && (item.ResourceID == review.ID || item.ResourceID == review.SlugID)
+			})
+			data.Reviews = append(data.Reviews, review)
+		}
+		data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool { return item.ResourceType == "issue" })
+		data.Subscriptions = slices.DeleteFunc(data.Subscriptions, func(item domain.Subscription) bool { return item.ResourceType == "issue" })
+		for _, item := range favorites {
+			if item.UserID == userID && item.ResourceType == "issue" && visible[item.ResourceID] {
+				data.Favorites = append(data.Favorites, item)
+			}
+		}
+		for _, item := range subscriptions {
+			if item.UserID == userID && item.ResourceType == "issue" && visible[item.ResourceID] {
+				data.Subscriptions = append(data.Subscriptions, item)
+			}
+		}
+	}
+	data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool { return item.ResourceType == "review" })
+	data.Subscriptions = slices.DeleteFunc(data.Subscriptions, func(item domain.Subscription) bool { return item.ResourceType == "review" })
+	reviewVisible := func(id string) bool {
+		return slices.ContainsFunc(data.Reviews, func(review domain.CodeReview) bool { return review.ID == id || review.SlugID == id })
+	}
+	for _, item := range favorites {
+		if item.UserID == userID && item.ResourceType == "review" && reviewVisible(item.ResourceID) {
+			data.Favorites = append(data.Favorites, item)
+		}
+	}
+	for _, item := range subscriptions {
+		if item.UserID == userID && item.ResourceType == "review" && reviewVisible(item.ResourceID) {
+			data.Subscriptions = append(data.Subscriptions, item)
+		}
+	}
 	data.IssueCollectionPaged = true
+	data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool { return item.ResourceType == "release" })
+	data.Subscriptions = slices.DeleteFunc(data.Subscriptions, func(item domain.Subscription) bool { return item.ResourceType == "release" })
+	releaseVisible := func(id string) bool {
+		return slices.ContainsFunc(data.Releases, func(release domain.Release) bool { return release.ID == id })
+	}
+	for _, item := range favorites {
+		if item.UserID == userID && item.ResourceType == "release" && releaseVisible(item.ResourceID) {
+			data.Favorites = append(data.Favorites, item)
+		}
+	}
+	for _, item := range subscriptions {
+		if item.UserID == userID && item.ResourceType == "release" && releaseVisible(item.ResourceID) {
+			data.Subscriptions = append(data.Subscriptions, item)
+		}
+	}
 	return data, nil
 }
 
@@ -457,19 +564,24 @@ func (s *SQLiteStore) QueryIssueRecords(ctx context.Context, query IssueRecordQu
 		where += " AND (i." + column + operator + "? OR (i." + column + "=? AND i.id" + operator + "?))"
 		args = append(args, value, value, cursor.ID)
 	}
-	rows, err := s.db.QueryContext(ctx, prefix+"SELECT i.data,i."+column+" FROM issue_records i WHERE "+where+" ORDER BY i."+column+" "+direction+",i.id "+direction+" LIMIT ?", append(append(prefixArgs, args...), limit+1)...)
+	payload := "i.data"
+	if query.Summary {
+		payload = "COALESCE(i.list_data,i.data)"
+	}
+	rows, err := s.db.QueryContext(ctx, prefix+"SELECT "+payload+",i."+column+" FROM issue_records i WHERE "+where+" ORDER BY i."+column+" "+direction+",i.id "+direction+" LIMIT ?", append(append(prefixArgs, args...), limit+1)...)
 	if err != nil {
 		return page, err
 	}
 	defer rows.Close()
 	lastValue := ""
+	pageBytes := 0
 	for rows.Next() {
 		var raw []byte
 		var sortValue string
 		if err := rows.Scan(&raw, &sortValue); err != nil {
 			return page, err
 		}
-		if len(page.Items) == limit {
+		if len(page.Items) == limit || query.Summary && len(page.Items) > 0 && pageBytes+len(raw) > 4<<20 {
 			page.HasMore = true
 			break
 		}
@@ -478,7 +590,11 @@ func (s *SQLiteStore) QueryIssueRecords(ctx context.Context, query IssueRecordQu
 			return page, err
 		}
 		normalizeIssueRecord(&issue)
+		if query.Summary {
+			issue = issueListProjection(issue)
+		}
 		page.Items = append(page.Items, issue)
+		pageBytes += len(raw)
 		lastValue = sortValue
 	}
 	if err := rows.Err(); err != nil {

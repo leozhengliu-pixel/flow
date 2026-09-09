@@ -6,6 +6,8 @@ package main
 // without inventing a new query parameter for every property.
 
 import (
+	"container/heap"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -16,6 +18,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 type issueQueryResponse struct {
@@ -35,7 +38,14 @@ type issueQueryNode struct {
 }
 
 func (s *server) listIssues(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	r = r.WithContext(ctx)
+	data, scope, scopeErr := s.pagedRealtimeMetadata(r)
+	if scopeErr != nil {
+		issueRecordsError(w, scopeErr)
+		return
+	}
 	query := r.URL.Query()
 
 	root, err := decodeIssueQuery(query.Get("filter"))
@@ -44,23 +54,6 @@ func (s *server) listIssues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := make([]domain.Issue, 0, len(data.Issues))
-	for _, issue := range data.Issues {
-		if !issueArchiveMatches(issue, query.Get("archived")) || !issueScopeMatches(issue, query) || !issueTextMatches(issue, query.Get("q")) {
-			continue
-		}
-		if !root.empty() && !root.matches(issue, data) {
-			continue
-		}
-		items = append(items, issue)
-	}
-
-	sortIssues(items, query.Get("sort"), query.Get("direction"))
-	total := len(items)
-	offset := decodeCursor(query.Get("cursor"))
-	if offset > len(items) {
-		offset = len(items)
-	}
 	limit, _ := strconv.Atoi(query.Get("limit"))
 	if limit <= 0 {
 		limit = 50
@@ -68,16 +61,119 @@ func (s *server) listIssues(w http.ResponseWriter, r *http.Request) {
 	if limit > 100 {
 		limit = 100
 	}
-	end := offset + limit
-	if end > len(items) {
-		end = len(items)
+	if root.empty() && query.Get("q") == "" {
+		scope.Limit = limit
+		scope.IncludeTotal = true
+		if scope.Sort != "priority" && scope.Sort != "createdAt" && scope.Sort != "updatedAt" && scope.Sort != "title" {
+			scope.Sort = "sortOrder"
+		}
+		page, err := s.store.QueryIssueRecords(ctx, scope)
+		if err != nil {
+			issueRecordsError(w, err)
+			return
+		}
+		page.Items, err = s.projectIssueRecordReferences(r, data, scope, page.Items)
+		if err != nil {
+			issueRecordsError(w, err)
+			return
+		}
+		writeJSON(w, 200, page)
+		return
 	}
-	page := items[offset:end]
-	response := issueQueryResponse{Items: page, Total: total, HasMore: end < total}
+	var cursor *domain.Issue
+	if query.Get("cursor") != "" {
+		raw, err := base64.RawURLEncoding.DecodeString(query.Get("cursor"))
+		var value domain.Issue
+		if err != nil || json.Unmarshal(raw, &value) != nil || value.ID == "" {
+			writeError(w, 400, "invalid query cursor")
+			return
+		}
+		cursor = &value
+	}
+	compare := func(a, b domain.Issue) int {
+		return compareQueryIssues(a, b, query.Get("sort"), query.Get("direction"))
+	}
+	result := &boundedIssueHeap{compare: compare}
+	total, remaining := 0, 0
+	scope.Filter = store.IssueFilter{}
+	scope.Text = ""
+	scope.Cursor = ""
+	err = s.store.WalkIssueRecords(ctx, scope, func(issue domain.Issue) error {
+		if !issueArchiveMatches(issue, query.Get("archived")) || !issueScopeMatches(issue, query) || !issueTextMatches(issue, query.Get("q")) || !root.matches(issue, data) {
+			return nil
+		}
+		total++
+		if cursor != nil && compare(issue, *cursor) <= 0 {
+			return nil
+		}
+		remaining++
+		if len(result.items) < limit {
+			heap.Push(result, issue)
+		} else if compare(issue, result.items[0]) < 0 {
+			result.items[0] = issue
+			heap.Fix(result, 0)
+		}
+		return nil
+	})
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
+	sortIssues(result.items, query.Get("sort"), query.Get("direction"))
+	items, err := s.projectIssueRecordReferences(r, data, scope, result.items)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
+	if items == nil {
+		items = []domain.Issue{}
+	}
+	response := issueQueryResponse{Items: items, Total: total, HasMore: remaining > len(items)}
 	if response.HasMore {
-		response.NextCursor = encodeCursor(end)
+		last := items[len(items)-1]
+		last = domain.Issue{ID: last.ID, Title: last.Title, Priority: last.Priority, SortOrder: last.SortOrder, CreatedAt: last.CreatedAt, UpdatedAt: last.UpdatedAt}
+		raw, _ := json.Marshal(last)
+		response.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
 	}
-	writeJSON(w, http.StatusOK, response)
+	writeJSON(w, 200, response)
+}
+
+type boundedIssueHeap struct {
+	items   []domain.Issue
+	compare func(domain.Issue, domain.Issue) int
+}
+
+func (h boundedIssueHeap) Len() int           { return len(h.items) }
+func (h boundedIssueHeap) Less(i, j int) bool { return h.compare(h.items[i], h.items[j]) > 0 }
+func (h boundedIssueHeap) Swap(i, j int)      { h.items[i], h.items[j] = h.items[j], h.items[i] }
+func (h *boundedIssueHeap) Push(v any)        { h.items = append(h.items, v.(domain.Issue)) }
+func (h *boundedIssueHeap) Pop() any {
+	last := h.items[len(h.items)-1]
+	h.items = h.items[:len(h.items)-1]
+	return last
+}
+
+func compareQueryIssues(left, right domain.Issue, field, direction string) int {
+	if strings.EqualFold(direction, "desc") {
+		left, right = right, left
+	}
+	var cmp int
+	switch strings.ToLower(field) {
+	case "priority":
+		cmp = compareInt(left.Priority, right.Priority)
+	case "createdat":
+		cmp = compareTime(left.CreatedAt, right.CreatedAt)
+	case "updatedat":
+		cmp = compareTime(left.UpdatedAt, right.UpdatedAt)
+	case "title":
+		cmp = strings.Compare(strings.ToLower(left.Title), strings.ToLower(right.Title))
+	default:
+		cmp = compareFloat(left.SortOrder, right.SortOrder)
+	}
+	if cmp == 0 {
+		return strings.Compare(left.ID, right.ID)
+	}
+	return cmp
 }
 
 func decodeIssueQuery(raw string) (issueQueryNode, error) {

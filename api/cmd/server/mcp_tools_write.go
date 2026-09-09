@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 type mcpPendingUpload struct {
@@ -227,7 +228,7 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 			input.SLAType = &value
 		}
 		input.LabelIDs = labelIDs
-		result, err = invokeJSONHandler(ctx, http.MethodPost, nil, input, s.createIssue)
+		result, err = invokeJSONHandler(ctx, http.MethodPost, nil, input, s.createIssueRecord)
 	} else {
 		input := domain.IssueUpdateInput{}
 		if value, ok := args["title"].(string); ok {
@@ -259,7 +260,7 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 		if milestoneID != "" {
 			input.ProjectMilestoneID = &milestoneID
 		}
-		result, err = invokeJSONHandler(ctx, http.MethodPatch, map[string]string{"id": current.ID}, input, s.updateIssue)
+		result, err = invokeJSONHandler(ctx, http.MethodPatch, map[string]string{"id": current.ID}, input, s.updateIssueRecord)
 	}
 	if err != nil {
 		return nil, err
@@ -268,6 +269,11 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 	if err := jsonClone(result, &saved); err != nil {
 		return nil, err
 	}
+	issueScope := []string{saved.ID}
+	for _, issue := range data.Issues {
+		issueScope = append(issueScope, issue.ID)
+	}
+	ctx = store.WithIssueRecordMutations(ctx, issueScope...)
 	if links, ok := args["links"].([]any); ok {
 		for _, raw := range links {
 			var link domain.IssueLinkInput
@@ -312,8 +318,7 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 			return nil, err
 		}
 	}
-	updated, _, _ := s.store.BootstrapForUser(ctx, actor.WorkspaceKey, actor.User.ID)
-	return mcpFindIssue(updated, saved.ID)
+	return s.store.IssueRecord(ctx, data.Workspace.URLKey, saved.ID)
 }
 
 func (s *server) saveMCPProject(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
@@ -764,6 +769,9 @@ func (s *server) deleteMCPComment(ctx context.Context, actor mcpActor, id string
 	if err != nil {
 		return nil, err
 	}
+	if err := s.hydrateMCPIssueArguments(ctx, actor, &data, map[string]any{"id": id}); err != nil {
+		return nil, err
+	}
 	return s.mutateAnyComment(ctx, actor, data, id, "", "delete", "")
 }
 
@@ -778,6 +786,20 @@ func (s *server) mutateAnyComment(ctx context.Context, actor mcpActor, data doma
 		}
 	} else if !mcpCommentVisible(data, targetID) {
 		return nil, fmt.Errorf("comment not found")
+	}
+	if operation == "create" {
+		if issue, err := mcpFindIssue(data, targetID); err == nil {
+			ctx = store.WithIssueDiscussionMutation(ctx, issue.ID, "")
+		}
+	} else {
+		for resource, comments := range data.Comments {
+			if slices.ContainsFunc(comments, func(c domain.Comment) bool { return c.ID == targetID }) {
+				if _, err := s.store.IssueRecord(ctx, data.Workspace.URLKey, resource); err == nil {
+					ctx = store.WithIssueDiscussionMutation(ctx, resource, targetID)
+				}
+				break
+			}
+		}
 	}
 	var result domain.Comment
 	err := s.store.MutateWorkspace(ctx, actor.WorkspaceKey, "comment."+operation, targetID, map[string]string{"body": body}, func(next *domain.Bootstrap) error {
@@ -1082,6 +1104,7 @@ func (s *server) createMCPAttachment(ctx context.Context, actor mcpActor, data d
 }
 
 func (s *server) attachStoredObject(ctx context.Context, actor mcpActor, issueID, title, contentType, key string, size int64) (any, error) {
+	ctx = store.WithIssueRecordMutations(ctx, issueID)
 	attachment := domain.Attachment{ID: fmt.Sprintf("attachment_%d", time.Now().UnixNano()), IssueID: issueID, Title: title, URL: "/uploads/" + key, ContentType: contentType, Size: size, CreatedAt: time.Now().UTC(), Creator: actor.User}
 	err := s.store.MutateWorkspace(ctx, actor.WorkspaceKey, "attachment.created", issueID, nil, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, issueID)

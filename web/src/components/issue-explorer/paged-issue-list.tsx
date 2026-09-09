@@ -81,7 +81,8 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
       if (request.abort.signal.aborted) return
       cache.put(group, pageIndex, page, cursor)
       recordsRef.current?.(cache.records())
-      setGroups(current => current.map(item => item.value === group ? { ...item, loaded: Math.max(item.loaded, pageIndex * PAGE_SIZE + page.items.length), hasMore: pageIndex * PAGE_SIZE + page.items.length >= item.loaded ? page.hasMore : item.hasMore } : item))
+      const end = cache.start(group, pageIndex) + page.items.length
+      setGroups(current => current.map(item => item.value === group ? { ...item, loaded: Math.max(item.loaded, end), hasMore: end >= item.loaded ? page.hasMore : item.hasMore } : item))
       setRevision(value => value + 1)
     }).catch(error => { if (!request.abort.signal.aborted) setError(String(error.message ?? error)) })
       .finally(() => request.pending.delete(key))
@@ -113,7 +114,7 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
         <IssueBoardGroupHeader group={descriptor(group)} onCreateIssue={onCreateIssue} onHideGroup={onHideGroup} onSelectIssue={rowProps.onSelectIssue}/>
         <div style={{ flex: 1, minHeight: 0 }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); drop(group) }}>
           <Virtuoso style={{ height: '100%' }} totalCount={group.loaded + (group.hasMore ? 1 : 0)} defaultItemHeight={120} context={revision} increaseViewportBy={240} itemContent={index => {
-            const pageIndex = Math.floor(index / PAGE_SIZE), page = cache.get(group.value, pageIndex), issue = page?.items[index % PAGE_SIZE]
+            const pageIndex = cache.pageAt(group.value, index), page = cache.get(group.value, pageIndex), issue = page?.items[index - cache.start(group.value, pageIndex)]
             if (!issue) return <IssuePagePlaceholder load={() => load(group.value, pageIndex)}/>
             const row = issueToExplorerRow(issue, data.workspace.urlKey, page!.items, data)
             return <div style={{ padding: '4px 8px' }}><IssueBoardCard issue={row} properties={rowProps.displayProperties ?? new Set(['id','status','priority','assignee'])} propertyOptions={rowProps.propertyOptions ?? { status: [], priority: [], assignee: [], dueDate: [], labels: [], project: [] }} selected={Boolean(rowProps.selectedIds?.has(issue.id))} dragging={dragging?.issue.id === issue.id} dropBefore={false} onDragStart={() => setDragging({ issue, group: group.value })} onDragEnd={() => setDragging(undefined)} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); event.stopPropagation(); drop(group, issue) }} onOpen={() => onOpenIssueRecord(issue)} onOpenSubIssue={child => { const issue = page!.items.find(issue => issue.id === child.id); if (issue) onOpenIssueRecord(issue) }} onPropertyChange={(property, value) => rowProps.onPropertyChange?.(row, property, value)} onSelect={(selected, range) => rowProps.onSelectIssue?.(issue.id, selected, range)}/></div>
@@ -126,8 +127,8 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
   return <GroupedVirtuoso className={styles.virtualList} role="list" aria-label="Issues" groupCounts={counts} context={revision} defaultItemHeight={44} increaseViewportBy={{ top: 176, bottom: 264 }}
     groupContent={index => <MyIssuesGroupHeader group={descriptor(groups[index])} collapsed={Boolean(collapsedGroupIds?.has(groups[index].value))} createIssueLabel="Create new issue" onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/>}
     itemContent={(index, groupIndex) => {
-      const group = groups[groupIndex], localIndex = index - offsets[groupIndex], pageIndex = Math.floor(localIndex / PAGE_SIZE)
-      const page = cache.get(group.value, pageIndex), issue = page?.items[localIndex % PAGE_SIZE]
+      const group = groups[groupIndex], localIndex = index - offsets[groupIndex], pageIndex = cache.pageAt(group.value, localIndex)
+      const page = cache.get(group.value, pageIndex), issue = page?.items[localIndex - cache.start(group.value, pageIndex)]
       if (!issue) return <IssuePagePlaceholder load={() => load(group.value, pageIndex)}/>
       const row = issueToExplorerRow(issue, data.workspace.urlKey, page!.items, data)
       return <MyIssuesRow issue={row} selected={rowProps.selectedIds?.has(issue.id)} displayProperties={rowProps.displayProperties} propertyOptions={rowProps.propertyOptions} mutationError={rowProps.mutationErrors?.get(issue.id)} onOpen={() => onOpenIssueRecord(issue)} onPropertyChange={rowProps.onPropertyChange} onSelect={rowProps.onSelectIssue} onContextAction={rowProps.onContextAction} onRetryMutation={rowProps.onRetryMutation}/>

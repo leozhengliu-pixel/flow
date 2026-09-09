@@ -32,6 +32,17 @@ function pulseData() {
 }
 
 describe('pulse model', () => {
+  it('keeps inbox event preferences separate from Pulse subscriptions', () => {
+    const data = pulseData()
+    data.projects[0].lead = undefined
+    data.projects[0].memberIds = []
+    data.subscriptions = [{id:'subscription',userId:data.viewer.id,resourceType:'project',resourceId:data.projects[0].id,events:['projectChanges'],createdAt:'2026-09-01T00:00:00Z'}]
+    expect(buildPulseFeed(data,'following')).toHaveLength(0)
+    data.subscriptions[0].events = ['projectChanges','pulse']
+    expect(buildPulseFeed(data,'following').map(item=>item.kind)).toEqual(['project'])
+    data.subscriptions[0].events = []
+    expect(buildPulseFeed(data,'following').map(item=>item.kind)).toEqual(['project'])
+  })
   it('sorts updates and applies following and filter semantics', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-30T12:00:00.000Z'))

@@ -995,22 +995,33 @@ function RecurringIssuesSettings({
   const issues = data.issues.filter(
     (issue) => issue.team.id === team.id && issue.recurrence,
   );
-  const [creating, setCreating] = useState(false);
-  const [title, setTitle] = useState("");
+  const sourceId = new URLSearchParams(window.location.search).get('fromIssue');
+  const source = data.issues.find(issue => issue.id === sourceId && issue.team.id === team.id);
+  const [creating, setCreating] = useState(Boolean(source));
+  const [title, setTitle] = useState(source?.title ?? "");
+  useEffect(() => { if (source && !creating && !title) { setCreating(true); setTitle(source.title) } }, [source, creating, title]);
+  const closeCreation = () => {
+    setCreating(false); setTitle("");
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('fromIssue')) { url.searchParams.delete('fromIssue'); window.history.replaceState(window.history.state, '', url) }
+  };
   const [cadence, setCadence] = useState<"daily" | "weekly" | "monthly">(
     "weekly",
   );
   const create = async () => {
     if (!title.trim()) return;
     try {
+      if (source) {
+        await updateIssue(source.id, {title: title.trim(), recurrence: cadence});
+      } else {
       const issue = await createIssue({
         title: title.trim(),
         description: "",
         teamId: team.id,
       });
       await updateIssue(issue.id, { recurrence: cadence });
-      setCreating(false);
-      setTitle("");
+      }
+      closeCreation();
       await onReload();
     } catch (error) {
       toast.error(message(error));
@@ -1055,7 +1066,7 @@ function RecurringIssuesSettings({
               type="button"
               className="settings-icon-action"
               aria-label="Cancel"
-              onClick={() => setCreating(false)}
+              onClick={closeCreation}
             >
               <X size={14} />
             </button>
@@ -1063,7 +1074,7 @@ function RecurringIssuesSettings({
               className="settings-action primary"
               disabled={!title.trim()}
             >
-              Create
+              {t(source ? "Save" : "Create")}
             </button>
           </form>
         )}

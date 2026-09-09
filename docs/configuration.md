@@ -416,6 +416,14 @@ database service completes its first-time initialization.
 
 ## Row-Backed Issue Collections
 
+Favorites, favorite folders, and resource subscriptions use metadata-only
+transactions. Issue targets are authorized through indexed visibility checks.
+Single-notification changes update the notification row directly. Browser
+preference refreshes use `/api/resource-preferences`, preserving the loaded issue
+and discussion caches instead of requesting another full bootstrap. Personal
+favorite/subscription events are sent only to their owner; notification events
+are restricted to the recipient.
+
 Existing clients using `/api/issues` now send writes through the bounded issue
 record implementation without changing their URLs. SSE connections and presence
 heartbeats also use indexed entity visibility checks regardless of the web build

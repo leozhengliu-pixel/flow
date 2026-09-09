@@ -1,4 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { refreshResourcePreferences } from '@/lib/resource-preferences';
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Select from "@radix-ui/react-select";
 import {
@@ -364,7 +365,7 @@ export function Sidebar({
         !["initiatives", "views", "customers"].includes(entry)),
   );
   const reloadFavorites = async () => {
-    await onReload?.();
+    await refreshResourcePreferences(data.workspace.urlKey);
   };
   const toggleSidebarFavorite = async (
     resourceType: string,
@@ -827,7 +828,7 @@ export function Sidebar({
                       } else {
                         await removeSubscription("team", team.id);
                       }
-                      await onReload?.();
+                      await refreshResourcePreferences(data.workspace.urlKey);
                     }}
                     viewerId={data.viewer.id}
                     canLeave={

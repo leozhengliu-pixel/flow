@@ -1,4 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { refreshResourcePreferences } from '@/lib/resource-preferences';
 import {
   Bell,
   Check,
@@ -84,7 +85,7 @@ export function CustomerDetailPage({
                 favorite
                   ? removeFavorite("customer", customer.id)
                   : addFavorite("customer", customer.id)
-              ).then(onReload)
+              ).then(() => refreshResourcePreferences(data.workspace.urlKey))
             }
           >
             <Star size={15} fill={favorite ? "currentColor" : "none"} />
@@ -112,7 +113,7 @@ export function CustomerDetailPage({
                       subscribed
                         ? removeSubscription("customer", customer.id)
                         : addSubscription("customer", customer.id)
-                    ).then(onReload)
+                    ).then(() => refreshResourcePreferences(data.workspace.urlKey))
                   }
                 >
                   <Bell size={14} />
@@ -139,7 +140,7 @@ export function CustomerDetailPage({
                 subscribed
                   ? removeSubscription("customer", customer.id)
                   : addSubscription("customer", customer.id)
-              ).then(onReload)
+              ).then(() => refreshResourcePreferences(data.workspace.urlKey))
             }
           >
             <Bell size={15} fill={subscribed ? "currentColor" : "none"} />

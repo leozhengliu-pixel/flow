@@ -39,10 +39,12 @@ import {
   promptAction,
 } from "@/components/ui/action-dialog-service";
 import "./project-detail-page.css";
+import { ProjectSlackDialog } from './project-slack-dialog';
 
 export type { ProjectDetailTab } from "./project-detail-types";
 
 export function ProjectDetailPage(props: ProjectDetailProps) {
+  const [slackOpen,setSlackOpen] = useState(false);
   const {
     project,
     projects,
@@ -240,6 +242,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
       toast.error("Could not update project notifications", {
         description: error instanceof Error ? error.message : undefined,
       });
+      throw error;
     }
   };
 
@@ -292,6 +295,8 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
           onShowActivity={() => onTabChange("activity")}
           onShowHistory={() => setHistoryOpen(true)}
           onShowNotifications={() => setNotificationOpen(true)}
+          onShowSlack={() => setSlackOpen(true)}
+          onUpdateSchedule={updateSchedule => save({ updateSchedule })}
           project={project}
           subscription={props.subscription}
         />
@@ -309,6 +314,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
           <Link2 size={14} />
         </button>
         <ProjectNotificationMenu
+          onShowSlack={() => { setNotificationOpen(false); setSlackOpen(true) }}
           onOpenChange={setNotificationOpen}
           open={notificationOpen}
           onSetEvents={setEvents}
@@ -317,6 +323,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
           subscription={props.subscription}
         />
       </header>
+      <ProjectSlackDialog open={slackOpen} onOpenChange={setSlackOpen} project={project} connections={props.integrationConnections} onSave={save}/>
 
       <div className="project-detail-page__toolbar">
         <nav aria-label="Project views" className="project-detail-page__tabs">

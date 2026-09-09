@@ -232,6 +232,7 @@ function mergeProjectRelations(data: BootstrapData, projectId: string, relations
 }
 
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
+import { fetchResourcePreferences, mergeResourcePreferences, RESOURCE_PREFERENCES_UPDATED, type ResourcePreferences } from '@/lib/resource-preferences';
 import { useDesktopNotifications } from "@/hooks/use-desktop-notifications";
 import { labelsForResource, setGroupedLabelSelected } from "@/lib/labels";
 import { applyTheme } from "@/lib/theme";
@@ -556,8 +557,9 @@ function App() {
       : null;
   const [issueContextLoading, setIssueContextLoading] = useState(false);
   const issueContextKey = useRef('');
+  const historyRefreshSequence = useRef(0);
   const recordIdentifier = route.kind === 'issue' ? route.identifier : '';
-  const missingIssueRecord = Boolean(data?.issueCollectionPaged && recordIdentifier && !selectedIssue);
+  const missingIssueRecord = Boolean(data?.issueCollectionPaged && recordIdentifier && (!selectedIssue || selectedIssue.isSummary));
   useEffect(() => {
     if (!data?.issueCollectionPaged || !recordIdentifier) return;
     const key = `${data.workspace.urlKey}:${recordIdentifier}`;
@@ -571,7 +573,7 @@ function App() {
         if (current?.workspace.urlKey !== data.workspace.urlKey) return current;
         const fetched = [context.issue, ...context.relatedIssues.filter(issue => issue.id !== context.issue.id)];
         const ids = new Set(fetched.map(issue => issue.id));
-        return { ...current, issues: [...fetched, ...current.issues.filter(issue => !ids.has(issue.id))].slice(0, 2000), comments: { ...current.comments, [context.issue.id]: context.comments ?? [] }, activities: { ...current.activities, [context.issue.id]: context.activities ?? [] } };
+        return { ...current, issueHistoryCursors: { ...current.issueHistoryCursors, [context.issue.id]: { commentsCursor: context.commentsCursor, activitiesCursor: context.activitiesCursor } }, issues: [...fetched, ...current.issues.filter(issue => !ids.has(issue.id))].slice(0, 2000), comments: { ...current.comments, [context.issue.id]: context.comments ?? [] }, activities: { ...current.activities, [context.issue.id]: context.activities ?? [] } };
       });
     }).catch(error => { if (!controller.signal.aborted) { issueContextKey.current = key; toast.error('Could not load issue', { description: error.message }); } })
       .finally(() => { if (!controller.signal.aborted) setIssueContextLoading(false); });
@@ -583,6 +585,22 @@ function App() {
           (project) => project.slugId === route.projectSlugId,
         ) || null
       : null;
+  useEffect(() => {
+    const refresh = async (event: Event) => {
+      const issueId = (event as CustomEvent<string>).detail;
+      if (!selectedIssue || selectedIssue.id !== issueId) return;
+      const sequence = ++historyRefreshSequence.current;
+      const context = await fetchIssueRecordContext(issueId);
+      if (sequence !== historyRefreshSequence.current) return;
+      setData(current => current && current.workspace.urlKey === data?.workspace.urlKey ? { ...current,
+        comments: { ...current.comments, [issueId]: context.comments }, activities: { ...current.activities, [issueId]: context.activities },
+        issueHistoryCursors: { ...current.issueHistoryCursors, [issueId]: { commentsCursor: context.commentsCursor, activitiesCursor: context.activitiesCursor } },
+      } : current);
+    };
+    const listener = (event: Event) => { void refresh(event).catch(() => undefined) };
+    window.addEventListener('flow-issue-history-changed', listener);
+    return () => { historyRefreshSequence.current++; window.removeEventListener('flow-issue-history-changed', listener) };
+  }, [selectedIssue?.id, data?.workspace.urlKey]);
   const selectedDocument =
     route.kind === "document"
       ? data?.documents.find(
@@ -702,6 +720,14 @@ function App() {
       },
     );
   }, [data, viewedResourceId, viewedResourceType]);
+  useEffect(() => {
+    const update = (event: Event) => {
+      const { workspaceKey, preferences } = (event as CustomEvent<{ workspaceKey: string; preferences: ResourcePreferences }>).detail;
+      setData(current => current?.workspace.urlKey === workspaceKey ? mergeResourcePreferences(current, preferences) : current);
+    };
+    window.addEventListener(RESOURCE_PREFERENCES_UPDATED, update);
+    return () => window.removeEventListener(RESOURCE_PREFERENCES_UPDATED, update);
+  }, []);
   const realtime = useWorkspaceRealtime({
     workspaceKey: data?.workspace.urlKey,
     snapshot: data,
@@ -711,11 +737,31 @@ function App() {
       const workspace = data?.workspace.urlKey;
       if (!workspace) return;
       const entity = event.payload?.entity;
+      if (/^(favorite\.|favorite_folder\.|subscription\.)/.test(event.type)) {
+        const preferences = await fetchResourcePreferences(workspace);
+        setData(current => current?.workspace.urlKey === workspace ? mergeResourcePreferences(current, preferences) : current);
+        return;
+      }
+      if (event.type.startsWith('notification.') && entity && typeof entity === 'object' && 'recipientId' in entity) {
+        const notification = entity as BootstrapData['notifications'][number];
+        if (notification.recipientId !== data.viewer.id) return;
+        setData(current => current?.workspace.urlKey === workspace ? {
+          ...current, notifications: current.notifications.some(item => item.id === notification.id)
+            ? current.notifications.map(item => item.id === notification.id ? notification : item)
+            : [...current.notifications, notification],
+        } : current);
+        return;
+      }
       const issue = event.payload?.issue ?? (
         entity && typeof entity === "object" && "identifier" in entity
           ? (entity as Issue)
           : undefined
       );
+      if (event.type.startsWith('comment.') && issue) {
+        issueContextKey.current = '';
+        window.dispatchEvent(new CustomEvent('flow-issue-history-changed', { detail: issue.id }));
+        return;
+      }
       if ((event.type === "issue.updated" || event.type === "issue.created") && issue) {
         setData((current) =>
           current?.workspace.urlKey === workspace
@@ -933,6 +979,7 @@ function App() {
         ...current,
         issues: current.issues.map(issue => issue.id === context.issue.id && issue.version <= context.issue.version ? context.issue : issue),
         comments: { ...current.comments, [context.issue.id]: context.comments ?? [] },
+        issueHistoryCursors: { ...current.issueHistoryCursors, [context.issue.id]: { commentsCursor: context.commentsCursor, activitiesCursor: context.activitiesCursor } },
         activities: { ...current.activities, [context.issue.id]: context.activities ?? [] },
       } : current);
       return;
@@ -1224,7 +1271,13 @@ function App() {
       () =>
         createIssue({
           title,
-          description: "",
+          description: kind === "copy" ? selectedIssue.description : "",
+          descriptionState: kind === "copy" ? selectedIssue.descriptionState : undefined,
+          descriptionData: kind === "copy" ? selectedIssue.documentContent?.contentData : undefined,
+          estimate: kind === "copy" ? selectedIssue.estimate : undefined,
+          cycleId: kind === "copy" ? selectedIssue.cycleId : undefined,
+          dueDate: kind === "copy" ? selectedIssue.dueDate : undefined,
+          projectMilestoneId: kind === "copy" ? selectedIssue.projectMilestoneId : undefined,
           teamId: selectedIssue.team.id,
           parentId: kind === "sub-issue" ? selectedIssue.id : undefined,
           stateId: selectedIssue.state.id,
@@ -1237,7 +1290,7 @@ function App() {
     );
     if (kind === "parent") {
       await updateIssueById(selectedIssue, { parentId: related.id });
-    } else if (kind !== "sub-issue") {
+    } else if (kind !== "sub-issue" && kind !== "copy") {
       const relationType: IssueRelationType =
         kind === "blocked"
           ? "blocks"
@@ -1412,6 +1465,7 @@ function App() {
           unlinkReview: unlinkSelectedReview,
           toggleRelease: toggleSelectedRelease,
           createRelated: createSelectedRelated,
+          configureRecurring: () => navigateTo(`${settingsPath(data!.workspace.urlKey, 'team', selectedIssue.team.key, 'recurring-issues')}?fromIssue=${encodeURIComponent(selectedIssue.id)}`),
           convert: convertSelectedIssue,
           setRecurring: (recurrence) =>
             updateIssueById(selectedIssue, {

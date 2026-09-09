@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check, ChevronRight, Diamond, ExternalLink, FileText, Flag, Link2, MoreHorizontal, Plus, Trash2, X } from 'lucide-react'
@@ -7,28 +7,25 @@ import { toast } from 'sonner'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
 import { Avatar } from '@/components/issue/issue-row'
-import { CalendarIcon, LabelIcon, NoAssigneeIcon, PriorityIcon, ProjectStatusIcon, TeamIcon } from '@/components/issue/issue-icons'
+import { CalendarIcon, NoAssigneeIcon, PriorityIcon, ProjectStatusIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { projectStatusOptionColor } from '@/lib/project-status-color'
 import { ViewIconPicker } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { ProjectDatePicker } from '@/components/projects-page/project-target-date-picker'
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { confirmAction } from '@/components/ui/action-dialog-service'
-import { groupOptionSections } from '@/lib/group-options'
 import { useI18n } from '@/i18n/i18n'
 import type { ProjectMutationInput } from '@/components/projects-page/projects-page'
 import type { Issue, ProjectResource, Team } from '@/types/flow'
 import type { ProjectDetailProps } from './project-detail-types'
 import { PRIORITY_LABELS } from './project-detail-types'
-import { toggleGroupedLabelIds } from '@/lib/labels'
 import { ProjectLabelControl } from '@/components/property/project-label-control'
-import { projectLabelOptions } from '@/components/property/project-label-menu-model'
-import { ProjectLabelMenuContent } from '@/components/property/project-label-menu-content'
 import { formatProjectPropertyDate, initiativeStatusLabel, inviteProjectMember } from './project-detail-helpers'
+import { ProjectPropertiesMenu } from './project-properties-menu'
 
 type Props = ProjectDetailProps & { projectIssues: Issue[]; save: (input: ProjectMutationInput) => Promise<void> }
 
-export function ProjectOverview({ issueSummary, project, projects, initiatives, documents, projectStatuses, projectUpdates, users, teams, labels, labelGroups, projectIssues, save, onCreateLabel, onCreateResource, onUpdateResource, onDeleteResource, onCreateMilestone, onUpdateMilestone, onDeleteMilestone, onOpenMilestoneIssues = () => onTabChange('issues'), onTabChange }: Props & { onOpenMilestoneIssues?: (milestoneId?: string) => void }) {
+export function ProjectOverview({ issueSummary, project, projects, projectRelations, integrationConnections, viewer, onUpdate, initiatives, documents, projectStatuses, projectUpdates, users, teams, labels, labelGroups, projectIssues, save, onCreateLabel, onCreateResource, onUpdateResource, onDeleteResource, onCreateMilestone, onUpdateMilestone, onDeleteMilestone, onOpenMilestoneIssues = () => onTabChange('issues'), onTabChange }: Props & { onOpenMilestoneIssues?: (milestoneId?: string) => void }) {
   const statuses = useMemo(() => uniqueById(projectStatuses.length ? projectStatuses : projects.map(item => item.status)), [projectStatuses, projects])
   const members = users.filter(user => (project.memberIds ?? []).includes(user.id))
   const selectedMemberIds = [...new Set([...(project.memberIds ?? []), ...(project.lead?.id ? [project.lead.id] : [])])]
@@ -50,7 +47,7 @@ export function ProjectOverview({ issueSummary, project, projects, initiatives, 
           {project.startDate && <><DateProperty label="Start date" max={project.targetDate} placeholder="Start date" resolution={project.startDateResolution} value={project.startDate} onChange={(startDate, startDateResolution) => void save({ startDate, startDateResolution: startDateResolution ?? '' })}/><span aria-hidden="true" className="project-overview__date-arrow">→</span></>}
           <DateProperty label="Target date" min={project.startDate} placeholder="Target date" resolution={project.targetDateResolution} value={project.targetDate} onChange={(targetDate, targetDateResolution) => void save({ targetDate, targetDateResolution: targetDateResolution ?? '' })}/>
           <button className="project-overview__team" data-i18n-ignore={projectTeams.length ? true : undefined} disabled type="button"><TeamIcon team={projectTeams[0]} size={14}/>{projectTeams.map(team => team.name).join(', ') || 'Team'}</button>
-          <ProjectMoreMenu initiatives={initiatives} labelGroups={labelGroups} labels={labels} onCreateLabel={onCreateLabel} project={project} projects={projects} save={save}/>
+          <ProjectPropertiesMenu integrationConnections={integrationConnections} initiatives={initiatives} labelGroups={labelGroups} labels={labels} onCreateLabel={onCreateLabel} project={project} projectRelations={projectRelations} projects={projects} users={users} viewer={viewer} save={save} onUpdateProject={onUpdate}/>
         </div>
       </div>
     </section>
@@ -174,22 +171,6 @@ function ProjectResourceDialog({ onOpenChange, onSubmit, open, resource }: { onO
 function StringInputDialog({ label, onOpenChange, onSubmit, open }: { label: string; onOpenChange: (open: boolean) => void; onSubmit: (value: string) => void; open: boolean }) {
   const [value, setValue] = useState('')
   return <Dialog.Root onOpenChange={onOpenChange} open={open}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="project-detail-page__dialog-overlay"/><Dialog.Content data-flow-motion="dialog" aria-describedby={undefined} className="project-detail-page__form-dialog project-detail-page__string-dialog"><Dialog.Title>{label.replace('…','')}</Dialog.Title><input autoFocus aria-label={label} onChange={event => setValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && value.trim()) onSubmit(value.trim()) }} placeholder="Name" value={value}/><footer><Dialog.Close asChild><button type="button">Cancel</button></Dialog.Close><button className="is-primary" disabled={!value.trim()} onClick={() => onSubmit(value.trim())} type="button">Add</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
-}
-
-function ProjectMoreMenu({ initiatives, labels, labelGroups, project, projects, save, onCreateLabel }: { initiatives: Props['initiatives']; labels: Props['labels']; labelGroups: Props['labelGroups']; project: Props['project']; projects: Props['projects']; save: Props['save']; onCreateLabel?: Props['onCreateLabel'] }) {
-  const [open, setOpen] = useState(false)
-  const projectLabelIds = (project.labelIds ?? []).filter(id => labels.some(label => label.id === id))
-  const toggleProjectLabel = (id: string) => { void save({ labelIds: toggleGroupedLabelIds(projectLabelIds, id, labels) }) }
-  return <DropdownMenu.Root open={open} onOpenChange={setOpen}><DropdownMenu.Trigger asChild><button aria-label="More project properties" className="project-overview__more" type="button">•••</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="project-detail-page__menu project-overview__more-menu" sideOffset={4}>
-    <MultiSubmenu icon={<Flag size={14}/>} label="Initiatives" shortcut="P then N" options={initiatives.map(initiative => ({ id: initiative.id, label: initiative.name, color: initiative.color }))} selected={project.initiatives ?? []} onToggle={id => void save({ initiatives: toggleString(project.initiatives ?? [], id) })}/>
-    <MultiSubmenu icon={<Link2 size={14}/>} label="Dependencies" options={projects.filter(item => item.id !== project.id).map(item => ({ id: item.id, label: item.name, color: item.color }))} selected={project.dependencyIds ?? []} onToggle={id => void save({ dependencyIds: toggleString(project.dependencyIds ?? [], id) })}/>
-    <DropdownMenu.Sub><DropdownMenu.SubTrigger><LabelIcon size={14}/><span>Labels</span><kbd>P then L</kbd><ChevronRight size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="property-command-surface property-command-project-labels" sideOffset={6} onKeyDown={event => event.stopPropagation()}><ProjectLabelMenuContent options={projectLabelOptions(labels, labelGroups)} selectedIds={projectLabelIds} onChoose={toggleProjectLabel} onCreate={onCreateLabel ? async (name, groupId) => { const created = await onCreateLabel(name, groupId); await save({ labelIds: toggleGroupedLabelIds(projectLabelIds, created.id, [...labels, created]) }) } : undefined} onClose={() => setOpen(false)}/></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
-  </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
-}
-
-function MultiSubmenu({ icon, label, onToggle, options, selected, shortcut }: { icon: ReactNode; label: string; onToggle: (id: string) => void; options: { id: string; label: string; color?: string; groupId?: string; groupLabel?: string }[]; selected: string[]; shortcut?: string }) {
-  const sections = groupOptionSections(options)
-  return <DropdownMenu.Sub><DropdownMenu.SubTrigger>{icon}<span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<ChevronRight size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="project-detail-page__menu project-overview__submenu" sideOffset={6}><DropdownMenu.Label>Change {label.toLowerCase()}…</DropdownMenu.Label>{options.length ? sections.map(section => <DropdownMenu.Group key={section.id}>{section.label && <DropdownMenu.Label data-i18n-ignore>{section.label}</DropdownMenu.Label>}{section.options.map(option => <DropdownMenu.CheckboxItem checked={selected.includes(option.id)} key={option.id} onCheckedChange={() => onToggle(option.id)} onSelect={event => event.preventDefault()}>{option.color && <i className="project-overview__option-dot" style={{ background: option.color }}/>}<span data-i18n-ignore>{option.label}</span>{selected.includes(option.id) && <Check size={13}/>}</DropdownMenu.CheckboxItem>)}</DropdownMenu.Group>) : <DropdownMenu.Label>No options</DropdownMenu.Label>}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
 }
 
 function InitiativeSection({ initiatives, project, save }: { initiatives: Props['initiatives']; project: Props['project']; save: Props['save'] }) {

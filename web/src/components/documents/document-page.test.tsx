@@ -7,6 +7,7 @@ import { makeBootstrap, teammate, viewer } from '@/test/fixtures'
 import type { FlowDocument } from '@/types/flow'
 
 const api = vi.hoisted(() => ({
+  refreshResourcePreferences: vi.fn().mockResolvedValue(undefined),
   addFavorite: vi.fn(),
   addSubscription: vi.fn(),
   removeFavorite: vi.fn(),
@@ -14,6 +15,7 @@ const api = vi.hoisted(() => ({
   listDocumentPermissions: vi.fn(),
   replaceDocumentPermissions: vi.fn(),
 }))
+vi.mock('@/lib/resource-preferences', () => ({ refreshResourcePreferences: api.refreshResourcePreferences }))
 
 vi.mock('@/components/issue/issue-description-editor', () => ({ IssueDescriptionEditor: () => <div aria-label="Document content"/> }))
 vi.mock('@/components/views/view-icon-picker', () => ({ ViewGlyph: () => <svg aria-hidden="true"/>, ViewIconPicker: () => <button aria-label="Document icon"/> }))
@@ -52,7 +54,8 @@ describe('DocumentPage edited details', () => {
     await user.click(favoriteSwitch)
 
     await waitFor(() => expect(api.addFavorite).toHaveBeenCalledWith('document', flowDocument.id))
-    expect(onReload).toHaveBeenCalledOnce()
+    expect(api.refreshResourcePreferences).toHaveBeenCalledWith(data.workspace.urlKey)
+    expect(onReload).not.toHaveBeenCalled()
   })
 
   it('matches the Linear metadata popover and opens history as a second action', async () => {
@@ -119,13 +122,14 @@ describe('DocumentPage edited details', () => {
 
     await user.click(screen.getByRole('button', { name: 'Unsubscribe' }))
     await waitFor(() => expect(api.removeSubscription).toHaveBeenCalledWith('document', flowDocument.id))
-    expect(onReload).toHaveBeenCalledOnce()
+    expect(api.refreshResourcePreferences).toHaveBeenCalledWith(data.workspace.urlKey)
+    expect(onReload).not.toHaveBeenCalled()
 
     const unsubscribedDocument = { ...flowDocument, subscriberIds: [] }
     rerender(<I18nProvider><DocumentPage data={{ ...data, documents: [unsubscribedDocument] }} document={unsubscribedDocument} onBack={vi.fn()} onReload={onReload}/></I18nProvider>)
     await user.click(screen.getByRole('button', { name: 'Subscribe' }))
     await waitFor(() => expect(api.addSubscription).toHaveBeenCalledWith('document', flowDocument.id))
-    expect(onReload).toHaveBeenCalledTimes(2)
+    expect(onReload).not.toHaveBeenCalled()
   })
 
   it('lets the document owner manage member roles through the access dialog', async () => {

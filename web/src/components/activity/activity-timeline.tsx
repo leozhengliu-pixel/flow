@@ -20,11 +20,14 @@ export function ActivityTimeline({ events, comments, viewerId, context, highligh
   const [replying,setReplying]=useState<string|null>(null),[editing,setEditing]=useState<string|null>(null),[deleting,setDeleting]=useState<Comment|null>(null),[busy,setBusy]=useState<string|null>(null),[expanded,setExpanded]=useState(false)
   const { target, highlightAnchor } = useActivityHighlightTarget(highlightTarget)
   const timelineRef = useRef<HTMLDivElement>(null)
-  const topLevel=comments.filter(comment=>!comment.parentId)
+  const commentIds = new Set(comments.map(comment => comment.id))
+  const replies = new Map<string, Comment[]>()
+  for (const comment of comments) { if (comment.parentId && commentIds.has(comment.parentId)) { const items = replies.get(comment.parentId) ?? []; items.push(comment); replies.set(comment.parentId, items) } }
+  const topLevel=comments.filter(comment=>!comment.parentId || !commentIds.has(comment.parentId))
   const eventItems=events.flatMap(event=>{const description=describeIssueActivity(event,context,t);return description?[{...event,description}]:[]})
   const items=[...eventItems.map(event=>({...event,kind:'event' as const})),...topLevel.map(comment=>({...comment,kind:'comment' as const}))].sort((a,b)=>new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime())
   const targetComment = target?.kind === 'comment' ? comments.find(comment => comment.id === target.id) : undefined
-  const targetIndex = items.findIndex(item => item.id === (targetComment?.parentId ?? target?.id) && item.kind === (target?.kind === 'comment' ? 'comment' : 'event'))
+  const targetIndex = items.findIndex(item => item.id === (targetComment?.parentId && commentIds.has(targetComment.parentId) ? targetComment.parentId : target?.id) && item.kind === (target?.kind === 'comment' ? 'comment' : 'event'))
   const start = expanded ? 0 : Math.min(Math.max(0, items.length - 8), targetIndex < 0 ? items.length : targetIndex)
   const visible = items.slice(start), hidden = start
   const contentKey = target?.kind === 'comment' ? targetComment?.id : targetIndex >= 0 ? target?.id : undefined
@@ -41,7 +44,7 @@ export function ActivityTimeline({ events, comments, viewerId, context, highligh
         {editing===item.id?<Composer compact initialValue={item.body} initialData={item.bodyData} placeholder="Edit comment…" onCancel={()=>setEditing(null)} onSubmit={async(body,data)=>{await onEdit(item.id,body,data);setEditing(null)}}/>:<div className="comment-body"><RichComment body={item.body} data={item.bodyData}/></div>}
         <ReactionPills reactions={item.reactions} viewerId={viewerId} onToggle={emoji=>run(item.id,()=>onReaction(item.id,emoji))}/>
         <div className="comment-actions"><EmojiPicker align="start" onSelect={emoji=>run(item.id,()=>onReaction(item.id,emoji))}><button type="button" aria-label="Add reaction"><SmilePlus size={13}/><span>Add reaction</span></button></EmojiPicker><button type="button" aria-label="Reply" onClick={()=>setReplying(current=>current===item.id?null:item.id)}><MessageSquareReply size={13}/><span>Reply</span></button></div>
-        {comments.filter(reply=>reply.parentId===item.id).map(reply=><div className="comment-reply" id={`comment-${reply.id}`} data-activity-anchor={`comment-${reply.id}`} key={reply.id}><Avatar name={reply.user.displayName}/><div><header><strong>{reply.user.displayName}</strong><time>{formatDistanceToNow(new Date(reply.createdAt),{addSuffix:true})}</time></header><div className="reply-body"><RichComment body={reply.body} data={reply.bodyData}/></div><ReactionPills reactions={reply.reactions} viewerId={viewerId} onToggle={emoji=>run(reply.id,()=>onReaction(reply.id,emoji))}/></div></div>)}
+        {(replies.get(item.id) ?? []).map(reply=><div className="comment-reply" id={`comment-${reply.id}`} data-activity-anchor={`comment-${reply.id}`} key={reply.id}><Avatar name={reply.user.displayName}/><div><header><strong>{reply.user.displayName}</strong><time>{formatDistanceToNow(new Date(reply.createdAt),{addSuffix:true})}</time></header><div className="reply-body"><RichComment body={reply.body} data={reply.bodyData}/></div><ReactionPills reactions={reply.reactions} viewerId={viewerId} onToggle={emoji=>run(reply.id,()=>onReaction(reply.id,emoji))}/></div></div>)}
         {replying===item.id&&<Composer compact placeholder="Leave a reply…" onAttach={onAttach} onCancel={()=>setReplying(null)} onSubmit={async(body,data)=>{await onReply(body,data,item.id);setReplying(null)}}/>}
       </article>}</div></div>)}
     </div>
