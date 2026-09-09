@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 import type { User } from '@/types/flow'
 import { PersonHover } from '@/components/property/person-info'
-import { personIdentifier } from '@/lib/people'
+import { personDisplayName, personIdentifier } from '@/lib/people'
+import { useI18n } from '@/i18n/i18n'
 
 interface MentionMenuProps {
   users: User[]
@@ -12,6 +13,7 @@ interface MentionMenuProps {
 }
 
 export function MentionMenu({ users, selectedIndex, position, query, onSelect }: MentionMenuProps) {
+  const { t } = useI18n()
   const selectedRef = useRef<HTMLButtonElement>(null)
   useEffect(() => { selectedRef.current?.scrollIntoView({ block: 'nearest' }) }, [selectedIndex])
   return <div className="description-mention-menu" style={position} role="listbox" aria-label="Mention a user">
@@ -23,8 +25,8 @@ export function MentionMenu({ users, selectedIndex, position, query, onSelect }:
       onMouseDown={event => event.preventDefault()}
       onClick={() => onSelect(user)}
     >
-      <span className="description-mention-avatar" aria-hidden="true">{initials(user.displayName || user.name)}</span>
-      <span className="description-command-copy"><strong data-i18n-ignore>{user.displayName || user.name}</strong><small data-i18n-ignore>{personIdentifier(user)}{user.email ? ` · ${user.email}` : ''}</small></span>
+      <span className="description-mention-avatar" aria-hidden="true">{initials(personDisplayName(user) || t('Unknown user'))}</span>
+      <span className="description-command-copy"><strong data-i18n-ignore>{personDisplayName(user) || t('Unknown user')}</strong>{(personIdentifier(user) || user.email) && <small data-i18n-ignore>{[...new Set([personIdentifier(user), user.email].filter(Boolean))].join(' · ')}</small>}</span>
     </button></PersonHover>)}
   </div>
 }

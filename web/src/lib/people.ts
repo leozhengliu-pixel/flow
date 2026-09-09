@@ -6,7 +6,15 @@ export function personSearchText(person: PersonIdentity) {
   return [person.id, person.userId, person.name, person.displayName, person.label, person.email].filter(Boolean).join(' ')
 }
 
-export function personIdentifier(person: PersonIdentity) { return person.userId || person.id }
+/** Business identity for display; the database key stays in relationship payloads. */
+export function personIdentifier(person: PersonIdentity) {
+  const userId = person.userId?.trim()
+  return userId && userId !== person.id ? userId : ''
+}
+
+export function personDisplayName(person: PersonIdentity) {
+  return [person.displayName, person.label, person.name].find(value => value && value !== person.id) || personIdentifier(person) || person.email || ''
+}
 
 export function personMatchesQuery(person: PersonIdentity, query: string) {
   const needle = query.trim().toLocaleLowerCase()

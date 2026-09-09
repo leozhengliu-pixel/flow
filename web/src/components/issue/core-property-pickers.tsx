@@ -7,7 +7,7 @@ import { AssigneeHoverPreview, PropertyShortcutTooltip, StatusHoverPreview } fro
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
 import { PersonIdentityDetails } from '@/components/property/person-info'
-import { personSearchText } from '@/lib/people'
+import { personDisplayName, personSearchText } from '@/lib/people'
 
 export function StatusPicker({ value, states, onChange, hoverHistory }: { value: WorkflowState; states: WorkflowState[]; onChange: (id: string) => void | Promise<void>; hoverHistory?: { activities: ActivityEvent[]; issueCreatedAt: string } }) {
   const options = [...states].sort((left,right)=>(left.position??0)-(right.position??0)).map((state, index) => ({ id: state.id, label: state.name, icon: <StatusIcon state={state}/>, shortcut: String(index + 1) }))
@@ -66,10 +66,12 @@ export type PersonPickerOption = {
 
 export function PersonHoverPreview({ person, projectName, workspaceName }: { person: PersonPickerOption; projectName?: string; workspaceName: string }) {
   const { t } = useI18n()
+  const name = personDisplayName(person) || t('Unknown user')
+  const secondary = [person.name, person.email, person.label].find(value => value && value !== person.id)
   const invited = person.invited || person.end === 'Invited'
   const online = !invited && person.active !== false && person.online === true
   return <div className="assignee-hover-preview">
-    <header><PersonAvatar person={person}/><div><strong data-i18n-ignore>{person.label}</strong><span data-i18n-ignore>{person.name || person.email || person.label}</span></div></header>
+    <header><PersonAvatar person={{...person,label:name}}/><div><strong data-i18n-ignore>{name}</strong>{secondary && <span data-i18n-ignore>{secondary}</span>}</div></header>
     {!invited && <PersonIdentityDetails person={person}/>}
     <div className="assignee-hover-preview__details">
       {invited ? <span>{t('Invited')}</span> : person.active === false ? <span>{t('Inactive')}</span> : person.online !== undefined ? <span><i className={online ? undefined : 'offline'}/>{online ? t('Online') : t('Offline')}</span> : null}
