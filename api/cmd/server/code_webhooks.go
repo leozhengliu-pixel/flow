@@ -391,7 +391,7 @@ func persistIntegrationTestSuccess(s *server, r *http.Request, provider, id stri
 }
 
 func (s *server) webhookConnection(r *http.Request, provider string) *domain.IntegrationConnection {
-	data, ok := s.store.BootstrapFor(workspaceKey(r))
+	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
 	if !ok {
 		return nil
 	}

@@ -1460,7 +1460,7 @@ func (s *server) exchangeOAuthToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "unsupported grant_type")
 		return
 	}
-	data, ok := s.store.BootstrapFor(workspaceKey(r))
+	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return

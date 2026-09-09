@@ -121,7 +121,7 @@ func (s *server) authenticateSCIMRequest(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusUnauthorized, "invalid SCIM bearer token")
 		return "", "", false
 	}
-	data, ok := s.store.BootstrapFor(workspaceKey)
+	data, ok := s.store.WorkspaceMetadata(workspaceKey)
 	if !ok || data.Workspace.ID != workspaceID {
 		writeError(w, http.StatusForbidden, "SCIM token is not valid for this workspace")
 		return "", "", false
@@ -356,7 +356,7 @@ func (s *server) scimGroups(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "SCIM group method is not supported")
 		return
 	}
-	data, _ := s.store.BootstrapFor(workspaceKey)
+	data, _ := s.store.WorkspaceMetadata(workspaceKey)
 	groups, _ := s.store.ListSCIMGroups(r.Context(), workspaceID)
 	resources := make([]scimGroupResource, 0, len(data.Teams)+len(groups))
 	teamMembers, _ := s.store.ListTeamMembers(r.Context(), workspaceID)
@@ -437,7 +437,7 @@ func (s *server) scimGroup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) scimWorkspaceSettings(workspaceKey string) domain.WorkspaceSettings {
-	data, _ := s.store.BootstrapFor(workspaceKey)
+	data, _ := s.store.WorkspaceMetadata(workspaceKey)
 	return data.WorkspaceSettings
 }
 
@@ -445,7 +445,7 @@ func (s *server) scimWorkspaceSettings(workspaceKey string) domain.WorkspaceSett
 // externalId is the Flow team ID/key. Display names are not matched implicitly
 // because IdP group labels are not guaranteed to be unique.
 func (s *server) scimTeamForGroup(workspaceKey string, group store.SCIMGroup) string {
-	data, ok := s.store.BootstrapFor(workspaceKey)
+	data, ok := s.store.WorkspaceMetadata(workspaceKey)
 	if !ok {
 		return ""
 	}
@@ -521,7 +521,7 @@ func firstSCIMRole(values []struct {
 }
 
 func (s *server) scimRole(workspaceKey, value string) string {
-	data, _ := s.store.BootstrapFor(workspaceKey)
+	data, _ := s.store.WorkspaceMetadata(workspaceKey)
 	settings := data.WorkspaceSettings
 	value = strings.TrimSpace(value)
 	if mapped := settings.SCIMRoleMapping[strings.ToLower(value)]; mapped != "" {
