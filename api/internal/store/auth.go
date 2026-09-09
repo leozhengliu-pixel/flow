@@ -708,7 +708,7 @@ func (s *SQLiteStore) SetLastWorkspace(ctx context.Context, userID, workspaceKey
 }
 
 func (s *SQLiteStore) BootstrapForUser(ctx context.Context, workspaceKey, userID string) (domain.Bootstrap, bool, error) {
-	data, ok := s.BootstrapFor(workspaceKey)
+	data, ok := s.BootstrapForContext(ctx, workspaceKey)
 	if !ok {
 		return domain.Bootstrap{}, false, nil
 	}

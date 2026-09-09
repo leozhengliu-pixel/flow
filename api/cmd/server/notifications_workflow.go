@@ -1314,7 +1314,7 @@ func applyCycleAutomation(data *domain.Bootstrap, issue *domain.Issue) {
 }
 
 func (s *server) maintainCycleSchedule(ctx context.Context, key string) {
-	data, ok := s.store.BootstrapFor(key)
+	data, ok := s.store.WorkspaceMetadata(key)
 	if !ok {
 		return
 	}

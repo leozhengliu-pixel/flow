@@ -525,7 +525,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/ai/conversations", s.createAIConversation)
 	mux.HandleFunc("PATCH /api/ai/conversations/{id}", s.updateAIConversation)
 	mux.HandleFunc("POST /api/ai/prompt-progress", s.createAIPromptProgress)
-	mux.HandleFunc("GET /api/bootstrap", s.bootstrap)
+	mux.Handle("GET /api/bootstrap", serializeLegacyBootstrap(http.HandlerFunc(s.bootstrap)))
 	mux.HandleFunc("PUT /api/workspace/project-display-default", s.updateProjectDisplayDefault)
 	mux.HandleFunc("PUT /api/workspace/settings", s.updateWorkspaceSettings)
 	mux.HandleFunc("GET /api/notifications", s.listNotifications)
@@ -684,7 +684,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/events", s.events)
 	mux.HandleFunc("GET /uploads/{name}", s.serveUpload)
 
-	handler := s.withStaticFiles(s.authenticate(mux))
+	handler := s.withStaticFiles(boundedLegacyIssueWrites(s.authenticate(mux)))
 	return requestLog(s.cors(handler))
 }
 
@@ -754,7 +754,7 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		}
 		filterBootstrapForAPIKey(&data, r)
 		sanitizeBootstrap(&data)
-		writeJSON(w, http.StatusOK, data)
+		writeBootstrapJSON(w, data)
 		return
 	}
 	data, ok := s.store.BootstrapFor(workspaceKey(r))
@@ -765,7 +765,7 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 	data.ViewerRole = "admin"
 	materializeDevelopmentMembers(&data)
 	sanitizeBootstrap(&data)
-	writeJSON(w, http.StatusOK, data)
+	writeBootstrapJSON(w, data)
 }
 
 func sanitizeBootstrap(data *domain.Bootstrap) {

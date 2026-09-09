@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 
 	"flow/api/internal/domain"
@@ -10,7 +11,9 @@ import (
 )
 
 func pagedRealtimeRequest(r *http.Request) bool {
-	return strings.HasPrefix(r.URL.Path, "/api/realtime/") && r.URL.Query().Get("issues") == "paged"
+	// Realtime payloads have the same wire contract for both clients. Never
+	// retain a full workspace for an SSE connection or hydrate it on heartbeats.
+	return strings.HasPrefix(r.URL.Path, "/api/realtime/")
 }
 
 func (s *server) pagedRealtimeMetadata(r *http.Request) (domain.Bootstrap, store.IssueRecordQuery, error) {
@@ -69,9 +72,12 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 		return event, true, nil
 	}
 	if strings.HasPrefix(event.Type, "attachment.") || event.Type == "issue.deleted" || event.Type == "issue.batch_updated" || strings.Contains(event.Type, "permission") {
-		return domain.RealtimeEvent{ID: event.ID, Type: "workspace.resync_required", CreatedAt: event.CreatedAt}, true, nil
+		return domain.RealtimeEvent{ID: event.ID, Type: "workspace.resync_required", ClientID: event.ClientID, ActorID: event.ActorID, CreatedAt: event.CreatedAt}, true, nil
 	}
 	if strings.HasPrefix(event.Type, "issue.") || strings.HasPrefix(event.Type, "comment.") {
+		if strings.HasPrefix(event.Type, "comment.") && slices.ContainsFunc(data.Documents, func(document domain.Document) bool { return document.ID == event.AggregateID }) {
+			return event, realtimeEventVisible(data, event), nil
+		}
 		visible, err := s.store.VisibleIssueRecordIDs(r.Context(), query, []string{event.AggregateID})
 		if err != nil || !visible[event.AggregateID] {
 			return event, false, err
