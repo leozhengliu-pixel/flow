@@ -273,7 +273,7 @@ func (s *server) discoverWorkspaceSSO(w http.ResponseWriter, r *http.Request) {
 	items := []map[string]string{}
 	// Workspaces are deliberately scanned without returning issuer or client identifiers.
 	for _, key := range s.store.WorkspaceKeys() {
-		data, ok := s.store.BootstrapFor(key)
+		data, ok := s.store.WorkspaceMetadata(key)
 		if !ok {
 			continue
 		}
@@ -304,7 +304,7 @@ func parseEnterpriseProviderKey(value string) (string, string, bool) {
 }
 
 func (s *server) enterpriseOIDCClient(ctx context.Context, workspaceKey, providerID string) (*oidcClient, domain.IdentityProvider, error) {
-	data, ok := s.store.BootstrapFor(workspaceKey)
+	data, ok := s.store.WorkspaceMetadata(workspaceKey)
 	if !ok {
 		return nil, domain.IdentityProvider{}, errNotFound
 	}
@@ -401,7 +401,7 @@ func (s *server) finishEnterpriseOIDC(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "could not create Flow session")
 		return
 	}
-	data, _ := s.store.BootstrapFor(workspaceKey)
+	data, _ := s.store.WorkspaceMetadata(workspaceKey)
 	if autoProvision {
 		if err = s.store.EnsureWorkspaceMembership(ctx, data.Workspace.ID, session.User.ID); err != nil {
 			writeError(w, http.StatusInternalServerError, "could not grant workspace access")
@@ -708,7 +708,7 @@ func (s *server) retryIntegrationDelivery(w http.ResponseWriter, r *http.Request
 }
 
 func (s *server) processIntegrationDelivery(ctx context.Context, workspace, id string) (domain.IntegrationDelivery, error) {
-	data, ok := s.store.BootstrapFor(workspace)
+	data, ok := s.store.WorkspaceMetadata(workspace)
 	if !ok {
 		return domain.IntegrationDelivery{}, errNotFound
 	}
