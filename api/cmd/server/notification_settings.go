@@ -100,6 +100,10 @@ func (s *server) dispatchNotificationDigests(ctx context.Context, workspace stri
 				}
 			}
 		}
+		if data.WorkspaceSettings.HIPAACompliance {
+			body.Reset()
+			body.WriteString("Open Flow to view your notifications.")
+		}
 		err = s.mailer.send(recipient.Email, fmt.Sprintf("Flow: %d notifications", len(claimed)), body.String(), s.mailer.appURL+"/"+url.PathEscape(workspace)+"/inbox")
 		for _, delivery := range claimed {
 			_ = s.store.MutateNotificationDelivery(ctx, workspace, delivery.ID, func(current *domain.NotificationDelivery) error {

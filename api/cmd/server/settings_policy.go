@@ -21,6 +21,9 @@ func workspaceFeatureEnabled(settings domain.WorkspaceSettings, feature string) 
 }
 
 func agentWorkspacePolicy(settings domain.WorkspaceSettings, role string) error {
+	if settings.HIPAACompliance {
+		return store.ErrAuthForbidden
+	}
 	if !workspaceFeatureEnabled(settings, "ai-agent") {
 		return store.ErrAuthForbidden
 	}

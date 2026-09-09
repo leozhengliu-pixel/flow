@@ -276,7 +276,7 @@ export function TeamOverviewPage({
         <button
           className="team-home-mobile"
           aria-label="Open sidebar"
-          onClick={onOpenSidebar}
+          data-sidebar-trigger onClick={onOpenSidebar}
         >
           <Menu />
         </button>

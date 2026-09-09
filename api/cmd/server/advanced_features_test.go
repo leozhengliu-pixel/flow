@@ -551,7 +551,7 @@ func TestImportRetryAndIntegrationOAuthLifecycle(t *testing.T) {
 		t.Fatalf("OAuth start URL/state missing: %#v", started)
 	}
 	completed := requestJSON[map[string]string](t, handler, http.MethodGet, "/api/integrations/slack/oauth/callback?workspace="+url.QueryEscape(bootstrap.Workspace.URLKey)+"&state="+url.QueryEscape(started["state"])+"&code=test-code", nil, http.StatusOK)
-	if completed["status"] != "configured" || completed["connectionId"] != connection.ID {
+	if completed["status"] != "connected" || completed["connectionId"] != connection.ID {
 		t.Fatalf("OAuth callback did not complete: %#v", completed)
 	}
 	replayed := requestJSON[map[string]any](t, handler, http.MethodGet, "/api/integrations/slack/oauth/callback?workspace="+url.QueryEscape(bootstrap.Workspace.URLKey)+"&state="+url.QueryEscape(started["state"])+"&code=test-code", nil, http.StatusNotFound)

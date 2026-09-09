@@ -15,6 +15,9 @@ func TestReviewLifecycleAndCodeConnections(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repository.Close()
+	// This lifecycle case exercises local reviews; provider HTTP behavior has
+	// separate tests with a real local upstream server.
+	if err:=repository.MutateWorkspace(t.Context(),"test-workspace","review.local_fixture","",nil,func(data *domain.Bootstrap)error{data.Reviews[0].Provider="";return nil});err!=nil{t.Fatal(err)}
 	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
 	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	if len(bootstrap.Reviews) == 0 || len(bootstrap.Issues) < 2 || len(bootstrap.Users) < 2 {

@@ -42,7 +42,13 @@ export function apiFetch(url: string, init?: RequestInit) {
   const headers = new Headers(init?.headers)
   if (workspaceKey && !headers.has('X-Workspace-Key')) headers.set('X-Workspace-Key', workspaceKey)
   headers.set('X-Client-ID', realtimeClientId())
-	return fetch(url, { ...init, headers, credentials: 'same-origin' })
+	return fetch(url, { ...init, headers, credentials: 'same-origin' }).then(async response => {
+    if(response.status===403) {
+      const payload=await response.clone().json().catch(()=>null)
+      if(payload?.code==='mfa_required'||payload?.code==='authentication_method_required') window.dispatchEvent(new CustomEvent('flow:authentication-policy',{detail:{code:payload.code,workspaceKey:headers.get('X-Workspace-Key') ?? workspaceKey}}))
+    }
+    return response
+  })
 }
 
 function currentWorkspaceKey() {

@@ -750,6 +750,7 @@ func (s *server) createCustomerRequest(w http.ResponseWriter, r *http.Request) {
 			created.ProjectID = *input.ProjectID
 		}
 		data.CustomerRequests = append([]domain.CustomerRequest{created}, data.CustomerRequests...)
+		for _,customer:=range data.Customers {if customer.ID==created.CustomerID {for _,domain:=range customer.Domains {if customerDomainMatches(domain,data.WorkspaceSettings.FeatureSettings.CustomerExcludedDomains) {return "",fmt.Errorf("%w: customer domain is excluded from requests",errInvalid)}}}}
 		appendAudit(data, "created", "customer_request", created.ID, map[string]any{"customerId": created.CustomerID})
 		return created.ID, nil
 	})
@@ -896,6 +897,7 @@ func (s *server) deleteCustomerRequestAttachment(w http.ResponseWriter, r *http.
 }
 
 func applyReleaseInput(data *domain.Bootstrap, release *domain.Release, input releaseInput) error {
+	previousStatus := release.Status
 	if input.Name != nil {
 		if strings.TrimSpace(*input.Name) == "" {
 			return errInvalid
@@ -922,6 +924,9 @@ func applyReleaseInput(data *domain.Bootstrap, release *domain.Release, input re
 	}
 	if input.Stage != nil {
 		release.Stage = strings.TrimSpace(*input.Stage)
+		if pipeline := releasePipelineByID(data, release.PipelineID); pipeline != nil && input.Status == nil {
+			if status := pipeline.StageStatuses[release.Stage]; status != "" { input.Status = &status }
+		}
 	}
 	if release.Stage != "" {
 		pipeline := releasePipelineByID(data, release.PipelineID)
@@ -1035,7 +1040,7 @@ func applyReleaseInput(data *domain.Bootstrap, release *domain.Release, input re
 			release.ArchivedAt = nil
 		}
 	}
-	return nil
+	return applyReleaseSettingAutomations(data, previousStatus, *release, time.Now().UTC())
 }
 
 func (s *server) createRelease(w http.ResponseWriter, r *http.Request) {
@@ -1631,6 +1636,7 @@ func slaMatches(rule domain.SLARule, issue domain.Issue) bool {
 }
 
 func applySLARules(data *domain.Bootstrap, issue *domain.Issue, now time.Time) {
+	if !slaEnabled(data) {return}
 	for _, rule := range data.SLARules {
 		index := slices.IndexFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return item.IssueID == issue.ID && item.RuleID == rule.ID })
 		matches := slaMatches(rule, *issue)
@@ -1641,7 +1647,7 @@ func applySLARules(data *domain.Bootstrap, issue *domain.Issue, now time.Time) {
 			continue
 		}
 		if index < 0 {
-			value := domain.IssueSLA{ID: fmt.Sprintf("issue_sla_%d", now.UnixNano()+int64(len(data.IssueSLAs))), IssueID: issue.ID, RuleID: rule.ID, StartedAt: now, DueAt: now.Add(time.Duration(rule.TargetMinutes) * time.Minute), RemainingMinutes: rule.TargetMinutes, Status: "active"}
+			value := domain.IssueSLA{ID: fmt.Sprintf("issue_sla_%d", now.UnixNano()+int64(len(data.IssueSLAs))), IssueID: issue.ID, RuleID: rule.ID, StartedAt: now, DueAt: slaDeadline(data,*issue,rule,now,rule.TargetMinutes), RemainingMinutes: rule.TargetMinutes, Status: "active"}
 			if slices.Contains(rule.PauseStatuses, issue.State.ID) || slices.Contains(rule.PauseStatuses, issue.State.Type) {
 				value.PausedAt, value.Status = &now, "paused"
 			}
@@ -1655,13 +1661,14 @@ func applySLARules(data *domain.Bootstrap, issue *domain.Issue, now time.Time) {
 		sla := &data.IssueSLAs[index]
 		paused := slices.Contains(rule.PauseStatuses, issue.State.ID) || slices.Contains(rule.PauseStatuses, issue.State.Type)
 		if paused && sla.PausedAt == nil {
+			if rule.BusinessHours {sla.RemainingMinutes=businessMinutes(now,sla.DueAt,slaTimezone(data,*issue))}
 			sla.PausedAt, sla.Status = &now, "paused"
 			recordSLAEvent(data, issue.ID, sla.ID, "paused", now)
 		}
 		if !paused && sla.PausedAt != nil {
 			minutes := int(now.Sub(*sla.PausedAt).Minutes())
 			sla.PausedMinutes += max(0, minutes)
-			sla.DueAt = sla.DueAt.Add(time.Duration(max(0, minutes)) * time.Minute)
+			if rule.BusinessHours {sla.DueAt=slaDeadline(data,*issue,rule,now,sla.RemainingMinutes)} else {sla.DueAt = sla.DueAt.Add(time.Duration(max(0, minutes)) * time.Minute)}
 			sla.PausedAt, sla.Status = nil, "active"
 			recordSLAEvent(data, issue.ID, sla.ID, "resumed", now)
 		}
@@ -1674,6 +1681,7 @@ func applySLARules(data *domain.Bootstrap, issue *domain.Issue, now time.Time) {
 		}
 		if sla.PausedAt == nil {
 			sla.RemainingMinutes = int(sla.DueAt.Sub(now).Minutes())
+			if rule.BusinessHours {sla.RemainingMinutes=businessMinutes(now,sla.DueAt,slaTimezone(data,*issue))}
 			if now.After(sla.DueAt) && sla.BreachedAt == nil {
 				sla.BreachedAt, sla.Status = &now, "breached"
 				recordSLAEvent(data, issue.ID, sla.ID, "breached", now)
@@ -3061,7 +3069,7 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 		return
 	}
 	now := time.Now().UTC()
-	needsMutation := slices.ContainsFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return item.Status == "active" && now.After(item.DueAt) })
+	needsMutation := slaEnabled(&data) && slices.ContainsFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return item.Status == "active" && now.After(item.DueAt) })
 	needsMutation = needsMutation || slices.ContainsFunc(data.Trash, func(item domain.TrashEntry) bool { return now.After(item.ExpiresAt) })
 	settings, _ := data.Settings["projectUpdates"].(map[string]any)
 	defaultCadence := intFromAny(settings["cadenceDays"])

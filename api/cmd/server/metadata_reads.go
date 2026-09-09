@@ -23,7 +23,7 @@ func metadataReadRequest(r *http.Request) bool {
 		}
 	}
 	switch p[1] {
-	case "account", "workspace", "api-keys", "oauth", "notification-preferences", "push-subscriptions", "agent-skills", "agent", "exports":
+	case "account", "workspace", "application-policies", "api-keys", "oauth", "notification-preferences", "push-subscriptions", "agent-skills", "agent", "exports":
 		return true
 	case "teams":
 		if len(p) >= 4 {

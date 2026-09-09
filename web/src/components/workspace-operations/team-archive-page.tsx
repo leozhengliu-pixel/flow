@@ -49,7 +49,7 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
 
   return <main className="main-panel operations-page archive-page" aria-label={`${team.name} archive`}>
     <header className="operations-header operations-special-header archive-header">
-      <button className="operations-mobile-menu" aria-label={t('Open sidebar')} onClick={onOpenSidebar}><Menu/></button>
+      <button className="operations-mobile-menu" aria-label={t('Open sidebar')} data-sidebar-trigger onClick={onOpenSidebar}><Menu/></button>
       <div className="operations-heading"><h2>{t(tab.title)}</h2><span className="archive-count">{count}</span></div>
     </header>
     <div className="archive-toolbar">

@@ -18,6 +18,24 @@ import (
 	"flow/api/internal/domain"
 )
 
+func TestPublicOAuthCallbackFindsWorkspaceWithoutSessionOrWorkspaceQuery(t *testing.T) {
+	handler, repository := enterpriseTestServer(t)
+	connection := requestJSON[domain.IntegrationConnection](t, handler, http.MethodPut, "/api/integrations/slack?workspace=test-workspace", map[string]any{"name": "Callback test", "config": map[string]string{"authorizationURL": "https://example.test/oauth", "clientID": "client", "redirectURI": "https://flow.example.test/api/integrations/slack/oauth/callback"}}, http.StatusOK)
+	started := requestJSON[map[string]string](t, handler, http.MethodPost, "/api/integrations/slack/oauth/start?workspace=test-workspace", nil, http.StatusOK)
+	publicHandler := newHandler(&server{store: repository, uploadPath: t.TempDir()})
+	requestJSON[map[string]any](t, publicHandler, http.MethodGet, "/api/integrations/slack/oauth/callback?state="+url.QueryEscape(started["state"])+"&error=access_denied", nil, http.StatusBadRequest)
+	data, _ := repository.WorkspaceMetadata("test-workspace")
+	for _, item := range data.IntegrationConnections {
+		if item.ID == connection.ID {
+			if item.Status != "error" || item.OAuthState != "" {
+				t.Fatalf("callback did not consume the correct workspace state: %+v", item)
+			}
+			return
+		}
+	}
+	t.Fatal("connection disappeared")
+}
+
 func TestIntegrationOAuthRefreshAndRevokeUseConfiguredProvider(t *testing.T) {
 	handler, repository := enterpriseTestServer(t)
 	var tokenCalls, revokeCalls atomic.Int32
@@ -56,11 +74,11 @@ func TestIntegrationOAuthRefreshAndRevokeUseConfiguredProvider(t *testing.T) {
 	}, http.StatusOK)
 	started := requestJSON[map[string]string](t, handler, http.MethodPost, "/api/integrations/slack/oauth/start?workspace=test-workspace", nil, http.StatusOK)
 	completed := requestJSON[map[string]string](t, handler, http.MethodGet, "/api/integrations/slack/oauth/callback?workspace=test-workspace&state="+url.QueryEscape(started["state"])+"&code=auth-code", nil, http.StatusOK)
-	if completed["status"] != "configured" {
+	if completed["status"] != "connected" {
 		t.Fatalf("oauth callback status=%#v", completed)
 	}
 	refreshed := requestJSON[domain.IntegrationConnection](t, handler, http.MethodPost, "/api/integrations/slack/"+connection.ID+"/oauth/refresh?workspace=test-workspace", nil, http.StatusOK)
-	if refreshed.Status != "configured" || refreshed.OAuthAccessToken != "" {
+	if refreshed.Status != "connected" || refreshed.OAuthAccessToken != "" {
 		t.Fatalf("refresh leaked token or status: %#v", refreshed)
 	}
 	requestJSON[any](t, handler, http.MethodDelete, "/api/integrations/slack/"+connection.ID+"/oauth/token?workspace=test-workspace", nil, http.StatusNoContent)

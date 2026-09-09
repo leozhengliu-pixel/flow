@@ -14,10 +14,11 @@ describe('Pulse header menus', () => {
 
     await user.click(screen.getByRole('button', { name: 'Subscription' }))
     expect(screen.getByRole('dialog')).toBeVisible()
-    expect(screen.getAllByRole('option')).toHaveLength(3)
+    expect(screen.getAllByRole('option')).toHaveLength(4)
+    expect(screen.getByRole('option', { name: 'Workspace default' })).toBeVisible()
     expect(screen.getByRole('option', { name: 'Never' })).toHaveAttribute('aria-checked', 'true')
 
-    await user.type(screen.getByRole('searchbox', { name: 'Filter…' }), 'd')
+    await user.type(screen.getByRole('searchbox', { name: 'Filter…' }), 'daily')
     expect(screen.getAllByRole('option')).toHaveLength(1)
     await user.click(screen.getByRole('option', { name: 'Daily' }))
     expect(onChange).toHaveBeenCalledWith('daily')

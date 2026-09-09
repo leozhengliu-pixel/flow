@@ -252,7 +252,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
         <button
           aria-label="Open workspace sidebar"
           className="project-detail-page__mobile-menu"
-          onClick={onOpenSidebar}
+          data-sidebar-trigger onClick={onOpenSidebar}
           type="button"
         >
           <span />

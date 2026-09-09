@@ -401,6 +401,10 @@ func (s *server) finishEnterpriseOIDC(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "could not create Flow session")
 		return
 	}
+	if err := s.store.SetSessionAuthentication(ctx, sessionToken, "enterprise:"+provider.ID, provider.Issuer, verifiedMFAClaim(claims)); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save authentication context")
+		return
+	}
 	data, _ := s.store.WorkspaceMetadata(workspaceKey)
 	if autoProvision {
 		if err = s.store.EnsureWorkspaceMembership(ctx, data.Workspace.ID, session.User.ID); err != nil {
@@ -490,6 +494,9 @@ func uniqueTrimmed(values []string) []string {
 }
 
 func redactIntegrationConnection(item domain.IntegrationConnection) domain.IntegrationConnection {
+	if item.Status == "configured" && item.OAuthAccessToken != "" && item.OAuthCompletedAt != nil && item.LastError == "" {
+		item.Status = "connected"
+	}
 	item.OAuthState, item.OAuthAccessToken, item.OAuthRefreshToken = "", "", ""
 	config := map[string]string{}
 	for key, value := range item.Config {
@@ -574,6 +581,11 @@ func (s *server) upsertTargetBranch(w http.ResponseWriter, r *http.Request) {
 	}
 	var result domain.TargetBranch
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "target_branch.upserted", input.ID, input, func(data *domain.Bootstrap) error {
+		for event, stateID := range input.AutomationStates {
+			if !slices.Contains([]string{"draft", "opened", "reviewActivity", "ready", "merged"}, event) || (stateID != "" && stateForTeam(data, input.TeamID, stateID) == nil) {
+				return errInvalid
+			}
+		}
 		if !slices.ContainsFunc(data.Teams, func(v domain.Team) bool { return v.ID == input.TeamID }) {
 			return errInvalid
 		}
@@ -666,7 +678,7 @@ func (s *server) createIntegrationDelivery(w http.ResponseWriter, r *http.Reques
 			return nil
 		}
 		i := slices.IndexFunc(data.IntegrationConnections, func(v domain.IntegrationConnection) bool {
-			return v.ID == input.ConnectionID && v.Status == "configured"
+			return v.ID == input.ConnectionID && slices.Contains([]string{"configured", "connected"}, v.Status)
 		})
 		if i < 0 {
 			return errNotFound
@@ -711,6 +723,9 @@ func (s *server) processIntegrationDelivery(ctx context.Context, workspace, id s
 	data, ok := s.store.WorkspaceMetadata(workspace)
 	if !ok {
 		return domain.IntegrationDelivery{}, errNotFound
+	}
+	if data.WorkspaceSettings.HIPAACompliance {
+		return domain.IntegrationDelivery{}, fmt.Errorf("%w: external processing is disabled by workspace policy", errConflict)
 	}
 	deliveryIndex := slices.IndexFunc(data.IntegrationDeliveries, func(v domain.IntegrationDelivery) bool { return v.ID == id })
 	if deliveryIndex < 0 {

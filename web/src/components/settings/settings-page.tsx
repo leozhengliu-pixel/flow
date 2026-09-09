@@ -9,6 +9,7 @@ import {
 } from "react";
 import { persistUserSettings } from '@/lib/settings-persistence';
 import { UploadPolicyDialog } from './upload-policy-dialog';
+import { ApplicationPolicySettings, DataPrivacyDialog } from './application-policy-settings';
 import { canManageTeamSettings } from '@/lib/settings-permissions';
 import {
   Activity,
@@ -89,7 +90,6 @@ import {
   updateMemberRole,
   updateMemberIdentity,
   updateOAuthApplication,
-  updateUserSettings,
   updateWebhook,
   updateWorkspacePreferences,
   uploadWorkspaceLogo,
@@ -1018,10 +1018,7 @@ function WorkspacePage(
       ),
     ) as Partial<WorkspaceSettings>;
     if (!Object.keys(changed).length) return;
-    await updateWorkspacePreferences({
-      ...props.data.workspaceSettings,
-      ...changed,
-    });
+    await updateWorkspacePreferences(changed);
     await props.onReload();
   };
   return (
@@ -1725,10 +1722,11 @@ function SecuritySupplement({
   onReload: () => Promise<void>;
 }) {
   const [uploadPolicyOpen,setUploadPolicyOpen] = useState(false);
+  const [privacyDialog,setPrivacyDialog] = useState<"support"|"health"|null>(null);
   const settings = data.workspaceSettings;
   const save = async (patch: Partial<WorkspaceSettings>) => {
     try {
-      await updateWorkspacePreferences({ ...settings, ...patch });
+      await updateWorkspacePreferences(patch);
       await onReload();
       toast.success("Security policy saved");
     } catch (error) {
@@ -1765,7 +1763,7 @@ function SecuritySupplement({
           title="Reduce personal information from support integrations"
           description="Personal information from support integrations will not be stored"
         >
-          <ActionButton>Configure</ActionButton>
+          <ActionButton onClick={()=>setPrivacyDialog("support")}>Configure</ActionButton>
         </Row>
       </Section>
       <Section title="MCP connections">
@@ -1803,9 +1801,11 @@ function SecuritySupplement({
           title="HIPAA compliance"
           description="Enable privacy and security measures for protected health information"
         >
-          <ActionButton>Configure</ActionButton>
+          <ActionButton onClick={()=>setPrivacyDialog("health")}>Configure</ActionButton>
         </Row>
       </Section>
+      <ApplicationPolicySettings admin={data.viewerRole==="admin"||data.viewerRole==="owner"}/>
+      {privacyDialog&&<DataPrivacyDialog kind={privacyDialog} settings={settings} onSave={async patch=>{await updateWorkspacePreferences(patch);await onReload()}} onClose={()=>setPrivacyDialog(null)}/>}
     </>
   );
 }
@@ -3936,6 +3936,7 @@ function useUserStoredSettings(data: BootstrapData) {
 }
 
 function memberCanManage(page: SettingsPageId, settings: WorkspaceSettings) {
+  if (page === 'ai') return settings.agentGuidancePermission === 'members';
   if (["issue-labels", "project-labels"].includes(page))
     return settings.labelPermission === "members";
   if (["issue-templates", "project-templates"].includes(page))

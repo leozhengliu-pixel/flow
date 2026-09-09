@@ -236,6 +236,7 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
       const issue = projection ? issueById.get(projection.issueId) : undefined
       const project = projection?.projectId ? data.projects.find(item => item.id === projection.projectId) : undefined
       const review = projection?.reviewId ? data.reviews.find(item => item.id === projection.reviewId) : undefined
+      if (projection?.identifier==='pulseSummary') return {content:<div className="flow-inbox-project-reminder"><h2>Pulse summary</h2><p>{projection.body}</p><a href={`/${data.workspace.urlKey}/pulse`}>Open Pulse</a></div>}
       if (projection && review && !issue) return { content: <InboxReviewDetail review={review} onOpen={() => onOpenReview?.(review)} /> }
       if (projection && project && !issue) return { content: <ProjectReminderDetail overdue={project.health==='noUpdate'} project={project} onOpen={() => onOpenProject?.(project)}/> }
       if (!projection || !issue) return { content: <InboxMissingIssue /> }
@@ -376,7 +377,7 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
         kind: 'generic' as const,
         identifier: notification.type,
         title: genericNotificationTitle(notification),
-        body: withOccurrence(genericNotificationBody(notification), notification.occurrenceCount),
+        body: notification.type==='pulseSummary'?`${notification.occurrenceCount} project and initiative updates`:withOccurrence(genericNotificationBody(notification), notification.occurrenceCount),
         timeLabel: relativeTime(notification.updatedAt),
         timestamp: notification.updatedAt,
         read: Boolean(notification.readAt),

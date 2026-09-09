@@ -1,0 +1,23 @@
+.review-code{font-size:var(--review-code-size,12px)!important;line-height:1.6!important;font-family:var(--font-monospace);color:var(--code-light-fg)}
+.review-diff-cell:has(.review-code[data-code-theme$="light"]){background:var(--code-light-bg);color:var(--code-light-fg)}
+.review-diff-cell:has(.review-code[data-code-theme$="dark"]){background:var(--code-dark-bg);color:var(--code-dark-fg)}
+.review-code[data-code-theme$="dark"]{color:var(--code-dark-fg)}
+.review-code .hljs-keyword,.review-code .hljs-selector-tag{color:var(--code-light-keyword)}
+.review-code .hljs-string,.review-code .hljs-attr{color:var(--code-light-string)}
+.review-code .hljs-comment{color:var(--code-light-comment)}
+.review-code .hljs-number,.review-code .hljs-literal{color:var(--code-light-number)}
+.review-code[data-code-theme$="dark"] .hljs-keyword{color:var(--code-dark-keyword)}
+.review-code[data-code-theme$="dark"] .hljs-string,.review-code[data-code-theme$="dark"] .hljs-attr{color:var(--code-dark-string)}
+.review-code[data-code-theme$="dark"] .hljs-comment{color:var(--code-dark-comment)}
+.review-code[data-code-theme$="dark"] .hljs-number,.review-code[data-code-theme$="dark"] .hljs-literal{color:var(--code-dark-number)}
+.review-diff-cell.is-add:has(.review-code){box-shadow:inset 3px 0 var(--semantic-success)}
+.review-diff-cell.is-remove:has(.review-code){box-shadow:inset 3px 0 var(--semantic-danger)}
+.personal-code-preview:has(.review-code[data-code-theme$="dark"]){background:var(--code-dark-bg)}
+.personal-code-preview:has(.review-code[data-code-theme$="light"]){background:var(--code-light-bg)}
+.personal-code-preview .review-code span{color:inherit}
+.personal-code-preview .review-code .hljs-keyword{color:var(--code-light-keyword)}
+.personal-code-preview .review-code .hljs-string{color:var(--code-light-string)}
+.personal-code-preview .review-code .hljs-number,.personal-code-preview .review-code .hljs-literal{color:var(--code-light-number)}
+.personal-code-preview .review-code[data-code-theme$="dark"] .hljs-keyword{color:var(--code-dark-keyword)}
+.personal-code-preview .review-code[data-code-theme$="dark"] .hljs-string{color:var(--code-dark-string)}
+.personal-code-preview .review-code[data-code-theme$="dark"] .hljs-number,.personal-code-preview .review-code[data-code-theme$="dark"] .hljs-literal{color:var(--code-dark-number)}

@@ -474,10 +474,11 @@ export function changeAccountPassword(
   );
 }
 export function updateWorkspacePreferences(
-  input: Partial<WorkspaceSettings>,
+  input: Omit<Partial<WorkspaceSettings>, 'featureSettings'> & { featureSettings?: Partial<WorkspaceSettings['featureSettings']> },
 ): Promise<WorkspaceSettings> {
   return request("/api/workspace/preferences", jsonRequest("PATCH", input));
 }
+export function updateWorkspaceAgentGuidance(instructions:string):Promise<{instructions:string}> {return request('/api/workspace/agent-guidance',jsonRequest('PATCH',{instructions}));}
 export function createWorkspaceLabel(input: {
   name: string;
   description?: string;
@@ -816,6 +817,11 @@ export function startIntegrationOAuth(provider: string): Promise<{
     jsonRequest("POST", {}),
   );
 }
+export async function authorizeIntegration(provider: string, input: { name?: string; config?: Record<string,string> }, configured = false): Promise<void> {
+  if (!configured) await connectIntegration(provider, input);
+  const authorization = await startIntegrationOAuth(provider);
+  window.location.assign(authorization.authorizationURL);
+}
 export function disconnectIntegration(provider: string): Promise<void> {
   return request(`/api/integrations/${provider}`, { method: "DELETE" });
 }
@@ -871,7 +877,7 @@ export function updateReview(
       | "draft"
       | "branchState"
     >
-  >,
+  > & {mergeMethod?:'merge'|'squash'|'rebase'},
 ): Promise<CodeReview> {
   return request(`/api/reviews/${id}`, jsonRequest("PATCH", input));
 }

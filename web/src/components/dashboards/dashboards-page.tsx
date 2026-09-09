@@ -738,7 +738,7 @@ function DashboardHeader({
   const { t } = useI18n();
   return (
     <header className="dashboards-header">
-      <button className="mobile-menu" type="button" onClick={onOpenSidebar}>
+      <button aria-label="Open sidebar" className="mobile-menu" type="button" data-sidebar-trigger onClick={onOpenSidebar}>
         Menu
       </button>
       {selected ? (

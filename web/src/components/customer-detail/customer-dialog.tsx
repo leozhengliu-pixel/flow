@@ -17,10 +17,11 @@ type CustomerDraft = {
 
 const emptyDraft: CustomerDraft = { name: '', logoUrl: '', ownerId: '', status: 'active', tier: '', annualRevenue: '', size: '', domains: '' }
 
-export function CustomerDialog({ open, users, customer, onOpenChange, onSubmit }: {
+export function CustomerDialog({ open, users, customer, onOpenChange, onSubmit, currency = 'USD' }: {
   open: boolean
   users: User[]
   customer?: Customer
+  currency?: string
   onOpenChange: (open: boolean) => void
   onSubmit: (input: CustomerMutationInput & { name: string }) => Promise<void>
 }) {
@@ -75,7 +76,7 @@ export function CustomerDialog({ open, users, customer, onOpenChange, onSubmit }
           <Field label="Owner"><SelectControl className="workspace-customer-select" label="Owner" value={draft.ownerId} onChange={ownerId => setDraft(value => ({ ...value, ownerId }))} options={[{value:'',label:'No owner'},...users.map(user=>({value:user.id,label:user.displayName,entityName:true}))]}/></Field>
           <Field label="Status"><SelectControl className="workspace-customer-select" label="Status" value={draft.status} onChange={status => setDraft(value => ({ ...value, status: status as Customer['status'] }))} options={[{value:'active',label:'Active'},{value:'inactive',label:'Inactive'}]}/></Field>
           <Field label="Tier"><SelectControl className="workspace-customer-select" label="Tier" value={draft.tier} onChange={tier => setDraft(value => ({ ...value, tier }))} options={[{value:'',label:'No tier'},{value:'Enterprise',label:'Enterprise'},{value:'Mid-market',label:'Mid-market'},{value:'Small business',label:'Small business'}]}/></Field>
-          <Field label="Annual revenue"><div className="workspace-money-input"><span>$</span><input aria-label="Annual revenue" inputMode="decimal" value={draft.annualRevenue} onChange={event => setDraft(value => ({ ...value, annualRevenue: event.target.value.replace(/[^\d.]/g, '') }))}/></div></Field>
+          <Field label="Annual revenue"><div className="workspace-money-input"><span>{currency}</span><input aria-label="Annual revenue" inputMode="decimal" value={draft.annualRevenue} onChange={event => setDraft(value => ({ ...value, annualRevenue: event.target.value.replace(/[^\d.]/g, '') }))}/></div></Field>
           <Field label="Size"><input aria-label="Size" inputMode="numeric" value={draft.size} onChange={event => setDraft(value => ({ ...value, size: event.target.value.replace(/\D/g, '') }))}/></Field>
         </div>
         <Field label="Domains"><input aria-label="Domains" placeholder="customer.com, example.org" value={draft.domains} onChange={event => setDraft(value => ({ ...value, domains: event.target.value }))}/></Field>

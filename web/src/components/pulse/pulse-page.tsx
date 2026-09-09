@@ -66,7 +66,7 @@ export function PulsePage(props: Props) {
 
   return <main className="flow-framed-workspace main-panel pulse-page">
     <header className="pulse-header">
-      <div className="pulse-header-top"><button aria-label="Open workspace sidebar" className="pulse-mobile-menu" onClick={props.onOpenSidebar} type="button"><Menu size={16}/></button><h2>Pulse</h2><span/><PulseSubscriptionMenu cadence={cadence} onChange={next=>void changeCadence(next)}/></div>
+      <div className="pulse-header-top"><button aria-label="Open workspace sidebar" className="pulse-mobile-menu" data-sidebar-trigger onClick={props.onOpenSidebar} type="button"><Menu size={16}/></button><h2>Pulse</h2><span/><PulseSubscriptionMenu cadence={cadence} onChange={next=>void changeCadence(next)}/></div>
       <div className="pulse-toolbar">
       <div className="pulse-view-tabs">
         {([['following', 'For me'], ['popular', 'Popular'], ['all', 'Recent']] as const).map(([id, label]) => <a className="ui-pill" aria-current={!activeSavedView && view === id ? 'page' : undefined} href={pulsePath(data.workspace.urlKey, id)} key={id} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); navigate(id) }}>{label}</a>)}

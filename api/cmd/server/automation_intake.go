@@ -814,6 +814,23 @@ func (s *server) verifyEmailIntakeAddress(w http.ResponseWriter, r *http.Request
 		return
 	}
 	teamID, id := r.PathValue("id"), r.PathValue("addressId")
+	metadata := s.workspaceData(r)
+	addressIndex := slices.IndexFunc(metadata.EmailIntakeAddresses, func(item domain.EmailIntakeAddress) bool { return item.ID == id && item.TeamID == teamID })
+	if addressIndex < 0 {
+		writeError(w, http.StatusNotFound, "intake address not found")
+		return
+	}
+	expectedToken := metadata.EmailIntakeAddresses[addressIndex].VerificationToken
+	expectedTXT := "flow-verification=" + expectedToken
+	verified := s.authDisabled && strings.TrimSpace(input.TXTValue) == expectedTXT
+	if !verified {
+		records, err := net.DefaultResolver.LookupTXT(r.Context(), "_flow-intake."+metadata.EmailIntakeAddresses[addressIndex].Domain)
+		verified = err == nil && slices.Contains(records, expectedTXT)
+	}
+	if !verified {
+		writeError(w, http.StatusBadRequest, "TXT verification record was not found")
+		return
+	}
 	var updated domain.EmailIntakeAddress
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "email_intake.verified", id, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.EmailIntakeAddresses, func(item domain.EmailIntakeAddress) bool { return item.ID == id && item.TeamID == teamID })
@@ -821,14 +838,8 @@ func (s *server) verifyEmailIntakeAddress(w http.ResponseWriter, r *http.Request
 			return errNotFound
 		}
 		item := &data.EmailIntakeAddresses[index]
-		expected := "flow-verification=" + item.VerificationToken
-		found := strings.TrimSpace(input.TXTValue) == expected
-		if !found && strings.TrimSpace(input.TXTValue) == "" {
-			records, _ := net.LookupTXT("_flow-intake." + item.Domain)
-			found = slices.Contains(records, expected)
-		}
-		if !found {
-			return fmt.Errorf("%w: TXT verification record was not found", errInvalid)
+		if item.VerificationToken != expectedToken {
+			return errConflict
 		}
 		now := time.Now().UTC()
 		item.VerificationState = "verified"
@@ -943,6 +954,11 @@ func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "invalid or unverified intake address")
 		return
 	}
+	// Remove identity before constructing the persisted event payload as well as
+	// the intake record. The message body is retained as submitted.
+	if metadata, ok := s.store.WorkspaceMetadata(key); ok && (metadata.WorkspaceSettings.ReduceSupportPersonalInfo || metadata.WorkspaceSettings.HIPAACompliance) {
+		input.From = ""
+	}
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), key, "email_intake.received", input, func(data *domain.Bootstrap) (string, error) {
 		if existing := slices.IndexFunc(data.EmailIntakeMessages, func(item domain.EmailIntakeMessage) bool { return item.MessageID == input.MessageID }); existing >= 0 {
 			if issue, e := issueByID(data, data.EmailIntakeMessages[existing].IssueID); e == nil {
@@ -986,6 +1002,20 @@ func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
 		applyTriageRouting(data, &created, now)
 		data.Issues = append([]domain.Issue{created}, data.Issues...)
 		data.EmailIntakeMessages = append(data.EmailIntakeMessages, domain.EmailIntakeMessage{ID: fmt.Sprintf("email_message_%d", now.UnixNano()), AddressID: address.ID, MessageID: input.MessageID, From: input.From, Subject: input.Subject, IssueID: created.ID, Status: "processed", ReceivedAt: now, ProcessedAt: &now})
+		if slices.ContainsFunc(data.WorkspaceSettings.FeatureSettings.AsksEmailAddresses, func(value string) bool { return strings.EqualFold(value, address.Address) }) {
+			requester := domain.User{ID: "email_requester", Name: "Email requester", DisplayName: "Email requester"}
+			if !data.WorkspaceSettings.ReduceSupportPersonalInfo && !data.WorkspaceSettings.HIPAACompliance && input.From != "" {
+				if sender, err := mail.ParseAddress(input.From); err == nil {
+					requester.Email = sender.Address
+					requester.Name = sender.Name
+					requester.DisplayName = sender.Name
+					if requester.DisplayName == "" {
+						requester.DisplayName = sender.Address
+					}
+				}
+			}
+			data.Asks = append(data.Asks, domain.Ask{ID: fmt.Sprintf("ask_email_%d", now.UnixNano()), Title: created.Title, Body: created.Description, Source: "email", TeamID: address.TeamID, Requester: requester, Status: "approved", IssueID: created.ID, Approvals: []domain.AskApproval{}, CreatedAt: now, UpdatedAt: now})
+		}
 		return created.ID, nil
 	})
 	status := http.StatusCreated

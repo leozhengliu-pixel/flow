@@ -78,7 +78,7 @@ function ReleaseRouteNotFound({title,onOpenSidebar}:{title:string;onOpenSidebar:
 
 function TopBar({ title, onOpenSidebar, children }: { title: ReactNode; onOpenSidebar: () => void; children?: ReactNode }) {
   const { t } = useI18n()
-  return <header className="flow-releases-topbar"><button className="flow-releases-mobile-menu" aria-label={t('Open sidebar')} onClick={onOpenSidebar}><Menu/></button><div className="flow-releases-heading">{title}</div><div className="flow-releases-topbar__actions">{children}</div></header>
+  return <header className="flow-releases-topbar"><button className="flow-releases-mobile-menu" aria-label={t('Open sidebar')} data-sidebar-trigger onClick={onOpenSidebar}><Menu/></button><div className="flow-releases-heading">{title}</div><div className="flow-releases-topbar__actions">{children}</div></header>
 }
 
 function ReleasePipelinesView({ data, onCreate, onOpen, onOpenSidebar, onNavigate }: { data: BootstrapData; onCreate: () => void; onOpen: (pipeline: ReleasePipeline) => void; onOpenSidebar: () => void; onNavigate:(path:string)=>void }) {

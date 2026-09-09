@@ -1,8 +1,14 @@
 import { useSyncExternalStore } from 'react'
-import type { User, UserSettings } from '@/types/flow'
+import type { User, UserSettings, WorkspaceSettings } from '@/types/flow'
 
 let current: Partial<UserSettings> = {}
 const listeners = new Set<() => void>()
+let workspace: Partial<WorkspaceSettings> = {}
+export function setWorkspaceRuntimePreferences(next:Partial<WorkspaceSettings>) {workspace=next;for(const listener of listeners)listener()}
+export function useWorkspacePreferences(){return useSyncExternalStore(listener=>{listeners.add(listener);return()=>listeners.delete(listener)},()=>workspace,()=>workspace)}
+export function fiscalMonth(){return Math.max(0,['January','February','March','April','May','June','July','August','September','October','November','December'].indexOf(workspace.fiscalMonth ?? 'January'))}
+export function fiscalYear(date:Date){return date.getFullYear()-(date.getMonth()<fiscalMonth()?1:0)}
+export function fiscalMonthOffset(date:Date){return (date.getMonth()-fiscalMonth()+12)%12}
 export function setRuntimePreferences(next: Partial<UserSettings>) {
   if (current === next) return
   current = next

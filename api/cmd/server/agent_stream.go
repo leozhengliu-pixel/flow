@@ -88,11 +88,15 @@ func (s *server) resolveAgentApproval(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "agent approval not found")
 		return
 	}
-	approval := s.takeAgentApproval(approvalID)
+	s.agentApprovalsMu.Lock()
+	approval := s.agentApprovals[approvalID]
 	if approval == nil || approval.SessionID != sessionID || approval.WorkspaceKey != workspaceKey(r) || approval.UserID != data.Viewer.ID {
+		s.agentApprovalsMu.Unlock()
 		writeError(w, http.StatusNotFound, "agent approval not found")
 		return
 	}
+	delete(s.agentApprovals, approvalID)
+	s.agentApprovalsMu.Unlock()
 	approval.Decision <- decision
 	writeJSON(w, http.StatusOK, map[string]string{"approvalId": approvalID, "decision": decision})
 }
@@ -226,6 +230,9 @@ func (s *server) streamAgentSession(w http.ResponseWriter, r *http.Request, id s
 
 func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventWriter) (domain.AgentSession, error) {
 	data := s.workspaceData(r)
+	if err := agentWorkspacePolicy(data.WorkspaceSettings, data.ViewerRole); err != nil {
+		return domain.AgentSession{}, err
+	}
 	session, err := ownedAgentSession(&data, id)
 	if err != nil {
 		return domain.AgentSession{}, err
@@ -238,6 +245,11 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	issues := selectedAgentIssues(data.Issues, session.IssueIDs)
 	skills := selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)
 	messages := agentProviderHistory(*session, workspaceAgentSystemPrompt(data, issues, skills))
+	connectors, err := s.discoverConnectorTools(r.Context(), data)
+	if err != nil {
+		return domain.AgentSession{}, err
+	}
+	r = r.WithContext(context.WithValue(r.Context(), connectorToolsKey{}, connectors))
 	messageID := fmt.Sprintf("agent_message_%d", time.Now().UnixNano())
 	started := time.Now()
 	parts := []domain.AgentMessagePart{}
@@ -317,7 +329,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, ToolCalls: turn.ToolCalls})
 		for _, toolCall := range turn.ToolCalls {
 			call := toolCall
-			if s.agentToolRequiresApproval(call.Name) {
+			if s.agentToolRequiresApproval(call.Name) || strings.HasPrefix(call.Name, "external_") {
 				approvalID := fmt.Sprintf("agent_approval_%d", time.Now().UnixNano())
 				call.ApprovalID = approvalID
 				call.Status = "pending"
@@ -424,6 +436,44 @@ func (s *server) agentToolRequiresApproval(name string) bool {
 }
 
 func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call domain.AgentToolCall) ([]byte, error) {
+	if s.store != nil {
+		fresh, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+		if !ok {
+			return nil, errNotFound
+		}
+		role := data.ViewerRole
+		if !s.authDisabled {
+			var status string
+			var err error
+			role, status, err = s.store.WorkspaceRole(r.Context(), fresh.Workspace.ID, data.Viewer.ID)
+			if err != nil || status != "active" {
+				return nil, fmt.Errorf("Workspace access was revoked")
+			}
+		}
+		if err := agentWorkspacePolicy(fresh.WorkspaceSettings, role); err != nil {
+			return nil, err
+		}
+	}
+	if !s.agent.ToolsEnabled {
+		return nil, fmt.Errorf("Agent tools are disabled")
+	}
+	if strings.HasPrefix(call.Name, "external_") {
+		return s.executeConnectorTool(r, data, call)
+	}
+	definitions, err := s.agentToolDefinitions()
+	if err != nil {
+		return nil, err
+	}
+	allowed := false
+	for _, definition := range definitions {
+		if definition.Name == strings.TrimPrefix(call.Name, "mcp__flow.") {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return nil, fmt.Errorf("Agent tool is not enabled: %s", call.Name)
+	}
 	var args map[string]any
 	if len(call.Arguments) > 0 {
 		if err := json.Unmarshal(call.Arguments, &args); err != nil {

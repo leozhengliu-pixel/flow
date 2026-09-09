@@ -50,6 +50,7 @@ import {
 import type { BootstrapData, CodeReview } from "@/types/flow";
 
 import "./reviews-page.css";
+import { ReviewCode } from './review-code';
 
 type Display = {
   grouping: "focus" | "status" | "repository";
@@ -168,7 +169,7 @@ export function ReviewsPage({
             <button
               className="reviews-mobile-sidebar"
               aria-label={t("Open sidebar")}
-              onClick={onOpenSidebar}
+              data-sidebar-trigger onClick={onOpenSidebar}
             >
               <PanelRightClose />
             </button>
@@ -603,7 +604,7 @@ function ReviewDetail({
           onClick={() => void onMutate({ status: "merged" })}
         >
           <GitMerge />
-          {t("Squash & merge")}
+          {t(data.userSettings[data.viewer.id]?.mergeStrategy || "Squash and merge")}
         </button>
         <button
           className="review-submit"
@@ -1914,7 +1915,7 @@ function DiffLineCell({
     <div className={`review-diff-cell is-${line?.kind ?? "empty"}`}>
       <span className="review-diff-number">{lineNumber ?? ""}</span>
       {line ? <span className="review-diff-marker">{line.kind === "add" ? "+" : line.kind === "remove" ? "−" : " "}</span> : null}
-      <code data-i18n-ignore>{line?.content ?? ""}</code>
+      <ReviewCode content={line?.content ?? ''} path={path}/>
       {commentNumber ? (
         <button
           aria-label={`${t("Comment on line")} ${commentNumber}`}

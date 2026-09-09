@@ -7,7 +7,8 @@ import {
   useState,
 } from "react";
 import { Bot, History } from "lucide-react";
-import { setRuntimePreferences } from '@/lib/runtime-preferences';
+import { setRuntimePreferences, setWorkspaceRuntimePreferences } from '@/lib/runtime-preferences';
+import { AuthenticationPolicyPage } from '@/components/auth/authentication-policy-page';
 import {
   addFavorite,
   addSubscription,
@@ -254,6 +255,8 @@ function App() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const bootstrapRequest = useRef<{ key: string; promise: Promise<BootstrapData> } | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [authenticationPolicy,setAuthenticationPolicy] = useState<string>();
+  useEffect(()=>{const listener=(event:Event)=>{const detail=(event as CustomEvent<{code:string;workspaceKey:string}>).detail;if(detail.workspaceKey===decodeURIComponent(window.location.pathname.split('/').filter(Boolean)[0]??''))setAuthenticationPolicy(detail.code)};window.addEventListener('flow:authentication-policy',listener);return()=>window.removeEventListener('flow:authentication-policy',listener)},[]);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [closedAgentSessionIds, setClosedAgentSessionIds] = useState<
     Set<string>
@@ -352,6 +355,7 @@ function App() {
     if (!data) return;
     const settings = data.userSettings[data.viewer.id] ?? {};
     setRuntimePreferences(settings);
+    setWorkspaceRuntimePreferences(data.workspaceSettings);
     const root = document.documentElement;
     applyTheme(settings);
     root.style.fontSize =
@@ -3429,13 +3433,14 @@ function App() {
     if (!data) return;
     const workspace = data.workspace.urlKey;
     if (route.kind === "root" || route.kind === "workspace-root") {
-      const homeView = data.userSettings[data.viewer.id]?.homeView;
+      const preference = data.userSettings[data.viewer.id]?.homeView;
+      const homeView = preference && !preference.includes('(default)') ? preference : data.workspaceSettings.defaultHomeView ?? 'agent';
       navigateTo(
-        homeView === "Inbox"
+        homeView === "Inbox" || homeView === 'inbox'
           ? inboxPath(workspace)
-          : homeView === "My issues"
+          : homeView === "My issues" || homeView === 'my-issues'
             ? myIssuesPath(workspace)
-            : agentPath(workspace),
+            : homeView === 'projects' || homeView === 'Projects' ? projectsPath(workspace) : agentPath(workspace),
         { replace: true },
       );
       return;
@@ -3769,6 +3774,7 @@ function App() {
     selectedSavedView,
     selectedReview,
   ]);
+  if (authenticationPolicy && !authPath) return <AuthenticationPolicyPage code={authenticationPolicy}/>;
   if (!authReady)
     return (
       <div className="auth-page">

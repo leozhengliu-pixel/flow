@@ -29,6 +29,9 @@ import {
 import * as Popover from "@radix-ui/react-popover";
 import { toast } from "sonner";
 import { NotificationChannelSettings } from './notification-channel-settings';
+import { ApplicationPolicySettings } from './application-policy-settings';
+import { toCredentialCreationOptions, serializeCreationCredential } from '@/lib/webauthn';
+import { ReviewCode } from '@/components/reviews/review-code';
 import { NavLink } from "react-router-dom";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -1306,11 +1309,7 @@ function CodeReviews({
           />
         </PersonalRow>
         <pre className="personal-code-preview" data-i18n-ignore>
-          <code>
-            <span>const</span> config = {"{"}\n apiUrl:{" "}
-            <i>"https://api.example.com"</i>,\n timeout: <b>5000</b>,\n debug:{" "}
-            <em>true</em>\n{"}"};
-          </code>
+          <ReviewCode path="preview.ts" theme={String(values.codeTheme)} font={String(values.codeFont)} content={'const config = {\n  apiUrl: "https://api.example.com",\n  timeout: 5000,\n  debug: true\n};'}/>
         </pre>
       </PersonalSection>
       <PersonalSection
@@ -3590,18 +3589,18 @@ function Agents({ data, values, setValue, onNavigate, p }: PersonalProps) {
           </NavLink>
         </div>
       </PersonalSection>
-      <PersonalSection
+      {data.workspaceSettings?.mcpConnectorsEnabled ? <ApplicationPolicySettings admin={false} /> : <PersonalSection
         title={p("MCP connectors")}
         description={p(
           "Add MCP connectors for use with Flow Agent. Workspace admins can manage available connectors in security settings.",
         )}
       >
         <PersonalRow title={p("Agent MCP access disabled in this workspace")}>
-          <Action onClick={() => onNavigate("security")}>
+          {(data.viewerRole==='admin'||data.viewerRole==='owner')&&<Action onClick={() => onNavigate("security")}>
             {p("Configure")}
-          </Action>
+          </Action>}
         </PersonalRow>
-      </PersonalSection>
+      </PersonalSection>}
     </>
   );
 }
@@ -4008,68 +4007,6 @@ function BrowserSessionIcon({ browserType }: { browserType?: string }) {
   );
 }
 
-function decodeBase64Url(value: string): ArrayBuffer {
-  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return bytes.buffer;
-}
-
-function encodeBase64Url(value: ArrayBufferLike): string {
-  const bytes = new Uint8Array(value);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
-}
-
-function toCredentialCreationOptions(raw: unknown): PublicKeyCredentialCreationOptions {
-  const wrapper = (raw ?? {}) as {
-    publicKey?: Record<string, unknown>;
-  };
-  const source = wrapper.publicKey ?? (raw as Record<string, unknown>) ?? {};
-  const user = (source.user ?? {}) as Record<string, unknown>;
-  const excludeCredentials = Array.isArray(source.excludeCredentials)
-    ? source.excludeCredentials.map((item) => {
-        const descriptor = item as Record<string, unknown>;
-        return {
-          ...descriptor,
-          id: decodeBase64Url(String(descriptor.id ?? "")),
-        } as PublicKeyCredentialDescriptor;
-      })
-    : undefined;
-  return {
-    ...source,
-    challenge: decodeBase64Url(String(source.challenge ?? "")),
-    user: {
-      ...user,
-      id: decodeBase64Url(String(user.id ?? "")),
-    },
-    excludeCredentials,
-  } as PublicKeyCredentialCreationOptions;
-}
-
-function serializeCreationCredential(
-  credential: PublicKeyCredential,
-  response: AuthenticatorAttestationResponse,
-) {
-  return {
-    id: credential.id,
-    type: credential.type,
-    rawId: encodeBase64Url(credential.rawId),
-    response: {
-      clientDataJSON: encodeBase64Url(response.clientDataJSON),
-      attestationObject: encodeBase64Url(response.attestationObject),
-      transports: response.getTransports?.() ?? [],
-    },
-  };
-}
 function localizedOptions(
   p: PersonalTranslate,
   values: string[],
