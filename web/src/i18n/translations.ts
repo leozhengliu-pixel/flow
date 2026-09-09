@@ -2182,7 +2182,7 @@ export const zhCN: Record<string, string> = {
   "Create new sub-issue": "创建子事项",
   "created the issue": "创建了该事项",
   "User ID": "用户 ID / 工号",
-  "Internal ID": "内部 ID",
+  "Unknown user": "未知用户",
   "Search people": "搜索人员",
   "Search people…": "搜索姓名、用户 ID 或邮箱…",
   "updated the issue": "更新了该事项",
