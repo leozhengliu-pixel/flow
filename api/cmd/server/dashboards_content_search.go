@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/csv"
@@ -15,6 +16,7 @@ import (
 	"unicode"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 const (
@@ -1252,8 +1254,48 @@ func semanticTextScore(query string, fields ...string) (int, []string) {
 }
 
 func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	r = r.WithContext(ctx)
+	data, scope, err := s.pagedRealtimeMetadata(r)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if searchTypes(r.URL.Query().Get("types"))["issue"] {
+		scope.Filter = store.IssueFilter{}
+		scope.Archived = "all"
+		seen := map[string]bool{}
+		terms := semanticTerms(query)
+		if len(terms) > 32 {
+			writeError(w, 400, "search contains too many terms")
+			return
+		}
+		for _, term := range terms {
+			err := s.store.SearchIssueCandidates(ctx, scope, term, nil, 250, func(issue domain.Issue) error {
+				if !seen[issue.ID] {
+					seen[issue.ID] = true
+					data.Issues = append(data.Issues, issue)
+				}
+				return nil
+			})
+			if err != nil {
+				issueRecordsError(w, err)
+				return
+			}
+		}
+		if len(terms) == 0 {
+			scope.Limit = 250
+			scope.Summary = true
+			page, err := s.store.QueryIssueRecords(ctx, scope)
+			if err != nil {
+				issueRecordsError(w, err)
+				return
+			}
+			data.Issues = page.Items
+		}
+	}
 	types := searchTypes(r.URL.Query().Get("types"))
 	results := []semanticResult{}
 	add := func(item domain.SearchResult, fields ...string) {

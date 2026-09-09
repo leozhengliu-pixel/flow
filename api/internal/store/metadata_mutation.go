@@ -21,6 +21,8 @@ func metadataOnlyMutation(event string, payload any) bool {
 		return ok && input.TemplateID == ""
 	}
 	switch event {
+	case "integration_delivery.claimed", "integration_delivery.retry":
+		return true
 	case "label.created", "label_group.created", "workspace_invitations.created", "workspace_invitation.revoked", "workspace_invitation.resent":
 		return true
 	case "api_key.created", "api_key.secret_rotated", "api_key.revoked", "account.profile_updated", "workspace_member.identity_cascaded":
