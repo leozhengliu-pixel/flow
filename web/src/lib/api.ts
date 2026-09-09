@@ -340,7 +340,7 @@ export function updateIssueRecord(id: string, input: IssueUpdateInput): Promise<
 }
 
 export function fetchIssueRecordContext(id: string, signal?: AbortSignal, cursors?: { commentsCursor?: string; activitiesCursor?: string }): Promise<{ issue: Issue; relatedIssues: Issue[]; comments: Comment[]; activities: BootstrapData['activities'][string]; commentsCursor?: string; activitiesCursor?: string }> {
-  const query = cursors ? `?${new URLSearchParams({ commentsCursor: cursors.commentsCursor ?? '-', activitiesCursor: cursors.activitiesCursor ?? '-' })}` : ''
+  const query = cursors ? `?${new URLSearchParams({ commentsCursor: cursors.commentsCursor || '-', activitiesCursor: cursors.activitiesCursor || '-' })}` : ''
   return request(`/api/issue-records/${encodeURIComponent(id)}/context${query}`, { signal })
 }
 export function listIssues(filters: IssueQueryInput = {}): Promise<IssueQueryPage> {
@@ -418,8 +418,13 @@ export function fetchUserSettings(
     workspaceKey ? { headers: { "X-Workspace-Key": workspaceKey } } : undefined,
   );
 }
-export function updateUserSettings(input: UserSettings): Promise<UserSettings> {
-  return request("/api/account/settings", jsonRequest("PATCH", input));
+export async function updateUserSettings(input: Partial<UserSettings>, workspaceKey = decodeURIComponent(location.pathname.split('/').filter(Boolean)[0] ?? '')): Promise<UserSettings> {
+  const init = jsonRequest("PATCH", input);
+  const headers = new Headers(init.headers);
+  if (workspaceKey) headers.set('X-Workspace-Key', workspaceKey);
+  const settings = await request<UserSettings>("/api/account/settings", {...init,headers});
+  window.dispatchEvent(new CustomEvent('flow:user-settings-updated', {detail:{workspaceKey,settings}}));
+  return settings;
 }
 export function updateAccountProfile(input: {
   displayName: string;
@@ -469,7 +474,7 @@ export function changeAccountPassword(
   );
 }
 export function updateWorkspacePreferences(
-  input: WorkspaceSettings,
+  input: Partial<WorkspaceSettings>,
 ): Promise<WorkspaceSettings> {
   return request("/api/workspace/preferences", jsonRequest("PATCH", input));
 }

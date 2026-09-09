@@ -445,7 +445,10 @@ func (s *server) saveMCPProject(ctx context.Context, actor mcpActor, data domain
 			}
 		}
 	}
-	updated, _, _ := s.store.BootstrapForUser(ctx, actor.WorkspaceKey, actor.User.ID)
+	updated, err := s.mcpWorkspaceData(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
 	return mcpFindProject(updated, saved.ID)
 }
 
@@ -1024,7 +1027,9 @@ func (s *server) putMCPUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "storage unavailable")
 		return
 	}
-	size, err := storage.Put(r.Context(), objectKey, r.Body, pending.ContentType)
+	upload, policyErr := s.checkUploadPolicy(pending.WorkspaceKey,pending.Filename,r.Body)
+	if policyErr != nil { writeError(w,http.StatusForbidden,policyErr.Error()); return }
+	size, err := storage.Put(r.Context(), objectKey, upload, pending.ContentType)
 	if err != nil || size > 20<<20 || pending.ExpectedSize > 0 && size != pending.ExpectedSize {
 		_ = storage.Delete(r.Context(), objectKey)
 		writeError(w, http.StatusBadRequest, "uploaded size does not match the prepared upload")
@@ -1092,7 +1097,9 @@ func (s *server) createMCPAttachment(ctx context.Context, actor mcpActor, data d
 	if err != nil {
 		return nil, err
 	}
-	size, err := storage.Put(ctx, key, bytes.NewReader(content), stringArg(args, "contentType"))
+	upload, policyErr := s.checkUploadPolicy(actor.WorkspaceKey,stringArg(args,"filename"),bytes.NewReader(content))
+	if policyErr != nil { return nil,policyErr }
+	size, err := storage.Put(ctx, key, upload, stringArg(args, "contentType"))
 	if err != nil {
 		return nil, err
 	}

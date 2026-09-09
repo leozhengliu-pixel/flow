@@ -410,6 +410,10 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusForbidden, "You don't have access to this workspace")
 		return false
 	}
+	if strings.HasPrefix(r.URL.Path, "/api/agent") && agentWorkspacePolicy(data.WorkspaceSettings, role) != nil {
+		writeError(w, http.StatusForbidden, "Agent access is disabled by workspace policy")
+		return false
+	}
 	trashResourceType := trashRestoreResourceType(data, r)
 	if (adminOnlyRequest(r) || trashResourceType == "release_pipeline") && !workspaceAdminRole(role) {
 		writeError(w, http.StatusForbidden, "Workspace admin access required")
@@ -417,8 +421,9 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	}
 	if teamManagementRequest(r) && !workspaceAdminRole(role) && !membershipSelfServiceRequest(r, user.ID) {
 		teamID := teamIDFromWorkspacePath(r.URL.Path)
-		teamRole, err := s.store.TeamRole(r.Context(), data.Workspace.ID, teamID, user.ID)
-		if err != nil || teamRole != "owner" {
+		teamRole, _ := s.store.TeamRole(r.Context(), data.Workspace.ID, teamID, user.ID)
+		allowed := teamOperationPermission(data.TeamSettings[teamID], r)
+		if !teamOperationAllowed(data.TeamSettings[teamID], allowed, teamRole, role) {
 			writeError(w, http.StatusForbidden, "Team owner access required")
 			return false
 		}
@@ -435,7 +440,7 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusForbidden, "Guests cannot access this workspace resource")
 		return false
 	}
-	if permission := permissionForRequest(r); permission != "" && !workspacePermissionAllows(data.WorkspaceSettings, permission, role) {
+	if permission := permissionForRequest(r); permission != "" && !teamManagementRequest(r) && !workspacePermissionAllows(data.WorkspaceSettings, permission, role) {
 		writeError(w, http.StatusForbidden, "Your workspace role cannot perform this action")
 		return false
 	}
@@ -443,8 +448,8 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	if feature == "" && (trashResourceType == "release" || trashResourceType == "release_pipeline") {
 		feature = "releases"
 	}
-	if feature != "" && data.WorkspaceSettings.FeatureFlags != nil {
-		if enabled, configured := data.WorkspaceSettings.FeatureFlags[feature]; configured && !enabled {
+	if feature != "" {
+		if !workspaceFeatureEnabled(data.WorkspaceSettings, feature) {
 			writeError(w, http.StatusForbidden, "This workspace feature is disabled")
 			return false
 		}
@@ -473,6 +478,12 @@ func trashRestoreResourceType(data domain.Bootstrap, r *http.Request) string {
 }
 
 func featureForPath(path string) string {
+	if strings.HasPrefix(path, "/api/agent") {
+		return "ai-agent"
+	}
+	if strings.HasPrefix(path, "/api/loops") {
+		return "loops"
+	}
 	if (strings.HasPrefix(path, "/api/issues/") || strings.HasPrefix(path, "/api/issue-records/")) && strings.HasSuffix(path, "/releases") {
 		return "releases"
 	}
@@ -532,6 +543,10 @@ func permissionForRequest(r *http.Request) string {
 		return "template"
 	case strings.HasPrefix(path, "/api/api-keys"):
 		return "apiKey"
+	case strings.HasPrefix(path, "/api/initiatives"):
+		return "initiative"
+	case strings.HasPrefix(path, "/api/loops"):
+		return "loop"
 	default:
 		return ""
 	}
@@ -556,6 +571,18 @@ func workspacePermissionAllows(settings domain.WorkspaceSettings, permission, ro
 		value = settings.TemplatePermission
 	case "apiKey":
 		value = settings.APIKeyPermission
+	case "initiative":
+		value = settings.InitiativePermission
+		if value == "" {
+			value = "members"
+		}
+	case "loop":
+		value = settings.LoopPermission
+		if value == "" {
+			value = "members"
+		}
+	case "agentGuidance":
+		value = settings.AgentGuidancePermission
 	}
 	return value == "members" || value == "everyone"
 }

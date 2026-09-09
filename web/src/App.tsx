@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { Bot, History } from "lucide-react";
+import { setRuntimePreferences } from '@/lib/runtime-preferences';
 import {
   addFavorite,
   addSubscription,
@@ -350,6 +351,7 @@ function App() {
   useEffect(() => {
     if (!data) return;
     const settings = data.userSettings[data.viewer.id] ?? {};
+    setRuntimePreferences(settings);
     const root = document.documentElement;
     applyTheme(settings);
     root.style.fontSize =
@@ -767,7 +769,9 @@ function App() {
           current?.workspace.urlKey === workspace
             ? deriveResourceCounts({
                 ...current,
-                issues: current.issues.some((item) => item.id === issue.id)
+                issues: current.issueCollectionPaged
+                  ? [issue, ...current.issues.filter(item => item.id !== issue.id)].slice(0, 2000)
+                  : current.issues.some((item) => item.id === issue.id)
                   ? current.issues.map((item) => item.id === issue.id ? issue : item)
                   : [issue, ...current.issues],
               })
@@ -2994,6 +2998,14 @@ function App() {
     );
     return shared.url;
   };
+  useEffect(() => {
+    const sync = (event: Event) => {
+      const {workspaceKey,settings} = (event as CustomEvent<{workspaceKey:string;settings:UserSettings}>).detail;
+      setData(current => current && current.workspace.urlKey === workspaceKey && current.viewer.id === settings.userId ? {...current,userSettings:{...current.userSettings,[settings.userId]:settings}} : current);
+    };
+    window.addEventListener('flow:user-settings-updated',sync);
+    return () => window.removeEventListener('flow:user-settings-updated',sync);
+  }, []);
   const changeCurrentUserSettings = async (input: UserSettings) => {
     const settings = await run(
       () => updateUserSettings(input),
@@ -3854,6 +3866,8 @@ function App() {
         <SettingsPage
           data={data}
           page={route.page}
+          notificationChannel={route.notificationChannel}
+          onNavigateNotification={channel => navigateTo(`${settingsPath(data.workspace.urlKey,'notifications')}${channel ? `/${channel}` : ''}`)}
           apiKeyMode={route.apiKeyMode}
           apiKeyId={route.apiKeyId}
           signingKeyMode={route.signingKeyMode}

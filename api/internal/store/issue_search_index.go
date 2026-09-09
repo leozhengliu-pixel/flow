@@ -139,6 +139,20 @@ func (s *SQLiteStore) SearchIssueCandidates(ctx context.Context, q IssueRecordQu
 	// context when label matches are included alongside textual matches.
 	textMatch := `i.id IN (SELECT s.issue_id FROM issue_search_documents s` + join + ` WHERE s.workspace_key=? AND ` + match + `)`
 	textArgs := append([]any{q.Workspace}, searchArgs...)
+	if s.dialect == "postgres" {
+		// Before auto-analyze runs, PostgreSQL can estimate one workspace row
+		// and reevaluate the text predicate for every issue. Materialize only
+		// matching IDs to make the text scan run once even with cold statistics.
+		cte := `search_text AS MATERIALIZED (SELECT s.issue_id FROM issue_search_documents s WHERE s.workspace_key=? AND ` + match + `) `
+		if prefix == "" {
+			prefix = "WITH " + cte
+		} else {
+			prefix = strings.TrimSpace(prefix) + ", " + cte
+		}
+		prefixArgs = append(prefixArgs, textArgs...)
+		textArgs = nil
+		textMatch = "i.id IN (SELECT issue_id FROM search_text)"
+	}
 	if len(labelIDs) > 0 {
 		clause, values := bindList("l.label_id", labelIDs)
 		textMatch = "(" + textMatch + " OR EXISTS (SELECT 1 FROM issue_label_records l WHERE l.workspace_key=i.workspace_key AND l.issue_id=i.id AND " + clause + "))"

@@ -16,8 +16,12 @@ type IssueHistory struct {
 	ActivitiesCursor string                 `json:"activitiesCursor,omitempty"`
 }
 
-func readContentPage[T any](ctx context.Context, s *SQLiteStore, workspace, resource, kind, cursor string) ([]T, string, error) {
+func readContentPage[T any](ctx context.Context, s *SQLiteStore, workspace, resource, kind, cursor string, limits ...int) ([]T, string, error) {
 	items := []T{}
+	limit := 100
+	if len(limits) > 0 {
+		limit = min(100, max(1, limits[0]))
+	}
 	if cursor == "-" {
 		return items, "", nil
 	}
@@ -32,7 +36,7 @@ func readContentPage[T any](ctx context.Context, s *SQLiteStore, workspace, reso
 		where += " AND (created_at<? OR (created_at=? AND id<?))"
 		args = append(args, c.Date, c.Date, c.ID)
 	}
-	rows, err := s.db.QueryContext(ctx, "SELECT data,created_at,id FROM workspace_content_records WHERE "+where+" ORDER BY created_at DESC,id DESC LIMIT 101", args...)
+	rows, err := s.db.QueryContext(ctx, "SELECT data,created_at,id FROM workspace_content_records WHERE "+where+" ORDER BY created_at DESC,id DESC LIMIT ?", append(args, limit+1)...)
 	if err != nil {
 		return items, "", err
 	}
@@ -46,7 +50,7 @@ func readContentPage[T any](ctx context.Context, s *SQLiteStore, workspace, reso
 		if err := rows.Scan(&raw, &c.Date, &c.ID); err != nil {
 			return items, "", err
 		}
-		if len(items) == 100 || len(items) > 0 && bytes+len(raw) > 1<<20 {
+		if len(items) == limit || len(items) > 0 && bytes+len(raw) > 1<<20 {
 			encoded, _ := json.Marshal(last)
 			next = base64.RawURLEncoding.EncodeToString(encoded)
 			break
@@ -61,6 +65,11 @@ func readContentPage[T any](ctx context.Context, s *SQLiteStore, workspace, reso
 	}
 	slices.Reverse(items)
 	return items, next, rows.Err()
+}
+
+// The caller authorizes the resource before requesting its discussion page.
+func (s *SQLiteStore) ResourceCommentsPage(ctx context.Context, workspace, resource, cursor string, limit int) ([]domain.Comment, string, error) {
+	return readContentPage[domain.Comment](ctx, s, workspace, resource, "comment", cursor, limit)
 }
 
 func (s *SQLiteStore) IssueHistoryPage(ctx context.Context, workspace, issue, commentsCursor, activitiesCursor string) (IssueHistory, error) {

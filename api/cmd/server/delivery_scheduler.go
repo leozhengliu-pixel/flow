@@ -75,6 +75,7 @@ func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error 
 			return err
 		}
 		s.dispatchNotificationEmails(ctx, key)
+		s.dispatchNotificationDigests(ctx, key, now)
 		data, ok := s.store.WorkspaceMetadata(key)
 		if !ok {
 			continue

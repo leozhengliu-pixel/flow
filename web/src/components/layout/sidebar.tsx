@@ -207,7 +207,7 @@ export function Sidebar({
   } = useSidebarCustomizationState();
   const [dismissedTry, setDismissedTry] = useState<string[]>(readDismissedTry);
   const featureEnabled = (feature: string) =>
-    data.workspaceSettings.featureFlags[feature] !== false;
+    (feature === 'ai' ? data.workspaceSettings.featureFlags['ai-agent'] ?? data.workspaceSettings.featureFlags.ai : data.workspaceSettings.featureFlags[feature]) !== false;
   const sidebarTeams = useMemo(() => {
     const viewerTeamIds = new Set(data.teamMembers.filter(member => member.userId === data.viewer.id).map(member => member.teamId));
     return data.teams.filter(team => !team.retiredAt && viewerTeamIds.has(team.id));
@@ -537,7 +537,7 @@ export function Sidebar({
         onClick={close}
       />
     ),
-    reviews: (
+    reviews: data.userSettings[data.viewer.id]?.codeReviewsEnabled !== false ? (
       <Nav
         badge={reviewCount}
         active={page === "reviews"}
@@ -546,7 +546,7 @@ export function Sidebar({
         to={reviewsPath(workspaceSlug)}
         onClick={close}
       />
-    ),
+    ) : null,
     myIssues: (
       <Nav
         active={page === "issue-detail"}
@@ -816,7 +816,7 @@ export function Sidebar({
                     upcoming={upcomingCycleTeamIds.has(team.id)}
                     initiativesEnabled={
                       data.viewerRole !== "guest" &&
-                      featureEnabled("initiatives")
+                      featureEnabled("initiatives") && data.teamSettings[team.id]?.showInitiatives !== false
                     }
                     team={team}
                     favorite={favoriteTeamIds.has(team.id)}

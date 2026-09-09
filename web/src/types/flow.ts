@@ -941,6 +941,7 @@ export interface WorkspaceSettings {
   reviewThirdPartyApplications?: boolean;
   allowedMcpConnectors?: "all" | "approved";
   restrictFileUploads?: boolean;
+  allowedFileExtensions?: string[];
   reduceSupportPersonalInfo?: boolean;
   hipaaCompliance?: boolean;
   scimEnabled?: boolean;

@@ -127,7 +127,7 @@ new deployments should use `FLOW_DATABASE_PATH`.
 Redis is optional for a single Flow process and disabled by default. Enable it
 when running multiple API replicas. Flow uses Redis for shared authentication
 rate limits, cross-instance realtime events, shared presence, and distributed
-workspace write locks. A replica reloads the latest workspace JSON from SQL
+workspace write locks. A replica reloads the latest workspace metadata from SQL
 inside the distributed lock before applying a mutation, preventing one process
 from overwriting another process's update.
 
@@ -135,11 +135,12 @@ Redis does not replace the primary database. Multi-instance mode requires
 PostgreSQL or MySQL; startup rejects Redis with SQLite because a local SQLite
 file is not a horizontally scalable source of truth.
 
-Flow serializes mutations per workspace and stores one bounded workspace
-aggregate. This keeps single-instance deployment simple and guarantees atomic
-domain updates, but it is intended for small and medium workspaces rather than
-unbounded event ingestion. Monitor database row size and mutation latency before
-raising `FLOW_WORKSPACE_STATE_MAX_BYTES`.
+Flow serializes mutations per workspace. Issues and discussion records are
+stored separately from workspace metadata. Native issue operations update a
+bounded set of rows; compatibility cascade operations can still load complete
+collections. Monitor heap usage, query latency, and transaction sizes before
+raising `FLOW_WORKSPACE_STATE_MAX_BYTES`. This setting does not cap the total
+resident size of split metadata or issue collections.
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -431,11 +432,15 @@ flag; they no longer retain a complete issue collection for each connection.
 Legacy scalar patches keep their existing field-merge behavior, while document
 snapshot versions remain checked.
 
-The legacy `/api/bootstrap` response still includes complete collections. Its
-large arrays are encoded incrementally, and only one legacy bootstrap runs per
-API process at a time. Cancelled queued requests do not load the workspace.
-This reduces transient memory but does not turn the legacy client into a paged
-client. Other compatibility workflows may still require complete collections.
+The legacy `/api/bootstrap` response still includes complete collections. Issue
+bodies and discussion records stream from SQL; a lightweight issue outline is
+retained for visibility and reference projection. Bootstrap and export downloads
+share one concurrency slot per API handler, with a five-minute request/write
+deadline. Cancelled queued requests do not load the workspace. Each download
+uses one consistent SQL read snapshot and releases it on completion or
+cancellation. This reduces transient memory but does not turn the legacy client
+into a paged client. Other compatibility workflows still require complete
+collections.
 
 For an app container limited to 1 GiB, `GOMEMLIMIT=650MiB` can leave headroom for
 runtime overhead and filesystem cache. Compose passes this optional environment
@@ -467,9 +472,42 @@ migration to finish before sending traffic to the upgraded instance.
 Set `VITE_PAGED_ISSUES=true` when building the web client to opt into the new
 issue list and board path. Docker builds accept
 `--build-arg VITE_PAGED_ISSUES=true`. The default remains `false` during rollout.
-The browser retains at most 40 pages of issue records and reloads evicted pages
-using their cursors. Cursor checkpoints do not serialize workspace snapshots
-into localStorage.
+The browser retains at most 40 pages and an estimated 16 MiB of issue records,
+and reloads evicted pages using their cursors. Request `projection=list` to omit
+description and document state; these results have `isSummary: true` and must
+not replace full detail content. Pages also have a 4 MiB payload budget, except
+that one oversized record can be returned to ensure forward progress. Follow
+`nextCursor` rather than assuming every page contains the requested row count.
+Cursor checkpoints do not serialize workspace snapshots into localStorage.
+
+Issue context accepts independent `commentsCursor` and `activitiesCursor`
+parameters. Omit a cursor to start from the latest page; use the corresponding
+cursor in the response for older history, or `-` to skip an exhausted stream.
+Each stream returns at most 100 entries and approximately 1 MiB, with the same
+single-record exception. MCP issue/document/milestone comment lists use opaque
+SQL cursors and return at most 100 entries even if a higher limit is requested.
+
+Search indexes are backfilled in checkpointed batches during startup. SQLite
+uses FTS5 trigram indexing, MySQL uses its `ngram` full-text parser, and
+PostgreSQL uses `pg_trgm`. For managed PostgreSQL, have a database administrator
+install `pg_trgm` before upgrading if the app role cannot create extensions.
+MySQL must provide the `ngram` parser. Search results use a bounded candidate
+set; candidate-derived facets and semantic ranking are not exhaustive global
+counts. Short terms can still require scans.
+
+JSON requests have a 16 MiB body limit. Realtime replay has a 256 KiB per-event
+limit, an 8 MiB per-workspace budget, and a 64 MiB process-wide budget; oversized
+events trigger resynchronization. Each collaboration socket has an 8 MiB
+outgoing queue budget and disconnects slow consumers. The browser event backlog
+is bounded to 256 events and approximately 4 MiB before requesting a resync.
+Offline editor changes remain in the Yjs document; after 128 queued updates or
+1 MiB, the provider derives a new delta after acknowledgements instead of
+retaining another growing edit log. This does not impose a document-size cap
+or provide durable offline storage; closing an unsaved editor can lose changes.
+
+Imports reject more than 5,000 rows while parsing and run at most two background
+jobs per API process. Agent output is bounded to 8 MiB and 1,024 parts; provider
+history uses at most the latest 32 messages and approximately 8 MiB.
 
 This is a staged migration, not a claim that every Flow module has completed
 large-workspace support. Projects and several other modules still use complete

@@ -15,7 +15,7 @@ func (s *SQLiteStore) NotificationDeliverySnapshot(ctx context.Context, workspac
 		return data, fmt.Errorf("workspace not found")
 	}
 	clause, args := bindList("status", statuses)
-	rows, err := s.db.QueryContext(ctx, `SELECT data FROM workspace_content_records WHERE workspace_key=? AND kind='delivery' AND `+clause+` AND (status<>'failed' OR (next_attempt_at<>'' AND next_attempt_at<=?)) ORDER BY next_attempt_at,id LIMIT 1000`, append(append([]any{workspace}, args...), now.UTC().Format(issueRecordTimestamp))...)
+	rows, err := s.db.QueryContext(ctx, `SELECT data FROM workspace_content_records WHERE workspace_key=? AND kind='delivery' AND `+clause+` AND (next_attempt_at='' OR next_attempt_at<=?) ORDER BY next_attempt_at,id LIMIT 1000`, append(append([]any{workspace}, args...), now.UTC().Format(issueRecordTimestamp))...)
 	if err != nil {
 		return data, err
 	}

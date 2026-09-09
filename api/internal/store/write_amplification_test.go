@@ -288,6 +288,37 @@ func TestMetadataMigrationRestoresLegacyJSONWithoutMutatingIt(t *testing.T) {
 	}
 }
 
+func TestMetadataRawObjectRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "raw-metadata.db")
+	repo, err := OpenSQLiteTestFixture(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := repo.Bootstrap().Workspace.URLKey
+	values := map[string]any{}
+	for i := 0; i < 200; i++ {
+		values[fmt.Sprintf("field-%03d", i)] = map[string]any{"visible": i%2 == 0, "width": i + 1}
+	}
+	raw, _ := json.Marshal(values)
+	err = repo.MutateWorkspace(t.Context(), key, "project_display_default.updated", "defaults", nil, func(data *domain.Bootstrap) error {
+		data.ProjectDisplayDefault = raw
+		return nil
+	})
+	repo.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo, err = OpenSQLiteTestFixture(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	metadata, ok := repo.WorkspaceMetadata(key)
+	if !ok || string(metadata.ProjectDisplayDefault) != string(raw) {
+		t.Fatal("split raw object did not survive restart")
+	}
+}
+
 func TestImportBoundsRejectBeforeWriting(t *testing.T) {
 	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {

@@ -302,18 +302,30 @@ func mysqlDSN(raw string) (string, error) {
 }
 
 func (d *sqlDatabase) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == d {
+		return nil, errors.New("cannot write inside a workspace read snapshot")
+	}
 	return d.DB.ExecContext(ctx, rewriteSQL(query, d.dialect), args...)
 }
 
 func (d *sqlDatabase) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == d {
+		return snapshot.reader.QueryContext(ctx, query, args...)
+	}
 	return d.DB.QueryContext(ctx, rewriteSQL(query, d.dialect), args...)
 }
 
 func (d *sqlDatabase) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == d {
+		return snapshot.reader.QueryRowContext(ctx, query, args...)
+	}
 	return d.DB.QueryRowContext(ctx, rewriteSQL(query, d.dialect), args...)
 }
 
 func (d *sqlDatabase) BeginTx(ctx context.Context, options *sql.TxOptions) (*sqlTx, error) {
+	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == d {
+		return nil, errors.New("cannot start a transaction inside a workspace read snapshot")
+	}
 	tx, err := d.DB.BeginTx(ctx, options)
 	if err != nil {
 		return nil, err

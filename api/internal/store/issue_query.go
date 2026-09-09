@@ -55,7 +55,7 @@ type IssueRecordAccess struct {
 }
 
 func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, userID string) (domain.Bootstrap, error) {
-	data, ok := s.WorkspaceMetadata(workspace)
+	_, data, ok := s.workspaceReadSource(ctx, workspace)
 	if !ok {
 		return data, ErrAuthForbidden
 	}
@@ -177,7 +177,7 @@ func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, use
 }
 
 func (s *SQLiteStore) IssueQueryAccess(ctx context.Context, workspace, userID string) (domain.Bootstrap, IssueRecordAccess, error) {
-	data, ok := s.WorkspaceMetadata(workspace)
+	_, data, ok := s.workspaceReadSource(ctx, workspace)
 	if !ok {
 		return data, IssueRecordAccess{}, ErrAuthForbidden
 	}

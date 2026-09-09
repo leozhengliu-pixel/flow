@@ -161,7 +161,7 @@ func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, 
 	case "get_document":
 		return mcpFindDocument(data, stringArg(args, "id"))
 	case "list_comments":
-		return s.listMCPComments(data, args)
+		return s.listMCPComments(ctx, data, args)
 	case "get_status_updates":
 		return statusUpdates(data, args)
 	case "list_release_pipelines":
@@ -443,7 +443,7 @@ func filterProjects(data domain.Bootstrap, items []domain.Project, args map[stri
 	})
 }
 
-func (s *server) listMCPComments(data domain.Bootstrap, args map[string]any) (any, error) {
+func (s *server) listMCPComments(ctx context.Context, data domain.Bootstrap, args map[string]any) (any, error) {
 	parents := []string{"issueId", "projectId", "initiativeId", "documentId", "milestoneId", "statusUpdateId"}
 	provided := []string{}
 	for _, key := range parents {
@@ -455,8 +455,12 @@ func (s *server) listMCPComments(data domain.Bootstrap, args map[string]any) (an
 		return nil, fmt.Errorf("provide exactly one comment parent")
 	}
 	id := provided[0]
+	page := func(resource string) (any, error) {
+		items, cursor, err := s.store.ResourceCommentsPage(ctx, data.Workspace.URLKey, resource, stringArg(args, "cursor"), intArg(args, "limit", 50))
+		return map[string]any{"items": items, "nextCursor": cursor}, err
+	}
 	if issue, err := mcpFindIssue(data, id); err == nil {
-		return paginate(data.Comments[issue.ID], args), nil
+		return page(issue.ID)
 	}
 	if project, err := mcpFindProject(data, id); err == nil {
 		return paginate(project.Comments, args), nil
@@ -465,12 +469,12 @@ func (s *server) listMCPComments(data domain.Bootstrap, args map[string]any) (an
 		return paginate(initiative.Comments, args), nil
 	}
 	if document, err := mcpFindDocument(data, id); err == nil {
-		return paginate(data.Comments[document.ID], args), nil
+		return page(document.ID)
 	}
 	for _, project := range data.Projects {
 		for _, milestone := range project.Milestones {
 			if milestone.ID == id {
-				return paginate(data.Comments[id], args), nil
+				return page(id)
 			}
 		}
 	}

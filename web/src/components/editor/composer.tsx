@@ -8,6 +8,8 @@ import { createDraft, deleteDraft, updateDraft } from '@/lib/api'
 import { clearComposerDraft, readComposerDraft, writeComposerDraft, type ComposerDraftType } from '@/lib/composer-drafts'
 import type { Draft } from '@/types/flow'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { commentShortcutMatches } from '@/lib/runtime-preferences'
+import { handleEmoticonInput } from './emoticon-input'
 
 export function Composer({ placeholder = 'Leave a comment…', initialValue = '', initialData, compact = false, onCancel, onSubmit, onAttach, draftType, draftResourceId, drafts = [], draftTitle = '', draftMetadata }: { placeholder?: string; initialValue?: string; initialData?: Record<string,unknown>; compact?: boolean; onCancel?: () => void; onSubmit?: (body: string, bodyData?: Record<string, unknown>) => Promise<void>; onAttach?:()=>void; draftType?: ComposerDraftType; draftResourceId?: string; drafts?: Draft[]; draftTitle?: string; draftMetadata?: Record<string, unknown> }) {
   const persistedDraft = useMemo(() => draftType && draftResourceId ? drafts.find(item => item.type === draftType && item.resourceId === draftResourceId) ?? readComposerDraft(draftType, draftResourceId) : undefined, [draftResourceId, draftType, drafts])
@@ -19,7 +21,7 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
     immediatelyRender: false,
     extensions: [StarterKit.configure({ heading: false }), Placeholder.configure({ placeholder })],
     content: initialData?.type === 'doc' ? initialData : initialBody || { type: 'doc', content: [{ type: 'paragraph' }] },
-    editorProps: { attributes: { class: 'comment-prosemirror', 'aria-label': placeholder }, handleKeyDown: (_view, event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); void submit(); return true } if (event.key === 'Escape' && onCancel) { event.preventDefault(); onCancel(); return true } return false } },
+    editorProps: { handleTextInput: handleEmoticonInput, attributes: { class: 'comment-prosemirror', 'aria-label': placeholder }, handleKeyDown: (_view, event) => { if (!event.isComposing && commentShortcutMatches(event)) { event.preventDefault(); void submit(); return true } if (event.key === 'Escape' && onCancel) { event.preventDefault(); onCancel(); return true } return false } },
     onUpdate: ({editor}) => { setEmpty(editor.isEmpty); setDraftBody(editor.getText({ blockSeparator: '\n' })) },
   })
   useEffect(() => {

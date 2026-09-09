@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -43,6 +44,12 @@ func TestLegacyWritesAndRealtimeDoNotReadUnrelatedIssues(t *testing.T) {
 	if _, err := db.Exec(`UPDATE issue_records SET data=? WHERE id<>?`, []byte("invalid-unrelated-json"), issue.ID); err != nil {
 		t.Fatal(err)
 	}
+	for _, endpoint := range []string{"workflows", "workflow-runs", "dashboards", "posts", "meetings", "ai/conversations", "customer-taxonomy", "imports"} {
+		authRequest[json.RawMessage](t, client, "GET", host.URL+"/api/"+endpoint, nil, "test-workspace", http.StatusOK)
+	}
+	loop := authRequest[domain.Loop](t, client, "POST", host.URL+"/api/loops", map[string]string{"name": "Bounded loop settings"}, "test-workspace", http.StatusCreated)
+	authRequest[domain.Loop](t, client, "PATCH", host.URL+"/api/loops/"+loop.ID, map[string]string{"name": "Updated loop settings"}, "test-workspace", http.StatusOK)
+	authRequest[json.RawMessage](t, client, "DELETE", host.URL+"/api/loops/"+loop.ID, nil, "test-workspace", http.StatusNoContent)
 	authRequest[domain.Issue](t, client, "POST", host.URL+"/api/issues", map[string]any{"title": "Created without reading unrelated issues"}, "test-workspace", 201)
 	updated := authRequest[domain.Issue](t, client, "PATCH", host.URL+"/api/issues/"+issue.ID, map[string]any{"title": "Updated without copying workspace"}, "test-workspace", 200)
 	if updated.Title != "Updated without copying workspace" {
@@ -98,7 +105,23 @@ func TestLegacyIssueMemoryAt75675Rows(t *testing.T) {
 	if os.Getenv("FLOW_TEST_ISSUE_MEMORY") != "1" && !preferencesOnly {
 		t.Skip("opt-in memory regression")
 	}
-	repo, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "memory.db"))
+	var repo *store.SQLiteStore
+	var err error
+	if dsn := os.Getenv("FLOW_TEST_MEMORY_MYSQL_DSN"); dsn != "" {
+		db, openErr := sql.Open("mysql", dsn)
+		if openErr != nil {
+			t.Fatal(openErr)
+		}
+		var tables int
+		openErr = db.QueryRow(`SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE()`).Scan(&tables)
+		db.Close()
+		if openErr != nil || tables != 0 {
+			t.Fatalf("memory test requires an empty isolated database: tables=%d err=%v", tables, openErr)
+		}
+		repo, err = store.OpenDatabase(store.DatabaseConfig{Driver: "mysql", URL: dsn, FixtureProfile: "test", FixturePassword: "test-password", MaxOpenConns: 4, MaxIdleConns: 2})
+	} else {
+		repo, err = store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "memory.db"))
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,6 +244,13 @@ func TestLegacyIssueMemoryAt75675Rows(t *testing.T) {
 			t.Logf("legacy_bootstrap_bytes=%d elapsed=%s", bytes, time.Since(start))
 			if peak, err := os.ReadFile("/sys/fs/cgroup/memory.peak"); err == nil {
 				t.Logf("container_memory_peak_bytes=%s", strings.TrimSpace(string(peak)))
+			}
+			if memory, err := os.ReadFile("/sys/fs/cgroup/memory.stat"); err == nil {
+				for _, line := range strings.Split(string(memory), "\n") {
+					if strings.HasPrefix(line, "anon ") || strings.HasPrefix(line, "file ") {
+						t.Logf("container_memory_%s", line)
+					}
+				}
 			}
 		}
 		if preferencesOnly {
