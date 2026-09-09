@@ -34,6 +34,7 @@ import './issue-options-menu.css'
 import { IssueReleasePicker } from './issue-release-picker'
 import { useI18n } from '@/i18n/i18n'
 import { IssueActionGlyph } from './issue-action-glyphs'
+import { configuredIssueBranch, copyIssueForWork } from '@/lib/issue-work-actions'
 import type { ActivityEvent, BootstrapData, Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 
 export type RelatedIssueCreationKind = 'issue' | 'sub-issue' | 'parent' | 'blocked' | 'blocking' | 'copy'
@@ -176,13 +177,14 @@ export function IssueOptionsMenu({
     openDialog('link')
   }, [openDialog])
 
-  const copy = async (value: string, message: string) => {
+  const copy = async (value: string, message: string, work?: 'branch'|'prompt') => {
     try {
-      await navigator.clipboard.writeText(value)
+      if(work) await copyIssueForWork(value,work,issue,data,onUpdate)
+      else await navigator.clipboard.writeText(value)
       toast.success(message)
       closeMenu()
-    } catch {
-      toast.error('Could not write to clipboard')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not write to clipboard')
     }
   }
 
@@ -327,8 +329,8 @@ export function IssueOptionsMenu({
             <Option icon={<Copy/>} label="Copy title as link" shortcut="Command C" onSelect={() => void copy(titleLink, 'Title link copied to clipboard')}/>
             <Option icon={<Copy/>} label="Copy description as Markdown" onSelect={() => void copy(issue.description, 'Description copied to clipboard')}/>
             <Option icon={<Copy/>} label="Copy content as Markdown" shortcut="Command Option C" onSelect={() => void copy(`# ${issue.title}\n\n${issue.description}`, 'Content copied to clipboard')}/>
-            <Option icon={<Copy/>} label="Copy git branch name" shortcut="Command Shift ." onSelect={() => void copy(issueBranchName(issue), 'Branch name copied to clipboard')}/>
-            <Option icon={<Copy/>} label="Copy as prompt" shortcut="Command Option P" onSelect={() => void copy(issuePrompt, 'Prompt copied to clipboard')}/>
+            <Option icon={<Copy/>} label="Copy git branch name" shortcut="Command Shift ." onSelect={() => void copy(configuredIssueBranch(issue,data), 'Branch name copied to clipboard','branch')}/>
+            <Option icon={<Copy/>} label="Copy as prompt" shortcut="Command Option P" onSelect={() => void copy(issuePrompt, 'Prompt copied to clipboard','prompt')}/>
           </SubmenuSurface>}
           {submenu === 'convert' && <SubmenuSurface label="Convert to" anchor={anchors.convert} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}>
             <Option icon={<RefreshCw/>} label="Project..." onSelect={() => {
@@ -460,12 +462,6 @@ function IssueOptionsShortcut({ value }: { value: string }) {
 
 function Separator() {
   return <div className="issue-options-separator" role="separator"/>
-}
-
-function issueBranchName(issue: Issue) {
-  const owner = (issue.assignee?.email || issue.creator.email || '').split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || 'user'
-  const title = issue.title.normalize('NFC').toLowerCase().replace(/[()[\]{}=]/g, '').replace(/[^\p{L}\p{N}_：:-]+/gu, '-').replace(/^-|-$/g, '')
-  return `${owner}/${`${issue.identifier.toLowerCase()}-${title || 'issue'}`.slice(0,100)}`
 }
 
 function descriptionHistory(issue: Issue, activities: ActivityEvent[]) {

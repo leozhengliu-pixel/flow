@@ -43,6 +43,7 @@ describe('InboxFilterBuilder', () => {
     await user.type(screen.getByLabelText('Command menu'), 'Issue priority')
     await user.keyboard('{Enter}')
     expect(screen.queryByRole('option', {name:'Notification type'})).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('Command menu')).toHaveFocus())
     await user.keyboard('{ArrowLeft}')
     expect(screen.getByRole('option', {name:'Notification type'})).toBeInTheDocument()
     await user.click(screen.getByRole('option', {name:'Issue priority'}))
@@ -62,6 +63,7 @@ describe('InboxFilterBuilder', () => {
     await user.keyboard('{ArrowRight}')
     const menu = screen.getByRole('dialog',{name:'Filter Notification type'})
     expect(within(menu).getAllByRole('option')).toHaveLength(2)
+    await waitFor(() => expect(within(menu).getByRole('searchbox')).toHaveFocus())
     await user.keyboard('{Enter}')
     expect(onFiltersChange).toHaveBeenCalledWith([expect.objectContaining({values:[expect.objectContaining({value:'type-5'})]})])
     await user.click(screen.getByRole('button',{name:'Add filter'}))
@@ -83,6 +85,7 @@ describe('InboxFilterBuilder', () => {
     const priority = screen.getByRole('option', { name: 'Issue priority' })
 
     expect(notificationType).toHaveAttribute('aria-selected', 'false')
+    await waitFor(() => expect(screen.getByRole('searchbox', {name:'Add Filter'})).toHaveFocus())
     await user.hover(priority)
 
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Filter Issue priority' })).toBeVisible())
@@ -93,6 +96,7 @@ describe('InboxFilterBuilder', () => {
     const user = userEvent.setup()
     const onFiltersChange = vi.fn()
     render(<I18nProvider><InboxFilterBuilder open filters={[]} onFiltersChange={onFiltersChange} /></I18nProvider>)
+    await waitFor(() => expect(screen.getByRole('searchbox', {name:'Add Filter'})).toHaveFocus())
     await user.hover(screen.getByRole('option', { name: 'Issue priority' }))
     const submenu = await screen.findByRole('dialog', { name: 'Filter Issue priority' })
     await user.click(within(submenu).getByRole('option', { name: 'Urgent' }))

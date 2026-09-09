@@ -241,6 +241,10 @@ func (s *server) authenticateMCP(w http.ResponseWriter, r *http.Request) (mcpAct
 		s.mcpUnauthorized(w, r, "OAuth authorization has been revoked")
 		return mcpActor{}, false
 	}
+	if key.OAuthClientID != "" && !applicationApproved(&data, key.OAuthClientID, key.Scopes) {
+		s.mcpUnauthorized(w, r, "Application approval is required")
+		return mcpActor{}, false
+	}
 	now := time.Now().UTC()
 	_ = s.store.MutateWorkspace(r.Context(), workspaceKey, "api_key.used", key.ID, nil, func(next *domain.Bootstrap) error {
 		if index := slices.IndexFunc(next.APIKeys, func(item domain.APIKey) bool { return item.ID == key.ID }); index >= 0 {

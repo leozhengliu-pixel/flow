@@ -152,7 +152,7 @@ export function InitiativeDetailPage(props: Props) {
 
   return <main className="main-panel li-detail">
     <header className="li-detail-header">
-      <button className="li-mobile-menu" onClick={props.onOpenSidebar} type="button">☰</button>
+      <button aria-label="Open sidebar" className="li-mobile-menu" data-sidebar-trigger onClick={props.onOpenSidebar} type="button">☰</button>
       <button className="li-detail-all" onClick={props.onBack} type="button">Initiatives</button><ChevronRight className="li-detail-separator" size={12}/>
       <button className="li-detail-crumb" data-i18n-ignore onClick={() => onTabChange('overview')} type="button"><ViewGlyph color={initiative.color} icon={initiative.icon || 'Initiative'}/><strong>{initiative.name}</strong></button>
       <button aria-checked={initiative.favorite} aria-label="Add to favorites" className={initiative.favorite ? 'is-active' : ''} onClick={() => update({ favorite: !initiative.favorite })} role="switch" type="button"><Star fill={initiative.favorite ? 'currentColor' : 'none'} size={14}/></button>

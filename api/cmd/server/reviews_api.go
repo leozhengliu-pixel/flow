@@ -18,6 +18,7 @@ type reviewInput struct {
 	Favorite    *bool     `json:"favorite,omitempty"`
 	Draft       *bool     `json:"draft,omitempty"`
 	BranchState *string   `json:"branchState,omitempty"`
+	MergeMethod *string   `json:"mergeMethod,omitempty"`
 }
 
 func (s *server) listReviews(w http.ResponseWriter, r *http.Request) {
@@ -35,7 +36,61 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
+	if input.Status != nil {
+		if !slices.Contains([]string{"open", "inReview", "approved", "merged", "closed"}, *input.Status) {
+			writeError(w, 400, "invalid review status")
+			return
+		}
+		if slices.Contains([]string{"open", "merged", "closed"}, *input.Status) {
+			if input.Title != nil || input.ReviewerIDs != nil || input.IssueIDs != nil || input.Favorite != nil || input.Draft != nil || input.BranchState != nil {
+				writeError(w, 400, "submit repository status changes separately from metadata edits")
+				return
+			}
+			data := s.workspaceData(r)
+			current, err := reviewByID(data, id)
+			if err != nil {
+				respondMutation(w, err, 200, nil)
+				return
+			}
+			method := mergeMethod(data.UserSettings[data.Viewer.ID].MergeStrategy)
+			if input.MergeMethod != nil {
+				method = *input.MergeMethod
+			}
+			if !slices.Contains([]string{"merge", "squash", "rebase"}, method) {
+				writeError(w, 400, "invalid merge method")
+				return
+			}
+			if current.Status != *input.Status {
+				if err := s.syncReviewStatus(r.Context(), data, current, *input.Status, method); err != nil {
+					writeError(w, http.StatusBadGateway, err.Error())
+					return
+				}
+			}
+		}
+	}
 	var updated domain.CodeReview
+	if input.ReviewerIDs != nil && len(*input.ReviewerIDs) > 0 {
+		data := s.workspaceData(r)
+		review, err := reviewByID(data, id)
+		if err != nil {
+			respondMutation(w, err, 200, nil)
+			return
+		}
+		if !validateResourceIDs(&data, "user", *input.ReviewerIDs) {
+			writeError(w, 400, "invalid reviewer")
+			return
+		}
+		if data.UserSettings[data.Viewer.ID].AutoConvertDrafts && review.Draft {
+			if input.Title != nil || input.Status != nil || input.Draft != nil || input.IssueIDs != nil || input.Favorite != nil || input.BranchState != nil {
+				writeError(w, 400, "submit draft review requests separately from metadata edits")
+				return
+			}
+			if err := s.markReviewReady(r.Context(), data, review); err != nil {
+				writeError(w, 502, err.Error())
+				return
+			}
+		}
+	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), favoriteMutationEvent("review.updated", input), id, input, func(data *domain.Bootstrap) error {
 		index := reviewIndex(*data, id)
 		if index < 0 {
@@ -69,6 +124,9 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 				return errInvalid
 			}
 			review.ReviewerIDs = ids
+			if len(ids) > 0 && data.UserSettings[data.Viewer.ID].AutoConvertDrafts {
+				review.Draft = false
+			}
 		}
 		if input.IssueIDs != nil {
 			ids := normalizedStrings(*input.IssueIDs)
@@ -120,6 +178,20 @@ func (s *server) submitReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, actor := r.PathValue("id"), requestActor(s, r)
+	if input.Decision == "approve" {
+		data := s.workspaceData(r)
+		review, err := reviewByID(data, id)
+		if err != nil {
+			respondMutation(w, err, 200, nil)
+			return
+		}
+		if data.UserSettings[actor.ID].AutoConvertDrafts {
+			if err := s.markReviewReady(r.Context(), data, review); err != nil {
+				writeError(w, 502, err.Error())
+				return
+			}
+		}
+	}
 	var updated domain.CodeReview
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "review.submitted", id, input, func(data *domain.Bootstrap) error {
 		index := reviewIndex(*data, id)
@@ -133,6 +205,9 @@ func (s *server) submitReview(w http.ResponseWriter, r *http.Request) {
 		eventType := "review_commented"
 		if input.Decision == "approve" {
 			review.Status, eventType = "approved", "approved"
+			if data.UserSettings[actor.ID].AutoConvertDrafts {
+				review.Draft = false
+			}
 		} else if input.Decision == "requestChanges" {
 			review.Status, eventType = "inReview", "changes_requested"
 		}

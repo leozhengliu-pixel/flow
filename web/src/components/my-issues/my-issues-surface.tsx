@@ -87,7 +87,7 @@ export function MyIssuesSurface({
   const {changeDisplayOpen,changeFilterOpen,displayOpen,filterOpen}=useIssueSurfaceControls(filterOpenSignal,detailsOpen,onDetailsOpenChange)
   return <main className={styles.surface} data-my-issues-surface="true">
     <header className={styles.header}>
-      <button className={styles.mobileSidebarButton} aria-label="Open sidebar" onClick={onOpenSidebar}><span/><span/><span/></button>
+      <button className={styles.mobileSidebarButton} aria-label="Open sidebar" data-sidebar-trigger onClick={onOpenSidebar}><span/><span/><span/></button>
       <h2>My issues</h2>
     </header>
     <div className={styles.toolbar}>

@@ -86,21 +86,7 @@ func webAuthnForRequest(r *http.Request) (*webauthn.WebAuthn, string, error) {
 
 func (s *server) beginPasskeyRegistration(w http.ResponseWriter, r *http.Request) {
 	actor := requestActor(s, r)
-	data := s.workspaceData(r)
-	if strings.EqualFold(data.ViewerRole, "guest") {
-		writeError(w, http.StatusForbidden, "guest users cannot register passkeys")
-		return
-	}
-	credentials := make([]webauthn.Credential, 0)
-	for _, item := range data.Passkeys {
-		if item.UserID != actor.ID || item.CredentialJSON == "" {
-			continue
-		}
-		var credential webauthn.Credential
-		if json.Unmarshal([]byte(item.CredentialJSON), &credential) == nil {
-			credentials = append(credentials, credential)
-		}
-	}
+	credentials := s.mfaWebAuthnUser(actor).credentials
 	instance, origin, err := webAuthnForRequest(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -158,6 +144,7 @@ func (s *server) finishPasskeyRegistration(w http.ResponseWriter, r *http.Reques
 	actor := requestActor(s, r)
 	data := s.workspaceData(r)
 	var pending *domain.PasskeyRegistrationChallenge
+	if !strings.HasPrefix(input.RegistrationID,"passkey_reg_") {writeError(w,http.StatusBadRequest,"invalid registration session");return}
 	for index := range data.PasskeyRegistrationChallenges {
 		item := &data.PasskeyRegistrationChallenges[index]
 		if item.ID == input.RegistrationID && item.UserID == actor.ID {
@@ -183,16 +170,7 @@ func (s *server) finishPasskeyRegistration(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "passkey origin changed")
 		return
 	}
-	credentials := make([]webauthn.Credential, 0)
-	for _, item := range data.Passkeys {
-		if item.UserID != actor.ID || item.CredentialJSON == "" {
-			continue
-		}
-		var credential webauthn.Credential
-		if json.Unmarshal([]byte(item.CredentialJSON), &credential) == nil {
-			credentials = append(credentials, credential)
-		}
-	}
+	credentials := s.mfaWebAuthnUser(actor).credentials
 	parsed, err := protocol.ParseCredentialCreationResponseBytes(input.Credential)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid passkey response")

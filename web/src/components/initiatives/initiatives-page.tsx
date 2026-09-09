@@ -147,7 +147,7 @@ export function InitiativesPage(props: Props) {
   const tableHeader = visible.length > 0 && <div className="li-columns" style={{ gridTemplateColumns: columnGrid }}><span aria-hidden="true"/><span aria-hidden="true"/><button aria-label="Order by Name" onClick={() => setSort('name')} style={{ gridColumn: 3 }} type="button">Name<InitiativeSortIcon/></button>{columns.map((property, index) => <ColumnHeader gridColumn={index + 4} key={property} property={property} onSort={setSort}/>)}</div>
   return <main className="main-panel li-page">
     <header className="li-page-header">
-      <button className="li-mobile-menu" onClick={onOpenSidebar} type="button">☰</button>
+      <button aria-label="Open sidebar" className="li-mobile-menu" data-sidebar-trigger onClick={onOpenSidebar} type="button">☰</button>
       <h2>{t('Initiatives')}</h2>
       <button aria-label={t('New initiative')} className="li-new-initiative" onClick={() => setCreating(true)} type="button"><PlusIcon/><span>{t('New initiative')}</span></button>
     </header>

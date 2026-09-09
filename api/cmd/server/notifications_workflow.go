@@ -236,7 +236,28 @@ func (s *server) dispatchNotificationEmails(ctx context.Context, key string) {
 				}
 				return ""
 			}())
-			if notificationIndex < 0 || recipient == nil || issueErr != nil {
+			if notificationIndex >= 0 && recipient != nil && data.Notifications[notificationIndex].ReviewID != "" {
+				review, err := reviewByID(data, data.Notifications[notificationIndex].ReviewID)
+				if err != nil {
+					status, message = "failed", "review is unavailable"
+				} else {
+					title, body := "Flow review activity", review.Title
+					if data.WorkspaceSettings.HIPAACompliance {
+						body = "Open Flow to view your notification."
+					}
+					if err := s.mailer.send(recipient.Email, title, body, s.mailer.appURL+"/"+key+"/review/"+review.SlugID); err != nil {
+						status, message = "failed", err.Error()
+					}
+				}
+			} else if notificationIndex >= 0 && recipient != nil && data.Notifications[notificationIndex].Type == "pulseSummary" {
+				body := fmt.Sprintf("%d project and initiative updates are ready in Pulse.", data.Notifications[notificationIndex].OccurrenceCount)
+				if data.WorkspaceSettings.HIPAACompliance {
+					body = "Open Flow to view your summary."
+				}
+				if err := s.mailer.send(recipient.Email, "Flow Pulse summary", body, s.mailer.appURL+"/"+key+"/pulse"); err != nil {
+					status, message = "failed", err.Error()
+				}
+			} else if notificationIndex < 0 || recipient == nil || issueErr != nil {
 				status, message = "failed", "notification source is unavailable"
 			} else {
 				notification := data.Notifications[notificationIndex]
@@ -250,7 +271,13 @@ func (s *server) dispatchNotificationEmails(ctx context.Context, key string) {
 				if notification.Type == "comment" {
 					body = notification.Actor.DisplayName + " commented on the issue"
 				}
-				if err := s.mailer.sendNotification(recipient.Email, key, issue.Identifier, issue.Title, body); err != nil {
+				var sendErr error
+				if data.WorkspaceSettings.HIPAACompliance {
+					sendErr = s.mailer.send(recipient.Email, "Flow notification", "Open Flow to view your notification.", s.mailer.appURL+"/"+key+"/inbox")
+				} else {
+					sendErr = s.mailer.sendNotification(recipient.Email, key, issue.Identifier, issue.Title, body)
+				}
+				if err := sendErr; err != nil {
 					status, message = "failed", err.Error()
 				}
 			}
@@ -633,6 +660,20 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 			settings.ProgressOrder = *input.ProgressOrder
 		}
 		if input.ReleaseAutomations != nil {
+			if len(*input.ReleaseAutomations) > 100 {
+				return errInvalid
+			}
+			for _, rule := range *input.ReleaseAutomations {
+				if stateForTeam(data, teamID, rule.Action) == nil {
+					return errInvalid
+				}
+				if rule.Trigger != "" && rule.Trigger != "*" {
+					pipeline := releasePipelineByID(data, rule.Trigger)
+					if pipeline == nil || !pipeline.Production || len(pipeline.TeamIDs) > 0 && !slices.Contains(pipeline.TeamIDs, teamID) {
+						return errInvalid
+					}
+				}
+			}
 			settings.ReleaseAutomations = slices.Clone(*input.ReleaseAutomations)
 		}
 		if input.TriageEnabled != nil {

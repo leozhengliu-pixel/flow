@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -48,9 +49,9 @@ func (s *server) updateUserSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		input.UserID, input.UpdatedAt = actor.ID, time.Now().UTC()
 		if input.PulseSchedule == "" {
-			input.PulseSchedule = "daily"
+			input.PulseSchedule = "default"
 		}
-		if !slices.Contains([]string{"daily", "weekly", "never"}, input.PulseSchedule) {
+		if !slices.Contains([]string{"default", "daily", "weekly", "never"}, input.PulseSchedule) {
 			return errInvalid
 		}
 		data.UserSettings[actor.ID] = input
@@ -231,6 +232,19 @@ func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Reque
 		input.FeatureSettings.CustomerExcludedDomains = normalizedStrings(input.FeatureSettings.CustomerExcludedDomains)
 		input.FeatureSettings.CustomerGenericDomains = normalizedStrings(input.FeatureSettings.CustomerGenericDomains)
 		input.FeatureSettings.AsksEmailAddresses = normalizedStrings(input.FeatureSettings.AsksEmailAddresses)
+		for _, address := range input.FeatureSettings.AsksEmailAddresses {
+			if slices.Contains(data.WorkspaceSettings.FeatureSettings.AsksEmailAddresses, address) {
+				continue
+			}
+			if !slices.ContainsFunc(data.EmailIntakeAddresses, func(item domain.EmailIntakeAddress) bool {
+				return item.Enabled && item.VerificationState == "verified" && strings.EqualFold(item.Address, address)
+			}) {
+				return fmt.Errorf("%w: Asks requires an enabled, verified team email intake address", errInvalid)
+			}
+		}
+		if !slices.Contains([]string{"daily", "weekly", "never"}, input.FeatureSettings.PulseWorkspaceSchedule) {
+			return errInvalid
+		}
 		input.UpdatedAt = time.Now().UTC()
 		data.WorkspaceSettings = input
 		updated = input
@@ -1543,9 +1557,8 @@ func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 }
 
 // startIntegrationOAuth creates a short-lived, single-use state value and
-// returns the provider authorization URL. Provider-specific token exchange is
-// intentionally delegated to the configured callback endpoint; no provider
-// credential is ever returned to the browser or persisted in Config.
+// returns the provider authorization URL. Credentials never enter Config or
+// the browser response; the callback performs the server-side token exchange.
 func (s *server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	provider := strings.ToLower(r.PathValue("provider"))
 	if !slices.Contains([]string{"github", "gitlab", "slack", "figma", "google"}, provider) {
@@ -1616,11 +1629,8 @@ func (s *server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-// finishIntegrationOAuth validates state and records the provider callback.
-// A provider token exchange is deliberately not faked: deployments that need
-// one should run their provider-specific exchange worker and then PATCH the
-// connection status. This endpoint still gives operators durable pending,
-// completed, and error states with replay protection.
+// finishIntegrationOAuth marks the connection connected only after a successful
+// token exchange. Errors retain a failed state; callbacks cannot be replayed.
 func (s *server) finishIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	provider := strings.ToLower(r.PathValue("provider"))
 	state, code := strings.TrimSpace(r.URL.Query().Get("state")), strings.TrimSpace(r.URL.Query().Get("code"))
@@ -1630,15 +1640,36 @@ func (s *server) finishIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 	}
 	// Snapshot the credentials before the provider call. Network I/O must never
 	// execute while MutateWorkspace holds the workspace write lock.
-	data := s.workspaceData(r)
-	index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool {
-		return item.Provider == provider && item.OAuthState == state
-	})
+	// Provider callbacks have no authenticated Flow request context. Resolve
+	// their workspace from the single-use state, never the last active workspace.
+	var data domain.Bootstrap
+	index := -1
+	for _, key := range s.store.WorkspaceKeys() {
+		candidate, ok := s.store.WorkspaceMetadata(key)
+		if !ok {
+			continue
+		}
+		found := slices.IndexFunc(candidate.IntegrationConnections, func(item domain.IntegrationConnection) bool {
+			return item.Provider == provider && item.OAuthState == state
+		})
+		if found >= 0 {
+			data, index = candidate, found
+			r = r.WithContext(context.WithValue(r.Context(), workspaceKeyContextKey{}, key))
+			break
+		}
+	}
 	if index < 0 || data.IntegrationConnections[index].Status != "oauth_pending" {
 		writeError(w, http.StatusNotFound, "resource not found")
 		return
 	}
 	snapshot := data.IntegrationConnections[index]
+	if !s.authDisabled {
+		role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, snapshot.ConnectedBy)
+		if err != nil || status != "active" || !workspaceAdminRole(role) {
+			writeError(w, http.StatusForbidden, "Integration administrator no longer has workspace access")
+			return
+		}
+	}
 	oauthConfig := integrationOAuthConfigFor(provider, snapshot.Config)
 	if snapshot.OAuthStartedAt == nil || time.Since(*snapshot.OAuthStartedAt) > 10*time.Minute {
 		_ = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_expired", snapshot.ID, nil, func(next *domain.Bootstrap) error {
@@ -1699,7 +1730,7 @@ func (s *server) finishIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 				expiry := now.Add(time.Duration(expiresIn) * time.Second)
 				connection.OAuthExpiresAt = &expiry
 			}
-			connection.Status, connection.OAuthCompletedAt, connection.LastError = "configured", &now, ""
+			connection.Status, connection.OAuthCompletedAt, connection.LastError = "connected", &now, ""
 		}
 		connection.OAuthState, connection.UpdatedAt = "", now
 		result = map[string]string{"provider": provider, "connectionId": connection.ID, "status": connection.Status}
@@ -1715,6 +1746,14 @@ func (s *server) finishIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 			status = http.StatusBadRequest
 		}
 		writeError(w, status, providerError)
+		return
+	}
+	if strings.Contains(r.Header.Get("Accept"), "text/html") {
+		appURL := strings.TrimRight(os.Getenv("FLOW_APP_URL"), "/")
+		if appURL == "" {
+			appURL = "http://localhost:5173"
+		}
+		http.Redirect(w, r, appURL+"/"+url.PathEscape(workspaceKey(r))+"/settings/integrations", http.StatusSeeOther)
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -1838,7 +1877,7 @@ func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request)
 			expiry := time.Now().UTC().Add(time.Duration(payload.ExpiresIn) * time.Second)
 			connection.OAuthExpiresAt = &expiry
 		}
-		connection.Status, connection.LastError, connection.UpdatedAt = "configured", "", time.Now().UTC()
+		connection.Status, connection.LastError, connection.UpdatedAt = "connected", "", time.Now().UTC()
 		result = *connection
 		return nil
 	})

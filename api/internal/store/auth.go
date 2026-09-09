@@ -359,8 +359,21 @@ func (s *SQLiteStore) createSession(ctx context.Context, user domain.User) (doma
 	}
 	now := time.Now().UTC()
 	expires := now.Add(30 * 24 * time.Hour)
-	_, err = s.db.ExecContext(ctx, `INSERT INTO auth_sessions(token_hash,user_id,expires_at,created_at,last_seen_at) VALUES(?,?,?,?,?)`, tokenHash(token), user.ID, expires.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
+		return domain.AuthSession{}, "", err
+	}
+	defer tx.Rollback()
+	_, err = tx.ExecContext(ctx, `INSERT INTO auth_sessions(token_hash,user_id,expires_at,created_at,last_seen_at) VALUES(?,?,?,?,?)`, tokenHash(token), user.ID, expires.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	if err != nil {
+		return domain.AuthSession{}, "", err
+	}
+	// External authentication callbacks replace this context before issuing
+	// the cookie. Persist the password context atomically for normal sign-ins.
+	if _, err = tx.ExecContext(ctx, `INSERT INTO auth_session_security(token_hash,provider,issuer,mfa_verified_at) VALUES(?,?,?,?)`, tokenHash(token), "password", "", nil); err != nil {
+		return domain.AuthSession{}, "", err
+	}
+	if err = tx.Commit(); err != nil {
 		return domain.AuthSession{}, "", err
 	}
 	return s.sessionForUser(ctx, user, expires), token, nil

@@ -1,5 +1,6 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
+import { formatCustomerRevenue } from '@/lib/customer-settings';
 import { AppLink } from '@/components/ui/app-link';
 import {
   ArrowDown,
@@ -161,6 +162,7 @@ export function WorkspaceDirectoryPage({
       {kind === "members" && <MembersDirectory data={data} onOpen={onNavigateMember} onOpenTeam={onNavigateTeam} />}
       {kind === "customers" && (
         <CustomersDirectory
+          featureSettings={data.workspaceSettings.featureSettings}
           customers={data.customers ?? []}
           requests={data.customerRequests}
           users={data.users}
@@ -189,6 +191,7 @@ export function WorkspaceDirectoryPage({
         onSent={onReload}
       />
       <CustomerDialog
+        currency={data.workspaceSettings.featureSettings?.customerRevenueCurrency}
         open={customerOpen}
         users={data.users}
         onOpenChange={setCustomerOpen}
@@ -221,7 +224,7 @@ function DirectoryHeader({
         className="workspace-directory__mobile"
         type="button"
         aria-label="Open sidebar"
-        onClick={onOpenSidebar}
+        data-sidebar-trigger onClick={onOpenSidebar}
       >
         <span />
         <span />
@@ -404,6 +407,7 @@ function DirectorySortHeader({
 }
 
 function CustomersDirectory({
+  featureSettings,
   customers,
   requests,
   users,
@@ -413,6 +417,7 @@ function CustomersDirectory({
   onDelete,
   onOpen,
 }: {
+  featureSettings: BootstrapData['workspaceSettings']['featureSettings'];
   customers: Customer[];
   requests: BootstrapData["customerRequests"];
   users: User[];
@@ -658,7 +663,7 @@ function CustomersDirectory({
               </div>
               {columns.has("requests") && <span>{requestCounts.get(customer.id) ?? 0}</span>}
               {columns.has("revenue") && (
-                <span>{formatRevenue(customer.annualRevenue)}</span>
+                <span>{formatCustomerRevenue(customer.annualRevenue,featureSettings)}</span>
               )}
               {columns.has("size") && <span>{customer.size ?? "—"}</span>}
               {columns.has("status") && (
@@ -1506,15 +1511,6 @@ function teamCreatedAt(team: Team) {
 
 function formatDirectoryDate(value: Date) {
   return value.toLocaleDateString("en", { month: "short", day: "numeric" });
-}
-
-function formatRevenue(value?: number) {
-  if (!value) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
 }
 
 function namesFor(ids: Set<string>, users: User[]) {

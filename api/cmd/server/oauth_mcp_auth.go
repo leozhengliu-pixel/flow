@@ -165,7 +165,34 @@ func (s *server) decideOAuthAuthorization(w http.ResponseWriter, r *http.Request
 		writeOAuthError(w, http.StatusForbidden, "access_denied", "You do not have access to that workspace")
 		return
 	}
+	if !s.authDisabled && !s.authorizeAuthenticationPolicy(w, r, workspace, workspace.ViewerRole) {
+		return
+	}
 	authorizationID := fmt.Sprintf("oauth_authorization_%d", time.Now().UnixNano())
+	if !applicationApproved(&workspace, client.ClientID, scopes) {
+		err := s.store.MutateWorkspace(r.Context(), workspace.Workspace.URLKey, "application_policy.updated", client.ClientID, nil, func(data *domain.Bootstrap) error {
+			items := applicationPolicies(data)
+			index := slices.IndexFunc(items, func(item applicationPolicy) bool { return item.ID == client.ClientID })
+			if index < 0 && len(items) < 100 {
+				items = append(items, applicationPolicy{ID: client.ClientID, Name: client.ClientName, Kind: "oauth", OwnerID: actor.ID, Shared: true, Status: "pending", Scopes: scopes, UpdatedAt: time.Now().UTC()})
+			} else if index >= 0 && items[index].Status != "rejected" {
+				items[index].Status = "pending"
+				for _, scope := range scopes {
+					if !slices.Contains(items[index].Scopes, scope) {
+						items[index].Scopes = append(items[index].Scopes, scope)
+					}
+				}
+			}
+			setApplicationPolicies(data, items)
+			return nil
+		})
+		if err != nil {
+			writeOAuthError(w, 500, "server_error", "Could not request application approval")
+			return
+		}
+		writeOAuthError(w, http.StatusForbidden, "access_denied", "Workspace administrator approval is required for this application and its requested scopes")
+		return
+	}
 	code, err := randomSecret("flow_code_")
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not authorize client")
@@ -239,6 +266,9 @@ func (s *server) issueOAuthTokens(w http.ResponseWriter, r *http.Request, grant 
 			return item.ID == grant.AuthorizationID && item.RevokedAt == nil
 		})
 		if index < 0 {
+			return errNotFound
+		}
+		if !applicationApproved(data, grant.ClientID, grant.Scopes) {
 			return errNotFound
 		}
 		data.APIKeys = append([]domain.APIKey{key}, data.APIKeys...)

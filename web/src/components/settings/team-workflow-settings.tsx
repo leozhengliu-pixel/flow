@@ -1193,7 +1193,7 @@ function WorkflowSettings({
     }
   };
   const addRelease = async () => {
-    if (!releasePipeline || !releaseState) return;
+    if (!releaseState) return;
     await save({
       releaseAutomations: [
         ...settings.releaseAutomations,
@@ -1243,7 +1243,8 @@ function WorkflowSettings({
           a specified branch.
         </p>
         {branches.map((item) => (
-          <div className="automation-rule-row" key={item.id}>
+          <div key={item.id}>
+          <div className="automation-rule-row">
             <GitBranch size={16} />
             <span>
               <strong data-i18n-ignore>{item.branch}</strong>
@@ -1261,6 +1262,8 @@ function WorkflowSettings({
                   .catch((error) => toast.error(message(error)))
               }
             />
+          </div>
+          {prRows.map(([event,label])=><SelectRow key={event} title={label} value={item.automationStates?.[event] ?? '__inherit__'} options={['__inherit__',...stateOptions]} labels={{...stateLabels,__inherit__:'Use team default'}} entityOptions={states.map(state=>state.id)} onChange={async value=>{const automationStates={...item.automationStates};if(value==='__inherit__')delete automationStates[event];else automationStates[event]=value;await upsertTargetBranch({...item,automationStates});await onReload()}}/>)}
           </div>
         ))}
         {addingBranch && (
@@ -1393,7 +1396,7 @@ function WorkflowSettings({
             </button>
             <button
               className="settings-action primary"
-              disabled={!releasePipeline || !releaseState}
+              disabled={!releaseState}
             >
               Save
             </button>

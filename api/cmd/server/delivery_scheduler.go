@@ -70,7 +70,16 @@ func (s *server) runDeliverySchedulerTick(ctx context.Context) error {
 }
 
 func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error {
+	sweepSettings := s.settingsLastSweep.Swap(now.Unix()/60) != now.Unix()/60
 	for _, key := range s.store.WorkspaceKeys() {
+		if sweepSettings {
+			if err := s.maintainTeamSettings(ctx, key, now); err != nil {
+				return err
+			}
+			if err := s.preparePulseSummaries(ctx, key, now); err != nil {
+				return err
+			}
+		}
 		if err := s.prepareDueNotificationDeliveries(ctx, key, now); err != nil {
 			return err
 		}

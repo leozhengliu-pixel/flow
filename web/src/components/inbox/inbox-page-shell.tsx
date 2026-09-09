@@ -226,7 +226,7 @@ export function InboxHeader({
           className="flow-inbox__icon-button flow-inbox__mobile-menu"
           type="button"
           aria-label="Open sidebar"
-          onClick={onOpenSidebar}
+          data-sidebar-trigger onClick={onOpenSidebar}
         >
           <SidebarIcon />
         </button>

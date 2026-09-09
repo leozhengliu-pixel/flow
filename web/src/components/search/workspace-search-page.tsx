@@ -78,7 +78,7 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult }: {
 
   return <main className="main-panel workspace-search-page">
     <header className="workspace-search-header">
-      <button className="workspace-search-mobile-menu" type="button" aria-label="Open sidebar" onClick={onOpenSidebar}>☰</button>
+      <button className="workspace-search-mobile-menu" type="button" aria-label="Open sidebar" data-sidebar-trigger onClick={onOpenSidebar}>☰</button>
       <Search size={15}/>
       <input
         autoFocus

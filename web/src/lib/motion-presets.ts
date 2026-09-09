@@ -1,4 +1,5 @@
 export const motionPresets = {
+  sidebar: { type: 'spring', stiffness: 420, damping: 38, mass: 1 },
   surface: { type: 'spring', duration: 0.3, bounce: 0 },
   quick: { duration: 0.15, ease: 'easeOut' },
   createEnter: { type: 'spring', duration: 0.35, bounce: 0 },

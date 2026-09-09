@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type Ref, type RefObject } from 'react'
 import { useI18n, type AppLocale } from '@/i18n/i18n'
 import styles from './project-row-menus.module.css'
-import { firstWeekday, useUserPreferences } from '@/lib/runtime-preferences'
+import { firstWeekday, useUserPreferences, useWorkspacePreferences, fiscalMonth, fiscalYear, fiscalMonthOffset } from '@/lib/runtime-preferences'
 
 export type DateMode = 'day' | 'month' | 'quarter' | 'half-year' | 'year'
 export type DateResolution = 'halfYear' | 'month' | 'quarter' | 'year'
@@ -117,8 +117,9 @@ function DayPanel({ cursor, locale, max, min, onChangeCursor, onChoose, selected
 }
 
 function PeriodPanel({ cursor: _cursor, label, locale, max, min, mode, onChoose, selected }: { cursor: Date; label: 'Start date' | 'Target date'; locale: AppLocale; max?: Date; min?: Date; mode: Exclude<DateMode, 'day'>; onChoose: (date: Date, resolution: DateResolution) => void; selected?: Date }) {
+  useWorkspacePreferences()
   const scrollerRef = useRef<HTMLDivElement>(null)
-  const currentYear = new Date().getFullYear()
+  const currentYear = mode === 'month' ? new Date().getFullYear() : fiscalYear(new Date())
   const years = Array.from({ length: 10 }, (_, index) => currentYear - 4 + index)
   useEffect(() => {
     const scroller = scrollerRef.current
@@ -141,15 +142,15 @@ function periodsFor(mode: Exclude<DateMode, 'day'>, locale: AppLocale) {
 function dateForPeriod(year: number, mode: Exclude<DateMode, 'day'>, index: number, label: 'Start date' | 'Target date') {
   const start = label === 'Start date'
   if (mode === 'month') return start ? new Date(year, index, 1) : new Date(year, index + 1, 0)
-  if (mode === 'quarter') return start ? new Date(year, index * 3, 1) : new Date(year, (index + 1) * 3, 0)
-  if (mode === 'half-year') return start ? new Date(year, index * 6, 1) : new Date(year, (index + 1) * 6, 0)
-  return start ? new Date(year, 0, 1) : new Date(year, 11, 31)
+  if (mode === 'quarter') return start ? new Date(year, fiscalMonth()+index * 3, 1) : new Date(year, fiscalMonth()+(index + 1) * 3, 0)
+  if (mode === 'half-year') return start ? new Date(year, fiscalMonth()+index * 6, 1) : new Date(year, fiscalMonth()+(index + 1) * 6, 0)
+  return start ? new Date(year, fiscalMonth(), 1) : new Date(year+1, fiscalMonth(), 0)
 }
 function periodSelected(date: Date | undefined, year: number, mode: Exclude<DateMode, 'day'>, index: number) {
-  if (!date || date.getFullYear() !== year) return false
+  if (!date || (mode === 'month' ? date.getFullYear() : fiscalYear(date)) !== year) return false
   if (mode === 'month') return date.getMonth() === index
-  if (mode === 'quarter') return Math.floor(date.getMonth() / 3) === index
-  if (mode === 'half-year') return Math.floor(date.getMonth() / 6) === index
+  if (mode === 'quarter') return Math.floor(fiscalMonthOffset(date) / 3) === index
+  if (mode === 'half-year') return Math.floor(fiscalMonthOffset(date) / 6) === index
   return true
 }
 function calendarDays(cursor: Date, weekStart = 1) {
@@ -175,15 +176,15 @@ async function parseNaturalTarget(input: string, mode: DateMode, label: 'Start d
     natural = parseDate(value, new Date(), { forwardDate: true }) ?? new Date(Number.NaN)
   }
   if (Number.isNaN(natural.getTime())) return undefined
-  if (mode !== 'day') return dateForPeriod(natural.getFullYear(), mode, mode === 'month' ? natural.getMonth() : mode === 'quarter' ? Math.floor(natural.getMonth() / 3) : mode === 'half-year' ? Math.floor(natural.getMonth() / 6) : 0, label)
+  if (mode !== 'day') return dateForPeriod(mode === 'month' ? natural.getFullYear() : fiscalYear(natural), mode, mode === 'month' ? natural.getMonth() : mode === 'quarter' ? Math.floor(fiscalMonthOffset(natural) / 3) : mode === 'half-year' ? Math.floor(fiscalMonthOffset(natural) / 6) : 0, label)
   return startOfDay(natural)
 }
 function formatForMode(date: Date, mode: DateMode) {
   if (mode === 'day') return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`
   if (mode === 'month') return `${MONTHS[date.getMonth()]} ${date.getFullYear()}`
-  if (mode === 'quarter') return `Q${Math.floor(date.getMonth() / 3) + 1} ${date.getFullYear()}`
-  if (mode === 'half-year') return `H${Math.floor(date.getMonth() / 6) + 1} ${date.getFullYear()}`
-  return String(date.getFullYear())
+  if (mode === 'quarter') return `Q${Math.floor(fiscalMonthOffset(date) / 3) + 1} ${fiscalYear(date)}`
+  if (mode === 'half-year') return `H${Math.floor(fiscalMonthOffset(date) / 6) + 1} ${fiscalYear(date)}`
+  return String(fiscalYear(date))
 }
 function parseDate(value?: string) { if (!value) return undefined; const date = new Date(`${value}T00:00:00`); return Number.isNaN(date.getTime()) ? undefined : date }
 function isDateDisabled(date: Date, min?: Date, max?: Date) { return Boolean((min && date < min) || (max && date > max)) }

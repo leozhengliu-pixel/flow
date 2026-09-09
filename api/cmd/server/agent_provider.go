@@ -57,6 +57,11 @@ func (s *server) requestAgentTurn(ctx context.Context, messages []agentProviderM
 	if err != nil {
 		return agentProviderTurn{}, err
 	}
+	if connectors, ok := ctx.Value(connectorToolsKey{}).([]connectorTool); ok {
+		for _, tool := range connectors {
+			tools = append(tools, tool.Definition)
+		}
+	}
 	protocol := s.agent.Protocol
 	if protocol == "" {
 		protocol = "openai-chat-completions"

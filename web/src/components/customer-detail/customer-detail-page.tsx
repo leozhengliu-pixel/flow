@@ -1,5 +1,6 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
+import { customerRevenueLabel, formatCustomerRevenue } from '@/lib/customer-settings';
 import {
   Bell,
   Check,
@@ -158,7 +159,7 @@ export function CustomerDetailPage({
               <small>{customer.domains.join(", ")}</small>
             )}
           </div>
-          <button onClick={() => setEditOpen(true)}>Edit customer</button>
+          <button disabled={data.workspaceSettings.featureSettings.customerManualEdits === false} onClick={() => setEditOpen(true)}>Edit customer</button>
         </section>
         <section className="customer-properties">
           <label>Status</label>
@@ -258,7 +259,7 @@ export function CustomerDetailPage({
             </DropdownMenu.Portal>
           </DropdownMenu.Root></>}
           {customer.size != null && <><label>Size</label><span>{customer.size}</span></>}
-          {customer.annualRevenue != null && <><label>Annual revenue</label><span>{new Intl.NumberFormat(undefined,{style:"currency",currency:"USD",notation:"compact"}).format(customer.annualRevenue)}</span></>}
+          {customer.annualRevenue != null && <><label>{customerRevenueLabel(data.workspaceSettings.featureSettings)}</label><span>{formatCustomerRevenue(customer.annualRevenue,data.workspaceSettings.featureSettings)}</span></>}
           <label>Requests</label><span>{requests.length}</span>
           {customer.ownerId && (
             <>
@@ -336,6 +337,7 @@ export function CustomerDetailPage({
         </DialogContent>
       </Dialog>
       <CustomerDialog
+        currency={data.workspaceSettings.featureSettings?.customerRevenueCurrency}
         open={editOpen}
         users={data.users}
         customer={customer}
@@ -487,7 +489,8 @@ function CustomerRequestComposer({
         const issue = await createIssue({
           title: `Customer request from ${customer.name}`,
           description: body,
-          teamId: data.teams[0]?.id ?? "",
+          teamId: data.workspaceSettings.featureSettings.customerDefaultTeamId || data.teams[0]?.id || "",
+          stateId: data.states.find(state => (!state.teamId || state.teamId === (data.workspaceSettings.featureSettings.customerDefaultTeamId || data.teams[0]?.id)) && state.type === 'backlog')?.id,
         });
         issueId = issue.id;
       } else if (target.startsWith("issue:")) issueId = target.slice(6);
