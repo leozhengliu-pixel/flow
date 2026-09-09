@@ -248,6 +248,7 @@ export type AppRoute =
       kind: "settings";
       workspaceSlug: string;
       page: SettingsPageId;
+      notificationChannel?: 'desktop' | 'mobile' | 'email' | 'slack';
       /** Nested personal-security flows (for example API-key creation/detail). */
       apiKeyMode?: "new" | "detail" | "edit";
       /** Dedicated commit-signing-key upload flow. */
@@ -645,6 +646,8 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     segments.length === 4
   )
     return { kind: "settings", workspaceSlug, page: "account-security" };
+  if (section === 'settings' && third === 'account' && fourth === 'notifications' && ['desktop','mobile','email','slack'].includes(fifth) && segments.length === 5)
+    return {kind:'settings',workspaceSlug,page:'notifications',notificationChannel:fifth as 'desktop'|'mobile'|'email'|'slack'};
   if (
     section === "settings" &&
     third === "account" &&

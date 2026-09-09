@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type Ref, type RefObject } from 'react'
 import { useI18n, type AppLocale } from '@/i18n/i18n'
 import styles from './project-row-menus.module.css'
+import { firstWeekday, useUserPreferences } from '@/lib/runtime-preferences'
 
 export type DateMode = 'day' | 'month' | 'quarter' | 'half-year' | 'year'
 export type DateResolution = 'halfYear' | 'month' | 'quarter' | 'year'
@@ -102,9 +103,12 @@ export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, c
 }
 
 function DayPanel({ cursor, locale, max, min, onChangeCursor, onChoose, selected }: { cursor: Date; locale: AppLocale; max?: Date; min?: Date; onChangeCursor: (date: Date) => void; onChoose: (date: Date) => void; selected?: Date }) {
-  const days = useMemo(() => calendarDays(cursor), [cursor])
+  const preferences = useUserPreferences()
+  const weekStart = firstWeekday(preferences.firstDay)
+  const days = useMemo(() => calendarDays(cursor,weekStart), [cursor,weekStart])
   const monthLabel = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(cursor)
-  const weekdays = locale === 'zh-CN' ? ['一', '二', '三', '四', '五', '六', '日'] : ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
+  const labels = locale === 'zh-CN' ? ['日','一','二','三','四','五','六'] : ['Su','Mo','Tu','We','Th','Fr','Sa']
+  const weekdays = Array.from({length:7},(_,index)=>labels[(index+weekStart)%7])
   return <div className={styles.dayPanel}>
     <header><strong>{monthLabel}</strong><span><button aria-label={locale === 'zh-CN' ? '上个月' : 'Previous month'} onClick={() => onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))} type="button"><ChevronLeft size={14}/></button><button aria-label={locale === 'zh-CN' ? '下个月' : 'Next month'} onClick={() => onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))} type="button"><ChevronRight size={14}/></button></span></header>
     <div className={styles.weekdays}>{weekdays.map(day => <span key={day}>{day}</span>)}</div>
@@ -148,10 +152,10 @@ function periodSelected(date: Date | undefined, year: number, mode: Exclude<Date
   if (mode === 'half-year') return Math.floor(date.getMonth() / 6) === index
   return true
 }
-function calendarDays(cursor: Date) {
+function calendarDays(cursor: Date, weekStart = 1) {
   const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
   const start = new Date(first)
-  start.setDate(first.getDate() - ((first.getDay() + 6) % 7))
+  start.setDate(first.getDate() - ((first.getDay() - weekStart + 7) % 7))
   return Array.from({ length: 42 }, (_, index) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + index))
 }
 async function parseNaturalTarget(input: string, mode: DateMode, label: 'Start date' | 'Target date') {

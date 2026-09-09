@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { makeBootstrap } from '@/test/fixtures'
 import type { BootstrapData } from '@/types/flow'
 import { deriveResourceCounts } from './resource-counts'
 
@@ -26,4 +27,10 @@ describe('resource counts', () => {
     expect(result.projects.find(item => item.id === 'project-2')?.issueCount).toBe(0)
     expect(result.issues[0].labels[0].issueCount).toBe(1)
   })
+})
+it('retains unaffected issue references when counts do not change', () => {
+  const initial = deriveResourceCounts(makeBootstrap())
+  const next = deriveResourceCounts({ ...initial, issues: initial.issues.map((issue, index) => index === 0 ? { ...issue, title: 'Updated title' } : issue) })
+  expect(next.labels[0]).toBe(initial.labels[0])
+  for (let index = 1; index < initial.issues.length; index++) expect(next.issues[index]).toBe(initial.issues[index])
 })

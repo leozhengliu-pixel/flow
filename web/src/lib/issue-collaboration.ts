@@ -1,5 +1,5 @@
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwarenessStates } from 'y-protocols/awareness'
-import { applyUpdate, encodeStateAsUpdate, type Doc } from 'yjs'
+import { applyUpdate, encodeStateAsUpdate, encodeStateVector, parseUpdateMeta, type Doc } from 'yjs'
 import { realtimeClientId } from '@/lib/api'
 import type { User } from '@/types/flow'
 
@@ -28,6 +28,9 @@ export class IssueCollaborationProvider {
   private readonly appliedUpdateIds = new Set<string>()
   private readonly pendingUpdates = new Map<string, Uint8Array>()
   private readonly sentUpdates = new Set<string>()
+  private readonly serverClocks = new Map<number, number>()
+  private pendingBytes = 0
+  private deferredUpdate = false
   private receivedServerState = false
   private readonly listeners = new Set<Listener>()
   private socket?: WebSocket
@@ -105,6 +108,9 @@ export class IssueCollaborationProvider {
     this.awareness.destroy()
     this.socket?.close(1000, 'editor closed')
     this.pendingUpdates.clear()
+    this.pendingBytes = 0
+    this.deferredUpdate = false
+    this.serverClocks.clear()
     this.sentUpdates.clear()
     this.appliedUpdateIds.clear()
     this.emit('disconnected')
@@ -166,10 +172,10 @@ export class IssueCollaborationProvider {
     if (message.type !== 'document.sync' || !('documentId' in message) || message.documentId !== this.documentId) return
     const sync = message as SyncMessage
     this.receivedServerState ||= Boolean(sync.contentState) || sync.updates.length > 0
-    if (sync.contentState) applyUpdate(this.document, base64ToBytes(sync.contentState), this)
+    if (sync.contentState) this.applyServerUpdate(base64ToBytes(sync.contentState))
     sync.updates.forEach(update => {
-      applyUpdate(this.document, base64ToBytes(update.data), this)
-      this.pendingUpdates.delete(update.id)
+      this.applyServerUpdate(base64ToBytes(update.data))
+      this.acknowledgeUpdate(update.id)
       this.sentUpdates.delete(update.id)
       this.appliedUpdateIds.add(update.id)
     })
@@ -184,9 +190,9 @@ export class IssueCollaborationProvider {
     const frame = decodeFrame(raw)
     if (!frame || frame.documentId !== this.documentId) return
     if (frame.kind === updateFrame) {
-      applyUpdate(this.document, frame.payload, this)
+      this.applyServerUpdate(frame.payload)
       if (frame.updateId) {
-        this.pendingUpdates.delete(frame.updateId)
+        this.acknowledgeUpdate(frame.updateId)
         this.sentUpdates.delete(frame.updateId)
         this.appliedUpdateIds.add(frame.updateId)
       }
@@ -207,13 +213,45 @@ export class IssueCollaborationProvider {
   }
 
   private queueDocumentUpdate(update: Uint8Array) {
+    if (this.deferredUpdate || this.pendingUpdates.size >= 128 || this.pendingBytes + update.byteLength > 1024 * 1024) {
+      // Y.Doc already owns every edit. Retain a dirty marker while offline or
+      // backpressured, then derive a delta against acknowledged server clocks.
+      // Do not keep an additional unbounded copy of the document's edit log.
+      this.deferredUpdate = true
+      this.flushPendingUpdates()
+      return
+    }
     const updateId = `collab_${crypto.randomUUID()}`
     this.pendingUpdates.set(updateId, update.slice())
+    this.pendingBytes += update.byteLength
     this.flushPendingUpdates()
+  }
+
+  private acknowledgeUpdate(id: string) {
+    this.pendingBytes -= this.pendingUpdates.get(id)?.byteLength ?? 0
+    this.pendingUpdates.delete(id)
+  }
+
+  private applyServerUpdate(update: Uint8Array) {
+    applyUpdate(this.document, update, this)
+    const { from, to } = parseUpdateMeta(update)
+    for (const [client, clock] of to) {
+      const known = this.serverClocks.get(client) ?? 0
+      // Out-of-order gaps stay conservative: resending a Yjs update is safe,
+      // advancing past an unacknowledged gap could lose an offline edit.
+      if ((from.get(client) ?? 0) <= known) this.serverClocks.set(client, Math.max(known, clock))
+    }
   }
 
   private flushPendingUpdates() {
     if (!this.synced || this.socket?.readyState !== WebSocket.OPEN) return
+    if ((this.socket.bufferedAmount ?? 0) > 2 * 1024 * 1024) return
+    if (this.deferredUpdate && this.pendingUpdates.size === 0) {
+      const update = encodeStateAsUpdate(this.document, encodeStateVector(this.serverClocks))
+      this.pendingUpdates.set(`collab_${crypto.randomUUID()}`, update)
+      this.pendingBytes = update.byteLength
+      this.deferredUpdate = false
+    }
     for (const [updateId, update] of this.pendingUpdates) {
       if (this.sentUpdates.has(updateId)) continue
       if ((this.socket.bufferedAmount ?? 0) > 2 * 1024 * 1024) return

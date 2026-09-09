@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Doc } from 'yjs'
+import { applyUpdate, Doc, encodeStateAsUpdate } from 'yjs'
 import { viewer } from '@/test/fixtures'
 
 vi.mock('@/lib/api', () => ({ realtimeClientId: () => 'client-1' }))
@@ -92,5 +92,46 @@ describe('issue collaboration provider', () => {
     expect(provider.updateIds()).toEqual([])
     provider.destroy()
     provider.destroy()
+  })
+
+  it('coalesces a long offline edit backlog without losing edits or remote changes', async () => {
+    let sequence = 0
+    vi.spyOn(crypto, 'randomUUID').mockImplementation(() => `00000000-0000-4000-8000-${String(++sequence).padStart(12, '0')}`)
+    const { IssueCollaborationProvider } = await import('./issue-collaboration')
+    const document = new Doc()
+    const remote = new Doc()
+    const provider = new IssueCollaborationProvider({ document, workspaceKey: 'workspace', documentId: 'document-1', viewer, seededWithoutServerState: false })
+    const content = document.getText('content')
+    for (let i = 0; i < 1000; i++) {
+      content.insert(content.length, 'xy')
+      content.delete(content.length - 1, 1)
+    }
+    remote.getMap('properties').set('title', 'Changed remotely')
+    provider.start()
+    const socket = MockWebSocket.instances[0]
+    socket.open()
+    const state = encodeStateAsUpdate(remote)
+    socket.message(JSON.stringify({ type: 'document.sync', documentId: 'document-1', contentState: btoa(String.fromCharCode(...state)), updates: [], more: true }))
+    expect(socket.sent.filter(value => value instanceof Uint8Array && value[0] === 1)).toHaveLength(0)
+    socket.message(JSON.stringify({ type: 'document.sync', documentId: 'document-1', updates: [] }))
+    let sentUpdates = 0
+    for (let i = 0; i < socket.sent.length; i++) {
+      const value = socket.sent[i]
+      if (!(value instanceof Uint8Array) || value[0] !== 1) continue
+      const view = new DataView(value.buffer, value.byteOffset, value.byteLength)
+      const documentLength = view.getUint16(1)
+      const updateOffset = 3 + documentLength
+      const updateLength = view.getUint16(updateOffset)
+      applyUpdate(remote, value.subarray(updateOffset + 2 + updateLength))
+      socket.message(value.buffer)
+      sentUpdates++
+    }
+    expect(sentUpdates).toBeLessThanOrEqual(129)
+    expect(remote.getText('content').toString()).toBe('x'.repeat(1000))
+    expect(document.getMap('properties').get('title')).toBe('Changed remotely')
+    expect(encodeStateAsUpdate(remote)).toEqual(encodeStateAsUpdate(document))
+    provider.destroy()
+    document.destroy()
+    remote.destroy()
   })
 })

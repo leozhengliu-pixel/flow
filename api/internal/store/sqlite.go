@@ -170,12 +170,8 @@ func (s *SQLiteStore) ReloadAllWorkspaces(ctx context.Context) error {
 	}
 	rows.Close()
 	for key, raw := range stored {
-		full, err := s.expandWorkspaceMetadata(ctx, key, raw, tx)
+		data, err := s.decodeWorkspaceMetadata(ctx, key, raw, tx)
 		if err != nil {
-			return err
-		}
-		var data domain.Bootstrap
-		if err := json.Unmarshal(full, &data); err != nil {
 			return err
 		}
 		normalizeStoredMetadata(&data)
@@ -206,13 +202,9 @@ func (s *SQLiteStore) loadWorkspaceState(ctx context.Context, workspaceKey strin
 	if len(raw) > s.maxStateBytes {
 		return domain.Bootstrap{}, fmt.Errorf("workspace state exceeds %d bytes", s.maxStateBytes)
 	}
-	raw, err = s.expandWorkspaceMetadata(ctx, workspaceKey, raw, tx)
+	data, err := s.decodeWorkspaceMetadata(ctx, workspaceKey, raw, tx)
 	if err != nil {
 		return domain.Bootstrap{}, err
-	}
-	var data domain.Bootstrap
-	if err := json.Unmarshal(raw, &data); err != nil {
-		return data, err
 	}
 	normalizeStoredMetadata(&data)
 	if err := tx.Commit(); err != nil {
@@ -423,13 +415,8 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	}
 	for _, item := range stored {
 		key := item.key
-		raw, err := s.expandWorkspaceMetadata(ctx, key, item.raw, tx)
+		data, err := s.decodeWorkspaceMetadata(ctx, key, item.raw, tx)
 		if err != nil {
-			return err
-		}
-		var data domain.Bootstrap
-		if err := json.Unmarshal(raw, &data); err != nil {
-			rows.Close()
 			return err
 		}
 		externalIssues := data.Issues == nil

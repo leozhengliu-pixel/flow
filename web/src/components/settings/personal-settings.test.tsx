@@ -179,9 +179,12 @@ describe('personal settings workflows', () => {
 
     view.rerender(<I18nProvider><PersonalSettings {...props('notifications')}/></I18nProvider>)
     await user.click(screen.getByRole('button', { name: /桌面端/ }))
-    expect(await screen.findByRole('heading', { name: '桌面通知' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '桌面端' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: '通知声音' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '完成' }))
+    expect(screen.getByRole('heading', { name: '通用通知' })).toBeInTheDocument()
+    expect(screen.getByText('适用于所有已启用通知的浏览器')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '通知' }))
+    expect(screen.getByRole('heading', { name: '通知' })).toBeInTheDocument()
 
     view.rerender(<I18nProvider><PersonalSettings {...props('code-and-reviews')}/></I18nProvider>)
     await user.click(screen.getByRole('combobox', { name: 'Git 附件格式' }))

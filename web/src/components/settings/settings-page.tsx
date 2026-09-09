@@ -7,6 +7,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { persistUserSettings } from '@/lib/settings-persistence';
+import { UploadPolicyDialog } from './upload-policy-dialog';
+import { canManageTeamSettings } from '@/lib/settings-permissions';
 import {
   Activity,
   AppWindow,
@@ -212,6 +215,8 @@ type SettingListItem = {
 type SettingsPageProps = {
   data: BootstrapData;
   page: SettingsPageId;
+  notificationChannel?: 'desktop'|'mobile'|'email'|'slack';
+  onNavigateNotification?: (channel?: 'desktop'|'mobile'|'email'|'slack') => void;
   apiKeyMode?: "new" | "detail" | "edit";
   apiKeyId?: string;
   signingKeyMode?: "new";
@@ -616,18 +621,7 @@ function SettingsBody(
     "connections",
     "agents",
   ].includes(page);
-  const teamOwner =
-    page === "team" &&
-    props.data.teams.some(
-      (team) =>
-        team.key.toLowerCase() === props.teamKey?.toLowerCase() &&
-        props.data.teamMembers.some(
-          (member) =>
-            member.teamId === team.id &&
-            member.userId === props.data.viewer.id &&
-            member.role === "owner",
-        ),
-    );
+  const teamOwner = page === 'team' && props.data.teams.some(team => team.key.toLowerCase()===props.teamKey?.toLowerCase() && canManageTeamSettings(props.data,team.id,props.teamSection));
   if (
     !personal &&
     !isWorkspaceAdmin &&
@@ -655,6 +649,8 @@ function SettingsBody(
     return (
       <PersonalSettings
         page={page}
+        notificationChannel={props.notificationChannel}
+        onNavigateNotification={props.onNavigateNotification}
         apiKeyMode={props.apiKeyMode}
         apiKeyId={props.apiKeyId}
         signingKeyMode={props.signingKeyMode}
@@ -1728,6 +1724,7 @@ function SecuritySupplement({
   onNavigate: (page: SettingsPageId) => void;
   onReload: () => Promise<void>;
 }) {
+  const [uploadPolicyOpen,setUploadPolicyOpen] = useState(false);
   const settings = data.workspaceSettings;
   const save = async (patch: Partial<WorkspaceSettings>) => {
     try {
@@ -1747,9 +1744,10 @@ function SecuritySupplement({
           title="Restrict file uploads"
           description="Restrict uploaded file types. Images and videos remain allowed."
         >
-          <ActionButton>Configure</ActionButton>
+          <ActionButton onClick={()=>setUploadPolicyOpen(true)}>Configure</ActionButton>
         </Row>
       </Section>
+      {uploadPolicyOpen && <UploadPolicyDialog settings={settings} onSave={async patch=>{await updateWorkspacePreferences(patch);await onReload()}} onClose={()=>setUploadPolicyOpen(false)}/>}
       <Section title="Application approvals">
         <Row
           title="Review third-party applications"
@@ -3879,46 +3877,39 @@ function sameStoredValues(
 }
 function useUserStoredSettings(data: BootstrapData) {
   const source = data.userSettings[data.viewer.id];
-  const sourceRef = useRef(source);
-  sourceRef.current = source;
-  const dirtyRef = useRef(false);
+  const pending = useRef(0);
   const [state, setStateInternal] = useState<StoredSettings>(() => ({
     values: storedUserValues(source),
     lists: {},
   }));
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const setState = useCallback<
     React.Dispatch<React.SetStateAction<StoredSettings>>
   >((update) => {
-    dirtyRef.current = true;
-    setStateInternal(update);
-  }, []);
+    const before = stateRef.current;
+    const next = typeof update === 'function' ? update(before) : update;
+    const patch = Object.fromEntries(Object.entries(next.values).filter(([key,value]) => !Object.is(value,before.values[key])));
+    stateRef.current = next;
+    setStateInternal(next);
+    if (!Object.keys(patch).length) return;
+    pending.current++;
+    void persistUserSettings(data.workspace.urlKey,data.viewer.id,patch as Partial<UserSettings>).catch(() => {
+      setStateInternal(current => ({...current,values:{...current.values,...Object.fromEntries(Object.entries(patch).filter(([key,value]) => Object.is(current.values[key],value)).map(([key]) => [key,before.values[key]]))}}));
+      toast.error('Could not save settings');
+    }).finally(() => { pending.current--; });
+  }, [data.workspace.urlKey,data.viewer.id]);
   useEffect(() => {
     const next = data.userSettings[data.viewer.id];
     if (next)
       setStateInternal((current) => {
-        if (dirtyRef.current) return current;
+        if (pending.current) return current;
         const values = storedUserValues(next);
         return sameStoredValues(current.values, values)
           ? current
           : { ...current, values };
       });
   }, [data.userSettings, data.viewer.id]);
-  useEffect(() => {
-    if (!dirtyRef.current) return;
-    const timeout = window.setTimeout(() => {
-      const current = sourceRef.current;
-      if (!current) return;
-      dirtyRef.current = false;
-      void updateUserSettings({
-        ...current,
-        ...state.values,
-      } as UserSettings).catch(() => {
-        dirtyRef.current = true;
-        toast.error("Could not save settings");
-      });
-    }, 250);
-    return () => window.clearTimeout(timeout);
-  }, [data.viewer.id, state.values]);
   useEffect(() => {
     const root = document.documentElement;
     applyTheme(state.values);

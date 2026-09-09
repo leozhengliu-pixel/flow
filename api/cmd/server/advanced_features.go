@@ -835,7 +835,12 @@ func (s *server) createCustomerRequestAttachment(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusInternalServerError, "could not store attachment")
 		return
 	}
-	size, copyErr := storage.Put(r.Context(), safeName, io.LimitReader(file, (20<<20)+1), header.Header.Get("Content-Type"))
+	upload, policyErr := s.checkUploadPolicy(workspaceKey(r), header.Filename, file)
+	if policyErr != nil {
+		writeError(w, http.StatusForbidden, policyErr.Error())
+		return
+	}
+	size, copyErr := storage.Put(r.Context(), safeName, io.LimitReader(upload, (20<<20)+1), header.Header.Get("Content-Type"))
 	if copyErr != nil || size > 20<<20 {
 		_ = storage.Delete(r.Context(), safeName)
 		if size > 20<<20 {
@@ -2893,8 +2898,7 @@ func (s *server) createExport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) completeExport(workspaceKey, id string) {
-	time.Sleep(100 * time.Millisecond)
-	_ = s.store.MutateWorkspace(context.Background(), workspaceKey, "export.completed", id, nil, func(data *domain.Bootstrap) error {
+	_ = s.store.MutateWorkspace(s.store.WorkerContext(), workspaceKey, "export.completed", id, nil, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ExportJobs, func(item domain.ExportJob) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -2909,11 +2913,23 @@ func (s *server) completeExport(workspaceKey, id string) {
 }
 
 func (s *server) downloadExport(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.BootstrapFor(workspaceKey(r))
-	if !ok {
+	ctx, release, err := s.store.BeginWorkspaceRead(r.Context(), workspaceKey(r))
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
+	defer release()
+	r = r.WithContext(ctx)
+	userID := ""
+	if !s.authDisabled {
+		userID = authUser(r).ID
+	}
+	data, err := s.store.BootstrapOutline(r.Context(), workspaceKey(r), userID)
+	if err != nil {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
+	filterBootstrapForAPIKey(&data, r)
 	id := r.PathValue("id")
 	index := slices.IndexFunc(data.ExportJobs, func(item domain.ExportJob) bool {
 		return item.ID == id && (s.authDisabled || item.UserID == authUser(r).ID)
@@ -2933,7 +2949,24 @@ func (s *server) downloadExport(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 		writer := csv.NewWriter(w)
 		_ = writer.Write([]string{"ID", "Team", "Title", "Description", "Status", "Estimate", "Priority", "Project ID", "Project", "Creator", "Assignee", "Labels", "Cycle Number", "Cycle Name", "Cycle Start", "Cycle End", "Created", "Updated", "Started", "Triaged", "Completed", "Canceled", "Archived", "Due Date", "Parent issue", "Initiatives", "Project Milestone ID", "Project Milestone", "SLA Status"})
-		for _, issue := range data.Issues {
+		visible := map[string]bool{}
+		outlines := map[string]*domain.Issue{}
+		parents := map[string]string{}
+		for i, issue := range data.Issues {
+			visible[issue.ID] = true
+			outlines[issue.ID] = &data.Issues[i]
+			parents[issue.ID] = issue.Identifier
+		}
+		err := s.store.WalkIssueRecords(r.Context(), store.IssueRecordQuery{Workspace: data.Workspace.URLKey, Archived: "all"}, func(issue domain.Issue) error {
+			if !visible[issue.ID] {
+				return nil
+			}
+			outline := outlines[issue.ID]
+			issue.Project = outline.Project
+			issue.Team = outline.Team
+			issue.Labels = outline.Labels
+			issue.Assignee = outline.Assignee
+			issue.Creator = outline.Creator
 			assignee, projectID, projectName := "", "", ""
 			if issue.Assignee != nil {
 				assignee = issue.Assignee.DisplayName
@@ -2959,9 +2992,7 @@ func (s *server) downloadExport(w http.ResponseWriter, r *http.Request) {
 			}
 			parent := ""
 			if issue.ParentID != nil {
-				if parentIndex := slices.IndexFunc(data.Issues, func(item domain.Issue) bool { return item.ID == *issue.ParentID }); parentIndex >= 0 {
-					parent = data.Issues[parentIndex].Identifier
-				}
+				parent = parents[*issue.ParentID]
 			}
 			milestoneID, milestoneName, initiativeNames := "", "", []string{}
 			if issue.ProjectMilestoneID != nil {
@@ -2987,13 +3018,27 @@ func (s *server) downloadExport(w http.ResponseWriter, r *http.Request) {
 				slaStatus = data.IssueSLAs[slaIndex].Status
 			}
 			_ = writer.Write([]string{issue.Identifier, issue.Team.Name, csvText(issue.Title), csvText(issue.Description), issue.State.Name, estimate, issue.PriorityLabel, projectID, projectName, issue.Creator.DisplayName, assignee, strings.Join(labels, ", "), cycleNumber, cycleName, cycleStart, cycleEnd, formatExportTime(&issue.CreatedAt), formatExportTime(&issue.UpdatedAt), formatExportTime(issue.StartedAt), formatExportTime(issue.TriagedAt), formatExportTime(issue.CompletedAt), formatExportTime(issue.CanceledAt), formatExportTime(issue.ArchivedAt), stringValue(issue.DueDate), parent, strings.Join(initiativeNames, ", "), milestoneID, milestoneName, slaStatus})
+			return writer.Error()
+		})
+		if err != nil {
+			return
 		}
 		writer.Flush()
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	packageData := map[string]any{"workspace": data.Workspace, "teams": data.Teams, "users": data.Users, "issues": data.Issues, "projects": data.Projects, "documents": data.Documents, "customers": data.Customers, "customerRequests": data.CustomerRequests, "releases": data.Releases, "asks": data.Asks, "comments": data.Comments, "activities": data.Activities, "labels": data.Labels, "workflowStates": data.States, "cycles": data.Cycles, "templates": map[string]any{"issues": data.IssueTemplates, "projects": data.ProjectTemplates}, "exportedAt": time.Now().UTC()}
-	_ = json.NewEncoder(w).Encode(packageData)
+	packageData := map[string]any{"workspace": data.Workspace, "teams": data.Teams, "users": data.Users, "issues": nil, "projects": data.Projects, "documents": data.Documents, "customers": data.Customers, "customerRequests": data.CustomerRequests, "releases": data.Releases, "asks": data.Asks, "comments": nil, "activities": nil, "labels": data.Labels, "workflowStates": data.States, "cycles": data.Cycles, "templates": map[string]any{"issues": data.IssueTemplates, "projects": data.ProjectTemplates}, "exportedAt": time.Now().UTC()}
+	raw, err := json.Marshal(packageData)
+	if err != nil {
+		writeError(w, 500, "could not encode export")
+		return
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		writeError(w, 500, "could not encode export")
+		return
+	}
+	s.writeStoredBootstrap(w, r, data, fields)
 }
 
 func formatExportTime(value *time.Time) string {

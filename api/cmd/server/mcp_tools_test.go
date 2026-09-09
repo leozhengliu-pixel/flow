@@ -4,15 +4,61 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
 )
+
+func TestMCPCommentsReadPersistedPages(t *testing.T) {
+	repository, actor, ctx := newMCPToolTestContext(t)
+	data := repository.Bootstrap()
+	issue := data.Issues[0]
+	if err := repository.MutateWorkspace(ctx, actor.WorkspaceKey, "test.comments", issue.ID, nil, func(next *domain.Bootstrap) error {
+		next.Comments[issue.ID] = nil
+		for i := 0; i < 75; i++ {
+			next.Comments[issue.ID] = append(next.Comments[issue.ID], domain.Comment{ID: fmt.Sprintf("paged-comment-%03d", i), Body: "Persisted comment", User: actor.User, CreatedAt: time.Unix(int64(i+1), 0).UTC()})
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	service := &server{store: repository}
+	cursor := ""
+	seen := map[string]bool{}
+	for page := 0; page < 4; page++ {
+		result, err := service.callFlowTool(ctx, actor, "list_comments", map[string]any{"issueId": issue.Identifier, "limit": float64(20), "cursor": cursor})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var decoded struct {
+			Items      []domain.Comment `json:"items"`
+			NextCursor string           `json:"nextCursor"`
+		}
+		if err := jsonClone(result, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		if len(decoded.Items) == 0 || len(decoded.Items) > 20 {
+			t.Fatalf("unexpected page size: %d", len(decoded.Items))
+		}
+		for _, comment := range decoded.Items {
+			if seen[comment.ID] {
+				t.Fatal("duplicate comment across pages")
+			}
+			seen[comment.ID] = true
+		}
+		cursor = decoded.NextCursor
+	}
+	if len(seen) != 75 || cursor != "" {
+		t.Fatalf("incomplete discussion: %d comments, cursor %q", len(seen), cursor)
+	}
+}
 
 func TestMCPHTTPProtocolLifecycle(t *testing.T) {
 	repository, actor, _ := newMCPToolTestContext(t)

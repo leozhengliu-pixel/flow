@@ -30,6 +30,29 @@ func (s *SQLiteStore) ResourceComment(ctx context.Context, workspace, resource, 
 	return comment, err
 }
 
+func (s *SQLiteStore) WalkContentRecords(ctx context.Context, workspace, kind string, visit func(string, json.RawMessage) error) error {
+	var reader metadataReader = s.db
+	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.workspace == workspace {
+		reader = snapshot.reader
+	}
+	rows, err := reader.QueryContext(ctx, `SELECT resource_id,data FROM workspace_content_records WHERE workspace_key=? AND kind=? ORDER BY resource_id,created_at,id`, workspace, kind)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var resource string
+		var raw json.RawMessage
+		if err := rows.Scan(&resource, &raw); err != nil {
+			return err
+		}
+		if err := visit(resource, raw); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
 func (s *SQLiteStore) CommentResource(ctx context.Context, workspace, id string) (string, domain.Comment, error) {
 	var resource string
 	var raw []byte
@@ -95,7 +118,7 @@ func (s *SQLiteStore) ensureContentRecords(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, `ALTER TABLE workspace_content_records ADD COLUMN record_version INTEGER NOT NULL DEFAULT 0`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
 		return err
 	}
-	for _, index := range []string{"content_owner_idx ON workspace_content_records(workspace_key,kind,owner_id,created_at,id)", "content_parent_idx ON workspace_content_records(workspace_key,kind,parent_id,id)", "content_identity_idx ON workspace_content_records(workspace_key,kind,id)", "content_status_idx ON workspace_content_records(workspace_key,kind,status,next_attempt_at,id)", "content_version_idx ON workspace_content_records(record_version,workspace_key,kind,id)"} {
+	for _, index := range []string{"content_resource_order_idx ON workspace_content_records(workspace_key,kind,resource_id,created_at,id)", "content_owner_idx ON workspace_content_records(workspace_key,kind,owner_id,created_at,id)", "content_parent_idx ON workspace_content_records(workspace_key,kind,parent_id,id)", "content_identity_idx ON workspace_content_records(workspace_key,kind,id)", "content_status_idx ON workspace_content_records(workspace_key,kind,status,next_attempt_at,id)", "content_version_idx ON workspace_content_records(record_version,workspace_key,kind,id)"} {
 		prefix := "CREATE INDEX IF NOT EXISTS "
 		if s.dialect == "mysql" {
 			prefix = "CREATE INDEX "

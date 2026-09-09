@@ -200,6 +200,7 @@ func (s *SQLiteStore) ensureIssueRecords(ctx context.Context) error {
 		}
 	}
 	indexes := []string{
+		"issue_records_collection_idx ON issue_records(workspace_key,collection_order,id)",
 		"issue_records_order_idx ON issue_records(workspace_key,archived,sort_order,id)",
 		"issue_records_state_idx ON issue_records(workspace_key,archived,state_id,sort_order,id)",
 		"issue_records_team_idx ON issue_records(workspace_key,team_id,archived,sort_order,id)",
@@ -342,6 +343,53 @@ func (s *SQLiteStore) readIssueRecords(ctx context.Context, workspace string) ([
 		issues = append(issues, issue)
 	}
 	return issues, rows.Err()
+}
+
+// Bootstrap keeps only list fields while it computes viewer visibility and
+// counts. Full issue bodies are fetched in bounded batches during encoding.
+func (s *SQLiteStore) BootstrapOutline(ctx context.Context, workspace, userID string) (domain.Bootstrap, error) {
+	reader, data, ok := s.workspaceReadSource(ctx, workspace)
+	if !ok {
+		return data, ErrAuthForbidden
+	}
+	rows, err := reader.QueryContext(ctx, `SELECT COALESCE(list_data,data) FROM issue_records WHERE workspace_key=? ORDER BY collection_order,id`, data.Workspace.URLKey)
+	if err != nil {
+		return data, err
+	}
+	data.Issues = []domain.Issue{}
+	for rows.Next() {
+		var raw []byte
+		var issue domain.Issue
+		if err := rows.Scan(&raw); err != nil {
+			rows.Close()
+			return data, err
+		}
+		if err := json.Unmarshal(raw, &issue); err != nil {
+			rows.Close()
+			return data, err
+		}
+		normalizeIssueRecord(&issue)
+		data.Issues = append(data.Issues, issueListProjection(issue))
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return data, err
+	}
+	refreshIssueReferences(&data)
+	if userID != "" {
+		data, ok, err = s.projectBootstrapForUser(ctx, data, userID)
+		if err != nil {
+			return data, err
+		}
+		if !ok {
+			return data, ErrAuthForbidden
+		}
+	} else {
+		data.ViewerRole = "admin"
+		refreshResourceCounts(&data)
+	}
+	return data, nil
 }
 
 func normalizeIssueRecord(issue *domain.Issue) {

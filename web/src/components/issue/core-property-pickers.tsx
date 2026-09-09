@@ -8,6 +8,7 @@ import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
 import { PersonIdentityDetails } from '@/components/property/person-info'
 import { personDisplayName, personSearchText } from '@/lib/people'
+import { displayUserName, useUserPreferences } from '@/lib/runtime-preferences'
 
 export function StatusPicker({ value, states, onChange, hoverHistory }: { value: WorkflowState; states: WorkflowState[]; onChange: (id: string) => void | Promise<void>; hoverHistory?: { activities: ActivityEvent[]; issueCreatedAt: string } }) {
   const options = [...states].sort((left,right)=>(left.position??0)-(right.position??0)).map((state, index) => ({ id: state.id, label: state.name, icon: <StatusIcon state={state}/>, shortcut: String(index + 1) }))
@@ -108,6 +109,8 @@ export function PersonPicker({ ariaLabel, closeOnSelect, emptyOptionLabel, empty
   value?: string
 }) {
   const { t } = useI18n()
+  useUserPreferences()
+  people = people.map(person=>({...person,label:displayUserName({displayName:personDisplayName(person),name:person.name && person.name!==person.id ? person.name : personDisplayName(person)})}))
   const selectedSet = new Set(multiple ? selectedIds : selectedId ? [selectedId] : [])
   const selectedPeople = people.filter(person => selectedSet.has(person.id))
   const selected = selectedPeople[0]

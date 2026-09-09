@@ -893,6 +893,7 @@ type WorkspaceSettings struct {
 	ReviewThirdPartyApplications bool              `json:"reviewThirdPartyApplications"`
 	AllowedMCPConnectors         string            `json:"allowedMcpConnectors,omitempty"`
 	RestrictFileUploads          bool              `json:"restrictFileUploads"`
+	AllowedFileExtensions        []string          `json:"allowedFileExtensions,omitempty"`
 	ReduceSupportPersonalInfo    bool              `json:"reduceSupportPersonalInfo"`
 	HIPAACompliance              bool              `json:"hipaaCompliance"`
 	SCIMEnabled                  bool              `json:"scimEnabled,omitempty"`

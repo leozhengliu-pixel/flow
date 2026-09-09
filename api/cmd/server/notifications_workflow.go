@@ -1404,10 +1404,19 @@ func enqueueNotificationDeliveries(data *domain.Bootstrap, notification domain.N
 	}
 	if preferences.Email.Enabled && categoryEnabled(preferences.Email, notification.Category) {
 		status := "pending"
-		if preferences.EmailFormat == "digest" && !(preferences.ImmediateUrgent && notification.Category == "assignments") {
+		if preferences.EmailFormat == "digest" && !(preferences.ImmediateUrgent && notificationUrgent(data, notification)) {
 			status = "digest"
 		}
 		appendDelivery("email", status)
+		if status == "digest" {
+			for index := range data.NotificationDeliveries {
+				if data.NotificationDeliveries[index].ID == "delivery_"+notification.ID+"_email" {
+					due := notificationDigestDue(data, notification, preferences)
+					data.NotificationDeliveries[index].NextAttemptAt = &due
+					break
+				}
+			}
+		}
 	}
 	if preferences.Desktop.Enabled && categoryEnabled(preferences.Desktop, notification.Category) {
 		appendDelivery("desktop", "pending")

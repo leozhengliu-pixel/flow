@@ -10,8 +10,20 @@ func metadataReadRequest(r *http.Request) bool {
 	if len(p) < 2 {
 		return false
 	}
+	if r.Method == http.MethodGet {
+		switch r.URL.Path {
+		case "/api/workflows", "/api/workflow-runs", "/api/dashboards", "/api/posts", "/api/meetings", "/api/ai/conversations", "/api/customer-taxonomy":
+			return true
+		}
+		if p[1] == "imports" && len(p) <= 3 {
+			return true
+		}
+		if p[1] == "teams" && len(p) == 4 && p[3] == "resources" {
+			return true
+		}
+	}
 	switch p[1] {
-	case "account", "workspace", "api-keys", "oauth", "notification-preferences", "push-subscriptions", "agent-skills", "agent":
+	case "account", "workspace", "api-keys", "oauth", "notification-preferences", "push-subscriptions", "agent-skills", "agent", "exports":
 		return true
 	case "teams":
 		if len(p) >= 4 {

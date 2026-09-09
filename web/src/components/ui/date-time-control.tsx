@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 
 import { SelectControl } from './select-control'
 import './date-time-control.css'
+import { firstWeekday, useUserPreferences } from '@/lib/runtime-preferences'
 
 type Mode = 'date' | 'datetime'
 
@@ -26,7 +27,9 @@ export function DateTimeControl({
   const [view, setView] = useState(() => new Date(initial.year, initial.month - 1, 1))
   const [draftDate, setDraftDate] = useState(initial.date)
   const [draftTime, setDraftTime] = useState(initial.time)
-  const days = useMemo(() => calendarDays(view), [view])
+  const preferences = useUserPreferences()
+  const weekStart = firstWeekday(preferences.firstDay)
+  const days = useMemo(() => calendarDays(view,weekStart), [view,weekStart])
   const choose = (date: string) => {
     setDraftDate(date)
     if (mode === 'date') {
@@ -55,7 +58,7 @@ export function DateTimeControl({
     <Popover.Portal>
       <Popover.Content data-flow-motion="floating" align="start" className="date-time-popover" collisionPadding={8} sideOffset={4}>
         <header><button aria-label="Previous month" onClick={() => setView(new Date(view.getFullYear(), view.getMonth() - 1, 1))}><ChevronIcon direction="left"/></button><strong>{view.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</strong><button aria-label="Next month" onClick={() => setView(new Date(view.getFullYear(), view.getMonth() + 1, 1))}><ChevronIcon direction="right"/></button></header>
-        <div className="date-time-weekdays">{['S','M','T','W','T','F','S'].map((day,index)=><span key={`${day}-${index}`}>{day}</span>)}</div>
+        <div className="date-time-weekdays">{Array.from({length:7},(_,index)=>['S','M','T','W','T','F','S'][(index+weekStart)%7]).map((day,index)=><span key={`${day}-${index}`}>{day}</span>)}</div>
         <div className="date-time-grid">{days.map(day => {
           const iso = formatDate(day)
           const outside = day.getMonth() !== view.getMonth()
@@ -85,9 +88,9 @@ function displayValue(value: string, mode: Mode) {
   const date = parsed.date.replaceAll('-', '/')
   return mode === 'datetime' ? `${date} ${parsed.time}` : date
 }
-function calendarDays(view: Date) {
+function calendarDays(view: Date, weekStart = 1) {
   const first = new Date(view.getFullYear(), view.getMonth(), 1)
-  const start = new Date(view.getFullYear(), view.getMonth(), 1 - first.getDay())
+  const start = new Date(view.getFullYear(), view.getMonth(), 1 - ((first.getDay()-weekStart+7)%7))
   return Array.from({ length: 42 }, (_, index) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + index))
 }
 function formatDate(value: Date) { return `${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,'0')}-${String(value.getDate()).padStart(2,'0')}` }
