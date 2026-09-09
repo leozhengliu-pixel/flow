@@ -41,6 +41,71 @@ automatically at startup for all three drivers.
 | `FLOW_DATABASE_MAX_IDLE_CONNS` | driver default | `1` for SQLite, `5` otherwise. |
 | `FLOW_DATABASE_CONN_MAX_LIFETIME` | `30m` | Go duration for pooled connections. |
 | `FLOW_WORKSPACE_STATE_MAX_BYTES` | `67108864` | Maximum serialized workspace state size. Mutations fail before exceeding this limit. |
+| `FLOW_DATABASE_MAX_TRANSACTION_BYTES` | `33554432` | Cumulative SQL write text and parameter bytes per transaction. Exceeding the budget rolls back the transaction, even if a caller ignores the first error. Minimum 1 MiB. This is not a measurement of physical binlog bytes. |
+
+### Import writes and MySQL binary logs
+
+Issue imports compare existing records and update only changed entities and index
+entries. Replaying an identical batch does not write rows. Compatibility creation
+preserves existing collection positions instead of renumbering every issue.
+Label usage counts are not duplicated into stored issue payloads.
+Display-only changes to referenced users, teams, statuses, projects and labels
+are resolved from their authoritative records on reads. Persisted mutation events
+contain the mutation input or changed fields; unchanged descriptions are not
+copied into both current and previous event payloads. Webhook previous values
+contain only changed fields.
+
+Workspace metadata collections are persisted per entity or dictionary entry in
+`workspace_metadata_records`. Project and initiative updates are stored per
+update. CSV inputs and migration bundles have separate records, so changing a
+job status does not rewrite the uploaded source. Completed CSV jobs discard
+their source rows; incomplete jobs retain them for retry. Existing workspace JSON is
+migrated automatically and reconstructed by the normal API; public bootstrap
+response shapes remain unchanged. Back up the database before upgrading; an
+older server that cannot read the new metadata records must not be started on
+the migrated database. Stop old application writers during this upgrade; do not
+run mixed old/new versions against the same database.
+
+The row import storage API accepts at most 1000 records, 1 MiB per serialized
+issue, and 16 MiB per batch. HTTP batch updates accept at most 1000 IDs and
+deduplicate repeated IDs. CSV preview remains limited to 5000 rows and the
+existing upload limit. A transaction-budget error means that the batch must be
+split; committed batches remain intact. The limits bound individual operations,
+not the total data a client can import over time.
+An upgrade that exceeds the configured transaction budget fails without switching
+the affected workspace to a partially migrated layout. Migrate that workspace
+offline with a reviewed larger budget, then restore the operational limit.
+
+For a MySQL 8.4 deployment, [deploy/mysql/binlog.cnf](../deploy/mysql/binlog.cnf)
+provides an optional configuration with minimal row images, transaction
+compression, a 256 MiB binlog transaction-cache ceiling and seven-day retention.
+Install it through your database configuration management after checking that
+replication and point-in-time recovery support the chosen image format,
+compression and retention. Flow does not disable binary logging, weaken fsync,
+alter global MySQL settings or purge existing logs.
+
+The MySQL limits have different purposes: `max_binlog_size` rotates files and is
+not a total disk quota; `max_binlog_cache_size` rejects oversized transactions;
+`binlog_expire_logs_seconds` controls age-based expiry when automatic purge is
+enabled. Even efficient writes can fill a disk during a sustained import if
+retention and capacity are mismatched. Budget disk for measured binlog bytes per
+imported row times the retained row volume, plus database/undo/temp space, and
+pause the importer before the disk reserve is exhausted. Keep the retention
+window longer than the required backup recovery period and replica outage lag.
+See the [official MySQL binary log configuration reference](https://dev.mysql.com/doc/refman/8.4/en/replication-options-binary-log.html).
+
+The opt-in regression test uses a **fresh, isolated** MySQL database and measures
+actual `SHOW BINARY LOGS` byte increments with `ROW/FULL` enabled. It refuses a
+database that already has tables. Run it with an account that has DDL rights on
+that isolated database and `REPLICATION CLIENT`:
+
+```sh
+FLOW_TEST_WRITE_MYSQL_DSN='user:password@tcp(127.0.0.1:3306)/empty_test_database?parseTime=true' \
+FLOW_ASSERT_WRITE_BOUNDS=1 \
+go test ./cmd/server -run '^TestMySQLImportWriteAmplification$' -count=1 -v
+```
+
+Run from `api/`. CI also runs this check on its disposable MySQL service.
 
 Examples:
 

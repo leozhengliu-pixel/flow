@@ -488,6 +488,10 @@ func (s *SQLiteStore) QueryIssueRecords(ctx context.Context, query IssueRecordQu
 		raw, _ := json.Marshal(issueRecordCursor{Version: 1, Scope: hash, Value: lastValue, ID: page.Items[len(page.Items)-1].ID})
 		page.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
 	}
+	rows.Close()
+	if err := s.resolveIssueReferences(ctx, query.Workspace, page.Items); err != nil {
+		return page, err
+	}
 	return page, nil
 }
 
@@ -560,5 +564,10 @@ func (s *SQLiteStore) IssueRecord(ctx context.Context, workspace, id string) (do
 	var issue domain.Issue
 	err = json.Unmarshal(raw, &issue)
 	normalizeIssueRecord(&issue)
+	if err == nil {
+		items := []domain.Issue{issue}
+		err = s.resolveIssueReferences(ctx, workspace, items)
+		issue = items[0]
+	}
 	return issue, err
 }

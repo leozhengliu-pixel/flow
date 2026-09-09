@@ -1,0 +1,13 @@
+# MySQL 8.4 example. Match retention to your backup and replica recovery window
+# before installing this file on an existing server. Flow never changes these
+# global settings or purges logs itself.
+[mysqld]
+binlog_format=ROW
+binlog_row_image=MINIMAL
+binlog_transaction_compression=ON
+max_binlog_cache_size=268435456
+max_binlog_size=134217728
+binlog_expire_logs_auto_purge=ON
+binlog_expire_logs_seconds=604800
+sync_binlog=1
+innodb_flush_log_at_trx_commit=1

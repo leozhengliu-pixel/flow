@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import type { SettingsPageId } from '@/lib/app-routes'
 import { makeBootstrap, viewer } from '@/test/fixtures'
@@ -42,6 +42,12 @@ function props(page: SettingsPageId) {
 }
 
 describe('personal settings workflows', () => {
+  const credentialsDescriptor = Object.getOwnPropertyDescriptor(navigator, 'credentials')
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    if (credentialsDescriptor) Object.defineProperty(navigator, 'credentials', credentialsDescriptor)
+    else Reflect.deleteProperty(navigator, 'credentials')
+  })
   beforeEach(() => {
     localStorage.removeItem('flow:locale')
     Object.values(api).forEach(mock => mock.mockReset())
@@ -75,6 +81,74 @@ describe('personal settings workflows', () => {
     expect(input.setValue).toHaveBeenCalledWith('homeView', 'Inbox')
     await user.click(screen.getByRole('button', { name: 'Customize' }))
     expect(input.onCustomizeSidebar).toHaveBeenCalledOnce()
+  })
+
+  it('enrolls a passkey using binary WebAuthn options and serializes the credential for verification', async () => {
+    const user = userEvent.setup()
+    class Credential {
+      id = 'credential-one'
+      type = 'public-key'
+      rawId = new Uint8Array([251, 255]).buffer
+      response = {
+        clientDataJSON: new Uint8Array([1, 2, 3]).buffer,
+        attestationObject: new Uint8Array([4, 5]).buffer,
+        getTransports: () => ['internal'],
+      }
+    }
+    vi.stubGlobal('PublicKeyCredential', Credential)
+    vi.stubGlobal('isSecureContext', true)
+    const create = vi.fn().mockResolvedValue(new Credential())
+    Object.defineProperty(navigator, 'credentials', {configurable:true,value:{create}})
+    api.beginPasskeyRegistration.mockResolvedValue({registrationId:'registration-one',options:{publicKey:{challenge:'AQID',rp:{name:'Flow',id:'localhost'},user:{id:'-_8',name:'viewer',displayName:'Viewer'},pubKeyCredParams:[{type:'public-key',alg:-7}],excludeCredentials:[{type:'public-key',id:'BAU',transports:['usb']}]}}})
+    api.finishPasskeyRegistration.mockResolvedValue({id:'passkey-one',name:'Passkey',createdAt:'2026-09-01T00:00:00Z'})
+    render(<I18nProvider><PersonalSettings {...props('account-security')}/></I18nProvider>)
+    await user.click(await screen.findByRole('button',{name:'New passkey'}))
+    await screen.findByText('Passkey', {exact:true})
+    const options = create.mock.calls[0][0].publicKey
+    expect([...new Uint8Array(options.challenge)]).toEqual([1,2,3])
+    expect([...new Uint8Array(options.user.id)]).toEqual([251,255])
+    expect([...new Uint8Array(options.excludeCredentials[0].id)]).toEqual([4,5])
+    expect(options.rp.id).toBe('localhost')
+    expect(api.finishPasskeyRegistration).toHaveBeenCalledWith({registrationId:'registration-one',name:'Passkey',credential:{id:'credential-one',type:'public-key',rawId:'-_8',response:{clientDataJSON:'AQID',attestationObject:'BAU',transports:['internal']}}})
+  })
+
+  it('does not save a cancelled passkey enrollment and permits retry', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('PublicKeyCredential', class {})
+    vi.stubGlobal('isSecureContext', true)
+    const create = vi.fn().mockResolvedValue(null)
+    Object.defineProperty(navigator, 'credentials', {configurable:true,value:{create}})
+    api.beginPasskeyRegistration.mockResolvedValue({registrationId:'canceled',options:{challenge:'AQ',user:{id:'Ag'}}})
+    render(<I18nProvider><PersonalSettings {...props('account-security')}/></I18nProvider>)
+    const enroll = await screen.findByRole('button',{name:'New passkey'})
+    await user.click(enroll)
+    await waitFor(()=>expect(enroll).toBeEnabled())
+    expect(create).toHaveBeenCalledOnce()
+    expect(api.finishPasskeyRegistration).not.toHaveBeenCalled()
+    expect(screen.getByText('No passkeys registered')).toBeVisible()
+    await user.click(enroll)
+    await waitFor(()=>expect(create).toHaveBeenCalledTimes(2))
+  })
+
+  it('renames and revokes a passkey only after confirming, preserving it after cancellation', async () => {
+    const user = userEvent.setup()
+    const passkey = {id:'passkey-one',name:'Laptop',createdAt:'2026-09-01T00:00:00Z',lastUsedAt:'2026-09-02T00:00:00Z'}
+    api.fetchPasskeys.mockResolvedValue([passkey])
+    api.updatePasskey.mockImplementation(async (id,name)=>({...passkey,id,name}))
+    render(<I18nProvider><PersonalSettings {...props('account-security')}/></I18nProvider>)
+    await user.click(await screen.findByRole('button',{name:'Rename'}))
+    await user.clear(screen.getByRole('textbox',{name:'Passkey name'}))
+    await user.type(screen.getByRole('textbox',{name:'Passkey name'}), '  Work laptop  {Enter}')
+    await screen.findByText('Work laptop', {exact:true})
+    expect(api.updatePasskey).toHaveBeenCalledWith('passkey-one','Work laptop')
+    await user.click(screen.getByRole('button',{name:'Revoke'}))
+    await user.click(within(screen.getByRole('dialog',{name:'Revoke passkey?'})).getByRole('button',{name:'Cancel'}))
+    expect(api.deletePasskey).not.toHaveBeenCalled()
+    expect(screen.getByText('Work laptop')).toBeVisible()
+    await user.click(screen.getByRole('button',{name:'Revoke'}))
+    await user.click(within(screen.getByRole('dialog',{name:'Revoke passkey?'})).getByRole('button',{name:'Revoke'}))
+    await screen.findByText('No passkeys registered')
+    expect(api.deletePasskey).toHaveBeenCalledWith('passkey-one')
   })
 
   it('validates and persists profile edits and workspace departure', async () => {

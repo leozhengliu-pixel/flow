@@ -2521,9 +2521,8 @@ func (s *server) commitImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	go func() {
-		request := r.Clone(context.Background())
+		request := r.Clone(context.WithoutCancel(r.Context()))
 		request.Body = io.NopCloser(bytes.NewReader(body))
-		request = request.WithContext(context.Background())
 		s.commitImportSync(httptest.NewRecorder(), request)
 	}()
 	writeJSON(w, http.StatusAccepted, job)
@@ -2750,6 +2749,21 @@ func (s *server) commitImportSync(w http.ResponseWriter, r *http.Request) {
 		appendAudit(data, "completed", "import", id, map[string]any{"imported": job.Imported, "errors": len(job.Errors)})
 		return nil
 	})
+	if err != nil {
+		failure := err.Error()
+		_ = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "import.failed", id, nil, func(data *domain.Bootstrap) error {
+			index := slices.IndexFunc(data.ImportJobs, func(job domain.ImportJob) bool {
+				return job.ID == id && job.UserID == data.Viewer.ID && job.Status == "running"
+			})
+			if index < 0 {
+				return errNotFound
+			}
+			data.ImportJobs[index].Status = "failed"
+			data.ImportJobs[index].Error = failure
+			data.ImportJobs[index].UpdatedAt = time.Now().UTC()
+			return nil
+		})
+	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
