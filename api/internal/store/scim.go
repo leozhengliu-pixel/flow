@@ -94,7 +94,7 @@ func (s *SQLiteStore) ensureSCIMSchema(ctx context.Context) error {
 }
 
 func (s *SQLiteStore) MustWorkspaceID(workspaceKey string) string {
-	if data, ok := s.BootstrapFor(strings.TrimSpace(workspaceKey)); ok {
+	if data, ok := s.WorkspaceMetadata(strings.TrimSpace(workspaceKey)); ok {
 		return data.Workspace.ID
 	}
 	return ""

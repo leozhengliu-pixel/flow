@@ -345,7 +345,7 @@ func (s *server) receiveReleasePipelineEvent(w http.ResponseWriter, r *http.Requ
 	pipelineID := r.PathValue("id")
 	workspaceKey := ""
 	for _, key := range s.store.WorkspaceKeys() {
-		data, ok := s.store.BootstrapFor(key)
+		data, ok := s.store.WorkspaceMetadata(key)
 		if !ok {
 			continue
 		}
