@@ -350,6 +350,25 @@ database service completes its first-time initialization.
 
 ## Row-Backed Issue Collections
 
+Existing clients using `/api/issues` now send writes through the bounded issue
+record implementation without changing their URLs. SSE connections and presence
+heartbeats also use indexed entity visibility checks regardless of the web build
+flag; they no longer retain a complete issue collection for each connection.
+Legacy scalar patches keep their existing field-merge behavior, while document
+snapshot versions remain checked.
+
+The legacy `/api/bootstrap` response still includes complete collections. Its
+large arrays are encoded incrementally, and only one legacy bootstrap runs per
+API process at a time. Cancelled queued requests do not load the workspace.
+This reduces transient memory but does not turn the legacy client into a paged
+client. Other compatibility workflows may still require complete collections.
+
+For an app container limited to 1 GiB, `GOMEMLIMIT=650MiB` can leave headroom for
+runtime overhead and filesystem cache. Compose passes this optional environment
+variable through. It is a soft Go memory target, not a hard cap or an assurance
+that arbitrary workspaces fit in 1 GiB; measure the actual workload and retain
+the container memory limit.
+
 The API stores issues in `issue_records`, with separate indexed label,
 subscriber, permission, and activity references. Comments, activity events,
 notifications, and notification deliveries use entity records instead of the

@@ -1098,6 +1098,12 @@ func (s *SQLiteStore) Bootstrap() domain.Bootstrap {
 }
 
 func (s *SQLiteStore) BootstrapFor(workspaceKey string) (domain.Bootstrap, bool) {
+	return s.BootstrapForContext(context.Background(), workspaceKey)
+}
+
+// Propagate request cancellation through compatibility collection reads so a
+// disconnected browser does not keep decoding the workspace in the background.
+func (s *SQLiteStore) BootstrapForContext(ctx context.Context, workspaceKey string) (domain.Bootstrap, bool) {
 	s.mu.RLock()
 	if workspaceKey == "" {
 		workspaceKey = s.lastWorkspaceKey
@@ -1114,13 +1120,13 @@ func (s *SQLiteStore) BootstrapFor(workspaceKey string) (domain.Bootstrap, bool)
 	var clone domain.Bootstrap
 	_ = json.Unmarshal(raw, &clone)
 	if data.Issues == nil {
-		issues, err := s.readIssueRecords(context.Background(), data.Workspace.URLKey)
+		issues, err := s.readIssueRecords(ctx, data.Workspace.URLKey)
 		if err != nil {
 			return domain.Bootstrap{}, false
 		}
 		clone.Issues = issues
 	}
-	if err := s.hydrateContentRecords(context.Background(), data.Workspace.URLKey, &clone); err != nil {
+	if err := s.hydrateContentRecords(ctx, data.Workspace.URLKey, &clone); err != nil {
 		return domain.Bootstrap{}, false
 	}
 	refreshResourceCounts(&clone)

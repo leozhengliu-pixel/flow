@@ -2945,7 +2945,7 @@ func csvText(value string) string {
 }
 
 func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
-	data, ok := s.store.BootstrapFor(key)
+	data, ok := s.store.WorkspaceMetadata(key)
 	if !ok {
 		return
 	}
@@ -2968,12 +2968,10 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 			missing := now.After(dueAt)
 			dueSoon := leadReminders && !missing && now.After(dueAt.Add(-24*time.Hour))
 			latestOutdated := len(updates) > 0 && (updates[0].DueAt == nil || !updates[0].DueAt.Equal(dueAt) || updates[0].Missing != missing)
-			activeMissingReminder := slices.ContainsFunc(data.Notifications, func(item domain.Notification) bool {
-				return item.ProjectID == project.ID && item.Type == "projectUpdateReminder" && item.ArchivedAt == nil && item.DeletedAt == nil
-			})
-			activeDueReminder := slices.ContainsFunc(data.Notifications, func(item domain.Notification) bool {
-				return item.ProjectID == project.ID && item.Type == "projectUpdateDueReminder" && item.ArchivedAt == nil && item.DeletedAt == nil
-			})
+			activeMissingReminder, activeDueReminder, err := s.store.ProjectReminderFlags(ctx, data.Workspace.URLKey, project.ID)
+			if err != nil {
+				return
+			}
 			if latestOutdated || (missing && (project.Health != "noUpdate" || (missingNotifications && !activeMissingReminder))) || (!missing && activeMissingReminder) || dueSoon != activeDueReminder {
 				needsMutation = true
 				break
