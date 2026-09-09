@@ -51,39 +51,15 @@ func issueAttributes(issue domain.Issue) map[string]string {
 }
 
 func writeIssueAttributes(ctx context.Context, tx *sqlTx, workspace string, issues []domain.Issue) error {
-	if len(issues) == 0 {
-		return nil
-	}
 	ids := make([]string, len(issues))
+	desired := [][]string{}
 	for i, issue := range issues {
 		ids[i] = issue.ID
-	}
-	where, args := bindList("issue_id", ids)
-	if _, err := tx.ExecContext(ctx, `DELETE FROM issue_attribute_records WHERE workspace_key=? AND `+where, append([]any{workspace}, args...)...); err != nil {
-		return err
-	}
-	var tuples []string
-	var values []any
-	flush := func() error {
-		if len(tuples) == 0 {
-			return nil
-		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO issue_attribute_records(workspace_key,issue_id,field,value) VALUES `+strings.Join(tuples, ","), values...)
-		tuples, values = nil, nil
-		return err
-	}
-	for _, issue := range issues {
 		for field, value := range issueAttributes(issue) {
-			tuples = append(tuples, "(?,?,?,?)")
-			values = append(values, workspace, issue.ID, field, value)
-			if len(tuples) == 200 {
-				if err := flush(); err != nil {
-					return err
-				}
-			}
+			desired = append(desired, []string{issue.ID, field, value})
 		}
 	}
-	return flush()
+	return syncIssueIndexRows(ctx, tx, workspace, "issue_attribute_records", []string{"issue_id", "field", "value"}, 2, ids, desired)
 }
 
 func (s *SQLiteStore) migrateIssueAttributes(ctx context.Context) error {

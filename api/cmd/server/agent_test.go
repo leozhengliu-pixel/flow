@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -153,11 +156,11 @@ func TestAgentSessionStreamsResponsesAndExecutesReadTools(t *testing.T) {
 }
 
 func TestAgentSessionWriteToolsRequireApproval(t *testing.T) {
-	providerCalls := 0
+	var providerCalls atomic.Int32
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		providerCalls++
+		call := providerCalls.Add(1)
 		w.Header().Set("Content-Type", "text/event-stream")
-		if providerCalls == 1 {
+		if call == 1 {
 			_, _ = w.Write([]byte("event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"item_write\",\"call_id\":\"call_write\",\"type\":\"function_call\",\"name\":\"save_issue\",\"arguments\":\"{}\"}}\n\n" +
 				"event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"item_id\":\"item_write\",\"arguments\":\"{}\"}\n\n" +
 				"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"))
@@ -172,35 +175,53 @@ func TestAgentSessionWriteToolsRequireApproval(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repository.Close()
-	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true, agent: appconfig.AgentConfig{Enabled: true, Protocol: "openai-responses", BaseURL: provider.URL, Model: "flow-test", MaxOutputTokens: 256, ToolsEnabled: true, WriteTools: true}, agentClient: provider.Client()})
-	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/api/agent/sessions/stream", strings.NewReader(`{"message":"Update the issue","location":"page"}`))
+	s := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true, agent: appconfig.AgentConfig{Enabled: true, Protocol: "openai-responses", BaseURL: provider.URL, Model: "flow-test", MaxOutputTokens: 256, ToolsEnabled: true, WriteTools: true}, agentClient: provider.Client()}
+	handler := newHandler(s)
+	defer s.stopDeliveryScheduler(context.Background())
+	host := httptest.NewServer(handler)
+	defer host.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, host.URL+"/api/agent/sessions/stream", strings.NewReader(`{"message":"Update the issue","location":"page"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
 	request.Header.Set("Content-Type", "application/json")
-	done := make(chan struct{})
-	go func() {
-		handler.ServeHTTP(recorder, request)
-		close(done)
-	}()
+	response, err := host.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("stream status=%d", response.StatusCode)
+	}
+	// Consume flushed SSE frames over HTTP. ResponseRecorder's buffer is not
+	// safe to read while the streaming handler writes to it.
+	scanner := bufio.NewScanner(response.Body)
+	var stream strings.Builder
 	var approvalID string
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		body := recorder.Body.String()
-		marker := `"approvalId":"agent_approval_`
-		if index := strings.Index(body, marker); index >= 0 {
-			start := index + len(`"approvalId":"`)
-			if end := strings.IndexByte(body[start:], '"'); end >= 0 {
-				approvalID = body[start : start+end]
-				break
-			}
+	for scanner.Scan() {
+		line := scanner.Text()
+		stream.WriteString(line + "\n")
+		if !strings.HasPrefix(line, "data: ") {
+			continue
 		}
-		time.Sleep(10 * time.Millisecond)
+		var event agentStreamEvent
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event); err != nil {
+			t.Fatal(err)
+		}
+		if event.Type == "tool.approval_required" {
+			approvalID = event.ApprovalID
+			break
+		}
 	}
 	if approvalID == "" {
-		t.Fatalf("approval event not emitted: %s", recorder.Body.String())
+		t.Fatalf("approval event not emitted: %v %s", scanner.Err(), stream.String())
+	}
+	if providerCalls.Load() != 1 || strings.Contains(stream.String(), "event: tool.completed") {
+		t.Fatal("tool continued before approval")
 	}
 	resolve := httptest.NewRecorder()
-	approvalRequest := httptest.NewRequest(http.MethodPost, "/api/agent/sessions/agent_session_pending/approvals/"+approvalID, strings.NewReader(`{"decision":"approve"}`))
-	approvalRequest.Header.Set("Content-Type", "application/json")
 	// The session id is supplied by the session.started event. Resolve against
 	// the actual persisted session rather than relying on an invented id.
 	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
@@ -208,18 +229,19 @@ func TestAgentSessionWriteToolsRequireApproval(t *testing.T) {
 	if len(sessions) != 1 || sessions[0].UserID != bootstrap.Viewer.ID {
 		t.Fatalf("stream did not create a session: %#v", sessions)
 	}
-	approvalRequest = httptest.NewRequest(http.MethodPost, "/api/agent/sessions/"+sessions[0].ID+"/approvals/"+approvalID, strings.NewReader(`{"decision":"approve"}`))
+	approvalRequest := httptest.NewRequest(http.MethodPost, "/api/agent/sessions/"+sessions[0].ID+"/approvals/"+approvalID, strings.NewReader(`{"decision":"approve"}`))
 	approvalRequest.Header.Set("Content-Type", "application/json")
 	handler.ServeHTTP(resolve, approvalRequest)
 	if resolve.Code != http.StatusOK {
 		t.Fatalf("approval response status=%d body=%s", resolve.Code, resolve.Body.String())
 	}
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("stream did not resume after approval")
+	for scanner.Scan() {
+		stream.WriteString(scanner.Text() + "\n")
 	}
-	if providerCalls != 2 || !strings.Contains(recorder.Body.String(), "tool.approval_required") || !strings.Contains(recorder.Body.String(), "tool.approval_resolved") || !strings.Contains(recorder.Body.String(), "Write approved.") {
-		t.Fatalf("approval stream incomplete calls=%d body=%s", providerCalls, recorder.Body.String())
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("stream did not resume after approval: %v", err)
+	}
+	if providerCalls.Load() != 2 || !strings.Contains(stream.String(), "tool.approval_required") || !strings.Contains(stream.String(), "tool.approval_resolved") || !strings.Contains(stream.String(), "Write approved.") || !strings.Contains(stream.String(), "session.completed") {
+		t.Fatalf("approval stream incomplete calls=%d body=%s", providerCalls.Load(), stream.String())
 	}
 }

@@ -1,8 +1,11 @@
 package store
 
 import (
+	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -23,6 +26,27 @@ func (s *SQLiteStore) IssueContent(ctx context.Context, workspace, id string) ([
 	activities, err := readContentRecords[domain.ActivityEvent](ctx, s, workspace, "activity", &id)
 	if err != nil {
 		return nil, nil, err
+	}
+	ids := []string{}
+	for _, comment := range comments[id] {
+		ids = append(ids, comment.User.ID)
+	}
+	for _, activity := range activities[id] {
+		ids = append(ids, activity.Actor.ID)
+	}
+	refs, err := s.readIssueReferences(ctx, workspace, ids)
+	if err != nil {
+		return nil, nil, err
+	}
+	for i, comment := range comments[id] {
+		if user, ok := refs.users[comment.User.ID]; ok {
+			comments[id][i].User = user
+		}
+	}
+	for i, activity := range activities[id] {
+		if user, ok := refs.users[activity.Actor.ID]; ok {
+			activities[id][i].Actor = user
+		}
 	}
 	return comments[id], activities[id], nil
 }
@@ -80,6 +104,15 @@ func writeContentRecord[T any](ctx context.Context, tx *sqlTx, workspace, kind, 
 	id, created, err := contentRecordIdentity(item)
 	if err != nil {
 		return err
+	}
+	var previous []byte
+	var version int
+	err = tx.QueryRowContext(ctx, `SELECT data,record_version FROM workspace_content_records WHERE workspace_key=? AND kind=? AND resource_id=? AND id=?`, workspace, kind, resource, id).Scan(&previous, &version)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if err == nil && version == 1 && bytes.Equal(previous, raw) {
+		return nil
 	}
 	var identity struct {
 		RecipientID    string      `json:"recipientId"`
@@ -143,7 +176,8 @@ func writeContentRecord[T any](ctx context.Context, tx *sqlTx, workspace, kind, 
 	return err
 }
 
-func syncContentRecords[T any](ctx context.Context, tx *sqlTx, workspace, kind string, items map[string][]T, scopes ...[]string) error {
+func syncContentRecords[T any](ctx context.Context, tx *sqlTx, workspace, kind string, items map[string][]T, metadata domain.Bootstrap, scopes ...[]string) error {
+	refs := newIssueReferences(metadata)
 	query := `SELECT resource_id,id,data FROM workspace_content_records WHERE workspace_key=? AND kind=?`
 	args := []any{workspace, kind}
 	if len(scopes) > 0 {
@@ -182,7 +216,7 @@ func syncContentRecords[T any](ctx context.Context, tx *sqlTx, workspace, kind s
 				return err
 			}
 			k := key{resource, id}
-			if previous[k] != string(raw) {
+			if previous[k] != string(raw) && !refs.equalDisplayData([]byte(previous[k]), raw) {
 				if err := writeContentRecord(ctx, tx, workspace, kind, resource, value); err != nil {
 					return err
 				}
@@ -228,6 +262,9 @@ func readContentRecords[T any](ctx context.Context, s *SQLiteStore, workspace, k
 }
 
 func (s *SQLiteStore) hydrateContentRecords(ctx context.Context, workspace string, data *domain.Bootstrap) error {
+	if err := s.hydrateImportInputs(ctx, workspace, data); err != nil {
+		return err
+	}
 	var err error
 	if data.Activities == nil {
 		data.Activities, err = readContentRecords[domain.ActivityEvent](ctx, s, workspace, "activity", nil)
@@ -267,6 +304,7 @@ func (s *SQLiteStore) hydrateContentRecords(ctx context.Context, workspace strin
 func normalizeStoredMetadata(data *domain.Bootstrap) {
 	issues, activities, comments, notifications, deliveries := data.Issues == nil, data.Activities == nil, data.Comments == nil, data.Notifications == nil, data.NotificationDeliveries == nil
 	normalize(data)
+	refreshDisplayReferences(data)
 	if issues {
 		data.Issues = nil
 	}
@@ -297,6 +335,7 @@ func notificationRecords(values []domain.Notification) map[string][]domain.Notif
 }
 
 func collectionMetadata(data domain.Bootstrap) domain.Bootstrap {
+	data = compactImportInputs(data)
 	data.Issues = nil
 	data.Activities = nil
 	data.Comments = nil

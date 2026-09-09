@@ -135,7 +135,7 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 			}
 			last = max(last, issue.Number)
 			if !exists || !reflect.DeepEqual(old, issue) {
-				if err := s.writeIssueRecord(ctx, tx, workspace, issue); err != nil {
+				if err := s.writeIssueRecord(ctx, tx, workspace, issue, metadata); err != nil {
 					return err
 				}
 			}
@@ -176,6 +176,7 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 			}
 		}
 		metadata.ViewerRole = originalRole
+		metadata.Viewer = current.Viewer
 		metadata = collectionMetadata(metadata)
 		encoded, err = json.Marshal(metadata)
 		if err != nil {
@@ -184,7 +185,7 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 		if len(encoded) > s.maxStateBytes {
 			return fmt.Errorf("workspace metadata exceeds %d bytes", s.maxStateBytes)
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE workspace_states SET data=?,updated_at=? WHERE workspace_key=?`, encoded, time.Now().UTC().Format(time.RFC3339Nano), workspace); err != nil {
+		if err := writeWorkspaceMetadata(ctx, tx, workspace, metadata.Workspace.ID, encoded); err != nil {
 			return err
 		}
 		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: "issue.created", AggregateID: id, Payload: raw, CreatedAt: time.Now().UTC()}

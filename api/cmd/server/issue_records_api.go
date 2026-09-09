@@ -328,7 +328,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	mutationScope := store.IssueMutationScope{RelatedIDs: extra, IncludeFamily: input.StateID != nil || input.ParentID != nil}
+	mutationScope := store.IssueMutationScope{RelatedIDs: extra, IncludeFamily: input.StateID != nil || input.ParentID != nil, Payload: input}
 	if input.ParentID != nil {
 		mutationScope.NewParentID = *input.ParentID
 	}

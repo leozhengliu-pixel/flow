@@ -1,9 +1,13 @@
 package store
 
 import (
+	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -14,7 +18,7 @@ func isDuplicateIndex(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "duplicate key name")
 }
 
-var workspaceRecordTables = []string{"issue_records", "issue_label_records", "issue_subscriber_records", "issue_actor_records", "issue_permission_records", "issue_attribute_records", "issue_attribute_migrations", "issue_collection_counts", "issue_records_migrations", "issue_scope_counts", "issue_stats_migrations", "issue_number_sequences", "workspace_content_records"}
+var workspaceRecordTables = []string{"issue_records", "issue_label_records", "issue_subscriber_records", "issue_actor_records", "issue_permission_records", "issue_attribute_records", "issue_attribute_migrations", "issue_collection_counts", "issue_records_migrations", "issue_scope_counts", "issue_stats_migrations", "issue_number_sequences", "workspace_content_records", "workspace_metadata_records"}
 
 func (s *SQLiteStore) migrateIssueCollections(ctx context.Context) error {
 	for key, data := range s.workspaces {
@@ -37,7 +41,8 @@ func (s *SQLiteStore) migrateIssueCollections(ctx context.Context) error {
 	return nil
 }
 
-func (s *SQLiteStore) replaceIssueRecords(ctx context.Context, tx *sqlTx, workspace string, issues []domain.Issue) error {
+func (s *SQLiteStore) replaceIssueRecords(ctx context.Context, tx *sqlTx, workspace string, issues []domain.Issue, metadata domain.Bootstrap) error {
+	refs := newIssueReferences(metadata)
 	// Compatibility mutations supply the full collection; compare the existing
 	// row payloads so unchanged entities never become database writes.
 	rows, err := tx.QueryContext(ctx, `SELECT id,data,collection_order FROM issue_records WHERE workspace_key=?`, workspace)
@@ -62,22 +67,35 @@ func (s *SQLiteStore) replaceIssueRecords(ctx context.Context, tx *sqlTx, worksp
 		return err
 	}
 	rows.Close()
-	for position, issue := range issues {
-		raw, err := json.Marshal(issue)
+	order := issueCollectionOrder(issues, positions)
+	changed := []domain.Issue{}
+	deltas := map[issueStatsKey]int64{}
+	for _, issue := range issues {
+		position := order[issue.ID]
+		values, err := issueRecordValues(workspace, issue)
 		if err != nil {
 			return err
 		}
-		if previous[issue.ID] != string(raw) {
-			if err := s.writeIssueRecord(ctx, tx, workspace, issue); err != nil {
-				return err
+		raw := values[len(values)-1].([]byte)
+		if !equalIssueRecordData([]byte(previous[issue.ID]), raw) && !refs.equalOwned([]byte(previous[issue.ID]), issue) {
+			if old := previous[issue.ID]; old != "" {
+				var previousIssue domain.Issue
+				if err := json.Unmarshal([]byte(old), &previousIssue); err != nil {
+					return err
+				}
+				addIssueStats(deltas, issueStatsOf(previousIssue), -1)
 			}
-		}
-		if old, ok := positions[issue.ID]; !ok || old != position {
+			addIssueStats(deltas, issueStatsOf(issue), 1)
+			changed = append(changed, issue)
+		} else if old, ok := positions[issue.ID]; !ok || old != position {
 			if _, err := tx.ExecContext(ctx, `UPDATE issue_records SET collection_order=? WHERE workspace_key=? AND id=?`, position, workspace, issue.ID); err != nil {
 				return err
 			}
 		}
 		delete(previous, issue.ID)
+	}
+	if err := s.importIssueRecordBatch(ctx, tx, workspace, changed, order); err != nil {
+		return err
 	}
 	for id := range previous {
 		for _, table := range []string{"issue_subscriber_records", "issue_actor_records", "issue_attribute_records"} {
@@ -89,11 +107,7 @@ func (s *SQLiteStore) replaceIssueRecords(ctx context.Context, tx *sqlTx, worksp
 		if err != nil {
 			return err
 		}
-		delta := map[issueStatsKey]int64{}
-		addIssueStats(delta, old, -1)
-		if err := writeIssueStats(ctx, tx, workspace, delta); err != nil {
-			return err
-		}
+		addIssueStats(deltas, old, -1)
 		if _, err := tx.ExecContext(ctx, `DELETE FROM issue_permission_records WHERE workspace_key=? AND issue_id=?`, workspace, id); err != nil {
 			return err
 		}
@@ -104,7 +118,10 @@ func (s *SQLiteStore) replaceIssueRecords(ctx context.Context, tx *sqlTx, worksp
 			return err
 		}
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO issue_records_migrations(workspace_key,migrated_at) VALUES(?,?) ON CONFLICT(workspace_key) DO UPDATE SET migrated_at=excluded.migrated_at`, workspace, time.Now().UTC().Format(time.RFC3339Nano))
+	if err := writeIssueStats(ctx, tx, workspace, deltas); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO issue_records_migrations(workspace_key,migrated_at) VALUES(?,?) ON CONFLICT DO NOTHING`, workspace, time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return err
 	}
@@ -192,8 +209,29 @@ const issueRecordValuesSQL = `(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 const issueRecordTimestamp = "2006-01-02T15:04:05.000000000Z"
 const issueRecordUpdate = ` ON CONFLICT(workspace_key,id) DO UPDATE SET identifier=excluded.identifier,team_id=excluded.team_id,state_id=excluded.state_id,state_type=excluded.state_type,project_id=excluded.project_id,assignee_id=excluded.assignee_id,creator_id=excluded.creator_id,cycle_id=excluded.cycle_id,parent_id=excluded.parent_id,priority=excluded.priority,sort_order=excluded.sort_order,title=excluded.title,created_at=excluded.created_at,updated_at=excluded.updated_at,archived=excluded.archived,version=excluded.version,data=excluded.data`
 
+func equalIssueRecordData(previous, next []byte) bool {
+	if bytes.Equal(previous, next) {
+		return true
+	}
+	if len(previous) == 0 {
+		return false
+	}
+	var issue domain.Issue
+	if json.Unmarshal(previous, &issue) != nil {
+		return false
+	}
+	values, err := issueRecordValues("", issue)
+	return err == nil && bytes.Equal(values[len(values)-1].([]byte), next)
+}
+
 func issueRecordValues(workspace string, issue domain.Issue) ([]any, error) {
 	normalizeIssueRecord(&issue)
+	// Usage counts belong to the label read model. Copying them into every
+	// issue rewrites the entire labeled collection whenever its count changes.
+	issue.Labels = slices.Clone(issue.Labels)
+	for i := range issue.Labels {
+		issue.Labels[i].IssueCount = 0
+	}
 	raw, err := json.Marshal(issue)
 	if err != nil {
 		return nil, err
@@ -218,17 +256,29 @@ func issueRecordValues(workspace string, issue domain.Issue) ([]any, error) {
 	return []any{workspace, issue.ID, issue.Identifier, issue.Team.ID, issue.State.ID, issue.State.Type, project, assignee, issue.Creator.ID, cycle, parent, issue.Priority, issue.SortOrder, issue.Title, issue.CreatedAt.UTC().Format(issueRecordTimestamp), issue.UpdatedAt.UTC().Format(issueRecordTimestamp), archived, issue.Version, raw}, nil
 }
 
-func (s *SQLiteStore) writeIssueRecord(ctx context.Context, tx *sqlTx, workspace string, issue domain.Issue) error {
-	if err := writeIssueAttributes(ctx, tx, workspace, []domain.Issue{issue}); err != nil {
-		return err
-	}
-	old, err := readIssueStats(ctx, tx, workspace, issue.ID)
-	if err != nil {
-		return err
-	}
+func (s *SQLiteStore) writeIssueRecord(ctx context.Context, tx *sqlTx, workspace string, issue domain.Issue, metadata ...domain.Bootstrap) error {
 	values, err := issueRecordValues(workspace, issue)
 	if err != nil {
 		return err
+	}
+	var raw []byte
+	err = tx.QueryRowContext(ctx, "SELECT data FROM issue_records WHERE workspace_key=? AND id=?", workspace, issue.ID).Scan(&raw)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if equalIssueRecordData(raw, values[len(values)-1].([]byte)) {
+		return nil
+	}
+	if len(raw) > 0 && len(metadata) > 0 && newIssueReferences(metadata[0]).equalOwned(raw, issue) {
+		return nil
+	}
+	var old *issueStatsDimensions
+	if len(raw) > 0 {
+		var previous domain.Issue
+		if err := json.Unmarshal(raw, &previous); err != nil {
+			return err
+		}
+		old = issueStatsOf(previous)
 	}
 	delta := map[issueStatsKey]int64{}
 	addIssueStats(delta, old, -1)
@@ -236,48 +286,10 @@ func (s *SQLiteStore) writeIssueRecord(ctx context.Context, tx *sqlTx, workspace
 	if err := writeIssueStats(ctx, tx, workspace, delta); err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, issueRecordInsert+issueRecordValuesSQL+issueRecordUpdate, values...)
-	if err != nil {
+	if _, err := tx.ExecContext(ctx, issueRecordInsert+issueRecordValuesSQL+issueRecordUpdate, values...); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM issue_label_records WHERE workspace_key=? AND issue_id=?`, workspace, issue.ID); err != nil {
-		return err
-	}
-	seen := map[string]bool{}
-	for _, label := range issue.Labels {
-		if seen[label.ID] {
-			continue
-		}
-		seen[label.ID] = true
-		if _, err = tx.ExecContext(ctx, `INSERT INTO issue_label_records(workspace_key,issue_id,label_id) VALUES(?,?,?)`, workspace, issue.ID, label.ID); err != nil {
-			return err
-		}
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM issue_permission_records WHERE workspace_key=? AND issue_id=?`, workspace, issue.ID); err != nil {
-		return err
-	}
-	for _, permission := range issue.Permissions {
-		if permission.Role == "" || strings.EqualFold(permission.Role, "none") {
-			continue
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO issue_permission_records(workspace_key,issue_id,subject_type,subject_id,role) VALUES(?,?,?,?,?) ON CONFLICT(workspace_key,issue_id,subject_type,subject_id) DO UPDATE SET role=excluded.role`, workspace, issue.ID, permission.SubjectType, permission.SubjectID, permission.Role); err != nil {
-			return err
-		}
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM issue_subscriber_records WHERE workspace_key=? AND issue_id=?`, workspace, issue.ID); err != nil {
-		return err
-	}
-	seenSubscribers := map[string]bool{}
-	for _, userID := range issue.SubscriberIDs {
-		if seenSubscribers[userID] {
-			continue
-		}
-		seenSubscribers[userID] = true
-		if _, err := tx.ExecContext(ctx, `INSERT INTO issue_subscriber_records(workspace_key,issue_id,user_id) VALUES(?,?,?)`, workspace, issue.ID, userID); err != nil {
-			return err
-		}
-	}
-	return nil
+	return syncIssueIndexes(ctx, tx, workspace, []domain.Issue{issue})
 }
 
 func (s *SQLiteStore) readIssueRecords(ctx context.Context, workspace string) ([]domain.Issue, error) {
@@ -332,6 +344,26 @@ func (s *SQLiteStore) ImportIssues(ctx context.Context, workspace string, issues
 	if len(issues) > 1000 {
 		return fmt.Errorf("issue import batch exceeds 1000 records")
 	}
+	if len(issues) == 0 {
+		return nil
+	}
+	encoded := make(map[string][]byte, len(issues))
+	totalBytes := 0
+	for _, issue := range issues {
+		if issue.ID == "" {
+			return fmt.Errorf("issue import requires non-empty IDs")
+		}
+		values, err := issueRecordValues(workspace, issue)
+		if err != nil {
+			return err
+		}
+		raw := values[len(values)-1].([]byte)
+		totalBytes += len(raw)
+		if len(raw) > 1<<20 || totalBytes > 16<<20 {
+			return fmt.Errorf("issue import exceeds 1 MiB per issue or 16 MiB per transaction")
+		}
+		encoded[issue.ID] = raw
+	}
 	if _, ok := s.WorkspaceMetadata(workspace); !ok {
 		return fmt.Errorf("workspace not found")
 	}
@@ -356,28 +388,47 @@ func (s *SQLiteStore) ImportIssues(ctx context.Context, workspace string, issues
 	clause, args := bindList("id", ids)
 	var existing int
 	delta := map[issueStatsKey]int64{}
-	rows, err := tx.QueryContext(ctx, `SELECT team_id,project_id,assignee_id,state_id,state_type,priority,archived FROM issue_records WHERE workspace_key=? AND `+clause, append([]any{workspace}, args...)...)
+	unchanged := map[string]bool{}
+	rows, err := tx.QueryContext(ctx, `SELECT id,data FROM issue_records WHERE workspace_key=? AND `+clause, append([]any{workspace}, args...)...)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
-		var d issueStatsDimensions
-		if err := rows.Scan(&d.Team, &d.Project, &d.Assignee, &d.State, &d.Type, &d.Priority, &d.Archived); err != nil {
+		var id string
+		var raw []byte
+		if err := rows.Scan(&id, &raw); err != nil {
 			rows.Close()
 			return err
 		}
 		existing++
-		addIssueStats(delta, &d, -1)
+		if equalIssueRecordData(raw, encoded[id]) {
+			unchanged[id] = true
+			continue
+		}
+		var previous domain.Issue
+		if err := json.Unmarshal(raw, &previous); err != nil {
+			rows.Close()
+			return err
+		}
+		addIssueStats(delta, issueStatsOf(previous), -1)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
 		return err
 	}
 	rows.Close()
+	changed := make([]domain.Issue, 0, len(issues))
 	for _, issue := range issues {
+		if unchanged[issue.ID] {
+			continue
+		}
+		changed = append(changed, issue)
 		addIssueStats(delta, issueStatsOf(issue), 1)
 	}
-	if err := s.importIssueRecordBatch(ctx, tx, workspace, issues); err != nil {
+	if len(changed) == 0 {
+		return nil
+	}
+	if err := s.importIssueRecordBatch(ctx, tx, workspace, changed); err != nil {
 		return err
 	}
 	if err := writeIssueStats(ctx, tx, workspace, delta); err != nil {
@@ -424,7 +475,13 @@ func (s *SQLiteStore) migrateIssueSequences(ctx context.Context) error {
 	return nil
 }
 
-func (s *SQLiteStore) importIssueRecordBatch(ctx context.Context, tx *sqlTx, workspace string, issues []domain.Issue) error {
+func (s *SQLiteStore) importIssueRecordBatch(ctx context.Context, tx *sqlTx, workspace string, issues []domain.Issue, orders ...map[string]int) error {
+	insert, tuple, update := issueRecordInsert, issueRecordValuesSQL, issueRecordUpdate
+	if len(orders) > 0 {
+		insert = strings.TrimSuffix(insert, ") VALUES ") + ",collection_order) VALUES "
+		tuple = strings.TrimSuffix(tuple, ")") + ",?)"
+		update += ",collection_order=excluded.collection_order"
+	}
 	for start := 0; start < len(issues); {
 		end := start
 		size := 0
@@ -440,72 +497,19 @@ func (s *SQLiteStore) importIssueRecordBatch(ctx context.Context, tx *sqlTx, wor
 				break
 			}
 			size += len(raw)
+			if len(orders) > 0 {
+				values = append(values, orders[0][issues[end].ID])
+			}
 			args = append(args, values...)
-			tuples = append(tuples, issueRecordValuesSQL)
+			tuples = append(tuples, tuple)
 			end++
 		}
-		if _, err := tx.ExecContext(ctx, issueRecordInsert+strings.Join(tuples, ",")+issueRecordUpdate, args...); err != nil {
+		if _, err := tx.ExecContext(ctx, insert+strings.Join(tuples, ",")+update, args...); err != nil {
 			return err
-		}
-		ids := make([]string, 0, end-start)
-		for _, issue := range issues[start:end] {
-			ids = append(ids, issue.ID)
-		}
-		where, values := bindList("issue_id", ids)
-		for _, table := range []string{"issue_label_records", "issue_permission_records", "issue_subscriber_records"} {
-			if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE workspace_key=? AND "+where, append([]any{workspace}, values...)...); err != nil {
-				return err
-			}
-		}
-		var labelArgs, permissionArgs []any
-		var labelTuples, permissionTuples []string
-		var subscriberArgs []any
-		var subscriberTuples []string
-		for _, issue := range issues[start:end] {
-			seenSubscribers := map[string]bool{}
-			for _, userID := range issue.SubscriberIDs {
-				if seenSubscribers[userID] {
-					continue
-				}
-				seenSubscribers[userID] = true
-				subscriberArgs = append(subscriberArgs, workspace, issue.ID, userID)
-				subscriberTuples = append(subscriberTuples, "(?,?,?)")
-			}
-			seen := map[string]bool{}
-			for _, label := range issue.Labels {
-				if seen[label.ID] {
-					continue
-				}
-				seen[label.ID] = true
-				labelArgs = append(labelArgs, workspace, issue.ID, label.ID)
-				labelTuples = append(labelTuples, "(?,?,?)")
-			}
-			for _, permission := range issue.Permissions {
-				if permission.Role == "" || strings.EqualFold(permission.Role, "none") {
-					continue
-				}
-				permissionArgs = append(permissionArgs, workspace, issue.ID, permission.SubjectType, permission.SubjectID, permission.Role)
-				permissionTuples = append(permissionTuples, "(?,?,?,?,?)")
-			}
-		}
-		if len(labelTuples) > 0 {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO issue_label_records(workspace_key,issue_id,label_id) VALUES `+strings.Join(labelTuples, ","), labelArgs...); err != nil {
-				return err
-			}
-		}
-		if len(permissionTuples) > 0 {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO issue_permission_records(workspace_key,issue_id,subject_type,subject_id,role) VALUES `+strings.Join(permissionTuples, ",")+` ON CONFLICT(workspace_key,issue_id,subject_type,subject_id) DO UPDATE SET role=excluded.role`, permissionArgs...); err != nil {
-				return err
-			}
-		}
-		if len(subscriberTuples) > 0 {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO issue_subscriber_records(workspace_key,issue_id,user_id) VALUES `+strings.Join(subscriberTuples, ","), subscriberArgs...); err != nil {
-				return err
-			}
 		}
 		start = end
 	}
-	return writeIssueAttributes(ctx, tx, workspace, issues)
+	return syncIssueIndexes(ctx, tx, workspace, issues)
 }
 
 func (s *SQLiteStore) issueCollectionCounts(ctx context.Context) (map[string]int, error) {
