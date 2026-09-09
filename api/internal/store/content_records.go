@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -16,6 +17,29 @@ import (
 func (s *SQLiteStore) HasNotificationDeliveries(ctx context.Context, workspace string) bool {
 	var id string
 	return s.db.QueryRowContext(ctx, `SELECT id FROM workspace_content_records WHERE workspace_key=? AND kind='delivery' LIMIT 1`, workspace).Scan(&id) == nil
+}
+
+func (s *SQLiteStore) ResourceComment(ctx context.Context, workspace, resource, id string) (domain.Comment, error) {
+	var raw []byte
+	var comment domain.Comment
+	err := s.db.QueryRowContext(ctx, `SELECT data FROM workspace_content_records WHERE workspace_key=? AND kind='comment' AND resource_id=? AND id=?`, workspace, resource, id).Scan(&raw)
+	if err != nil {
+		return comment, err
+	}
+	err = json.Unmarshal(raw, &comment)
+	return comment, err
+}
+
+func (s *SQLiteStore) CommentResource(ctx context.Context, workspace, id string) (string, domain.Comment, error) {
+	var resource string
+	var raw []byte
+	var comment domain.Comment
+	err := s.db.QueryRowContext(ctx, `SELECT resource_id,data FROM workspace_content_records WHERE workspace_key=? AND kind='comment' AND id=?`, workspace, id).Scan(&resource, &raw)
+	if err != nil {
+		return resource, comment, err
+	}
+	err = json.Unmarshal(raw, &comment)
+	return resource, comment, err
 }
 
 func (s *SQLiteStore) IssueContent(ctx context.Context, workspace, id string) ([]domain.Comment, []domain.ActivityEvent, error) {
@@ -190,7 +214,7 @@ func syncContentRecords[T any](ctx context.Context, tx *sqlTx, workspace, kind s
 		return err
 	}
 	type key struct{ resource, id string }
-	previous := map[key]string{}
+	previous := map[key][32]byte{}
 	for rows.Next() {
 		var k key
 		var raw []byte
@@ -198,7 +222,7 @@ func syncContentRecords[T any](ctx context.Context, tx *sqlTx, workspace, kind s
 			rows.Close()
 			return err
 		}
-		previous[k] = string(raw)
+		previous[k] = sha256.Sum256(raw)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
@@ -216,7 +240,17 @@ func syncContentRecords[T any](ctx context.Context, tx *sqlTx, workspace, kind s
 				return err
 			}
 			k := key{resource, id}
-			if previous[k] != string(raw) && !refs.equalDisplayData([]byte(previous[k]), raw) {
+			if previous[k] != sha256.Sum256(raw) {
+				var before []byte
+				if _, exists := previous[k]; exists {
+					if err := tx.QueryRowContext(ctx, `SELECT data FROM workspace_content_records WHERE workspace_key=? AND kind=? AND resource_id=? AND id=?`, workspace, kind, resource, id).Scan(&before); err != nil {
+						return err
+					}
+				}
+				if refs.equalDisplayData(before, raw) {
+					delete(previous, k)
+					continue
+				}
 				if err := writeContentRecord(ctx, tx, workspace, kind, resource, value); err != nil {
 					return err
 				}

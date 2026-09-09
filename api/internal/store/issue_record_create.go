@@ -48,13 +48,8 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 		if !ok {
 			return fmt.Errorf("workspace not found")
 		}
-		encoded, err := json.Marshal(collectionMetadata(current))
-		if err != nil {
-			return err
-		}
-		if err := json.Unmarshal(encoded, &metadata); err != nil {
-			return err
-		}
+		metadata = cloneBootstrap(collectionMetadata(current))
+		var encoded []byte
 		metadata.Viewer = actor
 		originalRole := metadata.ViewerRole
 		if _, ok := actorFromContext(ctx); ok {

@@ -158,19 +158,19 @@
 .project-dependency-projects__label { min-width: 0!important; height: 18px; display: flex; align-items: center; gap: 8px; padding-left: 6px; line-height: normal; }
 .project-dependency-projects__label > svg { width: 16px; height: 16px; flex: 0 0 16px; }
 .project-dependency-projects__label > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.project-notifications { z-index: 500; box-sizing: border-box; width: 412.5px; padding: 0; overflow: hidden; border: .5px solid var(--theme-border-strong); border-radius: 8px; outline: 0; background: var(--theme-surface-1); box-shadow: 0 6px 18px rgb(0 0 0 / 14%),0 3px 9px rgb(0 0 0 / 18%),0 1px 1px rgb(0 0 0 / 24%); color: var(--theme-text-primary); }
+.project-notifications { z-index: 600; box-sizing: border-box; width: max-content; min-width: 300px; max-width: min(420px,calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0; overflow: auto; border: .5px solid var(--popover-border); border-radius: 8px; outline: 0; background: var(--theme-surface-2); box-shadow: var(--shadow-control); color: var(--action-menu-text); }
 .project-notifications__section { padding: 16px; border-bottom: .5px solid var(--theme-border-strong); }
-.project-notifications__section h2 { margin: 0 0 8px; color: var(--theme-text-primary); font-size: 11px; font-weight: 500; line-height: 16.5px; }
-.project-notifications__section label { min-height: 14.5px; display: flex; align-items: center; gap: 12px; margin-bottom: 8px; color: var(--theme-text-secondary); font-size: 11px; line-height: 14.5px; }
+.project-notifications__section h2 { margin: 0 0 8px; color: var(--action-menu-text); font-size: 12px; font-weight: 500; line-height: 14.5px; overflow-wrap: anywhere; }
+.project-notifications__section label { min-height: 14.5px; display: flex; align-items: center; gap: 24px; margin-bottom: 8px; color: var(--action-menu-muted); font-size: 12px; line-height: 14.5px; }
 .project-notifications__section label:last-child { margin-bottom: 0; }
 .project-notifications__section label > span { min-width: 0; flex: 1; }
 .project-notifications [role=checkbox] { width: 14px; height: 14px; flex: none; display: grid; place-items: center; padding: 0; border: 1px solid #5d5d62; border-radius: 3px; background: transparent; color: white; }
 .project-notifications [role=checkbox][data-checked=true] { border-color: #686de0; background: #686de0; }
 .project-notifications__schedule { min-height: 68px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: .5px solid var(--theme-border-strong); }
 .project-notifications__schedule > div { min-width: 0; flex: 1; display: grid; gap: 4px; }
-.project-notifications__schedule strong { color: var(--theme-text-primary); font-size: 11px; font-weight: 500; }
-.project-notifications__schedule span { color: #85858b; font-size: 11px; }
-.project-notifications__schedule button { height: 25px; padding: 0 9px; border: .5px solid var(--theme-border-strong); border-radius: 9999px; background: var(--theme-control-hover); color: var(--theme-text-primary); font-size: 10px; }
+.project-notifications__schedule strong { color: var(--action-menu-text); font-size: 12px; font-weight: 500; }
+.project-notifications__schedule span { color: var(--action-menu-muted); font-size: 12px; }
+.project-notifications__schedule button { height: 24px; padding: 0 9px; border: .5px solid var(--theme-border-strong); border-radius: 9999px; background: var(--theme-control-hover); color: var(--theme-text-primary); font-size: 12px; }
 .project-notifications__slack button { height: 25px; padding: 0 9px; border: .5px solid var(--theme-border-strong); border-radius: 9999px; background: var(--theme-control-hover); color: var(--theme-text-primary); font-size: 10px; }
 .project-notifications__slack { display: flex; align-items: center; gap: 10px; padding: 0 16px; min-height: 56px; border-bottom: 0; }
 .project-notifications__slack svg { color: #71c9a8; }

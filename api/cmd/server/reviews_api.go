@@ -36,7 +36,7 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.CodeReview
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "review.updated", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), favoriteMutationEvent("review.updated", input), id, input, func(data *domain.Bootstrap) error {
 		index := reviewIndex(*data, id)
 		if index < 0 {
 			return errNotFound
@@ -89,6 +89,7 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Favorite != nil {
 			review.Favorite = *input.Favorite
+			setFavoriteRecord(data, "review", review.ID, *input.Favorite)
 		}
 		if input.Draft != nil {
 			review.Draft = *input.Draft

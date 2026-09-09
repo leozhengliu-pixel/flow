@@ -31,6 +31,8 @@ func (s *server) startDeliveryScheduler() {
 		defer ticker.Stop()
 		for {
 			select {
+			case <-s.store.WorkerContext().Done():
+				return
 			case <-ctx.Done():
 				return
 			case <-ticker.C:

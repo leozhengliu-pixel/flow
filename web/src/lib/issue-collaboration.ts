@@ -14,6 +14,7 @@ interface SyncMessage {
   documentId: string
   contentState?: string
   updates: Array<{ id: string; data: string }>
+  more?: boolean
 }
 
 export class IssueCollaborationProvider {
@@ -26,6 +27,8 @@ export class IssueCollaborationProvider {
   private readonly localUser: { id: string; name: string; color: string }
   private readonly appliedUpdateIds = new Set<string>()
   private readonly pendingUpdates = new Map<string, Uint8Array>()
+  private readonly sentUpdates = new Set<string>()
+  private receivedServerState = false
   private readonly listeners = new Set<Listener>()
   private socket?: WebSocket
   private reconnectTimer?: number
@@ -70,6 +73,8 @@ export class IssueCollaborationProvider {
     if (!this.started) return
     this.started = false
     this.synced = false
+    this.sentUpdates.clear()
+    this.receivedServerState = false
     window.clearTimeout(this.reconnectTimer)
     window.clearInterval(this.heartbeatTimer)
     if (this.socket?.readyState === WebSocket.OPEN) {
@@ -99,6 +104,9 @@ export class IssueCollaborationProvider {
     this.awareness.off('update', this.onAwarenessUpdate)
     this.awareness.destroy()
     this.socket?.close(1000, 'editor closed')
+    this.pendingUpdates.clear()
+    this.sentUpdates.clear()
+    this.appliedUpdateIds.clear()
     this.emit('disconnected')
   }
 
@@ -134,6 +142,8 @@ export class IssueCollaborationProvider {
     socket.onclose = () => {
       if (this.socket === socket) this.socket = undefined
       this.synced = false
+      this.sentUpdates.clear()
+      this.receivedServerState = false
       removeAwarenessStates(this.awareness, [...this.awareness.getStates().keys()].filter(id => id !== this.document.clientID), this)
       this.emit('disconnected')
       if (!this.destroyed && this.started) {
@@ -145,6 +155,7 @@ export class IssueCollaborationProvider {
     this.heartbeatTimer = window.setInterval(() => {
       if (socket.readyState !== WebSocket.OPEN) return
       this.awareness.setLocalStateField('heartbeat', Date.now())
+      this.flushPendingUpdates()
     }, 15_000)
   }
 
@@ -154,15 +165,17 @@ export class IssueCollaborationProvider {
     catch { return }
     if (message.type !== 'document.sync' || !('documentId' in message) || message.documentId !== this.documentId) return
     const sync = message as SyncMessage
-    const serverHasState = Boolean(sync.contentState) || sync.updates.length > 0
+    this.receivedServerState ||= Boolean(sync.contentState) || sync.updates.length > 0
     if (sync.contentState) applyUpdate(this.document, base64ToBytes(sync.contentState), this)
     sync.updates.forEach(update => {
       applyUpdate(this.document, base64ToBytes(update.data), this)
       this.pendingUpdates.delete(update.id)
+      this.sentUpdates.delete(update.id)
       this.appliedUpdateIds.add(update.id)
     })
+    if (sync.more) return
     this.synced = true
-    if (!serverHasState && this.seededWithoutServerState && this.pendingUpdates.size === 0) this.queueDocumentUpdate(encodeStateAsUpdate(this.document))
+    if (!this.receivedServerState && this.seededWithoutServerState && this.pendingUpdates.size === 0) this.queueDocumentUpdate(encodeStateAsUpdate(this.document))
     this.flushPendingUpdates()
     this.sendAwarenessUpdate([this.document.clientID])
   }
@@ -174,8 +187,10 @@ export class IssueCollaborationProvider {
       applyUpdate(this.document, frame.payload, this)
       if (frame.updateId) {
         this.pendingUpdates.delete(frame.updateId)
+        this.sentUpdates.delete(frame.updateId)
         this.appliedUpdateIds.add(frame.updateId)
       }
+      this.flushPendingUpdates()
       return
     }
     if (frame.kind === awarenessFrame) applyAwarenessUpdate(this.awareness, frame.payload, this)
@@ -199,7 +214,12 @@ export class IssueCollaborationProvider {
 
   private flushPendingUpdates() {
     if (!this.synced || this.socket?.readyState !== WebSocket.OPEN) return
-    this.pendingUpdates.forEach((update, updateId) => this.socket?.send(encodeFrame(updateFrame, this.documentId, updateId, update)))
+    for (const [updateId, update] of this.pendingUpdates) {
+      if (this.sentUpdates.has(updateId)) continue
+      if ((this.socket.bufferedAmount ?? 0) > 2 * 1024 * 1024) return
+      this.socket.send(encodeFrame(updateFrame, this.documentId, updateId, update))
+      this.sentUpdates.add(updateId)
+    }
   }
 
   private sendAwarenessUpdate(clients: number[]) {

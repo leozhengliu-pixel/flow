@@ -1,17 +1,27 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	r = r.WithContext(ctx)
+	data, scope, err := s.pagedRealtimeMetadata(r)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit < 1 || limit > 100 {
@@ -19,6 +29,32 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 	types := searchTypes(r.URL.Query().Get("types"))
 	results := buildSearchResultsLimited(data, query, types, limit)
+	if query != "" && types["issue"] {
+		scope.Filter = store.IssueFilter{}
+		scope.Text = ""
+		scope.Archived = "all"
+		labelIDs := []string{}
+		for _, label := range data.Labels {
+			if fuzzyScore(query, label.Name) > 0 {
+				labelIDs = append(labelIDs, label.ID)
+			}
+		}
+		err := s.store.SearchIssueCandidates(r.Context(), scope, query, labelIDs, max(100, limit*4), func(issue domain.Issue) error {
+			one := data
+			one.Issues = []domain.Issue{issue}
+			results = append(results, buildSearchResultsLimited(one, query, map[string]bool{"issue": true}, 1)...)
+			if len(results) > limit*2 {
+				sortSearchResults(results)
+				results = results[:limit]
+			}
+			return nil
+		})
+		if err != nil {
+			issueRecordsError(w, err)
+			return
+		}
+		sortSearchResults(results)
+	}
 	userID := authUser(r).ID
 	if s.authDisabled {
 		userID = data.Viewer.ID
@@ -29,6 +65,23 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 	history, _ := s.store.SearchHistory(r.Context(), data.Workspace.ID, userID, 8)
 	recent, _ := s.store.RecentResources(r.Context(), data.Workspace.ID, userID, 12)
 	if query == "" {
+		ids := []string{}
+		for _, item := range recent {
+			if item.ResourceType == "issue" {
+				ids = append(ids, item.ResourceID)
+			}
+		}
+		if len(ids) > 0 {
+			scope.Filter = store.IssueFilter{Field: "id", Values: ids}
+			scope.Archived = "all"
+			scope.Limit = 100
+			page, err := s.store.QueryIssueRecords(r.Context(), scope)
+			if err != nil {
+				issueRecordsError(w, err)
+				return
+			}
+			data.Issues = page.Items
+		}
 		results = resolveRecentResults(data, recent, types)
 	}
 	if len(results) > limit {
@@ -38,12 +91,25 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) clearSearchHistory(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	data, _, err := s.pagedRealtimeMetadata(r)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	userID := authUser(r).ID
 	if s.authDisabled {
 		userID = data.Viewer.ID
 	}
 	respondMutation(w, s.store.ClearSearchHistory(r.Context(), data.Workspace.ID, userID), http.StatusNoContent, nil)
+}
+
+func sortSearchResults(results []domain.SearchResult) {
+	slices.SortStableFunc(results, func(a, b domain.SearchResult) int {
+		if a.Score != b.Score {
+			return b.Score - a.Score
+		}
+		return b.UpdatedAt.Compare(a.UpdatedAt)
+	})
 }
 
 func (s *server) recordRecentResource(w http.ResponseWriter, r *http.Request) {

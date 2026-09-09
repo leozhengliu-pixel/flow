@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { realtimeClientId, updatePresence } from '@/lib/api'
-import { loadRealtimeCache, saveRealtimeCache, saveRealtimeCursor } from '@/lib/realtime-cache'
+import { loadRealtimeCursor, saveRealtimeCursor } from '@/lib/realtime-cache'
 import type { BootstrapData, Presence, RealtimeEvent } from '@/types/flow'
 
-export function useWorkspaceRealtime({ workspaceKey, issueId, route, snapshot, onRemoteSync }: {
+export function useWorkspaceRealtime({ workspaceKey, issueId, route, onRemoteSync }: {
   workspaceKey?: string
   issueId?: string
   route: string
@@ -76,7 +76,7 @@ export function useWorkspaceRealtime({ workspaceKey, issueId, route, snapshot, o
         schedule(event)
       }
     }
-    void loadRealtimeCache(workspaceKey).then(cache => connect(cache?.cursor))
+    connect(loadRealtimeCursor(workspaceKey))
     return () => {
       disposed = true
       stream?.close()
@@ -87,19 +87,6 @@ export function useWorkspaceRealtime({ workspaceKey, issueId, route, snapshot, o
       queuedRef.current = []
     }
   }, [workspaceKey])
-
-  useEffect(() => {
-    if (!workspaceKey || !snapshot) return
-    const timer = window.setTimeout(() => {
-      void loadRealtimeCache(workspaceKey).then(cache => saveRealtimeCache({
-        workspaceKey,
-        cursor: cache?.cursor,
-        snapshot,
-        updatedAt: new Date().toISOString(),
-      }))
-    }, 1200)
-    return () => window.clearTimeout(timer)
-  }, [snapshot, workspaceKey])
 
   useEffect(() => {
     if (!workspaceKey) return

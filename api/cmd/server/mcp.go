@@ -230,8 +230,8 @@ func (s *server) authenticateMCP(w http.ResponseWriter, r *http.Request) (mcpAct
 		s.mcpUnauthorized(w, r, "Token owner no longer exists")
 		return mcpActor{}, false
 	}
-	data, ok, err := s.store.BootstrapForUser(r.Context(), workspaceKey, user.ID)
-	if err != nil || !ok {
+	data, err := s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey, user.ID)
+	if err != nil {
 		s.mcpUnauthorized(w, r, "Token owner no longer has workspace access")
 		return mcpActor{}, false
 	}

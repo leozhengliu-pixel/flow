@@ -6,7 +6,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import type { ActivityEvent, Attachment, BootstrapData, CodeReview, Comment, FlowDocument, Issue, IssueRelationType, IssueUpdateInput, Presence, Project, ProjectMilestone } from '@/types/flow'
 import { Button } from '@/components/ui/button'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
-import { ActivityTimeline } from '@/components/activity/activity-timeline'
+import { PagedActivityTimeline } from '@/components/activity/paged-activity-timeline'
 import type { ActivityHighlightTarget } from '@/components/activity/activity-highlight'
 import { Composer } from '@/components/editor/composer'
 import { Avatar } from '@/components/issue/issue-row'
@@ -105,7 +105,7 @@ export function DetailPane({issue,data,comments,activities,highlightTarget,prese
         {customerRequests.length>0&&<IssueSection title="Customer requests" count={customerRequests.length}>{customerRequests.map(request=>{const customer=data.customers.find(item=>item.id===request.customerId);return <div className="linked-issue issue-resource-row" key={request.id}><UserRound size={14}/><span>{customer?.name??'Customer'}</span><strong>{request.body}</strong></div>})}</IssueSection>}
         <IssueAttachments attachments={fileAttachments} upload={uploadState} onRetry={upload} onDelete={onDeleteAttachment}/>
         <div className="activity-heading"><span>Activity</span><div><Button className="issue-subscribe-toggle" variant="ghost" size="sm" disabled={Boolean(issue.archivedAt)} onClick={()=>toggleSubscriber(data.viewer.id)}>{issue.subscriberIds.includes(data.viewer.id)?'Unsubscribe':'Subscribe'}</Button><IssueSubscriberPicker issue={issue} users={data.users} onToggle={toggleSubscriber}/></div></div>
-        <ActivityTimeline highlightTarget={highlightTarget} events={activities} comments={comments} viewerId={data.viewer.id} context={data} onReply={(body,bodyData,parentId)=>onComment(body,bodyData,parentId)} onEdit={onEditComment} onDelete={onDeleteComment} onReaction={onReactComment} onAttach={()=>fileRef.current?.click()}/><Composer drafts={data.drafts} draftMetadata={{ resourceType: 'issue' }} draftResourceId={issue.id} draftTitle={issue.title} draftType="comment" onSubmit={onComment} onAttach={()=>fileRef.current?.click()}/>
+        <PagedActivityTimeline issueId={issue.id} cursors={data.issueHistoryCursors?.[issue.id]} highlightTarget={highlightTarget} events={activities} comments={comments} viewerId={data.viewer.id} context={data} onReply={(body,bodyData,parentId)=>onComment(body,bodyData,parentId)} onEdit={onEditComment} onDelete={onDeleteComment} onReaction={onReactComment} onAttach={()=>fileRef.current?.click()}/><Composer drafts={data.drafts} draftMetadata={{ resourceType: 'issue' }} draftResourceId={issue.id} draftTitle={issue.title} draftType="comment" onSubmit={onComment} onAttach={()=>fileRef.current?.click()}/>
       </article>
       <IssueProperties issue={issue} data={data} activities={activities} presence={peoplePresence} releasesEnabled={releasesEnabled} onCreateMilestone={onCreateProjectMilestone} onCreateProject={onCreateProject} onUpdate={onUpdate} onToggleLabel={toggleLabel}/>
     </div></div>

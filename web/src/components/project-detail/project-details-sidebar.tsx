@@ -342,7 +342,7 @@ function ProjectDependencyMenu({ onUpdate, onUpdateProject, project, projectRela
   </DropdownMenu.Root>
 }
 
-function DependencyProjectPicker({ direction, onUpdate, onUpdateProject, project, projectRelations, projects, viewer }: {
+export function DependencyProjectPicker({ direction, onUpdate, onUpdateProject, project, projectRelations, projects, viewer }: {
   direction: ProjectDependencyDirection
   onUpdate: (input: ProjectMutationInput) => Promise<void>
   onUpdateProject: ProjectDetailProps['onUpdate']
@@ -395,7 +395,7 @@ function DependencyProjectPicker({ direction, onUpdate, onUpdateProject, project
   </DropdownMenu.Group> : null
 
   return <>
-    <div className="project-dependency-menu__search"><input aria-label={direction === 'blockedBy' ? 'Mark as blocked by…' : 'Mark as blocking…'} autoFocus onChange={event => setQuery(event.target.value)} onKeyDown={event => event.stopPropagation()} placeholder={direction === 'blockedBy' ? 'Mark as blocked by…' : 'Mark as blocking…'} value={query}/></div>
+    <div className={`project-dependency-menu__search${query ? ' is-filtering' : ''}`}><input aria-label={direction === 'blockedBy' ? 'Mark as blocked by…' : 'Mark as blocking…'} autoFocus onChange={event => setQuery(event.target.value)} onKeyDown={event => event.stopPropagation()} placeholder={direction === 'blockedBy' ? 'Mark as blocked by…' : 'Mark as blocking…'} value={query}/></div>
     <div className="project-dependency-projects__list">{rows(yourProjects, 'Your projects')}{rows(otherProjects, 'Other projects')}{!candidates.length && <DropdownMenu.Label>No projects found</DropdownMenu.Label>}</div>
   </>
 }

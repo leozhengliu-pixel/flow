@@ -1,4 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { refreshResourcePreferences } from '@/lib/resource-preferences';
 import { AppLink } from '@/components/ui/app-link';
 import {
   ArrowDown,
@@ -1148,7 +1149,7 @@ function TeamRowMenu({
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content data-flow-motion="floating" className="workspace-directory__menu" align="end">
-          <DropdownMenu.Item onSelect={()=>void (favorite?removeFavorite('team',team.id):addFavorite('team',team.id)).then(onReload)}>{favorite?'Unfavorite':'Favorite'}</DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={()=>void (favorite?removeFavorite('team',team.id):addFavorite('team',team.id)).then(()=>refreshResourcePreferences())}>{favorite?'Unfavorite':'Favorite'}</DropdownMenu.Item>
           <DropdownMenu.Separator />
           <DropdownMenu.Item asChild><AppLink href={`/${encodeURIComponent(workspaceKey)}/settings/teams/${encodeURIComponent(team.key)}`}>Team settings</AppLink></DropdownMenu.Item>
           <DropdownMenu.Item
@@ -1162,7 +1163,7 @@ function TeamRowMenu({
           </DropdownMenu.Item>
           <DropdownMenu.Item asChild><AppLink href={`/${encodeURIComponent(workspaceKey)}/team/${encodeURIComponent(team.key)}/archive/issues`}>Open archive</AppLink></DropdownMenu.Item>
           <DropdownMenu.Separator />
-          <DropdownMenu.Item onSelect={()=>void (subscribed?removeSubscription('team',team.id):addSubscription('team',team.id)).then(onReload)}>{subscribed?'Unsubscribe':'Subscribe'}</DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={()=>void (subscribed?removeSubscription('team',team.id):addSubscription('team',team.id)).then(()=>refreshResourcePreferences())}>{subscribed?'Unsubscribe':'Subscribe'}</DropdownMenu.Item>
           <DropdownMenu.Item asChild><AppLink href={`/${encodeURIComponent(workspaceKey)}/settings/teams/${encodeURIComponent(team.key)}/notifications`}>Configure Slack notifications…</AppLink></DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

@@ -232,6 +232,7 @@ export interface DocumentContentDraft {
   updatedAt: string;
 }
 export interface Issue {
+  isSummary?: boolean;
   id: UUID;
   version: number;
   identifier: string;
@@ -603,6 +604,7 @@ export interface Project {
   comments: Comment[];
   descriptionRevisions: ProjectDescriptionRevision[];
   updateCadence: "none" | "weekly" | "biweekly" | "monthly";
+  updateSchedule?: ProjectUpdateSchedule;
   startDate?: string;
   startDateResolution?: "halfYear" | "month" | "quarter" | "year";
   targetDate?: string;
@@ -1383,6 +1385,14 @@ export interface InitiativeNotificationRules {
   newUpdate: boolean;
   allProjectUpdates: boolean;
 }
+export interface ProjectUpdateSchedule {
+  mode: "default" | "custom" | "never";
+  frequencyDays: number;
+  weekday: number;
+  hour: number;
+  timezone: string;
+}
+
 export interface InitiativeUpdateSchedule {
   cadence: "none" | "weekly" | "biweekly" | "monthly" | "custom" | "never";
   weekday: number;
@@ -1537,6 +1547,7 @@ export interface InitiativeMutationInput {
 export interface BootstrapData {
   issueCollectionPaged?: boolean;
   issueCollectionRevision?: number;
+  issueHistoryCursors?: Record<string, { commentsCursor?: string; activitiesCursor?: string }>;
   workspace: Workspace;
   viewer: User;
   users: User[];

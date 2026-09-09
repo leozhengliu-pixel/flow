@@ -133,72 +133,16 @@ func (s *server) batchNotifications(w http.ResponseWriter, r *http.Request) {
 		}
 		snoozedUntil = &parsed
 	}
-	viewerID := s.workspaceData(r).Viewer.ID
-	var updated int
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "notifications.batch_updated", viewerID, input, func(data *domain.Bootstrap) error {
-		now := time.Now().UTC()
-		ids := make(map[string]struct{}, len(input.IDs))
-		for _, id := range input.IDs {
-			ids[id] = struct{}{}
-		}
-		completed := map[string]bool{}
-		for _, issue := range data.Issues {
-			completed[issue.ID] = issue.State.Type == "completed" || issue.State.Type == "canceled"
-		}
-		for index := range data.Notifications {
-			notification := &data.Notifications[index]
-			if notification.RecipientID != viewerID {
-				continue
-			}
-			_, selected := ids[notification.ID]
-			if len(ids) > 0 && !selected {
-				continue
-			}
-			switch input.Action {
-			case "delete":
-				if selected {
-					notification.DeletedAt = &now
-					updated++
-				}
-			case "deleteAll":
-				notification.DeletedAt = &now
-				updated++
-			case "deleteRead":
-				if notification.ReadAt != nil {
-					notification.DeletedAt = &now
-					updated++
-				}
-			case "deleteReadCompleted":
-				if notification.ReadAt != nil && completed[notification.IssueID] {
-					notification.DeletedAt = &now
-					updated++
-				}
-			case "markRead":
-				notification.ReadAt = &now
-				updated++
-			case "markAllRead":
-				notification.ReadAt = &now
-				updated++
-			case "markUnread":
-				notification.ReadAt = nil
-				updated++
-			case "archive", "archiveAll":
-				notification.ArchivedAt = &now
-				updated++
-			case "unarchive":
-				notification.ArchivedAt = nil
-				updated++
-			case "snooze", "snoozeAll":
-				notification.SnoozedUntil = snoozedUntil
-				updated++
-			case "unsnooze":
-				notification.SnoozedUntil = nil
-				updated++
-			}
-			notification.UpdatedAt = now
-		}
-		return nil
-	})
+	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	if !ok {
+		writeError(w, 404, "workspace not found")
+		return
+	}
+	if len(input.IDs) > 1000 {
+		writeError(w, 400, "select no more than 1000 notifications per batch")
+		return
+	}
+	updated, err := s.store.BatchNotificationRecords(r.Context(), data.Workspace.URLKey, requestActor(s, r).ID, input, snoozedUntil)
 	respondMutation(w, err, http.StatusOK, map[string]int{"updated": updated})
 }
 
@@ -553,7 +497,7 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 	}
 	teamID := r.PathValue("id")
 	var persistedTeamMembers []domain.TeamMember
-	if current, ok := s.store.BootstrapFor(workspaceKey(r)); ok {
+	if current, ok := s.store.WorkspaceMetadata(workspaceKey(r)); ok {
 		persistedTeamMembers, _ = s.store.ListTeamMembers(r.Context(), current.Workspace.ID)
 	}
 	var updated domain.TeamSettings

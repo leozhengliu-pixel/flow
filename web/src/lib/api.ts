@@ -308,6 +308,7 @@ export type IssueQueryInput = {
 
 export function listIssueRecords(filters: IssueQueryInput = {}, signal?: AbortSignal): Promise<IssueQueryPage> {
   const params = new URLSearchParams()
+  params.set('projection', 'list')
   for (const [key, value] of Object.entries(filters)) {
     if (value === undefined) continue
     params.set(key, key === 'filter' ? JSON.stringify(value) : Array.isArray(value) ? value.join(',') : String(value))
@@ -338,8 +339,9 @@ export function updateIssueRecord(id: string, input: IssueUpdateInput): Promise<
   return request(`/api/issue-records/${encodeURIComponent(id)}`, jsonRequest('PATCH', input))
 }
 
-export function fetchIssueRecordContext(id: string, signal?: AbortSignal): Promise<{ issue: Issue; relatedIssues: Issue[]; comments: Comment[]; activities: BootstrapData['activities'][string] }> {
-  return request(`/api/issue-records/${encodeURIComponent(id)}/context`, { signal })
+export function fetchIssueRecordContext(id: string, signal?: AbortSignal, cursors?: { commentsCursor?: string; activitiesCursor?: string }): Promise<{ issue: Issue; relatedIssues: Issue[]; comments: Comment[]; activities: BootstrapData['activities'][string]; commentsCursor?: string; activitiesCursor?: string }> {
+  const query = cursors ? `?${new URLSearchParams({ commentsCursor: cursors.commentsCursor ?? '-', activitiesCursor: cursors.activitiesCursor ?? '-' })}` : ''
+  return request(`/api/issue-records/${encodeURIComponent(id)}/context${query}`, { signal })
 }
 export function listIssues(filters: IssueQueryInput = {}): Promise<IssueQueryPage> {
   const query = new URLSearchParams();

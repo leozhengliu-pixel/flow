@@ -717,7 +717,13 @@ func (s *server) startWorkflowScheduler() {
 	go func() {
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
-		for range ticker.C {
+		ctx := s.store.WorkerContext()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
 			now := time.Now().UTC()
 			for _, key := range s.store.WorkspaceKeys() {
 				data, ok := s.store.WorkspaceMetadata(key)
@@ -726,12 +732,12 @@ func (s *server) startWorkflowScheduler() {
 				}
 				for _, definition := range data.WorkflowDefinitions {
 					if definition.Enabled && definition.Trigger == "schedule" && definition.NextRunAt != nil && !definition.NextRunAt.After(now) {
-						_, _ = s.executeWorkflow(context.Background(), key, definition.ID, "schedule", "", "")
+						_, _ = s.executeWorkflow(ctx, key, definition.ID, "schedule", "", "")
 					}
 				}
 				for _, run := range data.WorkflowRuns {
 					if run.Status == "failed" && run.NextRetryAt != nil && !run.NextRetryAt.After(now) {
-						_, _ = s.executeWorkflow(context.Background(), key, run.WorkflowID, "retry", run.ResourceType, run.ResourceID)
+						_, _ = s.executeWorkflow(ctx, key, run.WorkflowID, "retry", run.ResourceType, run.ResourceID)
 					}
 				}
 			}
@@ -913,7 +919,7 @@ func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
 	duplicate := false
 	key := ""
 	for _, workspaceKey := range s.store.WorkspaceKeys() {
-		data, ok := s.store.BootstrapFor(workspaceKey)
+		data, ok := s.store.WorkspaceMetadata(workspaceKey)
 		if !ok {
 			continue
 		}

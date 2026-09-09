@@ -10325,6 +10325,26 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/resource-preferences": {
+      "get": {
+        "operationId": "get_resource_preferences",
+        "tags": [
+          "resource-preferences"
+        ],
+        "summary": "GET /api/resource-preferences",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/reviews": {
       "get": {
         "operationId": "get_reviews",

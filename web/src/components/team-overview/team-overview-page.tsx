@@ -1,4 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
+import { refreshResourcePreferences } from '@/lib/resource-preferences';
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Check,
@@ -295,7 +296,7 @@ export function TeamOverviewPage({
                 favorite
                   ? removeFavorite("team", team.id)
                   : addFavorite("team", team.id)
-              ).then(onReload)
+              ).then(() => refreshResourcePreferences(data.workspace.urlKey))
             }
           >
             <FavoriteIcon filled={favorite} />

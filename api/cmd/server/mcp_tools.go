@@ -12,12 +12,18 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, args map[string]any) (any, error) {
 	data, err := s.mcpWorkspaceData(ctx, actor)
 	if err != nil {
 		return nil, err
+	}
+	if name != "list_issues" && (strings.Contains(name, "issue") || strings.Contains(name, "comment") || strings.Contains(name, "attachment") || name == "save_release") {
+		if err := s.hydrateMCPIssueArguments(ctx, actor, &data, args); err != nil {
+			return nil, err
+		}
 	}
 	switch name {
 	case "get_workspace":
@@ -93,9 +99,7 @@ func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, 
 		}
 		return paginate(items, args), nil
 	case "list_issues":
-		items := slices.Clone(data.Issues)
-		items = filterIssues(data, items, args)
-		return paginate(items, args), nil
+		return s.pagedMCPIssues(ctx, actor, data, args)
 	case "list_cycles":
 		team, err := mcpFindTeam(data, stringArg(args, "teamId"))
 		if err != nil {
@@ -222,8 +226,8 @@ func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, 
 }
 
 func (s *server) mcpWorkspaceData(ctx context.Context, actor mcpActor) (domain.Bootstrap, error) {
-	data, ok, err := s.store.BootstrapForUser(ctx, actor.WorkspaceKey, actor.User.ID)
-	if err != nil || !ok {
+	data, err := s.store.PagedWorkspaceMetadata(ctx, actor.WorkspaceKey, actor.User.ID)
+	if err != nil {
 		return data, fmt.Errorf("workspace access denied")
 	}
 	// Passkeys are account-scoped metadata. MCP callers may inspect workspace
@@ -273,6 +277,120 @@ func (s *server) mcpWorkspaceData(ctx context.Context, actor mcpActor) (domain.B
 		data.Reviews[index].TeamReviewers = slices.DeleteFunc(data.Reviews[index].TeamReviewers, func(id string) bool { return !allowed(id) })
 	}
 	return data, nil
+}
+
+func (s *server) mcpIssueQuery(ctx context.Context, actor mcpActor) (store.IssueRecordQuery, error) {
+	data, access, err := s.store.IssueQueryAccess(ctx, actor.WorkspaceKey, actor.User.ID)
+	q := store.IssueRecordQuery{Workspace: data.Workspace.URLKey, Access: &access, Archived: "all"}
+	if apiKeyTeamRestrictionSelected(actor.APIKey) {
+		q.AllowedTeamIDs = slices.Clone(actor.APIKey.TeamIDs)
+		if q.AllowedTeamIDs == nil {
+			q.AllowedTeamIDs = []string{}
+		}
+	}
+	return q, err
+}
+
+func (s *server) hydrateMCPIssueArguments(ctx context.Context, actor mcpActor, data *domain.Bootstrap, args map[string]any) error {
+	q, err := s.mcpIssueQuery(ctx, actor)
+	if err != nil {
+		return err
+	}
+	values := map[string]bool{}
+	budget := 1024
+	var walk func(any, int)
+	walk = func(v any, depth int) {
+		budget--
+		if budget < 0 || depth > 8 {
+			return
+		}
+		switch x := v.(type) {
+		case string:
+			if len(x) <= 191 && x != "" {
+				values[x] = true
+			}
+		case []string:
+			for _, v := range x {
+				walk(v, depth+1)
+			}
+		case []any:
+			for _, v := range x {
+				walk(v, depth+1)
+			}
+		case map[string]any:
+			for _, v := range x {
+				walk(v, depth+1)
+			}
+		}
+	}
+	walk(args, 0)
+	if budget < 0 || len(values) > 128 {
+		return fmt.Errorf("too many issue references")
+	}
+	seen := map[string]bool{}
+	for value := range values {
+		issue, err := s.store.IssueRecord(ctx, q.Workspace, value)
+		if err != nil {
+			resource, comment, commentErr := s.store.CommentResource(ctx, q.Workspace, value)
+			if commentErr == nil {
+				visible, err := s.store.VisibleIssueRecordIDs(ctx, q, []string{resource})
+				if err != nil {
+					return err
+				}
+				if visible[resource] || slices.ContainsFunc(data.Documents, func(d domain.Document) bool { return d.ID == resource }) {
+					data.Comments[resource] = append(data.Comments[resource], comment)
+					if visible[resource] && !seen[resource] {
+						parent, err := s.store.IssueRecord(ctx, q.Workspace, resource)
+						if err != nil {
+							return err
+						}
+						data.Issues = append(data.Issues, parent)
+						seen[resource] = true
+					}
+				}
+			}
+			continue
+		}
+		visible, err := s.store.VisibleIssueRecordIDs(ctx, q, []string{issue.ID})
+		if err != nil {
+			return err
+		}
+		if visible[issue.ID] && !seen[issue.ID] {
+			seen[issue.ID] = true
+			data.Issues = append(data.Issues, issue)
+		}
+	}
+	return nil
+}
+
+func (s *server) pagedMCPIssues(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
+	q, err := s.mcpIssueQuery(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
+	start, _ := strconv.Atoi(stringArg(args, "cursor"))
+	start = max(start, 0)
+	limit := min(max(intArg(args, "limit", 50), 1), 250)
+	items := []domain.Issue{}
+	matched := 0
+	err = s.store.WalkIssueRecords(ctx, q, func(issue domain.Issue) error {
+		if len(filterIssues(data, []domain.Issue{issue}, args)) == 0 {
+			return nil
+		}
+		matched++
+		if matched > start && len(items) < limit {
+			items = append(items, issue)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	next := ""
+	if matched > start+len(items) {
+		next = strconv.Itoa(start + len(items))
+	}
+	return map[string]any{"items": items, "nextCursor": next}, nil
 }
 
 func filterIssues(data domain.Bootstrap, items []domain.Issue, args map[string]any) []domain.Issue {
