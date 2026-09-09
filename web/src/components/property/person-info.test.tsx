@@ -10,6 +10,7 @@ import { PeopleProvider } from './people-provider'
 import { PropertyMenu } from './property-menu'
 import { PeopleMenuItems } from './people-menu-items'
 import { PersonInfo } from './person-info'
+import { MentionMenu } from '@/components/issue/editor/mention-menu'
 import { makeBootstrap, project } from '@/test/fixtures'
 import { personSearchText } from '@/lib/people'
 import { MyIssuesBulkActionBar } from '@/components/my-issues/my-issues-bulk-action-bar'
@@ -34,7 +35,8 @@ describe('enterprise people pickers', () => {
     await user.hover(screen.getAllByRole('option', { name: '张伟' })[0])
     const card = await screen.findByRole('tooltip')
     expect(card).toHaveTextContent('EMP-1001')
-    expect(card).toHaveTextContent('usr-one')
+    expect(card).not.toHaveTextContent('usr-one')
+    expect(card).not.toHaveTextContent('Internal ID')
     expect(within(card).queryByText('Email')).not.toBeInTheDocument()
     await user.type(screen.getByRole('textbox', { name: 'Change assignee…' }), 'EMP-1001')
     expect(screen.getAllByRole('option', { name: '张伟' })).toHaveLength(1)
@@ -85,6 +87,34 @@ describe('enterprise people pickers', () => {
   it('includes both identifiers in search without deriving an email', () => {
     expect(personSearchText(users[0])).toContain('usr-one EMP-1001')
     expect(personSearchText(users[0])).not.toContain('@')
+  })
+
+  it('shows email without an internal-ID fallback for users without employee IDs', () => {
+    const { container } = render(<I18nProvider><PersonInfo person={{ id:'usr-internal', displayName:'Alex', email:'alex@example.test' }}/></I18nProvider>)
+    expect(screen.getByText('alex@example.test')).toBeVisible()
+    expect(container).not.toHaveTextContent('usr-internal')
+    expect(screen.queryByText('User ID')).not.toBeInTheDocument()
+  })
+
+  it('hides internal IDs supplied as business IDs and omits empty identity details', () => {
+    const { container } = render(<I18nProvider><PersonInfo person={{id:'usr-internal',userId:'usr-internal',name:'usr-internal',displayName:'usr-internal'}}/></I18nProvider>)
+    expect(screen.getByText('Unknown user')).toBeVisible()
+    expect(container).not.toHaveTextContent('usr-internal')
+    expect(container.querySelector('.person-identity-details')).not.toBeInTheDocument()
+  })
+
+  it('keeps employee IDs in mention suggestions and omits internal IDs and dangling separators', async () => {
+    const user = userEvent.setup()
+    const onSelect = vi.fn()
+    const emailUser = {...users[1],userId:undefined}
+    render(<Shell><MentionMenu users={[users[0],emailUser]} selectedIndex={0} position={{left:0,top:0}} query="" onSelect={onSelect}/></Shell>)
+    const options = screen.getAllByRole('option')
+    expect(options[0]).toHaveTextContent('EMP-1001')
+    expect(options[0]).not.toHaveTextContent('usr-one')
+    expect(options[1].querySelector('small')).toHaveTextContent(/^second@example\.test$/)
+    expect(options[1]).not.toHaveTextContent('usr-two')
+    await user.click(options[1])
+    expect(onSelect).toHaveBeenCalledWith(emailUser)
   })
 
   it('shows identity details on the selected person trigger', async () => {

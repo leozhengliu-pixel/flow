@@ -285,8 +285,9 @@ Flow never derives an email address from the employee number.
 Workspace member and bootstrap user records include an optional `userId` for the
 enterprise identity subject (for example, the configured OIDC employee-number
 claim). A SCIM identifier is only used in its own workspace.
-People pickers display this identifier alongside the internal `id` and optional
-email, and search all of them. Assignment payloads continue to use the internal
+People pickers display this identifier and optional email. Internal database IDs
+are hidden from profiles and mention suggestions; search still accepts both
+identifiers and email. Assignment payloads continue to use the internal
 `id`, so adding this profile field does not change existing relationships.
 
 SCIM role groups and team groups are configured in the workspace settings API.

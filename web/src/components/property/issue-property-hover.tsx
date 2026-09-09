@@ -3,6 +3,8 @@ import type { ActivityEvent, ProjectSummary, User, WorkspaceMember, WorkflowStat
 import { Avatar } from '@/components/issue/issue-row'
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { PersonIdentityDetails } from './person-info'
+import { personDisplayName } from '@/lib/people'
+import { useI18n } from '@/i18n/i18n'
 
 export function StatusHoverPreview({ state, activities, issueCreatedAt }: { state: WorkflowState; activities: ActivityEvent[]; issueCreatedAt: string }) {
   const changes = activities
@@ -19,9 +21,11 @@ export function StatusHoverPreview({ state, activities, issueCreatedAt }: { stat
 }
 
 export function AssigneeHoverPreview({ user, member, online, workspaceName, project }: { user: User; member?: WorkspaceMember; online?: boolean; workspaceName: string; project?: ProjectSummary }) {
+  const { t } = useI18n()
+  const name = personDisplayName(user) || t('Unknown user')
   const isOnline = online && user.active && member?.status !== 'suspended'
   return <div className="assignee-hover-preview">
-    <header><Avatar name={user.displayName}/><div><strong data-i18n-ignore>{user.displayName}</strong><span data-i18n-ignore>{user.name}</span></div></header>
+    <header><Avatar name={name}/><div><strong data-i18n-ignore>{name}</strong>{user.name && user.name !== user.id && <span data-i18n-ignore>{user.name}</span>}</div></header>
     <PersonIdentityDetails person={user}/>
     <div className="assignee-hover-preview__details">
       {member?.status === 'suspended' ? <span>Suspended</span> : !user.active ? <span>Inactive</span> : online !== undefined ? <span><i className={isOnline ? undefined : 'offline'}/>{isOnline ? 'Online' : 'Offline'}</span> : null}
