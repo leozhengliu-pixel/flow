@@ -190,16 +190,9 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	workspace := workspaceKey(r)
-	var data domain.Bootstrap
-	if pagedRealtimeRequest(r) {
-		var err error
-		data, _, err = s.pagedRealtimeMetadata(r)
-		if err != nil {
-			issueRecordsError(w, err)
-			return
-		}
-	} else {
-		data = s.workspaceData(r)
+	if _, _, err := s.pagedRealtimeMetadata(r); err != nil {
+		issueRecordsError(w, err)
+		return
 	}
 	presence, err := s.snapshotPresence(r.Context(), workspace)
 	if err != nil {
@@ -221,14 +214,10 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	channel, unsubscribe := s.realtime.subscribeSince(workspace, since)
 	defer unsubscribe()
-	if pagedRealtimeRequest(r) {
-		presence, err = s.pagedPresence(r, presence)
-		if err != nil {
-			issueRecordsError(w, err)
-			return
-		}
-	} else {
-		presence = filterPresenceForViewer(data, presence)
+	presence, err = s.pagedPresence(r, presence)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
 	}
 	initial, _ := json.Marshal(map[string]any{"presence": presence})
 	if !writeSSE(w, domain.RealtimeEvent{ID: fmt.Sprintf("connected_%d", time.Now().UnixNano()), Type: "connected", Payload: initial, CreatedAt: time.Now().UTC()}) {
@@ -242,35 +231,16 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case event := <-channel:
-			if pagedRealtimeRequest(r) {
-				projected, visible, err := s.pagedRealtimeEvent(r, event)
-				if err != nil {
-					return
-				}
-				if visible {
-					if !writeSSE(w, projected) {
-						return
-					}
-					flusher.Flush()
-				}
-				continue
-			}
-			if !realtimeEventVisible(data, event) {
-				continue
-			}
-			if event.Type == "presence.updated" {
-				var payload struct {
-					Presence []domain.Presence `json:"presence"`
-				}
-				if json.Unmarshal(event.Payload, &payload) == nil {
-					payload.Presence = filterPresenceForViewer(data, payload.Presence)
-					event.Payload, _ = json.Marshal(payload)
-				}
-			}
-			if !writeSSE(w, event) {
+			projected, visible, err := s.pagedRealtimeEvent(r, event)
+			if err != nil {
 				return
 			}
-			flusher.Flush()
+			if visible {
+				if !writeSSE(w, projected) {
+					return
+				}
+				flusher.Flush()
+			}
 		case <-ticker.C:
 			if s.coordinator != nil {
 				presence, changed, err := s.coordinator.CleanupPresence(r.Context(), workspace, presenceTTL)
