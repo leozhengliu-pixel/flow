@@ -71,7 +71,7 @@ export function CodeIntegrationSettings({
       setOrganization("");
       setToken("");
       setHost("");
-      toast.success(t(`${title} connected`));
+      toast.success(t(`${title} configuration saved`));
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -156,7 +156,7 @@ export function CodeIntegrationSettings({
           <p>{t(description)}</p>
         </div>
         <aside>
-          <span>{connections.length ? t("Enabled by") : t("Built by")}</span>
+          <span>{connections.length ? t(connections[0].status==='connected'?"Enabled by":"Configured by") : t("Built by")}</span>
           <strong data-i18n-ignore>
             {connections.length
               ? (data.users.find(
@@ -184,7 +184,7 @@ export function CodeIntegrationSettings({
             <h2>
               {t(
                 connections.length
-                  ? "Connected organizations"
+                  ? "Configured organizations"
                   : `Connect ${title}`,
               )}
             </h2>
@@ -221,7 +221,7 @@ export function CodeIntegrationSettings({
                   connection.name}
               </strong>
               <span>
-                {t("Enabled by")}{" "}
+                {t(connection.status==='connected'?"Enabled by":"Configured by")}{" "}
                 <b data-i18n-ignore>
                   {data.users.find((user) => user.id === connection.connectedBy)
                     ?.displayName ?? data.viewer.displayName}
@@ -250,7 +250,7 @@ export function CodeIntegrationSettings({
                   className="code-manage"
                   aria-label={t("Manage connection")}
                 >
-                  {t("Connected")}
+                  {t(connection.status==='connected'?"Connected":"Configured")}
                   <ChevronDown />
                 </button>
               </DropdownMenu.Trigger>

@@ -1,6 +1,7 @@
 import { format } from 'date-fns'
 
 import type { Initiative, Project } from '@/types/flow'
+import { fiscalMonthOffset, fiscalYear } from '@/lib/runtime-preferences'
 
 type DateFormatter = (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => string
 
@@ -20,9 +21,9 @@ export function formatProjectPropertyDate(
       ? format(date, monthYear === 'short' ? "MMM ''yy" : 'MMM yyyy')
       : formatDate(`${value}T00:00:00`, { month: 'short', year })
   }
-  if (resolution === 'quarter') return `Q${Math.floor(date.getMonth() / 3) + 1} ${date.getFullYear()}`
-  if (resolution === 'halfYear') return `H${Math.floor(date.getMonth() / 6) + 1} ${date.getFullYear()}`
-  if (resolution === 'year') return String(date.getFullYear())
+  if (resolution === 'quarter') return `Q${Math.floor(fiscalMonthOffset(date) / 3) + 1} ${fiscalYear(date)}`
+  if (resolution === 'halfYear') return `H${Math.floor(fiscalMonthOffset(date) / 6) + 1} ${fiscalYear(date)}`
+  if (resolution === 'year') return String(fiscalYear(date))
   return locale === 'en-US'
     ? format(date, 'MMM do')
     : formatDate(`${value}T00:00:00`, { month: 'short', day: 'numeric' })

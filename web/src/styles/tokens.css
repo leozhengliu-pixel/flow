@@ -3,6 +3,8 @@
 :root{--action-menu-text:lch(91.178% 1.425 272);--action-menu-active-text:lch(100% 0 272);--action-menu-muted:lch(64.714% 1.425 272);--action-menu-active-bg:lch(20.82% 1.3 272);--issue-menu-text:var(--action-menu-text);--issue-menu-active-text:var(--action-menu-active-text);--issue-menu-muted:var(--action-menu-muted);--issue-menu-active-bg:var(--action-menu-active-bg)}
 :root[data-theme="light"]{--action-menu-text:lch(20% 1 282);--action-menu-active-text:lch(10% 0 282);--action-menu-muted:lch(40% 1 282);--action-menu-active-bg:lch(95% 0 282)}
 :root{--project-dependency-icon:lch(80% 80 29)}
+:root{--review-code-size:12px}
+:root{--code-light-bg:#fff;--code-light-fg:#24292f;--code-light-keyword:#cf222e;--code-light-string:#0a3069;--code-light-comment:#6e7781;--code-light-number:#0550ae;--code-dark-bg:#0d1117;--code-dark-fg:#c9d1d9;--code-dark-keyword:#ff7b72;--code-dark-string:#a5d6ff;--code-dark-comment:#8b949e;--code-dark-number:#79c0ff}
 :root[data-theme="light"]{--project-dependency-icon:var(--action-menu-muted)}
 :root{--activity-highlight-color:lch(47.918% 59.303 288.421)}
 :root[data-theme="light"]{--activity-highlight-color:lch(53% 52.26 286.91)}

@@ -1,8 +1,8 @@
-import { Children, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { Children, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import {
   Bot, CalendarDays, Check, ChevronDown, ChevronRight, CircleDot, Code2, FileText,
   Inbox, Mail, MessageSquare, MoreHorizontal, Plus, Radio, Rocket,
-  Search, Settings2, Smile, Sparkles, Upload, UsersRound, Zap,
+  Search, Smile, Sparkles, Upload, UsersRound, Zap,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -11,9 +11,10 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/i18n/i18n";
 import {
-  connectIntegration, createCustomerStatus, createCustomerTier, createCustomEmoji, createDocumentTemplate, deleteCustomerStatus, deleteCustomerTier, restoreTrashEntry,
+  authorizeIntegration, createCustomerStatus, createCustomerTier, createCustomEmoji, createDocumentTemplate, deleteCustomerStatus, deleteCustomerTier, restoreTrashEntry,
   deleteDocumentTemplate, disconnectIntegration, updateCustomEmoji, updateDocumentTemplate,
   updateCustomerStatus, updateCustomerTier, updateWorkspacePreferences,
+  updateWorkspaceAgentGuidance,
 } from "@/lib/api";
 import type { SettingsPageId } from "@/lib/app-routes";
 import type {
@@ -45,17 +46,17 @@ const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
 export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpenReleasePipeline, onOpenIntegration, onReload }: Props) {
   const [busy, setBusy] = useState(false);
   const settings = useMemo(() => normalizeSettings(data.workspaceSettings), [data.workspaceSettings]);
-  const save = async (next: WorkspaceSettings) => {
+  const save = async (next: Parameters<typeof updateWorkspacePreferences>[0]) => {
     setBusy(true);
     try { await updateWorkspacePreferences(next); await onReload(); }
     catch (error) { toast.error(message(error)); }
     finally { setBusy(false); }
   };
-  const setEnabled = (id: string, value: boolean) => save({ ...settings, featureFlags: { ...settings.featureFlags, [id]: value } });
+  const setEnabled = (id: string, value: boolean) => save({ featureFlags: { [id]: value } });
   const setFeature = <K extends keyof FeatureSettings>(key: K, value: FeatureSettings[K]) =>
-    save({ ...settings, featureSettings: { ...settings.featureSettings, [key]: value } });
+    save({ featureSettings: { [key]: value } });
 
-  if (page === "ai") return <AIPage settings={settings} busy={busy} setEnabled={setEnabled}/>;
+  if (page === "ai") return <AIPage data={data} onReload={onReload} settings={settings} busy={busy || !['admin','owner'].includes(data.viewerRole)} setEnabled={setEnabled}/>;
   if (page === "initiatives") return <InitiativesFeatureSettings data={data} settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload}/>;
   if (page === "documents") return <DocumentsPage data={data} onReload={onReload}/>;
   if (page === "customer-requests") return <CustomerRequestsPage data={data} settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload}/>;
@@ -66,8 +67,12 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
   return <IntegrationsPage data={data} onOpen={onOpenIntegration} onReload={onReload}/>;
 }
 
-function AIPage({settings,busy,setEnabled}:{settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void}) {
+function AIPage({data,onReload,settings,busy,setEnabled}:{data:BootstrapData;onReload:()=>Promise<void>;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void}) {
   const { t } = useI18n();
+  const [guidance,setGuidance]=useState(settings.agentInstructions??'');
+  const [savingGuidance,setSavingGuidance]=useState(false);
+  useEffect(()=>setGuidance(settings.agentInstructions??''),[settings.agentInstructions]);
+  const canEdit=['owner','admin'].includes(data.viewerRole)||settings.agentGuidancePermission==='members';
   const cards = [
     ["ai-agent", "Flow Agent", "Create issues and answer questions about your workspace", Bot],
     ["coding-sessions", "Coding sessions", "Assign or ask Flow to make code changes", Code2],
@@ -79,15 +84,16 @@ function AIPage({settings,busy,setEnabled}:{settings:WorkspaceSettings;busy:bool
     <FeatureSection title="Flow Agent" description="Create issues and answer questions about your workspace.">
       <FeatureCard>{cards.map(([id,title,description,Icon])=><FeatureRow key={id} icon={Icon} title={title} businessTitle={id==="ai-agent"} description={description} badge={id==="code-intelligence"?"Beta":undefined}><Toggle checked={settings.featureFlags[id]??["ai-agent","coding-sessions","loops"].includes(id)} disabled={busy} label={title} onChange={value=>setEnabled(id,value)}/></FeatureRow>)}</FeatureCard>
     </FeatureSection>
-    <FeatureSection title="Installed Agents" description="AI agents can work alongside you as teammates."><FeatureCard><FeatureRow icon={Settings2} title="Installed agents guidance" description="Provide context and instructions for installed agents"><span className="feature-state">{t("Configured in Agent personalization")}</span></FeatureRow></FeatureCard></FeatureSection>
+    <FeatureSection title="Installed Agents" description="AI agents can work alongside you as teammates."><div className="settings-agent-guidance"><label>{t('Installed agents guidance')}<textarea aria-label={t('Installed agents guidance')} maxLength={8000} disabled={!canEdit||savingGuidance} value={guidance} onChange={event=>setGuidance(event.target.value)}/></label><FeatureButton primary disabled={!canEdit||savingGuidance||guidance===(settings.agentInstructions??'')} onClick={async()=>{setSavingGuidance(true);try{await updateWorkspaceAgentGuidance(guidance);await onReload()}catch(error){toast.error(message(error))}finally{setSavingGuidance(false)}}}>Save</FeatureButton></div></FeatureSection>
     <FeatureSection title="AI" description="Control AI assistance throughout Flow"><FeatureCard><FeatureRow icon={MessageSquare} title="Resolved thread summaries" description="Control AI summaries for resolved threads across Flow"><Toggle checked={settings.featureFlags["thread-summaries"]??true} disabled={busy} label="Resolved thread summaries" onChange={value=>setEnabled("thread-summaries",value)}/></FeatureRow></FeatureCard></FeatureSection>
   </FeatureShell>;
 }
 
 function InitiativesFeatureSettings({data,settings,busy,setEnabled,setFeature,onReload}:{data:BootstrapData;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void;onReload:()=>Promise<void>}) {
   const { t } = useI18n();
-  const slack = data.integrationConnections.find(item=>item.provider==="slack");
-  const toggleSlack = async()=>{try{if(slack)await disconnectIntegration("slack");else await connectIntegration("slack",{name:"Slack",config:{scope:"initiative-updates"}});await onReload()}catch(error){toast.error(message(error))}};
+  const slackConfig = data.integrationConnections.find(item=>item.provider==="slack");
+  const slack = slackConfig?.status==="connected" ? slackConfig : undefined;
+  const toggleSlack = async()=>{try{if(slack)await disconnectIntegration("slack");else await authorizeIntegration("slack",{name:"Slack",config:{scope:"initiative-updates"}},Boolean(slackConfig));await onReload()}catch(error){toast.error(message(error))}};
   return <FeatureShell title="Initiatives" description="Initiatives group multiple projects that contribute toward the same strategic effort. Use initiatives to plan and coordinate larger streams of work and monitor their progress at scale.">
     <FeatureCard><FeatureRow title="Enable Initiatives" description="Visible to all non-guest workspace members"><Toggle checked={settings.featureFlags.initiatives??true} disabled={busy} label="Enable Initiatives" onChange={value=>setEnabled("initiatives",value)}/></FeatureRow></FeatureCard>
     <FeatureSection title="Initiative updates" description="Short status reports about progress and health. Owners receive reminders based on the update schedule.">
@@ -155,9 +161,9 @@ function PulseFeatureSettings({settings,busy,setEnabled,setFeature}:{settings:Wo
 }
 
 function AsksFeatureSettings({data,settings,busy,setFeature,onReload}:{data:BootstrapData;settings:WorkspaceSettings;busy:boolean;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void;onReload:()=>Promise<void>}) {
-  const [emailOpen,setEmailOpen]=useState(false); const slack=data.integrationConnections.find(item=>item.provider==="slack");
-  const toggleSlack=async()=>{try{if(slack)await disconnectIntegration("slack");else await connectIntegration("slack",{name:"Slack",config:{scope:"asks"}});await onReload()}catch(error){toast.error(message(error))}};
-  return <FeatureShell title="Asks" description="Let anyone submit bug reports, feature requests, and more using structured templates from Slack or email."><FeatureSection title="Slack" description="Allow anyone in your Slack workspace to submit Asks using templated forms">{slack?<FeatureCard><FeatureRow icon={MessageSquare} title={slack.name} businessTitle description="Connected workspace"><FeatureButton danger onClick={()=>void toggleSlack()}>Disconnect</FeatureButton></FeatureRow></FeatureCard>:<FeatureEmpty icon={MessageSquare} title="No workspaces connected" action={<FeatureButton onClick={()=>void toggleSlack()}><Plus size={14}/>Connect workspace</FeatureButton>}/>}</FeatureSection><FeatureSection title="Email" description="Allow anyone to submit Asks by emailing a custom address">{settings.featureSettings.asksEmailAddresses.length?<FeatureCard>{settings.featureSettings.asksEmailAddresses.map(email=><FeatureRow key={email} icon={Mail} title={email} businessTitle><FeatureButton danger disabled={busy} onClick={()=>setFeature("asksEmailAddresses",settings.featureSettings.asksEmailAddresses.filter(value=>value!==email))}>Remove</FeatureButton></FeatureRow>)}</FeatureCard>:<FeatureEmpty icon={Mail} title="No email addresses configured" action={<FeatureButton onClick={()=>setEmailOpen(true)}><Plus size={14}/>Add email</FeatureButton>}/>}<div className="feature-section-action">{settings.featureSettings.asksEmailAddresses.length>0&&<FeatureButton onClick={()=>setEmailOpen(true)}><Plus size={14}/>Add email</FeatureButton>}</div></FeatureSection>{emailOpen&&<EmailDialog onClose={()=>setEmailOpen(false)} onSave={email=>{setFeature("asksEmailAddresses",[...new Set([...settings.featureSettings.asksEmailAddresses,email])]);setEmailOpen(false)}}/>}</FeatureShell>;
+  const [emailOpen,setEmailOpen]=useState(false); const slackConfig=data.integrationConnections.find(item=>item.provider==="slack"); const slack=slackConfig?.status==="connected"?slackConfig:undefined;
+  const toggleSlack=async()=>{try{if(slack)await disconnectIntegration("slack");else await authorizeIntegration("slack",{name:"Slack",config:{scope:"asks"}},Boolean(slackConfig));await onReload()}catch(error){toast.error(message(error))}};
+  return <FeatureShell title="Asks" description="Let anyone submit bug reports, feature requests, and more using structured templates from Slack or email."><FeatureSection title="Slack" description="Allow anyone in your Slack workspace to submit Asks using templated forms">{slack?<FeatureCard><FeatureRow icon={MessageSquare} title={slack.name} businessTitle description="Connected workspace"><FeatureButton danger onClick={()=>void toggleSlack()}>Disconnect</FeatureButton></FeatureRow></FeatureCard>:<FeatureEmpty icon={MessageSquare} title="No workspaces connected" action={<FeatureButton onClick={()=>void toggleSlack()}><Plus size={14}/>Connect workspace</FeatureButton>}/>}</FeatureSection><FeatureSection title="Email" description="Allow anyone to submit Asks by emailing a custom address">{settings.featureSettings.asksEmailAddresses.length?<FeatureCard>{settings.featureSettings.asksEmailAddresses.map(email=><FeatureRow key={email} icon={Mail} title={email} businessTitle><FeatureButton danger disabled={busy} onClick={()=>setFeature("asksEmailAddresses",settings.featureSettings.asksEmailAddresses.filter(value=>value!==email))}>Remove</FeatureButton></FeatureRow>)}</FeatureCard>:<FeatureEmpty icon={Mail} title="No email addresses configured" action={<FeatureButton onClick={()=>setEmailOpen(true)}><Plus size={14}/>Add email</FeatureButton>}/>}<div className="feature-section-action">{settings.featureSettings.asksEmailAddresses.length>0&&<FeatureButton onClick={()=>setEmailOpen(true)}><Plus size={14}/>Add email</FeatureButton>}</div></FeatureSection>{emailOpen&&<EmailDialog addresses={data.emailIntakeAddresses.filter(item=>item.enabled&&item.verificationState==='verified'&&!settings.featureSettings.asksEmailAddresses.includes(item.address)).map(item=>item.address)} onClose={()=>setEmailOpen(false)} onSave={email=>{setFeature("asksEmailAddresses",[...new Set([...settings.featureSettings.asksEmailAddresses,email])]);setEmailOpen(false)}}/>}</FeatureShell>;
 }
 
 function EmojisPage({data,onReload}:{data:BootstrapData;onReload:()=>Promise<void>}) {
@@ -187,8 +193,19 @@ function IntegrationsPage({data,onOpen,onReload}:{data:BootstrapData;onOpen:(pro
   const {t}=useI18n();
   const [query,setQuery]=useState(""); const [category,setCategory]=useState("All"); const [busy,setBusy]=useState("");
   const list=INTEGRATIONS.filter(item=>(category==="All"||item.category===category)&&`${item.name} ${item.description}`.toLowerCase().includes(query.toLowerCase()));
-  const toggle=async(item:typeof INTEGRATIONS[number],connection?:IntegrationConnection)=>{setBusy(item.provider);try{if(connection)await disconnectIntegration(item.provider);else await connectIntegration(item.provider,{name:item.name,config:{mode:"workspace"}});await onReload()}catch(error){toast.error(message(error))}finally{setBusy("")}};
-  return <div className="feature-integrations"><FeatureShell title="Integrations" description="Enhance your Flow experience with a wide variety of add-ons and integrations"><div className="feature-integration-search"><Search size={16}/><input aria-label={t("Search integrations")} placeholder={t("Search integrations")} value={query} onChange={event=>setQuery(event.target.value)}/></div><div className="feature-categories" role="tablist" aria-label={t("Integration categories")}>{["All","Essentials","Agents","Engineering","Customer support","Automation"].map(value=><button role="tab" aria-selected={category===value} key={value} onClick={()=>setCategory(value)}>{t(value)}</button>)}</div><div className="feature-integration-grid">{list.map(item=>{const connection=data.integrationConnections.find(value=>value.provider===item.provider);const Icon=item.icon;const code=item.provider==='github'||item.provider==='gitlab';return <article key={item.provider}><Icon size={25}/><div><h3><span data-i18n-ignore>{item.name}</span>{connection&&<small>{t("Enabled")}</small>}</h3><p>{t(item.description)}</p></div><FeatureButton primary={!connection} danger={Boolean(connection)&&!code} disabled={busy===item.provider} onClick={()=>code?onOpen(item.provider as "github"|"gitlab"):void toggle(item,connection)}>{t(code?connection?"Manage":"Connect":connection?"Disconnect":"Connect")}</FeatureButton></article>})}</div>{!list.length&&<FeatureEmpty icon={Search} title="No integrations found"/>}</FeatureShell></div>;
+  const toggle=async(item:typeof INTEGRATIONS[number],connection?:IntegrationConnection)=>{setBusy(item.provider);try{if(connection?.status==="connected")await disconnectIntegration(item.provider);else await authorizeIntegration(item.provider,{name:item.name,config:{mode:"workspace"}},Boolean(connection));await onReload()}catch(error){toast.error(message(error))}finally{setBusy("")}};
+  return <div className="feature-integrations"><FeatureShell title="Integrations" description="Enhance your Flow experience with add-ons and integrations">
+    <div className="feature-integration-search"><Search size={16}/><input aria-label={t("Search integrations")} placeholder={t("Search integrations")} value={query} onChange={event=>setQuery(event.target.value)}/></div>
+    <div className="feature-categories" role="tablist" aria-label={t("Integration categories")}>{["All","Essentials","Agents","Engineering","Customer support","Automation"].map(value=><button role="tab" aria-selected={category===value} key={value} onClick={()=>setCategory(value)}>{t(value)}</button>)}</div>
+    <div className="feature-integration-grid">{list.map(item=>{
+      const connection=data.integrationConnections.find(value=>value.provider===item.provider);
+      const Icon=item.icon; const code=item.provider==='github'||item.provider==='gitlab';
+      const supported=code||item.provider==='slack'||item.provider==='figma';
+      const connected=connection?.status==='connected';
+      return <article key={item.provider}><Icon size={25}/><div><h3><span data-i18n-ignore>{item.name}</span>{connection&&<small>{t(connected?'Connected':connection.status==='error'?'Connection failed':'Not authorized')}</small>}</h3><p>{t(item.description)}</p>{connection?.lastError&&<p role="status">{connection.lastError}</p>}</div>
+        <FeatureButton primary={!connected} danger={connected&&!code} disabled={!supported||busy===item.provider} onClick={()=>code?onOpen(item.provider as "github"|"gitlab"):void toggle(item,connection)}>{t(!supported?'Unavailable':code?connection?'Manage':'Connect':connected?'Disconnect':'Connect')}</FeatureButton></article>;
+    })}</div>{!list.length&&<FeatureEmpty icon={Search} title="No integrations found"/>}
+  </FeatureShell></div>;
 }
 
 function FeatureShell({title,description,children}:{title:string;description?:string;children:ReactNode}) { const {t}=useI18n();return <div className="feature-settings"><header className="feature-header"><h1>{t(title)}</h1>{description&&<p>{t(description)}</p>}</header>{children}</div> }
@@ -206,7 +223,13 @@ function OptionList({type,items,onAdd,onEdit,onRemove}:{type:"status"|"tier";ite
 function OptionDialog({type,item,onClose,onSave}:{type:"status"|"tier";item?:FeatureOption;onClose:()=>void;onSave:(item:FeatureOption)=>void}) {const {t}=useI18n();const [name,setName]=useState(item?.name??"");const [color,setColor]=useState(item?.color??"#5e6ad2");const title=item?(type==="status"?"Edit customer status":"Edit customer tier"):(type==="status"?"New customer status":"New customer tier");return <FeatureDialog open onClose={onClose} title={title}><label>{t("Name")}<input aria-label={t("Name")} autoFocus value={name} onChange={event=>setName(event.target.value)}/></label><label>{t("Color")}<input aria-label={t("Color")} className="feature-color" type="color" value={color} onChange={event=>setColor(event.target.value)}/></label><FeatureDialogFooter><span/><FeatureButton onClick={onClose}>Cancel</FeatureButton><FeatureButton primary disabled={!name.trim()} onClick={()=>onSave({id:item?.id??`${type}-${Date.now()}`,name:name.trim(),color})}>Save</FeatureButton></FeatureDialogFooter></FeatureDialog>}
 function DomainList({values,empty,onEdit}:{values:string[];empty:string;onEdit:()=>void}) {const {t}=useI18n();return <FeatureCard><div className="feature-domain-row"><strong data-i18n-ignore={values.length?true:undefined}>{values.length?values.join(", "):t(empty)}</strong><FeatureButton aria-label={t("Open menu")} onClick={onEdit}>{values.length?"Edit":<Plus size={14}/>}</FeatureButton></div></FeatureCard>}
 function DomainDialog({title,values,onClose,onSave}:{title:string;values:string[];onClose:()=>void;onSave:(values:string[])=>void}) {const {t}=useI18n();const [text,setText]=useState(values.join("\n"));return <FeatureDialog open onClose={onClose} title={title}><label>{t("One domain or email per line")}<textarea aria-label={t("One domain or email per line")} autoFocus value={text} onChange={event=>setText(event.target.value)}/></label><FeatureDialogFooter><span/><FeatureButton onClick={onClose}>Cancel</FeatureButton><FeatureButton primary onClick={()=>onSave([...new Set(text.split(/[\n,]+/).map(value=>value.trim().toLowerCase()).filter(Boolean))])}>Save</FeatureButton></FeatureDialogFooter></FeatureDialog>}
-function EmailDialog({onClose,onSave}:{onClose:()=>void;onSave:(email:string)=>void}) {const {t}=useI18n();const [email,setEmail]=useState("");const valid=/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);return <FeatureDialog open onClose={onClose} title="Add Ask email"><label>{t("Email address")}<input aria-label={t("Email address")} autoFocus type="email" value={email} onChange={event=>setEmail(event.target.value)}/></label><FeatureDialogFooter><span/><FeatureButton onClick={onClose}>Cancel</FeatureButton><FeatureButton primary disabled={!valid} onClick={()=>onSave(email.toLowerCase())}>Add email</FeatureButton></FeatureDialogFooter></FeatureDialog>}
+function EmailDialog({addresses,onClose,onSave}:{addresses:string[];onClose:()=>void;onSave:(email:string)=>void}) {
+  const {t}=useI18n();const [email,setEmail]=useState(addresses[0]??"");
+  return <FeatureDialog open onClose={onClose} title="Add Ask email">
+    {addresses.length?<label>{t("Verified email address")}<FeatureSelect label="Verified email address" value={email} onChange={setEmail} options={addresses.map(address=>({value:address,label:address,translate:false}))}/></label>:<p>{t("No verified team email addresses available")}</p>}
+    <FeatureDialogFooter><span/><FeatureButton onClick={onClose}>Cancel</FeatureButton><FeatureButton primary disabled={!addresses.includes(email)} onClick={()=>onSave(email)}>Add email</FeatureButton></FeatureDialogFooter>
+  </FeatureDialog>;
+}
 function EmojiDialog({input,onClose,onReload}:{input:{name:string;imageUrl:string};onClose:()=>void;onReload:()=>Promise<void>}) {const {t}=useI18n();const [name,setName]=useState(input.name);const [busy,setBusy]=useState(false);const save=async()=>{setBusy(true);try{await createCustomEmoji({name,imageUrl:input.imageUrl});await onReload();onClose()}catch(error){toast.error(message(error))}finally{setBusy(false)}};return <FeatureDialog open onClose={onClose} title="Upload emoji"><div className="feature-emoji-preview"><img src={input.imageUrl} alt={t("Preview")}/></div><label>{t("Name")}<input aria-label={t("Name")} autoFocus value={name} onChange={event=>setName(event.target.value)}/></label><FeatureDialogFooter><span/><FeatureButton onClick={onClose}>Cancel</FeatureButton><FeatureButton primary disabled={busy||!name.trim()} onClick={()=>void save()}>Upload</FeatureButton></FeatureDialogFooter></FeatureDialog>}
 
 function normalizeSettings(settings:WorkspaceSettings):WorkspaceSettings {return {...settings,featureFlags:settings.featureFlags??{},featureSettings:{...DEFAULT_FEATURE_SETTINGS,...(settings.featureSettings??{}),customerStatuses:settings.featureSettings?.customerStatuses?.length?settings.featureSettings.customerStatuses:DEFAULT_FEATURE_SETTINGS.customerStatuses,customerTiers:settings.featureSettings?.customerTiers??[],customerExcludedDomains:settings.featureSettings?.customerExcludedDomains??[],customerGenericDomains:settings.featureSettings?.customerGenericDomains??[],asksEmailAddresses:settings.featureSettings?.asksEmailAddresses??[]}}}

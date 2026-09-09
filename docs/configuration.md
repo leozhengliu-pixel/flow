@@ -415,6 +415,46 @@ domains and use TLS plus ACL credentials.
 The app service uses `restart: unless-stopped`, so it retries while a selected
 database service completes its first-time initialization.
 
+## Settings Execution
+
+### Workspace policy execution
+
+Workspace security preferences are enforced by the API, including session authentication methods, second-factor requirements, guest Agent access and file types. Passkeys can satisfy the second-factor challenge. A positive authenticator ceremony still needs verification on each deployment's origin/RP configuration.
+
+Database migration 4 adds per-session authentication context for existing installations. New password sessions write this context atomically; external callbacks replace it with the verified provider context before issuing a cookie. Legacy sessions with an unknown authentication method must sign in again when method restrictions apply. MFA checks also apply before an interactive OAuth grant is issued for a workspace.
+
+`reviewThirdPartyApplications` gates incoming OAuth applications. An authorization attempt creates an approval request without issuing a code. Administrators review it in Security settings. Approval binds the client ID and its scopes; requesting additional scopes requires another decision. Rejecting or removing approval blocks existing access tokens and refresh tokens while the policy is enabled. A delegated API key needs the `admin` scope to approve applications.
+
+`GET/PUT /api/application-policies` and `DELETE /api/application-policies/{id}` manage application decisions and external Agent MCP connectors. A connector has a server URL, owner, personal/workspace scope and pending/approved/rejected status. Personal connectors are available only to their owner. When `allowedMcpConnectors` is `approved`, discovery and execution require approval; rejected connectors are always blocked. Disabling `mcpConnectorsEnabled` also blocks tools from already-open Agent conversations.
+
+External MCP connectors support Streamable HTTP initialization, JSON/SSE responses, paginated `tools/list` and `tools/call`. They require both `FLOW_AGENT_TOOLS_ENABLED` and `FLOW_AGENT_WRITE_TOOLS` and every call requires interactive approval. Tools from external servers are conservatively treated as potentially mutating. Discovery is bounded to 30 seconds, 10 pages per server and 128 tools total. Execution checks current membership and workspace policy again after approval. Redirects and non-public production endpoints are rejected.
+
+For servers requiring bearer authentication, set `FLOW_MCP_CREDENTIALS` to a JSON object keyed by connector ID. Each value contains `url` and `token`. The URL must exactly match the registered URL (ignoring a trailing slash); credentials are never returned by the policy API. Use deployment secrets to supply this environment variable. Interactive remote MCP OAuth, elicitation and legacy HTTP+SSE transports are not implemented.
+
+The support privacy control omits sender identity from **new** email intake records, their persisted events and email Ask requesters. It does not redact freeform message bodies or rewrite historical data. Sensitive data protection blocks Agent requests, external MCP tools and integration deliveries, and strips business content from outgoing notification emails. These technical controls are not a HIPAA certification or a substitute for deployment-specific compliance measures.
+
+### Scheduled workflows
+
+Team stale-issue and closed-item archive sweeps run once per minute with up to 100 stale and 100 archive candidates per team. Production release completion rules run on the status transition, from either the API or a CI event, and do not repeat for a replayed completion. A pipeline-specific rule takes precedence over an all-production-pipelines rule. Invalid cross-team statuses or pipeline scopes are rejected when saving rules.
+
+Pulse summaries run at 09:00 in the member's first team's configured timezone (UTC when unavailable); weekly summaries run on Mondays. Personal `daily`, `weekly` or `never` overrides the workspace schedule; `default` inherits it. Summaries count updates visible to the recipient and use the normal Inbox/email/desktop delivery preferences. A persisted per-recipient cursor prevents duplicates across scheduler restarts. New summary notifications are appended without rewriting existing notifications or issue records.
+
+Asks email addresses must reference enabled, DNS-verified team intake addresses. Production verification reads the `_flow-intake` TXT record; sending the displayed verification string alone is insufficient. Forward received messages through the existing token-authenticated email intake endpoint. Matching addresses create a linked Ask and issue in the address's team. Message IDs deduplicate delivery retries. Flow does not run an SMTP receiving server; configure your mail service to forward inbound messages.
+
+Integration directory entries distinguish configuration from completed authorization. Supported OAuth connections enter the provider authorization flow; unavailable provider adapters cannot be connected from the directory. Credentials, endpoint configuration and provider permissions are required before a real connection can be established.
+
+## Repository Actions
+
+GitHub and GitLab merge/close/reopen actions require an OAuth access token on
+the configured connection or `FLOW_INTEGRATION_GITHUB_ACCESS_TOKEN` /
+`FLOW_INTEGRATION_GITLAB_ACCESS_TOKEN` in the deployment. They return an error
+when credentials are missing instead of changing only the local review state.
+For self-hosted providers, set `FLOW_INTEGRATION_GITHUB_API_URL` (for example,
+the enterprise `/api/v3` endpoint), `FLOW_INTEGRATION_GITLAB_API_URL`, or
+`FLOW_INTEGRATION_GITLAB_HOST`. Workspace configuration cannot redirect these
+deployment credentials to another API host. GitLab merge behavior remains
+subject to the repository's merge policy, including asynchronous rebases.
+
 ## Row-Backed Issue Collections
 
 Favorites, favorite folders, and resource subscriptions use metadata-only

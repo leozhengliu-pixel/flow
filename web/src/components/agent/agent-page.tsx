@@ -270,7 +270,7 @@ export function AgentPage({
         <button
           className={styles.mobileMenu}
           aria-label={t("Open navigation")}
-          onClick={onOpenSidebar}
+          data-sidebar-trigger onClick={onOpenSidebar}
           type="button"
         >
           ☰

@@ -245,6 +245,7 @@ func (s *server) finishOIDC(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "could not create Flow session")
 		return
 	}
+	if err:=s.store.SetSessionAuthentication(r.Context(),sessionToken,providerID,issuer,verifiedMFAClaim(claims));err!=nil {writeError(w,http.StatusInternalServerError,"could not save authentication context");return}
 	if role := externalOIDCRole(s.externalAuth.config.OIDC, claims); role != "" {
 		for _, membership := range session.Memberships {
 			if err := s.store.UpdateMemberRole(r.Context(), membership.Workspace.ID, session.User.ID, role); err != nil {
@@ -333,6 +334,9 @@ func (s *server) finishSAML(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "could not create Flow session")
 		return
 	}
+	issuer := ""
+	if s.externalAuth.saml != nil && s.externalAuth.saml.ServiceProvider.IDPMetadata != nil {issuer=s.externalAuth.saml.ServiceProvider.IDPMetadata.EntityID}
+	if err:=s.store.SetSessionAuthentication(r.Context(),token,"saml",issuer,false);err!=nil {writeError(w,http.StatusInternalServerError,"could not save authentication context");return}
 	setSessionCookie(w, r, token, flowSession.ExpiresAt)
 	http.Redirect(w, r, s.externalAuth.appURL, http.StatusFound)
 }

@@ -21,6 +21,16 @@ func metadataOnlyMutation(event string, payload any) bool {
 		return ok && input.TemplateID == ""
 	}
 	switch event {
+	case "pulse.summary_scheduled":
+		// Only appends new notifications/deliveries; persistWorkspace handles
+		// this event without replacing or hydrating existing content records.
+		return true
+	case "application_policy.updated":
+		return true
+	case "workspace.agent_guidance_updated":
+		return true
+	case "settings.project_archive":
+		return true
 	case "loop.created", "loop.updated", "loop.deleted",
 		"workflow_definition.created", "workflow_definition.updated", "workflow_definition.deleted",
 		"ai.conversation_created", "ai.conversation_updated", "ai.prompt_progress_created":

@@ -105,7 +105,7 @@ export function SettingsRow({
       tabIndex={tabIndex}
     >
       {icon && <span className="settings-row-icon">{icon}</span>}
-      <div>
+      <div className="settings-row-copy">
         <strong>{title}</strong>
         {description && <span>{description}</span>}
       </div>

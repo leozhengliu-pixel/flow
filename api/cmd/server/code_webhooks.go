@@ -122,6 +122,9 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 			updated = review
 		}
 		updated = data.Reviews[index]
+		if err := applyGitSettingAutomations(data, updated, reviewAutomationEvent(updated, event.Action), now); err != nil {
+			return err
+		}
 		for connectionIndex := range data.IntegrationConnections {
 			if data.IntegrationConnections[connectionIndex].Provider == provider {
 				data.IntegrationConnections[connectionIndex].LastWebhookAt = &now
@@ -396,7 +399,7 @@ func (s *server) webhookConnection(r *http.Request, provider string) *domain.Int
 		return nil
 	}
 	for index := range data.IntegrationConnections {
-		if data.IntegrationConnections[index].Provider == provider && data.IntegrationConnections[index].Status == "configured" {
+		if data.IntegrationConnections[index].Provider == provider && slices.Contains([]string{"configured", "connected"}, data.IntegrationConnections[index].Status) {
 			return &data.IntegrationConnections[index]
 		}
 	}
@@ -425,6 +428,19 @@ func verifyCodeWebhook(provider string, connection *domain.IntegrationConnection
 }
 
 type externalCodeReviewEvent struct {
+	Sender struct {
+		Login string `json:"login"`
+		Type  string `json:"type"`
+	} `json:"sender"`
+	RequestedTeam *struct {
+		Slug string `json:"slug"`
+	} `json:"requested_team"`
+	Comment struct {
+		Body string `json:"body"`
+	} `json:"comment"`
+	Review struct {
+		Body string `json:"body"`
+	} `json:"review"`
 	Action      string `json:"action"`
 	Number      int    `json:"number"`
 	Title       string `json:"title"`
@@ -584,7 +600,18 @@ func appendCodeReviewNotifications(data *domain.Bootstrap, review domain.CodeRev
 	recipients = uniqueStrings(recipients)
 	result := append([]domain.Notification{}, data.Notifications...)
 	for _, recipient := range recipients {
+		if settings, ok := data.UserSettings[recipient]; ok && !reviewNotificationEnabled(settings, event) {
+			continue
+		}
+		preferences, ok := data.NotificationPreferences[recipient]
+		if !ok {
+			preferences = defaultPreferences(recipient)
+		}
+		if !preferences.Inbox.Enabled || !categoryEnabled(preferences.Inbox, "reviews") {
+			continue
+		}
 		result = append(result, domain.Notification{ID: fmt.Sprintf("notification_review_%d_%s", now.UnixNano(), recipient), RecipientID: recipient, Type: "codeReview", SourceType: "codeReview", SourceID: eventID, ReviewID: review.ID, Actor: actor, Category: "reviews", GroupKey: "review:" + review.ID, OccurrenceCount: 1, LatestActorIDs: []string{actor.ID}, CreatedAt: now, UpdatedAt: now})
+		enqueueNotificationDeliveries(data, result[len(result)-1], preferences)
 	}
 	return result
 }

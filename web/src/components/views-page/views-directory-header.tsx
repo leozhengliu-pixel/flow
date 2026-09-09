@@ -35,7 +35,7 @@ export function ViewsDirectoryHeader({
   const localizedAction = t(actionLabel)
   return <>
     <header className={styles.header}>
-      <button className={styles.mobileMenu} aria-label={t('Open workspace sidebar')} onClick={onOpenSidebar} type="button">{t('Menu')}</button>
+      <button className={styles.mobileMenu} aria-label={t('Open workspace sidebar')} data-sidebar-trigger onClick={onOpenSidebar} type="button">{t('Menu')}</button>
       <h2>{t(title)}</h2>
       {afterTitle}
       <button aria-label={t(`Create ${actionLabel.toLowerCase()}`)} className={styles.createHeader} onClick={onAction} type="button">

@@ -11,10 +11,11 @@ export function PersonIdentityDetails({ person }: { person: PersonIdentity }) {
   const directory = usePeopleDirectory()
   const user = { ...person, ...directoryPerson(directory.users, person.id) }
   const identifier = personIdentifier(user)
-  if (!identifier && !user.email) return null
+  if (!identifier && !user.email && !user.jobTitle) return null
   return <dl className="person-identity-details">
     {identifier && <div><dt>{t('User ID')}</dt><dd data-i18n-ignore>{identifier}</dd></div>}
     {user.email && <div><dt>{t('Email')}</dt><dd data-i18n-ignore>{user.email}</dd></div>}
+    {user.jobTitle && <div><dt>{t('Job title')}</dt><dd data-i18n-ignore>{user.jobTitle}</dd></div>}
   </dl>
 }
 

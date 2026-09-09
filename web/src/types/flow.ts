@@ -5,6 +5,7 @@ export interface User {
   userId?: string;
   name: string;
   displayName: string;
+  jobTitle?: string;
   email: string;
   avatarUrl?: string;
   active: boolean;
@@ -888,7 +889,7 @@ export interface UserSettings {
   dpaUpdates?: boolean;
   agentEnabled: boolean;
   agentInstructions: string;
-  pulseSchedule?: "daily" | "weekly" | "never";
+  pulseSchedule?: "default" | "daily" | "weekly" | "never";
   jobTitle?: string;
   username?: string;
   updatedAt: string;
@@ -934,6 +935,7 @@ export interface WorkspaceSettings {
   initiativePermission?: string;
   loopPermission?: string;
   agentGuidancePermission?: string;
+  agentInstructions?: string;
   preventGuestAgents?: boolean;
   agentWebSearch?: boolean;
   externalLoopTriggers?: boolean;
@@ -1118,6 +1120,7 @@ export interface TargetBranch {
   repository: string;
   branch: string;
   default: boolean;
+  automationStates?: Record<string,string>;
   createdAt: string;
   updatedAt: string;
 }

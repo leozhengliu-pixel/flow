@@ -51,6 +51,7 @@ type server struct {
 	coordinationStarted            atomic.Bool
 	workflowSchedulerStarted       atomic.Bool
 	deliverySchedulerStarted       atomic.Bool
+	settingsLastSweep              atomic.Int64
 	deliverySchedulerMu            sync.Mutex
 	deliverySchedulerCancel        context.CancelFunc
 	deliverySchedulerDone          chan struct{}
@@ -240,6 +241,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/account/sessions/others", s.revokeOtherSessions)
 	mux.HandleFunc("DELETE /api/account/sessions/{id}", s.revokeAccountSession)
 	mux.HandleFunc("GET /api/account/passkeys", s.listPasskeys)
+	mux.HandleFunc("POST /api/account/mfa/start", s.beginMFA)
+	mux.HandleFunc("POST /api/account/mfa/finish", s.finishMFA)
 	mux.HandleFunc("POST /api/account/passkeys/register/start", s.beginPasskeyRegistration)
 	mux.HandleFunc("POST /api/account/passkeys/register/finish", s.finishPasskeyRegistration)
 	mux.HandleFunc("PATCH /api/account/passkeys/{id}", s.updatePasskey)
@@ -359,6 +362,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/project-statuses/reorder", s.reorderProjectStatuses)
 	mux.HandleFunc("GET /api/workspace/preferences", s.getWorkspacePreferences)
 	mux.HandleFunc("PATCH /api/workspace/preferences", s.updateWorkspacePreferences)
+	mux.HandleFunc("PATCH /api/workspace/agent-guidance", s.updateWorkspaceAgentGuidance)
 	mux.HandleFunc("GET /api/api-keys", s.listAPIKeys)
 	mux.HandleFunc("POST /api/api-keys", s.createAPIKey)
 	mux.HandleFunc("PATCH /api/api-keys/{id}", s.updateAPIKey)
@@ -398,6 +402,9 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PUT /scim/v2/{workspace}/Groups/{id}", s.scimGroup)
 	mux.HandleFunc("DELETE /scim/v2/{workspace}/Groups/{id}", s.scimGroup)
 	mux.HandleFunc("PUT /api/integrations/{provider}", s.connectIntegration)
+	mux.HandleFunc("GET /api/application-policies", s.listApplicationPolicies)
+	mux.HandleFunc("PUT /api/application-policies", s.saveApplicationPolicy)
+	mux.HandleFunc("DELETE /api/application-policies/{id}", s.deleteApplicationPolicy)
 	mux.HandleFunc("POST /api/integrations/{provider}/oauth/start", s.startIntegrationOAuth)
 	mux.HandleFunc("GET /api/integrations/{provider}/oauth/callback", s.finishIntegrationOAuth)
 	mux.HandleFunc("POST /api/integrations/{provider}/{id}/oauth/refresh", s.refreshIntegrationOAuth)
@@ -778,6 +785,20 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 }
 
 func sanitizeBootstrap(data *domain.Bootstrap) {
+	delete(data.Settings, "applicationPolicies")
+	delete(data.Settings, "pulseDeliveryCursors")
+	for index := range data.Users {
+		data.Users[index].JobTitle = data.UserSettings[data.Users[index].ID].JobTitle
+	}
+	for index := range data.Members {
+		data.Members[index].User.JobTitle = data.UserSettings[data.Members[index].User.ID].JobTitle
+	}
+	data.Viewer.JobTitle = data.UserSettings[data.Viewer.ID].JobTitle
+	if settings, ok := data.UserSettings[data.Viewer.ID]; ok {
+		data.UserSettings = map[string]domain.UserSettings{data.Viewer.ID: settings}
+	} else {
+		data.UserSettings = map[string]domain.UserSettings{}
+	}
 	// These collections have per-resource visibility rules and are served only
 	// through their paginated endpoints. Keeping them in the persisted settings
 	// envelope avoids a second transaction, but they must never leak through the
@@ -1047,6 +1068,9 @@ func (s *server) updateWorkspaceSettings(w http.ResponseWriter, r *http.Request)
 		input = map[string]any{}
 	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "workspace.settings_updated", "workspace", input, func(data *domain.Bootstrap) error {
+		// Security approvals are managed through their permission-checked API.
+		input["applicationPolicies"] = data.Settings["applicationPolicies"]
+		input["pulseDeliveryCursors"] = data.Settings["pulseDeliveryCursors"]
 		data.Settings = input
 		return nil
 	})
@@ -1572,6 +1596,9 @@ type customerInput struct {
 }
 
 func (s *server) createCustomer(w http.ResponseWriter, r *http.Request) {
+	if !s.allowManualCustomerEdit(w, r) {
+		return
+	}
 	var input customerInput
 	if !decodeJSON(w, r, &input) {
 		return
@@ -1584,6 +1611,11 @@ func (s *server) createCustomer(w http.ResponseWriter, r *http.Request) {
 	customer := domain.Customer{ID: fmt.Sprintf("customer_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), Status: "active", Domains: []string{}, CreatedAt: now, UpdatedAt: now}
 	applyCustomerInput(&customer, input)
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "customer.created", customer.ID, input, func(data *domain.Bootstrap) error {
+		for _, value := range customer.Domains {
+			if customerDomainMatches(value, data.WorkspaceSettings.FeatureSettings.CustomerGenericDomains) {
+				return fmt.Errorf("%w: generic domains cannot identify a customer", errInvalid)
+			}
+		}
 		data.Customers = append(data.Customers, customer)
 		return nil
 	})
@@ -1591,6 +1623,9 @@ func (s *server) createCustomer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) updateCustomer(w http.ResponseWriter, r *http.Request) {
+	if !s.allowManualCustomerEdit(w, r) {
+		return
+	}
 	id := r.PathValue("id")
 	var input customerInput
 	if !decodeJSON(w, r, &input) {
@@ -1603,6 +1638,11 @@ func (s *server) updateCustomer(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		applyCustomerInput(&data.Customers[index], input)
+		for _, value := range data.Customers[index].Domains {
+			if customerDomainMatches(value, data.WorkspaceSettings.FeatureSettings.CustomerGenericDomains) {
+				return fmt.Errorf("%w: generic domains cannot identify a customer", errInvalid)
+			}
+		}
 		if strings.TrimSpace(data.Customers[index].Name) == "" {
 			return errInvalid
 		}
@@ -4478,12 +4518,13 @@ func applyNotificationUpdate(notification *domain.Notification, input domain.Not
 }
 
 func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.IssueUpdateInput) (map[string]string, error) {
-	if input.StateID != nil && issue.State.Type == "triage" && teamSettings(data, issue.Team.ID).TriageRequirePriority {
+	triageSettings := teamSettings(data, issue.Team.ID)
+	if input.StateID != nil && issue.State.Type == "backlog" && issue.TriagedAt == nil && triageSettings.TriageEnabled && triageSettings.TriageRequirePriority && slices.ContainsFunc(data.Issues, func(existing domain.Issue) bool { return existing.ID == issue.ID }) {
 		priority := issue.Priority
 		if input.Priority != nil {
 			priority = *input.Priority
 		}
-		if next := stateForTeam(data, issue.Team.ID, *input.StateID); next != nil && next.Type != "triage" && priority == 0 {
+		if next := stateForTeam(data, issue.Team.ID, *input.StateID); next != nil && next.Type != "backlog" && priority == 0 {
 			return nil, fmt.Errorf("%w: set a priority before leaving triage", errInvalid)
 		}
 	}
@@ -4542,6 +4583,9 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		if value.ID != issue.State.ID {
 			now := time.Now().UTC()
 			previousState := issue.State
+			if previousState.Type == "backlog" && value.Type != "backlog" && triageSettings.TriageEnabled && issue.TriagedAt == nil {
+				issue.TriagedAt = &now
+			}
 			changes["stateBefore"] = issue.State.Name
 			changes["stateBeforeId"] = issue.State.ID
 			changes["stateBeforeType"] = issue.State.Type

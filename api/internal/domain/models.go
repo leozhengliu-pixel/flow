@@ -10,6 +10,7 @@ type User struct {
 	UserID        string `json:"userId,omitempty"`
 	Name          string `json:"name"`
 	DisplayName   string `json:"displayName"`
+	JobTitle      string `json:"jobTitle,omitempty"`
 	Email         string `json:"email"`
 	AvatarURL     string `json:"avatarUrl,omitempty"`
 	Active        bool   `json:"active"`
@@ -886,6 +887,7 @@ type WorkspaceSettings struct {
 	InitiativePermission         string            `json:"initiativePermission,omitempty"`
 	LoopPermission               string            `json:"loopPermission,omitempty"`
 	AgentGuidancePermission      string            `json:"agentGuidancePermission,omitempty"`
+	AgentInstructions            string            `json:"agentInstructions,omitempty"`
 	PreventGuestAgents           bool              `json:"preventGuestAgents"`
 	AgentWebSearch               bool              `json:"agentWebSearch"`
 	ExternalLoopTriggers         bool              `json:"externalLoopTriggers"`
@@ -1139,6 +1141,7 @@ type TargetBranch struct {
 	Repository string    `json:"repository"`
 	Branch     string    `json:"branch"`
 	Default    bool      `json:"default"`
+	AutomationStates map[string]string `json:"automationStates,omitempty"`
 	CreatedAt  time.Time `json:"createdAt"`
 	UpdatedAt  time.Time `json:"updatedAt"`
 }

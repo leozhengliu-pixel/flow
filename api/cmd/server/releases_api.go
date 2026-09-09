@@ -399,6 +399,8 @@ func (s *server) receiveReleasePipelineEvent(w http.ResponseWriter, r *http.Requ
 		index := slices.IndexFunc(data.Releases, func(item domain.Release) bool {
 			return item.PipelineID == pipelineID && input.Version != "" && item.Version == input.Version
 		})
+		previousStatus := ""
+		if index >= 0 { previousStatus = data.Releases[index].Status }
 		now := time.Now().UTC()
 		if index < 0 {
 			name := input.Name
@@ -437,7 +439,7 @@ func (s *server) receiveReleasePipelineEvent(w http.ResponseWriter, r *http.Requ
 			data.Releases[index] = saved
 		}
 		data.ReleaseHistory = append(data.ReleaseHistory, domain.ReleaseHistory{ID: fmt.Sprintf("release_history_%d", now.UnixNano()), ReleaseID: saved.ID, Actor: data.Viewer, Action: "ci_event", Metadata: map[string]any{"stage": stage, "commitSha": input.CommitSHA}, CreatedAt: now})
-		return nil
+		return applyReleaseSettingAutomations(data, previousStatus, saved, now)
 	})
 	if errors.Is(err, errInvalid) || err != nil && strings.Contains(err.Error(), errInvalid.Error()) {
 		writeError(w, http.StatusBadRequest, err.Error())

@@ -216,7 +216,7 @@ it("renders split and unified diff rows and posts an inline comment", async () =
     "aria-pressed",
     "true",
   );
-  expect(screen.getByText("const answer = value + 1;")).toBeVisible();
+  expect(screen.getByText((_text,element)=>element?.tagName==='CODE'&&element.textContent==='const answer = value + 1;')).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Unified" }));
   expect(screen.getByRole("button", { name: "Unified" })).toHaveAttribute(
     "aria-pressed",

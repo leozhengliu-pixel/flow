@@ -201,6 +201,46 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/account/mfa/finish": {
+      "post": {
+        "operationId": "post_account_mfa_finish",
+        "tags": [
+          "account"
+        ],
+        "summary": "POST /api/account/mfa/finish",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/account/mfa/start": {
+      "post": {
+        "operationId": "post_account_mfa_start",
+        "tags": [
+          "account"
+        ],
+        "summary": "POST /api/account/mfa/start",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/account/passkeys": {
       "get": {
         "operationId": "get_account_passkeys",
@@ -1236,6 +1276,74 @@
           "api-keys"
         ],
         "summary": "POST /api/api-keys/{id}/rotate-secret",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/application-policies": {
+      "get": {
+        "operationId": "get_application_policies",
+        "tags": [
+          "application-policies"
+        ],
+        "summary": "GET /api/application-policies",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "put": {
+        "operationId": "put_application_policies",
+        "tags": [
+          "application-policies"
+        ],
+        "summary": "PUT /api/application-policies",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/application-policies/{id}": {
+      "delete": {
+        "operationId": "delete_application_policies_id",
+        "tags": [
+          "application-policies"
+        ],
+        "summary": "DELETE /api/application-policies/{id}",
         "parameters": [
           {
             "name": "id",
@@ -12672,6 +12780,26 @@
             }
           }
         ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/workspace/agent-guidance": {
+      "patch": {
+        "operationId": "patch_workspace_agent_guidance",
+        "tags": [
+          "workspace"
+        ],
+        "summary": "PATCH /api/workspace/agent-guidance",
         "responses": {
           "default": {
             "description": "Flow API response. See the domain model documentation for resource fields.",

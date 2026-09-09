@@ -148,7 +148,7 @@ function LoopList({
         <button
           className="loops-mobile-menu"
           aria-label={t("Open sidebar")}
-          onClick={onOpenSidebar}
+          data-sidebar-trigger onClick={onOpenSidebar}
         >
           <Settings2 />
         </button>
@@ -651,7 +651,7 @@ function LoopEditor({
         <button
           className="loops-mobile-menu"
           aria-label={t("Open sidebar")}
-          onClick={onOpenSidebar}
+          data-sidebar-trigger onClick={onOpenSidebar}
         >
           <Settings2 />
         </button>

@@ -241,6 +241,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		{version: 1, name: "base schema", apply: func(ctx context.Context) error { return s.applyMigrationStatements(ctx, databaseMigrations(s.dialect)) }},
 		{version: 2, name: "nullable external identity email", apply: s.makeAuthEmailNullable},
 		{version: 3, name: "domain event previous values", apply: s.addDomainEventPreviousValues},
+		{version: 4, name: "session authentication policy context", apply: s.createSessionSecuritySchema},
 	}
 	for _, migration := range migrations {
 		if applied[migration.version] {
@@ -1103,7 +1104,7 @@ func slugUnicode(value string) string {
 }
 
 func defaultUserSettings(userID string) domain.UserSettings {
-	return domain.UserSettings{UserID: userID, Language: "en-US", HomeView: "Flow Agent (default)", DisplayNames: "Full name", FirstDay: "Monday", Emoticons: true, SendComments: "Enter", FontSize: "Default", InterfaceTheme: "System preference", LightTheme: "Light", DarkTheme: "Dark", ReviewAutoAssign: true, BranchFormat: "{identifier}-{title}", PersonalSettingsVersion: 1, CodeReviewsEnabled: true, MergeStrategy: "Squash and merge", CodeTheme: "Flow Light", CodeFont: "12px, Regular, Default", ReviewCommentsFilter: "Exclude Bots", ReviewRequests: true, GithubTeamReviewRequests: true, ChecksMergeQueue: true, GitAttachmentFormat: "Title", GitBranchMoveStarted: true, CodingToolMoveStarted: true, ChangelogUpdates: true, InviteAcceptedUpdates: true, PrivacyUpdates: true, AgentEnabled: true, PulseSchedule: "never", UpdatedAt: time.Now().UTC()}
+	return domain.UserSettings{UserID: userID, Language: "en-US", HomeView: "Flow Agent (default)", DisplayNames: "Full name", FirstDay: "Monday", Emoticons: true, SendComments: "Enter", FontSize: "Default", InterfaceTheme: "System preference", LightTheme: "Light", DarkTheme: "Dark", ReviewAutoAssign: true, BranchFormat: "{identifier}-{title}", PersonalSettingsVersion: 1, CodeReviewsEnabled: true, MergeStrategy: "Squash and merge", CodeTheme: "Flow Light", CodeFont: "12px, Regular, Default", ReviewCommentsFilter: "Exclude Bots", ReviewRequests: true, GithubTeamReviewRequests: true, ChecksMergeQueue: true, GitAttachmentFormat: "Title", GitBranchMoveStarted: true, CodingToolMoveStarted: true, ChangelogUpdates: true, InviteAcceptedUpdates: true, PrivacyUpdates: true, AgentEnabled: true, PulseSchedule: "default", UpdatedAt: time.Now().UTC()}
 }
 
 func defaultWorkspaceSettings() domain.WorkspaceSettings {
@@ -1544,6 +1545,19 @@ func (s *SQLiteStore) persistWorkspace(ctx context.Context, workspaceKey string,
 	defer tx.Rollback()
 	if err := writeImportInputs(ctx, tx, workspaceKey, inputData); err != nil {
 		return err
+	}
+	if event != nil && event.Type == "pulse.summary_scheduled" {
+		for _, notification := range notifications {
+			if err := writeContentRecord(ctx, tx, workspaceKey, "notification", notification.IssueID, notification); err != nil {
+				return err
+			}
+		}
+		for _, delivery := range deliveries {
+			if err := writeContentRecord(ctx, tx, workspaceKey, "delivery", "", delivery); err != nil {
+				return err
+			}
+		}
+		notifications, deliveries = nil, nil
 	}
 	if deliveries != nil {
 		if err := syncContentRecords(ctx, tx, workspaceKey, "delivery", map[string][]domain.NotificationDelivery{"": deliveries}, data); err != nil {
