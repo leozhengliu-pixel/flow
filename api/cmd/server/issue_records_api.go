@@ -27,30 +27,22 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 	query := store.IssueRecordQuery{Workspace: key, Archived: r.URL.Query().Get("archived"), Sort: r.URL.Query().Get("sort"), Direction: r.URL.Query().Get("direction"), Cursor: r.URL.Query().Get("cursor"), Text: r.URL.Query().Get("q"), IncludeTotal: r.URL.Query().Get("includeTotal") == "true", GroupBy: r.URL.Query().Get("groupBy")}
 	query.Limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
 	query.Summary = r.URL.Query().Get("projection") == "list"
-	data, ok := s.store.WorkspaceMetadata(key)
-	if !ok {
-		return data, query, store.ErrAuthForbidden
+	data, access, err := s.requestIssueQueryAccess(r)
+	if err != nil {
+		return data, query, err
 	}
 	query.Workspace = data.Workspace.URLKey
+	if s.authDisabled && r.Method != http.MethodGet && r.Method != http.MethodHead && r.URL.Path != "/api/issue-records/visibility" {
+		data, _ = s.store.WorkspaceMetadata(query.Workspace)
+		data.ViewerRole = "admin"
+	}
 	if !s.authDisabled {
-		metadata, access, err := s.store.IssueQueryAccess(r.Context(), query.Workspace, authUser(r).ID)
-		if err != nil {
-			return data, query, err
-		}
-		data = metadata
 		query.Access = &access
 		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) {
 			query.AllowedTeamIDs = slices.Clone(key.TeamIDs)
 			if query.AllowedTeamIDs == nil {
 				query.AllowedTeamIDs = []string{}
 			}
-		}
-		if !access.Admin || query.AllowedTeamIDs != nil {
-			data, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
-			if err != nil {
-				return data, query, err
-			}
-			filterBootstrapForAPIKey(&data, r)
 		}
 	}
 	query.TeamIDs = splitQueryValues(r.URL.Query().Get("teamId"))
@@ -212,12 +204,21 @@ func (s *server) listIssueRecordGroups(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) issueRecordProjectSummary(w http.ResponseWriter, r *http.Request) {
-	metadata, query, err := s.issueRecordsQuery(r)
+	_, query, err := s.issueRecordsQuery(r)
 	if err != nil {
 		issueRecordsError(w, err)
 		return
 	}
-	if len(query.ProjectIDs) != 1 || !slices.ContainsFunc(metadata.Projects, func(project domain.Project) bool { return project.ID == query.ProjectIDs[0] }) {
+	if len(query.ProjectIDs) != 1 {
+		writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+	metadata, err := s.store.IssueReferenceMetadata(r.Context(), query, []domain.Issue{{Project: &domain.ProjectSummary{ID: query.ProjectIDs[0]}}})
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
+	if len(metadata.Projects) == 0 {
 		writeError(w, http.StatusNotFound, "project not found")
 		return
 	}
@@ -236,29 +237,17 @@ func (s *server) getIssueRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	issue, err := s.store.IssueRecord(r.Context(), query.Workspace, id)
+	issue, err := s.store.AuthorizedIssueRecord(r.Context(), query, id)
 	if err != nil {
-		writeError(w, 404, "issue not found")
+		issueDetailReadError(w, err)
 		return
 	}
-	query.Filter = store.IssueFilter{Field: "id", Values: []string{issue.ID}}
-	query.Archived = "all"
-	query.Limit = 1
-	page, err := s.store.QueryIssueRecords(r.Context(), query)
+	items, err := s.projectIssueRecordReferences(r, metadata, query, []domain.Issue{issue})
 	if err != nil {
 		issueRecordsError(w, err)
 		return
 	}
-	if len(page.Items) == 0 {
-		writeError(w, http.StatusNotFound, "issue not found")
-		return
-	}
-	page.Items, err = s.projectIssueRecordReferences(r, metadata, query, page.Items)
-	if err != nil {
-		issueRecordsError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, page.Items[0])
+	writeJSON(w, http.StatusOK, items[0])
 }
 
 func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
@@ -340,6 +329,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 	if input.ParentID != nil {
 		mutationScope.NewParentID = *input.ParentID
 	}
+	previousDocumentID := ""
 	updated, err := s.store.UpdateIssueRecord(r.Context(), query.Workspace, id, input.ExpectedVersion, mutationScope, func(data *domain.Bootstrap, issue *domain.Issue) error {
 		accessData := metadata
 		accessData.Issues = data.Issues
@@ -354,6 +344,11 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 			if version != *input.ExpectedDocumentVersion {
 				return store.ErrIssueVersion
 			}
+		}
+		if issue.DocumentContent != nil {
+			previousDocumentID = issue.DocumentContent.ID
+		} else {
+			previousDocumentID = "document_content_" + issue.ID
 		}
 		changes, err := applyUpdate(data, issue, input)
 		if err != nil {
@@ -381,6 +376,11 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		issueRecordsError(w, err)
 		return
 	}
+	if err == nil && updated.DocumentContent != nil && previousDocumentID != "" && previousDocumentID != updated.DocumentContent.ID {
+		if cleanupErr := s.store.DeleteDocumentCollaborationDocument(r.Context(), query.Workspace, previousDocumentID); cleanupErr != nil {
+			log.Printf("discard replaced collaboration document=%s: %v", previousDocumentID, cleanupErr)
+		}
+	}
 	if err == nil && updated.DocumentContent != nil && len(input.DocumentUpdateIDs) > 0 {
 		if deleteErr := s.store.DeleteDocumentCollaborationUpdates(r.Context(), query.Workspace, updated.DocumentContent.ID, input.DocumentUpdateIDs); deleteErr != nil {
 			log.Printf("compact collaboration updates document=%s: %v", updated.DocumentContent.ID, deleteErr)
@@ -395,29 +395,17 @@ func (s *server) getIssueRecordContext(w http.ResponseWriter, r *http.Request) {
 		issueRecordsError(w, err)
 		return
 	}
-	issue, err := s.store.IssueRecord(r.Context(), query.Workspace, r.PathValue("id"))
+	issue, err := s.store.AuthorizedIssueRecord(r.Context(), query, r.PathValue("id"))
 	if err != nil {
-		writeError(w, 404, "issue not found")
+		issueDetailReadError(w, err)
 		return
 	}
-	query.Filter = store.IssueFilter{Field: "id", Values: []string{issue.ID}}
-	query.Archived = "all"
-	query.Limit = 1
-	page, err := s.store.QueryIssueRecords(r.Context(), query)
+	items, err := s.projectIssueRecordReferences(r, metadata, query, []domain.Issue{issue})
 	if err != nil {
 		issueRecordsError(w, err)
 		return
 	}
-	if len(page.Items) == 0 {
-		writeError(w, 404, "issue not found")
-		return
-	}
-	page.Items, err = s.projectIssueRecordReferences(r, metadata, query, page.Items)
-	if err != nil {
-		issueRecordsError(w, err)
-		return
-	}
-	issue = page.Items[0]
+	issue = items[0]
 	history, err := s.store.IssueHistoryPage(r.Context(), query.Workspace, issue.ID, r.URL.Query().Get("commentsCursor"), r.URL.Query().Get("activitiesCursor"))
 	if err != nil {
 		issueRecordsError(w, err)
@@ -452,6 +440,11 @@ func (s *server) getIssueRecordContext(w http.ResponseWriter, r *http.Request) {
 func (s *server) projectIssueRecordReferences(r *http.Request, metadata domain.Bootstrap, query store.IssueRecordQuery, issues []domain.Issue) ([]domain.Issue, error) {
 	if (query.Access == nil || query.Access.Admin) && query.AllowedTeamIDs == nil {
 		return issues, nil
+	}
+	var err error
+	metadata, err = s.store.IssueReferenceMetadata(r.Context(), query, issues)
+	if err != nil {
+		return nil, err
 	}
 	ids := []string{}
 	for _, issue := range issues {

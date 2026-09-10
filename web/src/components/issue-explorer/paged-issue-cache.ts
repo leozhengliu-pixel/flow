@@ -14,6 +14,8 @@ export class PagedIssueCache {
   readonly maxBytes: number
   constructor(capacity = 40, maxBytes = 16 * 1024 * 1024) { this.capacity = capacity; this.maxBytes = maxBytes }
   key(group: string, page: number) { return JSON.stringify([group, page]) }
+  clear() { this.pages.clear(); this.sizes.clear(); this.starts.clear(); this.cursors.clear(); this.bytes = 0 }
+  contains(id: string) { return [...this.pages.values()].some(page => page.items.some(issue => issue.id === id)) }
   start(group: string, page: number) { return this.starts.get(group)?.[page] ?? 0 }
   pageAt(group: string, index: number) {
     const starts = this.starts.get(group) ?? [0]

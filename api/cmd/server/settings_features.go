@@ -462,7 +462,7 @@ func (s *server) moveWorkspaceLabelToTeams(w http.ResponseWriter, r *http.Reques
 
 func (s *server) deleteWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "label.deleted", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateLabelDeletion(r.Context(), workspaceKey(r), "label.deleted", id, false, func(data *domain.Bootstrap) error {
 		before := len(data.Labels)
 		data.Labels = slices.DeleteFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id && labelScopeIsWorkspace(label.Scope) })
 		if before == len(data.Labels) {
@@ -563,9 +563,9 @@ func (s *server) updateLabelGroup(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteLabelGroup(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "label_group.deleted", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateLabelDeletion(r.Context(), workspaceKey(r), "label_group.deleted", id, true, func(data *domain.Bootstrap) error {
 		before := len(data.LabelGroups)
-		data.LabelGroups = slices.DeleteFunc(data.LabelGroups, func(group domain.LabelGroup) bool { return group.ID == id })
+		data.LabelGroups = slices.DeleteFunc(data.LabelGroups, func(group domain.LabelGroup) bool { return group.ID == id && labelScopeIsWorkspace(group.Scope) })
 		if before == len(data.LabelGroups) {
 			return errNotFound
 		}
@@ -581,7 +581,11 @@ func (s *server) deleteLabelGroup(w http.ResponseWriter, r *http.Request) {
 				return remove
 			})
 			removeLabelReferences(data, childIDs)
+			for childID := range childIDs {
+				removeResourcePreferences(data, "label", childID)
+			}
 		}
+		removeResourcePreferences(data, "label", id)
 		return nil
 	})
 	if err != nil {

@@ -1,0 +1,17 @@
+.issue-description-save-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-card);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.issue-description-save-error > span { flex-basis: 100%; }
+.issue-description-save-error button { text-decoration: underline; text-underline-offset: 3px; }

@@ -3,6 +3,7 @@ import { realtimeClientId, updatePresence } from '@/lib/api'
 import { loadRealtimeCursor, saveRealtimeCursor } from '@/lib/realtime-cache'
 import { RealtimeEventQueue } from '@/lib/realtime-event-queue'
 import type { BootstrapData, Presence, RealtimeEvent } from '@/types/flow'
+import { ISSUE_QUERY_INVALIDATED, type IssueQueryInvalidation } from '@/components/issue-explorer/paged-issue-invalidation'
 
 export function useWorkspaceRealtime({ workspaceKey, issueId, route, onRemoteSync }: {
   workspaceKey?: string
@@ -36,7 +37,20 @@ export function useWorkspaceRealtime({ workspaceKey, issueId, route, onRemoteSyn
       syncing = true
       const event = queue.shift()!
       let failed = false
-      try { await syncRef.current(event) }
+      try {
+        // Drop protected rows before awaiting permission reconciliation. A
+        // background refresh must never keep revoked data visible on failure.
+        const force = /^(resync$|workspace\.resync_required$|issue\.(permissions_updated|permission_updated|permission_deleted|shared|unshared)$|issue_permission\.|team_member\.|workspace_member\.|membership\.)/.test(event.type)
+        if (force || event.type === 'issue.deleted') {
+          const detail: IssueQueryInvalidation = { workspaceKey, issueId: event.aggregateId, issue: event.payload?.issue, force }
+          window.dispatchEvent(new CustomEvent(ISSUE_QUERY_INVALIDATED, { detail }))
+        }
+        if (['label.deleted', 'issue_label.deleted', 'label_group.deleted'].includes(event.type)) {
+          const labelIds = (event.payload as { labelIds?: unknown } | undefined)?.labelIds
+          if (Array.isArray(labelIds)) window.dispatchEvent(new CustomEvent(ISSUE_QUERY_INVALIDATED, { detail: { workspaceKey, labelIds: labelIds.filter((id): id is string => typeof id === 'string') } satisfies IssueQueryInvalidation }))
+        }
+        await syncRef.current(event)
+      }
       catch {
         failed = true
         queue.push({ id: event.id, type: 'resync', createdAt: event.createdAt }, 0)

@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, makeIssue } from '@/test/fixtures'
 import { listIssueRecordGroups, listIssueRecords } from '@/lib/api'
 import { PagedIssueList } from './paged-issue-list'
+import { ISSUE_QUERY_INVALIDATED } from './paged-issue-invalidation'
 
 vi.mock('@/lib/api', () => ({ listIssueRecordGroups: vi.fn(), listIssueRecords: vi.fn() }))
 vi.mock('react-virtuoso', async () => {
@@ -53,5 +54,55 @@ describe('server-backed issue groups', () => {
     resolveOld({ groups: [{ value: 'state-backlog', count: 999 }] })
     await waitFor(() => expect(screen.queryByText('Backlog')).not.toBeInTheDocument())
     expect(screen.getByText('In progress').closest('header')).toHaveTextContent('42')
+  })
+
+  it.each(['status', 'none'])('starts the first %s page before the group count returns', async groupBy => {
+    let resolveGroups!: (value: { groups: { value: string; count: number }[] }) => void
+    vi.mocked(listIssueRecordGroups).mockImplementation(() => new Promise(resolve => { resolveGroups = resolve }))
+    vi.mocked(listIssueRecords).mockResolvedValue({ items: [makeIssue({ title: 'Prefetched first row' })], hasMore: false, total: -1 })
+    render(<I18nProvider><PagedIssueList data={makeBootstrap({ issues: [] })} query={{ groupBy }} onOpenIssueRecord={vi.fn()}/></I18nProvider>)
+    expect(listIssueRecords).toHaveBeenCalledTimes(1)
+    await act(async () => resolveGroups({ groups: [{ value: groupBy === 'none' ? 'all' : 'state-backlog', count: 1 }] }))
+    await screen.findByText('Prefetched first row')
+    expect(listIssueRecords).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores unrelated team and assignee updates without clearing cached rows', async () => {
+    const issue = makeIssue({ title: 'Current assigned issue' })
+    vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 1 }] })
+    vi.mocked(listIssueRecords).mockResolvedValue({ items: [issue], hasMore: false, total: -1 })
+    const data = makeBootstrap({ issues: [], issueCollectionPaged: true })
+    const query = { groupBy: 'status', teamId: issue.team.id, filter: { field: 'assignee', values: [issue.assignee?.id ?? ''] } }
+    const { rerender } = render(<I18nProvider><PagedIssueList data={data} query={query} onOpenIssueRecord={vi.fn()}/></I18nProvider>)
+    await screen.findByText('Current assigned issue')
+    rerender(<I18nProvider><PagedIssueList data={{ ...data, issues: [makeIssue({ id: 'unrelated', team: { ...issue.team, id: 'other-team' } }), makeIssue({ id: 'other-person', assignee: { ...data.viewer, id: 'different-person' } })] }} query={query} onOpenIssueRecord={vi.fn()}/></I18nProvider>)
+    expect(listIssueRecordGroups).toHaveBeenCalledTimes(1)
+    expect(listIssueRecords).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('Current assigned issue')).toBeVisible()
+  })
+
+  it('keeps existing rows during a count refresh but clears them on permission invalidation', async () => {
+    vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 1 }] })
+    vi.mocked(listIssueRecords).mockResolvedValue({ items: [makeIssue({ title: 'Existing row' })], hasMore: false, total: -1 })
+    const data = makeBootstrap({ issues: [], issueCollectionPaged: true })
+    const { rerender } = render(<I18nProvider><PagedIssueList data={data} query={{ groupBy: 'status' }} onOpenIssueRecord={vi.fn()}/></I18nProvider>)
+    await screen.findByText('Existing row')
+    vi.mocked(listIssueRecordGroups).mockImplementation(() => new Promise(() => {}))
+    rerender(<I18nProvider><PagedIssueList data={{ ...data, issueCollectionRevision: 1 }} query={{ groupBy: 'status' }} onOpenIssueRecord={vi.fn()}/></I18nProvider>)
+    expect(screen.getByText('Existing row')).toBeVisible()
+    await act(async () => window.dispatchEvent(new CustomEvent(ISSUE_QUERY_INVALIDATED, { detail: { workspaceKey: data.workspace.urlKey, force: true } })))
+    expect(screen.queryByText('Existing row')).not.toBeInTheDocument()
+  })
+
+  it('coalesces a burst of relevant remote deletions into one background query', async () => {
+    vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 1 }] })
+    vi.mocked(listIssueRecords).mockResolvedValue({ items: [makeIssue({ title: 'Remaining issue' })], hasMore: false, total: -1 })
+    const data = makeBootstrap({ issues: [], issueCollectionPaged: true })
+    render(<I18nProvider><PagedIssueList data={data} query={{ groupBy: 'status' }} onOpenIssueRecord={vi.fn()}/></I18nProvider>)
+    await screen.findByText('Remaining issue')
+    act(() => { for (let i = 0; i < 20; i++) window.dispatchEvent(new CustomEvent(ISSUE_QUERY_INVALIDATED, { detail: { workspaceKey: data.workspace.urlKey, issueId: `deleted-${i}` } })) })
+    expect(screen.getByText('Remaining issue')).toBeVisible()
+    await waitFor(() => expect(listIssueRecordGroups).toHaveBeenCalledTimes(2))
+    expect(listIssueRecords).toHaveBeenCalledTimes(2)
   })
 })

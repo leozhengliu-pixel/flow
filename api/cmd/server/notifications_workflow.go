@@ -936,7 +936,7 @@ func (s *server) updateTeamLabel(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteTeamLabel(w http.ResponseWriter, r *http.Request) {
 	teamID, labelID := r.PathValue("id"), r.PathValue("labelId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue_label.deleted", labelID, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateLabelDeletion(r.Context(), workspaceKey(r), "issue_label.deleted", labelID, false, func(data *domain.Bootstrap) error {
 		before := len(data.Labels)
 		data.Labels = slices.DeleteFunc(data.Labels, func(item domain.IssueLabel) bool { return item.ID == labelID && item.Scope == teamID })
 		if len(data.Labels) == before {

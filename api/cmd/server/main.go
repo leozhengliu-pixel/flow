@@ -586,6 +586,9 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/issue-records/groups", s.listIssueRecordGroups)
 	mux.HandleFunc("GET /api/issue-records/{id}", s.getIssueRecord)
 	mux.HandleFunc("GET /api/issue-records/{id}/context", s.getIssueRecordContext)
+	mux.HandleFunc("GET /api/issue-records/{id}/history", s.getIssueRecordHistory)
+	mux.HandleFunc("GET /api/issue-records/{id}/related", s.getIssueRecordRelated)
+	mux.HandleFunc("POST /api/issue-records/visibility", s.issueRecordVisibility)
 	mux.HandleFunc("PATCH /api/issue-records/{id}", s.updateIssueRecord)
 	mux.HandleFunc("DELETE /api/issue-records/{id}", s.issueRecordAlias(s.deleteIssue))
 	mux.HandleFunc("POST /api/issue-records/{id}/share", s.issueRecordAlias(s.shareIssue))
@@ -3731,6 +3734,7 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 		workspace = s.store.Bootstrap().Workspace.URLKey
 	}
 	var updated, current domain.Issue
+	var previousDocumentID string
 	payload := struct {
 		Changes domain.IssueUpdateInput `json:"changes"`
 		Issue   domain.Issue            `json:"issue"`
@@ -3740,7 +3744,11 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		if input.DescriptionData != nil && input.ExpectedDocumentVersion != nil {
+		previousDocumentID = "document_content_" + issue.ID
+		if issue.DocumentContent != nil && issue.DocumentContent.ID != "" {
+			previousDocumentID = issue.DocumentContent.ID
+		}
+		if input.ExpectedDocumentVersion != nil {
 			documentVersion := int64(0)
 			if issue.DocumentContent != nil {
 				documentVersion = issue.DocumentContent.Version
@@ -3768,6 +3776,11 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err == nil {
+		if updated.DocumentContent != nil && previousDocumentID != updated.DocumentContent.ID {
+			if deleteErr := s.store.DeleteDocumentCollaborationDocument(r.Context(), workspace, previousDocumentID); deleteErr != nil {
+				log.Printf("clear replaced collaboration document=%s: %v", previousDocumentID, deleteErr)
+			}
+		}
 		if updated.DocumentContent != nil && len(input.DocumentUpdateIDs) > 0 {
 			// Persisting the new base before pruning is crash-safe: replaying an
 			// already included Yjs update is idempotent.
@@ -4590,19 +4603,14 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		changes["descriptionBefore"] = issue.Description
 		changes["descriptionStateBefore"] = issue.DescriptionState
 		issue.Description = *input.Description
-		if input.DescriptionData == nil && issue.DocumentContent != nil {
-			issue.DocumentContent.Content = *input.Description
-			issue.DocumentContent.ContentData = nil
-			if input.DescriptionState != nil {
-				issue.DocumentContent.ContentState = *input.DescriptionState
-			}
-			issue.DocumentContent.UpdatedAt = time.Now().UTC()
-		}
+		// Markdown writes (including MCP) replace the rich-text projection. An
+		// old ProseMirror/Yjs snapshot must never take precedence over this text.
+		issue.DescriptionState = ""
 	}
 	if input.DescriptionState != nil {
 		issue.DescriptionState = *input.DescriptionState
 	}
-	if input.DescriptionData != nil {
+	if input.Description != nil || input.DescriptionData != nil || input.DescriptionState != nil {
 		content := issue.Description
 		if input.Description != nil {
 			content = *input.Description
@@ -4610,12 +4618,15 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		contentState := ""
 		if input.ContentState != nil {
 			contentState = *input.ContentState
-		} else if issue.DocumentContent != nil {
-			contentState = issue.DocumentContent.ContentState
 		}
 		now := time.Now().UTC()
 		if issue.DocumentContent == nil {
 			issue.DocumentContent = &domain.DocumentContent{ID: "document_content_" + issue.ID}
+		}
+		if contentState == "" {
+			// A replacement has no shared CRDT ancestry. Give it a new generation
+			// so delayed/offline updates cannot resurrect the previous document.
+			issue.DocumentContent.ID = "document_content_" + newCollaborationID()
 		}
 		issue.DocumentContent.Version++
 		issue.DocumentContent.Content = content

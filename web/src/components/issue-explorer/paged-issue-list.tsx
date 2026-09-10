@@ -5,6 +5,7 @@ import { listIssueRecordGroups, listIssueRecords, type IssueQueryInput } from '@
 import { MyIssuesGroupHeader, MyIssuesRow, type MyIssuesGroupData, type MyIssuesListProps } from '@/components/my-issues/my-issues-list'
 import { issueToExplorerRow } from './issue-explorer-model'
 import { PagedIssueCache } from './paged-issue-cache'
+import { ISSUE_QUERY_INVALIDATED, issueMayMatchQuery, queryUsesLabels, type IssueQueryInvalidation } from './paged-issue-invalidation'
 import styles from '@/components/my-issues/my-issues-list.module.css'
 import boardStyles from './issue-board.module.css'
 import { IssueBoardCard, IssueBoardGroupHeader } from './issue-board'
@@ -24,57 +25,114 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
   onShowGroup?: (id: string) => void
   onMoveIssueRecord?: (issue: Issue, input: IssueUpdateInput) => Promise<unknown>
 }) {
-  const signature = JSON.stringify([data.workspace.id, query, data.issueCollectionRevision])
+  const signature = JSON.stringify([data.workspace.id, query])
   const [retry, setRetry] = useState(0)
-  const cache = useMemo(() => new PagedIssueCache(), [signature, retry])
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const requestRefresh = useCallback(() => {
+    clearTimeout(refreshTimer.current)
+    refreshTimer.current = setTimeout(() => setRetry(value => value + 1), 80)
+  }, [])
+  useEffect(() => () => clearTimeout(refreshTimer.current), [signature])
+  const cache = useMemo(() => new PagedIssueCache(), [signature])
   const [groups, setGroups] = useState<Group[]>([])
   const [revision, setRevision] = useState(0)
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(true)
   const [dragging, setDragging] = useState<{ issue: Issue; group: string }>()
-  const active = useRef<{ signature: string; abort: AbortController; pending: Set<string> } | undefined>(undefined)
+  const active = useRef<{ signature: string; abort: AbortController; pending: Set<string>; ready: boolean } | undefined>(undefined)
   const queryRef = useRef(query); queryRef.current = query
   const totalRef = useRef(onTotalChange); totalRef.current = onTotalChange
   const recordsRef = useRef(onLoadedIssuesChange); recordsRef.current = onLoadedIssuesChange
   const stateOrderRef = useRef(data.states); stateOrderRef.current = data.states
+  const dataRef = useRef(data); dataRef.current = data
+  const groupsRef = useRef(groups); groupsRef.current = groups
+  const renderedSignature = useRef(signature)
   useEffect(() => {
-    const request = { signature, abort: new AbortController(), pending: new Set<string>() }
+    const request = { signature, abort: new AbortController(), pending: new Set<string>(), ready: false }
     active.current = request
-    recordsRef.current?.([])
-    setLoading(true); setError(undefined); setGroups([])
-    void listIssueRecordGroups(queryRef.current, request.abort.signal).then(result => {
+    const changed = renderedSignature.current !== signature
+    renderedSignature.current = signature
+    if (changed || !cache.retainedEntities) { recordsRef.current?.([]); setGroups([]); setLoading(true) }
+    setError(undefined)
+    const initialQuery = queryRef.current
+    const firstGroup = !changed && groupsRef.current.length ? groupsRef.current[0].value
+      : initialQuery.groupBy === 'none' ? 'all' : initialQuery.groupBy === 'status' || !initialQuery.groupBy ? stateOrderRef.current[0]?.id : undefined
+    // The common status/all-issues first page does not have to wait for counts.
+    const prefetched = firstGroup === undefined ? undefined : listIssueRecords({ ...initialQuery, groupValue: firstGroup, limit: PAGE_SIZE, includeTotal: false }, request.abort.signal)
+    // A rejected speculative page is handled after groups resolve, never as an
+    // unhandled rejection while the slower aggregate query is still pending.
+    const firstPage = prefetched?.then(page => ({ page }), error => ({ error }))
+    void listIssueRecordGroups(initialQuery, request.abort.signal).then(async result => {
       if (request.abort.signal.aborted) return
       const groups = result.groups.map(group => ({ ...group, loaded: 0, hasMore: group.count > 0 }))
       if (queryRef.current.groupBy === 'status') {
         const order = new Map(stateOrderRef.current.map((state, index) => [state.id, index]))
         groups.sort((a, b) => (order.get(a.value) ?? 999) - (order.get(b.value) ?? 999))
       }
+      const first = groups[0]
+      let page
+      if (first) {
+        const prefetched = first.value === firstGroup ? await firstPage : undefined
+        if (prefetched && 'error' in prefetched) throw prefetched.error
+        page = prefetched?.page ?? await listIssueRecords({ ...initialQuery, groupValue: first.value, limit: PAGE_SIZE, includeTotal: false }, request.abort.signal)
+      }
+      if (request.abort.signal.aborted) return
+      cache.clear()
+      if (first && page) { cache.put(first.value, 0, page); first.loaded = page.items.length; first.hasMore = page.hasMore }
+      request.ready = true
+      recordsRef.current?.(cache.records())
       setGroups(groups)
       totalRef.current?.(groups.reduce((total, group) => total + group.count, 0))
     }).catch(error => { if (!request.abort.signal.aborted) setError(String(error.message ?? error)) })
       .finally(() => { if (!request.abort.signal.aborted) setLoading(false) })
     return () => request.abort.abort()
-  }, [signature, retry])
+  }, [signature, retry, cache])
+  const collectionRevision = useRef(data.issueCollectionRevision)
+  useEffect(() => {
+    if (collectionRevision.current === data.issueCollectionRevision) return
+    collectionRevision.current = data.issueCollectionRevision
+    setRetry(value => value + 1)
+  }, [data.issueCollectionRevision])
+  useEffect(() => {
+    const invalidate = (event: Event) => {
+      const detail = (event as CustomEvent<IssueQueryInvalidation>).detail
+      if (detail.workspaceKey !== dataRef.current.workspace.urlKey) return
+      if (detail.labelIds) {
+        const deleted = new Set(detail.labelIds)
+        for (const issue of cache.records()) if (issue.labels.some(label => deleted.has(label.id))) cache.update({ ...issue, labels: issue.labels.filter(label => !deleted.has(label.id)) })
+        recordsRef.current?.(cache.records()); setRevision(value => value + 1)
+        if (queryUsesLabels(queryRef.current)) requestRefresh()
+        return
+      }
+      if (detail.force) { cache.clear(); recordsRef.current?.([]); setGroups([]); setLoading(true) }
+      if (detail.force) { clearTimeout(refreshTimer.current); setRetry(value => value + 1) }
+      else if (!detail.issue || cache.contains(detail.issue.id) || issueMayMatchQuery(detail.issue, queryRef.current, dataRef.current)) requestRefresh()
+    }
+    window.addEventListener(ISSUE_QUERY_INVALIDATED, invalidate)
+    return () => window.removeEventListener(ISSUE_QUERY_INVALIDATED, invalidate)
+  }, [cache, requestRefresh])
   const observedIssues = useRef(data.issues)
   useEffect(() => {
     if (observedIssues.current === data.issues) return
     const oldRecords = new Map(observedIssues.current.map(issue => [issue.id, issue]))
     observedIssues.current = data.issues
-    let refresh = false
+    let refresh = false, updated = false
     for (const issue of data.issues) {
       const oldRecord = oldRecords.get(issue.id)
       oldRecords.delete(issue.id)
       if (oldRecord === issue) continue
       const previous = cache.update(issue)
-      if (!previous || issueQueryChanged(previous, issue, queryRef.current)) refresh = true
+      if (previous) updated = true
+      if (previous ? issueQueryChanged(previous, issue, queryRef.current) : (!oldRecord || issueQueryChanged(oldRecord, issue, queryRef.current)) && (issueMayMatchQuery(issue, queryRef.current, dataRef.current) || Boolean(oldRecord && issueMayMatchQuery(oldRecord, queryRef.current, dataRef.current)))) refresh = true
     }
-    if (oldRecords.size) refresh = true
-    if (refresh) setRetry(value => value + 1)
-    else { recordsRef.current?.(cache.records()); setRevision(value => value + 1) }
-  }, [cache, data.issues])
+    // Bootstrap's bounded detail cache can evict unrelated entities. Its absence
+    // alone is not a deletion; explicit deletion events invalidate the query.
+    if (refresh) requestRefresh()
+    else if (updated) { recordsRef.current?.(cache.records()); setRevision(value => value + 1) }
+  }, [cache, data.issues, requestRefresh])
   const load = useCallback((group: string, pageIndex: number) => {
     const request = active.current, key = cache.key(group, pageIndex)
-    if (!request || request.signature !== signature || request.abort.signal.aborted || request.pending.has(key) || !cache.hasCursor(group, pageIndex)) return
+    if (!request || !request.ready || request.signature !== signature || request.abort.signal.aborted || request.pending.has(key) || !cache.hasCursor(group, pageIndex)) return
     request.pending.add(key)
     const cursor = cache.cursors.get(key)
     void listIssueRecords({ ...queryRef.current, groupValue: group, cursor, limit: PAGE_SIZE, includeTotal: false }, request.abort.signal).then(page => {
@@ -97,7 +155,7 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
   const offsets: number[] = []; let offset = 0
   for (const count of counts) { offsets.push(offset); offset += count }
   if (loading) return <div className={styles.loadingMore} role="status">Loading issues…</div>
-  if (error) return <div className={styles.state} role="alert"><p>{error}</p><button onClick={() => { active.current?.abort.abort(); setRetry(value => value + 1) }}>Retry</button></div>
+  if (error && !cache.retainedEntities) return <div className={styles.state} role="alert"><p>{error}</p><button onClick={() => { active.current?.abort.abort(); setRetry(value => value + 1) }}>Retry</button></div>
   if (!groups.length) return <div className={styles.state}>No issues</div>
   if (layout === 'board') {
     const drop = (group: Group, before?: Issue) => {
@@ -148,7 +206,7 @@ function VisibleIssueColumn({ label, children }: { label: string; children: Reac
 }
 
 function issueQueryChanged(before: Issue, after: Issue, query: IssueQueryInput) {
-  const fields = new Set([query.groupBy, query.sort])
+  const fields = new Set([query.groupBy ?? 'status', query.sort ?? 'sortOrder'])
   const visit = (node: unknown) => {
     if (!node || typeof node !== 'object') return
     const filter = node as Record<string, unknown>
