@@ -1,7 +1,9 @@
 import * as Popover from '@radix-ui/react-popover'
 import * as Tooltip from '@radix-ui/react-tooltip'
 import { Check, ChevronRight, Layers3, Plus } from 'lucide-react'
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
+import './virtual-property-options.css'
 import { createPortal } from 'react-dom'
 import { LabelGroupIcon, LabelIcon, NoAssigneeIcon, ProjectIcon, PriorityIcon } from '@/components/issue/issue-icons'
 import { LabelHoverPreview } from './label-hover-preview'
@@ -80,12 +82,12 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   embedded?: boolean
 }) {
   const { t } = useI18n()
-  useUserPreferences()
+  const preferences = useUserPreferences()
   const directory = usePeopleDirectory()
-  const menuOptions = options.map(option => {
+  const menuOptions = useMemo(() => options.map(option => {
     const person = option.person ?? (isPeopleProperty(label) && option.id && !option.id.startsWith('__') && !['*','me','none','all'].includes(option.id) ? directoryPerson(directory.users, option.id) ?? { id: option.id, label: option.label } : undefined)
     return person ? { ...option, label: displayUserName({displayName:person.displayName || option.label,name:person.name && person.name!==person.id ? person.name : option.label}), person, icon: <span aria-hidden="true">{option.icon ?? <UserAvatar className="people-menu-avatar" avatarUrl={person.avatarUrl} name={person.displayName || ('label' in person ? person.label : undefined) || person.name || person.id}/>}</span>, keywords: `${option.keywords ?? ''} ${personSearchText({ ...person, ...directoryPerson(directory.users, person.id) })}`, hoverContent: option.hoverContent ?? <PersonInfo person={person}/>, hoverClassName: option.hoverClassName ?? 'person-info-surface' } : option
-  })
+  }), [options, directory.users, label, preferences])
   const [localOpen, setLocalOpen] = useState(false)
   const open = embedded || (controlledOpen ?? localOpen)
   const setOpen = (next: boolean) => { setLocalOpen(next); onOpenChange?.(next) }
@@ -94,14 +96,15 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   const [openLabelGroupId, setOpenLabelGroupId] = useState<string>()
   const listboxId = useId()
   const selected = multiple ? selectedIds : [selectedId ?? options.find(option => option.label === value)?.id ?? '']
-  const selectedSet = new Set(selected)
+  const selectionKey = JSON.stringify(selected)
+  const selectedSet = useMemo(() => new Set<string>(JSON.parse(selectionKey)), [selectionKey])
   const selectedPerson = selected.length === 1 ? menuOptions.find(option => option.id === selected[0])?.person : undefined
   if (!hoverContent && selectedPerson) {
     hoverContent = <PersonInfo person={selectedPerson}/>
     hoverClassName = 'person-info-surface'
   }
   const kind = explicitKind ?? (multiple && label === 'Labels' ? 'labels' : label === 'Project' ? 'project' : 'standard')
-  const orderedOptions = multiple && kind !== 'labels' ? [...menuOptions].sort((left, right) => Number(selectedSet.has(right.id)) - Number(selectedSet.has(left.id))) : menuOptions
+  const orderedOptions = useMemo(() => multiple && kind !== 'labels' ? [...menuOptions.filter(option => selectedSet.has(option.id)), ...menuOptions.filter(option => !selectedSet.has(option.id))] : menuOptions, [menuOptions, multiple, kind, selectedSet])
   const command = usePropertyCommand({
     autoFocus: kind !== 'project-labels',
     closeOnSelect: closeOnSelect ?? !multiple,
@@ -113,7 +116,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
     onSelect: option => { void onChange?.(option.id) },
   })
   const labelMenu = groupLabelOptions(command.filteredOptions, selectedSet)
-  const standardSections = groupOptionSections(command.filteredOptions)
+  const standardSections = useMemo(() => groupOptionSections(command.filteredOptions), [command.filteredOptions])
   const noProject = command.filteredOptions.filter(option => !option.id)
   const projects = command.filteredOptions.filter(option => option.id)
   const selectedProjects = projects.filter(option => command.isSelected(option.id))
@@ -147,13 +150,13 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
             <input ref={command.inputRef} value={command.query} onFocus={() => setOpenLabelGroupId(undefined)} onChange={event => command.onQueryChange(event.target.value)} aria-label={placeholder} aria-controls={listboxId} aria-activedescendant={command.activeId ? `${listboxId}-${command.activeId || 'none'}` : undefined} placeholder={placeholder} autoComplete="off" spellCheck={false}/>
             {(searchShortcut ?? (kind === 'labels' ? 'L' : kind === 'project' ? 'Shift P' : undefined)) && <SearchShortcut value={searchShortcut ?? (kind === 'labels' ? 'L' : 'Shift P')}/>}
           </div>
-          <div id={listboxId} className="property-command-options" role="listbox" aria-label={label} aria-multiselectable={multiple || undefined} onWheel={event => event.stopPropagation()}>
+          {kind === 'standard' && command.filteredOptions.length > 60 ? <VirtualStandardOptions sections={standardSections} activeId={command.activeId} selected={selectedSet} label={label} multiple={multiple} listboxId={listboxId} onChoose={command.choose} onActive={command.setActiveId}/> : <div id={listboxId} className="property-command-options" role="listbox" aria-label={label} aria-multiselectable={multiple || undefined} onWheel={event => event.stopPropagation()}>
             {kind === 'labels' && <>{labelMenu.selectedOptions.length > 0 && <>{showGroupHeadings && <div className="property-command-group">{t('Frequently used')}</div>}{labelMenu.selectedOptions.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked labelHover listboxId={listboxId} icon={iconFor(label)} multi showGroupLabel onChoose={() => command.choose(option)} onActive={() => { setOpenLabelGroupId(undefined); command.setActiveId(option.id) }}/>)}</>}{showGroupHeadings && (labelMenu.options.length > 0 || labelMenu.groups.length > 0) && <div className="property-command-group">{t('Labels')}</div>}{labelMenu.groups.map(group => <LabelGroupOption key={group.id} group={group} open={openLabelGroupId === group.id} selectedIds={selectedSet} listboxId={listboxId} onOpenChange={next => setOpenLabelGroupId(next ? group.id : undefined)} onChoose={option => command.choose(option)}/>)}{labelMenu.options.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={false} labelHover listboxId={listboxId} icon={iconFor(label)} multi onChoose={() => command.choose(option)} onActive={() => { setOpenLabelGroupId(undefined); command.setActiveId(option.id) }}/>) }{canCreateLabel && <button data-i18n-ignore type="button" className="property-command-create" role="option" aria-label={`${createLabelText}: ${createName}`} onClick={createLabel}><Plus size={15}/><span data-i18n-ignore>{createLabelText}: <strong data-i18n-ignore>"{createName}"</strong></span></button>}{showLabelCreateHint && <div aria-disabled="true" className="property-command-create-hint" data-i18n-ignore role="option"><Plus size={16}/><span>{emptyLabel}</span></div>}</>}
             {kind === 'project' && <>{noProject.map(option => <CommandOption key="none" option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }{selectedProjects.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>)}{otherProjects.length > 0 && <div className="property-command-group">{teamName ? t('Projects in {team} team').replace('{team}', teamName) : t('Projects')}</div>}{otherProjects.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={false} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }{onCreate&&<><div className="property-command-group">{t('New project')}</div><button type="button" className="property-command-create" role="option" aria-label={t('Create new project…')} onClick={()=>{setOpen(false);void onCreate('')}}><Plus size={15}/><span>{t('Create new project…')}</span></button></>}</>}
             {kind === 'milestone' && <>{command.filteredOptions.map(option => <CommandOption key={option.id || 'none'} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>)}{canCreateMilestone&&<><div className="property-command-group">{t('New project milestone')}</div><button type="button" className="property-command-create" role="option" aria-label={t('Create new milestone…')} onClick={createMilestone}><Plus size={15}/><span>{t('Create new milestone…')}</span></button></>}</>}
             {kind === 'standard' && standardSections.map(section => <div className="property-command-section" key={section.id}>{section.label && <div className="property-command-group">{t(section.label)}</div>}{section.options.map(option => <CommandOption key={option.id || 'none'} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} multi={multiple} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>)}</div>) }
             {!command.filteredOptions.length && !canCreateLabel && !canCreateMilestone && !showLabelCreateHint && <div className="core-property-empty">{t(emptyLabel ?? 'No results')}</div>}
-          </div>
+          </div>}
         </div>
   if (embedded) return <Tooltip.Provider delayDuration={450} skipDelayDuration={300}>{content}</Tooltip.Provider>
   return <Tooltip.Provider delayDuration={450} skipDelayDuration={300}><Tooltip.Root open={Boolean(hoverContent) && !open && hoverOpen} onOpenChange={setHoverOpen}><Popover.Root open={open} onOpenChange={next => { setOpen(next); if (next) setHoverOpen(false); else { setActiveTrigger(undefined); setOpenLabelGroupId(undefined) } }}>
@@ -164,6 +167,18 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
       </Popover.Content>
     </Popover.Portal>
   </Popover.Root>{hoverContent&&<Tooltip.Portal><Tooltip.Content data-flow-motion="tooltip" className={hoverClassName ?? 'property-hover-tooltip'} side="left" align="center" sideOffset={6} collisionPadding={8}>{hoverContent}</Tooltip.Content></Tooltip.Portal>}</Tooltip.Root></Tooltip.Provider>
+}
+
+function VirtualStandardOptions({ sections, activeId, selected, label, multiple, listboxId, onChoose, onActive }: {
+  sections: ReturnType<typeof groupOptionSections<PropertyOption>>; activeId?: string; selected: Set<string>; label: string; multiple: boolean; listboxId: string; onChoose: (option: PropertyOption) => void; onActive: (id: string) => void
+}) {
+  const { t } = useI18n()
+  const ref = useRef<VirtuosoHandle>(null)
+  const rows = useMemo(() => sections.flatMap(section => [...(section.label ? [{ key: `header:${section.id}`, heading: section.label, option: undefined as PropertyOption | undefined }] : []), ...section.options.map(option => ({ key: `option:${option.id}`, heading: '', option }))]), [sections])
+  const indices = useMemo(() => new Map(rows.flatMap((row, index) => row.option ? [[row.option.id, index] as const] : [])), [rows])
+  const activeIndex = activeId === undefined ? 0 : indices.get(activeId) ?? 0
+  useEffect(() => { if (activeId !== undefined) ref.current?.scrollIntoView({ index: activeIndex }) }, [activeId, activeIndex])
+  return <Virtuoso ref={ref} id={listboxId} role="listbox" aria-label={label} aria-multiselectable={multiple || undefined} className="property-command-options virtual-property-options" data={rows} fixedItemHeight={32} initialTopMostItemIndex={activeIndex} increaseViewportBy={64} computeItemKey={(_index, row) => row.key} style={{height:Math.min(319, rows.length*32)}} itemContent={(_index,row) => row.option ? <CommandOption option={row.option} active={row.option.id===activeId} checked={selected.has(row.option.id)} listboxId={listboxId} icon={iconFor(label)} multi={multiple} onChoose={()=>onChoose(row.option!)} onActive={()=>onActive(row.option!.id)}/> : <div className="property-command-group" style={{height:32}}>{t(row.heading)}</div>}/>
 }
 
 function groupLabelOptions(options: PropertyOption[], selectedIds: Set<string>) {
