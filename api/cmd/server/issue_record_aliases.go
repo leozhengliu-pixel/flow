@@ -19,7 +19,10 @@ func issueRecordQueryOnly(r *http.Request) bool {
 		return true
 	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if r.Method == http.MethodGet && (len(parts) == 3 || len(parts) == 4 && parts[3] == "context") {
+	if r.Method == http.MethodGet && (len(parts) == 3 || len(parts) == 4 && (parts[3] == "context" || parts[3] == "history" || parts[3] == "related")) {
+		return true
+	}
+	if r.Method == http.MethodPost && r.URL.Path == "/api/issue-records/visibility" {
 		return true
 	}
 	return r.URL.Path == "/api/issue-records" || r.URL.Path == "/api/issue-records/groups" || r.URL.Path == "/api/issue-records/bootstrap"

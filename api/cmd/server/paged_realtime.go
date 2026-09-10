@@ -23,7 +23,14 @@ func (s *server) pagedRealtimeMetadata(r *http.Request) (domain.Bootstrap, store
 	if err != nil {
 		return data, query, err
 	}
-	if !s.authDisabled {
+	if s.authDisabled {
+		var ok bool
+		data, ok = s.store.WorkspaceMetadata(query.Workspace)
+		if !ok {
+			return data, query, store.ErrAuthForbidden
+		}
+		data.ViewerRole = "admin"
+	} else {
 		data, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
 		if err != nil {
 			return data, query, err

@@ -35,13 +35,14 @@ type realtimeSocketMessage struct {
 }
 
 type realtimeSocketClient struct {
-	id          uint64
-	clientID    string
-	workspace   string
-	documents   map[string]struct{}
-	send        chan realtimeSocketMessage
-	queuedBytes atomic.Int64
-	cancel      context.CancelFunc
+	id             uint64
+	clientID       string
+	workspace      string
+	documents      map[string]struct{}
+	issueDocuments map[string]string
+	send           chan realtimeSocketMessage
+	queuedBytes    atomic.Int64
+	cancel         context.CancelFunc
 }
 
 const maxSocketQueueBytes = 8 << 20
@@ -90,7 +91,7 @@ func (h *realtimeHub) addSocket(workspace, clientID string, cancel context.Cance
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.nextID++
-	client := &realtimeSocketClient{id: h.nextID, clientID: clientID, workspace: workspace, documents: map[string]struct{}{}, send: make(chan realtimeSocketMessage, 256), cancel: cancel}
+	client := &realtimeSocketClient{id: h.nextID, clientID: clientID, workspace: workspace, documents: map[string]struct{}{}, issueDocuments: map[string]string{}, send: make(chan realtimeSocketMessage, 256), cancel: cancel}
 	if h.sockets[workspace] == nil {
 		h.sockets[workspace] = map[uint64]*realtimeSocketClient{}
 	}
@@ -217,6 +218,13 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 	if err != nil {
 		return err
 	}
+	if s.authDisabled && command.IssueID == "" {
+		var ok bool
+		data, ok = s.store.WorkspaceMetadata(query.Workspace)
+		if !ok {
+			return store.ErrAuthForbidden
+		}
+	}
 	if !s.authDisabled {
 		data, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
 		if err != nil {
@@ -245,8 +253,12 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 			contentState = issue.DocumentContent.ContentState
 		}
 		if command.DocumentID != expectedDocumentID {
-			return errors.New("document does not belong to issue")
+			sendSocketJSON(client, map[string]any{"type": "document.conflict", "documentId": command.DocumentID})
+			return nil
 		}
+		s.realtime.mu.Lock()
+		client.issueDocuments[command.DocumentID] = issue.ID
+		s.realtime.mu.Unlock()
 	} else {
 		// Standalone workspace documents use the same collaboration protocol as
 		// issue descriptions, but are authorized by the document's team scope.
@@ -316,6 +328,19 @@ func (s *server) handleCollaborationFrame(ctx context.Context, client *realtimeS
 	}
 	if !s.realtime.joinedDocument(client, documentID) {
 		return errors.New("join document before sending updates")
+	}
+	s.realtime.mu.Lock()
+	issueID := client.issueDocuments[documentID]
+	s.realtime.mu.Unlock()
+	if issueID != "" {
+		currentDocumentID, err := s.store.IssueDocumentID(ctx, client.workspace, issueID)
+		if err != nil {
+			return err
+		}
+		if documentID != currentDocumentID {
+			sendSocketJSON(client, map[string]any{"type": "document.conflict", "documentId": documentID})
+			return nil
+		}
 	}
 	if kind == collaborationAwarenessFrame {
 		frame := encodeCollaborationFrame(kind, documentID, "", payload)

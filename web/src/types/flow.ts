@@ -237,6 +237,8 @@ export interface DocumentContentDraft {
 }
 export interface Issue {
   isSummary?: boolean;
+  // A complete cached document remains visible while a newer list version is fetched.
+  needsDetailRefresh?: boolean;
   id: UUID;
   version: number;
   identifier: string;

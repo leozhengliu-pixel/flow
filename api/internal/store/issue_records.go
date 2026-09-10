@@ -200,6 +200,7 @@ func (s *SQLiteStore) ensureIssueRecords(ctx context.Context) error {
 		}
 	}
 	indexes := []string{
+		"team_memberships_user ON team_memberships(workspace_id,user_id,team_id)",
 		"issue_records_collection_idx ON issue_records(workspace_key,collection_order,id)",
 		"issue_records_order_idx ON issue_records(workspace_key,archived,sort_order,id)",
 		"issue_records_state_idx ON issue_records(workspace_key,archived,state_id,sort_order,id)",

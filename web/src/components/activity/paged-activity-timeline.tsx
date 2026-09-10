@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type ComponentProps } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import { createComment, deleteComment, fetchIssueRecordContext, toggleCommentReaction, updateComment } from '@/lib/api'
+import { createComment, deleteComment, fetchIssueHistory, toggleCommentReaction, updateComment } from '@/lib/api'
 import { useI18n } from '@/i18n/i18n'
 import { ActivityTimeline } from './activity-timeline'
 
 type Cursor = { commentsCursor?: string; activitiesCursor?: string }
-type Page = Awaited<ReturnType<typeof fetchIssueRecordContext>>
+type Page = Awaited<ReturnType<typeof fetchIssueHistory>>
 
 export function PagedActivityTimeline({ issueId, cursors, ...props }: ComponentProps<typeof ActivityTimeline> & { issueId: string; cursors?: Cursor }) {
   const { t } = useI18n()
@@ -43,7 +43,7 @@ export function PagedActivityTimeline({ issueId, cursors, ...props }: ComponentP
     setLoading(true); setError('')
     const controller = new AbortController(); active.current = controller
     try {
-      const result = await fetchIssueRecordContext(issueId, controller.signal, target)
+      const result = await fetchIssueHistory(issueId, controller.signal, target)
       if (controller.signal.aborted) return
       setPrevious(current => older ? [...current, request] : current.slice(0, -1))
       setRequest(target); setPage(result)

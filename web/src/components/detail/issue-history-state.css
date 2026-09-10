@@ -1,0 +1,11 @@
+.issue-history-state {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+.issue-history-state > span { overflow-wrap: anywhere; }

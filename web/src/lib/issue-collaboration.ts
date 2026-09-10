@@ -6,7 +6,7 @@ import type { User } from '@/types/flow'
 const updateFrame = 1
 const awarenessFrame = 2
 
-type Status = 'connecting' | 'connected' | 'disconnected'
+type Status = 'connecting' | 'connected' | 'disconnected' | 'conflict'
 type Listener = (event: { status: Status }) => void
 
 interface SyncMessage {
@@ -32,6 +32,7 @@ export class IssueCollaborationProvider {
   private pendingBytes = 0
   private deferredUpdate = false
   private receivedServerState = false
+  private seedQueued = false
   private readonly listeners = new Set<Listener>()
   private socket?: WebSocket
   private reconnectTimer?: number
@@ -40,6 +41,7 @@ export class IssueCollaborationProvider {
   private destroyed = false
   private started = false
   private synced = false
+  private conflicted = false
 
   constructor({ document, workspaceKey, issueId, documentId, viewer, seededWithoutServerState }: {
     document: Doc
@@ -66,7 +68,7 @@ export class IssueCollaborationProvider {
   }
 
   start() {
-    if (this.destroyed || this.started) return
+    if (this.destroyed || this.started || this.conflicted) return
     this.started = true
     if (!this.awareness.getLocalState()) this.awareness.setLocalStateField('user', this.localUser)
     this.connect()
@@ -120,6 +122,10 @@ export class IssueCollaborationProvider {
     return [...this.appliedUpdateIds]
   }
 
+  isSynced() {
+    return this.synced && !this.conflicted
+  }
+
   acknowledgeSnapshot(updateIds: string[]) {
     updateIds.forEach(id => this.appliedUpdateIds.delete(id))
   }
@@ -138,7 +144,6 @@ export class IssueCollaborationProvider {
     socket.onopen = () => {
       this.retry = 0
       socket.send(JSON.stringify({ type: 'document.join', ...(this.issueId ? { issueId: this.issueId } : {}), documentId: this.documentId }))
-      this.emit('connected')
     }
     socket.onmessage = event => {
       if (typeof event.data === 'string') this.handleTextMessage(event.data)
@@ -169,6 +174,12 @@ export class IssueCollaborationProvider {
     let message: SyncMessage | { type?: string }
     try { message = JSON.parse(raw) as SyncMessage }
     catch { return }
+    if (message.type === 'document.conflict' && 'documentId' in message && message.documentId === this.documentId) {
+      this.conflicted = true
+      this.stop()
+      this.emit('conflict')
+      return
+    }
     if (message.type !== 'document.sync' || !('documentId' in message) || message.documentId !== this.documentId) return
     const sync = message as SyncMessage
     this.receivedServerState ||= Boolean(sync.contentState) || sync.updates.length > 0
@@ -177,13 +188,13 @@ export class IssueCollaborationProvider {
       this.applyServerUpdate(base64ToBytes(update.data))
       this.acknowledgeUpdate(update.id)
       this.sentUpdates.delete(update.id)
-      this.appliedUpdateIds.add(update.id)
+      this.recordAppliedUpdate(update.id)
     })
     if (sync.more) return
     this.synced = true
-    if (!this.receivedServerState && this.seededWithoutServerState && this.pendingUpdates.size === 0) this.queueDocumentUpdate(encodeStateAsUpdate(this.document))
     this.flushPendingUpdates()
     this.sendAwarenessUpdate([this.document.clientID])
+    this.emit('connected')
   }
 
   private handleBinaryMessage(raw: Uint8Array) {
@@ -194,7 +205,7 @@ export class IssueCollaborationProvider {
       if (frame.updateId) {
         this.acknowledgeUpdate(frame.updateId)
         this.sentUpdates.delete(frame.updateId)
-        this.appliedUpdateIds.add(frame.updateId)
+        this.recordAppliedUpdate(frame.updateId)
       }
       this.flushPendingUpdates()
       return
@@ -204,7 +215,11 @@ export class IssueCollaborationProvider {
 
   private onDocumentUpdate = (update: Uint8Array, origin: unknown) => {
     if (origin === this) return
-    this.queueDocumentUpdate(update)
+    // The initial Markdown seed is read-only until a user edits it. The first
+    // local update must include that seed because subsequent structs refer to it.
+    const includeSeed = this.seededWithoutServerState && !this.receivedServerState && !this.seedQueued
+    this.seedQueued ||= includeSeed
+    this.queueDocumentUpdate(includeSeed ? encodeStateAsUpdate(this.document) : update)
   }
 
   private onAwarenessUpdate = ({ added, updated, removed }: { added: number[]; updated: number[]; removed: number[] }, origin: unknown) => {
@@ -230,6 +245,13 @@ export class IssueCollaborationProvider {
   private acknowledgeUpdate(id: string) {
     this.pendingBytes -= this.pendingUpdates.get(id)?.byteLength ?? 0
     this.pendingUpdates.delete(id)
+  }
+
+  private recordAppliedUpdate(id: string) {
+    this.appliedUpdateIds.add(id)
+    // Read-only observers do not persist snapshots. Bound their bookkeeping
+    // without deleting unacknowledged updates from the server's durable log.
+    if (this.appliedUpdateIds.size > 10_000) this.appliedUpdateIds.delete(this.appliedUpdateIds.values().next().value!)
   }
 
   private applyServerUpdate(update: Uint8Array) {

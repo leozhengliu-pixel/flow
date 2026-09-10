@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { RealtimeEventQueue } from './realtime-event-queue'
+import { makeIssue } from '@/test/fixtures'
 
 describe('realtime event backlog', () => {
   const event = (id: number, type = 'issue.updated') => ({ id: String(id), type, aggregateId: String(id), createdAt: '2026-09-09' })
@@ -22,5 +23,19 @@ describe('realtime event backlog', () => {
       queue.push(event(500), 100)
       expect(queue.shift()?.type).toBe('issue.updated')
     }
+  })
+
+  it('coalesces full replacements without crossing a deletion or dropping partial updates', () => {
+    const queue = new RealtimeEventQueue()
+    const full = (id: number) => ({ ...event(id), aggregateId: 'same', payload: { issue: makeIssue({ id: 'same', title: String(id) }) } })
+    queue.push(full(1), 100)
+    queue.push(event(2, 'notification.updated'), 100)
+    queue.push(full(3), 100)
+    expect([queue.shift()?.id, queue.shift()?.id]).toEqual(['2', '3'])
+    queue.push(full(4), 100)
+    queue.push({ ...event(5, 'issue.deleted'), aggregateId: 'same' }, 100)
+    queue.push(full(6), 100)
+    queue.push({ ...event(7), aggregateId: 'same' }, 100)
+    expect([queue.shift()?.id, queue.shift()?.id, queue.shift()?.id, queue.shift()?.id]).toEqual(['4', '5', '6', '7'])
   })
 })

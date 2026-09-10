@@ -13,6 +13,18 @@ type DocumentCollaborationUpdate struct {
 	CreatedAt  time.Time `json:"createdAt"`
 }
 
+// IssueDocumentID checks the active CRDT generation without allocating an issue,
+// its description, attachments or activity for every incoming keystroke.
+func (s *SQLiteStore) IssueDocumentID(ctx context.Context, workspace, issueID string) (string, error) {
+	expression := s.jsonText("data", "documentContent.id")
+	if s.dialect == "postgres" {
+		expression = "(convert_from(data, 'UTF8')::jsonb #>> '{documentContent,id}')"
+	}
+	var documentID string
+	err := s.db.QueryRowContext(ctx, "SELECT COALESCE(NULLIF("+expression+", ''), ?) FROM issue_records WHERE workspace_key=? AND id=?", "document_content_"+issueID, workspace, issueID).Scan(&documentID)
+	return documentID, err
+}
+
 func (s *SQLiteStore) AppendDocumentCollaborationUpdate(ctx context.Context, workspaceKey string, update DocumentCollaborationUpdate) (bool, error) {
 	result, err := s.db.ExecContext(ctx, `INSERT INTO document_collaboration_updates(update_id,workspace_key,document_id,client_id,update_data,created_at) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING`, update.ID, workspaceKey, update.DocumentID, update.ClientID, update.Data, update.CreatedAt.UTC().Format(time.RFC3339Nano))
 	if err != nil {

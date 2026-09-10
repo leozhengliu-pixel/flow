@@ -326,8 +326,20 @@ export function listIssueRecordGroups(filters: IssueQueryInput, signal?: AbortSi
   return request(`/api/issue-records/groups?${params}`, { signal })
 }
 
-export function fetchIssueRecord(id: string, signal?: AbortSignal): Promise<Issue> {
-  return request(`/api/issue-records/${encodeURIComponent(id)}`, { signal })
+export function fetchIssueRecord(id: string, signal?: AbortSignal, workspaceKey?: string): Promise<Issue> {
+  return request(`/api/issue-records/${encodeURIComponent(id)}`, { signal, ...(workspaceKey ? {headers:{'X-Workspace-Key':workspaceKey}} : {}) })
+}
+
+export type IssueHistoryPage = {comments: Comment[]; activities: BootstrapData['activities'][string]; commentsCursor?: string; activitiesCursor?: string}
+export function fetchIssueHistory(id: string, signal?: AbortSignal, cursors?: { commentsCursor?: string; activitiesCursor?: string }): Promise<IssueHistoryPage> {
+  const query = cursors ? `?${new URLSearchParams({ commentsCursor: cursors.commentsCursor || '-', activitiesCursor: cursors.activitiesCursor || '-' })}` : ''
+  return request(`/api/issue-records/${encodeURIComponent(id)}/history${query}`, {signal})
+}
+export function fetchIssueRelated(id: string, signal?: AbortSignal): Promise<Issue[]> {
+  return request(`/api/issue-records/${encodeURIComponent(id)}/related`,{signal})
+}
+export function fetchVisibleIssueIds(workspaceKey: string, ids: string[]): Promise<{ids:string[]}> {
+  return request('/api/issue-records/visibility', {...jsonRequest('POST',{ids}),headers:{'Content-Type':'application/json','X-Workspace-Key':workspaceKey}})
 }
 
 export type IssueRecordTotals = { total: number; started: number; completed: number }
@@ -2089,7 +2101,10 @@ export function updateCycleSettings(
 }
 
 export function deleteIssue(issueId: string): Promise<void> {
-  return request(`/api/issues/${issueId}`, { method: "DELETE" });
+  const workspaceKey = typeof window === 'undefined' ? '' : decodeURIComponent(window.location.pathname.split('/').filter(Boolean)[0] ?? '');
+  return request<void>(`/api/issues/${issueId}`, { method: "DELETE" }).then(()=>{
+    window.dispatchEvent(new CustomEvent('flow-issue-query-invalidated',{detail:{workspaceKey,issueId}}));
+  });
 }
 export function toggleIssueReaction(
   issueId: string,
