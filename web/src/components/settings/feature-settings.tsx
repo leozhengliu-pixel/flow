@@ -16,7 +16,7 @@ import {
   updateCustomerStatus, updateCustomerTier, updateWorkspacePreferences,
   updateWorkspaceAgentGuidance,
 } from "@/lib/api";
-import type { SettingsPageId } from "@/lib/app-routes";
+import type { SettingsPageId, IntegrationProvider } from "@/lib/app-routes";
 import type {
   BootstrapData, CustomEmoji, DocumentTemplate, FeatureOption, FeatureSettings,
   IntegrationConnection, ReleasePipeline, WorkspaceSettings,
@@ -26,7 +26,7 @@ import "./feature-settings.css";
 import { SettingsToggle as BaseSettingsToggle } from './settings-primitives'
 
 type FeaturePageId = Extract<SettingsPageId, "ai"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations">;
-type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onOpenReleasePipeline: (pipeline:ReleasePipeline) => void; onOpenIntegration:(provider:"github"|"gitlab")=>void; onReload: () => Promise<void> };
+type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onOpenReleasePipeline: (pipeline:ReleasePipeline) => void; onOpenIntegration:(provider:IntegrationProvider)=>void; onReload: () => Promise<void> };
 
 const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
   initiativeUpdateSchedule: "none",
@@ -179,9 +179,9 @@ const INTEGRATIONS: {provider:string;name:string;description:string;category:str
   {provider:"github",name:"GitHub",description:"Automate pull request workflows and link code to issues",category:"Essentials",icon:Code2},
   {provider:"slack",name:"Slack",description:"Create issues from Slack messages and sync threads",category:"Essentials",icon:MessageSquare},
   {provider:"gitlab",name:"GitLab",description:"Automate your merge request workflow",category:"Engineering",icon:Code2},
-  {provider:"figma",name:"Figma",description:"Create and link issues directly from Figma",category:"Essentials",icon:FileText},
+  {provider:"figma",name:"Figma",description:"Preview and link Figma designs in issues",category:"Essentials",icon:FileText},
   {provider:"google-calendar",name:"Google Calendar",description:"Sync calendar out-of-office status to member profiles",category:"Essentials",icon:CalendarDays},
-  {provider:"notion",name:"Notion",description:"Preview Flow issues, projects, and views in Notion",category:"Essentials",icon:FileText},
+  {provider:"notion",name:"Notion",description:"Link Notion pages to issues and read page content",category:"Essentials",icon:FileText},
   {provider:"intercom",name:"Intercom",description:"Keep a tight feedback loop with customers",category:"Customer support",icon:MessageSquare},
   {provider:"codex",name:"Codex",description:"Delegate issues to Codex directly from Flow",category:"Agents",icon:Bot},
   {provider:"cursor",name:"Cursor",description:"Turn issues into pull requests with Cursor agents",category:"Agents",icon:Sparkles},
@@ -189,7 +189,7 @@ const INTEGRATIONS: {provider:string;name:string;description:string;category:str
   {provider:"zapier",name:"Zapier",description:"Build custom automations to create or update issues",category:"Automation",icon:Zap},
 ];
 
-function IntegrationsPage({data,onOpen,onReload}:{data:BootstrapData;onOpen:(provider:"github"|"gitlab")=>void;onReload:()=>Promise<void>}) {
+function IntegrationsPage({data,onOpen,onReload}:{data:BootstrapData;onOpen:(provider:IntegrationProvider)=>void;onReload:()=>Promise<void>}) {
   const {t}=useI18n();
   const [query,setQuery]=useState(""); const [category,setCategory]=useState("All"); const [busy,setBusy]=useState("");
   const list=INTEGRATIONS.filter(item=>(category==="All"||item.category===category)&&`${item.name} ${item.description}`.toLowerCase().includes(query.toLowerCase()));
@@ -200,10 +200,10 @@ function IntegrationsPage({data,onOpen,onReload}:{data:BootstrapData;onOpen:(pro
     <div className="feature-integration-grid">{list.map(item=>{
       const connection=data.integrationConnections.find(value=>value.provider===item.provider);
       const Icon=item.icon; const code=item.provider==='github'||item.provider==='gitlab';
-      const supported=code||item.provider==='slack'||item.provider==='figma';
+      const native=!code&&item.provider!=='slack';
       const connected=connection?.status==='connected';
       return <article key={item.provider}><Icon size={25}/><div><h3><span data-i18n-ignore>{item.name}</span>{connection&&<small>{t(connected?'Connected':connection.status==='error'?'Connection failed':'Not authorized')}</small>}</h3><p>{t(item.description)}</p>{connection?.lastError&&<p role="status">{connection.lastError}</p>}</div>
-        <FeatureButton primary={!connected} danger={connected&&!code} disabled={!supported||busy===item.provider} onClick={()=>code?onOpen(item.provider as "github"|"gitlab"):void toggle(item,connection)}>{t(!supported?'Unavailable':code?connection?'Manage':'Connect':connected?'Disconnect':'Connect')}</FeatureButton></article>;
+        <FeatureButton primary={!connected} danger={connected&&!code&&!native} disabled={busy===item.provider} onClick={()=>code||native?onOpen(item.provider as IntegrationProvider):void toggle(item,connection)}>{t(code||native?connection?'Manage':'Connect':connected?'Disconnect':'Connect')}</FeatureButton></article>;
     })}</div>{!list.length&&<FeatureEmpty icon={Search} title="No integrations found"/>}
   </FeatureShell></div>;
 }

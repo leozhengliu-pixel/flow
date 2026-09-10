@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -14,6 +12,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type connectorTool struct {
@@ -37,136 +36,128 @@ func connectorToken(item applicationPolicy) string {
 	}
 	_ = json.Unmarshal([]byte(os.Getenv("FLOW_MCP_CREDENTIALS")), &credentials)
 	value := credentials[item.ID]
-	if strings.TrimRight(value.URL, "/") != item.URL {
+	if strings.TrimRight(value.URL, "/") != strings.TrimRight(item.URL, "/") {
 		return ""
 	}
 	return value.Token
 }
 
 type remoteMCPClient struct {
-	server            *server
-	policy            applicationPolicy
-	session, protocol string
-	client            *http.Client
+	session *mcp.ClientSession
+	client  *http.Client
+}
+type connectorRequestContext struct {
+	Workspace, UserID string
+	Elicit            func(context.Context, applicationPolicy, *mcp.ElicitParams) (*mcp.ElicitResult, error)
+}
+type connectorContextKey struct{}
+type connectorTransport struct {
+	base            http.RoundTripper
+	endpoint, token string
+	headers         map[string]string
+	allowLocal      bool
 }
 
+func (t connectorTransport) CloseIdleConnections() {
+	if closer, ok := t.base.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
+}
+
+func (t connectorTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	if !integrationEndpointSafe(r.Context(), r.URL.String(), t.allowLocal) {
+		return nil, fmt.Errorf("unsafe MCP destination")
+	}
+	clone := r.Clone(r.Context())
+	clone.Header = r.Header.Clone()
+	if strings.TrimRight(r.URL.String(), "/") == strings.TrimRight(t.endpoint, "/") {
+		if t.token != "" {
+			clone.Header.Set("Authorization", "Bearer "+t.token)
+		}
+		for k, v := range t.headers {
+			clone.Header.Set(k, v)
+		}
+	}
+	response, err := t.base.RoundTrip(clone)
+	if err == nil && response.StatusCode != http.StatusSwitchingProtocols {
+		body := response.Body
+		response.Body = struct {
+			io.Reader
+			io.Closer
+		}{io.LimitReader(body, 2<<20), body}
+	}
+	return response, err
+}
 func (s *server) openConnector(ctx context.Context, item applicationPolicy) (*remoteMCPClient, error) {
-	client := secureOutboundClient(20 * time.Second)
-	if s.authDisabled && safeLocalDevelopmentURL(item.URL) {
-		client = &http.Client{Timeout: 20 * time.Second}
-	}
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	c := &remoteMCPClient{server: s, policy: item, client: client}
-	result, err := c.rpc(ctx, "initialize", map[string]any{"protocolVersion": "2025-11-25", "capabilities": map[string]any{}, "clientInfo": map[string]string{"name": "Flow", "version": "1"}}, false)
-	if err != nil {
-		return nil, err
-	}
-	var initialized struct {
-		ProtocolVersion string `json:"protocolVersion"`
-	}
-	if json.Unmarshal(result, &initialized) != nil {
-		return nil, fmt.Errorf("invalid MCP initialization")
-	}
-	switch initialized.ProtocolVersion {
-	case "2025-11-25", "2025-06-18", "2025-03-26":
-		c.protocol = initialized.ProtocolVersion
-	default:
-		return nil, fmt.Errorf("unsupported MCP protocol version")
-	}
-	_, err = c.rpc(ctx, "notifications/initialized", nil, true)
-	return c, err
-}
-
-func (c *remoteMCPClient) rpc(ctx context.Context, method string, params any, notification bool) (json.RawMessage, error) {
-	if !integrationEndpointSafe(ctx, c.policy.URL, c.server.authDisabled) {
-		return nil, fmt.Errorf("unsafe MCP endpoint")
-	}
-	payload := map[string]any{"jsonrpc": "2.0", "method": method}
-	if !notification {
-		payload["id"] = 1
-	}
-	if params != nil {
-		payload["params"] = params
-	}
-	raw, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.policy.URL, bytes.NewReader(raw))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json, text/event-stream")
-	if c.session != "" {
-		req.Header.Set("Mcp-Session-Id", c.session)
-	}
-	if c.protocol != "" {
-		req.Header.Set("MCP-Protocol-Version", c.protocol)
-	}
-	if token := connectorToken(c.policy); token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	response, err := c.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("MCP server unavailable")
-	}
-	defer response.Body.Close()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, fmt.Errorf("MCP server returned HTTP %d", response.StatusCode)
-	}
-	if method == "initialize" {
-		c.session = response.Header.Get("Mcp-Session-Id")
-	}
-	if notification {
-		return nil, nil
-	}
-	decode := func(raw []byte) (json.RawMessage, error) {
-		var envelope struct {
-			ID     json.RawMessage `json:"id"`
-			Result json.RawMessage `json:"result"`
-			Error  *struct {
-				Code int `json:"code"`
-			} `json:"error"`
+	requestContext, _ := ctx.Value(connectorContextKey{}).(connectorRequestContext)
+	token := connectorToken(item)
+	headers := map[string]string{}
+	if requestContext.Workspace != "" {
+		credential, err := s.connectorCredential(ctx, requestContext.Workspace, requestContext.UserID, item)
+		if err != nil {
+			return nil, err
 		}
-		if json.Unmarshal(raw, &envelope) != nil {
-			return nil, fmt.Errorf("invalid MCP response")
-		}
-		if string(envelope.ID) != "1" {
-			return nil, nil
-		}
-		if envelope.Error != nil {
-			return nil, fmt.Errorf("MCP request failed (%d)", envelope.Error.Code)
-		}
-		return envelope.Result, nil
-	}
-	if strings.Contains(response.Header.Get("Content-Type"), "text/event-stream") {
-		scanner := bufio.NewScanner(io.LimitReader(response.Body, 2<<20))
-		scanner.Buffer(make([]byte, 4096), 1<<20)
-		var event strings.Builder
-		for scanner.Scan() {
-			line := scanner.Text()
-			if line == "" {
-				if event.Len() > 0 {
-					result, e := decode([]byte(event.String()))
-					event.Reset()
-					if e != nil || result != nil {
-						return result, e
-					}
-				}
-			} else if strings.HasPrefix(line, "data:") {
-				event.WriteString(strings.TrimPrefix(strings.TrimPrefix(line, "data:"), " "))
-				event.WriteByte('\n')
+		if credential != nil {
+			if credential.Token != nil {
+				token = credential.Token.AccessToken
 			}
+			headers = credential.Headers
 		}
-		return nil, fmt.Errorf("MCP stream ended without a result")
 	}
-	raw, err = io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
-	if err != nil || len(raw) > 1<<20 {
+	httpClient := secureOutboundClient(0)
+	if s.authDisabled && safeLocalDevelopmentURL(item.URL) {
+		httpClient = &http.Client{Transport: http.DefaultTransport}
+	}
+	base := httpClient.Transport
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	httpClient.Transport = connectorTransport{base: base, endpoint: item.URL, token: token, headers: headers, allowLocal: s.authDisabled}
+	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	options := &mcp.ClientOptions{Capabilities: &mcp.ClientCapabilities{}}
+	if requestContext.Elicit != nil {
+		options.Capabilities.Elicitation = &mcp.ElicitationCapabilities{Form: &mcp.FormElicitationCapabilities{}, URL: &mcp.URLElicitationCapabilities{}}
+		options.ElicitationHandler = func(ctx context.Context, request *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+			return requestContext.Elicit(ctx, item, request.Params)
+		}
+	}
+	client := mcp.NewClient(&mcp.Implementation{Name: "Flow", Version: "1"}, options)
+	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: item.URL, HTTPClient: httpClient, MaxRetries: 1, DisableStandaloneSSE: true}, nil)
+	if err != nil {
+		httpClient.CloseIdleConnections()
+		return nil, fmt.Errorf("MCP connection failed; check authorization and server availability: %w", err)
+	}
+	return &remoteMCPClient{session: session, client: httpClient}, nil
+}
+func (c *remoteMCPClient) close() { _ = c.session.Close(); c.client.CloseIdleConnections() }
+func (c *remoteMCPClient) rpc(ctx context.Context, method string, params any, _ bool) (json.RawMessage, error) {
+	raw, _ := json.Marshal(params)
+	var result any
+	var err error
+	switch method {
+	case "tools/list":
+		var input mcp.ListToolsParams
+		if json.Unmarshal(raw, &input) != nil {
+			return nil, errInvalid
+		}
+		result, err = c.session.ListTools(ctx, &input)
+	case "tools/call":
+		var input mcp.CallToolParams
+		if json.Unmarshal(raw, &input) != nil {
+			return nil, errInvalid
+		}
+		result, err = c.session.CallTool(ctx, &input)
+	default:
+		return nil, fmt.Errorf("unsupported MCP operation")
+	}
+	if err != nil {
+		return nil, err
+	}
+	encoded, err := json.Marshal(result)
+	if len(encoded) > 1<<20 {
 		return nil, fmt.Errorf("MCP response exceeds limit")
 	}
-	result, err := decode(raw)
-	if err == nil && result == nil {
-		err = fmt.Errorf("missing MCP result")
-	}
-	return result, err
+	return encoded, err
 }
 
 func (s *server) discoverConnectorTools(ctx context.Context, data domain.Bootstrap) ([]connectorTool, error) {
@@ -184,7 +175,7 @@ func (s *server) discoverConnectorTools(ctx context.Context, data domain.Bootstr
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", policy.Name, err)
 		}
-		defer client.client.CloseIdleConnections()
+		defer client.close()
 		cursor := ""
 		for page := 0; page < 10; page++ {
 			params := map[string]string{}
@@ -230,6 +221,9 @@ func (s *server) discoverConnectorTools(ctx context.Context, data domain.Bootstr
 }
 
 func (s *server) executeConnectorTool(r *http.Request, data domain.Bootstrap, call domain.AgentToolCall) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Minute)
+	defer cancel()
+	r = r.WithContext(ctx)
 	if !s.agent.WriteTools {
 		return nil, fmt.Errorf("External MCP tools require write-tool access and approval")
 	}
@@ -254,7 +248,7 @@ func (s *server) executeConnectorTool(r *http.Request, data domain.Bootstrap, ca
 			if err != nil {
 				return nil, err
 			}
-			defer client.client.CloseIdleConnections()
+			defer client.close()
 			var args map[string]any
 			if json.Unmarshal(call.Arguments, &args) != nil || args == nil {
 				return nil, fmt.Errorf("invalid MCP tool arguments")

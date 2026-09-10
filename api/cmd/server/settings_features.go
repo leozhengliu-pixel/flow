@@ -2007,6 +2007,7 @@ func (s *server) updateIntegration(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) disconnectIntegrationConnection(w http.ResponseWriter, r *http.Request) {
 	provider, id := strings.ToLower(r.PathValue("provider")), r.PathValue("id")
+	metadata := s.workspaceData(r)
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.disconnected", id, nil, func(data *domain.Bootstrap) error {
 		before := len(data.IntegrationConnections)
 		data.IntegrationConnections = slices.DeleteFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
@@ -2015,11 +2016,15 @@ func (s *server) disconnectIntegrationConnection(w http.ResponseWriter, r *http.
 		}
 		return nil
 	})
+	if err == nil {
+		err = s.store.DeleteConnectorSecret(r.Context(), connectorSecretID(metadata.Workspace.URLKey, "provider", id))
+	}
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
 
 func (s *server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	provider := strings.ToLower(r.PathValue("provider"))
+	metadata := s.workspaceData(r)
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.disconnected", provider, nil, func(data *domain.Bootstrap) error {
 		before := len(data.IntegrationConnections)
 		data.IntegrationConnections = slices.DeleteFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.Provider == provider })
@@ -2031,6 +2036,14 @@ func (s *server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		respondMutation(w, err, http.StatusNoContent, nil)
 		return
+	}
+	for _, connection := range metadata.IntegrationConnections {
+		if connection.Provider == provider {
+			if err := s.store.DeleteConnectorSecret(r.Context(), connectorSecretID(metadata.Workspace.URLKey, "provider", connection.ID)); err != nil {
+				writeError(w, 500, "Could not remove integration credentials")
+				return
+			}
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

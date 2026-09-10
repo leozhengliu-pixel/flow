@@ -799,6 +799,7 @@ func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.B
 		data.UserSettings = map[string]domain.UserSettings{}
 	}
 	data.Drafts = slices.DeleteFunc(data.Drafts, func(item domain.Draft) bool { return item.UserID != userID })
+	data.ProviderJobs = slices.DeleteFunc(data.ProviderJobs, func(item domain.ProviderJob) bool { return item.UserID != userID })
 	data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool { return item.UserID != userID })
 	data.FavoriteFolders = slices.DeleteFunc(data.FavoriteFolders, func(item domain.FavoriteFolder) bool { return item.UserID != userID })
 	data.Subscriptions = slices.DeleteFunc(data.Subscriptions, func(item domain.Subscription) bool { return item.UserID != userID })

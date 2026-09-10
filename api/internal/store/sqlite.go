@@ -242,6 +242,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		{version: 2, name: "nullable external identity email", apply: s.makeAuthEmailNullable},
 		{version: 3, name: "domain event previous values", apply: s.addDomainEventPreviousValues},
 		{version: 4, name: "session authentication policy context", apply: s.createSessionSecuritySchema},
+		{version: 5, name: "encrypted connector credentials", apply: s.createConnectorSecretsSchema},
 	}
 	for _, migration := range migrations {
 		if applied[migration.version] {

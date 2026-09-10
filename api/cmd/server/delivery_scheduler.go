@@ -71,7 +71,11 @@ func (s *server) runDeliverySchedulerTick(ctx context.Context) error {
 
 func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error {
 	sweepSettings := s.settingsLastSweep.Swap(now.Unix()/60) != now.Unix()/60
+	sweepProviders := s.providerLastSweep.Swap(now.Unix()/300) != now.Unix()/300
 	for _, key := range s.store.WorkspaceKeys() {
+		if sweepProviders {
+			s.maintainProviderSettings(ctx, key)
+		}
 		if sweepSettings {
 			if err := s.maintainTeamSettings(ctx, key, now); err != nil {
 				return err

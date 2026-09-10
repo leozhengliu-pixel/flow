@@ -21,11 +21,13 @@ describe('application settings behavior', () => {
     render(<ApplicationPolicySettings admin={false} />);
     await screen.findByText('Personal connector');
     expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Add MCP connector' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add connector' }));
+    fireEvent.click(await screen.findByRole('option', {name:'Custom URL…'}));
+    fireEvent.click(screen.getByRole('button', {name:'Advanced…'}));
     expect(screen.queryByLabelText('Workspace connector')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Tools' } });
-    fireEvent.change(screen.getByLabelText('Server URL'), { target: { value: 'https://example.test/mcp' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add connector' }));
+    fireEvent.change(screen.getByLabelText('Connector URL'), { target: { value: 'https://example.test/mcp' } });
+    fireEvent.submit(screen.getByLabelText('Connector URL').closest('form')!);
     await waitFor(() => expect(request).toHaveBeenCalledWith('/api/application-policies', expect.objectContaining({ body: expect.stringContaining('"status":"pending"') })));
   });
   it('keeps the privacy editor open when persistence fails', async () => {

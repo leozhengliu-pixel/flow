@@ -230,12 +230,6 @@ export function TeamWorkflowSettings({
               <ArrowLeft size={15} />
             </button>
           )}
-          <span
-            className="settings-team-icon large"
-            style={{ color: team.color }}
-          >
-            <ViewGlyph color={team.color} icon={team.icon || "Team"} />
-          </span>
           <h1>
             {section === "overview" ? (
               <span data-i18n-ignore>{team.name}</span>

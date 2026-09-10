@@ -10,11 +10,19 @@ import { TeamIcon } from '@/components/issue/issue-icons'
 import './documents-index-page.css'
 import './documents-index-overrides.css'
 
-export function DocumentsIndexPage({ data, onOpen, onNavigate, onReload }: { data: BootstrapData; onOpen?: (document: FlowDocument) => void; onNavigate?: (path: string) => void; onReload: () => Promise<void> }) {
+export function DocumentsIndexPage({ data, onOpen, onNavigate, onReload, search = '', onFiltersChange }: { data: BootstrapData; onOpen?: (document: FlowDocument) => void; onNavigate?: (path: string) => void; onReload: () => Promise<void>; search?: string; onFiltersChange?: (search: string) => void }) {
   const open = (document: FlowDocument) => onOpen ? onOpen(document) : onNavigate?.(documentPath(data.workspace.urlKey, document))
-  const [query, setQuery] = useState('')
-  const [teamId, setTeamId] = useState('')
-  const [showArchived, setShowArchived] = useState(false)
+  const [localQuery, setLocalQuery] = useState('')
+  const [localTeam, setLocalTeam] = useState('')
+  const [localArchived, setLocalArchived] = useState(false)
+  const params = new URLSearchParams(search)
+  const query = onFiltersChange ? params.get('q') ?? '' : localQuery
+  const teamId = onFiltersChange ? params.get('teamId') ?? '' : localTeam
+  const showArchived = onFiltersChange ? params.get('archived') === 'true' : localArchived
+  const change = (field: string, value: string) => { const next = new URLSearchParams(search); if (value) next.set(field, value); else next.delete(field); onFiltersChange?.(next.toString()) }
+  const setQuery = (value: string) => { setLocalQuery(value); change('q', value) }
+  const setTeamId = (value: string) => { setLocalTeam(value); change('teamId', value) }
+  const setShowArchived = (value: boolean) => { setLocalArchived(value); change('archived', value ? 'true' : '') }
   const [creating, setCreating] = useState(false)
   const documents = useMemo(() => data.documents.filter(document => {
     if (!showArchived && document.archivedAt) return false

@@ -429,7 +429,13 @@ Database migration 4 adds per-session authentication context for existing instal
 
 External MCP connectors support Streamable HTTP initialization, JSON/SSE responses, paginated `tools/list` and `tools/call`. They require both `FLOW_AGENT_TOOLS_ENABLED` and `FLOW_AGENT_WRITE_TOOLS` and every call requires interactive approval. Tools from external servers are conservatively treated as potentially mutating. Discovery is bounded to 30 seconds, 10 pages per server and 128 tools total. Execution checks current membership and workspace policy again after approval. Redirects and non-public production endpoints are rejected.
 
-For servers requiring bearer authentication, set `FLOW_MCP_CREDENTIALS` to a JSON object keyed by connector ID. Each value contains `url` and `token`. The URL must exactly match the registered URL (ignoring a trailing slash); credentials are never returned by the policy API. Use deployment secrets to supply this environment variable. Interactive remote MCP OAuth, elicitation and legacy HTTP+SSE transports are not implemented.
+For servers requiring bearer authentication, set `FLOW_MCP_CREDENTIALS` to a JSON object keyed by connector ID. Each value contains `url` and `token`. The URL must match the registered URL (ignoring a trailing slash). Alternatively, use the connector's advanced authentication headers or its Authorize action. Credentials are never returned by the policy API.
+
+Remote OAuth discovers protected-resource and authorization-server metadata, binds PKCE S256 and resource audience, and supports client metadata documents, dynamic registration and pre-registered clients. `FLOW_MCP_OAUTH_CLIENTS` is a JSON object keyed by issuer URL, with `clientId` and optional `clientSecret` values for pre-registration. Callbacks are bound to the initiating browser session and current workspace policy. Refresh credentials are rotated under a connector-scoped lock, without blocking unrelated workspace mutations.
+
+Set `FLOW_CONNECTOR_SECRET_KEY` to 32 random bytes encoded as base64 before using stored provider credentials or connector OAuth. Keep this key outside Git, stable across restarts, and identical across replicas. Database migration 5 stores authenticated encrypted credentials separately from workspace data, bootstrap, events and exports. Rotating this encryption key requires reauthorizing stored connectors; losing it makes existing encrypted credentials unreadable.
+
+The official Go MCP SDK handles protocol negotiation and bidirectional messages. Both form and URL elicitation render in full-page and toolbar Agent conversations. Form responses validate against the requested schema; declining or canceling sends no form content. Submitted field values are not copied into conversation history by Flow. URL confirmations open separately, and the user explicitly continues or declines. Legacy HTTP+SSE transport is not supported; use Streamable HTTP.
 
 The support privacy control omits sender identity from **new** email intake records, their persisted events and email Ask requesters. It does not redact freeform message bodies or rewrite historical data. Sensitive data protection blocks Agent requests, external MCP tools and integration deliveries, and strips business content from outgoing notification emails. These technical controls are not a HIPAA certification or a substitute for deployment-specific compliance measures.
 
@@ -441,7 +447,9 @@ Pulse summaries run at 09:00 in the member's first team's configured timezone (U
 
 Asks email addresses must reference enabled, DNS-verified team intake addresses. Production verification reads the `_flow-intake` TXT record; sending the displayed verification string alone is insufficient. Forward received messages through the existing token-authenticated email intake endpoint. Matching addresses create a linked Ask and issue in the address's team. Message IDs deduplicate delivery retries. Flow does not run an SMTP receiving server; configure your mail service to forward inbound messages.
 
-Integration directory entries distinguish configuration from completed authorization. Supported OAuth connections enter the provider authorization flow; unavailable provider adapters cannot be connected from the directory. Credentials, endpoint configuration and provider permissions are required before a real connection can be established.
+Integration directory entries distinguish configuration from completed authorization. Native provider setup verifies the upstream credential before showing Connected; remote MCP connectors use the server's OAuth flow. Credentials, endpoint configuration and provider permissions are required before a real connection can be established.
+
+See [Provider adapters](provider-adapters.md) for native integration operations, webhook routes and deployment requirements.
 
 ## Repository Actions
 

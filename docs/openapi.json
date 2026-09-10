@@ -793,6 +793,44 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/agent/sessions/{id}/elicitations/{elicitationId}": {
+      "post": {
+        "operationId": "post_agent_sessions_id_elicitations_elicitationId",
+        "tags": [
+          "agent"
+        ],
+        "summary": "POST /api/agent/sessions/{id}/elicitations/{elicitationId}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "elicitationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/agent/sessions/{id}/messages": {
       "post": {
         "operationId": "post_agent_sessions_id_messages",
@@ -1344,6 +1382,124 @@
           "application-policies"
         ],
         "summary": "DELETE /api/application-policies/{id}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/application-policies/{id}/authorization": {
+      "delete": {
+        "operationId": "delete_application_policies_id_authorization",
+        "tags": [
+          "application-policies"
+        ],
+        "summary": "DELETE /api/application-policies/{id}/authorization",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "get": {
+        "operationId": "get_application_policies_id_authorization",
+        "tags": [
+          "application-policies"
+        ],
+        "summary": "GET /api/application-policies/{id}/authorization",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/application-policies/{id}/headers": {
+      "put": {
+        "operationId": "put_application_policies_id_headers",
+        "tags": [
+          "application-policies"
+        ],
+        "summary": "PUT /api/application-policies/{id}/headers",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/application-policies/{id}/oauth/start": {
+      "post": {
+        "operationId": "post_application_policies_id_oauth_start",
+        "tags": [
+          "application-policies"
+        ],
+        "summary": "POST /api/application-policies/{id}/oauth/start",
         "parameters": [
           {
             "name": "id",
@@ -1932,6 +2088,46 @@
             }
           }
         ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/connector-oauth/callback": {
+      "get": {
+        "operationId": "get_connector_oauth_callback",
+        "tags": [
+          "connector-oauth"
+        ],
+        "summary": "GET /api/connector-oauth/callback",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/connector-oauth/client-metadata": {
+      "get": {
+        "operationId": "get_connector_oauth_client_metadata",
+        "tags": [
+          "connector-oauth"
+        ],
+        "summary": "GET /api/connector-oauth/client-metadata",
         "responses": {
           "default": {
             "description": "Flow API response. See the domain model documentation for resource fields.",
@@ -5707,6 +5903,96 @@
           },
           {
             "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/integrations/{provider}/actions": {
+      "post": {
+        "operationId": "post_integrations_provider_actions",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "POST /api/integrations/{provider}/actions",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/integrations/{provider}/configure": {
+      "post": {
+        "operationId": "post_integrations_provider_configure",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "POST /api/integrations/{provider}/configure",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/integrations/{provider}/jobs": {
+      "get": {
+        "operationId": "get_integrations_provider_jobs",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "GET /api/integrations/{provider}/jobs",
+        "parameters": [
+          {
+            "name": "provider",
             "in": "path",
             "required": true,
             "schema": {

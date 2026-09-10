@@ -14,10 +14,12 @@ function Harness() {
   const location = useLocation()
   return <>
     <output>{location.pathname + location.search}</output>
+    <pre data-testid="navigation-state">{JSON.stringify(location.state)}</pre>
     <a href="/acme/projects/all?status=active">Projects</a>
     <a href="/acme/issues/all" onClick={event => event.preventDefault()}>Guarded</a>
     <button onClick={() => navigate('/acme/settings/account/security')}>Settings</button>
     <button onClick={() => navigate(-1)}>Back</button>
+    <a href="/acme/issue/ENG-1/title">Issue</a>
   </>
 }
 
@@ -41,5 +43,12 @@ describe('client navigation', () => {
     render(<MemoryRouter><Harness/></MemoryRouter>)
     fireEvent.focusIn(screen.getByText('Projects'))
     await waitFor(() => expect(preloadRoute).toHaveBeenCalledWith('/acme/projects/all?status=active'))
+  })
+  it('records context for ordinary internal anchors as well as button navigation', async () => {
+    render(<MemoryRouter initialEntries={['/acme/team/ENG/all?status=todo']}><Harness/></MemoryRouter>)
+    fireEvent.click(screen.getByText('Issue'))
+    await waitFor(() => expect(screen.getByTestId('navigation-state')).toHaveTextContent('"returnTo":"/acme/team/ENG/all?status=todo"'))
+    fireEvent.click(screen.getByText('Settings'))
+    await waitFor(() => expect(screen.getByTestId('navigation-state')).toHaveTextContent('"returnTo":"/acme/issue/ENG-1/title"'))
   })
 })

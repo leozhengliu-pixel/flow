@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { AgentElicitation } from './agent-elicitation';
 import {
   Check,
   ChevronRight,
@@ -128,7 +129,7 @@ export function AgentChatPanel({
             ? current.map((item, index) => index === current.length - 1 ? { ...item, content: item.content + (event.delta ?? "") } : item)
             : [...current, { id: event.messageId ?? `stream-${Date.now()}`, role: "assistant", content: event.delta ?? "", createdAt: new Date().toISOString() }]);
         }
-        if ((event.type.startsWith("tool.") || event.type === "reasoning.delta") && event.part) {
+        if ((event.type.startsWith("tool.") || event.type.startsWith("elicitation.") || event.type === "reasoning.delta") && event.part) {
           const nextPart = event.part;
           setStreamParts(current => {
             const index = current.findIndex(part => part.id === nextPart.id);
@@ -225,7 +226,7 @@ export function AgentChatPanel({
                 <strong>
                   {message.role === "user" ? t("You") : t("Flow Agent")}
                 </strong>
-                {message.role === "assistant" && <PanelMessageActivity parts={message.parts ?? []} onToolApproval={decideToolApproval} approvalBusy={approvalBusy}/>}
+                {message.role === "assistant" && <><PanelMessageActivity parts={message.parts ?? []} onToolApproval={decideToolApproval} approvalBusy={approvalBusy}/>{message.parts?.filter(part=>part.type==='elicitation').map(part=><AgentElicitation key={part.id} part={part}/>)}</>}
                 {message.content && <AgentRichText ariaLabel={message.role === "user" ? t("Your message") : t("AI message")} className={styles.messageDocument} content={message.content}/>}
               </article>
             ))}
@@ -235,7 +236,7 @@ export function AgentChatPanel({
                 {t("Thinking…")}
               </div>
             )}
-            {streamParts.map(part => <div className={styles.streamPart} key={part.id}>{part.type === "toolCall" ? <><span>{`${part.status === "completed" ? "✓" : part.status === "pending" ? "!" : "…"} ${part.toolCall?.name.replaceAll("_", " ")}`}</span>{part.status === "pending" && part.toolCall?.approvalId && <span className={styles.approvalActions}><button disabled={approvalBusy === part.toolCall.approvalId} onClick={() => void decideToolApproval(part.toolCall, "reject")} type="button">{t("Reject tool")}</button><button disabled={approvalBusy === part.toolCall.approvalId} onClick={() => void decideToolApproval(part.toolCall, "approve")} type="button">{t("Approve tool")}</button></span>}</> : part.type === "reasoning" ? `Thinking: ${part.text ?? ""}` : part.text}</div>)}
+            {streamParts.map(part => <div className={styles.streamPart} key={part.id}>{part.type === "elicitation" ? <AgentElicitation part={part}/> : part.type === "toolCall" ? <><span>{`${part.status === "completed" ? "✓" : part.status === "pending" ? "!" : "…"} ${part.toolCall?.name.replaceAll("_", " ")}`}</span>{part.status === "pending" && part.toolCall?.approvalId && <span className={styles.approvalActions}><button disabled={approvalBusy === part.toolCall.approvalId} onClick={() => void decideToolApproval(part.toolCall, "reject")} type="button">{t("Reject tool")}</button><button disabled={approvalBusy === part.toolCall.approvalId} onClick={() => void decideToolApproval(part.toolCall, "approve")} type="button">{t("Approve tool")}</button></span>}</> : part.type === "reasoning" ? `Thinking: ${part.text ?? ""}` : part.text}</div>)}
           </div>
           <div className={styles.composer}>
             <div className={styles.context}>

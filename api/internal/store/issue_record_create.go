@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -11,6 +13,15 @@ import (
 )
 
 type issueRecordMutationContext struct{}
+type issueCreationKeyContext struct{}
+
+func WithIssueCreationKey(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, issueCreationKeyContext{}, id)
+}
+func IssueCreationKey(ctx context.Context) string {
+	id, _ := ctx.Value(issueCreationKeyContext{}).(string)
+	return id
+}
 
 func WithIssueRecordMutations(ctx context.Context, ids ...string) context.Context {
 	return context.WithValue(ctx, issueRecordMutationContext{}, ids)
@@ -81,6 +92,19 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 			return err
 		}
 		metadata.NextIssueNumber = last + 1
+		if id := IssueCreationKey(ctx); id != "" {
+			var raw []byte
+			err := tx.QueryRowContext(ctx, `SELECT data FROM issue_records WHERE workspace_key=? AND id=?`, workspace, id).Scan(&raw)
+			if err == nil {
+				var existing domain.Issue
+				if err = json.Unmarshal(raw, &existing); err != nil {
+					return err
+				}
+				metadata.Issues = append(metadata.Issues, existing)
+			} else if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+		}
 		previous := map[string]domain.Issue{}
 		if parent.ParentID != nil && *parent.ParentID != "" {
 			for _, column := range []string{"id", "parent_id"} {
@@ -194,6 +218,9 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 		s.workspaces[workspace] = metadata
 		return nil
 	}()
+	if errors.Is(err, ErrNoMutation) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}

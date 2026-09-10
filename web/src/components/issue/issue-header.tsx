@@ -6,7 +6,8 @@ import { toast } from 'sonner'
 import type { ActivityEvent, BootstrapData, Issue, IssueRelationType, IssueUpdateInput, Presence, WorkflowState } from '@/types/flow'
 import { IssueOptionsMenu, type IssueOptionsActions } from '@/components/issue/issue-options-menu'
 import { FlowBranchIcon, FlowChevronIcon, FlowFavoriteIcon, FlowIssueIdIcon, FlowNextIcon, FlowPreviousIcon, FlowUrlIcon, FlowWorkIcon } from '@/components/issue/flow-header-icons'
-import { issuePath, myIssuesPath, projectPath } from '@/lib/app-routes'
+import { issuePath } from '@/lib/app-routes'
+import { issueBreadcrumbs } from '@/lib/issue-navigation-context'
 import { configuredIssueBranch, copyIssueForWork } from '@/lib/issue-work-actions'
 
 export type IssueSaveState = 'idle' | 'saving' | 'saved' | 'error'
@@ -16,20 +17,21 @@ interface IssueHeaderProps {
   data: BootstrapData; activities: ActivityEvent[]; issueOptionsActions?: IssueOptionsActions
   position: number; total: number; onClose: () => void; onNavigate: (direction: 'next' | 'previous') => void
   onNavigateIssue?: (issue: Issue) => void; onNavigateRoot?: () => void
+  returnPath?: string
   onUpdate: (input: IssueUpdateInput) => Promise<void>; onDelete: () => Promise<void>; onRelation: (type: IssueRelationType) => void
 }
 
-export function IssueHeader({ issue, states, presence = [], saveState, onRetrySave, data, activities, issueOptionsActions, position, total, onClose, onNavigate, onNavigateRoot, onUpdate, onDelete, onRelation }: IssueHeaderProps) {
+export function IssueHeader({ issue, states, presence = [], saveState, onRetrySave, data, activities, issueOptionsActions, position, total, onNavigate, onNavigateRoot, returnPath, onUpdate, onDelete, onRelation }: IssueHeaderProps) {
   const [working,setWorking]=useState(false)
   const favorite=data.favorites.some(item=>item.resourceType==='issue'&&item.resourceId===issue.id)
   const canGoNext=position<total, canGoPrevious=position>1
-  const project=issue.project?data.projects.find(item=>item.id===issue.project?.id):undefined
+  const breadcrumbs = issueBreadcrumbs(data, issue, returnPath)
   const copyWork=useCallback(async(kind:'branch'|'prompt')=>{try{const text=kind==='branch'?configuredIssueBranch(issue,data):`# ${issue.identifier}: ${issue.title}\n\n${issue.description||'No description provided.'}\n\nIssue URL: ${location.href}`;await copyIssueForWork(text,kind,issue,data,onUpdate);toast.success(kind==='branch'?'Branch name copied to clipboard':'Prompt copied to clipboard')}catch(error){toast.error(error instanceof Error?error.message:'Could not write to clipboard')}},[issue,data,onUpdate])
   useEffect(()=>{const onKey=(event:KeyboardEvent)=>{if(isEditable(event.target))return;if((event.metaKey||event.ctrlKey)&&event.altKey&&event.key.toLowerCase()==='p'){event.preventDefault();void copyWork('prompt')} };addEventListener('keydown',onKey);return()=>removeEventListener('keydown',onKey)},[copyWork])
   const startWork=async()=>{if(working)return;const started=states.find(state=>state.type==='started');if(!started){toast.error('No started status is configured');return}if(issue.state.id===started.id){toast('Issue is already in progress');return}setWorking(true);try{await onUpdate({stateId:started.id});toast.success(`Moved ${issue.identifier} to ${started.name}`)}finally{setWorking(false)}}
   return <header className="issue-header">
     <button type="button" data-sidebar-trigger aria-label="Open sidebar" onClick={() => window.dispatchEvent(new Event('flow:open-sidebar'))} />
-    <div className="issue-header-context"><nav className="issue-breadcrumb" aria-label="Issue breadcrumb"><span className="issue-breadcrumb-segment">{project?<a className="issue-breadcrumb-link" href={projectPath(data.workspace.urlKey,project,'overview')} data-i18n-ignore>{project.name}</a>:<a className="issue-breadcrumb-link" href={myIssuesPath(data.workspace.urlKey)} onClick={event=>activateLink(event,onNavigateRoot??onClose)}>My issues</a>}<span className="issue-breadcrumb-separator" aria-hidden="true">›</span></span><a className="issue-breadcrumb-current" href={issuePath(data.workspace.urlKey,issue)} aria-current="page"><strong>{issue.identifier}</strong><span>{issue.title}</span></a></nav><button className="issue-header-icon" type="button" role="switch" aria-checked={favorite} aria-label={favorite?'Remove from favorites':'Add to favorites'} onClick={()=>void issueOptionsActions?.toggleFavorite()}><FlowFavoriteIcon/></button><IssueOptionsMenu issue={issue} data={data} activities={activities} actions={issueOptionsActions} favorited={favorite} onUpdate={onUpdate} onDelete={onDelete} onRelation={onRelation}/></div>
+    <div className="issue-header-context"><nav className="issue-breadcrumb" aria-label="Issue breadcrumb">{breadcrumbs.map((crumb,index)=><span className="issue-breadcrumb-segment" key={crumb.href}><a className="issue-breadcrumb-link" href={crumb.href} data-i18n-ignore={crumb.entity || undefined} onClick={index===breadcrumbs.length-1 && onNavigateRoot ? event=>activateLink(event,onNavigateRoot) : undefined}>{crumb.label}</a><span className="issue-breadcrumb-separator" aria-hidden="true">›</span></span>)}<a className="issue-breadcrumb-current" href={issuePath(data.workspace.urlKey,issue)} aria-current="page"><strong>{issue.identifier}</strong><span>{issue.title}</span></a></nav><button className="issue-header-icon" type="button" role="switch" aria-checked={favorite} aria-label={favorite?'Remove from favorites':'Add to favorites'} onClick={()=>void issueOptionsActions?.toggleFavorite()}><FlowFavoriteIcon/></button><IssueOptionsMenu issue={issue} data={data} activities={activities} actions={issueOptionsActions} favorited={favorite} onUpdate={onUpdate} onDelete={onDelete} onRelation={onRelation}/></div>
     {presence.length>0&&<div className="issue-presence" aria-label={`${presence.length} other ${presence.length===1?'person':'people'} viewing`}><span className="issue-presence-dot"/>{presence.slice(0,3).map(item=><span className="issue-presence-avatar" title={`${item.user.displayName} is viewing`} key={item.clientId}>{initials(item.user.displayName)}</span>)}</div>}
     {saveState==='error'?<button type="button" className="save-state error" onClick={onRetrySave}>Save failed · Retry</button>:<span className={`save-state ${saveState}`} role="status" aria-live="polite">{saveState==='saving'?'Saving...':saveState==='saved'?'Saved':''}</span>}
     <div className="issue-sequence" aria-label="Issue navigation"><span><strong>{position}</strong><i>/</i>{total}</span><div className="issue-sequence-buttons"><button type="button" aria-label="Go to previous item" title="Previous item" disabled={!canGoPrevious} onClick={()=>onNavigate('previous')}><FlowPreviousIcon/></button><button type="button" aria-label="Go to next item" title="Next item" disabled={!canGoNext} onClick={()=>onNavigate('next')}><FlowNextIcon/></button></div></div>

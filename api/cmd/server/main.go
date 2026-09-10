@@ -52,6 +52,7 @@ type server struct {
 	workflowSchedulerStarted       atomic.Bool
 	deliverySchedulerStarted       atomic.Bool
 	settingsLastSweep              atomic.Int64
+	providerLastSweep              atomic.Int64
 	deliverySchedulerMu            sync.Mutex
 	deliverySchedulerCancel        context.CancelFunc
 	deliverySchedulerDone          chan struct{}
@@ -66,6 +67,7 @@ type server struct {
 	mcpUploads                     map[string]*mcpPendingUpload
 	agentApprovalsMu               sync.Mutex
 	agentApprovals                 map[string]*agentApproval
+	agentElicitations              map[string]*agentElicitation
 	importSlots                    chan struct{}
 }
 
@@ -270,6 +272,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/agent/sessions/{id}/messages/{messageId}", s.updateAgentSessionMessage)
 	mux.HandleFunc("PATCH /api/agent/sessions/{id}/messages/{messageId}/stream", s.updateAgentSessionMessageStream)
 	mux.HandleFunc("POST /api/agent/sessions/{id}/approvals/{approvalId}", s.resolveAgentApproval)
+	mux.HandleFunc("POST /api/agent/sessions/{id}/elicitations/{elicitationId}", s.resolveAgentElicitation)
 	mux.HandleFunc("GET /api/agent/skills", s.listAgentSkillsHTTP)
 	mux.HandleFunc("POST /api/agent/skills", s.createAgentSkill)
 	mux.HandleFunc("PATCH /api/agent/skills/{id}", s.updateAgentSkill)
@@ -402,7 +405,16 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PUT /scim/v2/{workspace}/Groups/{id}", s.scimGroup)
 	mux.HandleFunc("DELETE /scim/v2/{workspace}/Groups/{id}", s.scimGroup)
 	mux.HandleFunc("PUT /api/integrations/{provider}", s.connectIntegration)
+	mux.HandleFunc("POST /api/integrations/{provider}/configure", s.configureProvider)
+	mux.HandleFunc("POST /api/integrations/{provider}/actions", s.providerAction)
+	mux.HandleFunc("GET /api/integrations/{provider}/jobs", s.listProviderJobs)
 	mux.HandleFunc("GET /api/application-policies", s.listApplicationPolicies)
+	mux.HandleFunc("GET /api/application-policies/{id}/authorization", s.connectorAuthStatus)
+	mux.HandleFunc("POST /api/application-policies/{id}/oauth/start", s.startConnectorOAuth)
+	mux.HandleFunc("DELETE /api/application-policies/{id}/authorization", s.disconnectConnectorOAuth)
+	mux.HandleFunc("PUT /api/application-policies/{id}/headers", s.saveConnectorHeaders)
+	mux.HandleFunc("GET /api/connector-oauth/callback", s.finishConnectorOAuth)
+	mux.HandleFunc("GET /api/connector-oauth/client-metadata", s.connectorClientMetadata)
 	mux.HandleFunc("PUT /api/application-policies", s.saveApplicationPolicy)
 	mux.HandleFunc("DELETE /api/application-policies/{id}", s.deleteApplicationPolicy)
 	mux.HandleFunc("POST /api/integrations/{provider}/oauth/start", s.startIntegrationOAuth)
@@ -785,6 +797,16 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 }
 
 func sanitizeBootstrap(data *domain.Bootstrap) {
+	data.ProviderJobs = nil
+	delete(data.Settings, "providerJobs")
+	availability, _ := data.Settings["calendarAvailability"].(map[string]any)
+	for i := range data.Users {
+		if raw, ok := availability[data.Users[i].ID].(string); ok {
+			if until, err := time.Parse(time.RFC3339, raw); err == nil && until.After(time.Now()) {
+				data.Users[i].OutOfOfficeUntil = &until
+			}
+		}
+	}
 	delete(data.Settings, "applicationPolicies")
 	delete(data.Settings, "pulseDeliveryCursors")
 	for index := range data.Users {
@@ -1071,6 +1093,8 @@ func (s *server) updateWorkspaceSettings(w http.ResponseWriter, r *http.Request)
 		// Security approvals are managed through their permission-checked API.
 		input["applicationPolicies"] = data.Settings["applicationPolicies"]
 		input["pulseDeliveryCursors"] = data.Settings["pulseDeliveryCursors"]
+		input["providerJobs"] = data.Settings["providerJobs"]
+		input["calendarAvailability"] = data.Settings["calendarAvailability"]
 		data.Settings = input
 		return nil
 	})
@@ -2375,6 +2399,12 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		input.TeamID = projected.Teams[0].ID
 	}
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "issue.created", input, func(data *domain.Bootstrap) (string, error) {
+		if id := store.IssueCreationKey(r.Context()); id != "" {
+			if existing, err := issueByID(data, id); err == nil {
+				created = *existing
+				return id, store.ErrNoMutation
+			}
+		}
 		if input.TemplateID != "" {
 			index := slices.IndexFunc(data.IssueTemplates, func(template domain.IssueTemplate) bool { return template.ID == input.TemplateID })
 			if index < 0 {
@@ -2440,7 +2470,11 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		}
 		created = domain.Issue{ID: fmt.Sprintf("issue_%d", number), Version: 1, Identifier: fmt.Sprintf("%s-%d", team.Key, number), Number: number, Title: strings.TrimSpace(input.Title), Description: strings.TrimSpace(input.Description), Priority: settings.DefaultPriority, PriorityLabel: priorityLabel(settings.DefaultPriority), SortOrder: float64(number), CreatedAt: now, UpdatedAt: now, Team: team, State: *defaultState, Creator: data.Viewer, Labels: []domain.IssueLabel{}, ParentID: input.ParentID, SubscriberIDs: []string{data.Viewer.ID}, Reactions: map[string][]string{}, SubIssueIDs: []string{}, Relations: []domain.IssueRelation{}, Attachments: []domain.Attachment{}, TemplateID: input.TemplateID, SuggestedLabelIDs: []string{}}
 		if preferences := data.UserSettings[data.Viewer.ID]; preferences.AutoAssign && input.AssigneeID == nil {
+			// Personal assignment preferences also apply to provider imports.
 			input.AssigneeID = &data.Viewer.ID
+		}
+		if id := store.IssueCreationKey(r.Context()); id != "" {
+			created.ID = id
 		}
 		createUpdate := domain.IssueUpdateInput{DescriptionState: input.DescriptionState, DescriptionData: input.DescriptionData, ContentState: input.ContentState, StateID: input.StateID, Priority: input.Priority, Estimate: input.Estimate, AssigneeID: input.AssigneeID, DelegateID: input.DelegateID, ProjectID: input.ProjectID, ProjectMilestoneID: input.ProjectMilestoneID, CycleID: input.CycleID, DueDate: input.DueDate, SLABreachesAt: input.SLABreachesAt, SLAType: input.SLAType, Recurrence: input.Recurrence, NextOccurrenceAt: input.NextOccurrenceAt}
 		if len(input.LabelIDs) > 0 {
