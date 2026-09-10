@@ -20,6 +20,10 @@ import (
 
 func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 	provider := r.PathValue("provider")
+	if provider == "sentry" || provider == "intercom" {
+		s.providerWebhook(w, r)
+		return
+	}
 	if provider == "slack" {
 		s.slackWebhook(w, r)
 		return

@@ -1,5 +1,7 @@
 import { Check, ChevronDown, ChevronRight, ExternalLink, FileText, GitPullRequest, Link2, Plus, UserRound, X } from 'lucide-react'
 import { DocumentGlyph } from '@/components/documents/document-icon'
+import { fetchIssueRecord } from '@/lib/api'
+import { toast } from 'sonner'
 import * as Popover from '@radix-ui/react-popover'
 import * as Select from '@radix-ui/react-select'
 import * as Dialog from '@radix-ui/react-dialog'
@@ -38,7 +40,7 @@ import { SubIssueProgressRing } from '@/components/issue/sub-issue-progress-ring
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import './issue-code-reviews.css'
 
-export function DetailPane({issue,data,comments,activities,highlightTarget,presence=[],workspacePresence,full=false,embedded=false,issueOptionsActions,onClose,onNavigateIssue,onNavigateRoot,onUpdate,onDelete,onCreateSubIssue,onCreateProject,onCreateProjectMilestone,onReactIssue,onComment,onEditComment,onDeleteComment,onReactComment,onRelation,onDeleteRelation,onUpload,onDeleteAttachment}:{issue:Issue;data:BootstrapData;comments:Comment[];activities:ActivityEvent[];highlightTarget?:ActivityHighlightTarget;presence?:Presence[];workspacePresence?:Presence[];full?:boolean;embedded?:boolean;issueOptionsActions?:IssueOptionsActions;onClose:()=>void;onExpand?:()=>void;onNavigateIssue?:(issue:Issue)=>void;onNavigateRoot?:()=>void;onUpdate:(input:IssueUpdateInput)=>Promise<void>;onDelete:()=>Promise<void>;onCreateSubIssue:(input:SubIssueInput)=>Promise<void>;onCreateProject?:(draft:NewProjectDraft)=>Promise<Project>;onCreateProjectMilestone?:(projectId:string,input:{name:string})=>Promise<ProjectMilestone>;onReactIssue:(emoji:string)=>Promise<void>;onComment:(body:string,bodyData?:Record<string,unknown>,parentId?:string)=>Promise<void>;onEditComment:(id:string,body:string,bodyData?:Record<string,unknown>)=>Promise<void>;onDeleteComment:(id:string)=>Promise<void>;onReactComment:(id:string,emoji:string)=>Promise<void>;onRelation:(type:IssueRelationType,relatedIssueId:string)=>Promise<void>;onDeleteRelation:(relationId:string)=>Promise<void>;onUpload:(file:File)=>Promise<void>;onDeleteAttachment:(attachmentId:string)=>Promise<void>}){
+export function DetailPane({issue,data,comments,activities,highlightTarget,presence=[],workspacePresence,full=false,embedded=false,issueOptionsActions,onClose,onNavigateIssue,onNavigateRoot,returnPath,navigationIssueIds,onUpdate,onDelete,onCreateSubIssue,onCreateProject,onCreateProjectMilestone,onReactIssue,onComment,onEditComment,onDeleteComment,onReactComment,onRelation,onDeleteRelation,onUpload,onDeleteAttachment}:{issue:Issue;data:BootstrapData;comments:Comment[];activities:ActivityEvent[];highlightTarget?:ActivityHighlightTarget;presence?:Presence[];workspacePresence?:Presence[];full?:boolean;embedded?:boolean;issueOptionsActions?:IssueOptionsActions;onClose:()=>void;onExpand?:()=>void;onNavigateIssue?:(issue:Issue)=>void;onNavigateRoot?:()=>void;returnPath?:string;navigationIssueIds?:string[];onUpdate:(input:IssueUpdateInput)=>Promise<void>;onDelete:()=>Promise<void>;onCreateSubIssue:(input:SubIssueInput)=>Promise<void>;onCreateProject?:(draft:NewProjectDraft)=>Promise<Project>;onCreateProjectMilestone?:(projectId:string,input:{name:string})=>Promise<ProjectMilestone>;onReactIssue:(emoji:string)=>Promise<void>;onComment:(body:string,bodyData?:Record<string,unknown>,parentId?:string)=>Promise<void>;onEditComment:(id:string,body:string,bodyData?:Record<string,unknown>)=>Promise<void>;onDeleteComment:(id:string)=>Promise<void>;onReactComment:(id:string,emoji:string)=>Promise<void>;onRelation:(type:IssueRelationType,relatedIssueId:string)=>Promise<void>;onDeleteRelation:(relationId:string)=>Promise<void>;onUpload:(file:File)=>Promise<void>;onDeleteAttachment:(attachmentId:string)=>Promise<void>}){
   const{t}=useI18n(),[title,setTitle]=useState(issue.title),[description,setDescription]=useState(issue.description),[subOpen,setSubOpen]=useState(false),[subCollapsed,setSubCollapsed]=useState(false),[subSelected,setSubSelected]=useState(new Set<string>()),[subDisplay,setSubDisplay]=useState<SubIssueDisplay>({ordering:'priority',direction:'asc',completed:'all',nested:true,properties:new Set(['status','labels','assignee'])}),[relationType,setRelationType]=useState<IssueRelationType|null>(null),[uploadState,setUploadState]=useState<AttachmentUploadState>()
   const peoplePresence=workspacePresence??presence
   const fileRef=useRef<HTMLInputElement>(null)
@@ -46,9 +48,18 @@ export function DetailPane({issue,data,comments,activities,highlightTarget,prese
   useEffect(()=>{setTitle(issue.title);setDescription(issue.description)},[issue.id,issue.title,issue.description])
   const subIssues=flattenSubIssues(issue,data.issues,subDisplay.nested).filter(({issue:child})=>subDisplay.completed==='all'||(child.state.type!=='completed'&&child.state.type!=='canceled')).sort((a,b)=>(subDisplay.ordering==='created'?b.issue.createdAt.localeCompare(a.issue.createdAt):subDisplay.ordering==='updated'?b.issue.updatedAt.localeCompare(a.issue.updatedAt):a.issue.priority-b.issue.priority||a.issue.sortOrder-b.issue.sortOrder)*(subDisplay.direction==='asc'?1:-1))
   const subCompleted=subIssues.filter(({issue:child})=>child.state.type==='completed'||child.state.type==='canceled').length
-  const sequence=data.issues.filter(item=>!item.archivedAt)
-  const sequenceIndex=Math.max(0,sequence.findIndex(item=>item.id===issue.id))
-  const navigateIssue=(direction:'next'|'previous')=>{const next=sequence[sequenceIndex+(direction==='next'?1:-1)];if(next)onNavigateIssue?.(next)}
+  const sequence=navigationIssueIds?.includes(issue.id)?navigationIssueIds:[issue.id]
+  const sequenceIndex=Math.max(0,sequence.indexOf(issue.id))
+  const navigationRequest=useRef<AbortController | null>(null)
+  useEffect(()=>()=>navigationRequest.current?.abort(),[issue.id])
+  const navigateIssue=async(direction:'next'|'previous')=>{
+    const id=sequence[sequenceIndex+(direction==='next'?1:-1)]
+    if(!id)return
+    navigationRequest.current?.abort()
+    const controller=new AbortController();navigationRequest.current=controller
+    try{const next=data.issues.find(item=>item.id===id)??await fetchIssueRecord(id,controller.signal);if(!controller.signal.aborted)onNavigateIssue?.(next)}
+    catch(error){if(!controller.signal.aborted)toast.error(error instanceof Error?error.message:'Could not open issue')}
+  }
   const openIssue=(target:Issue)=>{void flush().then(saved=>{if(saved)onNavigateIssue?.(target)})}
   const related=(id:string)=>data.issues.find(i=>i.id===id)
   const parentIssue=issue.parentId?related(issue.parentId):undefined
@@ -66,7 +77,7 @@ export function DetailPane({issue,data,comments,activities,highlightTarget,prese
   const upload=async(file:File)=>{setUploadState({name:file.name,progress:20,file});try{setUploadState({name:file.name,progress:70,file});await onUpload(file);setUploadState(undefined)}catch(error){setUploadState({name:file.name,progress:100,file,error:error instanceof Error?error.message:'Upload failed'})}}
   return <section className={`issue-view ${full?'full':''} ${embedded?'issue-view--embedded':''}`}>
     {!embedded&&<IssueHeader
-      issue={issue} states={availableStates} presence={presence} saveState={saveState} data={data} activities={activities} issueOptionsActions={issueOptionsActions}
+      issue={issue} returnPath={returnPath} states={availableStates} presence={presence} saveState={saveState} data={data} activities={activities} issueOptionsActions={issueOptionsActions}
       onRetrySave={()=>void retry()} position={sequenceIndex+1} total={sequence.length}
       onClose={()=>{void flush().then(saved=>{if(saved)onClose()})}}
       onNavigate={direction=>{void flush().then(saved=>{if(saved)navigateIssue(direction)})}}

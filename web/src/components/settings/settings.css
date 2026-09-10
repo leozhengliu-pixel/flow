@@ -181,3 +181,17 @@ body .domain-label-row-menu .menu-separator:after,body .domain-label-group-subme
 
 /* Reserve the compact agent bar below the settings surface on desktop. */
 @media(min-width:761px){.settings-main{height:calc(100vh - 44px)}}
+.settings-main>.settings-content:has(.domain-labels-header){padding-top:64px}
+.settings-main>.settings-content:has(.feature-wide){width:100%;max-width:100%;padding:64px 40px 96px}
+@media(max-width:760px){.settings-main>.settings-content:has(.domain-labels-header){padding-top:36px}.settings-main>.settings-content:has(.feature-wide){padding:36px 8px 64px}}
+.settings-main>.settings-content:has(.settings-members-page){padding-top:64px}
+.settings-main>.settings-content:has(.settings-team-row){width:100%;max-width:100%;padding:64px 40px 96px}
+.settings-main .team-settings-header{position:relative}
+.settings-main .team-settings-header h1{font-size:24px;line-height:32px;font-weight:500}
+.settings-main .team-settings-header .team-settings-back{position:absolute;top:-36px;left:0}
+@media(max-width:760px){.settings-main>.settings-content:has(.settings-members-page){padding-top:36px}.settings-main>.settings-content:has(.settings-team-row){padding:36px 8px 64px}}
+.settings-main[data-settings-page=team]:is([data-team-section=members],[data-team-section=issue-labels])>.settings-content{width:100%;max-width:100%;padding:64px 40px 96px}
+.settings-content .team-statuses-page>.team-statuses-header{position:relative;height:auto;margin:0 16px 24px;padding:0}
+.settings-content .team-statuses-page>.team-statuses-header>button{position:absolute;top:-36px;left:0}
+.settings-content .team-statuses-page>.team-statuses-header>div{margin:0}
+@media(max-width:760px){.settings-main[data-settings-page=team]:is([data-team-section=members],[data-team-section=issue-labels])>.settings-content{padding:36px 8px 64px}}

@@ -152,6 +152,9 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 }
 
 func apiKeyRestrictedPersonalPath(path string) bool {
+	if strings.HasPrefix(path, "/api/application-policies/") && (strings.HasSuffix(path, "/oauth/start") || strings.HasSuffix(path, "/headers")) {
+		return true
+	}
 	return path == "/api/api-keys" || strings.HasPrefix(path, "/api/api-keys/") || path == "/api/account" || strings.HasPrefix(path, "/api/account/")
 }
 
@@ -174,7 +177,9 @@ func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKe
 	}
 	hash := secretHash(secret)
 	for _, key := range data.APIKeys {
-		if key.OAuthClientID != "" && !applicationApproved(&data,key.OAuthClientID,key.Scopes) { continue }
+		if key.OAuthClientID != "" && !applicationApproved(&data, key.OAuthClientID, key.Scopes) {
+			continue
+		}
 		if subtle.ConstantTimeCompare([]byte(key.SecretHash), []byte(hash)) != 1 || key.RevokedAt != nil || key.ExpiresAt != nil && !key.ExpiresAt.After(time.Now().UTC()) {
 			continue
 		}
@@ -370,7 +375,7 @@ func publicAuthPath(path string) bool {
 	if strings.HasPrefix(path, "/api/release-pipelines/") && strings.HasSuffix(path, "/events") {
 		return true
 	}
-	if path == "/mcp" || path == "/mcp/readonly" || path == "/oauth/register" || path == "/oauth/token" || path == "/oauth/revoke" || strings.HasPrefix(path, "/.well-known/oauth-") || strings.HasPrefix(path, "/api/mcp/uploads/") {
+	if path == "/api/connector-oauth/callback" || path == "/api/connector-oauth/client-metadata" || path == "/mcp" || path == "/mcp/readonly" || path == "/oauth/register" || path == "/oauth/token" || path == "/oauth/revoke" || strings.HasPrefix(path, "/.well-known/oauth-") || strings.HasPrefix(path, "/api/mcp/uploads/") {
 		return true
 	}
 	return path == "/api/health" || path == "/api/oauth/token" || path == "/api/auth/register" || path == "/api/auth/verify-email" || path == "/api/auth/resend-verification" || path == "/api/auth/login" || path == "/api/auth/logout" || path == "/api/auth/session" || path == "/api/auth/forgot-password" || path == "/api/auth/reset-password" || path == "/api/auth/providers" || path == "/api/auth/discovery" || strings.HasPrefix(path, "/api/auth/enterprise/") || strings.HasPrefix(path, "/api/auth/google/") || strings.HasPrefix(path, "/api/auth/oidc/") || strings.HasPrefix(path, "/api/auth/saml/") || strings.HasPrefix(path, "/api/invitations/preview/") || strings.HasPrefix(path, "/api/calendar/cycles/") || strings.HasPrefix(path, "/api/email-intake/") || strings.HasPrefix(path, "/api/integrations/") && (strings.HasSuffix(path, "/webhook") || strings.HasSuffix(path, "/oauth/callback")) || strings.HasPrefix(path, "/api/shared/views/") || strings.HasPrefix(path, "/api/shared/dashboards/") || strings.HasPrefix(path, "/api/shared/issues/")
@@ -415,7 +420,9 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusForbidden, "Agent access is disabled by workspace policy")
 		return false
 	}
-	if !s.authorizeAuthenticationPolicy(w,r,data,role) {return false}
+	if !s.authorizeAuthenticationPolicy(w, r, data, role) {
+		return false
+	}
 	trashResourceType := trashRestoreResourceType(data, r)
 	if (adminOnlyRequest(r) || trashResourceType == "release_pipeline") && !workspaceAdminRole(role) {
 		writeError(w, http.StatusForbidden, "Workspace admin access required")
@@ -499,7 +506,12 @@ func featureForPath(path string) string {
 
 func adminOnlyRequest(r *http.Request) bool {
 	path := r.URL.Path
-	if path=="/api/workspace/agent-guidance" {return false}
+	if strings.HasPrefix(path, "/api/integrations/") && strings.HasSuffix(path, "/configure") {
+		return true
+	}
+	if path == "/api/workspace/agent-guidance" {
+		return false
+	}
 	if strings.Contains(path, "/members/") && !strings.Contains(path, "/teams/") || path == "/api/events" {
 		return true
 	}
@@ -536,7 +548,7 @@ func permissionForRequest(r *http.Request) string {
 	}
 	path := r.URL.Path
 	switch {
-	case path=="/api/workspace/agent-guidance":
+	case path == "/api/workspace/agent-guidance":
 		return "agentGuidance"
 	case strings.Contains(path, "/invitations"):
 		return "invite"
@@ -1282,7 +1294,15 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		if len(parts) < 3 {
 			return true
 		}
-		return teamAllowed(parts[2])
+		if !teamAllowed(parts[2]) {
+			return false
+		}
+		if r.Method == http.MethodGet && len(parts) == 4 && parts[3] == "resources" {
+			// Carry only this team's authorized resource rows into the handler,
+			// rather than projecting workspace metadata a second time.
+			*r = *r.WithContext(context.WithValue(r.Context(), teamResourcesReadKey{}, projectTeamResources(data, parts[2])))
+		}
+		return true
 	case "notifications":
 		if len(parts) < 3 {
 			return true

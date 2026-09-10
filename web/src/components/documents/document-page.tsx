@@ -20,7 +20,7 @@ import type { BootstrapData, DocumentPermission, FlowDocument, User } from '@/ty
 
 import './document-page.css'
 
-export function DocumentPage({ data, document, onReload, onBack }: { data: BootstrapData; document: FlowDocument; onReload: () => Promise<void>; onBack: () => void }) {
+export function DocumentPage({ data, document, onReload, onBack, origin }: { origin?: {label:string;entity?:boolean}; data: BootstrapData; document: FlowDocument; onReload: () => Promise<void>; onBack: () => void }) {
   const {t}=useI18n()
   const [title,setTitle]=useState(document.title)
   const editorState=document.contentData?JSON.stringify(document.contentData):document.contentState
@@ -76,7 +76,7 @@ export function DocumentPage({ data, document, onReload, onBack }: { data: Boots
   return <main className="main-panel document-page">
     <header className="document-header">
       <nav aria-label="Document breadcrumb" className="document-breadcrumbs">
-        {issue?<a className="document-breadcrumb-link" href={issuePath(data.workspace.urlKey,issue)}><FileText/><span data-i18n-ignore>{issue.identifier}</span></a>:project?<a className="document-breadcrumb-link" href={projectPath(data.workspace.urlKey,project)}><ViewGlyph color={project.color} icon={normalizeProjectIcon(project.icon)}/><span data-i18n-ignore>{project.name}</span></a>:team?<><a className="document-breadcrumb-link" href={teamHomePath(data.workspace.urlKey,team.key)}><ViewGlyph color={team.color} icon={team.icon||'Team'}/><span data-i18n-ignore>{team.name}</span></a><span aria-hidden="true" className="document-breadcrumb-separator">›</span><a className="document-breadcrumb-link document-breadcrumb-documents" href={teamDocumentsPath(data.workspace.urlKey,team.key)}>Documents</a></>:<button className="document-breadcrumb-link" onClick={onBack}><FileText/><span>Documents</span></button>}
+        {origin?<button className="document-breadcrumb-link" onClick={onBack}><FileText/><span data-i18n-ignore={origin.entity || undefined}>{origin.label}</span></button>:issue?<a className="document-breadcrumb-link" href={issuePath(data.workspace.urlKey,issue)}><FileText/><span data-i18n-ignore>{issue.identifier}</span></a>:project?<a className="document-breadcrumb-link" href={projectPath(data.workspace.urlKey,project)}><ViewGlyph color={project.color} icon={normalizeProjectIcon(project.icon)}/><span data-i18n-ignore>{project.name}</span></a>:team?<><a className="document-breadcrumb-link" href={teamHomePath(data.workspace.urlKey,team.key)}><ViewGlyph color={team.color} icon={team.icon||'Team'}/><span data-i18n-ignore>{team.name}</span></a><span aria-hidden="true" className="document-breadcrumb-separator">›</span><a className="document-breadcrumb-link document-breadcrumb-documents" href={teamDocumentsPath(data.workspace.urlKey,team.key)}>Documents</a></>:<button className="document-breadcrumb-link" onClick={onBack}><FileText/><span>Documents</span></button>}
         <span aria-hidden="true" className="document-breadcrumb-separator">›</span><strong className="document-breadcrumb-current"><DocumentGlyph document={document}/><span data-i18n-ignore>{document.title}</span></strong>
       </nav>
       <div className="document-header-actions">

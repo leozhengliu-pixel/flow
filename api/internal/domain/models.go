@@ -6,15 +6,16 @@ import (
 )
 
 type User struct {
-	ID            string `json:"id"`
-	UserID        string `json:"userId,omitempty"`
-	Name          string `json:"name"`
-	DisplayName   string `json:"displayName"`
-	JobTitle      string `json:"jobTitle,omitempty"`
-	Email         string `json:"email"`
-	AvatarURL     string `json:"avatarUrl,omitempty"`
-	Active        bool   `json:"active"`
-	EmailVerified bool   `json:"emailVerified"`
+	OutOfOfficeUntil *time.Time `json:"outOfOfficeUntil,omitempty"`
+	ID               string     `json:"id"`
+	UserID           string     `json:"userId,omitempty"`
+	Name             string     `json:"name"`
+	DisplayName      string     `json:"displayName"`
+	JobTitle         string     `json:"jobTitle,omitempty"`
+	Email            string     `json:"email"`
+	AvatarURL        string     `json:"avatarUrl,omitempty"`
+	Active           bool       `json:"active"`
+	EmailVerified    bool       `json:"emailVerified"`
 }
 
 // AuthIdentity binds a user to a stable identifier issued by an external provider.
@@ -115,11 +116,24 @@ type AgentMessage struct {
 }
 
 type AgentMessagePart struct {
-	ID       string         `json:"id"`
-	Type     string         `json:"type"`
-	Text     string         `json:"text,omitempty"`
-	Status   string         `json:"status,omitempty"`
-	ToolCall *AgentToolCall `json:"toolCall,omitempty"`
+	Elicitation *AgentElicitation `json:"elicitation,omitempty"`
+	ID          string            `json:"id"`
+	Type        string            `json:"type"`
+	Text        string            `json:"text,omitempty"`
+	Status      string            `json:"status,omitempty"`
+	ToolCall    *AgentToolCall    `json:"toolCall,omitempty"`
+}
+
+type AgentElicitation struct {
+	ID            string          `json:"id"`
+	SessionID     string          `json:"sessionId"`
+	ConnectorName string          `json:"connectorName"`
+	ConnectorURL  string          `json:"connectorUrl"`
+	Mode          string          `json:"mode"`
+	Message       string          `json:"message"`
+	Schema        json.RawMessage `json:"schema,omitempty"`
+	URL           string          `json:"url,omitempty"`
+	Action        string          `json:"action,omitempty"`
 }
 
 type AgentToolCall struct {
@@ -1136,14 +1150,14 @@ type GitAutomationState struct {
 }
 
 type TargetBranch struct {
-	ID         string    `json:"id"`
-	TeamID     string    `json:"teamId"`
-	Repository string    `json:"repository"`
-	Branch     string    `json:"branch"`
-	Default    bool      `json:"default"`
+	ID               string            `json:"id"`
+	TeamID           string            `json:"teamId"`
+	Repository       string            `json:"repository"`
+	Branch           string            `json:"branch"`
+	Default          bool              `json:"default"`
 	AutomationStates map[string]string `json:"automationStates,omitempty"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	CreatedAt        time.Time         `json:"createdAt"`
+	UpdatedAt        time.Time         `json:"updatedAt"`
 }
 
 type ReviewCheck struct {
@@ -1576,6 +1590,7 @@ type NotificationList struct {
 }
 
 type Bootstrap struct {
+	ProviderJobs                  []ProviderJob                      `json:"providerJobs,omitempty"`
 	NextIssueNumber               int                                `json:"-"`
 	IssueCollectionPaged          bool                               `json:"issueCollectionPaged,omitempty"`
 	Workspace                     Workspace                          `json:"workspace"`
@@ -1665,6 +1680,19 @@ type Bootstrap struct {
 	TeamMembers                   []TeamMember                       `json:"teamMembers"`
 	Invitations                   []Invitation                       `json:"invitations"`
 	ViewerRole                    string                             `json:"viewerRole"`
+}
+
+type ProviderJob struct {
+	ID           string    `json:"id"`
+	Provider     string    `json:"provider"`
+	ConnectionID string    `json:"connectionId"`
+	IssueID      string    `json:"issueId"`
+	UserID       string    `json:"userId"`
+	ExternalID   string    `json:"externalId"`
+	TurnID       string    `json:"turnId"`
+	Status       string    `json:"status"`
+	URL          string    `json:"url,omitempty"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
 type SavedView struct {

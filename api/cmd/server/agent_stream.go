@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const maxAgentToolTurns = 8
@@ -245,17 +247,31 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	issues := selectedAgentIssues(data.Issues, session.IssueIDs)
 	skills := selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)
 	messages := agentProviderHistory(*session, workspaceAgentSystemPrompt(data, issues, skills))
-	connectors, err := s.discoverConnectorTools(r.Context(), data)
-	if err != nil {
-		return domain.AgentSession{}, err
-	}
-	r = r.WithContext(context.WithValue(r.Context(), connectorToolsKey{}, connectors))
 	messageID := fmt.Sprintf("agent_message_%d", time.Now().UnixNano())
 	started := time.Now()
 	parts := []domain.AgentMessagePart{}
 	partIndex := map[string]int{}
 	partText := map[string]*strings.Builder{}
 	streamBytes := 0
+	var elicitMu sync.Mutex
+	connectorContext := connectorRequestContext{Workspace: workspaceKey(r), UserID: data.Viewer.ID}
+	if writer != nil {
+		connectorContext.Elicit = func(ctx context.Context, item applicationPolicy, params *mcp.ElicitParams) (*mcp.ElicitResult, error) {
+			elicitMu.Lock()
+			defer elicitMu.Unlock()
+			return s.requestAgentElicitation(ctx, workspaceKey(r), session.ID, session.UserID, item, params, func(part domain.AgentMessagePart, kind string) error {
+				index, found := partIndex[part.ID]
+				if found {
+					parts[index] = part
+				} else {
+					partIndex[part.ID] = len(parts)
+					parts = append(parts, part)
+				}
+				return writer.send(agentStreamEvent{Type: kind, MessageID: messageID, Part: &part})
+			})
+		}
+	}
+	r = r.WithContext(context.WithValue(r.Context(), connectorContextKey{}, connectorContext))
 	if writer != nil {
 		snapshot := *session
 		if err := writer.send(agentStreamEvent{Type: "session.started", Session: &snapshot, MessageID: messageID}); err != nil {
@@ -263,6 +279,11 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		}
 	}
 
+	connectors, err := s.discoverConnectorTools(r.Context(), data)
+	if err != nil {
+		return s.persistAgentFailure(r, *session, messageID, "", parts, started, err)
+	}
+	r = r.WithContext(context.WithValue(r.Context(), connectorToolsKey{}, connectors))
 	emit := func(event agentProviderEvent) error {
 		streamBytes += len(event.Delta)
 		if streamBytes > 8<<20 || len(parts) > 1024 {
@@ -485,6 +506,9 @@ func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call d
 	}
 	args["__flowBaseURL"] = externalBaseURL(r)
 	actor := mcpActor{WorkspaceKey: workspaceKey(r), User: data.Viewer, APIKey: domain.APIKey{Scopes: []string{"read", "write"}}}
+	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+		actor.APIKey = key
+	}
 	ctx := context.WithValue(r.Context(), authUserContextKey{}, data.Viewer)
 	ctx = context.WithValue(ctx, workspaceKeyContextKey{}, workspaceKey(r))
 	ctx = store.ContextWithActor(ctx, data.Viewer)

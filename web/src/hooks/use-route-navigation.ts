@@ -1,14 +1,22 @@
-import { startTransition, useCallback, useEffect } from 'react'
-import { useNavigate, type NavigateFunction, type NavigateOptions, type To } from 'react-router-dom'
+import { startTransition, useCallback, useEffect, useRef } from 'react'
+import { useLocation, useNavigate, type NavigateFunction, type NavigateOptions, type To } from 'react-router-dom'
+import { nextNavigationState } from '@/lib/navigation-context'
 import { clientNavigationTarget, preloadRoute } from '@/lib/route-preload'
 
 export function useRouteNavigation() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const current = useRef(location)
+  current.current = location
   const navigateTo = useCallback((to: To | number, options?: NavigateOptions) => {
     if (typeof to === 'string') void preloadRoute(to).catch(() => undefined)
     startTransition(() => {
       if (typeof to === 'number') void navigate(to)
-      else void navigate(to, options)
+      else {
+        const target = typeof to === 'string' ? to : `${to.pathname ?? current.current.pathname}${to.search ?? ''}${to.hash ?? ''}`
+        const state = target.startsWith('/') && !target.startsWith('//') ? nextNavigationState(current.current, target, options?.state, options?.replace) : options?.state
+        void navigate(to, { ...options, state })
+      }
     })
   }, [navigate]) as NavigateFunction
 

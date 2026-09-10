@@ -24,7 +24,7 @@ export function applyAgentStreamEvent(session: AgentSession | undefined, event: 
 export function markAgentSessionStopped(session: AgentSession): AgentSession {
   const last = session.messages.at(-1)
   if (!last || last.role !== 'assistant') return session
-  const parts = (last.parts ?? []).map(part => part.status === 'running' ? { ...part, status: 'error' as const } : part)
+  const parts = (last.parts ?? []).map(part => part.status === 'running' || part.status === 'pending' ? { ...part, status: 'error' as const } : part)
   if (!parts.some(part => part.type === 'error')) parts.push({ id: `${last.id}-stopped`, type: 'error', status: 'error', text: 'Generation stopped' })
   return { ...session, messages: session.messages.map(message => message.id === last.id ? { ...message, parts } : message) }
 }

@@ -88,6 +88,7 @@ export function ReviewsPage({
   onNavigate,
   onReload,
   onOpenSidebar,
+  returnPath,
 }: {
   data: BootstrapData;
   view: "for-you" | "created";
@@ -96,6 +97,7 @@ export function ReviewsPage({
   onNavigate: (path: string) => void;
   onReload: () => Promise<void>;
   onOpenSidebar: () => void;
+  returnPath?: string;
 }) {
   const { t } = useI18n(),
     [filter, setFilter] = useState<FilterState>({}),
@@ -246,6 +248,7 @@ export function ReviewsPage({
       <section className="reviews-detail-pane">
         {review ? (
           <ReviewDetail
+            returnPath={returnPath}
             data={data}
             review={review}
             tab={tab}
@@ -434,6 +437,7 @@ function ReviewEmptyArt() {
 }
 
 function ReviewDetail({
+  returnPath,
   data,
   review,
   tab,
@@ -446,6 +450,7 @@ function ReviewDetail({
   onOpenSubmit,
   onOpenPicker,
 }: {
+  returnPath?: string;
   data: BootstrapData;
   review: CodeReview;
   tab: ReviewRouteTab;
@@ -498,7 +503,7 @@ function ReviewDetail({
         <button
           className="review-mobile-back"
           aria-label={t("Back to reviews")}
-          onClick={() => onNavigate(reviewsPath(data.workspace.urlKey))}
+          onClick={() => onNavigate(returnPath ?? reviewsPath(data.workspace.urlKey))}
         >
           <ChevronLeft />
         </button>

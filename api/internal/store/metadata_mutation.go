@@ -21,6 +21,8 @@ func metadataOnlyMutation(event string, payload any) bool {
 		return ok && input.TemplateID == ""
 	}
 	switch event {
+	case "integration.adapter_configured", "integration.ask_imported", "integration.job_updated", "integration.calendar_synced":
+		return true
 	case "pulse.summary_scheduled":
 		// Only appends new notifications/deliveries; persistWorkspace handles
 		// this event without replacing or hydrating existing content records.

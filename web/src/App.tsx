@@ -137,6 +137,8 @@ import type {
 } from "@/types/flow";
 import { deriveResourceCounts } from "@/lib/resource-counts";
 import { Sidebar, type PageId } from "@/components/layout/sidebar";
+import { issueReturnPath } from '@/lib/issue-navigation-context';
+import { navigationReturnPath, navigationLabel, sidebarOriginPath, reviewsOriginView, issueSequenceIDs } from '@/lib/navigation-context';
 import type {
   IssueOptionsActions,
   IssueConversionKind,
@@ -166,6 +168,8 @@ import {
   customerPath,
   cyclePath,
   documentPath,
+  documentsPath,
+  loopsPath,
   inboxPath,
   initiativePath,
   initiativesPath,
@@ -1011,7 +1015,7 @@ function App() {
           })
         : current,
     );
-    navigateTo(myIssuesPath(data.workspace.urlKey), { replace: true });
+    navigateTo(issueReturnPath(location.state, data.workspace.urlKey, selectedIssue), { replace: true });
   };
   const addComment = async (
     body: string,
@@ -1696,7 +1700,7 @@ function App() {
         : current,
     );
     if (data && selectedProject?.id === id)
-      navigateTo(projectsPath(data.workspace.urlKey), { replace: true });
+      navigateTo(navigationReturnPath(location.state, data.workspace.urlKey, projectsPath(data.workspace.urlKey)), { replace: true });
   };
   const toggleProjectFavorite = async (
     projectId: string,
@@ -3445,18 +3449,22 @@ function App() {
       );
       return;
     }
+    const canonicalize = (to: string, options?: { replace?: boolean; state?: unknown }) => {
+      if (!to.includes("?") && !to.includes("#")) navigateTo(to + location.search + location.hash, { ...options, state: location.state });
+      else navigateTo(to, options);
+    };
     if (!routeBelongsToWorkspace(route, workspace)) return;
     if (
       route.kind === "dashboards" &&
       data.workspaceSettings.featureFlags.dashboards === false
     ) {
-      navigateTo(workspaceViewsPath(workspace, "issues"), { replace: true });
+      canonicalize(workspaceViewsPath(workspace, "issues"), { replace: true });
       return;
     }
     if (route.kind === "inbox" && location.pathname !== inboxPath(workspace, route.tab))
-      navigateTo(inboxPath(workspace, route.tab), { replace: true });
+      canonicalize(inboxPath(workspace, route.tab), { replace: true });
     if (route.kind === "search" && location.pathname !== searchPath(workspace))
-      navigateTo(searchPath(workspace), { replace: true });
+      canonicalize(searchPath(workspace), { replace: true });
     if (
       route.kind === "pulse" &&
       location.pathname !==
@@ -3464,7 +3472,7 @@ function App() {
           ? pulseViewPath(workspace, route.viewId)
           : pulsePath(workspace, route.view))
     )
-      navigateTo(
+      canonicalize(
         route.viewId
           ? pulseViewPath(workspace, route.viewId)
           : pulsePath(workspace, route.view),
@@ -3474,27 +3482,27 @@ function App() {
       route.kind === "my-issues" &&
       location.pathname !== myIssuesPath(workspace, route.view)
     )
-      navigateTo(myIssuesPath(workspace, route.view), { replace: true });
+      canonicalize(myIssuesPath(workspace, route.view), { replace: true });
     if (
       route.kind === "reviews" &&
       location.pathname !== reviewsPath(workspace, route.view)
     )
-      navigateTo(reviewsPath(workspace, route.view), { replace: true });
+      canonicalize(reviewsPath(workspace, route.view), { replace: true });
     if (route.kind === "review" && selectedReview) {
       const canonical = reviewPath(workspace, selectedReview, route.tab);
       if (location.pathname !== canonical)
-        navigateTo(canonical, { replace: true });
+        canonicalize(canonical, { replace: true });
     }
     if (
       route.kind === "workspace-issues" &&
       location.pathname !== workspaceIssuesPath(workspace, route.view)
     )
-      navigateTo(workspaceIssuesPath(workspace, route.view), { replace: true });
+      canonicalize(workspaceIssuesPath(workspace, route.view), { replace: true });
     if (
       route.kind === "workspace-members" &&
       location.pathname !== membersPath(workspace)
     )
-      navigateTo(membersPath(workspace), { replace: true });
+      canonicalize(membersPath(workspace), { replace: true });
     if (route.kind === "member-profile") {
       const user = data.users.find(
         (item) => item.name === route.username || item.id === route.username,
@@ -3502,41 +3510,41 @@ function App() {
       if (user) {
         const canonical = memberProfilePath(workspace, user.name, route.view);
         if (location.pathname !== canonical)
-          navigateTo(canonical, { replace: true });
+          canonicalize(canonical, { replace: true });
       }
     }
     if (
       route.kind === "workspace-customers" &&
       location.pathname !== customersPath(workspace)
     )
-      navigateTo(customersPath(workspace), { replace: true });
+      canonicalize(customersPath(workspace), { replace: true });
     if (
       route.kind === "workspace-teams" &&
       location.pathname !== teamsPath(workspace)
     )
-      navigateTo(teamsPath(workspace), { replace: true });
+      canonicalize(teamsPath(workspace), { replace: true });
     if (
       route.kind === "new-team" &&
       location.pathname !== newTeamPath(workspace)
     )
-      navigateTo(newTeamPath(workspace), { replace: true });
+      canonicalize(newTeamPath(workspace), { replace: true });
     if (route.kind === "team-issues") {
       const canonical = teamIssuesPath(workspace, route.teamKey, route.view);
       if (location.pathname !== canonical)
-        navigateTo(canonical, { replace: true });
+        canonicalize(canonical, { replace: true });
     }
     if (
       route.kind === "team-cycles" &&
       location.pathname !== teamCyclesPath(workspace, route.teamKey)
     )
-      navigateTo(teamCyclesPath(workspace, route.teamKey), {
+      canonicalize(teamCyclesPath(workspace, route.teamKey), {
         replace: true,
       });
     if (
       route.kind === "cycle-upcoming" &&
       location.pathname !== upcomingCyclePath(workspace, route.teamKey)
     )
-      navigateTo(upcomingCyclePath(workspace, route.teamKey), {
+      canonicalize(upcomingCyclePath(workspace, route.teamKey), {
         replace: true,
       });
     if (
@@ -3553,7 +3561,7 @@ function App() {
               savedViewPathId(selectedSavedView),
             ))
     )
-      navigateTo(
+      canonicalize(
         route.editing
           ? workspaceSavedViewEditPath(
               workspace,
@@ -3581,7 +3589,7 @@ function App() {
               savedViewPathId(selectedSavedView),
             ))
     )
-      navigateTo(
+      canonicalize(
         route.editing
           ? teamSavedViewEditPath(
               workspace,
@@ -3599,14 +3607,14 @@ function App() {
       route.kind === "workspace-views" &&
       location.pathname !== workspaceViewsPath(workspace, route.resource)
     )
-      navigateTo(workspaceViewsPath(workspace, route.resource), {
+      canonicalize(workspaceViewsPath(workspace, route.resource), {
         replace: true,
       });
     if (
       route.kind === "workspace-views-new" &&
       location.pathname !== workspaceViewsNewPath(workspace, route.resource)
     )
-      navigateTo(workspaceViewsNewPath(workspace, route.resource), {
+      canonicalize(workspaceViewsNewPath(workspace, route.resource), {
         replace: true,
       });
     if (
@@ -3614,7 +3622,7 @@ function App() {
       location.pathname !==
         teamViewsPath(workspace, route.teamKey, route.resource)
     )
-      navigateTo(teamViewsPath(workspace, route.teamKey, route.resource), {
+      canonicalize(teamViewsPath(workspace, route.teamKey, route.resource), {
         replace: true,
       });
     if (
@@ -3622,32 +3630,32 @@ function App() {
       location.pathname !==
         teamViewsNewPath(workspace, route.teamKey, route.resource)
     )
-      navigateTo(teamViewsNewPath(workspace, route.teamKey, route.resource), {
+      canonicalize(teamViewsNewPath(workspace, route.teamKey, route.resource), {
         replace: true,
       });
     if (
       route.kind === "projects" &&
       location.pathname !== projectsPath(workspace)
     )
-      navigateTo(projectsPath(workspace), { replace: true });
+      canonicalize(projectsPath(workspace), { replace: true });
     if (
       route.kind === "initiatives" &&
       location.pathname !== initiativesPath(workspace, route.view)
     )
-      navigateTo(initiativesPath(workspace, route.view), { replace: true });
+      canonicalize(initiativesPath(workspace, route.view), { replace: true });
     if (
       route.kind === "team-initiatives" &&
       location.pathname !==
         teamInitiativesPath(workspace, route.teamKey, route.view)
     )
-      navigateTo(teamInitiativesPath(workspace, route.teamKey, route.view), {
+      canonicalize(teamInitiativesPath(workspace, route.teamKey, route.view), {
         replace: true,
       });
     if (
       route.kind === "team-projects" &&
       location.pathname !== teamProjectsPath(workspace, route.teamKey)
     )
-      navigateTo(teamProjectsPath(workspace, route.teamKey), { replace: true });
+      canonicalize(teamProjectsPath(workspace, route.teamKey), { replace: true });
     if (
       route.kind === "projects-saved-view" &&
       selectedProjectSavedView &&
@@ -3662,7 +3670,7 @@ function App() {
               savedViewPathId(selectedProjectSavedView),
             ))
     )
-      navigateTo(
+      canonicalize(
         route.editing
           ? projectsSavedViewEditPath(
               workspace,
@@ -3690,7 +3698,7 @@ function App() {
               savedViewPathId(selectedProjectSavedView),
             ))
     )
-      navigateTo(
+      canonicalize(
         route.editing
           ? teamProjectsSavedViewEditPath(
               workspace,
@@ -3707,17 +3715,17 @@ function App() {
     if (route.kind === "issue" && selectedIssue) {
       const canonical = issuePath(workspace, selectedIssue);
       if (location.pathname !== canonical)
-        navigateTo(canonical, { replace: true });
+        canonicalize(`${canonical}${location.search}${location.hash}`, { replace: true, state: location.state });
     }
     if (route.kind === "cycle" && route.cycleId !== "active" && selectedCycle) {
       const canonical = cyclePath(workspace, route.teamKey, selectedCycle);
       if (location.pathname !== canonical)
-        navigateTo(canonical, { replace: true });
+        canonicalize(canonical, { replace: true });
     }
     if (route.kind === "project" && selectedProject) {
       const canonical = projectPath(workspace, selectedProject, route.tab);
       if (location.pathname !== canonical)
-        navigateTo(canonical, { replace: true });
+        canonicalize(canonical, { replace: true });
     }
     if (
       route.kind === "project-saved-view" &&
@@ -3736,17 +3744,17 @@ function App() {
             savedViewPathId(selectedProjectFacetView),
           );
       if (location.pathname !== canonical)
-        navigateTo(canonical, { replace: true });
+        canonicalize(canonical, { replace: true });
     }
     if (route.kind === "document" && selectedDocument) {
       const canonical = documentPath(workspace, selectedDocument);
       if (location.pathname !== canonical)
-        navigateTo(canonical, { replace: true });
+        canonicalize(canonical, { replace: true });
     }
     if (route.kind === "customer" && selectedCustomer) {
       const canonical = customerPath(workspace, selectedCustomer);
       if (location.pathname !== canonical)
-        navigateTo(canonical, { replace: true });
+        canonicalize(canonical, { replace: true });
     }
     if (route.kind === "initiative" && selectedInitiative) {
       const canonical = initiativePath(
@@ -3756,7 +3764,7 @@ function App() {
         route.viewId,
       );
       if (location.pathname !== canonical)
-        navigateTo(canonical, { replace: true });
+        canonicalize(canonical, { replace: true });
     }
   }, [
     data,
@@ -3890,11 +3898,11 @@ function App() {
           agentSkillId={route.agentSkillId}
           onBack={() =>
             navigateTo(
-              route.releasePipelineMode
+              navigationReturnPath(location.state, data.workspace.urlKey, route.releasePipelineMode
                 ? releasePipelinesPath(data.workspace.urlKey)
                 : route.agentSkillMode
                   ? agentPath(data.workspace.urlKey)
-                  : myIssuesPath(data.workspace.urlKey),
+                  : myIssuesPath(data.workspace.urlKey)),
             )
           }
           onNavigate={(page, teamKey, teamSection) =>
@@ -3999,11 +4007,11 @@ function App() {
   const rememberResult = (type: SearchResourceType, id: string) => {
     void recordRecentResource(type, id).catch(() => undefined);
   };
-  const openIssue = (issue: Issue) => {
+  const openIssue = (issue: Issue, sequence?: string[]) => {
     if (data.issueCollectionPaged) setData(current => current ? { ...current, issues: [issue, ...current.issues.filter(item => item.id !== issue.id)].slice(0, 2000) } : current);
     rememberResult("issue", issue.id);
     navigateTo(issuePath(data.workspace.urlKey, issue), {
-      state: { returnTo: location.pathname },
+      state: sequence ? { issueSequence: sequence.slice(0, 1000) } : undefined,
     });
   };
   const openProject = (project: Project) => {
@@ -4225,6 +4233,7 @@ function App() {
         account={account}
         data={data}
         page={page}
+        sourcePath={sidebarOriginPath(location.state, location.pathname, data.workspace.urlKey) ?? (page === 'issue-detail' && selectedIssue ? issueReturnPath(location.state, data.workspace.urlKey, selectedIssue) : undefined)}
         open={mobileSidebarOpen}
         onOpenChange={setMobileSidebarOpen}
         onSearch={() => navigateTo(searchPath(data.workspace.urlKey))}
@@ -4266,6 +4275,8 @@ function App() {
         {page === "documents" && route.kind === "documents" && (
           <DocumentsIndexPage
             data={data}
+            search={location.search}
+            onFiltersChange={search => navigateTo(`${documentsPath(data.workspace.urlKey)}${search ? `?${search}` : ''}`, { replace: true })}
             onNavigate={navigateTo}
             onReload={async () =>
               setData(await fetchBootstrap(data.workspace.urlKey))
@@ -4449,7 +4460,7 @@ function App() {
               loopId={route.kind === "loop-editor" ? route.loopId : undefined}
               editing={route.kind === "loop-editor"}
               onOpenSidebar={() => setMobileSidebarOpen(true)}
-              onNavigate={navigateTo}
+              onNavigate={path => navigateTo(route.kind === 'loop-editor' && path === loopsPath(data.workspace.urlKey) ? navigationReturnPath(location.state, data.workspace.urlKey, path) : path)}
               onReload={async () =>
                 setData(await fetchBootstrap(data.workspace.urlKey))
               }
@@ -4459,7 +4470,8 @@ function App() {
           (route.kind === "reviews" || route.kind === "review") && (
             <ReviewsPage
               data={data}
-              view={route.kind === "reviews" ? route.view : "for-you"}
+              view={route.kind === "reviews" ? route.view : reviewsOriginView(location.state, data.workspace.urlKey)}
+              returnPath={navigationReturnPath(location.state, data.workspace.urlKey, reviewsPath(data.workspace.urlKey))}
               review={
                 route.kind === "review"
                   ? (selectedReview ?? undefined)
@@ -4539,11 +4551,14 @@ function App() {
         {page === "document-detail" && selectedDocument && (
           <DocumentPage
             data={data}
+            origin={navigationLabel(navigationReturnPath(location.state, data.workspace.urlKey, ''), data)}
             document={selectedDocument}
             onReload={async () =>
               setData(await fetchBootstrap(data.workspace.urlKey))
             }
             onBack={() => {
+              const source = navigationReturnPath(location.state, data.workspace.urlKey, '');
+              if (source) { navigateTo(source); return; }
               const issue = data.issues.find(
                 (item) => item.id === selectedDocument.issueId,
               );
@@ -4560,7 +4575,7 @@ function App() {
                     ? projectPath(data.workspace.urlKey, project)
                     : team
                       ? teamDocumentsPath(data.workspace.urlKey, team.key)
-                      : projectsPath(data.workspace.urlKey),
+                      : documentsPath(data.workspace.urlKey),
               );
             }}
           />
@@ -4569,7 +4584,7 @@ function App() {
           <CustomerDetailPage
             data={data}
             customer={selectedCustomer}
-            onBack={() => navigateTo(customersPath(data.workspace.urlKey))}
+            onBack={() => navigateTo(navigationReturnPath(location.state, data.workspace.urlKey, customersPath(data.workspace.urlKey)))}
             onReload={async () =>
               setData(await fetchBootstrap(data.workspace.urlKey))
             }
@@ -4761,7 +4776,7 @@ function App() {
               team={cycleTeam}
               data={data}
               onBack={() =>
-                navigateTo(teamCyclesPath(data.workspace.urlKey, cycleTeam.key))
+                navigateTo(navigationReturnPath(location.state, data.workspace.urlKey, teamCyclesPath(data.workspace.urlKey, cycleTeam.key)))
               }
               onUpdateCycle={(input) => changeCycle(selectedCycle.id, input)}
               onStartCycle={() => startCycle(selectedCycle)}
@@ -4769,7 +4784,7 @@ function App() {
               onUpdateIssue={updateIssueById}
               renderIssuePreview={renderIssuePreview}
               onOpenSidebar={() => setMobileSidebarOpen(true)}
-              onCreateIssue={() => openCreateIssue()}
+              onCreateIssue={() => openCreateIssue({ teamId: cycleTeam.id, cycleId: selectedCycle.id })}
               onReload={refreshActivity}
               onNavigate={navigateTo}
             />
@@ -4889,7 +4904,7 @@ function App() {
               )}
               tab={route.tab}
               viewId={route.viewId}
-              onBack={() => navigateTo(initiativesPath(data.workspace.urlKey))}
+              onBack={() => navigateTo(navigationReturnPath(location.state, data.workspace.urlKey, initiativesPath(data.workspace.urlKey)))}
               onTabChange={(tab) =>
                 navigateTo(
                   initiativePath(
@@ -5820,6 +5835,8 @@ function App() {
               issue={selectedIssue}
               data={data}
               full
+              returnPath={issueReturnPath(location.state, data.workspace.urlKey, selectedIssue)}
+              navigationIssueIds={issueSequenceIDs(location.state)}
               workspacePresence={realtime.presence}
               issueOptionsActions={selectedIssueOptionsActions}
               presence={realtime.presence.filter(
@@ -5829,11 +5846,11 @@ function App() {
               )}
               onClose={() =>
                 navigateTo(
-                  issueReturnPath(location.state, data.workspace.urlKey),
+                  issueReturnPath(location.state, data.workspace.urlKey, selectedIssue),
                 )
               }
               onNavigateRoot={() =>
-                navigateTo(myIssuesPath(data.workspace.urlKey))
+                navigateTo(issueReturnPath(location.state, data.workspace.urlKey, selectedIssue))
               }
               onNavigateIssue={openIssue}
               onUpdate={updateSelected}
@@ -6237,17 +6254,6 @@ function hasOpenShortcutScope() {
     ),
   );
 }
-function issueReturnPath(state: unknown, workspaceSlug: string) {
-  const returnTo =
-    state && typeof state === "object" && "returnTo" in state
-      ? (state as { returnTo?: unknown }).returnTo
-      : undefined;
-  return typeof returnTo === "string" &&
-    returnTo.startsWith(`/${workspaceSlug}/`)
-    ? returnTo
-    : myIssuesPath(workspaceSlug);
-}
-
 function applyOptimisticIssue(
   issue: Issue,
   input: IssueUpdateInput,

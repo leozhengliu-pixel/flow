@@ -1,6 +1,7 @@
 export type UUID = string;
 
 export interface User {
+	 outOfOfficeUntil?: string;
   id: UUID;
   userId?: string;
   name: string;
@@ -1997,6 +1998,7 @@ export interface AgentMessage extends AgentChatMessage {
   createdAt: string;
 }
 export interface AgentMessagePart {
+	 elicitation?: import('@/components/agent/agent-elicitation').ElicitationPrompt;
   id: UUID;
   type:
     | "text"

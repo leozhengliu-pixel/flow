@@ -303,6 +303,26 @@ func filterPresenceForViewer(data domain.Bootstrap, values []domain.Presence) []
 }
 
 func realtimeEventVisible(data domain.Bootstrap, event domain.RealtimeEvent) bool {
+	if strings.HasPrefix(event.Type, "agent.") {
+		return event.ActorID != "" && event.ActorID == data.Viewer.ID
+	}
+	if event.Type == "user_settings.updated" {
+		return event.AggregateID == data.Viewer.ID && data.Viewer.ID != ""
+	}
+	if event.Type == "integration.job_updated" {
+		return event.ActorID != "" && event.ActorID == data.Viewer.ID
+	}
+	if event.Type == "application_policy.updated" {
+		if workspaceAdminRole(data.ViewerRole) || event.ActorID != "" && event.ActorID == data.Viewer.ID {
+			return true
+		}
+		for _, policy := range applicationPolicies(&data) {
+			if policy.ID == event.AggregateID {
+				return policy.Shared || policy.OwnerID == data.Viewer.ID
+			}
+		}
+		return false
+	}
 	if event.Type == "connected" || event.Type == "presence.updated" || strings.HasPrefix(event.Type, "workspace.") {
 		return true
 	}

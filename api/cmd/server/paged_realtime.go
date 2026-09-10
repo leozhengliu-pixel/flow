@@ -59,6 +59,9 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 	if err != nil {
 		return event, false, err
 	}
+	if strings.HasPrefix(event.Type, "integration.") {
+		event.Payload = redactIntegrationEvent(event.Payload)
+	}
 	if strings.HasPrefix(event.Type, "favorite.") || strings.HasPrefix(event.Type, "favorite_folder.") || strings.HasPrefix(event.Type, "subscription.") || strings.HasPrefix(event.Type, "notifications.") {
 		return event, event.ActorID == data.Viewer.ID || s.authDisabled && event.ActorID == "", nil
 	}
