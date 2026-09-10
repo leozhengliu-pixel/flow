@@ -6,7 +6,7 @@ import CollaborationCaret from '@tiptap/extension-collaboration-caret'
 import StarterKit from '@tiptap/starter-kit'
 import { TableKit } from '@tiptap/extension-table'
 import { Markdown } from '@tiptap/markdown'
-import { getSchema } from '@tiptap/core'
+import { Editor as CoreEditor, getSchema } from '@tiptap/core'
 import type { EditorState } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
 import { handleEmoticonInput } from '@/components/editor/emoticon-input'
@@ -14,7 +14,7 @@ import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { descriptionDocumentJSON, parseDescriptionContent, sameDocument, serializeDescription, type DescriptionSnapshot } from './editor/editor-content'
-import { prosemirrorJSONToYXmlFragment, ySyncPluginKey } from 'y-prosemirror'
+import { prosemirrorJSONToYXmlFragment, ySyncPluginKey } from '@tiptap/y-tiptap'
 import { applyUpdate, Doc as YDoc } from 'yjs'
 import { getSlashCommandState, SlashCommandExtension, type SlashCommandState } from './editor/slash-command-extension'
 import { SlashCommandMenu, type EditorCommand } from './editor/slash-command-menu'
@@ -26,9 +26,12 @@ import { useI18n } from '@/i18n/i18n'
 import { handleEditorSubmit } from './editor/editor-keyboard'
 import { IssueCollaborationProvider } from '@/lib/issue-collaboration'
 import type { User } from '@/types/flow'
+import { clearDescriptionRecovery, descriptionRecoveryKey, downloadDescriptionRecovery, readDescriptionRecovery, writeDescriptionRecovery } from './editor/description-recovery'
+import './issue-description-editor.css'
 
 interface DescriptionEditorProps {
   value: string
+  loading?: boolean
   state?: string
   onChange?: (snapshot: DescriptionSnapshot) => void
   onBlur?: () => void
@@ -43,8 +46,9 @@ interface DescriptionEditorProps {
     issueId?: string
     documentId: string
     contentState?: string
+    documentVersion?: number
     viewer: User
-    onPersist: (snapshot: DescriptionSnapshot, updateIds: string[]) => Promise<void>
+    onPersist: (snapshot: DescriptionSnapshot, updateIds: string[], expectedVersion: number) => Promise<void>
     onPresence?: (users: User[]) => void
   }
 }
@@ -53,7 +57,13 @@ const closedSlash: SlashCommandState = { active: false, query: '', range: null }
 type MentionState = { active: boolean; query: string; range: { from: number; to: number } | null }
 const closedMention: MentionState = { active: false, query: '', range: null }
 
-export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmit, editorRef, className, collaboration, placeholder = 'Add description...', ariaLabel, users = [] }: DescriptionEditorProps) {
+export function IssueDescriptionEditor(props: DescriptionEditorProps) {
+  if (props.loading) return <div className="issue-description-skeleton" aria-label="Loading issue description"/>
+  const sessionKey = props.collaboration ? JSON.stringify([props.collaboration.viewer.id, props.collaboration.workspaceKey, props.collaboration.issueId ?? '', props.collaboration.documentId]) : 'local'
+  return <DescriptionEditorSession key={sessionKey} {...props}/>
+}
+
+function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, editorRef, className, collaboration, placeholder = 'Add description...', ariaLabel, users = [] }: DescriptionEditorProps) {
   const { t } = useI18n()
   const descriptionLabel = ariaLabel ?? t('Issue description')
   const initial = useMemo(() => parseDescriptionContent(value, state), []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -69,7 +79,13 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
   const destroyTimerRef = useRef<number | undefined>(undefined)
   const persistRef = useRef<() => Promise<void>>(async () => undefined)
   const persistChainRef = useRef<Promise<void>>(Promise.resolve())
-  const persistRetryRef = useRef(0)
+  const revisionRef = useRef(0)
+  const savedRevisionRef = useRef(0)
+  const versionRef = useRef(collaboration?.documentVersion ?? 0)
+  const blockedRef = useRef(false)
+  const recoveryKey = collaboration ? descriptionRecoveryKey(collaboration.workspaceKey, collaboration.issueId ?? collaboration.documentId, collaboration.viewer.id) : ''
+  const [recovery] = useState(() => recoveryKey ? readDescriptionRecovery(recoveryKey) : undefined)
+  const [saveError, setSaveError] = useState<string | undefined>(recovery ? 'Unsaved local changes are available to download.' : undefined)
   const presenceRef = useRef(collaboration?.onPresence)
   submitRef.current = onSubmit
   presenceRef.current = collaboration?.onPresence
@@ -110,7 +126,7 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
   }, [collaboration?.documentId, collaboration?.issueId, collaboration?.workspaceKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const scheduleCollaborativePersist = () => {
-    if (!collaborationSession || !collaboration) return
+    if (!collaborationSession || !collaboration || blockedRef.current) return
     window.clearTimeout(persistTimerRef.current)
     persistTimerRef.current = window.setTimeout(() => void persistRef.current(), 1_500)
   }
@@ -118,7 +134,9 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit.configure({ heading: { levels: [2, 3] }, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: collaborationSession ? false : undefined }),
+      // TrailingNode appends a random-client paragraph even on selection-only
+      // transactions. In a CRDT that would accumulate one paragraph per reader.
+      StarterKit.configure({ heading: { levels: [2, 3] }, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: collaborationSession ? false : undefined, trailingNode: collaborationSession ? false : undefined }),
       TableKit.configure({ table: { resizable: true } }),
       Placeholder.configure({ placeholder }),
       Markdown,
@@ -197,10 +215,16 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
       },
     },
     onUpdate: ({ editor: current, transaction }) => {
+      syncMentionState(current)
+      const origin = transaction.getMeta(ySyncPluginKey)
+      if (origin?.isChangeOrigin && !origin.isUndoRedoOperation) return
       const snapshot = serializeDescription(current, collaborationSession?.document)
       onChange?.(snapshot)
-      syncMentionState(current)
-      if (collaborationSession && !transaction.getMeta(ySyncPluginKey)?.isChangeOrigin) scheduleCollaborativePersist()
+      if (collaborationSession && collaboration) {
+        revisionRef.current++
+        if (!writeDescriptionRecovery(recoveryKey, { documentId: collaboration.documentId, version: versionRef.current, snapshot })) setSaveError('Local backup is unavailable. Keep this page open or download your changes.')
+        scheduleCollaborativePersist()
+      }
     },
     onTransaction: ({ editor: current }) => { syncSlashState(current); syncMentionState(current) },
     onSelectionUpdate: ({ editor: current }) => { syncSlashState(current); syncMentionState(current) },
@@ -208,17 +232,29 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
   })
 
   persistRef.current = async () => {
-    if (!editor || !collaborationSession || !collaboration) return
+    if (!editor || !collaborationSession || !collaboration || blockedRef.current || revisionRef.current === savedRevisionRef.current) return
     window.clearTimeout(persistTimerRef.current)
     const run = async () => {
+      if (blockedRef.current || revisionRef.current === savedRevisionRef.current || editor.isDestroyed) return
+      if (!collaborationSession.provider.isSynced()) {
+        setSaveError('Description could not be saved. Your local changes are preserved. Retry when connected.')
+        return
+      }
+      const revision = revisionRef.current
+      const snapshot = serializeDescription(editor, collaborationSession.document)
       const updateIds = collaborationSession.provider.updateIds()
       try {
-        await collaboration.onPersist(serializeDescription(editor, collaborationSession.document), updateIds)
+        await collaboration.onPersist(snapshot, updateIds, versionRef.current)
         collaborationSession.provider.acknowledgeSnapshot(updateIds)
-        persistRetryRef.current = 0
-      } catch {
-        persistRetryRef.current++
-        if (persistRetryRef.current <= 3) persistTimerRef.current = window.setTimeout(() => void persistRef.current(), 250 * persistRetryRef.current)
+        savedRevisionRef.current = revision
+        versionRef.current++
+        clearDescriptionRecovery(recoveryKey, snapshot)
+        setSaveError(undefined)
+      } catch (error) {
+        const conflict = typeof error === 'object' && error !== null && 'status' in error && error.status === 409
+        blockedRef.current = conflict
+        if (conflict) collaborationSession.provider.stop()
+        setSaveError(conflict ? 'The description changed in another session. Your local changes are preserved. Download them before reloading the latest version.' : 'Description could not be saved. Your local changes are preserved. Retry when connected.')
       }
     }
     const task = persistChainRef.current.catch(() => undefined).then(run)
@@ -261,6 +297,15 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
     editor.commands.setContent(next.content, { emitUpdate: false, contentType: next.contentType })
   }, [collaborationSession, editor, state, value])
   useEffect(() => {
+    if (!collaborationSession || !collaboration?.contentState || revisionRef.current !== savedRevisionRef.current || blockedRef.current) return
+    try {
+      applyUpdate(collaborationSession.document, base64ToBytes(collaboration.contentState), collaborationSession.provider)
+      versionRef.current = collaboration.documentVersion ?? versionRef.current
+    } catch {
+      setSaveError('The latest description could not be loaded. Keep this page open or download your changes.')
+    }
+  }, [collaborationSession, collaboration?.contentState, collaboration?.documentVersion])
+  useEffect(() => {
     if (!collaborationSession) return
     const syncPresence = () => {
       const users = [...collaborationSession.provider.awareness.getStates().values()]
@@ -269,6 +314,16 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
       presenceRef.current?.(users)
     }
     collaborationSession.provider.awareness.on('change', syncPresence)
+    const onStatus = ({ status }: { status: string }) => {
+      if (status === 'connected' && !blockedRef.current && revisionRef.current !== savedRevisionRef.current) {
+        void persistRef.current()
+      }
+      if (status !== 'conflict') return
+      blockedRef.current = true
+      window.clearTimeout(persistTimerRef.current)
+      setSaveError('The description changed in another session. Your local changes are preserved. Download them before reloading the latest version.')
+    }
+    collaborationSession.provider.on('status', onStatus)
     syncPresence()
     window.clearTimeout(destroyTimerRef.current)
     startTimerRef.current = window.setTimeout(() => collaborationSession.provider.start(), 0)
@@ -277,6 +332,7 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
       window.clearTimeout(persistTimerRef.current)
       collaborationSession.provider.stop()
       collaborationSession.provider.awareness.off('change', syncPresence)
+      collaborationSession.provider.off('status', onStatus)
       presenceRef.current?.([])
       destroyTimerRef.current = window.setTimeout(() => {
         collaborationSession.provider.destroy()
@@ -354,6 +410,12 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
 
   if (!editor) return <div className="issue-description-skeleton" aria-label="Loading issue description"/>
   return <div className={['issue-description-root', className].filter(Boolean).join(' ')} ref={rootRef}>
+    {saveError && <div role="alert" className="issue-description-save-error">
+      <span>{t(saveError)}</span>
+      <button type="button" onClick={() => downloadDescriptionRecovery(revisionRef.current > savedRevisionRef.current ? serializeDescription(editor, collaborationSession?.document) : recovery?.snapshot ?? serializeDescription(editor, collaborationSession?.document))}>{t('Download local changes')}</button>
+      {!blockedRef.current && revisionRef.current > savedRevisionRef.current && <button type="button" onClick={() => void persistRef.current()}>{t('Retry save')}</button>}
+      {blockedRef.current && <button type="button" onClick={() => window.location.reload()}>{t('Reload latest version')}</button>}
+    </div>}
     <EditorContent editor={editor}/>
     <BubbleMenu editor={editor} shouldShow={({ from, to, editor: current }) => from !== to && !current.isActive('codeBlock')}><SelectionToolbar editor={editor}/></BubbleMenu>
     {slash.active && <SlashCommandMenu
@@ -369,7 +431,7 @@ export function IssueDescriptionEditor({ value, state, onChange, onBlur, onSubmi
 
 function schemaExtensions() {
   return [
-    StarterKit.configure({ heading: { levels: [2, 3] }, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: false }),
+    StarterKit.configure({ heading: { levels: [2, 3] }, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: false, trailingNode: false }),
     TableKit.configure({ table: { resizable: true } }),
     Markdown,
     MentionExtension,
@@ -387,7 +449,11 @@ function base64ToBytes(value: string) {
 function seededCollaborationDocument(documentId: string, value: string, state?: string) {
   const document = new YDoc()
   document.clientID = deterministicClientId(documentId)
-  prosemirrorJSONToYXmlFragment(getSchema(schemaExtensions()), descriptionDocumentJSON(value, state), document.getXmlFragment('prosemirror'))
+  const parsed = parseDescriptionContent(value, state)
+  const markdownEditor = parsed.contentType === 'markdown' ? new CoreEditor({ extensions: schemaExtensions(), content: parsed.content, contentType: 'markdown' }) : undefined
+  const content = markdownEditor?.getJSON() ?? descriptionDocumentJSON(value, state)
+  prosemirrorJSONToYXmlFragment(getSchema(schemaExtensions()), content, document.getXmlFragment('prosemirror'))
+  markdownEditor?.destroy()
   document.clientID = randomClientId()
   return document
 }

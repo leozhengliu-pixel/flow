@@ -50,7 +50,7 @@ func TestIssueRecordSnapshotCompactsOnlyAcknowledgedCollaborationUpdates(t *test
 		}
 	}
 	requestJSON[domain.Issue](t, handler, "PATCH", "/api/issue-records/"+issue.ID, map[string]any{
-		"description": "Saved", "descriptionData": map[string]any{"type": "doc"}, "expectedDocumentVersion": 0, "documentUpdateIds": []string{"collab-included"},
+		"description": "Saved", "descriptionData": map[string]any{"type": "doc"}, "contentState": "AQID", "expectedDocumentVersion": 0, "documentUpdateIds": []string{"collab-included"},
 	}, 200)
 	updates, err := repository.DocumentCollaborationUpdates(context.Background(), "test-workspace", documentID)
 	if err != nil || len(updates) != 1 || updates[0].ID != "collab-concurrent" {

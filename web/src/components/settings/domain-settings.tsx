@@ -32,16 +32,18 @@ export function DomainLabelsSettings({ data, resourceType, onReload }: { data: B
   const [sort, setSort] = useState<{ key: LabelSort; descending: boolean }>({ key: 'workflow', descending: false })
   const [selected, setSelected] = useState<string[]>([])
   const [collapsedScopes, setCollapsedScopes] = useState<string[]>([])
-  const allGroups = useMemo(() => groupsForResource(data.labelGroups, resourceType), [data.labelGroups, resourceType])
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(() => new Set())
+  const allGroups = useMemo(() => groupsForResource(data.labelGroups, resourceType).filter(group => !deletedIds.has(group.id)), [data.labelGroups, resourceType, deletedIds])
   const groups = useMemo(() => allGroups.filter(group => scope === 'archived' ? Boolean(group.archivedAt) : !group.archivedAt), [allGroups, scope])
   const labels = useMemo(() => data.labels.filter(item => {
+    if (deletedIds.has(item.id) || deletedIds.has(item.groupId ?? '')) return false
     if (labelResourceType(item) !== resourceType) return false
     if (scope === 'archived') return Boolean(item.archivedAt)
     if (item.archivedAt) return false
     if (scope === 'workspace' && !isWorkspaceLabel(item)) return false
     const value = query.trim().toLowerCase()
     return !value || item.name.toLowerCase().includes(value) || (item.description ?? '').toLowerCase().includes(value)
-  }), [data.labels, query, resourceType, scope])
+  }), [data.labels, query, resourceType, scope, deletedIds])
   const sortedLabels = useMemo(() => sortLabels(labels, sort, data, resourceType), [labels, sort, data, resourceType])
   const sections = useMemo(
     () => labelSections(sortedLabels, groups, Boolean(query.trim()) || scope === 'archived'),
@@ -52,7 +54,21 @@ export function DomainLabelsSettings({ data, resourceType, onReload }: { data: B
     try { const result = await action(); if (preferencesOnly) await refreshResourcePreferences(data.workspace.urlKey); else await onReload(); return result } catch (error) { toast.error(message(error)); return undefined }
   }
   const saveLabel = async (label: IssueLabel, input: Partial<IssueLabel>) => { await run(() => isWorkspaceLabel(label) ? updateWorkspaceLabel(label.id, input) : updateTeamLabel(label.scope!, label.id, input)) }
-  const deleteLabel = async (label: IssueLabel) => { await run(() => isWorkspaceLabel(label) ? deleteWorkspaceLabel(label.id) : deleteTeamLabel(label.scope!, label.id)) }
+  const finishDeletion = (ids: string[], refresh: boolean) => {
+    setDeletedIds(current => new Set([...current, ...ids]))
+    setSelected(current => current.filter(id => !ids.includes(id)))
+    // The acknowledged deletion is complete even if background reconciliation
+    // is slow or unavailable. Keep the deleted rows hidden until it catches up.
+    if (refresh) void onReload().catch(error => toast.error(message(error)))
+  }
+  const deleteLabel = async (label: IssueLabel, refresh = true) => {
+    await (isWorkspaceLabel(label) ? deleteWorkspaceLabel(label.id) : deleteTeamLabel(label.scope!, label.id))
+    finishDeletion([label.id], refresh)
+  }
+  const deleteGroup = async (group: LabelGroup, refresh = true) => {
+    await deleteLabelGroup(group.id)
+    finishDeletion([group.id, ...data.labels.filter(label => label.groupId === group.id).map(label => label.id)], refresh)
+  }
   const archiveLabel = (label: IssueLabel) => saveLabel(label, { archivedAt: label.archivedAt ? '' : new Date().toISOString() })
   const moveLabelToTeams = async (label: IssueLabel) => { await run(() => moveWorkspaceLabelToTeams(label.id)) }
   const toggleSelected = (id: string) => setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
@@ -79,7 +95,7 @@ export function DomainLabelsSettings({ data, resourceType, onReload }: { data: B
     onDeleteLabel={deleteLabel}
     onSaveGroup={async (group, input) => { await run(() => updateLabelGroup(group.id, input)) }}
     onArchiveGroup={async group => { await run(() => updateLabelGroup(group.id, { archivedAt: group.archivedAt ? '' : new Date().toISOString() })) }}
-    onDeleteGroup={async group => { await run(() => deleteLabelGroup(group.id)) }}
+    onDeleteGroup={deleteGroup}
   />)
   const bulk = async (action: 'favorite'|'archive'|'delete') => {
     const selectedGroups = allGroups.filter(group => selected.includes(group.id))
@@ -95,10 +111,13 @@ export function DomainLabelsSettings({ data, resourceType, onReload }: { data: B
         ...selectedLabels.filter(label => !selectedGroupIds.has(label.groupId ?? '')).map(label => isWorkspaceLabel(label) ? updateWorkspaceLabel(label.id, { archivedAt }) : updateTeamLabel(label.scope!, label.id, { archivedAt })),
       ]))
     } else {
-      await run(async () => {
-        await Promise.all(selectedLabels.map(label => isWorkspaceLabel(label) ? deleteWorkspaceLabel(label.id) : deleteTeamLabel(label.scope!, label.id)))
-        await Promise.all(selectedGroups.map(group => deleteLabelGroup(group.id)))
-      })
+      const results = await Promise.allSettled([
+        ...selectedLabels.filter(label => !selectedGroupIds.has(label.groupId ?? '')).map(label => deleteLabel(label, false)),
+        ...selectedGroups.map(group => deleteGroup(group, false)),
+      ])
+      if (results.some(result => result.status === 'fulfilled')) void onReload().catch(error => toast.error(message(error)))
+      const failure = results.find(result => result.status === 'rejected')
+      if (failure?.status === 'rejected') { toast.error(message(failure.reason)); return }
     }
     setSelected([])
   }
@@ -130,7 +149,7 @@ export function DomainLabelsSettings({ data, resourceType, onReload }: { data: B
       {scope === 'all' ? scopes.map(item => <div className="domain-label-scope-block" key={item.id}>
         <ScopeSectionHeader label={item.id === 'workspace' ? t('Workspace') : item.label} count={item.labels.length} collapsed={collapsedScopes.includes(item.id)} onToggle={() => setCollapsedScopes(current => current.includes(item.id) ? current.filter(id => id !== item.id) : [...current, item.id])}/>
         {!collapsedScopes.includes(item.id) && renderSections(labelSections(item.labels, item.id === 'workspace' ? groups : [], true))}
-      </div>) : scope === 'archived' ? <ArchivedRows groups={groups} labels={sortedLabels} data={data} resourceType={resourceType} availableGroups={allGroups.filter(group => !group.archivedAt)} selected={selected} onToggleGroupSelected={toggleGroupSelected} onToggleSelected={toggleSelected} onSaveLabel={saveLabel} onArchiveLabel={archiveLabel} onDeleteLabel={deleteLabel} onArchiveGroup={async group => { await run(() => updateLabelGroup(group.id, { archivedAt: '' })) }} onDeleteGroup={async group => { await run(() => deleteLabelGroup(group.id)) }}/> : renderSections(sections)}
+      </div>) : scope === 'archived' ? <ArchivedRows groups={groups} labels={sortedLabels} data={data} resourceType={resourceType} availableGroups={allGroups.filter(group => !group.archivedAt)} selected={selected} onToggleGroupSelected={toggleGroupSelected} onToggleSelected={toggleSelected} onSaveLabel={saveLabel} onArchiveLabel={archiveLabel} onDeleteLabel={deleteLabel} onArchiveGroup={async group => { await run(() => updateLabelGroup(group.id, { archivedAt: '' })) }} onDeleteGroup={deleteGroup}/> : renderSections(sections)}
       {!labels.length && !groups.length && !creating && <div className="domain-labels-empty">{t(scope === 'archived' ? 'No archived labels' : resourceType === 'issue' ? 'No issue labels' : 'No project labels')}</div>}
     </div></section>
     {selected.length > 0 && (
@@ -281,7 +300,7 @@ function LabelConfirmDialog({kind,action,name,archived,resourceType,usage,onArch
   const deleteCopy=locale==='zh-CN'
     ? `${kind==='group'?'此分组内的所有标签':'此标签'}将从 ${usage} 个${resourceType==='issue'?'事项':'项目'}中移除，并且可能影响私有团队。删除后无法撤销。`
     : `${kind==='group'?'All labels in this group':'This label'} will be removed from ${usage} ${plural} and private teams may be affected. Deletion cannot be undone.`
-  const execute=(actionFn:()=>void|Promise<void>)=>{setBusy(true);void Promise.resolve(actionFn()).then(onClose).finally(()=>setBusy(false))}
+  const execute=(actionFn:()=>void|Promise<void>)=>{if(busy)return;setBusy(true);void Promise.resolve().then(actionFn).then(onClose).catch(error=>toast.error(message(error))).finally(()=>setBusy(false))}
   return <Dialog open={Boolean(action)} onOpenChange={open=>!open&&onClose()}><DialogContent data-i18n-ignore className="domain-label-confirm"><DialogTitle>{title}</DialogTitle><p>{action==='archive'?archiveCopy:deleteCopy}</p>{action==='delete'&&!archived&&<p>{locale==='zh-CN'?'如需阻止以后继续使用，请改为归档。':'To prevent future application of this label, archive the label instead.'}</p>}<footer>{action==='delete'&&!archived&&<button disabled={busy} onClick={()=>execute(onArchive)}>{t('Archive')}</button>}<span/><button disabled={busy} onClick={onClose}>{t('Cancel')}</button><button className="primary" disabled={busy} onClick={()=>execute(onConfirm)}>{t(verb)}</button></footer></DialogContent></Dialog>
 }
 

@@ -216,7 +216,7 @@ func apiKeyAllowsRequest(r *http.Request, key domain.APIKey) bool {
 	has := func(scope string) bool {
 		return apiKeyHasScope(key, scope) || apiKeyHasScope(key, "write")
 	}
-	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions || r.Method == http.MethodPost && r.URL.Path == "/api/issue-records/visibility" {
 		return has("read")
 	}
 	// A nil scope slice is the legacy full-access representation. Route it
@@ -402,7 +402,15 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	// authorization below loads the entities required by the specific route.
 	var data domain.Bootstrap
 	var ok bool
-	if r.URL.Path == "/api/workspace/preferences" {
+	if boundedIssueAuthorizationRequest(r) || labelDeletionRequest(r) {
+		var accessErr error
+		data, _, accessErr = s.requestIssueQueryAccess(r)
+		ok = accessErr == nil
+		if accessErr != nil && data.Workspace.ID != "" {
+			writeError(w, http.StatusForbidden, "You don't have access to this workspace")
+			return false
+		}
+	} else if r.URL.Path == "/api/workspace/preferences" {
 		data, ok = s.store.WorkspaceSettingsMetadata(key)
 	} else {
 		data, ok = s.store.WorkspaceMetadata(key)
@@ -423,7 +431,10 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 			return false
 		}
 	}
-	role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, user.ID)
+	role, status, err := data.ViewerRole, "active", error(nil)
+	if !boundedIssueAuthorizationRequest(r) && !labelDeletionRequest(r) {
+		role, status, err = s.store.WorkspaceRole(r.Context(), data.Workspace.ID, user.ID)
+	}
 	if err != nil || status != "active" {
 		writeError(w, http.StatusForbidden, "You don't have access to this workspace")
 		return false
@@ -654,13 +665,23 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 	if r.URL.Path == "/api/bootstrap" {
 		return true
 	}
-	if r.URL.Path == "/api/recent" {
-		_, _, err := s.store.IssueQueryAccess(r.Context(), workspace, userID)
+	if boundedIssueAuthorizationRequest(r) {
+		_, _, err := s.requestIssueQueryAccess(r)
 		return err == nil
 	}
-	if isIssueRecordsRequest(r) && issueRecordQueryOnly(r) {
-		_, _, err := s.store.IssueQueryAccess(r.Context(), workspace, userID)
-		return err == nil
+	if labelDeletionRequest(r) {
+		data, access, err := s.requestIssueQueryAccess(r)
+		if err != nil {
+			return false
+		}
+		teamID := teamIDFromWorkspacePath(r.URL.Path)
+		if teamID == "" {
+			return true
+		}
+		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) && !slices.Contains(key.TeamIDs, teamID) {
+			return false
+		}
+		return slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) && (access.Admin || slices.Contains(access.VisibleTeamIDs, teamID))
 	}
 	var data domain.Bootstrap
 	var ok bool

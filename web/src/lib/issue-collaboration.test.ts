@@ -94,6 +94,27 @@ describe('issue collaboration provider', () => {
     provider.destroy()
   })
 
+  it('retains local edits and stops reconnecting when the server replaces the document generation', async () => {
+    const { IssueCollaborationProvider } = await import('./issue-collaboration')
+    const document = new Doc()
+    const provider = new IssueCollaborationProvider({ document, workspaceKey: 'workspace', issueId: 'issue-1', documentId: 'document-1', viewer, seededWithoutServerState: false })
+    const statuses: string[] = []
+    provider.on('status', event => statuses.push(event.status))
+    provider.start()
+    const socket = MockWebSocket.instances[0]
+    document.getText('content').insert(0, 'Unsaved offline edits')
+    socket.open()
+    socket.message(JSON.stringify({ type: 'document.conflict', documentId: 'document-1' }))
+    expect(statuses.at(-1)).toBe('conflict')
+    expect(provider.isSynced()).toBe(false)
+    vi.advanceTimersByTime(30_000)
+    provider.start()
+    expect(MockWebSocket.instances).toHaveLength(1)
+    expect(document.getText('content').toString()).toBe('Unsaved offline edits')
+    provider.destroy()
+    document.destroy()
+  })
+
   it('coalesces a long offline edit backlog without losing edits or remote changes', async () => {
     let sequence = 0
     vi.spyOn(crypto, 'randomUUID').mockImplementation(() => `00000000-0000-4000-8000-${String(++sequence).padStart(12, '0')}`)

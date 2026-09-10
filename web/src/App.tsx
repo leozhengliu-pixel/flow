@@ -1,5 +1,6 @@
 import {
   Suspense,
+  lazy,
   useCallback,
   useEffect,
   useMemo,
@@ -62,7 +63,9 @@ import {
   fetchAuthSession,
   fetchBootstrap,
   fetchIssueRecord,
-  fetchIssueRecordContext,
+  fetchIssueHistory,
+  fetchIssueRelated,
+  fetchVisibleIssueIds,
   logoutAccount,
   listProjectRelations,
   recordRecentResource,
@@ -246,6 +249,9 @@ import { applyTheme } from "@/lib/theme";
 import { useExitPresence } from '@/components/ui/motion';
 
 import { PeopleProvider } from '@/components/property/people-provider'
+import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck } from '@/lib/issue-detail-cache'
+
+const IssueLoadingPreview = lazy(() => import('@/components/issue/issue-loading-preview').then(module => ({default:module.IssueLoadingPreview})))
 
 function App() {
   const location = useLocation(),
@@ -258,7 +264,11 @@ function App() {
     [data, setData] = useState<BootstrapData | null>(null),
     [error, setError] = useState(false);
   const [session, setSession] = useState<AuthSession | null>(null);
+  const sessionViewerRef=useRef(session?.user.id);
+  sessionViewerRef.current=session?.user.id;
+  const acceptBootstrap = useCallback((next:BootstrapData)=>setData(current=>next.viewer.id===sessionViewerRef.current?mergeWorkspaceDirectory(current,next):current),[]);
   const bootstrapRequest = useRef<{ key: string; promise: Promise<BootstrapData> } | null>(null);
+  const initialIssueRef = useRef<{key:string;viewerId:string;issue:Issue} | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [authenticationPolicy,setAuthenticationPolicy] = useState<string>();
   useEffect(()=>{const listener=(event:Event)=>{const detail=(event as CustomEvent<{code:string;workspaceKey:string}>).detail;if(detail.workspaceKey===decodeURIComponent(window.location.pathname.split('/').filter(Boolean)[0]??''))setAuthenticationPolicy(detail.code)};window.addEventListener('flow:authentication-policy',listener);return()=>window.removeEventListener('flow:authentication-policy',listener)},[]);
@@ -339,7 +349,7 @@ function App() {
     if (!key) return;
     setError(false);
     try {
-      setData(await fetchBootstrap(key));
+      acceptBootstrap(await fetchBootstrap(key));
     } catch {
       setError(true);
     }
@@ -472,7 +482,10 @@ function App() {
       void request.promise.then(clear, clear);
     }
     bootstrapRequest.current.promise
-      .then(next => { if (!cancelled) setData(next); })
+      .then(next => { if (!cancelled && next.viewer.id===sessionViewerRef.current) setData(current=>{
+        const merged=mergeWorkspaceDirectory(current,next), preview=initialIssueRef.current;
+        return preview?.viewerId===account.viewer.id && preview?.key.startsWith(`${requestedWorkspaceKey}:`) ? {...merged,issues:mergeIssueRecords(merged.issues,[preview.issue])}:merged;
+      }); })
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
   }, [account, loadedWorkspaceKey, navigateTo, oauthPath, requestedWorkspaceKey, route.kind]);
@@ -567,29 +580,66 @@ function App() {
         ) || null
       : null;
   const [issueContextLoading, setIssueContextLoading] = useState(false);
+  const [initialIssue, setInitialIssue] = useState<{key:string;viewerId:string;issue:Issue} | null>(null);
+  const [detailAccessPending,setDetailAccessPending]=useState('');
+  useEffect(()=>{initialIssueRef.current=null;setInitialIssue(null);setDetailAccessPending('');},[session?.user.id]);
+  const [issueHistoryState, setIssueHistoryState] = useState<{key:string;loading:boolean;error:boolean}>({key:'',loading:false,error:false});
   const issueContextKey = useRef('');
   const historyRefreshSequence = useRef(0);
   const recordIdentifier = route.kind === 'issue' ? route.identifier : '';
-  const missingIssueRecord = Boolean(data?.issueCollectionPaged && recordIdentifier && (!selectedIssue || selectedIssue.isSummary));
+  const detailWorkspaceKey = route.kind === 'issue' ? route.workspaceSlug : '';
+  const detailKey = `${detailWorkspaceKey}:${recordIdentifier}`;
+  const detailViewerId=session?.user.id;
+  const detailLookupId=selectedIssue?.id ?? recordIdentifier;
+  const previewIssue = initialIssue?.key === detailKey && initialIssue.viewerId===session?.user.id ? initialIssue.issue : undefined;
+  const missingIssueRecord = Boolean(recordIdentifier && (!selectedIssue || selectedIssue.isSummary || selectedIssue.needsDetailRefresh));
   useEffect(() => {
-    if (!data?.issueCollectionPaged || !recordIdentifier) return;
-    const key = `${data.workspace.urlKey}:${recordIdentifier}`;
-    if (!missingIssueRecord && issueContextKey.current === key) return;
+    if (!authReady || !detailViewerId || !detailWorkspaceKey || !recordIdentifier || !missingIssueRecord || detailAccessPending===detailWorkspaceKey) return;
+    const viewerId=detailViewerId;
+    const key = `${detailWorkspaceKey}:${recordIdentifier}`;
     const controller = new AbortController();
     setIssueContextLoading(true);
-    void fetchIssueRecordContext(recordIdentifier, controller.signal).then(context => {
-      if (controller.signal.aborted) return;
+    void fetchIssueRecord(detailLookupId, controller.signal, detailWorkspaceKey).then(issue => {
+      if (controller.signal.aborted || sessionViewerRef.current!==viewerId) return;
       issueContextKey.current = key;
-      setData(current => {
-        if (current?.workspace.urlKey !== data.workspace.urlKey) return current;
-        const fetched = [context.issue, ...context.relatedIssues.filter(issue => issue.id !== context.issue.id)];
-        const ids = new Set(fetched.map(issue => issue.id));
-        return { ...current, issueHistoryCursors: { ...current.issueHistoryCursors, [context.issue.id]: { commentsCursor: context.commentsCursor, activitiesCursor: context.activitiesCursor } }, issues: [...fetched, ...current.issues.filter(issue => !ids.has(issue.id))].slice(0, 2000), comments: { ...current.comments, [context.issue.id]: context.comments ?? [] }, activities: { ...current.activities, [context.issue.id]: context.activities ?? [] } };
-      });
-    }).catch(error => { if (!controller.signal.aborted) { issueContextKey.current = key; toast.error('Could not load issue', { description: error.message }); } })
+      initialIssueRef.current={key,viewerId,issue};
+      setInitialIssue({key,viewerId,issue});
+      setData(current => current?.workspace.urlKey === detailWorkspaceKey && current.viewer.id===viewerId ? {...current,issues:mergeIssueRecords(current.issues,[issue])}:current);
+    }).catch(error => { if (!controller.signal.aborted && sessionViewerRef.current===viewerId) {
+      issueContextKey.current = key;
+      if(initialIssueRef.current?.key===key)initialIssueRef.current=null;
+      setInitialIssue(current=>current?.key===key?null:current);
+      if (error instanceof ApiError && [403,404].includes(error.status)) setData(current=>current?.workspace.urlKey===detailWorkspaceKey?{...current,issues:current.issues.filter(issue=>issue.identifier.toUpperCase()!==recordIdentifier.toUpperCase())}:current);
+      toast.error('Could not load issue', { description: error.message });
+    } })
       .finally(() => { if (!controller.signal.aborted) setIssueContextLoading(false); });
     return () => controller.abort();
-  }, [data?.issueCollectionPaged, data?.workspace.urlKey, recordIdentifier, missingIssueRecord]);
+  }, [authReady,detailViewerId,detailLookupId,detailWorkspaceKey,recordIdentifier,missingIssueRecord,detailAccessPending]);
+  const historyIssueId=selectedIssue?.id;
+  const historyIssueSummary=Boolean(selectedIssue?.isSummary);
+  const historyLoaded=Boolean(historyIssueId && Object.hasOwn(data?.issueHistoryCursors ?? {},historyIssueId));
+  const relatedIssueKey=JSON.stringify([selectedIssue?.parentId,...(selectedIssue?.subIssueIds ?? [])].filter(Boolean));
+  useEffect(() => {
+    if (!data?.issueCollectionPaged || !historyIssueId || historyIssueSummary || historyLoaded) return;
+    const id=historyIssueId, workspace=data.workspace.urlKey, viewerId=data.viewer.id, key=`${workspace}:${id}`;
+    const controller=new AbortController();
+    const sequence=++historyRefreshSequence.current;
+    setIssueHistoryState({key,loading:true,error:false});
+    void fetchIssueHistory(id,controller.signal).then(history=>{
+      if(controller.signal.aborted || sequence!==historyRefreshSequence.current)return;
+      setData(current=>current?.workspace.urlKey===workspace && current.viewer.id===viewerId?{...current,comments:{...current.comments,[id]:history.comments},activities:{...current.activities,[id]:history.activities},issueHistoryCursors:{...current.issueHistoryCursors,[id]:{commentsCursor:history.commentsCursor,activitiesCursor:history.activitiesCursor}}}:current);
+      setIssueHistoryState({key,loading:false,error:false});
+    }).catch(()=>{if(!controller.signal.aborted && sequence===historyRefreshSequence.current)setIssueHistoryState({key,loading:false,error:true});});
+    return()=>controller.abort();
+  },[data?.issueCollectionPaged,data?.workspace.urlKey,data?.viewer.id,historyIssueId,historyIssueSummary,historyLoaded]);
+  useEffect(()=>{
+    if(!data?.issueCollectionPaged || !historyIssueId || historyIssueSummary || relatedIssueKey==='[]')return;
+    const controller=new AbortController(), workspace=data.workspace.urlKey, viewerId=data.viewer.id;
+    void fetchIssueRelated(historyIssueId,controller.signal).then(related=>{
+      if(!controller.signal.aborted)setData(current=>current?.workspace.urlKey===workspace && current.viewer.id===viewerId?{...current,issues:mergeIssueRecords(current.issues,related)}:current);
+    }).catch(()=>undefined);
+    return()=>controller.abort();
+  },[data?.issueCollectionPaged,data?.workspace.urlKey,data?.viewer.id,historyIssueId,historyIssueSummary,relatedIssueKey]);
   const selectedProject =
     route.kind === "project" || route.kind === "project-saved-view"
       ? data?.projects.find(
@@ -597,21 +647,25 @@ function App() {
         ) || null
       : null;
   useEffect(() => {
+    let active:AbortController|undefined;
     const refresh = async (event: Event) => {
       const issueId = (event as CustomEvent<string>).detail;
-      if (!selectedIssue || selectedIssue.id !== issueId) return;
+      if (historyIssueId !== issueId) return;
+      active?.abort();
+      const controller=new AbortController();active=controller;
       const sequence = ++historyRefreshSequence.current;
-      const context = await fetchIssueRecordContext(issueId);
-      if (sequence !== historyRefreshSequence.current) return;
-      setData(current => current && current.workspace.urlKey === data?.workspace.urlKey ? { ...current,
+      const context = await fetchIssueHistory(issueId,controller.signal);
+      if (controller.signal.aborted || sequence !== historyRefreshSequence.current) return;
+      setData(current => current && current.workspace.urlKey === data?.workspace.urlKey && current.viewer.id===data?.viewer.id ? { ...current,
         comments: { ...current.comments, [issueId]: context.comments }, activities: { ...current.activities, [issueId]: context.activities },
         issueHistoryCursors: { ...current.issueHistoryCursors, [issueId]: { commentsCursor: context.commentsCursor, activitiesCursor: context.activitiesCursor } },
       } : current);
+      setIssueHistoryState({key:`${data?.workspace.urlKey}:${issueId}`,loading:false,error:false});
     };
     const listener = (event: Event) => { void refresh(event).catch(() => undefined) };
     window.addEventListener('flow-issue-history-changed', listener);
-    return () => { historyRefreshSequence.current++; window.removeEventListener('flow-issue-history-changed', listener) };
-  }, [selectedIssue?.id, data?.workspace.urlKey]);
+    return () => { active?.abort(); window.removeEventListener('flow-issue-history-changed', listener) };
+  }, [historyIssueId, data?.workspace.urlKey, data?.viewer.id]);
   const selectedDocument =
     route.kind === "document"
       ? data?.documents.find(
@@ -747,21 +801,22 @@ function App() {
     onRemoteSync: async (event) => {
       const workspace = data?.workspace.urlKey;
       if (!workspace) return;
+      const viewerId=data.viewer.id;
       if (event.type === 'workspace_preferences.updated') {
         const settings = await fetchWorkspacePreferences(workspace);
-        setData(current => current?.workspace.urlKey === workspace ? { ...current, workspaceSettings: settings } : current);
+        setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? { ...current, workspaceSettings: settings } : current);
         return;
       }
       const entity = event.payload?.entity;
       if (/^(favorite\.|favorite_folder\.|subscription\.)/.test(event.type)) {
         const preferences = await fetchResourcePreferences(workspace);
-        setData(current => current?.workspace.urlKey === workspace ? mergeResourcePreferences(current, preferences) : current);
+        setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? mergeResourcePreferences(current, preferences) : current);
         return;
       }
       if (event.type.startsWith('notification.') && entity && typeof entity === 'object' && 'recipientId' in entity) {
         const notification = entity as BootstrapData['notifications'][number];
         if (notification.recipientId !== data.viewer.id) return;
-        setData(current => current?.workspace.urlKey === workspace ? {
+        setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? {
           ...current, notifications: current.notifications.some(item => item.id === notification.id)
             ? current.notifications.map(item => item.id === notification.id ? notification : item)
             : [...current.notifications, notification],
@@ -780,11 +835,11 @@ function App() {
       }
       if ((event.type === "issue.updated" || event.type === "issue.created") && issue) {
         setData((current) =>
-          current?.workspace.urlKey === workspace
+          current?.workspace.urlKey === workspace && current.viewer.id === viewerId
             ? deriveResourceCounts({
                 ...current,
                 issues: current.issueCollectionPaged
-                  ? [issue, ...current.issues.filter(item => item.id !== issue.id)].slice(0, 2000)
+                  ? mergeIssueRecords(current.issues,[issue])
                   : current.issues.some((item) => item.id === issue.id)
                   ? current.issues.map((item) => item.id === issue.id ? issue : item)
                   : [issue, ...current.issues],
@@ -795,7 +850,7 @@ function App() {
       }
       if (event.type === "issue.deleted" && event.aggregateId) {
         setData((current) =>
-          current?.workspace.urlKey === workspace
+          current?.workspace.urlKey === workspace && current.viewer.id === viewerId
             ? deriveResourceCounts({
                 ...current,
                 issues: current.issues.filter((item) => item.id !== event.aggregateId),
@@ -804,20 +859,50 @@ function App() {
         );
         return;
       }
-      const next = await fetchBootstrap(workspace);
-      setData((current) =>
-        current?.workspace.urlKey === workspace ? next : current,
-      );
+      const checkedIds=data.issues.map(issue=>issue.id);
+      const eventFields=event.payload as Record<string,unknown>|undefined;
+      const cosmeticTeamChange=(event.type==='team.updated'||event.type==='team.settings_updated') && eventFields && ['name','icon','color','description','timezone','showInitiatives'].some(key=>Object.hasOwn(eventFields,key)) && !['access','private','retired','parentTeamId','membershipRestriction'].some(key=>Object.hasOwn(eventFields,key));
+      const checkVisibility=data.issueCollectionPaged && requiresIssueVisibilityCheck(event.type) && !cosmeticTeamChange;
+      if(checkVisibility && /resync|member|permission|shared|unshared/.test(event.type))setDetailAccessPending(workspace);
+      let next:BootstrapData, visibility:{ids:string[]}|undefined;
+      try {
+        [next,visibility]=await Promise.all([fetchBootstrap(workspace),checkVisibility ? fetchVisibleIssueIds(workspace,checkedIds) : Promise.resolve(undefined)]);
+      } catch(error) {
+        if(checkVisibility && sessionViewerRef.current===viewerId)setDetailAccessPending(workspace);
+        throw error;
+      }
+      if(sessionViewerRef.current!==viewerId || next.viewer.id!==viewerId)return;
+      const checked=new Set(checkedIds), visible=visibility ? new Set(visibility.ids):undefined;
+      if(checkVisibility)setDetailAccessPending(workspace);
+      if (visible && initialIssueRef.current?.key.startsWith(`${workspace}:`) && !visible.has(initialIssueRef.current.issue.id)) {
+        initialIssueRef.current=null;
+        setInitialIssue(null);
+      }
+      const payload=event.payload as Record<string,unknown> | undefined;
+      const deletedLabelIds = Array.isArray(payload?.labelIds) ? new Set(payload.labelIds as string[]) : undefined;
+      setData(current=>{
+        if(current?.workspace.urlKey!==workspace || current.viewer.id!==viewerId)return current;
+        const authorized=visible?new Set([...visible,...current.issues.filter(issue=>!checked.has(issue.id)).map(issue=>issue.id)]):undefined;
+        const merged=mergeWorkspaceDirectory(current,next,authorized);
+        if(deletedLabelIds)merged.issues=merged.issues.map(issue=>issue.labels.some(label=>deletedLabelIds.has(label.id))?{...issue,labels:issue.labels.filter(label=>!deletedLabelIds.has(label.id))}:issue);
+        return merged;
+      });
+      if(visible && checkedIds.some(id=>!visible.has(id))) window.dispatchEvent(new CustomEvent('flow-issue-query-invalidated',{detail:{workspaceKey:workspace,force:true}}));
+      if(checkVisibility && selectedIssue && visible?.has(selectedIssue.id)) {
+        const refreshed=await fetchIssueRecord(selectedIssue.id,undefined,workspace);
+        setData(current=>current?.workspace.urlKey===workspace && current.viewer.id===viewerId?{...current,issues:mergeIssueRecords(current.issues,[refreshed])}:current);
+      }
+      if(checkVisibility && sessionViewerRef.current===viewerId)setDetailAccessPending(current=>current===workspace?'':current);
     },
   });
   useDesktopNotifications(data);
   const replaceIssue = (issue: Issue) =>
     setData((current) =>
-      current
+      current && current.workspace.id===data?.workspace.id && current.viewer.id===data?.viewer.id
         ? deriveResourceCounts({
             ...current,
             issues: current.issueCollectionPaged
-              ? [issue, ...current.issues.filter(item => item.id !== issue.id)].slice(0, 2000)
+              ? mergeIssueRecords(current.issues,[issue])
               : current.issues.map((i) => (i.id === issue.id ? issue : i)),
           })
         : current,
@@ -989,26 +1074,29 @@ function App() {
       throw error;
     }
   };
-  const refreshActivity = async () => {
+  const refreshActivity = async (includeIssue = true) => {
     if (!data) return;
     if (data.issueCollectionPaged && selectedIssue) {
-      const context = await fetchIssueRecordContext(selectedIssue.id);
-      setData(current => current?.workspace.id === data.workspace.id ? {
+      const sequence=++historyRefreshSequence.current;
+      const [issue,context] = await Promise.all([includeIssue ? fetchIssueRecord(selectedIssue.id) : Promise.resolve(undefined), fetchIssueHistory(selectedIssue.id)]);
+      if(sequence!==historyRefreshSequence.current)return;
+      setData(current => current?.workspace.id === data.workspace.id && current.viewer.id===data.viewer.id ? {
         ...current,
-        issues: current.issues.map(issue => issue.id === context.issue.id && issue.version <= context.issue.version ? context.issue : issue),
-        comments: { ...current.comments, [context.issue.id]: context.comments ?? [] },
-        issueHistoryCursors: { ...current.issueHistoryCursors, [context.issue.id]: { commentsCursor: context.commentsCursor, activitiesCursor: context.activitiesCursor } },
-        activities: { ...current.activities, [context.issue.id]: context.activities ?? [] },
+        issues: issue ? mergeIssueRecords(current.issues,[issue]) : current.issues,
+        comments: { ...current.comments, [selectedIssue.id]: context.comments ?? [] },
+        issueHistoryCursors: { ...current.issueHistoryCursors, [selectedIssue.id]: { commentsCursor: context.commentsCursor, activitiesCursor: context.activitiesCursor } },
+        activities: { ...current.activities, [selectedIssue.id]: context.activities ?? [] },
       } : current);
+      setIssueHistoryState({key:`${data.workspace.urlKey}:${selectedIssue.id}`,loading:false,error:false});
       return;
     }
     const next = await fetchBootstrap(data.workspace.urlKey);
-    setData(next);
+    setData(current=>mergeWorkspaceDirectory(current,next));
   };
   const updateSelected = async (input: IssueUpdateInput) => {
     if (!selectedIssue) return;
     await updateIssueById(selectedIssue, input);
-    if (input.description !== undefined) await refreshActivity();
+    if (input.description !== undefined) void refreshActivity(false).catch(()=>setIssueHistoryState({key:`${data?.workspace.urlKey}:${selectedIssue.id}`,loading:false,error:true}));
   };
   const removeSelected = async () => {
     if (!data || !selectedIssue) return;
@@ -2487,7 +2575,7 @@ function App() {
         "Could not create document",
       );
       const next = await fetchBootstrap(data?.workspace.urlKey);
-      setData(next);
+      acceptBootstrap(next);
       const resource = next.projects
         .find((project) => project.id === projectId)
         ?.resources.find((item) => item.id === document.id);
@@ -3201,7 +3289,7 @@ function App() {
   const renderIssuePreview = (issue: Issue, onClose: () => void) => {
     const refresh = async () => {
       const next = await fetchBootstrap(data!.workspace.urlKey);
-      setData(next);
+      acceptBootstrap(next);
     };
     return (
       <IssueDetails
@@ -3391,7 +3479,7 @@ function App() {
       () => createTeam(data.workspace.urlKey, input),
       "Could not create team",
     );
-    setData(await fetchBootstrap(data.workspace.urlKey));
+    acceptBootstrap(await fetchBootstrap(data.workspace.urlKey));
   };
   const addCustomer = async (
     input: CustomerMutationInput & { name: string },
@@ -3871,7 +3959,7 @@ function App() {
       <div className="app loading-app">
         <aside className="sidebar" />
         <main className="main-panel">
-          {error ? <ErrorState retry={load} /> : <SkeletonRows count={9} />}
+          {previewIssue && !previewIssue.isSummary ? <Suspense fallback={<SkeletonRows count={9}/>}><IssueLoadingPreview issue={previewIssue} onBack={()=>navigateTo(workspaceIssuesPath(detailWorkspaceKey,'all'))}/></Suspense> : error ? <ErrorState retry={load} /> : <SkeletonRows count={9} />}
         </main>
       </div>
     );
@@ -3989,7 +4077,7 @@ function App() {
           onWorkspaceDelete={removeWorkspace}
           onSettingsUpdate={updateWorkspaceSettings}
           onReload={async () => {
-            setData(await fetchBootstrap(data.workspace.urlKey));
+            acceptBootstrap(await fetchBootstrap(data.workspace.urlKey));
           }}
         />
       </Suspense></PeopleProvider>
@@ -4260,7 +4348,7 @@ function App() {
         onSwitchWorkspace={switchWorkspace}
         onCreateWorkspace={() => navigateTo(workspaceOnboardingPath())}
         onReload={async () =>
-          setData(await fetchBootstrap(data.workspace.urlKey))
+          acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
         }
         onLogout={async () => {
           await logoutAccount();
@@ -4290,7 +4378,7 @@ function App() {
             onFiltersChange={search => navigateTo(`${documentsPath(data.workspace.urlKey)}${search ? `?${search}` : ''}`, { replace: true })}
             onNavigate={navigateTo}
             onReload={async () =>
-              setData(await fetchBootstrap(data.workspace.urlKey))
+              acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
             }
           />
         )}
@@ -4317,7 +4405,7 @@ function App() {
               onNavigate={navigateTo}
               onOpenSidebar={() => setMobileSidebarOpen(true)}
               onReload={async () =>
-                setData(await fetchBootstrap(data.workspace.urlKey))
+                acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
               }
             />
           )}
@@ -4375,7 +4463,7 @@ function App() {
             }
             onNavigate={navigateTo}
             onReload={async () => {
-              setData(await fetchBootstrap(data.workspace.urlKey));
+              acceptBootstrap(await fetchBootstrap(data.workspace.urlKey));
             }}
           />
         )}
@@ -4459,7 +4547,7 @@ function App() {
             onNavigate={navigateTo}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
             onReload={async () =>
-              setData(await fetchBootstrap(data.workspace.urlKey))
+              acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
             }
           />
         )}
@@ -4473,7 +4561,7 @@ function App() {
               onOpenSidebar={() => setMobileSidebarOpen(true)}
               onNavigate={path => navigateTo(route.kind === 'loop-editor' && path === loopsPath(data.workspace.urlKey) ? navigationReturnPath(location.state, data.workspace.urlKey, path) : path)}
               onReload={async () =>
-                setData(await fetchBootstrap(data.workspace.urlKey))
+                acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
               }
             />
           )}
@@ -4491,7 +4579,7 @@ function App() {
               tab={route.kind === "review" ? route.tab : undefined}
               onNavigate={navigateTo}
               onReload={async () =>
-                setData(await fetchBootstrap(data.workspace.urlKey))
+                acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
               }
               onOpenSidebar={() => setMobileSidebarOpen(true)}
             />
@@ -4523,7 +4611,7 @@ function App() {
             releaseTab={route.kind === "release" ? route.tab : undefined}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
             onReload={async () =>
-              setData(await fetchBootstrap(data.workspace.urlKey))
+              acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
             }
             onNavigate={(path) => navigateTo(path)}
             onResumeDraft={(draft: Draft) => {
@@ -4555,7 +4643,7 @@ function App() {
               onNavigate={navigateTo}
               onOpenSidebar={() => setMobileSidebarOpen(true)}
               onReload={async () =>
-                setData(await fetchBootstrap(data.workspace.urlKey))
+                acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
               }
             />
           )}
@@ -4565,7 +4653,7 @@ function App() {
             origin={navigationLabel(navigationReturnPath(location.state, data.workspace.urlKey, ''), data)}
             document={selectedDocument}
             onReload={async () =>
-              setData(await fetchBootstrap(data.workspace.urlKey))
+              acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
             }
             onBack={() => {
               const source = navigationReturnPath(location.state, data.workspace.urlKey, '');
@@ -4597,7 +4685,7 @@ function App() {
             customer={selectedCustomer}
             onBack={() => navigateTo(navigationReturnPath(location.state, data.workspace.urlKey, customersPath(data.workspace.urlKey)))}
             onReload={async () =>
-              setData(await fetchBootstrap(data.workspace.urlKey))
+              acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
             }
             onOpenResource={(type, id) => {
               if (type === "issue") {
@@ -4677,7 +4765,7 @@ function App() {
               navigateTo(customerPath(data.workspace.urlKey, customer))
             }
             onReload={async () =>
-              setData(await fetchBootstrap(data.workspace.urlKey))
+              acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
             }
           />
         )}
@@ -5834,13 +5922,17 @@ function App() {
               onOpenSidebar={() => setMobileSidebarOpen(true)}
             />
           )}
-        {page === "issue-detail" && selectedIssue && (
+        {page === "issue-detail" && detailAccessPending===data.workspace.urlKey && <main className="main-panel issue-panel" role="status">Checking issue access…</main>}
+        {page === "issue-detail" && selectedIssue && !selectedIssue.isSummary && detailAccessPending!==data.workspace.urlKey && (
           <main className="main-panel issue-panel">
             <IssueDetails
               key={selectedIssue.id}
               issue={selectedIssue}
               data={data}
               full
+              historyLoading={issueHistoryState.key===`${data.workspace.urlKey}:${selectedIssue.id}`&&issueHistoryState.loading}
+              historyError={issueHistoryState.key===`${data.workspace.urlKey}:${selectedIssue.id}`&&issueHistoryState.error ? 'Could not load issue history' : undefined}
+              onRetryHistory={()=>{void refreshActivity(false).catch(()=>undefined)}}
               returnPath={issueReturnPath(location.state, data.workspace.urlKey, selectedIssue)}
               navigationIssueIds={issueSequenceIDs(location.state)}
               workspacePresence={realtime.presence}
@@ -5877,7 +5969,7 @@ function App() {
           </main>
         )}
         {routeScopeValid && page === "not-found" && <RouteNotFound />}
-        {routeScopeValid && page === "issue-detail" && !selectedIssue && (
+        {routeScopeValid && page === "issue-detail" && detailAccessPending!==data.workspace.urlKey && (!selectedIssue || selectedIssue.isSummary) && (
           issueContextLoading || (missingIssueRecord && issueContextKey.current !== `${data.workspace.urlKey}:${recordIdentifier}`) ? <main className="main-panel issue-panel" role="status">Loading issue…</main> : <RouteNotFound
             title="Issue not found"
             description="This issue does not exist or is no longer available."
@@ -5953,7 +6045,7 @@ function App() {
                 () => createDocument({ title: "Untitled document" }),
                 "Could not create document",
               ).then(async (document) => {
-                setData(await fetchBootstrap(data.workspace.urlKey));
+                acceptBootstrap(await fetchBootstrap(data.workspace.urlKey));
                 navigateTo(documentPath(data.workspace.urlKey, document));
               })
             }
@@ -6023,10 +6115,10 @@ function App() {
             data={data}
             onCreate={addIssue}
             onDraftSaved={async () =>
-              setData(await fetchBootstrap(data.workspace.urlKey))
+              acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
             }
             onDraftDeleted={async () =>
-              setData(await fetchBootstrap(data.workspace.urlKey))
+              acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
             }
             onUpload={async (issueId, file) => {
               const attachment = await run(

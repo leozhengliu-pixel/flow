@@ -177,7 +177,7 @@ func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, use
 }
 
 func (s *SQLiteStore) IssueQueryAccess(ctx context.Context, workspace, userID string) (domain.Bootstrap, IssueRecordAccess, error) {
-	_, data, ok := s.workspaceReadSource(ctx, workspace)
+	data, ok := s.IssueAccessMetadata(ctx, workspace)
 	if !ok {
 		return data, IssueRecordAccess{}, ErrAuthForbidden
 	}
@@ -191,16 +191,22 @@ func (s *SQLiteStore) IssueQueryAccess(ctx context.Context, workspace, userID st
 	}
 	data.Viewer = user
 	data.ViewerRole = role
-	data.TeamMembers, err = s.ListTeamMembers(ctx, data.Workspace.ID)
+	rows, err := s.db.QueryContext(ctx, `SELECT team_id,role FROM team_memberships WHERE workspace_id=? AND user_id=?`, data.Workspace.ID, userID)
 	if err != nil {
 		return data, IssueRecordAccess{}, err
 	}
-	access := IssueRecordAccess{UserID: userID, WorkspaceID: data.Workspace.ID, Admin: isWorkspaceAdminRole(role), VisibleTeamIDs: []string{}}
-	for _, team := range data.Teams {
-		if teamVisibleToUser(data, team.ID, userID, role) {
-			access.VisibleTeamIDs = append(access.VisibleTeamIDs, team.ID)
+	defer rows.Close()
+	for rows.Next() {
+		member := domain.TeamMember{UserID: userID}
+		if err := rows.Scan(&member.TeamID, &member.Role); err != nil {
+			return data, IssueRecordAccess{}, err
 		}
+		data.TeamMembers = append(data.TeamMembers, member)
 	}
+	if err := rows.Err(); err != nil {
+		return data, IssueRecordAccess{}, err
+	}
+	access := IssueRecordAccess{UserID: userID, WorkspaceID: data.Workspace.ID, Admin: isWorkspaceAdminRole(role), VisibleTeamIDs: visibleIssueTeams(data, userID, role)}
 	return data, access, nil
 }
 
