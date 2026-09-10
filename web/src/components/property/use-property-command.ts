@@ -37,7 +37,9 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
   const selectedIdsRef = useRef(selectedIds)
   selectedIdsRef.current = selectedIds
   const normalizedQuery = query.trim().toLocaleLowerCase()
-  const filteredOptions = useMemo(() => normalizedQuery ? options.filter(option => (keepSelectedVisible && selectedIds.includes(option.id)) || matchesOption(option, normalizedQuery)) : options, [keepSelectedVisible, normalizedQuery, options, selectedIds, matchesOption])
+  const selectionKey = JSON.stringify(selectedIds)
+  const selectedSet = useMemo(() => new Set<string>(JSON.parse(selectionKey)), [selectionKey])
+  const filteredOptions = useMemo(() => normalizedQuery ? options.filter(option => (keepSelectedVisible && selectedSet.has(option.id)) || matchesOption(option, normalizedQuery)) : options, [keepSelectedVisible, normalizedQuery, options, selectedSet, matchesOption])
 
   useEffect(() => {
     if (!open) return
@@ -64,6 +66,11 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
       move(event.key === 'ArrowDown' ? 1 : -1)
+      return
+    }
+    if (event.key === 'PageDown' || event.key === 'PageUp') {
+      event.preventDefault()
+      move(event.key === 'PageDown' ? 8 : -8)
       return
     }
     if (event.key === 'Home' || event.key === 'End') {
@@ -97,7 +104,7 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
     choose,
     filteredOptions,
     inputRef,
-    isSelected: (id: string) => selectedIds.includes(id),
+    isSelected: (id: string) => selectedSet.has(id),
     onKeyDown,
     onQueryChange,
     query,
