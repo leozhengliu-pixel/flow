@@ -190,7 +190,19 @@ func (s *server) changeAccountPassword(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) getWorkspacePreferences(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.workspaceData(r).WorkspaceSettings)
+	data, ok := s.store.WorkspaceSettingsMetadata(workspaceKey(r))
+	if !ok {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+	if !s.authDisabled {
+		_, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
+		if err != nil || status != "active" {
+			writeError(w, http.StatusForbidden, "Workspace access required")
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, data.WorkspaceSettings)
 }
 
 func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Request) {
@@ -1477,16 +1489,18 @@ func (s *server) exchangeOAuthToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listIntegrations(w http.ResponseWriter, r *http.Request) {
-	connections := s.workspaceData(r).IntegrationConnections
-	for index := range connections {
-		connections[index] = redactIntegrationConnection(connections[index])
+	connections := []domain.IntegrationConnection{}
+	for _, connection := range s.workspaceData(r).IntegrationConnections {
+		if supportedIntegration(connection.Provider) {
+			connections = append(connections, redactIntegrationConnection(connection))
+		}
 	}
 	writeJSON(w, http.StatusOK, connections)
 }
 
 func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 	provider := strings.ToLower(r.PathValue("provider"))
-	if !slices.Contains([]string{"github", "gitlab", "slack", "figma", "google"}, provider) {
+	if !slices.Contains([]string{"github", "gitlab", "slack"}, provider) {
 		writeError(w, http.StatusBadRequest, "unsupported integration")
 		return
 	}
@@ -1561,7 +1575,7 @@ func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 // the browser response; the callback performs the server-side token exchange.
 func (s *server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	provider := strings.ToLower(r.PathValue("provider"))
-	if !slices.Contains([]string{"github", "gitlab", "slack", "figma", "google"}, provider) {
+	if !slices.Contains([]string{"github", "gitlab", "slack"}, provider) {
 		writeError(w, http.StatusBadRequest, "unsupported integration")
 		return
 	}

@@ -95,3 +95,16 @@ it("treats workspace owners as administrators", () => {
   expect(screen.queryByText("需要管理员权限")).toBeNull();
   expect(screen.getByRole("heading", { name: "工作区" })).toBeVisible();
 });
+
+it('limits Your teams to memberships and searches joined team identifiers', async () => {
+  const user = userEvent.setup();
+  const input = props();
+  input.data = { ...input.data, teams: Array.from({ length: 1000 }, (_, index) => ({ id: `team-${index}`, key: `T${index}`, name: `Team ${index}`, color: '#777777' })), teamMembers: [{ teamId: 'team-8', userId: input.data.viewer.id, role: 'member', joinedAt: '' }] };
+  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  expect(screen.getByRole('button', { name: 'Team 8' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Team 999' })).not.toBeInTheDocument();
+  expect(document.querySelectorAll('.settings-team-icon')).toHaveLength(1);
+  await user.type(screen.getByRole('textbox', { name: '搜索设置' }), 'T8');
+  await user.click(screen.getByRole('button', { name: 'Team 8' }));
+  expect(input.onNavigate).toHaveBeenCalledWith('team', 'T8');
+});

@@ -23,6 +23,10 @@ type flowWebhookEnvelope struct {
 }
 
 func (s *server) dispatchWebhookEvent(workspace string, event domain.DomainEvent) {
+	resourceType := webhookResourceType(event.Type)
+	if resourceType == "" {
+		return
+	}
 	data, ok := s.store.WorkspaceMetadata(workspace)
 	if !ok || len(data.Webhooks) == 0 {
 		return
@@ -32,7 +36,6 @@ func (s *server) dispatchWebhookEvent(workspace string, event domain.DomainEvent
 			data.Issues = []domain.Issue{issue}
 		}
 	}
-	resourceType := webhookResourceType(event.Type)
 	action := webhookAction(event.Type)
 	for _, webhook := range data.Webhooks {
 		if !webhook.Enabled || webhook.URL == "" || !webhookResourceTypeAllowed(webhook, resourceType) || !webhookTeamAllowed(webhook, event.Payload, data, event.AggregateID) {

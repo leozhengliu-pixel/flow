@@ -1,11 +1,12 @@
 import { Children, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import {
-  Bot, CalendarDays, Check, ChevronDown, ChevronRight, CircleDot, Code2, FileText,
+  Bot, Check, ChevronDown, ChevronRight, Code2, FileText,
   Inbox, Mail, MessageSquare, MoreHorizontal, Plus, Radio, Rocket,
   Search, Smile, Sparkles, Upload, UsersRound, Zap,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { IntegrationBrandIcon } from './integration-brand-icon';
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -45,12 +46,20 @@ const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
 
 export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpenReleasePipeline, onOpenIntegration, onReload }: Props) {
   const [busy, setBusy] = useState(false);
-  const settings = useMemo(() => normalizeSettings(data.workspaceSettings), [data.workspaceSettings]);
+  const saving = useRef(false);
+  const [savedSettings, setSavedSettings] = useState<{ workspace: string; value: WorkspaceSettings }>();
+  const settings = useMemo(() => normalizeSettings(savedSettings?.workspace === data.workspace.urlKey ? savedSettings.value : data.workspaceSettings), [savedSettings, data.workspace.urlKey, data.workspaceSettings]);
+  useEffect(() => setSavedSettings(undefined), [data.workspace.urlKey, data.workspaceSettings]);
   const save = async (next: Parameters<typeof updateWorkspacePreferences>[0]) => {
+    if (saving.current) return;
+    saving.current = true;
     setBusy(true);
-    try { await updateWorkspacePreferences(next); await onReload(); }
-    catch (error) { toast.error(message(error)); }
-    finally { setBusy(false); }
+    const workspace = data.workspace.urlKey;
+    const before = settings;
+    setSavedSettings({ workspace, value: { ...settings, ...next, featureFlags: { ...settings.featureFlags, ...next.featureFlags }, featureSettings: { ...settings.featureSettings, ...next.featureSettings } } });
+    try { const updated = await updateWorkspacePreferences(next, workspace); setSavedSettings({ workspace, value: updated }); }
+    catch (error) { setSavedSettings({ workspace, value: before }); toast.error(message(error)); }
+    finally { saving.current = false; setBusy(false); }
   };
   const setEnabled = (id: string, value: boolean) => save({ featureFlags: { [id]: value } });
   const setFeature = <K extends keyof FeatureSettings>(key: K, value: FeatureSettings[K]) =>
@@ -175,18 +184,10 @@ function EmojisPage({data,onReload}:{data:BootstrapData;onReload:()=>Promise<voi
   return <div className="feature-wide"><FeatureShell title="Emojis"><div className="feature-toolbar"><label><Search size={15}/><input type="search" aria-label={t("Filter by name")} placeholder={t("Filter by name…")} value={query} onChange={event=>setQuery(event.target.value)}/></label><FeatureSelect label="Emoji state" value={showArchived?"archived":"active"} options={[{value:"active",label:"Active emojis"},{value:"archived",label:"Archived"}]} onChange={value=>setShowArchived(value==="archived")}/><span/><input ref={fileRef} aria-label={t("Emoji image")} className="feature-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={event=>choose(event.target.files?.[0])}/><FeatureButton onClick={()=>fileRef.current?.click()}><Upload size={14}/>Upload</FeatureButton></div>{emojis.length?<div className="feature-emoji-grid">{emojis.map(item=><div key={item.id}><img src={item.imageUrl} alt=""/><strong data-i18n-ignore>:{item.name}:</strong><span>{t("by")} <b data-i18n-ignore>{item.creator.displayName}</b></span><FeatureButton aria-label={`${t(item.archivedAt?"Restore":"Archive")}: ${item.name}`} onClick={()=>void archive(item)}>{item.archivedAt?"Restore":"Archive"}</FeatureButton></div>)}</div>:<FeatureEmpty icon={Smile} title={showArchived?"No archived emojis":"No emojis"}/>} {upload&&<EmojiDialog input={upload} onClose={()=>setUpload(null)} onReload={onReload}/>}</FeatureShell></div>;
 }
 
-const INTEGRATIONS: {provider:string;name:string;description:string;category:string;icon:LucideIcon}[] = [
-  {provider:"github",name:"GitHub",description:"Automate pull request workflows and link code to issues",category:"Essentials",icon:Code2},
-  {provider:"slack",name:"Slack",description:"Create issues from Slack messages and sync threads",category:"Essentials",icon:MessageSquare},
-  {provider:"gitlab",name:"GitLab",description:"Automate your merge request workflow",category:"Engineering",icon:Code2},
-  {provider:"figma",name:"Figma",description:"Preview and link Figma designs in issues",category:"Essentials",icon:FileText},
-  {provider:"google-calendar",name:"Google Calendar",description:"Sync calendar out-of-office status to member profiles",category:"Essentials",icon:CalendarDays},
-  {provider:"notion",name:"Notion",description:"Link Notion pages to issues and read page content",category:"Essentials",icon:FileText},
-  {provider:"intercom",name:"Intercom",description:"Keep a tight feedback loop with customers",category:"Customer support",icon:MessageSquare},
-  {provider:"codex",name:"Codex",description:"Delegate issues to Codex directly from Flow",category:"Agents",icon:Bot},
-  {provider:"cursor",name:"Cursor",description:"Turn issues into pull requests with Cursor agents",category:"Agents",icon:Sparkles},
-  {provider:"sentry",name:"Sentry",description:"Create and link issues from application errors",category:"Engineering",icon:CircleDot},
-  {provider:"zapier",name:"Zapier",description:"Build custom automations to create or update issues",category:"Automation",icon:Zap},
+const INTEGRATIONS: {provider:'github'|'gitlab'|'slack';name:string;description:string;category:string}[] = [
+  {provider:"github",name:"GitHub",description:"Automate pull request workflows and link code to issues",category:"Essentials"},
+  {provider:"slack",name:"Slack",description:"Create issues from Slack messages and sync threads",category:"Essentials"},
+  {provider:"gitlab",name:"GitLab",description:"Automate your merge request workflow",category:"Engineering"},
 ];
 
 function IntegrationsPage({data,onOpen,onReload}:{data:BootstrapData;onOpen:(provider:IntegrationProvider)=>void;onReload:()=>Promise<void>}) {
@@ -196,14 +197,13 @@ function IntegrationsPage({data,onOpen,onReload}:{data:BootstrapData;onOpen:(pro
   const toggle=async(item:typeof INTEGRATIONS[number],connection?:IntegrationConnection)=>{setBusy(item.provider);try{if(connection?.status==="connected")await disconnectIntegration(item.provider);else await authorizeIntegration(item.provider,{name:item.name,config:{mode:"workspace"}},Boolean(connection));await onReload()}catch(error){toast.error(message(error))}finally{setBusy("")}};
   return <div className="feature-integrations"><FeatureShell title="Integrations" description="Enhance your Flow experience with add-ons and integrations">
     <div className="feature-integration-search"><Search size={16}/><input aria-label={t("Search integrations")} placeholder={t("Search integrations")} value={query} onChange={event=>setQuery(event.target.value)}/></div>
-    <div className="feature-categories" role="tablist" aria-label={t("Integration categories")}>{["All","Essentials","Agents","Engineering","Customer support","Automation"].map(value=><button role="tab" aria-selected={category===value} key={value} onClick={()=>setCategory(value)}>{t(value)}</button>)}</div>
+    <div className="feature-categories" role="tablist" aria-label={t("Integration categories")}>{["All", ...new Set(INTEGRATIONS.map(item => item.category))].map(value=><button role="tab" aria-selected={category===value} key={value} onClick={()=>setCategory(value)}>{t(value)}</button>)}</div>
     <div className="feature-integration-grid">{list.map(item=>{
       const connection=data.integrationConnections.find(value=>value.provider===item.provider);
-      const Icon=item.icon; const code=item.provider==='github'||item.provider==='gitlab';
-      const native=!code&&item.provider!=='slack';
+      const code=item.provider==='github'||item.provider==='gitlab';
       const connected=connection?.status==='connected';
-      return <article key={item.provider}><Icon size={25}/><div><h3><span data-i18n-ignore>{item.name}</span>{connection&&<small>{t(connected?'Connected':connection.status==='error'?'Connection failed':'Not authorized')}</small>}</h3><p>{t(item.description)}</p>{connection?.lastError&&<p role="status">{connection.lastError}</p>}</div>
-        <FeatureButton primary={!connected} danger={connected&&!code&&!native} disabled={busy===item.provider} onClick={()=>code||native?onOpen(item.provider as IntegrationProvider):void toggle(item,connection)}>{t(code||native?connection?'Manage':'Connect':connected?'Disconnect':'Connect')}</FeatureButton></article>;
+      return <article key={item.provider}><IntegrationBrandIcon provider={item.provider}/><div><h3><span data-i18n-ignore>{item.name}</span>{connection&&<small>{t(connected?'Connected':connection.status==='error'?'Connection failed':'Not authorized')}</small>}</h3><p>{t(item.description)}</p>{connection?.lastError&&<p role="status">{connection.lastError}</p>}</div>
+        <FeatureButton primary={!connected} danger={connected&&!code} disabled={busy===item.provider} onClick={()=>code?onOpen(item.provider as IntegrationProvider):void toggle(item,connection)}>{t(code?connection?'Manage':'Connect':connected?'Disconnect':'Connect')}</FeatureButton></article>;
     })}</div>{!list.length&&<FeatureEmpty icon={Search} title="No integrations found"/>}
   </FeatureShell></div>;
 }

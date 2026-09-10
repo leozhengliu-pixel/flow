@@ -292,6 +292,7 @@ export function fetchPagedBootstrap(workspaceKey?: string): Promise<BootstrapDat
 }
 export type IssueQueryInput = {
   q?: string;
+  includeSubTeams?: boolean;
   teamId?: string | string[];
   stateId?: string | string[];
   projectId?: string | string[];
@@ -473,10 +474,19 @@ export function changeAccountPassword(
     jsonRequest("POST", { currentPassword, newPassword }),
   );
 }
-export function updateWorkspacePreferences(
+export async function updateWorkspacePreferences(
   input: Omit<Partial<WorkspaceSettings>, 'featureSettings'> & { featureSettings?: Partial<WorkspaceSettings['featureSettings']> },
+  workspaceKey = decodeURIComponent(location.pathname.split('/').filter(Boolean)[0] ?? ''),
 ): Promise<WorkspaceSettings> {
-  return request("/api/workspace/preferences", jsonRequest("PATCH", input));
+  const init = jsonRequest('PATCH', input);
+  const headers = new Headers(init.headers);
+  if (workspaceKey) headers.set('X-Workspace-Key', workspaceKey);
+  const settings = await request<WorkspaceSettings>('/api/workspace/preferences', { ...init, headers });
+  window.dispatchEvent(new CustomEvent('flow:workspace-preferences-updated', { detail: { workspaceKey, settings } }));
+  return settings;
+}
+export function fetchWorkspacePreferences(workspaceKey: string): Promise<WorkspaceSettings> {
+  return request('/api/workspace/preferences', { headers: { 'X-Workspace-Key': workspaceKey } });
 }
 export function updateWorkspaceAgentGuidance(instructions:string):Promise<{instructions:string}> {return request('/api/workspace/agent-guidance',jsonRequest('PATCH',{instructions}));}
 export function createWorkspaceLabel(input: {

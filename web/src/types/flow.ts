@@ -92,6 +92,8 @@ export interface Team {
   icon?: string;
   private?: boolean;
   retiredAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 export interface Customer {
   id: UUID;
@@ -1528,6 +1530,7 @@ export interface InitiativeUpdate {
   attachments: Attachment[];
 }
 export interface InitiativeMutationInput {
+  parentInitiativeIds?: UUID[];
   name?: string;
   summary?: string;
   description?: string;
@@ -1661,7 +1664,7 @@ export interface TeamSettings {
   defaultPriority: number;
   issueEmailEnabled: boolean;
   detailedHistory: boolean;
-  access: "public" | "private";
+  access: "public" | "private" | "restricted";
   membershipRestriction: "open" | "members" | "owners";
   settingsPermission: "allMembers" | "teamMembers" | "owners";
   labelPermission: "allMembers" | "teamMembers" | "owners";

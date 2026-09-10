@@ -11,6 +11,7 @@ export function PeopleProvider({ users, workspaceName, children, members = EMPTY
   const value = useMemo(() => {
     const teamNames = new Map(teams.map(team => [team.id, team.name]))
     const userTeams = new Map<string, string[]>()
+    const userTeamIds = new Map<string, string[]>()
     const userProjects = new Map<string, string[]>()
     const append = (map: Map<string, string[]>, id: string, name: string) => {
       const names = map.get(id)
@@ -18,6 +19,7 @@ export function PeopleProvider({ users, workspaceName, children, members = EMPTY
       else map.set(id, [name])
     }
     for (const member of teamMembers) {
+      append(userTeamIds, member.userId, member.teamId)
       const name = teamNames.get(member.teamId)
       if (name) append(userTeams, member.userId, name)
     }
@@ -25,7 +27,7 @@ export function PeopleProvider({ users, workspaceName, children, members = EMPTY
       if (project.archivedAt) continue
       for (const id of new Set([...(project.memberIds ?? []), ...(project.lead ? [project.lead.id] : [])])) append(userProjects, id, project.name)
     }
-    return { users: new Map(users.map(user => [user.id, user])), members: new Map(members.map(member => [member.user.id, member])), teams: userTeams, projects: userProjects, workspaceName }
+    return { users: new Map(users.map(user => [user.id, user])), members: new Map(members.map(member => [member.user.id, member])), teams: userTeams, teamIds: userTeamIds, projects: userProjects, workspaceName }
   }, [users, members, teams, teamMembers, projects, workspaceName])
   return <PeopleContext.Provider value={value}>{children}</PeopleContext.Provider>
 }

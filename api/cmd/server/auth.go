@@ -383,6 +383,12 @@ func publicAuthPath(path string) bool {
 
 func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Request, user domain.User) bool {
 	key := workspaceKey(r)
+	if key == "" && r.URL.Path == "/api/workspace/preferences" {
+		if metadata, ok := s.store.WorkspaceSettingsMetadata(""); ok {
+			key = metadata.Workspace.URLKey
+			*r = *r.WithContext(context.WithValue(r.Context(), workspaceKeyContextKey{}, key))
+		}
+	}
 	if strings.HasPrefix(r.URL.Path, "/api/workspaces/") {
 		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 		if len(parts) >= 3 {
@@ -394,7 +400,13 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	}
 	// Workspace membership and feature gates require metadata only. Resource
 	// authorization below loads the entities required by the specific route.
-	data, ok := s.store.WorkspaceMetadata(key)
+	var data domain.Bootstrap
+	var ok bool
+	if r.URL.Path == "/api/workspace/preferences" {
+		data, ok = s.store.WorkspaceSettingsMetadata(key)
+	} else {
+		data, ok = s.store.WorkspaceMetadata(key)
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return false
@@ -625,6 +637,14 @@ func guestRestrictedPath(path string) bool {
 }
 
 func (s *server) resourceAllowed(r *http.Request, workspace string, userID string) bool {
+	if r.URL.Path == "/api/workspace/preferences" {
+		data, ok := s.store.WorkspaceSettingsMetadata(workspace)
+		if !ok {
+			return false
+		}
+		_, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
+		return err == nil && status == "active"
+	}
 	if r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/api/notifications/") && len(strings.Split(strings.Trim(r.URL.Path, "/"), "/")) == 3 {
 		_, err := s.store.NotificationRecord(r.Context(), workspace, userID, strings.TrimPrefix(r.URL.Path, "/api/notifications/"))
 		return err == nil
@@ -694,6 +714,9 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 	initiativeAllowed := func(initiativeID string) bool {
 		return slices.ContainsFunc(data.Initiatives, func(item domain.Initiative) bool {
 			if item.ID != initiativeID {
+				return false
+			}
+			if item.LeadTeamID != "" && !teamAllowed(item.LeadTeamID) {
 				return false
 			}
 			if len(item.ProjectIDs) == 0 && len(item.ContributingTeamIDs) == 0 && item.LeadTeamID == "" {
@@ -994,7 +1017,14 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		return true
 	case "initiatives":
 		if len(parts) == 2 && r.Method == http.MethodPost {
-			return data.ViewerRole != "guest"
+			var input domain.InitiativeMutationInput
+			if data.ViewerRole == "guest" || !peekRequestJSON(r, &input) {
+				return false
+			}
+			return (input.LeadTeamID == nil || *input.LeadTeamID == "" || teamAllowed(*input.LeadTeamID)) &&
+				(input.ContributingTeamIDs == nil || !slices.ContainsFunc(*input.ContributingTeamIDs, func(id string) bool { return !teamAllowed(id) })) &&
+				(input.ProjectIDs == nil || !slices.ContainsFunc(*input.ProjectIDs, func(id string) bool { return !projectAllowed(id) })) &&
+				(input.ParentInitiativeIDs == nil || !slices.ContainsFunc(*input.ParentInitiativeIDs, func(id string) bool { return !initiativeAllowed(id) }))
 		}
 		if len(parts) < 3 {
 			return data.ViewerRole != "guest"
@@ -1020,6 +1050,9 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 				return false
 			}
 			if input.ContributingTeamIDs != nil && slices.ContainsFunc(*input.ContributingTeamIDs, func(id string) bool { return !teamAllowed(id) }) {
+				return false
+			}
+			if input.ParentInitiativeIDs != nil && slices.ContainsFunc(*input.ParentInitiativeIDs, func(id string) bool { return !initiativeAllowed(id) }) {
 				return false
 			}
 			if input.ProjectIDs != nil && slices.ContainsFunc(*input.ProjectIDs, func(id string) bool { return !projectAllowed(id) }) {
@@ -2068,6 +2101,16 @@ func (s *server) updateTeamMember(w http.ResponseWriter, r *http.Request) {
 				return errInvalid
 			}
 			index := slices.IndexFunc(workspace.TeamMembers, func(member domain.TeamMember) bool { return member.TeamID == teamID && member.UserID == userID })
+			if !input.Member && !slices.ContainsFunc(workspace.Members, func(member domain.WorkspaceMember) bool {
+				return member.User.ID == userID && strings.EqualFold(member.Role, "guest")
+			}) {
+				ids := domain.TeamSubtreeIDs(workspace, []string{teamID})
+				if slices.ContainsFunc(workspace.TeamMembers, func(member domain.TeamMember) bool {
+					return member.UserID == userID && member.TeamID != teamID && slices.Contains(ids, member.TeamID)
+				}) {
+					return fmt.Errorf("%w: leave sub-teams before leaving their parent team", errInvalid)
+				}
+			}
 			if input.Member {
 				if index >= 0 {
 					workspace.TeamMembers[index].Role = input.Role
@@ -2077,6 +2120,7 @@ func (s *server) updateTeamMember(w http.ResponseWriter, r *http.Request) {
 			} else if index >= 0 {
 				workspace.TeamMembers = slices.Delete(workspace.TeamMembers, index, index+1)
 			}
+			domain.SyncTeamAncestorMembers(workspace)
 			return nil
 		})
 		if err != nil {

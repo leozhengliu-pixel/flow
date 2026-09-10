@@ -1,0 +1,28 @@
+.li-hierarchy-section { margin: 24px 0; border-top: 1px solid var(--theme-border); padding-top: 16px; color: var(--theme-text-primary); font-size: 13px; }
+.li-hierarchy-section > header, .li-parent-initiatives { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 36px; }
+.li-hierarchy-section h3 { margin: 0; font-size: 13px; font-weight: 500; }
+.li-hierarchy-section > header > span { flex: 1; color: var(--theme-text-secondary); }
+.li-parent-initiatives { margin-bottom: 16px; }
+.li-parent-initiatives > span { color: var(--theme-text-secondary); }
+.li-parent-initiatives button, .li-hierarchy-action, .li-child-initiative button { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; padding: 4px 6px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.li-parent-initiatives button:hover, .li-hierarchy-action:hover, .li-child-initiative button:hover { background: var(--theme-surface-hover); }
+.li-parent-initiatives button > span, .li-child-name strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.li-parent-initiatives svg, .li-child-name svg { flex: 0 0 16px; width: 16px; height: 16px; }
+.li-child-initiative { display: grid; grid-template-columns: minmax(140px,1fr) 90px 100px 80px 28px; gap: 8px; align-items: center; min-height: 40px; border-bottom: .5px solid var(--theme-border); }
+.li-child-name strong { font-weight: 450; }
+.li-child-initiative > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--theme-text-secondary); }
+.li-hierarchy-empty { color: var(--theme-text-secondary); padding: 16px 0; }
+.li-subinitiative-dialog.dialog-content { width: 749px; max-width: calc(100vw - 32px); padding: 20px; }
+.li-subinitiative-dialog .li-create-row { display: flex; flex-wrap: wrap; width: 100%; min-width: 0; height: auto; min-height: 0; margin: 0; padding: 12px; }
+.li-subinitiative-dialog .li-create-fields { flex: 1; min-width: 0; height: auto; grid-template-rows: 28px 29.5px auto; }
+.li-subinitiative-dialog .li-create-fields > input { width: 100%; min-width: 0; }
+.li-subinitiative-dialog .li-create-properties { flex-wrap: wrap; height: auto; min-height: 24px; }
+.li-subinitiative-dialog footer { width: 100%; justify-content: flex-end; }
+.li-name .li-hierarchy-toggle { flex: 0 0 16px; height: 24px; display: grid; place-items: center; border: 0; padding: 0; border-radius: 4px; background: transparent; color: var(--theme-text-secondary); }
+.li-name .li-hierarchy-toggle:hover { background: var(--theme-surface-hover); }
+.li-row.is-context-only .li-name strong { color: var(--theme-text-secondary); }
+.li-contributing-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--theme-text-secondary); }
+.li-page-header h2 { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.li-page-header h2 > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.li-page-header h2 svg { width: 16px; height: 16px; flex-shrink: 0; }
+@media (max-width: 700px) { .li-child-initiative { grid-template-columns: minmax(100px,1fr) 72px 28px; } .li-child-initiative > span:nth-of-type(n+2) { display: none; } }

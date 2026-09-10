@@ -221,6 +221,8 @@ type Team struct {
 	Icon      string     `json:"icon,omitempty"`
 	Private   bool       `json:"private,omitempty"`
 	RetiredAt *time.Time `json:"retiredAt,omitempty"`
+	CreatedAt *time.Time `json:"createdAt,omitempty"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
 }
 
 type Customer struct {

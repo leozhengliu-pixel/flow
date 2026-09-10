@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { persistUserSettings } from '@/lib/settings-persistence';
+import { settingsSidebarTeams } from './settings-sidebar-teams';
 import { UploadPolicyDialog } from './upload-policy-dialog';
 import { ApplicationPolicySettings, DataPrivacyDialog } from './application-policy-settings';
 import type { IntegrationProvider } from '@/lib/app-routes';
@@ -175,10 +176,6 @@ const CodeIntegrationSettings = lazyPage(
   () => import("./code-integration-settings"),
   "CodeIntegrationSettings",
 );
-const ProviderAdapterSettings = lazyPage(
-  () => import('./provider-adapter-settings'),
-  'ProviderAdapterSettings',
-);
 const AuditLogSettings = lazyPage(
   () => import("./audit-log-settings"),
   "AuditLogSettings",
@@ -202,7 +199,7 @@ export async function preloadSettingsPage(page: SettingsPageProps['page'], optio
   if (page === 'import-export') return ImportExportSettings.preload()
   if (page === 'workflows') return WorkflowAutomationSettings.preload()
   if (page === 'releases' && options.releasePipelineMode) return PipelineEditorPage.preload()
-  if (page === 'integrations' && options.integrationProvider) return options.integrationProvider==='github'||options.integrationProvider==='gitlab'?CodeIntegrationSettings.preload():ProviderAdapterSettings.preload()
+  if (page === 'integrations' && options.integrationProvider) return CodeIntegrationSettings.preload()
   if (['ai', 'initiatives', 'documents', 'customer-requests', 'releases', 'pulse', 'asks', 'emojis', 'integrations'].includes(page)) return FeatureSettingsPage.preload()
 }
 
@@ -384,6 +381,7 @@ export function SettingsPage(props: SettingsPageProps) {
   const [settings, setSettings] = useUserStoredSettings(props.data);
   const isAdmin =
     props.data.viewerRole === "admin" || props.data.viewerRole === "owner";
+  const sidebarTeams = useMemo(() => settingsSidebarTeams(props.data, query), [props.data, query]);
   const visible = useMemo(
     () =>
       NAV.map((section) => ({
@@ -471,30 +469,21 @@ export function SettingsPage(props: SettingsPageProps) {
                 ))}
               </section>
             ))}
-            {!query && props.data.viewerRole !== "guest" && (
+            {props.data.viewerRole !== "guest" && (!query.trim() || sidebarTeams.length > 0) && (
               <section>
                 <h2>{t("Your teams")}</h2>
-                {props.data.teams
-                  .filter(
-                    (team) =>
-                      isAdmin ||
-                      props.data.teamMembers.some(
-                        (member) =>
-                          member.teamId === team.id &&
-                          member.userId === props.data.viewer.id &&
-                          member.role === "owner",
-                      ),
-                  )
-                  .map((team) => (
+                {sidebarTeams.map(({ team, depth }) => (
                     <button
                       key={team.id}
+                      style={depth ? { paddingInlineStart: 10 + Math.min(depth, 6) * 18 } : undefined}
+                      aria-current={props.page === 'team' && props.teamKey?.toLowerCase() === team.key.toLowerCase() ? 'page' : undefined}
                       className={
                         props.page === "team" &&
                         props.teamKey?.toLowerCase() === team.key.toLowerCase()
                           ? "active"
                           : ""
                       }
-                      onClick={() => props.onNavigate("team", team.key)}
+                      onClick={() => { props.onNavigate("team", team.key); setMobileNav(false); }}
                       onPointerEnter={() => { void TeamWorkflowSettings.preload().catch(() => undefined); }}
                       onFocus={() => { void TeamWorkflowSettings.preload().catch(() => undefined); }}
                     >
@@ -510,7 +499,7 @@ export function SettingsPage(props: SettingsPageProps) {
                       <span data-i18n-ignore>{team.name}</span>
                     </button>
                   ))}
-                {isAdmin && (
+                {isAdmin && !query.trim() && (
                   <button onPointerEnter={() => { void TeamCreatePage.preload().catch(() => undefined); }} onFocus={() => { void TeamCreatePage.preload().catch(() => undefined); }} onClick={props.onCreateTeam}>
                     <Plus size={16} />
                       <span>{t("Create a team")}</span>
@@ -779,14 +768,14 @@ function SettingsBody(
     );
   }
   if (page === "integrations" && props.integrationProvider)
-    return props.integrationProvider==='github'||props.integrationProvider==='gitlab'? (
+    return (
       <CodeIntegrationSettings
         provider={props.integrationProvider}
         data={props.data}
         onBack={() => props.onNavigate("integrations")}
         onReload={props.onReload}
       />
-    ) : <ProviderAdapterSettings embedded provider={props.integrationProvider} name={{notion:'Notion',intercom:'Intercom',sentry:'Sentry',figma:'Figma','google-calendar':'Google Calendar',cursor:'Cursor',codex:'Codex',zapier:'Zapier'}[props.integrationProvider]} data={props.data} onReload={props.onReload} onClose={()=>props.onNavigate('integrations')}/>;
+    );
   if (page === "team") {
     const team = props.data.teams.find(
       (team) => team.key.toLowerCase() === props.teamKey?.toLowerCase(),

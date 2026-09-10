@@ -2,7 +2,8 @@
 .property-command-standard>div{display:flex;flex-direction:column;max-height:inherit;min-height:0;overflow:hidden}
 .property-command-standard .property-command-search{flex:0 0 40px}
 .property-command-standard .property-command-options{min-height:0;max-height:min(319px,calc(100dvh - 62px),calc(var(--radix-popover-content-available-height,100dvh) - 42px));overscroll-behavior:contain;scrollbar-width:thin}
-.property-command-options.virtual-property-options{padding:0 5px!important;flex-shrink:1}
+.property-command-options.virtual-property-options{padding:0!important;flex-shrink:1}
+.virtual-property-options [data-index]{box-sizing:border-box;padding:0 5px}
 .virtual-property-options [role=option]{box-sizing:border-box;height:32px!important;min-height:32px;max-height:32px;margin:0!important}
 .people-menu-body{max-height:calc(100dvh - 24px)}
 .people-menu-body .property-command-search{flex:0 0 40px}

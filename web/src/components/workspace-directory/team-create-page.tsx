@@ -3,7 +3,6 @@ import {
   AppWindow,
   ArrowLeft,
   Bell,
-  Bot,
   Braces,
   Building2,
   CircleDot,
@@ -35,6 +34,8 @@ import { useMemo, useState, type FormEvent } from "react";
 import { ViewIconPicker } from "@/components/views/view-icon-picker";
 import { TeamIcon } from "@/components/issue/issue-icons";
 import { SelectControl } from "@/components/ui/select-control";
+import { ParentTeamPicker } from '@/components/property/parent-team-picker';
+import { teamHierarchy, type TeamHierarchySettings } from '@/lib/team-hierarchy';
 import { ReleasesIcon } from "@/components/releases/release-icons";
 import type { Team } from "@/types/flow";
 import type { SettingsPageId } from "@/lib/app-routes";
@@ -112,11 +113,17 @@ const SETTINGS_DESTINATIONS: Record<string, SettingsPageId> = {
 
 export function TeamCreatePage({
   teams,
+  teamSettings,
+  initialParentTeamId = '',
+  canCreateSubTeam = true,
   onBack,
   onNavigateSettings,
   onCreate,
 }: {
   teams: Team[];
+  teamSettings?: TeamHierarchySettings;
+  initialParentTeamId?: string;
+  canCreateSubTeam?: boolean;
   onBack: () => void;
   onNavigateSettings: (page: SettingsPageId, teamKey?: string) => void;
   onCreate: (input: {
@@ -140,18 +147,27 @@ export function TeamCreatePage({
     "GMT+8:00 – China Standard Time - Shanghai",
   );
   const [copyFrom, setCopyFrom] = useState("");
-  const [parentTeamId, setParentTeamId] = useState("");
+  const [parentTeamId, setParentTeamId] = useState(canCreateSubTeam ? initialParentTeamId : '');
+  const [error, setError] = useState('');
   const [privateTeam, setPrivateTeam] = useState(false);
   const [saving, setSaving] = useState(false);
   const generatedKey = useMemo(() => teamCode(name), [name]);
+  const parentHierarchy = useMemo(() => teamHierarchy(teams, teamSettings), [teams, teamSettings]);
+  const parent = parentHierarchy.byId.get(parentTeamId);
+  const restrictedByParent = parent && [parent, ...(parentHierarchy.ancestors.get(parentTeamId) ?? [])].some(team => team.private || ['private', 'restricted'].includes(teamSettings?.[team.id]?.access ?? ''));
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const identifier = (keyEdited ? key : generatedKey).trim();
     if (!name.trim() || !identifier || saving) return;
+    const invalidParent = teamHierarchy(teams, teamSettings).parentError('', parentTeamId);
+    if (invalidParent) { setError(invalidParent); return; }
+    setError('');
     setSaving(true);
     try {
       await onCreate({ name: name.trim(), key: identifier, color, icon, private: privateTeam, parentTeamId, copyFromTeamId: parentTeamId || copyFrom, timezone: timezone.includes("Coordinated") ? "Etc/UTC" : "Asia/Shanghai" });
       onBack();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Unable to create team');
     } finally {
       setSaving(false);
     }
@@ -199,7 +215,7 @@ export function TeamCreatePage({
             <h2>Your teams</h2>
             {teams.map((team) => (
               <button key={team.id} onClick={()=>onNavigateSettings("team",team.key)} type="button">
-                <Bot />
+                <TeamIcon team={team} size={16}/>
                 {team.name}
               </button>
             ))}
@@ -263,10 +279,10 @@ export function TeamCreatePage({
                 }}
               />
             </label>
-            <label>
-              <span>Parent team<small>Settings and workflows will be inherited from the parent team</small></span>
-              <SelectControl label="Parent team" value={parentTeamId} onChange={(value) => { setParentTeamId(value); if (value) setCopyFrom(value); }} options={[{ value: "", label: "No parent team" }, ...teams.map(team => ({ value: team.id, label: team.name, entityName: true, icon: <TeamIcon team={team} size={14}/> }))]}/>
-            </label>
+            {canCreateSubTeam && <label>
+              <span>Parent team<small>Start with a copy of the parent team's settings and workflows</small></span>
+              <ParentTeamPicker teams={teams} settings={teamSettings} value={parentTeamId} onChange={setParentTeamId}/>
+            </label>}
           </section>
           <h2>Team access</h2>
           <p>
@@ -276,7 +292,7 @@ export function TeamCreatePage({
           <section className="workspace-settings-card">
             <label>
               <span>Team access</span>
-              <SelectControl label="Team access" value={privateTeam ? "private" : "public"} onChange={(value) => setPrivateTeam(value === "private")} options={[{ value: "public", label: "Public to workspace" }, { value: "private", label: "Private" }]}/>
+              <SelectControl label="Team access" value={privateTeam ? "private" : "public"} onChange={(value) => setPrivateTeam(value === "private")} options={[{ value: "public", label: restrictedByParent ? "Restricted to parent team" : "Public to workspace" }, { value: "private", label: "Private" }]}/>
             </label>
           </section>
           <h2>Timezone</h2>
@@ -295,9 +311,10 @@ export function TeamCreatePage({
           <section className="workspace-settings-card">
             <label>
               <span>Copy from team</span>
-              <SelectControl label="Copy from team" disabled={Boolean(parentTeamId)} value={copyFrom} onChange={setCopyFrom} options={[{ value: "", label: "Don’t copy" }, ...teams.map(team => ({ value: team.id, label: team.name, entityName: true, icon: <TeamIcon team={team} size={14}/> }))]}/>
+              <SelectControl label="Copy from team" disabled={Boolean(parentTeamId)} value={parentTeamId || copyFrom} onChange={setCopyFrom} options={[{ value: "", label: "Don’t copy" }, ...teams.map(team => ({ value: team.id, label: team.name, entityName: true, icon: <TeamIcon team={team} size={14}/> }))]}/>
             </label>
           </section>
+          {error && <p role="alert">{error}</p>}
           <button
             className="workspace-new-team__submit"
             type="submit"

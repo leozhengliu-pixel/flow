@@ -1240,6 +1240,9 @@ func (s *SQLiteStore) MutateWithAggregate(ctx context.Context, eventType string,
 }
 
 func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
+	if eventType == "workspace_preferences.updated" && featureFlagsOnly(payload) {
+		return s.mutateFeatureFlags(ctx, workspaceKey, payload, mutate)
+	}
 	if eventType == "issue.created" && UsesIssueRecordMutations(ctx) {
 		return s.createIssueRecords(ctx, workspaceKey, payload, mutate)
 	}
@@ -1546,6 +1549,14 @@ func (s *SQLiteStore) persistWorkspace(ctx context.Context, workspaceKey string,
 	defer tx.Rollback()
 	if err := writeImportInputs(ctx, tx, workspaceKey, inputData); err != nil {
 		return err
+	}
+	if event != nil && event.Type == "team.settings_updated" {
+		var change map[string]json.RawMessage
+		if json.Unmarshal(event.Payload, &change) == nil && change["parentTeamId"] != nil {
+			if err := syncTeamAncestorMembers(ctx, tx, data, event.AggregateID); err != nil {
+				return err
+			}
+		}
 	}
 	if event != nil && event.Type == "pulse.summary_scheduled" {
 		for _, notification := range notifications {

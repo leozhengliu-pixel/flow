@@ -336,6 +336,12 @@
 .lp-projects-filter__group button.is-active { background: var(--lp-bg-hover); }
 .lp-projects-filter__group button svg { color: #77777c; flex: none; height: 14px; width: 14px; }
 .lp-projects-filter__empty { color: #79797e; font-size: 13px; padding: 14px; text-align: center; }
+.lp-projects-filter__value-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-projects-filter__nested.lp-projects-filter__people { width:280px;max-width:calc(100vw - 16px); }
+.lp-projects-filter__people .property-command-options [role=option] { grid-template-columns:20px minmax(0,1fr) auto; }
+.lp-projects-filter__people .property-command-option-end { grid-column:3;white-space:nowrap;color:var(--theme-text-secondary);font-size:11px; }
+.lp-projects-filter__people .property-command-label { white-space:nowrap;text-overflow:ellipsis;overflow:hidden; }
+.lp-projects-filter__values small { flex-shrink: 0; }
 .lp-projects-filter__nested{position:absolute;right:calc(100% - 3px);top:112px;width:215px;max-height:360px;overflow:hidden;border:.5px solid var(--theme-border-strong);border-radius:10px;background:var(--theme-surface-2);box-shadow:var(--shadow-control);color:var(--theme-text-primary)}.lp-projects-filter__values{max-height:317px;overflow:auto;padding:5px}.lp-projects-filter__values button{width:100%;height:32px;display:flex;align-items:center;gap:8px;padding:0 8px;border:0;border-radius:5px;background:transparent;color:inherit;font-size:13px;text-align:left}.lp-projects-filter__values button:hover,.lp-projects-filter__values button:focus-visible{background:var(--theme-control-active);outline:0}.lp-projects-filter__checkbox{width:14px;height:14px;flex:0 0 14px;border:1px solid #55555b;border-radius:3px}.lp-projects-filter__values i{width:10px;height:10px;flex:0 0 10px;border-radius:50%}.lp-projects-filter__values small{margin-left:auto;color:#77777c;font-size:11px;white-space:nowrap}
 
 .lp-projects-display { height: min(532px, calc(100dvh - 112px)); overflow: visible; padding: 8px 0 0; right: 33px; width: 331px; }
@@ -513,12 +519,13 @@
   border-radius: 9999px;
   color: #89898e;
   display: flex;
-  grid-column: 9;
+  position: absolute;
+  right: 8px;
+  top: 50%;
   height: 24px;
   justify-content: center;
-  justify-self: end;
   padding: 0 2px;
-  transform: translateX(-1.5px);
+  transform: translateY(-50%);
   width: 24px;
 }
 .lp-project-group__create:hover { background: #29292b; color: #fff; }

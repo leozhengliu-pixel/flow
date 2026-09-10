@@ -1,5 +1,8 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
+import { teamHierarchy } from '@/lib/team-hierarchy';
+import { TeamIcon } from '@/components/issue/issue-icons';
+import { newTeamPath } from '@/lib/app-routes';
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Check,
@@ -90,6 +93,9 @@ export function TeamOverviewPage({
   onReload: () => Promise<void>;
 }) {
   const {t}=useI18n();
+  const hierarchy = useMemo(() => teamHierarchy(data.teams, data.teamSettings), [data.teams, data.teamSettings]);
+  const parentTeam = hierarchy.byId.get(data.teamSettings[team.id]?.parentTeamId ?? '');
+  const childTeams = (hierarchy.children.get(team.id) ?? []).filter(item => !item.retiredAt);
   const [sections, setSections] = useState<TeamResourceSection[]>([]);
   const [resources, setResources] = useState<TeamPinnedResource[]>([]);
   const [loading, setLoading] = useState(true);
@@ -456,6 +462,11 @@ export function TeamOverviewPage({
             </section>
           </div>
           <aside className="team-home-rail">
+            {parentTeam && <section className="team-home-hierarchy"><span>{t('Parent team')}</span><a title={hierarchy.path(parentTeam.id)} href={teamHomePath(data.workspace.urlKey, parentTeam.key)} onClick={event => {event.preventDefault(); onNavigate(teamHomePath(data.workspace.urlKey, parentTeam.key));}}><TeamIcon team={parentTeam} size={18}/><span>{parentTeam.name}</span></a></section>}
+            <section className="team-home-hierarchy"><span>{t('Sub-teams')}</span>
+              {childTeams.map(child => <a key={child.id} href={teamHomePath(data.workspace.urlKey, child.key)} onClick={event => {event.preventDefault(); onNavigate(teamHomePath(data.workspace.urlKey, child.key));}}><TeamIcon team={child} size={18}/><span>{child.name}</span><small>{child.key}</small></a>)}
+              {(data.viewerRole === 'admin' || data.viewerRole === 'owner') && !hierarchy.parentError('', team.id) && <button type="button" onClick={() => onNavigate(`${newTeamPath(data.workspace.urlKey)}?parentTeamId=${encodeURIComponent(team.id)}`)}><Plus size={16}/>{t('Create sub-team')}</button>}
+            </section>
             <section className="team-home-members">
               <span>{t("Members")}</span>
               <div className="team-home-member-row">
