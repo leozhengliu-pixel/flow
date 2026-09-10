@@ -1,7 +1,10 @@
 import { type ReactNode } from 'react'
-import { NoAssigneeIcon, PriorityIcon, ProjectStatusIcon } from '@/components/issue/issue-icons'
+import { PriorityIcon, ProjectStatusIcon } from '@/components/issue/issue-icons'
 import { PropertyMenu, type PropertyOption } from '@/components/property/property-menu'
 import styles from './project-row-menus.module.css'
+import { PersonPicker } from '@/components/issue/core-property-pickers'
+import { usePeopleDirectory } from '@/components/property/people-context'
+import { directoryPerson } from '@/lib/people'
 
 export type ProjectPickerProperty = 'priority' | 'lead' | 'status'
 
@@ -33,7 +36,10 @@ export function ProjectPropertyPicker({ buttonClassName = '', children, label, o
   property: ProjectPickerProperty
   value: string
 }) {
+  const directory = usePeopleDirectory()
   const copy = PICKER_COPY[property]
+  if (property === 'lead') return <PersonPicker ariaLabel={label} label="Lead" emptyTriggerLabel="Lead" emptyOptionLabel="No lead" emptyOptionShortcut="0" selectedId={value} trigger={children} triggerClassName={`lp-project-property-trigger ${buttonClassName}`} surfaceClassName={styles.command} searchPlaceholder={copy.placeholder} searchShortcut="P, then A" onChange={onChange}
+    people={orderProjectPropertyOptions(options,property,value).filter(option=>option.value).map(option=>({...directoryPerson(directory.users,option.value),id:option.value,label:option.label,avatarUrl:option.avatarUrl ?? directory.users.get(option.value)?.avatarUrl,groupLabel:option.group}))}/>
   const menuOptions: PropertyOption[] = orderProjectPropertyOptions(options, property, value).map(option => ({
     id: option.value,
     label: option.label,
@@ -42,12 +48,12 @@ export function ProjectPropertyPicker({ buttonClassName = '', children, label, o
     groupId: option.group,
     groupLabel: option.group,
     icon: <ProjectPropertyOptionIcon option={option} property={property}/>,
-    i18nIgnore: property === 'lead' || property === 'status',
+    i18nIgnore: property === 'status',
   }))
   return <PropertyMenu
     align={property === 'status' ? 'end' : 'start'}
     ariaLabel={label}
-    label={property === 'lead' ? 'Lead' : property === 'priority' ? 'Priority' : 'Status'}
+    label={property === 'priority' ? 'Priority' : 'Status'}
     onChange={onChange}
     options={menuOptions}
     searchPlaceholder={copy.placeholder}
@@ -57,17 +63,12 @@ export function ProjectPropertyPicker({ buttonClassName = '', children, label, o
     trigger={children}
     triggerClassName={`lp-project-property-trigger ${buttonClassName}`}
     value={options.find(option => option.value === value)?.label}
-    valueIsEntityName={(property === 'lead' || property === 'status') && Boolean(value)}
+    valueIsEntityName={property === 'status' && Boolean(value)}
   />
 }
 
-function ProjectPropertyOptionIcon({ option, property }: { option: ProjectPropertyOption; property: ProjectPickerProperty }) {
+function ProjectPropertyOptionIcon({ option, property }: { option: ProjectPropertyOption; property: Exclude<ProjectPickerProperty,'lead'> }) {
   if (property === 'priority') return <PriorityIcon priority={priorityNumber(option.value)} size={15}/>
-  if (property === 'lead') {
-    if (!option.value) return <NoAssigneeIcon className={styles.optionIcon} size={15}/>
-    if (option.avatarUrl) return <img alt="" className={styles.avatar} src={option.avatarUrl}/>
-    return <span className={styles.avatar} style={{ backgroundColor: avatarColor(option.label) }}>{initials(option.label)}</span>
-  }
   return <ProjectStatusGlyph color={option.color} name={option.label} type={option.statusType}/>
 }
 
@@ -88,5 +89,3 @@ function orderProjectPropertyOptions(options: ProjectPropertyOption[], property:
 }
 
 function priorityNumber(value: string) { return ({ none: 0, urgent: 1, high: 2, medium: 3, low: 4 } as Record<string, number>)[value] ?? 0 }
-function initials(name: string) { return name.split(/\s|@/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('') }
-function avatarColor(name: string) { return ['#d15f5f', '#5e6ad2', '#4c9a67', '#d09b42'][[...name].reduce((sum, value) => sum + value.charCodeAt(0), 0) % 4] }

@@ -254,10 +254,23 @@ func (s *server) mcpWorkspaceData(ctx context.Context, actor mcpActor) (domain.B
 	})
 	data.TeamMembers = slices.DeleteFunc(data.TeamMembers, func(item domain.TeamMember) bool { return !allowed(item.TeamID) })
 	data.Initiatives = slices.DeleteFunc(data.Initiatives, func(item domain.Initiative) bool {
+		if item.LeadTeamID != "" && !allowed(item.LeadTeamID) {
+			return true
+		}
 		if item.LeadTeamID != "" && allowed(item.LeadTeamID) {
 			return false
 		}
 		return !slices.ContainsFunc(item.ContributingTeamIDs, allowed)
+	})
+	visibleInitiatives := map[string]bool{}
+	for _, item := range data.Initiatives {
+		visibleInitiatives[item.ID] = true
+	}
+	for i := range data.Initiatives {
+		data.Initiatives[i].ParentInitiativeIDs = slices.DeleteFunc(data.Initiatives[i].ParentInitiativeIDs, func(id string) bool { return !visibleInitiatives[id] })
+	}
+	data.InitiativeRelations = slices.DeleteFunc(data.InitiativeRelations, func(item domain.InitiativeRelation) bool {
+		return !visibleInitiatives[item.InitiativeID] || !visibleInitiatives[item.RelatedInitiativeID]
 	})
 	// Reviews are linked to issues rather than teams directly. Keep only
 	// reviews whose linked issues survived the team projection; unlinked

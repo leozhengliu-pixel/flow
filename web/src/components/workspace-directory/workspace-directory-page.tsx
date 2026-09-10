@@ -1,12 +1,18 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
+import { teamHierarchy } from '@/lib/team-hierarchy';
 import { formatCustomerRevenue } from '@/lib/customer-settings';
+import { personSearchText } from '@/lib/people';
+import { compareDirectoryTeams, indexTeamPeople, matchesTeamDate, matchesTeamFilters, teamDateChoices, teamTimestamp, type TeamFilterField, type TeamOrdering } from './team-directory-model';
+import { TeamDateFilterDialog, TeamFilterBar } from './team-directory-controls';
+import { useTeamDirectoryControls, type TeamColumn } from './use-team-directory-controls';
 import { AppLink } from '@/components/ui/app-link';
 import {
   ArrowDown,
   ArrowUp,
   Banknote,
   Check,
+  ChevronRight,
   Circle,
   MoreHorizontal,
   Plus,
@@ -59,9 +65,6 @@ import {
 } from "./directory-menus";
 
 type DirectoryKind = "members" | "customers" | "teams";
-type TeamColumn =
-  "membership" | "owners" | "projects" | "cycle" | "created" | "updated" | "members";
-type TeamOrdering = "name" | "updated" | "created";
 type CustomerColumn =
   | "requests"
   | "revenue"
@@ -175,6 +178,7 @@ export function WorkspaceDirectoryPage({
       )}
       {kind === "teams" && (
         <TeamsDirectory
+          key={`${data.workspace.id}:${data.viewer.id}`}
           data={data}
           onMembers={onNavigateTeamMembers}
           onOpen={onNavigateTeam}
@@ -783,22 +787,21 @@ function TeamsDirectory({
   onReload: () => Promise<void>;
 }) {
   const {t}=useI18n();
-  const [descending, setDescending] = useState(false);
-  const [ordering, setOrdering] = useState<TeamOrdering>("name");
-  const [advanced, setAdvanced] = useState(false);
-  const [memberIds, setMemberIds] = useState<Set<string>>(new Set());
-  const [ownerIds, setOwnerIds] = useState<Set<string>>(new Set());
-  const [privateOnly, setPrivateOnly] = useState(false);
-  const [createdWindow, setCreatedWindow] = useState<Set<string>>(new Set());
-  const [columns, setColumns] = useState<Set<TeamColumn>>(
-    new Set(["membership", "members", "cycle", "projects"]),
-  );
+  const { filters, setFilters, preferences, setPreferences } = useTeamDirectoryControls(data.workspace.id, data.viewer.id);
+  const hierarchy = useMemo(() => teamHierarchy(data.teams, data.teamSettings), [data.teams, data.teamSettings]);
+  const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(new Set());
+  const { descending, ordering } = preferences;
+  const columns = new Set(preferences.columns);
+  const [dateOpen, setDateOpen] = useState(false);
+  const people = useMemo(() => indexTeamPeople(data.teamMembers), [data.teamMembers]);
+  const setDescending = (update: boolean | ((value: boolean) => boolean)) => setPreferences(current => ({ ...current, descending: typeof update === 'function' ? update(current.descending) : update }));
+  const setOrdering = (value: TeamOrdering) => setPreferences(current => ({ ...current, ordering: value, descending: value !== 'name' }));
   const teamMetrics = useMemo(() => {
     const usersById = new Map(data.users.map(user => [user.id, user]));
     const metrics = new Map(data.teams.map(team => [team.id, {
       memberIds: new Set<string>(),
       users: [] as User[],
-      owner: undefined as User | undefined,
+      owners: [] as User[],
       viewerMember: false,
       cycleCount: 0,
       projectCount: 0,
@@ -811,7 +814,7 @@ function TeamsDirectory({
       metric.memberIds.add(membership.userId);
       const user = usersById.get(membership.userId);
       if (user) metric.users.push(user);
-      if (membership.role === "owner") metric.owner = user;
+      if (membership.role === "owner" && user) metric.owners.push(user);
       if (membership.userId === data.viewer.id) metric.viewerMember = true;
     }
     for (const cycle of data.cycles) if (cycle.status === "current") {
@@ -834,38 +837,29 @@ function TeamsDirectory({
     }
     return metrics;
   }, [data.cycles, data.favorites, data.projects, data.subscriptions, data.teamMembers, data.teams, data.users, data.viewer.id]);
-  const filtersActive =
-    advanced ||
-    memberIds.size > 0 ||
-    ownerIds.size > 0 ||
-    privateOnly ||
-    createdWindow.size > 0;
+  const filtersActive = filters.advanced || ['members', 'owners', 'private', 'created'].some(field => filters[field as TeamFilterField].length);
   const teams = useMemo(() => data.teams
-    .filter((team) => {
-      if(team.retiredAt)return false;
-      const teamMemberIds = teamMetrics.get(team.id)?.memberIds ?? new Set<string>();
-      const createdDays = Number([...createdWindow][0] ?? 0);
-      const createdAt = teamCreatedAt(team);
-      return (
-        (!memberIds.size ||
-          [...memberIds].some((id) => teamMemberIds.has(id))) &&
-        (!ownerIds.size || Boolean(teamMetrics.get(team.id)?.owner && ownerIds.has(teamMetrics.get(team.id)?.owner?.id ?? ""))) &&
-        (!privateOnly || team.private) &&
-        (!createdDays ||
-          Date.now() - createdAt.getTime() <= createdDays * 86400000)
-      );
-    })
-    .sort(
-      (left, right) =>
-        compareTeams(left, right, ordering) * (descending ? -1 : 1),
-    ), [createdWindow, data.teams, descending, memberIds, ordering, ownerIds, privateOnly, teamMetrics]);
+    .filter(team => matchesTeamFilters(team, filters, people))
+    .sort((left, right) => compareDirectoryTeams(left, right, ordering, descending)), [data.teams, descending, filters, ordering, people]);
   const toggleColumn = (column: TeamColumn) =>
-    setColumns((current) => {
-      const next = new Set(current);
+    setPreferences((current) => {
+      const next = new Set(current.columns);
       if (next.has(column)) next.delete(column);
       else next.add(column);
-      return next;
+      return { ...current, columns: [...next] };
     });
+  const teamRows = useMemo(() => hierarchy.rows(teams, collapsedTeams), [hierarchy, teams, collapsedTeams]);
+  const counts = useMemo(() => {
+    const result = { members: new Map<string, number>(), owners: new Map<string, number>() };
+    for (const team of data.teams) {
+      if (team.retiredAt) continue;
+      for (const field of ['members', 'owners'] as const) {
+        for (const id of people.get(team.id)?.[field] ?? []) result[field].set(id, (result[field].get(id) ?? 0) + 1);
+      }
+    }
+    return result;
+  }, [data.teams, people]);
+  const countLabel = (count: number) => `${count} ${count === 1 ? 'team' : 'teams'}`;
   const filterGroups: DirectoryFilterGroup[] = [
     {
       id: "members",
@@ -874,7 +868,9 @@ function TeamsDirectory({
       choices: data.users.map((user) => ({
         id: user.id,
         label: user.displayName,
-        meta: "1 team",
+        meta: countLabel(counts.members.get(user.id) ?? 0),
+        keywords: personSearchText(user),
+        person: user,
         icon: <DirectoryUserAvatar user={user} />,
       })),
     },
@@ -885,6 +881,9 @@ function TeamsDirectory({
       choices: data.users.map((user) => ({
         id: user.id,
         label: user.displayName,
+        meta: countLabel(counts.owners.get(user.id) ?? 0),
+        keywords: personSearchText(user),
+        person: user,
         icon: <DirectoryUserAvatar user={user} />,
       })),
     },
@@ -900,54 +899,27 @@ function TeamsDirectory({
       icon: <DirectoryCreatedDateIcon />,
       selectionMode: "single",
       choices: [
-        { id: "1", label: "1 day ago" },
-        { id: "3", label: "3 days ago" },
-        { id: "7", label: "1 week ago" },
-        { id: "30", label: "1 month ago" },
-        { id: "90", label: "3 months ago" },
-        { id: "180", label: "6 months ago", meta: "1 team" },
-        { id: "365", label: "1 year ago", meta: "1 team" },
+        ...teamDateChoices.map(choice => ({ ...choice, meta: countLabel(data.teams.filter(team => !team.retiredAt && matchesTeamDate(team, choice.id)).length) })),
         { id: "custom", label: "Custom date or timeframe…" },
       ],
     },
   ];
-  const selectedFilters = {
-    members: memberIds,
-    owners: ownerIds,
-    private: privateOnly ? new Set(["private"]) : new Set<string>(),
-    created: createdWindow,
-  };
+  const selectedFilters = Object.fromEntries(filterGroups.map(group => [group.id, new Set(filters[group.id as TeamFilterField])]));
   const changeFilter = (
     groupId: string,
     choiceId: string,
     checked: boolean,
   ) => {
-    const update = (
-      setter: Dispatch<SetStateAction<Set<string>>>,
-      single = false,
-    ) =>
-      setter((current) => {
-        const next = single ? new Set<string>() : new Set(current);
-        if (checked) next.add(choiceId === "custom" ? "365" : choiceId);
-        else next.delete(choiceId);
-        return next;
-      });
-    if (groupId === "members") update(setMemberIds);
-    if (groupId === "owners") update(setOwnerIds);
-    if (groupId === "created") update(setCreatedWindow, true);
+    if (choiceId === 'custom') { setDateOpen(true); return; }
+    const field = groupId as TeamFilterField;
+    setFilters(current => {
+      const next = new Set(field === 'created' || field === 'private' ? [] : current[field]);
+      if (checked) next.add(choiceId); else next.delete(choiceId);
+      return { ...current, [field]: [...next] };
+    });
   };
   const clearFilters = () => {
-    setAdvanced(false);
-    setMemberIds(new Set());
-    setOwnerIds(new Set());
-    setPrivateOnly(false);
-    setCreatedWindow(new Set());
-  };
-  const removeFilter = (id: string) => {
-    if (id === "members") setMemberIds(new Set());
-    if (id === "owners") setOwnerIds(new Set());
-    if (id === "private") setPrivateOnly(false);
-    if (id === "created") setCreatedWindow(new Set());
+    setFilters({ members: [], owners: [], private: [], created: [], operators: {}, conjunction: 'and', advanced: false });
   };
   return (
     <>
@@ -959,11 +931,9 @@ function TeamsDirectory({
         <span />
         <DirectoryFilterMenu
           groups={filterGroups}
-          onAdvanced={() => setAdvanced(true)}
+          onAdvanced={() => setFilters(current => ({ ...current, advanced: true }))}
           onChoice={changeFilter}
-          onDirect={(groupId) =>
-            groupId === "private" && setPrivateOnly((value) => !value)
-          }
+          onDirect={field => changeFilter(field, 'true', true)}
           selected={selectedFilters}
         />
         <DirectoryDisplayMenu<TeamColumn, TeamOrdering>
@@ -974,8 +944,8 @@ function TeamsDirectory({
           ordering={ordering}
           orderingOptions={[
             { id: "name", label: "Name" },
-            { id: "updated", label: "Updated" },
             { id: "created", label: "Created" },
+            { id: "updated", label: "Updated" },
           ]}
           properties={columns}
           propertyOptions={[
@@ -990,27 +960,9 @@ function TeamsDirectory({
         />
       </div>
       {filtersActive && (
-        <DirectoryFilterBar
-          advanced={advanced}
-          chips={teamFilterChips(
-            memberIds,
-            ownerIds,
-            privateOnly,
-            createdWindow,
-            data.users,
-          )}
-          groups={filterGroups}
-          onAdvanced={() => setAdvanced(true)}
-          onChoice={changeFilter}
-          onClear={clearFilters}
-          onDirect={(groupId) =>
-            groupId === "private" && setPrivateOnly((value) => !value)
-          }
-          onRemoveAdvanced={() => setAdvanced(false)}
-          onRemoveChip={removeFilter}
-          selected={selectedFilters}
-        />
+        <TeamFilterBar filters={filters} groups={filterGroups} onChange={setFilters} onChoice={changeFilter} onDate={() => setDateOpen(true)}/>
       )}
+      <TeamDateFilterDialog open={dateOpen} value={filters.created[0]} onClose={() => setDateOpen(false)} onApply={value => { changeFilter('created', value, true); setDateOpen(false); }}/>
       {teams.length === 0 ? (
         <DirectoryFilteredEmpty
           hiddenCount={data.teams.length}
@@ -1033,21 +985,20 @@ function TeamsDirectory({
                 else { setOrdering("name"); setDescending(false); }
               }}
             >
-              {t('Name')}{descending ? <ArrowUp /> : <ArrowDown />}
+              {t('Name')}{ordering === 'name' && (descending ? <ArrowDown /> : <ArrowUp />)}
             </button>
             {columns.has("membership") && <span>{t('Membership')}</span>}
             {columns.has("owners") && <span>Owners</span>}
             {columns.has("members") && <span>{t('Members')}</span>}
             {columns.has("cycle") && <span>{t('Cycle')}</span>}
             {columns.has("projects") && <span>{t('Active projects')}</span>}
-            {columns.has("created") && <span>Created</span>}
-            {columns.has("updated") && <span>Updated</span>}
+            {(['created', 'updated'] as const).map(field => columns.has(field) && <button key={field} aria-label={`Order by ${field === 'created' ? 'Created' : 'Updated'}`} type="button" onClick={() => { if (ordering === field) setDescending(value => !value); else setOrdering(field); }}>{field === 'created' ? 'Created' : 'Updated'}{ordering === field && (descending ? <ArrowDown/> : <ArrowUp/>)}</button>)}
             <span />
-          </div>} items={teams} itemKey={team => team.id} render={(team) => {
+          </div>} items={teamRows} itemKey={row => row.team.id} render={({team, depth, hasChildren}) => {
             const metric = teamMetrics.get(team.id);
             const viewerMembership = metric?.viewerMember;
             const teamUsers = metric?.users ?? [];
-            const owner = metric?.owner;
+            const owners = metric?.owners ?? [];
             const cycleCount = metric?.cycleCount ?? 0;
             const projectCount = metric?.projectCount ?? 0;
             return (
@@ -1061,7 +1012,8 @@ function TeamsDirectory({
                   if (event.key === "Enter") onOpen(team);
                 }}
               >
-                <div className="workspace-team-identity">
+                <div className="workspace-team-identity" style={{paddingInlineStart: depth * 18}} title={hierarchy.path(team.id)}>
+                  {hasChildren ? <button className="workspace-team-expand" aria-label={`${collapsedTeams.has(team.id) ? 'Expand' : 'Collapse'} ${team.name}`} aria-expanded={!collapsedTeams.has(team.id)} onKeyDown={event => event.stopPropagation()} onClick={event => {event.stopPropagation(); setCollapsedTeams(current => {const next = new Set(current); if(next.has(team.id))next.delete(team.id);else next.add(team.id);return next;});}}><ChevronRight size={14} style={{transform: collapsedTeams.has(team.id) ? undefined : 'rotate(90deg)'}}/></button> : <span className="workspace-team-expand-placeholder"/>}
                   <TeamGlyph team={team} />
                   <strong>{team.name}</strong>
                   <small>{team.key}</small>
@@ -1071,8 +1023,8 @@ function TeamsDirectory({
                 )}
                 {columns.has("owners") && (
                   <span className="workspace-team-owner">
-                    {owner&&<DirectoryUserAvatar user={owner} />}
-                    {owner?.displayName??'No owner'}
+                    {owners.map(owner => <DirectoryUserAvatar key={owner.id} user={owner} />)}
+                    {owners.map(owner => owner.displayName).join(', ') || 'No owner'}
                   </span>
                 )}
                 {columns.has("members") && (
@@ -1106,10 +1058,10 @@ function TeamsDirectory({
                   </button>
                 )}
                 {columns.has("created") && (
-                  <time>{formatDirectoryDate(teamCreatedAt(team))}</time>
+                  <time dateTime={team.createdAt}>{formatTeamDate(team, 'created')}</time>
                 )}
                 {columns.has("updated") && (
-                  <time>{formatDirectoryDate(teamCreatedAt(team))}</time>
+                  <time dateTime={team.updatedAt}>{formatTeamDate(team, 'updated')}</time>
                 )}
                 <TeamRowMenu
                   team={team}
@@ -1277,7 +1229,7 @@ function DirectoryFilteredEmpty({
         aria-hidden="true"
         src="/flow-filter-empty.svg"
       />
-      <h2>No {noun} matching the filters</h2>
+      <h2>{`No ${noun} matching the filters`}</h2>
       <div className="workspace-directory-filtered-empty__notice">
         <span>
           {hiddenCount} {hiddenCount === 1 ? noun.replace(/s$/, "") : noun}{" "}
@@ -1471,11 +1423,6 @@ function customerColumns(columns: Set<CustomerColumn>) {
     .join(" ")} 38px`;
 }
 
-function compareTeams(left: Team, right: Team, ordering: TeamOrdering) {
-  if (ordering === "name") return left.name.localeCompare(right.name);
-  return teamCreatedAt(left).getTime() - teamCreatedAt(right).getTime();
-}
-
 function compareCustomers(
   left: Customer,
   right: Customer,
@@ -1497,16 +1444,9 @@ function compareCustomers(
   );
 }
 
-function teamCreatedAt(team: Team) {
-  const match = /^team_(\d+)$/.exec(team.id);
-  if (match) {
-    try {
-      return new Date(Number(BigInt(match[1]) / 1000000n));
-    } catch {
-      // Seeded teams use readable ids and fall through to the workspace fixture date.
-    }
-  }
-  return new Date("2026-03-16T00:00:00Z");
+function formatTeamDate(team: Team, field: 'created' | 'updated') {
+  const timestamp = teamTimestamp(team, field);
+  return timestamp === undefined ? '-' : formatDirectoryDate(new Date(timestamp));
 }
 
 function formatDirectoryDate(value: Date) {
@@ -1517,37 +1457,6 @@ function namesFor(ids: Set<string>, users: User[]) {
   return [...ids]
     .map((id) => users.find((user) => user.id === id)?.displayName ?? id)
     .join(", ");
-}
-
-function teamFilterChips(
-  memberIds: Set<string>,
-  ownerIds: Set<string>,
-  privateOnly: boolean,
-  createdWindow: Set<string>,
-  users: User[],
-): DirectoryFilterChip[] {
-  const chips: DirectoryFilterChip[] = [];
-  if (memberIds.size)
-    chips.push({
-      id: "members",
-      label: "Members",
-      value: namesFor(memberIds, users),
-    });
-  if (ownerIds.size)
-    chips.push({
-      id: "owners",
-      label: "Owners",
-      value: namesFor(ownerIds, users),
-    });
-  if (privateOnly)
-    chips.push({ id: "private", label: "Private", value: "true" });
-  if (createdWindow.size)
-    chips.push({
-      id: "created",
-      label: "Created date",
-      value: createdWindowLabel([...createdWindow][0]),
-    });
-  return chips;
 }
 
 function customerFilterChips(
@@ -1583,20 +1492,4 @@ function customerFilterChips(
       value: `${Number([...size][0]).toLocaleString()}+`,
     });
   return chips;
-}
-
-function createdWindowLabel(value: string) {
-  return (
-    (
-      {
-        "1": "1 day ago",
-        "3": "3 days ago",
-        "7": "1 week ago",
-        "30": "1 month ago",
-        "90": "3 months ago",
-        "180": "6 months ago",
-        "365": "1 year ago",
-      } as Record<string, string>
-    )[value] ?? value
-  );
 }

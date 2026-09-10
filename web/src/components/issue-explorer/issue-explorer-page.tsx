@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { boundedIssueSequence } from '@/lib/navigation-context'
+import { teamHierarchy } from '@/lib/team-hierarchy'
 import type { BootstrapData, Issue, IssueUpdateInput, SavedView, SavedViewMutationInput, Team } from '@/types/flow'
 import type { TeamIssuesRouteView } from '@/lib/app-routes'
 import { MyIssuesBulkActionBar } from '@/components/my-issues/my-issues-bulk-action-bar'
@@ -91,8 +92,9 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
 
   useEffect(() => { const onKey = (event: KeyboardEvent) => { if (!event.altKey || event.metaKey || event.ctrlKey || event.key.toLowerCase() !== 'v' || savedView || creatingView || viewEditor || (event.target as HTMLElement | null)?.closest('input,textarea,[contenteditable=true],[role=textbox]')) return; event.preventDefault(); setViewEditor('create') }; addEventListener('keydown', onKey); return () => removeEventListener('keydown', onKey) }, [creatingView, savedView, viewEditor])
 
-  const scopedIssues = useMemo(() => filterInsightTeams(issuesForScope(data.issues, scope, view), initialInsightFilters?.teamIds), [data.issues, initialInsightFilters?.teamIds, scope, view])
-  const insightIssues = useMemo(() => insightsOpen ? filterInsightTeams(issuesForScope(data.issues, scope, view, true), initialInsightFilters?.teamIds) : [], [data.issues, initialInsightFilters?.teamIds, insightsOpen, scope, view])
+  const scopeTeamIds = useMemo(() => scope.kind === 'team' ? teamHierarchy(data.teams, data.teamSettings).subtree(scope.team.id) : undefined, [data.teams, data.teamSettings, scope])
+  const scopedIssues = useMemo(() => filterInsightTeams(issuesForScope(data.issues, scope, view, false, scopeTeamIds), initialInsightFilters?.teamIds), [data.issues, initialInsightFilters?.teamIds, scope, scopeTeamIds, view])
+  const insightIssues = useMemo(() => insightsOpen ? filterInsightTeams(issuesForScope(data.issues, scope, view, true, scopeTeamIds), initialInsightFilters?.teamIds) : [], [data.issues, initialInsightFilters?.teamIds, insightsOpen, scope, scopeTeamIds, view])
   const issuesById = useMemo(() => new Map([...data.issues, ...pagedIssues].map(issue => [issue.id, issue])), [data.issues, pagedIssues])
   const rowOptions = useMemo(() => explorerPropertyOptions(data, scopedIssues), [data, scopedIssues])
   // Bootstrap/sync owns the complete visible collection. Group before virtualizing;
@@ -107,7 +109,7 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
     if (view === 'active') conditions.push({ field: 'status', operator: 'in', values: ['unstarted', 'started'] })
     if (!display.showSubIssues) conditions.push({ field: 'parent', operator: 'isEmpty' })
     if (display.completedWindow === 'none') conditions.push({ field: 'status', operator: 'notIn', values: ['completed', 'canceled'] })
-    return { teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds, archived: 'false' as const, groupBy: display.grouping === 'focus' ? 'status' : display.grouping, sort: (display.ordering === 'created' ? 'createdAt' : display.ordering === 'updated' ? 'updatedAt' : display.ordering === 'priority' ? 'priority' : 'sortOrder') as 'priority'|'createdAt'|'updatedAt'|'sortOrder', direction: (display.ordering === 'created' || display.ordering === 'updated' ? 'desc' : 'asc') as 'asc'|'desc', filter: { and: [issueFiltersToQueryAst(filters), ...conditions] } }
+    return { teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds, includeSubTeams: scope.kind === 'team', archived: 'false' as const, groupBy: display.grouping === 'focus' ? 'status' : display.grouping, sort: (display.ordering === 'created' ? 'createdAt' : display.ordering === 'updated' ? 'updatedAt' : display.ordering === 'priority' ? 'priority' : 'sortOrder') as 'priority'|'createdAt'|'updatedAt'|'sortOrder', direction: (display.ordering === 'created' || display.ordering === 'updated' ? 'desc' : 'asc') as 'asc'|'desc', filter: { and: [issueFiltersToQueryAst(filters), ...conditions] } }
   }, [display.grouping, display.ordering, display.showSubIssues, display.completedWindow, filters, initialInsightFilters?.teamIds, scope, view])
   const selection = useMyIssuesSelection(groups)
   const summary = useMemo(() => deriveSummary(groups), [groups])
@@ -387,8 +389,8 @@ function exportIssuesCsv(rows: MyIssuesRowData[], name: string) {
   URL.revokeObjectURL(url)
 }
 
-function issuesForScope(issues: Issue[], scope: IssueExplorerPageProps['scope'], view: TeamIssuesRouteView, includeArchived = false) {
-  return issues.filter(issue => (includeArchived || !issue.archivedAt) && (scope.kind === 'workspace' || issue.team.id === scope.team.id) && (view === 'all' || (view === 'backlog' ? issue.state.type === 'backlog' : issue.state.type === 'unstarted' || issue.state.type === 'started')))
+function issuesForScope(issues: Issue[], scope: IssueExplorerPageProps['scope'], view: TeamIssuesRouteView, includeArchived = false, scopeTeamIds?: Set<string>) {
+  return issues.filter(issue => (includeArchived || !issue.archivedAt) && (scope.kind === 'workspace' || (scopeTeamIds ? scopeTeamIds.has(issue.team.id) : issue.team.id === scope.team.id)) && (view === 'all' || (view === 'backlog' ? issue.state.type === 'backlog' : issue.state.type === 'unstarted' || issue.state.type === 'started')))
 }
 
 function deriveSummary(groups: MyIssuesGroupData[]): MyIssuesDetailsSummary {

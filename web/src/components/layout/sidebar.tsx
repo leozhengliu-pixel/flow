@@ -1,5 +1,6 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
+import { teamHierarchy } from '@/lib/team-hierarchy';
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Select from "@radix-ui/react-select";
 import {
@@ -217,8 +218,8 @@ export function Sidebar({
     (feature === 'ai' ? data.workspaceSettings.featureFlags['ai-agent'] ?? data.workspaceSettings.featureFlags.ai : data.workspaceSettings.featureFlags[feature]) !== false;
   const sidebarTeams = useMemo(() => {
     const viewerTeamIds = new Set(data.teamMembers.filter(member => member.userId === data.viewer.id).map(member => member.teamId));
-    return data.teams.filter(team => !team.retiredAt && viewerTeamIds.has(team.id));
-  }, [data.teamMembers, data.teams, data.viewer.id]);
+    return teamHierarchy(data.teams, data.teamSettings).rows(data.teams.filter(team => !team.retiredAt && viewerTeamIds.has(team.id)));
+  }, [data.teamMembers, data.teams, data.teamSettings, data.viewer.id]);
   const currentCycleTeamIds = useMemo(() => new Set(data.cycles.filter(cycle => cycle.status === "current").map(cycle => cycle.teamId)), [data.cycles]);
   const upcomingCycleTeamIds = useMemo(() => new Set(data.cycles.filter(cycle => cycle.status === "upcoming").map(cycle => cycle.teamId)), [data.cycles]);
   const favoriteTeamIds = useMemo(() => new Set(favorites.filter(item => item.userId === data.viewer.id && item.resourceType === "team").map(item => item.resourceId)), [data.viewer.id, favorites]);
@@ -755,10 +756,10 @@ export function Sidebar({
             }
           >
             <div className="sidebar-team-list">
-              {sidebarTeams.map((team) => {
+              {sidebarTeams.map(({team, depth}) => {
                 const subscription = subscriptionByTeamId.get(team.id);
                 return (
-                  <TeamNavigation
+                  <div key={team.id} style={{paddingInlineStart: Math.min(depth, 4) * 12, minWidth: 0}}><TeamNavigation
                     key={team.id}
                     cyclesEnabled={Boolean(
                       data.cycleSettings[team.id]?.enabled,
@@ -792,7 +793,7 @@ export function Sidebar({
                     onFavoriteToggle={() =>
                       void toggleSidebarFavorite("team", team.id)
                     }
-                  />
+                  /></div>
                 );
               })}
             </div>

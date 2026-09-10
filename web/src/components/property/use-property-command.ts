@@ -10,6 +10,7 @@ export interface PropertyCommandOption {
   disabled?: boolean
   kind?: string
   person?: PersonIdentity
+  searchOnly?: boolean
 }
 
 export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus = true, closeOnSelect = true, keepSelectedVisible = false, onOpenChange, onSelect, open, options, resetKey, selectedIds = [], personOptions = false }: {
@@ -39,13 +40,13 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const selectionKey = JSON.stringify(selectedIds)
   const selectedSet = useMemo(() => new Set<string>(JSON.parse(selectionKey)), [selectionKey])
-  const filteredOptions = useMemo(() => normalizedQuery ? options.filter(option => (keepSelectedVisible && selectedSet.has(option.id)) || matchesOption(option, normalizedQuery)) : options, [keepSelectedVisible, normalizedQuery, options, selectedSet, matchesOption])
+  const filteredOptions = useMemo(() => options.filter(option => (!option.searchOnly || normalizedQuery.length > 1 || selectedSet.has(option.id)) && (!normalizedQuery || (keepSelectedVisible && selectedSet.has(option.id)) || matchesOption(option, normalizedQuery))), [keepSelectedVisible, normalizedQuery, options, selectedSet, matchesOption])
 
   useEffect(() => {
     if (!open) return
     setQuery('')
     const currentIds = selectedIdsRef.current
-    setActiveId(optionsRef.current.find(option => currentIds.includes(option.id) && !option.disabled)?.id ?? optionsRef.current.find(option => !option.disabled)?.id)
+    setActiveId(optionsRef.current.find(option => currentIds.includes(option.id) && !option.disabled)?.id ?? optionsRef.current.find(option => !option.disabled && !option.searchOnly)?.id)
     if (autoFocus) requestAnimationFrame(() => inputRef.current?.focus())
   }, [autoFocus, open, resetKey])
 
@@ -96,7 +97,7 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
   const onQueryChange = (value: string) => {
     setQuery(value)
     const normalized = value.trim().toLocaleLowerCase()
-    setActiveId(options.find(option => !option.disabled && matchesOption(option, normalized))?.id)
+    setActiveId(options.find(option => !option.disabled && (!option.searchOnly || normalized.length > 1 || selectedSet.has(option.id)) && matchesOption(option, normalized))?.id)
   }
 
   return {

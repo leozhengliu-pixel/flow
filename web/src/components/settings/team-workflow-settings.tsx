@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentType,
@@ -25,6 +26,8 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ParentTeamPicker } from '@/components/property/parent-team-picker';
+import { teamHierarchy } from '@/lib/team-hierarchy';
 
 import {
   DropdownMenu,
@@ -88,7 +91,6 @@ import { CheckboxMark } from "@/components/ui/checkbox-mark";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { StatusIcon } from "@/components/issue/issue-icons";
 import {
-  ViewGlyph,
   ViewIconPicker,
   type ViewVisual,
 } from "@/components/views/view-icon-picker";
@@ -416,27 +418,9 @@ function TeamOverview({
       </TeamSection>
       <TeamSection
         title="Team hierarchy"
-        description={<span>Teams can be nested to reflect your team structure and to share workflows and settings. <a href="https://linear.app/docs/sub-teams" rel="noreferrer" target="_blank">Docs↗</a></span>}
+        description="Organize teams into a hierarchy of up to five levels."
       >
-        <SelectRow
-          title="Parent team"
-          value={settings.parentTeamId ?? ""}
-          options={[
-            "",
-            ...data.teams
-              .filter((item) => item.id !== team.id && !item.retiredAt)
-              .map((item) => item.id),
-          ]}
-          labels={{
-            "": "No parent team",
-            ...Object.fromEntries(
-              data.teams.map((item) => [item.id, item.name]),
-            ),
-          }}
-          icons={Object.fromEntries(data.teams.map((item) => [item.id, <ViewGlyph key={item.id} color={item.color} icon={item.icon || "Team"} />]))}
-          entityOptions={data.teams.map((item) => item.id)}
-          onChange={(value) => save({ parentTeamId: value })}
-        />
+        {(data.viewerRole === 'admin' || data.viewerRole === 'owner') ? <ParentTeamPicker teams={data.teams} settings={data.teamSettings} teamId={team.id} value={settings.parentTeamId} onChange={value => { void save({parentTeamId: value}) }}/> : <span>{data.teams.find(item => item.id === settings.parentTeamId)?.name ?? 'No parent team'}</span>}
       </TeamSection>
       <TeamSection
         title="Team initiatives"
@@ -838,6 +822,7 @@ function AccessSettings({
   onReload: () => Promise<void>;
 }) {
   const { settings, save } = useTeamSettings(data, team, onReload);
+  const restrictedParent = useMemo(() => teamHierarchy(data.teams, data.teamSettings).ancestors.get(team.id)?.some(parent => parent.private || data.teamSettings[parent.id]?.access === 'private' || data.teamSettings[parent.id]?.access === 'restricted'), [data.teams, data.teamSettings, team.id]);
   const permissionLabels = {
     allMembers: "All workspace members",
     teamMembers: "Team members",
@@ -851,8 +836,8 @@ function AccessSettings({
           title="Team visibility"
           description="Private teams are visible only to members."
           value={settings.access}
-          options={["public", "private"]}
-          labels={{ public: "Public", private: "Private" }}
+          options={settings.access === 'restricted' ? ["public", "private", "restricted"] : ["public", "private"]}
+          labels={{ public: restrictedParent ? "Restricted to parent team" : "Public", private: "Private", restricted: "Restricted to parent team" }}
           onChange={(value) =>
             save({ access: value as TeamSettings["access"] })
           }

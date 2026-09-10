@@ -1,7 +1,6 @@
 import * as Popover from "@radix-ui/react-popover";
 import {
   ArrowUp,
-  Check,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -31,13 +30,7 @@ import { toast } from "sonner";
 import { Avatar } from "@/components/issue/issue-row";
 import { usePropertyCommand } from "@/components/property/use-property-command";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import {
-  DisplayIcon as Settings2,
-  FilterIcon as Filter,
-} from "@/components/ui/view-action-icons";
-import { Toggle } from "@/components/ui/toggle";
 import { CheckboxMark } from "@/components/ui/checkbox-mark";
-import { SelectControl } from "@/components/ui/select-control";
 import { useI18n } from "@/i18n/i18n";
 import { commentOnReview, submitReview, updateReview } from "@/lib/api";
 import {
@@ -51,34 +44,11 @@ import type { BootstrapData, CodeReview } from "@/types/flow";
 
 import "./reviews-page.css";
 import { ReviewCode } from './review-code';
-
-type Display = {
-  grouping: "focus" | "status" | "repository";
-  ordering: "importance" | "updated" | "opened";
-  closed: "day" | "week" | "month" | "all";
-  showDrafts: boolean;
-  showTeams: boolean;
-  badge: "all" | "requested";
-  properties: string[];
-};
-type FilterState = {
-  status?: string;
-  query?: string;
-  author?: string;
-  reviewer?: string;
-  repository?: string;
-  quick?: boolean;
-  missingIssue?: boolean;
-};
-const DEFAULT_DISPLAY: Display = {
-  grouping: "focus",
-  ordering: "importance",
-  closed: "day",
-  showDrafts: true,
-  showTeams: true,
-  badge: "all",
-  properties: ["repository", "author", "opened", "status", "quick"],
-};
+import { ReviewFilters, ReviewDisplayMenu } from './review-list-controls';
+import { compareReviews, groupReviews, matchesReviewFilters, reviewBaseItems, reviewStatus, reviewStatusLabels, type ReviewDisplay } from './review-list-model';
+import { useReviewListControls } from './use-review-list-controls';
+import { UserAvatar } from '@/components/ui/user-avatar';
+import { PersonHover } from '@/components/property/person-info';
 
 export function ReviewsPage({
   data,
@@ -99,54 +69,17 @@ export function ReviewsPage({
   onOpenSidebar: () => void;
   returnPath?: string;
 }) {
-  const { t } = useI18n(),
-    [filter, setFilter] = useState<FilterState>({}),
-    [display, setDisplay] = useState(DEFAULT_DISPLAY),
-    [fullWindow, setFullWindow] = useState(false);
+  const { t } = useI18n();
+  const { filters, setFilters, display, setDisplay } = useReviewListControls(data.workspace.id, data.viewer.id, view);
+  const [fullWindow, setFullWindow] = useState(false);
+  const [filterHost, setFilterHost] = useState<HTMLDivElement | null>(null);
   const [submitOpen, setSubmitOpen] = useState(false),
     [picker, setPicker] = useState<"reviewers" | "issues" | null>(null),
     [busy, setBusy] = useState(false),
-    [groupExpanded, setGroupExpanded] = useState(true);
-  const visible = useMemo(
-    () =>
-      data.reviews
-        .filter((item) =>
-          view === "created"
-            ? item.author.id === data.viewer.id
-            : item.reviewerIds.includes(data.viewer.id),
-        )
-        .filter((item) => display.showDrafts || !item.draft)
-        .filter((item) =>
-          filter.status ? item.status === filter.status : true,
-        )
-        .filter((item) =>
-          filter.author ? item.author.id === filter.author : true,
-        )
-        .filter((item) =>
-          filter.reviewer ? item.reviewerIds.includes(filter.reviewer) : true,
-        )
-        .filter((item) =>
-          filter.repository
-            ? `${item.repositoryOwner}/${item.repositoryName}` ===
-              filter.repository
-            : true,
-        )
-        .filter((item) => (filter.quick ? item.quickToReview : true))
-        .filter((item) => (filter.missingIssue ? !item.issueIds.length : true))
-        .filter((item) =>
-          filter.query
-            ? `${item.title} ${item.repositoryOwner} ${item.repositoryName}`
-                .toLowerCase()
-                .includes(filter.query.toLowerCase())
-            : true,
-        )
-        .sort((a, b) =>
-          display.ordering === "opened"
-            ? b.createdAt.localeCompare(a.createdAt)
-            : b.updatedAt.localeCompare(a.updatedAt),
-        ),
-    [data.reviews, data.viewer.id, display, filter, view],
-  );
+    [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const baseItems = useMemo(() => reviewBaseItems(data, view, display), [data, view, display]);
+  const visible = useMemo(() => baseItems.filter(item => matchesReviewFilters(item, filters)).sort((a, b) => compareReviews(a, b, display)), [baseItems, filters, display]);
+  const groups = useMemo(() => groupReviews(visible, display, data.viewer.id), [visible, display, data.viewer.id]);
   const mutate = async (input: Parameters<typeof updateReview>[1]) => {
     if (!review) return;
     setBusy(true);
@@ -177,12 +110,14 @@ export function ReviewsPage({
             </button>
             <h1>{t("Reviews")}</h1>
             <div>
-              <ReviewFilterMenu
-                filter={filter}
+              <ReviewFilters
+                filters={filters}
                 data={data}
-                onChange={setFilter}
+                items={baseItems}
+                onChange={setFilters}
+                filterBarHost={filterHost}
               />
-              <ReviewDisplayMenu display={display} onChange={setDisplay} />
+              <ReviewDisplayMenu display={display} view={view} onChange={setDisplay} />
             </div>
           </header>
           <nav className="reviews-tabs">
@@ -207,30 +142,35 @@ export function ReviewsPage({
               {t("Created")}
             </a>
           </nav>
+          <div className="review-filter-host" ref={setFilterHost}/>
           {visible.length ? (
             <div className="review-groups">
-              <button
-                aria-expanded={groupExpanded}
+              {groups.map(group => <section key={group.id}>
+              {display.grouping !== 'none' && <button
+                aria-expanded={!collapsedGroups.has(group.id)}
                 className="review-group-heading"
-                onClick={() => setGroupExpanded((value) => !value)}
+                onClick={() => setCollapsedGroups(current => { const next = new Set(current); if (next.has(group.id)) next.delete(group.id); else next.add(group.id); return next; })}
               >
-                {t(view === "created" ? "Created by you" : "Needs your review")}
+                {display.grouping === 'author' || display.grouping === 'repository' ? <span data-i18n-ignore>{group.label}</span> : t(group.label)}
+                <small>{group.items.length}</small>
                 <ChevronDown />
-              </button>
-              {groupExpanded &&
-                visible.map((item) => (
+              </button>}
+              {(display.grouping === 'none' || !collapsedGroups.has(group.id)) &&
+                group.items.map((item) => (
                   <ReviewRow
                     key={item.id}
                     item={item}
                     active={review?.id === item.id}
                     data={data}
+                    display={display}
                     onOpen={() =>
                       onNavigate(reviewPath(data.workspace.urlKey, item))
                     }
                   />
                 ))}
+              </section>)}
             </div>
-          ) : !data.integrationConnections.some(
+          ) : !filters.length && !data.integrationConnections.some(
               (item) =>
                 item.provider === "github" || item.provider === "gitlab",
             ) ? (
@@ -242,7 +182,7 @@ export function ReviewsPage({
                 )
               }
             />
-          ) : null}
+          ) : <div className="reviews-filter-empty"><strong>{t('No reviews matching the filters')}</strong>{filters.length > 0 && <button type="button" onClick={() => setFilters([])}>{t('Clear filters')}</button>}</div>}
         </section>
       )}
       <section className="reviews-detail-pane">
@@ -314,19 +254,26 @@ function ReviewRow({
   item,
   active,
   onOpen,
+  display,
 }: {
   item: CodeReview;
   active: boolean;
   data: BootstrapData;
   onOpen: () => void;
+  display: ReviewDisplay;
 }) {
   const { t } = useI18n();
   return (
-    <button className={`review-row ${active ? "active" : ""}`} onClick={onOpen}>
+    <button className={`review-row review-list-row ${active ? "active" : ""}`} onClick={onOpen}>
       <ReviewProviderIcon provider={item.provider} />
-      <span data-i18n-ignore>{item.title}</span>
-      {item.quickToReview && <Sparkles aria-label={t("Quick to review")} />}
-      <small>{relative(item.updatedAt, t)}</small>
+      <span className="review-list-row__content"><span data-i18n-ignore>{item.title}</span>{display.properties.some(id => ['repository', 'id', 'status'].includes(id)) && <small className="review-list-row__metadata">
+        {display.properties.includes('repository') && <span data-i18n-ignore>{item.repositoryName}</span>}
+        {display.properties.includes('id') && <span data-i18n-ignore>{reviewProviderIdentifier(item)}</span>}
+        {display.properties.includes('status') && <span>{t(reviewStatusLabels[reviewStatus(item)])}</span>}
+      </small>}</span>
+      {display.properties.includes('quick') && item.quickToReview && <Sparkles aria-label={t("Quick to review")} />}
+      {display.properties.includes('author') && <PersonHover person={item.author}><span><UserAvatar name={item.author.displayName} avatarUrl={item.author.avatarUrl} className="review-filter-avatar"/></span></PersonHover>}
+      {display.properties.includes('opened') && <time dateTime={item.createdAt} title={new Date(item.createdAt).toLocaleString()}>{relative(item.createdAt, t)}</time>}
     </button>
   );
 }
@@ -1050,321 +997,6 @@ function ReviewSidebar({
         ))}
       </section>
     </aside>
-  );
-}
-
-function ReviewFilterMenu({
-  filter,
-  data,
-  onChange,
-}: {
-  filter: FilterState;
-  data: BootstrapData;
-  onChange: (value: FilterState) => void;
-}) {
-  const { t } = useI18n(),
-    [open, setOpen] = useState(false),
-    [view, setView] = useState<
-      "fields" | "status" | "author" | "reviewer" | "repository"
-    >("fields");
-  const repositories = [
-    ...new Set(
-      data.reviews.map(
-        (item) => `${item.repositoryOwner}/${item.repositoryName}`,
-      ),
-    ),
-  ];
-  const users =
-    view === "author"
-      ? data.users.filter((user) =>
-          data.reviews.some((item) => item.author.id === user.id),
-        )
-      : data.users;
-  const options =
-    view === "fields"
-      ? [
-          { id: "status", label: "Status" },
-          { id: "author", label: "Author" },
-          { id: "reviewer", label: "Reviewers" },
-          { id: "repository", label: "Repository name" },
-          { id: "quick", label: "Quick to review" },
-          { id: "missingIssue", label: "Missing issue" },
-        ]
-      : view === "status"
-        ? ["open", "inReview", "approved", "merged", "closed"].map((id) => ({
-            id,
-            label: statusLabel(id),
-          }))
-        : view === "repository"
-          ? repositories.map((id) => ({ id, label: id }))
-          : users.map((user) => ({
-              id: user.id,
-              label: user.displayName,
-              keywords: `${user.name} ${user.email}`,
-            }));
-  const back = () => {
-    command.onQueryChange("");
-    setView("fields");
-  };
-  const select = (key: keyof FilterState, value: string | boolean) => {
-    onChange({ ...filter, [key]: filter[key] === value ? undefined : value });
-    back();
-  };
-  const command = usePropertyCommand({
-    closeOnSelect: false,
-    open,
-    options,
-    resetKey: view,
-    selectedIds: [],
-    onOpenChange: setOpen,
-    onSelect: (option) => {
-      if (view === "fields") {
-        if (option.id === "quick" || option.id === "missingIssue")
-          select(option.id, true);
-        else setView(option.id as typeof view);
-      } else {
-        const key =
-          view === "status"
-            ? "status"
-            : view === "author"
-              ? "author"
-              : view === "reviewer"
-                ? "reviewer"
-                : "repository";
-        select(key, option.id);
-      }
-    },
-  });
-  return (
-    <Popover.Root
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) back();
-      }}
-    >
-      <Popover.Trigger asChild>
-        <button className="reviews-icon-button" aria-label={t("Add filter")}>
-          <Filter />
-        </button>
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content data-flow-motion="floating"
-          className="reviews-command"
-          align="end"
-          sideOffset={5}
-          onKeyDown={command.onKeyDown}
-          onEscapeKeyDown={(event) => {
-            if (view !== "fields") {
-              event.preventDefault();
-              back();
-            }
-          }}
-        >
-          <label>
-            {view !== "fields" ? (
-              <button aria-label={t("Back")} onClick={back}>
-                ‹
-              </button>
-            ) : (
-              <Search />
-            )}
-            <input
-              ref={command.inputRef}
-              key={view}
-              autoFocus
-              aria-label={t(view === "fields" ? "Add Filter…" : "Filter…")}
-              placeholder={t(view === "fields" ? "Add Filter…" : "Filter…")}
-              value={command.query}
-              onChange={(event) => command.onQueryChange(event.target.value)}
-            />
-            {view === "fields" && <kbd>F</kbd>}
-          </label>
-          <div role="listbox">
-            {command.filteredOptions.map((option) => {
-              const selected =
-                option.id === "quick"
-                  ? filter.quick
-                  : option.id === "missingIssue"
-                    ? filter.missingIssue
-                    : view === "fields"
-                      ? false
-                      : filter[view] === option.id;
-              return (
-                <button
-                  role="option"
-                  aria-selected={command.activeId === option.id}
-                  aria-checked={selected || undefined}
-                  key={option.id}
-                  onPointerMove={() => command.setActiveId(option.id)}
-                  onFocus={() => command.setActiveId(option.id)}
-                  onClick={() => command.choose(option)}
-                >
-                  {option.id === "quick" ? (
-                    <Sparkles />
-                  ) : option.id === "missingIssue" ? (
-                    <Link2 />
-                  ) : (
-                    <CircleDot />
-                  )}
-                  <span
-                    data-i18n-ignore={
-                      (view !== "fields" && view !== "status") || undefined
-                    }
-                  >
-                    {view === "status" || view === "fields"
-                      ? t(option.label)
-                      : option.label}
-                  </span>
-                  {view === "fields" &&
-                  option.id !== "quick" &&
-                  option.id !== "missingIssue" ? (
-                    <ChevronRight />
-                  ) : selected ? (
-                    <Check />
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
-  );
-}
-
-function ReviewDisplayMenu({
-  display,
-  onChange,
-}: {
-  display: Display;
-  onChange: (value: Display) => void;
-}) {
-  const { t } = useI18n();
-  const toggle = (property: string) =>
-    onChange({
-      ...display,
-      properties: display.properties.includes(property)
-        ? display.properties.filter((item) => item !== property)
-        : [...display.properties, property],
-    });
-  return (
-    <Popover.Root>
-      <Popover.Trigger asChild>
-        <button
-          className="reviews-icon-button"
-          aria-label={t("Display options")}
-        >
-          <Settings2 />
-        </button>
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content data-flow-motion="floating" className="reviews-display" align="end" sideOffset={5}>
-          <SelectLine
-            label={t("Grouping")}
-            value={display.grouping}
-            options={["focus", "status", "repository"]}
-            onChange={(grouping) =>
-              onChange({
-                ...display,
-                grouping: grouping as Display["grouping"],
-              })
-            }
-          />
-          <SelectLine
-            label={t("Ordering")}
-            value={display.ordering}
-            options={["importance", "updated", "opened"]}
-            onChange={(ordering) =>
-              onChange({
-                ...display,
-                ordering: ordering as Display["ordering"],
-              })
-            }
-          />
-          <SelectLine
-            label={t("Closed reviews")}
-            value={display.closed}
-            options={["day", "week", "month", "all"]}
-            onChange={(closed) =>
-              onChange({ ...display, closed: closed as Display["closed"] })
-            }
-          />
-          <CheckLine
-            label={t("Show drafts")}
-            checked={display.showDrafts}
-            onChange={(showDrafts) => onChange({ ...display, showDrafts })}
-          />
-          <CheckLine
-            label={t("Show GitHub team reviews")}
-            checked={display.showTeams}
-            onChange={(showTeams) => onChange({ ...display, showTeams })}
-          />
-          <h4>{t("Display properties")}</h4>
-          <div className="review-property-pills">
-            {["repository", "id", "author", "opened", "status", "quick"].map(
-              (value) => (
-                <button
-                  aria-pressed={display.properties.includes(value)}
-                  key={value}
-                  onClick={() => toggle(value)}
-                >
-                  {t(
-                    value === "quick"
-                      ? "Quick to review"
-                      : value[0].toUpperCase() + value.slice(1),
-                  )}
-                </button>
-              ),
-            )}
-          </div>
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
-  );
-}
-
-function SelectLine({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: string[];
-  onChange: (value: string) => void;
-}) {
-  const { t } = useI18n();
-  return (
-    <label className="review-select-line">
-      <span>{label}</span>
-      <SelectControl
-        label={label}
-        value={value}
-        onChange={onChange}
-        options={options.map((option) => ({
-          value: option,
-          label: t(option[0].toUpperCase() + option.slice(1)),
-        }))}
-      />
-    </label>
-  );
-}
-function CheckLine({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (value: boolean) => void;
-}) {
-  return (
-    <label className="review-check-line">
-      <span>{label}</span>
-      <Toggle checked={checked} label={label} onChange={onChange} />
-    </label>
   );
 }
 

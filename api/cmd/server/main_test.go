@@ -85,12 +85,24 @@ func TestTeamCreationHierarchyCopyAndDelete(t *testing.T) {
 	source := bootstrap.Teams[0]
 	requestJSON[domain.TeamSettings](t, handler, http.MethodPatch, "/api/teams/"+source.ID+"/settings", map[string]any{"timezone": "Asia/Shanghai", "progressOrder": "last"}, http.StatusOK)
 	parent := requestJSON[domain.Team](t, handler, http.MethodPost, "/api/workspaces/test-workspace/teams", map[string]any{"name": "Platform", "key": "PLT", "private": true, "copyFromTeamId": source.ID, "timezone": "Europe/London"}, http.StatusCreated)
+	if parent.CreatedAt == nil || parent.UpdatedAt == nil || !parent.CreatedAt.Equal(*parent.UpdatedAt) {
+		t.Fatal("new team must have matching creation and update timestamps")
+	}
+	createdAt := *parent.CreatedAt
 	parent = requestJSON[domain.Team](t, handler, http.MethodPatch, "/api/workspaces/test-workspace/teams/"+parent.ID, map[string]any{"icon": "🚀", "color": "#d758fc"}, http.StatusOK)
+	if parent.CreatedAt == nil || !parent.CreatedAt.Equal(createdAt) || parent.UpdatedAt == nil || !parent.UpdatedAt.After(createdAt) {
+		t.Fatal("team edits must advance updatedAt without changing createdAt")
+	}
 	if parent.Icon != "🚀" || parent.Color != "#d758fc" {
 		t.Fatalf("team visual settings were not persisted: %#v", parent)
 	}
 	child := requestJSON[domain.Team](t, handler, http.MethodPost, "/api/workspaces/test-workspace/teams", map[string]any{"name": "Runtime", "key": "RUN", "parentTeamId": parent.ID}, http.StatusCreated)
 	afterCreate := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if !slices.ContainsFunc(afterCreate.Teams, func(team domain.Team) bool {
+		return team.ID == parent.ID && team.CreatedAt != nil && team.CreatedAt.Equal(createdAt) && team.UpdatedAt != nil && team.UpdatedAt.Equal(*parent.UpdatedAt)
+	}) {
+		t.Fatal("team directory timestamps were not persisted in bootstrap")
+	}
 	if afterCreate.TeamSettings[parent.ID].Timezone != "Europe/London" || afterCreate.TeamSettings[parent.ID].ProgressOrder != "last" || afterCreate.TeamSettings[child.ID].ParentTeamID != parent.ID {
 		t.Fatalf("team settings were not copied: parent=%#v child=%#v", afterCreate.TeamSettings[parent.ID], afterCreate.TeamSettings[child.ID])
 	}

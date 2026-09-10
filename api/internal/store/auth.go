@@ -950,6 +950,11 @@ func (s *SQLiteStore) AcceptInvitation(ctx context.Context, token, userID string
 		if _, err = tx.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`, workspaceID, teamID, userID, teamRole, now.Format(time.RFC3339Nano)); err != nil {
 			return domain.WorkspaceMembership{}, err
 		}
+		if metadata, _, ok := s.workspaceByID(workspaceID); ok {
+			if err := syncTeamAncestorMembers(ctx, tx, metadata, teamID, userID); err != nil {
+				return domain.WorkspaceMembership{}, err
+			}
+		}
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE workspace_invitations SET status='accepted',accepted_at=? WHERE id=?`, now.Format(time.RFC3339Nano), id); err != nil {
 		return domain.WorkspaceMembership{}, err
@@ -1122,10 +1127,16 @@ func (s *SQLiteStore) SetTeamMembership(ctx context.Context, workspaceID, teamID
 	if !ok || !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) {
 		return ErrAuthForbidden
 	}
-	if _, status, err := s.WorkspaceRole(ctx, workspaceID, userID); err != nil || status != "active" {
+	workspaceRole, status, err := s.WorkspaceRole(ctx, workspaceID, userID)
+	if err != nil || status != "active" {
 		return ErrAuthForbidden
 	}
 	if !member {
+		for _, descendant := range domain.TeamSubtreeIDs(&data, []string{teamID}) {
+			if workspaceRole != "guest" && descendant != teamID && s.teamRoleDirect(ctx, workspaceID, descendant, userID) != "" {
+				return fmt.Errorf("leave sub-teams before leaving their parent team: %w", ErrAuthForbidden)
+			}
+		}
 		if direct := s.teamRoleDirect(ctx, workspaceID, teamID, userID); direct == "owner" {
 			var owners int
 			if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM team_memberships WHERE workspace_id=? AND team_id=? AND role='owner'`, workspaceID, teamID).Scan(&owners); err != nil {
@@ -1141,8 +1152,19 @@ func (s *SQLiteStore) SetTeamMembership(ctx context.Context, workspaceID, teamID
 		}
 		return s.cleanupTeamMemberData(ctx, workspaceKey, teamID, userID)
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT(workspace_id,team_id,user_id) DO UPDATE SET role=excluded.role`, workspaceID, teamID, userID, role, time.Now().UTC().Format(time.RFC3339Nano))
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	_, err = tx.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT(workspace_id,team_id,user_id) DO UPDATE SET role=excluded.role`, workspaceID, teamID, userID, role, time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return err
+	}
+	if err := syncTeamAncestorMembers(ctx, tx, data, teamID, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // cleanupTeamMemberData removes assignments and subscriptions that are no
@@ -1293,10 +1315,26 @@ func teamVisibleToUser(data domain.Bootstrap, teamID, userID, workspaceRole stri
 	if workspaceRole == "guest" {
 		return false
 	}
-	if access == "private" || access == "restricted" || strings.EqualFold(settings.MembershipRestriction, "members") || strings.EqualFold(settings.MembershipRestriction, "owners") {
+	if access == "private" || strings.EqualFold(settings.MembershipRestriction, "members") || strings.EqualFold(settings.MembershipRestriction, "owners") {
 		return false
 	}
-	return true
+	// A non-private child of a private team is restricted to that boundary's
+	// members; a public-looking child must not expose a private team's content.
+	seen = map[string]bool{teamID: true}
+	for parent := settings.ParentTeamID; parent != "" && !seen[parent]; parent = data.TeamSettings[parent].ParentTeamID {
+		seen[parent] = true
+		parentSettings := data.TeamSettings[parent]
+		private := strings.EqualFold(parentSettings.Access, "private") || strings.EqualFold(parentSettings.Access, "restricted") && parentSettings.ParentTeamID == ""
+		for _, team := range data.Teams {
+			if team.ID == parent && team.Private {
+				private = true
+			}
+		}
+		if private {
+			return slices.ContainsFunc(data.TeamMembers, func(member domain.TeamMember) bool { return member.TeamID == parent && member.UserID == userID })
+		}
+	}
+	return access != "restricted"
 }
 
 func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest bool) {
@@ -1487,7 +1525,12 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 	// exclusively to hidden resources so their title and update history can be
 	// removed as well.
 	hiddenInitiatives := map[string]bool{}
+	initiativeParents := domain.InitiativeParents(data)
 	for _, initiative := range data.Initiatives {
+		if initiative.LeadTeamID != "" && !allowed[initiative.LeadTeamID] {
+			hiddenInitiatives[initiative.ID] = true
+			continue
+		}
 		hasScopedResource := initiative.LeadTeamID != "" || len(initiative.ContributingTeamIDs) > 0 || len(initiative.ProjectIDs) > 0
 		if !hasScopedResource {
 			continue
@@ -1501,8 +1544,8 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 	}
 	for index := range data.Initiatives {
 		data.Initiatives[index].ProjectIDs = slices.DeleteFunc(data.Initiatives[index].ProjectIDs, func(id string) bool { return !visibleProjects[id] })
-		data.Initiatives[index].ParentInitiativeIDs = slices.DeleteFunc(data.Initiatives[index].ParentInitiativeIDs, func(id string) bool {
-			return !slices.ContainsFunc(data.Initiatives, func(item domain.Initiative) bool { return item.ID == id })
+		data.Initiatives[index].ParentInitiativeIDs = slices.DeleteFunc(initiativeParents[data.Initiatives[index].ID], func(id string) bool {
+			return hiddenInitiatives[id] || !slices.ContainsFunc(data.Initiatives, func(item domain.Initiative) bool { return item.ID == id })
 		})
 		if !allowed[data.Initiatives[index].LeadTeamID] {
 			data.Initiatives[index].LeadTeamID = ""

@@ -55,6 +55,22 @@ func (s *server) pagedPresence(r *http.Request, values []domain.Presence) ([]dom
 }
 
 func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent) (domain.RealtimeEvent, bool, error) {
+	if event.Type == "workspace_preferences.updated" {
+		metadata, ok := s.store.WorkspaceSettingsMetadata(workspaceKey(r))
+		if !ok {
+			return event, false, nil
+		}
+		if !s.authDisabled {
+			_, status, err := s.store.WorkspaceRole(r.Context(), metadata.Workspace.ID, authUser(r).ID)
+			if err != nil || status != "active" {
+				return event, false, err
+			}
+		}
+		// Clients refresh the small settings endpoint. Do not project unrelated
+		// entity collections or include arbitrary preference payloads in SSE.
+		event.Payload = json.RawMessage(`{"settingsChanged":true}`)
+		return event, true, nil
+	}
 	data, query, err := s.pagedRealtimeMetadata(r)
 	if err != nil {
 		return event, false, err

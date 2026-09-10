@@ -19,6 +19,9 @@ import { DEFAULT_PROJECTS_DISPLAY, type ProjectsDisplaySettings } from './projec
 import './projects-page.css'
 import { PersonHover } from '@/components/property/person-info'
 import { isPeopleProperty } from '@/lib/people'
+import { PersonPicker } from '@/components/issue/core-property-pickers'
+import { usePeopleDirectory } from '@/components/property/people-context'
+import { directoryPerson } from '@/lib/people'
 
 export type ProjectsView = {
   id: string
@@ -262,7 +265,19 @@ function ProjectsFilterMenu({ filterOptions = {}, onSelect, rootRef }: { filterO
   </div>
 }
 
-function ProjectFilterValues({ field, onSelect, options }: { field: string; onSelect: (option: ProjectFilterOption) => void; options: ProjectFilterOption[] }) {
+export function ProjectFilterValues({ field, onSelect, options }: { field: string; onSelect: (option: ProjectFilterOption) => void; options: ProjectFilterOption[] }) {
+  return isPeopleProperty(field) ? <ProjectPeopleFilterValues field={field} onSelect={onSelect} options={options}/> : <ProjectStandardFilterValues field={field} onSelect={onSelect} options={options}/>
+}
+function ProjectPeopleFilterValues({field,onSelect,options}:{field:string;onSelect:(option:ProjectFilterOption)=>void;options:ProjectFilterOption[]}) {
+  const directory=usePeopleDirectory()
+  const empty=options.find(option=>!option.id)
+  return <div className="lp-projects-filter__nested lp-projects-filter__people property-command-standard" role="dialog" aria-label={`${field} filters`}>
+    <PersonPicker embedded ariaLabel={`${field} filters`} label={field} emptyTriggerLabel={field} selectedId="__unselected-filter__" emptyOptionLabel={empty?.label} emptyOptionEnd={empty?.count===undefined?undefined:`${empty.count} ${empty.count===1?'project':'projects'}`} searchPlaceholder="Filter…" triggerClassName=""
+      people={options.filter(option=>option.id).map(option=>({...directoryPerson(directory.users,option.id),id:option.id,label:option.label,end:option.count===undefined?undefined:`${option.count} ${option.count===1?'project':'projects'}`}))}
+      onChange={id=>{const option=options.find(item=>item.id===id);if(option)onSelect(option)}}/>
+  </div>
+}
+function ProjectStandardFilterValues({ field, onSelect, options }: { field: string; onSelect: (option: ProjectFilterOption) => void; options: ProjectFilterOption[] }) {
   const command=usePropertyCommand({personOptions:isPeopleProperty(field),open:true,options,onOpenChange:()=>{},onSelect:option=>{const selected=options.find(item=>item.id===option.id);if(selected)onSelect(selected)}})
-  return <div aria-label={`${field} filters`} className="lp-projects-filter__nested" role="dialog"><div className="lp-projects-filter__search"><input ref={command.inputRef} aria-label="Filter…" autoFocus onChange={event=>command.onQueryChange(event.target.value)} onKeyDown={command.onKeyDown} placeholder="Filter…" value={command.query}/></div><div className="lp-projects-filter__values" role="listbox" onKeyDown={command.onKeyDown}>{command.filteredOptions.map(option=><PersonHover key={option.id} userId={isPeopleProperty(field)?option.id:undefined}><button aria-selected={command.activeId===option.id} onPointerMove={()=>command.setActiveId(option.id)} onFocus={()=>command.setActiveId(option.id)} onClick={()=>command.choose(option)} role="option" type="button"><span className="lp-projects-filter__checkbox"/><i style={{background:option.color??'#77777c'}}/><span>{option.label}</span>{option.count!==undefined&&<small>{option.count} {option.count===1?'project':'projects'}</small>}</button></PersonHover>)}{!command.filteredOptions.length&&<div className="lp-projects-filter__empty">No results</div>}</div></div>
+  return <div aria-label={`${field} filters`} className="lp-projects-filter__nested" role="dialog"><div className="lp-projects-filter__search"><input ref={command.inputRef} aria-label="Filter…" autoFocus onChange={event=>command.onQueryChange(event.target.value)} onKeyDown={command.onKeyDown} placeholder="Filter…" value={command.query}/></div><div className="lp-projects-filter__values" role="listbox" onKeyDown={command.onKeyDown}>{command.filteredOptions.map(option=><PersonHover key={option.id} userId={isPeopleProperty(field)?option.id:undefined}><button aria-selected={command.activeId===option.id} onPointerMove={()=>command.setActiveId(option.id)} onFocus={()=>command.setActiveId(option.id)} onClick={()=>command.choose(option)} role="option" type="button"><span className="lp-projects-filter__checkbox"/><i style={{background:option.color??'#77777c'}}/><span className="lp-projects-filter__value-label" title={option.label}>{option.label}</span>{option.count!==undefined&&<small>{option.count} {option.count===1?'project':'projects'}</small>}</button></PersonHover>)}{!command.filteredOptions.length&&<div className="lp-projects-filter__empty">No results</div>}</div></div>
 }

@@ -54,6 +54,9 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 		}
 	}
 	query.TeamIDs = splitQueryValues(r.URL.Query().Get("teamId"))
+	if len(query.TeamIDs) > 0 && r.URL.Query().Get("includeSubTeams") == "true" {
+		query.TeamIDs = domain.TeamSubtreeIDs(&data, query.TeamIDs)
+	}
 	query.ProjectIDs = splitQueryValues(r.URL.Query().Get("projectId"))
 	query.StateIDs = splitQueryValues(r.URL.Query().Get("stateId"))
 	if value, ok := r.URL.Query()["groupValue"]; ok {

@@ -447,9 +447,7 @@ Pulse summaries run at 09:00 in the member's first team's configured timezone (U
 
 Asks email addresses must reference enabled, DNS-verified team intake addresses. Production verification reads the `_flow-intake` TXT record; sending the displayed verification string alone is insufficient. Forward received messages through the existing token-authenticated email intake endpoint. Matching addresses create a linked Ask and issue in the address's team. Message IDs deduplicate delivery retries. Flow does not run an SMTP receiving server; configure your mail service to forward inbound messages.
 
-Integration directory entries distinguish configuration from completed authorization. Native provider setup verifies the upstream credential before showing Connected; remote MCP connectors use the server's OAuth flow. Credentials, endpoint configuration and provider permissions are required before a real connection can be established.
-
-See [Provider adapters](provider-adapters.md) for native integration operations, webhook routes and deployment requirements.
+The integration directory offers GitHub, GitLab and Slack through deployment-configured applications and OAuth/webhooks. A configuration record alone does not mean authorization succeeded. Provider-owned marketplace agents and connectors without a Flow installation/authorization flow are not offered. Custom MCP servers remain available through the standard MCP connection flow.
 
 ## Repository Actions
 

@@ -8,7 +8,6 @@ import {
 } from "react";
 import {
   Bot,
-  CalendarDays,
   Check,
   ChevronDown,
   CircleAlert,
@@ -20,7 +19,6 @@ import {
   LoaderCircle,
   Mail,
   MessageCircle,
-  MessageSquare,
   Monitor,
   ShieldCheck,
   Plus,
@@ -3430,18 +3428,6 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
       icon: <MessageCircle />,
     },
     {
-      provider: "google-calendar",
-      name: "Google Calendar",
-      description: p("Sync your calendar out-of-office status to Flow"),
-      icon: <CalendarDays />,
-    },
-    {
-      provider: "notion",
-      name: "Notion",
-      description: p("Preview issues, projects, and views within Notion"),
-      icon: <MessageSquare />,
-    },
-    {
       provider: "github",
       name: "GitHub",
       description: p(
@@ -3470,7 +3456,7 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
                 description={item.description}
               >
                 <Action onClick={() => onNavigate("integrations")}>
-                  {p(connection ? "Connected" : "Connect")}
+                  {p(connection?.status === 'connected' ? "Connected" : "Connect")}
                 </Action>
               </PersonalRow>
             </div>

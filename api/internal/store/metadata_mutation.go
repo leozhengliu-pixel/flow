@@ -10,6 +10,9 @@ import (
 // or discussion collections. A generic prefix match could silently lose data
 // when a new event introduces a cascade.
 func metadataOnlyMutation(event string, payload any) bool {
+	if event == "team.created" || event == "team.settings_updated" && metadataFieldsOnly(payload, "parentTeamId") {
+		return true
+	}
 	if event == "label.updated" && metadataFieldsOnly(payload, "name", "description", "color") {
 		return true
 	}
