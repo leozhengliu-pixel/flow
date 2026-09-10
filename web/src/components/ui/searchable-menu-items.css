@@ -1,0 +1,6 @@
+.searchable-menu-body{display:flex;flex-direction:column;min-height:0;max-height:inherit;overflow:hidden}
+.searchable-menu-search{flex:0 0 36.5px}
+.searchable-menu-scroll{min-height:0;max-height:min(320px,calc(100dvh - 64px),calc(var(--radix-popper-available-height,100dvh) - 48px));overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:6px 0;scroll-padding:6px 0}
+.searchable-menu-scroll [role=menuitem]{box-sizing:border-box;min-height:32px;max-height:32px;margin:0!important;overflow:hidden}
+.searchable-menu-scroll [role=menuitem]>span[data-menu-label]{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.searchable-menu-scroll [role=menuitem][data-menu-active]{background:var(--theme-control-hover);color:var(--theme-text-primary)}
