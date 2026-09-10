@@ -1182,3 +1182,10 @@
 .team-members-list>a>button:hover{background:var(--theme-surface-active)}
 .team-members-list>a>button svg{width:14px;height:14px}
 @media(max-width:760px){.team-members-directory>header,.team-members-list>a{min-width:760px}}
+.team-home-hierarchy{display:flex;flex-direction:column;gap:8px;margin-bottom:24px;min-width:0;font-size:13px}
+.team-home-hierarchy>span{color:var(--theme-text-secondary)}
+.team-home-hierarchy a,.team-home-hierarchy button{display:flex;align-items:center;gap:8px;min-width:0;padding:4px;border:0;border-radius:4px;background:transparent;color:var(--theme-text-primary);font:inherit;text-decoration:none;text-align:start}
+.team-home-hierarchy a:hover,.team-home-hierarchy button:hover{background:var(--theme-control-hover)}
+.team-home-hierarchy svg{flex:none}
+.team-home-hierarchy a>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.team-home-hierarchy small{color:var(--theme-text-secondary);margin-inline-start:auto}

@@ -52,7 +52,6 @@ type server struct {
 	workflowSchedulerStarted       atomic.Bool
 	deliverySchedulerStarted       atomic.Bool
 	settingsLastSweep              atomic.Int64
-	providerLastSweep              atomic.Int64
 	deliverySchedulerMu            sync.Mutex
 	deliverySchedulerCancel        context.CancelFunc
 	deliverySchedulerDone          chan struct{}
@@ -404,10 +403,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /scim/v2/{workspace}/Groups/{id}", s.scimGroup)
 	mux.HandleFunc("PUT /scim/v2/{workspace}/Groups/{id}", s.scimGroup)
 	mux.HandleFunc("DELETE /scim/v2/{workspace}/Groups/{id}", s.scimGroup)
-	mux.HandleFunc("PUT /api/integrations/{provider}", s.connectIntegration)
-	mux.HandleFunc("POST /api/integrations/{provider}/configure", s.configureProvider)
-	mux.HandleFunc("POST /api/integrations/{provider}/actions", s.providerAction)
-	mux.HandleFunc("GET /api/integrations/{provider}/jobs", s.listProviderJobs)
+	mux.HandleFunc("PUT /api/integrations/{provider}", supportedIntegrationHandler(s.connectIntegration))
 	mux.HandleFunc("GET /api/application-policies", s.listApplicationPolicies)
 	mux.HandleFunc("GET /api/application-policies/{id}/authorization", s.connectorAuthStatus)
 	mux.HandleFunc("POST /api/application-policies/{id}/oauth/start", s.startConnectorOAuth)
@@ -417,16 +413,16 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/connector-oauth/client-metadata", s.connectorClientMetadata)
 	mux.HandleFunc("PUT /api/application-policies", s.saveApplicationPolicy)
 	mux.HandleFunc("DELETE /api/application-policies/{id}", s.deleteApplicationPolicy)
-	mux.HandleFunc("POST /api/integrations/{provider}/oauth/start", s.startIntegrationOAuth)
-	mux.HandleFunc("GET /api/integrations/{provider}/oauth/callback", s.finishIntegrationOAuth)
-	mux.HandleFunc("POST /api/integrations/{provider}/{id}/oauth/refresh", s.refreshIntegrationOAuth)
-	mux.HandleFunc("DELETE /api/integrations/{provider}/{id}/oauth/token", s.revokeIntegrationOAuth)
-	mux.HandleFunc("DELETE /api/integrations/{provider}", s.disconnectIntegration)
-	mux.HandleFunc("POST /api/integrations/{provider}/webhook", s.codeWebhook)
-	mux.HandleFunc("POST /api/integrations/{provider}/test", s.testIntegrationConnection)
-	mux.HandleFunc("POST /api/integrations/{provider}/{id}/test", s.testIntegrationConnection)
-	mux.HandleFunc("PATCH /api/integrations/{provider}/{id}", s.updateIntegration)
-	mux.HandleFunc("DELETE /api/integrations/{provider}/{id}", s.disconnectIntegrationConnection)
+	mux.HandleFunc("POST /api/integrations/{provider}/oauth/start", supportedIntegrationHandler(s.startIntegrationOAuth))
+	mux.HandleFunc("GET /api/integrations/{provider}/oauth/callback", supportedIntegrationHandler(s.finishIntegrationOAuth))
+	mux.HandleFunc("POST /api/integrations/{provider}/{id}/oauth/refresh", supportedIntegrationHandler(s.refreshIntegrationOAuth))
+	mux.HandleFunc("DELETE /api/integrations/{provider}/{id}/oauth/token", supportedIntegrationHandler(s.revokeIntegrationOAuth))
+	mux.HandleFunc("DELETE /api/integrations/{provider}", supportedIntegrationHandler(s.disconnectIntegration))
+	mux.HandleFunc("POST /api/integrations/{provider}/webhook", supportedIntegrationHandler(s.codeWebhook))
+	mux.HandleFunc("POST /api/integrations/{provider}/test", supportedIntegrationHandler(s.testIntegrationConnection))
+	mux.HandleFunc("POST /api/integrations/{provider}/{id}/test", supportedIntegrationHandler(s.testIntegrationConnection))
+	mux.HandleFunc("PATCH /api/integrations/{provider}/{id}", supportedIntegrationHandler(s.updateIntegration))
+	mux.HandleFunc("DELETE /api/integrations/{provider}/{id}", supportedIntegrationHandler(s.disconnectIntegrationConnection))
 	mux.HandleFunc("POST /api/integration-deliveries", s.createIntegrationDelivery)
 	mux.HandleFunc("POST /api/integration-deliveries/{id}/retry", s.retryIntegrationDelivery)
 	mux.HandleFunc("POST /api/git-automations", s.upsertGitAutomation)
@@ -1040,6 +1036,9 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	visibleInitiative := func(id string) bool {
 		return slices.ContainsFunc(data.Initiatives, func(item domain.Initiative) bool { return item.ID == id })
 	}
+	for i := range data.Initiatives {
+		data.Initiatives[i].ParentInitiativeIDs = slices.DeleteFunc(data.Initiatives[i].ParentInitiativeIDs, func(id string) bool { return !visibleInitiative(id) })
+	}
 	data.InitiativeRelations = slices.DeleteFunc(data.InitiativeRelations, func(relation domain.InitiativeRelation) bool {
 		return !visibleInitiative(relation.InitiativeID) || !visibleInitiative(relation.RelatedInitiativeID)
 	})
@@ -1382,7 +1381,8 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 	if data, ok := s.store.WorkspaceMetadata(workspaceKey); ok {
 		persistedTeamMembers, _ = s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
 	}
-	team := domain.Team{ID: fmt.Sprintf("team_%d", time.Now().UnixNano()), Name: input.Name, Key: input.Key, Color: input.Color, Icon: input.Icon, Private: input.Private}
+	now := time.Now().UTC()
+	team := domain.Team{ID: fmt.Sprintf("team_%d", now.UnixNano()), Name: input.Name, Key: input.Key, Color: input.Color, Icon: input.Icon, Private: input.Private, CreatedAt: &now, UpdatedAt: &now}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey, "team.created", team.ID, input, func(data *domain.Bootstrap) error {
 		for _, existing := range data.Teams {
 			if strings.EqualFold(existing.Key, team.Key) {
@@ -1391,6 +1391,12 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.ParentTeamID != "" && !teamExists(data, input.ParentTeamID) || input.CopyFromTeamID != "" && !teamExists(data, input.CopyFromTeamID) {
 			return errInvalid
+		}
+		if err := domain.ValidateTeamParent(data, team.ID, input.ParentTeamID); err != nil {
+			return fmt.Errorf("%w: %s", errInvalid, err)
+		}
+		if input.ParentTeamID != "" && !s.authDisabled && !workspaceAdminRole(data.ViewerRole) {
+			return store.ErrAuthForbidden
 		}
 		if len(data.TeamMembers) == 0 && len(persistedTeamMembers) > 0 {
 			data.TeamMembers = slices.Clone(persistedTeamMembers)
@@ -1451,11 +1457,12 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 			}) {
 				data.TeamMembers = append(data.TeamMembers, domain.TeamMember{TeamID: team.ID, UserID: data.Viewer.ID, Role: "owner", JoinedAt: time.Now().UTC()})
 			}
+			domain.SyncTeamAncestorMembers(data)
 		}
 		return nil
 	})
 	if err == nil && !s.authDisabled {
-		data, _ := s.store.BootstrapFor(workspaceKey)
+		data, _ := s.store.WorkspaceMetadata(workspaceKey)
 		err = s.store.SetTeamMembership(r.Context(), data.Workspace.ID, team.ID, authUser(r).ID, "owner", true)
 	}
 	respondMutation(w, err, http.StatusCreated, team)
@@ -1519,6 +1526,8 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 					data.Teams[index].RetiredAt = nil
 				}
 			}
+			now := time.Now().UTC()
+			data.Teams[index].UpdatedAt = &now
 			updated = data.Teams[index]
 			if input.Private != nil && *input.Private {
 				memberIDs := map[string]bool{}
@@ -2791,6 +2800,12 @@ func (s *server) deleteInitiative(w http.ResponseWriter, r *http.Request) {
 			data.Projects[i].Initiatives = removeString(data.Projects[i].Initiatives, id)
 		}
 		data.Initiatives = slices.Delete(data.Initiatives, index, index+1)
+		for i := range data.Initiatives {
+			data.Initiatives[i].ParentInitiativeIDs = removeString(data.Initiatives[i].ParentInitiativeIDs, id)
+		}
+		data.InitiativeRelations = slices.DeleteFunc(data.InitiativeRelations, func(relation domain.InitiativeRelation) bool {
+			return relation.InitiativeID == id || relation.RelatedInitiativeID == id
+		})
 		removeResourcePreferences(data, "initiative", removed.ID)
 		data.Drafts = slices.DeleteFunc(data.Drafts, func(item domain.Draft) bool { return draftBelongsToResource(item, "initiative", id) })
 		delete(data.InitiativeUpdates, id)
@@ -5492,6 +5507,9 @@ func applyInitiativeUpdate(data *domain.Bootstrap, initiative *domain.Initiative
 		initiative.LabelIDs = slices.Clone(*input.LabelIDs)
 	}
 	if input.ParentInitiativeIDs != nil {
+		if domain.InitiativeParentCycle(domain.InitiativeParents(data), initiative.ID, *input.ParentInitiativeIDs) {
+			return fmt.Errorf("%w: initiative hierarchy cannot contain a cycle", errInvalid)
+		}
 		for _, id := range *input.ParentInitiativeIDs {
 			if id == initiative.ID || !slices.ContainsFunc(data.Initiatives, func(item domain.Initiative) bool { return item.ID == id }) {
 				return errInvalid

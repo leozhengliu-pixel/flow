@@ -15,7 +15,7 @@ func EmptyWorkspace(name, urlKey, region string, viewer domain.User) domain.Boot
 	now := time.Now().UTC()
 	key := defaultTeamKey(urlKey)
 	workspaceID := fmt.Sprintf("workspace_%d", now.UnixNano())
-	team := domain.Team{ID: fmt.Sprintf("team_%d", now.UnixNano()), Name: name, Key: key, Color: "#5E6AD2"}
+	team := domain.Team{ID: fmt.Sprintf("team_%d", now.UnixNano()), Name: name, Key: key, Color: "#5E6AD2", CreatedAt: &now, UpdatedAt: &now}
 	data := domain.Bootstrap{
 		Workspace: domain.Workspace{ID: workspaceID, Name: name, URLKey: urlKey, Color: "#5E6AD2", Region: region, CreatedAt: now},
 		Viewer:    viewer, Users: []domain.User{viewer}, Teams: []domain.Team{team}, Customers: []domain.Customer{}, States: canonicalWorkflowStates(), Labels: []domain.IssueLabel{}, LabelGroups: []domain.LabelGroup{},

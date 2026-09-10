@@ -1,19 +1,24 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Popover from "@radix-ui/react-popover";
 import {
-  ArrowDownNarrowWide,
+  ArrowDownWideNarrow,
+  ArrowUpNarrowWide,
   Check,
   ChevronDown,
   ChevronRight,
   Search,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { PersonHover } from '@/components/property/person-info';
+import type { User } from '@/types/flow';
 
 export interface DirectoryFilterChoice {
   id: string;
   label: string;
   meta?: string;
   icon?: ReactNode;
+  keywords?: string;
+  person?: User;
 }
 
 export interface DirectoryFilterGroup {
@@ -32,16 +37,41 @@ export function DirectoryFilterMenu({
   onAdvanced,
   onChoice,
   onDirect,
+  triggerNode,
+  showAdvanced = true,
+  menuClassName = '',
+  triggerClassName = 'workspace-directory__icon-button',
+  open: controlledOpen,
+  onOpenChange,
 }: {
   groups: DirectoryFilterGroup[];
   selected: Record<string, Set<string>>;
   trigger?: "icon" | "add" | "advanced";
-  onAdvanced: () => void;
+  onAdvanced?: () => void;
   onChoice: (groupId: string, choiceId: string, checked: boolean) => void;
   onDirect?: (groupId: string) => void;
+  triggerNode?: ReactNode;
+  showAdvanced?: boolean;
+  menuClassName?: string;
+  triggerClassName?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
+  useEffect(() => {
+    if (trigger !== 'icon' || triggerNode) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.key.toLowerCase() !== 'f') return;
+      if ((event.target as HTMLElement | null)?.closest('input, textarea, select, [contenteditable="true"], [role="textbox"], [role="dialog"], [role="menu"]')) return;
+      event.preventDefault();
+      setMenuOpen(true);
+      onOpenChange?.(true);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [trigger, triggerNode, onOpenChange]);
   const filteredGroups = useMemo(
     () =>
       groups.filter((group) =>
@@ -51,7 +81,10 @@ export function DirectoryFilterMenu({
   );
   return (
     <DropdownMenu.Root
+      open={controlledOpen ?? menuOpen}
       onOpenChange={(open) => {
+        setMenuOpen(open);
+        onOpenChange?.(open);
         if (!open) {
           setQuery("");
           setActiveGroup(null);
@@ -59,10 +92,11 @@ export function DirectoryFilterMenu({
       }}
     >
       <DropdownMenu.Trigger asChild>
-        {trigger === "icon" ? (
+        {triggerNode ?? (trigger === "icon" ? (
           <button
             aria-label="Add filter"
-            className="workspace-directory__icon-button"
+            aria-keyshortcuts="F"
+            className={triggerClassName}
             type="button"
           >
             <FlowFilterIcon />
@@ -77,17 +111,18 @@ export function DirectoryFilterMenu({
           </button>
         ) : (
           <button aria-label="Add filter" className="workspace-advanced-filter-add" type="button">+&nbsp; Filter</button>
-        )}
+        ))}
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content data-flow-motion="floating"
           align="end"
-          className="workspace-directory-filter-menu"
+          className={`workspace-directory-filter-menu ${menuClassName}`}
           sideOffset={3.5}
+          collisionPadding={8}
         >
-          <DirectoryFilterSearch autoFocus label="Add Filter…" query={query} shortcut="F" onQuery={setQuery}/>
+          <DirectoryFilterSearch autoFocus label="Add Filter…" query={query} shortcut={trigger === 'icon' && !triggerNode ? 'F' : undefined} onQuery={setQuery}/>
           <div className="workspace-directory-filter-menu__items">
-            {!query && (
+            {!query && showAdvanced && onAdvanced && (
               <>
                 <DropdownMenu.Item
                   className="workspace-directory-filter-menu__advanced"
@@ -106,7 +141,7 @@ export function DirectoryFilterMenu({
                 key={group.id}
                 open={activeGroup === group.id}
                 onOpen={() => setActiveGroup(group.id)}
-                onPointerAway={() => setActiveGroup(null)}
+                onPointerAway={() => setActiveGroup(current => current === group.id ? null : current)}
                 onChoice={onChoice}
                 onDirect={onDirect}
                 selected={selected[group.id] ?? new Set()}
@@ -143,7 +178,7 @@ function FilterGroup({
 }) {
   const [query, setQuery] = useState("");
   const choices = (group.choices ?? []).filter((choice) =>
-    choice.label.toLowerCase().includes(query.trim().toLowerCase()),
+    `${choice.label} ${choice.keywords ?? ''}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
   );
   useEffect(() => {
     if (!open) setQuery("");
@@ -154,7 +189,7 @@ function FilterGroup({
       {group.choices ? (
         <DropdownMenu.Sub
           open={open}
-          onOpenChange={(nextOpen) => nextOpen && onOpen()}
+          onOpenChange={(nextOpen) => nextOpen ? onOpen() : onPointerAway()}
         >
           <DropdownMenu.SubTrigger className="workspace-directory-filter-menu__item">
             {group.icon}
@@ -165,6 +200,7 @@ function FilterGroup({
             <DropdownMenu.SubContent data-flow-motion="floating"
               className="workspace-directory-filter-submenu"
               sideOffset={5}
+              collisionPadding={8}
             >
               <DirectoryFilterSearch label="Filter…" query={query} submenu onQuery={setQuery}/>
               <div className="workspace-directory-filter-menu__items">
@@ -176,12 +212,12 @@ function FilterGroup({
                       onSelect={() => onChoice(group.id, choice.id, true)}
                     >
                       <DirectoryChoiceContent choice={choice}/>
+                      {selected.has(choice.id) && <Check size={14}/>}
                     </DropdownMenu.Item>
                   ) : (
-                    <DropdownMenu.CheckboxItem
+                    <PersonHover person={choice.person} key={choice.id}><DropdownMenu.CheckboxItem
                       checked={selected.has(choice.id)}
                       className="workspace-directory-filter-menu__choice"
-                      key={choice.id}
                       onCheckedChange={(checked) =>
                         onChoice(group.id, choice.id, checked === true)
                       }
@@ -191,9 +227,10 @@ function FilterGroup({
                         {selected.has(choice.id) && <Check />}
                       </span>
                       <DirectoryChoiceContent choice={choice}/>
-                    </DropdownMenu.CheckboxItem>
+                    </DropdownMenu.CheckboxItem></PersonHover>
                   ),
                 )}
+                {!choices.length && <div className="workspace-directory-filter-menu__none">No results</div>}
               </div>
             </DropdownMenu.SubContent>
           </DropdownMenu.Portal>
@@ -213,7 +250,13 @@ function FilterGroup({
 }
 
 function DirectoryFilterSearch({ autoFocus = false, label, onQuery, query, shortcut, submenu = false }: { autoFocus?: boolean; label: string; onQuery: (value: string) => void; query: string; shortcut?: string; submenu?: boolean }) {
-  return <label className={`workspace-directory-filter-menu__search${submenu ? ' is-submenu' : ''}`}><Search/><input aria-label={label} autoFocus={autoFocus} onChange={event => onQuery(event.target.value)} onKeyDown={event => event.stopPropagation()} placeholder={label} value={query}/>{shortcut && <kbd>{shortcut}</kbd>}</label>
+  return <label className={`workspace-directory-filter-menu__search${submenu ? ' is-submenu' : ''}`}><Search/><input aria-label={label} autoFocus={autoFocus} onChange={event => onQuery(event.target.value)} onKeyDown={event => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault(); event.stopPropagation();
+      const items = event.currentTarget.closest('[role="menu"]')?.querySelectorAll<HTMLElement>('[role^="menuitem"]');
+      items?.[event.key === 'ArrowDown' ? 0 : items.length - 1]?.focus();
+    } else if (!['Escape', 'Tab'].includes(event.key)) event.stopPropagation();
+  }} placeholder={label} value={query}/>{shortcut && <kbd>{shortcut}</kbd>}</label>
 }
 
 function DirectoryChoiceContent({ choice }: { choice: DirectoryFilterChoice }) {
@@ -274,13 +317,14 @@ export function DirectoryDisplayMenu<
           <div className="workspace-directory-display-menu__ordering">
             <span>Ordering</span>
             <button
-              aria-label="Direction"
+              aria-label={descending ? 'Sort ascending' : 'Sort descending'}
+              title={descending ? 'Descending' : 'Ascending'}
               className="workspace-directory-display-menu__direction"
               data-descending={descending}
               onClick={onDirection}
               type="button"
             >
-              <ArrowDownNarrowWide />
+              {descending ? <ArrowDownWideNarrow /> : <ArrowUpNarrowWide />}
             </button>
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>

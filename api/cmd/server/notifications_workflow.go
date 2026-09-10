@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 var teamIdentifierPattern = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,4}$`)
@@ -701,8 +702,11 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 			settings.ShowInitiatives = *input.ShowInitiatives
 		}
 		if input.ParentTeamID != nil {
-			if *input.ParentTeamID == teamID || (*input.ParentTeamID != "" && (!teamExists(data, *input.ParentTeamID) || teamParentCreatesCycle(data, teamID, *input.ParentTeamID))) {
-				return errInvalid
+			if !s.authDisabled && !workspaceAdminRole(data.ViewerRole) {
+				return store.ErrAuthForbidden
+			}
+			if err := domain.ValidateTeamParent(data, teamID, *input.ParentTeamID); err != nil {
+				return fmt.Errorf("%w: %s", errInvalid, err)
 			}
 			settings.ParentTeamID = *input.ParentTeamID
 		}
@@ -727,6 +731,15 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 			previousAccess = strings.ToLower(strings.TrimSpace(previous.Access))
 		}
 		data.TeamSettings[teamID] = settings
+		if input.ParentTeamID != nil && s.authDisabled {
+			domain.SyncTeamAncestorMembers(data)
+		}
+		for index := range data.Teams {
+			if data.Teams[index].ID == teamID {
+				now := time.Now().UTC()
+				data.Teams[index].UpdatedAt = &now
+			}
+		}
 		if strings.EqualFold(settings.Access, "private") && previousAccess != "private" {
 			memberIDs := map[string]bool{}
 			for _, member := range data.TeamMembers {

@@ -1827,5 +1827,5 @@ function slug(value: string) {
       .slice(0, 80) || "issue"
   );
 }
-export type IntegrationProvider = 'github'|'gitlab'|'notion'|'intercom'|'sentry'|'figma'|'google-calendar'|'cursor'|'codex'|'zapier';
-const INTEGRATION_PROVIDERS:IntegrationProvider[]=['github','gitlab','notion','intercom','sentry','figma','google-calendar','cursor','codex','zapier'];
+export type IntegrationProvider = 'github'|'gitlab';
+const INTEGRATION_PROVIDERS:IntegrationProvider[]=['github','gitlab'];

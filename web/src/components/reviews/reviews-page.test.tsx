@@ -1,6 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render as renderUI, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from 'react-router-dom';
+import type { ReactNode } from 'react';
 import userEvent from "@testing-library/user-event";
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "@/i18n/i18n";
 import { makeBootstrap, viewer, teammate } from "@/test/fixtures";
@@ -17,6 +19,8 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 }));
 
 import { ReviewsPage } from "./reviews-page";
+const render = (ui: ReactNode) => renderUI(<MemoryRouter>{ui}</MemoryRouter>);
+beforeEach(() => localStorage.clear());
 
 const review: CodeReview = {
   id: "review-1",
@@ -289,4 +293,54 @@ it("keeps a review comment available when posting fails", async () => {
   await user.click(screen.getByRole("button", { name: "Submit comment" }));
   await waitFor(() => expect(api.commentOnReview).toHaveBeenCalledWith(review.id, "Please check the migration"));
   expect(comment).toHaveValue("Please check the migration");
+});
+
+function renderReviewList(reviews: CodeReview[], view: 'for-you' | 'created' = 'for-you') {
+  return render(<I18nProvider><ReviewsPage data={makeBootstrap({ viewer, users: [viewer, teammate], reviews, teamMembers: [], userSettings: {}, integrationConnections: [{ id: 'github', provider: 'github' }] as never[] })} view={view} onNavigate={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)} onOpenSidebar={vi.fn()}/></I18nProvider>);
+}
+
+it('opens filter submenus on hover, supports multiple statuses, and clears actual list filters', async () => {
+  const user = userEvent.setup({ skipHover: true });
+  renderReviewList([review, { ...review, id: 'approved', title: 'Approved change', status: 'approved' }, { ...review, id: 'draft', title: 'Draft change', draft: true }]);
+  await user.click(screen.getByRole('button', { name: 'Add filter' }));
+  await user.hover(screen.getByRole('menuitem', { name: 'Status' }));
+  await user.click(await screen.findByRole('menuitemcheckbox', { name: /^Open/ }));
+  await user.click(screen.getByRole('menuitemcheckbox', { name: /^Approved/ }));
+  await user.keyboard('{Escape}{Escape}');
+  expect(document.querySelectorAll('.review-list-row')).toHaveLength(2);
+  expect(screen.queryByText('Draft change')).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Clear all filters' }));
+  expect(document.querySelectorAll('.review-list-row')).toHaveLength(3);
+});
+
+it('applies display properties, grouping, closed range, and resets view defaults', async () => {
+  const user = userEvent.setup();
+  renderReviewList([review, { ...review, id: 'draft', title: 'Draft change', draft: true }]);
+  expect(document.querySelector('.review-list-row__metadata')).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Display options' }));
+  await user.click(screen.getByRole('button', { name: 'ID' }));
+  expect(document.querySelector('.review-list-row__metadata')).toHaveTextContent('#33');
+  await user.click(screen.getByRole('checkbox', { name: 'Show drafts' }));
+  expect(document.querySelectorAll('.review-list-row')).toHaveLength(1);
+  await user.click(screen.getByRole('combobox', { name: 'Grouping' }));
+  await user.click(screen.getByRole('option', { name: 'No grouping' }));
+  expect(document.querySelector('.review-group-heading')).not.toBeInTheDocument();
+  expect(screen.getByRole('combobox', { name: 'Ordering' })).toHaveTextContent('Opened');
+  await user.click(screen.getByRole('combobox', { name: 'Closed reviews' }));
+  expect(screen.getByRole('option', { name: 'None' })).toBeInTheDocument();
+  await user.click(screen.getByRole('option', { name: 'None' }));
+  await user.click(screen.getByRole('button', { name: 'Reset to view default' }));
+  expect(document.querySelectorAll('.review-list-row')).toHaveLength(2);
+  expect(screen.getByRole('combobox', { name: 'Grouping' })).toHaveTextContent('Focus');
+  expect(document.querySelector('.review-list-row__metadata')).not.toBeInTheDocument();
+});
+
+it('uses Created view defaults and omits Focus and GitHub team review controls', async () => {
+  const user = userEvent.setup();
+  renderReviewList([{ ...review, author: viewer }], 'created');
+  await user.click(screen.getByRole('button', { name: 'Display options' }));
+  expect(screen.queryByRole('checkbox', { name: 'Show GitHub team reviews' })).not.toBeInTheDocument();
+  expect(screen.getByRole('combobox', { name: 'Closed reviews' })).toHaveTextContent('Past week');
+  await user.click(screen.getByRole('combobox', { name: 'Grouping' }));
+  expect(screen.queryByRole('option', { name: 'Focus' })).not.toBeInTheDocument();
 });

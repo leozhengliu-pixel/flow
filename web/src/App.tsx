@@ -138,6 +138,7 @@ import type {
 import { deriveResourceCounts } from "@/lib/resource-counts";
 import { Sidebar, type PageId } from "@/components/layout/sidebar";
 import { issueReturnPath } from '@/lib/issue-navigation-context';
+import { fetchWorkspacePreferences } from '@/lib/api';
 import { navigationReturnPath, navigationLabel, sidebarOriginPath, reviewsOriginView, issueSequenceIDs } from '@/lib/navigation-context';
 import type {
   IssueOptionsActions,
@@ -746,6 +747,11 @@ function App() {
     onRemoteSync: async (event) => {
       const workspace = data?.workspace.urlKey;
       if (!workspace) return;
+      if (event.type === 'workspace_preferences.updated') {
+        const settings = await fetchWorkspacePreferences(workspace);
+        setData(current => current?.workspace.urlKey === workspace ? { ...current, workspaceSettings: settings } : current);
+        return;
+      }
       const entity = event.payload?.entity;
       if (/^(favorite\.|favorite_folder\.|subscription\.)/.test(event.type)) {
         const preferences = await fetchResourcePreferences(workspace);
@@ -1959,7 +1965,7 @@ function App() {
       current
         ? {
             ...current,
-            initiatives: current.initiatives.filter((item) => item.id !== id),
+            initiatives: current.initiatives.filter((item) => item.id !== id).map(item => ({ ...item, parentInitiativeIds: (item.parentInitiativeIds ?? []).filter(parent => parent !== id) })),
             initiativeUpdates: Object.fromEntries(
               Object.entries(current.initiativeUpdates ?? {}).filter(
                 ([initiativeId]) => initiativeId !== id,
@@ -3012,7 +3018,12 @@ function App() {
       setData(current => current && current.workspace.urlKey === workspaceKey && current.viewer.id === settings.userId ? {...current,userSettings:{...current.userSettings,[settings.userId]:settings}} : current);
     };
     window.addEventListener('flow:user-settings-updated',sync);
-    return () => window.removeEventListener('flow:user-settings-updated',sync);
+    const syncWorkspace = (event: Event) => {
+      const {workspaceKey,settings} = (event as CustomEvent<{workspaceKey:string;settings:BootstrapData['workspaceSettings']}>).detail;
+      setData(current => current?.workspace.urlKey === workspaceKey ? { ...current, workspaceSettings: settings } : current);
+    };
+    window.addEventListener('flow:workspace-preferences-updated',syncWorkspace);
+    return () => { window.removeEventListener('flow:user-settings-updated',sync); window.removeEventListener('flow:workspace-preferences-updated',syncWorkspace); };
   }, []);
   const changeCurrentUserSettings = async (input: UserSettings) => {
     const settings = await run(
@@ -4699,6 +4710,9 @@ function App() {
         {page === "new-team" && (
           <TeamCreatePage
             teams={data.teams}
+            teamSettings={data.teamSettings}
+            initialParentTeamId={new URLSearchParams(location.search).get('parentTeamId') ?? ''}
+            canCreateSubTeam={data.viewerRole === 'admin' || data.viewerRole === 'owner'}
             onBack={() => navigateTo(teamsPath(data.workspace.urlKey))}
             onNavigateSettings={(settingsPage, teamKey) =>
               navigateTo(
@@ -4793,25 +4807,13 @@ function App() {
           (route.kind === "initiatives" ||
             route.kind === "team-initiatives") && (
             <InitiativesPage
+              key={route.kind === 'team-initiatives' ? route.teamKey : 'workspace-initiatives'}
               createOnMount={
                 new URLSearchParams(location.search).get("create") === "1"
               }
-              initiatives={
-                route.kind === "team-initiatives"
-                  ? data.initiatives.filter((item) => {
-                      const team = data.teams.find(
-                        (team) =>
-                          team.key.toLowerCase() ===
-                          route.teamKey.toLowerCase(),
-                      );
-                      return Boolean(
-                        team &&
-                        (item.leadTeamId === team.id ||
-                          item.contributingTeamIds.includes(team.id)),
-                      );
-                    })
-                  : data.initiatives
-              }
+              initiatives={data.initiatives}
+              teamSettings={data.teamSettings}
+              teamContext={route.kind === 'team-initiatives' ? data.teams.find(team => team.key.toLowerCase() === route.teamKey.toLowerCase()) : undefined}
               initiativeUpdates={data.initiativeUpdates}
               projects={data.projects}
               projectUpdates={data.projectUpdates}
@@ -4880,6 +4882,8 @@ function App() {
           selectedInitiative && (
             <InitiativeDetailPage
               key={selectedInitiative.id}
+              onCreateInitiative={addInitiative}
+              onOpenInitiative={openInitiative}
               initiative={selectedInitiative}
               initiatives={data.initiatives}
               documents={data.documents}
@@ -5470,6 +5474,7 @@ function App() {
                 labelGroups={data.labelGroups}
                 workspaceKey={data.workspace.urlKey}
                 scopeTeamId={viewsTeam?.id}
+                teamSettings={data.teamSettings}
                 viewerId={data.viewer.id}
                 viewer={data.viewer}
                 favoriteProjectIds={data.favorites
@@ -5591,6 +5596,7 @@ function App() {
                 labelGroups={data.labelGroups}
                 workspaceKey={data.workspace.urlKey}
                 scopeTeamId={projectTeam?.id}
+                teamSettings={data.teamSettings}
                 viewerId={data.viewer.id}
                 viewer={data.viewer}
                 favoriteProjectIds={data.favorites

@@ -1,0 +1,8 @@
+.parent-team-picker{max-width:100%;min-width:0;display:inline-flex;align-items:center;gap:6px}
+.parent-team-picker>svg{flex:none}
+.parent-team-picker>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.parent-team-picker-menu{width:320px!important;max-width:calc(100vw - 20px)}
+.parent-team-picker-menu .property-command-label{display:flex;align-items:center;gap:4px;min-width:0}
+.parent-team-picker-menu .parent-team-ancestors{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--theme-text-secondary)}
+.parent-team-picker-menu .parent-team-name{flex-shrink:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.workspace-settings-card label>.parent-team-picker{height:32px;padding:0 9px;border:.5px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-1);color:var(--theme-text-primary);width:100%;justify-content:flex-start}

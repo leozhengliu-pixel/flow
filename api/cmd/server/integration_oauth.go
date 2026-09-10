@@ -12,6 +12,20 @@ import (
 	"flow/api/internal/domain"
 )
 
+func supportedIntegration(provider string) bool {
+	return provider == "github" || provider == "gitlab" || provider == "slack"
+}
+
+func supportedIntegrationHandler(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !supportedIntegration(r.PathValue("provider")) {
+			writeError(w, http.StatusNotFound, "Unsupported integration provider")
+			return
+		}
+		next(w, r)
+	}
+}
+
 // integrationOAuthConfig resolves OAuth metadata from the connection first and
 // then from deployment environment variables. Secrets are intentionally read
 // from environment only; they are never persisted in workspace state.

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
+import { teamHierarchy, type TeamHierarchySettings } from '@/lib/team-hierarchy'
 import type { Initiative, Invitation, IssueLabel, LabelGroup, PersonalAgentSkill, Presence, Project, ProjectDependencyRelationInput, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
 import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from '@/components/issue-explorer/saved-view-editor'
 import { NewProjectDialog, type NewProjectDraft, type NewProjectMilestoneDraft } from './new-project-dialog'
@@ -85,6 +86,7 @@ export type ProjectsPageProps = {
   editingView?: boolean
   savedViews?: SavedView[]
   scopeTeamId?: string
+  teamSettings?: TeamHierarchySettings
   viewerId?: string
   viewer?: User
   defaultSaveScope?: SavedView['scope']
@@ -152,6 +154,7 @@ export function ProjectsPage({
   editingView = false,
   savedViews = [],
   scopeTeamId,
+  teamSettings,
   viewerId,
   viewer,
   defaultSaveScope,
@@ -184,7 +187,11 @@ export function ProjectsPage({
     return ids
   }, [currentViewerId, presence])
   const peopleChoices = useMemo(() => projectPeopleChoices(users, invitations, onlineUserIds), [invitations, onlineUserIds, users])
-  const scopedProjects = useMemo(() => scopeTeamId ? projects.filter(project => project.teamIds.includes(scopeTeamId)) : projects, [projects, scopeTeamId])
+  const scopedProjects = useMemo(() => {
+    if (!scopeTeamId) return projects
+    const ids = teamHierarchy(teams, teamSettings).subtree(scopeTeamId)
+    return projects.filter(project => project.teamIds.some(id => ids.has(id)))
+  }, [projects, scopeTeamId, teams, teamSettings])
   const items = useMemo(() => scopedProjects.map(project => toPageItem(project, projectHref?.(project), teams, projectUpdates[project.id]?.[0], initiatives, labels, labelGroups)), [initiatives, labelGroups, labels, projectHref, projectUpdates, scopedProjects, teams])
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [insightMode, setInsightMode] = useState<ProjectInsightMode>('health')
@@ -654,8 +661,14 @@ const PROJECT_FILTER_FIELDS: Record<string, ProjectFilterField> = {
 }
 
 function projectFilterOptions(items: ProjectPageItem[], users: User[], projectStatuses: ProjectStatus[], labels: IssueLabel[], teams: Team[]): Partial<Record<ProjectFilterField, ProjectFilterOption[]>> {
+  const leads = new Map<string,number>(), members = new Map<string,number>()
+  for (const item of items) {
+    const lead = item.lead?.id ?? ''
+    leads.set(lead,(leads.get(lead)??0)+1)
+    for (const member of new Set(item.memberIds ?? [])) members.set(member,(members.get(member)??0)+1)
+  }
   const count = (field: ProjectFilterField, id: string) => items.filter(item => projectValueMatches(item, field, id)).length
-  const values = (field: ProjectFilterField, definitions: ProjectFilterOption[]) => definitions.map(option => ({ ...option, count: count(field, option.id) }))
+  const values = (field: ProjectFilterField, definitions: ProjectFilterOption[]) => definitions.map(option => ({ ...option, count: field==='lead' ? leads.get(option.id)??0 : field==='members' ? members.get(option.id)??0 : count(field, option.id) }))
   return {
     status: values('status', projectStatuses.length ? projectStatuses.map(status => ({ id: status.name, label: status.name, color: status.color })) : uniqueFilterOptions(items.map(item => ({ id: item.status, label: item.status, color: statusColor(item.status) }))).sort(statusOptionOrder)),
     priority: values('priority', [

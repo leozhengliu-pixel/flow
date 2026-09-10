@@ -2,7 +2,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { PeopleMenuItems } from '@/components/property/people-menu-items'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { Bell, Check, ChevronRight, Clock3, Copy, Edit3, MessageSquare, MoreHorizontal, MousePointer2, Plus, Search, Send, Star, Trash2, X } from 'lucide-react'
+import { Bell, Check, ChevronDown, ChevronRight, Clock3, Copy, Edit3, MessageSquare, MoreHorizontal, MousePointer2, Plus, Search, Send, Star, Trash2, X } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { VirtualColumnList } from '@/components/ui/virtual-column-list'
 import { SearchableMenuItems } from '@/components/ui/searchable-menu-items'
@@ -20,8 +20,14 @@ import { titleCase } from './initiative-model'
 import './initiatives.css'
 import './initiatives-list-parity.css'
 import './initiative-controls.css'
+import './initiative-hierarchy.css'
+import { initiativeGraph, initiativeTreeRows, initiativesForTeam } from './initiative-hierarchy'
+import { teamInitiativesPath } from '@/lib/app-routes'
+import type { TeamSettings } from '@/types/flow'
 
 type Props = {
+  teamContext?: Team
+  teamSettings?: Record<string, TeamSettings>
   initiatives: Initiative[]
   initiativeUpdates: Record<string, InitiativeUpdate[]>
   projects: Project[]
@@ -41,8 +47,8 @@ type Props = {
   onCreateReminder: (id: string, remindAt: string) => Promise<unknown>
   onOpenSidebar?: () => void
   createOnMount?: boolean
-  displayDefault?: { grouping?: string; ordering?: string; properties?: string[]; showTeamInitiatives?: boolean }
-  onSetDefault: (value: { grouping: string; ordering: string; properties: string[]; showTeamInitiatives: boolean }) => Promise<void>
+  displayDefault?: { grouping?: string; ordering?: string; properties?: string[]; showTeamInitiatives?: boolean; showNestedInitiatives?: boolean; showParentInitiatives?: boolean }
+  onSetDefault: (value: { grouping: string; ordering: string; properties: string[]; showTeamInitiatives: boolean; showNestedInitiatives?: boolean; showParentInitiatives?: boolean }) => Promise<void>
 }
 
 const PROPERTY_ORDER = ['description', 'owner', 'status', 'leadTeam', 'teams', 'priority', 'health', 'projects', 'activeProjects', 'target', 'created', 'updated', 'completed', 'labels'] as const
@@ -54,7 +60,7 @@ type Grouping = 'none'|'contributingTeam'|'leadTeam'|'owner'|'health'|'status'|'
 type FilterState = { status?: InitiativeStatus; priority?: number; ownerId?: string; creatorId?: string; leadTeamId?: string; teamId?: string; health?: Project['health']; labelId?: string; date?: 'created7'|'updated7'|'targetMonth'|'completed' }
 type InitiativeListEntry =
   | { key: string; kind: 'group'; label: string; count: number; entityName: boolean }
-  | { key: string; kind: 'initiative'; initiative: Initiative }
+  | { key: string; kind: 'initiative'; initiative: Initiative; depth: number; childCount: number }
 
 const INITIATIVE_VIRTUALIZATION_THRESHOLD = 80
 
@@ -66,6 +72,12 @@ export function InitiativesPage(props: Props) {
   const defaultGrouping = displayDefault?.grouping && ['none','contributingTeam','leadTeam','owner','health','status','priority','label'].includes(displayDefault.grouping) ? displayDefault.grouping as Grouping : 'none'
   const defaultShowTeam = displayDefault?.showTeamInitiatives ?? true
   const [creating, setCreating] = useState(false)
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [showContributing, setShowContributing] = useState(() => localStorage.getItem(`flow:initiatives:${props.teamContext?.id}:contributing`) !== 'false')
+  const [showNested, setShowNested] = useState(() => displayDefault?.showNestedInitiatives ?? localStorage.getItem('flow:initiatives:show-nested') !== 'false')
+  const [showParents, setShowParents] = useState(() => displayDefault?.showParentInitiatives ?? localStorage.getItem('flow:initiatives:show-parents') !== 'false')
+  const graph = useMemo(() => initiativeGraph(initiatives), [initiatives])
+  const scopedInitiatives = useMemo(() => props.teamContext ? initiativesForTeam(initiatives, projects, teams, props.teamSettings ?? {}, props.teamContext.id, showContributing) : initiatives, [initiatives, projects, props.teamContext, props.teamSettings, showContributing, teams])
   const [filters, setFilters] = useState<FilterState>({})
   const [filterMode, setFilterMode] = useState<'all'|'any'>('all')
   const [advancedFilterEnabled, setAdvancedFilterEnabled] = useState(false)
@@ -78,12 +90,12 @@ export function InitiativesPage(props: Props) {
   const [updatesInitiative, setUpdatesInitiative] = useState<Initiative>()
   const [detailsOpen, setDetailsOpen] = useState(() => window.innerWidth > 800 && localStorage.getItem('flow:initiatives:details-open') === 'true')
 
-  const visible = useMemo(() => initiatives.filter(item => {
+  const visible = useMemo(() => scopedInitiatives.filter(item => {
     const inView = view === 'active' ? item.status === 'active' : view === 'planned' ? item.status === 'planned' || item.status === 'proposed' : true
     const matches = Object.entries(filters).map(([key, value]) => matchesInitiativeFilter(item, key as keyof FilterState, value as NonNullable<FilterState[keyof FilterState]>))
     const matchesFilters = matches.length === 0 || (filterMode === 'all' ? matches.every(Boolean) : matches.some(Boolean))
     return inView
-      && (showTeamInitiatives || !(item.leadTeamId && item.contributingTeamIds.includes(item.leadTeamId)))
+      && (props.teamContext || showTeamInitiatives || !item.leadTeamId)
       && matchesFilters
   }).sort((a, b) => {
     if (sort === 'manual') return (a.position ?? 0) - (b.position ?? 0)
@@ -95,19 +107,26 @@ export function InitiativesPage(props: Props) {
     if (sort === 'created') return a.createdAt.localeCompare(b.createdAt)
     if (sort === 'updated') return a.updatedAt.localeCompare(b.updatedAt)
     return 0
-  }), [filterMode, filters, initiatives, showTeamInitiatives, sort, view])
+  }), [filterMode, filters, scopedInitiatives, props.teamContext, showTeamInitiatives, sort, view])
 
+  const visibleIds = useMemo(() => new Set(visible.map(item => item.id)), [visible])
   const columns = TABLE_PROPERTY_ORDER.filter(property => properties.has(property))
   const showDetails = detailsOpen && view !== 'planned'
   const columnGrid = `8px 20px minmax(280px,1fr) ${columns.map(property => columnWidth(property, showDetails)).join(' ')} 12px`
   const workspaceSlug = location.pathname.split('/').filter(Boolean)[0] ?? ''
-  const grouped = useMemo(() => groupInitiatives(visible, grouping, teams, labels), [grouping, labels, teams, visible])
+  const grouped = useMemo(() => {
+    const items = new Map(visible.map(item => [item.id, item]))
+    if (showParents && showNested && grouping === 'none') for (const item of visible) for (const id of graph.ancestors(item.id)) {
+      const parent = graph.byId.get(id); if (parent && !items.has(id)) items.set(id, parent)
+    }
+    return groupInitiatives([...items.values()], grouping, teams, labels)
+  }, [graph, grouping, labels, showNested, showParents, teams, visible])
   const listEntries = useMemo<InitiativeListEntry[]>(() => grouped.flatMap(group => [
     ...(grouping !== 'none' ? [{ key: `group:${group.key}`, kind: 'group' as const, label: group.label, count: group.items.length, entityName: ['owner','leadTeam','contributingTeam','label'].includes(grouping) }] : []),
-    ...group.items.map(initiative => ({ key: `initiative:${group.key}:${initiative.id}`, kind: 'initiative' as const, initiative })),
-  ]), [grouped, grouping])
-  const displayDirty = grouping !== defaultGrouping || sort !== defaultSort || showTeamInitiatives !== defaultShowTeam || !sameStringSet(properties, new Set(defaultProperties))
-  const resetDisplay = () => { setGrouping(defaultGrouping); setSort(defaultSort); setShowTeamInitiatives(defaultShowTeam); setProperties(new Set(defaultProperties)) }
+    ...(showNested ? initiativeTreeRows(group.items, graph, collapsed) : group.items.map(initiative => ({ initiative, depth: 0, childCount: 0 }))).map(row => ({ key: `initiative:${group.key}:${row.initiative.id}`, kind: 'initiative' as const, ...row })),
+  ]), [grouped, grouping, graph, collapsed, showNested])
+  const displayDirty = showNested !== (displayDefault?.showNestedInitiatives ?? true) || showParents !== (displayDefault?.showParentInitiatives ?? true) || grouping !== defaultGrouping || sort !== defaultSort || showTeamInitiatives !== defaultShowTeam || !sameStringSet(properties, new Set(defaultProperties))
+  const resetDisplay = () => { setShowNested(displayDefault?.showNestedInitiatives ?? true); setShowParents(displayDefault?.showParentInitiatives ?? true); setGrouping(defaultGrouping); setSort(defaultSort); setShowTeamInitiatives(defaultShowTeam); setProperties(new Set(defaultProperties)) }
   const toggleProperty = (property: Property) => setProperties(current => {
     const next = new Set(current)
     if (next.has(property)) next.delete(property); else next.add(property)
@@ -139,25 +158,29 @@ export function InitiativesPage(props: Props) {
   useEffect(() => localStorage.setItem('flow:initiatives:sort', sort), [sort])
   useEffect(() => localStorage.setItem('flow:initiatives:grouping', grouping), [grouping])
   useEffect(() => localStorage.setItem('flow:initiatives:show-team', String(showTeamInitiatives)), [showTeamInitiatives])
+  useEffect(() => localStorage.setItem('flow:initiatives:show-nested', String(showNested)), [showNested])
+  useEffect(() => localStorage.setItem('flow:initiatives:show-parents', String(showParents)), [showParents])
+  useEffect(() => { if (props.teamContext) localStorage.setItem(`flow:initiatives:${props.teamContext.id}:contributing`, String(showContributing)) }, [props.teamContext, showContributing])
 
   const toggleDetails = () => setDetailsOpen(open => {
     localStorage.setItem('flow:initiatives:details-open', String(!open))
     return !open
   })
-  const renderInitiative = (initiative: Initiative) => <InitiativeRow columns={columns} grid={columnGrid} href={initiativePath(workspaceSlug, initiative)} initiative={initiative} initiativeUpdates={initiativeUpdates[initiative.id] ?? []} labels={labels} projects={projects} projectUpdates={projectUpdates} properties={properties} selected={selected.has(initiative.id)} teams={teams} users={users} onCreateLabel={onCreateLabel} onCreateReminder={remindAt => onCreateReminder(initiative.id, remindAt)} onDelete={onDelete} onOpen={onOpen} onOpenUpdates={() => setUpdatesInitiative(initiative)} onSelect={() => toggleSelected(initiative.id)} onUpdate={input => onUpdate(initiative.id, input)}/>
+  const renderInitiative = (initiative: Initiative, depth = 0, childCount = 0) => <InitiativeRow contextOnly={!visibleIds.has(initiative.id)} depth={depth} childCount={childCount} collapsed={collapsed.has(initiative.id)} onToggleChildren={() => setCollapsed(current => { const next = new Set(current); if (next.has(initiative.id)) next.delete(initiative.id); else next.add(initiative.id); return next; })} projectIds={graph.projectIds(initiative.id)} columns={columns} grid={columnGrid} href={initiativePath(workspaceSlug, initiative)} initiative={initiative} initiativeUpdates={initiativeUpdates[initiative.id] ?? []} labels={labels} projects={projects} projectUpdates={projectUpdates} properties={properties} selected={selected.has(initiative.id)} teams={teams} users={users} onCreateLabel={onCreateLabel} onCreateReminder={remindAt => onCreateReminder(initiative.id, remindAt)} onDelete={onDelete} onOpen={onOpen} onOpenUpdates={() => setUpdatesInitiative(initiative)} onSelect={() => toggleSelected(initiative.id)} onUpdate={input => onUpdate(initiative.id, input)}/>
 
   const tableHeader = visible.length > 0 && <div className="li-columns" style={{ gridTemplateColumns: columnGrid }}><span aria-hidden="true"/><span aria-hidden="true"/><button aria-label="Order by Name" onClick={() => setSort('name')} style={{ gridColumn: 3 }} type="button">Name<InitiativeSortIcon/></button>{columns.map((property, index) => <ColumnHeader gridColumn={index + 4} key={property} property={property} onSort={setSort}/>)}</div>
   return <main className="main-panel li-page">
     <header className="li-page-header">
       <button aria-label="Open sidebar" className="li-mobile-menu" data-sidebar-trigger onClick={onOpenSidebar} type="button">☰</button>
-      <h2>{t('Initiatives')}</h2>
+      <h2>{props.teamContext && <><ViewGlyph color={props.teamContext.color} icon={props.teamContext.icon || 'Team'}/><span data-i18n-ignore>{props.teamContext.name}</span> / </>}{t('Initiatives')}</h2>
       <button aria-label={t('New initiative')} className="li-new-initiative" onClick={() => setCreating(true)} type="button"><PlusIcon/><span>{t('New initiative')}</span></button>
     </header>
     <div className="li-toolbar">
-      <nav aria-label={t('Initiatives views')}>{(['active', 'planned', 'all'] as InitiativesRouteView[]).map(item => <a className="ui-pill" aria-current={view === item ? 'page' : undefined} href={initiativesPath(workspaceSlug, item)} key={item} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onViewChange(item) }}>{item === 'all' ? t('All initiatives') : t(titleCase(item))}</a>)}</nav>
+      <nav aria-label={t('Initiatives views')}>{(['active', 'planned', 'all'] as InitiativesRouteView[]).map(item => <a className="ui-pill" aria-current={view === item ? 'page' : undefined} href={props.teamContext ? teamInitiativesPath(workspaceSlug, props.teamContext.key, item) : initiativesPath(workspaceSlug, item)} key={item} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onViewChange(item) }}>{item === 'all' ? t('All initiatives') : t(titleCase(item))}</a>)}</nav>
       <div className="li-toolbar-actions">
+        {props.teamContext && <label className="li-contributing-toggle"><input type="checkbox" checked={showContributing} onChange={event => setShowContributing(event.target.checked)}/>{t('Show contributing initiatives')}</label>}
         <InitiativeFilterMenu filters={filters} initiatives={initiatives} labels={labels} onAdvanced={() => { setAdvancedFilterEnabled(true); setAdvancedFilterOpen(true) }} onChange={setFilters} teams={teams} users={users}/>
-        <InitiativeDisplayMenu dirty={displayDirty} grouping={grouping} properties={properties} showTeamInitiatives={showTeamInitiatives} sort={sort} onGrouping={setGrouping} onProperty={toggleProperty} onReset={resetDisplay} onSetDefault={() => onSetDefault({ grouping, ordering: sort, properties: [...properties], showTeamInitiatives })} onShowTeamInitiatives={setShowTeamInitiatives} onSort={setSort}/>
+        <InitiativeDisplayMenu hideTeamToggle={Boolean(props.teamContext)} showNested={showNested} showParents={showParents} onShowNested={setShowNested} onShowParents={setShowParents} dirty={displayDirty} grouping={grouping} properties={properties} showTeamInitiatives={showTeamInitiatives} sort={sort} onGrouping={setGrouping} onProperty={toggleProperty} onReset={resetDisplay} onSetDefault={() => onSetDefault({ grouping, ordering: sort, properties: [...properties], showTeamInitiatives, showNestedInitiatives: showNested, showParentInitiatives: showParents })} onShowTeamInitiatives={setShowTeamInitiatives} onSort={setSort}/>
         {view !== 'planned' && <button aria-expanded={detailsOpen} aria-label={t(detailsOpen ? 'Close sidebar' : 'Open sidebar')} className="li-icon-button ui-pill" onClick={toggleDetails} type="button"><SidebarIcon/></button>}
       </div>
     </div>
@@ -165,7 +188,7 @@ export function InitiativesPage(props: Props) {
     <div className={`li-list-body${showDetails ? ' has-details' : ''}`}>
       <div className={`li-table${showDetails ? ' has-details' : ''}${listEntries.length > INITIATIVE_VIRTUALIZATION_THRESHOLD ? ' is-virtualized' : ''}`} style={{ '--li-extra-columns': columns.length } as React.CSSProperties}>
         {listEntries.length <= INITIATIVE_VIRTUALIZATION_THRESHOLD && tableHeader}
-        {creating && <InitiativeCreateRow labels={labels} teams={teams} users={users} viewer={viewer} view={view} onCancel={() => setCreating(false)} onCreate={async input => { await onCreate(input); setCreating(false) }} onCreateLabel={onCreateLabel}/>}
+        {creating && <InitiativeCreateRow initialLeadTeamId={props.teamContext?.id} labels={labels} teams={teams} users={users} viewer={viewer} view={view} onCancel={() => setCreating(false)} onCreate={async input => { await onCreate(input); setCreating(false) }} onCreateLabel={onCreateLabel}/>}
         {listEntries.length > INITIATIVE_VIRTUALIZATION_THRESHOLD ? <VirtualColumnList
           header={tableHeader}
           scrollerClassName="li-virtual-list"
@@ -174,8 +197,8 @@ export function InitiativesPage(props: Props) {
           increaseViewportBy={{ top: 208, bottom: 520 }}
           itemContent={(_index, entry) => entry.kind === 'group'
             ? <div className="li-group-heading"><span data-i18n-ignore={entry.entityName || undefined}>{entry.label}</span><small>{entry.count}</small></div>
-            : renderInitiative(entry.initiative)}
-        /> : grouped.map(group => <Fragment key={group.key}>{grouping !== 'none' && <div className="li-group-heading"><span data-i18n-ignore={['owner','leadTeam','contributingTeam','label'].includes(grouping) ? true : undefined}>{group.label}</span><small>{group.items.length}</small></div>}{group.items.map(initiative => <Fragment key={initiative.id}>{renderInitiative(initiative)}</Fragment>)}</Fragment>)}
+            : renderInitiative(entry.initiative, entry.depth, entry.childCount)}
+        /> : listEntries.map(entry => entry.kind === 'group' ? <div key={entry.key} className="li-group-heading"><span data-i18n-ignore={entry.entityName || undefined}>{entry.label}</span><small>{entry.count}</small></div> : <Fragment key={entry.key}>{renderInitiative(entry.initiative, entry.depth, entry.childCount)}</Fragment>)}
         {!creating && !visible.length && <InitiativesEmpty filtered={Object.keys(filters).length > 0} onCreate={() => setCreating(true)} view={view}/>} 
       </div>
       {showDetails && <InitiativesListSidebar initiatives={visible} teams={teams} users={users} view={view}/>}
@@ -205,17 +228,18 @@ function InitiativesBulkBar({ initiatives, users, labels, onClear, onDelete, onU
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root><button aria-label="Ask Flow" aria-disabled="true" disabled title="Flow AI is not configured for this workspace" type="button"><MousePointer2 size={14}/></button><button aria-label="Clear selected" onClick={onClear} type="button"><X size={14}/></button></div>
 }
 
-function InitiativeRow({ initiative, initiativeUpdates, projects, projectUpdates, properties, columns, grid, href, selected, users, teams, labels, onCreateLabel, onCreateReminder, onDelete, onOpen, onOpenUpdates, onSelect, onUpdate }: {
+function InitiativeRow({ contextOnly, depth, childCount, collapsed, onToggleChildren, projectIds, initiative, initiativeUpdates, projects, projectUpdates, properties, columns, grid, href, selected, users, teams, labels, onCreateLabel, onCreateReminder, onDelete, onOpen, onOpenUpdates, onSelect, onUpdate }: {
+  contextOnly: boolean; depth: number; childCount: number; collapsed: boolean; onToggleChildren: () => void; projectIds: Set<string>
   initiative: Initiative; initiativeUpdates: InitiativeUpdate[]; projects: Project[]; projectUpdates: Record<string, ProjectUpdate[]>; properties: Set<Property>; columns: Property[]; grid: string; href: string; selected: boolean; users: User[]; teams: Team[]; labels: IssueLabel[]
   onCreateLabel: (name: string) => Promise<IssueLabel>; onCreateReminder: (remindAt: string) => Promise<unknown>; onDelete: (id: string) => Promise<void>; onOpen: (initiative: Initiative, tab?: InitiativeRouteTab) => void; onOpenUpdates: () => void; onSelect: () => void; onUpdate: (input: InitiativeMutationInput) => void | Promise<unknown>
 }) {
-  const linked = projects.filter(project => initiative.projectIds.includes(project.id))
+  const linked = projects.filter(project => projectIds.has(project.id))
   const completed = linked.filter(project => project.status.type === 'completed').length
   const needingUpdate = linked.filter(project => !['completed', 'canceled'].includes(project.status.type) && !(projectUpdates[project.id]?.length)).length
   const selectedLabels = labels.filter(label => initiative.labelIds.includes(label.id))
-  return <ContextMenu.Root><ContextMenu.Trigger asChild><a aria-selected={selected} className="li-row" data-selected={selected} href={href} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onOpen(initiative) }} onKeyDown={event => { if (event.target !== event.currentTarget) return; if (event.key === ' ') { event.preventDefault(); onSelect() } }} style={{ gridTemplateColumns: grid }}>
+  return <ContextMenu.Root><ContextMenu.Trigger asChild><a aria-selected={selected} className={`li-row${contextOnly ? " is-context-only" : ""}`} data-selected={selected} href={href} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onOpen(initiative) }} onKeyDown={event => { if (event.target !== event.currentTarget) return; if (event.key === ' ') { event.preventDefault(); onSelect() } }} style={{ gridTemplateColumns: grid }}>
     <button aria-label="Select initiative" className="li-select" onClick={event => { event.preventDefault(); event.stopPropagation(); onSelect() }} style={{ gridColumn: 2 }} type="button"><span>{selected && <Check size={11}/>}</span></button>
-    <div className="li-name" style={{ gridColumn: 3 }}><span className="li-row-icon" onClick={event => { event.preventDefault(); event.stopPropagation() }}><ViewIconPicker color={initiative.color} icon={initiative.icon || 'Initiative'} onChange={onUpdate} triggerClassName="li-initiative-icon"/></span><strong data-i18n-ignore>{initiative.name}</strong>{properties.has('description') && <small data-i18n-ignore>{initiative.summary}</small>}</div>
+    <div className="li-name" style={{ gridColumn: 3, paddingInlineStart: Math.min(depth, 8) * 18 }}><button className="li-hierarchy-toggle" aria-label={collapsed ? "Expand sub-initiatives" : "Collapse sub-initiatives"} aria-expanded={childCount ? !collapsed : undefined} style={{ visibility: childCount ? "visible" : "hidden" }} onClick={event => { event.preventDefault(); event.stopPropagation(); onToggleChildren(); }} type="button">{collapsed ? <ChevronRight size={12}/> : <ChevronDown size={12}/>}</button><span className="li-row-icon" onClick={event => { event.preventDefault(); event.stopPropagation() }}><ViewIconPicker color={initiative.color} icon={initiative.icon || 'Initiative'} onChange={onUpdate} triggerClassName="li-initiative-icon"/></span><strong data-i18n-ignore>{initiative.name}</strong>{properties.has('description') && <small data-i18n-ignore>{initiative.summary}</small>}</div>
     {columns.map((property, index) => <div className={`li-cell li-cell--${property}`} key={property} onClick={event => { event.preventDefault(); event.stopPropagation() }} style={{ gridColumn: index + 4 }}>{renderCell(property)}</div>)}
     <button aria-label="Initiative actions" className="li-row-more" onClick={event => { event.preventDefault(); event.stopPropagation(); event.currentTarget.closest('.li-row')?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: event.clientX, clientY: event.clientY })) }} type="button"><MoreHorizontal size={14}/></button>
   </a></ContextMenu.Trigger><ContextMenu.Portal><InitiativeRowContextMenu initiative={initiative} labels={labels} teams={teams} users={users} onCreateReminder={onCreateReminder} onDelete={() => onDelete(initiative.id)} onOpen={tab => onOpen(initiative, tab)} onUpdate={onUpdate}/></ContextMenu.Portal></ContextMenu.Root>
@@ -265,9 +289,9 @@ function InitiativeRowContextMenu({ initiative, users, teams, labels, onCreateRe
   </ContextMenu.Content>
 }
 
-function InitiativeCreateRow({ labels, users, teams, viewer, view, onCancel, onCreate, onCreateLabel }: { labels: IssueLabel[]; users: User[]; teams: Team[]; viewer: User; view: InitiativesRouteView; onCancel: () => void; onCreate: (input: InitiativeMutationInput & { name: string }) => Promise<void>; onCreateLabel: (name: string) => Promise<IssueLabel> }) {
+export function InitiativeCreateRow({ initialLeadTeamId, labels, users, teams, viewer, view, onCancel, onCreate, onCreateLabel }: { initialLeadTeamId?: string; labels: IssueLabel[]; users: User[]; teams: Team[]; viewer: User; view: InitiativesRouteView; onCancel: () => void; onCreate: (input: InitiativeMutationInput & { name: string }) => Promise<void>; onCreateLabel: (name: string) => Promise<IssueLabel> }) {
   const initialStatus: InitiativeStatus = view === 'planned' ? 'planned' : 'active'
-  const [draft, setDraft] = useState<Initiative>({ id: 'draft', name: '', slugId: '', summary: '', description: '', icon: 'Initiative', color: '#d6a526', status: initialStatus, priority: 0, priorityLabel: 'No priority', health: 'noUpdate', creator: viewer, contributingTeamIds: [], labelIds: [], projectIds: [], resources: [], comments: [], favorite: false, subscribed: false, notificationRules: { descriptionChanges: true, newUpdate: true, allProjectUpdates: false }, updateSchedule: { cadence: 'none', weekday: 1, timeRange: '09:00-12:00' }, descriptionHistory: [], createdAt: '', updatedAt: '' })
+  const [draft, setDraft] = useState<Initiative>({ id: 'draft', leadTeamId: initialLeadTeamId, name: '', slugId: '', summary: '', description: '', icon: 'Initiative', color: '#d6a526', status: initialStatus, priority: 0, priorityLabel: 'No priority', health: 'noUpdate', creator: viewer, contributingTeamIds: [], labelIds: [], projectIds: [], resources: [], comments: [], favorite: false, subscribed: false, notificationRules: { descriptionChanges: true, newUpdate: true, allProjectUpdates: false }, updateSchedule: { cadence: 'none', weekday: 1, timeRange: '09:00-12:00' }, descriptionHistory: [], createdAt: '', updatedAt: '' })
   const [saving, setSaving] = useState(false)
   const update = (input: InitiativeMutationInput) => setDraft(current => ({ ...current, ...input, targetDateResolution: input.targetDateResolution === '' ? undefined : input.targetDateResolution ?? current.targetDateResolution, owner: input.ownerId !== undefined ? users.find(user => user.id === input.ownerId) : current.owner, priorityLabel: input.priority !== undefined ? ['No priority', 'Urgent', 'High', 'Medium', 'Low'][input.priority] : current.priorityLabel }))
   const submit = async () => {
@@ -296,12 +320,12 @@ function ColumnHeader({ gridColumn, property, onSort }: { gridColumn: number; pr
 
 function InitiativeSortIcon() { return <svg aria-hidden="true" className="li-column-sort-icon" viewBox="0 0 16 16"><path d="M11.536 10.275c.266-.272.289-.707.04-1.005-.249-.299-.68-.355-.995-.142l-.062.046L8 11.274 5.48 9.174l-.061-.046c-.315-.213-.747-.157-.995.142-.249.298-.226.733.04 1.005l.056.051 3 2.5a.75.75 0 0 0 .96 0l3-2.5.056-.051Z"/><path d="M8.75 12.25a.75.75 0 0 1-1.5 0v-8.5a.75.75 0 0 1 1.5 0v8.5Z"/></svg> }
 
-function InitiativeDisplayMenu({ dirty, grouping, properties, showTeamInitiatives, sort, onGrouping, onProperty, onReset, onSetDefault, onShowTeamInitiatives, onSort }: { dirty: boolean; grouping: Grouping; properties: Set<Property>; showTeamInitiatives: boolean; sort: Sort; onGrouping: (grouping: Grouping) => void; onProperty: (property: Property) => void; onReset: () => void; onSetDefault: () => Promise<void>; onShowTeamInitiatives: (show: boolean) => void; onSort: (sort: Sort) => void }) {
+function InitiativeDisplayMenu({ hideTeamToggle, showNested, showParents, onShowNested, onShowParents, dirty, grouping, properties, showTeamInitiatives, sort, onGrouping, onProperty, onReset, onSetDefault, onShowTeamInitiatives, onSort }: { hideTeamToggle: boolean; showNested: boolean; showParents: boolean; onShowNested: (value: boolean) => void; onShowParents: (value: boolean) => void; dirty: boolean; grouping: Grouping; properties: Set<Property>; showTeamInitiatives: boolean; sort: Sort; onGrouping: (grouping: Grouping) => void; onProperty: (property: Property) => void; onReset: () => void; onSetDefault: () => Promise<void>; onShowTeamInitiatives: (show: boolean) => void; onSort: (sort: Sort) => void }) {
   const [saving, setSaving] = useState(false)
   return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Display options" className="li-icon-button ui-pill" type="button"><DisplayIcon/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className={`li-menu li-display-menu${dirty ? ' has-footer' : ''}`} sideOffset={4}>
     <div className="li-display-row"><span>Grouping</span><DropdownMenu.Sub><DropdownMenu.SubTrigger>{groupingLabel(grouping)} <ChevronRight size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="li-menu">{(['none','contributingTeam','leadTeam','owner','health','status','priority','label'] as Grouping[]).map(item => <DropdownMenu.Item key={item} onSelect={() => onGrouping(item)}>{groupingLabel(item)}{grouping === item && <Check className="li-menu-end" size={13}/>}</DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub></div>
     <div className="li-display-row"><span>Ordering</span><DropdownMenu.Sub><DropdownMenu.SubTrigger>{titleCase(sort)} <ChevronRight size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="li-menu">{(['manual', 'name', 'priority', 'target', 'health', 'created', 'updated'] as Sort[]).map(item => <DropdownMenu.Item key={item} onSelect={() => onSort(item)}>{titleCase(item)}{sort === item && <Check className="li-menu-end" size={13}/>}</DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub></div>
-    <DropdownMenu.Separator/><DropdownMenu.CheckboxItem checked={showTeamInitiatives} className="li-display-team-toggle" onCheckedChange={value => onShowTeamInitiatives(value === true)}><span>Show team initiatives</span><span aria-hidden="true" className="li-display-switch" data-checked={showTeamInitiatives}><i/></span></DropdownMenu.CheckboxItem><DropdownMenu.Separator/><DropdownMenu.Label className="li-display-properties-label">Display properties</DropdownMenu.Label><div className="li-display-properties">{PROPERTY_ORDER.map(property => <button aria-pressed={properties.has(property)} className={properties.has(property) ? 'is-active' : ''} key={property} onClick={event => { event.preventDefault(); onProperty(property) }} type="button">{columnLabel(property)}</button>)}</div>{dirty && <footer className="li-display-footer"><button onClick={event => { event.preventDefault(); onReset() }} type="button">Reset</button><button disabled={saving} onClick={event => { event.preventDefault(); setSaving(true); void onSetDefault().finally(() => setSaving(false)) }} type="button">Set default for everyone</button></footer>}
+    <DropdownMenu.Separator/>{[{label:"Show nested initiatives",value:showNested,change:onShowNested},{label:"Show parent initiatives",value:showParents,change:onShowParents}].map(option=><DropdownMenu.CheckboxItem key={option.label} checked={option.value} className="li-display-team-toggle" onCheckedChange={value=>option.change(value===true)}><span>{option.label}</span><span aria-hidden="true" className="li-display-switch" data-checked={option.value}><i/></span></DropdownMenu.CheckboxItem>)}{!hideTeamToggle && <DropdownMenu.CheckboxItem checked={showTeamInitiatives} className="li-display-team-toggle" onCheckedChange={value => onShowTeamInitiatives(value === true)}><span>Show team initiatives</span><span aria-hidden="true" className="li-display-switch" data-checked={showTeamInitiatives}><i/></span></DropdownMenu.CheckboxItem>}<DropdownMenu.Separator/><DropdownMenu.Label className="li-display-properties-label">Display properties</DropdownMenu.Label><div className="li-display-properties">{PROPERTY_ORDER.map(property => <button aria-pressed={properties.has(property)} className={properties.has(property) ? 'is-active' : ''} key={property} onClick={event => { event.preventDefault(); onProperty(property) }} type="button">{columnLabel(property)}</button>)}</div>{dirty && <footer className="li-display-footer"><button onClick={event => { event.preventDefault(); onReset() }} type="button">Reset</button><button disabled={saving} onClick={event => { event.preventDefault(); setSaving(true); void onSetDefault().finally(() => setSaving(false)) }} type="button">Set default for everyone</button></footer>}
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 

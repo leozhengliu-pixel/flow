@@ -165,6 +165,11 @@ func (s *server) createInitiativeRelation(w http.ResponseWriter, r *http.Request
 		}
 		now := time.Now().UTC()
 		input.ID = parityID("initiative_relation")
+		if input.Type == "parent" {
+			if err := changeInitiativeParent(data, input.InitiativeID, input.RelatedInitiativeID, true); err != nil {
+				return err
+			}
+		}
 		input.CreatedAt = now
 		input.UpdatedAt = now
 		input.SortOrder = float64(len(data.InitiativeRelations))
@@ -194,6 +199,12 @@ func (s *server) updateInitiativeRelation(w http.ResponseWriter, r *http.Request
 			if !slices.Contains([]string{"related", "parent", "blocks", "blocked_by"}, *input.Type) {
 				return errInvalid
 			}
+			previous := data.InitiativeRelations[index]
+			if previous.Type != *input.Type && (previous.Type == "parent" || *input.Type == "parent") {
+				if err := changeInitiativeParent(data, previous.InitiativeID, previous.RelatedInitiativeID, *input.Type == "parent"); err != nil {
+					return err
+				}
+			}
 			data.InitiativeRelations[index].Type = *input.Type
 		}
 		if input.SortOrder != nil {
@@ -207,6 +218,13 @@ func (s *server) updateInitiativeRelation(w http.ResponseWriter, r *http.Request
 }
 func (s *server) deleteInitiativeRelation(w http.ResponseWriter, r *http.Request) {
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.relation_deleted", r.PathValue("relationId"), nil, func(data *domain.Bootstrap) error {
+		for _, relation := range data.InitiativeRelations {
+			if relation.ID == r.PathValue("relationId") && relation.InitiativeID == r.PathValue("id") && relation.Type == "parent" {
+				if err := changeInitiativeParent(data, relation.InitiativeID, relation.RelatedInitiativeID, false); err != nil {
+					return err
+				}
+			}
+		}
 		before := len(data.InitiativeRelations)
 		data.InitiativeRelations = slices.DeleteFunc(data.InitiativeRelations, func(item domain.InitiativeRelation) bool {
 			return item.ID == r.PathValue("relationId") && item.InitiativeID == r.PathValue("id")
