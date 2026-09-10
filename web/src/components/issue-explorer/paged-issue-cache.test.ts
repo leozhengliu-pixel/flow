@@ -3,6 +3,15 @@ import { makeIssue } from '@/test/fixtures'
 import { PagedIssueCache } from './paged-issue-cache'
 
 describe('bounded issue page cache', () => {
+  it('navigates in group page order rather than LRU access order and stops at evicted gaps', () => {
+    const cache = new PagedIssueCache(4)
+    for (const [group, page, id] of [['a',0,'one'],['a',1,'two'],['a',2,'three'],['b',0,'other']] as const) cache.put(group,page,{items:[makeIssue({id})],hasMore:false})
+    cache.get('a',0)
+    expect(cache.sequence('a','two')).toEqual(['one','two','three'])
+    cache.put('b',1,{items:[makeIssue({id:'another'})],hasMore:false})
+    expect(cache.sequence('a','three')).toEqual(['three'])
+    expect(cache.sequence('a','one')).toEqual(['one'])
+  })
   it('locates variable-sized pages and excludes document bodies from cached list rows', () => {
     const cache = new PagedIssueCache(40, 6000)
     cache.put('a', 0, { items: [makeIssue({ description: 'x'.repeat(100000) }), makeIssue({ id: 'second' })], hasMore: true, nextCursor: 'next' })

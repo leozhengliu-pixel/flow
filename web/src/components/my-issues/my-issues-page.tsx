@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { boundedIssueSequence } from '@/lib/navigation-context'
 import { PagedIssueList } from '@/components/issue-explorer/paged-issue-list'
 import { issueFiltersToQueryAst } from './my-issues-filter-types'
 import type { BootstrapData, Issue, IssueUpdateInput } from '@/types/flow'
@@ -26,7 +27,7 @@ export interface MyIssuesPageProps {
   onCreateIssue?: (context?: MyIssuesCreateContext) => void
   onDeleteIssues: (issueIds: string[]) => Promise<void>
   onNavigateView?: (view: MyIssuesView, href: string) => void
-  onOpenIssue: (issue: Issue) => void
+  onOpenIssue: (issue: Issue, sequence?: string[]) => void
   onOpenSidebar?: () => void
   onPersistDisplay?: (view: MyIssuesView, options: MyIssuesDisplayOptions) => Promise<void>
   onPersistFilters?: (view: MyIssuesView, filters: MyIssuesAppliedFilter[]) => Promise<void>
@@ -205,7 +206,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onHideGroup={groupId => controller.changeDisplay({ ...controller.display, hiddenGroupIds: [...new Set([...controller.display.hiddenGroupIds, groupId])] })}
         onShowGroup={groupId => controller.changeDisplay({ ...controller.display, hiddenGroupIds: controller.display.hiddenGroupIds.filter(id => id !== groupId) })}
         onMove={moveIssue}
-        onOpenIssue={row => { const issue = issuesById.get(row.id); if (issue) onOpenIssue(issue) }}
+        onOpenIssue={row => { const issue = issuesById.get(row.id); if (issue) onOpenIssue(issue, boundedIssueSequence(boardGroups.find(group => group.issues.some(item => item.id === issue.id))?.issues.map(item => item.id) ?? [issue.id], issue.id)) }}
         onPropertyChange={changeProperty}
         onSelectIssue={controller.selectIssue}
       /> : <MyIssuesList
@@ -221,7 +222,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onClearError={onClearError}
         onCreateIssue={group => onCreateIssue?.(group.createContext ?? (stateIdForGroup(group, data) ? { stateId: stateIdForGroup(group, data) } : undefined))}
         onGroupCollapsedChange={(id, collapsed) => setCollapsedGroups(current => { const next = new Set(current); if (collapsed) next.add(id); else next.delete(id); return next })}
-        onOpenIssue={row => { const issue = issuesById.get(row.id); if (issue) onOpenIssue(issue) }}
+        onOpenIssue={row => { const issue = issuesById.get(row.id); if (issue) onOpenIssue(issue, boundedIssueSequence(controller.visibleGroups.find(group => group.issues.some(item => item.id === issue.id))?.issues.map(item => item.id) ?? [issue.id], issue.id)) }}
         onPropertyChange={changeProperty}
         onRetryMutation={row => { const input = retryUpdates.current.get(row.id); if (input) void updateOne(row, input).catch(() => undefined) }}
         onSelectIssue={controller.selectIssue}

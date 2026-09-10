@@ -636,15 +636,6 @@ func (s *server) releaseHistory(w http.ResponseWriter, r *http.Request) {
 	writePage(w, r, items)
 }
 
-func (s *server) listTeamResources(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
-	teamID := r.PathValue("id")
-	sections := slices.DeleteFunc(slices.Clone(data.TeamResourceSections), func(item domain.TeamResourceSection) bool { return item.TeamID != teamID })
-	resources := slices.DeleteFunc(slices.Clone(data.TeamPinnedResources), func(item domain.TeamPinnedResource) bool { return item.TeamID != teamID })
-	sort.Slice(sections, func(i, j int) bool { return sections[i].Position < sections[j].Position })
-	sort.Slice(resources, func(i, j int) bool { return resources[i].Position < resources[j].Position })
-	writeJSON(w, http.StatusOK, map[string]any{"sections": sections, "resources": resources})
-}
 func (s *server) createTeamResourceSection(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Name string `json:"name"`

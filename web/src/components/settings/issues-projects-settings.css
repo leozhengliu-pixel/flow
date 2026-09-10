@@ -82,3 +82,5 @@
 .ip-combobox:hover,.ip-combobox[data-state=open]{background:var(--dropdown-hover)}
 .ip-cadence-item[data-highlighted],.ip-row-menu [role=menuitem][data-highlighted]{background:var(--dropdown-hover)}
 .ip-editor-field>.settings-select,.ip-form-field>.settings-select{width:100%}
+.settings-content>.ip-settings-page:not(.ip-project-statuses-page):not(.ip-template-editor){width:100%;margin:0;padding:0 0 72px}
+.settings-content>.ip-settings-page:not(.ip-project-statuses-page):not(.ip-template-editor)>.ip-page-header h1{font-size:24px;line-height:32px;font-weight:500}

@@ -20,3 +20,4 @@
 .it-type-dialog{animation-name:it-dialog-in-centered}
 @media(max-width:760px){.it-type-dialog{left:12px;transform:none;animation-name:it-dialog-in}.it-type-options>button{height:auto}}
 @media(max-width:760px){.it-field-sortable{width:100%}}
+.settings-content .it-list-header{transform:none}

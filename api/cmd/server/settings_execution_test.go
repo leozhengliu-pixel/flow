@@ -217,9 +217,18 @@ func TestMCPConnectorDiscoveryExecutionAndRevocation(t *testing.T) {
 		t.Run(fmt.Sprint(stream), func(t *testing.T) {
 			var calls atomic.Int32
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == "DELETE" {
+					w.WriteHeader(200)
+					return
+				}
+				if r.Method != "POST" {
+					w.WriteHeader(405)
+					return
+				}
 				var request struct {
-					Method string         `json:"method"`
-					Params map[string]any `json:"params"`
+					ID     json.RawMessage `json:"id"`
+					Method string          `json:"method"`
+					Params map[string]any  `json:"params"`
 				}
 				if json.NewDecoder(r.Body).Decode(&request) != nil {
 					t.Error("bad request")
@@ -228,6 +237,10 @@ func TestMCPConnectorDiscoveryExecutionAndRevocation(t *testing.T) {
 				}
 				var result any
 				switch request.Method {
+				case "server/discover":
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": request.ID, "error": map[string]any{"code": -32601, "message": "Method not found"}})
+					return
 				case "initialize":
 					w.Header().Set("Mcp-Session-Id", "local-session")
 					result = map[string]any{"protocolVersion": "2025-11-25", "capabilities": map[string]any{"tools": map[string]any{}}}
@@ -248,7 +261,7 @@ func TestMCPConnectorDiscoveryExecutionAndRevocation(t *testing.T) {
 				if request.Method != "initialize" && (r.Header.Get("Mcp-Session-Id") != "local-session" || r.Header.Get("MCP-Protocol-Version") != "2025-11-25") {
 					t.Error("negotiated session headers absent")
 				}
-				raw, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "result": result})
+				raw, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": request.ID, "result": result})
 				if stream {
 					w.Header().Set("Content-Type", "text/event-stream")
 					fmt.Fprintf(w, "event: message\ndata: %s\n\n", raw)

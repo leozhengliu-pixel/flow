@@ -1,4 +1,5 @@
 import type { Issue } from '@/types/flow'
+import { boundedIssueSequence } from '@/lib/navigation-context'
 
 export type IssuePageBlock = { items: Issue[]; nextCursor?: string; hasMore: boolean }
 
@@ -62,6 +63,15 @@ export class PagedIssueCache {
   get retainedEntities() { return [...this.pages.values()].reduce((sum, page) => sum + page.items.length, 0) }
   get retainedBytes() { return this.bytes }
   records() { return [...new Map([...this.pages.values()].flatMap(page => page.items).map(issue => [issue.id, issue])).values()] }
+  sequence(group: string, selected: string) {
+    const pages = [...this.pages.entries()].map(([key, block]) => ({ key: JSON.parse(key) as [string, number], block })).filter(page => page.key[0] === group).sort((a, b) => a.key[1] - b.key[1])
+    const index = pages.findIndex(page => page.block.items.some(issue => issue.id === selected))
+    if (index < 0) return [selected]
+    let start = index, end = index
+    while (start > 0 && pages[start - 1].key[1] + 1 === pages[start].key[1]) start--
+    while (end + 1 < pages.length && pages[end].key[1] + 1 === pages[end + 1].key[1]) end++
+    return boundedIssueSequence(pages.slice(start, end + 1).flatMap(page => page.block.items.map(issue => issue.id)), selected)
+  }
 }
 
 function listIssue(issue: Issue): Issue {

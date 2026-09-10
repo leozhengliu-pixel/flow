@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { boundedIssueSequence } from '@/lib/navigation-context'
 import type { BootstrapData, Issue, IssueUpdateInput, SavedView, SavedViewMutationInput, Team } from '@/types/flow'
 import type { TeamIssuesRouteView } from '@/lib/app-routes'
 import { MyIssuesBulkActionBar } from '@/components/my-issues/my-issues-bulk-action-bar'
@@ -50,7 +51,7 @@ export interface IssueExplorerPageProps {
   onBeginEditSavedView?: () => void
   onFinishEditSavedView?: () => void
   onNewViewResourceChange?: (resource: 'issues' | 'projects') => void
-  onOpenIssue: (issue: Issue) => void
+  onOpenIssue: (issue: Issue, sequence?: string[]) => void
   renderIssuePreview?: (issue: Issue, onClose: () => void) => ReactNode
   onOpenSidebar?: () => void
   onCreateIssue?: (context?: MyIssuesCreateContext) => void
@@ -153,7 +154,7 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
     const issue = issuesById.get(row.id)
     if (!issue) return
     if (detailsOpen && renderIssuePreview) setPreviewIssueId(issue.id)
-    else onOpenIssue(issue)
+    else onOpenIssue(issue, boundedIssueSequence(groups.find(group => group.issues.some(row => row.id === issue.id))?.issues.map(row => row.id) ?? [issue.id], issue.id))
   }
   const addFilter = (field: MyIssuesFilterKey, option: MyIssuesFilterOption) => {
     const label = ISSUE_FILTER_LABELS[field]

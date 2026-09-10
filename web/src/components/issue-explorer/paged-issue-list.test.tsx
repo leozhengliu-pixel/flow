@@ -38,7 +38,7 @@ describe('server-backed issue groups', () => {
     await screen.findByRole('button', { name: 'Issue 100' })
     expect(listIssueRecords).toHaveBeenLastCalledWith(expect.objectContaining({ groupValue: 'state-backlog', cursor: 'page-2', limit: 100 }), expect.any(AbortSignal))
     await userEvent.click(screen.getByRole('button', { name: 'Issue 100' }))
-    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'issue-100' }))
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'issue-100' }), expect.arrayContaining(['issue-100', 'issue-101']))
   })
 
   it('ignores an old group response after the query changes', async () => {

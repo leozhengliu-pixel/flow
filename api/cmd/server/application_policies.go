@@ -83,7 +83,7 @@ func (s *server) saveApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if input.Kind == "mcp" {
-		input.URL = strings.TrimRight(strings.TrimSpace(input.URL), "/")
+		input.URL = strings.TrimSpace(input.URL)
 		if !integrationEndpointSafe(r.Context(), input.URL, s.authDisabled) {
 			writeError(w, 400, "MCP server must use a public HTTPS endpoint")
 			return
@@ -144,6 +144,7 @@ func (s *server) saveApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 	view := s.workspaceData(r)
+	var removed applicationPolicy
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "application_policy.updated", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
 		items := applicationPolicies(data)
 		index := slices.IndexFunc(items, func(item applicationPolicy) bool { return item.ID == r.PathValue("id") })
@@ -153,8 +154,12 @@ func (s *server) deleteApplicationPolicy(w http.ResponseWriter, r *http.Request)
 		if !s.applicationPolicyAdmin(r, view) && (items[index].OwnerID != view.Viewer.ID || items[index].Kind == "oauth") {
 			return store.ErrAuthForbidden
 		}
+		removed = items[index]
 		setApplicationPolicies(data, slices.Delete(items, index, index+1))
 		return nil
 	})
+	if err == nil && removed.Kind == "mcp" {
+		err = s.store.DeleteConnectorSecret(r.Context(), connectorSecretID(workspaceKey(r), connectorOwner(removed, view.Viewer.ID), removed.ID))
+	}
 	respondMutation(w, err, http.StatusNoContent, nil)
 }

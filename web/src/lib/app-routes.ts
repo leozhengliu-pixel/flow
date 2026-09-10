@@ -264,7 +264,7 @@ export type AppRoute =
       agentSkillId?: string;
       releasePipelineMode?: "new" | "edit";
       releasePipelineSlug?: string;
-      integrationProvider?: "github" | "gitlab";
+      integrationProvider?: IntegrationProvider;
     }
   | {
       kind: "team-views";
@@ -783,14 +783,14 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
   if (
     section === "settings" &&
     third === "integrations" &&
-    (fourth === "github" || fourth === "gitlab") &&
+    INTEGRATION_PROVIDERS.includes(fourth as IntegrationProvider) &&
     segments.length === 4
   )
     return {
       kind: "settings",
       workspaceSlug,
       page: "integrations",
-      integrationProvider: fourth,
+      integrationProvider: fourth as IntegrationProvider,
     };
   if (
     section === "settings" &&
@@ -1618,7 +1618,7 @@ export function projectTemplateEditPath(
 }
 export function integrationSettingsPath(
   workspaceSlug: string,
-  provider: "github" | "gitlab",
+  provider: IntegrationProvider,
 ) {
   return `${workspaceRootPath(workspaceSlug)}/settings/integrations/${provider}`;
 }
@@ -1827,3 +1827,5 @@ function slug(value: string) {
       .slice(0, 80) || "issue"
   );
 }
+export type IntegrationProvider = 'github'|'gitlab'|'notion'|'intercom'|'sentry'|'figma'|'google-calendar'|'cursor'|'codex'|'zapier';
+const INTEGRATION_PROVIDERS:IntegrationProvider[]=['github','gitlab','notion','intercom','sentry','figma','google-calendar','cursor','codex','zapier'];

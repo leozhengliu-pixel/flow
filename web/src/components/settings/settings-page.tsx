@@ -10,6 +10,7 @@ import {
 import { persistUserSettings } from '@/lib/settings-persistence';
 import { UploadPolicyDialog } from './upload-policy-dialog';
 import { ApplicationPolicySettings, DataPrivacyDialog } from './application-policy-settings';
+import type { IntegrationProvider } from '@/lib/app-routes';
 import { canManageTeamSettings } from '@/lib/settings-permissions';
 import {
   Activity,
@@ -174,6 +175,10 @@ const CodeIntegrationSettings = lazyPage(
   () => import("./code-integration-settings"),
   "CodeIntegrationSettings",
 );
+const ProviderAdapterSettings = lazyPage(
+  () => import('./provider-adapter-settings'),
+  'ProviderAdapterSettings',
+);
 const AuditLogSettings = lazyPage(
   () => import("./audit-log-settings"),
   "AuditLogSettings",
@@ -197,7 +202,7 @@ export async function preloadSettingsPage(page: SettingsPageProps['page'], optio
   if (page === 'import-export') return ImportExportSettings.preload()
   if (page === 'workflows') return WorkflowAutomationSettings.preload()
   if (page === 'releases' && options.releasePipelineMode) return PipelineEditorPage.preload()
-  if (page === 'integrations' && options.integrationProvider) return CodeIntegrationSettings.preload()
+  if (page === 'integrations' && options.integrationProvider) return options.integrationProvider==='github'||options.integrationProvider==='gitlab'?CodeIntegrationSettings.preload():ProviderAdapterSettings.preload()
   if (['ai', 'initiatives', 'documents', 'customer-requests', 'releases', 'pulse', 'asks', 'emojis', 'integrations'].includes(page)) return FeatureSettingsPage.preload()
 }
 
@@ -224,7 +229,7 @@ type SettingsPageProps = {
   teamSection?: TeamSettingsSection;
   releasePipelineMode?: "new" | "edit";
   releasePipelineSlug?: string;
-  integrationProvider?: "github" | "gitlab";
+  integrationProvider?: IntegrationProvider;
   issueTemplateMode?: "new" | "new-form" | "edit";
   issueTemplateId?: string;
   projectTemplateMode?: "new" | "edit";
@@ -246,7 +251,7 @@ type SettingsPageProps = {
   onOpenAgentHistory?: () => void;
   onCreateReleasePipeline: () => void;
   onOpenReleasePipeline: (pipeline: ReleasePipeline) => void;
-  onOpenIntegration: (provider: "github" | "gitlab") => void;
+  onOpenIntegration: (provider: IntegrationProvider) => void;
   onCreateIssueTemplate: (form: boolean) => void;
   onOpenIssueTemplate: (template: IssueTemplate) => void;
   onDuplicateIssueTemplate: (template: IssueTemplate) => void;
@@ -520,7 +525,7 @@ export function SettingsPage(props: SettingsPageProps) {
           aria-label={t("Close settings navigation")}
           onClick={() => setMobileNav(false)}
         />
-        <main ref={mainRef} className="settings-main">
+        <main ref={mainRef} className="settings-main" data-settings-page={props.page} data-team-section={props.teamSection}>
           <button
             className="settings-mobile-menu"
             aria-label={t("Settings navigation")}
@@ -774,14 +779,14 @@ function SettingsBody(
     );
   }
   if (page === "integrations" && props.integrationProvider)
-    return (
+    return props.integrationProvider==='github'||props.integrationProvider==='gitlab'? (
       <CodeIntegrationSettings
         provider={props.integrationProvider}
         data={props.data}
         onBack={() => props.onNavigate("integrations")}
         onReload={props.onReload}
       />
-    );
+    ) : <ProviderAdapterSettings embedded provider={props.integrationProvider} name={{notion:'Notion',intercom:'Intercom',sentry:'Sentry',figma:'Figma','google-calendar':'Google Calendar',cursor:'Cursor',codex:'Codex',zapier:'Zapier'}[props.integrationProvider]} data={props.data} onReload={props.onReload} onClose={()=>props.onNavigate('integrations')}/>;
   if (page === "team") {
     const team = props.data.teams.find(
       (team) => team.key.toLowerCase() === props.teamKey?.toLowerCase(),

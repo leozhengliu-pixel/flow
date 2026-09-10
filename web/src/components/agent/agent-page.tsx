@@ -39,6 +39,7 @@ import { AgentRichText } from "./agent-rich-text";
 import styles from "./agent-page.module.css";
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
 import { applyAgentStreamEvent, markAgentSessionStopped } from './agent-stream-state'
+import { AgentElicitation } from './agent-elicitation';
 
 export function AgentPage({
   chatSlug,
@@ -724,7 +725,7 @@ function AgentMessageParts({ message, onRetry, onToolApproval, approvalBusy }: {
   const other = message.parts?.filter(part => !["text", "reasoning", "toolCall"].includes(part.type)) ?? [];
   return <div className={styles.messageParts}>
     {work.length > 0 && <AgentWorkGroup message={message} parts={work} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>}
-    {other.map(part => part.type === "error"
+    {other.map(part => part.type === "elicitation" ? <AgentElicitation key={part.id} part={part}/> : part.type === "error"
       ? <div className={styles.partError} key={part.id} role="alert"><AlertCircle/><span>{part.text}</span>{onRetry && <button onClick={onRetry} type="button">{t("Retry")}</button>}</div>
       : <div className={styles.eventPart} key={part.id}><span>{part.text}</span></div>)}
     {text && <AgentRichText className={styles.messageDocument} content={text}/>}

@@ -27,6 +27,8 @@ import {
 } from "lucide-react";
 import {
   useEffect,
+  createContext,
+  useContext,
   useMemo,
   useRef,
   useState,
@@ -36,7 +38,9 @@ import {
 } from "react";
 import { m as motion } from 'motion/react';
 import { useSidebarLayout } from './use-sidebar-layout';
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
+import { parseAppRoute } from '@/lib/app-routes';
+import { sidebarRoutePath } from '@/lib/sidebar-route';
 import { toast } from "sonner";
 import {
   addFavorite,
@@ -153,10 +157,13 @@ export type PageId =
   | "document-detail"
   | "customer-detail";
 
+const SidebarRouteContext = createContext<string | undefined>(undefined);
+
 export function Sidebar({
   account,
   data,
   page,
+  sourcePath,
   open = false,
   onOpenChange,
   onSearch,
@@ -170,6 +177,7 @@ export function Sidebar({
   account: AccountBootstrap;
   data: BootstrapData;
   page: PageId | "not-found";
+  sourcePath?: string;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   onSearch: () => void;
@@ -181,6 +189,9 @@ export function Sidebar({
   onReload?: () => Promise<void>;
 }) {
   const layout = useSidebarLayout(open, onOpenChange);
+  const currentLocation = useLocation();
+  const navigationRoute = parseAppRoute(sourcePath?.split(/[?#]/)[0] ?? currentLocation.pathname);
+  const selectedNavigationPath = sidebarRoutePath(navigationRoute);
   const close = layout.onNavigate;
   const workspaceSlug = data.workspace.urlKey;
   const [customizeOpen, setCustomizeOpen] = useState(false);
@@ -278,17 +289,17 @@ export function Sidebar({
             ).length
           : 0;
   const activeWorkspaceEntry: SidebarEntry | undefined =
-    page === "members"
+    selectedNavigationPath === membersPath(workspaceSlug)
       ? "members"
-      : page === "customers" || page === "customer-detail"
+      : selectedNavigationPath === customersPath(workspaceSlug)
         ? "customers"
-        : page === "teams" || page === "new-team"
+        : selectedNavigationPath === teamsPath(workspaceSlug)
           ? "teams"
-          : page === "documents" || page === "document-detail"
+          : selectedNavigationPath === documentsPath(workspaceSlug)
             ? "documents"
-            : page === "releases"
+            : selectedNavigationPath === releasePipelinesPath(workspaceSlug)
               ? "releases"
-              : page === "loops"
+              : selectedNavigationPath === loopsPath(workspaceSlug)
                 ? "loops"
                 : undefined;
   const show = (entry: SidebarEntry) =>
@@ -491,7 +502,7 @@ export function Sidebar({
     ) : null,
     myIssues: (
       <Nav
-        active={page === "issue-detail"}
+        active={page === "issue-detail" && navigationRoute.kind === 'my-issues'}
         icon={<MyIssuesIcon />}
         label="My issues"
         to={myIssuesPath(workspaceSlug, "assigned")}
@@ -635,7 +646,7 @@ export function Sidebar({
         aria-label="Close sidebar"
         onClick={layout.close}
       />
-      <div className="sidebar-layout" onPointerEnter={layout.onEdgeEnter} onPointerLeave={layout.clearHover}>
+      <SidebarRouteContext.Provider value={selectedNavigationPath}><div className="sidebar-layout" onPointerEnter={layout.onEdgeEnter} onPointerLeave={layout.clearHover}>
       <motion.aside
         ref={layout.surfaceRef}
         className={`sidebar${layout.floating ? " is-floating" : ""}${layout.resizing ? " is-resizing" : ""}`}
@@ -759,6 +770,7 @@ export function Sidebar({
                       featureEnabled("initiatives") && data.teamSettings[team.id]?.showInitiatives !== false
                     }
                     team={team}
+                    activeIssues={navigationRoute.kind === 'team-issues' && navigationRoute.teamKey.toLowerCase() === team.key.toLowerCase()}
                     favorite={favoriteTeamIds.has(team.id)}
                     subscribed={Boolean(subscription)}
                     subscriptionEvents={subscription?.events}
@@ -843,7 +855,7 @@ export function Sidebar({
         /></FlowTooltip>}
       </motion.aside>
       {layout.collapsed && !layout.compact && !layout.floatingOpen && <button className="sidebar-reveal-edge" type="button" aria-label="Expand sidebar" onClick={layout.onResizeClick} onPointerDown={layout.onResizeStart} />}
-      </div>
+      </div></SidebarRouteContext.Provider>
 
       <SidebarCustomization
         open={customizeOpen}
@@ -1510,6 +1522,7 @@ function TeamNavigation({
   team,
   workspaceSlug,
   page,
+  activeIssues,
   cyclesEnabled,
   current,
   upcoming,
@@ -1526,6 +1539,7 @@ function TeamNavigation({
   team: Team;
   workspaceSlug: string;
   page: PageId | "not-found";
+  activeIssues: boolean;
   cyclesEnabled: boolean;
   current: boolean;
   upcoming: boolean;
@@ -1758,7 +1772,7 @@ function TeamNavigation({
             onClick={onNavigate}
           />
           <Nav
-            active={page === "team-issues" && !onOverview}
+            active={activeIssues}
             icon={<IssuesIcon />}
             label="Issues"
             to={teamIssuesPath(workspaceSlug, team.key)}
@@ -1994,6 +2008,7 @@ function Nav({
   onClick?: () => void;
   to?: string;
 }) {
+  const contextPath = useContext(SidebarRouteContext);
   const content = (
     <>
       <span className="nav-icon">{icon}</span>
@@ -2020,7 +2035,7 @@ function Nav({
     <NavLink
       end={false}
       className={({ isActive }) =>
-        `nav-item ${active || isActive ? "active" : ""}`
+        `nav-item ${(contextPath ? contextPath.toLowerCase() === to.toLowerCase() : active || isActive) ? "active" : ""}`
       }
       to={to}
       title={label}
