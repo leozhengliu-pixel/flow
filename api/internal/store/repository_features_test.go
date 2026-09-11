@@ -128,6 +128,27 @@ func TestOAuthStoreOneTimeGrantLifecycle(t *testing.T) {
 	}
 }
 
+func TestOAuthClientMetadataReuseMergesLoopbackRedirects(t *testing.T) {
+	repository, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	ctx := context.Background()
+	first := domain.OAuthClient{ClientID: "client-stable", ClientName: "Codex MCP", ClientURI: "", LogoURI: "", RedirectURIs: []string{"http://127.0.0.1:43119/callback"}, GrantTypes: []string{"authorization_code", "refresh_token"}, ResponseTypes: []string{"code"}, TokenEndpointAuthMethod: "none", CreatedAt: time.Now().UTC()}
+	if err := repository.RegisterOAuthClient(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	matched, found, err := repository.FindOAuthClientByMetadata(ctx, domain.OAuthClient{ClientName: "Codex MCP", RedirectURIs: []string{"http://127.0.0.1:52222/callback"}, GrantTypes: first.GrantTypes, ResponseTypes: first.ResponseTypes, TokenEndpointAuthMethod: "none"})
+	if err != nil || !found || matched.ClientID != first.ClientID {
+		t.Fatalf("matched=%#v found=%v err=%v", matched, found, err)
+	}
+	merged := MergeOAuthRedirectURIs(matched.RedirectURIs, []string{"http://127.0.0.1:52222/callback", "http://127.0.0.1:43119/callback"})
+	if len(merged) != 2 {
+		t.Fatalf("merged redirects=%#v", merged)
+	}
+}
+
 func TestOAuthApplicationAndAPIKeyLookup(t *testing.T) {
 	repository, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {

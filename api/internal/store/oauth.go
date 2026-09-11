@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"flow/api/internal/domain"
@@ -17,6 +18,58 @@ func (s *SQLiteStore) RegisterOAuthClient(ctx context.Context, client domain.OAu
 	}
 	_, err = s.db.ExecContext(ctx, `INSERT INTO oauth_clients(client_id,data,created_at) VALUES(?,?,?)`, client.ClientID, raw, client.CreatedAt.Format(time.RFC3339Nano))
 	return err
+}
+
+// FindOAuthClientByMetadata reuses dynamic public clients such as Codex MCP.
+// Loopback ports are intentionally ignored because CLI callbacks use an
+// ephemeral local listener on each authorization attempt.
+func (s *SQLiteStore) FindOAuthClientByMetadata(ctx context.Context, client domain.OAuthClient) (domain.OAuthClient, bool, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT data FROM oauth_clients ORDER BY created_at DESC`)
+	if err != nil {
+		return domain.OAuthClient{}, false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			return domain.OAuthClient{}, false, err
+		}
+		var current domain.OAuthClient
+		if json.Unmarshal(raw, &current) != nil {
+			continue
+		}
+		if current.ClientName != client.ClientName || current.ClientURI != client.ClientURI || current.LogoURI != client.LogoURI || current.TokenEndpointAuthMethod != client.TokenEndpointAuthMethod {
+			continue
+		}
+		return current, true, nil
+	}
+	return domain.OAuthClient{}, false, rows.Err()
+}
+
+func (s *SQLiteStore) UpdateOAuthClient(ctx context.Context, client domain.OAuthClient) error {
+	raw, err := json.Marshal(client)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `UPDATE oauth_clients SET data=? WHERE client_id=?`, raw, client.ClientID)
+	return err
+}
+
+func MergeOAuthRedirectURIs(existing, incoming []string) []string {
+	result := append([]string(nil), existing...)
+	for _, candidate := range incoming {
+		found := false
+		for _, value := range result {
+			if strings.TrimSpace(value) == strings.TrimSpace(candidate) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			result = append(result, candidate)
+		}
+	}
+	return result
 }
 
 func (s *SQLiteStore) OAuthClient(ctx context.Context, clientID string) (domain.OAuthClient, error) {
