@@ -64,6 +64,7 @@ import { ProjectIcon, SlackIcon } from "@/components/issue/issue-icons";
 import { ViewGlyph, ViewIconPicker } from "@/components/views/view-icon-picker";
 import { DocumentGlyph } from "@/components/documents/document-icon";
 import { LoopsDirectory } from "@/components/loops/loops-page";
+import { workspaceFeatureEnabled } from "@/components/layout/sidebar-customization-state";
 import { useI18n } from "@/i18n/i18n";
 import type {
   BootstrapData,
@@ -93,6 +94,10 @@ export function TeamOverviewPage({
   onReload: () => Promise<void>;
 }) {
   const {t}=useI18n();
+  const loopsEnabled = workspaceFeatureEnabled(
+    data.workspaceSettings?.featureFlags,
+    "loops",
+  );
   const hierarchy = useMemo(() => teamHierarchy(data.teams, data.teamSettings), [data.teams, data.teamSettings]);
   const parentTeam = hierarchy.byId.get(data.teamSettings[team.id]?.parentTeamId ?? '');
   const childTeams = (hierarchy.children.get(team.id) ?? []).filter(item => !item.retiredAt);
@@ -254,16 +259,18 @@ export function TeamOverviewPage({
       >
         {t("Documents")}
       </a>
-      <a
-        aria-current={view === "loops" ? "page" : undefined}
-        href={teamLoopsPath(data.workspace.urlKey, team.key)}
-        onClick={(event) => {
-          event.preventDefault();
-          onNavigate(teamLoopsPath(data.workspace.urlKey, team.key));
-        }}
-      >
-        Loops
-      </a>
+      {loopsEnabled && (
+        <a
+          aria-current={view === "loops" ? "page" : undefined}
+          href={teamLoopsPath(data.workspace.urlKey, team.key)}
+          onClick={(event) => {
+            event.preventDefault();
+            onNavigate(teamLoopsPath(data.workspace.urlKey, team.key));
+          }}
+        >
+          {t("Loops")}
+        </a>
+      )}
       <a
         aria-current={view === "members" ? "page" : undefined}
         href={teamMembersPath(data.workspace.urlKey, team.key)}
@@ -576,14 +583,21 @@ export function TeamOverviewPage({
           onNew={() => void newDocument()}
         />
       ) : view === "loops" ? (
-        <LoopsDirectory
-          data={data}
-          embedded
-          onNavigate={onNavigate}
-          onOpenSidebar={onOpenSidebar}
-          onReload={onReload}
-          teamId={team.id}
-        />
+        loopsEnabled ? (
+          <LoopsDirectory
+            data={data}
+            embedded
+            onNavigate={onNavigate}
+            onOpenSidebar={onOpenSidebar}
+            onReload={onReload}
+            teamId={team.id}
+          />
+        ) : (
+          <div className="state-fill">
+            <strong>{t("Loops is unavailable")}</strong>
+            <span>{t("This feature is turned off for the workspace.")}</span>
+          </div>
+        )
       ) : (
         <TeamMembersDirectory
           data={data}

@@ -114,6 +114,71 @@ func TestEmptySemanticSearchDoesNotEnumerateIssues(t *testing.T) {
 	}
 }
 
+func TestSearchFlowTermAndEmptyQuerySkipCatalog(t *testing.T) {
+	repo, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "search.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	data := repo.Bootstrap()
+	handler := newHandler(&server{store: repo, authDisabled: true})
+	issue := data.Issues[0]
+	issue.ID = "flow-search-hit"
+	issue.Identifier = "FLOW-42"
+	issue.Title = "Flow query target"
+	issue.Description = "Indexed Flow description"
+	if err := repo.ImportIssues(context.Background(), data.Workspace.URLKey, []domain.Issue{issue}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SearchIssueCandidates(context.Background(), store.IssueRecordQuery{Workspace: data.Workspace.URLKey, Archived: "all"}, "  ", nil, 10, func(domain.Issue) error {
+		t.Fatal("empty candidate search walked issues")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, endpoint := range []string{"/api/search?q=Flow&types=issue", "/api/search/semantic?q=Flow&types=issue"} {
+		response := requestJSON[domain.SearchResponse](t, handler, http.MethodGet, endpoint, nil, 200)
+		found := false
+		for _, result := range response.Results {
+			if result.ID == issue.ID && result.Type == "issue" {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("%s missing Flow hit: %+v", endpoint, response.Results)
+		}
+	}
+	empty := requestJSON[domain.SearchResponse](t, handler, http.MethodGet, "/api/search?q=%20%20&types=issue", nil, 200)
+	if len(empty.Results) != 0 {
+		t.Fatalf("whitespace query scanned catalog: %+v", empty.Results)
+	}
+	requestJSON[domain.SearchResponse](t, handler, http.MethodGet, "/api/search", nil, 200)
+	requestJSON[domain.SearchResponse](t, handler, http.MethodGet, "/api/search/semantic?q=%20", nil, 200)
+}
+
+func TestCancelledSearchDoesNotReportUnavailable(t *testing.T) {
+	repo, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "search.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	service := &server{store: repo, authDisabled: true}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, path := range []string{"/api/search?q=Flow&types=issue", "/api/search/semantic?q=Flow&types=issue"} {
+		r := httptest.NewRequest(http.MethodGet, path, nil).WithContext(ctx)
+		w := httptest.NewRecorder()
+		if strings.Contains(path, "semantic") {
+			service.semanticSearch(w, r)
+		} else {
+			service.searchWorkspace(w, r)
+		}
+		if w.Code == http.StatusInternalServerError && strings.Contains(w.Body.String(), "Could not query issues") {
+			t.Fatalf("cancelled %s reported unavailable: %s", path, w.Body.String())
+		}
+	}
+}
+
 func TestSearchAndMCPKeepIdenticalAPIKeyTeamBoundaries(t *testing.T) {
 	repo, actor, ctx := newMCPToolTestContext(t)
 	data := repo.Bootstrap()

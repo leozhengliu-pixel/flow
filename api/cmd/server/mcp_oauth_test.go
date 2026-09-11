@@ -116,6 +116,111 @@ func TestMCPOAuthPKCEAndToolLifecycle(t *testing.T) {
 	}
 }
 
+func TestMCPOAuthReusesPublicClientRegistrationAndConsent(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "mcp-reuse.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	host := httptest.NewServer(newHandler(&server{store: repository, uploadPath: t.TempDir()}))
+	defer host.Close()
+	client := authClient(t)
+	authRequest[domain.AuthSession](t, client, http.MethodPost, host.URL+"/api/auth/login", map[string]string{"email": "admin@example.test", "password": "test-password"}, "", http.StatusOK)
+
+	first := authRequest[domain.OAuthClient](t, client, http.MethodPost, host.URL+"/oauth/register", map[string]any{
+		"client_name": "Codex", "client_uri": "https://openai.example/codex", "logo_uri": "https://openai.example/logo.png",
+		"redirect_uris": []string{"http://127.0.0.1:43119/callback"}, "grant_types": []string{"authorization_code", "refresh_token"}, "token_endpoint_auth_method": "none",
+	}, "", http.StatusCreated)
+	reused := authRequest[domain.OAuthClient](t, client, http.MethodPost, host.URL+"/oauth/register", map[string]any{
+		"client_name": "Codex", "redirect_uris": []string{"http://127.0.0.1:52222/callback"}, "grant_types": []string{"authorization_code"}, "token_endpoint_auth_method": "none",
+	}, "", http.StatusOK)
+	if reused.ClientID != first.ClientID {
+		t.Fatalf("loopback DCR minted a new client: first=%q reused=%q", first.ClientID, reused.ClientID)
+	}
+	if !slices.Contains(reused.RedirectURIs, "http://127.0.0.1:43119/callback") || !slices.Contains(reused.RedirectURIs, "http://127.0.0.1:52222/callback") {
+		t.Fatalf("reused client missing merged redirects: %#v", reused.RedirectURIs)
+	}
+
+	other := authRequest[domain.OAuthClient](t, client, http.MethodPost, host.URL+"/oauth/register", map[string]any{
+		"client_name": "grok-cli", "redirect_uris": []string{"http://127.0.0.1:52222/callback"}, "token_endpoint_auth_method": "none",
+	}, "", http.StatusCreated)
+	if other.ClientID == first.ClientID {
+		t.Fatal("different client_name reused Codex client_id")
+	}
+
+	unnamed := authRequest[domain.OAuthClient](t, client, http.MethodPost, host.URL+"/oauth/register", map[string]any{
+		"redirect_uris": []string{"http://127.0.0.1:43119/callback"}, "token_endpoint_auth_method": "none",
+	}, "", http.StatusCreated)
+	if unnamed.ClientName != "MCP client" {
+		t.Fatalf("unnamed DCR client_name = %q", unnamed.ClientName)
+	}
+	unnamedAgain := authRequest[domain.OAuthClient](t, client, http.MethodPost, host.URL+"/oauth/register", map[string]any{
+		"client_name": "MCP client", "redirect_uris": []string{"http://127.0.0.1:59999/callback"}, "token_endpoint_auth_method": "none",
+	}, "", http.StatusCreated)
+	if unnamedAgain.ClientID == unnamed.ClientID {
+		t.Fatal("synthetic default client_name reused another unlabeled loopback client")
+	}
+
+	firstGrant := authorizeMCPOAuth(t, repository, client, host.URL, first.ClientID, "http://127.0.0.1:43119/callback")
+	secondGrant := authorizeMCPOAuth(t, repository, client, host.URL, first.ClientID, "http://127.0.0.1:52222/callback")
+	ephemeralGrant := authorizeMCPOAuth(t, repository, client, host.URL, first.ClientID, "http://127.0.0.1:59999/callback")
+	if firstGrant == "" || firstGrant != secondGrant || secondGrant != ephemeralGrant {
+		t.Fatalf("consent was not reused: first=%q second=%q ephemeral=%q", firstGrant, secondGrant, ephemeralGrant)
+	}
+	count := 0
+	for _, item := range oauthConsents(t, repository, first.ClientID) {
+		count++
+		if item.ID != firstGrant {
+			t.Fatalf("stored consent id=%q want=%q", item.ID, firstGrant)
+		}
+	}
+	if count != 1 {
+		t.Fatalf("expected one reused consent, found %d", count)
+	}
+}
+
+func authorizeMCPOAuth(t *testing.T, repository *store.SQLiteStore, client *http.Client, base, clientID, redirectURI string) string {
+	t.Helper()
+	verifier := strings.Repeat("v", 48)
+	digest := sha256.Sum256([]byte(verifier))
+	challenge := base64.RawURLEncoding.EncodeToString(digest[:])
+	decision := authRequest[map[string]string](t, client, http.MethodPost, base+"/api/oauth/authorization-request", map[string]any{
+		"clientId": clientID, "redirectUri": redirectURI, "responseType": "code", "scope": "read write", "state": "reuse-state",
+		"codeChallenge": challenge, "codeChallengeMethod": "S256", "workspaceKey": "test-workspace", "approve": true,
+	}, "", http.StatusOK)
+	redirect, err := url.Parse(decision["redirect"])
+	if err != nil || redirect.Query().Get("code") == "" {
+		t.Fatalf("authorization redirect = %#v, err=%v", decision, err)
+	}
+	tokens := postOAuthForm[struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+	}](t, base+"/oauth/token", url.Values{"grant_type": {"authorization_code"}, "code": {redirect.Query().Get("code")}, "client_id": {clientID}, "redirect_uri": {redirectURI}, "code_verifier": {verifier}}, http.StatusOK)
+	if tokens.AccessToken == "" || tokens.RefreshToken == "" {
+		t.Fatalf("token response = %#v", tokens)
+	}
+	consents := oauthConsents(t, repository, clientID)
+	if len(consents) != 1 {
+		t.Fatalf("consent records=%d want 1", len(consents))
+	}
+	return consents[0].ID
+}
+
+func oauthConsents(t *testing.T, repository *store.SQLiteStore, clientID string) []domain.OAuthAuthorization {
+	t.Helper()
+	bootstrap, ok := repository.BootstrapFor("test-workspace")
+	if !ok {
+		t.Fatal("missing workspace")
+	}
+	items := []domain.OAuthAuthorization{}
+	for _, item := range bootstrap.OAuthAuthorizations {
+		if item.ClientID == clientID && item.RevokedAt == nil {
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
 func postOAuthForm[T any](t *testing.T, endpoint string, form url.Values, wantStatus int) T {
 	t.Helper()
 	response, err := http.Post(endpoint, "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))

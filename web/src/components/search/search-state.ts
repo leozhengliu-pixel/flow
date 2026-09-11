@@ -16,7 +16,7 @@ export function readSearchState(params: URLSearchParams): SearchPageState {
   } catch { /* Invalid shared filters do not prevent opening search. */ }
   const tab = params.get('type') ?? params.get('tab') ?? 'all'
   const order = params.get('sort') ?? 'relevance'
-  return {query:params.get('q') ?? '',tab:(resourceTypes.includes(tab)?tab:'all') as SearchTab,order:(['relevance','createdAt','updatedAt','title'].includes(order)?order:'relevance') as SearchOrder,includeArchived:params.get('includeArchived') !== 'false',showId:params.get('showId') !== 'false',match:params.get('match')==='or'?'or':'and',filters}
+  return {query:(params.get('q') ?? '').trim(),tab:(resourceTypes.includes(tab)?tab:'all') as SearchTab,order:(['relevance','createdAt','updatedAt','title'].includes(order)?order:'relevance') as SearchOrder,includeArchived:params.get('includeArchived') !== 'false',showId:params.get('showId') !== 'false',match:params.get('match')==='or'?'or':'and',filters}
 }
 
 export function writeSearchState(state: SearchPageState) {

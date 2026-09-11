@@ -166,6 +166,15 @@ describe('team overview', () => {
     expect(screen.getByRole('link', { name: 'Team settings' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'Cycles' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'Views' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Loops' })).toHaveAttribute('href', '/workspace/team/TST/loops')
+  })
+
+  it('hides the Loops tab when the workspace flag is off', async () => {
+    renderOverview({
+      workspaceSettings: { featureFlags: { loops: false } } as BootstrapData['workspaceSettings'],
+    })
+    await waitFor(() => expect(api.fetchTeamResources).toHaveBeenCalledWith('team-1'))
+    expect(screen.queryByRole('link', { name: 'Loops' })).not.toBeInTheDocument()
   })
 
   it('uses the Linear resource menu and creates sections inline', async () => {

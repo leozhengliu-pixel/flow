@@ -115,7 +115,9 @@ import type {
   Workspace,
 } from "@/types/flow";
 import {
+  sidebarEntryAvailable,
   useSidebarCustomizationState,
+  workspaceFeatureEnabled,
   type SidebarBadgeStyle,
   type SidebarEntry,
   type SidebarGroup,
@@ -214,8 +216,9 @@ export function Sidebar({
     setPreferences,
   } = useSidebarCustomizationState();
   const [dismissedTry, setDismissedTry] = useState<string[]>(readDismissedTry);
+  const featureFlags = data.workspaceSettings?.featureFlags;
   const featureEnabled = (feature: string) =>
-    (feature === 'ai' ? data.workspaceSettings.featureFlags['ai-agent'] ?? data.workspaceSettings.featureFlags.ai : data.workspaceSettings.featureFlags[feature]) !== false;
+    workspaceFeatureEnabled(featureFlags, feature);
   const sidebarTeams = useMemo(() => {
     const viewerTeamIds = new Set(data.teamMembers.filter(member => member.userId === data.viewer.id).map(member => member.teamId));
     return teamHierarchy(data.teams, data.teamSettings).rows(data.teams.filter(team => !team.retiredAt && viewerTeamIds.has(team.id)));
@@ -308,9 +311,7 @@ export function Sidebar({
     (preferences[entry] === "badged" && badgeCount(entry) > 0) ||
     entry === activeWorkspaceEntry;
   const available = (entry: SidebarEntry) =>
-    (entry !== "initiatives" || featureEnabled("initiatives")) &&
-    (entry !== "customers" || featureEnabled("customer-requests")) &&
-    (entry !== "releases" || featureEnabled("releases"));
+    sidebarEntryAvailable(entry, featureFlags);
   const hiddenWorkspaceEntries = sidebarOrder.workspace.filter(
     (entry) =>
       available(entry) &&
@@ -695,7 +696,7 @@ export function Sidebar({
         <nav className="sidebar-nav">
           <div className="sidebar-primary-links">
             {sidebarOrder.personal.map((entry) =>
-              show(entry) ? (
+              show(entry) && available(entry) ? (
                 <span className="sidebar-ordered-entry" key={entry}>
                   {personalNavigation[entry]}
                 </span>
@@ -705,7 +706,7 @@ export function Sidebar({
 
           <Section label="Workspace" storageKey="workspace">
             {sidebarOrder.workspace.map((entry) =>
-              show(entry) ? (
+              show(entry) && available(entry) ? (
                 <span className="sidebar-ordered-entry" key={entry}>
                   {workspaceNavigation[entry]}
                 </span>
@@ -713,9 +714,9 @@ export function Sidebar({
             )}
             <MoreMenu
               entries={hiddenWorkspaceEntries}
+              featureFlags={featureFlags}
               onCustomize={() => setCustomizeOpen(true)}
               workspaceSlug={workspaceSlug}
-              asks={featureEnabled("asks")}
             />
           </Section>
 
@@ -1834,15 +1835,20 @@ function TeamNavigation({
 
 function MoreMenu({
   entries,
+  featureFlags,
   onCustomize,
   workspaceSlug,
-  asks,
 }: {
   entries: SidebarEntry[];
+  featureFlags: Record<string, boolean> | undefined;
   onCustomize: () => void;
   workspaceSlug: string;
-  asks: boolean;
 }) {
+  const { t } = useI18n();
+  const asks = workspaceFeatureEnabled(featureFlags, "asks");
+  const visibleEntries = entries.filter((entry) =>
+    sidebarEntryAvailable(entry, featureFlags),
+  );
   const items: Partial<
     Record<
       SidebarEntry,
@@ -1914,7 +1920,7 @@ function MoreMenu({
           align="start"
           sideOffset={6.5}
         >
-          {entries.map((entry) => {
+          {visibleEntries.map((entry) => {
             const item = items[entry];
             if (!item) return null;
             if (item.to)
@@ -1922,14 +1928,14 @@ function MoreMenu({
                 <DropdownMenu.Item key={entry} asChild>
                   <NavLink to={item.to}>
                     {item.icon}
-                    <span>{item.label}</span>
+                    <span>{t(item.label)}</span>
                   </NavLink>
                 </DropdownMenu.Item>
               );
             return (
               <DropdownMenu.Item key={entry} onSelect={item.onSelect}>
                 {item.icon}
-                <span>{item.label}</span>
+                <span>{t(item.label)}</span>
               </DropdownMenu.Item>
             );
           })}
@@ -1937,14 +1943,14 @@ function MoreMenu({
             <DropdownMenu.Item asChild>
               <NavLink to={asksPath(workspaceSlug)}>
                 <MessageCircleQuestion />
-                <span>Asks</span>
+                <span>{t("Asks")}</span>
               </NavLink>
             </DropdownMenu.Item>
           )}
           <DropdownMenu.Separator />
           <DropdownMenu.Item onSelect={onCustomize}>
             <CustomizeIcon />
-            <span>Customize sidebar</span>
+            <span>{t("Customize sidebar")}</span>
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
