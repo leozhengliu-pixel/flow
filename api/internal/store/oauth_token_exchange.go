@@ -115,6 +115,9 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 		if _, err := tx.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'apiKeys',?,?,?)`, workspace, key.ID, order, keyRaw); err != nil {
 			return err
 		}
+		if err := upsertAPIKeyLookup(ctx, tx, workspace, key.ID, key.SecretHash); err != nil {
+			return err
+		}
 		// Older empty workspaces can omit the array shape until the first key.
 		if err := ensureOAuthMetadataShape(ctx, tx, workspace, "apiKeys", "array", lock); err != nil {
 			return err
