@@ -38,4 +38,12 @@ describe('realtime event backlog', () => {
     queue.push({ ...event(7), aggregateId: 'same' }, 100)
     expect([queue.shift()?.id, queue.shift()?.id, queue.shift()?.id, queue.shift()?.id]).toEqual(['4', '5', '6', '7'])
   })
+
+  it('does not turn routine credential bursts into a bootstrap resync', () => {
+    const queue = new RealtimeEventQueue()
+    for (let index = 0; index < 300; index++) for (const type of ['oauth_token.created', 'api_key.used', 'oauth_authorization.reused']) queue.push(event(index, type), 500_000)
+    expect(queue.length).toBe(0)
+    for (const type of ['oauth_authorization.created', 'oauth_authorization.revoked', 'application_policy.updated']) queue.push(event(1, type), 100)
+    expect([queue.shift()?.type, queue.shift()?.type, queue.shift()?.type]).toEqual(['oauth_authorization.created', 'oauth_authorization.revoked', 'application_policy.updated'])
+  })
 })

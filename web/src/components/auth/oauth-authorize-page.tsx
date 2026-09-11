@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeftRight, Cable, ChevronDown, CircleAlert, LoaderCircle, ShieldCheck } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
@@ -12,6 +12,11 @@ type Props = { account: AccountBootstrap }
 
 export function OAuthAuthorizePage({ account }: Props) {
   const location = useLocation()
+  return <OAuthConsentPage key={JSON.stringify([account.viewer.id,location.search])} account={account}/>
+}
+
+function OAuthConsentPage({ account }: Props) {
+  const location = useLocation()
   const navigate = useNavigate()
   const query = useMemo(() => new URLSearchParams(location.search), [location.search])
   const [request, setRequest] = useState<OAuthAuthorizationRequest>()
@@ -19,28 +24,39 @@ export function OAuthAuthorizePage({ account }: Props) {
   const [selecting, setSelecting] = useState(true)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
+  const pendingRef=useRef(false)
+  const activeRef=useRef(true)
+  const preferredWorkspaceRef=useRef(account.lastWorkspaceKey)
+  preferredWorkspaceRef.current=account.lastWorkspaceKey
+  const themeWorkspace=account.workspaces.find(item=>item.workspace.urlKey===account.lastWorkspaceKey)?.workspace.urlKey??account.workspaces[0]?.workspace.urlKey
 
   useEffect(() => {
-    const key = account.workspaces.find(item => item.workspace.urlKey === account.lastWorkspaceKey)?.workspace.urlKey ?? account.workspaces[0]?.workspace.urlKey
-    if (key) void fetchUserSettings(key).then(applyTheme).catch(() => undefined)
-  }, [account.lastWorkspaceKey, account.workspaces])
+    let active=true
+    if (themeWorkspace) void fetchUserSettings(themeWorkspace).then(settings=>{if(active)applyTheme(settings)}).catch(() => undefined)
+    return ()=>{active=false}
+  }, [themeWorkspace])
 
   useEffect(() => {
-    fetchOAuthAuthorizationRequest(location.search)
+    const controller=new AbortController()
+    activeRef.current=true
+    fetchOAuthAuthorizationRequest(location.search,controller.signal)
       .then(value => {
+        if(controller.signal.aborted)return
         setRequest(value)
-        const preferred = value.workspaces.find(item => item.workspace.urlKey === account.lastWorkspaceKey) ?? value.workspaces[0]
+        const preferred = value.workspaces.find(item => item.workspace.urlKey === preferredWorkspaceRef.current) ?? value.workspaces[0]
         if (value.workspaces.length === 1 && preferred) {
           setWorkspaceKey(preferred.workspace.urlKey)
           setSelecting(false)
         }
       })
-      .catch(value => setError(value instanceof Error ? value.message : 'This authorization request is invalid.'))
-  }, [account.lastWorkspaceKey, location.search])
+      .catch(value => {if(!controller.signal.aborted)setError(value instanceof Error ? value.message : 'This authorization request is invalid.')})
+    return ()=>{controller.abort();activeRef.current=false}
+  }, [location.search])
 
   const selected = request?.workspaces.find(item => item.workspace.urlKey === workspaceKey)
   const submit = async (approve: boolean) => {
-    if (approve && !workspaceKey) return
+    if (pendingRef.current||(approve && !workspaceKey)) return
+    pendingRef.current=true
     setPending(true)
     setError('')
     try {
@@ -56,8 +72,10 @@ export function OAuthAuthorizePage({ account }: Props) {
         workspaceKey,
         approve,
       })
-      window.location.assign(result.redirect)
+      if(activeRef.current)window.location.assign(result.redirect)
     } catch (value) {
+      if(!activeRef.current)return
+      pendingRef.current=false
       setError(value instanceof Error ? value.message : 'Could not complete authorization.')
       setPending(false)
     }

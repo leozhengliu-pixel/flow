@@ -15,6 +15,7 @@ export class RealtimeEventQueue {
   get length() { return this.items.length }
 
   push(event: RealtimeEvent, wireLength: number) {
+    if (['oauth_token.created', 'api_key.used', 'oauth_authorization.reused'].includes(event.type)) return
     // Account for UTF-16 strings and parsed object overhead without serializing
     // the event again. Overflow requests one fresh snapshot instead of drops.
     const bytes = wireLength * 4 + 256

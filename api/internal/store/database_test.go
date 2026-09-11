@@ -15,6 +15,9 @@ func TestDatabaseDialectRewriting(t *testing.T) {
 		t.Fatalf("mysql upsert rewrite = %q", mysql)
 	}
 	ignore := rewriteSQL("INSERT INTO auth_users(id) VALUES(?) ON CONFLICT DO NOTHING", "mysql")
+	if rewriteSQL("INSERT INTO auth_users(id) VALUES(?) ON CONFLICT(id) DO NOTHING", "mysql") != ignore {
+		t.Fatal("MySQL did not translate an explicit conflict target for index backfill")
+	}
 	if ignore != "INSERT IGNORE INTO auth_users(id) VALUES(?)" {
 		t.Fatalf("mysql ignore rewrite = %q", ignore)
 	}

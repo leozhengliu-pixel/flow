@@ -62,6 +62,11 @@ func (s *server) pagedPresence(r *http.Request, values []domain.Presence) ([]dom
 }
 
 func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent) (domain.RealtimeEvent, bool, error) {
+	// Older nodes or replay buffers may still send credential telemetry. Reject
+	// it before any workspace permission/directory projection is attempted.
+	if domain.RoutineCredentialEvent(event.Type) {
+		return event, false, nil
+	}
 	if event.Type == "workspace_preferences.updated" {
 		metadata, ok := s.store.WorkspaceSettingsMetadata(workspaceKey(r))
 		if !ok {

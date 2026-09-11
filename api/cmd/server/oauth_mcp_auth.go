@@ -136,7 +136,7 @@ func (s *server) getOAuthAuthorizationRequest(w http.ResponseWriter, r *http.Req
 		return
 	}
 	actor := s.oauthRequestUser(r)
-	account, err := s.store.AccountForUser(r.Context(), actor.ID)
+	account, err := s.store.OAuthAccountForUser(r.Context(), actor.ID)
 	if err != nil {
 		writeOAuthError(w, http.StatusForbidden, "access_denied", "No accessible workspace")
 		return
@@ -175,17 +175,13 @@ func (s *server) decideOAuthAuthorization(w http.ResponseWriter, r *http.Request
 		return
 	}
 	actor := s.oauthRequestUser(r)
-	workspace, ok, err := s.store.BootstrapForUser(r.Context(), input.WorkspaceKey, actor.ID)
-	if err != nil || !ok {
-		writeOAuthError(w, http.StatusForbidden, "access_denied", "You do not have access to that workspace")
-		return
-	}
-	if !s.authDisabled && !s.authorizeAuthenticationPolicy(w, r, workspace, workspace.ViewerRole) {
+	workspace, ok := s.oauthWorkspaceForRequest(w, r, input.WorkspaceKey, actor)
+	if !ok {
 		return
 	}
 	authorizationID := fmt.Sprintf("oauth_authorization_%d", time.Now().UnixNano())
 	if !applicationApproved(&workspace, client.ClientID, scopes) {
-		err := s.store.MutateWorkspace(r.Context(), workspace.Workspace.URLKey, "application_policy.updated", client.ClientID, nil, func(data *domain.Bootstrap) error {
+		err := s.store.RequestOAuthApplicationApproval(r.Context(), workspace.Workspace.URLKey, client.ClientID, func(data *domain.Bootstrap) error {
 			items := applicationPolicies(data)
 			index := slices.IndexFunc(items, func(item applicationPolicy) bool { return item.ID == client.ClientID })
 			if index < 0 && len(items) < 100 {
@@ -214,14 +210,7 @@ func (s *server) decideOAuthAuthorization(w http.ResponseWriter, r *http.Request
 		return
 	}
 	grant := domain.OAuthAuthorizationCode{ClientID: client.ClientID, WorkspaceKey: workspace.Workspace.URLKey, UserID: actor.ID, RedirectURI: input.RedirectURI, Scopes: scopes, CodeChallenge: input.CodeChallenge, AuthorizationID: authorizationID, ExpiresAt: time.Now().UTC().Add(10 * time.Minute)}
-	if err := s.store.CreateOAuthAuthorizationCode(r.Context(), code, grant); err != nil {
-		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not authorize client")
-		return
-	}
-	err = s.store.MutateWorkspace(r.Context(), workspace.Workspace.URLKey, "oauth_authorization.created", authorizationID, map[string]any{"clientId": client.ClientID, "scopes": scopes}, func(data *domain.Bootstrap) error {
-		data.OAuthAuthorizations = append([]domain.OAuthAuthorization{{ID: authorizationID, ClientID: client.ClientID, ClientName: client.ClientName, UserID: actor.ID, Scopes: scopes, CreatedAt: time.Now().UTC()}}, data.OAuthAuthorizations...)
-		return nil
-	})
+	_, err = s.store.CreateOAuthAuthorizationGrant(r.Context(), code, grant, domain.OAuthAuthorization{ID: authorizationID, ClientID: client.ClientID, ClientName: client.ClientName, UserID: actor.ID, Scopes: scopes, CreatedAt: time.Now().UTC()}, applicationApproved)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not authorize client")
 		return
@@ -289,36 +278,28 @@ func (s *server) revokeOAuthToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := r.Form.Get("token")
-	_ = s.store.RevokeOAuthRefreshToken(r.Context(), token)
-	if workspace, key, ok := s.store.FindAPIKey(secretHash(token)); ok {
-		_ = s.store.MutateWorkspace(r.Context(), workspace, "oauth_token.revoked", key.ID, nil, func(data *domain.Bootstrap) error {
-			if index := slices.IndexFunc(data.APIKeys, func(item domain.APIKey) bool { return item.ID == key.ID }); index >= 0 {
-				now := time.Now().UTC()
-				data.APIKeys[index].RevokedAt = &now
-			}
-			return nil
-		})
+	if err := s.store.RevokeOAuthRefreshToken(r.Context(), token); err != nil {
+		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not revoke token")
+		return
+	}
+	if err := s.store.RevokeOAuthAccessToken(r.Context(), secretHash(token)); err != nil {
+		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not revoke token")
+		return
 	}
 	w.WriteHeader(http.StatusOK)
 }
 
 func (s *server) revokeOAuthAuthorization(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "oauth_authorization.revoked", id, nil, func(data *domain.Bootstrap) error {
-		actor := requestActor(s, r)
-		index := slices.IndexFunc(data.OAuthAuthorizations, func(item domain.OAuthAuthorization) bool { return item.ID == id && item.UserID == actor.ID })
-		if index < 0 {
-			return errNotFound
-		}
-		now := time.Now().UTC()
-		data.OAuthAuthorizations[index].RevokedAt = &now
-		for keyIndex := range data.APIKeys {
-			if data.APIKeys[keyIndex].AuthorizationID == id && data.APIKeys[keyIndex].RevokedAt == nil {
-				data.APIKeys[keyIndex].RevokedAt = &now
-			}
-		}
-		return nil
-	})
+	actor := requestActor(s, r)
+	workspace, ok := s.oauthWorkspaceForRequest(w, r, workspaceKey(r), actor)
+	if !ok {
+		return
+	}
+	err := s.store.RevokeOAuthAuthorizationRecords(r.Context(), workspace.Workspace.URLKey, id, actor.ID)
+	if errors.Is(err, store.ErrAuthForbidden) || store.IsOAuthNotFound(err) {
+		err = errNotFound
+	}
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
 

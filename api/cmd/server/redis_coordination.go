@@ -12,6 +12,9 @@ import (
 )
 
 func (s *server) publishRealtime(workspace string, event domain.RealtimeEvent) {
+	if domain.RoutineCredentialEvent(event.Type) {
+		return
+	}
 	s.realtime.publish(workspace, event)
 	if s.coordinator == nil {
 		return
@@ -35,6 +38,9 @@ func (s *server) startCoordination() {
 			}
 			cancel()
 			err := s.coordinator.Listen(context.Background(), func(envelope coordination.EventEnvelope) {
+				if domain.RoutineCredentialEvent(envelope.Event.Type) {
+					return
+				}
 				if s.receiveCollaborationEvent(envelope.Workspace, envelope.Event) {
 					return
 				}

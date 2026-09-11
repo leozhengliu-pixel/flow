@@ -192,6 +192,10 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := s.ensureAPIKeyLookup(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := s.loadOrSeed(context.Background()); err != nil {
 		db.Close()
 		return nil, err
@@ -242,6 +246,10 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		return nil, err
 	}
 	if err := s.migrateMetadataSearchIndex(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.migrateAPIKeyLookup(context.Background()); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -376,7 +384,7 @@ func (tx *sqlTx) QueryRowContext(ctx context.Context, query string, args ...any)
 
 var excludedColumn = regexp.MustCompile(`excluded\.([a-zA-Z_][a-zA-Z0-9_]*)`)
 var conflictUpdateClause = regexp.MustCompile(`(?i)\s+ON\s+CONFLICT\s*\([^)]*\)\s+DO\s+UPDATE\s+SET\s+`)
-var conflictIgnoreClause = regexp.MustCompile(`(?i)\s+ON\s+CONFLICT\s+DO\s+NOTHING$`)
+var conflictIgnoreClause = regexp.MustCompile(`(?i)\s+ON\s+CONFLICT(?:\s*\([^)]*\))?\s+DO\s+NOTHING$`)
 
 func rewriteSQL(query, dialect string) string {
 	query = strings.TrimSpace(query)
