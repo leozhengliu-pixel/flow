@@ -46,6 +46,10 @@ func newOAuthPerfFixture(t testing.TB, directorySize int, poison bool) *oauthPer
 		}
 	})
 	service := &server{store: repo, uploadPath: t.TempDir()}
+	// This fixture reopens the store and measures only the OAuth HTTP chain.
+	// Background schedulers must not retain the old store or affect allocations.
+	service.workflowSchedulerStarted.Store(true)
+	service.deliverySchedulerStarted.Store(true)
 	initialMetadata, ok := repo.WorkspaceMetadata("test-workspace")
 	if !ok {
 		t.Fatal("fixture workspace is missing")

@@ -33,6 +33,7 @@ type mcpPendingUpload struct {
 	ObjectKey    string
 	ActualSize   int64
 	Completed    bool
+	Busy         bool
 	ExpiresAt    time.Time
 }
 
@@ -55,7 +56,7 @@ func (s *server) callFlowWriteTool(ctx context.Context, actor mcpActor, data dom
 	case "delete_comment":
 		return s.deleteMCPComment(ctx, actor, stringArg(args, "id"))
 	case "prepare_attachment_upload":
-		return s.prepareMCPAttachmentUpload(actor, data, args)
+		return s.prepareMCPAttachmentUpload(ctx, actor, data, args)
 	case "create_attachment":
 		return s.createMCPAttachment(ctx, actor, data, args)
 	case "create_attachment_from_upload":
@@ -69,7 +70,7 @@ func (s *server) callFlowWriteTool(ctx context.Context, actor mcpActor, data dom
 	case "resolve_diff_thread":
 		return s.resolveMCPDiffThread(ctx, actor, data, args)
 	case "delete_diff_comment":
-		return s.deleteMCPDiffComment(ctx, actor, args)
+		return s.deleteMCPDiffComment(ctx, actor, data, args)
 	default:
 		return nil, fmt.Errorf("tool %q is not implemented", name)
 	}
@@ -154,6 +155,44 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 	}
 	if team.ID == "" {
 		return nil, fmt.Errorf("team is required when creating an issue")
+	}
+	// Resolve secondary operations before committing the issue itself. A typo in
+	// a relation, release or URL must not leave a partially created issue behind.
+	for _, field := range []string{"blockedBy", "blocks", "relatedTo", "removeBlockedBy", "removeBlocks", "removeRelatedTo", "duplicateOf"} {
+		queries := stringsArg(args, field)
+		if field == "duplicateOf" && stringArg(args, field) != "" {
+			queries = []string{stringArg(args, field)}
+		}
+		for _, query := range queries {
+			related, err := mcpFindIssue(data, query)
+			if err != nil {
+				return nil, err
+			}
+			if related.ID == current.ID {
+				return nil, fmt.Errorf("an issue cannot relate to itself")
+			}
+		}
+	}
+	for _, field := range []string{"addReleases", "removeReleases", "setReleases"} {
+		for _, query := range stringsArg(args, field) {
+			if !slices.ContainsFunc(data.Releases, func(release domain.Release) bool {
+				return release.ArchivedAt == nil && equalFoldAny(query, release.ID, release.SlugID, release.Name, release.Version)
+			}) {
+				return nil, fmt.Errorf("release %q not found", query)
+			}
+		}
+	}
+	if links, ok := args["links"].([]any); ok {
+		for _, raw := range links {
+			var link domain.IssueLinkInput
+			if err := jsonClone(raw, &link); err != nil {
+				return nil, err
+			}
+			parsed, err := url.ParseRequestURI(strings.TrimSpace(link.URL))
+			if err != nil || parsed.Host == "" || parsed.Scheme != "http" && parsed.Scheme != "https" {
+				return nil, fmt.Errorf("a valid http or https URL is required")
+			}
+		}
 	}
 	description := current.Description
 	if value, ok := args["description"].(string); ok {
@@ -937,7 +976,11 @@ func (s *server) updateMCPReview(ctx context.Context, _ mcpActor, data domain.Bo
 	}
 	if action == "merge" {
 		status := "merged"
-		return invokeJSONHandler(ctx, http.MethodPatch, map[string]string{"id": review.ID}, reviewInput{Status: &status}, s.updateReview)
+		input := reviewInput{Status: &status}
+		if method := lowerArg(args, "mergeMethod"); method != "" {
+			input.MergeMethod = &method
+		}
+		return invokeJSONHandler(ctx, http.MethodPatch, map[string]string{"id": review.ID}, input, s.updateReview)
 	}
 	decision := stringArg(args, "decision")
 	mapped := map[string]string{"approved": "approve", "changesRequested": "requestChanges", "commented": "comment"}[decision]
@@ -949,10 +992,17 @@ func (s *server) updateMCPReview(ctx context.Context, _ mcpActor, data domain.Bo
 
 func (s *server) resolveMCPDiffThread(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
 	threadID := stringArg(args, "threadId")
-	resolved := boolArg(args, "resolved")
+	reviewID, _, err := mcpReviewEvent(data, threadID)
+	if err != nil {
+		return nil, err
+	}
+	resolved := !hasBoolArg(args, "resolved") || boolArg(args, "resolved")
 	var updated domain.ReviewEvent
-	err := s.store.MutateWorkspace(ctx, actor.WorkspaceKey, "review.thread_resolved", threadID, args, func(next *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(ctx, actor.WorkspaceKey, "review.thread_resolved", threadID, args, func(next *domain.Bootstrap) error {
 		for reviewIndex := range next.Reviews {
+			if next.Reviews[reviewIndex].ID != reviewID {
+				continue
+			}
 			for eventIndex := range next.Reviews[reviewIndex].Events {
 				if next.Reviews[reviewIndex].Events[eventIndex].ID == threadID {
 					next.Reviews[reviewIndex].Events[eventIndex].Resolved = resolved
@@ -966,7 +1016,7 @@ func (s *server) resolveMCPDiffThread(ctx context.Context, actor mcpActor, data 
 	return updated, err
 }
 
-func (s *server) deleteMCPDiffComment(ctx context.Context, actor mcpActor, args map[string]any) (any, error) {
+func (s *server) deleteMCPDiffComment(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
 	id := stringArg(args, "commentId")
 	if id == "" {
 		id = stringArg(args, "draftId")
@@ -974,8 +1024,18 @@ func (s *server) deleteMCPDiffComment(ctx context.Context, actor mcpActor, args 
 	if id == "" {
 		return nil, fmt.Errorf("commentId or draftId is required")
 	}
-	err := s.store.MutateWorkspace(ctx, actor.WorkspaceKey, "review.comment_deleted", id, nil, func(next *domain.Bootstrap) error {
+	reviewID, event, err := mcpReviewEvent(data, id)
+	if err != nil {
+		return nil, err
+	}
+	if event.Actor.ID != actor.User.ID {
+		return nil, fmt.Errorf("only the comment author can delete it")
+	}
+	err = s.store.MutateWorkspace(ctx, actor.WorkspaceKey, "review.comment_deleted", id, nil, func(next *domain.Bootstrap) error {
 		for index := range next.Reviews {
+			if next.Reviews[index].ID != reviewID {
+				continue
+			}
 			before := len(next.Reviews[index].Events)
 			next.Reviews[index].Events = slices.DeleteFunc(next.Reviews[index].Events, func(item domain.ReviewEvent) bool { return item.ID == id })
 			if len(next.Reviews[index].Events) != before {
@@ -987,7 +1047,18 @@ func (s *server) deleteMCPDiffComment(ctx context.Context, actor mcpActor, args 
 	return map[string]any{"deleted": err == nil, "id": id}, err
 }
 
-func (s *server) prepareMCPAttachmentUpload(actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
+func mcpReviewEvent(data domain.Bootstrap, id string) (string, domain.ReviewEvent, error) {
+	for _, review := range data.Reviews {
+		for _, event := range review.Events {
+			if event.ID == id && slices.Contains([]string{"comment", "commented"}, event.Type) {
+				return review.ID, event, nil
+			}
+		}
+	}
+	return "", domain.ReviewEvent{}, errNotFound
+}
+
+func (s *server) prepareMCPAttachmentUpload(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
 	issue, err := mcpFindIssue(data, stringArg(args, "issue"))
 	if err != nil {
 		return nil, err
@@ -1001,9 +1072,25 @@ func (s *server) prepareMCPAttachmentUpload(actor mcpActor, data domain.Bootstra
 		return nil, err
 	}
 	pending := &mcpPendingUpload{WorkspaceKey: actor.WorkspaceKey, UserID: actor.User.ID, IssueID: issue.ID, Filename: filepath.Base(stringArg(args, "filename")), ContentType: stringArg(args, "contentType"), Title: stringArg(args, "title"), Subtitle: stringArg(args, "subtitle"), ExpectedSize: size, ExpiresAt: time.Now().UTC().Add(15 * time.Minute)}
+	s.cleanupMCPUploads(ctx)
 	s.mcpUploadMu.Lock()
 	if s.mcpUploads == nil {
 		s.mcpUploads = map[string]*mcpPendingUpload{}
+	}
+	var totalBytes, workspaceBytes int64
+	var ownerCount int
+	for _, upload := range s.mcpUploads {
+		totalBytes += upload.ExpectedSize
+		if upload.WorkspaceKey == actor.WorkspaceKey {
+			workspaceBytes += upload.ExpectedSize
+			if upload.UserID == actor.User.ID {
+				ownerCount++
+			}
+		}
+	}
+	if len(s.mcpUploads) >= 1024 || ownerCount >= 32 || totalBytes+size > 256<<20 || workspaceBytes+size > 64<<20 {
+		s.mcpUploadMu.Unlock()
+		return nil, fmt.Errorf("too many pending uploads; finish existing uploads first")
 	}
 	s.mcpUploads[token] = pending
 	s.mcpUploadMu.Unlock()
@@ -1011,15 +1098,58 @@ func (s *server) prepareMCPAttachmentUpload(actor mcpActor, data domain.Bootstra
 	return map[string]any{"uploadUrl": assetURL, "assetUrl": assetURL, "headers": map[string]string{"Content-Type": pending.ContentType}, "expiresAt": pending.ExpiresAt}, nil
 }
 
+func (s *server) cleanupMCPUploads(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	expired := map[string]*mcpPendingUpload{}
+	s.mcpUploadMu.Lock()
+	for token, pending := range s.mcpUploads {
+		if pending.Busy || time.Now().Before(pending.ExpiresAt) {
+			continue
+		}
+		if pending.ObjectKey == "" {
+			delete(s.mcpUploads, token)
+		} else if len(expired) < 16 {
+			pending.Busy = true
+			expired[token] = pending
+		}
+	}
+	s.mcpUploadMu.Unlock()
+	for token, pending := range expired {
+		storage, err := s.storage()
+		if err == nil {
+			err = storage.Delete(ctx, pending.ObjectKey)
+		}
+		s.mcpUploadMu.Lock()
+		pending.Busy = false
+		if err == nil {
+			delete(s.mcpUploads, token)
+		}
+		s.mcpUploadMu.Unlock()
+	}
+}
+
 func (s *server) putMCPUpload(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	s.mcpUploadMu.Lock()
 	pending := s.mcpUploads[token]
-	s.mcpUploadMu.Unlock()
 	if pending == nil || time.Now().UTC().After(pending.ExpiresAt) {
+		s.mcpUploadMu.Unlock()
 		writeError(w, http.StatusNotFound, "upload token is invalid or expired")
 		return
 	}
+	if pending.Busy || pending.Completed {
+		s.mcpUploadMu.Unlock()
+		writeError(w, http.StatusConflict, "upload is already in progress or completed")
+		return
+	}
+	pending.Busy = true
+	s.mcpUploadMu.Unlock()
+	defer func() {
+		s.mcpUploadMu.Lock()
+		pending.Busy = false
+		s.mcpUploadMu.Unlock()
+	}()
 	r.Body = http.MaxBytesReader(w, r.Body, (20<<20)+1)
 	objectKey := fmt.Sprintf("mcp_%d_%s", time.Now().UnixNano(), pending.Filename)
 	storage, err := s.storage()
@@ -1027,10 +1157,13 @@ func (s *server) putMCPUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "storage unavailable")
 		return
 	}
-	upload, policyErr := s.checkUploadPolicy(pending.WorkspaceKey,pending.Filename,r.Body)
-	if policyErr != nil { writeError(w,http.StatusForbidden,policyErr.Error()); return }
+	upload, policyErr := s.checkUploadPolicy(pending.WorkspaceKey, pending.Filename, r.Body)
+	if policyErr != nil {
+		writeError(w, http.StatusForbidden, policyErr.Error())
+		return
+	}
 	size, err := storage.Put(r.Context(), objectKey, upload, pending.ContentType)
-	if err != nil || size > 20<<20 || pending.ExpectedSize > 0 && size != pending.ExpectedSize {
+	if err != nil || size > 20<<20 || size != pending.ExpectedSize {
 		_ = storage.Delete(r.Context(), objectKey)
 		writeError(w, http.StatusBadRequest, "uploaded size does not match the prepared upload")
 		return
@@ -1050,19 +1183,22 @@ func (s *server) finalizeMCPAttachmentUpload(ctx context.Context, actor mcpActor
 		return nil, fmt.Errorf("invalid assetUrl")
 	}
 	token := filepath.Base(parsed.Path)
+	issue, err := mcpFindIssue(data, stringArg(args, "issue"))
+	if err != nil {
+		return nil, err
+	}
 	s.mcpUploadMu.Lock()
 	pending := s.mcpUploads[token]
-	if pending != nil && pending.Completed {
-		delete(s.mcpUploads, token)
-	}
-	s.mcpUploadMu.Unlock()
-	if pending == nil || !pending.Completed || pending.WorkspaceKey != actor.WorkspaceKey || pending.UserID != actor.User.ID {
+	if pending == nil || !pending.Completed || pending.Busy || time.Now().After(pending.ExpiresAt) || pending.WorkspaceKey != actor.WorkspaceKey || pending.UserID != actor.User.ID {
+		s.mcpUploadMu.Unlock()
 		return nil, fmt.Errorf("assetUrl is not a completed Flow upload")
 	}
-	issue, err := mcpFindIssue(data, stringArg(args, "issue"))
-	if err != nil || issue.ID != pending.IssueID {
+	if issue.ID != pending.IssueID {
+		s.mcpUploadMu.Unlock()
 		return nil, fmt.Errorf("upload was prepared for a different issue")
 	}
+	pending.Busy = true
+	s.mcpUploadMu.Unlock()
 	title := stringArg(args, "title")
 	if title == "" {
 		title = pending.Title
@@ -1070,7 +1206,14 @@ func (s *server) finalizeMCPAttachmentUpload(ctx context.Context, actor mcpActor
 	if title == "" {
 		title = pending.Filename
 	}
-	return s.attachStoredObject(ctx, actor, issue.ID, title, pending.ContentType, pending.ObjectKey, pending.ActualSize)
+	result, err := s.attachStoredObject(ctx, actor, issue.ID, title, pending.ContentType, pending.ObjectKey, pending.ActualSize)
+	s.mcpUploadMu.Lock()
+	pending.Busy = false
+	if err == nil {
+		delete(s.mcpUploads, token)
+	}
+	s.mcpUploadMu.Unlock()
+	return result, err
 }
 
 func (s *server) createMCPAttachment(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
@@ -1086,7 +1229,7 @@ func (s *server) createMCPAttachment(ctx context.Context, actor mcpActor, data d
 	if !strings.EqualFold(hex.EncodeToString(digest[:]), stringArg(args, "sha256")) {
 		return nil, fmt.Errorf("sha256 checksum mismatch")
 	}
-	if expected := intArg(args, "size", 0); expected > 0 && expected != len(content) {
+	if expected := intArg(args, "size", 0); hasNumberArg(args, "size") && expected != len(content) {
 		return nil, fmt.Errorf("attachment size mismatch")
 	}
 	if len(content) > 20<<20 {
@@ -1097,8 +1240,10 @@ func (s *server) createMCPAttachment(ctx context.Context, actor mcpActor, data d
 	if err != nil {
 		return nil, err
 	}
-	upload, policyErr := s.checkUploadPolicy(actor.WorkspaceKey,stringArg(args,"filename"),bytes.NewReader(content))
-	if policyErr != nil { return nil,policyErr }
+	upload, policyErr := s.checkUploadPolicy(actor.WorkspaceKey, stringArg(args, "filename"), bytes.NewReader(content))
+	if policyErr != nil {
+		return nil, policyErr
+	}
 	size, err := storage.Put(ctx, key, upload, stringArg(args, "contentType"))
 	if err != nil {
 		return nil, err
@@ -1107,7 +1252,11 @@ func (s *server) createMCPAttachment(ctx context.Context, actor mcpActor, data d
 	if title == "" {
 		title = filepath.Base(stringArg(args, "filename"))
 	}
-	return s.attachStoredObject(ctx, actor, issue.ID, title, stringArg(args, "contentType"), key, size)
+	result, err := s.attachStoredObject(ctx, actor, issue.ID, title, stringArg(args, "contentType"), key, size)
+	if err != nil {
+		_ = storage.Delete(context.WithoutCancel(ctx), key)
+	}
+	return result, err
 }
 
 func (s *server) attachStoredObject(ctx context.Context, actor mcpActor, issueID, title, contentType, key string, size int64) (any, error) {
@@ -1121,27 +1270,23 @@ func (s *server) attachStoredObject(ctx context.Context, actor mcpActor, issueID
 		issue.Attachments = append(issue.Attachments, attachment)
 		return nil
 	})
-	if err != nil {
-		if storage, e := s.storage(); e == nil {
-			_ = storage.Delete(ctx, key)
-		}
-	}
 	return attachment, err
 }
 
 func (s *server) deleteMCPAttachment(ctx context.Context, actor mcpActor, data domain.Bootstrap, id string) (any, error) {
-	for _, issue := range data.Issues {
-		for _, attachment := range issue.Attachments {
-			if attachment.ID == id {
-				_, err := invokeJSONHandler(ctx, http.MethodDelete, map[string]string{"id": issue.ID, "attachmentId": id}, nil, s.deleteAttachment)
-				if err != nil {
-					return nil, err
-				}
-				return map[string]any{"deleted": true, "id": id}, nil
-			}
-		}
+	q, err := s.mcpIssueQuery(ctx, actor)
+	if err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("attachment not found")
+	issueID, err := s.store.IssueAttachmentParent(ctx, q, id)
+	if err != nil {
+		return nil, fmt.Errorf("attachment not found")
+	}
+	_, err = invokeJSONHandler(ctx, http.MethodDelete, map[string]string{"id": issueID, "attachmentId": id}, nil, s.deleteAttachment)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"deleted": true, "id": id}, nil
 }
 
 func invokeJSONHandler(ctx context.Context, method string, pathValues map[string]string, input any, handler http.HandlerFunc) (any, error) {
