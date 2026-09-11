@@ -2,14 +2,49 @@ package store
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
 	"flow/api/internal/domain"
 )
 
-func (s *SQLiteStore) WorkspaceSearchViewer(workspace string)(domain.User,bool){
-	s.mu.RLock();defer s.mu.RUnlock();if workspace==""{workspace=s.lastWorkspaceKey};data,ok:=s.workspaces[workspace];return data.Viewer,ok
+func (s *SQLiteStore) WorkspaceSearchViewer(workspace string) (domain.User, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if workspace == "" {
+		workspace = s.lastWorkspaceKey
+	}
+	data, ok := s.workspaces[workspace]
+	return data.Viewer, ok
+}
+
+func (s *SQLiteStore) SearchResourceSlug(ctx context.Context, workspace, field, id string) (string, error) {
+	var slug string
+	err := s.db.QueryRowContext(ctx, "SELECT COALESCE("+s.jsonText("data", "slugId")+",record_key) FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?", workspace, field, id).Scan(&slug)
+	if slug == "" {
+		slug = id
+	}
+	return slug, err
+}
+
+func (s *SQLiteStore) MatchingIssueSearchLabels(ctx context.Context, q IssueRecordQuery, text string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT record_key,COALESCE("+s.jsonText("data", "scope")+",'') FROM workspace_metadata_records WHERE workspace_key=? AND field='labels' AND LOWER("+s.jsonText("data", "name")+") LIKE ? ESCAPE '!' AND COALESCE("+s.jsonText("data", "resourceType")+",'issue')='issue' LIMIT 500", q.Workspace, "%"+escapeIssueLike(strings.ToLower(text))+"%")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id, scope string
+		if err := rows.Scan(&id, &scope); err != nil {
+			return nil, err
+		}
+		if scope == "" || scope == "workspace" || (q.Access == nil || q.Access.Admin || slices.Contains(q.Access.VisibleTeamIDs, scope)) && (q.AllowedTeamIDs == nil || slices.Contains(q.AllowedTeamIDs, scope)) {
+			ids = append(ids, id)
+		}
+	}
+	return ids, rows.Err()
 }
 
 func (s *SQLiteStore) RecordSearch(ctx context.Context, workspaceID, userID, query string) error {

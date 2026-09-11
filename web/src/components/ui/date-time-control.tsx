@@ -4,12 +4,14 @@ import { useMemo, useState } from 'react'
 import { SelectControl } from './select-control'
 import './date-time-control.css'
 import { firstWeekday, useUserPreferences } from '@/lib/runtime-preferences'
+import { translateToChinese, type AppLocale } from '@/i18n/i18n'
 
 type Mode = 'date' | 'datetime'
 
 export function DateTimeControl({
   className = '',
   label,
+  locale,
   min,
   mode = 'date',
   onChange,
@@ -17,11 +19,13 @@ export function DateTimeControl({
 }: {
   className?: string
   label: string
+  locale?: AppLocale
   min?: string
   mode?: Mode
   onChange: (value: string) => void
   value: string
 }) {
+  const t=locale==='zh-CN'?translateToChinese:(text:string)=>text
   const initial = parseValue(value)
   const [open, setOpen] = useState(false)
   const [view, setView] = useState(() => new Date(initial.year, initial.month - 1, 1))
@@ -57,15 +61,15 @@ export function DateTimeControl({
     </Popover.Trigger>
     <Popover.Portal>
       <Popover.Content data-flow-motion="floating" align="start" className="date-time-popover" collisionPadding={8} sideOffset={4}>
-        <header><button aria-label="Previous month" onClick={() => setView(new Date(view.getFullYear(), view.getMonth() - 1, 1))}><ChevronIcon direction="left"/></button><strong>{view.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</strong><button aria-label="Next month" onClick={() => setView(new Date(view.getFullYear(), view.getMonth() + 1, 1))}><ChevronIcon direction="right"/></button></header>
-        <div className="date-time-weekdays">{Array.from({length:7},(_,index)=>['S','M','T','W','T','F','S'][(index+weekStart)%7]).map((day,index)=><span key={`${day}-${index}`}>{day}</span>)}</div>
+        <header><button aria-label={t('Previous month')} onClick={() => setView(new Date(view.getFullYear(), view.getMonth() - 1, 1))}><ChevronIcon direction="left"/></button><strong>{view.toLocaleDateString(locale, { month: 'long', year: 'numeric' })}</strong><button aria-label={t('Next month')} onClick={() => setView(new Date(view.getFullYear(), view.getMonth() + 1, 1))}><ChevronIcon direction="right"/></button></header>
+        <div className="date-time-weekdays">{Array.from({length:7},(_,index)=>(locale==='zh-CN'?['日','一','二','三','四','五','六']:['S','M','T','W','T','F','S'])[(index+weekStart)%7]).map((day,index)=><span key={`${day}-${index}`}>{day}</span>)}</div>
         <div className="date-time-grid">{days.map(day => {
           const iso = formatDate(day)
           const outside = day.getMonth() !== view.getMonth()
           const disabled = Boolean(min && iso < min.slice(0, 10))
-          return <button aria-label={day.toLocaleDateString()} data-outside={outside || undefined} data-selected={iso === draftDate || undefined} disabled={disabled} key={iso} onClick={() => choose(iso)}>{day.getDate()}</button>
+          return <button aria-label={day.toLocaleDateString(locale)} data-outside={outside || undefined} data-selected={iso === draftDate || undefined} disabled={disabled} key={iso} onClick={() => choose(iso)}>{day.getDate()}</button>
         })}</div>
-        {mode === 'datetime' && <footer><TimeControl label="Time" value={draftTime} onChange={setDraftTime}/><button className="date-time-apply" disabled={!draftDate} onClick={apply}>Apply</button></footer>}
+        {mode === 'datetime' && <footer><TimeControl label={t('Time')} value={draftTime} onChange={setDraftTime}/><button className="date-time-apply" disabled={!draftDate} onClick={apply}>{t('Apply')}</button></footer>}
       </Popover.Content>
     </Popover.Portal>
   </Popover.Root>

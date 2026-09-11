@@ -2079,23 +2079,25 @@ type Presence struct {
 }
 
 type SearchResult struct {
-	State *WorkflowState `json:"state,omitempty"`
+	URL           string         `json:"url,omitempty"`
+	SlugID        string         `json:"slugId,omitempty"`
+	State         *WorkflowState `json:"state,omitempty"`
 	ProjectStatus *ProjectStatus `json:"projectStatus,omitempty"`
-	StatusType string `json:"statusType,omitempty"`
-	StatusName string `json:"statusName,omitempty"`
-	CreatedAt time.Time `json:"createdAt,omitempty"`
-	ID         string    `json:"id"`
-	Type       string    `json:"type"`
-	Title      string    `json:"title"`
-	Subtitle   string    `json:"subtitle,omitempty"`
-	Identifier string    `json:"identifier,omitempty"`
-	ParentID   string    `json:"parentId,omitempty"`
-	ParentType string    `json:"parentType,omitempty"`
-	Email      string    `json:"email,omitempty"`
-	Icon       string    `json:"icon,omitempty"`
-	Color      string    `json:"color,omitempty"`
-	Score      int       `json:"score"`
-	UpdatedAt  time.Time `json:"updatedAt,omitempty"`
+	StatusType    string         `json:"statusType,omitempty"`
+	StatusName    string         `json:"statusName,omitempty"`
+	CreatedAt     time.Time      `json:"createdAt,omitempty"`
+	ID            string         `json:"id"`
+	Type          string         `json:"type"`
+	Title         string         `json:"title"`
+	Subtitle      string         `json:"subtitle,omitempty"`
+	Identifier    string         `json:"identifier,omitempty"`
+	ParentID      string         `json:"parentId,omitempty"`
+	ParentType    string         `json:"parentType,omitempty"`
+	Email         string         `json:"email,omitempty"`
+	Icon          string         `json:"icon,omitempty"`
+	Color         string         `json:"color,omitempty"`
+	Score         int            `json:"score"`
+	UpdatedAt     time.Time      `json:"updatedAt,omitempty"`
 }
 
 type SearchHistoryEntry struct {

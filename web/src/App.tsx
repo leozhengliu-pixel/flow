@@ -202,7 +202,6 @@ import {
   pulsePath,
   pulseViewPath,
   releasePipelinesPath,
-  releasePath,
   releasePipelineSettingsPath,
   reviewPath,
   reviewsPath,
@@ -249,6 +248,7 @@ import { applyTheme } from "@/lib/theme";
 import { useExitPresence } from '@/components/ui/motion';
 
 import { PeopleProvider } from '@/components/property/people-provider'
+import { searchResultLink } from '@/lib/search-result-link'
 import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck } from '@/lib/issue-detail-cache'
 
 const IssueLoadingPreview = lazy(() => import('@/components/issue/issue-loading-preview').then(module => ({default:module.IssueLoadingPreview})))
@@ -880,13 +880,19 @@ function App() {
       }
       const payload=event.payload as Record<string,unknown> | undefined;
       const deletedLabelIds = Array.isArray(payload?.labelIds) ? new Set(payload.labelIds as string[]) : undefined;
+      const deletedWorkflowState=event.type==='workflow_state.deleted' ? payload : undefined;
       setData(current=>{
         if(current?.workspace.urlKey!==workspace || current.viewer.id!==viewerId)return current;
         const authorized=visible?new Set([...visible,...current.issues.filter(issue=>!checked.has(issue.id)).map(issue=>issue.id)]):undefined;
         const merged=mergeWorkspaceDirectory(current,next,authorized);
         if(deletedLabelIds)merged.issues=merged.issues.map(issue=>issue.labels.some(label=>deletedLabelIds.has(label.id))?{...issue,labels:issue.labels.filter(label=>!deletedLabelIds.has(label.id))}:issue);
+        if(deletedWorkflowState){
+          const replacement=next.states.find(state=>state.id===deletedWorkflowState.replacementStateId);
+          if(replacement)merged.issues=merged.issues.map(issue=>issue.team.id===deletedWorkflowState.teamId&&issue.state.id===deletedWorkflowState.stateId?{...issue,state:replacement,needsDetailRefresh:!issue.isSummary}:issue);
+        }
         return merged;
       });
+      if(deletedWorkflowState)window.dispatchEvent(new CustomEvent('flow-issue-query-invalidated',{detail:{workspaceKey:workspace}}));
       if(visible && checkedIds.some(id=>!visible.has(id))) window.dispatchEvent(new CustomEvent('flow-issue-query-invalidated',{detail:{workspaceKey:workspace,force:true}}));
       if(checkVisibility && selectedIssue && visible?.has(selectedIssue.id)) {
         const refreshed=await fetchIssueRecord(selectedIssue.id,undefined,workspace);
@@ -4126,95 +4132,7 @@ function App() {
   };
   const openSearchResult = (result: SearchResult) => {
     rememberResult(result.type, result.id);
-    if (result.type === "issue") {
-      const issue = data.issues.find((item) => item.id === result.id);
-      if (issue) openIssue(issue);
-      return;
-    }
-    if (result.type === "project") {
-      const project = data.projects.find((item) => item.id === result.id);
-      if (project) openProject(project);
-      return;
-    }
-    if (result.type === "initiative") {
-      const initiative = data.initiatives.find((item) => item.id === result.id);
-      if (initiative) openInitiative(initiative);
-      return;
-    }
-    if (result.type === "member") {
-      navigateTo(membersPath(data.workspace.urlKey));
-      return;
-    }
-    if (result.type === "document") {
-      const document = data.documents.find((item) => item.id === result.id);
-      if (document) {
-        navigateTo(documentPath(data.workspace.urlKey, document));
-        return;
-      }
-    }
-    if (result.type === "customer") {
-      const customer = data.customers.find((item) => item.id === result.id);
-      if (customer) navigateTo(customerPath(data.workspace.urlKey, customer));
-      return;
-    }
-    if (result.type === "release") {
-      const release = data.releases.find((item) => item.id === result.id);
-      const pipeline = release
-        ? data.releasePipelines.find((item) => item.id === release.pipelineId)
-        : undefined;
-      if (release && pipeline)
-        navigateTo(
-          releasePath(data.workspace.urlKey, pipeline.slugId, release.slugId),
-        );
-      return;
-    }
-    if (result.type === "view") {
-      const view = data.savedViews.find((item) => item.id === result.id);
-      if (!view) return;
-      const team =
-        view.scope === "team"
-          ? data.teams.find((item) => item.id === view.teamId)
-          : undefined;
-      const project = view.projectId
-        ? data.projects.find((item) => item.id === view.projectId)
-        : undefined;
-      if ((view.resource ?? "issues") === "projects") {
-        navigateTo(
-          team
-            ? teamProjectsSavedViewPath(
-                data.workspace.urlKey,
-                team.key,
-                savedViewPathId(view),
-              )
-            : projectsSavedViewPath(
-                data.workspace.urlKey,
-                savedViewPathId(view),
-              ),
-        );
-      } else if (project) {
-        navigateTo(
-          projectSavedViewPath(
-            data.workspace.urlKey,
-            project.slugId,
-            savedViewPathId(view),
-          ),
-        );
-      } else {
-        navigateTo(
-          workspaceSavedViewPath(data.workspace.urlKey, savedViewPathId(view)),
-        );
-      }
-      return;
-    }
-    if (result.parentType === "project") {
-      const project = data.projects.find((item) => item.id === result.parentId);
-      if (project) openProject(project);
-    } else if (result.parentType === "initiative") {
-      const initiative = data.initiatives.find(
-        (item) => item.id === result.parentId,
-      );
-      if (initiative) openInitiative(initiative);
-    }
+    navigateTo(searchResultLink(data,result),{state:{returnTo:location.pathname+location.search,originPath:location.pathname+location.search}});
   };
   const cycleTeam =
     "teamKey" in route &&
@@ -4369,6 +4287,8 @@ function App() {
           <WorkspaceSearchPage
             onOpenSidebar={() => setMobileSidebarOpen(true)}
             onOpenResult={openSearchResult}
+            getResultHref={result=>searchResultLink(data,result)}
+            users={data.users}
           />
         )}
         {page === "documents" && route.kind === "documents" && (

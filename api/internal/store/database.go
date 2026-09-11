@@ -188,6 +188,10 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := s.ensureMetadataSearchIndex(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := s.loadOrSeed(context.Background()); err != nil {
 		db.Close()
 		return nil, err
@@ -234,6 +238,10 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		return nil, err
 	}
 	if err := s.migrateIssueSearchIndex(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.migrateMetadataSearchIndex(context.Background()); err != nil {
 		db.Close()
 		return nil, err
 	}

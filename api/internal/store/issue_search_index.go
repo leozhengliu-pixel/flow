@@ -125,7 +125,9 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 		return err
 	}
 	prefix, prefixArgs := issueAccessCTE(q)
-	if len(terms) == 0 || len(terms) > 32 { return ErrIssueQuery }
+	if len(terms) == 0 || len(terms) > 32 {
+		return ErrIssueQuery
+	}
 	text := terms[0]
 	// Use a subquery so SQLite FTS MATCH remains in a supported conjunctive
 	// context when label matches are included alongside textual matches.
@@ -134,9 +136,18 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 	for _, term := range terms {
 		join, match := "", "LOWER(s.content) LIKE ? ESCAPE '!'"
 		value := "%" + escapeIssueLike(strings.ToLower(term)) + "%"
-		if s.dialect == "sqlite" && utf8.RuneCountInString(term) >= 3 { join = " JOIN issue_search_fts ON issue_search_fts.rowid=s.rowid"; match = "issue_search_fts MATCH ?"; value = "\"" + strings.ReplaceAll(term, "\"", "\"\"") + "\"" }
-		if s.dialect == "mysql" && utf8.RuneCountInString(term) >= 2 { match = "MATCH(s.content) AGAINST (? IN BOOLEAN MODE)"; value = "\"" + strings.ReplaceAll(term, "\"", " ") + "\"" }
-		if s.dialect == "postgres" { match = "s.content ILIKE ? ESCAPE '!'" }
+		if s.dialect == "sqlite" && utf8.RuneCountInString(term) >= 3 {
+			join = " JOIN issue_search_fts ON issue_search_fts.rowid=s.rowid"
+			match = "issue_search_fts MATCH ?"
+			value = "\"" + strings.ReplaceAll(term, "\"", "\"\"") + "\""
+		}
+		if s.dialect == "mysql" && utf8.RuneCountInString(term) >= 2 {
+			match = "MATCH(s.content) AGAINST (? IN BOOLEAN MODE)"
+			value = "\"" + strings.ReplaceAll(term, "\"", " ") + "\""
+		}
+		if s.dialect == "postgres" {
+			match = "s.content ILIKE ? ESCAPE '!'"
+		}
 		selections = append(selections, "SELECT s.issue_id FROM issue_search_documents s"+join+" WHERE s.workspace_key=? AND "+match)
 		textArgs = append(textArgs, q.Workspace, value)
 	}
@@ -167,12 +178,21 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 	order := "CASE WHEN i.identifier=? THEN 0 WHEN LOWER(i.title)=LOWER(?) THEN 1 ELSE 2 END,i.updated_at DESC,i.id"
 	orderArgs := []any{text, text}
 	if q.Sort != "" && q.Sort != "sortOrder" {
-		column := map[string]string{"createdAt":"created_at", "updatedAt":"updated_at", "title":"title", "priority":"priority"}[q.Sort]
-		if column == "" { return ErrIssueQuery }
-		direction := "DESC"; if q.Direction == "asc" { direction = "ASC" }
-		order, orderArgs = "i."+column+" "+direction+",i.id", nil
+		column := map[string]string{"createdAt": "created_at", "updatedAt": "updated_at", "title": "title", "priority": "priority"}[q.Sort]
+		if column == "" {
+			return ErrIssueQuery
+		}
+		direction := "DESC"
+		if q.Direction == "asc" {
+			direction = "ASC"
+		}
+		expression := "i." + column
+		if q.Sort == "title" {
+			expression = "LOWER(i.title)"
+		}
+		order, orderArgs = expression+" "+direction+",i.id", nil
 	}
-	inner := `SELECT i.id FROM issue_records i WHERE ` + where + ` AND ` + textMatch + ` ORDER BY `+order+` LIMIT ?`
+	inner := `SELECT i.id FROM issue_records i WHERE ` + where + ` AND ` + textMatch + ` ORDER BY ` + order + ` LIMIT ?`
 	params := append(prefixArgs, args...)
 	params = append(params, textArgs...)
 	params = append(params, orderArgs...)
@@ -195,9 +215,17 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 		normalizeIssueRecord(&issue)
 		items = append(items, issueListProjection(issue))
 	}
-	if err := rows.Err(); err != nil { return err }
+	if err := rows.Err(); err != nil {
+		return err
+	}
 	rows.Close()
-	if err := s.resolveIssueReferences(ctx, q.Workspace, items); err != nil { return err }
-	for _, issue := range items { if err := visit(issue); err != nil { return err } }
+	if err := s.resolveIssueReferences(ctx, q.Workspace, items); err != nil {
+		return err
+	}
+	for _, issue := range items {
+		if err := visit(issue); err != nil {
+			return err
+		}
+	}
 	return nil
 }

@@ -6,9 +6,9 @@ import { DocumentGlyph } from '@/components/documents/document-icon'
 import { ReleasesIcon } from '@/components/releases/release-icons'
 
 import { clearSearchHistory, searchWorkspace, semanticSearch } from '@/lib/api'
-import type { SearchHistoryEntry, SearchResourceType, SearchResponse, SearchResult } from '@/types/flow'
+import type { SearchHistoryEntry, SearchResourceType, SearchResponse, SearchResult, User } from '@/types/flow'
 import { ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
-import { ViewIcon } from '@/components/views/view-icon'
+import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { useI18n } from '@/i18n/i18n'
 import { readSearchState, writeSearchState, searchFilterAST, type SearchTab, type SearchPageState } from './search-state'
@@ -23,12 +23,13 @@ const tabs: Array<{ id: SearchTab; label: string }> = [
   { id: 'initiative', label: 'Initiatives' },
   { id: 'document', label: 'Documents' },
 ]
-export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref }: {
+export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref, users }: {
   onOpenSidebar?: () => void
   onOpenResult: (result: SearchResult) => void
   getResultHref: (result: SearchResult) => string
+  users?: User[]
 }) {
-  const {t}=useI18n()
+  const {t,locale}=useI18n()
   const [params,setParams]=useSearchParams()
   const state=useMemo(()=>readSearchState(params),[params])
   const {query,tab}=state
@@ -40,6 +41,10 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
   const [retry, setRetry] = useState(0)
   const requestRef = useRef(0)
   const [completedRequest,setCompletedRequest]=useState('')
+  const [nextCursor,setNextCursor]=useState('')
+  const [loadingMore,setLoadingMore]=useState(false)
+  const [moreError,setMoreError]=useState<string>()
+  const moreController=useRef<AbortController | null>(null)
   const resultListRef=useRef<HTMLDivElement>(null)
   const options=useMemo(()=>({sort:state.order,includeArchived:state.includeArchived,filter:searchFilterAST(state)}),[state])
   const requestKey=JSON.stringify([query,tab,options])
@@ -55,14 +60,18 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
   useEffect(() => {
     const request = ++requestRef.current
     const controller=new AbortController()
+    moreController.current?.abort()
+    setLoadingMore(false)
+    setMoreError(undefined)
+    setNextCursor('')
     setLoading(true)
     setError(undefined)
-    const operation=query ? semanticSearch(query,types,options,controller.signal).then(result=>({results:result.results,history:[],recent:[]})) : searchWorkspace(query, types,options,controller.signal)
+    const operation=query ? semanticSearch(query,types,options,controller.signal).then(result=>({results:result.results,history:[],recent:[],nextCursor:result.hasMore?result.nextCursor:''})) : searchWorkspace(query, types,options,controller.signal).then(result=>({...result,nextCursor:''}))
     operation
-      .then(result => { if (!controller.signal.aborted&&request === requestRef.current) { setResponse(result);setCompletedRequest(requestKey); setActiveIndex(0) } })
+      .then(result => { if (!controller.signal.aborted&&request === requestRef.current) { setResponse(result);setNextCursor(result.nextCursor);setCompletedRequest(requestKey); setActiveIndex(0) } })
       .catch(reason => { if (!controller.signal.aborted&&request === requestRef.current) setError(reason instanceof Error ? reason.message : 'Search failed') })
       .finally(() => { if (!controller.signal.aborted&&request === requestRef.current) setLoading(false) })
-    return ()=>controller.abort()
+    return ()=>{controller.abort();moreController.current?.abort()}
   }, [query, retry, types, options,requestKey])
 
   const runSearch = (value = draft) => {
@@ -71,6 +80,21 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
     updateState({...state,query:next})
   }
   const choose = (result: SearchResult) => onOpenResult(result)
+  const loadMore=async()=>{
+    if(!currentResults||!nextCursor||loadingMore)return
+    const request=requestRef.current
+    const controller=new AbortController()
+    moreController.current=controller
+    setLoadingMore(true)
+    setMoreError(undefined)
+    try{
+      const page=await semanticSearch(query,types,{...options,cursor:nextCursor},controller.signal)
+      if(controller.signal.aborted||request!==requestRef.current)return
+      setResponse(previous=>{const keys=new Set(previous.results.map(item=>`${item.type}:${item.id}`));return {...previous,results:[...previous.results,...page.results.filter(item=>!keys.has(`${item.type}:${item.id}`))]}})
+      setNextCursor(page.hasMore?page.nextCursor:'')
+    }catch(reason){if(!controller.signal.aborted)setMoreError(reason instanceof Error?reason.message:t('Search failed'))}
+    finally{if(!controller.signal.aborted)setLoadingMore(false)}
+  }
 
   return <main className="main-panel workspace-search-page">
     <header className="workspace-search-header">
@@ -97,10 +121,10 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
       {draft && <button className="workspace-search-clear" type="button" aria-label={t('Clear search')} onClick={() => runSearch('')}><X size={14}/></button>}
     </header>
     <div className="workspace-search-toolbar">
-      <nav aria-label="Search resource type">
+      <nav aria-label={t('Search resource type')}>
         {tabs.map(item => <button key={item.id} type="button" aria-pressed={item.id===tab} className={`ui-pill ${item.id === tab ? 'active' : ''}`} onClick={() => updateState({...state,tab:item.id})}>{t(item.label)}</button>)}
       </nav>
-      <div className="workspace-search-tools"><SearchMenus state={state} onChange={updateState}/></div>
+      <div className="workspace-search-tools"><SearchMenus state={state} users={users} onChange={updateState}/></div>
     </div>
     <section className="workspace-search-content" aria-live="polite">
       {state.filters.length>0&&<SearchFilterChips state={state} onChange={updateState}/>}
@@ -108,8 +132,8 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
       {!query && currentResults && !inputPending && <RecentSearches history={response.history} onSearch={runSearch} onClear={async () => { try{await clearSearchHistory(); setResponse(current => ({ ...current, history: [] }))}catch(reason){setError(reason instanceof Error?reason.message:t('Could not clear search history'))} }}/>} 
       {!query && currentResults && !inputPending && !response.history.length && !results.length && <SearchEmpty/>}
       {loading && <SearchLoading/>}
-      {error && <div className="workspace-search-state"><strong>Search unavailable</strong><span>{error}</span><button type="button" onClick={() => setRetry(value => value + 1)}>Try again</button></div>}
-      {!loading && !error && query && response.results.length === 0 && <div className="workspace-search-state"><Search size={20}/><strong>No results found</strong><span>Try a different search term.</span></div>}
+      {error && <div className="workspace-search-state"><strong>{t('Search unavailable')}</strong><span>{t(error)}</span><button type="button" onClick={() => setRetry(value => value + 1)}>{t('Try again')}</button></div>}
+      {currentResults && !inputPending && query && response.results.length === 0 && <div className="workspace-search-state"><Search size={20}/><strong>{t('No results found')}</strong><span>{t('Try a different search term.')}</span></div>}
       {currentResults && !inputPending && results.length > 0 && <div className="workspace-search-results" ref={resultListRef}>
         <h2>{t(query ? 'Search results' : 'Recently viewed')}</h2>
         {results.map((result, index) => <a
@@ -125,19 +149,23 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
             <strong>{state.showId && result.identifier && <small>{result.identifier}</small>}{result.title}</strong>
             {(result.subtitle || result.email) && <span>{result.subtitle || result.email}</span>}
           </span>
-          <time>{relativeTime(result.updatedAt)}</time>
+          <time>{relativeTime(result.updatedAt,locale)}</time>
         </a>)}
+        {moreError&&<p role="alert">{t(moreError)}</p>}
+        {nextCursor&&<button type="button" className="workspace-search-more" disabled={loadingMore} onClick={()=>void loadMore()}>{t(loadingMore?'Loading...':moreError?'Try again':'Load more')}</button>}
       </div>}
     </section>
   </main>
 }
 
 function SearchEmpty() {
-  return <div className="workspace-search-empty"><SearchEmptyIllustration/><div><strong>Search</strong><span>Find issues, projects, initiatives, and documents</span></div></div>
+  const {t}=useI18n()
+  return <div className="workspace-search-empty"><SearchEmptyIllustration/><div><strong>{t('Search')}</strong><span>{t('Find issues, projects, initiatives, and documents')}</span></div></div>
 }
 
 function SearchEmptyIllustration() {
-  return <svg aria-label="No search results illustration" className="workspace-search-empty-illustration" fill="none" viewBox="0 0 156 72">
+  const {t}=useI18n()
+  return <svg role="img" aria-label={t('No search results illustration')} className="workspace-search-empty-illustration" fill="none" viewBox="0 0 156 72">
     <g fill="currentColor" opacity=".08">{[4,32,60,88,116,144].flatMap((x,index)=>[8,36,64].map((y,row)=><rect height={index===2&&row===1?16:10} key={`${x}-${y}`} rx="2" width={index===2&&row===1?16:10} x={x-5} y={y-5}/>))}</g>
     <circle cx="78" cy="36" fill="var(--theme-surface-2)" r="20" stroke="var(--theme-border-strong)"/>
     <circle cx="75" cy="33" r="8" stroke="var(--theme-text-secondary)" strokeWidth="2"/><path d="m81 39 7 7" stroke="var(--theme-text-secondary)" strokeLinecap="round" strokeWidth="2"/>
@@ -145,18 +173,19 @@ function SearchEmptyIllustration() {
 }
 
 function RecentSearches({ history, onSearch, onClear }: { history: SearchHistoryEntry[]; onSearch: (query: string) => void; onClear: () => void }) {
+  const {t}=useI18n()
   if (!history.length) return null
   return <div className="workspace-recent-searches">
-    <h2>Recent searches</h2>
+    <h2>{t('Recent searches')}</h2>
     {history.map(item => <button type="button" key={item.query} onClick={() => onSearch(item.query)}><Search size={13}/><span data-i18n-ignore>{item.query}</span></button>)}
-    <button className="workspace-clear-history" type="button" onClick={onClear}><X size={13}/><span>Clear History</span></button>
+    <button className="workspace-clear-history" type="button" onClick={onClear}><X size={13}/><span>{t('Clear History')}</span></button>
   </div>
 }
 
 function SearchResultIcon({ result }: { result: SearchResult }) {
   const style = result.color ? { color: result.color } : undefined
   if (result.type === 'issue') return <span className="workspace-search-result-icon issue" style={style}>{result.state?<StatusIcon state={result.state}/>:<Search size={15}/>}</span>
-  if (result.type === 'project') return <span className="workspace-search-result-icon" style={style}>{result.icon?<ViewIcon icon={normalizeProjectIcon(result.icon)} color={result.color}/>:<ProjectIcon/>}</span>
+  if (result.type === 'project') return <span className="workspace-search-result-icon" style={style}>{result.icon?<ViewGlyph icon={normalizeProjectIcon(result.icon)} color={result.color}/>:<ProjectIcon/>}</span>
   if (result.type === 'initiative') return <span className="workspace-search-result-icon" style={style}><Lightbulb/></span>
   if (result.type === 'member') return <span className="workspace-search-result-icon"><UserRound/></span>
   if (result.type === 'customer') return <span className="workspace-search-result-icon"><Building2/></span>
@@ -169,15 +198,22 @@ function SearchLoading() {
   return <div className="workspace-search-loading">{Array.from({ length: 5 }, (_, index) => <span key={index}/>)}</div>
 }
 
-function relativeTime(value?: string) {
+function relativeTime(value?: string,locale?:string) {
   if (!value) return ''
   const elapsed = Date.now() - new Date(value).getTime()
   const minutes = Math.floor(elapsed / 60_000)
+  if(locale==='zh-CN') {
+    const formatter=new Intl.RelativeTimeFormat(locale,{numeric:'auto'})
+    if(minutes<1)return formatter.format(0,'second')
+    if(minutes<60)return formatter.format(-minutes,'minute')
+    if(minutes<1440)return formatter.format(-Math.floor(minutes/60),'hour')
+    if(minutes<10080)return formatter.format(-Math.floor(minutes/1440),'day')
+  }
   if (minutes < 1) return 'now'
   if (minutes < 60) return `${minutes}m`
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours}h`
   const days = Math.floor(hours / 24)
   if (days < 7) return `${days}d`
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(value))
+  return new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(new Date(value))
 }

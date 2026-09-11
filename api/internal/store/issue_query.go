@@ -400,6 +400,12 @@ func compileIssueFilter(node IssueFilter, depth int, remaining *int) (string, []
 	return "(" + strings.Join(clauses, " AND ") + ")", args, nil
 }
 
+func ValidateIssueFilter(filter IssueFilter) error {
+	budget := 256
+	_, _, err := compileIssueFilter(filter, 0, &budget)
+	return err
+}
+
 func escapeIssueLike(value string) string {
 	return strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(value)
 }
