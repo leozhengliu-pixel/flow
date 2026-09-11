@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 var supportedOAuthScopes = []string{"read", "write", "openid", "email"}
@@ -100,12 +101,25 @@ func (s *server) registerOAuthClient(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_client_metadata", "Flow supports public PKCE authorization-code clients")
 		return
 	}
+	client := domain.OAuthClient{ClientName: strings.TrimSpace(input.ClientName), ClientURI: input.ClientURI, LogoURI: input.LogoURI, RedirectURIs: normalizedStrings(input.RedirectURIs), GrantTypes: normalizedStrings(input.GrantTypes), ResponseTypes: normalizedStrings(input.ResponseTypes), TokenEndpointAuthMethod: input.TokenEndpointAuthMethod, CreatedAt: time.Now().UTC()}
+	if existing, found, findErr := s.store.FindOAuthClientByMetadata(r.Context(), client); findErr != nil {
+		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not look up client")
+		return
+	} else if found {
+		existing.RedirectURIs = store.MergeOAuthRedirectURIs(existing.RedirectURIs, client.RedirectURIs)
+		if err := s.store.UpdateOAuthClient(r.Context(), existing); err != nil {
+			writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not update client")
+			return
+		}
+		writeJSON(w, http.StatusOK, existing)
+		return
+	}
 	clientID, err := randomSecret("flow_mcp_")
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not register client")
 		return
 	}
-	client := domain.OAuthClient{ClientID: clientID, ClientName: strings.TrimSpace(input.ClientName), ClientURI: input.ClientURI, LogoURI: input.LogoURI, RedirectURIs: normalizedStrings(input.RedirectURIs), GrantTypes: normalizedStrings(input.GrantTypes), ResponseTypes: normalizedStrings(input.ResponseTypes), TokenEndpointAuthMethod: input.TokenEndpointAuthMethod, CreatedAt: time.Now().UTC()}
+	client.ClientID = clientID
 	if err := s.store.RegisterOAuthClient(r.Context(), client); err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not register client")
 		return
