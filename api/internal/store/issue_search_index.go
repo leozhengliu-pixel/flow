@@ -113,37 +113,37 @@ func (s *SQLiteStore) migrateIssueSearchIndex(ctx context.Context) error {
 }
 
 func (s *SQLiteStore) SearchIssueCandidates(ctx context.Context, q IssueRecordQuery, text string, labelIDs []string, limit int, visit func(domain.Issue) error) error {
+	return s.SearchIssueCandidateTerms(ctx, q, []string{text}, labelIDs, limit, visit)
+}
+
+// Retrieve a bounded union once: semantic synonyms must not independently
+// decode the same issue, nor discard the caller's indexed facet predicates.
+func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueRecordQuery, terms []string, labelIDs []string, limit int, visit func(domain.Issue) error) error {
 	q.Text = ""
-	q.Filter = IssueFilter{}
 	where, args, err := issueRecordWhere(q)
 	if err != nil {
 		return err
 	}
 	prefix, prefixArgs := issueAccessCTE(q)
-	join := ""
-	match := "LOWER(s.content) LIKE ? ESCAPE '!'"
-	searchArgs := []any{"%" + escapeIssueLike(strings.ToLower(text)) + "%"}
-	if s.dialect == "sqlite" && utf8.RuneCountInString(text) >= 3 {
-		join = " JOIN issue_search_fts ON issue_search_fts.rowid=s.rowid"
-		match = "issue_search_fts MATCH ?"
-		searchArgs = []any{"\"" + strings.ReplaceAll(text, "\"", "\"\"") + "\""}
-	}
-	if s.dialect == "mysql" && utf8.RuneCountInString(text) >= 2 {
-		match = "MATCH(s.content) AGAINST (? IN BOOLEAN MODE)"
-		searchArgs = []any{"\"" + strings.ReplaceAll(text, "\"", " ") + "\""}
-	}
-	if s.dialect == "postgres" {
-		match = "s.content ILIKE ? ESCAPE '!'"
-	}
+	if len(terms) == 0 || len(terms) > 32 { return ErrIssueQuery }
+	text := terms[0]
 	// Use a subquery so SQLite FTS MATCH remains in a supported conjunctive
 	// context when label matches are included alongside textual matches.
-	textMatch := `i.id IN (SELECT s.issue_id FROM issue_search_documents s` + join + ` WHERE s.workspace_key=? AND ` + match + `)`
-	textArgs := append([]any{q.Workspace}, searchArgs...)
+	var selections []string
+	var textArgs []any
+	for _, term := range terms {
+		join, match := "", "LOWER(s.content) LIKE ? ESCAPE '!'"
+		value := "%" + escapeIssueLike(strings.ToLower(term)) + "%"
+		if s.dialect == "sqlite" && utf8.RuneCountInString(term) >= 3 { join = " JOIN issue_search_fts ON issue_search_fts.rowid=s.rowid"; match = "issue_search_fts MATCH ?"; value = "\"" + strings.ReplaceAll(term, "\"", "\"\"") + "\"" }
+		if s.dialect == "mysql" && utf8.RuneCountInString(term) >= 2 { match = "MATCH(s.content) AGAINST (? IN BOOLEAN MODE)"; value = "\"" + strings.ReplaceAll(term, "\"", " ") + "\"" }
+		if s.dialect == "postgres" { match = "s.content ILIKE ? ESCAPE '!'" }
+		selections = append(selections, "SELECT s.issue_id FROM issue_search_documents s"+join+" WHERE s.workspace_key=? AND "+match)
+		textArgs = append(textArgs, q.Workspace, value)
+	}
+	selection := strings.Join(selections, " UNION ")
+	textMatch := "i.id IN (" + selection + ")"
 	if s.dialect == "postgres" {
-		// Before auto-analyze runs, PostgreSQL can estimate one workspace row
-		// and reevaluate the text predicate for every issue. Materialize only
-		// matching IDs to make the text scan run once even with cold statistics.
-		cte := `search_text AS MATERIALIZED (SELECT s.issue_id FROM issue_search_documents s WHERE s.workspace_key=? AND ` + match + `) `
+		cte := `search_text AS MATERIALIZED (` + selection + `) `
 		if prefix == "" {
 			prefix = "WITH " + cte
 		} else {
@@ -164,20 +164,25 @@ func (s *SQLiteStore) SearchIssueCandidates(ctx context.Context, q IssueRecordQu
 	if limit > 500 {
 		limit = 500
 	}
-	inner := `SELECT i.id FROM issue_records i WHERE ` + where + ` AND ` + textMatch + ` ORDER BY CASE WHEN i.identifier=? THEN 0 WHEN LOWER(i.title)=LOWER(?) THEN 1 ELSE 2 END,i.updated_at DESC,i.id LIMIT ?`
+	order := "CASE WHEN i.identifier=? THEN 0 WHEN LOWER(i.title)=LOWER(?) THEN 1 ELSE 2 END,i.updated_at DESC,i.id"
+	orderArgs := []any{text, text}
+	if q.Sort != "" && q.Sort != "sortOrder" {
+		column := map[string]string{"createdAt":"created_at", "updatedAt":"updated_at", "title":"title", "priority":"priority"}[q.Sort]
+		if column == "" { return ErrIssueQuery }
+		direction := "DESC"; if q.Direction == "asc" { direction = "ASC" }
+		order, orderArgs = "i."+column+" "+direction+",i.id", nil
+	}
+	inner := `SELECT i.id FROM issue_records i WHERE ` + where + ` AND ` + textMatch + ` ORDER BY `+order+` LIMIT ?`
 	params := append(prefixArgs, args...)
 	params = append(params, textArgs...)
-	params = append(params, text, text, limit, q.Workspace)
-	metadata, ok := s.WorkspaceMetadata(q.Workspace)
-	if !ok {
-		return ErrAuthForbidden
-	}
-	refs := newIssueReferences(metadata)
-	rows, err := s.db.QueryContext(ctx, prefix+`SELECT output.data FROM (`+inner+`) candidates JOIN issue_records output ON output.id=candidates.id AND output.workspace_key=?`, params...)
+	params = append(params, orderArgs...)
+	params = append(params, limit, q.Workspace)
+	rows, err := s.db.QueryContext(ctx, prefix+`SELECT COALESCE(output.list_data,output.data) FROM (`+inner+`) candidates JOIN issue_records output ON output.id=candidates.id AND output.workspace_key=?`, params...)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
+	items := []domain.Issue{}
 	for rows.Next() {
 		var raw []byte
 		var issue domain.Issue
@@ -188,9 +193,11 @@ func (s *SQLiteStore) SearchIssueCandidates(ctx context.Context, q IssueRecordQu
 			return err
 		}
 		normalizeIssueRecord(&issue)
-		if err := visit(refs.resolve(issue)); err != nil {
-			return err
-		}
+		items = append(items, issueListProjection(issue))
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil { return err }
+	rows.Close()
+	if err := s.resolveIssueReferences(ctx, q.Workspace, items); err != nil { return err }
+	for _, issue := range items { if err := visit(issue); err != nil { return err } }
+	return nil
 }

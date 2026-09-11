@@ -2079,6 +2079,11 @@ type Presence struct {
 }
 
 type SearchResult struct {
+	State *WorkflowState `json:"state,omitempty"`
+	ProjectStatus *ProjectStatus `json:"projectStatus,omitempty"`
+	StatusType string `json:"statusType,omitempty"`
+	StatusName string `json:"statusName,omitempty"`
+	CreatedAt time.Time `json:"createdAt,omitempty"`
 	ID         string    `json:"id"`
 	Type       string    `json:"type"`
 	Title      string    `json:"title"`
