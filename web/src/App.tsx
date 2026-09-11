@@ -140,6 +140,7 @@ import type {
 } from "@/types/flow";
 import { deriveResourceCounts } from "@/lib/resource-counts";
 import { Sidebar, type PageId } from "@/components/layout/sidebar";
+import { workspaceFeatureEnabled } from "@/components/layout/sidebar-customization-state";
 import { issueReturnPath } from '@/lib/issue-navigation-context';
 import { fetchWorkspacePreferences } from '@/lib/api';
 import { navigationReturnPath, navigationLabel, sidebarOriginPath, reviewsOriginView, issueSequenceIDs } from '@/lib/navigation-context';
@@ -4097,6 +4098,13 @@ function App() {
     );
   const routeScopeValid = workspaceValid && teamValid;
   const page = routeScopeValid ? pageForRoute(route) : "not-found";
+  const featureFlags = data.workspaceSettings.featureFlags;
+  const loopsEnabled = workspaceFeatureEnabled(featureFlags, "loops");
+  const customerRequestsEnabled = workspaceFeatureEnabled(
+    featureFlags,
+    "customer-requests",
+  );
+  const asksEnabled = workspaceFeatureEnabled(featureFlags, "asks");
   const toolbarAgentSession = data.agentSessions?.find(
     (item) =>
       item.location === "toolbar" && !closedAgentSessionIds.has(item.id),
@@ -4305,7 +4313,7 @@ function App() {
         {page === "team-overview" &&
           (route.kind === "team-overview" ||
             route.kind === "team-documents" ||
-            route.kind === "team-loops" ||
+            (route.kind === "team-loops" && loopsEnabled) ||
             route.kind === "team-members") && (
             <TeamOverviewPage
               data={data}
@@ -4329,6 +4337,12 @@ function App() {
               }
             />
           )}
+        {(page === "loops" || (page === "team-overview" && route.kind === "team-loops")) && !loopsEnabled && (
+          <RouteNotFound
+            title="Loops is unavailable"
+            description="This feature is turned off for the workspace."
+          />
+        )}
         {(
           route.kind === "diary" ||
           route.kind === "meeting" ||
@@ -4472,6 +4486,7 @@ function App() {
           />
         )}
         {page === "loops" &&
+          loopsEnabled &&
           (route.kind === "loops" || route.kind === "loop-editor") && (
             <LoopsPage
               data={data}
@@ -4504,8 +4519,14 @@ function App() {
               onOpenSidebar={() => setMobileSidebarOpen(true)}
             />
           )}
+        {page === "asks" && !asksEnabled && (
+          <RouteNotFound
+            title="Asks is unavailable"
+            description="This feature is turned off for the workspace."
+          />
+        )}
         {((page === "drafts" && route.kind === "drafts") ||
-          (page === "asks" && route.kind === "asks") ||
+          (page === "asks" && asksEnabled && route.kind === "asks") ||
           (page === "releases" &&
             (route.kind === "releases" ||
               route.kind === "release-pipeline" ||
@@ -4599,7 +4620,9 @@ function App() {
             }}
           />
         )}
-        {page === "customer-detail" && selectedCustomer && (
+        {page === "customer-detail" &&
+          customerRequestsEnabled &&
+          selectedCustomer && (
           <CustomerDetailPage
             data={data}
             customer={selectedCustomer}
@@ -4631,8 +4654,15 @@ function App() {
             description="This team does not exist in the current workspace."
           />
         )}
+        {(page === "customers" || page === "customer-detail") &&
+          !customerRequestsEnabled && (
+          <RouteNotFound
+            title="Customers is unavailable"
+            description="This feature is turned off for the workspace."
+          />
+        )}
         {(route.kind === "workspace-members" ||
-          page === "customers" ||
+          (page === "customers" && customerRequestsEnabled) ||
           page === "teams") && (
           <WorkspaceDirectoryPage
             kind={

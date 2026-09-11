@@ -81,10 +81,12 @@ func (s *server) registerOAuthClient(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_redirect_uri", "At least one valid HTTPS or loopback redirect URI is required")
 		return
 	}
-	if input.ClientName == "" {
+	suppliedName := strings.TrimSpace(input.ClientName)
+	if suppliedName == "" {
 		input.ClientName = "MCP client"
+	} else {
+		input.ClientName = suppliedName
 	}
-	input.ClientName = strings.TrimSpace(input.ClientName)
 	if len(input.ClientName) > 200 || (input.ClientURI != "" && !validOAuthMetadataURI(input.ClientURI)) || (input.LogoURI != "" && !validOAuthMetadataURI(input.LogoURI)) {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_client_metadata", "Client metadata contains an invalid name or URL")
 		return
@@ -311,7 +313,7 @@ func (s *server) validateOAuthAuthorizationRequest(r *http.Request, request oaut
 			return client, nil, fmt.Errorf("unknown OAuth client")
 		}
 	}
-	if request.ResponseType != "code" || !slices.Contains(client.RedirectURIs, request.RedirectURI) {
+	if request.ResponseType != "code" || !store.OAuthRedirectURIAllowed(client.RedirectURIs, request.RedirectURI) {
 		return client, nil, fmt.Errorf("response type or redirect URI is invalid")
 	}
 	if request.CodeChallenge == "" || request.CodeChallengeMethod != "S256" {

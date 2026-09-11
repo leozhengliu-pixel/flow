@@ -22,6 +22,33 @@ export type SidebarPreferences = Record<SidebarEntry, SidebarVisibility>;
 export type SidebarGroup = "personal" | "workspace";
 export type SidebarOrder = Record<SidebarGroup, SidebarEntry[]>;
 
+// customers → customer-requests; Asks is a separate `asks` flag, not an entry.
+const SIDEBAR_ENTRY_FEATURES: Partial<Record<SidebarEntry, string>> = {
+  initiatives: "initiatives",
+  customers: "customer-requests",
+  releases: "releases",
+  loops: "loops",
+  pulse: "pulse",
+  agent: "ai",
+};
+
+export function workspaceFeatureEnabled(
+  flags: Record<string, boolean> | undefined,
+  feature: string,
+) {
+  const value =
+    feature === "ai" ? flags?.["ai-agent"] ?? flags?.ai : flags?.[feature];
+  return value !== false;
+}
+
+export function sidebarEntryAvailable(
+  entry: SidebarEntry,
+  flags: Record<string, boolean> | undefined,
+) {
+  const feature = SIDEBAR_ENTRY_FEATURES[entry];
+  return !feature || workspaceFeatureEnabled(flags, feature);
+}
+
 const defaultPersonalOrder: SidebarEntry[] = [
   "inbox", "reviews", "myIssues", "pulse", "drafts", "agent",
 ];

@@ -49,9 +49,13 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 	if limit < 1 || limit > 500 {
 		limit = 100
 	}
+	q.Terms = normalizeSearchTerms(q.Terms)
 	for _, kind := range searchMetadataKinds {
 		if !q.Types[kind.kind] {
 			continue
+		}
+		if err := ctx.Err(); err != nil {
+			return result, err
 		}
 		where, args := "workspace_key=? AND field=?", []any{q.Scope.Workspace, kind.field}
 		if len(q.Terms) == 0 {
@@ -70,23 +74,24 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 		} else {
 			matches := []string{}
 			for _, term := range q.Terms {
-				join, match, value := "", "LOWER(s.content) LIKE ? ESCAPE '!'", "%"+escapeIssueLike(strings.ToLower(term))+"%"
+				value := "%" + escapeIssueLike(strings.ToLower(term)) + "%"
+				selection := "SELECT s.record_key FROM metadata_search_documents s WHERE s.workspace_key=? AND s.field=? AND LOWER(s.content) LIKE ? ESCAPE '!'"
 				if s.dialect == "sqlite" && utf8.RuneCountInString(term) >= 3 {
-					join = " JOIN metadata_search_fts ON metadata_search_fts.rowid=s.rowid"
-					match = "metadata_search_fts MATCH ?"
 					value = "\"" + strings.ReplaceAll(term, "\"", "\"\"") + "\""
+					selection = "SELECT s.record_key FROM metadata_search_fts JOIN metadata_search_documents s ON metadata_search_fts.rowid=s.rowid WHERE s.workspace_key=? AND s.field=? AND metadata_search_fts MATCH ?"
 				}
 				if s.dialect == "mysql" && utf8.RuneCountInString(term) >= 2 {
-					match = "MATCH(s.content) AGAINST (? IN BOOLEAN MODE)"
+					selection = "SELECT s.record_key FROM metadata_search_documents s WHERE s.workspace_key=? AND s.field=? AND MATCH(s.content) AGAINST (? IN BOOLEAN MODE)"
 					value = "\"" + strings.ReplaceAll(term, "\"", " ") + "\""
 				}
 				if s.dialect == "postgres" {
-					match = "s.content ILIKE ? ESCAPE '!'"
+					selection = "SELECT s.record_key FROM metadata_search_documents s WHERE s.workspace_key=? AND s.field=? AND s.content ILIKE ? ESCAPE '!'"
 				}
-				matches = append(matches, "SELECT s.record_key FROM metadata_search_documents s"+join+" WHERE s.workspace_key=? AND s.field=? AND "+match)
+				matches = append(matches, selection)
 				args = append(args, q.Scope.Workspace, kind.field, value)
 			}
-			where += " AND record_key IN (" + strings.Join(matches, " UNION ") + ")"
+			where += " AND " + cappedSearchHitIN("record_key", "record_key", "SELECT record_key FROM ("+strings.Join(matches, " UNION ")+") search_hits LIMIT ?")
+			args = append(args, searchHitLimit(limit))
 		}
 		if q.Scope.Archived != "all" && q.Scope.Archived != "true" {
 			where += " AND " + s.jsonText("data", "archivedAt") + " IS NULL"
@@ -142,8 +147,11 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 			orderExpr = "LOWER(" + orderExpr + ")"
 		}
 		lastValue, lastID := "", ""
-		accepted := 0
+		accepted, examined := 0, 0
 		for accepted < limit {
+			if err := ctx.Err(); err != nil {
+				return result, err
+			}
 			pageWhere, pageArgs := where, slices.Clone(args)
 			if lastID != "" {
 				op := "<"
@@ -200,6 +208,7 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 			if err != nil {
 				return result, err
 			}
+			examined += len(batch)
 			for _, raw := range batch {
 				ok, err := s.appendSearchMetadata(ctx, &result, policy, q.Scope, allowed, kind.kind, raw)
 				if err != nil {
@@ -212,7 +221,7 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 					break
 				}
 			}
-			if len(batch) < 64 {
+			if len(batch) < 64 || examined >= 512 {
 				break
 			}
 		}
@@ -339,6 +348,9 @@ func (s *SQLiteStore) searchMetadataFilter(kind string, node IssueFilter, depth 
 }
 
 func (s *SQLiteStore) appendSearchMetadata(ctx context.Context, result *domain.Bootstrap, policy domain.Bootstrap, q IssueRecordQuery, allowed map[string]bool, kind string, raw []byte) (bool, error) {
+	if !json.Valid(raw) {
+		return false, nil
+	}
 	teamAllowed := func(ids []string) bool {
 		return len(ids) == 0 && q.AllowedTeamIDs == nil || slices.ContainsFunc(ids, func(id string) bool { return allowed[id] })
 	}

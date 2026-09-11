@@ -41,43 +41,42 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 	if query != "" {
 		terms = append(terms, query)
 	}
-	data, err := s.store.SearchMetadata(r.Context(), policy, store.SearchMetadataQuery{Scope: scope, Types: types, Terms: terms, Recent: recent, Limit: max(100, limit*4)})
+	candidateLimit := min(max(limit*4, 40), 200)
+	data, err := s.store.SearchMetadata(r.Context(), policy, store.SearchMetadataQuery{Scope: scope, Types: types, Terms: terms, Recent: recent, Limit: candidateLimit})
 	if err != nil {
 		issueRecordsError(w, err)
 		return
 	}
 	results := []domain.SearchResult{}
 	if query != "" {
-		results = buildSearchResultsLimited(data, query, types, 0, scope.Archived == "all", true)
+		results = buildSearchResultsLimited(data, query, types, candidateLimit, scope.Archived == "all", true)
 	}
 	if query != "" && types["issue"] {
 		scope.Text = ""
+		seen := map[string]bool{}
+		for _, result := range results {
+			if result.Type == "issue" {
+				seen[result.ID] = true
+			}
+		}
 		labelIDs, labelErr := s.store.MatchingIssueSearchLabels(r.Context(), scope, query)
 		if labelErr != nil {
 			issueRecordsError(w, labelErr)
 			return
 		}
-		err := s.store.SearchIssueCandidates(r.Context(), scope, query, labelIDs, max(100, limit*4), func(issue domain.Issue) error {
+		err := s.store.SearchIssueCandidates(r.Context(), scope, query, labelIDs, candidateLimit, func(issue domain.Issue) error {
+			if seen[issue.ID] {
+				return nil
+			}
+			seen[issue.ID] = true
 			data.Issues = append(data.Issues, issue)
-			one := domain.Bootstrap{Issues: []domain.Issue{issue}}
-			matched := buildSearchResultsLimited(one, query, map[string]bool{"issue": true}, 1)
-			if len(matched) == 0 {
-				matched = buildSearchResultsLimited(one, "", map[string]bool{"issue": true}, 1)
-			}
-			results = append(results, matched...)
-			if len(results) > limit*2 {
-				enrichSearchResults(results, data)
-				searchResultOrder(results, scope)
-				results = results[:limit]
-			}
+			results = append(results, scoreIssueSearchResult(issue, query))
 			return nil
 		})
 		if err != nil {
 			issueRecordsError(w, err)
 			return
 		}
-		enrichSearchResults(results, data)
-		searchResultOrder(results, scope)
 	}
 	if query == "" {
 		ids := []string{}
@@ -379,14 +378,32 @@ func isSubsequence(needle, value []rune) bool {
 	return false
 }
 
+func issueSearchResult(issue domain.Issue) domain.SearchResult {
+	return domain.SearchResult{ID: issue.ID, Type: "issue", Title: issue.Title, Subtitle: issue.Team.Name, Identifier: issue.Identifier, Color: issue.State.Color, UpdatedAt: issue.UpdatedAt, CreatedAt: issue.CreatedAt}
+}
+
+func scoreIssueSearchResult(issue domain.Issue, query string) domain.SearchResult {
+	result := issueSearchResult(issue)
+	labels := make([]string, 0, len(issue.Labels))
+	for _, label := range issue.Labels {
+		labels = append(labels, label.Name)
+	}
+	result.Score = fuzzyScore(query, issue.Identifier, issue.Title, issue.Description, strings.Join(labels, " "))
+	if result.Score == 0 {
+		result.Score = 1
+	}
+	return result
+}
+
 func resolveRecentResults(data domain.Bootstrap, recent []domain.RecentResource, types map[string]bool) []domain.SearchResult {
-	all := buildSearchResults(data, "", types)
+	index := map[string]domain.SearchResult{}
+	for _, item := range buildSearchResults(data, "", types) {
+		index[item.Type+":"+item.ID] = item
+	}
 	result := make([]domain.SearchResult, 0, len(recent))
 	for _, item := range recent {
-		if match := slices.IndexFunc(all, func(candidate domain.SearchResult) bool {
-			return candidate.Type == item.ResourceType && candidate.ID == item.ResourceID
-		}); match >= 0 {
-			result = append(result, all[match])
+		if candidate, ok := index[item.ResourceType+":"+item.ResourceID]; ok {
+			result = append(result, candidate)
 		}
 	}
 	return result

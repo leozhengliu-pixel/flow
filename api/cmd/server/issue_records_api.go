@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
@@ -484,6 +485,9 @@ func (s *server) projectIssueRecordReferences(r *http.Request, metadata domain.B
 }
 
 func issueRecordsError(w http.ResponseWriter, err error) {
+	if err == nil || errors.Is(err, context.Canceled) {
+		return
+	}
 	if errors.Is(err, store.ErrIssueQuery) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

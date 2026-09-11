@@ -24,8 +24,10 @@ func (s *SQLiteStore) RegisterOAuthClient(ctx context.Context, client domain.OAu
 }
 
 // FindOAuthClientByMetadata reuses dynamic public clients such as Codex MCP.
-// Loopback ports are intentionally ignored because CLI callbacks use an
-// ephemeral local listener on each authorization attempt.
+// Identity is client_name plus redirect host and path. Loopback ports are
+// ignored because CLI callbacks bind an ephemeral local listener each time.
+// ClientURI, LogoURI, and grant metadata are not part of identity: MCP
+// clients omit or vary those fields across registrations.
 func (s *SQLiteStore) FindOAuthClientByMetadata(ctx context.Context, client domain.OAuthClient) (domain.OAuthClient, bool, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT data FROM oauth_clients ORDER BY created_at DESC`)
 	if err != nil {
@@ -41,15 +43,20 @@ func (s *SQLiteStore) FindOAuthClientByMetadata(ctx context.Context, client doma
 		if json.Unmarshal(raw, &current) != nil {
 			continue
 		}
-		if current.ClientName != client.ClientName || current.ClientURI != client.ClientURI || current.LogoURI != client.LogoURI || current.TokenEndpointAuthMethod != client.TokenEndpointAuthMethod {
+		if current.ClientName != client.ClientName || current.TokenEndpointAuthMethod != client.TokenEndpointAuthMethod || !oauthReusableClientName(client.ClientName) {
 			continue
 		}
-		if !sameOAuthStringSet(current.GrantTypes, client.GrantTypes) || !sameOAuthStringSet(current.ResponseTypes, client.ResponseTypes) || !sameOAuthRedirects(current.RedirectURIs, client.RedirectURIs) {
+		if !sameOAuthRedirects(current.RedirectURIs, client.RedirectURIs) {
 			continue
 		}
 		return current, true, nil
 	}
 	return domain.OAuthClient{}, false, rows.Err()
+}
+
+func oauthReusableClientName(name string) bool {
+	name = strings.TrimSpace(name)
+	return name != "" && !strings.EqualFold(name, "MCP client")
 }
 
 func sameOAuthStringSet(left, right []string) bool {
@@ -64,29 +71,62 @@ func sameOAuthStringSet(left, right []string) bool {
 // URI is interchangeable: trusting only a public client name would allow an
 // unrelated registration to append its own callback to an existing client.
 func sameOAuthRedirects(left, right []string) bool {
-	normalize := func(values []string) ([]string, bool) {
-		result := make([]string, 0, len(values))
-		for _, value := range values {
-			parsed, err := url.Parse(value)
-			if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-				return nil, false
-			}
-			host := strings.ToLower(parsed.Hostname())
-			ip := net.ParseIP(host)
-			if parsed.Scheme == "http" && (host == "localhost" || ip != nil && ip.IsLoopback()) {
-				if strings.Contains(host, ":") {
-					parsed.Host = "[" + host + "]"
-				} else {
-					parsed.Host = host
-				}
-			}
-			result = append(result, parsed.String())
-		}
-		return result, true
-	}
-	l, lok := normalize(left)
-	r, rok := normalize(right)
+	l, lok := oauthRedirectIdentities(left)
+	r, rok := oauthRedirectIdentities(right)
 	return lok && rok && len(l) > 0 && sameOAuthStringSet(l, r)
+}
+
+func oauthRedirectIdentities(values []string) ([]string, bool) {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		identity, ok := oauthRedirectIdentity(value)
+		if !ok {
+			return nil, false
+		}
+		result = append(result, identity)
+	}
+	return result, true
+}
+
+func oauthRedirectIdentity(raw string) (string, bool) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if parsed.Scheme == "http" && oauthLoopbackHost(host) {
+		if strings.Contains(host, ":") {
+			parsed.Host = "[" + host + "]"
+		} else {
+			parsed.Host = host
+		}
+	}
+	return parsed.String(), true
+}
+
+func oauthLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// OAuthRedirectURIAllowed reports whether candidate may be used with a registered
+// public client. Loopback ports are ignored so an ephemeral CLI listener does
+// not need a new registration.
+func OAuthRedirectURIAllowed(registered []string, candidate string) bool {
+	identity, ok := oauthRedirectIdentity(candidate)
+	if !ok {
+		return false
+	}
+	for _, value := range registered {
+		current, currentOK := oauthRedirectIdentity(value)
+		if currentOK && current == identity {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *SQLiteStore) UpdateOAuthClient(ctx context.Context, client domain.OAuthClient) error {
