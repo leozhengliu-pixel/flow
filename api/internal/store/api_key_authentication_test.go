@@ -172,6 +172,62 @@ func TestAPIKeyAuthenticationIgnoresUnrelatedMetadataBodies(t *testing.T) {
 	}
 }
 
+func TestAPIKeyLookupMigrationBackfillsExistingRecords(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "lookup-backfill.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { repo.Close() })
+	dropAPIKeyLookupTriggers(t, repo)
+	data := repo.Bootstrap()
+	key := domain.APIKey{ID: "legacy-oauth-token", SecretHash: strings.Repeat("e", 64), CreatorID: data.Viewer.ID, Scopes: []string{"read"}, CreatedAt: time.Now().UTC()}
+	raw, err := json.Marshal(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.db.ExecContext(t.Context(), `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'apiKeys',?,0,?)`, data.Workspace.URLKey, key.ID, raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.AuthenticateAPIKeyRecord(t.Context(), "", key.SecretHash, nil); !errors.Is(err, ErrAuthForbidden) {
+		t.Fatal("unindexed token authenticated", err)
+	}
+	if err := repo.migrateAPIKeyLookup(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.AuthenticateAPIKeyRecord(t.Context(), "", key.SecretHash, nil); err != nil {
+		t.Fatalf("startup backfill missed the token: %v", err)
+	}
+}
+
+func TestPersonalAPIKeyAuthenticatesWithoutLookupTriggers(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "personal-key.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { repo.Close() })
+	dropAPIKeyLookupTriggers(t, repo)
+	data := repo.Bootstrap()
+	key := domain.APIKey{ID: "personal-cli-key", Name: "CLI", SecretHash: strings.Repeat("d", 64), CreatorID: data.Viewer.ID, Scopes: []string{"read", "write"}, CreatedAt: time.Now().UTC()}
+	if err := repo.MutateWorkspace(t.Context(), data.Workspace.URLKey, "api_key.created", key.ID, nil, func(next *domain.Bootstrap) error {
+		next.APIKeys = append(next.APIKeys, key)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.AuthenticateAPIKeyRecord(t.Context(), "", key.SecretHash, nil); err != nil {
+		t.Fatalf("personal API key was not indexed: %v", err)
+	}
+	if err := repo.MutateWorkspace(t.Context(), data.Workspace.URLKey, "api_key.revoked", key.ID, nil, func(next *domain.Bootstrap) error {
+		next.APIKeys = slices.DeleteFunc(next.APIKeys, func(item domain.APIKey) bool { return item.ID == key.ID })
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.AuthenticateAPIKeyRecord(t.Context(), "", key.SecretHash, nil); !errors.Is(err, ErrAuthForbidden) {
+		t.Fatal("removed API key remained in the hash index", err)
+	}
+}
+
 func BenchmarkAPIKeyAuthenticationLargeDirectory(b *testing.B) {
 	repo, data, key := apiKeyRecordFixture(b)
 	repo.mu.Lock()

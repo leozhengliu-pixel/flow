@@ -30,7 +30,7 @@ func (s *SQLiteStore) AuthenticateAPIKeyRecord(ctx context.Context, workspaceHin
 	}
 	var raw []byte
 	var workspace string
-	err := s.db.QueryRowContext(ctx, `SELECT locator.workspace_key,record.data FROM api_key_lookup locator JOIN workspace_metadata_records record ON record.workspace_key=locator.workspace_key AND record.field='apiKeys' AND record.record_key=locator.key_id WHERE `+where+` LIMIT 1`, args...).Scan(&workspace, &raw)
+	err := s.db.QueryRowContext(ctx, `SELECT locator.workspace_key,record.data FROM api_key_lookup locator JOIN workspace_metadata_records record ON record.workspace_key=locator.workspace_key AND record.field='apiKeys' AND `+s.metadataRecordKeyEquals("record.record_key", "locator.key_id")+` WHERE `+where+` LIMIT 1`, args...).Scan(&workspace, &raw)
 	if errors.Is(err, sql.ErrNoRows) {
 		return result, ErrAuthForbidden
 	}

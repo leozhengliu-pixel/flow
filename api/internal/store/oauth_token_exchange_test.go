@@ -5,12 +5,22 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"flow/api/internal/domain"
 )
+
+func dropAPIKeyLookupTriggers(t *testing.T, repo *SQLiteStore) {
+	t.Helper()
+	for _, name := range []string{"api_key_lookup_insert", "api_key_lookup_update", "api_key_lookup_delete"} {
+		if _, err := repo.db.ExecContext(t.Context(), "DROP TRIGGER IF EXISTS "+name); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 
 func oauthExchangeFixture(t *testing.T) (*SQLiteStore, domain.OAuthRefreshGrant) {
 	t.Helper()
@@ -162,5 +172,21 @@ func TestOAuthExchangeChecksCurrentAuthorizationAndApplicationPolicy(t *testing.
 	}
 	if _, err := repo.ExchangeOAuthGrant(t.Context(), "refresh_token", "old-refresh", grant.ClientID, "policy-refresh", key, nil, nil); !errors.Is(err, ErrAuthForbidden) {
 		t.Fatalf("revoked authorization refreshed: %v", err)
+	}
+}
+
+func TestOAuthExchangeAuthenticatesWithoutLookupTriggers(t *testing.T) {
+	repo, grant := oauthExchangeFixture(t)
+	dropAPIKeyLookupTriggers(t, repo)
+	key := domain.APIKey{ID: "lookup-access", SecretHash: strings.Repeat("c", 64), Scopes: []string{"read"}}
+	if _, err := repo.ExchangeOAuthGrant(t.Context(), "refresh_token", "old-refresh", grant.ClientID, "new-refresh", key, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	result, err := repo.AuthenticateAPIKeyRecord(t.Context(), "", key.SecretHash, nil)
+	if err != nil {
+		t.Fatalf("issued OAuth token was not indexed: %v", err)
+	}
+	if result.Key.ID != key.ID || result.Key.AuthorizationID != grant.AuthorizationID {
+		t.Fatalf("authenticated the wrong credential: %+v", result.Key)
 	}
 }
