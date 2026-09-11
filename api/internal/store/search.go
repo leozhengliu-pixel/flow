@@ -8,6 +8,10 @@ import (
 	"flow/api/internal/domain"
 )
 
+func (s *SQLiteStore) WorkspaceSearchViewer(workspace string)(domain.User,bool){
+	s.mu.RLock();defer s.mu.RUnlock();if workspace==""{workspace=s.lastWorkspaceKey};data,ok:=s.workspaces[workspace];return data.Viewer,ok
+}
+
 func (s *SQLiteStore) RecordSearch(ctx context.Context, workspaceID, userID, query string) error {
 	query = strings.TrimSpace(query)
 	if query == "" {

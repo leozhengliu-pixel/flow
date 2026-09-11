@@ -9,7 +9,7 @@
 .mobileSidebarButton{display:none;width:32px;height:32px;padding:8px;border:0;border-radius:6px;background:transparent}.mobileSidebarButton span{display:block;width:14px;height:1px;margin:3px 0;background:var(--issue-muted)}
 .toolbar{height:43px;flex:0 0 43px;display:flex;align-items:center;justify-content:space-between;padding:0 8px;border-bottom:0}.tabs,.actions{display:flex;align-items:center}.tabs{min-width:0;flex:1;gap:8px;overflow:hidden}.actions{flex:none;gap:6px}.savedTabs{height:32px;min-width:0;flex:1;overflow:hidden}.savedTabs .savedTab{margin-right:8px}
 .viewCount{padding-left:10px;color:var(--muted);font-size:12px;font-weight:450}
-.createPanel{height:137px;flex:0 0 137px;margin:8px 11px 0 8px;overflow:hidden;border:1px solid var(--theme-border);border-radius:10px;background:var(--theme-surface-2);box-shadow:0 3px 6px -2px var(--shadow-color-medium),0 1px 1px var(--shadow-color-raised)}
+.createPanel{height:137px;flex:0 0 137px;margin:8px 11px 0 8px;overflow:visible;border:1px solid var(--theme-border);border-radius:10px;background:var(--theme-surface-2);box-shadow:0 3px 6px -2px var(--shadow-color-medium),0 1px 1px var(--shadow-color-raised)}
 .createPanel>section{background:transparent;border-bottom:0}
 .createPanel .toolbar{height:45px;flex-basis:45px;padding:8px 12px;border-bottom:0}
 :global(:root[data-theme="light"]) .createPanel{border-color:var(--theme-surface-1);background:var(--theme-surface-2);box-shadow:0 3px 6px -2px var(--shadow-color-faint),0 1px 1px var(--shadow-color-soft)}
