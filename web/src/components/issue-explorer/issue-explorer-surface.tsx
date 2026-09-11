@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react'
+import { type ComponentPropsWithRef, type ReactNode } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import { ChevronRight, Link2, Star } from 'lucide-react'
 import { DetailsIcon, FilterIcon } from '@/components/my-issues/my-issues-icons'
@@ -86,6 +86,6 @@ export function IssueExplorerSurface({
   </main>
 }
 
-function ToolbarButton({ children, label, onClick, pressed, title }: { children: ReactNode; label: string; onClick?: () => void; pressed?: boolean; title?: string }) {
-  return <button type="button" className={`${styles.iconButton} ui-pill`} aria-label={label} aria-pressed={pressed} title={title} onClick={onClick}>{children}</button>
+function ToolbarButton({ children, label, pressed, className, ...props }: ComponentPropsWithRef<'button'> & { label: string; pressed?: boolean }) {
+  return <button type="button" className={`${styles.iconButton} ui-pill ${className ?? ''}`} aria-label={label} aria-pressed={pressed} {...props}>{children}</button>
 }

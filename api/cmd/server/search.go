@@ -17,7 +17,7 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 	r = r.WithContext(ctx)
-	data, scope, err := s.pagedRealtimeMetadata(r)
+	policy, scope, err := s.searchQuery(r)
 	if err != nil {
 		issueRecordsError(w, err)
 		return
@@ -28,11 +28,17 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 		limit = 30
 	}
 	types := searchTypes(r.URL.Query().Get("types"))
-	results := buildSearchResultsLimited(data, query, types, limit)
+	userID := policy.Viewer.ID
+	if query != "" { _ = s.store.RecordSearch(r.Context(), policy.Workspace.ID, userID, query) }
+	history, _ := s.store.SearchHistory(r.Context(), policy.Workspace.ID, userID, 8)
+	recent, _ := s.store.RecentResources(r.Context(), policy.Workspace.ID, userID, 12)
+	terms:=[]string{};if query!="" {terms=append(terms,query)}
+	data,err:=s.store.SearchMetadata(r.Context(),policy,store.SearchMetadataQuery{Scope:scope,Types:types,Terms:terms,Recent:recent,Limit:max(100,limit*4)})
+	if err!=nil{issueRecordsError(w,err);return}
+	results:=[]domain.SearchResult{}
+	if query!=""{results=buildSearchResultsLimited(data, query, types, 0)}
 	if query != "" && types["issue"] {
-		scope.Filter = store.IssueFilter{}
 		scope.Text = ""
-		scope.Archived = "all"
 		labelIDs := []string{}
 		for _, label := range data.Labels {
 			if fuzzyScore(query, label.Name) > 0 {
@@ -40,11 +46,13 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		err := s.store.SearchIssueCandidates(r.Context(), scope, query, labelIDs, max(100, limit*4), func(issue domain.Issue) error {
-			one := data
-			one.Issues = []domain.Issue{issue}
-			results = append(results, buildSearchResultsLimited(one, query, map[string]bool{"issue": true}, 1)...)
+			data.Issues=append(data.Issues,issue)
+			one:=domain.Bootstrap{Issues:[]domain.Issue{issue}}
+			matched:=buildSearchResultsLimited(one,query,map[string]bool{"issue":true},1)
+			if len(matched)==0 {matched=buildSearchResultsLimited(one,"",map[string]bool{"issue":true},1)}
+			results = append(results,matched...)
 			if len(results) > limit*2 {
-				sortSearchResults(results)
+				enrichSearchResults(results,data);searchResultOrder(results,scope)
 				results = results[:limit]
 			}
 			return nil
@@ -53,27 +61,18 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 			issueRecordsError(w, err)
 			return
 		}
-		sortSearchResults(results)
+		enrichSearchResults(results,data);searchResultOrder(results,scope)
 	}
-	userID := authUser(r).ID
-	if s.authDisabled {
-		userID = data.Viewer.ID
-	}
-	if query != "" {
-		_ = s.store.RecordSearch(r.Context(), data.Workspace.ID, userID, query)
-	}
-	history, _ := s.store.SearchHistory(r.Context(), data.Workspace.ID, userID, 8)
-	recent, _ := s.store.RecentResources(r.Context(), data.Workspace.ID, userID, 12)
 	if query == "" {
 		ids := []string{}
 		for _, item := range recent {
-			if item.ResourceType == "issue" {
+			if item.ResourceType == "issue" && types["issue"] {
 				ids = append(ids, item.ResourceID)
 			}
 		}
 		if len(ids) > 0 {
-			scope.Filter = store.IssueFilter{Field: "id", Values: ids}
-			scope.Archived = "all"
+			scope.Filter = store.IssueFilter{And:[]store.IssueFilter{scope.Filter,{Field: "id", Values: ids}}}
+			scope.Summary=true
 			scope.Limit = 100
 			page, err := s.store.QueryIssueRecords(r.Context(), scope)
 			if err != nil {
@@ -84,6 +83,8 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 		}
 		results = resolveRecentResults(data, recent, types)
 	}
+	enrichSearchResults(results,data)
+	if query!="" {searchResultOrder(results,scope)}
 	if len(results) > limit {
 		results = results[:limit]
 	}
