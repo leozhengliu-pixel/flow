@@ -22,6 +22,11 @@ func insertSearchMetadata(t testing.TB, repo *SQLiteStore, workspace, field, id 
 	if _, err = repo.db.ExecContext(context.Background(), `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,?,?,0,?) ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET data=excluded.data`, workspace, field, id, raw); err != nil {
 		t.Fatal(err)
 	}
+	if field == "apiKeys" {
+		if err = upsertAPIKeyLookup(context.Background(), repo.db, workspace, id, apiKeyLookupHashFromRecord(raw)); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func TestMetadataSearchUsesBoundedIndexedShellsAndTracksDirectWrites(t *testing.T) {

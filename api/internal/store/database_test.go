@@ -28,6 +28,10 @@ func TestDatabaseDialectRewriting(t *testing.T) {
 	if rewriteSQL("INSERT INTO auth_users(id) VALUES(?)\n\tON CONFLICT\nDO NOTHING", "mysql") != ignore {
 		t.Fatal("multiline mysql ignore was not rewritten")
 	}
+	backfill := rewriteSQL("INSERT INTO api_key_lookup(workspace_key,key_id,secret_hash) SELECT workspace_key,record_key,secret_hash FROM workspace_metadata_records ON CONFLICT(workspace_key,key_id) DO UPDATE SET secret_hash=excluded.secret_hash", "mysql")
+	if backfill != "INSERT INTO api_key_lookup(workspace_key,key_id,secret_hash) SELECT workspace_key,record_key,secret_hash FROM workspace_metadata_records ON DUPLICATE KEY UPDATE secret_hash=VALUES(secret_hash)" {
+		t.Fatalf("mysql lookup backfill rewrite = %q", backfill)
+	}
 }
 
 func TestMySQLURLConversion(t *testing.T) {

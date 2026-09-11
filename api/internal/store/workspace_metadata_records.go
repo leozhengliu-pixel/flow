@@ -239,12 +239,22 @@ func writeWorkspaceMetadataRecords(ctx context.Context, tx *sqlTx, workspace str
 			if _, err := tx.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,?,?,?,?) ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET collection_order=excluded.collection_order,data=excluded.data`, workspace, key.field, key.key, value.order, []byte(value.data)); err != nil {
 				return nil, err
 			}
+			if key.field == "apiKeys" {
+				if err := upsertAPIKeyLookup(ctx, tx, workspace, key.key, apiKeyLookupHashFromRecord(value.data)); err != nil {
+					return nil, err
+				}
+			}
 		}
 		delete(previous, key)
 	}
 	for key := range previous {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, key.field, key.key); err != nil {
 			return nil, err
+		}
+		if key.field == "apiKeys" {
+			if err := deleteAPIKeyLookup(ctx, tx, workspace, key.key); err != nil {
+				return nil, err
+			}
 		}
 	}
 	root[metadataCollectionsKey], err = json.Marshal(shapes)
