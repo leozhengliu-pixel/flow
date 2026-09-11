@@ -721,9 +721,11 @@ export interface OAuthAuthorizationRequest {
 }
 export function fetchOAuthAuthorizationRequest(
   query: string,
+  signal?: AbortSignal,
 ): Promise<OAuthAuthorizationRequest> {
   return request(
     `/api/oauth/authorization-request?${query.replace(/^\?/, "")}`,
+    {signal},
   );
 }
 export function decideOAuthAuthorization(input: {

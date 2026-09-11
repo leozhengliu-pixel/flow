@@ -51,6 +51,9 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 		if s.dialect != "sqlite" {
 			lock = " FOR UPDATE"
 		}
+		if err := oauthActiveMembership(ctx, tx, current.Workspace.ID, grant.UserID, lock); err != nil {
+			return err
+		}
 		var raw []byte
 		var expiration string
 		var used sql.NullString
@@ -93,32 +96,7 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 			return ErrAuthForbidden
 		}
 		// Policy reads are narrow metadata rows, never issue/discussion hydration.
-		policy := domain.Bootstrap{Settings: map[string]any{}}
-		rows, err := tx.QueryContext(ctx, `SELECT field,record_key,data FROM workspace_metadata_records WHERE workspace_key=? AND ((field='workspaceSettings' AND record_key='reviewThirdPartyApplications') OR (field='settings' AND record_key='applicationPolicies'))`+lock, workspace)
-		if err != nil {
-			return err
-		}
-		for rows.Next() {
-			var field, id string
-			var value []byte
-			if err := rows.Scan(&field, &id, &value); err != nil {
-				rows.Close()
-				return err
-			}
-			if field == "workspaceSettings" {
-				err = json.Unmarshal(value, &policy.WorkspaceSettings.ReviewThirdPartyApplications)
-			} else {
-				var policies any
-				err = json.Unmarshal(value, &policies)
-				policy.Settings[id] = policies
-			}
-			if err != nil {
-				rows.Close()
-				return err
-			}
-		}
-		err = rows.Err()
-		rows.Close()
+		policy, err := oauthPolicyMetadata(ctx, tx, workspace, lock)
 		if err != nil {
 			return err
 		}
@@ -133,40 +111,13 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 		if err != nil {
 			return err
 		}
-		var order int64
-		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MIN(collection_order),0)-1 FROM workspace_metadata_records WHERE workspace_key=? AND field='apiKeys'`, workspace).Scan(&order); err != nil {
-			return err
-		}
+		order := -time.Now().UTC().UnixMicro()
 		if _, err := tx.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'apiKeys',?,?,?)`, workspace, key.ID, order, keyRaw); err != nil {
 			return err
 		}
 		// Older empty workspaces can omit the array shape until the first key.
-		var rootRaw []byte
-		if err := tx.QueryRowContext(ctx, `SELECT data FROM workspace_states WHERE workspace_key=?`+lock, workspace).Scan(&rootRaw); err != nil {
+		if err := ensureOAuthMetadataShape(ctx, tx, workspace, "apiKeys", "array", lock); err != nil {
 			return err
-		}
-		var root map[string]json.RawMessage
-		if err := json.Unmarshal(rootRaw, &root); err != nil {
-			return err
-		}
-		shapes := map[string]string{}
-		if err := json.Unmarshal(root[metadataCollectionsKey], &shapes); err != nil {
-			return err
-		}
-		if shapes["apiKeys"] != "array" {
-			shapes["apiKeys"] = "array"
-			root[metadataCollectionsKey], err = json.Marshal(shapes)
-			if err != nil {
-				return err
-			}
-			root["apiKeys"] = json.RawMessage(`[]`)
-			rootRaw, err = json.Marshal(root)
-			if err != nil {
-				return err
-			}
-			if _, err := tx.ExecContext(ctx, `UPDATE workspace_states SET data=? WHERE workspace_key=?`, rootRaw, workspace); err != nil {
-				return err
-			}
 		}
 		grant.ExpiresAt = time.Now().UTC().Add(30 * 24 * time.Hour)
 		refreshRaw, err := json.Marshal(grant)
@@ -211,8 +162,7 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 	if sink := s.webhook(); sink != nil {
 		sink(workspace, event)
 	}
-	if sink := s.realtime(); sink != nil {
-		sink(workspace, domain.RealtimeEvent{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, ActorID: grant.UserID, CreatedAt: event.CreatedAt})
-	}
+	// Token rotation does not change browser workspace data. Keep its durable
+	// audit/webhook event without waking every connected workspace client.
 	return grant, nil
 }

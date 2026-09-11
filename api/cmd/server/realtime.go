@@ -77,6 +77,9 @@ func (h *realtimeHub) subscribeSince(workspace, sinceID string) (<-chan domain.R
 			channel <- domain.RealtimeEvent{ID: fmt.Sprintf("resync_%d", time.Now().UnixNano()), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}
 		} else {
 			for _, event := range history[index+1:] {
+				if domain.RoutineCredentialEvent(event.Type) {
+					continue
+				}
 				select {
 				case channel <- event:
 				default:
@@ -101,6 +104,9 @@ func (h *realtimeHub) subscribeSince(workspace, sinceID string) (<-chan domain.R
 }
 
 func (h *realtimeHub) publish(workspace string, event domain.RealtimeEvent) {
+	if domain.RoutineCredentialEvent(event.Type) {
+		return
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if len(event.Payload) > 256<<10 {
@@ -303,6 +309,9 @@ func filterPresenceForViewer(data domain.Bootstrap, values []domain.Presence) []
 }
 
 func realtimeEventVisible(data domain.Bootstrap, event domain.RealtimeEvent) bool {
+	if domain.RoutineCredentialEvent(event.Type) {
+		return false
+	}
 	if strings.HasPrefix(event.Type, "agent.") {
 		return event.ActorID != "" && event.ActorID == data.Viewer.ID
 	}
