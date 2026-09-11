@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-	"time"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
@@ -218,44 +217,16 @@ func (s *server) authenticateMCP(w http.ResponseWriter, r *http.Request) (mcpAct
 		s.mcpUnauthorized(w, r, "Bearer token is required")
 		return mcpActor{}, false
 	}
-	workspaceKey, key, ok := s.store.FindAPIKey(secretHash(strings.TrimSpace(header[len("Bearer "):])))
-	if !ok || key.RevokedAt != nil || key.ExpiresAt != nil && !key.ExpiresAt.After(time.Now().UTC()) || key.Scopes != nil && !slices.ContainsFunc(key.Scopes, func(scope string) bool {
+	authentication, err := s.store.AuthenticateAPIKeyRecord(r.Context(), "", secretHash(strings.TrimSpace(header[len("Bearer "):])), applicationApproved)
+	key := authentication.Key
+	if err != nil || key.Scopes != nil && !slices.ContainsFunc(key.Scopes, func(scope string) bool {
 		return slices.Contains([]string{"read", "write", "admin", "create_issues", "create_comments"}, canonicalAPIKeyScope(scope))
 	}) {
 		s.mcpUnauthorized(w, r, "Token is invalid, expired, or lacks read access")
 		return mcpActor{}, false
 	}
-	user, err := s.store.UserByID(r.Context(), key.CreatorID)
-	if err != nil {
-		s.mcpUnauthorized(w, r, "Token owner no longer exists")
-		return mcpActor{}, false
-	}
-	data, err := s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey, user.ID)
-	if err != nil {
-		s.mcpUnauthorized(w, r, "Token owner no longer has workspace access")
-		return mcpActor{}, false
-	}
-	if key.AuthorizationID != "" && !slices.ContainsFunc(data.OAuthAuthorizations, func(item domain.OAuthAuthorization) bool {
-		return item.ID == key.AuthorizationID && item.RevokedAt == nil
-	}) {
-		s.mcpUnauthorized(w, r, "OAuth authorization has been revoked")
-		return mcpActor{}, false
-	}
-	if key.OAuthClientID != "" && !applicationApproved(&data, key.OAuthClientID, key.Scopes) {
-		s.mcpUnauthorized(w, r, "Application approval is required")
-		return mcpActor{}, false
-	}
-	now := time.Now().UTC()
-	_ = s.store.MutateWorkspace(r.Context(), workspaceKey, "api_key.used", key.ID, nil, func(next *domain.Bootstrap) error {
-		if index := slices.IndexFunc(next.APIKeys, func(item domain.APIKey) bool { return item.ID == key.ID }); index >= 0 {
-			next.APIKeys[index].LastUsedAt = &now
-		}
-		if index := slices.IndexFunc(next.OAuthAuthorizations, func(item domain.OAuthAuthorization) bool { return item.ID == key.AuthorizationID }); index >= 0 {
-			next.OAuthAuthorizations[index].LastUsedAt = &now
-		}
-		return nil
-	})
-	return mcpActor{WorkspaceKey: workspaceKey, User: user, APIKey: key}, true
+	_ = s.store.RecordAPIKeyUse(r.Context(), authentication.Workspace.URLKey, key.ID, key.AuthorizationID)
+	return mcpActor{WorkspaceKey: authentication.Workspace.URLKey, User: authentication.User, APIKey: key}, true
 }
 
 func (s *server) mcpUnauthorized(w http.ResponseWriter, r *http.Request, message string) {

@@ -31,6 +31,12 @@ type SQLiteStore struct {
 	maxStateBytes    int
 	lifecycle        context.Context
 	stopLifecycle    context.CancelFunc
+	apiKeyUseOnce    sync.Once
+	apiKeyUseMu      sync.Mutex
+	apiKeyUseTimes   map[string]time.Time
+	apiKeyUseQueue   chan apiKeyUse
+	apiKeyUseWorkers sync.WaitGroup
+	apiKeyUseClosed  bool
 }
 
 // WorkspaceKeys returns a stable snapshot for background workers. Callers do
@@ -61,9 +67,13 @@ func OpenSQLiteTestFixture(path string) (*SQLiteStore, error) {
 }
 
 func (s *SQLiteStore) Close() error {
+	s.apiKeyUseMu.Lock()
+	s.apiKeyUseClosed = true
 	if s.stopLifecycle != nil {
 		s.stopLifecycle()
 	}
+	s.apiKeyUseMu.Unlock()
+	s.apiKeyUseWorkers.Wait()
 	return s.db.Close()
 }
 func (s *SQLiteStore) WorkerContext() context.Context {

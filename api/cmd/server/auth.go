@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -152,6 +151,9 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 }
 
 func apiKeyRestrictedPersonalPath(path string) bool {
+	if path == "/api/oauth/authorization-request" || strings.HasPrefix(path, "/api/oauth/authorizations/") {
+		return true
+	}
 	if strings.HasPrefix(path, "/api/application-policies/") && (strings.HasSuffix(path, "/oauth/start") || strings.HasSuffix(path, "/headers")) {
 		return true
 	}
@@ -164,45 +166,12 @@ func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKe
 		return domain.User{}, nil, ""
 	}
 	secret := strings.TrimSpace(header[len("Bearer "):])
-	key := workspaceKey(r)
-	data, ok := s.store.WorkspaceMetadata(key)
-	if !ok {
-		if resolved, _, found := s.store.FindAPIKey(secretHash(secret)); found {
-			key = resolved
-			data, ok = s.store.WorkspaceMetadata(key)
-		}
-	}
-	if !ok {
+	auth, err := s.store.AuthenticateAPIKeyRecord(r.Context(), workspaceKey(r), secretHash(secret), applicationApproved)
+	if err != nil || !apiKeyAllowsRequest(r, auth.Key) {
 		return domain.User{}, nil, ""
 	}
-	hash := secretHash(secret)
-	for _, key := range data.APIKeys {
-		if key.OAuthClientID != "" && !applicationApproved(&data, key.OAuthClientID, key.Scopes) {
-			continue
-		}
-		if subtle.ConstantTimeCompare([]byte(key.SecretHash), []byte(hash)) != 1 || key.RevokedAt != nil || key.ExpiresAt != nil && !key.ExpiresAt.After(time.Now().UTC()) {
-			continue
-		}
-		if !apiKeyAllowsRequest(r, key) {
-			return domain.User{}, nil, ""
-		}
-		if user, err := s.store.UserByID(r.Context(), key.CreatorID); err == nil {
-			now := time.Now().UTC()
-			_ = s.store.MutateWorkspace(r.Context(), data.Workspace.URLKey, "api_key.used", key.ID, nil, func(next *domain.Bootstrap) error {
-				if index := slices.IndexFunc(next.APIKeys, func(item domain.APIKey) bool { return item.ID == key.ID }); index >= 0 {
-					next.APIKeys[index].LastUsedAt = &now
-				}
-				if key.AuthorizationID != "" {
-					if index := slices.IndexFunc(next.OAuthAuthorizations, func(item domain.OAuthAuthorization) bool { return item.ID == key.AuthorizationID }); index >= 0 {
-						next.OAuthAuthorizations[index].LastUsedAt = &now
-					}
-				}
-				return nil
-			})
-			return user, &key, data.Workspace.URLKey
-		}
-	}
-	return domain.User{}, nil, ""
+	_ = s.store.RecordAPIKeyUse(r.Context(), auth.Workspace.URLKey, auth.Key.ID, auth.Key.AuthorizationID)
+	return auth.User, &auth.Key, auth.Workspace.URLKey
 }
 
 // apiKeyAllowsRequest supports the granular scopes exposed by the API-key
@@ -382,6 +351,15 @@ func publicAuthPath(path string) bool {
 }
 
 func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Request, user domain.User) bool {
+	if oauthAuthorizationEndpoint(r) {
+		// Consent may select a different workspace than the browser header. Its
+		// handler checks that selection; revocation checks only its target scope.
+		if r.URL.Path == "/api/oauth/authorization-request" {
+			return true
+		}
+		_, ok := s.oauthWorkspaceForRequest(w, r, workspaceKey(r), user)
+		return ok
+	}
 	key := workspaceKey(r)
 	if key == "" && r.URL.Path == "/api/workspace/preferences" {
 		if metadata, ok := s.store.WorkspaceSettingsMetadata(""); ok {
