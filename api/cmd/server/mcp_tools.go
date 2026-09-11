@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -95,7 +96,7 @@ func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, 
 			if err != nil {
 				return nil, err
 			}
-			items = slices.DeleteFunc(items, func(item domain.IssueLabel) bool { return item.Scope != "" && item.Scope != team.ID })
+			items = slices.DeleteFunc(items, func(item domain.IssueLabel) bool { return !labelScopeIsWorkspace(item.Scope) && item.Scope != team.ID })
 		}
 		return paginate(items, args), nil
 	case "list_issues":
@@ -166,6 +167,9 @@ func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, 
 		return statusUpdates(data, args)
 	case "list_release_pipelines":
 		items := slices.Clone(data.ReleasePipelines)
+		for i := range items {
+			items[i].AccessKeyHash = ""
+		}
 		query := lowerArg(args, "query")
 		items = slices.DeleteFunc(items, func(item domain.ReleasePipeline) bool {
 			return query != "" && !containsFold(item.Name, query) || hasBoolArg(args, "isProduction") && item.Production != boolArg(args, "isProduction") || stringArg(args, "type") != "" && item.Type != stringArg(args, "type")
@@ -203,8 +207,36 @@ func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, 
 			return nil, err
 		}
 		items := slices.Clone(review.Events)
+		items = slices.DeleteFunc(items, func(item domain.ReviewEvent) bool {
+			return !slices.Contains([]string{"comment", "commented"}, item.Type)
+		})
 		if threadID := stringArg(args, "threadId"); threadID != "" {
-			items = slices.DeleteFunc(items, func(item domain.ReviewEvent) bool { return item.ID != threadID })
+			root := threadID
+			visited := map[string]bool{}
+			for !visited[root] {
+				visited[root] = true
+				index := slices.IndexFunc(items, func(item domain.ReviewEvent) bool { return item.ID == root })
+				if index < 0 || items[index].ParentID == "" {
+					break
+				}
+				root = items[index].ParentID
+			}
+			items = slices.DeleteFunc(items, func(item domain.ReviewEvent) bool { return item.ID != root && item.ParentID != root })
+		}
+		if hasBoolArg(args, "resolved") {
+			resolved := map[string]bool{}
+			for _, item := range items {
+				if item.ParentID == "" {
+					resolved[item.ID] = item.Resolved
+				}
+			}
+			items = slices.DeleteFunc(items, func(item domain.ReviewEvent) bool {
+				root := item.ID
+				if item.ParentID != "" {
+					root = item.ParentID
+				}
+				return resolved[root] != boolArg(args, "resolved")
+			})
 		}
 		return items, nil
 	case "extract_images":
@@ -248,7 +280,7 @@ func (s *server) mcpWorkspaceData(ctx context.Context, actor mcpActor) (domain.B
 	data.Projects = slices.DeleteFunc(data.Projects, func(item domain.Project) bool {
 		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, allowed)
 	})
-	data.Labels = slices.DeleteFunc(data.Labels, func(item domain.IssueLabel) bool { return item.Scope != "" && !allowed(item.Scope) })
+	data.Labels = slices.DeleteFunc(data.Labels, func(item domain.IssueLabel) bool { return !labelScopeIsWorkspace(item.Scope) && !allowed(item.Scope) })
 	data.Documents = slices.DeleteFunc(data.Documents, func(item domain.Document) bool {
 		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, allowed)
 	})
@@ -275,9 +307,17 @@ func (s *server) mcpWorkspaceData(ctx context.Context, actor mcpActor) (domain.B
 	// Reviews are linked to issues rather than teams directly. Keep only
 	// reviews whose linked issues survived the team projection; unlinked
 	// reviews cannot be safely attributed to an allowed team.
-	visibleIssues := make(map[string]bool, len(data.Issues))
-	for _, issue := range data.Issues {
-		visibleIssues[issue.ID] = true
+	query, err := s.mcpIssueQuery(ctx, actor)
+	if err != nil {
+		return data, err
+	}
+	var linkedIDs []string
+	for _, review := range data.Reviews {
+		linkedIDs = append(linkedIDs, review.IssueIDs...)
+	}
+	visibleIssues, err := s.store.VisibleIssueRecordIDs(ctx, query, linkedIDs)
+	if err != nil {
+		return data, err
 	}
 	data.Reviews = slices.DeleteFunc(data.Reviews, func(review domain.CodeReview) bool {
 		if len(review.IssueIDs) == 0 {
@@ -336,13 +376,16 @@ func (s *server) hydrateMCPIssueArguments(ctx context.Context, actor mcpActor, d
 			}
 		}
 	}
-	walk(args, 0)
+	// Only resource references need hydration; prose, URLs and patch text do not.
+	for _, field := range []string{"id", "issue", "issueId", "parentId", "duplicateOf", "blocks", "blockedBy", "relatedTo", "removeBlocks", "removeBlockedBy", "removeRelatedTo"} {
+		walk(args[field], 0)
+	}
 	if budget < 0 || len(values) > 128 {
 		return fmt.Errorf("too many issue references")
 	}
 	seen := map[string]bool{}
 	for value := range values {
-		issue, err := s.store.IssueRecord(ctx, q.Workspace, value)
+		issue, err := s.store.AuthorizedIssueRecord(ctx, q, value)
 		if err != nil {
 			resource, comment, commentErr := s.store.CommentResource(ctx, q.Workspace, value)
 			if commentErr == nil {
@@ -381,29 +424,187 @@ func (s *server) pagedMCPIssues(ctx context.Context, actor mcpActor, data domain
 	if err != nil {
 		return nil, err
 	}
-	start, _ := strconv.Atoi(stringArg(args, "cursor"))
-	start = max(start, 0)
-	limit := min(max(intArg(args, "limit", 50), 1), 250)
-	items := []domain.Issue{}
-	matched := 0
-	err = s.store.WalkIssueRecords(ctx, q, func(issue domain.Issue) error {
-		if len(filterIssues(data, []domain.Issue{issue}, args)) == 0 {
-			return nil
+	q.Cursor = stringArg(args, "cursor")
+	anchor := time.Now().UTC()
+	if q.Cursor != "" {
+		var cursor mcpIssuePageCursor
+		raw, decodeErr := base64.RawURLEncoding.DecodeString(q.Cursor)
+		if decodeErr != nil || json.Unmarshal(raw, &cursor) != nil || cursor.Anchor.IsZero() || cursor.Cursor == "" {
+			return nil, fmt.Errorf("invalid issue cursor")
 		}
-		matched++
-		if matched > start && len(items) < limit {
-			items = append(items, issue)
+		anchor, q.Cursor = cursor.Anchor, cursor.Cursor
+	}
+	q.Limit = min(max(intArg(args, "limit", 50), 1), 250)
+	q.Sort = stringArg(args, "orderBy")
+	if q.Sort == "" {
+		q.Sort = "createdAt"
+	}
+	q.Direction = "desc"
+	q.Summary = true
+	fields := stringsArg(args, "fields")
+	q.IncludeDescription = len(fields) == 0 || slices.Contains(fields, "description")
+	q.SearchText = stringArg(args, "query")
+	if !boolArg(args, "includeArchived") {
+		q.Archived = "false"
+	}
+	add := func(field string, values ...string) {
+		q.Filter.And = append(q.Filter.And, store.IssueFilter{Field: field, Values: values})
+	}
+	if value := stringArg(args, "team"); value != "" {
+		team, err := mcpFindTeam(data, value)
+		if err != nil {
+			return nil, err
 		}
-		return nil
-	})
+		add("team", team.ID)
+	}
+	if value := stringArg(args, "state"); value != "" {
+		ids := []string{}
+		for _, state := range data.States {
+			if equalFoldAny(value, state.ID, state.Name, state.Type) {
+				ids = append(ids, state.ID)
+			}
+		}
+		add("status", ids...)
+	}
+	for _, field := range []string{"assignee", "delegate"} {
+		value, present := nullableStringArg(args, field)
+		if !present {
+			continue
+		}
+		id := ""
+		if value != "" && value != "null" {
+			user, err := mcpFindUser(data, value)
+			if err != nil {
+				return nil, err
+			}
+			id = user.ID
+		}
+		column := field
+		if field == "delegate" {
+			column = "delegateId"
+		}
+		add(column, id)
+	}
+	if value := stringArg(args, "project"); value != "" {
+		project, err := mcpFindProject(data, value)
+		if err != nil {
+			return nil, err
+		}
+		add("project", project.ID)
+	}
+	if value := stringArg(args, "parentId"); value != "" {
+		id, err := s.store.AuthorizedIssueRecordID(ctx, q, value)
+		if err != nil {
+			return nil, err
+		}
+		add("parent", id)
+	}
+	if value := stringArg(args, "label"); value != "" {
+		ids := []string{}
+		for _, label := range data.Labels {
+			if equalFoldAny(value, label.ID, label.Name) {
+				ids = append(ids, label.ID)
+			}
+		}
+		add("labels", ids...)
+	}
+	if value := stringArg(args, "cycle"); value != "" {
+		ids := []string{}
+		for _, cycle := range data.Cycles {
+			if cycleMatches(data, cycle.ID, value) {
+				ids = append(ids, cycle.ID)
+			}
+		}
+		add("cycle", ids...)
+	}
+	if value := stringArg(args, "release"); value != "" {
+		ids := []string{}
+		for _, release := range data.Releases {
+			if equalFoldAny(value, release.ID, release.SlugID) {
+				ids = append(ids, release.IssueIDs...)
+			}
+		}
+		add("id", ids...)
+	}
+	if hasNumberArg(args, "priority") {
+		add("priority", strconv.Itoa(intArg(args, "priority", 0)))
+	}
+	for _, field := range []string{"createdAt", "updatedAt"} {
+		if value := stringArg(args, field); value != "" {
+			date, err := mcpDateAt(value, anchor)
+			if err != nil {
+				return nil, err
+			}
+			q.Filter.And = append(q.Filter.And, store.IssueFilter{Field: field, Operator: "gte", Values: []string{date.Format(time.RFC3339Nano)}})
+		}
+	}
+	page, err := s.store.QueryIssueRecords(ctx, q)
 	if err != nil {
 		return nil, err
 	}
-	next := ""
-	if matched > start+len(items) {
-		next = strconv.Itoa(start + len(items))
+	if page.NextCursor != "" {
+		raw, _ := json.Marshal(mcpIssuePageCursor{Cursor: page.NextCursor, Anchor: anchor})
+		page.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
 	}
-	return map[string]any{"items": items, "nextCursor": next}, nil
+	if len(fields) > 0 {
+		items := make([]map[string]any, 0, len(page.Items))
+		for _, issue := range page.Items {
+			var raw map[string]any
+			_ = jsonClone(issue, &raw)
+			raw["status"], raw["statusType"] = issue.State.Name, issue.State.Type
+			raw["teamId"], raw["createdBy"], raw["createdById"] = issue.Team.ID, issue.Creator, issue.Creator.ID
+			if issue.Assignee != nil {
+				raw["assigneeId"] = issue.Assignee.ID
+			}
+			if issue.Delegate != nil {
+				raw["delegateId"] = issue.Delegate.ID
+			}
+			if issue.Project != nil {
+				raw["projectId"] = issue.Project.ID
+			}
+			projected := map[string]any{"id": issue.ID}
+			for _, field := range fields {
+				projected[field] = raw[field]
+			}
+			items = append(items, projected)
+		}
+		return map[string]any{"items": items, "nextCursor": page.NextCursor}, nil
+	}
+	return map[string]any{"items": page.Items, "nextCursor": page.NextCursor}, nil
+}
+
+var mcpDurationPattern = regexp.MustCompile(`^-P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$`)
+
+type mcpIssuePageCursor struct {
+	Cursor string    `json:"cursor"`
+	Anchor time.Time `json:"anchor"`
+}
+
+func mcpDate(value string) (time.Time, error) {
+	return mcpDateAt(value, time.Now().UTC())
+}
+
+func mcpDateAt(value string, anchor time.Time) (time.Time, error) {
+	for _, layout := range []string{time.RFC3339Nano, "2006-01-02"} {
+		if date, err := time.Parse(layout, value); err == nil {
+			return date, nil
+		}
+	}
+	if matches := mcpDurationPattern.FindStringSubmatch(value); matches != nil && strings.Trim(value, "-PT") != "" {
+		var duration time.Duration
+		for i, unit := range []time.Duration{7 * 24 * time.Hour, 24 * time.Hour, time.Hour, time.Minute, time.Second} {
+			if matches[i+1] == "" {
+				continue
+			}
+			n, err := strconv.ParseInt(matches[i+1], 10, 64)
+			if err != nil || n > int64((100*365*24*time.Hour-duration)/unit) {
+				return time.Time{}, fmt.Errorf("date duration exceeds 100 years")
+			}
+			duration += time.Duration(n) * unit
+		}
+		return anchor.Add(-duration), nil
+	}
+	return time.Time{}, fmt.Errorf("invalid date %q", value)
 }
 
 func filterIssues(data domain.Bootstrap, items []domain.Issue, args map[string]any) []domain.Issue {
@@ -649,9 +850,9 @@ func searchFlowDocumentation(query string, page int) map[string]any {
 }
 
 func paginate[T any](items []T, args map[string]any) map[string]any {
-	start, _ := strconv.Atoi(stringArg(args, "cursor"))
-	if start < 0 || start > len(items) {
-		start = 0
+	start, err := strconv.Atoi(stringArg(args, "cursor"))
+	if start < 0 || start > len(items) || err != nil && stringArg(args, "cursor") != "" {
+		start = len(items)
 	}
 	limit := intArg(args, "limit", 50)
 	limit = min(max(limit, 1), 250)

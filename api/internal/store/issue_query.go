@@ -28,23 +28,25 @@ type IssueFilter struct {
 }
 
 type IssueRecordQuery struct {
-	Workspace      string
-	Filter         IssueFilter
-	TeamIDs        []string
-	ProjectIDs     []string
-	StateIDs       []string
-	AllowedTeamIDs []string // nil is unrestricted; empty is denied.
-	Access         *IssueRecordAccess
-	Text           string
-	Archived       string
-	Sort           string
-	Direction      string
-	Cursor         string
-	Limit          int
-	GroupBy        string
-	GroupValue     *string
-	IncludeTotal   bool
-	Summary        bool
+	Workspace          string
+	Filter             IssueFilter
+	TeamIDs            []string
+	ProjectIDs         []string
+	StateIDs           []string
+	AllowedTeamIDs     []string // nil is unrestricted; empty is denied.
+	Access             *IssueRecordAccess
+	Text               string
+	SearchText         string // Indexed title, identifier and description search.
+	Archived           string
+	Sort               string
+	Direction          string
+	Cursor             string
+	Limit              int
+	GroupBy            string
+	GroupValue         *string
+	IncludeTotal       bool
+	Summary            bool
+	IncludeDescription bool
 }
 
 type IssueRecordAccess struct {
@@ -513,6 +515,11 @@ func (s *SQLiteStore) QueryIssueRecords(ctx context.Context, query IssueRecordQu
 	if err != nil {
 		return page, err
 	}
+	if query.SearchText != "" {
+		selection, values := s.issueTextSelection(query.Workspace, query.SearchText)
+		where += " AND i.id IN (" + selection + ")"
+		args = append(args, values...)
+	}
 	prefix, prefixArgs := issueAccessCTE(query)
 	column := "sort_order"
 	switch query.Sort {
@@ -580,7 +587,11 @@ func (s *SQLiteStore) QueryIssueRecords(ctx context.Context, query IssueRecordQu
 	if query.Summary {
 		payload = "COALESCE(i.list_data,i.data)"
 	}
-	rows, err := s.db.QueryContext(ctx, prefix+"SELECT "+payload+",i."+column+" FROM issue_records i WHERE "+where+" ORDER BY i."+column+" "+direction+",i.id "+direction+" LIMIT ?", append(append(prefixArgs, args...), limit+1)...)
+	descriptionColumn := "''"
+	if query.Summary && query.IncludeDescription {
+		descriptionColumn = "COALESCE(" + s.jsonText("i.data", "description") + ", '')"
+	}
+	rows, err := s.db.QueryContext(ctx, prefix+"SELECT "+payload+",i."+column+","+descriptionColumn+" FROM issue_records i WHERE "+where+" ORDER BY i."+column+" "+direction+",i.id "+direction+" LIMIT ?", append(append(prefixArgs, args...), limit+1)...)
 	if err != nil {
 		return page, err
 	}
@@ -590,10 +601,11 @@ func (s *SQLiteStore) QueryIssueRecords(ctx context.Context, query IssueRecordQu
 	for rows.Next() {
 		var raw []byte
 		var sortValue string
-		if err := rows.Scan(&raw, &sortValue); err != nil {
+		var description string
+		if err := rows.Scan(&raw, &sortValue, &description); err != nil {
 			return page, err
 		}
-		if len(page.Items) == limit || query.Summary && len(page.Items) > 0 && pageBytes+len(raw) > 4<<20 {
+		if len(page.Items) == limit || query.Summary && len(page.Items) > 0 && pageBytes+len(raw)+len(description) > 4<<20 {
 			page.HasMore = true
 			break
 		}
@@ -604,9 +616,12 @@ func (s *SQLiteStore) QueryIssueRecords(ctx context.Context, query IssueRecordQu
 		normalizeIssueRecord(&issue)
 		if query.Summary {
 			issue = issueListProjection(issue)
+			if query.IncludeDescription {
+				issue.Description = description
+			}
 		}
 		page.Items = append(page.Items, issue)
-		pageBytes += len(raw)
+		pageBytes += len(raw) + len(description)
 		lastValue = sortValue
 	}
 	if err := rows.Err(); err != nil {

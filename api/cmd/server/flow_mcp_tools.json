@@ -11,7 +11,7 @@
         "documentId": { "type": "string", "description": "Document ID or slug (provide exactly one parent)" },
         "initiativeId": { "type": "string", "description": "Initiative name, ID, identifier (e.g., INIT-123), or slug (provide exactly one parent)" },
         "issueId": { "type": "string", "description": "Issue ID or identifier (e.g., LIN-123) (provide exactly one parent)" },
-        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
         "milestoneId": { "type": "string", "description": "Milestone UUID (provide exactly one parent). Resolve milestone names via `list_milestones` first." },
         "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
         "projectId": { "type": "string", "description": "Project name, ID, identifier (e.g., PROJ-123), or slug (provide exactly one parent)" },
@@ -50,7 +50,7 @@
             ]
           }
         },
-        "priority": { "type": "integer" },
+        "priority": { "type": "integer", "minimum": 0, "maximum": 4 },
         "status": { "type": "string" },
         "summary": { "type": "string" },
         "targetDate": { "type": "string" }
@@ -121,7 +121,7 @@
         "links": { "type": "array", "items": { "type": "object", "required": ["title", "url"], "properties": { "title": { "type": "string" }, "url": { "type": "string" } } } },
         "name": { "type": "string" },
         "patch": { "type": "array", "items": { "description": "One of replace, insert_before, insert_after, prepend, append, replace_range patch objects, same shape as save_initiative.patch." } },
-        "priority": { "type": "integer" },
+        "priority": { "type": "integer", "minimum": 0, "maximum": 4 },
         "removeInitiatives": { "type": "array", "items": { "type": "string" } },
         "removeTeams": { "type": "array", "items": { "type": "string" } },
         "setInitiatives": { "type": "array", "items": { "type": "string" } },
@@ -150,7 +150,7 @@
       "required": [],
       "properties": {
         "cursor": { "type": "string", "description": "Next page cursor" },
-        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
         "name": { "type": "string", "description": "Filter by name" },
         "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] }
       }
@@ -165,7 +165,7 @@
       "required": [],
       "properties": {
         "cursor": { "type": "string", "description": "Next page cursor" },
-        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
         "name": { "type": "string", "description": "Filter by name" },
         "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] }
       }
@@ -180,7 +180,7 @@
       "required": [],
       "properties": {
         "cursor": { "type": "string", "description": "Next page cursor" },
-        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
         "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] }
       }
     }
@@ -196,7 +196,7 @@
         "createdAt": { "type": "string", "description": "Created after: ISO-8601 date/duration (e.g., -P1D)" },
         "cursor": { "type": "string", "description": "Next page cursor" },
         "includeArchived": { "type": "boolean", "description": "Include archived items" },
-        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
         "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
         "query": { "type": "string", "description": "Search query" },
         "updatedAt": { "type": "string", "description": "Updated after: ISO-8601 date/duration (e.g., -P1D)" }
@@ -212,7 +212,7 @@
       "required": [],
       "properties": {
         "cursor": { "type": "string", "description": "Next page cursor" },
-        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
         "name": { "type": "string", "description": "Filter by name" },
         "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
         "team": { "type": "string", "description": "Team name or ID" }
@@ -233,7 +233,7 @@
         "fields": { "type": "array", "description": "Fields to include in each result. `id` is always included. Omit or pass an empty array for the default response.", "items": { "type": "string", "enum": ["id", "title", "content", "url", "createdAt", "updatedAt", "archivedAt", "creator", "updatedBy", "project", "initiative", "team", "issue"] } },
         "includeArchived": { "type": "boolean", "description": "Include archived items" },
         "initiativeId": { "type": "string", "description": "Filter by initiative ID" },
-        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
         "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
         "projectId": { "type": "string", "description": "Filter by project ID" },
         "query": { "type": "string", "description": "Search query" },
@@ -274,7 +274,7 @@
       "properties": {
         "author": { "type": "string", "description": "Filter by author ID, name, email, or \"me\"" },
         "cursor": { "type": "string", "description": "Next page cursor" },
-        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
         "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
         "owner": { "type": "string", "description": "Filter returned diffs by repository owner" },
         "query": { "type": "string", "description": "Broad search by title, branch, PR number, or bare slug" },
@@ -301,7 +301,7 @@
         "includeSubInitiatives": { "type": "boolean", "description": "Include sub-initiatives" },
         "label": { "type": "string", "description": "Label name or ID" },
         "leadTeam": { "type": "string", "description": "Lead team name, key, or ID" },
-        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
         "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
         "owner": { "type": "string", "description": "User ID, name, email, or \"me\"" },
         "parentInitiative": { "type": "string", "description": "Parent initiative. Initiative name, ID, identifier (e.g., INIT-123), or slug" },
@@ -327,7 +327,7 @@
         "includeMilestones": { "type": "boolean", "description": "Include milestones" },
         "initiative": { "type": "string", "description": "Initiative name, ID, identifier (e.g., INIT-123), or slug" },
         "label": { "type": "string", "description": "Label name or ID" },
-        "limit": { "type": "number", "description": "Max results (default 50, max 50)", "default": 50, "maximum": 50 },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 50)", "default": 50, "maximum": 50 },
         "member": { "type": "string", "description": "User ID, name, email, or \"me\"" },
         "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
         "query": { "type": "string", "description": "Search project name" },
@@ -365,7 +365,7 @@
       "required": [],
       "properties": {
         "cursor": { "type": "string", "description": "Next page cursor" },
-        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
         "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
         "query": { "type": "string", "description": "Filter by name or email" },
         "team": { "type": "string", "description": "Team name or ID" }
@@ -386,7 +386,7 @@
         "includeStages": { "type": "boolean", "description": "Include each pipeline's stages" },
         "includeTeams": { "type": "boolean", "description": "Include each pipeline's teams" },
         "isProduction": { "type": "boolean", "description": "Filter by production pipeline flag" },
-        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
         "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
         "query": { "type": "string", "description": "Search pipeline name" },
         "team": { "type": "string", "description": "Team name or ID" },
@@ -411,10 +411,10 @@
         "fields": { "type": "array", "description": "Fields to include in each result. `id` is always included. Omit or pass an empty array for the default response.", "items": { "type": "string", "enum": ["id", "title", "description", "projectMilestone", "priority", "estimate", "url", "gitBranchName", "createdAt", "updatedAt", "archivedAt", "completedAt", "startedAt", "canceledAt", "dueDate", "slaStartedAt", "slaMediumRiskAt", "slaHighRiskAt", "slaBreachesAt", "slaType", "status", "statusType", "labels", "triageIntel", "createdBy", "createdById", "assignee", "assigneeId", "delegate", "delegateId", "project", "projectId", "parentId", "team", "teamId", "cycleId"] } },
         "includeArchived": { "type": "boolean", "description": "Include archived items" },
         "label": { "type": "string", "description": "Label name or ID" },
-        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
         "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
         "parentId": { "type": "string", "description": "Parent issue ID or identifier (e.g., LIN-123)" },
-        "priority": { "type": "number", "description": "0=None, 1=Urgent, 2=High, 3=Medium, 4=Low" },
+        "priority": { "type": "integer", "minimum": 0, "maximum": 4, "description": "0=None, 1=Urgent, 2=High, 3=Medium, 4=Low" },
         "project": { "type": "string", "description": "Project name, ID, identifier (e.g., PROJ-123), or slug" },
         "query": { "type": "string", "description": "Search issue title or description" },
         "release": { "type": "string", "description": "Release ID or slug" },
@@ -437,7 +437,7 @@
         "includeArchived": { "type": "boolean", "description": "Include archived items" },
         "includeContent": { "type": "boolean", "description": "Include markdown release notes content" },
         "includeReleases": { "type": "boolean", "description": "Include associated releases" },
-        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
         "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
         "pipeline": { "type": "string", "description": "Release pipeline ID, slug, or exact name" },
         "query": { "type": "string", "description": "Search release notes title" },
@@ -459,7 +459,7 @@
         "hasReleaseNotes": { "type": "boolean", "description": "Filter to releases that do (true) or do not (false) have release notes" },
         "includeArchived": { "type": "boolean", "description": "Include archived items" },
         "includeReleaseNotes": { "type": "boolean", "description": "Include associated release notes" },
-        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
         "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
         "pipeline": { "type": "string", "description": "Release pipeline ID, slug, or exact name" },
         "query": { "type": "string", "description": "Search release name or version" },
@@ -483,7 +483,7 @@
         "id": { "type": "string", "description": "Status update ID - if provided, returns this specific update" },
         "includeArchived": { "type": "boolean", "description": "Include archived items" },
         "initiative": { "type": "string", "description": "Initiative name, ID, identifier (e.g., INIT-123), or slug" },
-        "limit": { "type": "number", "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
         "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
         "project": { "type": "string", "description": "Project name, ID, identifier (e.g., PROJ-123), or slug" },
         "type": { "type": "string", "description": "Type of status update", "enum": ["project", "initiative"] },
@@ -526,7 +526,7 @@
         "contentType": { "type": "string", "description": "MIME type, e.g. image/png or application/pdf" },
         "filename": { "type": "string", "description": "Filename for the upload, e.g. screenshot.png" },
         "issue": { "type": "string", "description": "Issue ID or identifier (e.g., LIN-123)" },
-        "size": { "type": "integer", "description": "Exact file size in bytes. Must be smaller than 2 GB." },
+        "size": { "type": "integer", "minimum": 0, "maximum": 20971520, "description": "Exact file size in bytes. Must be at most 20 MiB." },
         "subtitle": { "type": "string", "description": "Suggested attachment subtitle for the finalize step" },
         "title": { "type": "string", "description": "Suggested attachment title for the finalize step" }
       }
@@ -556,7 +556,7 @@
         "milestone": { "type": "string" },
         "parentId": { "type": ["string", "null"] },
         "patch": { "type": "array", "items": { "description": "One of replace, insert_before, insert_after, prepend, append, replace_range patch objects, same shape as save_initiative.patch." } },
-        "priority": { "type": "number" },
+        "priority": { "type": "integer", "minimum": 0, "maximum": 4 },
         "project": { "type": ["string", "null"] },
         "relatedTo": { "type": "array", "items": { "type": "string" } },
         "removeBlockedBy": { "type": "array", "items": { "type": "string" } },
@@ -585,7 +585,7 @@
         "filename": { "type": "string", "description": "Filename for the upload (e.g., 'screenshot.png')" },
         "issue": { "type": "string", "description": "Issue ID or identifier (e.g., LIN-123)" },
         "sha256": { "type": "string", "description": "Expected SHA-256 hex digest of the decoded file bytes." },
-        "size": { "type": "integer", "description": "Optional expected decoded file size in bytes. Rejects the upload if it does not match." },
+        "size": { "type": "integer", "minimum": 0, "maximum": 20971520, "description": "Optional expected decoded file size in bytes. Rejects the upload if it does not match." },
         "subtitle": { "type": "string", "description": "Optional subtitle for the attachment" },
         "title": { "type": "string", "description": "Optional title for the attachment" }
       }
@@ -665,7 +665,7 @@
       "type": "object",
       "required": ["query"],
       "properties": {
-        "page": { "type": "number", "description": "Page number" },
+        "page": { "type": "integer", "minimum": 1, "description": "Page number" },
         "query": { "type": "string", "description": "Search query" }
       }
     }
@@ -750,7 +750,8 @@
     "description": "Retrieve detailed information about an issue status in Flow by name or ID",
     "input_schema": {
       "type": "object",
-      "required": ["id", "name", "team"],
+      "required": ["team"],
+      "anyOf": [{"required": ["id"]}, {"required": ["name"]}],
       "properties": {
         "id": { "type": "string", "description": "Status ID" },
         "name": { "type": "string", "description": "Status name" },

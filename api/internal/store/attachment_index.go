@@ -123,3 +123,23 @@ func (s *SQLiteStore) IssueAttachmentVisible(ctx context.Context, q IssueRecordQ
 	err = s.db.QueryRowContext(ctx, prefix+`SELECT COUNT(*) FROM (SELECT i.id FROM issue_attachment_records a JOIN issue_records i ON i.workspace_key=a.workspace_key AND i.id=a.issue_id WHERE a.url_hash=? AND `+where+` LIMIT 1) visible_attachment`, append(append(prefixArgs, attachmentKey(url)), args...)...).Scan(&count)
 	return count > 0, err
 }
+
+// Search only attachment-bearing issues, and apply access before decoding a
+// parent. Older attachments need no ID-index migration to remain removable.
+func (s *SQLiteStore) IssueAttachmentParent(ctx context.Context, q IssueRecordQuery, id string) (string, error) {
+	q.Archived = "all"
+	where, args, err := issueRecordWhere(q)
+	if err != nil {
+		return "", err
+	}
+	match := "EXISTS (SELECT 1 FROM json_each(i.data, '$.attachments') a WHERE json_extract(a.value, '$.id')=?)"
+	if s.dialect == "mysql" {
+		match = "JSON_CONTAINS(JSON_EXTRACT(CONVERT(i.data USING utf8mb4), '$.attachments'), JSON_OBJECT('id', ?))"
+	} else if s.dialect == "postgres" {
+		match = "EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(convert_from(i.data,'UTF8')::jsonb->'attachments','[]'::jsonb)) a WHERE a->>'id'=?)"
+	}
+	prefix, prefixArgs := issueAccessCTE(q)
+	var parent string
+	err = s.db.QueryRowContext(ctx, prefix+"SELECT i.id FROM issue_records i WHERE "+where+" AND i.id IN (SELECT issue_id FROM issue_attachment_records WHERE workspace_key=?) AND "+match+" LIMIT 1", append(append(prefixArgs, args...), q.Workspace, id)...).Scan(&parent)
+	return parent, err
+}

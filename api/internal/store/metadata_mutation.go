@@ -24,6 +24,8 @@ func metadataOnlyMutation(event string, payload any) bool {
 		return ok && input.TemplateID == ""
 	}
 	switch event {
+	case "review.thread_resolved", "review.comment_deleted":
+		return true
 	case "integration.adapter_configured", "integration.ask_imported", "integration.job_updated", "integration.calendar_synced":
 		return true
 	case "pulse.summary_scheduled":

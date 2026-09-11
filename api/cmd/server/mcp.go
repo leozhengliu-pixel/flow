@@ -1,16 +1,21 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
+	"math"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
+	"github.com/google/jsonschema-go/jsonschema"
 )
 
 //go:embed flow_mcp_tools.json
@@ -21,6 +26,7 @@ type flowMCPTool struct {
 	Access      string          `json:"access"`
 	Description string          `json:"description"`
 	InputSchema json.RawMessage `json:"input_schema"`
+	validator   *jsonschema.Resolved
 }
 
 type mcpRPCRequest struct {
@@ -32,7 +38,7 @@ type mcpRPCRequest struct {
 
 type mcpRPCResponse struct {
 	JSONRPC string       `json:"jsonrpc"`
-	ID      any          `json:"id,omitempty"`
+	ID      any          `json:"id"`
 	Result  any          `json:"result,omitempty"`
 	Error   *mcpRPCError `json:"error,omitempty"`
 }
@@ -56,6 +62,21 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 	}
 	for index := range tools {
 		tools[index].Name = strings.TrimPrefix(tools[index].Name, "mcp__flow.")
+		var raw map[string]any
+		if err := json.Unmarshal(tools[index].InputSchema, &raw); err != nil {
+			panic(err)
+		}
+		raw["additionalProperties"] = false
+		tools[index].InputSchema, _ = json.Marshal(raw)
+		var schema jsonschema.Schema
+		if err := json.Unmarshal(tools[index].InputSchema, &schema); err != nil {
+			panic(err)
+		}
+		resolved, err := schema.Resolve(nil)
+		if err != nil {
+			panic(fmt.Sprintf("invalid MCP schema %s: %v", tools[index].Name, err))
+		}
+		tools[index].validator = resolved
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		actor, ok := s.authenticateMCP(w, r)
@@ -68,18 +89,52 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 			return
 		}
 		var request mcpRPCRequest
-		if !decodeJSON(w, r, &request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
+		decoder := json.NewDecoder(r.Body)
+		var envelope json.RawMessage
+		if err := decoder.Decode(&envelope); err != nil {
+			s.writeMCPError(w, nil, -32700, "Parse error", nil)
+			return
+		}
+		if err := decoder.Decode(new(any)); err != io.EOF {
+			s.writeMCPError(w, nil, -32700, "Parse error", nil)
+			return
+		}
+		decoder = json.NewDecoder(bytes.NewReader(envelope))
+		decoder.UseNumber()
+		if err := decoder.Decode(&request); err != nil {
+			s.writeMCPError(w, nil, -32600, "Invalid Request", nil)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("MCP-Protocol-Version", "2025-11-25")
-		if request.JSONRPC != "2.0" {
-			s.writeMCPError(w, request.ID, -32600, "Invalid Request", nil)
+		if request.JSONRPC != "2.0" || request.Method == "" || request.ID != nil && !validMCPRequestID(request.ID) {
+			s.writeMCPError(w, nil, -32600, "Invalid Request", nil)
+			return
+		}
+		if request.ID == nil {
+			if strings.HasPrefix(request.Method, "notifications/") {
+				w.WriteHeader(http.StatusAccepted)
+			} else {
+				s.writeMCPError(w, nil, -32600, "Request ID is required", nil)
+			}
 			return
 		}
 		switch request.Method {
 		case "initialize":
-			writeJSON(w, http.StatusOK, mcpRPCResponse{JSONRPC: "2.0", ID: request.ID, Result: map[string]any{"protocolVersion": "2025-11-25", "capabilities": map[string]any{"tools": map[string]any{"listChanged": false}}, "serverInfo": map[string]string{"name": "Flow", "version": version}, "instructions": "Manage Flow issues, projects, initiatives, documents, releases, reviews, teams, and comments."}})
+			var params struct {
+				ProtocolVersion string `json:"protocolVersion"`
+			}
+			if len(request.Params) > 0 && json.Unmarshal(request.Params, &params) != nil {
+				s.writeMCPError(w, request.ID, -32602, "Invalid initialize parameters", nil)
+				return
+			}
+			protocol := "2025-11-25"
+			if slices.Contains([]string{"2025-03-26", "2025-06-18", "2025-11-25"}, params.ProtocolVersion) {
+				protocol = params.ProtocolVersion
+			}
+			w.Header().Set("MCP-Protocol-Version", protocol)
+			writeJSON(w, http.StatusOK, mcpRPCResponse{JSONRPC: "2.0", ID: request.ID, Result: map[string]any{"protocolVersion": protocol, "capabilities": map[string]any{"tools": map[string]any{"listChanged": false}}, "serverInfo": map[string]string{"name": "Flow", "version": version}, "instructions": "Manage Flow issues, projects, initiatives, documents, releases, reviews, teams, and comments."}})
 		case "notifications/initialized":
 			w.WriteHeader(http.StatusAccepted)
 		case "ping":
@@ -115,6 +170,10 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 				s.writeMCPToolResult(w, request.ID, nil, fmt.Errorf("write scope is required"))
 				return
 			}
+			if err := tool.validator.Validate(params.Arguments); err != nil {
+				s.writeMCPError(w, request.ID, -32602, "Invalid tool arguments", map[string]string{"detail": err.Error()})
+				return
+			}
 			ctx := context.WithValue(r.Context(), authUserContextKey{}, actor.User)
 			ctx = context.WithValue(ctx, apiKeyContextKey{}, actor.APIKey)
 			ctx = context.WithValue(ctx, workspaceKeyContextKey{}, actor.WorkspaceKey)
@@ -125,6 +184,18 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 		default:
 			s.writeMCPError(w, request.ID, -32601, "Method not found", nil)
 		}
+	}
+}
+
+func validMCPRequestID(id any) bool {
+	switch value := id.(type) {
+	case string:
+		return true
+	case json.Number:
+		number, err := strconv.ParseFloat(string(value), 64)
+		return err == nil && !math.IsInf(number, 0) && math.Trunc(number) == number
+	default:
+		return false
 	}
 }
 

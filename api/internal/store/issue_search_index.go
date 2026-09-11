@@ -116,6 +116,24 @@ func (s *SQLiteStore) SearchIssueCandidates(ctx context.Context, q IssueRecordQu
 	return s.SearchIssueCandidateTerms(ctx, q, []string{text}, labelIDs, limit, visit)
 }
 
+func (s *SQLiteStore) issueTextSelection(workspace, term string) (string, []any) {
+	join, match := "", "LOWER(s.content) LIKE ? ESCAPE '!'"
+	value := "%" + escapeIssueLike(strings.ToLower(term)) + "%"
+	if s.dialect == "sqlite" && utf8.RuneCountInString(term) >= 3 {
+		join = " JOIN issue_search_fts ON issue_search_fts.rowid=s.rowid"
+		match = "issue_search_fts MATCH ?"
+		value = "\"" + strings.ReplaceAll(term, "\"", "\"\"") + "\""
+	}
+	if s.dialect == "mysql" && utf8.RuneCountInString(term) >= 2 {
+		match = "MATCH(s.content) AGAINST (? IN BOOLEAN MODE)"
+		value = "\"" + strings.ReplaceAll(term, "\"", " ") + "\""
+	}
+	if s.dialect == "postgres" {
+		match = "s.content ILIKE ? ESCAPE '!'"
+	}
+	return "SELECT s.issue_id FROM issue_search_documents s" + join + " WHERE s.workspace_key=? AND " + match, []any{workspace, value}
+}
+
 // Retrieve a bounded union once: semantic synonyms must not independently
 // decode the same issue, nor discard the caller's indexed facet predicates.
 func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueRecordQuery, terms []string, labelIDs []string, limit int, visit func(domain.Issue) error) error {
@@ -134,22 +152,9 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 	var selections []string
 	var textArgs []any
 	for _, term := range terms {
-		join, match := "", "LOWER(s.content) LIKE ? ESCAPE '!'"
-		value := "%" + escapeIssueLike(strings.ToLower(term)) + "%"
-		if s.dialect == "sqlite" && utf8.RuneCountInString(term) >= 3 {
-			join = " JOIN issue_search_fts ON issue_search_fts.rowid=s.rowid"
-			match = "issue_search_fts MATCH ?"
-			value = "\"" + strings.ReplaceAll(term, "\"", "\"\"") + "\""
-		}
-		if s.dialect == "mysql" && utf8.RuneCountInString(term) >= 2 {
-			match = "MATCH(s.content) AGAINST (? IN BOOLEAN MODE)"
-			value = "\"" + strings.ReplaceAll(term, "\"", " ") + "\""
-		}
-		if s.dialect == "postgres" {
-			match = "s.content ILIKE ? ESCAPE '!'"
-		}
-		selections = append(selections, "SELECT s.issue_id FROM issue_search_documents s"+join+" WHERE s.workspace_key=? AND "+match)
-		textArgs = append(textArgs, q.Workspace, value)
+		selection, values := s.issueTextSelection(q.Workspace, term)
+		selections = append(selections, selection)
+		textArgs = append(textArgs, values...)
 	}
 	selection := strings.Join(selections, " UNION ")
 	textMatch := "i.id IN (" + selection + ")"
