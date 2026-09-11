@@ -51,8 +51,8 @@ import {
   deleteTeamLabel,
   deleteTriageResponsibility,
   deleteTriageRule,
-  deleteWorkflowState,
   fetchWorkflowStates,
+  listIssueRecordGroups,
   reorderWorkflowStates,
   setTeamMembership,
   updateCycleSettings,
@@ -90,6 +90,8 @@ import {
 import { CheckboxMark } from "@/components/ui/checkbox-mark";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { StatusIcon } from "@/components/issue/issue-icons";
+import { PropertyMenu } from '@/components/property/property-menu';
+import { WorkflowStateDeleteDialog } from './workflow-state-delete-dialog';
 import {
   ViewIconPicker,
   type ViewVisual,
@@ -212,6 +214,7 @@ export function TeamWorkflowSettings({
   if (section === "statuses")
     return (
       <StatusesSettings
+        key={team.id}
         data={data}
         team={team}
         onBack={() => onNavigate("overview")}
@@ -2300,13 +2303,26 @@ function StatusesSettings({
   const [createType, setCreateType] = useState<WorkflowStateType | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<WorkflowState | null>(null);
+  const [counts, setCounts] = useState<Record<string,number>>({});
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string>();
+  const [loadRetry, setLoadRetry] = useState(0);
   useEffect(() => {
-    void fetchWorkflowStates(team.id)
-      .then(setStates)
-      .catch(() => setStates(statesForTeam(data, team.id)));
-  }, [data, team.id]);
+    let active=true;
+    const controller=new AbortController();
+    setLoading(true);
+    setLoadError(undefined);
+    void Promise.all([fetchWorkflowStates(team.id),listIssueRecordGroups({teamId:team.id,includeSubTeams:false,groupBy:'status',archived:'all'},controller.signal)])
+      .then(([next,usage])=>{if(active){setStates(next);setCounts(Object.fromEntries(usage.groups.map(group=>[group.value,group.count])))}})
+      .catch(error=>{if(active)setLoadError(message(error))})
+      .finally(()=>{if(active)setLoading(false)});
+    return ()=>{active=false;controller.abort()};
+  }, [team.id,loadRetry]);
   const reload = async () => {
-    setStates(await fetchWorkflowStates(team.id));
+    const [next,usage]=await Promise.all([fetchWorkflowStates(team.id),listIssueRecordGroups({teamId:team.id,includeSubTeams:false,groupBy:'status',archived:'all'})]);
+    setStates(next);
+    setCounts(Object.fromEntries(usage.groups.map(group=>[group.value,group.count])));
     await onReload();
   };
   const run = async (action: () => Promise<unknown>) => {
@@ -2378,6 +2394,9 @@ function StatusesSettings({
           </p>
         </div>
       </header>
+      {loading&&<p role="status">{t('Loading issue statuses…')}</p>}
+      {loadError&&<div className="workflow-status-load-error" role="alert"><span>{t('Could not load issue statuses')}: {t(loadError)}</span><button type="button" onClick={()=>setLoadRetry(value=>value+1)}>{t('Try again')}</button></div>}
+      {!loading&&!loadError&&<div className="workflow-default-state"><PropertyMenu label={t('Default status')} ariaLabel={t('Default status')} searchPlaceholder={t('Search statuses…')} icon={states.some(state=>state.default)?<StatusIcon state={states.find(state=>state.default)!}/>:undefined} valueIsEntityName value={states.find(state=>state.default)?.name} selectedId={states.find(state=>state.default)?.id} options={states.filter(state=>!state.reserved).map(state=>({id:state.id,label:state.name,i18nIgnore:true,icon:<StatusIcon state={state}/>}))} onChange={id=>run(()=>updateWorkflowState(team.id,id,{default:true}))}/></div>}
       <section
         className="ip-status-card"
         role="list"
@@ -2389,7 +2408,7 @@ function StatusesSettings({
                 item.type === group.type &&
                 Boolean(item.reserved) === Boolean(group.reserved),
             ),
-            canModify = !group.reserved && groupStates.length > 1;
+            canModify = !group.reserved;
           return (
             <div className="ip-status-section" role="list" key={group.label}>
               <header>
@@ -2405,10 +2424,7 @@ function StatusesSettings({
                 )}
               </header>
               {groupStates.map((state) => {
-                const usage = data.issues.filter(
-                  (issue) =>
-                    issue.team.id === team.id && issue.state.id === state.id,
-                ).length;
+                const usage = loading||loadError ? undefined : counts[state.id]??0;
                 return editing === state.id ? (
                   <IssueStateEditor
                     key={state.id}
@@ -2427,6 +2443,8 @@ function StatusesSettings({
                     state={state}
                     usage={usage}
                     canModify={canModify}
+                    canDelete={canModify&&groupStates.length>1}
+                    canReorder={canModify&&groupStates.length>1}
                     dragging={dragging === state.id}
                     workspaceKey={data.workspace.urlKey}
                     teamKey={team.key}
@@ -2436,21 +2454,7 @@ function StatusesSettings({
                     onMove={(delta) => move(state, delta)}
                     onEdit={() => setEditing(state.id)}
                     onDelete={() => {
-                      if (!canModify) {
-                        toast(t("Can't delete status"), {
-                          description: t(
-                            "You can't delete the last status of a type.",
-                          ),
-                        });
-                        return;
-                      }
-                      if (usage) {
-                        toast(`Can't delete the "${state.name}" issue status`, {
-                          description: `The status has ${usage} ${usage === 1 ? "issue" : "issues"} assigned. Please archive or move them before deleting the status.`,
-                        });
-                        return;
-                      }
-                      void run(() => deleteWorkflowState(team.id, state.id));
+                      if(canModify&&groupStates.length>1)setDeleting(state);
                     }}
                   />
                 );
@@ -2469,6 +2473,7 @@ function StatusesSettings({
           );
         })}
       </section>
+      {deleting&&<WorkflowStateDeleteDialog key={deleting.id} teamId={team.id} state={states.find(state=>state.id===deleting.id)??deleting} states={states} usage={loading||loadError?undefined:counts[deleting.id]??0} loading={loading} loadError={loadError} onRetry={()=>setLoadRetry(value=>value+1)} onClose={()=>setDeleting(null)} onDeleted={async()=>{setStates(current=>current.filter(state=>state.id!==deleting.id));setDeleting(null);try{await reload()}catch(error){setLoadError(message(error))}}} onDefaultChanged={reload}/>}
     </div>
   );
 }
@@ -2570,6 +2575,8 @@ function IssueStateRow({
   state,
   usage,
   canModify,
+  canDelete,
+  canReorder,
   dragging,
   workspaceKey,
   teamKey,
@@ -2581,8 +2588,10 @@ function IssueStateRow({
   onDelete,
 }: {
   state: WorkflowState;
-  usage: number;
+  usage?: number;
   canModify: boolean;
+  canDelete: boolean;
+  canReorder: boolean;
   dragging: boolean;
   workspaceKey: string;
   teamKey: string;
@@ -2599,7 +2608,7 @@ function IssueStateRow({
   const menuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const items = [
         ...event.currentTarget.querySelectorAll<HTMLButtonElement>(
-          "[role=option]",
+          "[role=option]:not(:disabled)",
         ),
       ],
       index = items.indexOf(document.activeElement as HTMLButtonElement);
@@ -2620,7 +2629,7 @@ function IssueStateRow({
     }
   };
   const usageControl =
-    usage > 0 ? (
+    usage !== undefined && usage > 0 ? (
       canModify ? (
         <AppLink
           className="ip-status-usage"
@@ -2640,23 +2649,23 @@ function IssueStateRow({
     ) : null;
   return (
     <div
-      className={`ip-status-row${dragging ? " is-dragging" : ""}`}
+      className={`ip-status-row issue-state-row${dragging ? " is-dragging" : ""}`}
       role="button"
       aria-disabled={!canModify}
-      aria-roledescription="sortable"
-      tabIndex={canModify ? 0 : -1}
-      draggable={canModify}
+      aria-roledescription={canReorder?"sortable":undefined}
+      tabIndex={canReorder ? 0 : -1}
+      draggable={canReorder}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onDragOver={(event) => {
-        if (canModify) event.preventDefault();
+        if (canReorder) event.preventDefault();
       }}
       onDrop={(event) => {
         event.preventDefault();
         onDrop();
       }}
       onKeyDown={(event) => {
-        if (!canModify || !event.altKey) return;
+        if (!canReorder || !event.altKey) return;
         if (event.key === "ArrowUp") {
           event.preventDefault();
           onMove(-1);
@@ -2667,7 +2676,7 @@ function IssueStateRow({
         }
       }}
     >
-      {canModify && <StatusDragHandle />}
+      {canReorder && <StatusDragHandle />}
       <span
         className="issue-status-mark"
         style={{ "--status-color": state.color } as React.CSSProperties}
@@ -2724,6 +2733,8 @@ function IssueStateRow({
               </button>
               <button
                 role="option"
+                disabled={!canDelete}
+                title={!canDelete?t("You can't delete the last status of a type."):undefined}
                 onClick={() => {
                   setMenuOpen(false);
                   onDelete();

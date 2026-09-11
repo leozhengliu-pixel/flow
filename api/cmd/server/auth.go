@@ -402,7 +402,7 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	// authorization below loads the entities required by the specific route.
 	var data domain.Bootstrap
 	var ok bool
-	if boundedIssueAuthorizationRequest(r) || labelDeletionRequest(r) {
+	if boundedIssueAuthorizationRequest(r) || boundedSettingsDeletionRequest(r) {
 		var accessErr error
 		data, _, accessErr = s.requestIssueQueryAccess(r)
 		ok = accessErr == nil
@@ -432,7 +432,7 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	role, status, err := data.ViewerRole, "active", error(nil)
-	if !boundedIssueAuthorizationRequest(r) && !labelDeletionRequest(r) {
+	if !boundedIssueAuthorizationRequest(r) && !boundedSettingsDeletionRequest(r) {
 		role, status, err = s.store.WorkspaceRole(r.Context(), data.Workspace.ID, user.ID)
 	}
 	if err != nil || status != "active" {
@@ -669,7 +669,7 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		_, _, err := s.requestIssueQueryAccess(r)
 		return err == nil
 	}
-	if labelDeletionRequest(r) {
+	if boundedSettingsDeletionRequest(r) {
 		data, access, err := s.requestIssueQueryAccess(r)
 		if err != nil {
 			return false

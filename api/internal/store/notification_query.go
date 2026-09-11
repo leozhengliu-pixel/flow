@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"flow/api/internal/domain"
@@ -29,6 +30,9 @@ func (s *SQLiteStore) jsonText(column, field string) string {
 	case "mysql":
 		return "NULLIF(JSON_UNQUOTE(JSON_EXTRACT(CONVERT(" + column + " USING utf8mb4), '$." + field + "')), 'null')"
 	case "postgres":
+		if strings.Contains(field, ".") {
+			return "(convert_from(" + column + ", 'UTF8')::jsonb #>> '{" + strings.ReplaceAll(field, ".", ",") + "}')"
+		}
 		return "(convert_from(" + column + ", 'UTF8')::jsonb ->> '" + field + "')"
 	default:
 		return "json_extract(" + column + ", '$." + field + "')"

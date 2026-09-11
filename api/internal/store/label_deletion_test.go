@@ -53,7 +53,9 @@ func TestUnusedProjectLabelDeletionDoesNotReadOrRewriteUnrelatedCollections(t *t
 	for _, query := range []string{
 		`UPDATE issue_records SET data='invalid issue JSON'`,
 		`UPDATE workspace_content_records SET data='invalid discussion JSON'`,
-		`UPDATE workspace_metadata_records SET data='invalid project JSON' WHERE field='projects'`,
+		// Keep the searchable scalar fields valid for the indexing trigger, but
+		// make full Project decoding fail on the unrelated revision collection.
+		`UPDATE workspace_metadata_records SET data='{"descriptionRevisions":"invalid project body"}' WHERE field='projects'`,
 	} {
 		if _, err := repo.db.ExecContext(t.Context(), query); err != nil {
 			t.Fatal(err)

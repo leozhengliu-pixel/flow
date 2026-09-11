@@ -1,0 +1,20 @@
+.workflow-state-delete-dialog{width:min(440px,calc(100vw - 32px));padding:24px;display:flex;flex-direction:column;gap:14px}
+.workflow-state-delete-dialog h2{margin:0;font-size:16px;font-weight:600}
+.workflow-state-delete-dialog p{margin:0;font-size:13px;line-height:20px;color:var(--text-secondary);overflow-wrap:anywhere}
+.workflow-state-delete-dialog strong{font-weight:500;color:var(--text-primary)}
+.workflow-state-delete-dialog>.property-row{width:100%}
+.workflow-state-delete-dialog footer{display:flex;justify-content:flex-end;gap:8px}
+.workflow-state-delete-dialog button:not(.property-row):not(.dialog-close){min-height:30px;padding:4px 10px;border:1px solid var(--border-strong);border-radius:6px;background:var(--theme-control);color:var(--text);font-size:13px}
+.workflow-state-delete-dialog footer button.danger{background:var(--semantic-danger);border-color:var(--semantic-danger);color:var(--on-danger)}
+.workflow-state-delete-dialog button:disabled{opacity:.5;cursor:not-allowed}
+.workflow-default-state{padding:0 16px 16px}
+.workflow-status-load-error{display:flex;align-items:center;gap:8px;padding:12px 16px;color:var(--text-secondary);font-size:13px}
+.workflow-status-load-error button{padding:4px 8px;border:1px solid var(--border-strong);border-radius:5px}
+.team-statuses-page .issue-state-row{grid-template-columns:36px minmax(0,1fr) 32px}
+.team-statuses-page .issue-state-row>.issue-status-mark{grid-column:1;width:34px;height:34px;box-sizing:border-box;display:grid;place-items:center;padding:0;min-width:34px}
+.team-statuses-page .issue-state-row>.issue-status-mark>svg{width:16px;height:16px;display:block}
+.team-statuses-page .issue-state-row>.ip-status-copy{grid-column:2;min-width:0;display:flex;flex-direction:column;padding-left:9px}
+.team-statuses-page .issue-state-row>.ip-status-more{grid-column:3}
+.ip-status-menu button:disabled{opacity:.45;cursor:not-allowed}
+.team-statuses-page .ip-status-card .ip-status-editor .ip-status-color{width:34px;height:34px;display:grid;place-items:center;padding:0}
+.team-statuses-page .ip-status-card .ip-status-editor .ip-status-color>svg{display:block;width:16px;height:16px}

@@ -1844,14 +1844,40 @@ export function createAIPromptProgress(
 ): Promise<import("@/types/flow").AIPromptProgress> {
   return request("/api/ai/prompt-progress", jsonRequest("POST", input));
 }
+export type SearchOptions = {
+  limit?: number;
+  teamId?: string;
+  stateId?: string;
+  statusType?: string;
+  assigneeId?: string;
+  creatorId?: string;
+  createdAfter?: string;
+  createdBefore?: string;
+  updatedAfter?: string;
+  updatedBefore?: string;
+  includeArchived?: boolean;
+  sort?: 'relevance' | 'createdAt' | 'updatedAt' | 'title';
+  filter?: Record<string, unknown>;
+  cursor?: string;
+};
+
+function searchParams(query: string, types: string[], options: SearchOptions) {
+  const params = new URLSearchParams({ q: query });
+  for (const [key, value] of Object.entries(options)) {
+    if (value !== undefined) params.set(key, key === 'filter' ? JSON.stringify(value) : String(value));
+  }
+  if (types.length) params.set('types', types.join(','));
+  return params;
+}
+
 export function searchWorkspace(
   query: string,
   types: SearchResourceType[] = [],
-  limit = 40,
+  options: number | SearchOptions = 40,
+  signal?: AbortSignal,
 ): Promise<SearchResponse> {
-  const params = new URLSearchParams({ q: query, limit: String(limit) });
-  if (types.length) params.set("types", types.join(","));
-  return request(`/api/search?${params}`);
+  const params = searchParams(query, types, typeof options === 'number' ? { limit: options } : options);
+  return request(`/api/search?${params}`, { signal });
 }
 export function fetchAgentStatus(): Promise<
   import("@/types/flow").AgentStatus
@@ -3197,10 +3223,11 @@ export function deleteMeeting(id: string): Promise<void> {
 export function semanticSearch(
   query: string,
   types: string[] = [],
+  options: SearchOptions = {},
+  signal?: AbortSignal,
 ): Promise<SemanticSearchResponse> {
-  const params = new URLSearchParams({ q: query });
-  if (types.length) params.set("types", types.join(","));
-  return request(`/api/search/semantic?${params}`);
+  const params = searchParams(query, types, options);
+  return request(`/api/search/semantic?${params}`, { signal });
 }
 export function fetchFilterSuggestions(
   field = "",
