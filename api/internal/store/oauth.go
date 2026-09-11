@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"net"
+	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -41,9 +44,49 @@ func (s *SQLiteStore) FindOAuthClientByMetadata(ctx context.Context, client doma
 		if current.ClientName != client.ClientName || current.ClientURI != client.ClientURI || current.LogoURI != client.LogoURI || current.TokenEndpointAuthMethod != client.TokenEndpointAuthMethod {
 			continue
 		}
+		if !sameOAuthStringSet(current.GrantTypes, client.GrantTypes) || !sameOAuthStringSet(current.ResponseTypes, client.ResponseTypes) || !sameOAuthRedirects(current.RedirectURIs, client.RedirectURIs) {
+			continue
+		}
 		return current, true, nil
 	}
 	return domain.OAuthClient{}, false, rows.Err()
+}
+
+func sameOAuthStringSet(left, right []string) bool {
+	left = slices.Clone(left)
+	right = slices.Clone(right)
+	slices.Sort(left)
+	slices.Sort(right)
+	return slices.Equal(slices.Compact(left), slices.Compact(right))
+}
+
+// CLI loopback listener ports change across logins. Nothing else in a redirect
+// URI is interchangeable: trusting only a public client name would allow an
+// unrelated registration to append its own callback to an existing client.
+func sameOAuthRedirects(left, right []string) bool {
+	normalize := func(values []string) ([]string, bool) {
+		result := make([]string, 0, len(values))
+		for _, value := range values {
+			parsed, err := url.Parse(value)
+			if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+				return nil, false
+			}
+			host := strings.ToLower(parsed.Hostname())
+			ip := net.ParseIP(host)
+			if parsed.Scheme == "http" && (host == "localhost" || ip != nil && ip.IsLoopback()) {
+				if strings.Contains(host, ":") {
+					parsed.Host = "[" + host + "]"
+				} else {
+					parsed.Host = host
+				}
+			}
+			result = append(result, parsed.String())
+		}
+		return result, true
+	}
+	l, lok := normalize(left)
+	r, rok := normalize(right)
+	return lok && rok && len(l) > 0 && sameOAuthStringSet(l, r)
 }
 
 func (s *SQLiteStore) UpdateOAuthClient(ctx context.Context, client domain.OAuthClient) error {

@@ -1974,6 +1974,13 @@ export type SearchResourceType =
   | "release"
   | "view";
 export interface SearchResult {
+  url?: string;
+  slugId?: string;
+  state?: WorkflowState;
+  projectStatus?: ProjectStatus;
+  statusType?: string;
+  statusName?: string;
+  createdAt?: string;
   id: UUID;
   type: SearchResourceType;
   title: string;

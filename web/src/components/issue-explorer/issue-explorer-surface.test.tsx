@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { IssueExplorerSurface } from './issue-explorer-surface'
+import styles from './issue-explorer.module.css'
 
 class TestResizeObserver { observe() {} unobserve() {} disconnect() {} }
 Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, value: TestResizeObserver })
@@ -22,14 +23,16 @@ it.each(['mouse', 'keyboard'])('applies a filter from its portaled submenu using
   const trigger = screen.getByRole('button', { name: 'Add filter' })
   if (mode === 'mouse') {
     await user.click(trigger)
-    await user.hover(screen.getByRole('option', { name: 'Priority' }))
-    const option = await screen.findByRole('option', { name: 'High' })
-    expect(document.querySelector('.createPanel')?.contains(option)).toBe(false)
+    fireEvent.mouseMove(screen.getByRole('option', { name: 'Priority' }))
+    const option = await screen.findByRole('option', { name: /^High/ })
+    const panel = document.querySelector(`.${styles.createPanel}`)
+    expect(panel).not.toBeNull()
+    expect(panel?.contains(option)).toBe(false)
     await user.click(option)
   } else {
     trigger.focus()
     await user.keyboard('{Enter}')
-    await user.type(await screen.findByRole('textbox', { name: 'Add Filter…' }), 'Priority')
+    await user.type(await screen.findByLabelText('Add Filter…'), 'Priority')
     await user.keyboard('{ArrowDown}{Enter}')
     const search = await screen.findByRole('searchbox', { name: 'Filter Priority' })
     search.focus()

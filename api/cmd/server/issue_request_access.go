@@ -46,13 +46,13 @@ func (s *server) requestIssueQueryAccess(r *http.Request) (domain.Bootstrap, sto
 }
 
 func boundedIssueAuthorizationRequest(r *http.Request) bool {
-	return isIssueRecordsRequest(r) && issueRecordQueryOnly(r) || r.URL.Path == "/api/recent"
+	return isIssueRecordsRequest(r) && issueRecordQueryOnly(r) || r.URL.Path == "/api/recent" || r.URL.Path == "/api/search" || r.URL.Path == "/api/search/semantic" || r.URL.Path == "/api/search/history"
 }
 
-func labelDeletionRequest(r *http.Request) bool {
+func boundedSettingsDeletionRequest(r *http.Request) bool {
 	if r.Method != http.MethodDelete {
 		return false
 	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	return len(parts) == 3 && (parts[1] == "labels" || parts[1] == "label-groups") || len(parts) == 5 && parts[1] == "teams" && (parts[3] == "labels" || parts[3] == "label-groups")
+	return len(parts) == 3 && (parts[1] == "labels" || parts[1] == "label-groups") || len(parts) == 5 && parts[1] == "teams" && (parts[3] == "labels" || parts[3] == "label-groups" || parts[3] == "states")
 }

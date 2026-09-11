@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"net/http"
@@ -424,47 +425,46 @@ func (s *server) deleteWorkflowState(w http.ResponseWriter, r *http.Request) {
 	if r.Body != nil && r.ContentLength != 0 && !decodeJSON(w, r, &input) {
 		return
 	}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "workflow_state.deleted", stateID, input, func(data *domain.Bootstrap) error {
-		materializeTeamStates(data, teamID)
+	err := s.store.DeleteWorkflowStateRecords(r.Context(), workspaceKey(r), teamID, func(data *domain.Bootstrap, inUse bool) (domain.WorkflowState, *domain.WorkflowState, error) {
 		state := stateForTeam(data, teamID, stateID)
 		if state == nil {
 			state = stateForTeam(data, teamID, teamID+"_"+stateID)
 		}
 		if state == nil {
-			return errNotFound
+			return domain.WorkflowState{}, nil, errNotFound
 		}
-		resolvedStateID := state.ID
 		if state.Reserved {
-			return fmt.Errorf("%w: reserved status cannot be deleted", errInvalid)
+			return domain.WorkflowState{}, nil, fmt.Errorf("%w: reserved status cannot be deleted", errInvalid)
 		}
 		if state.Default {
-			return fmt.Errorf("%w: default status cannot be deleted", errInvalid)
+			return domain.WorkflowState{}, nil, fmt.Errorf("%w: default status cannot be deleted", errInvalid)
 		}
 		if countStatesOfType(data, teamID, state.Type) <= 1 {
-			return fmt.Errorf("%w: each workflow type needs at least one status", errInvalid)
+			return domain.WorkflowState{}, nil, fmt.Errorf("%w: each workflow type needs at least one status", errInvalid)
 		}
-		inUse := slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool { return issue.Team.ID == teamID && issue.State.ID == resolvedStateID })
+		if state.TeamID != teamID {
+			return domain.WorkflowState{}, nil, fmt.Errorf("%w: configure a team-specific workflow before deleting this status", errInvalid)
+		}
 		var replacement *domain.WorkflowState
 		if input.ReplacementStateID != "" {
 			replacement = stateForTeam(data, teamID, input.ReplacementStateID)
 			if replacement == nil {
 				replacement = stateForTeam(data, teamID, teamID+"_"+input.ReplacementStateID)
 			}
-		}
-		if inUse && replacement == nil {
-			return fmt.Errorf("%w: replacementStateId is required for a status in use", errInvalid)
-		}
-		if replacement != nil {
-			for index := range data.Issues {
-				if data.Issues[index].Team.ID == teamID && data.Issues[index].State.ID == resolvedStateID {
-					data.Issues[index].State = *replacement
-				}
+			if replacement == nil || replacement.TeamID != teamID || replacement.ID == state.ID {
+				return domain.WorkflowState{}, nil, fmt.Errorf("%w: replacementStateId must be another status in this team", errInvalid)
 			}
 		}
-		data.States = slices.DeleteFunc(data.States, func(item domain.WorkflowState) bool { return item.TeamID == teamID && item.ID == resolvedStateID })
-		return nil
+		if inUse && replacement == nil {
+			return domain.WorkflowState{}, nil, fmt.Errorf("%w: replacementStateId is required for a status in use", errInvalid)
+		}
+		return *state, replacement, nil
 	})
 	if err != nil {
+		if errors.Is(err, errInvalid) {
+			writeError(w, http.StatusBadRequest, strings.TrimPrefix(err.Error(), errInvalid.Error()+": "))
+			return
+		}
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}

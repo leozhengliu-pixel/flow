@@ -1257,24 +1257,35 @@ func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 	r = r.WithContext(ctx)
-	data, scope, err := s.pagedRealtimeMetadata(r)
+	policy, scope, err := s.searchQuery(r)
 	if err != nil {
 		issueRecordsError(w, err)
 		return
 	}
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if query == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"results": []semanticResult{}, "facets": map[string][]domain.SemanticSearchFacet{}, "nextCursor": "", "hasMore": false, "total": 0})
+		return
+	}
+	terms := semanticTerms(query)
+	if len(terms) > 32 {
+		writeError(w, 400, "search contains too many terms")
+		return
+	}
+	data, err := s.store.SearchMetadata(ctx, policy, store.SearchMetadataQuery{Scope: scope, Types: searchTypes(r.URL.Query().Get("types")), Terms: terms, Limit: 500})
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	issueScores := map[string]semanticResult{}
 	if searchTypes(r.URL.Query().Get("types"))["issue"] {
-		scope.Filter = store.IssueFilter{}
-		scope.Archived = "all"
 		seen := map[string]bool{}
-		terms := semanticTerms(query)
 		if len(terms) > 32 {
 			writeError(w, 400, "search contains too many terms")
 			return
 		}
-		for _, term := range terms {
-			err := s.store.SearchIssueCandidates(ctx, scope, term, nil, 250, func(issue domain.Issue) error {
+		{
+			err := s.store.SearchIssueCandidateTerms(ctx, scope, terms, nil, 500, func(issue domain.Issue) error {
 				if !seen[issue.ID] {
 					seen[issue.ID] = true
 					labels := []string{}
@@ -1282,6 +1293,9 @@ func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
 						labels = append(labels, label.Name)
 					}
 					score, matched := semanticTextScore(query, issue.Title, issue.Description, issue.Identifier, issue.Team.Name, issue.State.Name, strings.Join(labels, " "))
+					if score == 0 {
+						score = 1
+					}
 					issueScores[issue.ID] = semanticResult{SemanticScore: score, MatchedTerms: matched}
 					issue.Description = ""
 					issue.DescriptionState = ""
@@ -1297,21 +1311,14 @@ func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		if len(terms) == 0 {
-			scope.Limit = 250
-			scope.Summary = true
-			page, err := s.store.QueryIssueRecords(ctx, scope)
-			if err != nil {
-				issueRecordsError(w, err)
-				return
-			}
-			data.Issues = page.Items
-		}
 	}
 	types := searchTypes(r.URL.Query().Get("types"))
 	results := []semanticResult{}
 	add := func(item domain.SearchResult, fields ...string) {
 		score, matched := semanticTextScore(query, fields...)
+		if score == 0 {
+			score = 1
+		}
 		if score > 0 {
 			item.Score = score
 			results = append(results, semanticResult{SearchResult: item, SemanticScore: score, MatchedTerms: matched})
@@ -1319,12 +1326,6 @@ func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	if types["issue"] {
 		for _, item := range data.Issues {
-			if value := r.URL.Query().Get("teamId"); value != "" && item.Team.ID != value {
-				continue
-			}
-			if value := r.URL.Query().Get("stateId"); value != "" && item.State.ID != value {
-				continue
-			}
 			labels := []string{}
 			for _, label := range item.Labels {
 				labels = append(labels, label.Name)
@@ -1348,7 +1349,7 @@ func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	if types["document"] {
 		for _, item := range data.Documents {
-			if item.ArchivedAt == nil && documentVisibleToViewer(s, data, item) {
+			if scope.Archived == "all" || item.ArchivedAt == nil {
 				add(domain.SearchResult{ID: item.ID, Type: "document", Title: item.Title, Subtitle: "Document", Icon: item.Icon, Color: item.Color, UpdatedAt: item.UpdatedAt}, item.Title, item.Content)
 			}
 		}
@@ -1375,7 +1376,7 @@ func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	if types["release"] {
 		for _, item := range data.Releases {
-			if item.ArchivedAt != nil {
+			if scope.Archived != "all" && item.ArchivedAt != nil {
 				continue
 			}
 			subtitle := strings.TrimSpace(strings.Join([]string{item.Version, item.Status}, " "))
@@ -1394,11 +1395,33 @@ func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
 		}
 		return results[i].SemanticScore > results[j].SemanticScore
 	})
+	for i := range results {
+		items := []domain.SearchResult{results[i].SearchResult}
+		enrichSearchResults(items, data)
+		results[i].SearchResult = items[0]
+	}
+	if scope.Sort != "" {
+		sort.SliceStable(results, func(i, j int) bool {
+			a, b := results[i], results[j]
+			if scope.Sort == "title" {
+				return strings.ToLower(a.Title) < strings.ToLower(b.Title)
+			}
+			if scope.Sort == "createdAt" {
+				return a.CreatedAt.After(b.CreatedAt)
+			}
+			return a.UpdatedAt.After(b.UpdatedAt)
+		})
+	}
 	facets := semanticFacets(data, results)
 	start, end := contentPageBounds(r, len(results))
 	next := ""
 	if end < len(results) {
 		next = base64.RawURLEncoding.EncodeToString([]byte(strconv.Itoa(end)))
+	}
+	for i := start; i < end; i++ {
+		one := []domain.SearchResult{results[i].SearchResult}
+		s.attachSearchResultLinks(r, one, data)
+		results[i].SearchResult = one[0]
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"results": results[start:end], "facets": facets, "nextCursor": next, "hasMore": end < len(results), "total": len(results)})
 }

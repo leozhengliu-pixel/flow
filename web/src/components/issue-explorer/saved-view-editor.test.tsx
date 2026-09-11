@@ -17,7 +17,7 @@ it.each(['en-US', 'zh-CN'])('uses one language for system targets and preserves 
   await user.click(screen.getByRole('button', { name: chinese ? '保存到 个人' : 'Save to Personal' }))
   await user.click(screen.getAllByRole('menuitemradio', { name: 'Personal' }).at(-1)!)
   expect(screen.getByRole('button', { name: chinese ? '保存到 Personal' : 'Save to Personal' })).toBeVisible()
-  await user.click(screen.getByRole('button', { name: chinese ? '保存' : 'Save', exact: true }))
+  await user.click(screen.getByRole('button', { name: chinese ? /^保存$/ : /^Save$/ }))
   expect(save).toHaveBeenCalledWith(expect.any(String), '', targets[2], expect.any(Object))
 })
 

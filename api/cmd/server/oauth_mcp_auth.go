@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -247,26 +248,14 @@ func (s *server) exchangeMCPToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch r.Form.Get("grant_type") {
-	case "authorization_code":
-		grant, err := s.store.ConsumeOAuthAuthorizationCode(r.Context(), r.Form.Get("code"))
-		if err != nil || grant.ClientID != r.Form.Get("client_id") || grant.RedirectURI != r.Form.Get("redirect_uri") || !validPKCE(r.Form.Get("code_verifier"), grant.CodeChallenge) {
-			writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "Authorization code is invalid or expired")
-			return
-		}
-		s.issueOAuthTokens(w, r, domain.OAuthRefreshGrant{ClientID: grant.ClientID, WorkspaceKey: grant.WorkspaceKey, UserID: grant.UserID, Scopes: grant.Scopes, AuthorizationID: grant.AuthorizationID, ExpiresAt: time.Now().UTC().Add(30 * 24 * time.Hour)})
-	case "refresh_token":
-		grant, err := s.store.ConsumeOAuthRefreshToken(r.Context(), r.Form.Get("refresh_token"))
-		if err != nil || grant.ClientID != r.Form.Get("client_id") {
-			writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "Refresh token is invalid or expired")
-			return
-		}
-		s.issueOAuthTokens(w, r, grant)
+	case "authorization_code", "refresh_token":
+		s.issueOAuthTokens(w, r)
 	default:
 		writeOAuthError(w, http.StatusBadRequest, "unsupported_grant_type", "Supported grants: authorization_code, refresh_token")
 	}
 }
 
-func (s *server) issueOAuthTokens(w http.ResponseWriter, r *http.Request, grant domain.OAuthRefreshGrant) {
+func (s *server) issueOAuthTokens(w http.ResponseWriter, r *http.Request) {
 	accessToken, accessErr := randomSecret("flow_oauth_")
 	refreshToken, refreshErr := randomSecret("flow_refresh_")
 	if accessErr != nil || refreshErr != nil {
@@ -274,27 +263,20 @@ func (s *server) issueOAuthTokens(w http.ResponseWriter, r *http.Request, grant 
 		return
 	}
 	expiresAt := time.Now().UTC().Add(time.Hour)
-	key := domain.APIKey{ID: fmt.Sprintf("oauth_token_%d", time.Now().UnixNano()), Name: "MCP OAuth token", Prefix: accessToken[:min(len(accessToken), 19)], SecretHash: secretHash(accessToken), CreatorID: grant.UserID, Scopes: grant.Scopes, TeamIDs: []string{}, CreatedAt: time.Now().UTC(), ExpiresAt: &expiresAt, OAuthClientID: grant.ClientID, AuthorizationID: grant.AuthorizationID}
-	err := s.store.MutateWorkspace(r.Context(), grant.WorkspaceKey, "oauth_token.created", grant.AuthorizationID, nil, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.OAuthAuthorizations, func(item domain.OAuthAuthorization) bool {
-			return item.ID == grant.AuthorizationID && item.RevokedAt == nil
-		})
-		if index < 0 {
-			return errNotFound
-		}
-		if !applicationApproved(data, grant.ClientID, grant.Scopes) {
-			return errNotFound
-		}
-		data.APIKeys = append([]domain.APIKey{key}, data.APIKeys...)
-		return nil
-	})
-	if err != nil {
-		writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "Authorization has been revoked")
-		return
+	key := domain.APIKey{ID: fmt.Sprintf("oauth_token_%d", time.Now().UnixNano()), Name: "MCP OAuth token", Prefix: accessToken[:min(len(accessToken), 19)], SecretHash: secretHash(accessToken), TeamIDs: []string{}, CreatedAt: time.Now().UTC(), ExpiresAt: &expiresAt}
+	token := r.Form.Get("refresh_token")
+	if r.Form.Get("grant_type") == "authorization_code" {
+		token = r.Form.Get("code")
 	}
-	grant.ExpiresAt = time.Now().UTC().Add(30 * 24 * time.Hour)
-	if err := s.store.CreateOAuthRefreshToken(r.Context(), refreshToken, grant); err != nil {
-		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not issue refresh token")
+	grant, err := s.store.ExchangeOAuthGrant(r.Context(), r.Form.Get("grant_type"), token, r.Form.Get("client_id"), refreshToken, key, func(code domain.OAuthAuthorizationCode) bool {
+		return code.RedirectURI == r.Form.Get("redirect_uri") && validPKCE(r.Form.Get("code_verifier"), code.CodeChallenge)
+	}, applicationApproved)
+	if err != nil {
+		if errors.Is(err, store.ErrAuthForbidden) {
+			writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "Grant is invalid, expired, or revoked")
+		} else {
+			writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not issue tokens")
+		}
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"access_token": accessToken, "refresh_token": refreshToken, "token_type": "Bearer", "expires_in": 3600, "scope": strings.Join(grant.Scopes, " ")})

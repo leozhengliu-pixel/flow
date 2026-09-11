@@ -29,30 +29,45 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 	types := searchTypes(r.URL.Query().Get("types"))
 	userID := policy.Viewer.ID
-	if query != "" { _ = s.store.RecordSearch(r.Context(), policy.Workspace.ID, userID, query) }
+	if query != "" {
+		_ = s.store.RecordSearch(r.Context(), policy.Workspace.ID, userID, query)
+	}
 	history, _ := s.store.SearchHistory(r.Context(), policy.Workspace.ID, userID, 8)
-	recent, _ := s.store.RecentResources(r.Context(), policy.Workspace.ID, userID, 12)
-	terms:=[]string{};if query!="" {terms=append(terms,query)}
-	data,err:=s.store.SearchMetadata(r.Context(),policy,store.SearchMetadataQuery{Scope:scope,Types:types,Terms:terms,Recent:recent,Limit:max(100,limit*4)})
-	if err!=nil{issueRecordsError(w,err);return}
-	results:=[]domain.SearchResult{}
-	if query!=""{results=buildSearchResultsLimited(data, query, types, 0)}
+	recent := []domain.RecentResource{}
+	if query == "" {
+		recent, _ = s.store.RecentResources(r.Context(), policy.Workspace.ID, userID, 12)
+	}
+	terms := []string{}
+	if query != "" {
+		terms = append(terms, query)
+	}
+	data, err := s.store.SearchMetadata(r.Context(), policy, store.SearchMetadataQuery{Scope: scope, Types: types, Terms: terms, Recent: recent, Limit: max(100, limit*4)})
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
+	results := []domain.SearchResult{}
+	if query != "" {
+		results = buildSearchResultsLimited(data, query, types, 0, scope.Archived == "all", true)
+	}
 	if query != "" && types["issue"] {
 		scope.Text = ""
-		labelIDs := []string{}
-		for _, label := range data.Labels {
-			if fuzzyScore(query, label.Name) > 0 {
-				labelIDs = append(labelIDs, label.ID)
-			}
+		labelIDs, labelErr := s.store.MatchingIssueSearchLabels(r.Context(), scope, query)
+		if labelErr != nil {
+			issueRecordsError(w, labelErr)
+			return
 		}
 		err := s.store.SearchIssueCandidates(r.Context(), scope, query, labelIDs, max(100, limit*4), func(issue domain.Issue) error {
-			data.Issues=append(data.Issues,issue)
-			one:=domain.Bootstrap{Issues:[]domain.Issue{issue}}
-			matched:=buildSearchResultsLimited(one,query,map[string]bool{"issue":true},1)
-			if len(matched)==0 {matched=buildSearchResultsLimited(one,"",map[string]bool{"issue":true},1)}
-			results = append(results,matched...)
+			data.Issues = append(data.Issues, issue)
+			one := domain.Bootstrap{Issues: []domain.Issue{issue}}
+			matched := buildSearchResultsLimited(one, query, map[string]bool{"issue": true}, 1)
+			if len(matched) == 0 {
+				matched = buildSearchResultsLimited(one, "", map[string]bool{"issue": true}, 1)
+			}
+			results = append(results, matched...)
 			if len(results) > limit*2 {
-				enrichSearchResults(results,data);searchResultOrder(results,scope)
+				enrichSearchResults(results, data)
+				searchResultOrder(results, scope)
 				results = results[:limit]
 			}
 			return nil
@@ -61,7 +76,8 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 			issueRecordsError(w, err)
 			return
 		}
-		enrichSearchResults(results,data);searchResultOrder(results,scope)
+		enrichSearchResults(results, data)
+		searchResultOrder(results, scope)
 	}
 	if query == "" {
 		ids := []string{}
@@ -71,8 +87,8 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if len(ids) > 0 {
-			scope.Filter = store.IssueFilter{And:[]store.IssueFilter{scope.Filter,{Field: "id", Values: ids}}}
-			scope.Summary=true
+			scope.Filter = store.IssueFilter{And: []store.IssueFilter{scope.Filter, {Field: "id", Values: ids}}}
+			scope.Summary = true
 			scope.Limit = 100
 			page, err := s.store.QueryIssueRecords(r.Context(), scope)
 			if err != nil {
@@ -82,17 +98,25 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 			data.Issues = page.Items
 		}
 		results = resolveRecentResults(data, recent, types)
+		visibleRecent := map[string]bool{}
+		for _, result := range results {
+			visibleRecent[result.Type+":"+result.ID] = true
+		}
+		recent = slices.DeleteFunc(recent, func(item domain.RecentResource) bool { return !visibleRecent[item.ResourceType+":"+item.ResourceID] })
 	}
-	enrichSearchResults(results,data)
-	if query!="" {searchResultOrder(results,scope)}
+	enrichSearchResults(results, data)
+	if query != "" {
+		searchResultOrder(results, scope)
+	}
 	if len(results) > limit {
 		results = results[:limit]
 	}
+	s.attachSearchResultLinks(r, results, data)
 	writeJSON(w, http.StatusOK, domain.SearchResponse{Results: results, History: history, Recent: recent})
 }
 
 func (s *server) clearSearchHistory(w http.ResponseWriter, r *http.Request) {
-	data, _, err := s.pagedRealtimeMetadata(r)
+	data, _, err := s.searchQuery(r)
 	if err != nil {
 		issueRecordsError(w, err)
 		return
@@ -160,7 +184,8 @@ func buildSearchResults(data domain.Bootstrap, query string, types map[string]bo
 	return buildSearchResultsLimited(data, query, types, 0)
 }
 
-func buildSearchResultsLimited(data domain.Bootstrap, query string, types map[string]bool, limit int) []domain.SearchResult {
+func buildSearchResultsLimited(data domain.Bootstrap, query string, types map[string]bool, limit int, includeArchived ...bool) []domain.SearchResult {
+	archived := len(includeArchived) > 0 && includeArchived[0]
 	results := []domain.SearchResult{}
 	sortAndTrim := func() {
 		slices.SortStableFunc(results, func(left, right domain.SearchResult) int {
@@ -175,6 +200,9 @@ func buildSearchResultsLimited(data domain.Bootstrap, query string, types map[st
 	}
 	add := func(item domain.SearchResult, fields ...string) {
 		item.Score = fuzzyScore(query, fields...)
+		if item.Score == 0 && len(includeArchived) > 1 && includeArchived[1] {
+			item.Score = 1
+		}
 		if item.Score > 0 {
 			results = append(results, item)
 			if limit > 0 && len(results) >= limit*2 {
@@ -204,7 +232,7 @@ func buildSearchResultsLimited(data domain.Bootstrap, query string, types map[st
 	if types["document"] {
 		indexed := map[string]bool{}
 		for _, document := range data.Documents {
-			if document.ArchivedAt != nil {
+			if document.ArchivedAt != nil && !archived {
 				continue
 			}
 			subtitle := "Document"
@@ -258,7 +286,7 @@ func buildSearchResultsLimited(data domain.Bootstrap, query string, types map[st
 	}
 	if types["release"] {
 		for _, release := range data.Releases {
-			if release.ArchivedAt != nil {
+			if release.ArchivedAt != nil && !archived {
 				continue
 			}
 			subtitle := strings.TrimSpace(strings.Join([]string{release.Version, release.Status}, " "))

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { User } from '@/types/flow'
 import { Calendar, Check, Filter, SlidersHorizontal, UserRound, X } from 'lucide-react'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { PersonPicker } from '@/components/issue/core-property-pickers'
@@ -12,10 +13,10 @@ import { DisplayIcon, FilterIcon } from '@/components/ui/view-action-icons'
 import { useI18n } from '@/i18n/i18n'
 import { searchFields, type SearchPageState, type SearchFilterField, type SearchCondition, type SearchOrder } from './search-state'
 
-export const searchStatuses = [{id:'backlog',label:'Backlog'},{id:'unstarted',label:'Unstarted'},{id:'started',label:'Started'},{id:'completed',label:'Completed'},{id:'canceled',label:'Canceled'}]
+const searchStatuses = [{id:'backlog',label:'Backlog'},{id:'unstarted',label:'Unstarted'},{id:'started',label:'Started'},{id:'completed',label:'Completed'},{id:'canceled',label:'Canceled'}] as const
 const orderOptions: Array<{id:SearchOrder;label:string}> = [{id:'relevance',label:'Most relevant'},{id:'updatedAt',label:'Last updated'},{id:'createdAt',label:'Last created'},{id:'title',label:'Title'}]
 
-export function SearchMenus({state,onChange}:{state:SearchPageState;onChange:(state:SearchPageState)=>void}) {
+export function SearchMenus({state,onChange,users}:{state:SearchPageState;onChange:(state:SearchPageState)=>void;users?:User[]}) {
   const {t}=useI18n()
   const [filterOpen,setFilterOpen]=useState(false)
   const [advancedOpen,setAdvancedOpen]=useState(false)
@@ -33,7 +34,7 @@ export function SearchMenus({state,onChange}:{state:SearchPageState;onChange:(st
         {searchFields.map(field=><DropdownMenuSub key={field.id}>
           <DropdownMenuSubTrigger>{field.id.endsWith('At')?<Calendar size={15}/>:field.id==='statusType'?<Filter size={15}/>:<UserRound size={15}/>}<span>{t(field.label)}</span></DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="workspace-search-value-menu" onKeyDown={event=>event.stopPropagation()}>
-            <SearchFilterValue field={field.id} value="" onChange={(value,operator)=>add(field.id,value,operator)}/>
+            <SearchFilterValue users={users} field={field.id} value="" onChange={(value,operator)=>add(field.id,value,operator)}/>
           </DropdownMenuSubContent>
         </DropdownMenuSub>)}
       </DropdownMenuContent>
@@ -48,12 +49,12 @@ export function SearchMenus({state,onChange}:{state:SearchPageState;onChange:(st
         <DropdownMenuCheckboxItem checked={state.showId} onCheckedChange={showId=>onChange({...state,showId:showId===true})}>{t('ID')}</DropdownMenuCheckboxItem>
       </DropdownMenuContent>
     </DropdownMenu>
-    <Dialog open={advancedOpen} onOpenChange={setAdvancedOpen}><DialogContent className="workspace-search-advanced" aria-describedby={undefined}><DialogTitle>{t('Advanced filter')}</DialogTitle>
+    <Dialog open={advancedOpen} onOpenChange={setAdvancedOpen}><DialogContent closeLabel={t('Close')} className="workspace-search-advanced" aria-describedby={undefined}><DialogTitle>{t('Advanced filter')}</DialogTitle>
       <SelectControl label={t('Match filters')} value={advanced.match} options={[{value:'and',label:t('All filters')},{value:'or',label:t('Any filter')}]} onChange={match=>setAdvanced({...advanced,match:match as 'and'|'or'})}/>
       <div className="workspace-search-conditions">{advanced.filters.map(condition=><div className="workspace-search-condition" key={condition.id}>
         <SelectControl label={t('Filter field')} value={condition.field} options={searchFields.map(field=>({value:field.id,label:t(field.label)}))} onChange={field=>setAdvanced({...advanced,filters:advanced.filters.map(item=>item.id===condition.id?{...item,field:field as SearchFilterField,value:'',operator:field.endsWith('At')?'after':'is'}:item)})}/>
         <SelectControl label={t('Filter operator')} value={condition.operator} options={(condition.field.endsWith('At')?['after','before']:['is','isNot']).map(operator=>({value:operator,label:t(operator==='isNot'?'is not':operator)}))} onChange={operator=>setAdvanced({...advanced,filters:advanced.filters.map(item=>item.id===condition.id?{...item,operator:operator as SearchCondition['operator']}:item)})}/>
-        <SearchFilterValue field={condition.field} value={condition.value} compact onChange={value=>setAdvanced({...advanced,filters:advanced.filters.map(item=>item.id===condition.id?{...item,value}:item)})}/>
+        <SearchFilterValue users={users} field={condition.field} value={condition.value} compact onChange={value=>setAdvanced({...advanced,filters:advanced.filters.map(item=>item.id===condition.id?{...item,value}:item)})}/>
         <button type="button" aria-label={t('Remove filter')} onClick={()=>setAdvanced({...advanced,filters:advanced.filters.filter(item=>item.id!==condition.id)})}><X size={14}/></button>
       </div>)}</div>
       <footer><button type="button" onClick={()=>setAdvanced({...advanced,filters:[...advanced.filters,{id:crypto.randomUUID(),field:'statusType',operator:'is',value:''}]})}>{t('Add filter')}</button><button type="button" onClick={()=>{onChange({...state,match:advanced.match,filters:advanced.filters.filter(item=>item.value)});setAdvancedOpen(false)}}>{t('Apply filters')}</button></footer>
@@ -61,21 +62,21 @@ export function SearchMenus({state,onChange}:{state:SearchPageState;onChange:(st
   </>
 }
 
-function SearchFilterValue({field,value,onChange,compact=false}:{field:SearchFilterField;value:string;onChange:(value:string,operator?:SearchCondition['operator'])=>void;compact?:boolean}) {
-  const {t}=useI18n()
+function SearchFilterValue({field,value,onChange,compact=false,users}:{field:SearchFilterField;value:string;onChange:(value:string,operator?:SearchCondition['operator'])=>void;compact?:boolean;users?:User[]}) {
+  const {t,locale}=useI18n()
   const directory=usePeopleDirectory()
   const [operator,setOperator]=useState<'after'|'before'>('after')
   if(field.endsWith('At')) return <div className="workspace-search-date-filter">
     {!compact&&<SelectControl label={t('Filter operator')} value={operator} options={[{value:'after',label:t('After')},{value:'before',label:t('Before')}]} onChange={next=>setOperator(next as 'after'|'before')}/>}
-    <DateTimeControl label={t(searchFields.find(item=>item.id===field)!.label)} value={value} onChange={next=>onChange(next,operator)}/>
+    <DateTimeControl locale={locale} label={t(searchFields.find(item=>item.id===field)!.label)} value={value} onChange={next=>onChange(next,operator)}/>
   </div>
-  if(field==='statusType') return <PropertyMenu label="Status type" embedded={!compact} compact={compact} selectedId={value} value={searchStatuses.find(item=>item.id===value)?.label} options={searchStatuses.map(item=>({...item,icon:<StatusIcon state={{id:item.id,name:item.label,type:item.id,color:'var(--text-secondary)'}}/>}))} onChange={onChange}/>
+  if(field==='statusType') return <PropertyMenu label="Status type" ariaLabel={t('Status type')} searchPlaceholder={t('Filter status types…')} embedded={!compact} compact={compact} selectedId={value} value={searchStatuses.find(item=>item.id===value)?.label} options={searchStatuses.map(item=>({...item,icon:<StatusIcon state={{id:item.id,name:item.label,type:item.id,color:'var(--text-secondary)'}}/>}))} onChange={onChange}/>
   const label=field==='creatorId'?'Creator':'Assignee / Lead'
-  return <PersonPicker label={label} ariaLabel={t(label)} embedded={!compact} selectedId={value==='none'?'':value||'__unselected__'} value={directory.users.get(value)?.displayName} emptyOptionLabel="Unassigned" emptyTriggerLabel={label} searchPlaceholder="Search members…" triggerClassName="mini-property-trigger" people={[...directory.users.values()].filter(user=>user.active).map(user=>({...user,label:user.displayName}))} onChange={id=>onChange(id||'none')}/>
+  return <PersonPicker label={label} ariaLabel={t(label)} embedded={!compact} selectedId={value==='none'?'':value||'__unselected__'} value={(users??[...directory.users.values()]).find(user=>user.id===value)?.displayName} emptyOptionLabel="Unassigned" emptyTriggerLabel={label} searchPlaceholder={t('Search members…')} triggerClassName="mini-property-trigger" people={(users??[...directory.users.values()]).filter(user=>user.active).map(user=>({...user,label:user.displayName}))} onChange={id=>onChange(id||'none')}/>
 }
 
 export function SearchFilterChips({state,onChange}:{state:SearchPageState;onChange:(state:SearchPageState)=>void}) {
   const {t}=useI18n()
   const directory=usePeopleDirectory()
-  return <div className="workspace-search-filter-chips" aria-label={t('Active filters')}>{state.filters.map(filter=><span key={filter.id}><span>{t(searchFields.find(field=>field.id===filter.field)!.label)} {t(filter.operator==='isNot'?'is not':filter.operator)} </span><strong data-i18n-ignore>{directory.users.get(filter.value)?.displayName??(filter.field==='statusType'?t(searchStatuses.find(status=>status.id===filter.value)?.label??filter.value):filter.value)}</strong><button aria-label={t('Remove filter')} type="button" onClick={()=>onChange({...state,filters:state.filters.filter(item=>item.id!==filter.id)})}><X size={12}/></button></span>)}</div>
+  return <div className="workspace-search-filter-chips" aria-label={t('Active filters')}>{state.filters.map(filter=><span key={filter.id}><span>{t(searchFields.find(field=>field.id===filter.field)!.label)} {t(filter.operator==='isNot'?'is not':filter.operator)} </span><strong data-i18n-ignore>{directory.users.get(filter.value)?.displayName??(filter.value==='none'?t('Unassigned'):filter.field==='statusType'?t(searchStatuses.find(status=>status.id===filter.value)?.label??filter.value):filter.value)}</strong><button aria-label={t('Remove filter')} type="button" onClick={()=>onChange({...state,filters:state.filters.filter(item=>item.id!==filter.id)})}><X size={12}/></button></span>)}</div>
 }

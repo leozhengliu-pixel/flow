@@ -9,6 +9,7 @@ import {
   listIssues,
   realtimeClientId,
   searchWorkspace,
+  semanticSearch,
   updateInboxNotification,
   updateIssue,
   updatePresence,
@@ -99,5 +100,22 @@ describe('API client contract', () => {
     await fetchBootstrap()
     const headers = new Headers((fetchMock.mock.calls[0][1] as RequestInit).headers)
     expect(headers.has('X-Workspace-Key')).toBe(false)
+  })
+
+  it('forwards cancellation and identical server filter options to both search modes', async () => {
+    fetchMock.mockResolvedValue(response({ results: [] }))
+    const controller = new AbortController()
+    const filter = { or: [{ field: 'assigneeId', operator: 'is', values: ['none'] }, { field: 'updatedAt', operator: 'after', values: ['2026-09-01'] }] }
+    for (const search of [searchWorkspace, semanticSearch]) {
+      await search('needle', ['issue'], { filter, includeArchived: true, sort: 'updatedAt', updatedBefore: '2026-09-10' }, controller.signal)
+    }
+    for (const [url, init] of fetchMock.mock.calls as [string, RequestInit][]) {
+      const params = new URL(url, 'http://flow.local').searchParams
+      expect(JSON.parse(params.get('filter')!)).toEqual(filter)
+      expect(params.get('includeArchived')).toBe('true')
+      expect(params.get('sort')).toBe('updatedAt')
+      expect(params.get('updatedBefore')).toBe('2026-09-10')
+      expect(init.signal).toBe(controller.signal)
+    }
   })
 })
