@@ -139,7 +139,7 @@ func TestOAuthClientMetadataReuseMergesLoopbackRedirects(t *testing.T) {
 	if err := repository.RegisterOAuthClient(ctx, first); err != nil {
 		t.Fatal(err)
 	}
-	matched, found, err := repository.FindOAuthClientByMetadata(ctx, domain.OAuthClient{ClientName: "Codex MCP", RedirectURIs: []string{"http://127.0.0.1:52222/callback"}, GrantTypes: first.GrantTypes, ResponseTypes: first.ResponseTypes, TokenEndpointAuthMethod: "none"})
+	matched, found, err := repository.FindOAuthClientByMetadata(ctx, domain.OAuthClient{ClientName: "Codex MCP", ClientURI: "https://openai.example/codex", RedirectURIs: []string{"http://127.0.0.1:52222/callback"}, GrantTypes: []string{"authorization_code"}, TokenEndpointAuthMethod: "none"})
 	if err != nil || !found || matched.ClientID != first.ClientID {
 		t.Fatalf("matched=%#v found=%v err=%v", matched, found, err)
 	}

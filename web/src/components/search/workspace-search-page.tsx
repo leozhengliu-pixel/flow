@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Building2, Layers3, Lightbulb, Menu, Search, UserRound, X } from 'lucide-react'
+import { Building2, Menu, Search, UserRound, X } from 'lucide-react'
 
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { ReleasesIcon } from '@/components/releases/release-icons'
 
 import { clearSearchHistory, searchWorkspace, semanticSearch } from '@/lib/api'
-import type { SearchHistoryEntry, SearchResourceType, SearchResponse, SearchResult, User } from '@/types/flow'
-import { ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
+import type { SearchHistoryEntry, SearchResourceType, SearchResponse, SearchResult, User, WorkflowState } from '@/types/flow'
+import { StatusIcon } from '@/components/issue/issue-icons'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { useI18n } from '@/i18n/i18n'
@@ -33,6 +33,7 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
   const [params,setParams]=useSearchParams()
   const state=useMemo(()=>readSearchState(params),[params])
   const {query,tab}=state
+  const normalizedQuery=query.trim()
   const [draft, setDraft] = useState(query)
   const [response, setResponse] = useState<SearchResponse>({ results: [], history: [], recent: [] })
   const [loading, setLoading] = useState(true)
@@ -40,59 +41,63 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
   const [activeIndex, setActiveIndex] = useState(0)
   const [retry, setRetry] = useState(0)
   const requestRef = useRef(0)
+  const loadingRef = useRef(true)
   const [completedRequest,setCompletedRequest]=useState('')
   const [nextCursor,setNextCursor]=useState('')
   const [loadingMore,setLoadingMore]=useState(false)
   const [moreError,setMoreError]=useState<string>()
   const moreController=useRef<AbortController | null>(null)
   const resultListRef=useRef<HTMLDivElement>(null)
-  const options=useMemo(()=>({sort:state.order,includeArchived:state.includeArchived,filter:searchFilterAST(state)}),[state])
-  const requestKey=JSON.stringify([query,tab,options])
+  const options=useMemo(()=>({sort:state.order,includeArchived:state.includeArchived,filter:searchFilterAST(state),limit:40}),[state])
+  const requestKey=JSON.stringify([normalizedQuery,tab,options])
   const currentResults=completedRequest===requestKey&&!loading&&!error
-  const inputPending=draft.trim()!==query
+  const inputPending=draft!==query
   const updateState=(next:SearchPageState)=>setParams(writeSearchState(next))
 
   const types = useMemo<SearchResourceType[]>(() => tab === 'all' ? [] : [tab], [tab])
   const results = response.results
   useEffect(()=>setDraft(query),[query])
-  useEffect(()=>{ document.title=query?`${t('Search')}: ${query}`:t('Search') },[query,t])
+  useEffect(()=>{ document.title=normalizedQuery?`${t('Search')}: ${normalizedQuery}`:t('Search') },[normalizedQuery,t])
   useEffect(()=>{resultListRef.current?.querySelector<HTMLElement>(`[data-result-index="${activeIndex}"]`)?.scrollIntoView({block:'nearest'})},[activeIndex])
   useEffect(() => {
     const request = ++requestRef.current
     const controller=new AbortController()
     moreController.current?.abort()
+    loadingRef.current = true
     setLoadingMore(false)
     setMoreError(undefined)
     setNextCursor('')
     setLoading(true)
     setError(undefined)
-    const operation=query ? semanticSearch(query,types,options,controller.signal).then(result=>({results:result.results,history:[],recent:[],nextCursor:result.hasMore?result.nextCursor:''})) : searchWorkspace(query, types,options,controller.signal).then(result=>({...result,nextCursor:''}))
+    const operation=normalizedQuery ? semanticSearch(normalizedQuery,types,options,controller.signal).then(result=>({results:result.results,history:[],recent:[],nextCursor:result.hasMore?result.nextCursor:''})) : searchWorkspace('', types,options,controller.signal).then(result=>({...result,nextCursor:''}))
     operation
       .then(result => { if (!controller.signal.aborted&&request === requestRef.current) { setResponse(result);setNextCursor(result.nextCursor);setCompletedRequest(requestKey); setActiveIndex(0) } })
-      .catch(reason => { if (!controller.signal.aborted&&request === requestRef.current) setError(reason instanceof Error ? reason.message : 'Search failed') })
-      .finally(() => { if (!controller.signal.aborted&&request === requestRef.current) setLoading(false) })
+      .catch(reason => { if (!controller.signal.aborted&&request === requestRef.current&&!(reason instanceof Error && reason.name==='AbortError')) setError(reason instanceof Error ? reason.message : 'Search failed') })
+      .finally(() => { if (!controller.signal.aborted&&request === requestRef.current) { loadingRef.current = false; setLoading(false) } })
     return ()=>{controller.abort();moreController.current?.abort()}
-  }, [query, retry, types, options,requestKey])
+  }, [normalizedQuery, retry, types, options,requestKey])
 
   const runSearch = (value = draft) => {
     const next = value.trim()
     setDraft(next)
+    if (next !== normalizedQuery) loadingRef.current = true
     updateState({...state,query:next})
   }
+  const resultsReady = currentResults && !inputPending && !loading && !loadingRef.current
   const choose = (result: SearchResult) => onOpenResult(result)
   const loadMore=async()=>{
-    if(!currentResults||!nextCursor||loadingMore)return
+    if(!currentResults||!nextCursor||loadingMore||!normalizedQuery)return
     const request=requestRef.current
     const controller=new AbortController()
     moreController.current=controller
     setLoadingMore(true)
     setMoreError(undefined)
     try{
-      const page=await semanticSearch(query,types,{...options,cursor:nextCursor},controller.signal)
+      const page=await semanticSearch(normalizedQuery,types,{...options,cursor:nextCursor},controller.signal)
       if(controller.signal.aborted||request!==requestRef.current)return
       setResponse(previous=>{const keys=new Set(previous.results.map(item=>`${item.type}:${item.id}`));return {...previous,results:[...previous.results,...page.results.filter(item=>!keys.has(`${item.type}:${item.id}`))]}})
       setNextCursor(page.hasMore?page.nextCursor:'')
-    }catch(reason){if(!controller.signal.aborted)setMoreError(reason instanceof Error?reason.message:t('Search failed'))}
+    }catch(reason){if(!controller.signal.aborted&&!(reason instanceof Error&&reason.name==='AbortError'))setMoreError(reason instanceof Error?reason.message:t('Search failed'))}
     finally{if(!controller.signal.aborted)setLoadingMore(false)}
   }
 
@@ -104,17 +109,18 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
         autoFocus
         aria-label={t('Search issues, projects, and documents…')}
         placeholder={t('Search issues, projects, and documents…')}
-        aria-busy={loading}
+        aria-busy={loading && !inputPending}
         value={draft}
         onChange={event => setDraft(event.target.value)}
         onKeyDown={event => {
+          if (event.isComposing || event.nativeEvent.isComposing || event.keyCode === 229) return
           if (event.key === 'Enter') {
             event.preventDefault()
-            if (!inputPending && currentResults && results[activeIndex]) choose(results[activeIndex])
-            else if(inputPending) runSearch()
+            if (inputPending) runSearch()
+            else if (currentResults && !inputPending && !loadingRef.current && results[activeIndex]) choose(results[activeIndex])
           }
-          if (event.key === 'ArrowDown' && currentResults && results.length) { event.preventDefault(); setActiveIndex(index => Math.min(index + 1, results.length - 1)) }
-          if (event.key === 'ArrowUp' && currentResults && results.length) { event.preventDefault(); setActiveIndex(index => Math.max(index - 1, 0)) }
+          if (event.key === 'ArrowDown' && resultsReady && results.length) { event.preventDefault(); setActiveIndex(index => Math.min(index + 1, results.length - 1)) }
+          if (event.key === 'ArrowUp' && resultsReady && results.length) { event.preventDefault(); setActiveIndex(index => Math.max(index - 1, 0)) }
           if (event.key === 'Escape' && draft) { event.preventDefault(); runSearch('') }
         }}
       />
@@ -127,30 +133,33 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
       <div className="workspace-search-tools"><SearchMenus state={state} users={users} onChange={updateState}/></div>
     </div>
     <section className="workspace-search-content" aria-live="polite">
-      {state.filters.length>0&&<SearchFilterChips state={state} onChange={updateState}/>}
+      {state.filters.length>0&&<SearchFilterChips state={state} users={users} onChange={updateState}/>}
       {inputPending&&<div className="workspace-search-pending" role="status">{t('Press Enter to search')}</div>}
-      {!query && currentResults && !inputPending && <RecentSearches history={response.history} onSearch={runSearch} onClear={async () => { try{await clearSearchHistory(); setResponse(current => ({ ...current, history: [] }))}catch(reason){setError(reason instanceof Error?reason.message:t('Could not clear search history'))} }}/>} 
-      {!query && currentResults && !inputPending && !response.history.length && !results.length && <SearchEmpty/>}
-      {loading && <SearchLoading/>}
-      {error && <div className="workspace-search-state"><strong>{t('Search unavailable')}</strong><span>{t(error)}</span><button type="button" onClick={() => setRetry(value => value + 1)}>{t('Try again')}</button></div>}
-      {currentResults && !inputPending && query && response.results.length === 0 && <div className="workspace-search-state"><Search size={20}/><strong>{t('No results found')}</strong><span>{t('Try a different search term.')}</span></div>}
-      {currentResults && !inputPending && results.length > 0 && <div className="workspace-search-results" ref={resultListRef}>
-        <h2>{t(query ? 'Search results' : 'Recently viewed')}</h2>
-        {results.map((result, index) => <a
-          href={getResultHref(result)}
-          data-result-index={index}
-          key={`${result.type}-${result.id}`}
-          className={activeIndex === index ? 'active' : ''}
-          onMouseEnter={() => setActiveIndex(index)}
-          onClick={event => {if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();choose(result)}}
-        >
-          <SearchResultIcon result={result}/>
-          <span className="workspace-search-result-copy" data-i18n-ignore>
-            <strong>{state.showId && result.identifier && <small>{result.identifier}</small>}{result.title}</strong>
-            {(result.subtitle || result.email) && <span>{result.subtitle || result.email}</span>}
-          </span>
-          <time>{relativeTime(result.updatedAt,locale)}</time>
-        </a>)}
+      {!normalizedQuery && resultsReady && <RecentSearches history={response.history} onSearch={runSearch} onClear={async () => { try{await clearSearchHistory(); setResponse(current => ({ ...current, history: [] }))}catch(reason){setError(reason instanceof Error?reason.message:t('Could not clear search history'))} }}/>}
+      {!normalizedQuery && resultsReady && !response.history.length && !results.length && <SearchEmpty/>}
+      {loading && !inputPending && <SearchLoading/>}
+      {error && !inputPending && <div className="workspace-search-state"><strong>{t('Search unavailable')}</strong><span>{t(error)}</span><button type="button" onClick={() => setRetry(value => value + 1)}>{t('Try again')}</button></div>}
+      {resultsReady && normalizedQuery && response.results.length === 0 && <div className="workspace-search-state"><Search size={20}/><strong>{t('No results found')}</strong><span>{t('Try a different search term.')}</span></div>}
+      {resultsReady && results.length > 0 && <div className="workspace-search-results" ref={resultListRef}>
+        <h2>{t(normalizedQuery ? 'Search results' : 'Recently viewed')}</h2>
+        {results.map((result, index) => {
+          const context = resultContext(result)
+          return <a
+            href={getResultHref(result)}
+            data-result-index={index}
+            key={`${result.type}-${result.id}`}
+            className={activeIndex === index ? 'active' : ''}
+            onMouseEnter={() => setActiveIndex(index)}
+            onClick={event => {if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();choose(result)}}
+          >
+            <SearchResultIcon result={result}/>
+            <span className="workspace-search-result-copy" data-i18n-ignore>
+              <strong>{state.showId && result.identifier && <small>{result.identifier}</small>}{result.title}</strong>
+              {context && <span>{context}</span>}
+            </span>
+            <time>{relativeTime(result.updatedAt,locale)}</time>
+          </a>
+        })}
         {moreError&&<p role="alert">{t(moreError)}</p>}
         {nextCursor&&<button type="button" className="workspace-search-more" disabled={loadingMore} onClick={()=>void loadMore()}>{t(loadingMore?'Loading...':moreError?'Try again':'Load more')}</button>}
       </div>}
@@ -182,15 +191,31 @@ function RecentSearches({ history, onSearch, onClear }: { history: SearchHistory
   </div>
 }
 
+function resultContext(result: SearchResult) {
+  if (result.email) return result.email
+  if (result.subtitle && result.subtitle !== 'Document') return result.subtitle
+}
+
+function issueStatus(result: SearchResult): Pick<WorkflowState, 'id' | 'name' | 'color' | 'type'> | undefined {
+  if (result.state) return result.state
+  const type = result.statusType
+  if (type === 'backlog' || type === 'unstarted' || type === 'started' || type === 'completed' || type === 'canceled') {
+    return { id: type, name: result.statusName || type, color: result.color || 'currentColor', type }
+  }
+}
+
 function SearchResultIcon({ result }: { result: SearchResult }) {
   const style = result.color ? { color: result.color } : undefined
-  if (result.type === 'issue') return <span className="workspace-search-result-icon issue" style={style}>{result.state?<StatusIcon state={result.state}/>:<Search size={15}/>}</span>
-  if (result.type === 'project') return <span className="workspace-search-result-icon" style={style}>{result.icon?<ViewGlyph icon={normalizeProjectIcon(result.icon)} color={result.color}/>:<ProjectIcon/>}</span>
-  if (result.type === 'initiative') return <span className="workspace-search-result-icon" style={style}><Lightbulb/></span>
+  if (result.type === 'issue') {
+    const state = issueStatus(result)
+    return <span className="workspace-search-result-icon issue" style={style}>{state ? <StatusIcon state={state}/> : <Search size={15}/>}</span>
+  }
+  if (result.type === 'project') return <span className="workspace-search-result-icon" style={style}><ViewGlyph icon={normalizeProjectIcon(result.icon)} color={result.color}/></span>
+  if (result.type === 'initiative') return <span className="workspace-search-result-icon" style={style}><ViewGlyph icon={result.icon ? normalizeProjectIcon(result.icon) : 'Initiative'} color={result.color}/></span>
   if (result.type === 'member') return <span className="workspace-search-result-icon"><UserRound/></span>
   if (result.type === 'customer') return <span className="workspace-search-result-icon"><Building2/></span>
   if (result.type === 'release') return <span className="workspace-search-result-icon"><ReleasesIcon/></span>
-  if (result.type === 'view') return <span className="workspace-search-result-icon" style={style}><Layers3/></span>
+  if (result.type === 'view') return <span className="workspace-search-result-icon" style={style}><ViewGlyph icon={result.icon || 'CustomView'} color={result.color}/></span>
   return <span className="workspace-search-result-icon"><DocumentGlyph color={result.color} icon={result.icon}/></span>
 }
 

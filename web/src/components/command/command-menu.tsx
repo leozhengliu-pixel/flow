@@ -95,14 +95,15 @@ export function CommandMenu({
     if (!open) { setQuery(''); setResults([]); return }
     if (!query.trim()) { setResults([]); setLoading(false); return }
     let active = true
+    const controller = new AbortController()
     setLoading(true)
     const timer = window.setTimeout(() => {
-      searchWorkspace(query.trim(), [], 12)
+      searchWorkspace(query.trim(), [], 12, controller.signal)
         .then(response => { if (active) setResults(response.results) })
-        .catch(() => { if (active) setResults([]) })
+        .catch(reason => { if (active && !(reason instanceof Error && reason.name === 'AbortError')) setResults([]) })
         .finally(() => { if (active) setLoading(false) })
     }, 140)
-    return () => { active = false; window.clearTimeout(timer) }
+    return () => { active = false; window.clearTimeout(timer); controller.abort() }
   }, [open, query])
 
   const groups = [...new Set(actions.map(action => action.group))]

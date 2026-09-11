@@ -20,21 +20,61 @@ function setup(url='/test/search',onOpenResult=vi.fn()) {
 beforeEach(()=>{vi.clearAllMocks();localStorage.clear();vi.mocked(searchWorkspace).mockResolvedValue({results:[result],history:[],recent:[]});vi.mocked(semanticSearch).mockResolvedValue(semantic([result]))})
 
 describe('workspace search',()=>{
+  it('treats whitespace as recents and ignores aborted in-flight search errors',async()=>{
+    setup('/test/search?q=%20%20')
+    await waitFor(()=>expect(searchWorkspace).toHaveBeenCalled())
+    expect(semanticSearch).not.toHaveBeenCalled()
+    expect(searchWorkspace).toHaveBeenLastCalledWith('',[],expect.objectContaining({limit:40}),expect.any(AbortSignal))
+    const firstSignal=vi.mocked(searchWorkspace).mock.calls[0][3]!
+    const abortError=Object.assign(new Error('The user aborted a request.'),{name:'AbortError'})
+    vi.mocked(semanticSearch).mockRejectedValueOnce(abortError)
+    const input=screen.getByRole('textbox')
+    fireEvent.change(input,{target:{value:'Flow'}})
+    fireEvent.keyDown(input,{key:'Enter'})
+    await waitFor(()=>expect(semanticSearch).toHaveBeenCalled())
+    expect(firstSignal.aborted).toBe(true)
+    expect(screen.queryByText('Search unavailable')).not.toBeInTheDocument()
+    expect(semanticSearch).toHaveBeenLastCalledWith('Flow',[],expect.objectContaining({limit:40}),expect.any(AbortSignal))
+  })
+
+  it('keeps recents after clearing whitespace-only input',async()=>{
+    setup('/test/search?q=%20%20')
+    await screen.findByRole('link',{name:/General/})
+    const input=screen.getByRole('textbox')
+    fireEvent.change(input,{target:{value:'   '}})
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    fireEvent.keyDown(input,{key:'Escape'})
+    expect(await screen.findByRole('link',{name:/General/})).toBeInTheDocument()
+    expect(screen.queryByText('Search unavailable')).not.toBeInTheDocument()
+  })
+
   it('does not open stale recent results while a newly submitted search is pending',async()=>{
     let resolve!: (value:SemanticSearchResponse)=>void
     vi.mocked(semanticSearch).mockImplementation(()=>new Promise(done=>{resolve=done}))
     const {onOpenResult}=setup()
     await screen.findByRole('link',{name:/General/})
     const input=screen.getByRole('textbox')
+    fireEvent.keyDown(input,{key:'Enter',isComposing:true})
+    fireEvent.keyDown(input,{key:'Enter',keyCode:229})
+    expect(onOpenResult).not.toHaveBeenCalled()
     fireEvent.change(input,{target:{value:'flow'}})
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.getByText('Press Enter to search')).toHaveAttribute('role','status')
+    fireEvent.keyDown(input,{key:'Enter',isComposing:true})
+    expect(semanticSearch).not.toHaveBeenCalled()
     fireEvent.keyDown(input,{key:'Enter'})
     await waitFor(()=>expect(semanticSearch).toHaveBeenCalledTimes(1))
     fireEvent.keyDown(input,{key:'Enter'})
     expect(onOpenResult).not.toHaveBeenCalled()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Search URL')).toHaveTextContent('q=flow')
+    expect(screen.getByLabelText('Search URL')).toHaveTextContent('includeArchived=true')
+    expect(document.title).toBe('Search: flow')
     await act(async()=>resolve(semantic([{...result,title:'Current result'}])))
+    const current=await screen.findByRole('link',{name:/Current result/})
+    expect(current).toHaveAttribute('href','/test/issue/FLOW-1')
     fireEvent.keyDown(input,{key:'Enter'})
+    expect(onOpenResult).toHaveBeenCalledTimes(1)
     expect(onOpenResult).toHaveBeenCalledWith(expect.objectContaining({title:'Current result'}))
   })
 
@@ -60,12 +100,23 @@ describe('workspace search',()=>{
 
   it('renders real links and status glyphs while keeping entity names untranslated',async()=>{
     localStorage.setItem('flow:locale','zh-CN')
+    vi.mocked(semanticSearch).mockResolvedValue(semantic([
+      result,
+      {id:'issue-2',type:'issue',title:'No state',score:1,statusType:'started',statusName:'Review',color:'#ffcc00'},
+      {id:'project-1',type:'project',title:'Roadmap',score:1,icon:'Project',color:'#5e6ad2'},
+      {id:'doc-1',type:'document',title:'Spec',score:1,subtitle:'Platform'},
+      {id:'doc-2',type:'document',title:'Notes',score:1,subtitle:'Document'},
+    ]))
     const {onOpenResult}=setup('/test/search?q=flow')
     const link=await screen.findByRole('link',{name:/General/})
     expect(link).toHaveAttribute('href','/test/issue/FLOW-1')
     expect(link.querySelector('.workspace-search-result-icon svg path')).toHaveAttribute('fill','#ffcc00')
     expect(screen.getByText('General')).toBeInTheDocument()
     expect(link.querySelector('[data-i18n-ignore]')).not.toBeNull()
+    expect(screen.getByRole('link',{name:/No state/}).querySelector('.workspace-search-result-icon svg path')).toHaveAttribute('fill','#ffcc00')
+    expect(screen.getByRole('link',{name:/Roadmap/}).querySelector('use')).toHaveAttribute('href','#Project')
+    expect(screen.getByRole('link',{name:/Spec/})).toHaveTextContent('Platform')
+    expect(screen.getByRole('link',{name:/Notes/})).not.toHaveTextContent('Document')
     fireEvent.click(link,{ctrlKey:true})
     expect(onOpenResult).not.toHaveBeenCalled()
     fireEvent.click(link)
@@ -118,7 +169,8 @@ describe('workspace search',()=>{
     fireEvent.click(await screen.findByRole('menuitem',{name:'Updated date'}))
     fireEvent.click(await screen.findByRole('button',{name:'Updated date'}))
     const today=new Date()
-    fireEvent.click(await screen.findByRole('button',{name:today.toLocaleDateString()}))
+    const day=[...document.querySelectorAll('.date-time-grid button')].find(button=>button.textContent===String(today.getDate())&&!button.hasAttribute('data-outside'))
+    fireEvent.click(day!)
     const value=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({filters:[expect.objectContaining({field:'updatedAt',operator:'after',value})]}))
   })

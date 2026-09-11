@@ -111,10 +111,70 @@ func TestMetadataSearchFiltersBeforeLimitAndChecksPrivateScopes(t *testing.T) {
 	if err != nil || len(got.Projects) != 0 {
 		t.Fatal("empty search scanned candidate catalog", err)
 	}
+	q.Terms = []string{" ", ""}
+	got, err = repo.SearchMetadata(ctx, policy, q)
+	if err != nil || len(got.Projects) != 0 {
+		t.Fatal("whitespace search scanned candidate catalog", err)
+	}
 	q.Recent = []domain.RecentResource{{ResourceType: "project", ResourceID: "candidate-000"}, {ResourceType: "project", ResourceID: "candidate-079"}}
 	got, err = repo.SearchMetadata(ctx, policy, q)
 	if err != nil || len(got.Projects) != 1 {
 		t.Fatal("recents bypassed permission", err)
+	}
+}
+
+func TestCappedSearchHitINNestsLimitOffINOperand(t *testing.T) {
+	got := cappedSearchHitIN("i.id", "issue_id", "SELECT issue_id FROM search_hits LIMIT ?")
+	want := "i.id IN (SELECT issue_id FROM (SELECT issue_id FROM search_hits LIMIT ?) capped_hits)"
+	if got != want {
+		t.Fatalf("cappedSearchHitIN=%q want %q", got, want)
+	}
+}
+
+func TestEmptyIssueSearchDoesNotScanOrFailOnCorruptRows(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "search.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	data := repo.Bootstrap()
+	ctx := context.Background()
+	hit := data.Issues[0]
+	hit.ID = "flow-valid"
+	hit.Identifier = "FLOW-1"
+	hit.Title = "Flow valid"
+	poison := hit
+	poison.ID = "flow-poison"
+	poison.Identifier = "FLOW-2"
+	poison.Title = "Flow poison"
+	if err := repo.ImportIssues(ctx, data.Workspace.URLKey, []domain.Issue{hit, poison}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.db.ExecContext(ctx, `UPDATE issue_records SET data='invalid-json',list_data='invalid-json' WHERE workspace_key=? AND id=?`, data.Workspace.URLKey, poison.ID); err != nil {
+		t.Fatal(err)
+	}
+	q := IssueRecordQuery{Workspace: data.Workspace.URLKey, Archived: "all"}
+	if err := repo.SearchIssueCandidateTerms(ctx, q, nil, nil, 100, func(domain.Issue) error {
+		t.Fatal("blank terms scanned issue catalog")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SearchIssueCandidates(ctx, q, "   ", nil, 100, func(domain.Issue) error {
+		t.Fatal("whitespace terms scanned issue catalog")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	seen := []string{}
+	if err := repo.SearchIssueCandidates(ctx, q, "Flow", nil, 100, func(issue domain.Issue) error {
+		seen = append(seen, issue.ID)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) != 1 || seen[0] != hit.ID {
+		t.Fatalf("Flow search re-read or included corrupt rows: %v", seen)
 	}
 }
 
