@@ -1,5 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { refreshResourcePreferences } from '@/lib/resource-preferences';
+import { toggleFavoriteFor } from '@/lib/favorites';
 import { teamHierarchy } from '@/lib/team-hierarchy';
 import { TeamIcon } from '@/components/issue/issue-icons';
 import { newTeamPath } from '@/lib/app-routes';
@@ -30,14 +30,12 @@ import { confirmAction } from '@/components/ui/action-dialog-service';
 import { isToday, isYesterday, isThisWeek, isSameWeek, subWeeks, isThisMonth, isSameMonth, subMonths, format } from 'date-fns';
 
 import {
-  addFavorite,
   createDocument,
   createTeamResourceSection,
   deleteTeamResource,
   deleteTeamResourceSection,
   fetchTeamResources,
   pinTeamResource,
-  removeFavorite,
   setTeamMembership,
   updateTeamResource,
   updateTeamResourceSection,
@@ -304,13 +302,7 @@ export function TeamOverviewPage({
             aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
             aria-checked={favorite}
             role="switch"
-            onClick={() =>
-              void (
-                favorite
-                  ? removeFavorite("team", team.id)
-                  : addFavorite("team", team.id)
-              ).then(() => refreshResourcePreferences(data.workspace.urlKey))
-            }
+            onClick={() => void toggleFavoriteFor(data, "team", team.id, undefined, favorite)}
           >
             <FavoriteIcon filled={favorite} />
           </button>

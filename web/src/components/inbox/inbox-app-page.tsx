@@ -334,7 +334,7 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
     }
     const issue = notification.issueId ? issues.get(notification.issueId) : undefined
     const reminderProject = notification.projectId ? data.projects.find(project => project.id === notification.projectId) : undefined
-    if (!issue && reminderProject && (notification.type === 'projectUpdateReminder' || notification.type === 'projectUpdateDueReminder') && !notification.deletedAt && !notification.archivedAt) {
+    if (!issue && reminderProject && /project/i.test(notification.type) && !notification.deletedAt && !notification.archivedAt) {
       return [{
         id: notification.id,
         issueId: '',
@@ -345,9 +345,9 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
         actor: notification.actor.displayName,
         actorAvatarUrl: notification.actor.avatarUrl,
         kind: 'project' as const,
-        identifier: 'Project update',
+        identifier: notification.type === 'projectReminder' ? 'Reminder' : 'Project update',
         title: reminderProject.name,
-        body: notification.type === 'projectUpdateDueReminder' ? 'A project update is due soon' : 'A project update is overdue',
+        body: notification.type === 'projectReminder' ? `${notification.actor.displayName} set a reminder` : notification.type === 'projectUpdateDueReminder' ? 'A project update is due soon' : 'A project update is overdue',
         timeLabel: relativeTime(notification.updatedAt),
         timestamp: notification.updatedAt,
         read: Boolean(notification.readAt),
@@ -365,6 +365,7 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
     // dropping them from the inbox; the detail surface can still be opened by
     // a future resource-specific handler.
     if (!issue && !reminderProject && !notification.deletedAt && !notification.archivedAt) {
+      const initiative = data.initiatives.find(item => item.id === notification.sourceId)
       return [{
         id: notification.id,
         issueId: '',
@@ -375,9 +376,9 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
         actor: notification.actor.displayName,
         actorAvatarUrl: notification.actor.avatarUrl,
         kind: 'generic' as const,
-        identifier: notification.type,
-        title: genericNotificationTitle(notification),
-        body: notification.type==='pulseSummary'?`${notification.occurrenceCount} project and initiative updates`:withOccurrence(genericNotificationBody(notification), notification.occurrenceCount),
+        identifier: notification.type === 'initiativeReminder' ? 'Reminder' : genericNotificationTitle(notification),
+        title: initiative?.name || genericNotificationTitle(notification),
+        body: notification.type==='pulseSummary'?`${notification.occurrenceCount} project and initiative updates`:notification.type==='initiativeReminder'?`${notification.actor.displayName} set a reminder`:withOccurrence(genericNotificationBody(notification), notification.occurrenceCount),
         timeLabel: relativeTime(notification.updatedAt),
         timestamp: notification.updatedAt,
         read: Boolean(notification.readAt),

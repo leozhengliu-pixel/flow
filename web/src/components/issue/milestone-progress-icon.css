@@ -1,0 +1,52 @@
+.milestone-progress-icon {
+  display: block;
+  flex: none;
+  overflow: visible;
+  fill: none;
+}
+.milestone-progress-icon path {
+  vector-effect: non-scaling-stroke;
+}
+.milestone-progress-icon.is-unassigned path {
+  fill: none;
+  stroke: var(--theme-text-tertiary);
+  stroke-dasharray: 2 1.93;
+  stroke-dashoffset: .15;
+  stroke-width: 2;
+}
+.milestone-progress-icon.is-empty path {
+  fill: none;
+  stroke: var(--theme-text-tertiary);
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+.milestone-progress-icon.is-empty.is-overdue path,
+.milestone-progress-icon.is-progress path {
+  stroke: var(--project-dependency-icon);
+}
+.milestone-progress-icon.is-progress .is-track {
+  fill: none;
+  opacity: .3;
+  stroke: var(--project-dependency-icon);
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+.milestone-progress-icon.is-progress .is-value {
+  fill: none;
+  stroke: var(--project-dependency-icon);
+  stroke-dashoffset: -1.1;
+  stroke-linecap: round;
+  stroke-width: 2;
+}
+.milestone-progress-icon.is-complete path {
+  fill: var(--sub-issue-progress-value);
+  stroke: var(--sub-issue-progress-value);
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+:root[data-theme="light"] .milestone-progress-icon.is-unassigned path {
+  stroke: var(--theme-text-secondary);
+}
+:root[data-theme="light"] .milestone-progress-icon.is-empty path {
+  stroke: var(--theme-text-tertiary);
+}

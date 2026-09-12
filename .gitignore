@@ -4,26 +4,8 @@
 !.env.example
 .idea/
 .vscode/
-.coverage/
-coverage/
-.playwright-cli/
-artifacts/
-docs-audit/
-docs/audits/
-# Keep local audit reports outside the repository.
-docs/*-audit*.md
-docs/*-measurement*.md
-docs/*-verification*.md
-docs/*-page-modules.md
-docs/settings-modules.md
-docs/workspace-modules.md
-docs/team-workspace-issues-modules.md
-docs/*-replication-plan.md
-output/
+/node_modules/
 api/data/
 api/bin/
 api/flow
 web/node_modules/
-web/dist/
-web/playwright-report/
-web/test-results/

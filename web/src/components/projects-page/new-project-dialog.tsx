@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
-import { CalendarPlus, LayoutTemplate, X } from 'lucide-react'
+import { CalendarPlus, Flag, LayoutTemplate, X } from 'lucide-react'
 import { PlusIcon } from './projects-page-icons'
 import { PropertyMenu, type PropertyOption } from '@/components/property/property-menu'
-import { ViewIconPicker } from '@/components/views/view-icon-picker'
+import { ViewGlyph, ViewIconPicker } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { CalendarIcon, LabelIcon, MembersIcon, PriorityIcon } from '@/components/issue/issue-icons'
+import { MilestoneProgressIcon } from '@/components/issue/milestone-progress-icon'
 import { PersonHoverPreview, PersonPicker } from '@/components/issue/core-property-pickers'
 import { ProjectDependencyPicker, type ProjectDependencyPreviewData, type ProjectDependencyValue } from './project-dependency-picker'
 import { ProjectStatusGlyph } from './project-property-picker'
@@ -228,7 +229,7 @@ export function NewProjectDialog({
           <PersonPicker ariaLabel="Change project members" closeOnSelect emptyTriggerLabel="Members" icon={<MembersIcon size={14}/>} label="Members" multiple onChange={id => setDraft(current => ({ ...current, memberIds: current.memberIds.includes(id) ? current.memberIds.filter(value => value !== id) : [...current.memberIds, id] }))} optionHoverClassName="lp-new-project-person-hover" optionHoverContent={person => <PersonHoverPreview person={person} workspaceName={teamLabel}/>} people={members.map(member => ({ id: member.id, label: member.label, name: member.name, email: member.email, avatarUrl: member.avatarUrl, color: member.color, active: member.active, online: member.online, disabled: member.disabled, end: member.end, groupId: member.groupId, groupLabel: member.groupLabel, hoverContent: member.hoverContent, hoverClassName: member.hoverClassName }))} searchPlaceholder="Change members…" searchShortcut="P, then M" selectedIds={draft.memberIds} surfaceClassName="lp-new-project-picker__surface lp-new-project-person-picker__surface lp-new-project-person-picker__members" trigger={<>{members.find(member => member.id === draft.memberIds[0]) ? <UserAvatar avatarUrl={members.find(member => member.id === draft.memberIds[0])?.avatarUrl} className="avatar core-person-picker-avatar" color={members.find(member => member.id === draft.memberIds[0])?.color} name={members.find(member => member.id === draft.memberIds[0])?.label ?? ''}/> : <MembersIcon size={14}/>}<span>{draft.memberIds.length ? t(`${draft.memberIds.length} member${draft.memberIds.length === 1 ? '' : 's'}`) : t('Members')}</span></>} triggerClassName="lp-new-project-picker__trigger" unselectedGroupLabel="Users from the project team" />
           <DateChip kind="start" max={draft.targetDate} placeholder="Start" resolution={draft.startDateResolution} value={draft.startDate} onChange={(value, resolution) => setDraft(current => ({ ...current, startDate: value || undefined, startDateResolution: resolution }))} />
           <DateChip kind="target" min={draft.startDate} placeholder="Target" resolution={draft.targetDateResolution} value={draft.targetDate} onChange={(value, resolution) => setDraft(current => ({ ...current, targetDate: value || undefined, targetDateResolution: resolution }))} />
-          <ProjectDraftProperty icon={<LayoutTemplate size={14}/>} label="Change project initiatives" multiple options={initiatives} placeholder="Initiatives" value={draft.initiativeIds} onChange={value => set('initiativeIds', value)} />
+          <ProjectDraftProperty icon={<Flag size={14}/>} label="Change project initiatives" multiple options={initiatives} placeholder="Initiatives" value={draft.initiativeIds} onChange={value => set('initiativeIds', value)} />
           <ProjectDraftProperty icon={<LabelIcon size={14}/>} label="Change labels" multiple options={labels.filter(label => projectLabelInTeams(label, draft.teamIds))} placeholder="Labels" value={draft.labelIds} onChange={value => set('labelIds', value)} />
           <ProjectDependencyPicker ariaLabel="Add dependencies" onChange={value => setDraft(current => ({ ...current, dependencyIds: value.filter(item => item.type === 'blocked_by').map(item => item.projectId), dependencyRelations: value }))} projects={dependencies.filter(project => !project.id.startsWith('__')).map(project => ({ id: project.id, label: project.label, icon: typeof project.icon === 'string' ? project.icon : undefined, color: project.color, group: project.group, keywords: [project.name, project.email].filter(Boolean).join(' '), disabled: project.disabled, previewData: project.previewData }))} triggerClassName="lp-new-project-picker__trigger lp-new-project-dependency-trigger" value={draft.dependencyRelations as ProjectDependencyValue[]} />
         </div>
@@ -272,7 +273,7 @@ function ProjectDraftProperty(props: {
   const selected = Array.isArray(value) ? options.filter(option => value.includes(option.id)) : options.find(option => option.id === value)
   const selectedIds = Array.isArray(value) ? value : [value]
   const display = Array.isArray(selected) ? selected.length ? `${placeholder} · ${selected.length}` : placeholder : selected?.label ?? placeholder ?? label
-  const propertyOptions: PropertyOption[] = options.map(option => ({ id: option.id, label: option.label, color: option.color, groupId: option.groupId, groupLabel: option.groupLabel, groupColor: option.groupColor, icon: option.icon, i18nIgnore: Boolean(option.id) }))
+  const propertyOptions: PropertyOption[] = options.map(option => ({ id: option.id, label: option.label, color: option.color, groupId: option.groupId, groupLabel: option.groupLabel, groupColor: option.groupColor, icon: option.icon ?? (placeholder === 'Initiatives' ? <ViewGlyph color={option.color} icon="Initiative"/> : undefined), i18nIgnore: Boolean(option.id) }))
   const choose = (id: string) => {
     if (Array.isArray(value)) {
       if (props.multiple) { const target = options.find(option => option.id === id); const next = target?.groupId ? value.filter(selectedId => options.find(option => option.id === selectedId)?.groupId !== target.groupId) : value; props.onChange(value.includes(id) ? value.filter(item => item !== id) : [...next, id]) }
@@ -286,10 +287,10 @@ function ProjectDraftProperty(props: {
     multiple={multiple}
     onChange={choose}
     options={propertyOptions}
-    searchPlaceholder={`${label.replace(/^(Change|Set|Add) /, '')}…`}
+    searchPlaceholder={placeholder === 'Initiatives' ? 'Change initiatives…' : `${label.replace(/^(Change|Set|Add) /, '')}…`}
     selectedId={Array.isArray(value) ? undefined : value}
     selectedIds={selectedIds}
-    surfaceClassName="lp-new-project-picker__surface"
+    surfaceClassName={`lp-new-project-picker__surface${placeholder === 'Initiatives' ? ' lp-new-project-picker__initiatives' : ''}`}
     trigger={<>{icon ?? <span className="lp-new-project-picker__dot" style={{ background: Array.isArray(selected) ? selected[0]?.color : selected?.color }}/>}<span data-i18n-ignore={Boolean(Array.isArray(selected) ? selected.length : selected) || undefined}>{display}</span></>}
     triggerClassName="lp-new-project-picker__trigger"
     value={display}
@@ -338,7 +339,7 @@ function MilestonesEditor({ milestones, onChange }: { milestones: NewProjectMile
     <header><span>{t('Create milestone')}</span></header>
     <div className="lp-new-project__milestone-editor">
       <div className="lp-new-project__milestone-fields">
-        <MilestoneOutline />
+        <MilestoneProgressIcon className="lp-new-project__milestone-outline" empty />
         <input autoFocus aria-label={t('Milestone name')} className="lp-new-project__milestone-name" onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') cancel(); if (event.key === 'Enter' && name.trim()) { event.preventDefault(); add() } }} placeholder={t('Milestone name')} value={name} />
         <ProjectDatePicker align="end" ariaLabel="Choose date" buttonClassName={`lp-new-project__milestone-date${dateOpen || targetDate ? ' has-value' : ''}`} compactCalendar contentClassName="lp-new-project__milestone-calendar" label="Target date" onChange={value => setTargetDate(value)} onOpenChange={setDateOpen} side="top" value={targetDate}>
           {targetDate ? <span>{locale === 'en-US' ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(`${targetDate}T00:00:00`)) : formatDate(`${targetDate}T00:00:00`, { month: 'short', day: 'numeric' })}</span> : dateOpen ? <span>{t('Target date')}</span> : <CalendarPlus size={16}/>}
@@ -351,14 +352,12 @@ function MilestonesEditor({ milestones, onChange }: { milestones: NewProjectMile
   return <section className="lp-new-project__milestones" ref={sectionRef}>
     <header><button aria-expanded={!collapsed} onClick={() => setCollapsed(value => !value)} className="lp-new-project__milestone-toggle" type="button"><ViewIconPickerGlyph icon="MilestoneNone"/><strong>{t('Milestones')}</strong></button><button aria-label={t('Add')} onClick={() => setAdding(true)} type="button"><PlusIcon /></button></header>
     <AnimatedCollapse open={!collapsed}>
-    {milestones.map((item, index) => <div className="lp-new-project__milestone-row" key={`${item.name}-${index}`}><MilestoneOutline/><span><strong>{item.name}</strong>{item.description && <small>{item.description}</small>}</span>{item.targetDate && <time dateTime={item.targetDate}>{formatDate(`${item.targetDate}T00:00:00`, { month: 'short', day: 'numeric' })}</time>}<button aria-label={`${t('Remove')} ${item.name}`} onClick={() => onChange(milestones.filter((_, itemIndex) => itemIndex !== index))} type="button"><X size={13}/></button></div>)}
+    {milestones.map((item, index) => <div className="lp-new-project__milestone-row" key={`${item.name}-${index}`}><MilestoneProgressIcon className="lp-new-project__milestone-outline" empty/><span><strong>{item.name}</strong>{item.description && <small>{item.description}</small>}</span>{item.targetDate && <time dateTime={item.targetDate}>{formatDate(`${item.targetDate}T00:00:00`, { month: 'short', day: 'numeric' })}</time>}<button aria-label={`${t('Remove')} ${item.name}`} onClick={() => onChange(milestones.filter((_, itemIndex) => itemIndex !== index))} type="button"><X size={13}/></button></div>)}
     </AnimatedCollapse>
   </section>
 }
 
-function MilestoneOutline() {
-  return <svg aria-hidden="true" className="lp-new-project__milestone-outline" fill="none" viewBox="0 0 16 16"><path d="M7.341 2.32a.85.85 0 0 1 1.318 0l4.131 5.082a.95.95 0 0 1 0 1.196L8.659 13.68a.85.85 0 0 1-1.318 0L3.21 8.598a.95.95 0 0 1 0-1.196L7.341 2.32Z" stroke="currentColor" strokeWidth="2"/></svg>
-}
+
 
 function DiscardProjectDialog({ onCancel, onDiscard }: { onCancel: () => void; onDiscard: () => void }) {
   const { t } = useI18n()

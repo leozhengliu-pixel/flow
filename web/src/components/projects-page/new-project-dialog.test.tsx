@@ -29,6 +29,29 @@ describe('NewProjectDialog', () => {
     await user.keyboard('{Escape}')
   })
 
+  it('shows the full initiative name beside its icon in the create picker', async () => {
+    const user = userEvent.setup()
+    render(
+      <I18nProvider>
+        <NewProjectDialog
+          initiatives={[{ id: 'init-1', label: 'Favorite perf initiative', color: '#eb5757', groupLabel: 'Active' }]}
+          open
+          onClose={vi.fn()}
+          onCreate={vi.fn()}
+          teams={[{ id: 'team-1', label: 'Team', color: '#5e6ad2' }]}
+        />
+      </I18nProvider>,
+    )
+    await user.click(screen.getByRole('combobox', { name: 'Change project initiatives' }))
+    const option = await screen.findByRole('option', { name: 'Favorite perf initiative' })
+    expect(option.closest('.lp-new-project-picker__initiatives')).toBeTruthy()
+    expect(within(option).getByText('Favorite perf initiative')).toBeVisible()
+    expect(option.querySelector('.property-command-checkbox')).toBeTruthy()
+    expect(option.querySelector('.property-command-icon')).toBeTruthy()
+    expect(screen.getByPlaceholderText('Change initiatives…')).toBeInTheDocument()
+    expect(screen.getByText('Active')).toBeVisible()
+  })
+
   it('uses the shared person picker for the project lead', async () => {
     const onCreate = vi.fn().mockResolvedValue(undefined)
     render(

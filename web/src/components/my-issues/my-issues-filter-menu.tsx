@@ -2,7 +2,7 @@ import { cloneElement, Fragment, isValidElement, useMemo, useState, type ReactEl
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Popover from '@radix-ui/react-popover'
 import { Command } from 'cmdk'
-import { Archive, Bot, CalendarDays, CircleDot, ExternalLink, FileText, Flag, GitBranch, Layers3, Link2, ListFilter, Rocket, Sparkles, Tags, UserRound, Users } from 'lucide-react'
+import { Archive, Bot, Building2, CalendarDays, CircleDot, Diamond, ExternalLink, FileText, Flag, GitBranch, Layers3, Link2, ListFilter, Rocket, Sparkles, Tags, UserRound, Users } from 'lucide-react'
 import { ChevronRightIcon } from './my-issues-icons'
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, StatusIcon } from '@/components/issue/issue-icons'
 import type { MyIssuesAppliedFilter } from './my-issues-filter-types'
@@ -12,6 +12,8 @@ import { useI18n } from '@/i18n/i18n'
 import styles from './my-issues-filter-menu.module.css'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
 
+export type IssueFilterScope = 'issues' | 'project'
+
 export interface MyIssuesFilterMenuProps {
   open: boolean
   trigger: ReactElement
@@ -20,6 +22,13 @@ export interface MyIssuesFilterMenuProps {
   onOpenChange: (open: boolean) => void
   onToggle: (filter: MyIssuesFilterKey, option: MyIssuesFilterOption) => void
   availableFields?: MyIssuesFilterKey[]
+  /** Team/workspace issues hide project milestone; project issues hide project/initiative fields. */
+  scope?: IssueFilterScope
+}
+
+const ISSUE_FILTER_SCOPE_HIDDEN: Record<IssueFilterScope, MyIssuesFilterKey[]> = {
+  issues: ['projectMilestone'],
+  project: ['project', 'projectProperties', 'initiative'],
 }
 
 const MY_ISSUES_FILTER_GROUPS = [
@@ -33,9 +42,11 @@ const MY_ISSUES_FILTER_GROUPS = [
     { id: 'suggestedLabel', label: 'Suggested label', submenu: true }, { id: 'dates', label: 'Dates', submenu: true },
   ],
   [
+    { id: 'projectMilestone', label: 'Project milestone', submenu: true },
     { id: 'project', label: 'Project', submenu: true }, { id: 'projectProperties', label: 'Project properties', submenu: true },
     { id: 'initiative', label: 'Initiative', submenu: true }, { id: 'cycle', label: 'Cycle', submenu: true },
     { id: 'addedToCycle', label: 'Added to cycle', submenu: true }, { id: 'releases', label: 'Releases', submenu: true },
+    { id: 'customers', label: 'Customers', submenu: true },
   ],
   [
     { id: 'subscribers', label: 'Subscribers', submenu: true }, { id: 'externalSource', label: 'External source', submenu: true }, { id: 'autoClosed', label: 'Auto-closed' },
@@ -44,10 +55,11 @@ const MY_ISSUES_FILTER_GROUPS = [
   ],
 ] as const
 
-export function MyIssuesFilterMenu({ availableFields, filters = [], onOpenChange, onToggle, open, options, trigger }: MyIssuesFilterMenuProps) {
+export function MyIssuesFilterMenu({ availableFields, filters = [], onOpenChange, onToggle, open, options, scope = 'issues', trigger }: MyIssuesFilterMenuProps) {
   const { t } = useI18n()
   const [activeField, setActiveField] = useState<MyIssuesFilterKey>()
   const [textCondition, setTextCondition] = useState<{ field: MyIssuesFilterKey; option: MyIssuesFilterOption }>()
+  const hiddenFields = ISSUE_FILTER_SCOPE_HIDDEN[scope]
   const close = (next: boolean) => {
     if (!next) setActiveField(undefined)
     onOpenChange(next)
@@ -55,7 +67,10 @@ export function MyIssuesFilterMenu({ availableFields, filters = [], onOpenChange
   const openValues = (field: MyIssuesFilterKey) => {
     if (options?.(field)?.length) setActiveField(field)
   }
-  const visibleGroups = MY_ISSUES_FILTER_GROUPS.map(group => group.filter(item => !availableFields || availableFields.includes(item.id as MyIssuesFilterKey))).filter(group => group.length)
+  const visibleGroups = MY_ISSUES_FILTER_GROUPS.map(group => group.filter(item => {
+    const field = item.id as MyIssuesFilterKey
+    return (!availableFields || availableFields.includes(field)) && !hiddenFields.includes(field)
+  })).filter(group => group.length)
   const choose = (field: MyIssuesFilterKey, option: MyIssuesFilterOption) => {
     if (option.textConditionPrefix) {
       setTextCondition({ field, option })
@@ -191,6 +206,11 @@ function OptionMark({ field, option }: { field: MyIssuesFilterKey; option: MyIss
   if(kind==='projectLeadCategory')return <ProjectPropertyCategoryIcon kind="lead"/>
   if(kind==='projectLead'){const leadId=option.id.startsWith('project-lead:')?option.id.slice(13):option.id;return leadId&&option.label!=='Current user'?<span className={styles.optionAvatar} style={option.avatarUrl?{backgroundImage:`url(${option.avatarUrl})`}:undefined}>{option.avatarUrl?'':initials(option.label)}</span>:<NoAssigneeIcon size={14}/>}
   if(kind==='projectMilestone'||kind==='projectMilestoneCategory')return <ProjectPropertyCategoryIcon kind="milestone"/>
+  if(kind==='customerNameCategory'||kind==='customerCountCategory'||kind==='customerRevenueCategory'||kind==='customerSizeCategory')return <Building2 size={14}/>
+  if(kind==='customerOwnerCategory')return <ProjectPropertyCategoryIcon kind="lead"/>
+  if(kind==='customerOwner'){const ownerId=option.id.startsWith('customer-owner:')?option.id.slice(15):option.id;return ownerId&&option.label!=='Current user'?<span className={styles.optionAvatar} style={option.avatarUrl?{backgroundImage:`url(${option.avatarUrl})`}:undefined}>{option.avatarUrl?'':initials(option.label)}</span>:<NoAssigneeIcon size={14}/>}
+  if(kind==='customerStatusCategory'||kind==='customerTierCategory')return <i className={styles.optionMark} style={{backgroundColor:option.color||'var(--theme-text-tertiary)'}}/>
+  if(kind==='customerStatus'||kind==='customerTier'||kind==='customerName')return option.color?<i className={styles.optionMark} style={{backgroundColor:option.color}}/>:<Building2 size={14}/>
   if(option.color)return <i className={styles.optionMark} style={{backgroundColor:option.color}}/>
   return <span className={styles.optionIcon}><FilterFieldIcon field={field}/></span>
 }
@@ -204,7 +224,7 @@ function ProjectPropertyCategoryIcon({ kind }: { kind: 'status'|'statusType'|'pr
   return <svg className={styles.categoryIcon} width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M7.3406 2.32C7.68741 1.89333 8.31259 1.89333 8.6594 2.32L12.7903 7.402C13.0699 7.74597 13.0699 8.25403 12.7903 8.598L8.6594 13.68C8.31259 14.1067 7.68741 14.1067 7.3406 13.68L3.2097 8.598C2.9301 8.25403 2.9301 7.74597 3.2097 7.402L7.3406 2.32Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/></svg>
 }
 
-function FilterFieldIcon({field}:{field:MyIssuesFilterKey}){const props={size:15};if(field==='ai')return <Sparkles {...props}/>;if(field==='advanced')return <ListFilter {...props}/>;if(field==='status')return <CircleDot {...props}/>;if(field==='assignee'||field==='creator')return <UserRound {...props}/>;if(field==='agent'||field==='agentSession')return <Bot {...props}/>;if(field==='priority')return <Flag {...props}/>;if(field==='labels'||field==='suggestedLabel')return <Tags {...props}/>;if(field==='relations')return <GitBranch {...props}/>;if(field==='dates'||field==='addedToCycle')return <CalendarDays {...props}/>;if(field==='project')return <ProjectIcon {...props}/>;if(field==='projectProperties'||field==='initiative')return <Layers3 {...props}/>;if(field==='cycle')return <CycleIcon {...props}/>;if(field==='releases')return <Rocket {...props}/>;if(field==='subscribers')return <Users {...props}/>;if(field==='externalSource'||field==='links')return <ExternalLink {...props}/>;if(field==='autoClosed')return <Archive {...props}/>;if(field==='content')return <FileText {...props}/>;if(field==='template')return <FileText {...props}/>;return <Link2 {...props}/>}
+function FilterFieldIcon({field}:{field:MyIssuesFilterKey}){const props={size:15};if(field==='ai')return <Sparkles {...props}/>;if(field==='advanced')return <ListFilter {...props}/>;if(field==='status')return <CircleDot {...props}/>;if(field==='assignee'||field==='creator')return <UserRound {...props}/>;if(field==='agent'||field==='agentSession')return <Bot {...props}/>;if(field==='priority')return <Flag {...props}/>;if(field==='labels'||field==='suggestedLabel')return <Tags {...props}/>;if(field==='relations')return <GitBranch {...props}/>;if(field==='dates'||field==='addedToCycle')return <CalendarDays {...props}/>;if(field==='projectMilestone')return <Diamond {...props}/>;if(field==='project')return <ProjectIcon {...props}/>;if(field==='projectProperties'||field==='initiative')return <Layers3 {...props}/>;if(field==='cycle')return <CycleIcon {...props}/>;if(field==='releases')return <Rocket {...props}/>;if(field==='customers')return <Building2 {...props}/>;if(field==='subscribers')return <Users {...props}/>;if(field==='externalSource'||field==='links')return <ExternalLink {...props}/>;if(field==='autoClosed')return <Archive {...props}/>;if(field==='content')return <FileText {...props}/>;if(field==='template')return <FileText {...props}/>;return <Link2 {...props}/>}
 function priorityColor(priority:number|undefined){return ['var(--theme-text-tertiary)','var(--priority-urgent)','var(--priority-high)','var(--priority-medium)','var(--priority-low)'][priority??0]}
 function initials(value:string){return value.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]).join('').toUpperCase()}
 

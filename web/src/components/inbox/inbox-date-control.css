@@ -1,1 +1,14 @@
 .flow-inbox-snooze-custom__field .date-time-control{width:100%;height:30px}
+:root[data-theme="light"] .flow-inbox-snooze-custom__field .date-time-control{
+  color:var(--theme-text-primary);
+  background:var(--theme-surface-1);
+  border-color:var(--theme-border-strong);
+  color-scheme:light;
+}
+:root[data-theme="light"] .flow-inbox-snooze-custom__field .date-time-control:hover,
+:root[data-theme="light"] .flow-inbox-snooze-custom__field .date-time-control[data-state="open"]{
+  background:var(--theme-control-hover);
+}
+:root[data-theme="light"] .flow-inbox-snooze-custom__field .date-time-control svg{
+  color:var(--theme-text-secondary);
+}

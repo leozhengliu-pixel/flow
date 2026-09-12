@@ -124,7 +124,7 @@
 .project-dependency-picker__direction > svg:last-of-type { color: var(--theme-text-secondary); height: 13px; justify-self: end; width: 13px; }
 .project-dependency-picker__checkbox {
   border: 0;
-  color: white;
+  color: var(--on-accent);
   display: grid;
   height: 14px;
   place-items: center;
@@ -232,4 +232,23 @@
 @media (max-width: 600px) {
   .project-dependency-picker__preview { max-width: calc(100vw - 16px); width: calc(100vw - 16px); }
   .project-dependency-picker__preview-card { width: auto; }
+}
+
+:root[data-theme="light"] .project-dependency-picker__surface,
+:root[data-theme="light"] .project-dependency-picker__projects,
+:root[data-theme="light"] .project-dependency-picker__preview,
+:root[data-theme="light"] .project-dependency-picker__summary {
+  border-color: var(--popover-border);
+  background: var(--theme-surface-2);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .project-dependency-picker__surface { box-shadow: var(--shadow-control); }
+:root[data-theme="light"] .project-dependency-picker__projects,
+:root[data-theme="light"] .project-dependency-picker__preview { box-shadow: var(--shadow-dialog); }
+:root[data-theme="light"] .project-dependency-picker__hidden-search input,
+:root[data-theme="light"] .project-dependency-picker__project-search input {
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .project-dependency-picker__preview-progress-icon::after {
+  background: var(--theme-surface-2);
 }

@@ -3,3 +3,14 @@
 @media(max-width:900px){.connector-dialog.dialog-content{left:50%;width:min(680px,calc(100vw - 32px))}}
 .connector-settings .settings-row-copy>span{overflow-wrap:anywhere}
 @media(max-width:760px){.connector-settings .settings-row{flex-wrap:wrap;gap:12px}.connector-settings .settings-row-copy{flex-basis:100%}.connector-settings .settings-control{flex-wrap:wrap}}
+:root[data-theme="light"] .connector-menu{border:.5px solid var(--theme-border);border-radius:12px;background:var(--theme-surface-2);color:var(--text);box-shadow:var(--shadow-control)}
+:root[data-theme="light"] .connector-menu>input{border-color:var(--border);color:var(--text)}
+:root[data-theme="light"] .connector-menu [role=listbox]>small,:root[data-theme="light"] .connector-menu [role=option]>small,:root[data-theme="light"] .connector-advanced>small,:root[data-theme="light"] .connector-empty h3{color:var(--muted)}
+:root[data-theme="light"] .connector-header-inputs>button{width:28px;height:28px;color:var(--theme-text-primary)}
+:root[data-theme="light"] .connector-header-inputs>button:hover{background:var(--theme-surface-hover);color:var(--theme-text-primary)}
+:root[data-theme="light"] .connector-menu [role=option][aria-selected=true]{background:var(--theme-control-hover)}
+:root[data-theme="light"] .connector-dialog.dialog-content{background:var(--theme-surface-2);color:var(--text)}
+:root[data-theme="light"] .connector-dialog h2{color:var(--theme-text-primary)}
+:root[data-theme="light"] .connector-dialog input:not([type=checkbox]){border-color:var(--border-strong);background:var(--theme-surface-1);color:var(--text)}
+:root[data-theme="light"] .connector-dialog footer button{border-color:var(--border);background:var(--theme-control);color:var(--text)}
+:root[data-theme="light"] .connector-dialog footer button[type=submit]{background:var(--accent);color:var(--theme-on-primary)}

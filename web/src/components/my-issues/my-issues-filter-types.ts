@@ -27,10 +27,11 @@ export interface IssueQueryAstNode {
 
 const QUERY_FIELDS: Partial<Record<MyIssuesFilterKey, string>> = {
   assignee: 'assigneeId', creator: 'creatorId', labels: 'labelId', project: 'projectId',
+  projectMilestone: 'projectMilestoneId',
   projectProperties: 'project', status: 'status', priority: 'priority', cycle: 'cycleId',
   subscribers: 'subscriberId', externalSource: 'externalSource', autoClosed: 'autoClosed',
   template: 'templateId', relations: 'relation', links: 'links', content: 'content',
-  initiative: 'initiativeId', releases: 'releaseId', dates: 'dateFilter',
+  initiative: 'initiativeId', releases: 'releaseId', customers: 'customerId', dates: 'dateFilter',
 }
 
 /** Convert the existing filter-bar state into a composable AND expression. */

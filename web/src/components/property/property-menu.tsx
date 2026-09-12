@@ -17,7 +17,7 @@ import { directoryPerson, isPeopleProperty, personSearchText, type PersonIdentit
 import { usePeopleDirectory } from './people-context'
 import { PersonInfo } from './person-info'
 import { UserAvatar } from '@/components/ui/user-avatar'
-import { displayUserName, useUserPreferences } from '@/lib/runtime-preferences'
+import { displayUserName } from '@/lib/runtime-preferences'
 
 export interface PropertyOption {
   searchOnly?: boolean
@@ -84,12 +84,11 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   embedded?: boolean
 }) {
   const { t } = useI18n()
-  const preferences = useUserPreferences()
   const directory = usePeopleDirectory()
   const menuOptions = useMemo(() => options.map(option => {
     const person = option.person ?? (isPeopleProperty(label) && option.id && !option.id.startsWith('__') && !['*','me','none','all'].includes(option.id) ? directoryPerson(directory.users, option.id) ?? { id: option.id, label: option.label } : undefined)
     return person ? { ...option, label: displayUserName({displayName:person.displayName || option.label,name:person.name && person.name!==person.id ? person.name : option.label}), person, icon: <span aria-hidden="true">{option.icon ?? <UserAvatar className="people-menu-avatar" avatarUrl={person.avatarUrl} name={person.displayName || ('label' in person ? person.label : undefined) || person.name || person.id}/>}</span>, keywords: `${option.keywords ?? ''} ${personSearchText({ ...person, ...directoryPerson(directory.users, person.id) })}`, hoverContent: option.hoverContent ?? <PersonInfo person={person}/>, hoverClassName: option.hoverClassName ?? 'person-info-surface' } : option
-  }), [options, directory.users, label, preferences])
+  }), [options, directory.users, label])
   const [localOpen, setLocalOpen] = useState(false)
   const open = embedded || (controlledOpen ?? localOpen)
   const setOpen = (next: boolean) => { setLocalOpen(next); onOpenChange?.(next) }

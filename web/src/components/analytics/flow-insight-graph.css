@@ -38,3 +38,10 @@
   font-weight: 550;
   font-variant-numeric: tabular-nums;
 }
+
+:root[data-theme="light"] .flow-insight-tooltip {
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .flow-insight-tooltip span {
+  color: var(--muted);
+}

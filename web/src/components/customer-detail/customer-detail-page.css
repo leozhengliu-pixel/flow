@@ -18,14 +18,20 @@
   font-size: 12px;
 }
 .customer-detail-header > button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
   border: 0;
   background: transparent;
   color: var(--theme-text-secondary);
-  padding: 4px;
-  border-radius: 4px;
+  padding: 0;
+  border-radius: 9999px;
 }
+.customer-detail-header > button svg { width: 16px; height: 16px; }
 .customer-detail-header > button:hover {
   background: var(--theme-surface-hover);
+  color: var(--theme-text-primary);
 }
 .customer-detail-header > i {
   width: 19px;
@@ -39,8 +45,9 @@
   font-style: normal;
 }
 .customer-detail-header > strong {
+  font-size: 13px;
   font-weight: 500;
-  color: var(--theme-text-secondary);
+  color: var(--theme-text-primary);
 }
 .customer-detail-header > div {
   margin-left: auto;
@@ -97,16 +104,19 @@
 .customer-hero > button,
 .customer-requests-heading > button,
 .customer-requests-empty > button {
-  height: 29px;
-  border: 1px solid var(--theme-border);
-  border-radius: 5px;
-  background: transparent;
-  color: inherit;
-  padding: 0 9px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: var(--accent-primary);
+  color: var(--on-accent);
+  padding: 0 10px;
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font: 500 12px/normal inherit;
+}
+.customer-requests-empty > button:hover {
+  background: var(--accent-primary-hover);
 }
 .customer-properties {
   display: grid;
@@ -144,7 +154,7 @@
   background: #4d9a68;
 }
 .customer-status-dot.inactive {
-  background: #999;
+  background: var(--theme-text-tertiary);
 }
 .customer-requests-heading {
   height: 40px;
@@ -317,9 +327,9 @@
   border: 0;
 }
 .customer-request-tools .primary {
-  background: #5e6ad2;
-  color: #fff;
-  border-color: #5e6ad2;
+  background: var(--accent-primary);
+  color: var(--on-accent);
+  border-color: var(--accent-primary);
 }
 .customer-request-composer > label {
   display: flex;
@@ -333,17 +343,21 @@
 .customer-detail-menu {
   z-index: 90;
   min-width: 190px;
-  border: 1px solid var(--theme-border);
+  padding: 6px 0;
+  border: 0.5px solid var(--popover-border);
+  border-radius: 12px;
   background: var(--theme-surface-2);
-  box-shadow: var(--shadow-menu, 0 10px 26px #0002);
+  box-shadow: var(--shadow-control);
   padding: 4px;
-  border-radius: 7px;
+  border-radius: 12px;
 }
 .customer-detail-menu [role="menuitem"] {
-  height: 29px;
-  padding: 0 8px;
-  border-radius: 4px;
+  height: 32px;
+  padding: 0 18px 0 14px;
+  border-radius: 0;
   display: flex;
+  font-size: 13px;
+  font-weight: 400;
   align-items: center;
   gap: 8px;
   outline: 0;
@@ -407,4 +421,113 @@
     flex-direction: column;
   }
   .customer-request-composer .select-control{width:100%}
+}
+
+:root[data-theme="light"] .customer-detail {
+  background: var(--theme-surface-0);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .customer-detail-header,
+:root[data-theme="light"] .customer-properties,
+:root[data-theme="light"] .customer-requests-heading,
+:root[data-theme="light"] .customer-request-list,
+:root[data-theme="light"] .customer-request-row,
+:root[data-theme="light"] .customer-request-composer,
+:root[data-theme="light"] .customer-request-tools,
+:root[data-theme="light"] .customer-hero > button,
+:root[data-theme="light"] .customer-requests-heading > button,
+:root[data-theme="light"] .customer-requests-empty > button,
+:root[data-theme="light"] .customer-request-attachments > span,
+:root[data-theme="light"] .customer-request-file-queue > span,
+:root[data-theme="light"] .customer-request-tools > button,
+:root[data-theme="light"] .customer-delete-dialog footer button:not(.danger) {
+  border-color: var(--border);
+}
+:root[data-theme="light"] .customer-detail-header,
+:root[data-theme="light"] .customer-hero small,
+:root[data-theme="light"] .customer-properties label,
+:root[data-theme="light"] .customer-requests-heading > small,
+:root[data-theme="light"] .customer-request-row small,
+:root[data-theme="light"] .customer-requests-empty p,
+:root[data-theme="light"] .customer-requests-empty kbd,
+:root[data-theme="light"] .customer-request-composer > label {
+  color: var(--faint);
+}
+:root[data-theme="light"] .customer-delete-dialog p {
+  color: var(--muted);
+}
+:root[data-theme="light"] .customer-detail-header > button,
+:root[data-theme="light"] .customer-detail-header > div > button {
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .customer-detail-header > button svg,
+:root[data-theme="light"] .customer-detail-header > div > button svg {
+  width: 16px;
+  height: 16px;
+}
+:root[data-theme="light"] .customer-detail-header > button:hover,
+:root[data-theme="light"] .customer-detail-header > div > button:hover,
+:root[data-theme="light"] .customer-detail-header > div > button[data-state="open"] {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .customer-detail-header > strong {
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .customer-status-dot.inactive {
+  background: var(--faint);
+}
+:root[data-theme="light"] .customer-request-attachments > span,
+:root[data-theme="light"] .customer-request-file-queue > span,
+:root[data-theme="light"] .customer-request-row > div > button,
+:root[data-theme="light"] .customer-delete-dialog footer button:not(.danger) {
+  background: var(--theme-control);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .customer-request-tools .primary {
+  color: var(--on-accent);
+}
+:root[data-theme="light"] .customer-detail-menu {
+  border: 0.5px solid var(--theme-border);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--shadow-control);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .customer-detail-menu [role="menuitem"] {
+  height: 32px;
+  padding: 0 18px 0 14px;
+  border-radius: 0;
+  color: var(--theme-text-primary);
+  font-size: 13px;
+  font-weight: 400;
+}
+:root[data-theme="light"] .customer-requests-empty > button {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: var(--accent-primary);
+  color: var(--on-accent);
+  font: 500 12px/normal inherit;
+}
+:root[data-theme="light"] .customer-requests-empty > button:hover {
+  background: var(--accent-primary-hover);
+}
+:root[data-theme="light"] .customer-delete-dialog {
+  border: 0.5px solid var(--theme-border);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--shadow-dialog);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .customer-detail-menu [role="separator"] {
+  background: var(--border);
+}
+:root[data-theme="light"] .customer-delete-dialog footer .danger {
+  color: var(--on-accent);
 }

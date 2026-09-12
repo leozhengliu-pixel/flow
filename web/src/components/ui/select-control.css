@@ -3,3 +3,11 @@
 @keyframes select-control-in{from{opacity:0;transform:translateY(-3px) scale(.98)}to{opacity:1;transform:none}}
 .select-control-group-label{height:30px;display:flex;align-items:center;padding:0 14px;color:var(--theme-text-secondary);font:500 11px/normal var(--font)}
 @media(prefers-reduced-motion:reduce){.select-control-menu{animation:none}}
+:root[data-theme="light"] .select-control{border-color:var(--theme-border);background:var(--theme-surface-2);color:var(--theme-text-primary)}
+:root[data-theme="light"] .select-control:hover,:root[data-theme="light"] .select-control[data-state=open]{background:var(--theme-surface-hover)}
+:root[data-theme="light"] .select-control>span:last-child{color:var(--theme-text-secondary)}
+:root[data-theme="light"] .select-control-menu{border-color:var(--popover-border);background:var(--theme-surface-2);box-shadow:var(--shadow-control);color:var(--theme-text-primary)}
+:root[data-theme="light"] .select-control-option{color:var(--theme-text-primary)}
+:root[data-theme="light"] .select-control-option[data-highlighted]:before{background:var(--theme-surface-hover)}
+:root[data-theme="light"] .select-control-option>span:last-child{color:var(--theme-text-primary)}
+:root[data-theme="light"] .select-control-group-label{color:var(--theme-text-secondary)}

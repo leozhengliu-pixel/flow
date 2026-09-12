@@ -46,3 +46,20 @@
 .issue-activity-timeline .comment-card > header { height: auto; min-height: 24px; flex-wrap: wrap; }
 .issue-activity-timeline .comment-card > header > strong { min-width: 0; overflow-wrap: anywhere; }
 .issue-activity-timeline .comment-card > header > a { flex-shrink: 0; white-space: nowrap; }
+:root[data-theme="light"] .issue-activity-timeline .activity-event-icon,
+:root[data-theme="light"] .issue-activity-timeline .activity-row { color: var(--theme-text-secondary); }
+:root[data-theme="light"] .issue-activity-timeline .activity-row strong { color: var(--theme-text-primary); }
+:root[data-theme="light"] .issue-activity-timeline .activity-time,
+:root[data-theme="light"] .issue-activity-timeline .activity-dot,
+:root[data-theme="light"] .issue-activity-timeline .comment-card > header > a,
+:root[data-theme="light"] .issue-activity-timeline .comment-card > header > span,
+:root[data-theme="light"] .issue-activity-timeline .comment-reply time { color: var(--theme-text-tertiary); }
+:root[data-theme="light"] .issue-activity-timeline .comment-card > header > strong,
+:root[data-theme="light"] .issue-activity-timeline .comment-reply strong { color: var(--theme-text-primary); }
+:root[data-theme="light"] .issue-activity-timeline .comment-body { border: .5px solid var(--theme-border); border-radius: 8px; background: var(--theme-surface-1); }
+:root[data-theme="light"] .issue-activity-timeline .composer {
+  border: 0.5px solid var(--popover-border);
+  border-radius: 12px;
+  background: var(--theme-surface-2);
+  box-shadow: var(--shadow-dialog);
+}

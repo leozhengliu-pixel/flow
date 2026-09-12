@@ -12,3 +12,10 @@
 .issue-loading-preview-description ul,.issue-loading-preview-description ol{padding-inline-start:24px}
 .issue-loading-preview-description pre{overflow:auto;max-width:100%;padding:12px;background:var(--theme-surface-2)}
 .issue-loading-preview-description img{max-width:100%;height:auto}
+:root[data-theme="light"] .issue-loading-preview{color:var(--theme-text-primary)}
+:root[data-theme="light"] .issue-loading-preview>header{border-color:var(--border);color:var(--theme-text-primary)}
+:root[data-theme="light"] .issue-loading-preview>header button{color:var(--theme-text-primary)}
+:root[data-theme="light"] .issue-loading-preview>header button:hover{background:var(--theme-control-hover)}
+:root[data-theme="light"] .issue-loading-preview h1{color:var(--text)}
+:root[data-theme="light"] .issue-loading-preview-properties{color:var(--theme-text-secondary)}
+:root[data-theme="light"] .issue-loading-preview-description pre{background:var(--theme-surface-1);color:var(--theme-text-primary)}

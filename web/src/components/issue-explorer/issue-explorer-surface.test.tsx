@@ -40,3 +40,12 @@ it.each(['mouse', 'keyboard'])('applies a filter from its portaled submenu using
   }
   expect(toggle).toHaveBeenCalledWith('priority', { id: '2', label: 'High' })
 })
+
+it('keeps project milestone off the team issue filter menu', async () => {
+  const user = userEvent.setup()
+  render(<I18nProvider><IssueExplorerSurface creatingView scopeName="Workspace" activeView="all" viewHref={() => '#'} filters={[]} displayOptions={display} detailsOpen={false} onFilterToggle={vi.fn()} onDisplayOptionsChange={vi.fn()} onDetailsOpenChange={vi.fn()} onNavigateView={vi.fn()} filterOptions={() => []} viewEditor={<div>Editor</div>}>Content</IssueExplorerSurface></I18nProvider>)
+  await user.click(screen.getByRole('button', { name: 'Add filter' }))
+  expect(screen.getByRole('option', { name: 'Project' })).toBeInTheDocument()
+  expect(screen.getByRole('option', { name: 'Customers' })).toBeInTheDocument()
+  expect(screen.queryByRole('option', { name: 'Project milestone' })).not.toBeInTheDocument()
+})

@@ -11,7 +11,7 @@ html[data-locale="zh-CN"] body {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--muted, #8a8a8f);
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -20,12 +20,24 @@ html[data-locale="zh-CN"] body {
   height: 28px;
   min-width: 104px;
   padding: 0 8px 0 9px;
-  border: .5px solid var(--border, #3b3b3f);
+  border: .5px solid var(--border);
   border-radius: 6px;
   outline: 0;
-  background: var(--bg-subtle, #202023);
-  color: var(--text, #dedee1);
+  background: var(--bg-subtle);
+  color: var(--text);
   font: inherit;
+}
+
+:root[data-theme="light"] .auth-language,
+:root[data-theme="light"] .workspace-language {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] .auth-language .language-select-control,
+:root[data-theme="light"] .workspace-language .language-select-control {
+  border-color: var(--border);
+  background: var(--theme-surface-2);
+  color: var(--theme-text-primary);
 }
 
 @media (max-width: 600px) {

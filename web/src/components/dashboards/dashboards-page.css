@@ -35,6 +35,7 @@
   max-width: min(42vw, 440px);
   min-width: 0;
   overflow: hidden;
+  color: var(--theme-text-primary);
   font-size: 13px;
   font-weight: 500;
   text-overflow: ellipsis;
@@ -267,6 +268,7 @@
 }
 .dashboard-row > strong {
   overflow: hidden;
+  color: var(--text);
   font-size: 13px;
   font-weight: 500;
   text-overflow: ellipsis;
@@ -583,10 +585,10 @@
   z-index: 1100;
   min-width: 216px;
   padding: 4px;
-  border: 0.5px solid var(--theme-border);
-  border-radius: 8px;
-  background: var(--theme-menu-bg, var(--theme-surface-1));
-  box-shadow: var(--theme-shadow-popover);
+  border: 0.5px solid var(--popover-border);
+  border-radius: 12px;
+  background: var(--theme-menu-bg, var(--theme-surface-2));
+  box-shadow: var(--shadow-control);
 }
 .dashboard-menu [role="menuitem"],
 .dashboard-menu [role="menuitemcheckbox"],
@@ -721,6 +723,10 @@
   min-width: 220px;
   max-height: min(360px, var(--radix-dropdown-menu-content-available-height));
   overflow-y: auto;
+  border: 0.5px solid var(--popover-border);
+  border-radius: 12px;
+  background: var(--theme-surface-2);
+  box-shadow: var(--shadow-control);
   transform-origin: var(--radix-dropdown-menu-content-transform-origin);
   animation: dashboard-select-in 0.12s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
@@ -1231,4 +1237,124 @@
   .dashboard-insight-options {
     flex-direction: column;
   }
+}
+
+:root[data-theme="light"] .dashboards-shell,
+:root[data-theme="light"] .dashboard-index,
+:root[data-theme="light"] .dashboards-header,
+:root[data-theme="light"] .dashboard-insight-editor {
+  background: var(--theme-surface-0);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .dashboards-header > small,
+:root[data-theme="light"] .dashboards-header > strong > small,
+:root[data-theme="light"] .dashboards-header > span,
+:root[data-theme="light"] .dashboard-search::placeholder,
+:root[data-theme="light"] .dashboard-title input::placeholder,
+:root[data-theme="light"] .metric-muted,
+:root[data-theme="light"] .dashboard-menu [role="label"] {
+  color: var(--faint);
+}
+:root[data-theme="light"] .dashboard-directory-options,
+:root[data-theme="light"] .dashboard-table-head,
+:root[data-theme="light"] .dashboard-section > header,
+:root[data-theme="light"] .dashboard-owner > b,
+:root[data-theme="light"] .dashboard-zero,
+:root[data-theme="light"] .dashboard-state,
+:root[data-theme="light"] .dashboard-title .dashboard-description,
+:root[data-theme="light"] .dashboard-filter-button,
+:root[data-theme="light"] .dashboard-add-insight,
+:root[data-theme="light"] .dashboard-saved-filters,
+:root[data-theme="light"] .dashboard-filter-chip,
+:root[data-theme="light"] .dashboard-dialog > label,
+:root[data-theme="light"] .dashboard-form-grid > label,
+:root[data-theme="light"] .dashboard-dialog p,
+:root[data-theme="light"] .dashboard-select-copy small,
+:root[data-theme="light"] .dashboard-insight-editor-title input:nth-child(2),
+:root[data-theme="light"] .dashboard-insight-editor-controls > label,
+:root[data-theme="light"] .dashboard-insight-editor-body > aside > fieldset > legend,
+:root[data-theme="light"] .dashboard-insight-filter-builder > header,
+:root[data-theme="light"] .dashboard-hide-filters small {
+  color: var(--muted);
+}
+:root[data-theme="light"] .dashboard-search:hover,
+:root[data-theme="light"] .dashboard-search:focus,
+:root[data-theme="light"] .dashboard-state > button,
+:root[data-theme="light"] .dashboard-zero > button,
+:root[data-theme="light"] .dashboard-add-insight,
+:root[data-theme="light"] .dashboard-filter-chip,
+:root[data-theme="light"] .dashboard-dialog input:not([type="checkbox"]),
+:root[data-theme="light"] .dashboard-select-trigger,
+:root[data-theme="light"] .dashboard-dialog footer button:not(.primary):not(.danger),
+:root[data-theme="light"] .dashboard-segments button,
+:root[data-theme="light"] .dashboard-insight-editor-title button:not(.primary),
+:root[data-theme="light"] .dashboard-filter-property,
+:root[data-theme="light"] .dashboard-insight-preview {
+  border-color: var(--border);
+  background: var(--theme-control);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .dashboard-menu,
+:root[data-theme="light"] .dashboard-select-menu {
+  border-color: var(--popover-border);
+  background: var(--theme-surface-2);
+  box-shadow: var(--shadow-control);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .dashboards-header > strong {
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .dashboard-row > strong {
+  color: var(--text);
+}
+:root[data-theme="light"] .dashboard-grid article,
+:root[data-theme="light"] .dashboard-insight-editor-title,
+:root[data-theme="light"] .dashboard-insight-editor-controls,
+:root[data-theme="light"] .metric-list > div,
+:root[data-theme="light"] .metric-chart-table > div,
+:root[data-theme="light"] .dashboard-filter-fields fieldset {
+  border-color: var(--border);
+}
+:root[data-theme="light"] .dashboard-state-error,
+:root[data-theme="light"] .dashboard-state-error > strong,
+:root[data-theme="light"] .dashboard-menu .danger {
+  color: var(--semantic-danger);
+}
+:root[data-theme="light"] .dashboard-dialog footer .primary,
+:root[data-theme="light"] .dashboard-insight-editor-title button.primary {
+  color: var(--on-accent);
+}
+:root[data-theme="light"] .dashboard-dialog footer .danger {
+  background: var(--semantic-danger);
+  color: var(--on-accent);
+}
+:root[data-theme="light"] .dashboard-dialog footer button:not(.primary):not(.danger) {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .dashboard-dialog footer .primary {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 9999px;
+  background: var(--accent-primary);
+  color: var(--on-accent);
+}
+:root[data-theme="light"] .dashboard-dialog > .dialog-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .dashboards-header button,
+:root[data-theme="light"] .dashboard-directory-options {
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .dashboards-header button:hover,
+:root[data-theme="light"] .dashboard-directory-options:hover {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-primary);
 }

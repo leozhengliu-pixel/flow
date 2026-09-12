@@ -5,4 +5,8 @@
 .issue-sla[data-status=paused]{color:#d1a343}
 .issue-sla[data-status=breached]{border-color:#6c2f32;background:#3a1f21;color:#ee7777}
 .issue-sla[data-status=breached] strong{color:#ff9b9b}
-.issue-sla[data-status=completed]{color:#5ca675}
+.issue-sla[data-status=completed]{color:var(--semantic-success)}
+:root[data-theme=light] .issue-sla{border-color:var(--border);background:var(--theme-surface-1);color:var(--muted)}
+:root[data-theme=light] .issue-sla strong{color:var(--text)}
+:root[data-theme=light] .issue-sla[data-status=breached]{border-color:color-mix(in srgb,var(--semantic-danger) 40%,transparent);background:color-mix(in srgb,var(--semantic-danger) 12%,var(--theme-surface-2));color:var(--semantic-danger)}
+:root[data-theme=light] .issue-sla[data-status=breached] strong{color:var(--semantic-danger)}

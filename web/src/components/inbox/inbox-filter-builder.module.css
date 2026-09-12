@@ -37,6 +37,25 @@
 :global(:root[data-theme="light"]) .conditionField,:global(:root[data-theme="light"]) .conditionOperator,:global(:root[data-theme="light"]) .conditionValue,:global(:root[data-theme="light"]) .removeCondition{background:var(--bg-subtle);border-color:var(--border);color:var(--text)}
 :global(:root[data-theme="light"]) .conditionOperator:hover,:global(:root[data-theme="light"]) .conditionValue:hover,:global(:root[data-theme="light"]) .removeCondition:hover,:global(:root[data-theme="light"]) .addCondition:hover,:global(:root[data-theme="light"]) .clearAll:hover{background:var(--bg-active)}
 :global(:root[data-theme="light"]) .condition{border-color:var(--border)}
+:global(:root[data-theme="light"]) .commandMenu,:global(:root[data-theme="light"]) .propertyMenu,:global(:root[data-theme="light"]) .operatorMenu,:global(:root[data-theme="light"]) .conditionValueMenu{
+  color:var(--inbox-filter-text);
+  background:var(--theme-surface-2);
+  border-color:var(--popover-border);
+  box-shadow:var(--menu-shadow);
+}
+:global(:root[data-theme="light"]) .valueItem:disabled{color:var(--theme-text-tertiary)}
+:global(:root[data-theme="light"]) .colorDot{border-color:color-mix(in srgb,var(--theme-text-primary) 12%,transparent)}
+:global(:root[data-theme="light"]) .checkbox{color:var(--on-accent);border-color:var(--theme-border-strong)}
+:global(:root[data-theme="light"]) .valueItem[aria-checked=true] .checkbox{border-color:var(--selection-border);background:var(--selection-fill);color:var(--on-accent)}
+:global(:root[data-theme="light"]) .appliedBar::before{border-color:var(--theme-border);background:var(--bg-panel)}
+:global(:root[data-theme="light"]) .conditionOperator,:global(:root[data-theme="light"]) .removeCondition,:global(:root[data-theme="light"]) .addCondition{color:var(--muted)}
+:global(:root[data-theme="light"]) .clearAll,:global(:root[data-theme="light"]) .conditionValue{color:var(--text)}
+:global(:root[data-theme="light"]) .appliedBar button:focus-visible{outline-color:var(--focus-ring)}
+:global(:root[data-theme="light"]) .propertySearch kbd{
+  color:var(--theme-text-tertiary);
+  background:var(--theme-surface-0);
+  border-color:var(--theme-border);
+}
 .propertyItem:hover .propertyArrow,.propertyItem[aria-expanded=true] .propertyArrow{color:var(--bright)}
 .propertyItem:hover::before,.propertyItem[aria-selected=true]::before,.valueItem:hover::before,.valueItem[aria-selected=true]::before,.unmatchedItem:hover::before,.unmatchedItem:focus-visible::before,.operatorItem:hover::before,.operatorItem[aria-selected=true]::before{background:var(--inbox-filter-row-active)}
 @media(max-width:800px){.appliedBar{width:100%}.conditionField span{display:none}.conditionValue{max-width:120px}.clearAll{display:none}}@media(max-width:520px){.conditionValue{max-width:86px}.condition{min-width:0}.conditionValue>span:last-child{min-width:0}.appliedBar{padding-inline:8px}.valueMenu,.conditionValueMenu{width:min(280px,calc(100vw - 16px))}}@media (prefers-reduced-motion:reduce){.propertyMenu,.valueMenu,.operatorMenu,.conditionValueMenu{animation:none}}

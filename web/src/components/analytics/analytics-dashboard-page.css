@@ -38,7 +38,8 @@
   color: var(--theme-text-secondary);
 }
 .insights-header > div strong {
-  font-size: 16px;
+  color: var(--theme-text-primary);
+  font-size: 13px;
   font-weight: 500;
 }
 .insights-header > div span {
@@ -223,10 +224,10 @@
 .insights-menu {
   min-width: 210px;
   padding: 4px;
-  border: 0.5px solid var(--theme-border);
-  border-radius: 8px;
-  background: var(--theme-menu-bg, var(--theme-surface-1));
-  box-shadow: var(--theme-shadow-popover);
+  border: 0.5px solid var(--popover-border);
+  border-radius: 12px;
+  background: var(--theme-menu-bg, var(--theme-surface-2));
+  box-shadow: var(--shadow-control);
   z-index: 1000;
 }
 .insights-menu [role="menuitem"],
@@ -297,4 +298,54 @@
   .insights-table > div {
     grid-template-columns: minmax(0, 1fr) 72px 50px;
   }
+}
+
+:root[data-theme="light"] .insights-page {
+  background: var(--theme-surface-0);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .insights-page.is-fullscreen {
+  border-color: var(--border);
+  box-shadow: var(--shadow-control);
+}
+:root[data-theme="light"] .insights-header,
+:root[data-theme="light"] .insights-table > header,
+:root[data-theme="light"] .insights-table > div,
+:root[data-theme="light"] .insights-chart,
+:root[data-theme="light"] .insights-table {
+  border-color: var(--border);
+}
+:root[data-theme="light"] .insights-header > div > svg,
+:root[data-theme="light"] .insights-header > div span,
+:root[data-theme="light"] .insights-header button,
+:root[data-theme="light"] .insights-header a,
+:root[data-theme="light"] .insights-controls label,
+:root[data-theme="light"] .insights-controls button svg,
+:root[data-theme="light"] .insights-table > header,
+:root[data-theme="light"] .insights-table p,
+:root[data-theme="light"] .insights-state {
+  color: var(--muted);
+}
+:root[data-theme="light"] .insights-table > div span:last-child {
+  color: var(--faint);
+}
+:root[data-theme="light"] .insights-controls button,
+:root[data-theme="light"] .insights-chart,
+:root[data-theme="light"] .insights-table,
+:root[data-theme="light"] .insights-state > button {
+  border-color: var(--border);
+  background: var(--theme-control);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .insights-menu {
+  border-color: var(--popover-border);
+  background: var(--theme-surface-2);
+  box-shadow: var(--shadow-control);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .insights-header > div strong {
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .insights-state-error > strong {
+  color: var(--semantic-danger);
 }

@@ -18,7 +18,7 @@ func isDuplicateIndex(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "duplicate key name")
 }
 
-var workspaceRecordTables = []string{"issue_records", "issue_label_records", "issue_subscriber_records", "issue_actor_records", "issue_permission_records", "issue_attribute_records", "issue_attribute_migrations", "issue_collection_counts", "issue_records_migrations", "issue_scope_counts", "issue_stats_migrations", "issue_number_sequences", "workspace_content_records", "workspace_metadata_records", "issue_attachment_records", "issue_attachment_migrations", "issue_list_migrations", "issue_search_documents", "issue_search_migrations"}
+var workspaceRecordTables = []string{"issue_records", "issue_label_records", "issue_subscriber_records", "issue_actor_records", "issue_permission_records", "issue_attribute_records", "issue_attribute_migrations", "issue_collection_counts", "issue_records_migrations", "issue_scope_counts", "issue_stats_migrations", "issue_number_sequences", "workspace_content_records", "workspace_metadata_records", "issue_attachment_records", "issue_attachment_migrations", "issue_list_migrations", "issue_search_documents", "issue_search_migrations", "customer_filter_records", "customer_request_filter_records", "customer_filter_migrations"}
 
 func (s *SQLiteStore) migrateIssueCollections(ctx context.Context) error {
 	for key, data := range s.workspaces {

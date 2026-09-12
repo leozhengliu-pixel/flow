@@ -16,4 +16,12 @@ describe('ProjectsDisplayMenu', () => {
     await user.click(screen.getByRole('option', { name: 'Work type' }))
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ properties: expect.arrayContaining([projectLabelGroupProperty('group-1')]) }))
   })
+
+  it('turns on empty groups when switching to board layout', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<ProjectsDisplayMenu onChange={onChange} settings={DEFAULT_PROJECTS_DISPLAY}/>)
+    await user.click(screen.getByRole('tab', { name: 'Board' }))
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ layout: 'board', showEmptyGroups: true }))
+  })
 })

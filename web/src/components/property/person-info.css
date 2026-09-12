@@ -16,3 +16,11 @@
 .property-rich-hover.assignee-hover-surface { width: 300px; max-width: calc(100vw - 16px); }
 .people-menu-options { max-height: 320px; overflow-y: auto; }
 .people-menu-avatar { width: 16px; height: 16px; flex: 0 0 16px; display: grid; place-items: center; border-radius: 50%; background: var(--avatar-fallback); color: var(--on-accent); font-size: 8px; object-fit: cover; }
+:root[data-theme="light"] .person-info-surface { border-color: var(--popover-border); background: var(--theme-surface-2); color: var(--theme-text-primary); box-shadow: var(--shadow-control); }
+:root[data-theme="light"] .person-info header > div > span,
+:root[data-theme="light"] .person-info-badge,
+:root[data-theme="light"] .person-identity-details dt,
+:root[data-theme="light"] .person-info footer { color: var(--theme-text-secondary); }
+:root[data-theme="light"] .person-info-badge { border-color: var(--theme-border-strong); }
+:root[data-theme="light"] .person-identity-details dd { color: var(--theme-text-primary); }
+:root[data-theme="light"] .person-info footer { border-color: var(--theme-border); }

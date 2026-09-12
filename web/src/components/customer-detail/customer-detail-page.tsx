@@ -1,5 +1,6 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
+import { toggleFavoriteFor } from '@/lib/favorites';
 import { customerRevenueLabel, formatCustomerRevenue } from '@/lib/customer-settings';
 import {
   Bell,
@@ -19,14 +20,12 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { SelectControl } from "@/components/ui/select-control";
 import { CustomerDialog } from "./customer-dialog";
 import {
-  addFavorite,
   addSubscription,
   createCustomerRequest,
   createIssue,
   deleteCustomer,
   deleteCustomerRequest,
   deleteCustomerRequestAttachment,
-  removeFavorite,
   removeSubscription,
   updateCustomer,
   uploadCustomerRequestAttachment,
@@ -81,13 +80,7 @@ export function CustomerDetailPage({
         <div>
           <button
             aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
-            onClick={() =>
-              void (
-                favorite
-                  ? removeFavorite("customer", customer.id)
-                  : addFavorite("customer", customer.id)
-              ).then(() => refreshResourcePreferences(data.workspace.urlKey))
-            }
+            onClick={() => void toggleFavoriteFor(data, "customer", customer.id, undefined, favorite)}
           >
             <Star size={15} fill={favorite ? "currentColor" : "none"} />
           </button>

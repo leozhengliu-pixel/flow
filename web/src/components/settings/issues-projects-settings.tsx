@@ -3414,11 +3414,10 @@ export function SLASettings({
         <header>
           <h3>{t("Automation rules")}</h3>
           <button
-            className="settings-action"
+            className="settings-action ip-add-rule"
             disabled={!enabled || creating}
             onClick={() => setCreating(true)}
           >
-            <Plus size={14} />
             {t("Add rule")}
           </button>
         </header>
