@@ -10,7 +10,8 @@ import { IssueTitleEditor } from '@/components/issue/issue-title-editor'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
 import type { DescriptionSnapshot } from '@/components/issue/editor/editor-content'
 import { DueDateCommand } from '@/components/issue/due-date-picker'
-import { labelsForResource, toggleGroupedLabelIds } from '@/lib/labels'
+import { labelTeamScopeIds, labelsForResource, toggleGroupedLabelIds } from '@/lib/labels'
+import { resolvedTeamSettings } from '@/lib/team-hierarchy'
 
 export interface SubIssueInput {
   title: string
@@ -51,10 +52,11 @@ export function SubIssueEditor({ parent, data, onCancel, onCreate }: { parent: I
   const cycle = data.cycles.find(item => item.id === cycleId)
   const cycles = data.cycles.filter(item => item.teamId === parent.team.id && item.status !== 'completed')
   const nextUpcomingCycleId = [...cycles].filter(item => item.status === 'upcoming').sort((left,right)=>left.startsAt.localeCompare(right.startsAt))[0]?.id
-  const labels = labelsForResource(data.labels, 'issue', data.labelGroups).filter(label => !label.scope || label.scope === 'Workspace' || label.scope === parent.team.id)
+  const labelScopes = new Set(labelTeamScopeIds(parent.team.id, data.teams, data.teamSettings))
+  const labels = labelsForResource(data.labels, 'issue', data.labelGroups).filter(label => !label.scope || label.scope === 'Workspace' || labelScopes.has(label.scope))
   const labelGroupNames = useMemo(() => new Map(data.labelGroups.map(group => [group.id, group.name])), [data.labelGroups])
   const labelGroupColors = useMemo(() => new Map(data.labelGroups.map(group => [group.id, group.color])), [data.labelGroups])
-  const estimateType = data.teamSettings[parent.team.id]?.estimateType ?? 'notUsed'
+  const estimateType = resolvedTeamSettings(data.teamSettings, parent.team.id)?.estimateType ?? 'notUsed'
   const estimateValues = estimateType === 'fibonacci' ? [0,1,2,3,5,8,13,21] : estimateType === 'exponential' ? [0,1,2,4,8,16] : [0,1,2,3,5,8]
   const toggleLabel = (id: string) => setLabelIds(current => toggleGroupedLabelIds(current, id, labels))
   const submit = async () => {

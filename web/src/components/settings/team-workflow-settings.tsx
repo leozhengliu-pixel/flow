@@ -335,17 +335,22 @@ function TeamOverview({
 }) {
   const { t } = useI18n();
   const { settings, save } = useTeamSettings(data, team, onReload);
+  const descendantCount = Math.max(0, teamHierarchy(data.teams, data.teamSettings).subtree(team.id).size - 1);
   const retire = async () => {
     const action = team.retiredAt ? "Restore" : "Retire";
     if (
       !(await confirmAction(`${t(action)} ${team.name}?`, {
         confirmLabel: t(team.retiredAt ? "Restore team" : "Retire team"),
         danger: !team.retiredAt,
+        description: !team.retiredAt && descendantCount > 0
+          ? `This team and ${descendantCount} nested sub-team${descendantCount === 1 ? '' : 's'} will be retired together.`
+          : undefined,
       }))
     )
       return;
     await updateTeam(data.workspace.urlKey, team.id, {
       retired: !team.retiredAt,
+      subTeamAction: "retire",
     });
     await onReload();
   };
@@ -423,7 +428,7 @@ function TeamOverview({
         title="Team hierarchy"
         description="Organize teams into a hierarchy of up to five levels."
       >
-        {(data.viewerRole === 'admin' || data.viewerRole === 'owner') ? <ParentTeamPicker teams={data.teams} settings={data.teamSettings} teamId={team.id} value={settings.parentTeamId} onChange={value => { void save({parentTeamId: value}) }}/> : <span>{data.teams.find(item => item.id === settings.parentTeamId)?.name ?? 'No parent team'}</span>}
+        <ParentTeamPicker data={data} teams={data.teams} settings={data.teamSettings} teamId={team.id} value={settings.parentTeamId} onChange={value => { void save({parentTeamId: value}) }}/>
       </TeamSection>
       <TeamSection
         title="Team initiatives"
@@ -629,7 +634,13 @@ function GeneralSettings({
         />
       </TeamSection>
       <TeamSection title="Estimates">
-        <SelectRow
+        {settings.parentTeamId && <ToggleRow
+          title="Inherit estimate settings from parent team"
+          description="Keep this team's estimates in sync with its parent team."
+          checked={settings.inheritIssueEstimation}
+          onChange={(value) => save({ inheritIssueEstimation: value })}
+        />}
+        {settings.inheritIssueEstimation && settings.parentTeamId ? <TeamRow title="Issue estimation" description="This team is inheriting estimate settings from its parent team."><span className="team-inherited-value">{data.teams.find((item) => item.id === settings.parentTeamId)?.name}</span></TeamRow> : <SelectRow
           title="Issue estimation"
           description="Used to estimate issue complexity and plan cycle capacity."
           value={settings.estimateType}
@@ -643,7 +654,7 @@ function GeneralSettings({
           onChange={(value) =>
             save({ estimateType: value as TeamSettings["estimateType"] })
           }
-        />
+        />}
       </TeamSection>
       <EmailIntakeSettings
         data={data}
@@ -825,7 +836,7 @@ function AccessSettings({
   onReload: () => Promise<void>;
 }) {
   const { settings, save } = useTeamSettings(data, team, onReload);
-  const restrictedParent = useMemo(() => teamHierarchy(data.teams, data.teamSettings).ancestors.get(team.id)?.some(parent => parent.private || data.teamSettings[parent.id]?.access === 'private' || data.teamSettings[parent.id]?.access === 'restricted'), [data.teams, data.teamSettings, team.id]);
+  const restrictedParent = useMemo(() => teamHierarchy(data.teams, data.teamSettings).ancestors.get(team.id)?.some(parent => parent.private || data.teamSettings?.[parent.id]?.access === 'private' || data.teamSettings?.[parent.id]?.access === 'restricted'), [data.teams, data.teamSettings, team.id]);
   const permissionLabels = {
     allMembers: "All workspace members",
     teamMembers: "Team members",
@@ -2095,15 +2106,20 @@ function TemplatesSettings({
   const [editing, setEditing] = useState<
     IssueTemplate | ProjectTemplate | DocumentTemplate | null | undefined
   >(undefined);
+  const scopeIds = new Set([
+    team.id,
+    ...(teamHierarchy(data.teams, data.teamSettings).ancestors.get(team.id) ?? []).map((item) => item.id),
+  ]);
   const templates =
     type === "issue"
-      ? data.issueTemplates.filter((item) => item.teamId === team.id)
+      ? data.issueTemplates.filter((item) => scopeIds.has(item.teamId ?? ""))
       : type === "project"
         ? data.projectTemplates.filter(
             (item) =>
-              item.visibility === "teams" && item.teamIds.includes(team.id),
+              item.visibility === "teams" &&
+              item.teamIds.some((teamId) => scopeIds.has(teamId)),
           )
-        : data.documentTemplates.filter((item) => item.teamId === team.id);
+        : data.documentTemplates.filter((item) => scopeIds.has(item.teamId ?? ""));
   return (
     <>
       <div className="settings-segmented team-template-tabs">
@@ -2128,17 +2144,28 @@ function TemplatesSettings({
         }
       >
         <div className="team-setting-list">
-          {templates.map((template) => (
-            <button
+          {templates.map((template) => {
+            const sourceTeamID =
+              type === "project"
+                ? (template as ProjectTemplate).teamIds.find((teamId) => scopeIds.has(teamId) && teamId !== team.id)
+                : (template as IssueTemplate | DocumentTemplate).teamId && (template as IssueTemplate | DocumentTemplate).teamId !== team.id
+                  ? (template as IssueTemplate | DocumentTemplate).teamId
+                  : undefined;
+            const inherited = Boolean(sourceTeamID);
+            return <button
               className="team-template-setting"
+              data-inherited={inherited || undefined}
+              disabled={inherited}
               key={template.id}
-              onClick={() => setEditing(template)}
+              onClick={() => !inherited && setEditing(template)}
             >
               <span className="template-icon">T</span>
               <span>
                 <strong data-i18n-ignore>{template.name}</strong>
                 <small>
-                  {template.description ? (
+                  {inherited ? (
+                    <>Inherited from <span data-i18n-ignore>{data.teams.find((item) => item.id === sourceTeamID)?.name ?? "parent team"}</span></>
+                  ) : template.description ? (
                     <span data-i18n-ignore>{template.description}</span>
                   ) : (
                     `${titleCase(type)} template`
@@ -2146,7 +2173,7 @@ function TemplatesSettings({
                 </small>
               </span>
             </button>
-          ))}
+          })}
           {!templates.length && (
             <TeamEmpty
               icon={<Plus size={22} />}
@@ -2297,6 +2324,8 @@ function StatusesSettings({
   onReload: () => Promise<void>;
 }) {
   const { t } = useI18n();
+  const teamSettings = data.teamSettings?.[team.id];
+  const inherited = Boolean(teamSettings?.inheritWorkflowStatuses && teamSettings.parentTeamId);
   const [states, setStates] = useState<WorkflowState[]>(
     statesForTeam(data, team.id),
   );
@@ -2313,13 +2342,25 @@ function StatusesSettings({
     const controller=new AbortController();
     setLoading(true);
     setLoadError(undefined);
+    if (inherited) {
+      setStates(statesForTeam(data, team.id));
+      setCounts({});
+      setLoading(false);
+      return () => controller.abort();
+    }
     void Promise.all([fetchWorkflowStates(team.id),listIssueRecordGroups({teamId:team.id,includeSubTeams:false,groupBy:'status',archived:'all'},controller.signal)])
       .then(([next,usage])=>{if(active){setStates(next);setCounts(Object.fromEntries(usage.groups.map(group=>[group.value,group.count])))}})
       .catch(error=>{if(active)setLoadError(message(error))})
       .finally(()=>{if(active)setLoading(false)});
     return ()=>{active=false;controller.abort()};
-  }, [team.id,loadRetry]);
+  }, [data, inherited, team.id, loadRetry]);
   const reload = async () => {
+    if (inherited) {
+      setStates(statesForTeam(data, team.id));
+      setCounts({});
+      await onReload();
+      return;
+    }
     const [next,usage]=await Promise.all([fetchWorkflowStates(team.id),listIssueRecordGroups({teamId:team.id,includeSubTeams:false,groupBy:'status',archived:'all'})]);
     setStates(next);
     setCounts(Object.fromEntries(usage.groups.map(group=>[group.value,group.count])));
@@ -2394,9 +2435,10 @@ function StatusesSettings({
           </p>
         </div>
       </header>
+      {inherited && <div className="team-inherited-setting"><StatusIcon state={states[0]}/><div><strong>{t("Issue statuses are inherited")}</strong><p>{t("Manage statuses from the parent team. Changes are synced automatically.")}</p></div></div>}
       {loading&&<p role="status">{t('Loading issue statuses…')}</p>}
       {loadError&&<div className="workflow-status-load-error" role="alert"><span>{t('Could not load issue statuses')}: {t(loadError)}</span><button type="button" onClick={()=>setLoadRetry(value=>value+1)}>{t('Try again')}</button></div>}
-      {!loading&&!loadError&&<div className="workflow-default-state"><PropertyMenu label={t('Default status')} ariaLabel={t('Default status')} searchPlaceholder={t('Search statuses…')} icon={states.some(state=>state.default)?<StatusIcon state={states.find(state=>state.default)!}/>:undefined} valueIsEntityName value={states.find(state=>state.default)?.name} selectedId={states.find(state=>state.default)?.id} options={states.filter(state=>!state.reserved).map(state=>({id:state.id,label:state.name,i18nIgnore:true,icon:<StatusIcon state={state}/>}))} onChange={id=>run(()=>updateWorkflowState(team.id,id,{default:true}))}/></div>}
+      {!loading&&!loadError&&!inherited&&<div className="workflow-default-state"><PropertyMenu label={t('Default status')} ariaLabel={t('Default status')} searchPlaceholder={t('Search statuses…')} icon={states.some(state=>state.default)?<StatusIcon state={states.find(state=>state.default)!}/>:undefined} valueIsEntityName value={states.find(state=>state.default)?.name} selectedId={states.find(state=>state.default)?.id} options={states.filter(state=>!state.reserved).map(state=>({id:state.id,label:state.name,i18nIgnore:true,icon:<StatusIcon state={state}/>}))} onChange={id=>run(()=>updateWorkflowState(team.id,id,{default:true}))}/></div>}
       <section
         className="ip-status-card"
         role="list"
@@ -2408,7 +2450,7 @@ function StatusesSettings({
                 item.type === group.type &&
                 Boolean(item.reserved) === Boolean(group.reserved),
             ),
-            canModify = !group.reserved;
+            canModify = !group.reserved && !inherited;
           return (
             <div className="ip-status-section" role="list" key={group.label}>
               <header>
@@ -2416,7 +2458,7 @@ function StatusesSettings({
                 {!group.reserved && (
                   <button
                     aria-label={t("Create new workflow state")}
-                    disabled={busy}
+                    disabled={busy || inherited}
                     onClick={() => setCreateType(group.type)}
                   >
                     <Plus />
@@ -2770,7 +2812,13 @@ function CyclesSettings({
   team: Team;
   onReload: () => Promise<void>;
 }) {
+  const { settings: teamSettings, save: saveTeamSettings } = useTeamSettings(
+    data,
+    team,
+    onReload,
+  );
   const initial = data.cycleSettings[team.id] ?? defaultCycles();
+  const inherited = Boolean(teamSettings.inheritCycles && teamSettings.parentTeamId);
   const [settings, setSettings] = useState(initial);
   useEffect(
     () => setSettings(data.cycleSettings[team.id] ?? defaultCycles()),
@@ -2789,6 +2837,23 @@ function CyclesSettings({
   };
   return (
     <>
+      {teamSettings.parentTeamId && (
+        <TeamSection title="Team hierarchy">
+          <ToggleRow
+            title="Inherit cycles from parent team"
+            description="Keep this team's cycle schedule in sync with its parent team."
+            checked={teamSettings.inheritCycles}
+            onChange={(value) => void saveTeamSettings({ inheritCycles: value })}
+          />
+        </TeamSection>
+      )}
+      {inherited ? (
+        <TeamSection>
+          <TeamRow title="Cycles inherited from parent team" description="Manage the schedule and cycle settings from the parent team.">
+            <span className="team-inherited-value">{data.teams.find((item) => item.id === teamSettings.parentTeamId)?.name}</span>
+          </TeamRow>
+        </TeamSection>
+      ) : <>
       <TeamSection>
         <ToggleRow
           title="Enable cycles"
@@ -2870,6 +2935,7 @@ function CyclesSettings({
           />
         </TeamSection>
       </div>
+      </>}
     </>
   );
 }
@@ -3139,7 +3205,13 @@ function TeamEmpty({
     </div>
   );
 }
-function statesForTeam(data: BootstrapData, teamId: string) {
+function statesForTeam(data: BootstrapData, teamId: string, seen = new Set<string>()): WorkflowState[] {
+  if (seen.has(teamId)) return [];
+  seen.add(teamId);
+  const settings = data.teamSettings?.[teamId];
+  if (settings?.inheritWorkflowStatuses && settings.parentTeamId) {
+    return statesForTeam(data, settings.parentTeamId, seen);
+  }
   const specific = data.states.some((state) => state.teamId === teamId);
   return data.states
     .filter((state) => (specific ? state.teamId === teamId : !state.teamId))
@@ -3183,6 +3255,10 @@ function defaultTeamSettings(
     projectUpdatePrompt: "",
     resolvedThreadSummaries: true,
     showInitiatives: true,
+    inheritIssueEstimation: false,
+    inheritWorkflowStatuses: false,
+    inheritProjectStatuses: false,
+    inheritCycles: false,
   };
 }
 function defaultCycles(): CycleSettings {

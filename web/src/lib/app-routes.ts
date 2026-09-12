@@ -60,6 +60,7 @@ export type SettingsPageId =
   | "project-updates"
   | "ai"
   | "initiatives"
+  | "initiative-labels"
   | "documents"
   | "customer-requests"
   | "releases"
@@ -1530,6 +1531,7 @@ const SETTINGS_PAGES = new Set<SettingsPageId>([
   "project-updates",
   "ai",
   "initiatives",
+  "initiative-labels",
   "documents",
   "customer-requests",
   "releases",

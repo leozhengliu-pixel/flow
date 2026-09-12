@@ -13,7 +13,8 @@ import type { DescriptionSnapshot } from '@/components/issue/editor/editor-conte
 import { DueDateCommand } from '@/components/issue/due-date-picker'
 import styles from './create-issue-dialog.module.css'
 import { createDraft, deleteDraft, updateDraft } from '@/lib/api'
-import { labelsForResource, toggleGroupedLabelIds } from '@/lib/labels'
+import { labelTeamScopeIds, labelsForResource, toggleGroupedLabelIds } from '@/lib/labels'
+import { resolvedTeamSettings } from '@/lib/team-hierarchy'
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
 import { Toggle } from '@/components/ui/toggle'
 import type { MyIssuesCreateContext } from '@/components/my-issues/my-issues-list'
@@ -94,7 +95,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     return [...states].sort((left, right) => (left.position??0) - (right.position??0))
   }, [data.states, requestedStateId, teamId])
   const defaultState = useMemo(() => {
-    const configured = data.teamSettings[teamId]?.defaultStateId
+    const configured = data.teamSettings?.[teamId]?.defaultStateId
     return availableStates.find(state => state.id === configured)
       ?? availableStates.find(state => state.default)
       ?? [...availableStates].sort((a, b) => (a.position??0) - (b.position??0)).find(state => state.type === 'unstarted')
@@ -202,10 +203,17 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   const cycle = data.cycles.find(item => item.id === cycleId)
   const cycles = data.cycles.filter(item => item.teamId === teamId && item.status !== 'completed')
   const nextUpcomingCycleId = [...cycles].filter(item => item.status === 'upcoming').sort((left,right)=>left.startsAt.localeCompare(right.startsAt))[0]?.id
-  const estimateType = data.teamSettings[teamId]?.estimateType ?? 'notUsed'
+  const estimateType = resolvedTeamSettings(data.teamSettings, teamId)?.estimateType ?? 'notUsed'
   const estimateValues = estimateType === 'fibonacci' ? [0,1,2,3,5,8,13,21] : estimateType === 'exponential' ? [0,1,2,4,8,16] : [0,1,2,3,5,8]
   const issueLabels = useMemo(() => labelsForResource(data.labels, 'issue', data.labelGroups), [data.labelGroups, data.labels])
-  const availableLabels = useMemo(() => issueLabels.filter(label => !label.scope || label.scope === 'Workspace' || label.scope === teamId), [issueLabels, teamId])
+  const availableLabels = useMemo(() => {
+    const scopes = new Set(labelTeamScopeIds(teamId, data.teams, data.teamSettings))
+    return issueLabels.filter(label => !label.scope || label.scope === 'Workspace' || scopes.has(label.scope))
+  }, [data.teamSettings, data.teams, issueLabels, teamId])
+  const templateOptions = useMemo(() => {
+    const scopes = new Set(labelTeamScopeIds(teamId, data.teams, data.teamSettings))
+    return data.issueTemplates.filter(item => scopes.has(item.teamId ?? ''))
+  }, [data.issueTemplates, data.teamSettings, data.teams, teamId])
   const availableLabelIds = useMemo(() => new Set(availableLabels.map(label => label.id)), [availableLabels])
   const selectedLabels = availableLabels.filter(label => labelIds.includes(label.id))
   const labelGroupNames = useMemo(() => new Map(data.labelGroups.map(group => [group.id, group.name])), [data.labelGroups])
@@ -352,7 +360,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
           </div>
 
           <div className={styles.properties}>
-            {data.issueTemplates.some(item=>item.teamId===teamId) && <MiniProperty label="Template" value={data.issueTemplates.find(item=>item.id===templateId)?.name ?? 'Template'} selectedId={templateId} icon={<FilePlus2/>} options={[{id:'',label:'No template',icon:<FilePlus2/>},...data.issueTemplates.filter(item=>item.teamId===teamId).map(item=>({id:item.id,label:item.name,description:item.description,icon:<FilePlus2/>}))]} onChange={id=>{setTemplateId(id);const template=data.issueTemplates.find(item=>item.id===id);if(!template)return;setTitle(current=>current||template.name);setStateId(template.stateId||defaultState.id);setPriority(template.priority);setAssigneeId(template.assigneeId??data.viewer.id);setProjectId(template.projectId??'');setLabelIds(template.labelIds);if(template.body)descriptionEditorRef.current?.commands.setContent(template.body,{contentType:'markdown'})}}/>}
+            {templateOptions.length>0 && <MiniProperty label="Template" value={templateOptions.find(item=>item.id===templateId)?.name ?? 'Template'} selectedId={templateId} icon={<FilePlus2/>} options={[{id:'',label:'No template',icon:<FilePlus2/>},...templateOptions.map(item=>({id:item.id,label:item.name,description:item.description,icon:<FilePlus2/>}))]} onChange={id=>{setTemplateId(id);const template=templateOptions.find(item=>item.id===id);if(!template)return;setTitle(current=>current||template.name);setStateId(template.stateId||defaultState.id);setPriority(template.priority);setAssigneeId(template.assigneeId??data.viewer.id);setProjectId(template.projectId??'');setLabelIds(template.labelIds);if(template.body)descriptionEditorRef.current?.commands.setContent(template.body,{contentType:'markdown'})}}/>}
             <MiniProperty label="Status" value={state.name} selectedId={stateId} icon={<StatusIcon state={state}/>} options={[...availableStates].sort((a,b) => (a.position??0)-(b.position??0)).map((item,index) => ({ id:item.id,label:item.name,color:item.color,icon:<StatusIcon state={item}/>,shortcut:index < 5 ? String(index+1) : undefined }))} onChange={setStateId}/>
             <MiniProperty label="Priority" value={priority ? priorityNames[priority] : 'Priority'} selectedId={String(priority)} icon={<PriorityIcon priority={priority}/>} options={[0,1,2,3,4].map(item => ({ id:String(item),label:priorityNames[item],icon:<PriorityIcon priority={item}/>,shortcut:String(item) }))} onChange={value => setPriority(Number(value))}/>
             {estimateType!=='notUsed'&&<MiniProperty label="Estimate" value={estimate ? `${estimate} point${estimate===1?'':'s'}` : 'Estimate'} selectedId={String(estimate)} icon={<EstimateGlyph value={estimate}/>} options={estimateValues.map(value=>({id:String(value),label:value?`${value} point${value===1?'':'s'}`:'No estimate',icon:<EstimateGlyph value={value}/>}))} onChange={value=>setEstimate(Number(value))}/>}

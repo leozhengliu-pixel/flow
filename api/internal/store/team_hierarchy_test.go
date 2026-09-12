@@ -70,6 +70,13 @@ func TestTeamHierarchyMembershipAndPrivateBoundary(t *testing.T) {
 	if teamVisibleToUser(projection, "private-child", "parent-member", "member") {
 		t.Fatal("private child should require its own membership")
 	}
+	projection.TeamMembers = append(projection.TeamMembers, domain.TeamMember{TeamID: root.ID, UserID: "parent-owner", Role: "owner"})
+	if teamVisibleToUser(projection, "private-child", "parent-owner", "member") {
+		t.Fatal("parent owner should not bypass a private child's direct membership boundary")
+	}
+	if slices.Contains(visibleIssueTeams(projection, "parent-owner", "member"), "private-child") {
+		t.Fatal("issue visibility should not bypass a private child for parent owners")
+	}
 	guest, _, err := repository.Register(ctx, "Guest", "subteam-guest@example.test", "test-password")
 	if err != nil {
 		t.Fatal(err)

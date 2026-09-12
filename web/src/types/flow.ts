@@ -152,7 +152,7 @@ export interface LabelGroup {
   color: string;
   description?: string;
   scope?: string;
-  resourceType: "issue" | "project";
+  resourceType: LabelResourceType;
   createdAt: string;
   archivedAt?: string;
 }
@@ -906,6 +906,9 @@ export interface FeatureOption {
 }
 export interface FeatureSettings {
   initiativeUpdateSchedule: string;
+  initiativeUpdateFrequencyWeeks?: number;
+  initiativeUpdateWeekday?: number;
+  initiativeUpdateHour?: number;
   customerDefaultTeamId?: UUID;
   customerRevenueFormat: string;
   customerRevenueCurrency: string;
@@ -1694,6 +1697,10 @@ export interface TeamSettings {
   projectUpdatePrompt: string;
   resolvedThreadSummaries: boolean;
   showInitiatives: boolean;
+  inheritIssueEstimation: boolean;
+  inheritWorkflowStatuses: boolean;
+  inheritProjectStatuses: boolean;
+  inheritCycles: boolean;
   parentTeamId?: UUID;
 }
 export interface TeamSettingsMutationInput extends Partial<
