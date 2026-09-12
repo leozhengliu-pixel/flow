@@ -1,1 +1,5 @@
 .due-date-custom .date-time-control{min-width:0;flex:1;height:30px;padding:0;border:0;background:transparent}
+:root[data-theme="light"] .due-date-command{border-color:var(--popover-border);background:var(--theme-surface-2);box-shadow:var(--shadow-control);color:var(--theme-text-primary);border-radius:12px}
+:root[data-theme="light"] .due-date-search,:root[data-theme="light"] .due-date-options button:not(.due-date-remove){color:var(--theme-text-primary)}
+:root[data-theme="light"] .due-date-options button{height:32px;padding:0 18px 0 14px}
+:root[data-theme="light"] .due-date-custom input,:root[data-theme="light"] .flow-date input,:root[data-theme="light"] .due-property input,:root[data-theme="light"] .mini-date input,:root[data-theme="light"] .issue-action-dialog .date-time-control{color:var(--theme-text-primary);color-scheme:light}

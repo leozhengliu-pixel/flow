@@ -81,7 +81,7 @@ export function ProjectsDisplayMenu({ labelGroups = [], onChange, onReset, onSet
         aria-selected={settings.layout === id}
         className={settings.layout === id ? 'is-active' : ''}
         key={id}
-        onClick={() => set('layout', id)}
+        onClick={() => onChange({ ...settings, layout: id, ...(id === 'board' ? { showEmptyGroups: true } : {}) })}
         role="tab"
         type="button"
       ><Icon aria-hidden="true" size={13} />{label}</button>)}

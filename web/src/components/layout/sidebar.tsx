@@ -34,6 +34,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type MutableRefObject,
   type ReactElement,
   type ReactNode,
 } from "react";
@@ -43,12 +44,11 @@ import { NavLink, useLocation } from "react-router-dom";
 import { parseAppRoute } from '@/lib/app-routes';
 import { sidebarRoutePath } from '@/lib/sidebar-route';
 import { toast } from "sonner";
+import { favoriteResourceKey, patchFavorite, toggleFavoriteFor } from "@/lib/favorites";
 import {
-  addFavorite,
   addSubscription,
   createFavoriteFolder,
   deleteFavoriteFolder,
-  removeFavorite,
   removeSubscription,
   setTeamMembership,
   updateFavorite,
@@ -175,7 +175,6 @@ export function Sidebar({
   onSwitchWorkspace,
   onCreateWorkspace,
   onLogout,
-  onReload,
 }: {
   account: AccountBootstrap;
   data: BootstrapData;
@@ -189,7 +188,6 @@ export function Sidebar({
   onSwitchWorkspace: (workspace: Workspace) => void;
   onCreateWorkspace: () => void;
   onLogout: () => Promise<void>;
-  onReload?: () => Promise<void>;
 }) {
   const layout = useSidebarLayout(open, onOpenChange);
   const currentLocation = useLocation();
@@ -199,9 +197,18 @@ export function Sidebar({
   const workspaceSlug = data.workspace.urlKey;
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [favorites, setFavorites] = useState<Favorite[]>(() =>
-    data.favorites.filter((item) => item.userId === data.viewer.id),
+  const favorites = useMemo(
+    () => (data.favorites ?? []).filter((item) => item.userId === data.viewer.id),
+    [data.favorites, data.viewer.id],
   );
+  const seenFavoriteKeys = useRef<Set<string>>(new Set());
+  const seededFavoriteWorkspace = useRef("");
+  if (seededFavoriteWorkspace.current !== data.workspace.id) {
+    seededFavoriteWorkspace.current = data.workspace.id;
+    seenFavoriteKeys.current = new Set(
+      favorites.map((item) => favoriteResourceKey(item.resourceType, item.resourceId)),
+    );
+  }
   const [favoriteFolders, setFavoriteFolders] = useState<FavoriteFolder[]>(() =>
     (data.favoriteFolders ?? []).filter(
       (item) => item.userId === data.viewer.id,
@@ -228,13 +235,6 @@ export function Sidebar({
   const favoriteTeamIds = useMemo(() => new Set(favorites.filter(item => item.userId === data.viewer.id && item.resourceType === "team").map(item => item.resourceId)), [data.viewer.id, favorites]);
   const subscriptionByTeamId = useMemo(() => new Map(data.subscriptions.filter(item => item.userId === data.viewer.id && item.resourceType === "team").map(item => [item.resourceId, item])), [data.subscriptions, data.viewer.id]);
 
-  useEffect(
-    () =>
-      setFavorites(
-        data.favorites.filter((item) => item.userId === data.viewer.id),
-      ),
-    [data.favorites, data.viewer.id],
-  );
   useEffect(
     () =>
       setFavoriteFolders(
@@ -322,36 +322,11 @@ export function Sidebar({
   const reloadFavorites = async () => {
     await refreshResourcePreferences(data.workspace.urlKey);
   };
-  const toggleSidebarFavorite = async (
+  const toggleSidebarFavorite = (
     resourceType: string,
     resourceId: string,
   ) => {
-    const existing = favorites.find(
-      (item) =>
-        item.resourceType === resourceType && item.resourceId === resourceId,
-    );
-    try {
-      if (existing) {
-        setFavorites((items) =>
-          items.filter((item) => item.id !== existing.id),
-        );
-        await removeFavorite(resourceType, resourceId);
-      } else {
-        const created = await addFavorite(resourceType, resourceId);
-        setFavorites((items) => [
-          created,
-          ...items.filter((item) => item.id !== created.id),
-        ]);
-      }
-      await reloadFavorites();
-    } catch (error) {
-      setFavorites(
-        data.favorites.filter((item) => item.userId === data.viewer.id),
-      );
-      toast.error(
-        error instanceof Error ? error.message : "Could not update favorite",
-      );
-    }
+    void toggleFavoriteFor(data, resourceType, resourceId);
   };
   const moveSidebarFavorite = async (
     favorite: Favorite,
@@ -368,30 +343,21 @@ export function Sidebar({
         (maximum, item) => Math.max(maximum, item.position),
         -1,
       ) + 1;
-    const previous = favorites;
-    setFavorites((items) =>
-      items.map((item) =>
-        item.id === favorite.id
-          ? {
-              ...item,
-              folderId: folderId || undefined,
-              position: targetPosition,
-            }
-          : item,
-      ),
-    );
+    const next = {
+      ...favorite,
+      folderId: folderId || undefined,
+      position: targetPosition,
+    };
+    patchFavorite(data.workspace.urlKey, next);
     try {
       const updated = await updateFavorite(
         favorite.resourceType,
         favorite.resourceId,
         { folderId, position: targetPosition },
       );
-      setFavorites((items) =>
-        items.map((item) => (item.id === updated.id ? updated : item)),
-      );
-      await reloadFavorites();
+      patchFavorite(data.workspace.urlKey, updated);
     } catch (error) {
-      setFavorites(previous);
+      patchFavorite(data.workspace.urlKey, favorite);
       toast.error(
         error instanceof Error ? error.message : "Could not update favorite",
       );
@@ -462,17 +428,15 @@ export function Sidebar({
     setFavoriteFolders((items) =>
       items.filter((item) => item.id !== folder.id),
     );
-    setFavorites((items) =>
-      items.map((item) =>
-        item.folderId === folder.id ? { ...item, folderId: undefined } : item,
-      ),
-    );
+    for (const item of previousFavorites) {
+      if (item.folderId === folder.id) patchFavorite(data.workspace.urlKey, { ...item, folderId: undefined });
+    }
     try {
       await deleteFavoriteFolder(folder.id);
       await reloadFavorites();
     } catch (error) {
       setFavoriteFolders(previousFolders);
-      setFavorites(previousFavorites);
+      for (const item of previousFavorites) patchFavorite(data.workspace.urlKey, item);
       toast.error(
         error instanceof Error
           ? error.message
@@ -725,6 +689,7 @@ export function Sidebar({
               data={data}
               favorites={favorites}
               folders={favoriteFolders}
+              seenKeys={seenFavoriteKeys}
               workspaceSlug={workspaceSlug}
               onCreateFolder={createSidebarFolder}
               onMoveFavorite={moveSidebarFavorite}
@@ -877,10 +842,15 @@ export function Sidebar({
   );
 }
 
+function favoriteItemKey(item: FavoriteDescriptor) {
+  return favoriteResourceKey(item.favorite.resourceType, item.favorite.resourceId);
+}
+
 export function FavoritesSection({
   data,
   favorites,
   folders,
+  seenKeys,
   onCreateFolder,
   onMoveFavorite,
   onMoveFolder,
@@ -893,6 +863,7 @@ export function FavoritesSection({
   data: BootstrapData;
   favorites: Favorite[];
   folders: FavoriteFolder[];
+  seenKeys?: MutableRefObject<Set<string>>;
   onCreateFolder: (name: string) => Promise<void>;
   onMoveFavorite: (
     favorite: Favorite,
@@ -928,10 +899,15 @@ export function FavoritesSection({
   const orderedFolders = [...folders].sort(
     (a, b) => a.position - b.position || a.name.localeCompare(b.name),
   );
+  const previousFavoriteCount = useRef(favorites.length);
   useEffect(
     () => persistPreference("flow.sidebar.section.favorites", expanded),
     [expanded],
   );
+  useEffect(() => {
+    if (favorites.length > previousFavoriteCount.current) setExpanded(true);
+    previousFavoriteCount.current = favorites.length;
+  }, [favorites.length]);
   useEffect(
     () =>
       setOpenFolders(
@@ -954,7 +930,7 @@ export function FavoritesSection({
   ) => {
     event.preventDefault();
     const id = event.dataTransfer.getData("application/x-flow-favorite");
-    const favorite = favorites.find((item) => item.id === id);
+    const favorite = favorites.find((item) => item.id === id || favoriteResourceKey(item.resourceType, item.resourceId) === id);
     if (!favorite) return;
     const siblings = favorites.filter(
       (item) => (item.folderId ?? "") === folderId && item.id !== favorite.id,
@@ -1041,13 +1017,15 @@ export function FavoritesSection({
               }}
             />
           )}
-          {descriptors
-            .filter((item) => !item.favorite.folderId)
-            .map((item) => (
+          <AnimatedList
+            items={descriptors.filter((item) => !item.favorite.folderId)}
+            getKey={favoriteItemKey}
+            seenKeys={seenKeys}
+          >
+            {(item) => (
               <FavoriteLink
                 item={item}
                 folders={orderedFolders}
-                key={item.favorite.id}
                 onDropFavorite={(event) =>
                   dropFavorite(event, "", item.favorite.position)
                 }
@@ -1055,7 +1033,8 @@ export function FavoritesSection({
                 onNavigate={onNavigate}
                 onRemove={onRemoveFavorite}
               />
-            ))}
+            )}
+          </AnimatedList>
           {orderedFolders.map((folder) => {
             const folderItems = descriptors.filter(
               (item) => item.favorite.folderId === folder.id,
@@ -1156,11 +1135,11 @@ export function FavoritesSection({
                 </div>
                 {folderOpen && (
                   <div className="sidebar-favorite-folder-items">
-                    {folderItems.map((item) => (
+                    <AnimatedList items={folderItems} getKey={favoriteItemKey} seenKeys={seenKeys}>
+                      {(item) => (
                       <FavoriteLink
                         item={item}
                         folders={orderedFolders}
-                        key={item.favorite.id}
                         onDropFavorite={(event) =>
                           dropFavorite(event, folder.id, item.favorite.position)
                         }
@@ -1168,7 +1147,8 @@ export function FavoritesSection({
                         onNavigate={onNavigate}
                         onRemove={onRemoveFavorite}
                       />
-                    ))}
+                      )}
+                    </AnimatedList>
                   </div>
                 )}
               </div>
@@ -1377,7 +1357,7 @@ function FavoriteLink({
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData(
           "application/x-flow-favorite",
-          item.favorite.id,
+          favoriteResourceKey(item.favorite.resourceType, item.favorite.resourceId),
         );
       }}
       to={item.href}
@@ -2935,4 +2915,4 @@ function menuMatches(query: string, label: string) {
     !query.trim() || label.toLowerCase().includes(query.trim().toLowerCase())
   );
 }
-import { AnimatedCollapse } from '@/components/ui/motion';
+import { AnimatedCollapse, AnimatedList } from '@/components/ui/motion';

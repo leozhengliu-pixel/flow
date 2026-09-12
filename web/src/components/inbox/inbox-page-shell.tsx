@@ -34,6 +34,7 @@ export interface InboxPageShellProps {
   onDeleteAll: () => void
   onDeleteAllRead: () => void
   onDeleteAllReadCompleted: () => void
+  onMarkAllRead?: () => void
   onOpenSettings?: () => void
   onOpenSidebar?: () => void
   activeTab?: InboxTab
@@ -60,6 +61,7 @@ export function InboxPageShell({
   onDeleteAll,
   onDeleteAllRead,
   onDeleteAllReadCompleted,
+  onMarkAllRead,
   onOpenSettings,
   onOpenSidebar,
   activeTab = 'all',
@@ -147,6 +149,7 @@ export function InboxPageShell({
           onDeleteAll={onDeleteAll}
           onDeleteAllRead={onDeleteAllRead}
           onDeleteAllReadCompleted={onDeleteAllReadCompleted}
+          onMarkAllRead={onMarkAllRead}
           onOpenSettings={onOpenSettings}
           onOpenSidebar={onOpenSidebar}
           activeTab={activeTab}
@@ -216,6 +219,7 @@ export function InboxHeader({
   onDeleteAll,
   onDeleteAllRead,
   onDeleteAllReadCompleted,
+  onMarkAllRead,
   onOpenSettings,
   onOpenSidebar,
 }: InboxHeaderProps) {
@@ -235,6 +239,7 @@ export function InboxHeader({
         <h2>Inbox</h2>
         <NotificationActionsMenu
           pending={bulkPending}
+          onMarkAllRead={onMarkAllRead}
           onDeleteAll={onDeleteAll}
           onDeleteAllRead={onDeleteAllRead}
           onDeleteAllReadCompleted={onDeleteAllReadCompleted}
@@ -269,19 +274,30 @@ function UnreadFilterIcon() {
 
 function NotificationActionsMenu({
   pending = false,
+  onMarkAllRead,
   onDeleteAll,
   onDeleteAllRead,
   onDeleteAllReadCompleted,
   onOpenSettings,
 }: Pick<
   InboxPageShellProps,
-  'onDeleteAll' | 'onDeleteAllRead' | 'onDeleteAllReadCompleted' | 'onOpenSettings'
+  'onMarkAllRead' | 'onDeleteAll' | 'onDeleteAllRead' | 'onDeleteAllReadCompleted' | 'onOpenSettings'
 > & { pending?: boolean }) {
   useInboxShortcut('Backspace', event => {
     if (!event.shiftKey) return false
     onDeleteAllRead()
     return true
   })
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.key.toLowerCase() !== 'u' || !event.altKey || event.metaKey || event.ctrlKey || isEditableTarget(event.target)) return
+      if (!onMarkAllRead) return
+      event.preventDefault()
+      onMarkAllRead()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onMarkAllRead])
 
   return (
     <DropdownMenu.Root>
@@ -297,6 +313,10 @@ function NotificationActionsMenu({
           align="start"
           sideOffset={4}
         >
+          <InboxMenuItem disabled={pending || !onMarkAllRead} icon={<MarkAllReadIcon />} shortcut="⌥U" onSelect={() => onMarkAllRead?.()}>
+            Mark all as read
+          </InboxMenuItem>
+          <DropdownMenu.Separator className="flow-inbox-menu__separator" />
           <InboxMenuItem disabled={pending} icon={<DeleteInboxIcon />} onSelect={onDeleteAll}>
             Delete all
           </InboxMenuItem>
@@ -507,6 +527,10 @@ function MoreIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z" /></svg>
 }
 
+
+function MarkAllReadIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M3.22 8.28a.75.75 0 0 1 1.06-1.06L6.5 9.44l5.22-5.22a.75.75 0 1 1 1.06 1.06l-5.75 5.75a.75.75 0 0 1-1.06 0L3.22 8.28Z"/></svg>
+}
 
 function DeleteInboxIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true"><path fillRule="evenodd" clipRule="evenodd" d="M7.25 1a.75.75 0 0 1 0 1.5H5.18a1 1 0 0 0-.956.706L2.75 8h1.623c.955 0 1.846.477 2.376 1.272a.51.51 0 0 0 .427.228h1.648a.51.51 0 0 0 .427-.228A2.856 2.856 0 0 1 11.627 8H14.5l.323.009c.117.38.177.777.177 1.176V11.5a3.5 3.5 0 0 1-3.5 3.5h-7A3.5 3.5 0 0 1 1 11.5V9.185c0-.299.033-.597.1-.888l.077-.288L2.79 2.765A2.5 2.5 0 0 1 5.18 1h2.07ZM2.5 9.5v2a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-2h-1.873c-.397 0-.77.174-1.025.47l-.103.134A2.014 2.014 0 0 1 8.824 11H7.176a2.014 2.014 0 0 1-1.675-.896l-.103-.134a1.356 1.356 0 0 0-1.025-.47H2.5Zm11.22-8.28a.75.75 0 0 1 1.06 1.06L13.561 3.5l1.22 1.22a.75.75 0 1 1-1.061 1.06L12.5 4.561l-1.22 1.22a.75.75 0 1 1-1.06-1.061l1.219-1.22-1.22-1.22a.75.75 0 1 1 1.061-1.06l1.22 1.219 1.22-1.22Z" /></svg>

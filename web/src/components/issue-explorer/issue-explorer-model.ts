@@ -8,9 +8,10 @@ import type { MyIssuesDisplayOptions, MyIssuesGrouping } from '@/components/my-i
 import type { TeamIssuesRouteView } from '@/lib/app-routes'
 import { filterValues } from '@/components/my-issues/my-issues-filter-types'
 import { labelsForResource, setGroupedLabelSelected, toggleGroupedLabelIds } from '@/lib/labels'
+import { milestoneIssueProgress } from '@/components/issue/milestone-progress'
 
 export const ISSUE_FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = {
-  ai:'AI filter',advanced:'Advanced filter',status:'Status',assignee:'Assignee',agent:'Agent',agentSession:'Agent Session',creator:'Creator',priority:'Priority',labels:'Labels',relations:'Relations',suggestedLabel:'Suggested label',dates:'Dates',project:'Project',projectProperties:'Project properties',initiative:'Initiative',cycle:'Cycle',addedToCycle:'Added to cycle',releases:'Releases',subscribers:'Subscribers',externalSource:'External source',autoClosed:'Auto-closed',content:'Content',links:'Links',template:'Template',
+  ai:'AI filter',advanced:'Advanced filter',status:'Status',assignee:'Assignee',agent:'Agent',agentSession:'Agent Session',creator:'Creator',priority:'Priority',labels:'Labels',relations:'Relations',suggestedLabel:'Suggested label',dates:'Dates',projectMilestone:'Project milestone',project:'Project',projectProperties:'Project properties',initiative:'Initiative',cycle:'Cycle',addedToCycle:'Added to cycle',releases:'Releases',customers:'Customers',subscribers:'Subscribers',externalSource:'External source',autoClosed:'Auto-closed',content:'Content',links:'Links',template:'Template',
 }
 
 const PRIORITIES: MyIssuesContextOption[] = ['No priority', 'Urgent', 'High', 'Medium', 'Low'].map((label, id) => ({
@@ -63,7 +64,11 @@ export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: 
     projectPriority:fullProject?.priority,
     projectLabelIds:fullProject?.labelIds??[],
     projectLeadId:fullProject?.lead?.id,
+    projectMilestoneId: issue.projectMilestoneId,
     projectMilestoneNames:fullProject?.milestones?.map(milestone=>milestone.name)??[],
+    milestoneProgress: issue.projectMilestoneId && fullProject ? milestoneIssueProgress(data?.issues ?? issues, fullProject.id, issue.projectMilestoneId) : undefined,
+    rawMilestoneDate: fullProject?.milestones?.find(milestone => milestone.id === issue.projectMilestoneId)?.targetDate,
+    ...issueCustomerFields(issue.id, index),
     releaseIds:issueReleases.map(release=>release.id),releasePipelineIds:issueReleases.map(release=>release.pipelineId).filter((id):id is string=>Boolean(id)),releaseStages:issueReleases.map(release=>release.stage).filter((stage):stage is string=>Boolean(stage)),releaseStatuses:issueReleases.map(release=>release.status),hasReleasedRelease:issueReleases.some(release=>Boolean(release.releasedAt)),
     releaseCount: issueReleases.length,
     sla: issueSla ? { ...issueSla, ruleName: slaRule?.name } : undefined,
@@ -119,6 +124,36 @@ function buildExplorerDataIndex(data: BootstrapData) {
     reviewsByIssueId,
     slaByIssueId: new Map((data.issueSlas ?? []).filter(sla => sla.status !== 'removed').map(sla => [sla.issueId, sla])),
     slaRulesById: new Map((data.slaRules ?? []).map(rule => [rule.id, rule])),
+    ...indexIssueCustomers(data),
+  }
+}
+
+function indexIssueCustomers(data: BootstrapData) {
+  const customersById = new Map((data.customers ?? []).map(customer => [customer.id, customer]))
+  const customersByIssueId = new Map<string, NonNullable<BootstrapData['customers']>>()
+  const unknownCustomerIssueIds = new Set<string>()
+  for (const request of data.customerRequests ?? []) {
+    if (!request.issueId || request.archivedAt) continue
+    const customer = customersById.get(request.customerId)
+    if (!customer) { unknownCustomerIssueIds.add(request.issueId); continue }
+    const current = customersByIssueId.get(request.issueId) ?? []
+    if (!current.some(item => item.id === customer.id)) current.push(customer)
+    customersByIssueId.set(request.issueId, current)
+  }
+  return { customersByIssueId, unknownCustomerIssueIds }
+}
+
+function issueCustomerFields(issueId: string, index?: ReturnType<typeof buildExplorerDataIndex>) {
+  const customers = index?.customersByIssueId.get(issueId) ?? []
+  return {
+    customerIds: customers.map(customer => customer.id),
+    customerNames: customers.map(customer => customer.name),
+    hasUnknownCustomer: index?.unknownCustomerIssueIds.has(issueId) ?? false,
+    customerOwnerIds: customers.map(customer => customer.ownerId ?? ''),
+    customerStatuses: customers.map(customer => customer.status).filter(Boolean),
+    customerTiers: customers.map(customer => customer.tier ?? '').filter(Boolean),
+    customerRevenues: customers.map(customer => customer.annualRevenue ?? 0),
+    customerSizes: customers.map(customer => customer.size ?? 0),
   }
 }
 
@@ -211,11 +246,13 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
     dates: dateFilterCategories(issues),
     labels: issueLabels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined, count: labelCounts.get(label.id) ?? 0, kind: 'labels' as const })),
     project: [{ id: '', label: 'No project', count: noProject, kind: 'project' as const }, ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, count: projectCounts.get(project.id) ?? 0, kind: 'project' as const }))],
+    projectMilestone: projectMilestoneFilterOptions(data, issues),
     projectProperties:projectPropertyFilterOptions(data,issues),
     initiative:[{id:'',label:'No initiative',count:noInitiative},...data.initiatives.map(initiative=>({id:initiative.id,label:initiative.name,count:initiativeCounts.get(initiative.id) ?? 0}))],
     cycle: [{ id: '', label: 'No cycle', count: noCycle, kind: 'cycle' as const }, ...data.cycles.map(cycle => ({ id: cycle.id, teamId: cycle.teamId, label: cycle.name, count: cycleCounts.get(cycle.id) ?? 0, kind: 'cycle' as const }))],
     addedToCycle:[{id:'planned',label:'Planned',count:addedToCycleCounts.get('planned') ?? 0},{id:'during',label:'During cycle',count:addedToCycleCounts.get('during') ?? 0},{id:'after',label:'After cycle',count:addedToCycleCounts.get('after') ?? 0}],
     releases: releaseFilterCategories(data,issues),
+    customers: customerFilterOptions(data, issues),
     subscribers: [{ id: '', label: 'No subscribers', count: noSubscribers, kind: 'subscribers' as const }, ...data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: subscriberCounts.get(user.id) ?? 0, kind: 'subscribers' as const }))],
     externalSource:[{id:'',label:'No external source',count:noExternalSource},...[...externalSourceCounts].map(([source,count])=>({id:source,label:source,count}))],
     autoClosed:[{id:'true',label:'Auto-closed',count:autoClosed},{id:'false',label:'Not auto-closed',count:notAutoClosed}],
@@ -242,7 +279,8 @@ export function explorerFilterOptions(field: MyIssuesFilterKey, options: Explore
     {id:'advanced-labels',label:'Labels',children:options.labels.map(option=>({...option,id:`labels:${option.id}`}))},
     {id:'advanced-project',label:'Project',children:options.project.map(option=>({...option,id:`project:${option.id}`}))},
   ]}]
-  if (field === 'status'||field==='assignee'||field==='agent'||field==='agentSession'||field==='creator'||field==='priority'||field==='labels'||field==='relations'||field==='suggestedLabel'||field==='dates'||field==='project'||field==='projectProperties'||field==='initiative'||field==='cycle'||field==='addedToCycle'||field==='releases'||field==='subscribers'||field==='externalSource'||field==='autoClosed'||field==='content'||field==='links'||field==='template') return options[field]
+  if (field === 'labels') return [{ id: '', label: 'No labels', kind: 'labels' as const }, ...options.labels]
+  if (field === 'status'||field==='assignee'||field==='agent'||field==='agentSession'||field==='creator'||field==='priority'||field==='relations'||field==='suggestedLabel'||field==='dates'||field==='projectMilestone'||field==='project'||field==='projectProperties'||field==='initiative'||field==='cycle'||field==='addedToCycle'||field==='releases'||field==='customers'||field==='subscribers'||field==='externalSource'||field==='autoClosed'||field==='content'||field==='links'||field==='template') return options[field]
 }
 
 export function explorerBulkOptions(action: MyIssuesBulkAction, options: ExplorerPropertyOptions): MyIssuesBulkActionOption[] | undefined {
@@ -349,11 +387,13 @@ export function matchesExplorerFilter(issue: MyIssuesRowData, filter: MyIssuesAp
   else if (filter.field === 'labels') matched = Boolean(issue.labels?.some(label => values.includes(label.id)))
   else if (filter.field === 'suggestedLabel') matched = values.includes('') ? !issue.suggestedLabelIds?.length : Boolean(issue.suggestedLabelIds?.some(id => values.includes(id)))
   else if (filter.field === 'project') matched = values.includes(issue.project?.id ?? '')
+  else if (filter.field === 'projectMilestone') matched = values.includes(issue.projectMilestoneId ?? '')
   else if (filter.field === 'projectProperties') matched = matchesProjectProperties(issue, values)
   else if (filter.field === 'initiative') matched = values.includes('') ? !issue.initiativeIds?.length : Boolean(issue.initiativeIds?.some(id => values.includes(id)))
   else if (filter.field === 'cycle') matched = values.includes(issue.cycleId ?? '')
   else if (filter.field === 'addedToCycle') matched = values.includes(issue.addedToCycle ?? '')
   else if (filter.field === 'releases') matched = matchesReleaseFilter(issue, values)
+  else if (filter.field === 'customers') matched = matchesCustomerFilter(issue, values)
   else if (filter.field === 'dates') matched = values.some(value => matchesDateFilter(issue, value))
   else if (filter.field === 'subscribers') matched = values.includes('') ? !issue.subscriberIds?.length : Boolean(issue.subscriberIds?.some(id => values.includes(id)))
   else if (filter.field === 'relations') matched = values.includes('') ? !issue.relationTypes?.length : Boolean(issue.relationTypes?.some(type => values.includes(type)))
@@ -372,6 +412,24 @@ function matchesProjectProperties(issue: MyIssuesRowData, values: string[]) {
 }
 function matchesReleaseFilter(issue: MyIssuesRowData, values: string[]) {
   return values.some(value => value === 'no-releases' ? !issue.releaseIds?.length : value === 'released-any' ? Boolean(issue.hasReleasedRelease) : value.startsWith('release:') ? issue.releaseIds?.includes(value.slice(8)) : value.startsWith('release-pipeline:') ? issue.releasePipelineIds?.includes(value.slice(17)) : value.startsWith('release-stage:') ? issue.releaseStages?.includes(value.slice(14)) : value.startsWith('release-stage-type:') ? issue.releaseStatuses?.includes(value.slice(19)) : false)
+}
+function matchesCustomerFilter(issue: MyIssuesRowData, values: string[]) {
+  return values.some(value => {
+    if (value === 'customer:') return Boolean(issue.hasUnknownCustomer)
+    if (value.startsWith('customer:')) return issue.customerIds?.includes(value.slice(9))
+    if (value === 'customer-count:0') return !issue.customerIds?.length && !issue.hasUnknownCustomer
+    if (value === 'customer-count:1') return (issue.customerIds?.length ?? 0) + (issue.hasUnknownCustomer ? 1 : 0) === 1
+    if (value === 'customer-count:2+') return (issue.customerIds?.length ?? 0) + (issue.hasUnknownCustomer ? 1 : 0) >= 2
+    if (value === 'customer-owner:') return Boolean(issue.customerIds?.length) && !(issue.customerOwnerIds ?? []).some(Boolean)
+    if (value.startsWith('customer-owner:')) return issue.customerOwnerIds?.includes(value.slice(15))
+    if (value.startsWith('customer-status:')) return issue.customerStatuses?.includes(value.slice(16))
+    if (value.startsWith('customer-tier:')) return issue.customerTiers?.includes(value.slice(14))
+    if (value === 'customer-revenue:') return Boolean(issue.customerIds?.length) && !(issue.customerRevenues ?? []).some(amount => amount > 0)
+    if (value === 'customer-revenue:any') return (issue.customerRevenues ?? []).some(amount => amount > 0)
+    if (value === 'customer-size:') return Boolean(issue.customerIds?.length) && !(issue.customerSizes ?? []).some(size => size > 0)
+    if (value === 'customer-size:any') return (issue.customerSizes ?? []).some(size => size > 0)
+    return false
+  })
 }
 function matchesDateFilter(issue: MyIssuesRowData, value: string) {
   const now = Date.now(); const age = (input: string | undefined, days: number) => Boolean(input && Date.parse(input) >= now - days * 86_400_000)
@@ -514,6 +572,63 @@ function releaseFilterCategories(data:BootstrapData,issues:Issue[]):MyIssuesFilt
 ]}
 
 
+function projectMilestoneFilterOptions(data: BootstrapData, issues: Issue[]): MyIssuesFilterOption[] {
+  const counts = new Map<string, number>()
+  let noMilestone = 0
+  for (const issue of issues) {
+    if (issue.projectMilestoneId) incrementCount(counts, issue.projectMilestoneId)
+    else noMilestone += 1
+  }
+  const projectIds = new Set(issues.map(issue => issue.project?.id).filter((id): id is string => Boolean(id)))
+  const milestones = data.projects
+    .filter(project => !projectIds.size || projectIds.has(project.id))
+    .flatMap(project => project.milestones ?? [])
+  const seen = new Set<string>()
+  const options: MyIssuesFilterOption[] = [{ id: '', label: 'No milestone', count: noMilestone, kind: 'projectMilestone' }]
+  for (const milestone of milestones) {
+    if (seen.has(milestone.id)) continue
+    seen.add(milestone.id)
+    options.push({ id: milestone.id, label: milestone.name, count: counts.get(milestone.id) ?? 0, kind: 'projectMilestone' })
+  }
+  return options
+}
+function customerFilterOptions(data: BootstrapData, issues: Issue[]): MyIssuesFilterOption[] {
+  const index = explorerDataIndex(data)
+  const rows = issues.map(issue => issueCustomerFields(issue.id, index))
+  const count = (predicate: (row: ReturnType<typeof issueCustomerFields>) => boolean) => rows.filter(predicate).length
+  const statusCatalog = data.customerStatuses?.length
+    ? data.customerStatuses.filter(status => !status.archivedAt)
+    : uniqueStrings((data.customers ?? []).map(customer => customer.status)).map(status => ({ id: status, name: status, color: undefined as string | undefined }))
+  const tierCatalog = data.customerTiers?.length
+    ? data.customerTiers.filter(tier => !tier.archivedAt)
+    : uniqueStrings((data.customers ?? []).map(customer => customer.tier)).map(tier => ({ id: tier, name: tier, color: undefined as string | undefined }))
+  return [
+    { id: 'customer-name', label: 'Customer name', kind: 'customerNameCategory', children: [
+      { id: 'customer:', label: 'Unknown customer', kind: 'customerName', filterLabel: 'Customer name', count: count(row => row.hasUnknownCustomer) },
+      ...(data.customers ?? []).map(customer => ({ id: `customer:${customer.id}`, label: customer.name, kind: 'customerName' as const, filterLabel: 'Customer name', count: count(row => row.customerIds.includes(customer.id)) })),
+    ]},
+    { id: 'customer-count', label: 'Customer count', kind: 'customerCountCategory', children: [
+      { id: 'customer-count:0', label: 'No customers', kind: 'customerCountCategory', filterLabel: 'Customer count', count: count(row => !row.customerIds.length && !row.hasUnknownCustomer) },
+      { id: 'customer-count:1', label: '1 customer', kind: 'customerCountCategory', filterLabel: 'Customer count', count: count(row => row.customerIds.length + (row.hasUnknownCustomer ? 1 : 0) === 1) },
+      { id: 'customer-count:2+', label: '2+ customers', kind: 'customerCountCategory', filterLabel: 'Customer count', count: count(row => row.customerIds.length + (row.hasUnknownCustomer ? 1 : 0) >= 2) },
+    ]},
+    { id: 'customer-owner', label: 'Customer owner', kind: 'customerOwnerCategory', children: [
+      { id: 'customer-owner:', label: 'No owner', kind: 'customerOwner', filterLabel: 'Customer owner', count: count(row => row.customerIds.length > 0 && !row.customerOwnerIds.some(Boolean)) },
+      { id: `customer-owner:${data.viewer.id}`, label: 'Current user', kind: 'customerOwner', filterLabel: 'Customer owner', avatarUrl: data.viewer.avatarUrl, count: count(row => row.customerOwnerIds.includes(data.viewer.id)) },
+      ...data.users.filter(user => user.active && user.id !== data.viewer.id).map(user => ({ id: `customer-owner:${user.id}`, label: user.displayName, kind: 'customerOwner' as const, filterLabel: 'Customer owner', avatarUrl: user.avatarUrl, count: count(row => row.customerOwnerIds.includes(user.id)) })),
+    ]},
+    { id: 'customer-status', label: 'Customer status', kind: 'customerStatusCategory', children: statusCatalog.map(status => ({ id: `customer-status:${status.id}`, label: status.name, color: status.color, kind: 'customerStatus' as const, filterLabel: 'Customer status', count: count(row => row.customerStatuses.includes(status.id) || row.customerStatuses.includes(status.name)) })) },
+    { id: 'customer-tier', label: 'Customer tier', kind: 'customerTierCategory', children: tierCatalog.map(tier => ({ id: `customer-tier:${tier.id}`, label: tier.name, color: tier.color, kind: 'customerTier' as const, filterLabel: 'Customer tier', count: count(row => row.customerTiers.includes(tier.id) || row.customerTiers.includes(tier.name)) })) },
+    { id: 'customer-revenue', label: 'Customer revenue', kind: 'customerRevenueCategory', children: [
+      { id: 'customer-revenue:', label: 'No revenue', kind: 'customerRevenueCategory', filterLabel: 'Customer revenue', count: count(row => row.customerIds.length > 0 && !row.customerRevenues.some(amount => amount > 0)) },
+      { id: 'customer-revenue:any', label: 'Has revenue', kind: 'customerRevenueCategory', filterLabel: 'Customer revenue', count: count(row => row.customerRevenues.some(amount => amount > 0)) },
+    ]},
+    { id: 'customer-size', label: 'Customer size', kind: 'customerSizeCategory', children: [
+      { id: 'customer-size:', label: 'No size', kind: 'customerSizeCategory', filterLabel: 'Customer size', count: count(row => row.customerIds.length > 0 && !row.customerSizes.some(size => size > 0)) },
+      { id: 'customer-size:any', label: 'Has size', kind: 'customerSizeCategory', filterLabel: 'Customer size', count: count(row => row.customerSizes.some(size => size > 0)) },
+    ]},
+  ]
+}
 function uniqueStrings(values:(string|undefined)[]){return [...new Set(values.filter((value):value is string=>Boolean(value)))]}
 function relationFilterOptions(issues:Issue[]):MyIssuesFilterOption[]{const count=(predicate:(issue:Issue)=>boolean)=>issues.filter(predicate).length;return[
   {id:'parent_of',label:'Parent issues',count:count(issue=>issue.relations.some(relation=>relation.type==='parent_of'))},

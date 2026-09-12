@@ -113,7 +113,7 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
         value={draft}
         onChange={event => setDraft(event.target.value)}
         onKeyDown={event => {
-          if (event.isComposing || event.nativeEvent.isComposing || event.keyCode === 229) return
+          if (event.nativeEvent.isComposing || event.keyCode === 229) return
           if (event.key === 'Enter') {
             event.preventDefault()
             if (inputPending) runSearch()
@@ -139,7 +139,7 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
       {!normalizedQuery && resultsReady && !response.history.length && !results.length && <SearchEmpty/>}
       {loading && !inputPending && <SearchLoading/>}
       {error && !inputPending && <div className="workspace-search-state"><strong>{t('Search unavailable')}</strong><span>{t(error)}</span><button type="button" onClick={() => setRetry(value => value + 1)}>{t('Try again')}</button></div>}
-      {resultsReady && normalizedQuery && response.results.length === 0 && <div className="workspace-search-state"><Search size={20}/><strong>{t('No results found')}</strong><span>{t('Try a different search term.')}</span></div>}
+      {resultsReady && normalizedQuery && response.results.length === 0 && <div className="workspace-search-state workspace-search-no-results"><strong>{t('No results found for "{query}"').replace('{query}', normalizedQuery)}</strong></div>}
       {resultsReady && results.length > 0 && <div className="workspace-search-results" ref={resultListRef}>
         <h2>{t(normalizedQuery ? 'Search results' : 'Recently viewed')}</h2>
         {results.map((result, index) => {

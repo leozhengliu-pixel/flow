@@ -44,14 +44,14 @@ function SaveViewIcon() {
 }
 
 function EmptyViewsIllustration() {
-  return <svg aria-label="Empty custom views list illustration" fill="none" viewBox="15 14 92 112">
-    <path d="M20 110.4a2 2 0 0 1-1.26-1.85v-2.5a3 3 0 0 1 2.7-2.99L105 94.75v4.4a2 2 0 0 1-1 1.73l-41.78 24a6 6 0 0 1-5.22.37l-37-14.84Z" fill="var(--views-empty-fill)" stroke="var(--views-empty-stroke-1)" strokeWidth="1.5" />
-    <path d="M19.88 106.41a2 2 0 0 1-.27-3.6L61.8 78.5a6 6 0 0 1 5.18-.4l37.13 14.5a2 2 0 0 1 .27 3.6L62.2 120.5a6 6 0 0 1-5.18.4l-37.13-14.5Z" fill="var(--views-empty-fill)" stroke="var(--views-empty-stroke-1)" strokeWidth="1.5" />
-    <path d="M20 99.46a2 2 0 0 1-1.26-1.86v-2.5a3 3 0 0 1 2.7-2.99L105 83.8v4.4a2 2 0 0 1-1 1.73l-41.78 24a6 6 0 0 1-5.22.37L20 99.46Z" fill="var(--views-empty-fill)" stroke="var(--views-empty-stroke-2)" strokeWidth="1.5" />
-    <path d="M19.88 95.46a2 2 0 0 1-.27-3.6l42.2-24.33a6 6 0 0 1 5.18-.39l37.13 14.5a2 2 0 0 1 .27 3.6l-42.2 24.32a6 6 0 0 1-5.18.4l-37.13-14.5Z" fill="var(--views-empty-fill)" stroke="var(--views-empty-stroke-2)" strokeWidth="1.5" />
-    <path d="M20 88.5a2 2 0 0 1-1.26-1.85v-2.5a3 3 0 0 1 2.7-3l83.55-8.3v4.4a2 2 0 0 1-1 1.73l-41.78 24a6 6 0 0 1-5.22.36l-37-14.84Z" fill="var(--views-empty-fill)" stroke="var(--views-empty-stroke-3)" strokeWidth="1.5" />
-    <path d="M19.88 84.5a2 2 0 0 1-.27-3.59l42.2-24.33A6 6 0 0 1 67 56.2l37.13 14.5a2 2 0 0 1 .27 3.59L62.2 98.6a6 6 0 0 1-5.2.4L19.88 84.5Z" fill="var(--views-empty-fill)" stroke="var(--views-empty-stroke-3)" strokeWidth="1.5" />
-    <path d="M20.14 72.9a2 2 0 0 1-2.02-.99l-1.25-2.16a3 3 0 0 1 .85-3.94l68.2-48.97 2.2 3.8a2 2 0 0 1 0 2.01L63.94 64.32a6 6 0 0 1-4.34 2.93l-39.46 5.64Z" fill="var(--views-empty-fill)" stroke="var(--views-empty-stroke-4)" strokeWidth="1.5" />
-    <path d="M18.04 69.49a2 2 0 0 1-2.03-2.98L40.4 24.34a6 6 0 0 1 4.29-2.93l39.4-6.01a2 2 0 0 1 2.03 2.98L61.73 60.55a6 6 0 0 1-4.29 2.93l-39.4 6.01Z" fill="var(--views-empty-fill)" stroke="var(--views-empty-stroke-4)" strokeWidth="1.5" />
+  return <svg aria-label="Empty custom views list illustration" className={styles.emptySvg} fill="none" viewBox="15 14 92 112">
+    <path className={styles.emptyLayer1} d="M20 110.4a2 2 0 0 1-1.26-1.85v-2.5a3 3 0 0 1 2.7-2.99L105 94.75v4.4a2 2 0 0 1-1 1.73l-41.78 24a6 6 0 0 1-5.22.37l-37-14.84Z" />
+    <path className={styles.emptyLayer1} d="M19.88 106.41a2 2 0 0 1-.27-3.6L61.8 78.5a6 6 0 0 1 5.18-.4l37.13 14.5a2 2 0 0 1 .27 3.6L62.2 120.5a6 6 0 0 1-5.18.4l-37.13-14.5Z" />
+    <path className={styles.emptyLayer2} d="M20 99.46a2 2 0 0 1-1.26-1.86v-2.5a3 3 0 0 1 2.7-2.99L105 83.8v4.4a2 2 0 0 1-1 1.73l-41.78 24a6 6 0 0 1-5.22.37L20 99.46Z" />
+    <path className={styles.emptyLayer2} d="M19.88 95.46a2 2 0 0 1-.27-3.6l42.2-24.33a6 6 0 0 1 5.18-.39l37.13 14.5a2 2 0 0 1 .27 3.6l-42.2 24.32a6 6 0 0 1-5.18.4l-37.13-14.5Z" />
+    <path className={styles.emptyLayer3} d="M20 88.5a2 2 0 0 1-1.26-1.85v-2.5a3 3 0 0 1 2.7-3l83.55-8.3v4.4a2 2 0 0 1-1 1.73l-41.78 24a6 6 0 0 1-5.22.36l-37-14.84Z" />
+    <path className={styles.emptyLayer3} d="M19.88 84.5a2 2 0 0 1-.27-3.59l42.2-24.33A6 6 0 0 1 67 56.2l37.13 14.5a2 2 0 0 1 .27 3.59L62.2 98.6a6 6 0 0 1-5.2.4L19.88 84.5Z" />
+    <path className={styles.emptyLayer4} d="M20.14 72.9a2 2 0 0 1-2.02-.99l-1.25-2.16a3 3 0 0 1 .85-3.94l68.2-48.97 2.2 3.8a2 2 0 0 1 0 2.01L63.94 64.32a6 6 0 0 1-4.34 2.93l-39.46 5.64Z" />
+    <path className={styles.emptyLayer4} d="M18.04 69.49a2 2 0 0 1-2.03-2.98L40.4 24.34a6 6 0 0 1 4.29-2.93l39.4-6.01a2 2 0 0 1 2.03 2.98L61.73 60.55a6 6 0 0 1-4.29 2.93l-39.4 6.01Z" />
   </svg>
 }

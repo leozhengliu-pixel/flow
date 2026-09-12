@@ -9,3 +9,4 @@
   line-height: 20px;
 }
 .issue-history-state > span { overflow-wrap: anywhere; }
+:root[data-theme="light"] .issue-history-state { color: var(--theme-text-secondary); }

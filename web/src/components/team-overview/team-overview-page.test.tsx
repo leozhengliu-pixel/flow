@@ -171,7 +171,7 @@ describe('team overview', () => {
 
   it('hides the Loops tab when the workspace flag is off', async () => {
     renderOverview({
-      workspaceSettings: { featureFlags: { loops: false } } as BootstrapData['workspaceSettings'],
+      workspaceSettings: { ...makeBootstrap().workspaceSettings, featureFlags: { loops: false } },
     })
     await waitFor(() => expect(api.fetchTeamResources).toHaveBeenCalledWith('team-1'))
     expect(screen.queryByRole('link', { name: 'Loops' })).not.toBeInTheDocument()

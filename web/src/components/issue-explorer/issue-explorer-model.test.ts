@@ -66,7 +66,11 @@ describe('issue explorer workflow model', () => {
     const first = makeIssue({ dueDate: '2026-08-15', externalSource: 'email', autoClosed: true, templateId: 'template-1', suggestedLabelIds: [label.id] })
     first.project = { id: project.id, name: project.name, color: project.color, icon: project.icon }
     const second = makeIssue({ id: 'issue-2', identifier: 'TST-2', priority: 4, state: backlog, assignee: undefined, labels: [], subscriberIds: [], dueDate: undefined })
-    const data = makeBootstrap({ issues: [first, second], issueTemplates: [{ id: 'template-1', name: 'Bug report' }] as never })
+    const data = makeBootstrap({
+      issues: [first, second],
+      issueTemplates: [{ id: 'template-1', name: 'Bug report' }] as never,
+      projects: [{ ...project, milestones: [{ id: 'milestone-1', name: 'Beta' }] }] as never,
+    })
     const options = explorerPropertyOptions(data)
     expect(options.status.find(item => item.id === started.id)?.count).toBe(1)
     expect(options.assignee[0].count).toBe(1)
@@ -78,7 +82,27 @@ describe('issue explorer workflow model', () => {
     expect(matchesExplorerFilter(issueToExplorerRow(first, 'workspace', data.issues, data), filter('dates', ['today']))).toBe(true)
     expect(matchesExplorerFilter(issueToExplorerRow(first, 'workspace', data.issues, data), filter('externalSource', ['email'], 'isNot'))).toBe(false)
     expect(matchesExplorerFilter(issueToExplorerRow(first, 'workspace', data.issues, data), filter('projectProperties', [`project-status:${project.status.id}`]))).toBe(true)
+    first.projectMilestoneId = 'milestone-1'
+    expect(applyExplorerFilters([first, second], [filter('projectMilestone', ['milestone-1'])], data).map(issue => issue.id)).toEqual([first.id])
+    expect(explorerPropertyOptions(data, [first]).projectMilestone.some(option => option.id === 'milestone-1')).toBe(true)
     vi.useRealTimers()
+  })
+
+  it('filters issues by linked customers', () => {
+    const first = makeIssue()
+    const second = makeIssue({ id: 'issue-2', identifier: 'TST-2' })
+    const data = makeBootstrap({
+      issues: [first, second],
+      customers: [{ id: 'customer-1', name: 'TTEST', status: 'active', ownerId: viewer.id, annualRevenue: 1000, size: 12, domains: [] }] as never,
+      customerRequests: [
+        { id: 'request-1', customerId: 'customer-1', issueId: first.id, body: 'Need', source: 'manual', creator: viewer, attachments: [] },
+        { id: 'request-2', customerId: 'missing', issueId: second.id, body: 'Unknown', source: 'manual', creator: viewer, attachments: [] },
+      ] as never,
+    })
+    expect(applyExplorerFilters(data.issues, [filter('customers', ['customer:customer-1'])], data).map(issue => issue.id)).toEqual([first.id])
+    expect(applyExplorerFilters(data.issues, [filter('customers', ['customer:'])], data).map(issue => issue.id)).toEqual([second.id])
+    expect(applyExplorerFilters(data.issues, [filter('customers', ['customer-status:active'])], data).map(issue => issue.id)).toEqual([first.id])
+    expect(explorerPropertyOptions(data).customers.find(option => option.id === 'customer-name')?.children?.some(option => option.id === 'customer:customer-1')).toBe(true)
   })
 
   it('maps actions to updates and applies optimistic changes without mutating source groups', () => {

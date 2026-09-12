@@ -5,6 +5,8 @@ import * as Popover from '@radix-ui/react-popover'
 import { Check, ChevronDown, ChevronRight, Clock3, GitPullRequest, Link2, PackageOpen, Plus } from 'lucide-react'
 import type { MyIssuesProperty } from './my-issues-surface'
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
+import { MilestoneProgressIcon } from '@/components/issue/milestone-progress-icon'
+import { isMilestoneDateOverdue } from '@/components/issue/milestone-progress'
 import { PropertyMenu, type PropertyMenuKind } from '@/components/property/property-menu'
 import { LabelHoverPreview } from '@/components/property/label-hover-preview'
 import { DueDatePicker } from '@/components/issue/due-date-picker'
@@ -79,6 +81,17 @@ export interface MyIssuesRowData {
   projectLabelIds?: string[]
   projectLeadId?: string
   projectMilestoneNames?: string[]
+  projectMilestoneId?: string
+  milestoneProgress?: number
+  rawMilestoneDate?: string
+  customerIds?: string[]
+  hasUnknownCustomer?: boolean
+  customerOwnerIds?: string[]
+  customerStatuses?: string[]
+  customerTiers?: string[]
+  customerRevenues?: number[]
+  customerSizes?: number[]
+  customerNames?: string[]
   releaseIds?: string[]
   releasePipelineIds?: string[]
   releaseStages?: string[]
@@ -251,6 +264,9 @@ export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAU
             {displayProperties.has('labels') && issue.labels?.length ? <RowCommandPicker propertyLabel="Labels" kind="labels" multi label={`Change labels. ${issue.labels.map(label => label.name).join(', ')} selected`} searchLabel="Change or add labels..." selectedIds={issue.labels.map(label => label.id)} options={propertyOptions.labels} onSelect={value => change('labels', toggleGroupedLabelIds(issue.labels?.map(label => label.id) ?? [], value, propertyOptions.labels))} triggerClassName={styles.labelsTrigger} trigger={<span className={styles.badgeGroup}>{issue.labels.map(label => <PropertyBadge key={label.id} label={label}/>)}</span>}/> : null}
         {displayProperties.has('project') && issue.project ? <RowCommandPicker propertyLabel="Project" kind="project" label={`Change project. Current project is ${issue.project.name}`} searchLabel="Set project..." selectedIds={[issue.project.id]} options={propertyOptions.project} onSelect={value => change('project', value)} trigger={<PropertyBadge color={issue.project.color}>{issue.project.name}</PropertyBadge>}/> : null}
             {displayProperties.has('cycle') && issue.cycleId ? <RowCommandPicker propertyLabel="Cycle" label={`Change cycle. Current cycle is ${issue.cycleName ?? issue.cycleId}`} searchLabel="Add to cycle..." selectedIds={[issue.cycleId]} options={propertyOptions.cycle ?? []} onSelect={value => change('cycle', value)} trigger={<span className={styles.dueDate}><CycleIcon size={13}/><span data-i18n-ignore>{issue.cycleName ?? issue.cycleId}</span></span>}/> : null}
+            {displayProperties.has('milestone') && issue.projectMilestoneNames?.[0] ? <span className={styles.dueDate} aria-label={`Milestone ${issue.projectMilestoneNames[0]}`}><MilestoneProgressIcon overdue={isMilestoneDateOverdue(issue.rawMilestoneDate)} progress={issue.milestoneProgress ?? 0} size={13} /><span data-i18n-ignore>{issue.projectMilestoneNames[0]}</span></span> : null}
+            {displayProperties.has('customers') && issue.customerNames?.length ? <span className={styles.badgeGroup}>{issue.customerNames.map(name => <span className={styles.badge} key={name}><span data-i18n-ignore>{name}</span></span>)}</span> : null}
+            {displayProperties.has('customerRevenue') && customerRevenueTotal(issue) > 0 ? <span className={styles.badge} aria-label={`Customer revenue ${formatRowCustomerRevenue(customerRevenueTotal(issue))}`}>{formatRowCustomerRevenue(customerRevenueTotal(issue))}</span> : null}
             {displayProperties.has('dueDate') && issue.dueDate ? <DueDatePicker value={issue.dueDate} onChange={value => change('dueDate', value)} ariaLabel={`Change due date. Current due date is ${formatDueDate(issue.dueDate)}`} triggerClassName={styles.propertyTrigger} trigger={<time className={styles.dueDate} dateTime={issue.dueDate}><CalendarIcon size={13}/>{formatDueDate(issue.dueDate)}</time>}/> : null}
             {displayProperties.has('sla') && issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
             {displayProperties.has('estimate') && issue.estimate != null && <span className={styles.badge} aria-label={`Estimate ${issue.estimate}`}>{issue.estimate}</span>}
@@ -364,6 +380,8 @@ function rowAriaLabel(issue: MyIssuesRowData) { return `Select issue ${priorityN
 function formatRowDate(value: string) { return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value)) }
 function formatFullDate(value: string) { return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(new Date(value)) }
 function formatDueDate(value: string) { return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(`${value}T00:00:00`)) }
+function customerRevenueTotal(issue: MyIssuesRowData) { return (issue.customerRevenues ?? []).reduce((sum, value) => sum + value, 0) }
+function formatRowCustomerRevenue(value: number) { return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(value) }
 function formatTimeInStatus(minutes: number) {
   if (minutes < 60) return `${Math.max(0, minutes)}m`
   const hours = minutes / 60

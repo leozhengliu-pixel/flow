@@ -475,6 +475,21 @@
   --project-agent-chip-shadow: var(--shadow);
   --project-agent-composer-shadow: var(--shadow);
   --project-agent-submit-bg: var(--surface-elevated);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .project-creation-agent__header button,
+:root[data-theme="light"] .project-creation-agent__empty > strong,
+:root[data-theme="light"] .project-creation-agent__suggestions button,
+:root[data-theme="light"] .project-creation-agent__message,
+:root[data-theme="light"] .project-creation-agent__composer textarea,
+:root[data-theme="light"] .project-creation-agent__skills-menu button {
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .project-creation-agent__empty > p { color: var(--theme-text-secondary); }
+:root[data-theme="light"] .project-creation-agent__skills-menu {
+  border-color: var(--popover-border);
+  background: var(--theme-surface-2);
+  box-shadow: var(--shadow-dialog);
 }
 
 @media (max-width: 900px) {

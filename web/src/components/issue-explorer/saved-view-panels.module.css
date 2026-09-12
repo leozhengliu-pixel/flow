@@ -140,16 +140,16 @@
   height: 28px;
   flex: 1;
   padding: 0 12px;
-  border: 0.5px solid var(--theme-border);
+  border: 0.5px solid transparent;
   border-radius: 9999px;
-  background: var(--theme-surface-1);
-  color: var(--muted);
+  background: var(--ui-pill-bg);
+  color: var(--ui-pill-fg);
   font: 500 12px inherit;
 }
 .tabs button[aria-selected="true"] {
   border-color: transparent;
-  background: var(--theme-surface-active);
-  color: var(--text);
+  background: var(--ui-pill-active-bg);
+  color: var(--ui-pill-active-fg);
 }
 .tabs button:focus-visible,
 .summaryItem:focus-visible,
@@ -458,11 +458,11 @@
   z-index: 620;
   min-width: 188px;
   padding: 6px;
-  border: 0.5px solid var(--theme-border-strong);
+  border: 0.5px solid var(--popover-border);
   border-radius: 12px;
   background: var(--theme-surface-2);
   box-shadow: var(--menu-shadow);
-  color: var(--text);
+  color: var(--theme-text-primary);
   font:
     13px/1.5 "Inter Variable",
     "SF Pro Display",
@@ -481,7 +481,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 0 8px;
+  padding: 0 18px 0 14px;
   border-radius: 6px;
   outline: 0;
   cursor: default;
@@ -575,13 +575,13 @@
   flex: 1;
 }
 .menuCheckbox {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   display: grid;
   place-items: center;
-  flex: 0 0 15px;
-  border: 0.5px solid var(--theme-border-strong);
-  border-radius: 4px;
+  flex: 0 0 14px;
+  border: 1px solid var(--checkbox-border);
+  border-radius: 3px;
 }
 .menuCheckbox svg {
   width: 11px;
@@ -621,11 +621,11 @@
   z-index: 620;
   width: 300px;
   padding: 8px 0;
-  border: 0.5px solid var(--theme-border-strong);
+  border: 0.5px solid var(--popover-border);
   border-radius: 12px;
   background: var(--theme-surface-2);
   box-shadow: var(--menu-shadow);
-  color: var(--text);
+  color: var(--theme-text-primary);
   font:
     450 13px/19.5px "Inter Variable",
     "SF Pro Display",
@@ -882,12 +882,36 @@
     0 3px 6px -2px var(--shadow-color-faint),
     0 1px 1px var(--shadow-color-soft);
 }
-:global(:root[data-theme="light"]) .insightMenu {
-  border-color: var(--theme-border-strong);
+:global(:root[data-theme="light"]) .insightMenu,
+:global(:root[data-theme="light"]) .insightDisplayPopover {
+  border-color: var(--popover-border);
   background: var(--theme-surface-2);
-  box-shadow:
-    0 8px 24px var(--shadow-color-raised),
-    0 2px 7px var(--shadow-color-medium);
+  box-shadow: var(--shadow-control);
+  color: var(--theme-text-primary);
+}
+:global(:root[data-theme="light"]) .tabs button {
+  background: var(--ui-pill-bg);
+  color: var(--ui-pill-fg);
+}
+:global(:root[data-theme="light"]) .tabs button[aria-selected="true"] {
+  background: var(--ui-pill-active-bg);
+  color: var(--ui-pill-active-fg);
+}
+:global(:root[data-theme="light"]) .identityCard h2,
+:global(:root[data-theme="light"]) .summaryItem,
+:global(:root[data-theme="light"]) .fullscreenIssues a,
+:global(:root[data-theme="light"]) .fullscreenIssues a strong {
+  color: var(--text);
+}
+:global(:root[data-theme="light"]) .fullscreenIssues a small,
+:global(:root[data-theme="light"]) .metadataCard > div > span {
+  color: var(--muted);
+}
+:global(:root[data-theme="light"]) .menuCheckbox {
+  border-color: var(--checkbox-border);
+}
+:global(:root[data-theme="light"]) .iconButton {
+  color: var(--theme-text-primary);
 }
 @media (max-width: 800px) {
   .panel {

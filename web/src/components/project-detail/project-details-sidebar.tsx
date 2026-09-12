@@ -7,7 +7,10 @@ import { Blocks, ChevronDown, ChevronRight, Flag, MoreHorizontal, OctagonMinus, 
 import { format, formatDistanceToNowStrict } from 'date-fns'
 import { toast } from 'sonner'
 import { Avatar } from '@/components/issue/issue-row'
+import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { CalendarIcon, MembersIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, SlackIcon, TeamIcon } from '@/components/issue/issue-icons'
+import { MilestoneProgressIcon } from '@/components/issue/milestone-progress-icon'
+import { isMilestoneDateOverdue } from '@/components/issue/milestone-progress'
 import { projectStatusOptionColor } from '@/lib/project-status-color'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { ProjectLeadPicker } from '@/components/projects-page/project-lead-picker'
@@ -94,7 +97,7 @@ export function ProjectDetailsSidebar({ issueSummary, availableIssueLabels, init
           return <MilestoneRow disabled={Boolean(milestoneEditor)} dragging={draggingMilestoneId === milestone.id} dropEdge={milestoneDrop?.id === milestone.id ? milestoneDrop.edge : undefined} key={milestone.id} milestone={milestone} onConvert={async () => { await onConvertMilestone(project.id, milestone.id); toast.success('Milestone converted to project') }} onDelete={() => onDeleteMilestone(project.id, milestone.id)} onDragEnd={() => { setDraggingMilestoneId(undefined); setMilestoneDrop(undefined) }} onDragOver={(event) => { if (!draggingMilestoneId || draggingMilestoneId === milestone.id) return; event.preventDefault(); event.dataTransfer.dropEffect = 'move'; const rect = event.currentTarget.getBoundingClientRect(); setMilestoneDrop({ id: milestone.id, edge: event.clientY < rect.top + rect.height / 2 ? 'before' : 'after' }) }} onDragStart={(event) => { setDraggingMilestoneId(milestone.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', milestone.id) }} onDrop={(event) => { event.preventDefault(); const sourceId = draggingMilestoneId ?? event.dataTransfer.getData('text/plain'); if (sourceId && milestoneDrop) reorderMilestone(sourceId, milestone.id, milestoneDrop.edge); setDraggingMilestoneId(undefined); setMilestoneDrop(undefined) }} onEdit={() => setMilestoneEditor(milestone)} onMove={async targetProjectId => { await onMoveMilestone(project.id, milestone.id, targetProjectId); toast.success('Milestone moved') }} onOpenIssues={() => onOpenMilestoneIssues(milestone.id)} onUpdateDate={targetDate => onUpdateMilestone(project.id, milestone.id, { targetDate })} projects={projects.filter(item => item.id !== project.id)} stats={stats}/>
         }}</AnimatedMilestones>
         {milestoneEditor === 'new' && <MilestoneEditor onCancel={() => setMilestoneEditor(undefined)} onSubmit={async input => { await onCreateMilestone(project.id, input as { name: string; description?: string; targetDate?: string }); setMilestoneEditor(undefined) }} progress={0}/>}
-        {(project.milestones?.length ?? 0) > 0 && <div aria-label={`No milestone ${unassignedMilestoneStats.count} issues`} className="project-details-sidebar__milestone is-unassigned" role="button" tabIndex={0} onClick={() => onOpenMilestoneIssues()} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpenMilestoneIssues() } }}><MilestoneProgressIcon unassigned/><strong>No milestone</strong><span>{unassignedMilestoneStats.count}</span></div>}
+        {(project.milestones?.length ?? 0) > 0 && <div aria-label={`No milestone ${unassignedMilestoneStats.count} issues`} className="project-details-sidebar__milestone is-unassigned" role="button" tabIndex={0} onClick={() => onOpenMilestoneIssues()} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpenMilestoneIssues() } }}><MilestoneProgressIcon className="project-details-sidebar__milestone-icon" unassigned/><strong>No milestone</strong><span>{unassignedMilestoneStats.count}</span></div>}
         {!project.milestones?.length && !milestoneEditor && <div className="project-details-sidebar__milestone-empty"><p>Add milestones to organize work within your project and break it into more granular stages.</p><a href="https://flow.app/docs/project-milestones" rel="noreferrer" target="_blank">Learn more</a></div>}
       </div>
     </SidebarSection>
@@ -258,7 +261,7 @@ function MilestoneRow({ disabled, dragging, dropEdge, milestone, onConvert, onDe
   const link = `${location.origin}${location.pathname.replace(/\/(overview|activity|issues)$/, '/issues')}`
   const copy = (value: string, message: string) => void navigator.clipboard.writeText(value).then(() => toast.success(message))
   return <div aria-disabled={disabled} aria-label={`${milestone.name} ${stats.progress}% of ${stats.count}`} className="project-details-sidebar__milestone" data-disabled={disabled || undefined} data-dragging={dragging || undefined} data-drop-edge={dropEdge} draggable={!disabled} onClick={event => { if (!disabled && !(event.target as HTMLElement).closest('button,[role=menuitem]')) onOpenIssues() }} onDragEnd={onDragEnd} onDragOver={onDragOver} onDragStart={onDragStart} onDrop={onDrop} role="button" tabIndex={disabled ? -1 : 0} onKeyDown={event => { if (!disabled && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpenIssues() } }}>
-    <div className="project-details-sidebar__milestone-summary"><MilestoneProgressIcon progress={stats.progress}/><strong data-i18n-ignore>{milestone.name}</strong><span className="project-details-sidebar__milestone-stats"><span>{stats.progress}% of</span><button aria-label={`View ${stats.count} issues in ${milestone.name}`} onClick={event => { event.stopPropagation(); onOpenIssues() }} tabIndex={-1} type="button">{stats.count}</button></span><button className="project-details-sidebar__milestone-see-issues" onClick={event => { event.stopPropagation(); onOpenIssues() }} tabIndex={-1} type="button">See issues</button></div>
+    <div className="project-details-sidebar__milestone-summary"><MilestoneProgressIcon className="project-details-sidebar__milestone-icon" overdue={isMilestoneDateOverdue(milestone.targetDate)} progress={stats.progress}/><strong data-i18n-ignore>{milestone.name}</strong><span className="project-details-sidebar__milestone-stats"><span>{stats.progress}% of</span><button aria-label={`View ${stats.count} issues in ${milestone.name}`} onClick={event => { event.stopPropagation(); onOpenIssues() }} tabIndex={-1} type="button">{stats.count}</button></span><button className="project-details-sidebar__milestone-see-issues" onClick={event => { event.stopPropagation(); onOpenIssues() }} tabIndex={-1} type="button">See issues</button></div>
     <ProjectDatePicker buttonClassName="project-details-sidebar__milestone-date" contentClassName="project-details-sidebar__date-menu" label="Target date" onChange={targetDate => void onUpdateDate(targetDate)} side="left" value={milestone.targetDate}><span>{milestone.targetDate ? format(new Date(`${milestone.targetDate}T00:00:00`), 'MMM d') : 'No date'}</span></ProjectDatePicker>
     <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={`${milestone.name} actions`} className="project-details-sidebar__milestone-actions" onClick={event => event.stopPropagation()} type="button"><MilestoneMenuIcon name="more-horizontal"/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" alignOffset={-25} className="project-milestone-menu" collisionPadding={8} onCloseAutoFocus={event => event.preventDefault()} sideOffset={4}>
       <MilestoneMenuItem icon="edit" label="Edit…" onSelect={onEdit}/>
@@ -295,15 +298,6 @@ function MilestoneSubTrigger({ icon, label }: { icon: MilestoneMenuIconName; lab
   return <DropdownMenu.SubTrigger><span className="project-milestone-menu__item-background"/><MilestoneMenuIcon name={icon}/><span>{label}</span><MilestoneMenuIcon name="chevron-right"/></DropdownMenu.SubTrigger>
 }
 
-function MilestoneProgressIcon({ progress = 0, unassigned = false }: { progress?: number; unassigned?: boolean }) {
-  const clamped = Math.max(0, Math.min(100, progress))
-  const pathLength = 31
-  const completedLength = pathLength * clamped / 100
-  if (unassigned || clamped === 0) return <svg aria-hidden="true" className="project-details-sidebar__milestone-icon is-unassigned" height="16" viewBox="0 0 16 16" width="16"><use href="#milestone-shape"/></svg>
-  if (clamped === 100) return <svg aria-hidden="true" className="project-details-sidebar__milestone-icon is-complete" height="16" viewBox="0 0 16 16" width="16"><use href="#milestone-shape"/></svg>
-  return <svg aria-hidden="true" className="project-details-sidebar__milestone-icon is-progress" height="16" viewBox="0 0 16 16" width="16"><use className="is-track" href="#milestone-shape"/><use className="is-value" href="#milestone-shape" strokeDasharray={`${completedLength} ${pathLength - completedLength}`}/></svg>
-}
-
 function SidebarSection({ action, children, compact, onToggle, open, title }: { action?: ReactNode; children: ReactNode; compact?: boolean; onToggle: () => void; open: boolean; title: string }) {
   return <section className={`project-details-sidebar__section ${compact ? 'is-compact' : ''}`}><header><button aria-expanded={open} aria-label={`${open ? 'Collapse' : 'Expand'} ${title.toLowerCase()} section`} onClick={onToggle} type="button"><span>{title}</span>{open ? <ChevronDown size={11}/> : <ChevronRight size={11}/>}</button>{action}</header><AnimatedCollapse open={open}>{children}</AnimatedCollapse></section>
 }
@@ -322,8 +316,8 @@ function ProjectDependencyMenu({ onUpdate, onUpdateProject, project, projectRela
   const [direction, setDirection] = useState<ProjectDependencyDirection>()
   const [query, setQuery] = useState('')
   const directions = [
-    { id: 'blockedBy' as const, label: 'Blocked by…', icon: <OctagonMinus size={16}/> },
-    { id: 'blocking' as const, label: 'Blocking…', icon: <Blocks size={16}/> },
+    { id: 'blockedBy' as const, label: 'Blocked by…', icon: <IssueActionGlyph label="Blocked by…" fallback={<OctagonMinus size={16}/>} /> },
+    { id: 'blocking' as const, label: 'Blocking…', icon: <IssueActionGlyph label="Blocking…" fallback={<Blocks size={16}/>} /> },
   ].filter(item => item.label.toLowerCase().includes(query.trim().toLowerCase()))
 
   const reset = () => { setDirection(undefined); setQuery('') }
@@ -396,7 +390,7 @@ export function DependencyProjectPicker({ direction, onUpdate, onUpdateProject, 
   </DropdownMenu.Group> : null
 
   return <>
-    <div className={`project-dependency-menu__search${query ? ' is-filtering' : ''}`}><input aria-label={direction === 'blockedBy' ? 'Mark as blocked by…' : 'Mark as blocking…'} autoFocus onChange={event => setQuery(event.target.value)} onKeyDown={event => event.stopPropagation()} placeholder={direction === 'blockedBy' ? 'Mark as blocked by…' : 'Mark as blocking…'} value={query}/></div>
+    <div className="project-dependency-menu__search is-visible"><input aria-label={direction === 'blockedBy' ? 'Mark as blocked by…' : 'Mark as blocking…'} autoFocus onChange={event => setQuery(event.target.value)} onKeyDown={event => event.stopPropagation()} placeholder={direction === 'blockedBy' ? 'Mark as blocked by…' : 'Mark as blocking…'} value={query}/></div>
     <div className="project-dependency-projects__list">{rows(yourProjects, 'Your projects')}{rows(otherProjects, 'Other projects')}{!candidates.length && <DropdownMenu.Label>No projects found</DropdownMenu.Label>}</div>
   </>
 }
@@ -450,7 +444,7 @@ function MilestoneEditor({ milestone, onCancel, onSubmit, progress }: { mileston
     void onSubmit({ name: name.trim(), targetDate: date }).finally(() => setSaving(false))
   }
   return <form className="project-details-sidebar__milestone-editor" onSubmit={event => { event.preventDefault(); submit() }}>
-    <MilestoneProgressIcon progress={progress}/>
+    <MilestoneProgressIcon className="project-details-sidebar__milestone-icon" overdue={isMilestoneDateOverdue(date)} progress={progress}/>
     <input autoFocus aria-label="Milestone name" disabled={saving} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); onCancel() } }} placeholder="Milestone name" value={name}/>
     <ProjectDatePicker buttonClassName="project-details-sidebar__milestone-editor-date" label="Target date" onChange={setDate} value={date}><span>{date ? format(new Date(`${date}T00:00:00`), 'MMM d') : 'No date'}</span></ProjectDatePicker>
     <button aria-label="Cancel" className="project-details-sidebar__milestone-editor-cancel" onClick={onCancel} type="button"><MilestoneMenuIcon name="close"/></button>

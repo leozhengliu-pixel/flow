@@ -6,3 +6,5 @@
 .parent-team-picker-menu .parent-team-ancestors{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--theme-text-secondary)}
 .parent-team-picker-menu .parent-team-name{flex-shrink:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .workspace-settings-card label>.parent-team-picker{height:32px;padding:0 9px;border:.5px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-1);color:var(--theme-text-primary);width:100%;justify-content:flex-start}
+:root[data-theme="light"] .parent-team-picker-menu .parent-team-ancestors{color:var(--theme-text-secondary)}
+:root[data-theme="light"] .workspace-settings-card label>.parent-team-picker{border-color:var(--theme-border);background:var(--theme-surface-2);color:var(--theme-text-primary)}

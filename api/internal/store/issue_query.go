@@ -299,6 +299,15 @@ func compileIssueFilter(node IssueFilter, depth int, remaining *int) (string, []
 		}
 	}
 	if node.Field != "" {
+		if node.Field == "customerId" || node.Field == "customers" {
+			clause, values, err := compileCustomerFilter(node)
+			if err != nil {
+				return "", nil, err
+			}
+			clauses = append(clauses, clause)
+			args = append(args, values...)
+			return "(" + strings.Join(clauses, " AND ") + ")", args, nil
+		}
 		if issueAttributeFields[node.Field] {
 			clause, values, err := compileIssueAttribute(node)
 			if err != nil {

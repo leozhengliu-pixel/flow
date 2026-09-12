@@ -1,12 +1,12 @@
 import { AppLink } from '@/components/ui/app-link'
 import { refreshResourcePreferences } from '@/lib/resource-preferences'
-import { Archive, Check, ChevronDown, ChevronRight, MoreHorizontal, Plus, RotateCcw, Search, Star, Trash2, X } from 'lucide-react'
+import { Archive, Check, ChevronDown, ChevronRight, MoreHorizontal, RotateCcw, Search, Star, Trash2, X } from 'lucide-react'
 import * as Popover from '@radix-ui/react-popover'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
 import {
-  addFavorite, createLabelGroup, createWorkspaceLabel, deleteLabelGroup, deleteTeamLabel,
+  createLabelGroup, createWorkspaceLabel, deleteLabelGroup, deleteTeamLabel,
   deleteWorkspaceLabel, moveWorkspaceLabelToTeams, updateLabelGroup, updateTeamLabel, updateWorkspaceLabel,
 } from '@/lib/api'
 import {
@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import type { BootstrapData, IssueLabel, LabelGroup } from '@/types/flow'
+import { toggleFavoriteFor } from '@/lib/favorites'
 import { groupsForResource, isWorkspaceLabel, labelResourceType } from '@/lib/labels'
 import { useI18n } from '@/i18n/i18n'
 import { FLOW_COLOR_PALETTE } from '@/components/ui/color-palette'
@@ -103,7 +104,7 @@ export function DomainLabelsSettings({ data, resourceType, onReload }: { data: B
     const selectedLabels = data.labels.filter(label => selected.includes(label.id))
     if (action === 'favorite') {
       const existing = new Set(data.favorites.filter(item => item.resourceType === 'label').map(item => item.resourceId))
-      await run(() => Promise.all(selected.filter(id => !existing.has(id)).map(id => addFavorite('label', id))), true)
+      for (const id of selected.filter(id => !existing.has(id))) void toggleFavoriteFor(data, 'label', id, true)
     } else if (action === 'archive') {
       const archivedAt = scope === 'archived' ? '' : new Date().toISOString()
       await run(() => Promise.all([
@@ -129,8 +130,8 @@ export function DomainLabelsSettings({ data, resourceType, onReload }: { data: B
       <div className="settings-list-toolbar domain-labels-search"><Search size={14}/><input aria-label={t('Filter labels')} placeholder={t('Filter by name…')} value={query} onChange={event => setQuery(event.target.value)}/></div>
       <ScopeButton value={scope} resourceType={resourceType} onChange={value => { setScope(value); setSelected([]) }}/>
       <span/>
-      <button className="settings-action" disabled={scope === 'archived'} onClick={() => startCreating('group')}><Plus size={14}/>{t('New group')}</button>
-      <button className="settings-action primary" disabled={scope === 'archived'} onClick={() => startCreating('label')}><Plus size={14}/>{t('New label')}</button>
+      <button className="settings-action" disabled={scope === 'archived'} onClick={() => startCreating('group')}>{t('New group')}</button>
+      <button className="settings-action primary" disabled={scope === 'archived'} onClick={() => startCreating('label')}>{t('New label')}</button>
     </div>
     <section className="settings-section domain-labels-section"><div className="domain-labels-grid">
       <div className="domain-labels-table-header">

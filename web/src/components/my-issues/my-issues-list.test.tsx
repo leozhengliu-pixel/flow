@@ -44,4 +44,32 @@ describe('MyIssuesList virtualization', () => {
     expect(container.querySelectorAll('a').length).toBeLessThan(120)
     expect(container.querySelector('[data-virtuoso-scroller="true"]')).not.toBeNull()
   })
+
+  it('renders milestone, customers, and customer revenue when those display properties are on', () => {
+    const groups: MyIssuesGroupData[] = [{
+      id: 'started',
+      label: 'In progress',
+      issues: [{
+        id: 'issue-1',
+        identifier: 'FLOW-1',
+        title: 'Seed issue',
+        href: '#issue-1',
+        priority: 0,
+        state: { id: 'started', name: 'In progress', type: 'started', color: '#f2c94c' },
+        createdAt: '2026-09-07T00:00:00.000Z',
+        updatedAt: '2026-09-07T00:00:00.000Z',
+        projectMilestoneNames: ['车商城316迭代'],
+        customerNames: ['Acme'],
+        customerRevenues: [12000],
+      }],
+    }]
+    const { getByText, getByLabelText } = render(
+      <I18nProvider>
+        <MyIssuesList groups={groups} displayProperties={new Set(['id', 'milestone', 'customers', 'customerRevenue'])} />
+      </I18nProvider>,
+    )
+    expect(getByLabelText('Milestone 车商城316迭代')).toBeVisible()
+    expect(getByText('Acme')).toBeVisible()
+    expect(getByLabelText(/Customer revenue/)).toBeVisible()
+  })
 })

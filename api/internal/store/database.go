@@ -196,6 +196,10 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := s.ensureCustomerFilterIndex(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := s.loadOrSeed(context.Background()); err != nil {
 		db.Close()
 		return nil, err
@@ -250,6 +254,10 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		return nil, err
 	}
 	if err := s.migrateAPIKeyLookup(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.migrateCustomerFilterIndex(context.Background()); err != nil {
 		db.Close()
 		return nil, err
 	}

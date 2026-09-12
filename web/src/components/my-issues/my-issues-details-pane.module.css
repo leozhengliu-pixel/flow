@@ -131,7 +131,11 @@
   .previewHeader,.preview,.detailsSkeleton,.detailsError,.fullPreview{margin-right:0;border-right:0;border-radius:10px 0 0 0;box-shadow:none}
   .resizer{display:none}
 }
-:global(:root[data-theme="light"]) .summary,:global(:root[data-theme="light"]) .previewHeader,:global(:root[data-theme="light"]) .preview,:global(:root[data-theme="light"]) .detailsSkeleton,:global(:root[data-theme="light"]) .detailsError{border-color:var(--theme-border);background:var(--theme-surface-2);box-shadow:0 3px 6px -2px var(--shadow-color-faint),0 1px 1px var(--shadow-color-soft)}
-:global(:root[data-theme="light"]) .summaryTabs button{background:var(--theme-surface-1)}
-:global(:root[data-theme="light"]) .summaryTabs button[aria-selected=true]{background:var(--theme-surface-hover);color:var(--theme-text-primary)}
+:global(:root[data-theme="light"]) .summary,:global(:root[data-theme="light"]) .previewHeader,:global(:root[data-theme="light"]) .preview,:global(:root[data-theme="light"]) .detailsSkeleton,:global(:root[data-theme="light"]) .detailsError,:global(:root[data-theme="light"]) .fullPreview{border-color:var(--theme-border);background:var(--theme-surface-2);box-shadow:0 3px 6px -2px var(--shadow-color-faint),0 1px 1px var(--shadow-color-soft)}
+:global(:root[data-theme="light"]) .summaryTabs button{background:var(--ui-pill-bg);color:var(--ui-pill-fg)}
+:global(:root[data-theme="light"]) .summaryTabs button[aria-selected=true]{background:var(--ui-pill-active-bg);color:var(--ui-pill-active-fg)}
+:global(:root[data-theme="light"]) .summaryItem,:global(:root[data-theme="light"]) .property>strong,:global(:root[data-theme="light"]) .detailsError strong{color:var(--text)}
+:global(:root[data-theme="light"]) .preview h3{color:var(--text)}
 :global(:root[data-theme="light"]) .summaryItem:hover,:global(:root[data-theme="light"]) .summaryItem:focus-visible{background:var(--theme-surface-hover)}
+:global(:root[data-theme="light"]) .previewHeader button{color:var(--theme-text-primary)}
+:global(:root[data-theme="light"]) .previewHeader button:hover{background:var(--theme-surface-hover);color:var(--theme-text-primary)}

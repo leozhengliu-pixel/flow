@@ -177,6 +177,7 @@
   opacity: 1;
   isolation: isolate;
   overflow: visible;
+  container-type: inline-size;
 }.flow-inbox-row::before{position:absolute;z-index:0;inset:0 8px;border-radius:8px;background:transparent;content:"";pointer-events:none}.flow-inbox-row:hover::before,.flow-inbox-row:focus-visible::before{background:var(--inbox-row-hover)}.flow-inbox-row[data-active="true"]::before,.flow-inbox-row[data-selected="true"]::before{background:var(--inbox-row-selected)}
 .flow-inbox-row:focus-visible::after {
   position: absolute;
@@ -368,11 +369,11 @@
   background: transparent;
   content: ""; inset: 0 -6px; }.flow-inbox-switch { display: flex; width: 22px; height: 14px; align-items: center; padding: 2px; background: lch(48.247% .93 272); border-radius: 999px; transition: background 120ms ease; }.flow-inbox-switch i { width: 10px; height: 10px; background: var(--theme-text-primary); border-radius: 50%; transition: transform 120ms ease; }.flow-inbox-menu__check-item[data-state="checked"] .flow-inbox-switch { background: lch(47.918% 59.303 288.421); }.flow-inbox-menu__check-item[data-state="checked"] .flow-inbox-switch i { transform: translateX(8px); }.flow-inbox-ordering-select {
   display: inline-flex;
-  width: 72px;
+  width: 99px;
   height: 24px;
   align-items: center;
   justify-content: space-between;
-  padding: 1px 8px;
+  padding: 1px 18px 1px 8px;
   color: var(--theme-text-primary);
   background: lch(17.349% 1.139 272);
   border: 0.5px solid transparent;
@@ -437,7 +438,11 @@
   .flow-inbox-detail-state > * { animation: none; }
   .flow-inbox-row__pending { animation: none; border-color: #77777b; }
   .flow-inbox-detail__pending i { animation: none; border-color: #77777b; }
-}:root[data-theme="light"] .flow-inbox { --inbox-row-hover: lch(92.94% .5 282); --inbox-row-selected: lch(92.94% .5 282); --inbox-kind-bg: lch(92.44% .5 282); --inbox-kind-bg-active: lch(87.44% .5 282); --inbox-read-text: lch(39.176% 1.25 282); --inbox-tray-outer: lch(61.803% 1.2 272); --inbox-tray-inner: lch(37.776% 1.25 282); }
+}:root[data-theme="light"] .flow-inbox { --inbox-row-hover: var(--bg-hover); --inbox-row-selected: var(--bg-hover); --inbox-kind-bg: var(--bg-subtle); --inbox-kind-bg-active: var(--bg-active); --inbox-read-text: var(--theme-text-secondary); --inbox-tray-outer: var(--theme-text-tertiary); --inbox-tray-inner: var(--theme-text-secondary); --inbox-faint: var(--theme-text-tertiary); }
+:root[data-theme="light"] .flow-inbox-notification-list__loading { color: var(--theme-text-tertiary); }
+:root[data-theme="light"] .flow-inbox-row__pending { border-color: var(--theme-border-strong); border-top-color: var(--theme-text-secondary); }
+:root[data-theme="light"] .flow-inbox-menu__search-wrap--passive { color: var(--theme-text-tertiary); }
+:root[data-theme="light"] .flow-inbox-detail__back i { color: var(--theme-text-tertiary); }
 :root[data-theme="light"] .flow-inbox-row__kind {
   background: transparent;
 }:root[data-theme="light"] .flow-inbox-story {
@@ -448,8 +453,9 @@
 }:root[data-theme="light"] .flow-inbox-switch {
   background: var(--toggle-compact-off);
 }:root[data-theme="light"] .flow-inbox-ordering-select {
-  border-color: var(--border);
-  background: var(--theme-surface-1);
+  border-color: transparent;
+  background: var(--theme-surface-2);
+  color: var(--theme-text-primary);
   color-scheme: light;
 }:root[data-theme="light"] .flow-inbox-snooze-custom__field input {
   border-color: var(--border);
@@ -600,10 +606,10 @@
 .flow-inbox-menu__priority-row { height: 48px; padding: 8px 16px; }
 .flow-inbox-menu__display-row { height: 40px; padding: 4px 16px; }
 .flow-inbox-ordering-select,.flow-inbox-grouping-select { width: 99px; }
-.flow-inbox-grouping-select { display: inline-flex; height: 24px; align-items: center; justify-content: space-between; padding: 1px 8px; border: .5px solid transparent; border-radius: 8px; background: var(--theme-surface-1); color: var(--theme-text-primary); font: 12px/normal inherit; outline: none; }
+.flow-inbox-grouping-select { display: inline-flex; height: 24px; align-items: center; justify-content: space-between; padding: 1px 18px 1px 8px; border: .5px solid transparent; border-radius: 8px; background: var(--theme-surface-1); color: var(--theme-text-primary); font: 12px/normal inherit; outline: none; }
 .flow-inbox-grouping-select:hover,.flow-inbox-grouping-select[data-state="open"] { background: var(--theme-surface-active); }
 .flow-inbox-grouping-select svg { width: 9px; height: 5px; color: var(--theme-text-secondary); }
-:root[data-theme="light"] .flow-inbox-grouping-select { border-color: var(--border); background: var(--theme-surface-1); color-scheme: light; }
+:root[data-theme="light"] .flow-inbox-grouping-select { border-color: transparent; background: var(--theme-surface-2); color: var(--theme-text-primary); color-scheme: light; }
 .flow-inbox-menu__display-row > * { transform: translateY(4.5px); }
 .flow-inbox-menu__ordering > * { transform: translateY(-3.5px); }
 .flow-inbox-ordering-options { width: 99px; padding: 3.75px 0; }
@@ -641,5 +647,122 @@
 .flow-inbox-row__kind-bg > svg { fill: revert; }
 .flow-inbox-row__kind-bg > svg:not([width]):not([height]) { fill: currentColor; }
 :root[data-theme="light"] .flow-inbox-mutation-error { border-color: var(--theme-border-strong); box-shadow: var(--shadow-control); }
-:root[data-theme="light"] .flow-inbox-mutation-error button { border-color: var(--theme-border-strong); background: var(--theme-control-active); }
+:root[data-theme="light"] .flow-inbox-mutation-error button { border-color: var(--theme-border-strong); background: var(--theme-control-active); color: var(--theme-text-primary); }
 :root[data-theme="light"] .flow-inbox-menu__native-switch[aria-checked="true"] { background: var(--toggle-regular-on); }
+:root[data-theme="light"] .flow-inbox-row__avatar { color: var(--on-accent); }
+:root[data-theme="light"] .flow-inbox-list-state--message { color: var(--theme-text-tertiary); }
+:root[data-theme="light"] .flow-inbox-list-state--message svg { stroke: var(--theme-text-tertiary); }
+:root[data-theme="light"] .flow-inbox-list-state--message button,
+:root[data-theme="light"] .flow-inbox-detail-state--error button {
+  color: var(--theme-text-primary);
+  background: var(--theme-control-hover);
+  border-color: var(--theme-border-strong);
+}
+:root[data-theme="light"] .flow-inbox-detail__pending { background: var(--theme-soft-overlay); }
+:root[data-theme="light"] .flow-inbox-detail__pending i { border-color: var(--theme-border-strong); border-top-color: var(--theme-text-secondary); }
+:root[data-theme="light"] .flow-inbox-detail-activity__meta { color: var(--theme-text-tertiary); }
+:root[data-theme="light"] .flow-inbox-detail-activity__meta img,
+:root[data-theme="light"] .flow-inbox-detail-activity__meta i {
+  color: var(--theme-text-primary);
+  background: var(--theme-control-active);
+}
+:root[data-theme="light"] .flow-inbox-detail-activity__content { border-color: var(--theme-border); background: var(--theme-surface-1); }
+:root[data-theme="light"] .flow-inbox-menu,
+:root[data-theme="light"] .flow-inbox-ordering-options,
+:root[data-theme="light"] .flow-inbox-grouping-options {
+  color: var(--theme-text-primary);
+  background: var(--theme-surface-2);
+  border-color: var(--popover-border);
+  box-shadow: var(--menu-shadow);
+}
+:root[data-theme="light"] .flow-inbox-menu__item[data-disabled] { color: var(--theme-text-tertiary); }
+:root[data-theme="light"] .flow-inbox-menu__item[data-disabled] .flow-inbox-menu__item-icon { color: var(--theme-text-tertiary); }
+:root[data-theme="light"] .flow-inbox-menu__trailing,
+:root[data-theme="light"] .flow-inbox-menu__shortcut { color: var(--theme-text-tertiary); }
+:root[data-theme="light"] .flow-inbox-menu__search-wrap > kbd {
+  color: var(--theme-text-secondary);
+  background: var(--theme-surface-0);
+  border-color: var(--theme-border);
+}
+:root[data-theme="light"] .flow-inbox-menu__check-item[data-state="checked"] .flow-inbox-switch { background: var(--toggle-regular-on); }
+:root[data-theme="light"] .flow-inbox-snooze-custom__actions button { color: var(--theme-text-secondary); }
+:root[data-theme="light"] .flow-inbox-snooze-custom__actions button:hover:not(:disabled) {
+  color: var(--theme-text-primary);
+  background: var(--theme-control-hover);
+}
+:root[data-theme="light"] .flow-inbox-snooze-custom__actions button[type="submit"] {
+  color: var(--on-accent);
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+:root[data-theme="light"] .flow-inbox-snooze-custom__actions button[type="submit"]:hover:not(:disabled) {
+  color: var(--on-accent);
+  background: var(--accent-primary-hover);
+}
+:root[data-theme="light"] .flow-inbox-project-reminder button {
+  color: var(--on-accent);
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+:root[data-theme="light"] .flow-inbox__tab-count {
+  color: var(--theme-text-secondary);
+  background: var(--theme-control-hover);
+}
+.flow-inbox-row__actions {
+  position: absolute;
+  z-index: 2;
+  top: 13px;
+  right: 16px;
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+@container (max-width: 360px) {
+  .flow-inbox-row__actions {
+    display: none !important;
+  }
+}
+.flow-inbox-row:hover .flow-inbox-row__actions,
+.flow-inbox-row:focus-within .flow-inbox-row__actions,
+.flow-inbox-row:has(.flow-inbox-row__actions [data-state="open"]) .flow-inbox-row__actions {
+  display: flex;
+}
+.flow-inbox-row:hover .flow-inbox-row__summary time,
+.flow-inbox-row:focus-within .flow-inbox-row__summary time,
+.flow-inbox-row:has(.flow-inbox-row__actions [data-state="open"]) .flow-inbox-row__summary time {
+  visibility: hidden;
+}
+.flow-inbox-row__actions button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--theme-text-secondary);
+}
+.flow-inbox-row__actions button svg {
+  width: 16px;
+  height: 16px;
+}
+.flow-inbox-row__actions button:hover,
+.flow-inbox-row__actions button[data-state="open"] {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .flow-inbox-row__actions button {
+  color: var(--theme-text-secondary);
+}
+:root[data-theme="light"] .flow-inbox-row__actions button:hover,
+:root[data-theme="light"] .flow-inbox-row__actions button[data-state="open"] {
+  background: var(--theme-control-hover);
+  color: var(--theme-text-primary);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme="light"] .flow-inbox-row__pending,
+  :root[data-theme="light"] .flow-inbox-detail__pending i {
+    border-color: var(--theme-border-strong);
+  }
+}

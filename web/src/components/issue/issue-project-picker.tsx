@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { ProjectIcon, NoProjectIcon } from '@/components/issue/issue-icons'
+import { MilestoneProgressIcon } from '@/components/issue/milestone-progress-icon'
+import { isMilestoneDateOverdue, milestoneIssueProgress } from '@/components/issue/milestone-progress'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { PropertyShortcutTooltip } from '@/components/property/issue-property-hover'
 import { NewProjectDialog, type NewProjectDraft } from '@/components/projects-page/new-project-dialog'
@@ -44,8 +46,8 @@ export function IssueProjectPicker({ data, issue, grouped = false, presence = []
     ...projects.map(item => ({ id: item.id, label: item.name, icon: <ProjectIcon size={16} style={{ color: item.color }}/>, i18nIgnore: true })),
   ]
   const milestoneOptions = [
-    { id: '', label: t('No milestone'), shortcut: '0', icon: <MilestoneIcon unassigned/> },
-    ...milestones.map(item => ({ id: item.id, label: item.name, icon: <MilestoneIcon progress={milestoneProgress(data.issues, project?.id, item.id)}/>, end: item.targetDate ? formatDate(item.targetDate, { month: 'short', day: 'numeric' }) : undefined, i18nIgnore: true })),
+    { id: '', label: t('No milestone'), shortcut: '0', icon: <MilestoneProgressIcon unassigned/> },
+    ...milestones.map(item => ({ id: item.id, label: item.name, icon: <MilestoneProgressIcon overdue={isMilestoneDateOverdue(item.targetDate)} progress={milestoneIssueProgress(data.issues, project?.id, item.id)}/>, end: item.targetDate ? formatDate(item.targetDate, { month: 'short', day: 'numeric' }) : undefined, i18nIgnore: true })),
   ]
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -90,7 +92,7 @@ export function IssueProjectPicker({ data, issue, grouped = false, presence = []
     searchShortcut="Shift M"
     ariaLabel={milestone ? `${t('Change milestone')}. ${milestone.name}` : t('Set milestone')}
     triggerClassName="label-project-trigger issue-milestone-trigger"
-    trigger={<><MilestoneIcon progress={milestone ? milestoneProgress(data.issues, project.id, milestone.id) : undefined} unassigned={!milestone}/><span data-i18n-ignore={milestone ? true : undefined}>{milestone?.name ?? t('Set milestone')}</span></>}
+    trigger={<><MilestoneProgressIcon overdue={isMilestoneDateOverdue(milestone?.targetDate)} progress={milestone ? milestoneIssueProgress(data.issues, project.id, milestone.id) : undefined} unassigned={!milestone}/><span data-i18n-ignore={milestone ? true : undefined}>{milestone?.name ?? t('Set milestone')}</span></>}
     onChange={projectMilestoneId => onUpdate({ projectMilestoneId })}
     onCreate={async name => { const created = onCreateMilestone ? await onCreateMilestone(project.id, { name }) : await createProjectMilestoneRequest(project.id, { name }); setCreatedMilestones(current => ({ ...current, [project.id]: [...(current[project.id] ?? []), created] })); await onUpdate({ projectMilestoneId: created.id }) }}
   /> : null
@@ -115,20 +117,6 @@ export function IssueProjectPicker({ data, issue, grouped = false, presence = []
       workspaceName={issue.team.name}
     />
   </>
-}
-
-function milestoneProgress(issues: Issue[], projectId: string | undefined, milestoneId: string) {
-  const scoped = issues.filter(issue => issue.project?.id === projectId && issue.projectMilestoneId === milestoneId && !issue.archivedAt)
-  const completed = scoped.filter(issue => issue.state.type === 'completed' || issue.state.type === 'canceled').length
-  return scoped.length ? Math.round(completed / scoped.length * 100) : 0
-}
-
-function MilestoneIcon({ progress = 0, unassigned = false }: { progress?: number; unassigned?: boolean }) {
-  const path = 'M7.3406 2.32C7.68741 1.89333 8.31259 1.89333 8.6594 2.32L12.7903 7.402C13.0699 7.74597 13.0699 8.25403 12.7903 8.598L8.6594 13.68C8.31259 14.1067 7.68741 14.1067 7.3406 13.68L3.2097 8.598C2.9301 8.25403 2.9301 7.74597 3.2097 7.402L7.3406 2.32Z'
-  if (unassigned) return <svg aria-hidden="true" className="issue-milestone-icon is-unassigned" viewBox="0 0 16 16"><path d={path}/></svg>
-  if (progress >= 100) return <svg aria-hidden="true" className="issue-milestone-icon is-complete" viewBox="0 0 16 16"><path d={path}/></svg>
-  const length = Math.max(2.5, Math.min(31, 31 * progress / 100))
-  return <svg aria-hidden="true" className="issue-milestone-icon is-progress" viewBox="0 0 16 16"><path className="is-track" d={path}/><path className="is-value" d={path} strokeDasharray={`${length} ${31 - length}`}/></svg>
 }
 
 function OpenChevron() { return <svg aria-hidden="true" viewBox="0 0 9 5"><path d="M1.915.557a.667.667 0 0 0-.943.943l2.862 2.862a.942.942 0 0 0 1.333 0L8.028 1.5a.667.667 0 0 0-.943-.943L4.5 3.14 1.915.557Z" fill="currentColor"/></svg> }

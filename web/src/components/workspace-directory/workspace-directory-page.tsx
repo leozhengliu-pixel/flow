@@ -2,7 +2,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
 import { teamHierarchy } from '@/lib/team-hierarchy';
 import { formatCustomerRevenue } from '@/lib/customer-settings';
-import { personSearchText } from '@/lib/people';
+import { personMatchesQuery, personSearchText } from '@/lib/people';
 import { compareDirectoryTeams, indexTeamPeople, matchesTeamDate, matchesTeamFilters, teamDateChoices, teamTimestamp, type TeamFilterField, type TeamOrdering } from './team-directory-model';
 import { TeamDateFilterDialog, TeamFilterBar } from './team-directory-controls';
 import { useTeamDirectoryControls, type TeamColumn } from './use-team-directory-controls';
@@ -34,7 +34,8 @@ import {
 } from "react";
 import { VirtualColumnList } from '@/components/ui/virtual-column-list';
 import { toast } from "sonner";
-import { addFavorite, addSubscription, inviteMembers, removeFavorite, removeSubscription, setTeamMembership } from "@/lib/api";
+import { toggleFavoriteFor } from "@/lib/favorites";
+import { addSubscription, inviteMembers, removeSubscription, setTeamMembership } from "@/lib/api";
 import { useI18n } from "@/i18n/i18n";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -280,8 +281,12 @@ function TeamsOptions({ onOpenSettings }: { onOpenSettings: () => void }) {
 }
 
 function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; onOpen: (user: User) => void; onOpenTeam:(team:Team)=>void }) {
+  const { t } = useI18n();
+  const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"name" | "status" | "joined">("name");
   const [direction, setDirection] = useState<1 | -1>(1);
+  const [roles, setRoles] = useState<Set<string>>(new Set());
+  const [teamIds, setTeamIds] = useState<Set<string>>(new Set());
   const members = useMemo(
     () =>
       [...data.members].sort((left, right) => {
@@ -319,6 +324,44 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
     ...data.invitations.filter(invitation => invitation.status === "pending").map(invitation => ({ kind: "invitation" as const, invitation })),
     ...data.oauthApplications.map(application => ({ kind: "application" as const, application })),
   ], [data.invitations, data.oauthApplications, members]);
+  const filtered = useMemo(() => {
+    const needle = query.trim();
+    return entries.filter((entry) => {
+      if (entry.kind === "member") {
+        if (needle && !personMatchesQuery(entry.member.user, needle)) return false;
+        if (roles.size && !roles.has(entry.member.role)) return false;
+        if (teamIds.size && !(teamsByUserId.get(entry.member.user.id) ?? []).some((team) => teamIds.has(team.id))) return false;
+        return true;
+      }
+      if (entry.kind === "invitation") {
+        if (needle && !entry.invitation.email.toLocaleLowerCase().includes(needle.toLocaleLowerCase())) return false;
+        if (roles.size && !roles.has(entry.invitation.role)) return false;
+        if (teamIds.size && !entry.invitation.teamIds.some((id) => teamIds.has(id))) return false;
+        return true;
+      }
+      if (needle && !entry.application.name.toLocaleLowerCase().includes(needle.toLocaleLowerCase())) return false;
+      return !roles.size && !teamIds.size;
+    });
+  }, [entries, query, roles, teamIds, teamsByUserId]);
+  const filtersActive = roles.size > 0 || teamIds.size > 0;
+  const filterGroups: DirectoryFilterGroup[] = [
+    { id: "status", label: "Status", icon: <UsersRound />, choices: [
+      { id: "admin", label: "Admin" },
+      { id: "member", label: "Member" },
+      { id: "guest", label: "Guest" },
+    ] },
+    { id: "team", label: "Teams", icon: <UsersRound />, choices: data.teams.map((team) => ({ id: team.id, label: team.name, keywords: team.key })) },
+  ];
+  const changeFilter = (groupId: string, choiceId: string, checked: boolean) => {
+    const toggle = (current: Set<string>) => {
+      const next = new Set(current);
+      if (checked) next.add(choiceId);
+      else next.delete(choiceId);
+      return next;
+    };
+    if (groupId === "status") setRoles(toggle);
+    if (groupId === "team") setTeamIds(toggle);
+  };
   const changeSort = (next: typeof sort) => {
     if (sort === next) setDirection((value) => (value === 1 ? -1 : 1));
     else {
@@ -362,32 +405,77 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
     </a>;
   };
   return (
-    <div className={`workspace-directory__table workspace-members-table${entries.length > DIRECTORY_VIRTUALIZATION_THRESHOLD ? " is-virtualized" : ""}`}>
-      <DirectoryRows header={<div className="workspace-members-columns">
-        <span className="workspace-members-indent" />
-        <DirectorySortHeader
-          active={sort === "name"}
-          direction={direction}
-          label="Name"
-          onClick={() => changeSort("name")}
+    <>
+      <div className="workspace-directory__toolbar workspace-members-toolbar">
+        <label>
+          <Search />
+          <input
+            aria-label={t("Find members")}
+            placeholder={t("Find members…")}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          {query ? (
+            <button type="button" aria-label={t("Clear search")} onClick={() => setQuery("")}>
+              <X />
+            </button>
+          ) : null}
+        </label>
+        <span />
+        <DirectoryFilterMenu
+          groups={filterGroups}
+          onChoice={changeFilter}
+          selected={{ status: roles, team: teamIds }}
+          showAdvanced={false}
         />
-        <DirectorySortHeader
-          active={sort === "status"}
-          direction={direction}
-          label="Status"
-          onClick={() => changeSort("status")}
-        />
-        <DirectorySortHeader
-          active={sort === "joined"}
-          direction={direction}
-          label="Joined"
-          onClick={() => changeSort("joined")}
-        />
-        <span>Teams</span>
-        <span>Last seen</span>
-        <span className="workspace-members-end" />
-      </div>} items={entries} itemKey={entry => entry.kind === "member" ? `member:${entry.member.user.id}` : entry.kind === "invitation" ? `invitation:${entry.invitation.id}` : `application:${entry.application.id}`} render={renderEntry}/>
-    </div>
+      </div>
+      {filtered.length === 0 ? (
+        filtersActive && !query ? (
+          <DirectoryFilteredEmpty
+            hiddenCount={entries.length}
+            noun="members"
+            onClear={() => { setRoles(new Set()); setTeamIds(new Set()); }}
+          />
+        ) : (
+          <div className="workspace-members-empty" role="status">
+            <svg className="workspace-members-empty__mark" viewBox="0 0 80 80" aria-hidden="true">
+              <ellipse cx="40" cy="40" rx="22" ry="34" fill="none" stroke="currentColor" strokeWidth="1.2" />
+              <ellipse cx="40" cy="40" rx="34" ry="22" fill="none" stroke="currentColor" strokeWidth="1.2" />
+              <circle cx="40" cy="40" r="34" fill="none" stroke="currentColor" strokeWidth="1.2" />
+              <path d="M6 40h68M40 6v68" fill="none" stroke="currentColor" strokeWidth="1.2" />
+            </svg>
+            <strong>{t("No matching members")}</strong>
+          </div>
+        )
+      ) : (
+        <div className={`workspace-directory__table workspace-members-table${filtered.length > DIRECTORY_VIRTUALIZATION_THRESHOLD ? " is-virtualized" : ""}`}>
+          <DirectoryRows header={<div className="workspace-members-columns">
+            <span className="workspace-members-indent" />
+            <DirectorySortHeader
+              active={sort === "name"}
+              direction={direction}
+              label="Name"
+              onClick={() => changeSort("name")}
+            />
+            <DirectorySortHeader
+              active={sort === "status"}
+              direction={direction}
+              label="Status"
+              onClick={() => changeSort("status")}
+            />
+            <DirectorySortHeader
+              active={sort === "joined"}
+              direction={direction}
+              label="Joined"
+              onClick={() => changeSort("joined")}
+            />
+            <span>Teams</span>
+            <span>Last seen</span>
+            <span className="workspace-members-end" />
+          </div>} items={filtered} itemKey={entry => entry.kind === "member" ? `member:${entry.member.user.id}` : entry.kind === "invitation" ? `invitation:${entry.invitation.id}` : `application:${entry.application.id}`} render={renderEntry}/>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1064,11 +1152,11 @@ function TeamsDirectory({
                   <time dateTime={team.updatedAt}>{formatTeamDate(team, 'updated')}</time>
                 )}
                 <TeamRowMenu
+                  data={data}
                   team={team}
                   workspaceKey={data.workspace.urlKey}
                   favorite={Boolean(metric?.favorite)}
                   subscribed={Boolean(metric?.subscribed)}
-                  onReload={onReload}
                 />
               </div>
             );
@@ -1080,17 +1168,17 @@ function TeamsDirectory({
 }
 
 function TeamRowMenu({
+  data,
   team,
   workspaceKey,
   favorite,
   subscribed,
-  onReload,
 }: {
+  data: BootstrapData;
   team: Team;
   workspaceKey:string;
   favorite:boolean;
   subscribed:boolean;
-  onReload:()=>Promise<void>;
 }) {
   return (
     <DropdownMenu.Root>
@@ -1106,7 +1194,7 @@ function TeamRowMenu({
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content data-flow-motion="floating" className="workspace-directory__menu" align="end">
-          <DropdownMenu.Item onSelect={()=>void (favorite?removeFavorite('team',team.id):addFavorite('team',team.id)).then(()=>refreshResourcePreferences())}>{favorite?'Unfavorite':'Favorite'}</DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={()=>void toggleFavoriteFor(data,'team',team.id,undefined,favorite)}>{favorite?'Unfavorite':'Favorite'}</DropdownMenu.Item>
           <DropdownMenu.Separator />
           <DropdownMenu.Item asChild><AppLink href={`/${encodeURIComponent(workspaceKey)}/settings/teams/${encodeURIComponent(team.key)}`}>Team settings</AppLink></DropdownMenu.Item>
           <DropdownMenu.Item

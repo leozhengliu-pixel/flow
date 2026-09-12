@@ -12,7 +12,12 @@ export class PagedIssueCache {
   readonly cursors = new Map<string, string | undefined>()
   readonly capacity: number
   readonly maxBytes: number
-  constructor(capacity = 40, maxBytes = 16 * 1024 * 1024) { this.capacity = capacity; this.maxBytes = maxBytes }
+  readonly signature: string
+  constructor(capacity = 40, maxBytes = 16 * 1024 * 1024, signature = '') {
+    this.capacity = capacity
+    this.maxBytes = maxBytes
+    this.signature = signature
+  }
   key(group: string, page: number) { return JSON.stringify([group, page]) }
   clear() { this.pages.clear(); this.sizes.clear(); this.starts.clear(); this.cursors.clear(); this.bytes = 0 }
   contains(id: string) { return [...this.pages.values()].some(page => page.items.some(issue => issue.id === id)) }

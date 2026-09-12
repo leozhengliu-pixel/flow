@@ -15,3 +15,49 @@
 
 .issue-description-save-error > span { flex-basis: 100%; }
 .issue-description-save-error button { text-decoration: underline; text-underline-offset: 3px; }
+
+:root[data-theme="light"] .issue-description-save-error {
+  border-color: var(--border-strong);
+  background: var(--surface-card);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .description-editor:focus {
+  background: var(--theme-soft-overlay);
+}
+:root[data-theme="light"] .description-editor code,
+:root[data-theme="light"] .comment-body code {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .description-editor pre,
+:root[data-theme="light"] .issue-description-history section pre {
+  background: var(--theme-surface-1);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .issue-description-root .description-editor a {
+  color: var(--accent-primary);
+}
+:root[data-theme="light"] .description-bubble-menu {
+  border-color: var(--popover-border);
+  background: var(--theme-surface-2);
+  box-shadow: var(--shadow-control);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .description-block-menu,
+:root[data-theme="light"] .description-slash-menu,
+:root[data-theme="light"] .description-mention-menu,
+:root[data-theme="light"] .description-link-editor {
+  border-color: var(--popover-border);
+  background: var(--theme-surface-2);
+  box-shadow: var(--shadow-dialog);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .issue-description-history {
+  border-color: var(--border-strong);
+  background: var(--theme-surface-2);
+  box-shadow: var(--shadow-dialog);
+  color: var(--theme-text-primary);
+}
+:root[data-theme="light"] .comment-body {
+  background: var(--theme-soft-overlay);
+}

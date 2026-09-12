@@ -69,9 +69,11 @@ const filterGroups = [
     { id: 'suggestedLabel', label: 'Suggested label', submenu: true }, { id: 'dates', label: 'Dates', submenu: true },
   ] },
   { items: [
+    { id: 'projectMilestone', label: 'Project milestone', submenu: true },
     { id: 'project', label: 'Project', submenu: true }, { id: 'projectProperties', label: 'Project properties', submenu: true },
     { id: 'initiative', label: 'Initiative', submenu: true }, { id: 'cycle', label: 'Cycle', submenu: true },
     { id: 'addedToCycle', label: 'Added to cycle', submenu: true }, { id: 'releases', label: 'Releases', submenu: true },
+    { id: 'customers', label: 'Customers', submenu: true },
   ] },
   { items: [
     { id: 'subscribers', label: 'Subscribers', submenu: true }, { id: 'externalSource', label: 'External source', submenu: true }, { id: 'autoClosed', label: 'Auto-closed' },

@@ -39,15 +39,14 @@ import {
   type InsightPoint,
 } from "@/components/analytics/flow-insight-graph";
 import { useI18n } from "@/i18n/i18n";
+import { toggleFavoriteFor } from "@/lib/favorites";
 import {
-  addFavorite,
   createDashboard,
   dashboardExportURL,
   deleteDashboard,
   fetchDashboardResults,
   fetchDashboards,
   previewDashboardWidget,
-  removeFavorite,
   shareDashboard,
   subscribeDashboard,
   updateDashboard,
@@ -278,17 +277,9 @@ export function DashboardsPage({
       toast.error(t("Could not share dashboard"));
     }
   };
-  const toggleFavorite = async () => {
+  const toggleFavorite = () => {
     if (!selected) return;
-    const next = !favorite;
-    setFavorite(next);
-    try {
-      if (next) await addFavorite("dashboard", selected.id);
-      else await removeFavorite("dashboard", selected.id);
-    } catch {
-      setFavorite(!next);
-      toast.error(t("Could not update favorite"));
-    }
+    void toggleFavoriteFor(data, "dashboard", selected.id, !favorite, favorite);
   };
   const openInsight = (widgetId?: string) => {
     if (selected) onOpenWidget(selected.id, widgetId ?? "new");

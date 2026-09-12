@@ -49,9 +49,10 @@ export function useProjectsViewState(projects: ProjectPageItem[], { initial, sto
 
   const grouped = useMemo(() => groupAndSort(projects, state), [projects, state])
 
-  const dataViewProps: Pick<ProjectsDataViewProps, 'groups' | 'layout' | 'manualOrdering' | 'selectedIds' | 'sort' | 'visibleProperties' | 'onSelectionChange' | 'onSort'> = {
+  const dataViewProps: Pick<ProjectsDataViewProps, 'groups' | 'layout' | 'grouping' | 'manualOrdering' | 'selectedIds' | 'sort' | 'visibleProperties' | 'onSelectionChange' | 'onSort'> = {
     groups: grouped,
     layout: state.display.layout,
+    grouping: state.display.grouping,
     manualOrdering: state.display.ordering === 'Manual',
     onSelectionChange: selectedIds => setState(current => ({ ...current, selectedIds })),
     onSort: (column, direction) => setState(current => ({ ...current, display: { ...current.display, ordering: orderingForColumn(column), orderingDirection: direction }, sort: { column, direction } })),

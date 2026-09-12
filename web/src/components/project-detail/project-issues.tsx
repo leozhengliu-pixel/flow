@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Diamond, Plus, Trash2, X } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
+import { MilestoneProgressIcon } from "@/components/issue/milestone-progress-icon";
+import { isMilestoneDateOverdue, milestoneIssueProgress } from "@/components/issue/milestone-progress";
 import { toast } from "sonner";
 import { MyIssuesDisplayMenu } from "@/components/my-issues/my-issues-display-menu";
 import { MyIssuesFilterMenu } from "@/components/my-issues/my-issues-filter-menu";
@@ -14,6 +16,14 @@ import {
   updateFilterValues,
   type MyIssuesAppliedFilter,
 } from "@/components/my-issues/my-issues-filter-types";
+import {
+  ISSUE_FILTER_LABELS,
+  applyExplorerFilters,
+  explorerFilterOptions,
+  explorerPropertyOptions,
+  issueHierarchyFields,
+  nestedIssueProjection,
+} from "@/components/issue-explorer/issue-explorer-model";
 import {
   MyIssuesList,
   type MyIssuesContextAction,
@@ -32,10 +42,6 @@ import type {
 import { IssueBoard } from "@/components/issue-explorer/issue-board";
 import { PagedIssueList } from "@/components/issue-explorer/paged-issue-list";
 import type { IssueQueryInput } from "@/lib/api";
-import {
-  issueHierarchyFields,
-  nestedIssueProjection,
-} from "@/components/issue-explorer/issue-explorer-model";
 import { ViewIconPicker } from "@/components/views/view-icon-picker";
 import type {
   BootstrapData,
@@ -63,19 +69,22 @@ export function ProjectIssueFilterMenu({
   onChange: (filters: ProjectIssueFilters) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const options = useMemo(() => projectFilterOptions(issues, issueData), [issues, issueData]);
+  const options = useMemo(
+    () => (issueData ? explorerPropertyOptions(issueData, issues) : undefined),
+    [issueData, issues],
+  );
   const toggle = (field: MyIssuesFilterKey, option: MyIssuesFilterOption) => {
-    const label = FILTER_LABELS[field];
+    const label = ISSUE_FILTER_LABELS[field];
     if (label) onChange(toggleFilterOption(filters, field, label, option));
   };
   return (
     <MyIssuesFilterMenu
-      availableFields={["status", "assignee", "priority", "labels"]}
+      scope="project"
       filters={filters}
       onOpenChange={setOpen}
       onToggle={toggle}
       open={open}
-      options={(field) => options[field]}
+      options={(field) => (options ? explorerFilterOptions(field, options) : undefined)}
       trigger={
         <button
           aria-label="Add filter"
@@ -121,11 +130,14 @@ export function ProjectIssueFilterBar({
   issues: Issue[];
   onChange: (filters: ProjectIssueFilters) => void;
 }) {
-  const options = useMemo(() => projectFilterOptions(issues, issueData), [issues, issueData]);
+  const options = useMemo(
+    () => (issueData ? explorerPropertyOptions(issueData, issues) : undefined),
+    [issueData, issues],
+  );
   return (
     <MyIssuesFilterBar
       filters={filters}
-      filterOptions={(filter) => options[filter.field]}
+      filterOptions={(filter) => (options ? explorerFilterOptions(filter.field, options) : undefined)}
       onClear={() => onChange([])}
       onOperatorChange={(id, operator) =>
         onChange(updateFilterOperator(filters, id, operator))
@@ -304,8 +316,7 @@ export function ProjectIssues({
   const visible = useMemo(
     () =>
       sortIssues(
-        projectIssues
-          .filter((issue) => matchesFilters(issue, filters))
+        applyExplorerFilters(projectIssues, filters, issueData)
           .filter((issue) => display.showSubIssues || !issue.parentId)
           .filter(
             (issue) =>
@@ -314,7 +325,7 @@ export function ProjectIssues({
           ),
         display,
       ),
-    [display, filters, projectIssues],
+    [display, filters, issueData, projectIssues],
   );
   const allStates = useMemo(
     () =>
@@ -470,7 +481,7 @@ export function ProjectIssues({
     <div className="project-issues" data-layout={display.layout} data-paged={issueData?.issueCollectionPaged || undefined}>
       {milestoneScope && (
         <div className="project-issues__milestone-scope">
-          <Diamond size={13} />
+          <MilestoneProgressIcon overdue={isMilestoneDateOverdue(milestoneScope.targetDate)} progress={milestoneIssueProgress(projectIssues, project.id, milestoneScope.id)} size={13} />
           <span data-i18n-ignore>{milestoneScope.name}</span>
           <button
             aria-label="Clear milestone filter"
@@ -610,76 +621,6 @@ export function ProjectIssues({
   );
 }
 
-const FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = {
-  status: "Status",
-  assignee: "Assignee",
-  priority: "Priority",
-  labels: "Labels",
-  dates: "Due date",
-};
-function projectFilterOptions(
-  issues: Issue[],
-  data?: BootstrapData,
-): Partial<Record<MyIssuesFilterKey, MyIssuesFilterOption[]>> {
-  const count = (predicate: (issue: Issue) => boolean) =>
-    data?.issueCollectionPaged ? undefined : issues.filter(predicate).length;
-  const statuses = uniqueById(data?.states ?? issues.map((issue) => issue.state)).map(
-    (state) => ({
-      id: state.id,
-      label: state.name,
-      color: state.color,
-      count: count((issue) => issue.state.id === state.id),
-    }),
-  );
-  const assignees = uniqueById(
-    data?.users ?? issues.flatMap((issue) => (issue.assignee ? [issue.assignee] : [])),
-  ).map((user) => ({
-    id: user.id,
-    label: user.displayName,
-    count: count((issue) => issue.assignee?.id === user.id),
-  }));
-  const labels = uniqueById(data?.labels.filter(label => label.resourceType !== 'project') ?? issues.flatMap((issue) => issue.labels)).map(
-    (label) => ({
-      id: label.id,
-      label: label.name,
-      color: label.color,
-      count: count((issue) =>
-        issue.labels.some((item) => item.id === label.id),
-      ),
-    }),
-  );
-  return {
-    status: statuses,
-    priority: [0, 1, 2, 3, 4].map((priority) => ({
-      id: String(priority),
-      label: PRIORITY_LABELS[priority],
-      count: count((issue) => issue.priority === priority),
-    })),
-    assignee: [
-      {
-        id: "",
-        label: "No assignee",
-        count: count((issue) => !issue.assignee),
-      },
-      ...assignees,
-    ],
-    labels,
-  };
-}
-function matchesFilters(issue: Issue, filters: ProjectIssueFilters) {
-  return filters.every((filter) => {
-    const values = filterValues(filter).map((value) => value.value);
-    let match = true;
-    if (filter.field === "priority")
-      match = values.includes(String(issue.priority));
-    else if (filter.field === "status") match = values.includes(issue.state.id);
-    else if (filter.field === "assignee")
-      match = values.includes(issue.assignee?.id ?? "");
-    else if (filter.field === "labels")
-      match = issue.labels.some((label) => values.includes(label.id));
-    return filter.operator === "is" ? match : !match;
-  });
-}
 function groupIssues(
   issues: Issue[],
   display: MyIssuesDisplayOptions,
@@ -824,6 +765,7 @@ function toRowData(issue: Issue, issues: Issue[]): MyIssuesRowData {
     state: issue.state,
     labels: issue.labels,
     project: issue.project,
+    projectMilestoneId: issue.projectMilestoneId,
     assignee: issue.assignee
       ? {
           id: issue.assignee.id,

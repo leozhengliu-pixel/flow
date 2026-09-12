@@ -54,7 +54,7 @@ describe('DocumentPage edited details', () => {
     await user.click(favoriteSwitch)
 
     await waitFor(() => expect(api.addFavorite).toHaveBeenCalledWith('document', flowDocument.id))
-    expect(api.refreshResourcePreferences).toHaveBeenCalledWith(data.workspace.urlKey)
+    expect(api.refreshResourcePreferences).not.toHaveBeenCalled()
     expect(onReload).not.toHaveBeenCalled()
   })
 

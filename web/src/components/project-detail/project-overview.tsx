@@ -9,6 +9,8 @@ import { ProjectLeadPicker } from '@/components/projects-page/project-lead-picke
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
 import { Avatar } from '@/components/issue/issue-row'
 import { CalendarIcon, PriorityIcon, ProjectStatusIcon, TeamIcon } from '@/components/issue/issue-icons'
+import { MilestoneProgressIcon } from '@/components/issue/milestone-progress-icon'
+import { isMilestoneDateOverdue } from '@/components/issue/milestone-progress'
 import { projectStatusOptionColor } from '@/lib/project-status-color'
 import { ViewIconPicker } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
@@ -90,7 +92,7 @@ function OverviewMilestone({ totals, issues, milestone, onDelete, onOpenIssues, 
   const copy = (value: string, message: string) => void navigator.clipboard.writeText(value).then(() => toast.success(message))
   return <article className="project-overview__milestone" data-expanded={expanded} id={`milestone-${milestone.id}`}>
     <header>
-      <span className="project-overview__milestone-mark"><MilestoneProgress progress={progress}/></span>
+      <span className="project-overview__milestone-mark"><MilestoneProgressIcon className="project-overview__milestone-progress" overdue={isMilestoneDateOverdue(milestone.targetDate)} progress={progress}/></span>
       <ProjectEditableText ariaLabel="Milestone name" className="project-overview__milestone-name" placeholder="Milestone name" value={milestone.name} onCommit={name => onUpdate({ name }).then(() => undefined)}/>
       <button aria-expanded={expanded} aria-label={expanded ? 'Collapse' : 'Expand'} className="project-overview__milestone-collapse" onClick={() => setExpanded(value => !value)} type="button"><ChevronRight size={16}/></button>
       <span className="project-overview__milestone-spacer"/>
@@ -115,10 +117,7 @@ function OverviewMilestone({ totals, issues, milestone, onDelete, onOpenIssues, 
   </article>
 }
 
-function MilestoneProgress({ progress }: { progress: number }) {
-  const clamped = Math.max(0, Math.min(100, progress))
-  return <svg aria-hidden="true" className="project-overview__milestone-progress" height="16" viewBox="0 0 16 16" width="16"><path d="M7.3406 2.32c.3468-.4267.972-.4267 1.3188 0l4.1309 5.082c.2796.344.2796.852 0 1.196L8.6594 13.68c-.3468.4267-.972.4267-1.3188 0L3.2097 8.598a.95.95 0 0 1 0-1.196L7.3406 2.32Z" fill="none" opacity=".3" stroke="currentColor" strokeLinejoin="round" strokeWidth="2"/><path d="M7.3406 2.32c.3468-.4267.972-.4267 1.3188 0l4.1309 5.082c.2796.344.2796.852 0 1.196L8.6594 13.68c-.3468.4267-.972.4267-1.3188 0L3.2097 8.598a.95.95 0 0 1 0-1.196L7.3406 2.32Z" fill="none" pathLength="100" stroke="currentColor" strokeDasharray={`${clamped} ${100 - clamped}`} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"/></svg>
-}
+
 
 function OverviewMilestoneCreator({ onCancel, onCreate }: { onCancel: () => void; onCreate: (input: { name: string; description?: string; targetDate?: string }) => Promise<void> }) {
   const { formatDate, locale } = useI18n()
@@ -128,7 +127,7 @@ function OverviewMilestoneCreator({ onCancel, onCreate }: { onCancel: () => void
   const [saving, setSaving] = useState(false)
   const submit = () => { if (!name.trim() || saving) return; setSaving(true); void onCreate({ name: name.trim(), description: description.trim(), targetDate }).finally(() => setSaving(false)) }
   return <form className="project-overview__milestone project-overview__milestone-creator" onSubmit={event => { event.preventDefault(); submit() }}>
-    <header><span className="project-overview__milestone-mark"><MilestoneProgress progress={0}/></span><input autoFocus aria-label="Milestone name" className="project-overview__milestone-name" disabled={saving} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') onCancel() }} placeholder="Milestone name" value={name}/><span className="project-overview__milestone-spacer"/><ProjectDatePicker buttonClassName="project-overview__milestone-date" label="Target date" onChange={setTargetDate} value={targetDate}><span>{targetDate ? locale === 'en-US' ? format(new Date(`${targetDate}T00:00:00`), 'MMM d') : formatDate(`${targetDate}T00:00:00`, { month: 'short', day: 'numeric' }) : 'Choose date'}</span></ProjectDatePicker><button aria-label="Cancel" className="project-overview__milestone-menu-trigger" onClick={onCancel} type="button"><X size={12}/></button></header>
+    <header><span className="project-overview__milestone-mark"><MilestoneProgressIcon className="project-overview__milestone-progress" empty/></span><input autoFocus aria-label="Milestone name" className="project-overview__milestone-name" disabled={saving} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') onCancel() }} placeholder="Milestone name" value={name}/><span className="project-overview__milestone-spacer"/><ProjectDatePicker buttonClassName="project-overview__milestone-date" label="Target date" onChange={setTargetDate} value={targetDate}><span>{targetDate ? locale === 'en-US' ? format(new Date(`${targetDate}T00:00:00`), 'MMM d') : formatDate(`${targetDate}T00:00:00`, { month: 'short', day: 'numeric' }) : 'Choose date'}</span></ProjectDatePicker><button aria-label="Cancel" className="project-overview__milestone-menu-trigger" onClick={onCancel} type="button"><X size={12}/></button></header>
     <textarea aria-label="Milestone description" className="project-overview__milestone-description" disabled={saving} onChange={event => setDescription(event.target.value)} placeholder="Add milestone description…" value={description}/>
   </form>
 }

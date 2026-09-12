@@ -26,9 +26,11 @@
 
 :root[data-theme="light"] .flow-tooltip-content {
   background: var(--theme-surface-2);
-  border-color: var(--theme-border);
-  box-shadow: var(--shadow);
+  border-color: var(--popover-border);
+  box-shadow: var(--shadow-control);
+  color: var(--theme-text-primary);
 }
+:root[data-theme="light"] .flow-tooltip-shortcut { color: var(--theme-text-tertiary); }
 
 @media (prefers-reduced-motion: reduce) {
   .flow-tooltip-content { animation: none; }
