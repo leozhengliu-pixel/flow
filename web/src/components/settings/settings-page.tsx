@@ -1261,7 +1261,6 @@ function TeamsPage({
         description="Teams organize issues, projects, cycles, and views."
         action={
           <ActionButton primary onClick={onCreate}>
-            <Plus size={14} />
             New team
           </ActionButton>
         }
@@ -1381,7 +1380,6 @@ export function MembersPage({
           <div className="settings-header-actions">
             <ActionButton onClick={exportCsv}>Export CSV</ActionButton>
             <ActionButton primary onClick={() => setInviteOpen(true)}>
-              <Plus size={14} />
               Invite
             </ActionButton>
           </div>
@@ -2171,7 +2169,6 @@ function MembersPageV2({
         <span />
         <ActionButton onClick={exportCsv}>{t("Export CSV")}</ActionButton>
         <ActionButton primary onClick={() => setInviteOpen(true)}>
-          <Plus size={14} />
           {t("Invite")}
         </ActionButton>
       </div>

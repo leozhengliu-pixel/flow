@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog'
-import { refreshResourcePreferences } from '@/lib/resource-preferences'
+import { toggleFavoriteFor } from '@/lib/favorites'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
 import * as Select from '@radix-ui/react-select'
@@ -18,7 +18,7 @@ import type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption } 
 import { toggleFilterOption, updateFilterOperator, updateFilterValues } from '@/components/my-issues/my-issues-filter-types'
 import { DisplayIcon as SlidersHorizontal, FilterIcon as Filter } from '@/components/ui/view-action-icons'
 import { ISSUE_FILTER_LABELS, applyExplorerFilters, buildExplorerIssueGroups, explorerFilterOptions, explorerPropertyOptions, explorerUpdateForProperty, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
-import { addFavorite, createReleaseNote, deleteRelease, recordRecentResource, removeFavorite, updateIssue, updateRelease, updateReleaseNote } from '@/lib/api'
+import { createReleaseNote, deleteRelease, recordRecentResource, updateIssue, updateRelease, updateReleaseNote } from '@/lib/api'
 import { useI18n } from '@/i18n/i18n'
 import { newReleasePipelinePath, releasePath, releasePipelinePath, releasePipelineSettingsPath, teamArchivePath, type ReleasePipelineTab, type ReleaseRouteTab } from '@/lib/app-routes'
 import type { BootstrapData, Release, ReleasePipeline, ReleaseResource } from '@/types/flow'
@@ -134,7 +134,7 @@ function ReleasePipelineView({ data, pipeline, tab, archive, onArchiveChange, on
   const releases = releasesForPipeline(data,pipeline,archive)
   const changelog = releasesForPipeline(data,pipeline).filter(item=>item.status==='released')
   const favorite = data.favorites.some(item=>item.resourceType==='release_pipeline'&&item.resourceId===pipeline.id)
-  const toggleFavorite = async()=>{try{if(favorite)await removeFavorite('release_pipeline',pipeline.id);else await addFavorite('release_pipeline',pipeline.id);await refreshResourcePreferences(data.workspace.urlKey)}catch(error){toast.error(error instanceof Error?error.message:t('Could not update favorite'))}}
+  const toggleFavorite = ()=>{void toggleFavoriteFor(data,'release_pipeline',pipeline.id,undefined,favorite)}
   const copyUrl=async()=>{try{await navigator.clipboard.writeText(window.location.href);toast.success(t('URL copied'))}catch{toast.error(t('Could not copy URL'))}}
   const archiveTeam=data.teams.find(team=>pipeline.teamIds.includes(team.id))??data.teams[0]
   const pipelineMenu = <DropdownMenu.Root><DropdownMenu.Trigger asChild><IconButton label={t('Pipeline options')}><MoreHorizontal/></IconButton></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="flow-releases-menu flow-pipeline-options" align="start" sideOffset={4}>{pipeline.type==='scheduled'&&<ReleaseMenuItem icon={<Plus/>} onSelect={onCreate}>{t('Create release')}</ReleaseMenuItem>}<ReleaseMenuItem icon={<Star fill={favorite?'currentColor':'none'}/>} onSelect={()=>void toggleFavorite()}>{t(favorite?'Remove from favorites':'Favorite')}</ReleaseMenuItem><ReleaseMenuItem icon={<Copy/>} onSelect={()=>void copyUrl()}>{t('Copy URL')}</ReleaseMenuItem><DropdownMenu.Separator/><ReleaseMenuItem icon={<Settings2/>} onSelect={()=>onNavigate(releasePipelineSettingsPath(data.workspace.urlKey,pipeline.slugId))}>{t('Pipeline settings')}</ReleaseMenuItem><DropdownMenu.Separator/><ReleaseMenuItem icon={<Archive/>} onSelect={()=>onArchiveChange(!archive)}>{t(archive?'View active releases':'Open archive')}</ReleaseMenuItem>{archiveTeam&&<ReleaseMenuItem icon={<Trash2/>} onSelect={()=>onNavigate(teamArchivePath(data.workspace.urlKey,archiveTeam.key))}>{t('View recently deleted releases')}</ReleaseMenuItem>}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
@@ -199,7 +199,7 @@ function ReleaseDetailPage({data,pipeline,release,tab,onNavigate,onOpenSidebar,o
   const issueRows=useMemo(()=>visibleIssues.map(issue=>issueToExplorerRow(issue,data.workspace.urlKey,data.issues,data)),[data,visibleIssues])
   const issueGroups=useMemo(()=>buildExplorerIssueGroups(issueRows,display,data),[data,display,issueRows])
   const favorite=data.favorites.some(item=>item.resourceType==='release'&&item.resourceId===release.id)
-  const toggleFavorite=async()=>{try{if(favorite)await removeFavorite('release',release.id);else await addFavorite('release',release.id);await refreshResourcePreferences(data.workspace.urlKey)}catch(error){toast.error(error instanceof Error?error.message:t('Could not update favorite'))}}
+  const toggleFavorite=()=>{void toggleFavoriteFor(data,'release',release.id,undefined,favorite)}
   const copyUrl=async()=>{try{await navigator.clipboard.writeText(window.location.href);toast.success(t('URL copied'))}catch{toast.error(t('Could not copy URL'))}}
   const updateStage=async(value:string)=>{try{setStage(value);await updateRelease(release.id,{stage:value,status:releaseStatusForStage(pipeline,value,release.status)});await onReload()}catch(error){setStage(release.stage??'');toast.error(error instanceof Error?error.message:t('Could not save release'))}}
   const saveNotes=async()=>{setSavingNotes(true);try{if(releaseNote)await updateReleaseNote(release.id,releaseNote.id,{body:notes});else await createReleaseNote(release.id,{title:release.name,body:notes});await updateRelease(release.id,{releaseNotes:notes});setSavedNotes(notes);await onReload();toast.success(t('Release notes saved'))}catch(error){toast.error(error instanceof Error?error.message:t('Could not save release notes'))}finally{setSavingNotes(false)}}

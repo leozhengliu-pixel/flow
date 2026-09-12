@@ -11,7 +11,6 @@ import { Bot, History } from "lucide-react";
 import { setRuntimePreferences, setWorkspaceRuntimePreferences } from '@/lib/runtime-preferences';
 import { AuthenticationPolicyPage } from '@/components/auth/authentication-policy-page';
 import {
-  addFavorite,
   addSubscription,
   batchUpdateIssues,
   completeCycle as completeCycleRequest,
@@ -69,7 +68,6 @@ import {
   logoutAccount,
   listProjectRelations,
   recordRecentResource,
-  removeFavorite,
   removeSubscription,
   reorderProjectMilestones,
   setProjectDisplayDefault,
@@ -242,6 +240,7 @@ function mergeProjectRelations(data: BootstrapData, projectId: string, relations
 }
 
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
+import { applyFavoriteDelta, FAVORITES_CHANGED, overlayPendingFavoriteIntents, toggleFavoriteFor } from '@/lib/favorites';
 import { fetchResourcePreferences, mergeResourcePreferences, RESOURCE_PREFERENCES_UPDATED, type ResourcePreferences } from '@/lib/resource-preferences';
 import { useDesktopNotifications } from "@/hooks/use-desktop-notifications";
 import { labelsForResource, setGroupedLabelSelected } from "@/lib/labels";
@@ -789,10 +788,18 @@ function App() {
   useEffect(() => {
     const update = (event: Event) => {
       const { workspaceKey, preferences } = (event as CustomEvent<{ workspaceKey: string; preferences: ResourcePreferences }>).detail;
-      setData(current => current?.workspace.urlKey === workspaceKey ? mergeResourcePreferences(current, preferences) : current);
+      setData(current => current?.workspace.urlKey === workspaceKey ? overlayPendingFavoriteIntents(mergeResourcePreferences(current, preferences)) : current);
     };
     window.addEventListener(RESOURCE_PREFERENCES_UPDATED, update);
     return () => window.removeEventListener(RESOURCE_PREFERENCES_UPDATED, update);
+  }, []);
+  useEffect(() => {
+    const update = (event: Event) => {
+      const delta = (event as CustomEvent<{ workspaceKey: string; resourceType: string; resourceId: string; favorite: import('@/types/flow').Favorite | null }>).detail;
+      setData(current => current?.workspace.urlKey === delta.workspaceKey ? applyFavoriteDelta(current, delta) : current);
+    };
+    window.addEventListener(FAVORITES_CHANGED, update);
+    return () => window.removeEventListener(FAVORITES_CHANGED, update);
   }, []);
   const realtime = useWorkspaceRealtime({
     workspaceKey: data?.workspace.urlKey,
@@ -811,7 +818,7 @@ function App() {
       const entity = event.payload?.entity;
       if (/^(favorite\.|favorite_folder\.|subscription\.)/.test(event.type)) {
         const preferences = await fetchResourcePreferences(workspace);
-        setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? mergeResourcePreferences(current, preferences) : current);
+        setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? overlayPendingFavoriteIntents(mergeResourcePreferences(current, preferences)) : current);
         return;
       }
       if (event.type.startsWith('notification.') && entity && typeof entity === 'object' && 'recipientId' in entity) {
@@ -1477,36 +1484,7 @@ function App() {
   };
   const toggleSelectedFavorite = async () => {
     if (!data || !selectedIssue) return;
-    const favorite = data.favorites.find(
-      (item) =>
-        item.resourceType === "issue" && item.resourceId === selectedIssue.id,
-    );
-    if (favorite) {
-      await run(
-        () => removeFavorite("issue", selectedIssue.id),
-        "Could not remove favorite",
-      );
-      setData((current) =>
-        current
-          ? {
-              ...current,
-              favorites: current.favorites.filter(
-                (item) => item.id !== favorite.id,
-              ),
-            }
-          : current,
-      );
-    } else {
-      const created = await run(
-        () => addFavorite("issue", selectedIssue.id),
-        "Could not add favorite",
-      );
-      setData((current) =>
-        current
-          ? { ...current, favorites: [created, ...current.favorites] }
-          : current,
-      );
-    }
+    await toggleFavoriteFor(data, "issue", selectedIssue.id);
   };
   const remindSelectedIssue = async (remindAt: string) => {
     if (!selectedIssue) return;
@@ -1807,89 +1785,12 @@ function App() {
     projectId: string,
     favorite: boolean,
   ) => {
-    const current = data?.favorites.find(
-      (item) =>
-        item.userId === data.viewer.id &&
-        item.resourceType === "project" &&
-        item.resourceId === projectId,
-    );
-    if (!favorite) {
-      if (current)
-        await run(
-          () => removeFavorite("project", projectId),
-          "Could not update favorite",
-        );
-      setData((state) =>
-        state
-          ? {
-              ...state,
-              favorites: state.favorites.filter(
-                (item) =>
-                  !(
-                    item.userId === state.viewer.id &&
-                    item.resourceType === "project" &&
-                    item.resourceId === projectId
-                  ),
-              ),
-            }
-          : state,
-      );
-      return;
-    }
-    const created = await run(
-      () => addFavorite("project", projectId),
-      "Could not update favorite",
-    );
-    setData((state) =>
-      state
-        ? {
-            ...state,
-            favorites: [
-              created,
-              ...state.favorites.filter((item) => item.id !== created.id),
-            ],
-          }
-        : state,
-    );
+    if (!data) return;
+    await toggleFavoriteFor(data, "project", projectId, favorite);
   };
   const toggleTeamFavorite = async (teamId: string, favorite: boolean) => {
-    if (!favorite) {
-      await run(
-        () => removeFavorite("team", teamId),
-        "Could not update favorite",
-      );
-      setData((state) =>
-        state
-          ? {
-              ...state,
-              favorites: state.favorites.filter(
-                (item) =>
-                  !(
-                    item.userId === state.viewer.id &&
-                    item.resourceType === "team" &&
-                    item.resourceId === teamId
-                  ),
-              ),
-            }
-          : state,
-      );
-      return;
-    }
-    const created = await run(
-      () => addFavorite("team", teamId),
-      "Could not update favorite",
-    );
-    setData((state) =>
-      state
-        ? {
-            ...state,
-            favorites: [
-              created,
-              ...state.favorites.filter((item) => item.id !== created.id),
-            ],
-          }
-        : state,
-    );
+    if (!data) return;
+    await toggleFavoriteFor(data, "team", teamId, favorite);
   };
   const setProjectSubscriptionEvents = async (
     projectId: string,
@@ -2032,6 +1933,14 @@ function App() {
     id: string,
     input: InitiativeMutationInput,
   ) => {
+    if (data && typeof input.favorite === "boolean") {
+      const pending = Object.entries(input).filter(([, value]) => value !== undefined);
+      const current = pending.length === 1 ? data.initiatives.find((item) => item.id === id) : undefined;
+      if (current) {
+        void toggleFavoriteFor(data, "initiative", id, input.favorite);
+        return { ...current, favorite: input.favorite };
+      }
+    }
     const initiative = await run(
       () => updateInitiative(id, input),
       "Could not update initiative",
@@ -2964,6 +2873,14 @@ function App() {
     return updateIssueById(issue, input);
   };
   const changeCycle = async (id: string, input: CycleMutationInput) => {
+    if (data && typeof input.favorite === "boolean") {
+      const pending = Object.entries(input).filter(([, value]) => value !== undefined);
+      const current = pending.length === 1 ? data.cycles.find((item) => item.id === id) : undefined;
+      if (current) {
+        void toggleFavoriteFor(data, "cycle", id, input.favorite);
+        return { ...current, favorite: input.favorite };
+      }
+    }
     const cycle = await run(
       () => updateCycleRequest(id, input),
       "Could not update cycle",
@@ -3055,6 +2972,14 @@ function App() {
     return view;
   };
   const changeSavedView = async (id: string, input: SavedViewMutationInput) => {
+    if (data && typeof input.favorite === "boolean") {
+      const pending = Object.entries(input).filter(([, value]) => value !== undefined);
+      const current = pending.length === 1 ? data.savedViews.find((item) => item.id === id) : undefined;
+      if (current) {
+        void toggleFavoriteFor(data, "view", id, input.favorite);
+        return { ...current, favorite: input.favorite };
+      }
+    }
     const view = await run(
       () => updateSavedView(id, input),
       "Could not update view",
@@ -3139,51 +3064,8 @@ function App() {
     return settings;
   };
   const toggleSavedViewFavorite = async (view: SavedView) => {
-    const current = data?.favorites.find(
-      (item) =>
-        item.userId === data.viewer.id &&
-        item.resourceType === "view" &&
-        item.resourceId === view.id,
-    );
-    if (current || view.favorite) {
-      if (current)
-        await run(
-          () => removeFavorite("view", view.id),
-          "Could not remove favorite",
-        );
-      if (view.favorite) await changeSavedView(view.id, { favorite: false });
-      setData((state) =>
-        state
-          ? {
-              ...state,
-              favorites: state.favorites.filter(
-                (item) =>
-                  !(
-                    item.userId === state.viewer.id &&
-                    item.resourceType === "view" &&
-                    item.resourceId === view.id
-                  ),
-              ),
-            }
-          : state,
-      );
-      return;
-    }
-    const created = await run(
-      () => addFavorite("view", view.id),
-      "Could not add favorite",
-    );
-    setData((state) =>
-      state
-        ? {
-            ...state,
-            favorites: [
-              created,
-              ...state.favorites.filter((item) => item.id !== created.id),
-            ],
-          }
-        : state,
-    );
+    if (!data) return;
+    await toggleFavoriteFor(data, "view", view.id, undefined, Boolean(view.favorite));
   };
   const setSavedViewSubscriptionEvents = async (
     view: SavedView,
@@ -3874,7 +3756,10 @@ function App() {
     }
   }, [
     data,
+    location.hash,
     location.pathname,
+    location.search,
+    location.state,
     navigateTo,
     route,
     selectedCycle,
@@ -4273,9 +4158,6 @@ function App() {
         }
         onSwitchWorkspace={switchWorkspace}
         onCreateWorkspace={() => navigateTo(workspaceOnboardingPath())}
-        onReload={async () =>
-          acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
-        }
         onLogout={async () => {
           await logoutAccount();
           setSession(null);
@@ -5510,6 +5392,7 @@ function App() {
                 agentSkills={data.agentSkills}
                 labels={data.labels}
                 labelGroups={data.labelGroups}
+                issues={data.issues}
                 workspaceKey={data.workspace.urlKey}
                 scopeTeamId={viewsTeam?.id}
                 teamSettings={data.teamSettings}
@@ -5632,6 +5515,7 @@ function App() {
                 agentSkills={data.agentSkills}
                 labels={data.labels}
                 labelGroups={data.labelGroups}
+                issues={data.issues}
                 workspaceKey={data.workspace.urlKey}
                 scopeTeamId={projectTeam?.id}
                 teamSettings={data.teamSettings}
@@ -5767,7 +5651,7 @@ function App() {
               selectedProjectFacetView)) &&
           selectedProject && (
             <ProjectDetailPage
-              issueData={data.issueCollectionPaged ? data : undefined}
+              issueData={data}
               onCreateLabel={addProjectLabel}
               key={`${selectedProject.id}:${selectedProjectFacetView?.id ?? "base"}`}
               project={selectedProject}

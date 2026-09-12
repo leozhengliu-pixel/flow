@@ -3,6 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { expect, it, vi } from 'vitest'
 
+class TestResizeObserver { observe() {} unobserve() {} disconnect() {} }
+Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, value: TestResizeObserver })
+
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, viewer } from '@/test/fixtures'
 import type { Favorite, FavoriteFolder, FlowDocument, SavedView } from '@/types/flow'

@@ -23,6 +23,10 @@
   outline-offset: -2px;
 }
 
+:global(:root[data-theme="light"]) .snoozeOption:focus-visible {
+  outline-color: var(--accent-primary);
+}
+
 .actionError {
   position: absolute;
   width: 1px;

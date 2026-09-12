@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { teamHierarchy, type TeamHierarchySettings } from '@/lib/team-hierarchy'
-import type { Initiative, Invitation, IssueLabel, LabelGroup, PersonalAgentSkill, Presence, Project, ProjectDependencyRelationInput, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
+import type { Initiative, Invitation, Issue, IssueLabel, LabelGroup, PersonalAgentSkill, Presence, Project, ProjectDependencyRelationInput, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
+import { currentProjectMilestone, milestoneIssueProgress } from '@/components/issue/milestone-progress'
 import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from '@/components/issue-explorer/saved-view-editor'
 import { NewProjectDialog, type NewProjectDraft, type NewProjectMilestoneDraft } from './new-project-dialog'
 import { projectPeopleChoices } from './project-people'
@@ -67,6 +68,7 @@ export type ProjectsPageProps = {
   agentSkills?: PersonalAgentSkill[]
   labels?: IssueLabel[]
   labelGroups?: LabelGroup[]
+  issues?: Issue[]
   loading?: boolean
   error?: string | null
   onCreateProject?: (input: ProjectCreateInput) => Promise<Project>
@@ -130,6 +132,7 @@ export function ProjectsPage({
   agentSkills = [],
   labels = [],
   labelGroups = [],
+  issues = [],
   favoriteProjectIds = [],
   projectSubscriptions = [],
   loading = false,
@@ -192,7 +195,7 @@ export function ProjectsPage({
     const ids = teamHierarchy(teams, teamSettings).subtree(scopeTeamId)
     return projects.filter(project => project.teamIds.some(id => ids.has(id)))
   }, [projects, scopeTeamId, teams, teamSettings])
-  const items = useMemo(() => scopedProjects.map(project => toPageItem(project, projectHref?.(project), teams, projectUpdates[project.id]?.[0], initiatives, labels, labelGroups)), [initiatives, labelGroups, labels, projectHref, projectUpdates, scopedProjects, teams])
+  const items = useMemo(() => scopedProjects.map(project => toPageItem(project, projectHref?.(project), teams, projectUpdates[project.id]?.[0], initiatives, labels, labelGroups, issues)), [initiatives, issues, labelGroups, labels, projectHref, projectUpdates, scopedProjects, teams])
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [insightMode, setInsightMode] = useState<ProjectInsightMode>('health')
   const [insightFilter, setInsightFilter] = useState<ProjectInsightFilter>(() => projectFilterFromSavedView(sourceView))
@@ -324,10 +327,11 @@ export function ProjectsPage({
 
   const addFilter = (label: string, option?: ProjectFilterOption) => {
     const field = PROJECT_FILTER_FIELDS[label]
-    if (!field || !option) {
+    if (!field) {
       toast.info(label === 'AI filter' ? 'AI filters require the Flow integration.' : `${label} is not available for the current project data.`)
       return
     }
+    if (!option) return
     setProjectFilters(current => {
       const existing = current.find(filter => filter.field === field && filter.operator === 'is')
       if (!existing) return [...current, createProjectFilter(field, label, option)]
@@ -503,7 +507,7 @@ export function ProjectsPage({
       initialTemplateId={initialTemplateId}
       defaultStatus={createStatus}
       dependencies={projects.filter(project => !project.archivedAt).map(project => ({ id: project.id, label: project.name, icon: normalizeProjectIcon(project.icon), color: project.color, group: viewerId && (project.lead?.id === viewerId || (project.memberIds ?? []).includes(viewerId)) ? 'your' : 'other', previewData: { summary: project.summary || project.description, status: project.status.name, milestone: (project.milestones ?? [])[0]?.name, team: (project.teamIds ?? []).map(id => teams.find(team => team.id === id)?.name).filter(Boolean).join(', '), lead: project.lead?.displayName, member: (project.memberIds ?? []).map(id => users.find(user => user.id === id)?.displayName).find(Boolean), memberAvatarUrl: (project.memberIds ?? []).map(id => users.find(user => user.id === id)?.avatarUrl).find(Boolean), priority: project.priorityLabel, targetDate: project.targetDate, progress: Math.round(project.progress * 100), issueCount: project.issueCount } }))}
-      initiatives={initiatives.map(initiative => ({ id: initiative.id, label: initiative.name, color: initiative.color }))}
+      initiatives={initiatives.map(initiative => ({ id: initiative.id, label: initiative.name, color: initiative.color, groupLabel: initiative.status ? `${initiative.status[0].toUpperCase()}${initiative.status.slice(1)}` : undefined }))}
       labels={projectLabelOptions(projectLabels, labelGroups)}
       leads={peopleChoices}
       members={peopleChoices}
@@ -540,9 +544,10 @@ export function ProjectsPage({
   </ProjectsPageSurface>
 }
 
-function toPageItem(project: Project, href?: string, teams: Team[] = [], latestUpdate?: ProjectUpdate, initiatives: Initiative[] = [], labels: IssueLabel[] = [], labelGroups: LabelGroup[] = []): ProjectPageItem {
+function toPageItem(project: Project, href?: string, teams: Team[] = [], latestUpdate?: ProjectUpdate, initiatives: Initiative[] = [], labels: IssueLabel[] = [], labelGroups: LabelGroup[] = [], issues: Issue[] = []): ProjectPageItem {
   const projectLabels = labelsForResource(labels, 'project', labelGroups).filter(label => (project.labelIds ?? []).includes(label.id))
   const labelsByGroup = Object.fromEntries(labelGroups.filter(group => group.resourceType === 'project').map(group => [group.id, projectLabels.filter(label => label.groupId === group.id).map(label => ({ id: label.id, name: label.name, color: label.color }))]))
+  const milestone = currentProjectMilestone(project.milestones, id => milestoneIssueProgress(issues, project.id, id))
   return {
     color: project.color,
     health: ({ onTrack: 'on-track', atRisk: 'at-risk', offTrack: 'off-track', noUpdate: 'no-update' } as const)[project.health],
@@ -551,7 +556,10 @@ function toPageItem(project: Project, href?: string, teams: Team[] = [], latestU
     href,
     issueCount: project.issueCount,
     lead: project.lead ? { avatarUrl: project.lead.avatarUrl, id: project.lead.id, name: project.lead.displayName } : undefined,
-    milestone: project.summary && !project.description ? project.summary : undefined,
+    milestone: milestone?.name,
+    milestoneDate: milestone?.targetDate ? formatDay(milestone.targetDate) : undefined,
+    milestoneProgress: milestone ? milestoneIssueProgress(issues, project.id, milestone.id) : undefined,
+    rawMilestoneDate: milestone?.targetDate,
     name: project.name,
     priority: ({ 0: 'none', 1: 'urgent', 2: 'high', 3: 'medium', 4: 'low' } as const)[project.priority as 0 | 1 | 2 | 3 | 4] ?? 'none',
     position: project.position,
@@ -630,6 +638,12 @@ function formatMonth(value: string) {
   return new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric' }).format(date)
 }
 
+function formatDay(value: string) {
+  const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(date)
+}
+
 function uniqueStatuses(items: ProjectStatus[]) { return items.filter((item, index) => items.findIndex(candidate => candidate.id === item.id) === index) }
 
 function parseProjectDisplayDefault(value: Record<string, unknown> | undefined): ProjectsDisplaySettings | undefined {
@@ -679,7 +693,7 @@ function projectFilterOptions(items: ProjectPageItem[], users: User[], projectSt
     health: values('health', [{ id: 'on-track', label: 'On track', color: '#4d9b5d' }, { id: 'at-risk', label: 'At risk', color: '#d3a036' }, { id: 'off-track', label: 'Off track', color: '#d8605f' }, { id: 'no-update', label: 'No update', color: '#57575c' }]),
     dates: values('dates', [{ id: 'has-target', label: 'Has target date' }, { id: 'no-target', label: 'No target date' }, { id: 'overdue', label: 'Target date is overdue', color: '#d8605f' }]),
     milestones: values('milestones', uniqueFilterOptions(items.filter(item => item.milestone).map(item => ({ id: item.milestone!, label: item.milestone! })))),
-    labels: values('labels', labels.map(label => ({ id: label.id, label: label.name, color: label.color }))),
+    labels: values('labels', [{ id: '', label: 'No labels' }, ...labels.map(label => ({ id: label.id, label: label.name, color: label.color }))]),
     teams: values('teams', teams.map(team => ({ id: team.id, label: team.name, color: team.color }))),
     project: items.map(item => ({ id: item.id, label: item.name, color: item.color, count: 1 })),
   }
@@ -703,7 +717,7 @@ function projectValueMatches(item: ProjectPageItem, field: ProjectFilterField, v
   if (field === 'health') return item.health === value
   if (field === 'project') return item.id === value
   if (field === 'milestones') return item.milestone === value
-  if (field === 'labels') return item.labelIds?.includes(value) ?? false
+  if (field === 'labels') return value ? item.labelIds?.includes(value) ?? false : !(item.labelIds?.length)
   if (field === 'teams') return item.teamIds?.includes(value) ?? false
   if (field === 'dates') {
     if (value === 'has-target') return Boolean(item.rawTargetDate)

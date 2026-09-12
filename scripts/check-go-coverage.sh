@@ -14,3 +14,17 @@ awk -v actual="$total" -v required="$minimum" 'BEGIN {
   printf "Go statement coverage: %.1f%% (required %.1f%%)\n", actual, required
   exit(actual + 0.0001 < required)
 }'
+
+# Keep the public MCP contract from regressing behind the aggregate API score.
+awk -v required="${MCP_COVERAGE_MIN:-75}" '
+  $1 ~ /cmd\/server\/(mcp|mcp_tools|mcp_tools_write|oauth_mcp_auth)\.go:/ {
+    statements += $2
+    if ($3 > 0) covered += $2
+  }
+  END {
+    if (!statements) { print "MCP coverage is missing from the profile"; exit 1 }
+    actual = 100 * covered / statements
+    printf "MCP/OAuth statement coverage: %.1f%% (required %.1f%%)\n", actual, required
+    exit(actual + 0.0001 < required)
+  }
+' "$profile"

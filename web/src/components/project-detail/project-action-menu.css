@@ -7,7 +7,9 @@
 .project-action-menu :is([role=menuitem],[role=menuitemcheckbox]):is([data-highlighted],[data-state=open]) .project-menu-icon{color:var(--action-menu-active-text)}
 .project-menu-icon{display:grid;place-items:center;width:16px;height:16px;flex:0 0 16px;color:var(--action-menu-muted)}
 .project-menu-icon svg{width:16px;height:16px;flex:none}
-.project-action-menu[data-menu=Dependencies] .project-menu-icon{color:var(--project-dependency-icon)}
+.project-action-menu[data-menu=Dependencies]{width:172px;min-width:172px}
+.project-action-menu[data-menu=Dependencies] :is([role=menuitem],[role=menuitemcheckbox]) .project-menu-icon,
+.project-action-menu[data-menu=Dependencies] :is([role=menuitem],[role=menuitemcheckbox]):is([data-highlighted],[data-state=open]) .project-menu-icon{color:var(--project-dependency-icon)}
 .project-menu-label{min-width:0;overflow:hidden;text-overflow:ellipsis;flex:1}
 .project-menu-chevron{display:grid;place-items:center;width:16px;height:16px;flex:0 0 16px;margin-left:auto;color:var(--theme-text-tertiary);font-size:6px}
 .project-menu-shortcut{display:flex;align-items:center;gap:2px;flex:none;margin-left:auto;color:var(--action-menu-muted);font:400 12px/normal var(--font);white-space:nowrap}
@@ -43,8 +45,9 @@
 .project-action-menu.project-property-submenu .property-command-group{height:24px;padding:4px 14px;color:var(--action-menu-muted);font-size:12px}
 .project-action-menu.project-property-submenu .avatar{width:16px;height:16px;font-size:8px}
 .project-action-menu.project-property-submenu .property-command-search input{font:400 13px/normal var(--font)}
-.project-action-menu .project-dependency-menu__search.is-filtering{position:static;width:auto;height:36.5px;margin:0;border:0;border-bottom:.5px solid var(--theme-border-strong)}
-.project-action-menu.project-dependency-projects{width:340px;min-width:175px;max-width:calc(100vw - 32px);padding:0;border-width:.5px}
+.project-action-menu .project-dependency-menu__search.is-filtering,
+.project-action-menu .project-dependency-menu__search.is-visible{position:static;left:auto;width:auto;height:36px;margin:0;overflow:visible;padding:0 14px;border:0;border-bottom:.5px solid var(--theme-border-strong)}
+.project-action-menu.project-dependency-projects{width:333px;min-width:333px;max-width:calc(100vw - 32px);padding:0;border:.5px solid var(--popover-border)}
 .project-action-menu.project-dependency-projects .project-dependency-projects__group-label{height:24px;padding:4px 14px}
 .project-action-menu.project-dependency-projects .project-dependency-projects__list{padding:6px 0}
 .project-action-menu.project-dependency-projects .project-dependency-projects__list{max-height:min(400px,calc(100dvh - 96px));overflow:auto}
@@ -67,3 +70,11 @@
 .project-slack-dialog h2{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .project-slack-dialog h2>span{overflow-wrap:anywhere}
 .project-slack-dialog__connect{display:inline-flex;margin-top:16px;color:var(--accent)}
+:root[data-theme="light"] .project-action-menu,:root[data-theme="light"] .project-update-schedule{border-color:var(--popover-border);background:var(--theme-surface-2);color:var(--theme-text-primary)}
+:root[data-theme="light"] .project-action-menu{box-shadow:var(--shadow-control)}
+:root[data-theme="light"] .project-action-submenu,:root[data-theme="light"] .project-update-schedule{box-shadow:var(--shadow-dialog)}
+:root[data-theme="light"] .project-action-menu :is([role=menuitem],[role=menuitemcheckbox]),:root[data-theme="light"] .project-action-menu.project-property-submenu .property-command-options [role=option],:root[data-theme="light"] .project-update-schedule>footer button{color:var(--action-menu-text)}
+:root[data-theme="light"] .project-menu-icon,:root[data-theme="light"] .project-menu-shortcut,:root[data-theme="light"] .project-action-menu__empty,:root[data-theme="light"] .project-action-menu.project-property-submenu .property-command-group,:root[data-theme="light"] .project-update-schedule header p,:root[data-theme="light"] .project-update-schedule__options small{color:var(--action-menu-muted)}
+:root[data-theme="light"] .project-menu-shortcut kbd{border-color:var(--popover-border);background:var(--theme-surface-hover)}
+:root[data-theme="light"] .project-update-schedule>footer button{border-color:var(--theme-border-strong);background:var(--theme-control)}
+:root[data-theme="light"] .project-update-schedule>footer .is-primary{background:var(--accent);color:var(--on-accent)}

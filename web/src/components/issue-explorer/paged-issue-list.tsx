@@ -33,7 +33,7 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
     refreshTimer.current = setTimeout(() => setRetry(value => value + 1), 80)
   }, [])
   useEffect(() => () => clearTimeout(refreshTimer.current), [signature])
-  const cache = useMemo(() => new PagedIssueCache(), [signature])
+  const cache = useMemo(() => new PagedIssueCache(40, 16 * 1024 * 1024, signature), [signature])
   const [groups, setGroups] = useState<Group[]>([])
   const [revision, setRevision] = useState(0)
   const [error, setError] = useState<string>()

@@ -16,7 +16,7 @@ export const DEFAULT_PROJECTS_DISPLAY: ProjectsDisplaySettings = {
   layout: 'list',
   ordering: 'Name',
   orderingDirection: 'asc',
-  properties: ['Milestones', 'Priority', 'Status', 'Health', 'Lead', 'Target date', 'Issues'],
+  properties: ['Milestones', 'Summary', 'Priority', 'Status', 'Health', 'Lead', 'Target date', 'Issues'],
   showClosed: 'All',
   showEmptyGroups: false,
   subGrouping: 'No grouping',

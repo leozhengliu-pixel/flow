@@ -43,11 +43,11 @@
 .createMore { height: 28px; display: flex; align-items: center; gap: 7px; margin-left: auto; color: lch(64.805% 1.65 272); font-size: 12px; }
 .submit { height: 28px; padding: 0 11px; border: .5px solid transparent; border-radius: 9999px; background: lch(47.918% 59.303 288.421); box-shadow: 0 .5px 1px 1px #0005; color: lch(100% 5 288.421); font-size: 12px; font-weight: 500; }
 .submit:disabled { opacity: .55; box-shadow: none; }
-.moreMenu, .dateMenu { z-index: 1000; padding: 5px; border: .5px solid var(--theme-border-strong); border-radius: 8px; background: var(--theme-surface-2); box-shadow: 0 12px 28px #0008; color: lch(91.201% 1.65 272); font-family: "Inter Variable", system-ui, sans-serif; }
+.moreMenu, .dateMenu { z-index: 1000; padding: 5px; border: .5px solid var(--theme-border-strong); border-radius: 12px; background: var(--theme-surface-2); box-shadow: 0 12px 28px #0008; color: lch(91.201% 1.65 272); font-family: "Inter Variable", system-ui, sans-serif; }
 .moreMenu { width: 242px; }
 .dateMenu.dateMenu { width: 228px; padding: 0; border: 0; background: transparent; box-shadow: none; }
 .dateMenu :global(.due-date-command) { width: 228px; }
-.menuItem { height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-radius: 5px; outline: 0; font-size: 13px; }
+.menuItem { height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 18px 0 14px; border-radius: 5px; outline: 0; font-size: 13px; }
 .menuItem[data-highlighted] { background: lch(18% 1.1 272); }
 .menuItem[data-disabled] { opacity: .38; }
 .menuItem svg { width: 16px; height: 16px; color: lch(64.805% 1.65 272); }
@@ -68,7 +68,7 @@
 .linkDialog > div .addLink { background: lch(47.918% 59.303 288.421); color: white; }
 .linkDialog > div .addLink:disabled { opacity: .45; }
 .confirmOverlay { position: fixed; z-index: 1020; inset: 0; background: lch(0% 0 0 / .6); }
-.confirmDialog { position: fixed; z-index: 1021; left: 50%; top: 26.57%; width: 480px; max-width: calc(100vw - 32px); min-height: 153px; transform: translateX(-50%); padding: 24px; border: .5px solid var(--theme-border-strong); border-radius: 12px; background: var(--theme-surface-2); box-shadow: 0 4px 40px lch(0 0 0 / .1), 0 3px 20px lch(0 0 0 / .125), 0 3px 12px lch(0 0 0 / .125), 0 2px 8px lch(0 0 0 / .125), 0 1px 1px lch(0 0 0 / .125); color: white; outline: 0; }
+.confirmDialog { position: fixed; z-index: 1021; left: 50%; top: 26.57%; width: 480px; max-width: calc(100vw - 32px); min-height: 153px; transform: translateX(-50%); padding: 24px; border: .5px solid var(--theme-border-strong); border-radius: 12px; background: var(--theme-surface-2); box-shadow: 0 4px 40px var(--shadow-color), 0 3px 20px lch(0 0 0 / .125), 0 3px 12px lch(0 0 0 / .125), 0 2px 8px lch(0 0 0 / .125), 0 1px 1px lch(0 0 0 / .125); color: white; outline: 0; }
 .confirmDialog h2 { margin: 0 0 6px; color: var(--bright); font-size: 15px; line-height: 23px; font-weight: 600; }
 .confirmDialog p { margin: 0; color: var(--theme-text-secondary); font-size: 15px; line-height: 23px; font-weight: 450; }
 .confirmActions { height: 40px; display: grid; grid-template-columns:auto 1fr auto auto; align-items: center; gap: 8px; margin-top: 16px; margin-bottom: -4px; }
@@ -86,19 +86,31 @@
   .properties { overflow-x: auto; }
 }
 
-:global(:root[data-theme="light"]) .overlay { background: var(--theme-overlay); }
-:global(:root[data-theme="light"]) .dialog { background: var(--theme-surface-2); color: var(--theme-text-primary); box-shadow: var(--menu-shadow); }
+:global(:root[data-theme="light"]) .overlay, :global(:root[data-theme="light"]) .linkOverlay, :global(:root[data-theme="light"]) .confirmOverlay { background: var(--theme-overlay); }
+:global(:root[data-theme="light"]) .dialog { border-color: var(--popover-border); background: var(--theme-surface-2); color: var(--theme-text-primary); box-shadow: var(--shadow-dialog); }
 :global(:root[data-theme="light"]) .header h2, :global(:root[data-theme="light"]) .iconButton { color: var(--theme-text-primary); }
-:global(:root[data-theme="light"]) .team, :global(:root[data-theme="light"]) .saveDraft, :global(:root[data-theme="light"]) .moreButton, :global(:root[data-theme="light"]) .attachButton { border-color: var(--border); background: var(--theme-surface-2); color: var(--theme-text-secondary); }
-:global(:root[data-theme="light"]) .saveDraft:hover, :global(:root[data-theme="light"]) .iconButton:hover, :global(:root[data-theme="light"]) .moreButton:hover, :global(:root[data-theme="light"]) .moreButton[data-state="open"], :global(:root[data-theme="light"]) .attachButton:hover, :global(:root[data-theme="light"]) .properties :global(.mini-property-trigger:hover), :global(:root[data-theme="light"]) .properties :global(.mini-property-trigger[aria-expanded="true"]) { background: var(--theme-control-hover); color: var(--theme-text-primary); }
-:global(:root[data-theme="light"]) .breadcrumb, :global(:root[data-theme="light"]) .createMore { color: var(--theme-text-secondary); }
-:global(:root[data-theme="light"]) .titleField :global(.title-editor) { color: var(--theme-text-primary); }
+:global(:root[data-theme="light"]) .team, :global(:root[data-theme="light"]) .saveDraft { border-color: transparent; background: var(--theme-surface-2); color: lch(40% 1 282); }
+:global(:root[data-theme="light"]) .team { padding: 0 8px 0 5px; }
+:global(:root[data-theme="light"]) .moreButton, :global(:root[data-theme="light"]) .attachButton { border-color: transparent; background: var(--theme-surface-2); color: var(--theme-text-primary); }
+:global(:root[data-theme="light"]) .attachButton { width: 28px; height: 28px; }
+:global(:root[data-theme="light"]) .iconButton { color: var(--theme-text-primary); }
+:global(:root[data-theme="light"]) .properties :global(.mini-property-trigger) { height: 24px; padding: 0 8px 0 6px; background: var(--theme-surface-2); color: lch(40% 1 282); font-size: 12px; font-weight: 500; }
+:global(:root[data-theme="light"]) .saveDraft:hover, :global(:root[data-theme="light"]) .iconButton:hover, :global(:root[data-theme="light"]) .moreButton:hover, :global(:root[data-theme="light"]) .moreButton[data-state="open"], :global(:root[data-theme="light"]) .attachButton:hover, :global(:root[data-theme="light"]) .properties :global(.mini-property-trigger:hover), :global(:root[data-theme="light"]) .properties :global(.mini-property-trigger[aria-expanded="true"]) { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
+:global(:root[data-theme="light"]) .breadcrumb, :global(:root[data-theme="light"]) .createMore { color: var(--muted); }
+:global(:root[data-theme="light"]) .titleField :global(.title-editor) { color: var(--text); }
+:global(:root[data-theme="light"]) .descriptionField :global(.description-editor) { color: var(--theme-text-primary); }
+:global(:root[data-theme="light"]) .attachments > span { border-color: var(--border); color: var(--muted); }
 :global(:root[data-theme="light"]) .footer { border-color: var(--border); }
-:global(:root[data-theme="light"]) .moreMenu, :global(:root[data-theme="light"]) .linkDialog, :global(:root[data-theme="light"]) .confirmDialog { color: var(--theme-text-primary); box-shadow: var(--menu-shadow); }
+:global(:root[data-theme="light"]) .submit { height: 28px; padding: 0 10px; background: var(--accent-primary); color: var(--on-accent); box-shadow: none; }
+:global(:root[data-theme="light"]) .moreMenu, :global(:root[data-theme="light"]) .linkDialog, :global(:root[data-theme="light"]) .confirmDialog { border-color: var(--popover-border); background: var(--theme-surface-2); color: var(--theme-text-primary); box-shadow: var(--shadow-control); }
+:global(:root[data-theme="light"]) .linkDialog, :global(:root[data-theme="light"]) .confirmDialog { box-shadow: var(--shadow-dialog); border-radius: 12px; }
+:global(:root[data-theme="light"]) .confirmDialog h2 { color: var(--theme-text-primary); }
 :global(:root[data-theme="light"]) .menuItem[data-highlighted] { background: var(--theme-control-hover); }
-:global(:root[data-theme="light"]) .menuItem svg, :global(:root[data-theme="light"]) .menuItem kbd { color: var(--theme-text-secondary); }
+:global(:root[data-theme="light"]) .menuItem svg, :global(:root[data-theme="light"]) .menuItem kbd, :global(:root[data-theme="light"]) .linkDialog h2 svg { color: var(--theme-text-secondary); }
 :global(:root[data-theme="light"]) .menuSeparator { background: var(--border); }
 :global(:root[data-theme="light"]) .linkDialog input { color: var(--theme-text-primary); }
-:global(:root[data-theme="light"]) .linkDialog label, :global(:root[data-theme="light"]) .linkDialog > div button { color: var(--theme-text-secondary); }
-:global(:root[data-theme="light"]) .confirmActions button { background: var(--theme-control); }
+:global(:root[data-theme="light"]) .linkDialog label, :global(:root[data-theme="light"]) .linkDialog label small, :global(:root[data-theme="light"]) .linkDialog > div button { color: var(--theme-text-secondary); }
+:global(:root[data-theme="light"]) .linkDialog > div .addLink { color: var(--on-accent); }
+:global(:root[data-theme="light"]) .confirmActions button { background: var(--theme-control); color: var(--theme-text-primary); }
 :global(:root[data-theme="light"]) .confirmActions button:hover { background: var(--theme-control-hover); }
+:global(:root[data-theme="light"]) .confirmActions .confirmSave { color: var(--on-accent); }

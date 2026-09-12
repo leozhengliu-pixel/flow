@@ -18,6 +18,7 @@ import {
   KeyRound,
   LoaderCircle,
   Mail,
+  Pencil,
   MessageCircle,
   Monitor,
   ShieldCheck,
@@ -201,6 +202,7 @@ const PERSONAL_ZH: Record<string, string> = {
   "Workspace access": "工作区访问权限",
   "Remove yourself from workspace": "将自己移出工作区",
   "Leave workspace": "离开工作区",
+  "Change email": "更改邮箱",
   "You will lose access to this workspace. An administrator must invite you again to restore access.":
     "你将失去此工作区的访问权限。管理员需要重新邀请你才能恢复访问。",
   "Could not leave workspace": "无法离开工作区",
@@ -932,6 +934,14 @@ function Profile({ data, onReload, onBack, p }: PersonalProps) {
           <span className="personal-static" data-i18n-ignore>
             {data.viewer.email}
           </span>
+          <button
+            type="button"
+            className="personal-icon-action"
+            aria-label={p("Change email")}
+            title={p("Change email")}
+          >
+            <Pencil size={14} />
+          </button>
         </PersonalRow>
         <PersonalRow title={p("Full name")}>
           <input
@@ -3547,6 +3557,15 @@ function Agents({ data, values, setValue, onNavigate, p }: PersonalProps) {
         description={p(
           "Reusable prompts auto-selected by the agent or invoked via slash commands",
         )}
+        action={
+          <NavLink
+            className="personal-skill-create"
+            to={newAgentSkillPath(data.workspace.urlKey)}
+            aria-label={p("Create skill")}
+          >
+            <Plus size={14} />
+          </NavLink>
+        }
       >
         <div className="personal-agent-skills">
           {data.agentSkills.map((skill) => (
@@ -3562,17 +3581,6 @@ function Agents({ data, values, setValue, onNavigate, p }: PersonalProps) {
               </span>
             </NavLink>
           ))}
-          <NavLink
-            className="personal-agent-add-row"
-            to={newAgentSkillPath(data.workspace.urlKey)}
-          >
-            <span>
-              {p(
-                data.agentSkills.length ? "Create skill" : "No skills created",
-              )}
-            </span>
-            <Plus />
-          </NavLink>
         </div>
       </PersonalSection>
       {data.workspaceSettings?.mcpConnectorsEnabled ? <ApplicationPolicySettings admin={false} /> : <PersonalSection

@@ -32,6 +32,7 @@ import { usePropertyCommand } from "@/components/property/use-property-command";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { CheckboxMark } from "@/components/ui/checkbox-mark";
 import { useI18n } from "@/i18n/i18n";
+import { toggleFavoriteFor } from "@/lib/favorites";
 import { commentOnReview, submitReview, updateReview } from "@/lib/api";
 import {
   integrationSettingsPath,
@@ -82,6 +83,11 @@ export function ReviewsPage({
   const groups = useMemo(() => groupReviews(visible, display, data.viewer.id), [visible, display, data.viewer.id]);
   const mutate = async (input: Parameters<typeof updateReview>[1]) => {
     if (!review) return;
+    const pending = Object.entries(input).filter(([, value]) => value !== undefined);
+    if (input.favorite !== undefined && pending.length === 1) {
+      void toggleFavoriteFor(data, "review", review.id, input.favorite, review.favorite);
+      return;
+    }
     setBusy(true);
     try {
       await updateReview(review.id, input);

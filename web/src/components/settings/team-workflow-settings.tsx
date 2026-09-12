@@ -442,7 +442,7 @@ function TeamOverview({
           description="Remove yourself as a member of this team"
         >
           <button
-            className="settings-action danger"
+            className="settings-action"
             disabled={
               !data.teamMembers.some(
                 (item) =>
@@ -459,7 +459,7 @@ function TeamOverview({
           description="Prevent creating and updating issues while preserving historical data"
         >
           <button
-            className="settings-action danger"
+            className="settings-action"
             onClick={() => void retire()}
           >
             {team.retiredAt ? "Restore…" : "Retire…"}
@@ -470,7 +470,7 @@ function TeamOverview({
           description="Permanently delete this team and all of its owned data"
         >
           <button
-            className="settings-action danger"
+            className="settings-action"
             disabled={data.teams.filter((item) => !item.retiredAt).length <= 1}
             onClick={() => void remove()}
           >

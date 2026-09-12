@@ -39,6 +39,6 @@
 .periodGrid button{height:28px;border:.5px solid transparent;border-radius:9999px;background:var(--theme-control-hover);color:var(--theme-text-primary);font-size:12px}
 .periodGrid button:hover:not(:disabled){background:var(--theme-control-active)}
 .periodGrid button:disabled{color:var(--theme-text-tertiary);opacity:.55}
-:global(:root[data-theme="light"]) .datePicker{box-shadow:0 6px 18px lch(0 0 0/.02),0 3px 9px lch(0 0 0/.04),0 1px 1px lch(0 0 0/.04)}
+:global(:root[data-theme="light"]) .datePicker{box-shadow:0 6px 18px var(--shadow-color-faint),0 3px 9px var(--shadow-color-soft),0 1px 1px var(--shadow-color-soft)}
 :global(:root[data-theme="light"]) .dateLabel input:focus{border-color:var(--theme-border-strong)}
-:global(:root[data-theme="light"]) .datePicker.compactPeriods,:global(:root[data-theme="light"]) .compactPeriods .dateLabel input,:global(:root[data-theme="light"]) .compactPeriods .dateModes{background:lch(100% 0 282)}
+:global(:root[data-theme="light"]) .datePicker.compactPeriods,:global(:root[data-theme="light"]) .compactPeriods .dateLabel input,:global(:root[data-theme="light"]) .compactPeriods .dateModes{background:var(--theme-surface-2)}

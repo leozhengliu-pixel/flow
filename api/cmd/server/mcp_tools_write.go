@@ -455,11 +455,26 @@ func (s *server) saveMCPProject(ctx context.Context, actor mcpActor, data domain
 	if id == "" && len(input.TeamIDs) == 0 {
 		return nil, fmt.Errorf("at least one team is required when creating a project")
 	}
+	// The REST input uses omitempty slices. Preserve explicit empty arrays so
+	// removing the last label, team or initiative is still sent as a mutation.
+	var payload map[string]any
+	if err := jsonClone(input, &payload); err != nil {
+		return nil, err
+	}
+	for field, values := range map[string][]string{"labelIds": input.LabelIDs, "teamIds": input.TeamIDs, "initiatives": input.Initiatives} {
+		present := field == "labelIds" && hasAnyArg(args, "labels") || field == "teamIds" && hasAnyArg(args, "addTeams", "removeTeams", "setTeams") || field == "initiatives" && hasAnyArg(args, "addInitiatives", "removeInitiatives", "setInitiatives")
+		if present {
+			if values == nil {
+				values = []string{}
+			}
+			payload[field] = values
+		}
+	}
 	var result any
 	if id == "" {
-		result, err = invokeJSONHandler(ctx, http.MethodPost, nil, input, s.createProject)
+		result, err = invokeJSONHandler(ctx, http.MethodPost, nil, payload, s.createProject)
 	} else {
-		result, err = invokeJSONHandler(ctx, http.MethodPatch, map[string]string{"id": current.ID}, input, s.updateProject)
+		result, err = invokeJSONHandler(ctx, http.MethodPatch, map[string]string{"id": current.ID}, payload, s.updateProject)
 	}
 	if err != nil {
 		return nil, err
@@ -620,6 +635,19 @@ func (s *server) saveMCPMilestone(ctx context.Context, _ mcpActor, data domain.B
 }
 
 func (s *server) saveMCPRelease(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
+	for _, field := range []string{"createdAt", "startDate", "startedAt", "completedAt"} {
+		value, present := nullableStringArg(args, field)
+		if !present || value == "" {
+			continue
+		}
+		layout := time.RFC3339
+		if field == "startDate" {
+			layout = "2006-01-02"
+		}
+		if _, err := time.Parse(layout, value); err != nil {
+			return nil, fmt.Errorf("invalid %s", field)
+		}
+	}
 	id := stringArg(args, "id")
 	var current domain.Release
 	if id != "" {
@@ -1246,6 +1274,9 @@ func (s *server) createMCPAttachment(ctx context.Context, actor mcpActor, data d
 	}
 	size, err := storage.Put(ctx, key, upload, stringArg(args, "contentType"))
 	if err != nil {
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = storage.Delete(cleanup, key)
 		return nil, err
 	}
 	title := stringArg(args, "title")

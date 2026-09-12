@@ -1,7 +1,7 @@
 /* oxlint-disable react/only-export-components -- Provider and hooks share the captured activation origin. */
 import { AnimatePresence, m as motion, LazyMotion, domAnimation, MotionConfig, useIsPresent, useReducedMotion, type HTMLMotionProps } from 'motion/react'
 import { animated, useTransition } from '@react-spring/web'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react'
 import { motionPresets } from '@/lib/motion-presets'
 
 let activation: { x: number; y: number; at: number } | undefined
@@ -99,11 +99,29 @@ function MilestoneMotionRow({ progress, leaving, children }: { progress: import(
   </animated.div>
 }
 
-export function AnimatedMilestones<T extends { id: string }>({ items, children }: { items: T[]; children: (item: T) => ReactNode }) {
+export function AnimatedList<T>({ items, getKey, seenKeys, children }: {
+  items: T[]
+  getKey: (item: T) => string
+  seenKeys?: MutableRefObject<Set<string>>
+  children: (item: T) => ReactNode
+}) {
   const reduced = useReducedMotion()
   const transitions = useTransition(items, {
-    keys: item => item.id, initial: { progress: 1 }, from: { progress: 0 }, enter: { progress: 1 }, leave: { progress: 0 },
-    config: motionPresets.milestone, immediate: Boolean(reduced),
+    keys: getKey,
+    initial: item => (!seenKeys || seenKeys.current.has(getKey(item))) ? { progress: 1 } : { progress: 0 },
+    from: { progress: 0 },
+    enter: { progress: 1 },
+    leave: { progress: 0 },
+    config: motionPresets.milestone,
+    immediate: Boolean(reduced),
   })
+  useLayoutEffect(() => {
+    if (!seenKeys) return
+    for (const item of items) seenKeys.current.add(getKey(item))
+  }, [getKey, items, seenKeys])
   return transitions((style, item, state) => <MilestoneMotionRow progress={style.progress} leaving={state.phase === 'leave'}>{children(item)}</MilestoneMotionRow>)
+}
+
+export function AnimatedMilestones<T extends { id: string }>({ items, children }: { items: T[]; children: (item: T) => ReactNode }) {
+  return <AnimatedList items={items} getKey={item => item.id}>{children}</AnimatedList>
 }

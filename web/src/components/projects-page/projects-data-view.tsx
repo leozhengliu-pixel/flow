@@ -1,9 +1,11 @@
 import * as Tooltip from '@radix-ui/react-tooltip'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Bell, Box, CalendarPlus, Clipboard, FileText, LayoutGrid, Link2, MessageCirclePlus, MoreHorizontal, Move, Package, Search, Star, Tag, Trash2, UserRound } from 'lucide-react'
+import { Bell, Box, CalendarPlus, ChevronDown, Clipboard, FileText, LayoutGrid, Link2, MessageCirclePlus, MoreHorizontal, Move, Package, Search, Star, Tag, Trash2, UserRound } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { VirtualColumnList } from '@/components/ui/virtual-column-list'
-import { MembersIcon, NoAssigneeIcon } from '@/components/issue/issue-icons'
+import { CalendarIcon, MembersIcon, NoAssigneeIcon } from '@/components/issue/issue-icons'
+import { MilestoneProgressIcon } from '@/components/issue/milestone-progress-icon'
+import { isMilestoneDateOverdue } from '@/components/issue/milestone-progress'
 import { ViewGlyph, ViewIconPicker } from '@/components/views/view-icon-picker'
 import { CheckIcon, ChevronRightIcon, PlusIcon } from './projects-page-icons'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
@@ -26,6 +28,9 @@ export type ProjectPageItem = {
   color?: string
   summary?: string
   milestone?: string
+  milestoneDate?: string
+  milestoneProgress?: number
+  rawMilestoneDate?: string
   health: 'on-track' | 'off-track' | 'at-risk' | 'no-update'
   healthLabel?: string
   priority: 'urgent' | 'high' | 'medium' | 'low' | 'none'
@@ -59,6 +64,7 @@ export type ProjectDataGroup = {
 export type ProjectsDataViewProps = {
   groups: ProjectDataGroup[]
   layout?: 'list' | 'board' | 'timeline'
+  grouping?: string
   loading?: boolean
   error?: string | null
   selectedIds?: string[]
@@ -137,6 +143,7 @@ const PROJECT_VIRTUALIZATION_THRESHOLD = 80
 export function ProjectsDataView({
   groups,
   layout = 'list',
+  grouping,
   loading = false,
   error = null,
   selectedIds = [],
@@ -159,6 +166,7 @@ export function ProjectsDataView({
   sort: externalSort,
 }: ProjectsDataViewProps) {
   const [collapsed, setCollapsed] = useState<string[]>([])
+  const [hiddenGroupIds, setHiddenGroupIds] = useState<string[]>([])
   const [sort, setSort] = useState<{ column: ProjectSortColumn, direction: 'asc' | 'desc' }>(externalSort ?? { column: 'name', direction: 'asc' })
 
   useEffect(() => {
@@ -194,40 +202,63 @@ export function ProjectsDataView({
 
   if (loading) return <ProjectsLoadingState layout={layout} />
   if (error) return <ProjectsErrorState error={error} onRetry={onRetry} />
-  if (!groups.some(groupHasProjects)) return <ProjectsEmptyState onCreate={() => onCreateProject?.('Backlog')} />
+  if (layout !== 'board' && !groups.some(groupHasProjects)) return <ProjectsEmptyState onCreate={() => onCreateProject?.('Backlog')} />
+  if (layout === 'board' && !groups.length) return <ProjectsEmptyState onCreate={() => onCreateProject?.('Backlog')} />
 
   const visible = new Set(visibleProperties)
-  if (layout === 'board') return <div className="lp-project-board" role="list">
-    {groups.map((group, groupIndex) => <ProjectBoardColumn
-      group={group}
-      key={group.id}
-      manualOrdering={manualOrdering}
-      onCreateProject={onCreateProject}
-      onOpenProject={onOpenProject}
-      onOpenProjectIssues={onOpenProjectIssues}
-      onOpenProjectUpdates={onOpenProjectUpdates}
-      onProjectAction={onProjectAction}
-      onProjectVisualChange={onProjectVisualChange}
-      onPropertyChange={onPropertyChange}
-      projectMenu={projectMenu}
-      labelGroupProperties={labelGroupProperties}
-      onDropProject={projectId => {
-        const project = findProject(groups, projectId)
-        const destination = projectGroupProperty(group)
-        if (!project || !destination || !onPropertyChange) return false
-        onPropertyChange(project, destination.property, destination.value)
-        return true
-      }}
-      onKeyboardMove={(project, direction) => {
-        const destinationGroup = groups[groupIndex + direction]
-        const destination = destinationGroup && projectGroupProperty(destinationGroup)
-        if (!destination || !onPropertyChange) return
-        onPropertyChange(project, destination.property, destination.value)
-      }}
-      propertyOptions={propertyOptions}
-      visible={visible}
-    />)}
-  </div>
+  if (layout === 'board') {
+    const hiddenSet = new Set(hiddenGroupIds)
+    const boardGroups = groups.filter(group => !hiddenSet.has(group.id))
+    const hiddenGroups = groups.filter(group => hiddenSet.has(group.id))
+    return <div className="lp-project-board" role="list">
+      {boardGroups.map((group, groupIndex) => <ProjectBoardColumn
+        group={group}
+        key={group.id}
+        selectedIds={selectedIds}
+        manualOrdering={manualOrdering}
+        onCreateProject={onCreateProject}
+        onHide={() => setHiddenGroupIds(current => current.includes(group.id) ? current : [...current, group.id])}
+        onOpenProject={onOpenProject}
+        onOpenProjectIssues={onOpenProjectIssues}
+        onOpenProjectUpdates={onOpenProjectUpdates}
+        onProjectAction={onProjectAction}
+        onProjectVisualChange={onProjectVisualChange}
+        onPropertyChange={onPropertyChange}
+        onSelectAll={() => {
+          const ids = group.subgroups?.flatMap(item => item.projects.map(project => project.id)) ?? group.projects.map(project => project.id)
+          onSelectionChange?.([...new Set([...selectedIds, ...ids])])
+        }}
+        projectMenu={projectMenu}
+        labelGroupProperties={labelGroupProperties}
+        onDropProject={projectId => {
+          const project = findProject(groups, projectId)
+          const destination = projectGroupProperty(group)
+          if (!project || !destination || !onPropertyChange) return false
+          onPropertyChange(project, destination.property, destination.value)
+          return true
+        }}
+        onKeyboardMove={(project, direction) => {
+          const destinationGroup = boardGroups[groupIndex + direction]
+          const destination = destinationGroup && projectGroupProperty(destinationGroup)
+          if (!destination || !onPropertyChange) return
+          onPropertyChange(project, destination.property, destination.value)
+        }}
+        propertyOptions={propertyOptions}
+        showStatus={grouping !== 'Status'}
+        visible={visible}
+      />)}
+      {hiddenGroups.length > 0 && <section aria-label="Hidden columns" className="lp-project-board__hidden">
+        <header><button aria-expanded="true" className="lp-project-board__hidden-label" type="button"><ChevronDown size={12}/> Hidden columns</button></header>
+        <div className="lp-project-board__hidden-list">
+          {hiddenGroups.map(group => <button className="lp-project-board__hidden-row" key={group.id} onClick={() => setHiddenGroupIds(current => current.filter(id => id !== group.id))} type="button">
+            <ProjectGroupStatus color={group.color} name={group.name} propertyOptions={propertyOptions}/>
+            <span data-i18n-ignore>{group.name}</span>
+            <small>{projectCount(group)}</small>
+          </button>)}
+        </div>
+      </section>}
+    </div>
+  }
 
   if (layout === 'timeline') return <ProjectTimeline groups={groups} onOpenProject={onOpenProject} onUpdateProject={onUpdateProject} propertyOptions={propertyOptions}/>
 
@@ -466,42 +497,57 @@ function ProjectListRow({ project, selected, manualOrdering, onOpen, onOpenIssue
   </>
 }
 
-function ProjectBoardColumn({ group, manualOrdering, onCreateProject, onDropProject, onKeyboardMove, onOpenProject, onOpenProjectIssues, onOpenProjectUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, propertyOptions, projectMenu, labelGroupProperties, visible }: {
+function ProjectBoardColumn({ group, manualOrdering, onCreateProject, onDropProject, onHide, onKeyboardMove, onOpenProject, onOpenProjectIssues, onOpenProjectUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, onSelectAll, propertyOptions, projectMenu, labelGroupProperties, selectedIds, showStatus, visible }: {
   group: ProjectsDataViewProps['groups'][number]
+  selectedIds: string[]
   manualOrdering?: boolean
   onCreateProject?: (status: string) => void
+  onHide: () => void
   onOpenProject?: (project: ProjectPageItem) => void
   onOpenProjectIssues?: (project: ProjectPageItem) => void
   onOpenProjectUpdates?: (project: ProjectPageItem) => void
   onProjectAction?: (project: ProjectPageItem, action: ProjectAction) => void
   onProjectVisualChange?: (project: ProjectPageItem, icon: string, color: string) => void
   onPropertyChange?: (project: ProjectPageItem, property: ProjectProperty, value: string) => void
+  onSelectAll: () => void
   onDropProject: (projectId: string) => boolean
   onKeyboardMove: (project: ProjectPageItem, direction: -1 | 1) => void
   propertyOptions?: ProjectPropertyOptions
   projectMenu?: ProjectMenuIntegration
   labelGroupProperties?: Array<{ id: string; name: string }>
+  showStatus: boolean
   visible: Set<string>
 }) {
-  const [collapsed, setCollapsed] = useState(false)
   const [dragOver, setDragOver] = useState(false)
-  const card = (project: ProjectPageItem) => <ProjectBoardCard key={project.id} manualOrdering={manualOrdering} onKeyboardMove={direction => onKeyboardMove(project, direction)} onOpen={onOpenProject} onOpenIssues={onOpenProjectIssues} onOpenUpdates={onOpenProjectUpdates} onProjectAction={onProjectAction} onProjectVisualChange={onProjectVisualChange} onPropertyChange={onPropertyChange} project={project} projectMenu={projectMenu} propertyOptions={propertyOptions} labelGroupProperties={labelGroupProperties} visible={visible} />
-  return <section aria-label={group.name} className="lp-project-board__column" data-collapsed={collapsed || undefined} data-drop-target={dragOver || undefined} onDragEnter={event => { if (event.dataTransfer.types.includes(PROJECT_DRAG_TYPE)) setDragOver(true) }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragOver(false) }} onDragOver={event => { if (event.dataTransfer.types.includes(PROJECT_DRAG_TYPE)) { event.preventDefault(); event.dataTransfer.dropEffect = 'move' } }} onDrop={event => { const projectId = event.dataTransfer.getData(PROJECT_DRAG_TYPE); if (projectId) { event.preventDefault(); onDropProject(projectId) } setDragOver(false) }}>
-    <header><ProjectGroupStatus color={group.color} name={group.name} propertyOptions={propertyOptions}/><strong data-i18n-ignore>{group.name}</strong><span>{projectCount(group)}</span><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open group menu" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="lp-project-board__group-menu" sideOffset={4}><DropdownMenu.Item onSelect={() => setCollapsed(value => !value)}>{collapsed ? 'Expand group' : 'Collapse group'}</DropdownMenu.Item><DropdownMenu.Item onSelect={() => onCreateProject?.(projectCreateStatus(group.name))}>Create new project</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root><button aria-label="Create new project" onClick={() => onCreateProject?.(projectCreateStatus(group.name))} type="button"><PlusIcon /></button></header>
-    {!collapsed && <div className="lp-project-board__cards">
+  const card = (project: ProjectPageItem) => <ProjectBoardCard key={project.id} manualOrdering={manualOrdering} onKeyboardMove={direction => onKeyboardMove(project, direction)} onOpen={onOpenProject} onOpenIssues={onOpenProjectIssues} onOpenUpdates={onOpenProjectUpdates} onProjectAction={onProjectAction} onProjectVisualChange={onProjectVisualChange} onPropertyChange={onPropertyChange} project={project} projectMenu={projectMenu} propertyOptions={propertyOptions} labelGroupProperties={labelGroupProperties} selected={selectedIds.includes(project.id)} showStatus={showStatus} visible={visible} />
+  return <section aria-label={group.name} className="lp-project-board__column" data-drop-target={dragOver || undefined} onDragEnter={event => { if (event.dataTransfer.types.includes(PROJECT_DRAG_TYPE)) setDragOver(true) }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragOver(false) }} onDragOver={event => { if (event.dataTransfer.types.includes(PROJECT_DRAG_TYPE)) { event.preventDefault(); event.dataTransfer.dropEffect = 'move' } }} onDrop={event => { const projectId = event.dataTransfer.getData(PROJECT_DRAG_TYPE); if (projectId) { event.preventDefault(); onDropProject(projectId) } setDragOver(false) }}>
+    <header>
+      <span className="lp-project-board__heading"><ProjectGroupStatus color={group.color} name={group.name} propertyOptions={propertyOptions}/><strong data-i18n-ignore>{group.name}</strong><span aria-label="Project count" className="lp-project-board__count">{projectCount(group)}</span></span>
+      <span className="lp-project-board__actions">
+        <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open menu" className="lp-project-board__menu" type="button"><MoreHorizontal size={16}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="lp-project-board__group-menu" sideOffset={4}><DropdownMenu.Item onSelect={onSelectAll}>Select all in column</DropdownMenu.Item><DropdownMenu.Item onSelect={onHide}>Hide column</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+        <button aria-label="Create new project" className="lp-project-board__create" onClick={() => onCreateProject?.(projectCreateStatus(group.name))} type="button"><PlusIcon height={14} width={14} /></button>
+      </span>
+    </header>
+    <div className="lp-project-board__cards">
       {group.subgroups?.map(subgroup => <section className="lp-project-board__subgroup" key={subgroup.id}><header><ProjectGroupStatus color={subgroup.color} compact name={subgroup.name} propertyOptions={propertyOptions}/><span data-i18n-ignore>{subgroup.name}</span><small>{projectCount(subgroup)}</small></header>{subgroup.projects.map(card)}</section>)}
       {!group.subgroups?.length && group.projects.map(card)}
-      <button className="lp-project-board__add" onClick={() => onCreateProject?.(projectCreateStatus(group.name))} type="button"><PlusIcon /> Add new project</button>
-    </div>}
+      <button aria-label="Add new project" className="lp-project-board__add" onClick={() => onCreateProject?.(projectCreateStatus(group.name))} type="button"><PlusIcon /></button>
+    </div>
   </section>
 }
 
-function ProjectBoardCard({ project, manualOrdering, onKeyboardMove, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, projectMenu, propertyOptions, labelGroupProperties = [], visible }: ProjectItemActions & { onKeyboardMove: (direction: -1 | 1) => void }) {
+function ProjectBoardCard({ project, manualOrdering, onKeyboardMove, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, projectMenu, propertyOptions, labelGroupProperties = [], selected = false, showStatus, visible }: ProjectItemActions & { onKeyboardMove: (direction: -1 | 1) => void; selected?: boolean; showStatus: boolean }) {
   const [menuPoint, setMenuPoint] = useState<{ x: number, y: number } | null>(null)
+  const statusOption = (propertyOptions?.status ?? PROPERTY_OPTIONS.status).find(option => option.value === project.status)
+  const overdue = isTargetDateOverdue(project.rawTargetDate ?? project.targetDate)
+  const metaLabels = labelGroupProperties.filter(group => visible.has(projectLabelGroupProperty(group.id))).flatMap(group => project.labelsByGroup?.[group.id] ?? [])
+  const showDate = visible.has('Target date') && Boolean(project.targetDate)
+  const showMeta = showDate || (visible.has('Initiatives') && Boolean(project.initiativeNames?.length)) || metaLabels.length > 0 || Boolean(project.milestone)
   return <>
     <a
       aria-label={project.name}
       className="lp-project-card"
+      data-selected={selected || undefined}
       draggable={Boolean(onPropertyChange)}
       href={project.href}
       onClick={event => openProjectLink(event, project, onOpen)}
@@ -515,19 +561,20 @@ function ProjectBoardCard({ project, manualOrdering, onKeyboardMove, onOpen, onO
       role="button"
       tabIndex={0}
     >
-      <div className="lp-project-card__top"><span className="lp-project-card__identity"><ViewIconPicker color={project.color} icon={project.icon || 'Project'} onChange={visual => onProjectVisualChange?.(project, visual.icon, visual.color)} triggerClassName="lp-project-row__project-icon"/><strong>{project.name}</strong></span><span className="lp-project-card__properties">
+      <div className="lp-project-card__top"><span className="lp-project-card__identity"><ViewIconPicker color={project.color} icon={project.icon || 'Project'} onChange={visual => onProjectVisualChange?.(project, visual.icon, visual.color)} triggerClassName="lp-project-card__icon"/><strong data-i18n-ignore>{project.name}</strong></span><span className="lp-project-card__properties">
         {visible.has('Health') && <button aria-label={project.healthLabel ?? `${healthText(project.health)}. Click to open updates.`} className="lp-project-property-trigger" onClick={event => { stopPropagation(event); onOpenUpdates?.(project) }} type="button"><HealthIcon value={project.health} /></button>}
+        {showStatus && visible.has('Status') && <ProjectPropertyPicker label={project.status} onChange={value => onPropertyChange?.(project, 'status', value)} options={propertyOptions?.status ?? PROPERTY_OPTIONS.status} property="status" value={project.status}><ProjectStatusGlyph color={statusOption?.color} name={project.status} progress={project.progress / 100} type={statusOption?.statusType}/></ProjectPropertyPicker>}
         {visible.has('Priority') && <ProjectPropertyPicker label={`${priorityText(project.priority)} Priority`} onChange={value => onPropertyChange?.(project, 'priority', value)} options={propertyOptions?.priority ?? PROPERTY_OPTIONS.priority} property="priority" value={project.priority}><DataViewPriorityIcon value={project.priority} /></ProjectPropertyPicker>}
         {visible.has('Lead') && <span className={`lp-project-card__lead ${project.lead ? '' : 'is-empty'}`}><LeadPropertyButton lead={project.lead} onChange={value => onPropertyChange?.(project, 'lead', value)} options={propertyOptions?.lead} /></span>}
       </span></div>
-      {visible.has('Summary') && project.summary && <p>{project.summary}</p>}
-      <div className="lp-project-card__bottom">
-        {visible.has('Target date') && <ProjectTargetDatePicker displayValue={project.targetDate} onChange={value => onPropertyChange?.(project, 'targetDate', value)} value={project.rawTargetDate}>{project.targetDate}</ProjectTargetDatePicker>}
+      {visible.has('Summary') && project.summary && <p className="lp-project-card__summary">{project.summary}</p>}
+      {showMeta && <div className="lp-project-card__meta">
+        {showDate && <ProjectTargetDatePicker buttonClassName={`lp-project-card__date${overdue ? ' is-overdue' : ''}`} displayValue={project.targetDate} onChange={value => onPropertyChange?.(project, 'targetDate', value)} value={project.rawTargetDate}><BoardTargetDateIcon overdue={overdue}/><span>{project.targetDate}</span></ProjectTargetDatePicker>}
         {visible.has('Initiatives') && project.initiativeNames?.map(name => <span className="lp-project-card__initiative" data-i18n-ignore key={name}>{name}</span>)}
-        {labelGroupProperties.filter(group => visible.has(projectLabelGroupProperty(group.id))).flatMap(group => project.labelsByGroup?.[group.id] ?? []).map(label => <span className="lp-project-card__initiative" data-i18n-ignore key={label.id}><i style={{ background: label.color }}/>{label.name}</span>)}
-        {project.milestone && <button className="lp-project-card__milestone" onClick={stopPropagation} type="button"><span />{project.milestone}</button>}
-        {visible.has('Issues') && <button className="lp-project-card__issues" onClick={event => { stopPropagation(event); onOpenIssues?.(project) }} type="button">{project.issueCount} issues</button>}
-      </div>
+        {metaLabels.map(label => <span className="lp-project-card__initiative" data-i18n-ignore key={label.id}><i style={{ background: label.color }}/>{label.name}</span>)}
+        {project.milestone && <button className="lp-project-card__milestone" onClick={stopPropagation} type="button"><MilestoneProgressIcon className="lp-project-card__milestone-icon" label={`Milestone ${project.milestone}. Progress: ${project.milestoneProgress ?? 0}%.`} overdue={isMilestoneDateOverdue(project.rawMilestoneDate)} progress={project.milestoneProgress ?? 0} /><span className="lp-project-card__milestone-name">{project.milestone}</span>{project.milestoneDate && <span className="lp-project-card__milestone-date">{project.milestoneDate}</span>}</button>}
+      </div>}
+      {visible.has('Issues') && <div className="lp-project-card__footer"><button className="lp-project-card__issues" onClick={event => { stopPropagation(event); onOpenIssues?.(project) }} type="button">{issueCountLabel(project.issueCount)}</button></div>}
     </a>
     <ProjectItemMenu manualOrdering={manualOrdering} onProjectAction={onProjectAction} onPropertyChange={onPropertyChange} options={propertyOptions} point={menuPoint} project={project} projectMenu={projectMenu} setPoint={setMenuPoint}/>
   </>
@@ -589,7 +636,7 @@ function ProjectContextMenu({ integration, manualOrdering = false, point, onActi
   const [nested, setNested] = useState<ProjectContextKind | null>(null)
   const [query, setQuery] = useState('')
   const [nestedQuery, setNestedQuery] = useState('')
-  const [labelMenuPosition, setLabelMenuPosition] = useState({ top: 5, flip: false, maxHeight: 410 })
+  const [nestedPosition, setNestedPosition] = useState({ top: 5, flip: false, maxHeight: 410 })
   const favorite = integration?.isFavorite(project.id) ?? false
   const subscriptionEvents = new Set(integration?.subscriptionEvents(project.id) ?? [])
   const subscriptions = Object.fromEntries(Object.keys(SUBSCRIPTION_LABELS).map(event => [event, subscriptionEvents.has(event)]))
@@ -619,10 +666,15 @@ function ProjectContextMenu({ integration, manualOrdering = false, point, onActi
   const top = Math.max(8, Math.min(point.y, window.innerHeight - 536))
 
   const openNested = (kind: ProjectContextKind | null, anchor: HTMLElement) => {
-    if (kind === 'labels' && ref.current) {
+    if (kind && ref.current) {
       const root = ref.current.getBoundingClientRect()
       const row = anchor.getBoundingClientRect()
-      setLabelMenuPosition({ top: row.top - root.top - 6.5, flip: root.right + 252 > window.innerWidth - 8, maxHeight: Math.max(80, window.innerHeight - row.top - 1.5) })
+      const width = kind === 'labels' ? 252 : kind === 'lead' || kind === 'members' ? 280 : 248
+      const spaceRight = window.innerWidth - root.right - 8
+      const spaceLeft = root.left - 8
+      const flip = spaceRight < width && spaceLeft >= spaceRight
+      const top = Math.max(5, row.top - root.top - 6.5)
+      setNestedPosition({ top, flip, maxHeight: Math.max(80, window.innerHeight - (root.top + top) - 8) })
     }
     setNested(kind)
   }
@@ -659,7 +711,7 @@ function ProjectContextMenu({ integration, manualOrdering = false, point, onActi
         type="button"
       ><ContextItemContent item={item}/></button>)}</div>
     })}
-    {nested && <div className={`lp-project-context__nested${nested === 'labels' ? ' is-project-labels' : ''}`} style={nested === 'labels' ? { top: labelMenuPosition.top, left: labelMenuPosition.flip ? 'auto' : undefined, right: labelMenuPosition.flip ? 'calc(100% - 3px)' : undefined, maxHeight: labelMenuPosition.maxHeight } : undefined} onKeyDown={event => menuKeyboard(event, () => setNested(null))} ref={nestedRef} role="menu">
+    {nested && <div className={`lp-project-context__nested${nested === 'labels' ? ' is-project-labels' : ''}${nestedPosition.flip ? ' is-start' : ''}`} style={{ top: nestedPosition.top, maxHeight: nestedPosition.maxHeight }} onKeyDown={event => menuKeyboard(event, () => setNested(null))} ref={nestedRef} role="menu">
       <ProjectContextSubmenu
         submenuPortalContainer={ref.current}
         kind={nested}
@@ -918,6 +970,24 @@ function projectCount(group: ProjectDataGroup): number {
   return group.subgroups?.reduce((total, subgroup) => total + projectCount(subgroup), 0) ?? group.projects.length
 }
 
+function issueCountLabel(count: number) {
+  return count === 1 ? '1 issue' : `${count} issues`
+}
+
+function isTargetDateOverdue(value?: string) {
+  if (!value) return false
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value)
+  if (!Number.isFinite(date.getTime())) return false
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return date < today
+}
+
+function BoardTargetDateIcon({ overdue }: { overdue: boolean }) {
+  if (!overdue) return <CalendarIcon size={16} />
+  return <svg aria-hidden="true" className="lp-project-card__date-icon" fill="currentColor" focusable="false" height="16" viewBox="0 0 16 16" width="16"><path d="M11 1C13.2091 1 15 2.79086 15 5V6.25C15 6.66421 14.6642 7 14.25 7C13.8358 7 13.5 6.66421 13.5 6.25V6H2.5V11C2.5 12.3807 3.61929 13.5 5 13.5H6.25C6.66421 13.5 7 13.8358 7 14.25C7 14.6642 6.66421 15 6.25 15H5C2.79086 15 1 13.2091 1 11V5C1 2.79086 2.79086 1 5 1H11ZM9.53033 8.46967L11.5 10.4393L13.4697 8.46967C13.7626 8.17678 14.2374 8.17678 14.5303 8.46967C14.8232 8.76256 14.8232 9.23744 14.5303 9.53033L12.5607 11.5L14.5303 13.4697C14.8232 13.7626 14.8232 14.2374 14.5303 14.5303C14.2374 14.8232 13.7626 14.8232 13.4697 14.5303L11.5 12.5607L9.53033 14.5303C9.23744 14.8232 8.76256 14.8232 8.46967 14.5303C8.17678 14.2374 8.17678 13.7626 8.46967 13.4697L10.4393 11.5L8.46967 9.53033C8.17678 9.23744 8.17678 8.76256 8.46967 8.46967C8.76256 8.17678 9.23744 8.17678 9.53033 8.46967Z"/></svg>
+}
+
 function groupHasProjects(group: ProjectDataGroup) { return projectCount(group) > 0 }
 
 function projectCreateStatus(groupName: string) {
@@ -925,11 +995,17 @@ function projectCreateStatus(groupName: string) {
 }
 
 function ProjectsLoadingState({ layout }: { layout: 'list' | 'board' | 'timeline' }) {
-  return <div aria-busy="true" aria-label="Loading projects" className={`lp-project-state lp-project-state--loading is-${layout}`}>{Array.from({ length: layout === 'board' ? 6 : 8 }, (_, index) => <span key={index} />)}</div>
+  if (layout === 'board') return <div aria-busy="true" aria-label="Loading projects" className="lp-project-board is-loading">
+    {Array.from({ length: 4 }, (_, index) => <section className="lp-project-board__column" key={index}>
+      <header><span className="lp-project-board__heading"><span className="lp-project-state__skel lp-project-state__skel-icon" /><span className="lp-project-state__skel lp-project-state__skel-title" /></span></header>
+      <div className="lp-project-board__cards"><span className="lp-project-state__skel-card" /><span className="lp-project-state__skel-card is-tall" /></div>
+    </section>)}
+  </div>
+  return <div aria-busy="true" aria-label="Loading projects" className={`lp-project-state lp-project-state--loading is-${layout}`}>{Array.from({ length: 8 }, (_, index) => <span key={index} />)}</div>
 }
 
 function ProjectsEmptyState({ onCreate }: { onCreate: () => void }) {
-  return <div className="lp-project-state lp-project-state--message"><DataViewProjectIcon /><h2>No projects</h2><button onClick={onCreate} type="button"><PlusIcon /> New project</button></div>
+  return <div className="lp-project-state lp-project-state--message"><DataViewProjectIcon /><h2>No projects</h2><p>Create a project to start grouping related issues.</p><button onClick={onCreate} type="button"><PlusIcon /> New project</button></div>
 }
 
 function ProjectsErrorState({ error, onRetry }: { error: string, onRetry?: () => void }) {

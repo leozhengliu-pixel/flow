@@ -27,3 +27,15 @@ it('moves selection across search results without Radix typeahead stealing the s
   fireEvent.keyDown(search,{key:'Enter'})
   expect(selected).toHaveBeenCalledWith({id:'two',label:'Beta'})
 })
+
+it('offers creating a workspace label when the search has no match', async () => {
+  const selected = vi.fn()
+  const created = vi.fn()
+  render(<I18nProvider><DropdownMenu.Root defaultOpen><DropdownMenu.Trigger>Labels</DropdownMenu.Trigger><DropdownMenu.Content><SearchableMenuItems options={[{id:'one',label:'Launch'}]} renderOption={option=><span>{option.label}</span>} onSelect={selected} onCreate={created}/></DropdownMenu.Content></DropdownMenu.Root></I18nProvider>)
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'test' } })
+  const create = await screen.findByRole('menuitem', { name: /Create new workspace label.*test/ })
+  expect(screen.queryByText('No results')).not.toBeInTheDocument()
+  fireEvent.click(create)
+  expect(created).toHaveBeenCalledWith('test')
+  expect(selected).not.toHaveBeenCalled()
+})

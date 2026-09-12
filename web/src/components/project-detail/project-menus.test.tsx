@@ -70,11 +70,14 @@ describe('project properties menus', () => {
     expect(screen.getByRole('menuitem',{name:'Dependencies'})).toBeVisible()
   })
 
-  it.each([['Blocked by','blocked_by'],['Blocking','blocks']] as const)('creates the correct dependency direction through %s', async (direction,type) => {
+  it.each([['Blocked by','blocked_by','blocked'],['Blocking','blocks','blocking']] as const)('creates the correct dependency direction through %s', async (direction,type,glyph) => {
     const user = userEvent.setup(); const {save,next} = properties()
     await user.click(screen.getByRole('button',{name:'More project properties'}))
     await user.hover(screen.getByRole('menuitem',{name:'Dependencies'}))
-    await user.hover(await screen.findByRole('menuitem',{name:direction}))
+    const row = await screen.findByRole('menuitem',{name:direction})
+    expect(row.querySelector(`[data-action-glyph="${glyph}"]`)).toBeTruthy()
+    await user.hover(row)
+    expect(await screen.findByRole('textbox',{name:direction === 'Blocked by' ? 'Mark as blocked by…' : 'Mark as blocking…'})).toBeVisible()
     await user.click(await screen.findByRole('menuitemcheckbox',{name:next.name}))
     expect(save).toHaveBeenCalledWith({dependencyRelations:[{projectId:next.id,type}]})
     expect(screen.queryByRole('menuitemcheckbox',{name:project.name})).not.toBeInTheDocument()

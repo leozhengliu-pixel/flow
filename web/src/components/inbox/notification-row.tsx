@@ -178,6 +178,11 @@ export function InboxNotificationRow(props: InboxNotificationRowProps) {
                   </div>
                 </div>
               </div>
+              <InboxRowHoverActions
+                disabled={disabled}
+                pending={pending}
+                onSnooze={() => setKeyboardSnoozeOpen(true)}
+              />
               {pending ? <span className="flow-inbox-row__pending" aria-hidden="true" /> : null}
               {actionError ? <span id={`${notification.id}-action-error`} className={styles.actionError} role="alert">{actionError}</span> : null}
             </div>
@@ -223,6 +228,35 @@ export function InboxNotificationRow(props: InboxNotificationRowProps) {
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
+  )
+}
+
+function stopRowAction(event: { stopPropagation(): void; preventDefault(): void }) {
+  event.stopPropagation()
+  event.preventDefault()
+}
+
+function InboxRowHoverActions({
+  disabled,
+  pending,
+  onSnooze,
+}: {
+  disabled: boolean
+  pending: boolean
+  onSnooze: () => void
+}) {
+  const idle = disabled || pending
+  return (
+    <div
+      className="flow-inbox-row__actions"
+      onClick={stopRowAction}
+      onPointerDown={stopRowAction}
+      onKeyDown={(event) => event.stopPropagation()}
+    >
+      <button type="button" aria-label="Snooze notification" disabled={idle} onClick={onSnooze}>
+        <SnoozeIcon />
+      </button>
+    </div>
   )
 }
 

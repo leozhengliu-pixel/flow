@@ -3,6 +3,7 @@ import * as Popover from '@radix-ui/react-popover'
 import { Bell, Check, ChevronDown, Copy, FileText, History, Link2, MessageCircle, MoreHorizontal, Send, SlidersHorizontal, Star, Trash2, Users, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { refreshResourcePreferences } from '@/lib/resource-preferences'
+import { toggleFavoriteFor } from '@/lib/favorites'
 import { toast } from 'sonner'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -15,7 +16,7 @@ import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { useI18n } from '@/i18n/i18n'
 import { documentPath, issuePath, projectPath, teamDocumentsPath, teamHomePath } from '@/lib/app-routes'
-import { addFavorite, addSubscription, createDocumentComment, deleteDocument, deleteDocumentComment, listDocumentPermissions, removeFavorite, removeSubscription, replaceDocumentPermissions, restoreDocumentRevision, updateDocument } from '@/lib/api'
+import { addSubscription, createDocumentComment, deleteDocument, deleteDocumentComment, listDocumentPermissions, removeSubscription, replaceDocumentPermissions, restoreDocumentRevision, updateDocument } from '@/lib/api'
 import type { BootstrapData, DocumentPermission, FlowDocument, User } from '@/types/flow'
 
 import './document-page.css'
@@ -37,7 +38,6 @@ export function DocumentPage({ data, document, onReload, onBack, origin }: { ori
   const [authorNamesOpen,setAuthorNamesOpen]=useState(()=>readDocumentViewOption(document.id,'authors',false))
   const [presence,setPresence]=useState<User[]>([])
   const [copyBusy,setCopyBusy]=useState(false)
-  const [favoriteBusy,setFavoriteBusy]=useState(false)
   const [subscriptionBusy,setSubscriptionBusy]=useState(false)
   const [accessOpen,setAccessOpen]=useState(false)
   const [accessBusy,setAccessBusy]=useState(false)
@@ -66,7 +66,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin }: { ori
   const restoreRevision=async()=>{if(!selectedRevision||selectedRevisionCurrent)return;const restored=await restoreDocumentRevision(document.id,selectedRevision.id);setTitle(restored.title);setBody({value:restored.content,state:restored.contentData?JSON.stringify(restored.contentData):restored.contentState});setEditorVersion(value=>value+1);setHistoryOpen(false);await onReload();toast.success('Content has been restored.')}
   const toggleProject=async(id:string)=>{const next=document.projectIds.includes(id)?document.projectIds.filter(value=>value!==id):[...document.projectIds,id];await updateDocument(document.id,{projectIds:next});await onReload()}
   const copyDocumentURL=async()=>{if(copyBusy)return;setCopyBusy(true);try{await navigator.clipboard.writeText(new URL(documentPath(data.workspace.urlKey,document),location.origin).href);toast.success(t('Copied document link to clipboard'))}catch(error){toast.error(error instanceof Error?error.message:t('Could not copy document link'))}finally{setCopyBusy(false)}}
-  const toggleFavorite=async()=>{if(favoriteBusy)return;setFavoriteBusy(true);try{if(favorite)await removeFavorite('document',document.id);else await addFavorite('document',document.id);await refreshResourcePreferences(data.workspace.urlKey)}catch(error){toast.error(error instanceof Error?error.message:t('Could not update favorite'))}finally{setFavoriteBusy(false)}}
+  const toggleFavorite=()=>{void toggleFavoriteFor(data,'document',document.id,undefined,favorite)}
   const toggleSubscription=async()=>{if(subscriptionBusy)return;setSubscriptionBusy(true);try{if(subscribed)await removeSubscription('document',document.id);else await addSubscription('document',document.id);await refreshResourcePreferences(data.workspace.urlKey);toast.success(t(subscribed?'Unsubscribed from document':'Subscribed to document'))}catch(error){toast.error(error instanceof Error?error.message:t('Could not update document subscription'))}finally{setSubscriptionBusy(false)}}
   const canManageAccess=data.viewer.id===document.creator.id||data.viewerRole==='admin'||String(data.viewerRole)==='owner'
   const documentMembers=data.members??[]
@@ -81,7 +81,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin }: { ori
       </nav>
       <div className="document-header-actions">
         {saveState==='error'&&<span className="document-save-state error">Could not save</span>}
-        <button aria-busy={favoriteBusy||undefined} aria-checked={favorite} aria-label={favorite?'Remove from favorites':'Add to favorites'} disabled={favoriteBusy} onClick={()=>void toggleFavorite()} role="switch"><Star size={15} fill={favorite?'currentColor':'none'}/></button>
+        <button aria-checked={favorite} aria-label={favorite?'Remove from favorites':'Add to favorites'} onClick={toggleFavorite} role="switch"><Star size={15} fill={favorite?'currentColor':'none'}/></button>
         <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Document options"><MoreHorizontal size={16}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="document-menu" align="end" sideOffset={5}><DropdownMenu.Sub><DropdownMenu.SubTrigger><FileText size={14}/><span>Move to</span><ChevronDown size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="document-menu" sideOffset={6}>{data.projects.map(item=><DropdownMenu.CheckboxItem checked={document.projectIds.includes(item.id)} key={item.id} onCheckedChange={()=>void toggleProject(item.id)} onSelect={event=>event.preventDefault()}><i style={{background:item.color}}/><span data-i18n-ignore>{item.name}</span>{document.projectIds.includes(item.id)&&<Check size={13}/>}</DropdownMenu.CheckboxItem>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub><DropdownMenu.Item disabled={copyBusy} onSelect={()=>void copyDocumentURL()}><Copy size={14}/><span>Copy link</span></DropdownMenu.Item>{canManageAccess&&<DropdownMenu.Item onSelect={()=>void openAccess()}><Users size={14}/><span>People with access</span></DropdownMenu.Item>}<DropdownMenu.Item onSelect={()=>void openHistory()}><History size={14}/><span>Show document history</span></DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item className="danger" onSelect={()=>setDeleteOpen(true)}><Trash2 size={14}/><span>Delete</span></DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
         <span className="document-header-spacer"/>
         {collaborators.slice(0,4).map(user=>{const name=user.displayName||user.name||'?';return <span className="document-presence__avatar" key={user.id} title={`${name} is editing`}>{name.slice(0,2).toUpperCase()}</span>})}

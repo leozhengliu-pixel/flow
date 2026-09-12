@@ -143,6 +143,7 @@ export function InboxPage(props: InboxPageProps) {
         onDeleteAll={() => void runPageAction('all', props.adapter.deleteAll)}
         onDeleteAllRead={() => void runPageAction('read', props.adapter.deleteAllRead)}
         onDeleteAllReadCompleted={() => void runPageAction('completed', props.adapter.deleteAllReadCompleted)}
+        onMarkAllRead={() => void runPageAction('mark-read', props.adapter.markAllRead)}
       >
         {(props.filterHiddenCount ?? 0) > 0 && !props.notifications.length ? (
           <InboxListFilteredEmpty hiddenCount={props.filterHiddenCount ?? 0} onClear={() => props.onFiltersChange?.([])} />

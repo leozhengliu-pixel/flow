@@ -2023,8 +2023,8 @@ func setFavoriteRecord(data *domain.Bootstrap, kind, id string, favorite bool) {
 	now := time.Now().UTC()
 	position := 0.0
 	for _, item := range data.Favorites {
-		if item.UserID == data.Viewer.ID && item.FolderID == "" && item.Position >= position {
-			position = item.Position + 1
+		if item.UserID == data.Viewer.ID && item.FolderID == "" && item.Position <= position {
+			position = item.Position - 1
 		}
 	}
 	data.Favorites = append(data.Favorites, domain.Favorite{ID: fmt.Sprintf("favorite_%d", now.UnixNano()), UserID: data.Viewer.ID, ResourceType: kind, ResourceID: id, Position: position, CreatedAt: now})

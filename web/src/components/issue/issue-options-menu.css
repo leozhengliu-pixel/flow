@@ -1,5 +1,5 @@
 .issue-options-popover,.issue-options-submenu{z-index:600;box-sizing:border-box;width:max-content;max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px);padding:0;border:.5px solid var(--popover-border);border-radius:12px;background:var(--theme-surface-2);box-shadow:var(--shadow-control);outline:0;color:var(--theme-text-primary);font-family:var(--font)}
-.issue-options-popover{min-width:243px;overflow:hidden}
+.issue-options-popover{width:242px;min-width:242px;overflow:hidden}
 .issue-options-popover>[cmdk-root],.issue-options-submenu>[cmdk-root]{display:flex;flex-direction:column;max-height:inherit;min-height:0}
 .issue-options-popover [cmdk-list],.issue-options-submenu [cmdk-list]{padding:6px 0;overflow:auto;min-height:0;scrollbar-width:none}
 .issue-options-filter{position:absolute;left:-99999px;width:1px;height:1px;padding:0;opacity:0}
@@ -32,9 +32,16 @@
 .issue-options-submenu-search{box-sizing:border-box;display:block;flex:none;width:100%;height:36.5px;margin:0;padding:10px 12px 9px 14px;border:0;border-bottom:.5px solid var(--theme-border);outline:0;background:transparent;color:var(--theme-text-primary);font:400 13px/normal var(--font)}
 .issue-options-submenu-search::placeholder{color:var(--theme-text-secondary);opacity:1}
 .issue-options-due-date{z-index:600;outline:0}
-.issue-options-due-date .due-date-command{width:231px;max-width:calc(100vw - 32px);box-shadow:var(--shadow-dialog);border-radius:12px}
+.issue-options-due-date .due-date-command{width:230px;max-width:calc(100vw - 32px);box-shadow:var(--shadow-dialog);border-radius:12px}
 .issue-options-due-date .due-date-search{color:var(--issue-menu-text)}
 .issue-options-due-date .due-date-options{padding:6px}
 .issue-options-due-date .due-date-options button{padding:0 8px;border-radius:8px;color:var(--issue-menu-text)}
 .issue-options-due-date .due-date-options button:hover,.issue-options-due-date .due-date-options button:focus-visible{background:var(--issue-menu-active-bg);color:var(--issue-menu-active-text)}
 .issue-options-due-date .due-date-options button small{font-size:12px;color:var(--issue-menu-muted)}
+:root[data-theme="light"] .issue-options-popover,:root[data-theme="light"] .issue-options-submenu{border-color:var(--popover-border);background:var(--theme-surface-2);color:var(--theme-text-primary)}
+:root[data-theme="light"] .issue-options-popover{box-shadow:var(--shadow-control)}
+:root[data-theme="light"] .issue-options-submenu{box-shadow:var(--shadow-dialog)}
+:root[data-theme="light"] .issue-options-item{color:var(--theme-text-primary)}
+:root[data-theme="light"] .issue-options-shortcut kbd{border-color:var(--border);background:var(--theme-control);color:var(--muted)}
+:root[data-theme="light"] .issue-link-dialog{border-color:var(--popover-border);background:var(--theme-surface-2);box-shadow:var(--shadow-dialog);color:var(--theme-text-primary)}
+:root[data-theme="light"] .issue-link-dialog input{background:var(--theme-surface-1);color:var(--theme-text-primary)}
