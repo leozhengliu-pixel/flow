@@ -59,7 +59,7 @@ export function issueBreadcrumbs(data: BootstrapData, issue: Issue, returnPath?:
     if (view) return [{ label: view.name, href, entity: true }]
   }
   const project = route.kind === 'project' || route.kind === 'project-saved-view' ? data.projects.find(project => project.slugId === route.projectSlugId || project.id === route.projectSlugId) : issue.project && data.projects.find(project => project.id === issue.project?.id)
-  if (project && (route.kind === 'project' || route.kind === 'project-saved-view')) return [{ label: project.name, href, entity: true }]
-  if (!returnPath && project) return [{ label: project.name, href: projectPath(workspace, project, 'issues'), entity: true }]
+  if (project && (route.kind === 'project' || route.kind === 'project-saved-view')) return [{ label: project.name, href: projectPath(workspace, project, 'overview'), entity: true }]
+  if (!returnPath && project) return [{ label: project.name, href: projectPath(workspace, project, 'overview'), entity: true }]
   return [{ label: issue.team.name, href: teamHomePath(workspace, issue.team.key), entity: true }, { label: 'Issues', href: fallback }]
 }

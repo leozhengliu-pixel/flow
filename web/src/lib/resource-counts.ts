@@ -1,4 +1,12 @@
-import type { BootstrapData, IssueLabel } from '@/types/flow'
+import type { BootstrapData, IssueLabel, LabelResourceType } from '@/types/flow'
+
+export function countLabelsByResource(labels: readonly IssueLabel[], resourceType: LabelResourceType) {
+  let count = 0
+  for (const label of labels) {
+    if ((label.resourceType ?? 'issue') === resourceType) count += 1
+  }
+  return count
+}
 
 export function deriveResourceCounts(data: BootstrapData): BootstrapData {
   if (data.issueCollectionPaged) return { ...data, issues: data.issues.slice(0, 2000) }

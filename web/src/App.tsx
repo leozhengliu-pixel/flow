@@ -4629,10 +4629,11 @@ function App() {
           })()}
         {page === "new-team" && (
           <TeamCreatePage
+            data={data}
             teams={data.teams}
             teamSettings={data.teamSettings}
             initialParentTeamId={new URLSearchParams(location.search).get('parentTeamId') ?? ''}
-            canCreateSubTeam={data.viewerRole === 'admin' || data.viewerRole === 'owner'}
+            canCreateSubTeam
             onBack={() => navigateTo(teamsPath(data.workspace.urlKey))}
             onNavigateSettings={(settingsPage, teamKey) =>
               navigateTo(

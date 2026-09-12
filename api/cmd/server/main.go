@@ -1401,7 +1401,7 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 		if err := domain.ValidateTeamParent(data, team.ID, input.ParentTeamID); err != nil {
 			return fmt.Errorf("%w: %s", errInvalid, err)
 		}
-		if input.ParentTeamID != "" && !s.authDisabled && !workspaceAdminRole(data.ViewerRole) {
+		if input.ParentTeamID != "" && !s.authDisabled && !canManageTeamHierarchy(data, input.ParentTeamID, data.Viewer.ID) {
 			return store.ErrAuthForbidden
 		}
 		if len(data.TeamMembers) == 0 && len(persistedTeamMembers) > 0 {
@@ -1432,6 +1432,10 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 			settings.Access = "public"
 		}
 		settings.ParentTeamID = input.ParentTeamID
+		settings.InheritIssueEstimation = input.ParentTeamID != ""
+		settings.InheritWorkflowStatuses = input.ParentTeamID != ""
+		settings.InheritProjectStatuses = input.ParentTeamID != ""
+		settings.InheritCycles = input.ParentTeamID != ""
 		data.TeamSettings[team.ID] = settings
 		if data.CycleSettings == nil {
 			data.CycleSettings = map[string]domain.CycleSettings{}
@@ -1478,8 +1482,9 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 	workspaceKey, teamID := r.PathValue("workspaceKey"), r.PathValue("teamId")
 	var input struct {
 		Name, Key, Color, Icon *string
-		Private                *bool `json:"private"`
-		Retired                *bool `json:"retired"`
+		Private                *bool  `json:"private"`
+		Retired                *bool  `json:"retired"`
+		SubTeamAction          string `json:"subTeamAction"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
@@ -1527,9 +1532,44 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 			if input.Retired != nil {
 				if *input.Retired {
 					now := time.Now().UTC()
+					descendants := teamDescendantIDs(data, teamID)
+					if len(descendants) > 0 {
+						switch input.SubTeamAction {
+						case "retire":
+							for index := range data.Teams {
+								if slices.Contains(descendants, data.Teams[index].ID) {
+									data.Teams[index].RetiredAt = &now
+								}
+							}
+						case "detach":
+							for index := range data.Teams {
+								if data.TeamSettings[data.Teams[index].ID].ParentTeamID != teamID {
+									continue
+								}
+								child := data.TeamSettings[data.Teams[index].ID]
+								child.ParentTeamID = ""
+								child.InheritIssueEstimation = false
+								child.InheritWorkflowStatuses = false
+								child.InheritProjectStatuses = false
+								child.InheritCycles = false
+								data.TeamSettings[data.Teams[index].ID] = child
+							}
+						default:
+							return fmt.Errorf("%w: choose how to handle sub-teams", errInvalid)
+						}
+					}
 					data.Teams[index].RetiredAt = &now
 				} else {
 					data.Teams[index].RetiredAt = nil
+					if input.SubTeamAction == "retire" {
+						for _, descendantID := range teamDescendantIDsIncludingRetired(data, teamID) {
+							for teamIndex := range data.Teams {
+								if data.Teams[teamIndex].ID == descendantID {
+									data.Teams[teamIndex].RetiredAt = nil
+								}
+							}
+						}
+					}
 				}
 			}
 			now := time.Now().UTC()
@@ -2055,6 +2095,9 @@ func (s *server) updateCycleSettings(w http.ResponseWriter, r *http.Request) {
 		if !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) {
 			return errNotFound
 		}
+		if teamSettings(data, teamID).InheritCycles {
+			return fmt.Errorf("%w: cycles are inherited from the parent team", errInvalid)
+		}
 		settings := data.CycleSettings[teamID]
 		if settings.DurationWeeks == 0 {
 			settings = domain.CycleSettings{Enabled: true, DurationWeeks: 2, StartsOn: 1, UpcomingCount: 2}
@@ -2120,6 +2163,7 @@ func (s *server) updateCycleSettings(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+		syncInheritedCycles(data, teamID)
 		updated = settings
 		return nil
 	})
@@ -4808,6 +4852,9 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		if len(issue.Labels) != len(*input.LabelIDs) {
 			return nil, fmt.Errorf("%w: unknown label", errInvalid)
 		}
+		if !labelsAvailableToTeam(data, issue.Labels, issue.Team.ID) {
+			return nil, fmt.Errorf("%w: label is not available to this team", errInvalid)
+		}
 		if !validLabelGroupSelection(issue.Labels) {
 			return nil, fmt.Errorf("%w: only one label from each group can be selected", errInvalid)
 		}
@@ -5319,7 +5366,9 @@ func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input d
 			teamIDs = input.TeamIDs
 		}
 		for _, label := range selectedLabels {
-			if !labelScopeIsWorkspace(label.Scope) && !slices.Contains(teamIDs, label.Scope) {
+			if !labelScopeIsWorkspace(label.Scope) && !slices.ContainsFunc(teamIDs, func(teamID string) bool {
+				return label.Scope == teamID || slices.Contains(teamAncestorIDs(data, teamID), label.Scope)
+			}) {
 				return errInvalid
 			}
 		}

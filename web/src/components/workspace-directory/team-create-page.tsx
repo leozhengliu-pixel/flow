@@ -37,7 +37,7 @@ import { SelectControl } from "@/components/ui/select-control";
 import { ParentTeamPicker } from '@/components/property/parent-team-picker';
 import { teamHierarchy, type TeamHierarchySettings } from '@/lib/team-hierarchy';
 import { ReleasesIcon } from "@/components/releases/release-icons";
-import type { Team } from "@/types/flow";
+import type { BootstrapData, Team } from "@/types/flow";
 import type { SettingsPageId } from "@/lib/app-routes";
 
 import "./workspace-directory.css";
@@ -112,6 +112,7 @@ const SETTINGS_DESTINATIONS: Record<string, SettingsPageId> = {
 };
 
 export function TeamCreatePage({
+  data,
   teams,
   teamSettings,
   initialParentTeamId = '',
@@ -120,6 +121,7 @@ export function TeamCreatePage({
   onNavigateSettings,
   onCreate,
 }: {
+  data?: BootstrapData;
   teams: Team[];
   teamSettings?: TeamHierarchySettings;
   initialParentTeamId?: string;
@@ -281,7 +283,7 @@ export function TeamCreatePage({
             </label>
             {canCreateSubTeam && <label>
               <span>Parent team<small>Start with a copy of the parent team's settings and workflows</small></span>
-              <ParentTeamPicker teams={teams} settings={teamSettings} value={parentTeamId} onChange={setParentTeamId}/>
+              <ParentTeamPicker data={data} teams={teams} settings={teamSettings} value={parentTeamId} onChange={setParentTeamId}/>
             </label>}
           </section>
           <h2>Team access</h2>
