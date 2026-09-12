@@ -56,11 +56,6 @@ func visibleIssueTeams(data domain.Bootstrap, userID, role string) []string {
 	for _, team := range data.Teams {
 		allowed := isWorkspaceAdminRole(role) || roles[team.ID] != ""
 		settings := data.TeamSettings[team.ID]
-		seen := map[string]bool{team.ID: true}
-		for parent := settings.ParentTeamID; !allowed && parent != "" && !seen[parent]; parent = data.TeamSettings[parent].ParentTeamID {
-			seen[parent] = true
-			allowed = strings.EqualFold(roles[parent], "owner")
-		}
 		if !allowed && role != "guest" {
 			access := strings.ToLower(strings.TrimSpace(settings.Access))
 			if access == "" && team.Private {
@@ -68,7 +63,7 @@ func visibleIssueTeams(data domain.Bootstrap, userID, role string) []string {
 			}
 			if access != "private" && !strings.EqualFold(settings.MembershipRestriction, "members") && !strings.EqualFold(settings.MembershipRestriction, "owners") {
 				allowed = access != "restricted"
-				seen = map[string]bool{team.ID: true}
+				seen := map[string]bool{team.ID: true}
 				for parent := settings.ParentTeamID; parent != "" && !seen[parent]; parent = data.TeamSettings[parent].ParentTeamID {
 					seen[parent] = true
 					p := data.TeamSettings[parent]

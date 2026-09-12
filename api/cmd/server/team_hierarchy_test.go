@@ -58,3 +58,39 @@ func TestTeamHierarchyIssueQueryIncludesDescendantsOnlyWhenRequested(t *testing.
 		t.Fatal("invalid next page")
 	}
 }
+
+func TestSubTeamInheritsSettingsLabelsAndCycles(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, authDisabled: true, uploadPath: t.TempDir()})
+	parent := requestJSON[domain.Team](t, handler, "POST", "/api/workspaces/test-workspace/teams", map[string]any{"name": "Parent", "key": "PAR"}, http.StatusCreated)
+	child := requestJSON[domain.Team](t, handler, "POST", "/api/workspaces/test-workspace/teams", map[string]any{"name": "Child", "key": "CHD"}, http.StatusCreated)
+	requestJSON[domain.TeamSettings](t, handler, "PATCH", "/api/teams/"+parent.ID+"/settings", map[string]any{"estimateType": "fibonacci"}, http.StatusOK)
+	requestJSON[domain.CycleSettings](t, handler, "PATCH", "/api/teams/"+parent.ID+"/cycle-settings", map[string]any{"enabled": true, "durationWeeks": 3}, http.StatusOK)
+	parentLabel := requestJSON[domain.IssueLabel](t, handler, "POST", "/api/teams/"+parent.ID+"/labels", map[string]any{"name": "Shared"}, http.StatusCreated)
+	requestJSON[domain.IssueLabel](t, handler, "POST", "/api/teams/"+child.ID+"/labels", map[string]any{"name": "Shared"}, http.StatusCreated)
+
+	requestJSON[domain.TeamSettings](t, handler, "PATCH", "/api/teams/"+child.ID+"/settings", map[string]any{"parentTeamId": parent.ID}, http.StatusOK)
+	settings := requestJSON[domain.TeamSettings](t, handler, "GET", "/api/teams/"+child.ID+"/settings", nil, http.StatusOK)
+	if !settings.InheritIssueEstimation || !settings.InheritWorkflowStatuses || !settings.InheritProjectStatuses || !settings.InheritCycles || settings.EstimateType != "fibonacci" {
+		t.Fatalf("sub-team did not inherit parent settings: %#v", settings)
+	}
+	requestJSON[any](t, handler, "PATCH", "/api/teams/"+child.ID+"/cycle-settings", map[string]any{"durationWeeks": 4}, http.StatusBadRequest)
+	data := requestJSON[domain.Bootstrap](t, handler, "GET", "/api/bootstrap", nil, http.StatusOK)
+	if cycles := data.CycleSettings[child.ID]; !cycles.Enabled || cycles.DurationWeeks != 3 {
+		t.Fatalf("sub-team did not inherit parent cycles: %#v", cycles)
+	}
+	var childLabel domain.IssueLabel
+	for _, label := range data.Labels {
+		if label.Scope == child.ID && labelResourceType(label) == "issue" {
+			childLabel = label
+			break
+		}
+	}
+	if childLabel.ID == "" || childLabel.Name == "Shared" || childLabel.Name != "Shared (CHD)" || parentLabel.Name != "Shared" {
+		t.Fatalf("sub-team label was not made unique: parent=%#v child=%#v", parentLabel, childLabel)
+	}
+}

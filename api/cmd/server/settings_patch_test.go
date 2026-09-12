@@ -31,6 +31,15 @@ func TestSettingsPatchPreservesIndependentFields(t *testing.T) {
 	if ws.FeatureFlags["initiatives"] || ws.FeatureFlags["loops"] || ws.FeatureSettings.CustomerRevenueCurrency != "CNY" || ws.WelcomeMessage != "Welcome" {
 		t.Fatalf("nested patch reset unrelated values: %#v", ws)
 	}
+	schedule := requestJSON[domain.WorkspaceSettings](t, handler, http.MethodPatch, "/api/workspace/preferences", map[string]any{"featureSettings": map[string]any{
+		"initiativeUpdateSchedule": "biweekly", "initiativeUpdateFrequencyWeeks": 2, "initiativeUpdateWeekday": 4, "initiativeUpdateHour": 14,
+	}}, http.StatusOK)
+	if schedule.FeatureSettings.InitiativeUpdateFrequencyWeeks != 2 || schedule.FeatureSettings.InitiativeUpdateWeekday != 4 || schedule.FeatureSettings.InitiativeUpdateHour != 14 {
+		t.Fatalf("initiative schedule was not persisted: %#v", schedule.FeatureSettings)
+	}
+	requestJSON[domain.WorkspaceSettings](t, handler, http.MethodPatch, "/api/workspace/preferences", map[string]any{"featureSettings": map[string]any{"initiativeUpdateFrequencyWeeks": 9}}, http.StatusBadRequest)
+	requestJSON[domain.WorkspaceSettings](t, handler, http.MethodPatch, "/api/workspace/preferences", map[string]any{"featureSettings": map[string]any{"initiativeUpdateWeekday": 7}}, http.StatusBadRequest)
+	requestJSON[domain.WorkspaceSettings](t, handler, http.MethodPatch, "/api/workspace/preferences", map[string]any{"featureSettings": map[string]any{"initiativeUpdateHour": 24}}, http.StatusBadRequest)
 }
 
 func TestSettingsPatchProtectsIdentityAndRejectsInvalidShapes(t *testing.T) {

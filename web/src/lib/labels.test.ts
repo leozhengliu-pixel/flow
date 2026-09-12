@@ -34,6 +34,7 @@ describe('label helpers', () => {
 
   it('respects workspace and team scopes', () => {
     expect(labelsForIssueTeam(labels, 'team-a', groups).map(label => label.id)).toEqual(['issue-a', 'issue-b'])
+    expect(labelsForIssueTeam(labels, 'team-b', groups, ['team-a']).map(label => label.id)).toEqual(['issue-a', 'issue-b'])
     expect(labelsForIssueTeam(labels, 'team-b', groups).map(label => label.id)).toEqual(['issue-a'])
     expect(isWorkspaceLabel({ scope: '' } as IssueLabel)).toBe(true)
     expect(labelScopeName(labels[1], [{ id: 'team-a', name: 'Platform' } as Team])).toBe('Platform')
@@ -51,5 +52,21 @@ describe('label helpers', () => {
   it('returns only workspace groups for the requested resource', () => {
     expect(groupsForResource(groups, 'issue').map(group => group.id)).toEqual(['issue-group', 'archived-group'])
     expect(groupsForResource(groups, 'project').map(group => group.id)).toEqual(['project-group'])
+  })
+
+  it('resolves inherited issue labels over one million labels without copying the catalog', () => {
+    const labels = Array.from({ length: 1_000_000 }, (_, index) => ({
+      id: `label-${index}`,
+      name: `Label ${index}`,
+      color: '#888888',
+      resourceType: 'issue',
+      scope: index === 0 ? 'parent' : index === 1 ? 'child' : 'other',
+    })) as IssueLabel[]
+    const start = performance.now()
+    const inherited = labelsForIssueTeam(labels, 'child', [], ['parent'])
+    const elapsed = performance.now() - start
+
+    expect(inherited.map(label => label.id)).toEqual(['label-0', 'label-1'])
+    expect(elapsed).toBeLessThan(5_000)
   })
 })

@@ -3,6 +3,15 @@ import type { Team, TeamSettings } from '@/types/flow'
 export const MAX_TEAM_DEPTH = 4
 export type TeamHierarchySettings = Record<string, Pick<TeamSettings, 'parentTeamId'> & Partial<Pick<TeamSettings, 'access'>>>
 
+export function resolvedTeamSettings(settings: Record<string, TeamSettings>, teamId: string, seen = new Set<string>()): TeamSettings | undefined {
+  const current = settings[teamId]
+  if (!current || seen.has(teamId)) return current
+  seen.add(teamId)
+  if (!current.inheritIssueEstimation || !current.parentTeamId) return current
+  const parent = resolvedTeamSettings(settings, current.parentTeamId, seen)
+  return parent ? { ...current, estimateType: parent.estimateType } : current
+}
+
 export function teamHierarchy(teams: Team[], settings: TeamHierarchySettings = {}) {
   const byId = new Map(teams.map(team => [team.id, team]))
   const ancestors = new Map<string, Team[]>()

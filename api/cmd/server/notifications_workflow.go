@@ -323,6 +323,9 @@ func (s *server) createWorkflowState(w http.ResponseWriter, r *http.Request) {
 		if !teamExists(data, teamID) || !validWorkflowType(*input.Type) {
 			return "", errInvalid
 		}
+		if teamSettings(data, teamID).InheritWorkflowStatuses {
+			return "", fmt.Errorf("%w: issue statuses are inherited from the parent team", errInvalid)
+		}
 		materializeTeamStates(data, teamID)
 		states := statesForTeam(data, teamID)
 		position := float64(len(states))
@@ -352,6 +355,7 @@ func (s *server) createWorkflowState(w http.ResponseWriter, r *http.Request) {
 			settings.DefaultStateID = created.ID
 			data.TeamSettings[teamID] = settings
 		}
+		remapInheritedWorkflowIssues(data, teamID)
 		return created.ID, nil
 	})
 	respondMutation(w, err, http.StatusCreated, created)
@@ -365,6 +369,9 @@ func (s *server) updateWorkflowState(w http.ResponseWriter, r *http.Request) {
 	teamID, stateID := r.PathValue("id"), r.PathValue("stateId")
 	var updated domain.WorkflowState
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "workflow_state.updated", stateID, input, func(data *domain.Bootstrap) error {
+		if teamSettings(data, teamID).InheritWorkflowStatuses {
+			return fmt.Errorf("%w: issue statuses are inherited from the parent team", errInvalid)
+		}
 		materializeTeamStates(data, teamID)
 		state := stateForTeam(data, teamID, stateID)
 		if state == nil {
@@ -414,6 +421,7 @@ func (s *server) updateWorkflowState(w http.ResponseWriter, r *http.Request) {
 				data.Issues[index].State = updated
 			}
 		}
+		remapInheritedWorkflowIssues(data, teamID)
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
@@ -426,6 +434,9 @@ func (s *server) deleteWorkflowState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := s.store.DeleteWorkflowStateRecords(r.Context(), workspaceKey(r), teamID, func(data *domain.Bootstrap, inUse bool) (domain.WorkflowState, *domain.WorkflowState, error) {
+		if teamSettings(data, teamID).InheritWorkflowStatuses {
+			return domain.WorkflowState{}, nil, fmt.Errorf("%w: issue statuses are inherited from the parent team", errInvalid)
+		}
 		state := stateForTeam(data, teamID, stateID)
 		if state == nil {
 			state = stateForTeam(data, teamID, teamID+"_"+stateID)
@@ -480,6 +491,9 @@ func (s *server) reorderWorkflowStates(w http.ResponseWriter, r *http.Request) {
 	teamID := r.PathValue("id")
 	var updated []domain.WorkflowState
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "workflow_states.reordered", teamID, input, func(data *domain.Bootstrap) error {
+		if teamSettings(data, teamID).InheritWorkflowStatuses {
+			return fmt.Errorf("%w: issue statuses are inherited from the parent team", errInvalid)
+		}
 		materializeTeamStates(data, teamID)
 		states := statesForTeam(data, teamID)
 		if len(input.StateIDs) != len(states) || !allUniqueStrings(input.StateIDs) {
@@ -507,6 +521,7 @@ func (s *server) reorderWorkflowStates(w http.ResponseWriter, r *http.Request) {
 				data.Issues[issueIndex].State = *state
 			}
 		}
+		remapInheritedWorkflowIssues(data, teamID)
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
@@ -537,6 +552,7 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 			return errNotFound
 		}
 		settings := teamSettings(data, teamID)
+		previousParentTeamID := settings.ParentTeamID
 		if input.Description != nil {
 			settings.Description = strings.TrimSpace(*input.Description)
 		}
@@ -701,14 +717,57 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 		if input.ShowInitiatives != nil {
 			settings.ShowInitiatives = *input.ShowInitiatives
 		}
+		if input.InheritIssueEstimation != nil {
+			if settings.ParentTeamID == "" && *input.InheritIssueEstimation {
+				return errInvalid
+			}
+			settings.InheritIssueEstimation = *input.InheritIssueEstimation
+		}
+		if input.InheritWorkflowStatuses != nil {
+			if settings.ParentTeamID == "" && *input.InheritWorkflowStatuses {
+				return errInvalid
+			}
+			settings.InheritWorkflowStatuses = *input.InheritWorkflowStatuses
+		}
+		if input.InheritProjectStatuses != nil {
+			if settings.ParentTeamID == "" && *input.InheritProjectStatuses {
+				return errInvalid
+			}
+			settings.InheritProjectStatuses = *input.InheritProjectStatuses
+		}
+		if input.InheritCycles != nil {
+			if settings.ParentTeamID == "" && *input.InheritCycles {
+				return errInvalid
+			}
+			settings.InheritCycles = *input.InheritCycles
+		}
 		if input.ParentTeamID != nil {
-			if !s.authDisabled && !workspaceAdminRole(data.ViewerRole) {
+			if !s.authDisabled && !canManageTeamHierarchy(data, teamID, data.Viewer.ID) {
 				return store.ErrAuthForbidden
 			}
 			if err := domain.ValidateTeamParent(data, teamID, *input.ParentTeamID); err != nil {
 				return fmt.Errorf("%w: %s", errInvalid, err)
 			}
 			settings.ParentTeamID = *input.ParentTeamID
+			if *input.ParentTeamID == "" {
+				settings.InheritIssueEstimation = false
+				settings.InheritWorkflowStatuses = false
+				settings.InheritProjectStatuses = false
+				settings.InheritCycles = false
+			} else {
+				if input.InheritIssueEstimation == nil {
+					settings.InheritIssueEstimation = true
+				}
+				if input.InheritWorkflowStatuses == nil {
+					settings.InheritWorkflowStatuses = true
+				}
+				if input.InheritProjectStatuses == nil {
+					settings.InheritProjectStatuses = true
+				}
+				if input.InheritCycles == nil {
+					settings.InheritCycles = true
+				}
+			}
 		}
 		if input.Identifier != nil {
 			identifier := strings.ToUpper(strings.TrimSpace(*input.Identifier))
@@ -731,6 +790,12 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 			previousAccess = strings.ToLower(strings.TrimSpace(previous.Access))
 		}
 		data.TeamSettings[teamID] = settings
+		if input.ParentTeamID != nil && *input.ParentTeamID != "" && *input.ParentTeamID != previousParentTeamID {
+			inheritParentTeamConfiguration(data, teamID, *input.ParentTeamID)
+		}
+		if input.InheritCycles != nil && *input.InheritCycles {
+			syncInheritedCycles(data, teamID)
+		}
 		if input.ParentTeamID != nil && s.authDisabled {
 			domain.SyncTeamAncestorMembers(data)
 		}
@@ -1018,7 +1083,7 @@ func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, 
 	}
 	if input.LabelIDs != nil {
 		labels := labelsByIDForResource(data, *input.LabelIDs, "issue")
-		if len(labels) != len(*input.LabelIDs) || !validLabelGroupSelection(labels) || !labelsAvailableToTeam(labels, template.TeamID) {
+		if len(labels) != len(*input.LabelIDs) || !validLabelGroupSelection(labels) || !labelsAvailableToTeam(data, labels, template.TeamID) {
 			return errInvalid
 		}
 		template.LabelIDs = slices.Clone(*input.LabelIDs)
@@ -1053,7 +1118,7 @@ func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, 
 				return errInvalid
 			}
 			labels := labelsByIDForResource(data, item.LabelIDs, "issue")
-			if len(labels) != len(item.LabelIDs) || !validLabelGroupSelection(labels) || !labelsAvailableToTeam(labels, item.TeamID) {
+			if len(labels) != len(item.LabelIDs) || !validLabelGroupSelection(labels) || !labelsAvailableToTeam(data, labels, item.TeamID) {
 				return errInvalid
 			}
 			if item.ID == "" {
@@ -1065,9 +1130,13 @@ func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, 
 	return nil
 }
 
-func labelsAvailableToTeam(labels []domain.IssueLabel, teamID string) bool {
+func labelsAvailableToTeam(data *domain.Bootstrap, labels []domain.IssueLabel, teamID string) bool {
+	allowedScopes := map[string]bool{teamID: true}
+	for _, ancestorID := range teamAncestorIDs(data, teamID) {
+		allowedScopes[ancestorID] = true
+	}
 	return !slices.ContainsFunc(labels, func(label domain.IssueLabel) bool {
-		return !labelScopeIsWorkspace(label.Scope) && label.Scope != teamID
+		return !labelScopeIsWorkspace(label.Scope) && !allowedScopes[label.Scope]
 	})
 }
 
@@ -1150,9 +1219,279 @@ func teamSettings(data *domain.Bootstrap, teamID string) domain.TeamSettings {
 	if settings.AgentSkills == nil {
 		settings.AgentSkills = []domain.TeamAgentSkill{}
 	}
+	if settings.InheritIssueEstimation && settings.ParentTeamID != "" {
+		parent := teamSettings(data, settings.ParentTeamID)
+		settings.EstimateType = parent.EstimateType
+	}
 	return settings
 }
+
+func teamAncestorIDs(data *domain.Bootstrap, teamID string) []string {
+	result := []string{}
+	seen := map[string]bool{teamID: true}
+	for parent := data.TeamSettings[teamID].ParentTeamID; parent != "" && !seen[parent]; parent = data.TeamSettings[parent].ParentTeamID {
+		seen[parent] = true
+		result = append(result, parent)
+	}
+	return result
+}
+
+func teamDescendantIDs(data *domain.Bootstrap, teamID string) []string {
+	children := map[string][]string{}
+	for _, team := range data.Teams {
+		if team.RetiredAt != nil {
+			continue
+		}
+		parent := data.TeamSettings[team.ID].ParentTeamID
+		children[parent] = append(children[parent], team.ID)
+	}
+	result := []string{}
+	seen := map[string]bool{}
+	queue := append([]string(nil), children[teamID]...)
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		result = append(result, id)
+		queue = append(queue, children[id]...)
+	}
+	return result
+}
+
+func teamDescendantIDsIncludingRetired(data *domain.Bootstrap, teamID string) []string {
+	children := map[string][]string{}
+	for _, team := range data.Teams {
+		parent := data.TeamSettings[team.ID].ParentTeamID
+		children[parent] = append(children[parent], team.ID)
+	}
+	result := []string{}
+	seen := map[string]bool{}
+	queue := append([]string(nil), children[teamID]...)
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		result = append(result, id)
+		queue = append(queue, children[id]...)
+	}
+	return result
+}
+
+func teamRoleForUser(data *domain.Bootstrap, teamID, userID string) string {
+	seen := map[string]bool{}
+	for current := teamID; current != "" && !seen[current]; current = data.TeamSettings[current].ParentTeamID {
+		seen[current] = true
+		for _, member := range data.TeamMembers {
+			if member.TeamID == current && member.UserID == userID {
+				return member.Role
+			}
+		}
+	}
+	return ""
+}
+
+func canManageTeamHierarchy(data *domain.Bootstrap, teamID, userID string) bool {
+	return workspaceAdminRole(data.ViewerRole) || teamRoleForUser(data, teamID, userID) == "owner"
+}
+
+func inheritParentTeamConfiguration(data *domain.Bootstrap, teamID, parentID string) {
+	parentSettings := teamSettings(data, parentID)
+	settings := data.TeamSettings[teamID]
+	settings.ParentTeamID = parentID
+	settings.InheritIssueEstimation = true
+	settings.InheritWorkflowStatuses = true
+	settings.InheritProjectStatuses = true
+	settings.InheritCycles = true
+	settings.EstimateType = parentSettings.EstimateType
+	settings.DefaultStateID = parentSettings.DefaultStateID
+	settings.DefaultPriority = parentSettings.DefaultPriority
+	data.TeamSettings[teamID] = settings
+
+	remapInheritedWorkflowIssues(data, teamID)
+	ensureSubtreeLabelUniqueness(data, teamID)
+	syncInheritedCycles(data, teamID)
+}
+
+func remapInheritedWorkflowIssues(data *domain.Bootstrap, rootTeamID string) {
+	for _, id := range append([]string{rootTeamID}, teamDescendantIDs(data, rootTeamID)...) {
+		child := data.TeamSettings[id]
+		if !child.InheritWorkflowStatuses || child.ParentTeamID == "" {
+			continue
+		}
+		for index := range data.Issues {
+			if data.Issues[index].Team.ID != id {
+				continue
+			}
+			states := statesForTeam(data, id)
+			next := slices.IndexFunc(states, func(state domain.WorkflowState) bool {
+				return state.Type == data.Issues[index].State.Type && strings.EqualFold(state.Name, data.Issues[index].State.Name)
+			})
+			if next < 0 {
+				next = slices.IndexFunc(states, func(state domain.WorkflowState) bool { return state.Type == data.Issues[index].State.Type })
+			}
+			if next >= 0 {
+				data.Issues[index].State = states[next]
+			}
+		}
+	}
+}
+
+func ensureSubtreeLabelUniqueness(data *domain.Bootstrap, rootTeamID string) {
+	occupied := map[string]map[string]bool{}
+	for _, ancestorID := range teamAncestorIDs(data, rootTeamID) {
+		for _, label := range data.Labels {
+			if label.Scope == ancestorID {
+				key := labelResourceType(label)
+				if occupied[key] == nil {
+					occupied[key] = map[string]bool{}
+				}
+				occupied[key][strings.ToLower(label.Name)] = true
+			}
+		}
+	}
+	for _, teamID := range append([]string{rootTeamID}, teamDescendantIDs(data, rootTeamID)...) {
+		team := slices.IndexFunc(data.Teams, func(item domain.Team) bool { return item.ID == teamID })
+		if team < 0 {
+			continue
+		}
+		for index := range data.Labels {
+			label := &data.Labels[index]
+			if label.Scope != teamID {
+				continue
+			}
+			resource := labelResourceType(*label)
+			if occupied[resource] == nil {
+				occupied[resource] = map[string]bool{}
+			}
+			name := label.Name
+			if occupied[resource][strings.ToLower(name)] {
+				base := fmt.Sprintf("%s (%s)", name, data.Teams[team].Key)
+				name = base
+				for suffix := 2; occupied[resource][strings.ToLower(name)]; suffix++ {
+					name = fmt.Sprintf("%s %d", base, suffix)
+				}
+				label.Name = name
+				cascadeLabel(data, *label)
+			}
+			occupied[resource][strings.ToLower(name)] = true
+		}
+	}
+}
+
+func syncInheritedCycles(data *domain.Bootstrap, rootTeamID string) {
+	for _, teamID := range append([]string{rootTeamID}, teamDescendantIDs(data, rootTeamID)...) {
+		settings := data.TeamSettings[teamID]
+		if !settings.InheritCycles || settings.ParentTeamID == "" {
+			continue
+		}
+		parent := data.CycleSettings[settings.ParentTeamID]
+		data.CycleSettings[teamID] = parent
+		reconcileInheritedCycles(data, teamID, settings.ParentTeamID)
+	}
+}
+
+func reconcileInheritedCycles(data *domain.Bootstrap, teamID, parentID string) {
+	now := time.Now().UTC()
+	settings := data.CycleSettings[teamID]
+	if !settings.Enabled {
+		for index := range data.Cycles {
+			cycle := &data.Cycles[index]
+			if cycle.TeamID != teamID {
+				continue
+			}
+			if cycle.Status == "current" {
+				cycle.Status = "completed"
+				cycle.EndsAt = now
+				cycle.UpdatedAt = now
+			}
+		}
+		removed := map[string]bool{}
+		data.Cycles = slices.DeleteFunc(data.Cycles, func(cycle domain.Cycle) bool {
+			remove := cycle.TeamID == teamID && cycle.Status == "upcoming"
+			if remove {
+				removed[cycle.ID] = true
+			}
+			return remove
+		})
+		for index := range data.Issues {
+			if data.Issues[index].Team.ID == teamID && data.Issues[index].CycleID != nil && removed[*data.Issues[index].CycleID] {
+				data.Issues[index].CycleID = nil
+			}
+		}
+		return
+	}
+	parentCycles := []domain.Cycle{}
+	for _, cycle := range data.Cycles {
+		if cycle.TeamID == parentID && (cycle.Status == "current" || cycle.Status == "upcoming") {
+			parentCycles = append(parentCycles, cycle)
+		}
+	}
+	parentKeys := map[string]bool{}
+	for index, parent := range parentCycles {
+		parentKeys[parent.StartsAt.UTC().Format(time.RFC3339)] = true
+		target := -1
+		for childIndex := range data.Cycles {
+			child := data.Cycles[childIndex]
+			if child.TeamID == teamID && child.StartsAt.Equal(parent.StartsAt) {
+				target = childIndex
+				break
+			}
+		}
+		if target < 0 {
+			clone := parent
+			clone.ID = fmt.Sprintf("cycle_%d_%d", now.UnixNano(), index)
+			clone.TeamID = teamID
+			clone.Capacity = settings.Capacity
+			clone.CreatedAt = now
+			clone.UpdatedAt = now
+			data.Cycles = append(data.Cycles, clone)
+			continue
+		}
+		data.Cycles[target].Number = parent.Number
+		data.Cycles[target].Name = parent.Name
+		data.Cycles[target].StartsAt = parent.StartsAt
+		data.Cycles[target].EndsAt = parent.EndsAt
+		data.Cycles[target].Status = parent.Status
+		data.Cycles[target].Capacity = settings.Capacity
+		data.Cycles[target].UpdatedAt = now
+	}
+	removed := map[string]bool{}
+	data.Cycles = slices.DeleteFunc(data.Cycles, func(cycle domain.Cycle) bool {
+		if cycle.TeamID != teamID || (cycle.Status != "current" && cycle.Status != "upcoming") {
+			return false
+		}
+		remove := !parentKeys[cycle.StartsAt.UTC().Format(time.RFC3339)]
+		if remove {
+			removed[cycle.ID] = true
+		}
+		return remove
+	})
+	for index := range data.Issues {
+		if data.Issues[index].Team.ID == teamID && data.Issues[index].CycleID != nil && removed[*data.Issues[index].CycleID] {
+			data.Issues[index].CycleID = nil
+		}
+	}
+}
+
 func statesForTeam(data *domain.Bootstrap, teamID string) []domain.WorkflowState {
+	return statesForTeamSeen(data, teamID, map[string]bool{})
+}
+
+func statesForTeamSeen(data *domain.Bootstrap, teamID string, seen map[string]bool) []domain.WorkflowState {
+	if seen[teamID] {
+		return []domain.WorkflowState{}
+	}
+	seen[teamID] = true
+	settings := data.TeamSettings[teamID]
+	if settings.InheritWorkflowStatuses && settings.ParentTeamID != "" {
+		return statesForTeamSeen(data, settings.ParentTeamID, seen)
+	}
 	result := []domain.WorkflowState{}
 	specific := slices.ContainsFunc(data.States, func(state domain.WorkflowState) bool { return state.TeamID == teamID })
 	for _, state := range data.States {
@@ -1172,6 +1511,10 @@ func statesForTeam(data *domain.Bootstrap, teamID string) []domain.WorkflowState
 	return result
 }
 func stateForTeam(data *domain.Bootstrap, teamID, stateID string) *domain.WorkflowState {
+	settings := data.TeamSettings[teamID]
+	if settings.InheritWorkflowStatuses && settings.ParentTeamID != "" {
+		return stateForTeam(data, settings.ParentTeamID, stateID)
+	}
 	specific := slices.ContainsFunc(data.States, func(state domain.WorkflowState) bool { return state.TeamID == teamID })
 	for index := range data.States {
 		state := &data.States[index]

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { teamHierarchy } from './team-hierarchy'
+import { resolvedTeamSettings, teamHierarchy } from './team-hierarchy'
 import type { Team } from '@/types/flow'
 
 const teams: Team[] = Array.from({length:6},(_,i)=>({id:`t${i}`,name:`Level ${i+1}`,key:`T${i}`,color:'#888888'}))
@@ -26,5 +26,16 @@ describe('team hierarchy',()=>{
   it('does not hide teams with inaccessible parents or legacy cycles',()=>{
     expect(teamHierarchy(teams.slice(1,5),settings).rows().map(row=>row.depth)).toEqual([0,1,2,3])
     expect(teamHierarchy(teams,{...settings,t0:{parentTeamId:'t4'}}).rows()).toHaveLength(6)
+  })
+
+  it('resolves inherited estimate settings without mutating child settings',()=>{
+    const teams = [{id:'parent',name:'Parent',key:'P'},{id:'child',name:'Child',key:'C'}] as Team[]
+    const settings = {
+      parent: { teamId:'parent', parentTeamId:'', inheritIssueEstimation:false, estimateType:'fibonacci' },
+      child: { teamId:'child', parentTeamId:'parent', inheritIssueEstimation:true, estimateType:'notUsed' },
+    } as unknown as Record<string, import('@/types/flow').TeamSettings>
+    expect(resolvedTeamSettings(settings,'child')?.estimateType).toBe('fibonacci')
+    expect(settings.child.estimateType).toBe('notUsed')
+    expect(teams).toHaveLength(2)
   })
 })

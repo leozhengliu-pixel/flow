@@ -1,19 +1,21 @@
 import { Children, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import {
+  ArrowUpRight,
   Bot, Check, ChevronDown, ChevronRight, Code2, FileText,
   Inbox, Mail, MessageSquare, MoreHorizontal, Plus, Radio, Rocket,
-  Search, Smile, Sparkles, UsersRound, Zap,
+  Search, Smile, Sparkles, Tag, UsersRound,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { IntegrationBrandIcon } from './integration-brand-icon';
+import { countLabelsByResource } from '@/lib/resource-counts';
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/i18n/i18n";
 import {
   authorizeIntegration, createCustomerStatus, createCustomerTier, createCustomEmoji, createDocumentTemplate, deleteCustomerStatus, deleteCustomerTier, restoreTrashEntry,
-  deleteDocumentTemplate, disconnectIntegration, updateCustomEmoji, updateDocumentTemplate,
+  deleteDocumentTemplate, disconnectIntegration, disconnectIntegrationConnection, updateCustomEmoji, updateDocumentTemplate,
   updateCustomerStatus, updateCustomerTier, updateWorkspacePreferences,
   updateWorkspaceAgentGuidance,
 } from "@/lib/api";
@@ -27,10 +29,13 @@ import "./feature-settings.css";
 import { SettingsToggle as BaseSettingsToggle } from './settings-primitives'
 
 type FeaturePageId = Extract<SettingsPageId, "ai"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations">;
-type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onOpenReleasePipeline: (pipeline:ReleasePipeline) => void; onOpenIntegration:(provider:IntegrationProvider)=>void; onReload: () => Promise<void> };
+type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onOpenReleasePipeline: (pipeline:ReleasePipeline) => void; onOpenIntegration:(provider:IntegrationProvider)=>void; onReload: () => Promise<void>; onNavigateSettings?: (page: SettingsPageId) => void };
 
 const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
   initiativeUpdateSchedule: "none",
+  initiativeUpdateFrequencyWeeks: 0,
+  initiativeUpdateWeekday: 4,
+  initiativeUpdateHour: 14,
   customerRevenueFormat: "annual",
   customerRevenueCurrency: "USD",
   customerManualEdits: true,
@@ -44,7 +49,14 @@ const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
   pulseWorkspaceSchedule: "daily", asksEmailAddresses: [],
 };
 
-export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpenReleasePipeline, onOpenIntegration, onReload }: Props) {
+const INITIATIVE_FREQUENCY_OPTIONS = Array.from({ length: 9 }, (_, frequency) => ({
+  value: String(frequency),
+  label: frequency === 0 ? "No expectation for updates" : frequency === 1 ? "Every week" : `Every ${frequency} weeks`,
+}));
+const INITIATIVE_WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const INITIATIVE_HOURS = Array.from({ length: 24 }, (_, hour) => ({ value: String(hour), label: `${String(hour).padStart(2, "0")}:00 - ${String((hour + 1) % 24).padStart(2, "0")}:00` }));
+
+export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpenReleasePipeline, onOpenIntegration, onReload, onNavigateSettings }: Props) {
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
   const [savedSettings, setSavedSettings] = useState<{ workspace: string; value: WorkspaceSettings }>();
@@ -66,7 +78,7 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
     save({ featureSettings: { [key]: value } });
 
   if (page === "ai") return <AIPage data={data} onReload={onReload} settings={settings} busy={busy || !['admin','owner'].includes(data.viewerRole)} setEnabled={setEnabled}/>;
-  if (page === "initiatives") return <InitiativesFeatureSettings data={data} settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload}/>;
+  if (page === "initiatives") return <InitiativesFeatureSettings data={data} settings={settings} busy={busy} setEnabled={setEnabled} onScheduleChange={schedule => save({ featureSettings: { initiativeUpdateSchedule: initiativeScheduleValue(schedule.frequency), initiativeUpdateFrequencyWeeks: schedule.frequency, initiativeUpdateWeekday: schedule.weekday, initiativeUpdateHour: schedule.hour } })} onReload={onReload} onNavigateLabels={() => onNavigateSettings?.("initiative-labels")}/>;
   if (page === "documents") return <DocumentsPage data={data} onReload={onReload}/>;
   if (page === "customer-requests") return <CustomerRequestsPage data={data} settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload}/>;
   if (page === "releases") return <ReleasesFeatureSettings data={data} onCreate={onCreateReleasePipeline} onOpen={onOpenReleasePipeline} onReload={onReload}/>;
@@ -98,18 +110,96 @@ function AIPage({data,onReload,settings,busy,setEnabled}:{data:BootstrapData;onR
   </FeatureShell>;
 }
 
-function InitiativesFeatureSettings({data,settings,busy,setEnabled,setFeature,onReload}:{data:BootstrapData;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void;onReload:()=>Promise<void>}) {
+function InitiativesFeatureSettings({data,settings,busy,setEnabled,onScheduleChange,onReload,onNavigateLabels}:{data:BootstrapData;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;onScheduleChange:(schedule:{frequency:number;weekday:number;hour:number})=>void;onReload:()=>Promise<void>;onNavigateLabels:()=>void}) {
   const { t } = useI18n();
-  const slackConfig = data.integrationConnections.find(item=>item.provider==="slack");
-  const slack = slackConfig?.status==="connected" ? slackConfig : undefined;
-  const toggleSlack = async()=>{try{if(slack)await disconnectIntegration("slack");else await authorizeIntegration("slack",{name:"Slack",config:{scope:"initiative-updates"}},Boolean(slackConfig));await onReload()}catch(error){toast.error(message(error))}};
-  return <FeatureShell title="Initiatives" description="Initiatives group multiple projects that contribute toward the same strategic effort. Use initiatives to plan and coordinate larger streams of work and monitor their progress at scale.">
-    <FeatureCard><FeatureRow title="Enable Initiatives" description="Visible to all non-guest workspace members"><Toggle checked={settings.featureFlags.initiatives??true} disabled={busy} label="Enable Initiatives" onChange={value=>setEnabled("initiatives",value)}/></FeatureRow></FeatureCard>
-    <FeatureSection title="Initiative updates" description="Short status reports about progress and health. Owners receive reminders based on the update schedule.">
-      <FeatureCard><FeatureRow title="Update schedule" description="Configure how often updates are expected on initiatives"><FeatureSelect label="Update schedule" value={settings.featureSettings.initiativeUpdateSchedule} options={[{value:"none",label:"No expectation for updates"},{value:"weekly",label:"Weekly"},{value:"biweekly",label:"Every two weeks"},{value:"monthly",label:"Monthly"}]} disabled={busy} onChange={value=>setFeature("initiativeUpdateSchedule",value)}/></FeatureRow>
-      <FeatureRow icon={MessageSquare} title="Send initiative updates to a Slack channel" description={slack?"Slack is connected for initiative updates":"Connect a channel to send all initiative updates to"}><FeatureButton onClick={()=>void toggleSlack()}>{slack?"Disconnect":"Connect"}</FeatureButton></FeatureRow></FeatureCard>
+  const enabled = settings.featureFlags.initiatives ?? true;
+  const canEditSchedule = ["owner", "admin"].includes(data.viewerRole) && !busy;
+  const schedule = useMemo(() => ({
+    frequency: settings.featureSettings.initiativeUpdateFrequencyWeeks ?? initiativeScheduleFrequency(settings.featureSettings.initiativeUpdateSchedule),
+    weekday: settings.featureSettings.initiativeUpdateWeekday ?? 4,
+    hour: settings.featureSettings.initiativeUpdateHour ?? 14,
+  }), [settings.featureSettings.initiativeUpdateFrequencyWeeks, settings.featureSettings.initiativeUpdateHour, settings.featureSettings.initiativeUpdateSchedule, settings.featureSettings.initiativeUpdateWeekday]);
+  const [editingSchedule, setEditingSchedule] = useState(false);
+  const [draftSchedule, setDraftSchedule] = useState(schedule);
+  const [slackBusy, setSlackBusy] = useState(false);
+  useEffect(() => {
+    if (!editingSchedule) setDraftSchedule(schedule);
+  }, [editingSchedule, schedule]);
+  const slackConfig = (data.integrationConnections ?? []).find(item => item.provider === "slack" && item.config?.scope === "initiative-updates");
+  const slack = slackConfig?.status === "connected" ? slackConfig : undefined;
+  const slackCreator = slack ? (data.users ?? []).find(user => user.id === slack.connectedBy) : undefined;
+  const toggleSlack = async()=>{
+    setSlackBusy(true);
+    try {
+      if (slack) await disconnectIntegrationConnection("slack", slack.id);
+      else await authorizeIntegration("slack", { name: "Slack", config: { scope: "initiative-updates" } });
+      await onReload();
+    } catch(error) {
+      toast.error(message(error));
+    } finally {
+      setSlackBusy(false);
+    }
+  };
+  const initiativeLabelCount = useMemo(
+    () => countLabelsByResource(data.labels, "initiative"),
+    [data.labels],
+  );
+  const scheduleSummary = initiativeScheduleSummary(draftSchedule, t);
+  return <FeatureShell className="feature-initiatives-settings" title="Initiatives" description={<>{t("Initiatives group multiple projects that contribute toward the same strategic effort. Use initiatives to plan and coordinate larger streams of work and monitor their progress at scale.")} <a className="feature-docs-link" href="https://flow.app/docs/initiatives" rel="noreferrer" target="_blank">{t("Docs")}<ArrowUpRight size={11}/></a></>}>
+    <FeatureCard><FeatureRow title="Enable Initiatives" description="Visible to all non-guest workspace members"><Toggle checked={enabled} disabled={busy} label="Enable Initiatives" onChange={value=>setEnabled("initiatives",value)}/></FeatureRow></FeatureCard>
+    <FeatureSection title="Initiative updates" description="Short status reports about the progress and health of your initiative. Updates are ideally written regularly by the owner of the initiative. Subscribers receive these updates directly in their inbox. You can also configure a Slack channel where all initiative updates are posted.">
+      <div className={`feature-subsection${enabled ? "" : " is-disabled"}`} aria-disabled={!enabled}>
+        <header><h3>{t("Update schedule")}</h3><p>{t("Configure how often updates are expected on initiatives. Initiative owners will receive reminders to post updates.")}</p></header>
+        <FeatureCard>
+          {editingSchedule ? (
+            <div className="initiative-schedule-editor">
+              <FeatureSelect label="Update frequency" value={String(draftSchedule.frequency)} options={INITIATIVE_FREQUENCY_OPTIONS} disabled={!canEditSchedule} onChange={value => setDraftSchedule(current => ({ ...current, frequency: Number(value) }))}/>
+              {draftSchedule.frequency > 0 && <>
+                <span>{t("on")}</span>
+                <FeatureSelect label="Update weekday" value={String(draftSchedule.weekday)} options={INITIATIVE_WEEKDAYS.map((label, value) => ({ value: String(value), label }))} disabled={!canEditSchedule} onChange={value => setDraftSchedule(current => ({ ...current, weekday: Number(value) }))}/>
+                <span>{t("between")}</span>
+                <FeatureSelect label="Update time" value={String(draftSchedule.hour)} options={INITIATIVE_HOURS} disabled={!canEditSchedule} onChange={value => setDraftSchedule(current => ({ ...current, hour: Number(value) }))}/>
+              </>}
+              <span className="initiative-schedule-actions">
+                <FeatureButton onClick={() => { setDraftSchedule(schedule); setEditingSchedule(false) }}>{t("Cancel")}</FeatureButton>
+                <FeatureButton primary disabled={!canEditSchedule} onClick={() => { onScheduleChange(draftSchedule); setEditingSchedule(false) }}>{t("Save")}</FeatureButton>
+              </span>
+            </div>
+          ) : (
+            <div className="initiative-schedule-summary">
+              <span>{t(scheduleSummary)}</span>
+              <FeatureButton disabled={!canEditSchedule} onClick={() => { setDraftSchedule(schedule); setEditingSchedule(true) }}>{t("Edit")}</FeatureButton>
+            </div>
+          )}
+        </FeatureCard>
+      </div>
+      <div className={`feature-subsection${enabled ? "" : " is-disabled"}`} aria-disabled={!enabled}>
+        <header><h3>{t("Slack notifications")}</h3><p>{t("Updates are only posted to Slack for workspace-level initiatives or initiatives led by a public team")}</p></header>
+        <FeatureCard>
+          <div className="initiative-integration-row">
+            <IntegrationBrandIcon provider="slack"/>
+            <div><strong>{slack ? slack.name : t("Send initiative updates to a Slack channel")}</strong><span>{slack ? t("Broadcasting initiative updates") : t("Connect a channel to send all initiative updates to")}</span></div>
+            <FeatureButton
+              disabled={!enabled || slackBusy || !["owner", "admin"].includes(data.viewerRole)}
+              onClick={() => void toggleSlack()}
+              title={slack && slackCreator ? t("Enabled by {name} on {date}").replace("{name}", slackCreator.displayName || slackCreator.name).replace("{date}", new Date(slack.createdAt).toLocaleDateString()) : undefined}
+            >
+              {slack ? t("Disconnect") : <>{t("Connect")}<ArrowUpRight size={11}/></>}
+            </FeatureButton>
+          </div>
+        </FeatureCard>
+      </div>
     </FeatureSection>
-    <FeatureSection title="Labels"><FeatureCard><FeatureRow icon={Zap} title="Initiative labels" description="Manage the labels that can be applied to initiatives in your workspace"><span className="feature-state">{data.labels.filter(label=>label.resourceType==="initiative").length} {t("labels")}</span></FeatureRow></FeatureCard></FeatureSection>
+    <FeatureSection title="Labels">
+      <FeatureCard>
+        <button className="feature-navigation-row" disabled={!enabled} onClick={onNavigateLabels} type="button">
+          <span className="feature-navigation-icon"><Tag size={17}/></span>
+          <span className="feature-navigation-copy"><strong>{t("Initiative labels")}</strong><span>{t("Manage the labels that can be applied to initiatives in your workspace")}</span></span>
+          <span className="feature-navigation-detail">{initiativeLabelCount} {t(initiativeLabelCount === 1 ? "label" : "labels")}</span>
+          <ChevronRight size={15}/>
+        </button>
+      </FeatureCard>
+    </FeatureSection>
   </FeatureShell>;
 }
 
@@ -208,7 +298,7 @@ function IntegrationsPage({data,onOpen,onReload}:{data:BootstrapData;onOpen:(pro
   </FeatureShell></div>;
 }
 
-function FeatureShell({title,description,children}:{title:string;description?:string;children:ReactNode}) { const {t}=useI18n();return <div className="feature-settings"><header className="feature-header"><h1>{t(title)}</h1>{description&&<p>{t(description)}</p>}</header>{children}</div> }
+function FeatureShell({className,title,description,children}:{className?:string;title:string;description?:ReactNode;children:ReactNode}) { const {t}=useI18n();return <div className={`feature-settings${className?` ${className}`:""}`}><header className="feature-header"><h1>{t(title)}</h1>{description&&<p>{typeof description==="string"?t(description):description}</p>}</header>{children}</div> }
 function FeatureSection({title,description,children}:{title:string;description?:string;children:ReactNode}) { const {t}=useI18n();return <section className="feature-section"><header><h2>{t(title)}</h2>{description&&<p>{t(description)}</p>}</header>{children}</section> }
 function FeatureCard({children}:{children:ReactNode}) {return <div className="feature-card">{children}</div>}
 function Toggle(props:ComponentProps<typeof BaseSettingsToggle>) {const {t}=useI18n();return <BaseSettingsToggle {...props} label={t(props.label)}/>}
@@ -233,4 +323,13 @@ function EmailDialog({addresses,onClose,onSave}:{addresses:string[];onClose:()=>
 function EmojiDialog({input,onClose,onReload}:{input:{name:string;imageUrl:string};onClose:()=>void;onReload:()=>Promise<void>}) {const {t}=useI18n();const [name,setName]=useState(input.name);const [busy,setBusy]=useState(false);const save=async()=>{setBusy(true);try{await createCustomEmoji({name,imageUrl:input.imageUrl});await onReload();onClose()}catch(error){toast.error(message(error))}finally{setBusy(false)}};return <FeatureDialog open onClose={onClose} title="Upload emoji"><div className="feature-emoji-preview"><img src={input.imageUrl} alt={t("Preview")}/></div><label>{t("Name")}<input aria-label={t("Name")} autoFocus value={name} onChange={event=>setName(event.target.value)}/></label><FeatureDialogFooter><span/><FeatureButton onClick={onClose}>Cancel</FeatureButton><FeatureButton primary disabled={busy||!name.trim()} onClick={()=>void save()}>Upload</FeatureButton></FeatureDialogFooter></FeatureDialog>}
 
 function normalizeSettings(settings:WorkspaceSettings):WorkspaceSettings {return {...settings,featureFlags:settings.featureFlags??{},featureSettings:{...DEFAULT_FEATURE_SETTINGS,...(settings.featureSettings??{}),customerStatuses:settings.featureSettings?.customerStatuses?.length?settings.featureSettings.customerStatuses:DEFAULT_FEATURE_SETTINGS.customerStatuses,customerTiers:settings.featureSettings?.customerTiers??[],customerExcludedDomains:settings.featureSettings?.customerExcludedDomains??[],customerGenericDomains:settings.featureSettings?.customerGenericDomains??[],asksEmailAddresses:settings.featureSettings?.asksEmailAddresses??[]}}}
+function initiativeScheduleValue(frequency:number){return frequency<=0?"none":frequency===1?"weekly":frequency===2?"biweekly":"monthly"}
+function initiativeScheduleFrequency(value:string){return value==="weekly"?1:value==="biweekly"?2:value==="monthly"?4:0}
+function initiativeScheduleSummary(schedule:{frequency:number;weekday:number;hour:number},t:(value:string)=>string){
+  if(schedule.frequency<=0)return t("No expectation for updates")
+  const frequency=schedule.frequency===1?t("Every week"):t("Every {count} weeks").replace("{count}",String(schedule.frequency))
+  const weekday=t(INITIATIVE_WEEKDAYS[schedule.weekday]??INITIATIVE_WEEKDAYS[4])
+  const time=`${String(schedule.hour).padStart(2,"0")}:00 - ${String((schedule.hour+1)%24).padStart(2,"0")}:00`
+  return `${frequency} ${t("on")} ${weekday} ${t("between")} ${time}`
+}
 function message(error:unknown){return error instanceof Error?error.message:"Could not update feature settings"}

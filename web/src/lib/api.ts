@@ -528,7 +528,7 @@ export function createLabelGroup(input: {
   name: string;
   color?: string;
   description?: string;
-  resourceType: "issue" | "project";
+  resourceType: "issue" | "project" | "initiative";
 }): Promise<LabelGroup> {
   return request("/api/label-groups", jsonRequest("POST", input));
 }
@@ -967,6 +967,7 @@ export function updateTeam(
   teamId: string,
   input: Partial<Pick<Team, "name" | "key" | "color" | "icon" | "private">> & {
     retired?: boolean;
+    subTeamAction?: "retire" | "detach";
   },
 ): Promise<Team> {
   return request(

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { makeBootstrap } from '@/test/fixtures'
 import type { BootstrapData } from '@/types/flow'
-import { deriveResourceCounts } from './resource-counts'
+import { countLabelsByResource, deriveResourceCounts } from './resource-counts'
 
 describe('resource counts', () => {
   it('counts active issue, project, and initiative relationships without duplicates', () => {
@@ -33,4 +33,15 @@ it('retains unaffected issue references when counts do not change', () => {
   const next = deriveResourceCounts({ ...initial, issues: initial.issues.map((issue, index) => index === 0 ? { ...issue, title: 'Updated title' } : issue) })
   expect(next.labels[0]).toBe(initial.labels[0])
   for (let index = 1; index < initial.issues.length; index++) expect(next.issues[index]).toBe(initial.issues[index])
+})
+
+it('counts one million initiative labels without materializing derived arrays', () => {
+  const label = { id: 'initiative-label', name: 'Strategy', color: '#123456', resourceType: 'initiative' as const }
+  const labels = Array.from({ length: 1_000_000 }, () => label)
+  const start = performance.now()
+  const count = countLabelsByResource(labels, 'initiative')
+  const elapsed = performance.now() - start
+
+  expect(count).toBe(1_000_000)
+  expect(elapsed).toBeLessThan(100)
 })

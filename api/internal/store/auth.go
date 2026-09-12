@@ -1281,27 +1281,6 @@ func teamVisibleToUser(data domain.Bootstrap, teamID, userID, workspaceRole stri
 	if memberRole != "" {
 		return true
 	}
-	// Parent-team owners inherit access to descendants, including private
-	// children. Ordinary parent members do not.
-	seen := map[string]bool{}
-	for current := teamID; current != "" && !seen[current]; {
-		seen[current] = true
-		settings := data.TeamSettings[current]
-		if settings.ParentTeamID == "" {
-			break
-		}
-		parentRole := ""
-		for _, membership := range data.TeamMembers {
-			if membership.TeamID == settings.ParentTeamID && membership.UserID == userID {
-				parentRole = membership.Role
-				break
-			}
-		}
-		if strings.EqualFold(parentRole, "owner") {
-			return true
-		}
-		current = settings.ParentTeamID
-	}
 	settings := data.TeamSettings[teamID]
 	access := strings.ToLower(strings.TrimSpace(settings.Access))
 	if access == "" {
@@ -1320,7 +1299,7 @@ func teamVisibleToUser(data domain.Bootstrap, teamID, userID, workspaceRole stri
 	}
 	// A non-private child of a private team is restricted to that boundary's
 	// members; a public-looking child must not expose a private team's content.
-	seen = map[string]bool{teamID: true}
+	seen := map[string]bool{teamID: true}
 	for parent := settings.ParentTeamID; parent != "" && !seen[parent]; parent = data.TeamSettings[parent].ParentTeamID {
 		seen[parent] = true
 		parentSettings := data.TeamSettings[parent]

@@ -18,5 +18,6 @@ it('searches ancestor names and prevents choosing a parent at the fifth level',(
   fireEvent.click(deepest)
   expect(change).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('option',{name:/Unit 3$/}))
+  fireEvent.click(screen.getByRole('button',{name:'Set parent team'}))
   expect(change).toHaveBeenCalledWith('t3')
 })

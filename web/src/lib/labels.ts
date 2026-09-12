@@ -1,4 +1,17 @@
 import type { IssueLabel, LabelGroup, LabelResourceType, Team } from '@/types/flow'
+import type { TeamHierarchySettings } from './team-hierarchy'
+
+export function labelTeamScopeIds(teamId: string, teams: Team[] = [], settings: TeamHierarchySettings = {}) {
+  const result = [teamId]
+  const seen = new Set([teamId])
+  let parent = settings[teamId]?.parentTeamId
+  while (parent && settings[parent] && !seen.has(parent)) {
+    seen.add(parent)
+    result.push(parent)
+    parent = settings[parent]?.parentTeamId
+  }
+  return result
+}
 
 export function labelResourceType(label: IssueLabel): LabelResourceType {
 	return label.resourceType === 'project' || label.resourceType === 'initiative' ? label.resourceType : 'issue'
@@ -9,13 +22,15 @@ export function labelsForResource(labels: IssueLabel[], resourceType: LabelResou
   return labels.filter(label => labelResourceType(label) === resourceType && !label.archivedAt && (!label.groupId || !archivedGroups.has(label.groupId)))
 }
 
-export function labelsForIssueTeam(labels: IssueLabel[], teamId?: string, groups: LabelGroup[] = []) {
-  return labelsForResource(labels, 'issue', groups).filter(label => isWorkspaceLabel(label) || label.scope === teamId)
+export function labelsForIssueTeam(labels: IssueLabel[], teamId?: string, groups: LabelGroup[] = [], ancestorTeamIds: string[] = []) {
+  const scopes = new Set([teamId ?? '', ...ancestorTeamIds])
+  return labelsForResource(labels, 'issue', groups).filter(label => isWorkspaceLabel(label) || scopes.has(label.scope ?? ''))
 }
 
-export function labelsForProject(labels: IssueLabel[], teamIds: string[], groups: LabelGroup[] = [], selectedIds: string[] = []) {
+export function labelsForProject(labels: IssueLabel[], teamIds: string[], groups: LabelGroup[] = [], selectedIds: string[] = [], ancestorTeamIds: string[] = []) {
   const available = new Set(labelsForResource(labels, 'project', groups).map(label => label.id))
-  return labels.filter(label => labelResourceType(label) === 'project' && (available.has(label.id) || selectedIds.includes(label.id)) && (isWorkspaceLabel(label) || teamIds.includes(label.scope ?? '')))
+  const scopes = new Set([...teamIds, ...ancestorTeamIds])
+  return labels.filter(label => labelResourceType(label) === 'project' && (available.has(label.id) || selectedIds.includes(label.id)) && (isWorkspaceLabel(label) || scopes.has(label.scope ?? '')))
 }
 
 export function toggleGroupedLabelIds<T extends { id: string; groupId?: string }>(selectedIds: string[], labelId: string, labels: T[]) {
@@ -42,6 +57,6 @@ export function labelScopeName(label: IssueLabel, teams: Team[] = []) {
   return teams.find(team => team.id === label.scope)?.name ?? 'Team'
 }
 
-export function groupsForResource(groups: LabelGroup[], resourceType: 'issue' | 'project') {
+export function groupsForResource(groups: LabelGroup[], resourceType: LabelResourceType) {
   return groups.filter(group => group.resourceType === resourceType && (!group.scope || group.scope.toLowerCase() === 'workspace'))
 }

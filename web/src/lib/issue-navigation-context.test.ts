@@ -22,6 +22,15 @@ describe('issue navigation context', () => {
     ])
   })
 
+  it('links the project breadcrumb to the project overview instead of the issues tab used to open the issue', () => {
+    const linked = { ...issue, project }
+    const path = '/workspace/project/project-one/issues?projectMilestoneId=milestone-1'
+    expect(issueReturnPath({ returnTo: path }, 'workspace', linked)).toBe(path)
+    expect(issueBreadcrumbs(data, linked, path)).toEqual([
+      { label: 'Project one', href: '/workspace/project/project-one/overview', entity: true },
+    ])
+  })
+
   it('keeps personal navigation only for an actual personal list origin', () => {
     expect(issueBreadcrumbs(data, issue, '/workspace/my-issues/created')).toEqual([{ label: 'My issues', href: '/workspace/my-issues/created' }])
     expect(issueReturnPath(undefined, 'workspace', issue)).toBe('/workspace/team/TST/all')

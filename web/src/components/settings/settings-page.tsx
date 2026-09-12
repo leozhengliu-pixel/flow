@@ -123,6 +123,8 @@ import {
   SettingsSelect as Select,
   SettingsToggle as Toggle,
 } from "./settings-primitives";
+import { SettingsSearchResults } from "./settings-search-results";
+import { createSettingsSearchIndex, searchTeams, SETTINGS_SEARCH_PAGES } from "./settings-search";
 
 import "./settings.css";
 import "./workflow-settings.css";
@@ -189,7 +191,7 @@ const WorkflowAutomationSettings = lazyPage(
 export async function preloadSettingsPage(page: SettingsPageProps['page'], options: Pick<SettingsPageProps, 'releasePipelineMode' | 'integrationProvider' | 'agentSkillMode'> = {}) {
   if (options.agentSkillMode) return
   if (['preferences', 'profile', 'notifications', 'code-and-reviews', 'account-security', 'connections', 'agents'].includes(page)) return PersonalSettings.preload()
-  if (page === 'issue-labels' || page === 'project-labels') return DomainLabelsSettings.preload()
+  if (page === 'issue-labels' || page === 'project-labels' || page === 'initiative-labels') return DomainLabelsSettings.preload()
   if (page === 'project-statuses') return ProjectStatusesSettings.preload()
   if (page === 'issue-templates' || page === 'project-templates') return TemplateSettings.preload()
   if (page === 'sla') return SLASettings.preload()
@@ -300,6 +302,7 @@ const NAV: { title: string; items: NavItem[] }[] = [
     items: [
       { id: "ai", label: "AI & Agents", icon: Sparkles },
       { id: "initiatives", label: "Initiatives", icon: Zap },
+      { id: "initiative-labels", label: "Initiative labels", icon: Tag },
       { id: "documents", label: "Documents", icon: FileText },
       { id: "customer-requests", label: "Customer requests", icon: UsersRound },
       { id: "releases", label: "Releases", icon: Rocket },
@@ -371,17 +374,21 @@ const DEFAULT_VALUES: StoredSettings["values"] = {
 };
 
 export function SettingsPage(props: SettingsPageProps) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const [query, setQuery] = useState("");
   const [mobileNav, setMobileNav] = useState(false);
   const [sidebarCustomizationOpen, setSidebarCustomizationOpen] =
     useState(false);
   const mainRef = useRef<HTMLElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const searchResultsRef = useRef<HTMLDivElement | null>(null);
+  const searchTargetRequestRef = useRef(0);
   const sidebarCustomization = useSidebarCustomizationState();
   const [settings, setSettings] = useUserStoredSettings(props.data);
   const isAdmin =
     props.data.viewerRole === "admin" || props.data.viewerRole === "owner";
-  const sidebarTeams = useMemo(() => settingsSidebarTeams(props.data, query), [props.data, query]);
+  const allSidebarTeams = useMemo(() => settingsSidebarTeams(props.data, ""), [props.data]);
+  const sidebarTeams = allSidebarTeams;
   const visible = useMemo(
     () =>
       NAV.map((section) => ({
@@ -390,13 +397,85 @@ export function SettingsPage(props: SettingsPageProps) {
           (item) =>
             (isAdmin ||
               section.title === "Personal" ||
-              memberCanManage(item.id, props.data.workspaceSettings)) &&
-            (item.label.toLowerCase().includes(query.toLowerCase()) ||
-              t(item.label).toLowerCase().includes(query.toLowerCase())),
+              memberCanManage(item.id, props.data.workspaceSettings)),
         ),
       })).filter((section) => section.items.length),
-    [isAdmin, props.data.workspaceSettings, query, t],
+    [isAdmin, props.data.workspaceSettings],
   );
+  const accessiblePageIds = useMemo(
+    () => new Set(visible.flatMap(section => section.items.map(item => item.id))),
+    [visible],
+  );
+  const searchablePages = useMemo(
+    () => SETTINGS_SEARCH_PAGES.filter(page => accessiblePageIds.has(page.id)),
+    [accessiblePageIds],
+  );
+  const settingsSearchIndex = useMemo(
+    () => createSettingsSearchIndex(searchablePages, t),
+    [searchablePages, t],
+  );
+  const searchResults = useMemo(
+    () => settingsSearchIndex.search(query),
+    [query, settingsSearchIndex],
+  );
+  const searchableTeams = useMemo(
+    () => allSidebarTeams.map(({ team }) => ({ key: team.key, name: team.name })),
+    [allSidebarTeams],
+  );
+  const teamSearchResults = useMemo(
+    () => searchTeams(query, searchableTeams, t, locale),
+    [locale, query, searchableTeams, t],
+  );
+  const searchPageMeta = useMemo(
+    () => Object.fromEntries(visible.flatMap(section => section.items.map(item => [
+      item.id,
+      {
+        id: item.id,
+        title: item.label,
+        section: section.title,
+        icon: <item.icon size={14}/>,
+      },
+    ]))),
+    [visible],
+  );
+  const trimmedQuery = query.trim();
+  const scrollToSearchTarget = useCallback((targetTitle: string) => {
+    const request = ++searchTargetRequestRef.current;
+    const scrollToTarget = (attempt = 0) => {
+      window.setTimeout(() => {
+        if (request !== searchTargetRequestRef.current) return;
+        const target = findSettingsSearchTarget(t(targetTitle));
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "center" });
+          target.classList.add("settings-search-target");
+          window.setTimeout(() => target.classList.remove("settings-search-target"), 1600);
+        } else if (attempt < 12) {
+          scrollToTarget(attempt + 1);
+        }
+      }, attempt ? 80 : 0);
+    };
+    scrollToTarget();
+  }, [t]);
+  const selectSearchResult = useCallback((result: (typeof searchResults)[number]) => {
+    props.onNavigate(result.page);
+    if (result.targetTitle) {
+      scrollToSearchTarget(result.targetTitle);
+    }
+  }, [props, scrollToSearchTarget]);
+  const selectSearchTeam = useCallback((teamKey: string, section?: TeamSettingsSection, targetTitle?: string) => {
+    props.onNavigate("team", teamKey, section);
+    if (targetTitle) scrollToSearchTarget(targetTitle);
+  }, [props, scrollToSearchTarget]);
+  const moveSearchFocus = useCallback((delta: number) => {
+    const items = Array.from(searchResultsRef.current?.querySelectorAll<HTMLButtonElement>("[data-settings-search-result]") ?? []);
+    if (!items.length) return;
+    const active = document.activeElement;
+    const index = items.indexOf(active as HTMLButtonElement);
+    const next = index < 0
+      ? delta > 0 ? 0 : items.length - 1
+      : (index + delta + items.length) % items.length;
+    items[next]?.focus();
+  }, []);
   const setValue = (key: string, value: string | boolean) => {
     if (Object.is(settings.values[key], value)) return;
     setSettings((current) => ({
@@ -430,6 +509,16 @@ export function SettingsPage(props: SettingsPageProps) {
     props.releasePipelineSlug,
     props.integrationProvider,
   ]);
+  useEffect(() => {
+    const focusSearch = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isTextEditingTarget(event.target)) return;
+      event.preventDefault();
+      searchInputRef.current?.focus();
+    };
+    window.addEventListener("keydown", focusSearch);
+    return () => window.removeEventListener("keydown", focusSearch);
+  }, []);
   return (
     <>
       <div className="settings-app">
@@ -442,18 +531,62 @@ export function SettingsPage(props: SettingsPageProps) {
             <Search size={15} />
             <input
               aria-label="Search settings"
+              aria-controls="settings-search-results"
+              aria-expanded={Boolean(trimmedQuery)}
               placeholder={t("Search…")}
+              ref={searchInputRef}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                  event.preventDefault();
+                  moveSearchFocus(event.key === "ArrowDown" ? 1 : -1);
+                } else if (event.key === "Enter" && document.activeElement !== searchInputRef.current) {
+                  event.preventDefault();
+                  (document.activeElement as HTMLElement | null)?.click();
+                } else if (event.key === "Escape") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (query.length > 0) setQuery("");
+                  else searchInputRef.current?.blur();
+                }
+              }}
             />
             {query && (
-              <button aria-label="Clear search" onClick={() => setQuery("")}>
+              <button aria-label="Clear search" onClick={() => { setQuery(""); searchInputRef.current?.focus(); }}>
                 <X size={13} />
               </button>
             )}
           </label>
-          <nav aria-label="Settings navigation">
-            {visible.map((section) => (
+          <nav
+            aria-label="Settings navigation"
+            onKeyDown={(event) => {
+              if (!trimmedQuery) return;
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                moveSearchFocus(event.key === "ArrowDown" ? 1 : -1);
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                setQuery("");
+                searchInputRef.current?.focus();
+              }
+            }}
+            ref={trimmedQuery ? searchResultsRef : undefined}
+          >
+            {trimmedQuery ? (
+              <div id="settings-search-results">
+                <SettingsSearchResults
+                  onSelectPage={page => props.onNavigate(page)}
+                  onSelectResult={selectSearchResult}
+                  onSelectTeam={selectSearchTeam}
+                  pageMeta={searchPageMeta}
+                  query={trimmedQuery}
+                  results={searchResults}
+                  teamResults={teamSearchResults}
+                />
+              </div>
+            ) : visible.map((section) => (
               <section key={section.title}>
                 <h2>{t(section.title)}</h2>
                 {section.items.map((item) => (
@@ -469,7 +602,7 @@ export function SettingsPage(props: SettingsPageProps) {
                 ))}
               </section>
             ))}
-            {props.data.viewerRole !== "guest" && (!query.trim() || sidebarTeams.length > 0) && (
+            {!trimmedQuery && props.data.viewerRole !== "guest" && (
               <section>
                 <h2>{t("Your teams")}</h2>
                 {sidebarTeams.map(({ team, depth }) => (
@@ -562,6 +695,40 @@ export function SettingsPage(props: SettingsPageProps) {
       />
     </>
   );
+}
+
+function findSettingsSearchTarget(title: string) {
+  const expected = normalizeSettingsSearchText(title);
+  const candidates = Array.from(document.querySelectorAll<HTMLElement>(".settings-row, .settings-section"));
+  const exact = candidates.find(candidate => {
+    const label = candidate.matches(".settings-section")
+      ? candidate.querySelector(":scope > h3")
+      : candidate.querySelector(".settings-row-copy > strong");
+    return normalizeSettingsSearchText(label?.textContent ?? "") === expected;
+  });
+  if (exact) return exact;
+  return candidates.find(candidate => {
+    const label = candidate.matches(".settings-section")
+      ? candidate.querySelector(":scope > h3")
+      : candidate.querySelector(".settings-row-copy > strong");
+    return normalizeSettingsSearchText(label?.textContent ?? "").startsWith(expected);
+  }) ?? null;
+}
+
+function normalizeSettingsSearchText(value: string) {
+  return value
+    .replaceAll("…", "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase();
+}
+
+function isTextEditingTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable ||
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement;
 }
 
 function SettingsPageFallback() {
@@ -675,6 +842,14 @@ function SettingsBody(
       <DomainLabelsSettings
         data={props.data}
         resourceType="project"
+        onReload={props.onReload}
+      />
+    );
+  if (page === "initiative-labels")
+    return (
+      <DomainLabelsSettings
+        data={props.data}
+        resourceType="initiative"
         onReload={props.onReload}
       />
     );
@@ -837,6 +1012,7 @@ function SettingsBody(
         onOpenReleasePipeline={props.onOpenReleasePipeline}
         onOpenIntegration={props.onOpenIntegration}
         onReload={props.onReload}
+        onNavigateSettings={props.onNavigate}
       />
     );
   return (

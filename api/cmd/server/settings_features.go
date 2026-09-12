@@ -232,6 +232,15 @@ func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Reque
 		if input.FeatureSettings.InitiativeUpdateSchedule == "" {
 			input.FeatureSettings.InitiativeUpdateSchedule = "none"
 		}
+		if input.FeatureSettings.InitiativeUpdateFrequencyWeeks < 0 || input.FeatureSettings.InitiativeUpdateFrequencyWeeks > 8 {
+			return errInvalid
+		}
+		if input.FeatureSettings.InitiativeUpdateWeekday < 0 || input.FeatureSettings.InitiativeUpdateWeekday > 6 {
+			return errInvalid
+		}
+		if input.FeatureSettings.InitiativeUpdateHour < 0 || input.FeatureSettings.InitiativeUpdateHour > 23 {
+			return errInvalid
+		}
 		if input.FeatureSettings.CustomerRevenueFormat == "" {
 			input.FeatureSettings.CustomerRevenueFormat = "annual"
 		}
@@ -329,7 +338,7 @@ func (s *server) updateWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 		if input.GroupID != nil {
 			groupID = strings.TrimSpace(*input.GroupID)
 		}
-		if !validLabelGroup(data, resource, groupID) {
+		if !validLabelGroup(data, resource, data.Labels[index].Scope, groupID) {
 			return errInvalid
 		}
 		applyLabelInput(&data.Labels[index], input)
@@ -350,7 +359,7 @@ func newLabel(data *domain.Bootstrap, actorID, scope string, input labelInput) (
 	}
 	created := domain.IssueLabel{ID: fmt.Sprintf("label_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#5E6AD2", Scope: scope, ResourceType: resource, CreatorID: actorID, CreatedAt: time.Now().UTC()}
 	applyLabelInput(&created, input)
-	if !validLabelGroup(data, resource, created.GroupID) {
+	if !validLabelGroup(data, resource, created.Scope, created.GroupID) {
 		return domain.IssueLabel{}, errInvalid
 	}
 	return created, nil
@@ -360,16 +369,24 @@ func validLabelResourceType(resource string) bool {
 	return resource == "issue" || resource == "project" || resource == "initiative"
 }
 
-func validLabelGroup(data *domain.Bootstrap, resource, groupID string) bool {
+func validLabelGroup(data *domain.Bootstrap, resource, scope, groupID string) bool {
 	if groupID == "" {
 		return true
 	}
-	if resource == "initiative" {
-		return false
-	}
 	return slices.ContainsFunc(data.LabelGroups, func(group domain.LabelGroup) bool {
-		return group.ID == groupID && group.ResourceType == resource && group.ArchivedAt == nil
+		return group.ID == groupID &&
+			group.ResourceType == resource &&
+			group.ArchivedAt == nil &&
+			labelScopesMatch(group.Scope, scope)
 	})
+}
+
+func labelScopesMatch(left, right string) bool {
+	leftWorkspace, rightWorkspace := labelScopeIsWorkspace(left), labelScopeIsWorkspace(right)
+	if leftWorkspace || rightWorkspace {
+		return leftWorkspace && rightWorkspace
+	}
+	return left == right
 }
 
 func applyLabelInput(label *domain.IssueLabel, input labelInput) {
@@ -499,7 +516,7 @@ func (s *server) createLabelGroup(w http.ResponseWriter, r *http.Request) {
 		if input.ResourceType != nil {
 			resource = strings.TrimSpace(*input.ResourceType)
 		}
-		if resource != "issue" && resource != "project" {
+		if !validLabelResourceType(resource) {
 			return "", errInvalid
 		}
 		created = domain.LabelGroup{ID: fmt.Sprintf("label_group_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#8b8d98", Scope: "Workspace", ResourceType: resource, CreatedAt: time.Now().UTC()}

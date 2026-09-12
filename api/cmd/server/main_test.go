@@ -112,10 +112,10 @@ func TestTeamCreationHierarchyCopyAndDelete(t *testing.T) {
 		t.Fatal("team workflow or owner membership was not copied")
 	}
 	parentIssue := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Retirement coverage", "teamId": parent.ID}, http.StatusCreated)
-	requestJSON[domain.Team](t, handler, http.MethodPatch, "/api/workspaces/test-workspace/teams/"+parent.ID, map[string]any{"retired": true}, http.StatusOK)
+	requestJSON[domain.Team](t, handler, http.MethodPatch, "/api/workspaces/test-workspace/teams/"+parent.ID, map[string]any{"retired": true, "subTeamAction": "retire"}, http.StatusOK)
 	requestJSON[any](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Blocked on retired team", "teamId": parent.ID}, http.StatusBadRequest)
 	requestJSON[any](t, handler, http.MethodPatch, "/api/issues/"+parentIssue.ID, map[string]any{"priority": 2}, http.StatusBadRequest)
-	requestJSON[domain.Team](t, handler, http.MethodPatch, "/api/workspaces/test-workspace/teams/"+parent.ID, map[string]any{"retired": false}, http.StatusOK)
+	requestJSON[domain.Team](t, handler, http.MethodPatch, "/api/workspaces/test-workspace/teams/"+parent.ID, map[string]any{"retired": false, "subTeamAction": "retire"}, http.StatusOK)
 	requestJSON[any](t, handler, http.MethodPatch, "/api/teams/"+parent.ID+"/settings", map[string]any{"parentTeamId": child.ID}, http.StatusBadRequest)
 	issue := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Deleted with team", "teamId": child.ID}, http.StatusCreated)
 	requestJSON[any](t, handler, http.MethodDelete, "/api/workspaces/test-workspace/teams/"+child.ID, nil, http.StatusNoContent)
@@ -1422,8 +1422,17 @@ func TestInitiativeLifecycle(t *testing.T) {
 	if initiativeLabel.ResourceType != "initiative" || initiativeLabel.GroupID != "" || !labelScopeIsWorkspace(initiativeLabel.Scope) {
 		t.Fatalf("initiative label contract failed: %#v", initiativeLabel)
 	}
+	initiativeGroup := requestJSON[domain.LabelGroup](t, handler, http.MethodPost, "/api/label-groups", map[string]any{
+		"name": "Initiative category", "resourceType": "initiative",
+	}, http.StatusCreated)
+	groupedInitiativeLabel := requestJSON[domain.IssueLabel](t, handler, http.MethodPost, "/api/labels", map[string]any{
+		"name": "Grouped initiative label", "resourceType": "initiative", "groupId": initiativeGroup.ID,
+	}, http.StatusCreated)
+	if groupedInitiativeLabel.ResourceType != "initiative" || groupedInitiativeLabel.GroupID != initiativeGroup.ID {
+		t.Fatalf("grouped initiative label contract failed: %#v", groupedInitiativeLabel)
+	}
 	requestJSON[map[string]any](t, handler, http.MethodPost, "/api/labels", map[string]any{
-		"name": "Invalid grouped initiative label", "resourceType": "initiative", "groupId": "label_group_work_type",
+		"name": "Invalid grouped initiative label", "resourceType": "initiative", "groupId": "label_group_project_value",
 	}, http.StatusBadRequest)
 	requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/initiatives/"+created.ID, map[string]any{
 		"labelIds": []string{"label_type_defect"},
