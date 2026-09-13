@@ -250,6 +250,26 @@ func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Reque
 		if input.FeatureSettings.PulseWorkspaceSchedule == "" {
 			input.FeatureSettings.PulseWorkspaceSchedule = "daily"
 		}
+		triageIntelligence := &input.FeatureSettings.TriageIntelligence
+		for _, action := range []*string{
+			&triageIntelligence.AssigneeAction,
+			&triageIntelligence.ProjectAction,
+			&triageIntelligence.LabelAction,
+			&triageIntelligence.TeamAction,
+			&triageIntelligence.DuplicateAction,
+			&triageIntelligence.RelatedAction,
+		} {
+			if *action == "" {
+				*action = "suggest"
+			}
+			if !slices.Contains([]string{"suggest", "auto", "hide"}, *action) {
+				return errInvalid
+			}
+		}
+		triageIntelligence.WorkspaceGuidance = strings.TrimSpace(triageIntelligence.WorkspaceGuidance)
+		if len(triageIntelligence.WorkspaceGuidance) > 8000 {
+			return errInvalid
+		}
 		input.FeatureSettings.CustomerExcludedDomains = normalizedStrings(input.FeatureSettings.CustomerExcludedDomains)
 		input.FeatureSettings.CustomerGenericDomains = normalizedStrings(input.FeatureSettings.CustomerGenericDomains)
 		input.FeatureSettings.AsksEmailAddresses = normalizedStrings(input.FeatureSettings.AsksEmailAddresses)

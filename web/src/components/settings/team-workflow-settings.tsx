@@ -1711,8 +1711,10 @@ function TriageSettings({
           duplicates, and infer properties like team, project, labels, and
           assignee.
         </p>
-        <TeamRow title="Triage Intelligence is not enabled in this workspace">
-          <span className="settings-static">View settings</span>
+        <TeamRow title={data.workspaceSettings.featureFlags["triage-intelligence"] ? "Triage Intelligence is enabled in this workspace" : "Triage Intelligence is not enabled in this workspace"}>
+          <span className="settings-static">
+            {data.workspaceSettings.featureFlags["triage-intelligence"] ? "Enabled" : "View settings"}
+          </span>
         </TeamRow>
       </TeamSection>
     </>

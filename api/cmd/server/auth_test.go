@@ -75,6 +75,16 @@ func TestAuthenticationInvitationAndAuthorizationLifecycle(t *testing.T) {
 	if len(account.Workspaces) != 1 || account.Workspaces[0].Role != "Member" {
 		t.Fatalf("accepted membership = %#v", account.Workspaces)
 	}
+	authRequest[domain.WorkspaceSettings](t, admin, http.MethodPatch, server.URL+"/api/workspace/preferences", map[string]any{
+		"featureFlags": map[string]bool{"triage-intelligence": true},
+	}, "", http.StatusOK)
+	suggestionIssue := authRequest[domain.Issue](t, admin, http.MethodPost, server.URL+"/api/issues", map[string]any{
+		"title": "Suggestion permissions", "teamId": bootstrap.Teams[0].ID,
+	}, "test-workspace", http.StatusCreated)
+	authRequest[[]domain.IssuePermission](t, admin, http.MethodPut, server.URL+"/api/issues/"+suggestionIssue.ID+"/permissions", map[string]any{
+		"permissions": []map[string]string{{"subjectType": "user", "subjectId": registered.User.ID, "role": "viewer"}},
+	}, "test-workspace", http.StatusOK)
+	authRequest[any](t, member, http.MethodPost, server.URL+"/api/issues/"+suggestionIssue.ID+"/suggestions/refresh", nil, "test-workspace", http.StatusForbidden)
 
 	privateTeam := authRequest[domain.Team](t, admin, http.MethodPost, server.URL+"/api/workspaces/test-workspace/teams", map[string]any{"name": "Private", "key": "PRV", "private": true}, "", http.StatusCreated)
 	hiddenIssue := authRequest[domain.Issue](t, admin, http.MethodPost, server.URL+"/api/issues", map[string]any{"title": "Private issue", "teamId": privateTeam.ID}, "test-workspace", http.StatusCreated)

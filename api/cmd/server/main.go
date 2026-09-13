@@ -550,6 +550,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/ai/conversations", s.createAIConversation)
 	mux.HandleFunc("PATCH /api/ai/conversations/{id}", s.updateAIConversation)
 	mux.HandleFunc("POST /api/ai/prompt-progress", s.createAIPromptProgress)
+	mux.HandleFunc("GET /api/issue-suggestions", s.previewIssueSuggestions)
 	mux.Handle("GET /api/bootstrap", serializeLegacyBootstrap(http.HandlerFunc(s.bootstrap), legacyReadGate))
 	mux.HandleFunc("PUT /api/workspace/project-display-default", s.updateProjectDisplayDefault)
 	mux.HandleFunc("PUT /api/workspace/settings", s.updateWorkspaceSettings)
@@ -613,7 +614,15 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/issue-records/{id}/reminders", s.issueRecordAlias(s.createIssueReminder))
 	mux.HandleFunc("POST /api/issue-records/{id}/loop-runs", s.issueRecordAlias(s.createIssueLoopRun))
 	mux.HandleFunc("PUT /api/issue-records/{id}/releases", s.issueRecordAlias(s.setIssueReleases))
+	mux.HandleFunc("POST /api/issue-records/{id}/suggestions/refresh", s.issueRecordAlias(s.refreshIssueSuggestions))
+	mux.HandleFunc("GET /api/issue-records/{id}/suggestions", s.listIssueSuggestions)
+	mux.HandleFunc("POST /api/issue-records/{id}/suggestions/{suggestionId}/accept", s.issueRecordAlias(s.acceptIssueSuggestion))
+	mux.HandleFunc("POST /api/issue-records/{id}/suggestions/{suggestionId}/dismiss", s.issueRecordAlias(s.dismissIssueSuggestion))
 	mux.HandleFunc("POST /api/issues", s.createIssue)
+	mux.HandleFunc("POST /api/issues/{id}/suggestions/refresh", s.refreshIssueSuggestions)
+	mux.HandleFunc("GET /api/issues/{id}/suggestions", s.listIssueSuggestions)
+	mux.HandleFunc("POST /api/issues/{id}/suggestions/{suggestionId}/accept", s.acceptIssueSuggestion)
+	mux.HandleFunc("POST /api/issues/{id}/suggestions/{suggestionId}/dismiss", s.dismissIssueSuggestion)
 	mux.HandleFunc("GET /api/issues/{id}/permissions", s.listIssuePermissions)
 	mux.HandleFunc("PUT /api/issues/{id}/permissions", s.replaceIssuePermissions)
 	mux.HandleFunc("PATCH /api/issues/{id}/permissions/{permissionId}", s.updateIssuePermission)
@@ -732,13 +741,18 @@ func (s *server) withStaticFiles(next http.Handler) http.Handler {
 		}
 		path := strings.TrimPrefix(filepath.Clean("/"+strings.TrimPrefix(r.URL.Path, "/")), string(filepath.Separator))
 		if path == "" {
+			w.Header().Set("Cache-Control", "no-cache")
 			http.ServeFile(w, r, filepath.Join(s.staticPath, "index.html"))
 			return
 		}
 		if _, err := os.Stat(filepath.Join(s.staticPath, path)); err == nil {
+			if strings.HasPrefix(r.URL.Path, "/assets/") || strings.HasPrefix(r.URL.Path, "/fonts/") {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			}
 			files.ServeHTTP(w, r)
 			return
 		}
+		w.Header().Set("Cache-Control", "no-cache")
 		http.ServeFile(w, r, filepath.Join(s.staticPath, "index.html"))
 	})
 }
@@ -972,11 +986,23 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	visibleIssue := func(id string) bool {
 		return slices.ContainsFunc(data.Issues, func(item domain.Issue) bool { return item.ID == id })
 	}
+	data.IssueSuggestions = slices.DeleteFunc(data.IssueSuggestions, func(item domain.IssueSuggestion) bool {
+		return !visibleIssue(item.IssueID)
+	})
 	data.Cycles = slices.DeleteFunc(data.Cycles, func(item domain.Cycle) bool { return !allowed(item.TeamID) })
 	data.Projects = slices.DeleteFunc(data.Projects, func(item domain.Project) bool { return !slices.ContainsFunc(item.TeamIDs, allowed) })
 	visibleProject := func(id string) bool {
 		return slices.ContainsFunc(data.Projects, func(item domain.Project) bool { return item.ID == id })
 	}
+	data.IssueSuggestions = slices.DeleteFunc(data.IssueSuggestions, func(item domain.IssueSuggestion) bool {
+		if item.SuggestedIssueID != "" && !visibleIssue(item.SuggestedIssueID) {
+			return true
+		}
+		if item.SuggestedProjectID != "" && !visibleProject(item.SuggestedProjectID) {
+			return true
+		}
+		return item.SuggestedTeamID != "" && !allowed(item.SuggestedTeamID)
+	})
 	data.ProjectRelations = slices.DeleteFunc(data.ProjectRelations, func(relation domain.ProjectRelation) bool {
 		return !visibleProject(relation.ProjectID) || !visibleProject(relation.RelatedProjectID)
 	})
@@ -2587,6 +2613,13 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		}
 		return created.ID, nil
 	})
+	if err == nil && triageIntelligenceWorkspaceEnabled(s, workspaceKey(r)) {
+		if generated, generationErr := s.generateTriageIntelligenceForIssue(r.Context(), workspaceKey(r), created.ID); generationErr == nil {
+			created = generated
+		} else if !errors.Is(generationErr, store.ErrNoMutation) {
+			log.Printf("generate triage intelligence issue=%s: %v", created.ID, generationErr)
+		}
+	}
 	respondMutation(w, err, http.StatusCreated, created)
 }
 
@@ -3823,6 +3856,13 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err == nil {
+		if triageIntelligenceWorkspaceEnabled(s, workspace) {
+			if generated, generationErr := s.generateTriageIntelligenceForIssue(r.Context(), workspace, id); generationErr == nil {
+				updated = generated
+			} else if !errors.Is(generationErr, store.ErrNoMutation) {
+				log.Printf("generate triage intelligence issue=%s: %v", id, generationErr)
+			}
+		}
 		if updated.DocumentContent != nil && previousDocumentID != updated.DocumentContent.ID {
 			if deleteErr := s.store.DeleteDocumentCollaborationDocument(r.Context(), workspace, previousDocumentID); deleteErr != nil {
 				log.Printf("clear replaced collaboration document=%s: %v", previousDocumentID, deleteErr)
@@ -3860,6 +3900,7 @@ func (s *server) deleteIssue(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		data.Issues = slices.Delete(data.Issues, index, index+1)
+		data.IssueSuggestions = slices.DeleteFunc(data.IssueSuggestions, func(item domain.IssueSuggestion) bool { return item.IssueID == id })
 		delete(data.Comments, id)
 		delete(data.Activities, id)
 		removedNotificationIDs := map[string]bool{}
@@ -3973,6 +4014,25 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err == nil {
+		if triageIntelligenceWorkspaceEnabled(s, workspaceKey(r)) {
+			issueIDs := make([]string, len(updated))
+			for index := range updated {
+				issueIDs[index] = updated[index].ID
+			}
+			if generated, generationErr := s.generateTriageIntelligenceForIssues(r.Context(), workspaceKey(r), issueIDs); generationErr == nil {
+				byID := make(map[string]domain.Issue, len(generated))
+				for _, issue := range generated {
+					byID[issue.ID] = issue
+				}
+				for index := range updated {
+					if issue, ok := byID[updated[index].ID]; ok {
+						updated[index] = issue
+					}
+				}
+			} else if !errors.Is(generationErr, store.ErrNoMutation) {
+				log.Printf("generate triage intelligence batch: %v", generationErr)
+			}
+		}
 		s.dispatchNotificationEmails(r.Context(), workspaceKey(r))
 	}
 	respondMutation(w, err, http.StatusOK, updated)
@@ -4690,8 +4750,17 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		if value.ID != issue.State.ID {
 			now := time.Now().UTC()
 			previousState := issue.State
-			if previousState.Type == "backlog" && value.Type != "backlog" && triageSettings.TriageEnabled && issue.TriagedAt == nil {
+			if value.Type == "backlog" && triageSettings.TriageEnabled {
+				issue.TriagedAt = nil
+				issue.SuggestionsGeneratedAt = nil
+				data.IssueSuggestions = slices.DeleteFunc(data.IssueSuggestions, func(item domain.IssueSuggestion) bool {
+					return item.IssueID == issue.ID
+				})
+			} else if previousState.Type == "backlog" && value.Type != "backlog" && triageSettings.TriageEnabled && issue.TriagedAt == nil {
 				issue.TriagedAt = &now
+				data.IssueSuggestions = slices.DeleteFunc(data.IssueSuggestions, func(item domain.IssueSuggestion) bool {
+					return item.IssueID == issue.ID
+				})
 			}
 			changes["stateBefore"] = issue.State.Name
 			changes["stateBeforeId"] = issue.State.ID

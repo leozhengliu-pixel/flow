@@ -119,3 +119,22 @@ type AIPromptProgress struct {
 	CreatedAt      time.Time `json:"createdAt"`
 	UpdatedAt      time.Time `json:"updatedAt"`
 }
+
+// IssueSuggestion stores a Triage Intelligence recommendation. The target is
+// kept in a dedicated field so clients can project each suggestion into the
+// corresponding model store without parsing free-form AI text.
+type IssueSuggestion struct {
+	ID                 string         `json:"id"`
+	IssueID            string         `json:"issueId"`
+	Type               string         `json:"type"`
+	State              string         `json:"state"`
+	StateChangedAt     time.Time      `json:"stateChangedAt"`
+	Metadata           map[string]any `json:"metadata"`
+	SuggestedIssueID   string         `json:"suggestedIssueId,omitempty"`
+	SuggestedProjectID string         `json:"suggestedProjectId,omitempty"`
+	SuggestedUserID    string         `json:"suggestedUserId,omitempty"`
+	SuggestedLabelID   string         `json:"suggestedLabelId,omitempty"`
+	SuggestedTeamID    string         `json:"suggestedTeamId,omitempty"`
+	CreatedAt          time.Time      `json:"createdAt"`
+	UpdatedAt          time.Time      `json:"updatedAt"`
+}

@@ -1324,6 +1324,13 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 		}
 		return !issuePermissionAllows(*data, issue, allowed)
 	})
+	visibleIssueIDs := map[string]bool{}
+	for _, issue := range data.Issues {
+		visibleIssueIDs[issue.ID] = true
+	}
+	data.IssueSuggestions = slices.DeleteFunc(data.IssueSuggestions, func(suggestion domain.IssueSuggestion) bool {
+		return !visibleIssueIDs[suggestion.IssueID]
+	})
 	// Documents can be scoped to private teams just like issues and projects.
 	// Keep unscoped documents workspace-visible, while preventing a member from
 	// discovering the title or content of a team document they cannot access.
@@ -1390,6 +1397,18 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 	for _, project := range data.Projects {
 		visibleProjects[project.ID] = true
 	}
+	data.IssueSuggestions = slices.DeleteFunc(data.IssueSuggestions, func(suggestion domain.IssueSuggestion) bool {
+		if suggestion.SuggestedIssueID != "" && !visibleIssueIDs[suggestion.SuggestedIssueID] {
+			return true
+		}
+		if suggestion.SuggestedProjectID != "" && !visibleProjects[suggestion.SuggestedProjectID] {
+			return true
+		}
+		if suggestion.SuggestedTeamID != "" && !allowed[suggestion.SuggestedTeamID] {
+			return true
+		}
+		return false
+	})
 	data.ProjectRelations = slices.DeleteFunc(data.ProjectRelations, func(relation domain.ProjectRelation) bool {
 		return !visibleProjects[relation.ProjectID] || !visibleProjects[relation.RelatedProjectID]
 	})

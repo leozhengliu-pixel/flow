@@ -12,6 +12,9 @@ func workspaceFeatureEnabled(settings domain.WorkspaceSettings, feature string) 
 	if enabled, found := settings.FeatureFlags[feature]; found {
 		return enabled
 	}
+	if feature == "triage-intelligence" {
+		return false
+	}
 	if feature == "ai-agent" {
 		if enabled, found := settings.FeatureFlags["ai"]; found {
 			return enabled

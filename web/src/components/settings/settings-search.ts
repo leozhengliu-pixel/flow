@@ -478,6 +478,7 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
           { title: 'Code Intelligence', keywords: ['code search'] },
           { title: 'Coding Sessions', keywords: ['agents'] },
           { title: 'Loops', keywords: ['automations'] },
+          { title: 'Triage Intelligence', keywords: ['triage', 'suggestions', 'duplicates'] },
         ],
       },
       {
