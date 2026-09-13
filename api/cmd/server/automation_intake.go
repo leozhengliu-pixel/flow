@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/mail"
@@ -14,6 +16,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 type triageResponsibilityInput struct {
@@ -1021,6 +1024,12 @@ func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
 	status := http.StatusCreated
 	if duplicate {
 		status = http.StatusOK
+	} else if err == nil && triageIntelligenceWorkspaceEnabled(s, key) {
+		if generated, generationErr := s.generateTriageIntelligenceForIssue(r.Context(), key, created.ID); generationErr == nil {
+			created = generated
+		} else if !errors.Is(generationErr, store.ErrNoMutation) {
+			log.Printf("generate triage intelligence issue=%s: %v", created.ID, generationErr)
+		}
 	}
 	respondMutation(w, err, status, created)
 }

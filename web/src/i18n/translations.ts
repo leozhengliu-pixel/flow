@@ -1072,7 +1072,20 @@ export const zhCN: Record<string, string> = {
     "Flow 使用智能助手 AI 自动查找相关和重复事项，并推断团队、项目、标签和负责人等属性。",
   "Triage Intelligence is not enabled in this workspace":
     "此工作区尚未启用智能分流",
+  "Triage Intelligence is enabled in this workspace":
+    "此工作区已启用智能分流",
   "View settings": "查看设置",
+  "Behavior": "行为",
+  "Define whether each suggestion is shown, applied automatically, or hidden.":
+    "设置每条建议是显示、自动应用还是隐藏。",
+  "Workspace guidance": "工作区指导",
+  "Optionally provide additional context and instructions for Triage Intelligence in this workspace.":
+    "可选：为此工作区的智能分流提供额外上下文和说明。",
+  "Triage Intelligence guidance": "智能分流指导",
+  "Show suggestion": "显示建议",
+  "Apply automatically": "自动应用",
+  "Analyzing related work and inferring properties…":
+    "正在分析相关工作并推断属性…",
   "Guidance used when generating project updates for":
     "为以下团队生成项目更新时使用的指导说明：",
   "Team labels are available only on issues in this team.":

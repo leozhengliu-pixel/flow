@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import type { Editor } from '@tiptap/react'
-import { ChevronRight, CircleDashed, Diamond, ExternalLink, FilePlus2, Link2, Maximize2, Minimize2, MoreHorizontal, Paperclip, Repeat2, Trash2, X } from 'lucide-react'
-import type { BootstrapData, Draft, Issue } from '@/types/flow'
+import { ChevronRight, CircleDashed, Diamond, ExternalLink, FilePlus2, Link2, Maximize2, Minimize2, MoreHorizontal, Paperclip, Repeat2, Sparkles, Trash2, X } from 'lucide-react'
+import type { BootstrapData, Draft, Issue, IssueSuggestionPreview } from '@/types/flow'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { Avatar } from '@/components/issue/issue-row'
@@ -12,7 +12,7 @@ import { IssueDescriptionEditor } from '@/components/issue/issue-description-edi
 import type { DescriptionSnapshot } from '@/components/issue/editor/editor-content'
 import { DueDateCommand } from '@/components/issue/due-date-picker'
 import styles from './create-issue-dialog.module.css'
-import { createDraft, deleteDraft, updateDraft } from '@/lib/api'
+import { createDraft, deleteDraft, fetchIssueSuggestionPreview, updateDraft } from '@/lib/api'
 import { labelTeamScopeIds, labelsForResource, toggleGroupedLabelIds } from '@/lib/labels'
 import { resolvedTeamSettings } from '@/lib/team-hierarchy'
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
@@ -120,6 +120,8 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string>()
   const [files, setFiles] = useState<File[]>([])
+  const [quickSuggestions, setQuickSuggestions] = useState<IssueSuggestionPreview[]>([])
+  const [quickSuggestionsLoading, setQuickSuggestionsLoading] = useState(false)
   const [linkOpen, setLinkOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false)
@@ -191,6 +193,33 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   useEffect(() => { if (open && !availableStates.some(state => state.id === stateId)) setStateId(defaultState.id) }, [availableStates, defaultState.id, open, stateId])
 
   useEffect(() => {
+    const query = title.trim()
+    if (!open || !(data.workspaceSettings.featureFlags?.['triage-intelligence'] ?? false) || query.length < 3 || !teamId) {
+      setQuickSuggestions([])
+      setQuickSuggestionsLoading(false)
+      return
+    }
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => {
+      setQuickSuggestionsLoading(true)
+      void fetchIssueSuggestionPreview(`${query}\n${description?.markdown ?? ''}`, teamId, controller.signal)
+        .then(result => {
+          if (!controller.signal.aborted) setQuickSuggestions(result.suggestions)
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setQuickSuggestions([])
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setQuickSuggestionsLoading(false)
+        })
+    }, 360)
+    return () => {
+      controller.abort()
+      window.clearTimeout(timer)
+    }
+  }, [data.workspaceSettings.featureFlags, description?.markdown, open, teamId, title])
+
+  useEffect(() => {
     if (!open || draftId || initialTemplateId || !requestedStateId) return
     if (availableStates.some(state => state.id === requestedStateId)) setStateId(requestedStateId)
   }, [availableStates, draftId, initialTemplateId, open, requestedStateId])
@@ -219,6 +248,22 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   const labelGroupNames = useMemo(() => new Map(data.labelGroups.map(group => [group.id, group.name])), [data.labelGroups])
   const labelGroupColors = useMemo(() => new Map(data.labelGroups.map(group => [group.id, group.color])), [data.labelGroups])
   const toggleLabel = (id: string) => setLabelIds(current => toggleGroupedLabelIds(current, id, availableLabels))
+  const applyQuickSuggestion = (suggestion: IssueSuggestionPreview) => {
+    if (suggestion.type === 'assignee' && data.users.some(user => user.id === suggestion.id)) {
+      setAssigneeId(suggestion.id)
+    } else if (suggestion.type === 'project' && data.projects.some(item => item.id === suggestion.id)) {
+      setProjectId(suggestion.id)
+      setProjectMilestoneId('')
+    } else if (suggestion.type === 'label' && availableLabelIds.has(suggestion.id)) {
+      setLabelIds(current => current.includes(suggestion.id) ? current : [...current, suggestion.id])
+    } else if (suggestion.type === 'team' && data.teams.some(team => team.id === suggestion.id)) {
+      setTeamId(suggestion.id)
+      setCycleId('')
+    } else {
+      return
+    }
+    setQuickSuggestions(current => current.filter(item => item.id !== suggestion.id || item.type !== suggestion.type))
+  }
 
   const resetBody = (focus = true) => {
     setTitle('')
@@ -371,6 +416,32 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
             <MiniProperty label="Cycle" value={cycle?.name ?? 'Cycle'} valueIsEntityName={Boolean(cycle)} selectedId={cycleId} icon={<CycleIcon cycle={cycle} nextUpcomingId={nextUpcomingCycleId} progress={cycle?cycleIssueProgress(data.issues,cycle.id):0}/>} options={[{id:'',label:'No cycle',icon:<CycleIcon noCycle/>},...cycles.map(item=>({id:item.id,label:item.name,icon:<CycleIcon cycle={item} nextUpcomingId={nextUpcomingCycleId} progress={cycleIssueProgress(data.issues,item.id)}/>,i18nIgnore:true}))]} onChange={setCycleId} ariaLabel="Add to cycle"/>
             <MoreActions active={open && !linkOpen} dueDate={dueDate} recurrence={recurrence} onDueDateChange={setDueDate} onRecurrenceChange={setRecurrence} onInsertLink={() => setLinkOpen(true)}/>
           </div>
+
+          {(quickSuggestionsLoading || quickSuggestions.length > 0) && <div className={styles.quickSuggestions}>
+            <span className={styles.quickSuggestionsLabel}><Sparkles/>{quickSuggestionsLoading && !quickSuggestions.length ? 'Analyzing…' : 'Quick suggestions'}</span>
+            <div>
+              {quickSuggestions.length > 1 && <button className={styles.applyAllSuggestions} type="button" onClick={() => quickSuggestions.forEach(applyQuickSuggestion)}>Apply all</button>}
+              {quickSuggestions.map(suggestion => {
+                if (suggestion.type === 'assignee') {
+                  const user = data.users.find(item => item.id === suggestion.id)
+                  return user ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><Avatar name={user.displayName}/><span>Assign {user.displayName}</span></button> : null
+                }
+                if (suggestion.type === 'project') {
+                  const item = data.projects.find(project => project.id === suggestion.id)
+                  return item ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><ProjectIcon style={{color:item.color}}/><span>Add to {item.name}</span></button> : null
+                }
+                if (suggestion.type === 'label') {
+                  const item = availableLabels.find(label => label.id === suggestion.id)
+                  return item ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><LabelIcon/><span>Add {item.name}</span></button> : null
+                }
+                if (suggestion.type === 'team') {
+                  const item = data.teams.find(team => team.id === suggestion.id)
+                  return item ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><TeamIcon team={item}/><span>Move to {item.name}</span></button> : null
+                }
+                return null
+              })}
+            </div>
+          </div>}
 
           {files.length > 0 && <div className={styles.attachments}>{files.map((file, index) => <span key={`${file.name}-${index}`}><Paperclip/><span>{file.name}</span><AttachmentRemoveButton label={`Remove ${file.name}`} onClick={() => setFiles(current => current.filter((_, item) => item !== index))}/></span>)}</div>}
           {error && <div className={styles.error} role="alert">{error}</div>}

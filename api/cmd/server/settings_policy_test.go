@@ -20,6 +20,13 @@ func TestWorkspaceAgentAndFeaturePolicies(t *testing.T) {
 	if featureForPath("/api/agent/sessions") != "ai-agent" || featureForPath("/api/loops/1") != "loops" {
 		t.Fatal("missing API feature guards")
 	}
+	if workspaceFeatureEnabled(s, "triage-intelligence") || featureForPath("/api/issue-suggestions") != "triage-intelligence" {
+		t.Fatal("triage intelligence must default off and be guarded")
+	}
+	s.FeatureFlags["triage-intelligence"] = true
+	if !workspaceFeatureEnabled(s, "triage-intelligence") {
+		t.Fatal("explicit triage intelligence enable was ignored")
+	}
 	s.InitiativePermission = "admins"
 	if workspacePermissionAllows(s, "initiative", "member") || !workspacePermissionAllows(s, "initiative", "admin") {
 		t.Fatal("initiative permission ignored")

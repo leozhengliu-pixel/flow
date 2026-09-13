@@ -3191,6 +3191,7 @@ function App() {
         onUpdate={async (input) => {
           await updateIssueById(issue, input);
         }}
+        onIssueUpdated={replaceIssue}
         onDelete={async () => {
           await run(() => deleteIssue(issue.id), "Could not delete issue");
           setData((current) =>
@@ -5787,6 +5788,7 @@ function App() {
               }
               onNavigateIssue={openIssue}
               onUpdate={updateSelected}
+              onIssueUpdated={replaceIssue}
               onDelete={removeSelected}
               onCreateSubIssue={addSubIssue}
               onCreateProject={addIssueProject}

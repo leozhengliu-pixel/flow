@@ -43,4 +43,24 @@ func normalizeParity(data *domain.Bootstrap) {
 	if data.AIPromptProgress == nil {
 		data.AIPromptProgress = []domain.AIPromptProgress{}
 	}
+	if data.IssueSuggestions == nil {
+		data.IssueSuggestions = []domain.IssueSuggestion{}
+	}
+	normalizeTriageIntelligenceSettings(&data.WorkspaceSettings.FeatureSettings.TriageIntelligence)
+}
+
+func normalizeTriageIntelligenceSettings(settings *domain.TriageIntelligenceSettings) {
+	defaults := map[*string]string{
+		&settings.AssigneeAction:  "suggest",
+		&settings.ProjectAction:   "suggest",
+		&settings.LabelAction:     "suggest",
+		&settings.TeamAction:      "suggest",
+		&settings.DuplicateAction: "suggest",
+		&settings.RelatedAction:   "suggest",
+	}
+	for target, fallback := range defaults {
+		if *target == "" {
+			*target = fallback
+		}
+	}
 }

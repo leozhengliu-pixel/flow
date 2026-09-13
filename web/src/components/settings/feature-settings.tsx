@@ -47,6 +47,14 @@ const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
   ],
   customerTiers: [], customerExcludedDomains: [], customerGenericDomains: [],
   pulseWorkspaceSchedule: "daily", asksEmailAddresses: [],
+  triageIntelligence: {
+    assigneeAction: "suggest",
+    projectAction: "suggest",
+    labelAction: "suggest",
+    teamAction: "suggest",
+    duplicateAction: "suggest",
+    relatedAction: "suggest",
+  },
 };
 
 const INITIATIVE_FREQUENCY_OPTIONS = Array.from({ length: 9 }, (_, frequency) => ({
@@ -77,7 +85,7 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
   const setFeature = <K extends keyof FeatureSettings>(key: K, value: FeatureSettings[K]) =>
     save({ featureSettings: { [key]: value } });
 
-  if (page === "ai") return <AIPage data={data} onReload={onReload} settings={settings} busy={busy || !['admin','owner'].includes(data.viewerRole)} setEnabled={setEnabled}/>;
+  if (page === "ai") return <AIPage data={data} onReload={onReload} settings={settings} busy={busy || !['admin','owner'].includes(data.viewerRole)} setEnabled={setEnabled} setFeature={setFeature}/>;
   if (page === "initiatives") return <InitiativesFeatureSettings data={data} settings={settings} busy={busy} setEnabled={setEnabled} onScheduleChange={schedule => save({ featureSettings: { initiativeUpdateSchedule: initiativeScheduleValue(schedule.frequency), initiativeUpdateFrequencyWeeks: schedule.frequency, initiativeUpdateWeekday: schedule.weekday, initiativeUpdateHour: schedule.hour } })} onReload={onReload} onNavigateLabels={() => onNavigateSettings?.("initiative-labels")}/>;
   if (page === "documents") return <DocumentsPage data={data} onReload={onReload}/>;
   if (page === "customer-requests") return <CustomerRequestsPage data={data} settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload}/>;
@@ -88,7 +96,7 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
   return <IntegrationsPage data={data} onOpen={onOpenIntegration} onReload={onReload}/>;
 }
 
-function AIPage({data,onReload,settings,busy,setEnabled}:{data:BootstrapData;onReload:()=>Promise<void>;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void}) {
+function AIPage({data,onReload,settings,busy,setEnabled,setFeature}:{data:BootstrapData;onReload:()=>Promise<void>;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void}) {
   const { t } = useI18n();
   const [guidance,setGuidance]=useState(settings.agentInstructions??'');
   const [savingGuidance,setSavingGuidance]=useState(false);
@@ -99,15 +107,48 @@ function AIPage({data,onReload,settings,busy,setEnabled}:{data:BootstrapData;onR
     ["coding-sessions", "Coding sessions", "Assign or ask Flow to make code changes", Code2],
     ["loops", "Loops", "Automated agent workflows triggered by schedules or issue updates", Radio],
     ["code-intelligence", "Code Intelligence", "Allow agents to analyze and answer questions about your code", Sparkles],
-    ["triage-intelligence", "Triage Intelligence", "Infer teams, projects, labels, and assignees", Inbox],
   ] as const;
   return <FeatureShell title="AI & Agents" description="Automate your product development processes and operations with AI">
     <FeatureSection title="Flow Agent" description="Create issues and answer questions about your workspace.">
       <FeatureCard>{cards.map(([id,title,description,Icon])=><FeatureRow key={id} icon={Icon} title={title} businessTitle={id==="ai-agent"} description={description} badge={id==="code-intelligence"?"Beta":undefined}><Toggle checked={settings.featureFlags[id]??["ai-agent","coding-sessions","loops"].includes(id)} disabled={busy} label={title} onChange={value=>setEnabled(id,value)}/></FeatureRow>)}</FeatureCard>
     </FeatureSection>
+    <TriageIntelligenceFeatureSettings settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature}/>
     <FeatureSection title="Installed Agents" description="AI agents can work alongside you as teammates."><div className="settings-agent-guidance"><label>{t('Installed agents guidance')}<textarea aria-label={t('Installed agents guidance')} maxLength={8000} disabled={!canEdit||savingGuidance} value={guidance} onChange={event=>setGuidance(event.target.value)}/></label><FeatureButton primary disabled={!canEdit||savingGuidance||guidance===(settings.agentInstructions??'')} onClick={async()=>{setSavingGuidance(true);try{await updateWorkspaceAgentGuidance(guidance);await onReload()}catch(error){toast.error(message(error))}finally{setSavingGuidance(false)}}}>Save</FeatureButton></div></FeatureSection>
     <FeatureSection title="AI" description="Control AI assistance throughout Flow"><FeatureCard><FeatureRow icon={MessageSquare} title="Resolved thread summaries" description="Control AI summaries for resolved threads across Flow"><Toggle checked={settings.featureFlags["thread-summaries"]??true} disabled={busy} label="Resolved thread summaries" onChange={value=>setEnabled("thread-summaries",value)}/></FeatureRow></FeatureCard></FeatureSection>
   </FeatureShell>;
+}
+
+function TriageIntelligenceFeatureSettings({settings,busy,setEnabled,setFeature}:{settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void}) {
+  const { t } = useI18n();
+  const config = settings.featureSettings.triageIntelligence;
+  const enabled = settings.featureFlags["triage-intelligence"] ?? false;
+  const [guidance,setGuidance]=useState(config.workspaceGuidance??'');
+  useEffect(()=>setGuidance(config.workspaceGuidance??''),[config.workspaceGuidance]);
+  const update = <K extends keyof typeof config>(key:K,value:typeof config[K]) => setFeature("triageIntelligence",{...config,[key]:value});
+  const actionOptions = [
+    {value:"suggest",label:"Show suggestion"},
+    {value:"auto",label:"Apply automatically"},
+    {value:"hide",label:"Hide"},
+  ];
+  const rows: Array<[keyof typeof config,string,string]> = [
+    ["assigneeAction","Assignee is suggested","Infer the owner from related work"],
+    ["projectAction","Project is suggested","Route the request into the closest project"],
+    ["labelAction","Label is suggested","Apply consistent intake categorization"],
+    ["teamAction","Team is suggested","Detect the team that owns the work"],
+    ["duplicateAction","Duplicate issue is suggested","Find the canonical existing request"],
+    ["relatedAction","Related issue is suggested","Surface adjacent implementation work"],
+  ];
+  return <FeatureSection title="Triage Intelligence" description="Use workspace context to infer teams, projects, labels, assignees, duplicates, and related work.">
+    <FeatureCard><FeatureRow icon={Inbox} title="Enable Triage Intelligence" description="Generate suggestions when issues enter triage"><Toggle checked={enabled} disabled={busy} label="Enable Triage Intelligence" onChange={value=>setEnabled("triage-intelligence",value)}/></FeatureRow></FeatureCard>
+    <div className={`feature-subsection${enabled ? "" : " is-disabled"}`} aria-disabled={!enabled}>
+      <header><h3>{t("Behavior")}</h3><p>{t("Define whether each suggestion is shown, applied automatically, or hidden.")}</p></header>
+      <FeatureCard>{rows.map(([key,title,description])=><FeatureRow key={key} title={title} description={description}><FeatureSelect label={title} value={config[key] as string} options={actionOptions} disabled={busy||!enabled} onChange={value=>update(key,value as never)}/></FeatureRow>)}</FeatureCard>
+    </div>
+    <div className={`feature-subsection${enabled ? "" : " is-disabled"}`} aria-disabled={!enabled}>
+      <header><h3>{t("Workspace guidance")}</h3><p>{t("Optionally provide additional context and instructions for Triage Intelligence in this workspace.")}</p></header>
+      <FeatureCard><div className="settings-agent-guidance"><label>{t("Triage Intelligence guidance")}<textarea aria-label={t("Triage Intelligence guidance")} maxLength={8000} disabled={busy||!enabled} value={guidance} onChange={event=>setGuidance(event.target.value)}/></label><FeatureButton primary disabled={busy||!enabled||guidance===(config.workspaceGuidance??'')} onClick={()=>update("workspaceGuidance",guidance.trim())}>Save</FeatureButton></div></FeatureCard>
+    </div>
+  </FeatureSection>;
 }
 
 function InitiativesFeatureSettings({data,settings,busy,setEnabled,onScheduleChange,onReload,onNavigateLabels}:{data:BootstrapData;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;onScheduleChange:(schedule:{frequency:number;weekday:number;hour:number})=>void;onReload:()=>Promise<void>;onNavigateLabels:()=>void}) {
@@ -322,7 +363,7 @@ function EmailDialog({addresses,onClose,onSave}:{addresses:string[];onClose:()=>
 }
 function EmojiDialog({input,onClose,onReload}:{input:{name:string;imageUrl:string};onClose:()=>void;onReload:()=>Promise<void>}) {const {t}=useI18n();const [name,setName]=useState(input.name);const [busy,setBusy]=useState(false);const save=async()=>{setBusy(true);try{await createCustomEmoji({name,imageUrl:input.imageUrl});await onReload();onClose()}catch(error){toast.error(message(error))}finally{setBusy(false)}};return <FeatureDialog open onClose={onClose} title="Upload emoji"><div className="feature-emoji-preview"><img src={input.imageUrl} alt={t("Preview")}/></div><label>{t("Name")}<input aria-label={t("Name")} autoFocus value={name} onChange={event=>setName(event.target.value)}/></label><FeatureDialogFooter><span/><FeatureButton onClick={onClose}>Cancel</FeatureButton><FeatureButton primary disabled={busy||!name.trim()} onClick={()=>void save()}>Upload</FeatureButton></FeatureDialogFooter></FeatureDialog>}
 
-function normalizeSettings(settings:WorkspaceSettings):WorkspaceSettings {return {...settings,featureFlags:settings.featureFlags??{},featureSettings:{...DEFAULT_FEATURE_SETTINGS,...(settings.featureSettings??{}),customerStatuses:settings.featureSettings?.customerStatuses?.length?settings.featureSettings.customerStatuses:DEFAULT_FEATURE_SETTINGS.customerStatuses,customerTiers:settings.featureSettings?.customerTiers??[],customerExcludedDomains:settings.featureSettings?.customerExcludedDomains??[],customerGenericDomains:settings.featureSettings?.customerGenericDomains??[],asksEmailAddresses:settings.featureSettings?.asksEmailAddresses??[]}}}
+function normalizeSettings(settings:WorkspaceSettings):WorkspaceSettings {return {...settings,featureFlags:settings.featureFlags??{},featureSettings:{...DEFAULT_FEATURE_SETTINGS,...(settings.featureSettings??{}),triageIntelligence:{...DEFAULT_FEATURE_SETTINGS.triageIntelligence,...(settings.featureSettings?.triageIntelligence??{})},customerStatuses:settings.featureSettings?.customerStatuses?.length?settings.featureSettings.customerStatuses:DEFAULT_FEATURE_SETTINGS.customerStatuses,customerTiers:settings.featureSettings?.customerTiers??[],customerExcludedDomains:settings.featureSettings?.customerExcludedDomains??[],customerGenericDomains:settings.featureSettings?.customerGenericDomains??[],asksEmailAddresses:settings.featureSettings?.asksEmailAddresses??[]}}}
 function initiativeScheduleValue(frequency:number){return frequency<=0?"none":frequency===1?"weekly":frequency===2?"biweekly":"monthly"}
 function initiativeScheduleFrequency(value:string){return value==="weekly"?1:value==="biweekly"?2:value==="monthly"?4:0}
 function initiativeScheduleSummary(schedule:{frequency:number;weekday:number;hour:number},t:(value:string)=>string){

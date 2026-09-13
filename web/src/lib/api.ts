@@ -33,6 +33,8 @@ import type {
   IssueLabel,
   IssueRelation,
   IssueRelationType,
+  IssueSuggestion,
+  IssueSuggestionPreview,
   IssueTemplate,
   IssueTemplateMutationInput,
   IssueUpdateInput,
@@ -2435,6 +2437,50 @@ export function deleteTriageRule(teamId: string, id: string): Promise<void> {
   return request(`/api/teams/${teamId}/triage-rules/${id}`, {
     method: "DELETE",
   });
+}
+export function fetchIssueSuggestionPreview(
+  text: string,
+  teamId: string,
+  signal?: AbortSignal,
+): Promise<{ suggestions: IssueSuggestionPreview[] }> {
+  const params = new URLSearchParams({ text, teamId });
+  return request(`/api/issue-suggestions?${params}`, { signal });
+}
+export function fetchIssueSuggestions(
+  issueId: string,
+  signal?: AbortSignal,
+): Promise<{
+  issueId: string;
+  suggestionsGeneratedAt?: string;
+  suggestions: IssueSuggestion[];
+}> {
+  return request(`/api/issues/${issueId}/suggestions`, { signal });
+}
+export function refreshIssueSuggestions(
+  issueId: string,
+): Promise<IssueSuggestion[]> {
+  return request(
+    `/api/issues/${issueId}/suggestions/refresh`,
+    jsonRequest("POST", {}),
+  );
+}
+export function acceptIssueSuggestion(
+  issueId: string,
+  suggestionId: string,
+): Promise<IssueSuggestion> {
+  return request(
+    `/api/issues/${issueId}/suggestions/${suggestionId}/accept`,
+    jsonRequest("POST", {}),
+  );
+}
+export function dismissIssueSuggestion(
+  issueId: string,
+  suggestionId: string,
+): Promise<IssueSuggestion> {
+  return request(
+    `/api/issues/${issueId}/suggestions/${suggestionId}/dismiss`,
+    jsonRequest("POST", {}),
+  );
 }
 export function listEmailIntakeAddresses(
   teamId: string,

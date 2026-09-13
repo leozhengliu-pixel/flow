@@ -51,6 +51,11 @@ export function makeBootstrap(overrides: Partial<BootstrapData> = {}): Bootstrap
     labels: [label], labelGroups: [{ id: 'group-1', name: 'Type', color: '#5e6ad2', resourceType: 'issue' }],
     issues: [issue], projects: [project], projectStatuses: [project.status], projectUpdates: {}, initiatives: [],
     initiativeUpdates: {}, cycles: [], issueTemplates: [], releases: [], releasePipelines: [], subscriptions: [], activities: {},
+    issueSuggestions: [],
+    workspaceSettings: {
+      featureFlags: { 'triage-intelligence': false },
+      featureSettings: { triageIntelligence: { assigneeAction: 'suggest', projectAction: 'suggest', labelAction: 'suggest', teamAction: 'suggest', duplicateAction: 'suggest', relatedAction: 'suggest' } },
+    },
     ...overrides,
   } as unknown as BootstrapData
 }
