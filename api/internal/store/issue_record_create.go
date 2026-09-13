@@ -30,6 +30,14 @@ func UsesIssueRecordMutations(ctx context.Context) bool {
 	return ctx.Value(issueRecordMutationContext{}) != nil
 }
 
+// WithoutIssueRecordMutations runs a follow-up metadata mutation against the
+// full workspace even when the parent request used the scoped issue-record
+// path. Triage Intelligence writes both issue content and suggestion records,
+// so it cannot run through the issue-only scope.
+func WithoutIssueRecordMutations(ctx context.Context) context.Context {
+	return context.WithValue(ctx, issueRecordMutationContext{}, nil)
+}
+
 func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
 	metadata, ok := s.WorkspaceMetadata(workspace)
 	if !ok {

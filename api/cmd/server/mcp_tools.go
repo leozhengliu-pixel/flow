@@ -562,6 +562,9 @@ func (s *server) pagedMCPIssues(ctx context.Context, actor mcpActor, data domain
 			if issue.Project != nil {
 				raw["projectId"] = issue.Project.ID
 			}
+			if slices.Contains(fields, "triageIntel") {
+				raw["triageIntel"] = activeIssueSuggestions(&data, issue.ID)
+			}
 			projected := map[string]any{"id": issue.ID}
 			for _, field := range fields {
 				projected[field] = raw[field]
@@ -571,6 +574,16 @@ func (s *server) pagedMCPIssues(ctx context.Context, actor mcpActor, data domain
 		return map[string]any{"items": items, "nextCursor": page.NextCursor}, nil
 	}
 	return map[string]any{"items": page.Items, "nextCursor": page.NextCursor}, nil
+}
+
+func activeIssueSuggestions(data *domain.Bootstrap, issueID string) []domain.IssueSuggestion {
+	result := make([]domain.IssueSuggestion, 0)
+	for _, suggestion := range data.IssueSuggestions {
+		if suggestion.IssueID == issueID && suggestion.State == "active" {
+			result = append(result, suggestion)
+		}
+	}
+	return result
 }
 
 var mcpDurationPattern = regexp.MustCompile(`^-P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$`)

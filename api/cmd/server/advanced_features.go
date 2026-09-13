@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -1217,6 +1218,7 @@ func (s *server) decideAsk(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.Ask
+	createdIssueID := ""
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "ask.decided", id, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Asks, func(item domain.Ask) bool { return item.ID == id })
 		if index < 0 {
@@ -1233,11 +1235,19 @@ func (s *server) decideAsk(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			ask.IssueID = issue.ID
+			createdIssueID = issue.ID
 		}
 		updated = *ask
 		appendAudit(data, input.Decision, "ask", id, map[string]any{"note": approval.Note})
 		return nil
 	})
+	if err == nil && createdIssueID != "" && triageIntelligenceWorkspaceEnabled(s, workspaceKey(r)) {
+		if generated, generationErr := s.generateTriageIntelligenceForIssue(r.Context(), workspaceKey(r), createdIssueID); generationErr != nil && !errors.Is(generationErr, store.ErrNoMutation) {
+			log.Printf("generate triage intelligence issue=%s: %v", createdIssueID, generationErr)
+		} else if generationErr == nil && generated.ID != "" {
+			updated.IssueID = generated.ID
+		}
+	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
 

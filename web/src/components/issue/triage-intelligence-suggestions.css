@@ -1,0 +1,362 @@
+.triage-intelligence-panel {
+  display: grid;
+  gap: 10px;
+  margin: 2px 0 14px;
+  padding: 11px 12px 12px;
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  background: var(--color-bg-secondary);
+}
+
+.triage-intelligence-panel > header,
+.triage-intelligence-title,
+.triage-intelligence-thinking,
+.triage-intelligence-row,
+.triage-intelligence-related-row,
+.triage-intelligence-row-actions,
+.triage-intelligence-chips,
+.triage-intelligence-chip,
+.triage-intelligence-popover-target,
+.triage-intelligence-popover-actions {
+  display: flex;
+  align-items: center;
+}
+
+.triage-intelligence-panel > header {
+  justify-content: space-between;
+  min-height: 20px;
+}
+
+.triage-intelligence-title {
+  gap: 6px;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+}
+
+.triage-intelligence-title svg {
+  color: var(--accent-primary);
+}
+
+.triage-intelligence-refresh {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  color: var(--theme-text-tertiary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.triage-intelligence-refresh:hover {
+  color: var(--color-text-primary);
+  background: var(--theme-control-hover);
+}
+
+.triage-intelligence-refresh:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.triage-intelligence-spinner {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: triage-intelligence-spin 0.8s linear infinite;
+}
+
+.triage-intelligence-thinking {
+  gap: 8px;
+  min-height: 30px;
+  color: var(--theme-text-tertiary);
+  font-size: 12px;
+}
+
+.triage-intelligence-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  animation: triage-intelligence-pulse 1.2s ease-in-out infinite;
+}
+
+.triage-intelligence-body {
+  display: grid;
+  gap: 8px;
+}
+
+.triage-intelligence-row {
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+}
+
+.triage-intelligence-row-label {
+  flex: none;
+  width: 82px;
+  padding-top: 3px;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.triage-intelligence-chips {
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+}
+
+.triage-intelligence-chip {
+  max-width: 220px;
+  min-height: 25px;
+  gap: 6px;
+  padding: 2px 7px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--theme-text-primary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.triage-intelligence-chip-assignee,
+.triage-intelligence-chip-project,
+.triage-intelligence-chip-team {
+  border: 1px dashed var(--theme-border-strong);
+}
+
+.triage-intelligence-chip:hover,
+.triage-intelligence-chip[data-state='open'] {
+  background: var(--theme-control-hover);
+}
+
+.triage-intelligence-chip > span:not(.triage-intelligence-chip-dot) {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.triage-intelligence-chip svg,
+.triage-intelligence-chip .avatar {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.triage-intelligence-panel .avatar {
+  color: var(--on-accent);
+  background: var(--accent-primary);
+}
+
+.triage-intelligence-chip-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.triage-intelligence-chip-check {
+  color: var(--theme-text-tertiary);
+}
+
+.triage-intelligence-related-list {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.triage-intelligence-related-row {
+  min-width: 0;
+  min-height: 24px;
+  gap: 7px;
+}
+
+.triage-intelligence-related-row > svg {
+  flex: none;
+}
+
+.triage-intelligence-related-row > a,
+.triage-intelligence-copy a {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--theme-text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.triage-intelligence-related-row > a span {
+  color: var(--theme-text-secondary);
+  font-weight: 600;
+}
+
+.triage-intelligence-related-row > a:hover {
+  text-decoration: underline;
+}
+
+.triage-intelligence-row-actions {
+  flex: none;
+  gap: 1px;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.triage-intelligence-related-row:hover .triage-intelligence-row-actions,
+.triage-intelligence-related-row:focus-within .triage-intelligence-row-actions {
+  opacity: 1;
+}
+
+.triage-intelligence-row-actions button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  color: var(--theme-text-tertiary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.triage-intelligence-row-actions button:hover {
+  color: var(--theme-text-primary);
+  background: var(--theme-control-hover);
+}
+
+.triage-intelligence-row-actions button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.triage-intelligence-popover {
+  z-index: 80;
+  width: min(310px, calc(100vw - 40px));
+  padding: 14px;
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 8px;
+  background: var(--color-bg-secondary);
+  box-shadow: var(--menu-shadow);
+}
+
+.triage-intelligence-popover-target {
+  gap: 7px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--theme-border);
+  color: var(--theme-text-primary);
+}
+
+.triage-intelligence-popover-target svg,
+.triage-intelligence-popover-target .avatar {
+  width: 22px;
+  height: 22px;
+}
+
+.triage-intelligence-popover-target strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.triage-intelligence-popover h4 {
+  margin: 12px 0 7px;
+  color: var(--theme-text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.triage-intelligence-popover ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.triage-intelligence-popover p {
+  margin: 0;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.triage-intelligence-popover-actions {
+  gap: 6px;
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px solid var(--theme-border);
+}
+
+.triage-intelligence-popover-actions button:first-child {
+  flex: 1;
+  justify-content: center;
+  height: 31px;
+  gap: 6px;
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 6px;
+  color: var(--theme-text-primary);
+  background: var(--theme-control);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.triage-intelligence-popover-actions button:first-child:hover {
+  background: var(--theme-control-hover);
+}
+
+.triage-intelligence-popover-actions button:last-child {
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  border: 1px solid var(--theme-border);
+  border-radius: 6px;
+  color: var(--theme-text-tertiary);
+  background: transparent;
+}
+
+.triage-intelligence-popover-actions button:last-child:hover {
+  color: var(--theme-text-primary);
+  background: var(--theme-control-hover);
+}
+
+.triage-intelligence-popover-actions button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.triage-intelligence-popover-arrow {
+  fill: var(--color-bg-secondary);
+}
+
+@keyframes triage-intelligence-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes triage-intelligence-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

@@ -259,6 +259,7 @@ export interface Issue {
   completedAt?: string;
   startedAt?: string;
   triagedAt?: string;
+  suggestionsGeneratedAt?: string;
   statusChangedAt?: string;
   autoClosedAt?: string;
   canceledAt?: string;
@@ -919,6 +920,18 @@ export interface FeatureSettings {
   customerGenericDomains: string[];
   pulseWorkspaceSchedule: string;
   asksEmailAddresses: string[];
+  triageIntelligence: TriageIntelligenceSettings;
+}
+
+export type TriageIntelligenceAction = "suggest" | "auto" | "hide";
+export interface TriageIntelligenceSettings {
+  assigneeAction: TriageIntelligenceAction;
+  projectAction: TriageIntelligenceAction;
+  labelAction: TriageIntelligenceAction;
+  teamAction: TriageIntelligenceAction;
+  duplicateAction: TriageIntelligenceAction;
+  relatedAction: TriageIntelligenceAction;
+  workspaceGuidance?: string;
 }
 export interface WorkspaceSettings {
   fiscalMonth: string;
@@ -1521,6 +1534,37 @@ export interface AIPromptProgress {
   createdAt: string;
   updatedAt: string;
 }
+export type IssueSuggestionType =
+  | "assignee"
+  | "project"
+  | "label"
+  | "team"
+  | "similarIssue"
+  | "relatedIssue";
+export interface IssueSuggestion {
+  id: UUID;
+  issueId: UUID;
+  type: IssueSuggestionType;
+  state: "active" | "accepted" | "dismissed";
+  stateChangedAt: string;
+  metadata: {
+    rank?: number;
+    score?: number;
+    reasons?: string[];
+    [key: string]: unknown;
+  };
+  suggestedIssueId?: UUID;
+  suggestedProjectId?: UUID;
+  suggestedUserId?: UUID;
+  suggestedLabelId?: UUID;
+  suggestedTeamId?: UUID;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface IssueSuggestionPreview {
+  type: IssueSuggestionType;
+  id: UUID;
+}
 export interface InitiativeUpdate {
   id: UUID;
   initiativeId: UUID;
@@ -1626,6 +1670,7 @@ export interface BootstrapData {
   agentActivities: AgentActivity[];
   aiConversations: AIConversation[];
   aiPromptProgress: AIPromptProgress[];
+  issueSuggestions: IssueSuggestion[];
   settings?: Record<string, unknown>;
   labelGroups: LabelGroup[];
   userSettings: Record<UUID, UserSettings>;

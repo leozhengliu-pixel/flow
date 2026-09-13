@@ -114,3 +114,15 @@
 :global(:root[data-theme="light"]) .confirmActions button { background: var(--theme-control); color: var(--theme-text-primary); }
 :global(:root[data-theme="light"]) .confirmActions button:hover { background: var(--theme-control-hover); }
 :global(:root[data-theme="light"]) .confirmActions .confirmSave { color: var(--on-accent); }
+
+.quickSuggestions { min-height: 30px; display: flex; align-items: center; gap: 8px; padding: 4px 12px 6px; border-top: .5px solid lch(14% 1.2 272); }
+.quickSuggestionsLabel { flex: none; display: inline-flex; align-items: center; gap: 5px; color: lch(64.805% 1.65 272); font-size: 11px; }
+.quickSuggestionsLabel svg { width: 12px; height: 12px; color: lch(67.6% 34.2 283); }
+.quickSuggestions > div { min-width: 0; display: flex; align-items: center; gap: 5px; overflow-x: auto; }
+.quickSuggestions button { height: 24px; flex: none; display: inline-flex; align-items: center; gap: 5px; max-width: 220px; padding: 0 8px; border: .5px solid var(--theme-border-strong); border-radius: 9999px; background: var(--theme-surface-2); color: var(--theme-text-secondary); font-size: 11px; }
+.quickSuggestions button:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
+.quickSuggestions .applyAllSuggestions { border-color: var(--accent-primary); color: var(--accent-primary); }
+.quickSuggestions button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quickSuggestions button svg { width: 12px; height: 12px; flex: none; }
+:global(:root[data-theme="light"]) .quickSuggestions { border-color: var(--border); }
+:global(:root[data-theme="light"]) .quickSuggestions button { color: var(--theme-text-secondary); }

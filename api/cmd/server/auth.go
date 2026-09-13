@@ -494,6 +494,10 @@ func featureForPath(path string) string {
 	if strings.HasPrefix(path, "/api/loops") {
 		return "loops"
 	}
+	if strings.HasPrefix(path, "/api/issue-suggestions") ||
+		(strings.Contains(path, "/suggestions") && (strings.HasPrefix(path, "/api/issues/") || strings.HasPrefix(path, "/api/issue-records/"))) {
+		return "triage-intelligence"
+	}
 	if (strings.HasPrefix(path, "/api/issues/") || strings.HasPrefix(path, "/api/issue-records/")) && strings.HasSuffix(path, "/releases") {
 		return "releases"
 	}
@@ -946,6 +950,9 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 					return roleRank >= issuePermissionRank("editor") || comment.User.ID == userID
 				}
 			}
+		}
+		if len(parts) >= 4 && parts[3] == "suggestions" && r.Method != http.MethodGet {
+			return roleRank >= issuePermissionRank("editor")
 		}
 		if len(parts) >= 4 && parts[3] == "attachments" && (r.Method == http.MethodPost || r.Method == http.MethodDelete) {
 			return roleRank >= issuePermissionRank("editor")

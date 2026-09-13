@@ -12,9 +12,47 @@ vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 beforeEach(() => { vi.clearAllMocks(); localStorage.setItem('flow:locale','en-US') })
 const initial = { sessionDurationDays:30, featureFlags:{'customer-requests':true,initiatives:true,pulse:true},featureSettings:{} } as unknown as WorkspaceSettings
-function page(onReload = vi.fn(), feature: 'customer-requests'|'pulse'|'initiatives' = 'customer-requests', onNavigateSettings = vi.fn()) {
+function page(onReload = vi.fn(), feature: 'customer-requests'|'pulse'|'initiatives'|'ai' = 'customer-requests', onNavigateSettings = vi.fn()) {
   return <I18nProvider><FeatureSettingsPage page={feature} data={makeBootstrap({workspaceSettings:initial,customers:[],viewerRole:'admin'})} onCreateReleasePipeline={vi.fn()} onOpenReleasePipeline={vi.fn()} onOpenIntegration={vi.fn()} onNavigateSettings={onNavigateSettings} onReload={onReload}/></I18nProvider>
 }
+
+it('enables and configures Triage Intelligence behavior', async () => {
+  const user = userEvent.setup()
+  const enabled = {
+    ...initial,
+    featureFlags: { ...initial.featureFlags, 'triage-intelligence': true },
+    featureSettings: {
+      ...initial.featureSettings,
+      triageIntelligence: {
+        assigneeAction: 'suggest', projectAction: 'suggest', labelAction: 'suggest',
+        teamAction: 'suggest', duplicateAction: 'suggest', relatedAction: 'suggest',
+      },
+    },
+  } as WorkspaceSettings
+  vi.mocked(updateWorkspacePreferences).mockResolvedValueOnce(enabled)
+  render(page(vi.fn(), 'ai'))
+
+  await user.click(screen.getByRole('checkbox', { name: 'Enable Triage Intelligence' }))
+  await waitFor(() => expect(updateWorkspacePreferences).toHaveBeenCalledWith({ featureFlags: { 'triage-intelligence': true } }, 'workspace'))
+
+  vi.mocked(updateWorkspacePreferences).mockResolvedValueOnce({
+    ...enabled,
+    featureSettings: {
+      ...enabled.featureSettings,
+      triageIntelligence: { ...enabled.featureSettings.triageIntelligence, projectAction: 'auto' },
+    },
+  })
+  await user.click(screen.getByRole('combobox', { name: 'Project is suggested' }))
+  await user.click(await screen.findByRole('menuitem', { name: 'Apply automatically' }))
+  await waitFor(() => expect(updateWorkspacePreferences).toHaveBeenLastCalledWith({
+    featureSettings: {
+      triageIntelligence: {
+        assigneeAction: 'suggest', projectAction: 'auto', labelAction: 'suggest',
+        teamAction: 'suggest', duplicateAction: 'suggest', relatedAction: 'suggest',
+      },
+    },
+  }, 'workspace'))
+})
 it('turns off immediately and applies the response without reloading a large workspace',async()=>{
   let complete!: (value: WorkspaceSettings) => void
   vi.mocked(updateWorkspacePreferences).mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve}))
