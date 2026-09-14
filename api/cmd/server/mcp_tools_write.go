@@ -813,10 +813,10 @@ func (s *server) saveMCPComment(ctx context.Context, actor mcpActor, data domain
 	id := stringArg(args, "id")
 	parentID := stringArg(args, "parentId")
 	if id != "" {
-		return s.mutateAnyComment(ctx, actor, data, id, body, "update", "")
+		return s.mutateAnyComment(ctx, actor, data, id, body, objectArg(args, "bodyData"), "update")
 	}
 	if parentID != "" {
-		return s.mutateAnyComment(ctx, actor, data, parentID, body, "reply", "")
+		return s.mutateAnyComment(ctx, actor, data, parentID, body, objectArg(args, "bodyData"), "reply")
 	}
 	parents := []string{"issueId", "projectId", "initiativeId", "documentId", "milestoneId", "statusUpdateId"}
 	parent := ""
@@ -831,7 +831,7 @@ func (s *server) saveMCPComment(ctx context.Context, actor mcpActor, data domain
 	if parent == "" {
 		return nil, fmt.Errorf("comment parent is required")
 	}
-	return s.mutateAnyComment(ctx, actor, data, parent, body, "create", "")
+	return s.mutateAnyComment(ctx, actor, data, parent, body, objectArg(args, "bodyData"), "create")
 }
 
 func (s *server) deleteMCPComment(ctx context.Context, actor mcpActor, id string) (any, error) {
@@ -842,10 +842,10 @@ func (s *server) deleteMCPComment(ctx context.Context, actor mcpActor, id string
 	if err := s.hydrateMCPIssueArguments(ctx, actor, &data, map[string]any{"id": id}); err != nil {
 		return nil, err
 	}
-	return s.mutateAnyComment(ctx, actor, data, id, "", "delete", "")
+	return s.mutateAnyComment(ctx, actor, data, id, "", nil, "delete")
 }
 
-func (s *server) mutateAnyComment(ctx context.Context, actor mcpActor, data domain.Bootstrap, targetID, body, operation, _ string) (any, error) {
+func (s *server) mutateAnyComment(ctx context.Context, actor mcpActor, data domain.Bootstrap, targetID, body string, bodyData map[string]any, operation string) (any, error) {
 	// The MCP write path invokes handlers directly, so the normal HTTP resource
 	// authorization middleware is not run. Validate the parent or comment
 	// against the already projected workspace before mutating the persisted
@@ -882,12 +882,13 @@ func (s *server) mutateAnyComment(ctx context.Context, actor mcpActor, data doma
 			case "update":
 				now := time.Now().UTC()
 				(*items)[index].Body = body
+				(*items)[index].BodyData = bodyData
 				(*items)[index].EditedAt = &now
 				(*items)[index].Version++
 				result = (*items)[index]
 			case "reply":
 				parent := (*items)[index].ID
-				result = newMCPComment(next.Viewer, body, &parent)
+				result = newMCPComment(next.Viewer, body, bodyData, &parent)
 				*items = append(*items, result)
 			case "delete":
 				*items = slices.DeleteFunc(*items, func(item domain.Comment) bool {
@@ -931,23 +932,23 @@ func (s *server) mutateAnyComment(ctx context.Context, actor mcpActor, data doma
 		}
 		if operation == "create" {
 			if issue, err := issueByID(next, targetID); err == nil {
-				result = newMCPComment(next.Viewer, body, nil)
+				result = newMCPComment(next.Viewer, body, bodyData, nil)
 				next.Comments[issue.ID] = append(next.Comments[issue.ID], result)
 				return nil
 			}
 			if project, err := fullProjectByID(next, targetID); err == nil {
-				result = newMCPComment(next.Viewer, body, nil)
+				result = newMCPComment(next.Viewer, body, bodyData, nil)
 				project.Comments = append(project.Comments, result)
 				return nil
 			}
 			if initiative, err := initiativeByID(next, targetID); err == nil {
-				result = newMCPComment(next.Viewer, body, nil)
+				result = newMCPComment(next.Viewer, body, bodyData, nil)
 				initiative.Comments = append(initiative.Comments, result)
 				return nil
 			}
 			for _, document := range next.Documents {
 				if equalFoldAny(targetID, document.ID, document.SlugID) {
-					result = newMCPComment(next.Viewer, body, nil)
+					result = newMCPComment(next.Viewer, body, bodyData, nil)
 					next.Comments[document.ID] = append(next.Comments[document.ID], result)
 					return nil
 				}
@@ -955,7 +956,7 @@ func (s *server) mutateAnyComment(ctx context.Context, actor mcpActor, data doma
 			for _, project := range next.Projects {
 				for _, milestone := range project.Milestones {
 					if milestone.ID == targetID {
-						result = newMCPComment(next.Viewer, body, nil)
+						result = newMCPComment(next.Viewer, body, bodyData, nil)
 						next.Comments[targetID] = append(next.Comments[targetID], result)
 						return nil
 					}
@@ -964,7 +965,7 @@ func (s *server) mutateAnyComment(ctx context.Context, actor mcpActor, data doma
 			for key, updates := range next.ProjectUpdates {
 				for index := range updates {
 					if updates[index].ID == targetID {
-						result = newMCPComment(next.Viewer, body, nil)
+						result = newMCPComment(next.Viewer, body, bodyData, nil)
 						updates[index].Comments = append(updates[index].Comments, result)
 						next.ProjectUpdates[key] = updates
 						return nil
@@ -974,7 +975,7 @@ func (s *server) mutateAnyComment(ctx context.Context, actor mcpActor, data doma
 			for key, updates := range next.InitiativeUpdates {
 				for index := range updates {
 					if updates[index].ID == targetID {
-						result = newMCPComment(next.Viewer, body, nil)
+						result = newMCPComment(next.Viewer, body, bodyData, nil)
 						updates[index].Comments = append(updates[index].Comments, result)
 						next.InitiativeUpdates[key] = updates
 						return nil
@@ -993,8 +994,8 @@ func (s *server) mutateAnyComment(ctx context.Context, actor mcpActor, data doma
 	return result, nil
 }
 
-func newMCPComment(user domain.User, body string, parentID *string) domain.Comment {
-	return domain.Comment{ID: fmt.Sprintf("comment_%d", time.Now().UnixNano()), Version: 1, Body: body, ParentID: parentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: user}
+func newMCPComment(user domain.User, body string, bodyData map[string]any, parentID *string) domain.Comment {
+	return domain.Comment{ID: fmt.Sprintf("comment_%d", time.Now().UnixNano()), Version: 1, Body: body, BodyData: bodyData, ParentID: parentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: user}
 }
 
 func (s *server) updateMCPReview(ctx context.Context, _ mcpActor, data domain.Bootstrap, args map[string]any, action string) (any, error) {

@@ -289,6 +289,93 @@ func TestMCPArgumentAndPatchHelpers(t *testing.T) {
 	}
 }
 
+func TestMCPCommentUpdateClearsStaleBodyData(t *testing.T) {
+	repository, actor, ctx := newMCPToolTestContext(t)
+	data := repository.Bootstrap()
+	issue := data.Issues[0]
+	stale := map[string]any{
+		"type": "doc",
+		"content": []any{
+			map[string]any{"type": "paragraph", "content": []any{map[string]any{"type": "text", "text": "Old rich text"}}},
+		},
+	}
+	if err := repository.MutateWorkspace(ctx, actor.WorkspaceKey, "test.comment", issue.ID, nil, func(next *domain.Bootstrap) error {
+		next.Comments[issue.ID] = append(next.Comments[issue.ID], domain.Comment{
+			ID: "comment-stale", Version: 1, Body: "Old rich text", BodyData: stale, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: actor.User,
+		})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	service := &server{store: repository}
+	result, err := service.callFlowTool(ctx, actor, "save_comment", map[string]any{"id": "comment-stale", "body": "## After\n\nUpdated markdown"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var updated domain.Comment
+	if err := jsonClone(result, &updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.Body != "## After\n\nUpdated markdown" {
+		t.Fatalf("body=%q", updated.Body)
+	}
+	if updated.BodyData != nil {
+		t.Fatalf("stale bodyData retained: %#v", updated.BodyData)
+	}
+	if updated.Version != 2 || updated.EditedAt == nil {
+		t.Fatalf("version=%d editedAt=%v", updated.Version, updated.EditedAt)
+	}
+	persisted := repository.Bootstrap().Comments[issue.ID]
+	found := false
+	for _, comment := range persisted {
+		if comment.ID != "comment-stale" {
+			continue
+		}
+		found = true
+		if comment.BodyData != nil {
+			t.Fatalf("persisted bodyData=%#v", comment.BodyData)
+		}
+		if comment.Body != "## After\n\nUpdated markdown" {
+			t.Fatalf("persisted body=%q", comment.Body)
+		}
+	}
+	if !found {
+		t.Fatal("updated comment missing from persisted workspace")
+	}
+}
+
+func TestMCPCommentUpdateKeepsProvidedBodyData(t *testing.T) {
+	repository, actor, ctx := newMCPToolTestContext(t)
+	data := repository.Bootstrap()
+	issue := data.Issues[0]
+	if err := repository.MutateWorkspace(ctx, actor.WorkspaceKey, "test.comment", issue.ID, nil, func(next *domain.Bootstrap) error {
+		next.Comments[issue.ID] = append(next.Comments[issue.ID], domain.Comment{
+			ID: "comment-rich", Version: 1, Body: "Old rich text", BodyData: map[string]any{"type": "doc", "content": []any{}}, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: actor.User,
+		})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	fresh := map[string]any{
+		"type": "doc",
+		"content": []any{
+			map[string]any{"type": "paragraph", "content": []any{map[string]any{"type": "text", "text": "New rich text"}}},
+		},
+	}
+	service := &server{store: repository}
+	result, err := service.callFlowTool(ctx, actor, "save_comment", map[string]any{"id": "comment-rich", "body": "New rich text", "bodyData": fresh})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var updated domain.Comment
+	if err := jsonClone(result, &updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.BodyData["type"] != "doc" {
+		t.Fatalf("bodyData=%#v", updated.BodyData)
+	}
+}
+
 func newMCPToolTestContext(t *testing.T) (*store.SQLiteStore, mcpActor, context.Context) {
 	t.Helper()
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "mcp-tools.db"))
