@@ -90,7 +90,8 @@
 .team-defaults-menu .menu-item[data-disabled] { opacity: .4; cursor: default; }
 .team-defaults-dialog { box-sizing: border-box; width: 420px; max-width: calc(100vw - 32px); padding: 24px; }
 .team-defaults-dialog h2 { margin: 0 0 24px; font-size: 16px; font-weight: 500; line-height: 24px; }
-.team-defaults-dialog form > label { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin-bottom: 18px; color: var(--text); font-size: 13px; }
+.team-defaults-dialog form > label,
+.team-defaults-field { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin-bottom: 18px; color: var(--text); font-size: 13px; }
 .team-defaults-dialog .settings-input { width: 100%; min-width: 0; }
 .team-defaults-dialog footer { justify-content: flex-end; margin-top: 24px; }
 @media (hover: none), (max-width: 760px) {

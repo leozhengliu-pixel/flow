@@ -145,6 +145,19 @@ describe('team default favorites settings', () => {
     expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument()
   })
 
+  it('preserves the selected resource type through ID entry and save', async () => {
+    setup()
+    await screen.findByText('No default favorites configured.')
+    const dialog = await manualDialog()
+    await userEvent.click(within(dialog).getByRole('combobox', { name: 'Resource type' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Team' }))
+    expect(within(dialog).getByRole('combobox', { name: 'Resource type' })).toHaveTextContent('Team')
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Resource ID' }), 'team-1')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add favorite' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(replaceTeamDefaultFavorites).toHaveBeenCalledWith('team-1', [{ resourceType: 'team', resourceId: 'team-1' }]))
+  })
+
   it('disables duplicate choices and enforces the server limit before adding', async () => {
     vi.mocked(fetchTeamDefaultFavorites).mockResolvedValue({ items: [favorite()] })
     const view = setup()
