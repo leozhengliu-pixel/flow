@@ -5,6 +5,7 @@ package store
 import (
 	"context"
 	"os"
+	"slices"
 	"testing"
 
 	"flow/api/internal/domain"
@@ -28,7 +29,12 @@ func TestExternalMetadataSearchIndexLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	project := domain.Project{ID: "indexed-project", Name: "NeedleProject", TeamIDs: []string{data.Teams[0].ID}, Status: domain.ProjectStatus{Type: "started"}}
-	insertSearchMetadata(t, repo, workspace, "projects", project.ID, project)
+	if err := repo.MutateWorkspace(ctx, workspace, "search.integration", project.ID, nil, func(next *domain.Bootstrap) error {
+		next.Projects = append(next.Projects, project)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	q := SearchMetadataQuery{Scope: IssueRecordQuery{Workspace: workspace, Filter: IssueFilter{Field: "statusType", Values: []string{"started"}}}, Types: map[string]bool{"project": true}, Terms: []string{"NeedleProject"}, Limit: 10}
 	result, err := repo.SearchMetadata(ctx, data, q)
 	if err != nil || len(result.Projects) != 1 {
@@ -44,7 +50,16 @@ func TestExternalMetadataSearchIndexLifecycle(t *testing.T) {
 	}
 	defer repo.Close()
 	project.Name = "ChangedNeedle"
-	insertSearchMetadata(t, repo, workspace, "projects", project.ID, project)
+	if err := repo.MutateWorkspace(ctx, workspace, "search.integration", project.ID, nil, func(next *domain.Bootstrap) error {
+		for i := range next.Projects {
+			if next.Projects[i].ID == project.ID {
+				next.Projects[i] = project
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	result, err = repo.SearchMetadata(ctx, data, q)
 	if err != nil || len(result.Projects) != 0 {
 		t.Fatalf("update retained old index: %+v %v", result.Projects, err)
@@ -54,7 +69,10 @@ func TestExternalMetadataSearchIndexLifecycle(t *testing.T) {
 	if err != nil || len(result.Projects) != 1 {
 		t.Fatalf("update index missing: %+v %v", result.Projects, err)
 	}
-	if _, err := repo.db.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='projects' AND record_key=?`, workspace, project.ID); err != nil {
+	if err := repo.MutateWorkspace(ctx, workspace, "search.integration", project.ID, nil, func(next *domain.Bootstrap) error {
+		next.Projects = slices.DeleteFunc(next.Projects, func(item domain.Project) bool { return item.ID == project.ID })
+		return nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 	result, err = repo.SearchMetadata(ctx, data, q)
