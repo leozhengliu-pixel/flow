@@ -8,6 +8,7 @@ import {
   fetchInboxNotifications,
   listIssues,
   realtimeClientId,
+  replaceTeamDefaultFavorites,
   searchWorkspace,
   semanticSearch,
   updateInboxNotification,
@@ -27,6 +28,18 @@ describe('API client contract', () => {
     fetchMock.mockReset()
     vi.stubGlobal('fetch', fetchMock)
     window.history.replaceState({}, '', '/workspace/issues/all')
+  })
+
+  it('strips server-owned default favorite fields even from full runtime objects', async () => {
+    fetchMock.mockResolvedValue(response({ items: [] }))
+    const legacy = { resourceType: 'project', resourceId: 'project-1', id: 'local:project-1', workspaceKey: 'wrong', teamId: 'wrong', position: 99, createdAt: '', updatedAt: '' }
+    await replaceTeamDefaultFavorites('team/1', [legacy, { resourceType: 'view', resourceId: 'view-1' }])
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/api/teams/team%2F1/default-favorites')
+    expect(JSON.parse(String(init.body))).toEqual({ items: [{ resourceType: 'project', resourceId: 'project-1' }, { resourceType: 'view', resourceId: 'view-1' }] })
+    expect(legacy.createdAt).toBe('')
+    fetchMock.mockResolvedValue(response({ error: 'resource is outside this workspace' }, 400))
+    await expect(replaceTeamDefaultFavorites('team-1', [legacy])).rejects.toMatchObject({ message: 'resource is outside this workspace', status: 400 })
   })
 
   it('attaches workspace, realtime client, credentials, and explicit JSON requests', async () => {

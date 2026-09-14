@@ -1478,7 +1478,9 @@ export function fetchTeamDefaultFavorites(teamId: string): Promise<{ items: Team
   return request(`/api/teams/${encodeURIComponent(teamId)}/default-favorites`)
 }
 export function replaceTeamDefaultFavorites(teamId: string, items: Array<Pick<TeamDefaultFavorite, 'resourceType' | 'resourceId'>>): Promise<{ items: TeamDefaultFavorite[] }> {
-  return request(`/api/teams/${encodeURIComponent(teamId)}/default-favorites`, jsonRequest('PUT', { items }))
+  return request(`/api/teams/${encodeURIComponent(teamId)}/default-favorites`, jsonRequest('PUT', {
+    items: items.map(({ resourceType, resourceId }) => ({ resourceType, resourceId })),
+  }))
 }
 export function removeFavorite(type: string, id: string): Promise<void> {
   return request(`/api/favorites/${type}/${id}`, { method: "DELETE" });

@@ -21,9 +21,19 @@ func (s *server) listTeamDefaultFavorites(w http.ResponseWriter, r *http.Request
 
 func (s *server) replaceTeamDefaultFavorites(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Items []domain.TeamDefaultFavorite `json:"items"`
+		Items []struct {
+			ResourceType string `json:"resourceType"`
+			ResourceID   string `json:"resourceId"`
+		} `json:"items"`
 	}
-	if !decodeJSON(w, r, &input) || len(input.Items) > 100 {
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if input.Items == nil {
+		writeError(w, http.StatusBadRequest, "items must be an array of resource references")
+		return
+	}
+	if len(input.Items) > 100 {
 		writeError(w, http.StatusBadRequest, "up to 100 default favorites are allowed")
 		return
 	}
@@ -34,6 +44,7 @@ func (s *server) replaceTeamDefaultFavorites(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	seen := map[string]bool{}
+	items := make([]domain.TeamDefaultFavorite, 0, len(input.Items))
 	for _, item := range input.Items {
 		if !slices.Contains(defaultFavoriteTypes, item.ResourceType) || strings.TrimSpace(item.ResourceID) == "" {
 			writeError(w, http.StatusBadRequest, "invalid default favorite resource")
@@ -60,8 +71,9 @@ func (s *server) replaceTeamDefaultFavorites(w http.ResponseWriter, r *http.Requ
 			writeError(w, http.StatusBadRequest, "resource is outside this workspace")
 			return
 		}
+		items = append(items, domain.TeamDefaultFavorite{ResourceType: item.ResourceType, ResourceID: item.ResourceID})
 	}
-	if err := s.store.ReplaceTeamDefaultFavorites(r.Context(), workspace, teamID, input.Items); err != nil {
+	if err := s.store.ReplaceTeamDefaultFavorites(r.Context(), workspace, teamID, items); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
