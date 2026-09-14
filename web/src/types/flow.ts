@@ -1286,6 +1286,16 @@ export interface FavoriteFolder {
   createdAt: string;
   updatedAt: string;
 }
+export interface TeamDefaultFavorite {
+  id: UUID;
+  workspaceKey: string;
+  teamId: UUID;
+  resourceType: string;
+  resourceId: UUID;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
 export interface Subscription {
   id: UUID;
   userId: UUID;

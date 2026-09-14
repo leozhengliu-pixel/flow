@@ -61,6 +61,7 @@ func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, use
 	if !ok {
 		return data, ErrAuthForbidden
 	}
+	if err := s.mergeTeamDefaultFavorites(ctx, &data, userID); err != nil { return data, err }
 	favorites, subscriptions := slices.Clone(data.Favorites), slices.Clone(data.Subscriptions)
 	releases := slices.Clone(data.Releases)
 	for i := range releases {

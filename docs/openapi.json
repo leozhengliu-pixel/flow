@@ -6925,6 +6925,142 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/issue-records/{id}/suggestions": {
+      "get": {
+        "operationId": "get_issue_records_id_suggestions",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "GET /api/issue-records/{id}/suggestions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/suggestions/{suggestionId}/accept": {
+      "post": {
+        "operationId": "post_issue_records_id_suggestions_suggestionId_accept",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "POST /api/issue-records/{id}/suggestions/{suggestionId}/accept",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "suggestionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/suggestions/{suggestionId}/dismiss": {
+      "post": {
+        "operationId": "post_issue_records_id_suggestions_suggestionId_dismiss",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "POST /api/issue-records/{id}/suggestions/{suggestionId}/dismiss",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "suggestionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/suggestions/refresh": {
+      "post": {
+        "operationId": "post_issue_records_id_suggestions_refresh",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "POST /api/issue-records/{id}/suggestions/refresh",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/issue-records/batch": {
       "post": {
         "operationId": "post_issue_records_batch",
@@ -7012,6 +7148,26 @@
           "issue-records"
         ],
         "summary": "POST /api/issue-records/visibility",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-suggestions": {
+      "get": {
+        "operationId": "get_issue_suggestions",
+        "tags": [
+          "issue-suggestions"
+        ],
+        "summary": "GET /api/issue-suggestions",
         "responses": {
           "default": {
             "description": "Flow API response. See the domain model documentation for resource fields.",
@@ -7812,6 +7968,142 @@
           "issues"
         ],
         "summary": "POST /api/issues/{id}/share",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issues/{id}/suggestions": {
+      "get": {
+        "operationId": "get_issues_id_suggestions",
+        "tags": [
+          "issues"
+        ],
+        "summary": "GET /api/issues/{id}/suggestions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issues/{id}/suggestions/{suggestionId}/accept": {
+      "post": {
+        "operationId": "post_issues_id_suggestions_suggestionId_accept",
+        "tags": [
+          "issues"
+        ],
+        "summary": "POST /api/issues/{id}/suggestions/{suggestionId}/accept",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "suggestionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issues/{id}/suggestions/{suggestionId}/dismiss": {
+      "post": {
+        "operationId": "post_issues_id_suggestions_suggestionId_dismiss",
+        "tags": [
+          "issues"
+        ],
+        "summary": "POST /api/issues/{id}/suggestions/{suggestionId}/dismiss",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "suggestionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issues/{id}/suggestions/refresh": {
+      "post": {
+        "operationId": "post_issues_id_suggestions_refresh",
+        "tags": [
+          "issues"
+        ],
+        "summary": "POST /api/issues/{id}/suggestions/refresh",
         "parameters": [
           {
             "name": "id",
@@ -11362,6 +11654,64 @@
           "teams"
         ],
         "summary": "PATCH /api/teams/{id}/cycle-settings",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/teams/{id}/default-favorites": {
+      "get": {
+        "operationId": "get_teams_id_default_favorites",
+        "tags": [
+          "teams"
+        ],
+        "summary": "GET /api/teams/{id}/default-favorites",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "put": {
+        "operationId": "put_teams_id_default_favorites",
+        "tags": [
+          "teams"
+        ],
+        "summary": "PUT /api/teams/{id}/default-favorites",
         "parameters": [
           {
             "name": "id",

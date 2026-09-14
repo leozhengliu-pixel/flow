@@ -49,6 +49,8 @@ func teamOperationPermission(settings domain.TeamSettings, r *http.Request) stri
 		return settings.AgentSkillPermission
 	case strings.Contains(path, "/loops"):
 		return settings.LoopPermission
+	case strings.HasSuffix(path, "/default-favorites"):
+		return "owners"
 	case strings.HasSuffix(path, "/settings"):
 		var patch map[string]any
 		if !peekRequestJSON(r, &patch) {

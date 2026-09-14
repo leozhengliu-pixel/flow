@@ -630,6 +630,14 @@ func guestRestrictedPath(path string) bool {
 }
 
 func (s *server) resourceAllowed(r *http.Request, workspace string, userID string) bool {
+	if strings.HasSuffix(r.URL.Path, "/default-favorites") {
+		teamID := teamIDFromWorkspacePath(r.URL.Path)
+		data, access, err := s.requestIssueQueryAccess(r)
+		if err != nil {
+			return false
+		}
+		return slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) && (access.Admin || slices.Contains(access.VisibleTeamIDs, teamID))
+	}
 	if r.URL.Path == "/api/workspace/preferences" {
 		data, ok := s.store.WorkspaceSettingsMetadata(workspace)
 		if !ok {

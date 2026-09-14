@@ -295,6 +295,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/members/{userId}/resume", s.resumeMember)
 	mux.HandleFunc("DELETE /api/workspaces/{workspaceKey}/members/{userId}", s.removeMember)
 	mux.HandleFunc("PUT /api/workspaces/{workspaceKey}/teams/{teamId}/members/{userId}", s.updateTeamMember)
+	mux.HandleFunc("GET /api/teams/{id}/default-favorites", s.listTeamDefaultFavorites)
+	mux.HandleFunc("PUT /api/teams/{id}/default-favorites", s.replaceTeamDefaultFavorites)
 	mux.HandleFunc("POST /api/customers", s.createCustomer)
 	mux.HandleFunc("PATCH /api/customers/{id}", s.updateCustomer)
 	mux.HandleFunc("DELETE /api/customers/{id}", s.deleteCustomer)
@@ -806,6 +808,10 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.authDisabled {
+		if err := s.store.ApplyTeamDefaultFavorites(r.Context(), &data, data.Viewer.ID); err != nil {
+			issueRecordsError(w, err)
+			return
+		}
 		materializeDevelopmentMembers(&data)
 	}
 	sanitizeBootstrap(&data)

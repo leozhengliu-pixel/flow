@@ -30,6 +30,9 @@ func (s *server) pagedRealtimeMetadata(r *http.Request) (domain.Bootstrap, store
 			return data, query, store.ErrAuthForbidden
 		}
 		data.ViewerRole = "admin"
+		if err := s.store.ApplyTeamDefaultFavorites(r.Context(), &data, data.Viewer.ID); err != nil {
+			return data, query, err
+		}
 	} else {
 		data, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
 		if err != nil {

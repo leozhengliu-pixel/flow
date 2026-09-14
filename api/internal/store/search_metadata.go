@@ -90,8 +90,9 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 				matches = append(matches, selection)
 				args = append(args, q.Scope.Workspace, kind.field, value)
 			}
-			where += " AND " + cappedSearchHitIN("record_key", "record_key", "SELECT record_key FROM ("+strings.Join(matches, " UNION ")+") search_hits LIMIT ?")
-			args = append(args, searchHitLimit(limit))
+			// Filter visibility before pagination; private records must not consume
+			// the raw search-hit cap and hide an authorized match.
+			where += " AND record_key IN (" + strings.Join(matches, " UNION ") + ")"
 		}
 		if q.Scope.Archived != "all" && q.Scope.Archived != "true" {
 			where += " AND " + s.jsonText("data", "archivedAt") + " IS NULL"
@@ -147,7 +148,7 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 			orderExpr = "LOWER(" + orderExpr + ")"
 		}
 		lastValue, lastID := "", ""
-		accepted, examined := 0, 0
+		accepted := 0
 		for accepted < limit {
 			if err := ctx.Err(); err != nil {
 				return result, err
@@ -208,7 +209,6 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 			if err != nil {
 				return result, err
 			}
-			examined += len(batch)
 			for _, raw := range batch {
 				ok, err := s.appendSearchMetadata(ctx, &result, policy, q.Scope, allowed, kind.kind, raw)
 				if err != nil {
@@ -221,7 +221,7 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 					break
 				}
 			}
-			if len(batch) < 64 || examined >= 512 {
+			if len(batch) < 64 {
 				break
 			}
 		}
