@@ -47,20 +47,21 @@ func metadataSearchText(raw []byte) string {
 	if json.Unmarshal(raw, &value) != nil {
 		return string(raw)
 	}
-	parts := make([]string, 0, 12)
+	parts := make([]string, 0, 13)
 	for _, field := range []string{"name", "title", "displayName", "email", "summary", "description", "content", "domains", "version", "status", "tier", "scope", "resource"} {
-		if item, ok := value[field]; ok {
-			encoded, _ := json.Marshal(item)
-			var textValue string
-			if json.Unmarshal(encoded, &textValue) == nil && strings.TrimSpace(textValue) != "" {
-				parts = append(parts, textValue)
-			} else if list, ok := item.([]any); ok {
-				for _, entry := range list {
-					if textValue, ok := entry.(string); ok && strings.TrimSpace(textValue) != "" {
-						parts = append(parts, textValue)
-					}
-				}
-			}
+		item, ok := value[field]
+		if !ok || item == nil {
+			parts = append(parts, "")
+			continue
+		}
+		encoded, _ := json.Marshal(item)
+		var textValue string
+		if json.Unmarshal(encoded, &textValue) == nil {
+			parts = append(parts, textValue)
+		} else {
+			// Match json_extract()/CONCAT_WS output used by trigger backfills,
+			// including compact JSON arrays and scalar numbers/booleans.
+			parts = append(parts, string(encoded))
 		}
 	}
 	return strings.Join(parts, " ")
@@ -200,10 +201,12 @@ func (s *SQLiteStore) migrateMetadataSearchIndex(ctx context.Context) error {
 			if _, err := s.db.ExecContext(ctx, `UPDATE metadata_search_migration_checkpoints SET completed=1 WHERE workspace_key=? AND field=?`, workspace, kind.field); err != nil {
 				return err
 			}
-			if _, err := s.db.ExecContext(ctx, `INSERT INTO metadata_search_migrations(workspace_key,field) VALUES(?,?) ON CONFLICT DO NOTHING`, workspace, kind.field); err != nil {
-				if s.dialect != "mysql" || !strings.Contains(strings.ToLower(err.Error()), "syntax") {
-					return err
-				}
+			migrationInsert := `INSERT INTO metadata_search_migrations(workspace_key,field) VALUES(?,?) ON CONFLICT DO NOTHING`
+			if s.dialect == "mysql" {
+				migrationInsert = `INSERT IGNORE INTO metadata_search_migrations(workspace_key,field) VALUES(?,?)`
+			}
+			if _, err := s.db.ExecContext(ctx, migrationInsert, workspace, kind.field); err != nil {
+				return err
 			}
 		}
 	}
