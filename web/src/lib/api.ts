@@ -67,6 +67,7 @@ import type {
   SLARule,
   Subscription,
   Team,
+  TeamDefaultFavorite,
   TeamRole,
   TeamSettings,
   TeamSettingsMutationInput,
@@ -1472,6 +1473,12 @@ export function deleteAllDrafts(): Promise<void> {
 }
 export function addFavorite(type: string, id: string): Promise<Favorite> {
   return request(`/api/favorites/${type}/${id}`, { method: "PUT" });
+}
+export function fetchTeamDefaultFavorites(teamId: string): Promise<{ items: TeamDefaultFavorite[] }> {
+  return request(`/api/teams/${encodeURIComponent(teamId)}/default-favorites`)
+}
+export function replaceTeamDefaultFavorites(teamId: string, items: Array<Pick<TeamDefaultFavorite, 'resourceType' | 'resourceId'>>): Promise<{ items: TeamDefaultFavorite[] }> {
+  return request(`/api/teams/${encodeURIComponent(teamId)}/default-favorites`, jsonRequest('PUT', { items }))
 }
 export function removeFavorite(type: string, id: string): Promise<void> {
   return request(`/api/favorites/${type}/${id}`, { method: "DELETE" });

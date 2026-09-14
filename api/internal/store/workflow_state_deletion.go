@@ -35,6 +35,23 @@ func (s *SQLiteStore) DeleteWorkflowStateRecords(ctx context.Context, workspace,
 			lock = " FOR UPDATE"
 		}
 		metadata := domain.Bootstrap{}
+		metadata.Teams = slices.Clone(current.Teams)
+		metadata.TeamSettings = current.TeamSettings
+		teams := []string{teamID}
+		for candidateID, settings := range current.TeamSettings {
+			if !settings.InheritWorkflowStatuses || settings.ParentTeamID == "" {
+				continue
+			}
+			seen := map[string]bool{candidateID: true}
+			for parent := settings.ParentTeamID; parent != "" && !seen[parent]; parent = current.TeamSettings[parent].ParentTeamID {
+				seen[parent] = true
+				if parent == teamID {
+					teams = append(teams, candidateID)
+					break
+				}
+			}
+		}
+		teamClause, teamArgs := bindList("team_id", teams)
 		rows, err := tx.QueryContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='states'`+lock, workspace)
 		if err != nil {
 			return err
@@ -66,7 +83,7 @@ func (s *SQLiteStore) DeleteWorkflowStateRecords(ctx context.Context, workspace,
 			return ErrAuthForbidden
 		}
 		var count int64
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM issue_records WHERE workspace_key=? AND team_id=? AND state_id=?`, workspace, teamID, state.ID).Scan(&count); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM issue_records WHERE workspace_key=? AND state_id=? AND `+teamClause, append([]any{workspace, state.ID}, teamArgs...)...).Scan(&count); err != nil {
 			return err
 		}
 		if _, _, err := validate(&metadata, count > 0); err != nil {
@@ -81,8 +98,8 @@ func (s *SQLiteStore) DeleteWorkflowStateRecords(ctx context.Context, workspace,
 		if count > 0 {
 			lastOrder, lastID, started := float64(0), "", false
 			for {
-				query := `SELECT data,sort_order,id FROM issue_records WHERE workspace_key=? AND team_id=? AND state_id=?`
-				args := []any{workspace, teamID, state.ID}
+				query := `SELECT data,sort_order,id FROM issue_records WHERE workspace_key=? AND state_id=? AND ` + teamClause
+				args := append([]any{workspace, state.ID}, teamArgs...)
 				if started {
 					query += ` AND (sort_order>? OR (sort_order=? AND id>?))`
 					args = append(args, lastOrder, lastOrder, lastID)

@@ -9,3 +9,4 @@ api/data/
 api/bin/
 api/flow
 web/node_modules/
+web/test-results/

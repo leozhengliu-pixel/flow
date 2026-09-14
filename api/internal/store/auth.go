@@ -738,6 +738,7 @@ func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.B
 		return domain.Bootstrap{}, false, err
 	}
 	data.Viewer, data.ViewerRole = user, role
+	if err := s.mergeTeamDefaultFavorites(ctx, &data, userID); err != nil { return domain.Bootstrap{}, false, err }
 	if !isWorkspaceAdminRole(role) {
 		data.AuditLog = []domain.AuditLogEntry{}
 	}

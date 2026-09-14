@@ -24,6 +24,18 @@ type FavoriteDelta = {
 }
 
 const pendingIntents = new Map<string, FavoriteIntent>()
+const pendingRequests = new Map<string, Promise<unknown>>()
+
+function serializeFavoriteRequest<T>(key: string, operation: () => Promise<T>): Promise<T> {
+  const previous = pendingRequests.get(key)
+  const request = (async () => {
+    if (previous) await previous.catch(() => undefined)
+    return operation()
+  })()
+  pendingRequests.set(key, request)
+  void request.then(() => { if (pendingRequests.get(key) === request) pendingRequests.delete(key) }, () => { if (pendingRequests.get(key) === request) pendingRequests.delete(key) })
+  return request
+}
 
 export function favoriteResourceKey(resourceType: string, resourceId: string) {
   return `${resourceType}:${resourceId}`
@@ -121,7 +133,7 @@ export function toggleFavorite(input: {
     const favorite = optimisticFavorite(input.userId, input.resourceType, input.resourceId, input.position ?? 0)
     pendingIntents.set(key, { ...base, action: 'add', favorite })
     emitFavoriteDelta({ workspaceKey: input.workspaceKey, resourceType: input.resourceType, resourceId: input.resourceId, favorite })
-    return addFavorite(input.resourceType, input.resourceId).then(created => {
+    return serializeFavoriteRequest(key, () => addFavorite(input.resourceType, input.resourceId)).then(created => {
       if (pendingIntents.get(key)?.generation !== generation) return created
       if (created) {
         pendingIntents.set(key, { ...base, action: 'add', favorite: created })
@@ -138,10 +150,10 @@ export function toggleFavorite(input: {
       throw error
     })
   }
-  const previous = input.existing ?? null
+  const previous = input.existing ?? (pending?.action === 'add' ? pending.favorite : null)
   pendingIntents.set(key, { ...base, action: 'remove', favorite: previous })
   emitFavoriteDelta({ workspaceKey: input.workspaceKey, resourceType: input.resourceType, resourceId: input.resourceId, favorite: null })
-  return removeFavorite(input.resourceType, input.resourceId).then(() => {
+  return serializeFavoriteRequest(key, () => removeFavorite(input.resourceType, input.resourceId)).then(() => {
     if (pendingIntents.get(key)?.generation === generation) pendingIntents.delete(key)
   }).catch(error => {
     if (pendingIntents.get(key)?.generation === generation) {
@@ -170,4 +182,5 @@ export function toggleFavoriteFor(data: BootstrapData, resourceType: string, res
 
 export function resetFavoriteIntents() {
   pendingIntents.clear()
+  pendingRequests.clear()
 }
