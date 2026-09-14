@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"path/filepath"
 	"testing"
 
@@ -15,6 +16,10 @@ func TestTeamDefaultFavoritesMergeAndOverride(t *testing.T) {
 	defer repo.Close()
 	data := repo.Bootstrap()
 	team, issue := data.Teams[0], data.Issues[0]
+	var before []byte
+	if err := repo.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, data.Workspace.URLKey).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
 	if err := repo.ReplaceTeamDefaultFavorites(t.Context(), data.Workspace.URLKey, team.ID, []domain.TeamDefaultFavorite{{ResourceType: "issue", ResourceID: issue.ID}, {ResourceType: "team", ResourceID: team.ID}}); err != nil {
 		t.Fatal(err)
 	}
@@ -25,6 +30,13 @@ func TestTeamDefaultFavoritesMergeAndOverride(t *testing.T) {
 	if got := len(metadata.Favorites); got != 2 {
 		t.Fatalf("merged defaults=%d, want 2", got)
 	}
+	var after []byte
+	if err := repo.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, data.Workspace.URLKey).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("default favorite configuration rewrote workspace JSON state")
+	}
 	for _, item := range metadata.Favorites {
 		if item.ID[:len("team-default:")] != "team-default:" {
 			t.Fatalf("default favorite provenance missing: %#v", item)
@@ -32,6 +44,12 @@ func TestTeamDefaultFavoritesMergeAndOverride(t *testing.T) {
 	}
 	if err := repo.SetTeamDefaultFavoriteOverride(t.Context(), data.Workspace.URLKey, data.Viewer.ID, "issue", issue.ID, true); err != nil {
 		t.Fatal(err)
+	}
+	if err := repo.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, data.Workspace.URLKey).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("member override rewrote workspace JSON state")
 	}
 	metadata, err = repo.PagedWorkspaceMetadata(t.Context(), data.Workspace.URLKey, data.Viewer.ID)
 	if err != nil {
