@@ -5,9 +5,53 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Flow</title>
+    <script>
+      // Resolve the saved theme before the entry bundle or styles arrive.
+      (() => {
+        let theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        let locale = navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en';
+        try {
+          const saved = JSON.parse(localStorage.getItem('flow.theme') || '{}');
+          const preference = String(saved.interfaceTheme || '').toLowerCase();
+          if (preference === 'dark' || preference === 'light') theme = preference;
+          const language = localStorage.getItem('flow:locale');
+          if (language) locale = language === 'zh-CN' ? 'zh-CN' : 'en';
+        } catch { /* Keep system preferences when storage is unavailable. */ }
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+        document.documentElement.lang = locale;
+      })();
+    </script>
+    <style>
+      /* Also used by AppStartup while authentication and bootstrap are pending. */
+      html { background: #121213; }
+      html[data-theme="light"] { background: #f9f9fa; }
+      .flow-startup { position: fixed; inset: 0; display: grid; place-items: center; background: #121213; color: #6b6f76; font: 13px/20px system-ui, sans-serif; }
+      [data-theme="light"] .flow-startup { background: #f9f9fa; color: #b0b5c0; }
+      .flow-startup__content { position: relative; width: 64px; height: 64px; display: grid; place-items: center; }
+      .flow-startup__mark { width: 32px; height: 32px; }
+      .flow-startup__pulse { position: absolute; inset: 0; border: 1px solid currentColor; border-radius: 50%; opacity: 0; animation: flow-startup-pulse 3.2s ease-out infinite; }
+      .flow-startup__text { position: absolute; top: 72px; left: 50%; transform: translateX(-50%); white-space: nowrap; opacity: 0; animation: flow-startup-text .4s ease-out 8s forwards; }
+      .flow-startup__zh { display: none; }
+      :lang(zh) .flow-startup__en { display: none; }
+      :lang(zh) .flow-startup__zh { display: inline; }
+      .flow-startup__accessible { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+      @keyframes flow-startup-pulse { 0% { opacity: 0; transform: scale(.8); } 70% { opacity: .4; } 100% { opacity: 0; transform: scale(1); } }
+      @keyframes flow-startup-text { to { opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) { .flow-startup__pulse { animation: none; opacity: .3; } .flow-startup__text { animation: none; opacity: 1; } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="flow-startup" role="status" aria-live="polite" aria-busy="true">
+        <div class="flow-startup__content">
+          <span class="flow-startup__pulse" aria-hidden="true"></span>
+          <svg class="flow-startup__mark" viewBox="0 0 48 48" fill="currentColor" aria-hidden="true"><path d="M12 8a4 4 0 0 0-4 4v24a4 4 0 0 0 8 0v-6h13a4 4 0 0 0 0-8H16v-6h20a4 4 0 0 0 0-8H12Z"/><circle cx="35" cy="36" r="4"/></svg>
+          <span class="flow-startup__accessible"><span class="flow-startup__en">Loading Flow</span><span class="flow-startup__zh">正在加载 Flow</span></span>
+          <span class="flow-startup__text" aria-hidden="true"><span class="flow-startup__en">Loading…</span><span class="flow-startup__zh">加载中…</span></span>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
