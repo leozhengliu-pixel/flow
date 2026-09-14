@@ -389,6 +389,41 @@ func BenchmarkIndexedMetadataSearchLargeCatalog(b *testing.B) {
 	}
 }
 
+func BenchmarkMetadataSearchSingleMutation(b *testing.B) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(b.TempDir(), "mutation.db"))
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer repo.Close()
+	ctx := context.Background()
+	data := repo.Bootstrap()
+	for _, name := range []string{"metadata_records_search_insert", "metadata_records_search_update"} {
+		if _, err := repo.db.ExecContext(ctx, `DROP TRIGGER IF EXISTS `+name); err != nil {
+			b.Fatal(err)
+		}
+	}
+	insertSearchMetadata(b, repo, data.Workspace.URLKey, "projects", "mutation-project", domain.Project{ID: "mutation-project", Name: "Initial searchable"})
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		tx, err := repo.db.BeginTx(ctx, nil)
+		if err != nil {
+			b.Fatal(err)
+		}
+		raw, _ := json.Marshal(domain.Project{ID: "mutation-project", Name: fmt.Sprintf("Mutation searchable %d", i)})
+		if _, err = tx.ExecContext(ctx, `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='projects' AND record_key=?`, raw, data.Workspace.URLKey, "mutation-project"); err == nil {
+			err = syncMetadataSearchDocument(ctx, tx, data.Workspace.URLKey, "projects", "mutation-project", raw)
+		}
+		if err != nil {
+			_ = tx.Rollback()
+			b.Fatal(err)
+		}
+		if err = tx.Commit(); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func TestMetadataSearchRepairReconcilesCompletedAndResumesCheckpoint(t *testing.T) {
 	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "repair.db"))
 	if err != nil {
