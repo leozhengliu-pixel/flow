@@ -112,7 +112,7 @@ func (s *SQLiteStore) ensureMetadataSearchIndex(ctx context.Context) error {
 	case "mysql":
 		statements = append(statements, `CREATE FULLTEXT INDEX metadata_search_fulltext ON metadata_search_documents(content) WITH PARSER ngram`)
 		for _, event := range []string{"INSERT", "UPDATE"} {
-			statements = append(statements, `CREATE TRIGGER metadata_records_search_`+strings.ToLower(event)+` AFTER `+event+` ON workspace_metadata_records FOR EACH ROW `+insert+` ON DUPLICATE KEY UPDATE content=VALUES(content)`)
+			statements = append(statements, `CREATE TRIGGER metadata_records_search_`+strings.ToLower(event)+` AFTER `+event+` ON workspace_metadata_records FOR EACH ROW `+insert+` ON DUPLICATE KEY UPDATE content=IF(content<>VALUES(content),VALUES(content),content)`)
 		}
 		statements = append(statements, `CREATE TRIGGER metadata_records_search_delete AFTER DELETE ON workspace_metadata_records FOR EACH ROW `+remove)
 	case "postgres":
