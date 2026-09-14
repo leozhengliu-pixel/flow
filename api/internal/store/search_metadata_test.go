@@ -441,12 +441,26 @@ func TestMetadataSearchRollbackAndSameContentAvoidIndexWrites(t *testing.T) {
 	ctx := context.Background()
 	data := repo.Bootstrap()
 	insertSearchMetadata(t, repo, data.Workspace.URLKey, "projects", "atomic-project", domain.Project{ID: "atomic-project", Name: "Stable searchable"})
-	if err := repo.MutateWorkspace(ctx, data.Workspace.URLKey, "atomic.test", "atomic-project", nil, func(next *domain.Bootstrap) error { return errors.New("rollback") }); err == nil {
-		t.Fatal("expected mutation rollback error")
+	tx, err := repo.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(domain.Project{ID: "rolled-back", Name: "Should not be searchable"})
+	if _, err := tx.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,?,?,0,?)`, data.Workspace.URLKey, "projects", "rolled-back", raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := syncMetadataSearchDocument(ctx, tx, data.Workspace.URLKey, "projects", "rolled-back", raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
 	}
 	var count int
 	if err := repo.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM metadata_search_documents WHERE workspace_key=? AND field='projects' AND record_key=?`, data.Workspace.URLKey, "atomic-project").Scan(&count); err != nil || count != 1 {
 		t.Fatalf("rollback removed search row: %d %v", count, err)
+	}
+	if err := repo.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM metadata_search_documents WHERE workspace_key=? AND field='projects' AND record_key=?`, data.Workspace.URLKey, "rolled-back").Scan(&count); err != nil || count != 0 {
+		t.Fatalf("rolled-back transaction left search row: %d %v", count, err)
 	}
 	if _, err := repo.db.ExecContext(ctx, `UPDATE workspace_metadata_records SET data=data WHERE workspace_key=? AND field='projects' AND record_key=?`, data.Workspace.URLKey, "atomic-project"); err != nil {
 		t.Fatal(err)
