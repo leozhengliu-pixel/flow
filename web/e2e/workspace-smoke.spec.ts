@@ -49,7 +49,10 @@ test('renders core workspace workflows without runtime or viewport failures', as
   ]
   for (const route of routes) {
     await page.goto(`/${workspaceKey}/${route}`)
-    await expect(page.locator('main.main-panel').first()).toBeVisible()
+    // Settings routes intentionally use the semantic main landmark without the
+    // app's legacy `main-panel` class. Assert the landmark rather than a
+    // presentation class so every route is covered consistently.
+    await expect(page.locator('main').first()).toBeVisible()
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
     expect(overflow, `${route} should not overflow the viewport`).toBe(false)
   }
@@ -98,25 +101,23 @@ test('opens the project creation assistant and dispatches a suggestion', async (
   const assistant = page.locator('aside[aria-label="Project creation assistant"]')
   await expect(assistant).toBeVisible()
   await expect(page.getByRole('button', { name: 'Outline the scope', exact: true })).toBeVisible()
-  const geometry = await page.evaluate(() => {
+  // The create surface springs from its source point; wait for the final
+  // geometry instead of sampling the mid-animation width.
+  await expect.poll(async () => (await page.locator('.lp-new-project__panel').boundingBox())?.width ?? 0).toBeCloseTo(1320, 0)
+  const settledGeometry = await page.evaluate(() => {
     const rect = (selector: string) => {
       const element = document.querySelector<HTMLElement>(selector)
       if (!element) return null
       const value = element.getBoundingClientRect()
       return { x: value.x, y: value.y, width: value.width, height: value.height }
     }
-    return {
-      panel: rect('.lp-new-project__panel'),
-      form: rect('.lp-new-project__form'),
-      assistant: rect('.project-creation-agent'),
-      composer: rect('.project-creation-agent__composer'),
-    }
+    return { panel: rect('.lp-new-project__panel'), form: rect('.lp-new-project__form'), assistant: rect('.project-creation-agent'), composer: rect('.project-creation-agent__composer') }
   })
-  expect(geometry.panel?.width).toBeCloseTo(1320, 0)
-  expect(geometry.panel?.height).toBeCloseTo(621, 0)
-  expect(geometry.form?.width).toBeCloseTo(904, 0)
-  expect(geometry.assistant?.width).toBeCloseTo(400, 0)
-  expect(geometry.composer?.width).toBeCloseTo(400, 0)
+  expect(settledGeometry.panel?.width).toBeCloseTo(1320, 0)
+  expect(settledGeometry.panel?.height).toBeCloseTo(621, 0)
+  expect(settledGeometry.form?.width).toBeCloseTo(904, 0)
+  expect(settledGeometry.assistant?.width).toBeCloseTo(400, 0)
+  expect(settledGeometry.composer?.width).toBeCloseTo(400, 0)
   await page.evaluate(() => { document.documentElement.dataset.theme = 'dark' })
   const darkBackground = await assistant.evaluate(element => getComputedStyle(element).backgroundColor)
   expect(darkBackground).not.toBe('rgba(0, 0, 0, 0)')
