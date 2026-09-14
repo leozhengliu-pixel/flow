@@ -141,6 +141,15 @@ import { deriveResourceCounts } from "@/lib/resource-counts";
 import { Sidebar, type PageId } from "@/components/layout/sidebar";
 import { workspaceFeatureEnabled } from "@/components/layout/sidebar-customization-state";
 import { issueReturnPath } from '@/lib/issue-navigation-context';
+import { WorkspaceBootShell } from "@/components/layout/workspace-boot-shell";
+import { issueDetailPane } from "@/lib/issue-detail-boot";
+import {
+  clearNavigationCache,
+  hydrateWorkspaceNavigation,
+  readNavigationCache,
+  workspaceBootstrapPhase,
+  writeNavigationCache,
+} from "@/lib/navigation-cache";
 import { fetchWorkspacePreferences } from '@/lib/api';
 import { navigationReturnPath, navigationLabel, sidebarOriginPath, reviewsOriginView, issueSequenceIDs } from '@/lib/navigation-context';
 import type {
@@ -267,7 +276,14 @@ function App() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const sessionViewerRef=useRef(session?.user.id);
   sessionViewerRef.current=session?.user.id;
-  const acceptBootstrap = useCallback((next:BootstrapData)=>setData(current=>next.viewer.id===sessionViewerRef.current?mergeWorkspaceDirectory(current,next):current),[]);
+  const acceptBootstrap = useCallback((next:BootstrapData)=>{
+    if(next.viewer.id!==sessionViewerRef.current) return;
+    setData(current=>{
+      const merged=mergeWorkspaceDirectory(current,next);
+      writeNavigationCache(next.viewer.id, next.workspace.urlKey, merged);
+      return merged;
+    });
+  },[]);
   const bootstrapRequest = useRef<{ key: string; promise: Promise<BootstrapData> } | null>(null);
   const initialIssueRef = useRef<{key:string;viewerId:string;issue:Issue} | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -364,6 +380,7 @@ function App() {
       .catch(() => {
         setSession(null);
         setAccount(null);
+        clearNavigationCache();
       })
       .finally(() => setAuthReady(true));
   }, []);
@@ -468,14 +485,21 @@ function App() {
       setError(true);
       return;
     }
-    if (loadedWorkspaceKey === requestedWorkspaceKey) return;
-    let cancelled = false;
-    setData((current) =>
-      current?.workspace.urlKey === requestedWorkspaceKey ? current : null,
-    );
-    setError(false);
-    // Clearing the previous workspace reruns this effect; share its in-flight request.
     const requestKey = `${account.viewer.id}:${requestedWorkspaceKey}`;
+    if (workspaceBootstrapPhase(loadedWorkspaceKey, requestedWorkspaceKey, bootstrapRequest.current?.key, requestKey) === 'skip') return;
+    let cancelled = false;
+    if (loadedWorkspaceKey !== requestedWorkspaceKey) {
+      const cachedNavigation = readNavigationCache(account.viewer.id, requestedWorkspaceKey);
+      setData((current) => hydrateWorkspaceNavigation({
+        current,
+        cached: cachedNavigation,
+        requestedWorkspaceKey,
+        viewerId: account.viewer.id,
+        preview: initialIssueRef.current,
+      }));
+      setError(false);
+    }
+    // Cache hydration can make this workspace look loaded; share the in-flight request.
     if (bootstrapRequest.current?.key !== requestKey) {
       const request = { key: requestKey, promise: fetchBootstrap(requestedWorkspaceKey) };
       bootstrapRequest.current = request;
@@ -483,10 +507,17 @@ function App() {
       void request.promise.then(clear, clear);
     }
     bootstrapRequest.current.promise
-      .then(next => { if (!cancelled && next.viewer.id===sessionViewerRef.current) setData(current=>{
-        const merged=mergeWorkspaceDirectory(current,next), preview=initialIssueRef.current;
-        return preview?.viewerId===account.viewer.id && preview?.key.startsWith(`${requestedWorkspaceKey}:`) ? {...merged,issues:mergeIssueRecords(merged.issues,[preview.issue])}:merged;
-      }); })
+      .then(next => {
+        if (cancelled || next.viewer.id!==sessionViewerRef.current) return;
+        setData(current=>{
+          const merged=mergeWorkspaceDirectory(current,next), preview=initialIssueRef.current;
+          const withPreview=preview?.viewerId===account.viewer.id && preview?.key.startsWith(`${requestedWorkspaceKey}:`) && !preview.issue.isSummary
+            ? {...merged,issues:mergeIssueRecords(merged.issues,[preview.issue])}
+            : merged;
+          writeNavigationCache(account.viewer.id, requestedWorkspaceKey, withPreview);
+          return withPreview;
+        });
+      })
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
   }, [account, loadedWorkspaceKey, navigateTo, oauthPath, requestedWorkspaceKey, route.kind]);
@@ -583,7 +614,7 @@ function App() {
   const [issueContextLoading, setIssueContextLoading] = useState(false);
   const [initialIssue, setInitialIssue] = useState<{key:string;viewerId:string;issue:Issue} | null>(null);
   const [detailAccessPending,setDetailAccessPending]=useState('');
-  useEffect(()=>{initialIssueRef.current=null;setInitialIssue(null);setDetailAccessPending('');},[session?.user.id]);
+  useEffect(()=>{initialIssueRef.current=null;setInitialIssue(null);setDetailAccessPending('');if(!session?.user.id)clearNavigationCache();},[session?.user.id]);
   const [issueHistoryState, setIssueHistoryState] = useState<{key:string;loading:boolean;error:boolean}>({key:'',loading:false,error:false});
   const issueContextKey = useRef('');
   const historyRefreshSequence = useRef(0);
@@ -3798,16 +3829,9 @@ function App() {
   if (!account && !error) return <AppStartup />;
   if (!account)
     return (
-      <div className="app loading-app">
-        <aside className="sidebar" />
-        <main className="main-panel">
-          {error ? (
-            <ErrorState retry={loadAccount} />
-          ) : (
-            <SkeletonRows count={9} />
-          )}
-        </main>
-      </div>
+      <WorkspaceBootShell sidebarLabel="Loading account navigation">
+        {error ? <ErrorState retry={loadAccount} /> : <SkeletonRows count={9} />}
+      </WorkspaceBootShell>
     );
   if (oauthPath) return <OAuthAuthorizePage account={account} />;
   if (route.kind === "workspace-onboarding" || account.workspaces.length === 0)
@@ -3836,32 +3860,27 @@ function App() {
             setSession(null);
             setAccount(null);
             setData(null);
+            clearNavigationCache();
             navigateTo("/login", { replace: true });
           }}
         />
       </Suspense>
     );
-  if (!data && !error && (!previewIssue || previewIssue.isSummary)) return <AppStartup />;
+  if (!data && !error && route.kind !== "issue" && (!previewIssue || previewIssue.isSummary)) return <AppStartup />;
   if (!data)
     return (
-      <div className="app loading-app">
-        <aside className="sidebar" />
-        <main className="main-panel">
-          {previewIssue && !previewIssue.isSummary ? <Suspense fallback={<SkeletonRows count={9}/>}><IssueLoadingPreview issue={previewIssue} onBack={()=>navigateTo(workspaceIssuesPath(detailWorkspaceKey,'all'))}/></Suspense> : error ? <ErrorState retry={load} /> : <SkeletonRows count={9} />}
-        </main>
-      </div>
+      <WorkspaceBootShell>
+        {previewIssue && !previewIssue.isSummary ? <Suspense fallback={<SkeletonRows count={9}/>}><IssueLoadingPreview issue={previewIssue} onBack={()=>navigateTo(workspaceIssuesPath(detailWorkspaceKey,'all'))}/></Suspense> : error ? <ErrorState retry={load} /> : <SkeletonRows count={9} />}
+      </WorkspaceBootShell>
     );
   if (route.kind === "settings")
     return (
       <PeopleProvider users={data.users} workspaceName={data.workspace.name} members={data.members} teams={data.teams} teamMembers={data.teamMembers} projects={data.projects}>
       <Suspense
         fallback={
-          <div className="app loading-app">
-            <aside className="sidebar" />
-            <main className="main-panel">
-              <SkeletonRows count={9} />
-            </main>
-          </div>
+          <WorkspaceBootShell>
+            <SkeletonRows count={9} />
+          </WorkspaceBootShell>
         }
       >
         <SettingsPage
@@ -3914,6 +3933,7 @@ function App() {
             setSession(null);
             setAccount(null);
             setData(null);
+            clearNavigationCache();
             navigateTo("/login", { replace: true });
           }}
           onNavigateAgent={() => navigateTo(agentPath(data.workspace.urlKey))}
@@ -3979,6 +3999,14 @@ function App() {
     );
   const routeScopeValid = workspaceValid && teamValid;
   const page = routeScopeValid ? pageForRoute(route) : "not-found";
+  const issuePane = page === "issue-detail" ? issueDetailPane({
+    selectedIssue,
+    previewIssue,
+    accessPending: detailAccessPending === data.workspace.urlKey,
+    issueContextLoading,
+    missingIssueRecord,
+    contextReady: issueContextKey.current === `${data.workspace.urlKey}:${recordIdentifier}`,
+  }) : undefined;
   const featureFlags = data.workspaceSettings.featureFlags;
   const loopsEnabled = workspaceFeatureEnabled(featureFlags, "loops");
   const customerRequestsEnabled = workspaceFeatureEnabled(
@@ -4159,9 +4187,15 @@ function App() {
           setSession(null);
           setAccount(null);
           setData(null);
+          clearNavigationCache();
           navigateTo("/login", { replace: true });
         }}
       />
+      {error ? (
+        <main className="main-panel">
+          <ErrorState retry={load} />
+        </main>
+      ) : (
       <Suspense
         fallback={
           <main className="main-panel">
@@ -5753,8 +5787,15 @@ function App() {
               onOpenSidebar={() => setMobileSidebarOpen(true)}
             />
           )}
-        {page === "issue-detail" && detailAccessPending===data.workspace.urlKey && <main className="main-panel issue-panel" role="status">Checking issue access…</main>}
-        {page === "issue-detail" && selectedIssue && !selectedIssue.isSummary && detailAccessPending!==data.workspace.urlKey && (
+        {page === "issue-detail" && issuePane === "checking-access" && <main className="main-panel issue-panel" role="status">Checking issue access…</main>}
+        {page === "issue-detail" && issuePane === "preview" && previewIssue && (
+          <Suspense fallback={<main className="main-panel issue-panel"><SkeletonRows count={9}/></main>}>
+            <main className="main-panel issue-panel">
+              <IssueLoadingPreview issue={previewIssue} onBack={()=>navigateTo(workspaceIssuesPath(data.workspace.urlKey,'all'))}/>
+            </main>
+          </Suspense>
+        )}
+        {page === "issue-detail" && issuePane === "editor" && selectedIssue && !selectedIssue.isSummary && (
           <main className="main-panel issue-panel">
             <IssueDetails
               key={selectedIssue.id}
@@ -5801,8 +5842,9 @@ function App() {
           </main>
         )}
         {routeScopeValid && page === "not-found" && <RouteNotFound />}
-        {routeScopeValid && page === "issue-detail" && detailAccessPending!==data.workspace.urlKey && (!selectedIssue || selectedIssue.isSummary) && (
-          issueContextLoading || (missingIssueRecord && issueContextKey.current !== `${data.workspace.urlKey}:${recordIdentifier}`) ? <main className="main-panel issue-panel" role="status">Loading issue…</main> : <RouteNotFound
+        {routeScopeValid && page === "issue-detail" && issuePane === "loading" && <main className="main-panel issue-panel" role="status">Loading issue…</main>}
+        {routeScopeValid && page === "issue-detail" && issuePane === "not-found" && (
+          <RouteNotFound
             title="Issue not found"
             description="This issue does not exist or is no longer available."
           />
@@ -5854,6 +5896,7 @@ function App() {
             />
           )}
       </Suspense>
+      )}
       <Suspense fallback={null}>
         {selected.size > 0 && (
           <BulkActionBar

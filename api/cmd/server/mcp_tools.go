@@ -968,6 +968,11 @@ func stringsArg(args map[string]any, key string) []string {
 	}
 	return result
 }
+
+func objectArg(args map[string]any, key string) map[string]any {
+	value, _ := args[key].(map[string]any)
+	return value
+}
 func containsFold(value, query string) bool {
 	return strings.Contains(strings.ToLower(value), strings.ToLower(query))
 }
