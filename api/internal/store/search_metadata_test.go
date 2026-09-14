@@ -388,3 +388,71 @@ func BenchmarkIndexedMetadataSearchLargeCatalog(b *testing.B) {
 		})
 	}
 }
+
+func TestMetadataSearchRepairReconcilesCompletedAndResumesCheckpoint(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "repair.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	ctx := context.Background()
+	data := repo.Bootstrap()
+	insertSearchMetadata(t, repo, data.Workspace.URLKey, "projects", "repair-project", domain.Project{ID: "repair-project", Name: "Repairable content"})
+	// Simulate a stale row left by a prior completed migration.
+	if _, err := repo.db.ExecContext(ctx, `UPDATE metadata_search_documents SET content='old content' WHERE workspace_key=? AND field='projects' AND record_key=?`, data.Workspace.URLKey, "repair-project"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.db.ExecContext(ctx, `UPDATE metadata_search_migration_checkpoints SET completed=1,last_record_key='repair-project' WHERE workspace_key=? AND field='projects'`, data.Workspace.URLKey); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.migrateMetadataSearchIndex(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var content string
+	if err := repo.db.QueryRowContext(ctx, `SELECT content FROM metadata_search_documents WHERE workspace_key=? AND field='projects' AND record_key=?`, data.Workspace.URLKey, "repair-project").Scan(&content); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(content, "Repairable content") {
+		t.Fatalf("stale index was not repaired: %q", content)
+	}
+	// A non-zero checkpoint must resume from its key and still reconcile the tail.
+	insertSearchMetadata(t, repo, data.Workspace.URLKey, "projects", "repair-tail", domain.Project{ID: "repair-tail", Name: "Tail content"})
+	if _, err := repo.db.ExecContext(ctx, `DELETE FROM metadata_search_documents WHERE workspace_key=? AND field='projects' AND record_key=?`, data.Workspace.URLKey, "repair-tail"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.db.ExecContext(ctx, `UPDATE metadata_search_migration_checkpoints SET completed=0,last_record_key='repair-project' WHERE workspace_key=? AND field='projects'`, data.Workspace.URLKey); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.migrateMetadataSearchIndex(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := repo.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM metadata_search_documents WHERE workspace_key=? AND field='projects' AND record_key=?`, data.Workspace.URLKey, "repair-tail").Scan(&count); err != nil || count != 1 {
+		t.Fatalf("checkpoint retry did not restore row: %d %v", count, err)
+	}
+}
+
+func TestMetadataSearchRollbackAndSameContentAvoidIndexWrites(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "atomic.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	ctx := context.Background()
+	data := repo.Bootstrap()
+	insertSearchMetadata(t, repo, data.Workspace.URLKey, "projects", "atomic-project", domain.Project{ID: "atomic-project", Name: "Stable searchable"})
+	if err := repo.MutateWorkspace(ctx, data.Workspace.URLKey, "atomic.test", "atomic-project", nil, func(next *domain.Bootstrap) error { return errors.New("rollback") }); err == nil {
+		t.Fatal("expected mutation rollback error")
+	}
+	var count int
+	if err := repo.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM metadata_search_documents WHERE workspace_key=? AND field='projects' AND record_key=?`, data.Workspace.URLKey, "atomic-project").Scan(&count); err != nil || count != 1 {
+		t.Fatalf("rollback removed search row: %d %v", count, err)
+	}
+	if _, err := repo.db.ExecContext(ctx, `UPDATE workspace_metadata_records SET data=data WHERE workspace_key=? AND field='projects' AND record_key=?`, data.Workspace.URLKey, "atomic-project"); err != nil {
+		t.Fatal(err)
+	}
+	var content string
+	if err := repo.db.QueryRowContext(ctx, `SELECT content FROM metadata_search_documents WHERE workspace_key=? AND field='projects' AND record_key=?`, data.Workspace.URLKey, "atomic-project").Scan(&content); err != nil || !strings.Contains(content, "Stable searchable") {
+		t.Fatalf("same-content update changed index: %q %v", content, err)
+	}
+}
