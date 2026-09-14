@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowDown, ArrowUp, Circle, FileText, Hash, MoreHorizontal, Plus, RefreshCw, Star, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, Circle, FileText, Hash, MoreHorizontal, Plus, RefreshCw, Star, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { ProjectIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { PropertyMenu, type PropertyOption } from '@/components/property/property-menu'
@@ -10,7 +10,6 @@ import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { useI18n } from '@/i18n/i18n'
 import { fetchTeamDefaultFavorites, replaceTeamDefaultFavorites } from '@/lib/api'
 import type { BootstrapData, Team, TeamDefaultFavorite } from '@/types/flow'
-import { SettingsSelect } from './settings-primitives'
 import './team-default-favorites-settings.css'
 
 type Favorite = Pick<TeamDefaultFavorite, 'resourceType' | 'resourceId'>
@@ -166,7 +165,8 @@ function DefaultFavoritesEditor({ data, team }: Props) {
     <Dialog open={manualOpen} onOpenChange={setManualOpen}><DialogContent className="team-defaults-dialog" closeLabel={t('Close')} aria-describedby={undefined}>
       <DialogTitle>{t('Add by ID')}</DialogTitle>
       <form onSubmit={event => { event.preventDefault(); if (disabled || full || !manualId.trim() || manualDuplicate) return; add({ resourceType: manualType, resourceId: manualId.trim() }); setManualOpen(false) }}>
-        <label><span>{t('Resource type')}</span><SettingsSelect label={t('Resource type')} value={manualType} onChange={setManualType} options={RESOURCE_TYPES.map(type => ({ value: type, label: t(TYPE_LABELS[type]), icon: resourceIcon(type) }))} /></label>
+        <div className="team-defaults-field"><span>{t('Resource type')}</span><PropertyMenu label={t('Resource type')} selectedId={manualType} onChange={setManualType} hideSearch options={RESOURCE_TYPES.map(type => ({ id: type, label: t(TYPE_LABELS[type]), icon: resourceIcon(type) }))}
+          customTrigger={({ open, openMenu }) => <button type="button" className="settings-select" aria-label={t('Resource type')} role="combobox" aria-expanded={open} aria-haspopup="dialog" onClick={() => openMenu()}><span className="settings-select-value">{resourceIcon(manualType)}{t(TYPE_LABELS[manualType])}</span><ChevronDown size={14} /></button>} /></div>
         <label><span>{t('Resource ID')}</span><input className="settings-input" autoFocus value={manualId} onChange={event => setManualId(event.target.value)} autoComplete="off" spellCheck={false} /></label>
         {manualDuplicate && <p role="alert" className="team-defaults-error">{t('This resource is already added.')}</p>}
         <footer><button type="button" className="settings-action" onClick={() => setManualOpen(false)}>{t('Cancel')}</button><button type="submit" className="settings-action primary" disabled={disabled || full || !manualId.trim() || manualDuplicate}>{t('Add favorite')}</button></footer>
