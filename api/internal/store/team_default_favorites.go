@@ -55,16 +55,11 @@ func (s *SQLiteStore) ReplaceTeamDefaultFavorites(ctx context.Context, workspace
 		if item.ResourceType == "" || item.ResourceID == "" {
 			return fmt.Errorf("resource type and id are required")
 		}
-		id := item.ID
-		if id == "" {
-			id = fmt.Sprintf("team_default_favorite_%d", time.Now().UnixNano()+int64(i))
-		}
+		// IDs are server-owned. Never accept a client-supplied primary key here:
+		// the table key is global and reusing an ID from another team/workspace
+		// could otherwise overwrite that row on MySQL's duplicate-key path.
+		id := fmt.Sprintf("team_default_favorite_%d_%d", time.Now().UnixNano(), i)
 		q := `INSERT INTO team_default_favorites(id,workspace_key,team_id,resource_type,resource_id,position,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`
-		if s.dialect == "mysql" {
-			q += ` ON DUPLICATE KEY UPDATE position=VALUES(position),updated_at=VALUES(updated_at)`
-		} else {
-			q += ` ON CONFLICT(workspace_key,team_id,resource_type,resource_id) DO UPDATE SET position=excluded.position,updated_at=excluded.updated_at`
-		}
 		if _, err = tx.ExecContext(ctx, q, id, workspace, teamID, item.ResourceType, item.ResourceID, float64(i), now, now); err != nil {
 			return err
 		}

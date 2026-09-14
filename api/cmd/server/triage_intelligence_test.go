@@ -320,6 +320,42 @@ func TestRefreshTriageSuggestionsPersistsIssueBookkeeping(t *testing.T) {
 	}
 }
 
+func TestTriageCandidateSearchDeduplicatesOverlappingTerms(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "dedup.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	data := repository.Bootstrap()
+	team, state := data.Teams[0], data.States[0]
+	candidate := data.Issues[0]
+	candidate.ID = "triage-dedup-candidate"
+	candidate.Identifier = "DEDUP-1"
+	candidate.Title = "Triage deduplication sentinel alpha beta"
+	candidate.Description = "A candidate matched by the full title and individual terms."
+	candidate.Team, candidate.State = team, state
+	if err := repository.ImportIssues(t.Context(), data.Workspace.URLKey, []domain.Issue{candidate}); err != nil {
+		t.Fatal(err)
+	}
+	probe := candidate
+	probe.ID = "triage-dedup-probe"
+	query := store.IssueRecordQuery{Workspace: data.Workspace.URLKey, Archived: "false"}
+	service := &server{store: repository}
+	items, err := service.triageCandidateIssues(t.Context(), &probe, query)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, item := range items {
+		if item.ID == candidate.ID {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("overlapping search terms returned candidate %d times: %#v", count, items)
+	}
+}
+
 func BenchmarkTriageIntelligenceGenerate2000Candidates(b *testing.B) {
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(b.TempDir(), "flow.db"))
 	if err != nil {
