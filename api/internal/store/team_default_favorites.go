@@ -48,6 +48,32 @@ func (s *SQLiteStore) ReplaceTeamDefaultFavorites(ctx context.Context, workspace
 		return err
 	}
 	defer tx.Rollback()
+	// Compare only the bounded team configuration. An unchanged save must not
+	// rotate IDs or emit delete/insert pairs into the replication log.
+	rows, err := tx.QueryContext(ctx, `SELECT resource_type,resource_id FROM team_default_favorites WHERE workspace_key=? AND team_id=? ORDER BY position,id`, workspace, teamID)
+	if err != nil {
+		return err
+	}
+	unchanged, count := true, 0
+	for rows.Next() {
+		var resourceType, resourceID string
+		if err := rows.Scan(&resourceType, &resourceID); err != nil {
+			rows.Close()
+			return err
+		}
+		if count >= len(items) || items[count].ResourceType != resourceType || items[count].ResourceID != resourceID {
+			unchanged = false
+		}
+		count++
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	if unchanged && count == len(items) {
+		return nil
+	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM team_default_favorites WHERE workspace_key=? AND team_id=?`, workspace, teamID); err != nil {
 		return err
 	}

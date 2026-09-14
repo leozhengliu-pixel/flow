@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { Bot, History } from "lucide-react";
+import { AppStartup } from '@/components/layout/app-startup';
 import { setRuntimePreferences, setWorkspaceRuntimePreferences } from '@/lib/runtime-preferences';
 import { AuthenticationPolicyPage } from '@/components/auth/authentication-policy-page';
 import {
@@ -3775,15 +3776,7 @@ function App() {
     selectedReview,
   ]);
   if (authenticationPolicy && !authPath) return <AuthenticationPolicyPage code={authenticationPolicy}/>;
-  if (!authReady)
-    return (
-      <div className="auth-page">
-        <div className="auth-brand">
-          <span className="auth-brand-mark" />
-          Flow
-        </div>
-      </div>
-    );
+  if (!authReady) return <AppStartup />;
   if (!session || authPath)
     return (
       <AuthPage
@@ -3802,6 +3795,7 @@ function App() {
         }}
       />
     );
+  if (!account && !error) return <AppStartup />;
   if (!account)
     return (
       <div className="app loading-app">
@@ -3847,6 +3841,7 @@ function App() {
         />
       </Suspense>
     );
+  if (!data && !error && (!previewIssue || previewIssue.isSummary)) return <AppStartup />;
   if (!data)
     return (
       <div className="app loading-app">

@@ -15,14 +15,12 @@ import {
   ChevronRight,
   Circle,
   Copy,
-  FilePlus2,
   GitBranch,
   Mail,
   MoreHorizontal,
   Plus,
   RefreshCw,
   Sparkles,
-  Star,
   Trash2,
   WandSparkles,
   X,
@@ -54,10 +52,8 @@ import {
   deleteTriageResponsibility,
   deleteTriageRule,
   fetchWorkflowStates,
-  fetchTeamDefaultFavorites,
   listIssueRecordGroups,
   reorderWorkflowStates,
-  replaceTeamDefaultFavorites,
   setTeamMembership,
   updateCycleSettings,
   rotateEmailIntakeAddress,
@@ -93,12 +89,12 @@ import {
 } from "./settings-primitives";
 import { CheckboxMark } from "@/components/ui/checkbox-mark";
 import { confirmAction } from "@/components/ui/action-dialog-service";
-import { ProjectIcon, StatusIcon, TeamIcon } from "@/components/issue/issue-icons";
+import { StatusIcon } from "@/components/issue/issue-icons";
+import { DefaultFavoritesSettings } from './team-default-favorites-settings';
 import { PropertyMenu } from '@/components/property/property-menu';
 import { WorkflowStateDeleteDialog } from './workflow-state-delete-dialog';
 import {
   ViewIconPicker,
-  ViewGlyph,
   type ViewVisual,
 } from "@/components/views/view-icon-picker";
 import { useI18n } from "@/i18n/i18n";
@@ -194,7 +190,6 @@ const SECTIONS: {
     description: "Automatically generate summaries for resolved threads",
   },
 ];
-const DEFAULT_FAVORITE_TYPES = ["issue", "project", "team", "document", "view"] as const;
 const STATUS_GROUPS: {
   type: WorkflowStateType;
   label: string;
@@ -497,32 +492,6 @@ function TeamOverview({
       </TeamSection>
     </>
   );
-}
-
-function DefaultFavoritesSettings({ data, team }: { data: BootstrapData; team: Team }) {
-  const { t } = useI18n()
-  const [items, setItems] = useState<import('@/types/flow').TeamDefaultFavorite[]>([])
-  const [selected, setSelected] = useState('')
-  const [manualType, setManualType] = useState('issue')
-  const [manualId, setManualId] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  useEffect(() => { let active = true; setLoading(true); void fetchTeamDefaultFavorites(team.id).then(result => { if (active) setItems(result.items) }).catch(() => { if (active) toast.error('Could not load default favorites') }).finally(() => { if (active) setLoading(false) }); return () => { active = false } }, [team.id])
-  const options = useMemo(() => {
-    const result: import('@/components/property/property-menu').PropertyOption[] = []
-    for (const issue of data.issues) result.push({ id: `issue:${issue.id}`, label: `${issue.identifier} ${issue.title}`, icon: <StatusIcon state={issue.state} size={14} /> })
-    for (const project of data.projects) result.push({ id: `project:${project.id}`, label: project.name, icon: <ProjectIcon style={{ color: project.color }} /> })
-    for (const view of data.savedViews) result.push({ id: `view:${view.id}`, label: view.name, icon: <ViewGlyph icon={view.icon} color={view.color} /> })
-    for (const document of data.documents) result.push({ id: `document:${document.id}`, label: document.title, icon: <FilePlus2 size={14} /> })
-    for (const member of data.teams) result.push({ id: `team:${member.id}`, label: member.name, icon: <TeamIcon team={member} size={14} /> })
-    const existing = new Set(items.map(item => `${item.resourceType}:${item.resourceId}`))
-    return result.map(option => ({ ...option, disabled: existing.has(option.id) }))
-  }, [data.documents, data.issues, data.projects, data.savedViews, data.teams, items])
-  const add = () => { if (!selected) return; const [resourceType, resourceId] = selected.split(':'); const source = options.find(option => option.id === selected); if (!source || !resourceId) return; setItems(current => [...current, { id: `local:${selected}`, workspaceKey: data.workspace.urlKey, teamId: team.id, resourceType, resourceId, position: current.length, createdAt: '', updatedAt: '' }]); setSelected('') }
-  const addManual = () => { const resourceId = manualId.trim(); if (!resourceId || items.some(item => item.resourceType === manualType && item.resourceId === resourceId)) return; setItems(current => [...current, { id: `local:${manualType}:${resourceId}`, workspaceKey: data.workspace.urlKey, teamId: team.id, resourceType: manualType, resourceId, position: current.length, createdAt: '', updatedAt: '' }]); setManualId('') }
-  const remove = (id: string) => setItems(current => current.filter(item => item.id !== id))
-  const save = async () => { setSaving(true); try { const result = await replaceTeamDefaultFavorites(team.id, items); setItems(result.items); toast.success('Default favorites saved') } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not save default favorites') } finally { setSaving(false) } }
-  return <TeamSection title={t('Default favorites')}><p className="settings-section-copy">{t('Resources added here appear in Favorites for every current and future member of this team. Members can hide them without changing this team configuration.')}</p><div className="team-default-favorites-add"><PropertyMenu label={t('Add default favorite')} ariaLabel={t('Add default favorite')} value={options.find(option => option.id === selected)?.label ?? t('Choose a resource')} selectedId={selected} options={options} onChange={setSelected} searchPlaceholder={t('Search resources…')} /><button type="button" className="settings-primary-button" disabled={!selected || saving} onClick={add}><Plus size={14}/>{t('Add')}</button></div><div className="team-default-favorites-manual"><select aria-label={t('Resource type')} value={manualType} onChange={event => setManualType(event.target.value)}>{DEFAULT_FAVORITE_TYPES.map(type => <option key={type} value={type}>{t(type)}</option>)}</select><input aria-label={t('Resource ID')} value={manualId} onChange={event => setManualId(event.target.value)} placeholder={t('Resource ID for large workspaces')} /><button type="button" className="settings-secondary-button" disabled={!manualId.trim() || saving} onClick={addManual}>{t('Add by ID')}</button></div><div className="team-default-favorites-list">{loading ? <p className="settings-section-copy">{t('Loading…')}</p> : items.map(item => <div className="team-default-favorite-row" key={item.id}><Star size={14} /><span>{options.find(option => option.id === `${item.resourceType}:${item.resourceId}`)?.label ?? `${item.resourceType} · ${item.resourceId}`}</span><button type="button" aria-label={`${t('Remove')} ${item.resourceType}`} onClick={() => remove(item.id)}><X size={14}/></button></div>)}{!loading && !items.length && <p className="settings-section-copy">{t('No default favorites configured.')}</p>}</div><div className="settings-form-actions"><button type="button" className="settings-primary-button" disabled={saving || loading} onClick={() => void save()}>{saving ? t('Saving…') : t('Save default favorites')}</button></div></TeamSection>
 }
 
 function GeneralSettings({

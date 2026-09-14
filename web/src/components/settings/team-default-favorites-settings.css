@@ -1,0 +1,101 @@
+.team-defaults {
+  min-width: 0;
+  margin: 0 16px;
+  color: var(--text);
+  font-size: 13px;
+}
+.team-defaults-description {
+  margin: 0 0 28px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+.team-defaults-toolbar,
+.team-defaults-actions,
+.team-defaults-footer,
+.team-defaults-dialog footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.team-defaults-toolbar {
+  min-height: 44px;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.team-defaults-toolbar h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+.team-defaults-toolbar h2 span {
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.team-defaults-actions { flex: 0 0 auto; }
+.team-defaults .settings-icon-action:hover { background: var(--bg-hover); color: var(--text); }
+.team-defaults .settings-icon-action:disabled { opacity: .4; }
+.team-defaults button:focus-visible,
+.team-defaults-dialog button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.team-defaults-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 160px;
+  padding: 24px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  text-align: center;
+  line-height: 20px;
+}
+.team-defaults-state > svg { color: var(--faint); }
+.team-defaults-state p { margin: 0; }
+.team-defaults-list { list-style: none; padding: 0; margin: 0; }
+.team-defaults-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.team-defaults-row:hover { background: var(--bg-hover); }
+.team-defaults-icon { display: grid; place-items: center; width: 20px; height: 20px; flex: 0 0 20px; color: var(--muted); }
+.team-defaults-icon > svg { width: 16px; height: 16px; }
+.team-defaults-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.team-defaults-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 19px; }
+.team-defaults-meta { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--muted); font-size: 12px; line-height: 17px; }
+.team-defaults-meta > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-defaults-row-action { flex: 0 0 28px; opacity: 0; }
+.team-defaults-row:hover .team-defaults-row-action,
+.team-defaults-row:focus-within .team-defaults-row-action,
+.team-defaults-row-action[data-state="open"] { opacity: 1; }
+.team-defaults-footer { justify-content: space-between; flex-wrap: wrap; padding: 16px 0; }
+.team-defaults-footer > span,
+.team-defaults-note { font-size: 12px; line-height: 18px; color: var(--muted); }
+.team-defaults-footer .team-defaults-actions { margin-left: auto; }
+.team-defaults-error { margin: 12px 0; color: var(--semantic-danger); font-size: 13px; line-height: 20px; overflow-wrap: anywhere; }
+.team-defaults-picker { width: 360px; max-width: calc(100vw - 32px); }
+.team-defaults-picker .property-command-options [role="option"] { grid-template-columns: 20px minmax(0, 1fr) auto; }
+.team-defaults-picker .property-command-option-end { grid-column: 3; max-width: 88px; overflow: hidden; text-overflow: ellipsis; }
+.team-defaults-menu .menu-item[data-disabled] { opacity: .4; cursor: default; }
+.team-defaults-dialog { box-sizing: border-box; width: 420px; max-width: calc(100vw - 32px); padding: 24px; }
+.team-defaults-dialog h2 { margin: 0 0 24px; font-size: 16px; font-weight: 500; line-height: 24px; }
+.team-defaults-dialog form > label { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin-bottom: 18px; color: var(--text); font-size: 13px; }
+.team-defaults-dialog .settings-input { width: 100%; min-width: 0; }
+.team-defaults-dialog footer { justify-content: flex-end; margin-top: 24px; }
+@media (hover: none), (max-width: 760px) {
+  .team-defaults-row-action { opacity: 1; }
+}
+@media (max-width: 420px) {
+  .team-defaults-toolbar { flex-wrap: wrap; }
+}
