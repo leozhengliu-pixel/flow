@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -72,6 +73,65 @@ func TestMetadataSearchUsesBoundedIndexedShellsAndTracksDirectWrites(t *testing.
 	var count int
 	if err := repo.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM metadata_search_documents WHERE workspace_key=? AND field='projects' AND record_key=?`, q.Scope.Workspace, project.ID).Scan(&count); err != nil || count != 0 {
 		t.Fatal("deleted index retained", err)
+	}
+}
+
+func TestMetadataSearchUpdatesWithoutDatabaseTriggers(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "search-no-triggers.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	ctx := context.Background()
+	data := repo.Bootstrap()
+	for _, name := range []string{"metadata_records_search_insert", "metadata_records_search_update", "metadata_records_search_delete"} {
+		if _, err := repo.db.ExecContext(ctx, `DROP TRIGGER IF EXISTS `+name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	created := false
+	if err := repo.MutateWorkspace(ctx, data.Workspace.URLKey, "search.test", "project-no-trigger", nil, func(next *domain.Bootstrap) error {
+		next.Projects = append(next.Projects, domain.Project{ID: "project-no-trigger", Name: "No trigger searchable name", Summary: "Incremental metadata", TeamIDs: []string{next.Teams[0].ID}})
+		created = true
+		return nil
+	}); err != nil || !created {
+		t.Fatalf("mutate=%v created=%v", err, created)
+	}
+	policy, access, err := repo.IssueQueryAccess(ctx, data.Workspace.URLKey, data.Viewer.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := repo.SearchMetadata(ctx, policy, SearchMetadataQuery{Scope: IssueRecordQuery{Workspace: data.Workspace.URLKey, Access: &access}, Types: map[string]bool{"project": true}, Terms: []string{"searchable"}, Limit: 10})
+	if err != nil || len(result.Projects) != 1 || result.Projects[0].ID != "project-no-trigger" {
+		t.Fatalf("insert was not indexed without trigger: %+v %v", result.Projects, err)
+	}
+	if err := repo.MutateWorkspace(ctx, data.Workspace.URLKey, "search.test", "project-no-trigger", nil, func(next *domain.Bootstrap) error {
+		for i := range next.Projects {
+			if next.Projects[i].ID == "project-no-trigger" {
+				next.Projects[i].Name = "Renamed searchable record"
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result, err = repo.SearchMetadata(ctx, policy, SearchMetadataQuery{Scope: IssueRecordQuery{Workspace: data.Workspace.URLKey, Access: &access}, Types: map[string]bool{"project": true}, Terms: []string{"no trigger"}, Limit: 10})
+	if err != nil || len(result.Projects) != 0 {
+		t.Fatalf("stale search content survived update: %+v %v", result.Projects, err)
+	}
+	result, err = repo.SearchMetadata(ctx, policy, SearchMetadataQuery{Scope: IssueRecordQuery{Workspace: data.Workspace.URLKey, Access: &access}, Types: map[string]bool{"project": true}, Terms: []string{"renamed"}, Limit: 10})
+	if err != nil || len(result.Projects) != 1 {
+		t.Fatalf("updated search content missing: %+v %v", result.Projects, err)
+	}
+	if err := repo.MutateWorkspace(ctx, data.Workspace.URLKey, "search.test", "project-no-trigger", nil, func(next *domain.Bootstrap) error {
+		next.Projects = slices.DeleteFunc(next.Projects, func(project domain.Project) bool { return project.ID == "project-no-trigger" })
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result, err = repo.SearchMetadata(ctx, policy, SearchMetadataQuery{Scope: IssueRecordQuery{Workspace: data.Workspace.URLKey, Access: &access}, Types: map[string]bool{"project": true}, Terms: []string{"renamed"}, Limit: 10})
+	if err != nil || len(result.Projects) != 0 {
+		t.Fatalf("deleted search content survived: %+v %v", result.Projects, err)
 	}
 }
 

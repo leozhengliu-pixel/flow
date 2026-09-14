@@ -247,6 +247,9 @@ func writeWorkspaceMetadataRecords(ctx context.Context, tx *sqlTx, workspace str
 			if err := writeCustomerFilterRecord(ctx, tx, workspace, key.field, key.key, value.data); err != nil {
 				return nil, err
 			}
+			if err := syncMetadataSearchDocument(ctx, tx, workspace, key.field, key.key, value.data); err != nil {
+				return nil, err
+			}
 		}
 		delete(previous, key)
 	}
@@ -260,6 +263,9 @@ func writeWorkspaceMetadataRecords(ctx context.Context, tx *sqlTx, workspace str
 			}
 		}
 		if err := writeCustomerFilterRecord(ctx, tx, workspace, key.field, key.key, nil); err != nil {
+			return nil, err
+		}
+		if err := syncMetadataSearchDocument(ctx, tx, workspace, key.field, key.key, nil); err != nil {
 			return nil, err
 		}
 	}

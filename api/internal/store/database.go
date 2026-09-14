@@ -200,6 +200,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := s.ensureTeamDefaultFavorites(context.Background()); err != nil { db.Close(); return nil, err }
 	if err := s.loadOrSeed(context.Background()); err != nil {
 		db.Close()
 		return nil, err

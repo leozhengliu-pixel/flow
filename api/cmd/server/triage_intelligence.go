@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -51,7 +52,9 @@ func generateAndAppendIssueSuggestions(data *domain.Bootstrap, issue *domain.Iss
 	if !triageIntelligenceEnabled(data.WorkspaceSettings) || !isTriageIssue(data, issue) {
 		return
 	}
+	dismissed := slices.DeleteFunc(slices.Clone(data.IssueSuggestions), func(item domain.IssueSuggestion) bool { return item.IssueID != issue.ID || item.State != "dismissed" })
 	data.IssueSuggestions = slicesDeleteIssueSuggestions(data.IssueSuggestions, issue.ID, "")
+	data.IssueSuggestions = append(data.IssueSuggestions, dismissed...)
 	suggestions := generateIssueSuggestions(data, issue, now)
 	for index := range suggestions {
 		if applyTriageSuggestionAction(data, issue, &suggestions[index], now) {
@@ -75,7 +78,39 @@ func (s *server) generateTriageIntelligenceForIssues(ctx context.Context, worksp
 	var updated domain.Issue
 	results := make([]domain.Issue, 0, len(issueIDs))
 	generated := false
-	err := s.store.MutateWorkspace(store.WithoutIssueRecordMutations(ctx), workspace, "issue.suggestions_generated", "issue_suggestions_batch", nil, func(data *domain.Bootstrap) error {
+	actor := mcpActor{WorkspaceKey: workspace}
+	if user, ok := ctx.Value(authUserContextKey{}).(domain.User); ok {
+		actor.User = user
+	}
+	if actor.User.ID == "" {
+		if metadata, ok := s.store.WorkspaceMetadata(workspace); ok {
+			actor.User = metadata.Viewer
+		}
+	}
+	if key, ok := ctx.Value(apiKeyContextKey{}).(domain.APIKey); ok {
+		actor.APIKey = key
+	}
+	query, err := s.mcpIssueQuery(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
+	metadata, ok := s.store.WorkspaceMetadata(workspace)
+	if !ok || !triageIntelligenceEnabled(metadata.WorkspaceSettings) {
+		return nil, store.ErrNoMutation
+	}
+	candidateSets := map[string][]domain.Issue{}
+	for _, issueID := range issueIDs {
+		issue, readErr := s.store.AuthorizedIssueRecord(ctx, query, issueID)
+		if readErr != nil || !isTriageIssue(&metadata, &issue) {
+			continue
+		}
+		candidates, candidateErr := s.triageCandidateIssues(ctx, &issue, query)
+		if candidateErr != nil {
+			return nil, candidateErr
+		}
+		candidateSets[issueID] = candidates
+	}
+	err = s.store.MutateWorkspace(store.WithIssueRecordMutations(ctx, issueIDs...), workspace, "issue.suggestions_generated", "issue_suggestions_batch", nil, func(data *domain.Bootstrap) error {
 		for _, issueID := range issueIDs {
 			issue, err := issueByID(data, issueID)
 			if err != nil {
@@ -84,11 +119,21 @@ func (s *server) generateTriageIntelligenceForIssues(ctx context.Context, worksp
 			if !triageIntelligenceEnabled(data.WorkspaceSettings) || !isTriageIssue(data, issue) {
 				continue
 			}
+			data.Issues = append(data.Issues, candidateSets[issueID]...)
+			issue, err = issueByID(data, issueID)
+			if err != nil {
+				continue
+			}
 			generateAndAppendIssueSuggestions(data, issue, time.Now().UTC())
 			updated = *issue
 			results = append(results, updated)
 			generated = true
 		}
+		allowed := map[string]bool{}
+		for _, id := range issueIDs {
+			allowed[id] = true
+		}
+		data.Issues = slices.DeleteFunc(data.Issues, func(item domain.Issue) bool { return !allowed[item.ID] })
 		if !generated {
 			return store.ErrNoMutation
 		}
@@ -98,6 +143,30 @@ func (s *server) generateTriageIntelligenceForIssues(ctx context.Context, worksp
 		return nil, store.ErrNoMutation
 	}
 	return results, err
+}
+
+func (s *server) triageCandidateIssues(ctx context.Context, issue *domain.Issue, q store.IssueRecordQuery) ([]domain.Issue, error) {
+	if issue == nil || strings.TrimSpace(issue.Title) == "" {
+		return nil, nil
+	}
+	q.Limit, q.Summary, q.Archived = maxTriageSuggestionCandidates, true, "false"
+	terms := []string{issue.Title}
+	for _, token := range strings.Fields(issue.Title) {
+		if len([]rune(token)) >= 3 && !slices.Contains(terms, token) {
+			terms = append(terms, token)
+		}
+		if len(terms) >= 8 {
+			break
+		}
+	}
+	items := []domain.Issue{}
+	err := s.store.SearchIssueCandidateTerms(ctx, q, terms, nil, maxTriageSuggestionCandidates, func(candidate domain.Issue) error {
+		if candidate.ID != issue.ID {
+			items = append(items, candidate)
+		}
+		return nil
+	})
+	return items, err
 }
 
 func slicesDeleteIssueSuggestions(items []domain.IssueSuggestion, issueID, keepID string) []domain.IssueSuggestion {
@@ -767,19 +836,82 @@ func (s *server) previewIssueSuggestions(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	teamID := strings.TrimSpace(r.URL.Query().Get("teamId"))
-	data := s.workspaceData(r)
+	actor := mcpActor{WorkspaceKey: workspaceKey(r), User: authUser(r)}
+	if actor.User.ID == "" {
+		if metadata, ok := s.store.WorkspaceMetadata(actor.WorkspaceKey); ok {
+			actor.User = metadata.Viewer
+		}
+	}
+	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+		actor.APIKey = key
+	}
+	data, err := s.mcpWorkspaceData(r.Context(), actor)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	if teamID == "" && len(data.Teams) > 0 {
 		teamID = data.Teams[0].ID
 	}
+	query, err := s.mcpIssueQuery(r.Context(), actor)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
+	probe := domain.Issue{Title: text, Team: domain.Team{ID: teamID}}
+	candidates, err := s.triageCandidateIssues(r.Context(), &probe, query)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
+	data.Issues = candidates
 	writeJSON(w, http.StatusOK, map[string]any{"suggestions": previewIssueSuggestions(&data, text, teamID)})
 }
 
 func (s *server) listIssueSuggestions(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
-	issue, err := issueByID(&data, r.PathValue("id"))
+	actor := mcpActor{WorkspaceKey: workspaceKey(r), User: authUser(r)}
+	if actor.User.ID == "" {
+		if metadata, ok := s.store.WorkspaceMetadata(actor.WorkspaceKey); ok {
+			actor.User = metadata.Viewer
+		}
+	}
+	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+		actor.APIKey = key
+	}
+	data, err := s.mcpWorkspaceData(r.Context(), actor)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
+	query, err := s.mcpIssueQuery(r.Context(), actor)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
+	issue, err := s.store.AuthorizedIssueRecord(r.Context(), query, r.PathValue("id"))
 	if err != nil {
 		writeError(w, http.StatusNotFound, "issue not found")
 		return
+	}
+	if metadata, ok := s.store.WorkspaceMetadata(actor.WorkspaceKey); ok {
+		data.IssueSuggestions = slices.DeleteFunc(metadata.IssueSuggestions, func(item domain.IssueSuggestion) bool {
+			if item.IssueID != issue.ID {
+				return true
+			}
+			if item.SuggestedIssueID != "" {
+				_, targetErr := s.store.AuthorizedIssueRecord(r.Context(), query, item.SuggestedIssueID)
+				if targetErr != nil {
+					return true
+				}
+			}
+			if item.SuggestedProjectID != "" && !slices.ContainsFunc(data.Projects, func(project domain.Project) bool { return project.ID == item.SuggestedProjectID }) {
+				return true
+			}
+			if item.SuggestedTeamID != "" && !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == item.SuggestedTeamID }) {
+				return true
+			}
+			return false
+		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"issueId":                issue.ID,
@@ -791,7 +923,36 @@ func (s *server) listIssueSuggestions(w http.ResponseWriter, r *http.Request) {
 func (s *server) refreshIssueSuggestions(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var updated []domain.IssueSuggestion
-	err := s.store.MutateWorkspace(store.WithoutIssueRecordMutations(r.Context()), workspaceKey(r), "issue.suggestions_refreshed", id, nil, func(data *domain.Bootstrap) error {
+	actor := mcpActor{WorkspaceKey: workspaceKey(r), User: authUser(r)}
+	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+		actor.APIKey = key
+	}
+	if actor.User.ID == "" {
+		if metadata, ok := s.store.WorkspaceMetadata(actor.WorkspaceKey); ok {
+			actor.User = metadata.Viewer
+		}
+	}
+	query, queryErr := s.mcpIssueQuery(r.Context(), actor)
+	if queryErr != nil {
+		respondMutation(w, queryErr, http.StatusOK, updated)
+		return
+	}
+	issue, readErr := s.store.AuthorizedIssueRecord(r.Context(), query, id)
+	if readErr != nil {
+		respondMutation(w, readErr, http.StatusOK, updated)
+		return
+	}
+	metadata, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	if !ok || !triageIntelligenceEnabled(metadata.WorkspaceSettings) || !isTriageIssue(&metadata, &issue) {
+		respondMutation(w, fmt.Errorf("%w: Triage Intelligence is disabled or issue is not in triage", errInvalid), http.StatusOK, updated)
+		return
+	}
+	candidates, candidateErr := s.triageCandidateIssues(r.Context(), &issue, query)
+	if candidateErr != nil {
+		respondMutation(w, candidateErr, http.StatusOK, updated)
+		return
+	}
+	err := s.store.MutateWorkspace(store.WithIssueRecordMutations(r.Context(), id), workspaceKey(r), "issue.suggestions_refreshed", id, nil, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, id)
 		if err != nil {
 			return err
@@ -799,8 +960,16 @@ func (s *server) refreshIssueSuggestions(w http.ResponseWriter, r *http.Request)
 		if !triageIntelligenceEnabled(data.WorkspaceSettings) {
 			return fmt.Errorf("%w: Triage Intelligence is disabled", errInvalid)
 		}
+		if !isTriageIssue(data, issue) {
+			return fmt.Errorf("%w: issue is not in triage", errInvalid)
+		}
 		now := time.Now().UTC()
 		data.IssueSuggestions = slicesDeleteIssueSuggestions(data.IssueSuggestions, issue.ID, "")
+		data.Issues = append(data.Issues, candidates...)
+		issue, err = issueByID(data, id)
+		if err != nil {
+			return err
+		}
 		generated := generateIssueSuggestions(data, issue, now)
 		for index := range generated {
 			if applyTriageSuggestionAction(data, issue, &generated[index], now) {
@@ -812,6 +981,10 @@ func (s *server) refreshIssueSuggestions(w http.ResponseWriter, r *http.Request)
 		issue.SuggestionsGeneratedAt = &now
 		issue.UpdatedAt = now
 		issue.Version++
+		// issueByID returns a pointer into data.Issues. Apply the bookkeeping
+		// fields before replacing the scoped issue slice, otherwise those writes
+		// land on an abandoned backing array and are not persisted.
+		data.Issues = []domain.Issue{*issue}
 		updated = generated
 		return nil
 	})
@@ -834,7 +1007,56 @@ func (s *server) updateIssueSuggestionState(w http.ResponseWriter, r *http.Reque
 		eventType = "issue.suggestion_accepted"
 	}
 	var updated domain.IssueSuggestion
-	err := s.store.MutateWorkspace(store.WithoutIssueRecordMutations(r.Context()), workspaceKey(r), eventType, suggestionID, nil, func(data *domain.Bootstrap) error {
+	metadata, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	if !ok {
+		respondMutation(w, store.ErrAuthForbidden, http.StatusOK, updated)
+		return
+	}
+	var targetID string
+	for _, item := range metadata.IssueSuggestions {
+		if item.ID == suggestionID {
+			targetID = item.SuggestedIssueID
+			break
+		}
+	}
+	actor := mcpActor{WorkspaceKey: workspaceKey(r), User: authUser(r)}
+	if actor.User.ID == "" {
+		actor.User = metadata.Viewer
+	}
+	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+		actor.APIKey = key
+	}
+	query, queryErr := s.mcpIssueQuery(r.Context(), actor)
+	if queryErr != nil {
+		respondMutation(w, queryErr, http.StatusOK, updated)
+		return
+	}
+	if targetID != "" {
+		if _, queryErr = s.store.AuthorizedIssueRecord(r.Context(), query, targetID); queryErr != nil {
+			respondMutation(w, store.ErrAuthForbidden, http.StatusOK, updated)
+			return
+		}
+	}
+	visible, visibleErr := s.mcpWorkspaceData(r.Context(), actor)
+	if visibleErr != nil {
+		respondMutation(w, visibleErr, http.StatusOK, updated)
+		return
+	}
+	for _, item := range metadata.IssueSuggestions {
+		if item.ID != suggestionID {
+			continue
+		}
+		if item.SuggestedProjectID != "" && !slices.ContainsFunc(visible.Projects, func(project domain.Project) bool { return project.ID == item.SuggestedProjectID }) || item.SuggestedTeamID != "" && !slices.ContainsFunc(visible.Teams, func(team domain.Team) bool { return team.ID == item.SuggestedTeamID }) || item.SuggestedLabelID != "" && !slices.ContainsFunc(visible.Labels, func(label domain.IssueLabel) bool { return label.ID == item.SuggestedLabelID }) {
+			respondMutation(w, store.ErrAuthForbidden, http.StatusOK, updated)
+			return
+		}
+		break
+	}
+	scope := []string{issueID}
+	if targetID != "" {
+		scope = append(scope, targetID)
+	}
+	err := s.store.MutateWorkspace(store.WithIssueRecordMutations(r.Context(), scope...), workspaceKey(r), eventType, suggestionID, nil, func(data *domain.Bootstrap) error {
 		index := -1
 		for itemIndex := range data.IssueSuggestions {
 			item := &data.IssueSuggestions[itemIndex]

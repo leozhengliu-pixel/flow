@@ -108,6 +108,10 @@ func (s *server) issueRecordsBootstrap(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data.ViewerRole = "admin"
+		if err := s.store.ApplyTeamDefaultFavorites(r.Context(), &data, data.Viewer.ID); err != nil {
+			issueRecordsError(w, err)
+			return
+		}
 	} else {
 		var err error
 		data, err = s.store.PagedWorkspaceMetadata(r.Context(), key, authUser(r).ID)

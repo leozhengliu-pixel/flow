@@ -266,6 +266,60 @@ func TestTriageIntelligenceRegeneratesWhenIssueReturnsToTriage(t *testing.T) {
 	}
 }
 
+func TestRefreshTriageSuggestionsPersistsIssueBookkeeping(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	bootstrap := repository.Bootstrap()
+	team := bootstrap.Teams[0]
+	project := bootstrap.Projects[0]
+	backlogState := slices.IndexFunc(bootstrap.States, func(state domain.WorkflowState) bool { return state.Type == "backlog" })
+	if backlogState < 0 {
+		t.Fatal("test workspace has no backlog state")
+	}
+	if err := repository.MutateWorkspace(t.Context(), bootstrap.Workspace.URLKey, "test.refresh_triage_setup", team.ID, nil, func(data *domain.Bootstrap) error {
+		settings := teamSettings(data, team.ID)
+		settings.TriageEnabled = true
+		data.TeamSettings[team.ID] = settings
+		data.WorkspaceSettings.FeatureFlags["triage-intelligence"] = true
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{
+		"title": "Refresh vehicle marketplace image preview", "teamId": team.ID,
+		"stateId": bootstrap.States[backlogState].ID, "projectId": project.ID,
+	}, http.StatusCreated)
+	target := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{
+		"title": "Refresh vehicle marketplace image preview behavior", "teamId": team.ID,
+		"stateId": bootstrap.States[backlogState].ID,
+	}, http.StatusCreated)
+	before := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	beforeTarget, err := issueByID(&before, target.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeVersion := beforeTarget.Version
+	requestJSON[[]domain.IssueSuggestion](t, handler, http.MethodPost, "/api/issues/"+target.ID+"/suggestions/refresh", nil, http.StatusOK)
+	after := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	afterTarget, err := issueByID(&after, target.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterTarget.SuggestionsGeneratedAt == nil {
+		t.Fatal("refresh did not persist suggestionsGeneratedAt")
+	}
+	if afterTarget.Version != beforeVersion+1 {
+		t.Fatalf("refresh version was not persisted: before=%d after=%d", beforeVersion, afterTarget.Version)
+	}
+	if len(after.Issues) != len(before.Issues) {
+		t.Fatalf("refresh changed issue collection size: before=%d after=%d", len(before.Issues), len(after.Issues))
+	}
+}
+
 func BenchmarkTriageIntelligenceGenerate2000Candidates(b *testing.B) {
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(b.TempDir(), "flow.db"))
 	if err != nil {

@@ -193,11 +193,10 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 			selections = append(selections, selection)
 			textArgs = append(textArgs, values...)
 		}
-		// Cap indexed hits before the issue-record join so a common token such
-		// as a workspace identifier cannot materialize the whole catalog.
-		selection := "SELECT issue_id FROM (" + strings.Join(selections, " UNION ") + ") search_hits LIMIT ?"
-		textArgs = append(textArgs, searchHitLimit(limit))
-		textMatch = cappedSearchHitIN("i.id", "issue_id", selection)
+		// Apply the issue access predicate before limiting the result rows. Raw
+		// index hits may include private teams and must not consume the page cap.
+		selection := strings.Join(selections, " UNION ")
+		textMatch = "i.id IN (" + selection + ")"
 		if s.dialect == "postgres" {
 			cte := `search_text AS MATERIALIZED (` + selection + `) `
 			if prefix == "" {

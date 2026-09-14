@@ -127,6 +127,20 @@ describe('favorites', () => {
     expect(removed).toEqual(['project-1'])
   })
 
+  it('serializes an add followed by remove so the server matches the final intent', async () => {
+    let resolveAdd!: (value: Favorite) => void
+    const order: string[] = []
+    api.addFavorite.mockImplementation(() => new Promise<Favorite>(resolve => { resolveAdd = value => { order.push('add'); resolve(value) } }))
+    api.removeFavorite.mockImplementation(async () => { order.push('remove') })
+    const added = toggleFavorite({ workspaceKey: 'workspace', userId: viewer.id, resourceType: 'issue', resourceId: 'issue-1', currentlyFavorited: false })
+    const removed = toggleFavorite({ workspaceKey: 'workspace', userId: viewer.id, resourceType: 'issue', resourceId: 'issue-1', currentlyFavorited: false })
+    await Promise.resolve()
+    expect(order).toEqual([])
+    resolveAdd(favorite({ id: 'server-favorite', resourceType: 'issue', resourceId: 'issue-1' }))
+    await Promise.all([added, removed])
+    expect(order).toEqual(['add', 'remove'])
+  })
+
   it('keeps the latest local intent over a stale preferences refresh', async () => {
     let resolveCreated: (value: Favorite) => void = () => undefined
     api.addFavorite.mockReturnValue(new Promise<Favorite>(resolve => { resolveCreated = resolve }))

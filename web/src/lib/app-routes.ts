@@ -93,6 +93,7 @@ export type TeamSettingsSection =
   | "cycles"
   | "agents"
   | "agent-skills"
+  | "default-favorites"
   | "ai-updates"
   | "ai-summaries";
 
@@ -1564,6 +1565,7 @@ const TEAM_SETTINGS_SECTIONS = new Set<TeamSettingsSection>([
   "cycles",
   "agents",
   "agent-skills",
+  "default-favorites",
 ]);
 export function settingsPath(
   workspaceSlug: string,

@@ -1312,6 +1312,17 @@ type FavoriteFolder struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+type TeamDefaultFavorite struct {
+	ID           string    `json:"id"`
+	WorkspaceKey string    `json:"workspaceKey"`
+	TeamID       string    `json:"teamId"`
+	ResourceType string    `json:"resourceType"`
+	ResourceID   string    `json:"resourceId"`
+	Position     float64   `json:"position"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
 type Subscription struct {
 	ID           string    `json:"id"`
 	UserID       string    `json:"userId"`

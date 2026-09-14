@@ -28,7 +28,7 @@ func metadataReadRequest(r *http.Request) bool {
 	case "teams":
 		if len(p) >= 4 {
 			switch p[3] {
-			case "settings", "states", "triage-responsibilities", "triage-rules", "email-intake-addresses", "cycle-settings":
+			case "settings", "states", "triage-responsibilities", "triage-rules", "email-intake-addresses", "cycle-settings", "default-favorites":
 				return true
 			}
 		}
