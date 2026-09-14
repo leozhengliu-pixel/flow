@@ -91,4 +91,14 @@ describe('issue activity timeline', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Copy link to comment' }))
     expect(copy).toHaveBeenCalledWith(`${location.href.split('#')[0]}#comment-comment-one`)
   })
+
+  it('parses markdown comments and replies through RichComment', async () => {
+    const comment = { id: 'comment-one', version: 1, body: '## Root heading\n\nRoot paragraph.', user: viewer, createdAt: '2026-09-01T00:00:00Z', reactions: {} } as Comment
+    const reply = { ...comment, id: 'reply-one', parentId: 'comment-one', version: 2, body: '- reply item' }
+    render(<I18nProvider><ActivityTimeline events={[]} comments={[comment, reply]} viewerId={viewer.id} onReply={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} onReaction={vi.fn()}/></I18nProvider>)
+    expect(await screen.findByRole('heading', { name: 'Root heading' })).toBeVisible()
+    expect(screen.getByText('Root paragraph.')).toBeVisible()
+    expect(screen.getByText('reply item')).toBeVisible()
+    expect(screen.getByRole('list')).toBeVisible()
+  })
 })

@@ -63,3 +63,65 @@
   background: var(--theme-surface-2);
   box-shadow: var(--shadow-dialog);
 }
+
+.issue-activity-timeline .comment-body,
+.issue-activity-timeline .reply-body {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 21px;
+}
+.issue-activity-timeline .comment-body p,
+.issue-activity-timeline .comment-body li,
+.issue-activity-timeline .reply-body p,
+.issue-activity-timeline .reply-body li {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 21px;
+}
+.issue-activity-timeline .comment-body p:last-child,
+.issue-activity-timeline .comment-body li:last-child,
+.issue-activity-timeline .reply-body p:last-child,
+.issue-activity-timeline .reply-body li:last-child { margin-bottom: 0; }
+.issue-activity-timeline .comment-body h1,
+.issue-activity-timeline .comment-body h2,
+.issue-activity-timeline .comment-body h3,
+.issue-activity-timeline .comment-body h4,
+.issue-activity-timeline .reply-body h1,
+.issue-activity-timeline .reply-body h2,
+.issue-activity-timeline .reply-body h3,
+.issue-activity-timeline .reply-body h4 {
+  margin: 12px 0 6px;
+  color: var(--text);
+  font-weight: 600;
+}
+.issue-activity-timeline .comment-body h1 { font-size: 16px; line-height: 24px; }
+.issue-activity-timeline .comment-body h2,
+.issue-activity-timeline .reply-body h2 { font-size: 15px; line-height: 22px; }
+.issue-activity-timeline .comment-body h3,
+.issue-activity-timeline .reply-body h3 { margin: 10px 0 5px; font-size: 13px; line-height: 21px; }
+.issue-activity-timeline .comment-body ul,
+.issue-activity-timeline .comment-body ol,
+.issue-activity-timeline .reply-body ul,
+.issue-activity-timeline .reply-body ol { margin: 6px 0; padding-left: 20px; }
+.issue-activity-timeline .comment-body code,
+.issue-activity-timeline .reply-body code {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #ffffff0d;
+  color: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .9em;
+}
+.issue-activity-timeline .comment-body pre,
+.issue-activity-timeline .reply-body pre {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: .5px solid var(--border);
+  border-radius: 6px;
+  overflow: auto;
+}
+.issue-activity-timeline .comment-body pre code,
+.issue-activity-timeline .reply-body pre code { padding: 0; background: transparent; }
+.issue-activity-timeline .comment-body a,
+.issue-activity-timeline .reply-body a { color: var(--accent-primary); }
