@@ -12,6 +12,10 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { PersonHover } from '@/components/property/person-info';
 import type { User } from '@/types/flow';
 
+import './workspace-directory.css';
+
+import './workspace-directory.css';
+
 export interface DirectoryFilterChoice {
   id: string;
   label: string;

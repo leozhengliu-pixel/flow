@@ -40,6 +40,9 @@ export type ProjectPageItem = {
   issueCount: number
   progress: number
   status: string
+  statusId?: string
+  statusType?: string
+  statusColor?: string
   team?: { id: string, name: string }
   memberIds?: string[]
   labelIds?: string[]
@@ -208,8 +211,9 @@ export function ProjectsDataView({
 
   if (loading) return <ProjectsLoadingState layout={layout} />
   if (error) return <ProjectsErrorState error={error} onRetry={onRetry} />
-  if (layout !== 'board' && !groups.some(groupHasProjects)) return <ProjectsEmptyState onCreate={() => onCreateProject?.('Backlog')} />
-  if (layout === 'board' && !groups.length) return <ProjectsEmptyState onCreate={() => onCreateProject?.('Backlog')} />
+  const defaultCreateStatus = projectCreateStatus(undefined, false, propertyOptions)
+  if (layout !== 'board' && !groups.some(groupHasProjects)) return <ProjectsEmptyState onCreate={() => onCreateProject?.(defaultCreateStatus)} />
+  if (layout === 'board' && !groups.length) return <ProjectsEmptyState onCreate={() => onCreateProject?.(defaultCreateStatus)} />
 
   const visible = new Set(visibleProperties)
   if (layout === 'board') {
@@ -301,7 +305,7 @@ export function ProjectsDataView({
           color={entry.group.color}
           count={projectCount(entry.group)}
           name={entry.group.name}
-          onCreate={() => onCreateProject?.(projectCreateStatus(entry.group.name))}
+          onCreate={() => onCreateProject?.(projectCreateStatus(entry.group.name, grouping === 'Status', propertyOptions))}
           onToggle={() => setCollapsed(current => current.includes(entry.group.id) ? current.filter(id => id !== entry.group.id) : [...current, entry.group.id])}
           propertyOptions={propertyOptions}
         />
@@ -320,7 +324,7 @@ export function ProjectsDataView({
           color={group.color}
           count={projectCount(group)}
           name={group.name}
-          onCreate={() => onCreateProject?.(projectCreateStatus(group.name))}
+          onCreate={() => onCreateProject?.(projectCreateStatus(group.name, grouping === 'Status', propertyOptions))}
           onToggle={() => setCollapsed(current => current.includes(group.id) ? current.filter(id => id !== group.id) : [...current, group.id])}
           propertyOptions={propertyOptions}
         />
@@ -533,13 +537,13 @@ function ProjectBoardColumn({ group, manualOrdering, onCreateProject, onDropProj
       <span className="lp-project-board__heading"><ProjectGroupStatus color={group.color} name={group.name} propertyOptions={propertyOptions}/><strong data-i18n-ignore>{group.name}</strong><span aria-label="Project count" className="lp-project-board__count">{projectCount(group)}</span></span>
       <span className="lp-project-board__actions">
         <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open menu" className="lp-project-board__menu" type="button"><MoreHorizontal size={16}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="lp-project-board__group-menu" sideOffset={4}><DropdownMenu.Item onSelect={onSelectAll}>Select all in column</DropdownMenu.Item><DropdownMenu.Item onSelect={onHide}>Hide column</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
-        <button aria-label="Create new project" className="lp-project-board__create" onClick={() => onCreateProject?.(projectCreateStatus(group.name))} type="button"><PlusIcon height={14} width={14} /></button>
+        <button aria-label="Create new project" className="lp-project-board__create" onClick={() => onCreateProject?.(projectCreateStatus(group.name, !showStatus, propertyOptions))} type="button"><PlusIcon height={14} width={14} /></button>
       </span>
     </header>
     <div className="lp-project-board__cards">
       {group.subgroups?.map(subgroup => <section className="lp-project-board__subgroup" key={subgroup.id}><header><ProjectGroupStatus color={subgroup.color} compact name={subgroup.name} propertyOptions={propertyOptions}/><span data-i18n-ignore>{subgroup.name}</span><small>{projectCount(subgroup)}</small></header>{subgroup.projects.map(card)}</section>)}
       {!group.subgroups?.length && group.projects.map(card)}
-      <button aria-label="Add new project" className="lp-project-board__add" onClick={() => onCreateProject?.(projectCreateStatus(group.name))} type="button"><PlusIcon /></button>
+      <button aria-label="Add new project" className="lp-project-board__add" onClick={() => onCreateProject?.(projectCreateStatus(group.name, !showStatus, propertyOptions))} type="button"><PlusIcon /></button>
     </div>
   </section>
 }
@@ -998,8 +1002,12 @@ function BoardTargetDateIcon({ overdue }: { overdue: boolean }) {
 
 function groupHasProjects(group: ProjectDataGroup) { return projectCount(group) > 0 }
 
-function projectCreateStatus(groupName: string) {
-  return ['Backlog', 'Planned', 'In Progress', 'Completed', 'Canceled'].includes(groupName) ? groupName : 'Backlog'
+function projectCreateStatus(groupName: string | undefined, groupedByStatus: boolean, propertyOptions?: ProjectPropertyOptions) {
+  const statuses = propertyOptions?.status ?? []
+  return (groupedByStatus ? statuses.find(option => option.label === groupName || option.value === groupName)?.value : undefined)
+    ?? statuses.find(option => option.statusType === 'backlog')?.value
+    ?? statuses[0]?.value
+    ?? ''
 }
 
 function ProjectsLoadingState({ layout }: { layout: 'list' | 'board' | 'timeline' }) {

@@ -209,6 +209,7 @@ func TestSQLitePerformancePragmasAndIndexes(t *testing.T) {
 	for _, name := range []string{
 		"workspace_states_updated_idx",
 		"domain_events_created_idx",
+		"team_memberships_role_idx",
 		"workspace_invitations_workspace_created_idx",
 	} {
 		var count int
@@ -231,8 +232,8 @@ func TestSchemaMigrationsAreVersionedAndIdempotent(t *testing.T) {
 	if err := repository.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 5 {
-		t.Fatalf("schema migration count = %d, want 5", count)
+	if count != 6 {
+		t.Fatalf("schema migration count = %d, want 6", count)
 	}
 	if err := repository.Close(); err != nil {
 		t.Fatal(err)
@@ -245,8 +246,8 @@ func TestSchemaMigrationsAreVersionedAndIdempotent(t *testing.T) {
 	if err := reopened.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 5 {
-		t.Fatalf("schema migration count after reopen = %d, want 5", count)
+	if count != 6 {
+		t.Fatalf("schema migration count after reopen = %d, want 6", count)
 	}
 }
 

@@ -5436,6 +5436,7 @@ function App() {
                 workspaceKey={data.workspace.urlKey}
                 scopeTeamId={viewsTeam?.id}
                 teamSettings={data.teamSettings}
+                teamParents={data.teamParents}
                 viewerId={data.viewer.id}
                 viewer={data.viewer}
                 favoriteProjectIds={data.favorites
@@ -5555,6 +5556,7 @@ function App() {
                 workspaceKey={data.workspace.urlKey}
                 scopeTeamId={projectTeam?.id}
                 teamSettings={data.teamSettings}
+                teamParents={data.teamParents}
                 viewerId={data.viewer.id}
                 viewer={data.viewer}
                 favoriteProjectIds={data.favorites

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -26,10 +26,11 @@ vi.mock('@/lib/api', async importOriginal => ({
 
 import { TeamOverviewPage } from './team-overview-page'
 
-function renderOverview(overrides: Partial<BootstrapData> = {}) {
+function renderPage(view: "overview" | "documents" | "loops" | "members", overrides: Partial<BootstrapData> = {}) {
   const data = makeBootstrap({
     documents: [],
     favorites: [],
+    members: [viewer, ...makeBootstrap().users.filter(user => user.id !== viewer.id)].map(user => ({ user, role: 'member' as const, status: 'active' as const, joinedAt: '' })),
     subscriptions: [],
     teamMembers: [{ teamId: 'team-1', userId: viewer.id, role: 'owner', joinedAt: '2026-08-01T00:00:00Z' }],
     teamSettings: {
@@ -45,10 +46,14 @@ function renderOverview(overrides: Partial<BootstrapData> = {}) {
         onOpenSidebar={vi.fn()}
         onReload={vi.fn().mockResolvedValue(undefined)}
         team={data.teams[0]}
-        view="overview"
+        view={view}
       />
     </I18nProvider>,
   )
+}
+
+function renderOverview(overrides: Partial<BootstrapData> = {}) {
+  return renderPage("overview", overrides)
 }
 
 describe('team overview', () => {
@@ -209,7 +214,104 @@ describe('team overview', () => {
         'team-1',
         'user-2',
         true,
+        'member',
       ),
     )
+  })
+
+  it('provides the complete team document filter and display controls', async () => {
+    const user = userEvent.setup()
+    const project = { ...makeBootstrap().projects[0], id: 'project-docs', name: 'Website', teamIds: ['team-1'] }
+    const pinned = { id: 'pin-doc', teamId: 'team-1', resourceType: 'document', resourceId: document.id, title: document.title, position: 0, createdAt: '', updatedAt: '' }
+    api.fetchTeamResources.mockResolvedValue({ resources: [pinned], sections: [] })
+    renderPage('documents', { documents: [{ ...document, projectIds: [project.id] }, { ...document, id: 'doc-team', slugId: 'team-notes', title: 'Team notes' }], projects: [project] })
+
+    await user.click(screen.getByRole('button', { name: 'Add filter' }))
+    expect(screen.getByRole('menuitem', { name: 'Advanced filter' })).toBeVisible()
+    for (const label of ['Creator', 'Owner', 'Project', 'Cycle', 'Dates']) expect(screen.getByRole('menuitem', { name: label })).toBeVisible()
+    await user.keyboard('{Escape}')
+
+    await user.click(screen.getByRole('button', { name: 'Display options' }))
+    expect(screen.getByRole('combobox', { name: 'Grouping' })).toHaveValue('project')
+    expect(screen.getByRole('combobox', { name: 'Ordering' })).toHaveValue('name')
+    expect(screen.getByRole('switch', { name: 'Show inactive projects' })).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByRole('switch', { name: 'Show only my projects' })).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByRole('button', { name: 'Owner', pressed: true })).toBeVisible()
+    await user.keyboard('{Escape}')
+
+    expect(screen.getByText('Team documents')).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Website' })).toHaveAttribute('href', expect.stringContaining('/project/'))
+    expect(await screen.findByLabelText('Pinned to team overview')).toBeVisible()
+  })
+
+  it('makes document pinning and advanced filter matching functional', async () => {
+    const user = userEvent.setup()
+    api.fetchTeamResources.mockResolvedValue({ resources: [], sections: [] })
+    renderPage('documents', { documents: [document] })
+    await user.click(screen.getByRole('button', { name: 'Open menu' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Pin to team overview' }))
+    await waitFor(() => expect(api.pinTeamResource).toHaveBeenCalledWith('team-1', expect.objectContaining({ resourceId: 'doc-1' })))
+
+    await user.click(screen.getByRole('button', { name: 'Add filter' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Advanced filter' }))
+    const advanced = screen.getByRole('dialog', { name: 'Advanced filter' })
+    await user.click(within(advanced).getByRole('button', { name: 'Any filter' }))
+    expect(within(advanced).getByRole('button', { name: 'Any filter' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('sorts members, configures columns, and virtualizes a long independently scrollable list', async () => {
+    const user = userEvent.setup()
+    const extraUsers = Array.from({ length: 100 }, (_, index) => ({ ...viewer, id: `member-${index}`, name: `person-${String(index).padStart(3, '0')}`, displayName: `Person ${String(index).padStart(3, '0')}`, email: `person-${index}@example.com` }))
+    const teamMembers = extraUsers.map((person, index) => ({ teamId: 'team-1', userId: person.id, role: index === 0 ? 'owner' as const : 'member' as const, joinedAt: '' }))
+    renderPage('members', { users: extraUsers, members: extraUsers.map(user => ({ user, role: 'member' as const, status: 'active' as const, joinedAt: '' })), teamMembers })
+
+    const list = screen.getByRole('list', { name: 'Team members' })
+    expect(list).toHaveClass('team-members-scroll')
+    expect(globalThis.document.querySelectorAll('.team-member-row').length).toBeLessThan(100)
+    await user.click(screen.getByRole('button', { name: 'Display options' }))
+    await user.click(screen.getByRole('button', { name: 'Email', pressed: true }))
+    await user.click(screen.getByRole('button', { name: 'Display options' }))
+    expect(screen.queryByRole('button', { name: 'Email' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'A-Z' }))
+    expect(screen.getByRole('button', { name: 'Z-A' })).toBeVisible()
+  })
+
+  it('searches add-member candidates by employee id and can add a team owner', async () => {
+    const user = userEvent.setup()
+    const employee = { ...viewer, id: 'employee-user', userId: '25062215', name: 'liuzheng', displayName: '刘峥', email: 'liu@example.com' }
+    renderPage('overview', { users: [viewer, employee], members: [viewer, employee].map(person => ({ user: person, role: 'member' as const, status: 'active' as const, joinedAt: '' })) })
+    await user.click(screen.getByRole('button', { name: 'Add members' }))
+    await user.click(screen.getByRole('button', { name: 'Select members' }))
+    await user.type(screen.getByRole('textbox', { name: 'Search members…' }), '25062215')
+    await user.click(screen.getByRole('menuitemcheckbox', { name: '刘峥' }))
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: 'Team owner' }))
+    await user.click(screen.getByRole('button', { name: 'Add members' }))
+    await waitFor(() => expect(api.setTeamMembership).toHaveBeenCalledWith('workspace', 'team-1', 'employee-user', true, 'owner'))
+  })
+
+  it('separates team and workspace roles, shows invitations, and applies visibility controls', async () => {
+    const user = userEvent.setup()
+    renderPage('members', {
+      viewerRole: 'owner',
+      members: [{ user: viewer, role: 'owner', status: 'active', joinedAt: '' }],
+      invitations: [{ id: 'invite-team', workspaceId: 'workspace-1', email: 'invited@example.com', role: 'member', teamIds: ['team-1'], status: 'pending', inviterId: viewer.id, expiresAt: '', createdAt: '' }],
+    })
+    expect(screen.getByText('Team owner')).toBeVisible()
+    expect(screen.getByText('Workspace owner')).toBeVisible()
+    expect(screen.getAllByText('invited@example.com')).toHaveLength(2)
+    await user.click(screen.getByRole('button', { name: 'Display options' }))
+    await user.click(screen.getByRole('switch', { name: 'Show invited' }))
+    expect(screen.queryByText('invited@example.com')).not.toBeInTheDocument()
+  })
+
+  it('keeps management controls hidden while preserving a member self-leave menu', async () => {
+    const user = userEvent.setup()
+    const settings = { ...makeBootstrap().teamSettings?.['team-1'], teamId: 'team-1', memberPermission: 'owners' } as BootstrapData['teamSettings'][string]
+    renderPage('members', { viewerRole: 'member', teamSettings: { 'team-1': settings }, members: [{ user: viewer, role: 'member', status: 'active', joinedAt: '' }], teamMembers: [{ teamId: 'team-1', userId: viewer.id, role: 'member', joinedAt: '' }] })
+    expect(screen.queryByRole('button', { name: 'Add a member' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Open menu' }))
+    expect(screen.getByRole('menuitem', { name: 'Leave team' })).toBeVisible()
+    expect(screen.queryByRole('menuitem', { name: 'Make team owner' })).not.toBeInTheDocument()
   })
 })

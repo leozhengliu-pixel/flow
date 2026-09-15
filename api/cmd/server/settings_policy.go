@@ -79,7 +79,20 @@ func teamOperationAllowed(settings domain.TeamSettings, permission, teamRole, wo
 		return teamRole == "member"
 	}
 	if permission == "allMembers" {
-		return teamRole != "" || (settings.Access != "private" && settings.Access != "restricted")
+		// "allMembers" refers to every member of this team. Team visibility is
+		// controlled separately and must never grant mutation rights to an
+		// unrelated workspace member.
+		return teamRole == "member"
 	}
 	return false
+}
+
+func teamOperationDeniedMessage(permission, workspaceRole string) string {
+	if workspaceRole == "guest" {
+		return "Guests cannot manage team settings"
+	}
+	if permission == "owners" {
+		return "Team owner access required"
+	}
+	return "Team membership required"
 }

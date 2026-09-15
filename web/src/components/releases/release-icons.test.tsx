@@ -5,14 +5,16 @@ import { ReleasePipelineIcon, ReleasesIcon, ReleaseStatusIcon } from './release-
 
 describe('release icons', () => {
   it('renders a distinct status glyph for each release status', () => {
+    const expectedColors = ['#95999F', '#F2C94C', '#5E6AD2', '#8A8F98']
     const markup = (['planned', 'inProgress', 'released', 'canceled'] as const).map(status => {
       const { container } = render(<ReleaseStatusIcon status={status} />)
       const svg = container.querySelector('svg')
       expect(svg).toHaveAttribute('data-icon', 'release-status')
       expect(svg).toHaveAttribute('data-status', status)
-      return svg?.innerHTML ?? ''
+      return svg?.outerHTML ?? ''
     })
     expect(new Set(markup).size).toBe(4)
+    expectedColors.forEach((color, index) => expect(markup[index]).toContain(color))
   })
 
   it('exposes pipeline and module icons for list and empty states', () => {

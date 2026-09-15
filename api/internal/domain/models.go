@@ -80,10 +80,12 @@ type IssuePermission struct {
 }
 
 type TeamMember struct {
-	TeamID   string    `json:"teamId"`
-	UserID   string    `json:"userId"`
-	Role     string    `json:"role"`
-	JoinedAt time.Time `json:"joinedAt"`
+	TeamID        string    `json:"teamId"`
+	UserID        string    `json:"userId"`
+	Role          string    `json:"role"`
+	JoinedAt      time.Time `json:"joinedAt"`
+	Managed       bool      `json:"managed,omitempty"`
+	ManagedSource string    `json:"managedSource,omitempty"`
 }
 
 type Invitation struct {
@@ -1642,6 +1644,7 @@ type Bootstrap struct {
 	Cycles                        []Cycle                            `json:"cycles"`
 	CycleSettings                 map[string]CycleSettings           `json:"cycleSettings"`
 	TeamSettings                  map[string]TeamSettings            `json:"teamSettings"`
+	TeamParents                   map[string]string                  `json:"teamParents,omitempty"`
 	IssueTemplates                []IssueTemplate                    `json:"issueTemplates"`
 	ProjectTemplates              []ProjectTemplate                  `json:"projectTemplates"`
 	DocumentTemplates             []DocumentTemplate                 `json:"documentTemplates"`
@@ -1687,6 +1690,8 @@ type Bootstrap struct {
 	Activities                    map[string][]ActivityEvent         `json:"activities"`
 	SavedViews                    []SavedView                        `json:"savedViews"`
 	Notifications                 []Notification                     `json:"notifications"`
+	InboxUnreadCount              int                                `json:"inboxUnreadCount,omitempty"`
+	ReviewCount                   int                                `json:"reviewCount,omitempty"`
 	NotificationPreferences       map[string]NotificationPreferences `json:"notificationPreferences"`
 	NotificationDeliveries        []NotificationDelivery             `json:"notificationDeliveries"`
 	PushSubscriptions             []PushSubscription                 `json:"pushSubscriptions"`

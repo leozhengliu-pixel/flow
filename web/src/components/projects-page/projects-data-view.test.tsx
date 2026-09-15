@@ -125,6 +125,47 @@ describe('ProjectsDataView project menu', () => {
     expect(screen.getByRole('button', { name: 'Open menu' })).toBeInTheDocument()
   })
 
+  it('creates into a custom workspace status from its board group', async () => {
+    const user = userEvent.setup()
+    const onCreateProject = vi.fn()
+    render(<I18nProvider><ProjectsDataView
+      groups={[{ id: 'status-building', name: '建设中', color: '#f2c94c', projects: [] }]}
+      grouping="Status"
+      layout="board"
+      onCreateProject={onCreateProject}
+      propertyOptions={{ status: [
+        { value: '待规划', label: '待规划', color: '#8a8d93', statusType: 'backlog' },
+        { value: '建设中', label: '建设中', color: '#f2c94c', statusType: 'started' },
+      ] }}
+    /></I18nProvider>)
+
+    await user.click(screen.getByRole('button', { name: 'Create new project' }))
+    expect(onCreateProject).toHaveBeenCalledWith('建设中')
+  })
+
+  it('uses the workspace backlog status outside status grouping and in an empty view', async () => {
+    const user = userEvent.setup()
+    const onCreateProject = vi.fn()
+    const status = [
+      { value: '待规划', label: '待规划', color: '#8a8d93', statusType: 'backlog' },
+      { value: '建设中', label: '建设中', color: '#f2c94c', statusType: 'started' },
+    ]
+    const { rerender } = render(<I18nProvider><ProjectsDataView
+      groups={[{ id: 'team-building', name: '建设中', projects: [] }]}
+      grouping="Team"
+      layout="board"
+      onCreateProject={onCreateProject}
+      propertyOptions={{ status }}
+    /></I18nProvider>)
+
+    await user.click(screen.getByRole('button', { name: 'Create new project' }))
+    expect(onCreateProject).toHaveBeenLastCalledWith('待规划')
+
+    rerender(<I18nProvider><ProjectsDataView groups={[]} grouping="Status" layout="list" onCreateProject={onCreateProject} propertyOptions={{ status }}/></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'New project' }))
+    expect(onCreateProject).toHaveBeenLastCalledWith('待规划')
+  })
+
   it('hides the board summary when the Summary display property is disabled', () => {
     render(<I18nProvider><ProjectsDataView
       groups={[{ id: 'status-progress', name: 'In Progress', projects: [{ ...project, summary: 'Hidden board summary' }] }]}

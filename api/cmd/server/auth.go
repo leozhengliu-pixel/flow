@@ -288,11 +288,12 @@ func applyAPIKeyProjection(data *domain.Bootstrap, key domain.APIKey) {
 		visibleIssues[issue.ID] = true
 	}
 	data.Releases = slices.DeleteFunc(data.Releases, func(release domain.Release) bool {
-		if release.PipelineID != "" && !slices.ContainsFunc(data.ReleasePipelines, func(p domain.ReleasePipeline) bool { return p.ID == release.PipelineID }) {
-			return true
-		}
-		return slices.ContainsFunc(release.ProjectIDs, func(id string) bool { return !visibleProjects[id] }) || slices.ContainsFunc(release.IssueIDs, func(id string) bool { return !visibleIssues[id] })
+		return release.PipelineID != "" && !slices.ContainsFunc(data.ReleasePipelines, func(p domain.ReleasePipeline) bool { return p.ID == release.PipelineID })
 	})
+	for index := range data.Releases {
+		data.Releases[index].ProjectIDs = slices.DeleteFunc(data.Releases[index].ProjectIDs, func(id string) bool { return !visibleProjects[id] })
+		data.Releases[index].IssueIDs = slices.DeleteFunc(data.Releases[index].IssueIDs, func(id string) bool { return !visibleIssues[id] })
+	}
 	data.Documents = slices.DeleteFunc(data.Documents, func(document domain.Document) bool {
 		return len(document.TeamIDs) > 0 && !slices.ContainsFunc(document.TeamIDs, func(id string) bool { return allowed[id] })
 	})
@@ -322,17 +323,28 @@ func applyAPIKeyProjection(data *domain.Bootstrap, key domain.APIKey) {
 // A member may join or leave their own public/open team. Changes involving a
 // different user or assigning the owner role remain owner/admin operations.
 func membershipSelfServiceRequest(r *http.Request, userID string) bool {
+	_, ok := membershipSelfServiceAction(r, userID)
+	return ok
+}
+
+// membershipSelfServiceAction returns whether the caller is joining (true) or
+// leaving (false) their own team membership. Owner role changes are never
+// self-service operations.
+func membershipSelfServiceAction(r *http.Request, userID string) (bool, bool) {
 	if r.Method != http.MethodPut || !strings.HasPrefix(r.URL.Path, "/api/workspaces/") || !strings.Contains(r.URL.Path, "/teams/") || !strings.HasSuffix(r.URL.Path, "/members/"+userID) {
-		return false
+		return false, false
 	}
 	var input struct {
 		Role   string `json:"role"`
 		Member *bool  `json:"member"`
 	}
 	if !peekRequestJSON(r, &input) || input.Member == nil {
-		return false
+		return false, false
 	}
-	return strings.TrimSpace(input.Role) == "" || strings.EqualFold(strings.TrimSpace(input.Role), "member")
+	if role := strings.TrimSpace(input.Role); role != "" && !strings.EqualFold(role, "member") {
+		return false, false
+	}
+	return *input.Member, true
 }
 
 func publicAuthPath(path string) bool {
@@ -434,11 +446,11 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		teamRole, _ := s.store.TeamRole(r.Context(), data.Workspace.ID, teamID, user.ID)
 		allowed := teamOperationPermission(data.TeamSettings[teamID], r)
 		if !teamOperationAllowed(data.TeamSettings[teamID], allowed, teamRole, role) {
-			writeError(w, http.StatusForbidden, "Team owner access required")
+			writeError(w, http.StatusForbidden, teamOperationDeniedMessage(allowed, role))
 			return false
 		}
 	}
-	if membershipSelfServiceRequest(r, user.ID) {
+	if joining, selfService := membershipSelfServiceAction(r, user.ID); selfService && joining {
 		teamID := teamIDFromWorkspacePath(r.URL.Path)
 		settings := data.TeamSettings[teamID]
 		if role == "guest" || strings.EqualFold(settings.Access, "private") || strings.EqualFold(settings.Access, "restricted") || strings.EqualFold(settings.MembershipRestriction, "members") || strings.EqualFold(settings.MembershipRestriction, "owners") {
@@ -2099,13 +2111,22 @@ func (s *server) updateTeamMember(w http.ResponseWriter, r *http.Request) {
 	}
 	var input struct {
 		Role   string `json:"role"`
-		Member bool   `json:"member"`
+		Member *bool  `json:"member"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	if input.Member == nil {
+		writeError(w, http.StatusBadRequest, "member is required")
+		return
+	}
+	member := *input.Member
 	if input.Role == "" {
 		input.Role = "member"
+	}
+	if input.Role != "member" && input.Role != "owner" {
+		writeError(w, http.StatusBadRequest, "Team role must be owner or member")
+		return
 	}
 	if s.authDisabled {
 		teamID, userID := r.PathValue("teamId"), r.PathValue("userId")
@@ -2115,7 +2136,21 @@ func (s *server) updateTeamMember(w http.ResponseWriter, r *http.Request) {
 				return errInvalid
 			}
 			index := slices.IndexFunc(workspace.TeamMembers, func(member domain.TeamMember) bool { return member.TeamID == teamID && member.UserID == userID })
-			if !input.Member && !slices.ContainsFunc(workspace.Members, func(member domain.WorkspaceMember) bool {
+			if index >= 0 && workspace.TeamMembers[index].Managed {
+				return store.ErrManagedTeamMembership
+			}
+			if index >= 0 && workspace.TeamMembers[index].Role == "owner" && (!member || input.Role != "owner") {
+				owners := 0
+				for _, membership := range workspace.TeamMembers {
+					if membership.TeamID == teamID && membership.Role == "owner" {
+						owners++
+					}
+				}
+				if owners <= 1 {
+					return store.ErrLastTeamOwner
+				}
+			}
+			if !member && !slices.ContainsFunc(workspace.Members, func(member domain.WorkspaceMember) bool {
 				return member.User.ID == userID && strings.EqualFold(member.Role, "guest")
 			}) {
 				ids := domain.TeamSubtreeIDs(workspace, []string{teamID})
@@ -2125,7 +2160,7 @@ func (s *server) updateTeamMember(w http.ResponseWriter, r *http.Request) {
 					return fmt.Errorf("%w: leave sub-teams before leaving their parent team", errInvalid)
 				}
 			}
-			if input.Member {
+			if member {
 				if index >= 0 {
 					workspace.TeamMembers[index].Role = input.Role
 				} else {
@@ -2144,7 +2179,24 @@ func (s *server) updateTeamMember(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	err := s.store.SetTeamMembership(r.Context(), data.Workspace.ID, r.PathValue("teamId"), r.PathValue("userId"), input.Role, input.Member)
+	actorID := authUser(r).ID
+	workspaceRole, _, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, actorID)
+	actorTeamRole, _ := s.store.TeamRole(r.Context(), data.Workspace.ID, r.PathValue("teamId"), actorID)
+	targetMembership, targetIsMember, err := s.store.TeamMembership(r.Context(), data.Workspace.ID, r.PathValue("teamId"), r.PathValue("userId"))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not verify team membership")
+		return
+	}
+	currentRole := ""
+	if targetIsMember {
+		currentRole = targetMembership.Role
+	}
+	ownerRoleChange := member && input.Role == "owner" || currentRole == "owner" && (!member || input.Role != "owner")
+	if ownerRoleChange && !workspaceAdminRole(workspaceRole) && actorTeamRole != "owner" {
+		writeError(w, http.StatusForbidden, "Team owner access required to change owner roles")
+		return
+	}
+	err = s.store.SetTeamMembership(r.Context(), data.Workspace.ID, r.PathValue("teamId"), r.PathValue("userId"), input.Role, member)
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
 

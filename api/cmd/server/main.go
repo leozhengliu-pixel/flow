@@ -808,12 +808,11 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		issueRecordsError(w, err)
 		return
 	}
-	if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
-		issueRecordsError(w, err)
-		return
-	}
 	if projectListBootstrapRequested(r) {
 		store.ProjectListBootstrapProjection(&data)
+	} else if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
+		issueRecordsError(w, err)
+		return
 	}
 	if s.authDisabled {
 		if err := s.store.ApplyTeamDefaultFavorites(r.Context(), &data, data.Viewer.ID); err != nil {
@@ -5906,6 +5905,14 @@ func respondMutation(w http.ResponseWriter, err error, success int, value any) {
 		return
 	}
 	if errors.Is(err, store.ErrLastTeamOwner) {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	if errors.Is(err, store.ErrManagedTeamMembership) {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	if errors.Is(err, store.ErrTeamHasSubteamMembership) {
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	}

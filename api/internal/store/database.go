@@ -200,7 +200,10 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
-	if err := s.ensureTeamDefaultFavorites(context.Background()); err != nil { db.Close(); return nil, err }
+	if err := s.ensureTeamDefaultFavorites(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := s.loadOrSeed(context.Background()); err != nil {
 		db.Close()
 		return nil, err
@@ -460,6 +463,7 @@ func databaseMigrations(dialect string) []string {
 		"auth_sessions_user_idx ON auth_sessions(user_id,expires_at)",
 		"auth_identities_user_idx ON auth_identities(user_id)",
 		"workspace_memberships_user_idx ON workspace_memberships(user_id,status)",
+		"team_memberships_role_idx ON team_memberships(workspace_id,team_id,role)",
 		"workspace_invitations_email_idx ON workspace_invitations(email,status)",
 		"workspace_invitations_workspace_created_idx ON workspace_invitations(workspace_id,created_at)",
 		"search_history_recent_idx ON search_history(user_id,workspace_id,last_used_at)",

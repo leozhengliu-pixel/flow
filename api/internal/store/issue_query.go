@@ -113,15 +113,16 @@ func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, use
 		}
 		data.Reviews = []domain.CodeReview{}
 		data.Releases = []domain.Release{}
+		visibleProjects := make(map[string]bool, len(data.Projects))
+		for _, project := range data.Projects {
+			visibleProjects[project.ID] = true
+		}
 		for _, release := range releases {
 			if release.PipelineID != "" && !slices.ContainsFunc(data.ReleasePipelines, func(p domain.ReleasePipeline) bool { return p.ID == release.PipelineID }) {
 				continue
 			}
-			if slices.ContainsFunc(release.ProjectIDs, func(id string) bool {
-				return !slices.ContainsFunc(data.Projects, func(p domain.Project) bool { return p.ID == id })
-			}) || slices.ContainsFunc(release.IssueIDs, func(id string) bool { return !visible[id] }) {
-				continue
-			}
+			release.ProjectIDs = slices.DeleteFunc(release.ProjectIDs, func(id string) bool { return !visibleProjects[id] })
+			release.IssueIDs = slices.DeleteFunc(release.IssueIDs, func(id string) bool { return !visible[id] })
 			data.Releases = append(data.Releases, release)
 		}
 		for _, review := range reviews {
