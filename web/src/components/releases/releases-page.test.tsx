@@ -124,6 +124,29 @@ describe('ReleasesPage icons', () => {
     expect(screen.getByRole('button', { name: /App/ })).toBeVisible()
   })
 
+  it('filters release pipelines from the directory search and clears with Escape', async () => {
+    const user = userEvent.setup()
+    renderPage(
+      <ReleasesPage
+        data={pageData({
+          releasePipelines: [pipeline(), pipeline({ id: 'pipeline-2', slugId: 'api', name: 'API' })],
+        })}
+        onNavigate={vi.fn()}
+        onOpenSidebar={vi.fn()}
+        onReload={vi.fn().mockResolvedValue(undefined)}
+      />,
+    )
+
+    const search = screen.getByRole('searchbox', { name: 'Find release pipelines…' })
+    await user.type(search, 'api')
+    expect(screen.getByRole('button', { name: /API/ })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /App/ })).toBeNull()
+
+    await user.keyboard('{Escape}')
+    expect(search).toHaveValue('')
+    expect(screen.getByRole('button', { name: /App/ })).toBeVisible()
+  })
+
   it('uses an empty-state pipeline icon when no pipelines exist', () => {
     const { container } = renderPage(
       <ReleasesPage
