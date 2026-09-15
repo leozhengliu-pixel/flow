@@ -134,7 +134,7 @@ func writeIssueStats(ctx context.Context, tx *sqlTx, workspace string, deltas ma
 // Use small transactional counters only for queries that exactly match their
 // dimensions. Arbitrary filters and inherited-share scopes retain SQL aggregation.
 func (s *SQLiteStore) issueGroupsFromStats(ctx context.Context, q IssueRecordQuery) ([]IssueRecordGroup, bool, error) {
-	if q.Access != nil && !q.Access.Admin || q.Text != "" || len(q.StateIDs) > 0 || q.AllowedTeamIDs != nil {
+	if q.Access != nil && !q.Access.Admin || q.Text != "" || len(q.StateIDs) > 0 || q.AllowedTeamIDs != nil || q.RestrictToIssueIDs || len(q.ReleaseIDs) > 0 {
 		return nil, false, nil
 	}
 	if q.GroupBy != "status" && q.GroupBy != "priority" && q.GroupBy != "none" {

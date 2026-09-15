@@ -11,6 +11,9 @@ func (s *SQLiteStore) VisibleIssueRecordIDs(ctx context.Context, q IssueRecordQu
 	q.TeamIDs = nil
 	q.StateIDs = nil
 	q.ProjectIDs = nil
+	q.ReleaseIDs = nil
+	q.IssueIDs = nil
+	q.RestrictToIssueIDs = false
 	q.GroupValue = nil
 	q.GroupBy = ""
 	for start := 0; start < len(ids); start += 500 {

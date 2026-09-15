@@ -742,6 +742,8 @@ export interface Release {
   targetDate?: string;
   projectIds: UUID[];
   issueIds: UUID[];
+  issueCount?: number;
+  completedCount?: number;
   subscriberIds: UUID[];
   resources: ReleaseResource[];
   creator: User;

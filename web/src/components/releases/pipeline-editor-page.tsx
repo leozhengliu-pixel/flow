@@ -2,8 +2,8 @@ import * as Popover from '@radix-ui/react-popover'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Dialog from '@radix-ui/react-dialog'
 import {
-  CalendarDays, Check, ChevronDown, ChevronRight, CircleCheck, CircleDashed, CircleDotDashed,
-  CircleHelp, CircleX, Copy, KeyRound, MoreHorizontal, Plus, Repeat2, Trash2,
+  CalendarDays, Check, ChevronDown, ChevronRight,
+  CircleHelp, Copy, KeyRound, MoreHorizontal, Plus, Repeat2, Trash2,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -14,6 +14,8 @@ import { Toggle } from '@/components/ui/toggle'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { createReleasePipeline, deleteReleasePipeline, rotateReleasePipelineAccessKey, updateReleasePipeline } from '@/lib/api'
 import type { BootstrapData, Release, ReleasePipeline } from '@/types/flow'
+
+import { ReleaseStatusIcon } from './release-icons'
 import './pipeline-editor.css'
 
 type StageDraft = { name: string; status: Release['status'] }
@@ -138,7 +140,7 @@ export function PipelineEditorPage({ data, pipeline, onCancel, onSaved }: {
         <div className="flow-pipeline-started-label"><span>{t('Started')}</span><button type="button" aria-label={t('Add stage')} title={t('Add stage')} onClick={() => setAddingStage(true)}><Plus/></button><span className="flow-pipeline-stage-help" title={t('Stages between planned and released are considered started.')}><CircleHelp/></span></div>
         {stages.slice(1, -2).map(stage => <StageRow inset key={stage.name} stage={stage}/>)}
         {addingStage && <div className="flow-pipeline-stage-edit-row">
-          <span className="flow-pipeline-stage-edit-icon"><CircleDotDashed/></span>
+          <span className="flow-pipeline-stage-edit-icon"><ReleaseStatusIcon status="inProgress"/></span>
           <input autoFocus value={stageName} onChange={event => setStageName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addStage() } if (event.key === 'Escape') { event.preventDefault(); setAddingStage(false); setStageName('') } }} placeholder={t('Stage name')}/>
           <div><button type="button" onClick={() => { setAddingStage(false); setStageName('') }}>{t('Cancel')}</button><button type="button" className="primary" disabled={!stageName.trim() || stages.some(stage => stage.name.toLowerCase() === stageName.trim().toLowerCase())} onClick={addStage}>{t('Create')}</button></div>
         </div>}
@@ -157,6 +159,5 @@ export function PipelineEditorPage({ data, pipeline, onCancel, onSaved }: {
 }
 
 function StageRow({ stage, inset = false }: { stage: StageDraft; inset?: boolean }) {
-  const Icon = stage.status === 'planned' ? CircleDashed : stage.status === 'inProgress' ? CircleDotDashed : stage.status === 'released' ? CircleCheck : CircleX
-  return <div className={`flow-pipeline-stage-row status-${stage.status}${inset ? ' inset' : ''}`}><div><Icon/><strong data-i18n-ignore>{stage.name}</strong></div></div>
+  return <div className={`flow-pipeline-stage-row status-${stage.status}${inset ? ' inset' : ''}`}><div><ReleaseStatusIcon status={stage.status}/><strong data-i18n-ignore>{stage.name}</strong></div></div>
 }

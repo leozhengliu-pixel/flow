@@ -130,6 +130,9 @@ func TestReleasePipelineAndReleaseAPILifecycle(t *testing.T) {
 	if release.SlugID == "" || release.PipelineID != pipeline.ID || release.Stage != "Planning" || release.CommitSHA != "abc123def456" || release.ReleaseNotes != "Initial notes" || len(release.Resources) != 1 || release.Resources[0].Title != "Runbook" || release.StartedAt == nil || release.ReleasedAt != nil {
 		t.Fatalf("release business fields were not initialized: %#v", release)
 	}
+	if release.IssueCount != 1 {
+		t.Fatalf("release progress count was not derived: %#v", release)
+	}
 	persistedRelease := requestJSON[domain.Release](t, handler, http.MethodGet, "/api/releases/"+release.ID, nil, http.StatusOK)
 	if persistedRelease.PipelineID != pipeline.ID || persistedRelease.CommitSHA != release.CommitSHA || persistedRelease.StartedAt == nil {
 		t.Fatalf("release did not survive the read round trip: %#v", persistedRelease)
@@ -151,6 +154,14 @@ func TestReleasePipelineAndReleaseAPILifecycle(t *testing.T) {
 	issueReleases = requestJSON[[]domain.Release](t, handler, http.MethodPut, "/api/issues/"+secondIssue.ID+"/releases", map[string]any{"releaseIds": []string{secondRelease.ID}}, http.StatusOK)
 	if len(issueReleases) != 1 || issueReleases[0].ID != secondRelease.ID {
 		t.Fatalf("issue release removal failed: %#v", issueReleases)
+	}
+	scoped := requestJSON[store.IssueRecordPage](t, handler, http.MethodGet, "/api/issue-records?releaseId="+secondRelease.ID+"&includeTotal=true", nil, http.StatusOK)
+	if scoped.Total != 1 || len(scoped.Items) != 1 || scoped.Items[0].ID != secondIssue.ID {
+		t.Fatalf("release-scoped issue query returned %#v", scoped)
+	}
+	missingRelease := requestJSON[store.IssueRecordPage](t, handler, http.MethodGet, "/api/issue-records?releaseId=missing-release&includeTotal=true", nil, http.StatusOK)
+	if missingRelease.Total != 0 || len(missingRelease.Items) != 0 {
+		t.Fatalf("unknown release should not list workspace issues: %#v", missingRelease)
 	}
 	filtered := requestJSON[[]domain.Release](t, handler, http.MethodGet, "/api/releases?pipelineId="+pipeline.ID+"&status=planned", nil, http.StatusOK)
 	if len(filtered) != 1 || filtered[0].ID != secondRelease.ID {
@@ -175,6 +186,10 @@ func TestReleasePipelineAndReleaseAPILifecycle(t *testing.T) {
 	}, http.StatusOK)
 	if len(release.IssueIDs) != 0 {
 		t.Fatalf("frozen stage should allow issue removal: %#v", release.IssueIDs)
+	}
+	emptyRelease := requestJSON[store.IssueRecordPage](t, handler, http.MethodGet, "/api/issue-records?releaseId="+release.ID+"&includeTotal=true", nil, http.StatusOK)
+	if emptyRelease.Total != 0 || len(emptyRelease.Items) != 0 {
+		t.Fatalf("empty release should not list workspace issues: %#v", emptyRelease)
 	}
 	release = requestJSON[domain.Release](t, handler, http.MethodPatch, "/api/releases/"+release.ID, map[string]any{"status": "released"}, http.StatusOK)
 	if release.ReleasedAt == nil || release.StartedAt == nil {

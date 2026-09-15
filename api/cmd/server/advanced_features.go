@@ -1082,6 +1082,14 @@ func (s *server) createRelease(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "continuous pipelines create releases through CI/CD integrations")
 		return
 	}
+	if err == nil {
+		projection := domain.Bootstrap{Workspace: domain.Workspace{URLKey: workspaceKey(r)}, Releases: []domain.Release{created}}
+		if progressErr := s.store.PopulateReleaseProgress(r.Context(), &projection); progressErr != nil {
+			err = progressErr
+		} else {
+			created = projection.Releases[0]
+		}
+	}
 	respondMutation(w, err, http.StatusCreated, created)
 }
 
@@ -1118,6 +1126,14 @@ func (s *server) updateRelease(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, errConflict) {
 		writeError(w, http.StatusConflict, "frozen release stages do not accept new issues")
 		return
+	}
+	if err == nil {
+		projection := domain.Bootstrap{Workspace: domain.Workspace{URLKey: workspaceKey(r)}, Releases: []domain.Release{updated}}
+		if progressErr := s.store.PopulateReleaseProgress(r.Context(), &projection); progressErr != nil {
+			err = progressErr
+		} else {
+			updated = projection.Releases[0]
+		}
 	}
 	respondMutation(w, err, http.StatusOK, updated)
 }

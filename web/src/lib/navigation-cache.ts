@@ -32,14 +32,15 @@ function isAuthorizedRecord(record: NavigationCacheRecord | undefined, viewerId:
 }
 
 function stripIssue(issue: Issue): Issue {
-  return {
+  const preview: Partial<Issue> = {
     ...issue,
-    description: undefined,
-    descriptionState: undefined,
-    documentContent: undefined,
     isSummary: true,
     needsDetailRefresh: true,
   }
+  delete preview.description
+  delete preview.descriptionState
+  delete preview.documentContent
+  return preview as Issue
 }
 
 /** Directory snapshot safe to reuse as left-nav chrome. Issue bodies stay out of storage. */

@@ -712,30 +712,32 @@ type CustomerRequest struct {
 }
 
 type Release struct {
-	ID            string            `json:"id"`
-	SlugID        string            `json:"slugId"`
-	Name          string            `json:"name"`
-	Version       string            `json:"version"`
-	Description   string            `json:"description"`
-	Status        string            `json:"status"`
-	PipelineID    string            `json:"pipelineId,omitempty"`
-	Stage         string            `json:"stage,omitempty"`
-	CommitSHA     string            `json:"commitSha,omitempty"`
-	ReleaseNotes  string            `json:"releaseNotes,omitempty"`
-	Position      float64           `json:"position"`
-	StartDate     *string           `json:"startDate,omitempty"`
-	TargetDate    *string           `json:"targetDate,omitempty"`
-	ProjectIDs    []string          `json:"projectIds"`
-	IssueIDs      []string          `json:"issueIds"`
-	SubscriberIDs []string          `json:"subscriberIds"`
-	Resources     []ReleaseResource `json:"resources"`
-	Creator       User              `json:"creator"`
-	StartedAt     *time.Time        `json:"startedAt,omitempty"`
-	ReleasedAt    *time.Time        `json:"releasedAt,omitempty"`
-	StageFrozenAt *time.Time        `json:"stageFrozenAt,omitempty"`
-	ArchivedAt    *time.Time        `json:"archivedAt,omitempty"`
-	CreatedAt     time.Time         `json:"createdAt"`
-	UpdatedAt     time.Time         `json:"updatedAt"`
+	ID             string            `json:"id"`
+	SlugID         string            `json:"slugId"`
+	Name           string            `json:"name"`
+	Version        string            `json:"version"`
+	Description    string            `json:"description"`
+	Status         string            `json:"status"`
+	PipelineID     string            `json:"pipelineId,omitempty"`
+	Stage          string            `json:"stage,omitempty"`
+	CommitSHA      string            `json:"commitSha,omitempty"`
+	ReleaseNotes   string            `json:"releaseNotes,omitempty"`
+	Position       float64           `json:"position"`
+	StartDate      *string           `json:"startDate,omitempty"`
+	TargetDate     *string           `json:"targetDate,omitempty"`
+	ProjectIDs     []string          `json:"projectIds"`
+	IssueIDs       []string          `json:"issueIds"`
+	IssueCount     int               `json:"issueCount,omitempty"`
+	CompletedCount int               `json:"completedCount,omitempty"`
+	SubscriberIDs  []string          `json:"subscriberIds"`
+	Resources      []ReleaseResource `json:"resources"`
+	Creator        User              `json:"creator"`
+	StartedAt      *time.Time        `json:"startedAt,omitempty"`
+	ReleasedAt     *time.Time        `json:"releasedAt,omitempty"`
+	StageFrozenAt  *time.Time        `json:"stageFrozenAt,omitempty"`
+	ArchivedAt     *time.Time        `json:"archivedAt,omitempty"`
+	CreatedAt      time.Time         `json:"createdAt"`
+	UpdatedAt      time.Time         `json:"updatedAt"`
 }
 
 type ReleaseResource struct {

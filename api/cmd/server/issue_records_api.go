@@ -52,6 +52,7 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 	}
 	query.ProjectIDs = splitQueryValues(r.URL.Query().Get("projectId"))
 	query.StateIDs = splitQueryValues(r.URL.Query().Get("stateId"))
+	query.ReleaseIDs = splitQueryValues(r.URL.Query().Get("releaseId"))
 	if value, ok := r.URL.Query()["groupValue"]; ok {
 		v := ""
 		if len(value) > 0 {
@@ -123,6 +124,10 @@ func (s *server) issueRecordsBootstrap(w http.ResponseWriter, r *http.Request) {
 	}
 	data.IssueCollectionPaged = true
 	if err := s.filterPreferenceIssueTeams(r, &data); err != nil {
+		issueRecordsError(w, err)
+		return
+	}
+	if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
 		issueRecordsError(w, err)
 		return
 	}
