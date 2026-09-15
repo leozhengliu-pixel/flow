@@ -101,4 +101,21 @@ describe('issue activity timeline', () => {
     expect(screen.getByText('reply item')).toBeVisible()
     expect(screen.getByRole('list')).toBeVisible()
   })
+
+  it('keeps reply composer commands separate from its text cancel action', async () => {
+    const user = userEvent.setup()
+    const comment = { id: 'comment-one', body: 'Reply here', user: viewer, createdAt: '2026-09-01T00:00:00Z', reactions: {} } as Comment
+    const { container } = render(<I18nProvider><ActivityTimeline events={[]} comments={[comment]} viewerId={viewer.id} onReply={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} onReaction={vi.fn()}/></I18nProvider>)
+
+    await user.click(screen.getByRole('button', { name: 'Reply' }))
+    const cancel = screen.getByRole('button', { name: 'Cancel' })
+    const send = screen.getByRole('button', { name: 'Submit comment' })
+    expect(container.querySelector('.composer-tools')).toBeInTheDocument()
+    expect(cancel).toHaveClass('composer-cancel')
+    expect(cancel).not.toHaveClass('composer-send')
+    expect(send).toHaveClass('composer-send')
+    expect(cancel.className).toContain('px-2')
+    expect(send.className).toContain('size-7')
+    expect(container.querySelector('.composer-tools')?.parentElement).toHaveClass('composer-toolbar')
+  })
 })

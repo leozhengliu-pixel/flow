@@ -37,6 +37,7 @@ type SQLiteStore struct {
 	apiKeyUseQueue   chan apiKeyUse
 	apiKeyUseWorkers sync.WaitGroup
 	apiKeyUseClosed  bool
+	teamMembershipMu sync.Mutex
 }
 
 // WorkspaceKeys returns a stable snapshot for background workers. Callers do
@@ -253,6 +254,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		{version: 3, name: "domain event previous values", apply: s.addDomainEventPreviousValues},
 		{version: 4, name: "session authentication policy context", apply: s.createSessionSecuritySchema},
 		{version: 5, name: "encrypted connector credentials", apply: s.createConnectorSecretsSchema},
+		{version: 6, name: "team membership role index", apply: s.createTeamMembershipRoleIndex},
 	}
 	for _, migration := range migrations {
 		if applied[migration.version] {
@@ -266,6 +268,14 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (s *SQLiteStore) createTeamMembershipRoleIndex(ctx context.Context) error {
+	prefix := "CREATE INDEX IF NOT EXISTS "
+	if s.dialect == "mysql" {
+		prefix = "CREATE INDEX "
+	}
+	return s.applyMigrationStatements(ctx, []string{prefix + "team_memberships_role_idx ON team_memberships(workspace_id,team_id,role)"})
 }
 
 func (s *SQLiteStore) addDomainEventPreviousValues(ctx context.Context) error {
@@ -1252,6 +1262,9 @@ func (s *SQLiteStore) MutateWithAggregate(ctx context.Context, eventType string,
 func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
 	if eventType == "workspace_preferences.updated" && featureFlagsOnly(payload) {
 		return s.mutateFeatureFlags(ctx, workspaceKey, payload, mutate)
+	}
+	if standaloneFavoriteMutation(eventType, payload) {
+		return s.mutateStandaloneFavorite(ctx, workspaceKey, eventType, payload, mutate)
 	}
 	if eventType == "issue.created" && UsesIssueRecordMutations(ctx) {
 		return s.createIssueRecords(ctx, workspaceKey, payload, mutate)

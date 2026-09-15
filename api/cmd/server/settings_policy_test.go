@@ -37,8 +37,11 @@ func TestTeamPermissionsAllowConfiguredRolesWithoutPolicyEscalation(t *testing.T
 	s := domain.TeamSettings{SettingsPermission: "allMembers", MemberPermission: "teamMembers", Access: "public"}
 	r := httptest.NewRequest("PATCH", "/api/teams/team/settings", strings.NewReader(`{"description":"Edited"}`))
 	r.Header.Set("Content-Type", "application/json")
-	if !teamOperationAllowed(s, teamOperationPermission(s, r), "", "member") {
-		t.Fatal("all workspace members should be allowed on public team general settings")
+	if teamOperationAllowed(s, teamOperationPermission(s, r), "", "member") {
+		t.Fatal("public team visibility must not grant mutation rights to non-team workspace members")
+	}
+	if !teamOperationAllowed(s, teamOperationPermission(s, r), "member", "member") {
+		t.Fatal("allMembers should allow a team member")
 	}
 	r = httptest.NewRequest("PATCH", "/api/teams/team/settings", strings.NewReader(`{"settingsPermission":"allMembers"}`))
 	r.Header.Set("Content-Type", "application/json")

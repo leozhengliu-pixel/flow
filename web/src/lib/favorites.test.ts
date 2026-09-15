@@ -152,4 +152,26 @@ describe('favorites', () => {
     resolveCreated(favorite({ id: 'favorite-server' }))
     await pending
   })
+
+  it('keeps a confirmed add until a preferences snapshot acknowledges it', async () => {
+    const created = favorite({ id: 'favorite-server', resourceType: 'release', resourceId: 'release-1' })
+    api.addFavorite.mockResolvedValue(created)
+    const data = makeBootstrap({ favorites: [] })
+
+    await toggleFavoriteFor(data, 'release', 'release-1', true)
+    expect(overlayPendingFavoriteIntents({ ...data, favorites: [] }).favorites).toContainEqual(created)
+    expect(overlayPendingFavoriteIntents({ ...data, favorites: [created] }).favorites).toContainEqual(created)
+    expect(overlayPendingFavoriteIntents({ ...data, favorites: [] }).favorites).toEqual([])
+  })
+
+  it('keeps a confirmed removal over a stale preferences snapshot', async () => {
+    const existing = favorite({ resourceType: 'release', resourceId: 'release-1' })
+    api.removeFavorite.mockResolvedValue(undefined)
+    const data = makeBootstrap({ favorites: [existing] })
+
+    await toggleFavoriteFor(data, 'release', 'release-1', false)
+    expect(overlayPendingFavoriteIntents(data).favorites).toEqual([])
+    expect(overlayPendingFavoriteIntents({ ...data, favorites: [] }).favorites).toEqual([])
+    expect(overlayPendingFavoriteIntents(data).favorites).toEqual([existing])
+  })
 })

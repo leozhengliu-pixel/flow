@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -78,6 +79,7 @@ func ProjectListProjection(project domain.Project) domain.Project {
 	project.InProgressScopeHistory = nil
 	project.ProgressHistory = nil
 	project.UpdateSchedule = nil
+	project.Milestones = slices.Clone(project.Milestones)
 	for index := range project.Milestones {
 		project.Milestones[index].Description = ""
 	}
@@ -91,6 +93,51 @@ func ProjectListBootstrapProjection(data *domain.Bootstrap) {
 	if data == nil {
 		return
 	}
+	for _, notification := range data.Notifications {
+		if notification.RecipientID == data.Viewer.ID && notification.ReadAt == nil && notification.ArchivedAt == nil && notification.DeletedAt == nil && (notification.SnoozedUntil == nil || !notification.SnoozedUntil.After(time.Now())) {
+			data.InboxUnreadCount++
+		}
+	}
+	for _, review := range data.Reviews {
+		if review.Status != "merged" && review.Status != "closed" && slices.Contains(review.ReviewerIDs, data.Viewer.ID) {
+			data.ReviewCount++
+		}
+	}
+	favoriteIDs := map[string]map[string]bool{}
+	for _, favorite := range data.Favorites {
+		ids := favoriteIDs[favorite.ResourceType]
+		if ids == nil {
+			ids = map[string]bool{}
+			favoriteIDs[favorite.ResourceType] = ids
+		}
+		ids[favorite.ResourceID] = true
+	}
+	favoriteProjects := slices.DeleteFunc(slices.Clone(data.Projects), func(item domain.Project) bool { return !favoriteIDs["project"][item.ID] })
+	for index := range favoriteProjects {
+		favoriteProjects[index] = ProjectListProjection(favoriteProjects[index])
+	}
+	favoriteIssues := slices.DeleteFunc(slices.Clone(data.Issues), func(item domain.Issue) bool { return !favoriteIDs["issue"][item.ID] })
+	for index := range favoriteIssues {
+		favoriteIssues[index] = issueListProjection(favoriteIssues[index])
+	}
+	favoriteDocuments := slices.DeleteFunc(slices.Clone(data.Documents), func(item domain.Document) bool { return !favoriteIDs["document"][item.ID] })
+	for index := range favoriteDocuments {
+		favoriteDocuments[index].Content = ""
+		favoriteDocuments[index].ContentState = ""
+		favoriteDocuments[index].ContentData = nil
+		favoriteDocuments[index].Revisions = nil
+		favoriteDocuments[index].Permissions = nil
+	}
+	favoriteCustomers := slices.DeleteFunc(slices.Clone(data.Customers), func(item domain.Customer) bool { return !favoriteIDs["customer"][item.ID] })
+	favoriteReleases := slices.DeleteFunc(slices.Clone(data.Releases), func(item domain.Release) bool { return !favoriteIDs["release"][item.ID] })
+	neededPipelines := maps.Clone(favoriteIDs["release_pipeline"])
+	if neededPipelines == nil {
+		neededPipelines = map[string]bool{}
+	}
+	for _, release := range favoriteReleases {
+		neededPipelines[release.PipelineID] = true
+	}
+	favoritePipelines := slices.DeleteFunc(slices.Clone(data.ReleasePipelines), func(item domain.ReleasePipeline) bool { return !neededPipelines[item.ID] })
 	for index := range data.Projects {
 		data.Projects[index] = ProjectListProjection(data.Projects[index])
 	}
@@ -100,6 +147,105 @@ func ProjectListBootstrapProjection(data *domain.Bootstrap) {
 	data.Activities = map[string][]domain.ActivityEvent{}
 	data.ProjectUpdates = map[string][]domain.ProjectUpdate{}
 	data.InitiativeUpdates = map[string][]domain.InitiativeUpdate{}
+	data.ProviderJobs = []domain.ProviderJob{}
+	data.Customers = favoriteCustomers
+	data.States = []domain.WorkflowState{}
+	// Current and upcoming cycles remain because they are part of sidebar navigation.
+	data.IssueTemplates = []domain.IssueTemplate{}
+	data.DocumentTemplates = []domain.DocumentTemplate{}
+	data.Documents = favoriteDocuments
+	data.CustomerRequests = []domain.CustomerRequest{}
+	data.Releases = favoriteReleases
+	data.ReleasePipelines = favoritePipelines
+	data.CustomEmojis = []domain.CustomEmoji{}
+	data.Asks = []domain.Ask{}
+	data.Loops = []domain.Loop{}
+	data.SLARules = []domain.SLARule{}
+	data.IssueSLAs = []domain.IssueSLA{}
+	data.SLAEvents = []domain.SLAEvent{}
+	data.Drafts = []domain.Draft{}
+	data.AuditLog = []domain.AuditLogEntry{}
+	data.Trash = []domain.TrashEntry{}
+	data.ImportJobs = []domain.ImportJob{}
+	data.ExportJobs = []domain.ExportJob{}
+	data.MigrationJobs = []domain.MigrationJob{}
+	data.ProjectRelations = []domain.ProjectRelation{}
+	data.InitiativeRelations = []domain.InitiativeRelation{}
+	data.DocumentContentDrafts = []domain.DocumentContentDraft{}
+	data.CustomerStatuses = []domain.CustomerStatus{}
+	data.CustomerTiers = []domain.CustomerTier{}
+	data.ReleaseNotes = []domain.ReleaseNote{}
+	data.ReleaseHistory = []domain.ReleaseHistory{}
+	data.TeamResourceSections = []domain.TeamResourceSection{}
+	data.TeamPinnedResources = []domain.TeamPinnedResource{}
+	data.AgentActivities = []domain.AgentActivity{}
+	data.AIConversations = []domain.AIConversation{}
+	data.AIPromptProgress = []domain.AIPromptProgress{}
+	data.IssueSuggestions = []domain.IssueSuggestion{}
+	data.Notifications = []domain.Notification{}
+	data.NotificationPreferences = map[string]domain.NotificationPreferences{}
+	data.NotificationDeliveries = []domain.NotificationDelivery{}
+	data.PushSubscriptions = []domain.PushSubscription{}
+	data.TriageResponsibilities = []domain.TriageResponsibility{}
+	data.TriageRoutingRules = []domain.TriageRoutingRule{}
+	data.TriageAssignments = []domain.TriageAssignment{}
+	data.WorkflowDefinitions = []domain.WorkflowDefinition{}
+	data.WorkflowRuns = []domain.WorkflowRun{}
+	data.EmailIntakeAddresses = []domain.EmailIntakeAddress{}
+	data.EmailIntakeMessages = []domain.EmailIntakeMessage{}
+	data.APIKeys = []domain.APIKey{}
+	data.Passkeys = []domain.Passkey{}
+	data.PasskeyRegistrationChallenges = []domain.PasskeyRegistrationChallenge{}
+	data.OAuthApplications = []domain.OAuthApplication{}
+	data.OAuthAuthorizations = []domain.OAuthAuthorization{}
+	data.Webhooks = []domain.Webhook{}
+	data.IntegrationConnections = []domain.IntegrationConnection{}
+	data.IdentityProviders = []domain.IdentityProvider{}
+	data.IntegrationDeliveries = []domain.IntegrationDelivery{}
+	data.GitAutomationStates = []domain.GitAutomationState{}
+	data.TargetBranches = []domain.TargetBranch{}
+	data.Reviews = []domain.CodeReview{}
+	data.AgentSessions = []domain.AgentSession{}
+	data.Projects = favoriteProjects
+	data.Issues = favoriteIssues
+	viewerTeams := map[string]bool{}
+	data.TeamParents = make(map[string]string, len(data.TeamSettings))
+	for teamID, settings := range data.TeamSettings {
+		if settings.ParentTeamID != "" {
+			data.TeamParents[teamID] = settings.ParentTeamID
+		}
+	}
+	data.TeamMembers = slices.DeleteFunc(data.TeamMembers, func(member domain.TeamMember) bool {
+		if member.UserID == data.Viewer.ID {
+			viewerTeams[member.TeamID] = true
+			return false
+		}
+		return true
+	})
+	for changed := true; changed; {
+		changed = false
+		for teamID := range viewerTeams {
+			parentID := data.TeamSettings[teamID].ParentTeamID
+			if parentID != "" && !viewerTeams[parentID] {
+				viewerTeams[parentID] = true
+				changed = true
+			}
+		}
+	}
+	teamSettings := make(map[string]domain.TeamSettings, len(viewerTeams))
+	for teamID := range viewerTeams {
+		if settings, ok := data.TeamSettings[teamID]; ok {
+			teamSettings[teamID] = settings
+		}
+	}
+	data.TeamSettings = teamSettings
+	data.Members = []domain.WorkspaceMember{}
+	data.Invitations = []domain.Invitation{}
+	data.Labels = slices.DeleteFunc(data.Labels, func(label domain.IssueLabel) bool {
+		return label.ResourceType != "project" && !favoriteIDs["label"][label.ID]
+	})
+	data.LabelGroups = slices.DeleteFunc(data.LabelGroups, func(group domain.LabelGroup) bool { return group.ResourceType != "project" })
+	data.SavedViews = slices.DeleteFunc(data.SavedViews, func(view domain.SavedView) bool { return view.Resource != "projects" && !favoriteIDs["view"][view.ID] })
 	data.IssueCollectionPaged = true
 }
 

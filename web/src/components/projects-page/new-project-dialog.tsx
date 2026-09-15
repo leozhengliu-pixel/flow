@@ -85,18 +85,16 @@ export type NewProjectDialogProps = {
   onCreate: (draft: NewProjectDraft) => Promise<void> | void
 }
 
-const STATUS = ['Backlog', 'Planned', 'In Progress', 'Completed', 'Canceled']
 const PRIORITY = ['No priority', 'Urgent', 'High', 'Medium', 'Low']
 const DEFAULT_TEAMS: NewProjectChoice[] = []
 const EMPTY_CHOICES: NewProjectChoice[] = []
 const EMPTY_TEMPLATES: NewProjectTemplateChoice[] = []
-const DEFAULT_STATUSES: NewProjectChoice[] = STATUS.map(value => ({ id: value, icon: <ProjectStatusGlyph name={value} type={projectStatusType(value)}/>, label: value }))
 
 export function NewProjectDialog({
   open,
   initialTemplateId,
   teamLabel = 'Team',
-  defaultStatus = 'Backlog',
+  defaultStatus,
   teams = DEFAULT_TEAMS,
   leads = EMPTY_CHOICES,
   members = EMPTY_CHOICES,
@@ -105,12 +103,13 @@ export function NewProjectDialog({
   dependencies = EMPTY_CHOICES,
   agentSkills = [],
   workspaceName,
-  statuses = DEFAULT_STATUSES,
+  statuses = EMPTY_CHOICES,
   templates = EMPTY_TEMPLATES,
   onClose,
   onCreate,
 }: NewProjectDialogProps) {
   const { t } = useI18n()
+  const resolvedDefaultStatus = defaultStatus ?? statuses[0]?.id ?? ''
   const panelRef = useRef<HTMLFormElement>(null)
   const nameRef = useRef<HTMLInputElement>(null)
   const defaultTeamId = teams[0]?.id
@@ -122,7 +121,7 @@ export function NewProjectDialog({
   const labelsRef = useRef(labels)
   templatesRef.current = templates
   labelsRef.current = labels
-  const [draft, setDraft] = useState<NewProjectDraft>(() => emptyDraft(defaultStatus, defaultTeamId))
+  const [draft, setDraft] = useState<NewProjectDraft>(() => emptyDraft(resolvedDefaultStatus, defaultTeamId))
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [nameError, setNameError] = useState(false)
@@ -138,7 +137,7 @@ export function NewProjectDialog({
 
   useEffect(() => {
     if (!open) return
-    const nextDraft = applyProjectTemplateDraft(emptyDraft(defaultStatus, defaultTeamId), initialTemplateId, templatesRef.current, labelsRef.current)
+    const nextDraft = applyProjectTemplateDraft(emptyDraft(resolvedDefaultStatus, defaultTeamId), initialTemplateId, templatesRef.current, labelsRef.current)
     initialDraftRef.current = nextDraft
     setDraft(nextDraft)
     setError(null)
@@ -146,7 +145,7 @@ export function NewProjectDialog({
     setAgentOpen(false)
     setDiscardOpen(false)
     requestAnimationFrame(() => nameRef.current?.focus())
-  }, [defaultStatus, defaultTeamId, initialTemplateId, labelSignature, open, templateSignature])
+  }, [defaultTeamId, initialTemplateId, labelSignature, open, resolvedDefaultStatus, templateSignature])
 
   useEffect(() => {
     if (!open) return
@@ -223,7 +222,7 @@ export function NewProjectDialog({
         </div>
         <div className="lp-new-project__properties">
           {templates.length > 0 && <ProjectDraftProperty icon={<LayoutTemplate size={14}/>} label="Apply project template" options={[{ id: '', label: 'No template' }, ...templates]} placeholder="Template" value={draft.templateId ?? ''} onChange={applyTemplate} />}
-          <ProjectDraftProperty icon={statuses.find(status=>status.id===draft.status)?.icon??<ProjectStatusGlyph name={draft.status} type={projectStatusType(draft.status)}/>} label="Change project status" options={statuses} value={draft.status} onChange={value => set('status', value)} />
+          <ProjectDraftProperty icon={statuses.find(status=>status.id===draft.status)?.icon??<ProjectStatusGlyph name={draft.status} type="planned"/>} label="Change project status" options={statuses} value={draft.status} onChange={value => set('status', value)} />
           <ProjectDraftProperty icon={<PriorityIcon priority={Math.max(0, PRIORITY.indexOf(draft.priority))} size={14}/>} label="Change project priority" options={PRIORITY.map((value, priority) => ({ id: value, icon: <PriorityIcon priority={priority} size={14}/>, label: value }))} value={draft.priority} onChange={value => set('priority', value)} />
           <PersonPicker ariaLabel="Set project lead" emptyOptionLabel="No lead" emptyOptionShortcut="0" emptyTriggerLabel="Lead" label="Lead" onChange={value => set('leadId', value || undefined)} optionHoverClassName="lp-new-project-person-hover" optionHoverContent={person => <PersonHoverPreview person={person} workspaceName={teamLabel}/>} people={leads.map(lead => ({ id: lead.id, label: lead.label, name: lead.name, email: lead.email, avatarUrl: lead.avatarUrl, color: lead.color, active: lead.active, online: lead.online, disabled: lead.disabled, end: lead.end, groupId: lead.groupId, groupLabel: lead.groupLabel, hoverContent: lead.hoverContent, hoverClassName: lead.hoverClassName }))} searchPlaceholder="Set lead…" searchShortcut="P, then A" selectedId={draft.leadId} showUnselectedGroupWhenEmpty surfaceClassName="lp-new-project-picker__surface lp-new-project-person-picker__surface lp-new-project-person-picker__lead" triggerClassName="lp-new-project-picker__trigger" unselectedGroupLabel="Users from the project team" />
           <PersonPicker ariaLabel="Change project members" closeOnSelect emptyTriggerLabel="Members" icon={<MembersIcon size={14}/>} label="Members" multiple onChange={id => setDraft(current => ({ ...current, memberIds: current.memberIds.includes(id) ? current.memberIds.filter(value => value !== id) : [...current.memberIds, id] }))} optionHoverClassName="lp-new-project-person-hover" optionHoverContent={person => <PersonHoverPreview person={person} workspaceName={teamLabel}/>} people={members.map(member => ({ id: member.id, label: member.label, name: member.name, email: member.email, avatarUrl: member.avatarUrl, color: member.color, active: member.active, online: member.online, disabled: member.disabled, end: member.end, groupId: member.groupId, groupLabel: member.groupLabel, hoverContent: member.hoverContent, hoverClassName: member.hoverClassName }))} searchPlaceholder="Change members…" searchShortcut="P, then M" selectedIds={draft.memberIds} surfaceClassName="lp-new-project-picker__surface lp-new-project-person-picker__surface lp-new-project-person-picker__members" trigger={<>{members.find(member => member.id === draft.memberIds[0]) ? <UserAvatar avatarUrl={members.find(member => member.id === draft.memberIds[0])?.avatarUrl} className="avatar core-person-picker-avatar" color={members.find(member => member.id === draft.memberIds[0])?.color} name={members.find(member => member.id === draft.memberIds[0])?.label ?? ''}/> : <MembersIcon size={14}/>}<span>{draft.memberIds.length ? t(`${draft.memberIds.length} member${draft.memberIds.length === 1 ? '' : 's'}`) : t('Members')}</span></>} triggerClassName="lp-new-project-picker__trigger" unselectedGroupLabel="Users from the project team" />
@@ -406,7 +405,6 @@ function applyProjectTemplateDraft(current:NewProjectDraft,templateId:string|und
   return {...current,templateId,name:template.name??template.label,summary:template.summary??'',description:template.description??'',icon:normalizeProjectIcon(template.icon),color:template.color??current.color,status:template.status??current.status,priority:template.priority??current.priority,teamIds:template.teamIds?.length?[...template.teamIds]:current.teamIds,initiativeIds:template.initiativeIds?[...template.initiativeIds]:current.initiativeIds,labelIds:template.labelIds?template.labelIds.filter(id=>labelOptionIds.has(id)):current.labelIds,dependencyIds,dependencyRelations:dependencyIds.map(projectId => ({ projectId, type: 'blocked_by' as const }))}
 }
 
-function projectStatusType(status: string) { return status === 'Backlog' ? 'backlog' : status === 'In Progress' ? 'started' : status === 'Completed' ? 'completed' : status === 'Canceled' ? 'canceled' : 'planned' }
 
 function mergeAgentDraft(current: NewProjectDraft, patch: ProjectAgentDraft, statuses: NewProjectChoice[], choices: Pick<NewProjectDialogProps, 'dependencies' | 'initiatives' | 'labels' | 'leads' | 'members' | 'teams'>) {
   const next = { ...current }

@@ -845,7 +845,7 @@ function AccessSettings({
   const { settings, save } = useTeamSettings(data, team, onReload);
   const restrictedParent = useMemo(() => teamHierarchy(data.teams, data.teamSettings).ancestors.get(team.id)?.some(parent => parent.private || data.teamSettings?.[parent.id]?.access === 'private' || data.teamSettings?.[parent.id]?.access === 'restricted'), [data.teams, data.teamSettings, team.id]);
   const permissionLabels = {
-    allMembers: "All workspace members",
+    allMembers: "All team members",
     teamMembers: "Team members",
     owners: "Team owners",
   };

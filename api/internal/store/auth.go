@@ -19,12 +19,14 @@ import (
 )
 
 var (
-	ErrAuthInvalid   = errors.New("invalid email or password")
-	ErrAuthExpired   = errors.New("token is invalid or expired")
-	ErrAuthConflict  = errors.New("account already exists")
-	ErrAuthForbidden = errors.New("forbidden")
-	ErrLastAdmin     = errors.New("a workspace needs at least one admin")
-	ErrLastTeamOwner = errors.New("a team needs at least one owner")
+	ErrAuthInvalid              = errors.New("invalid email or password")
+	ErrAuthExpired              = errors.New("token is invalid or expired")
+	ErrAuthConflict             = errors.New("account already exists")
+	ErrAuthForbidden            = errors.New("forbidden")
+	ErrLastAdmin                = errors.New("a workspace needs at least one admin")
+	ErrLastTeamOwner            = errors.New("a team needs at least one owner")
+	ErrManagedTeamMembership    = errors.New("team membership is managed by SCIM")
+	ErrTeamHasSubteamMembership = errors.New("remove sub-team memberships before removing the parent team membership")
 )
 
 type actorContextKey struct{}
@@ -738,7 +740,9 @@ func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.B
 		return domain.Bootstrap{}, false, err
 	}
 	data.Viewer, data.ViewerRole = user, role
-	if err := s.mergeTeamDefaultFavorites(ctx, &data, userID); err != nil { return domain.Bootstrap{}, false, err }
+	if err := s.mergeTeamDefaultFavorites(ctx, &data, userID); err != nil {
+		return domain.Bootstrap{}, false, err
+	}
 	if !isWorkspaceAdminRole(role) {
 		data.AuditLog = []domain.AuditLogEntry{}
 	}
@@ -877,7 +881,9 @@ func (s *SQLiteStore) ListMembers(ctx context.Context, workspaceID string) ([]do
 }
 
 func (s *SQLiteStore) ListTeamMembers(ctx context.Context, workspaceID string) ([]domain.TeamMember, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT team_id,user_id,role,joined_at FROM team_memberships WHERE workspace_id=? ORDER BY joined_at`, workspaceID)
+	rows, err := s.db.QueryContext(ctx, `SELECT m.team_id,m.user_id,m.role,m.joined_at,
+		CASE WHEN EXISTS (SELECT 1 FROM scim_team_memberships sm WHERE sm.workspace_id=m.workspace_id AND sm.team_id=m.team_id AND sm.user_id=m.user_id AND sm.managed=1) THEN 1 ELSE 0 END
+		FROM team_memberships m WHERE m.workspace_id=? ORDER BY m.joined_at`, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -886,13 +892,41 @@ func (s *SQLiteStore) ListTeamMembers(ctx context.Context, workspaceID string) (
 	for rows.Next() {
 		var item domain.TeamMember
 		var joined string
-		if err := rows.Scan(&item.TeamID, &item.UserID, &item.Role, &joined); err != nil {
+		var managed int
+		if err := rows.Scan(&item.TeamID, &item.UserID, &item.Role, &joined, &managed); err != nil {
 			return nil, err
 		}
 		item.JoinedAt, _ = time.Parse(time.RFC3339Nano, joined)
+		item.Managed = managed == 1
+		if item.Managed {
+			item.ManagedSource = "scim"
+		}
 		result = append(result, item)
 	}
 	return result, rows.Err()
+}
+
+// TeamMembership performs an indexed point read for permission checks on a
+// single member. The boolean is false when the user is not in the team.
+func (s *SQLiteStore) TeamMembership(ctx context.Context, workspaceID, teamID, userID string) (domain.TeamMember, bool, error) {
+	var item domain.TeamMember
+	var joined string
+	var managed int
+	err := s.db.QueryRowContext(ctx, `SELECT m.team_id,m.user_id,m.role,m.joined_at,
+		CASE WHEN EXISTS (SELECT 1 FROM scim_team_memberships sm WHERE sm.workspace_id=m.workspace_id AND sm.team_id=m.team_id AND sm.user_id=m.user_id AND sm.managed=1) THEN 1 ELSE 0 END
+		FROM team_memberships m WHERE m.workspace_id=? AND m.team_id=? AND m.user_id=?`, workspaceID, teamID, userID).Scan(&item.TeamID, &item.UserID, &item.Role, &joined, &managed)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.TeamMember{}, false, nil
+	}
+	if err != nil {
+		return domain.TeamMember{}, false, err
+	}
+	item.JoinedAt, _ = time.Parse(time.RFC3339Nano, joined)
+	item.Managed = managed == 1
+	if item.Managed {
+		item.ManagedSource = "scim"
+	}
+	return item, true, nil
 }
 
 func (s *SQLiteStore) Invite(ctx context.Context, workspaceID, inviterID, email, role string, teamIDs []string) (domain.Invitation, error) {
@@ -931,6 +965,13 @@ func (s *SQLiteStore) AcceptInvitation(ctx context.Context, token, userID string
 	if err != nil || !strings.EqualFold(user.Email, email) {
 		return domain.WorkspaceMembership{}, ErrAuthForbidden
 	}
+	// Read immutable workspace metadata before opening the SQL transaction.
+	// Mutations take the store lock before acquiring a database connection, so
+	// doing this in the reverse order can deadlock with background schedulers.
+	metadata, _, ok := s.workspaceByID(workspaceID)
+	if !ok {
+		return domain.WorkspaceMembership{}, ErrAuthForbidden
+	}
 	now := time.Now().UTC()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -951,10 +992,8 @@ func (s *SQLiteStore) AcceptInvitation(ctx context.Context, token, userID string
 		if _, err = tx.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`, workspaceID, teamID, userID, teamRole, now.Format(time.RFC3339Nano)); err != nil {
 			return domain.WorkspaceMembership{}, err
 		}
-		if metadata, _, ok := s.workspaceByID(workspaceID); ok {
-			if err := syncTeamAncestorMembers(ctx, tx, metadata, teamID, userID); err != nil {
-				return domain.WorkspaceMembership{}, err
-			}
+		if err := syncTeamAncestorMembers(ctx, tx, metadata, teamID, userID); err != nil {
+			return domain.WorkspaceMembership{}, err
 		}
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE workspace_invitations SET status='accepted',accepted_at=? WHERE id=?`, now.Format(time.RFC3339Nano), id); err != nil {
@@ -963,11 +1002,7 @@ func (s *SQLiteStore) AcceptInvitation(ctx context.Context, token, userID string
 	if err = tx.Commit(); err != nil {
 		return domain.WorkspaceMembership{}, err
 	}
-	data, _, ok := s.workspaceByID(workspaceID)
-	if !ok {
-		return domain.WorkspaceMembership{}, ErrAuthForbidden
-	}
-	return domain.WorkspaceMembership{Workspace: data.Workspace, Role: titleRole(role), JoinedAt: now, IssueCount: len(data.Issues)}, nil
+	return domain.WorkspaceMembership{Workspace: metadata.Workspace, Role: titleRole(role), JoinedAt: now, IssueCount: len(metadata.Issues)}, nil
 }
 
 func (s *SQLiteStore) ListInvitations(ctx context.Context, workspaceID string) ([]domain.Invitation, error) {
@@ -1132,32 +1167,79 @@ func (s *SQLiteStore) SetTeamMembership(ctx context.Context, workspaceID, teamID
 	if err != nil || status != "active" {
 		return ErrAuthForbidden
 	}
-	if !member {
-		for _, descendant := range domain.TeamSubtreeIDs(&data, []string{teamID}) {
-			if workspaceRole != "guest" && descendant != teamID && s.teamRoleDirect(ctx, workspaceID, descendant, userID) != "" {
-				return fmt.Errorf("leave sub-teams before leaving their parent team: %w", ErrAuthForbidden)
-			}
-		}
-		if direct := s.teamRoleDirect(ctx, workspaceID, teamID, userID); direct == "owner" {
-			var owners int
-			if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM team_memberships WHERE workspace_id=? AND team_id=? AND role='owner'`, workspaceID, teamID).Scan(&owners); err != nil {
-				return err
-			}
-			if owners <= 1 {
-				return ErrLastTeamOwner
-			}
-		}
-		_, err := s.db.ExecContext(ctx, `DELETE FROM team_memberships WHERE workspace_id=? AND team_id=? AND user_id=?`, workspaceID, teamID, userID)
-		if err != nil {
-			return err
-		}
-		return s.cleanupTeamMemberData(ctx, workspaceKey, teamID, userID)
-	}
+	// Serialize local writers, while row locks below coordinate separate
+	// application instances on databases that support SELECT ... FOR UPDATE.
+	s.teamMembershipMu.Lock()
+	defer s.teamMembershipMu.Unlock()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if s.dialect != "sqlite" {
+		rows, err := tx.QueryContext(ctx, `SELECT user_id FROM team_memberships WHERE workspace_id=? AND team_id=? ORDER BY user_id FOR UPDATE`, workspaceID, teamID)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var lockedUserID string
+			if err := rows.Scan(&lockedUserID); err != nil {
+				rows.Close()
+				return err
+			}
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+	}
+	var currentRole string
+	currentErr := tx.QueryRowContext(ctx, `SELECT role FROM team_memberships WHERE workspace_id=? AND team_id=? AND user_id=?`, workspaceID, teamID, userID).Scan(&currentRole)
+	if currentErr != nil && !errors.Is(currentErr, sql.ErrNoRows) {
+		return currentErr
+	}
+	var managed int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM scim_team_memberships WHERE workspace_id=? AND team_id=? AND user_id=? AND managed=1`, workspaceID, teamID, userID).Scan(&managed); err != nil {
+		return err
+	}
+	if managed > 0 {
+		return ErrManagedTeamMembership
+	}
+	if !member {
+		for _, descendant := range domain.TeamSubtreeIDs(&data, []string{teamID}) {
+			if workspaceRole == "guest" || descendant == teamID {
+				continue
+			}
+			var descendantRole string
+			err := tx.QueryRowContext(ctx, `SELECT role FROM team_memberships WHERE workspace_id=? AND team_id=? AND user_id=?`, workspaceID, descendant, userID).Scan(&descendantRole)
+			if err == nil {
+				return ErrTeamHasSubteamMembership
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+		}
+		if currentRole == "owner" {
+			if err := ensureAnotherTeamOwner(ctx, tx, workspaceID, teamID, userID); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM team_memberships WHERE workspace_id=? AND team_id=? AND user_id=?`, workspaceID, teamID, userID); err != nil {
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		return s.cleanupTeamMemberData(ctx, workspaceKey, teamID, userID)
+	}
+	if currentRole == "owner" && role != "owner" {
+		if err := ensureAnotherTeamOwner(ctx, tx, workspaceID, teamID, userID); err != nil {
+			return err
+		}
+	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT(workspace_id,team_id,user_id) DO UPDATE SET role=excluded.role`, workspaceID, teamID, userID, role, time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return err
@@ -1166,6 +1248,17 @@ func (s *SQLiteStore) SetTeamMembership(ctx context.Context, workspaceID, teamID
 		return err
 	}
 	return tx.Commit()
+}
+
+func ensureAnotherTeamOwner(ctx context.Context, tx *sqlTx, workspaceID, teamID, userID string) error {
+	var owners int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM team_memberships WHERE workspace_id=? AND team_id=? AND role='owner' AND user_id<>?`, workspaceID, teamID, userID).Scan(&owners); err != nil {
+		return err
+	}
+	if owners == 0 {
+		return ErrLastTeamOwner
+	}
+	return nil
 }
 
 // cleanupTeamMemberData removes assignments and subscriptions that are no
@@ -1494,11 +1587,7 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 		visiblePipelines[data.ReleasePipelines[index].ID] = true
 	}
 	data.Releases = slices.DeleteFunc(data.Releases, func(release domain.Release) bool {
-		if release.PipelineID != "" && !visiblePipelines[release.PipelineID] {
-			return true
-		}
-		return slices.ContainsFunc(release.ProjectIDs, func(id string) bool { return !visibleProjects[id] }) ||
-			slices.ContainsFunc(release.IssueIDs, func(id string) bool { return !visibleIssues[id] })
+		return release.PipelineID != "" && !visiblePipelines[release.PipelineID]
 	})
 	for index := range data.Releases {
 		data.Releases[index].ProjectIDs = slices.DeleteFunc(data.Releases[index].ProjectIDs, func(id string) bool { return !visibleProjects[id] })

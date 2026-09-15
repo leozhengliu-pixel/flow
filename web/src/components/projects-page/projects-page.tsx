@@ -10,7 +10,7 @@ import { ProjectsDataView, type ProjectAction, type ProjectPageItem, type Projec
 import { ProjectsPageSurface } from './projects-page-surface'
 import { DEFAULT_PROJECTS_DISPLAY, type ProjectsDisplaySettings } from './projects-display-model'
 import { ProjectsInsightsSidebar, type ProjectInsightFilter, type ProjectInsightMode } from './projects-insights-sidebar'
-import { useProjectsViewState } from './use-projects-view-state'
+import { projectStatusesForLayout, useProjectsViewState } from './use-projects-view-state'
 import { ProjectsFilterBar } from './projects-filter-bar'
 import { createProjectFilter, isProjectFilter, type ProjectFilter, type ProjectFilterField, type ProjectFilterOption } from './projects-filter-model'
 import { ProjectsBulkActionBar, type ProjectBulkAction } from './projects-bulk-action-bar'
@@ -90,6 +90,7 @@ export type ProjectsPageProps = {
   savedViews?: SavedView[]
   scopeTeamId?: string
   teamSettings?: TeamHierarchySettings
+  teamParents?: Record<string, string>
   viewerId?: string
   viewer?: User
   defaultSaveScope?: SavedView['scope']
@@ -159,6 +160,7 @@ export function ProjectsPage({
   savedViews = [],
   scopeTeamId,
   teamSettings,
+  teamParents,
   viewerId,
   viewer,
   defaultSaveScope,
@@ -207,7 +209,7 @@ export function ProjectsPage({
       setDirectoryLoading(true)
       setDirectoryError(null)
       try {
-        const page = await listProjectRecords({ teamId: scopeTeamId, archived: 'all', filter: projectFilterQuery, limit: 100, includeTotal: true }, controller.signal)
+        const page = await listProjectRecords({ teamId: scopeTeamId, archived: 'all', filter: projectFilterQuery, limit: 100 }, controller.signal)
         if (!cancelled) startTransition(() => setPagedProjects(page.items))
         if (!cancelled) { setDirectoryCursor(page.nextCursor); setDirectoryHasMore(page.hasMore) }
       } catch (error) {
@@ -245,9 +247,9 @@ export function ProjectsPage({
   const peopleChoices = useMemo(() => projectPeopleChoices(users, invitations, onlineUserIds), [invitations, onlineUserIds, users])
   const scopedProjects = useMemo(() => {
     if (!scopeTeamId) return projectCollection
-    const ids = teamHierarchy(teams, teamSettings).subtree(scopeTeamId)
+    const ids = teamHierarchy(teams, teamSettings, teamParents).subtree(scopeTeamId)
     return projectCollection.filter(project => project.teamIds.some(id => ids.has(id)))
-  }, [projectCollection, scopeTeamId, teams, teamSettings])
+  }, [projectCollection, scopeTeamId, teamParents, teams, teamSettings])
   const projectLabels = useMemo(() => labelsForResource(labels, 'project', labelGroups), [labelGroups, labels])
   const projectLabelGroups = useMemo(() => labelGroups.filter(group => group.resourceType === 'project'), [labelGroups])
   const itemIndexes = useMemo<ProjectPageIndexes>(() => ({
@@ -267,18 +269,19 @@ export function ProjectsPage({
     else result = result.filter(item => (item.lead?.id ?? '') === insightFilter.value)
     return result
   }, [insightFilter, items, projectFilters])
+  const availableProjectStatuses = useMemo(() => projectStatusesForLayout(projectStatuses.length ? projectStatuses : uniqueStatuses(projectCollection.map(project => project.status)), 'board'), [projectCollection, projectStatuses])
+  const defaultCreateStatus = availableProjectStatuses.find(status => status.type === 'backlog')?.name ?? availableProjectStatuses[0]?.name ?? ''
   const workspaceDefault = useMemo(() => parseProjectDisplayDefault(projectDisplayDefault), [projectDisplayDefault])
   const savedDisplay = useMemo(() => parseProjectDisplayDefault(sourceView?.display), [sourceView?.display])
-  const view = useProjectsViewState(visibleItems, { initial: savedDisplay ? { display: savedDisplay } : undefined, storageKey: `${workspaceKey}:${scopeTeamId ?? 'workspace'}:${savedView?.id ?? 'all'}`, workspaceDefault })
+  const view = useProjectsViewState(visibleItems, { initial: savedDisplay ? { display: savedDisplay } : undefined, projectStatuses: availableProjectStatuses, storageKey: `${workspaceKey}:${scopeTeamId ?? 'workspace'}:${savedView?.id ?? 'all'}`, workspaceDefault })
   const [createOpen, setCreateOpen] = useState(false)
-  const [createStatus, setCreateStatus] = useState('Backlog')
+  const [createStatus, setCreateStatus] = useState(defaultCreateStatus)
   const [updatesProjectId, setUpdatesProjectId] = useState<string>()
   const [viewEditor, setViewEditor] = useState<'create' | 'edit' | undefined>(creatingView ? 'create' : editingView ? 'edit' : undefined)
   const [viewSaving, setViewSaving] = useState(false)
   useEffect(() => { const onKey = (event: KeyboardEvent) => { if (!event.altKey || event.metaKey || event.ctrlKey || event.key.toLowerCase() !== 'v' || savedView || creatingView || viewEditor || (event.target as HTMLElement | null)?.closest('input,textarea,[contenteditable=true],[role=textbox]')) return; event.preventDefault(); setViewEditor('create') }; addEventListener('keydown', onKey); return () => removeEventListener('keydown', onKey) }, [creatingView, savedView, viewEditor])
   const projectById = useMemo(() => new Map(projectCollection.map(project => [project.id, project])), [projectCollection])
   const projectLabelGroupNames = useMemo(() => new Map(projectLabelGroups.map(group => [group.id, group.name])), [projectLabelGroups])
-  const availableProjectStatuses = useMemo(() => projectStatuses.length ? projectStatuses : uniqueStatuses(projects.map(project => project.status)), [projectStatuses, projects])
   const statusOptions = useMemo(() => availableProjectStatuses.map((status, index) => ({ color: status.color, label: status.name, shortcut: String(index + 1), statusType: status.type, value: status.name })), [availableProjectStatuses])
   const propertyOptions: ProjectPropertyOptions = useMemo(() => ({
     lead: [{ label: 'No lead', shortcut: '0', value: '' }, ...users.filter(user => user.active).map(user => ({ avatarUrl: user.avatarUrl, group: 'Users from the project team', keywords: `${user.name} ${user.email}`, label: user.displayName, value: user.id }))],
@@ -297,10 +300,13 @@ export function ProjectsPage({
 
   useEffect(() => setViewEditor(creatingView ? 'create' : editingView ? 'edit' : undefined), [creatingView, editingView])
   useEffect(() => {
+    if (!availableProjectStatuses.some(status => status.name === createStatus)) setCreateStatus(defaultCreateStatus)
+  }, [availableProjectStatuses, createStatus, defaultCreateStatus])
+  useEffect(() => {
     if (createOnMount) setCreateOpen(true)
   }, [createOnMount])
 
-  const openCreate = (status = 'Backlog') => {
+  const openCreate = (status = defaultCreateStatus) => {
     setCreateStatus(status)
     setCreateOpen(true)
   }
@@ -404,7 +410,7 @@ export function ProjectsPage({
 
   const selectedProjects = items.filter(item => view.state.selectedIds.includes(item.id))
   const bulkActionOptions = (action: ProjectBulkAction) => {
-    if (action === 'status') return statusOptions.map(option => ({ id: option.value, label: option.label, color: statusColor(option.value) }))
+    if (action === 'status') return statusOptions.map(option => ({ id: option.value, label: option.label, color: option.color }))
     if (action === 'priority') return [{ id: 'none', label: 'No priority' }, { id: 'urgent', label: 'Urgent', color: '#e56a68' }, { id: 'high', label: 'High' }, { id: 'medium', label: 'Medium' }, { id: 'low', label: 'Low' }]
     if (action === 'lead') return propertyOptions.lead?.map(option => ({ id: option.value, label: option.label }))
     if (action === 'targetDate') return propertyOptions.targetDate?.map(option => ({ id: option.value, label: option.label }))
@@ -633,6 +639,9 @@ function toPageItem(project: Project, href: string | undefined, indexes: Project
     position: project.position,
     progress: Math.round(project.progress * 100),
     status: project.status.name,
+    statusId: project.status.id,
+    statusType: project.status.type,
+    statusColor: project.status.color,
     startDate: project.startDate ? formatMonth(project.startDate) : undefined,
     summary: project.description || project.summary,
     team: project.teamIds[0] ? indexes.teams.get(project.teamIds[0]) : undefined,
@@ -764,7 +773,7 @@ function projectFilterOptions(items: ProjectPageItem[], users: User[], projectSt
   }
   const values = (field: ProjectFilterField, definitions: ProjectFilterOption[]) => definitions.map(option => ({ ...option, count: counts.get(field)?.get(option.id) ?? 0 }))
   return {
-    status: values('status', projectStatuses.length ? projectStatuses.map(status => ({ id: status.name, label: status.name, color: status.color })) : uniqueFilterOptions(items.map(item => ({ id: item.status, label: item.status, color: statusColor(item.status) }))).sort(statusOptionOrder)),
+    status: values('status', projectStatuses.length ? projectStatuses.map(status => ({ id: status.name, label: status.name, color: status.color })) : uniqueFilterOptions(items.map(item => ({ id: item.status, label: item.status, color: item.statusColor ?? '#77777c' })))),
     priority: values('priority', [
       { id: 'urgent', label: 'Urgent', color: '#e56a68' }, { id: 'high', label: 'High', color: '#c8c8cb' }, { id: 'medium', label: 'Medium', color: '#a7a7ac' }, { id: 'low', label: 'Low', color: '#77777c' }, { id: 'none', label: 'No priority', color: '#68686d' },
     ]),
@@ -807,9 +816,7 @@ function projectValueMatches(item: ProjectPageItem, field: ProjectFilterField, v
   return true
 }
 
-function statusColor(status: string) { return ({ Backlog: '#77777c', Planned: '#d6b326', 'In Progress': '#5e8fd8', Completed: '#5e6ad2', Canceled: '#77777c' })[status] ?? '#77777c' }
 function uniqueFilterOptions(items: ProjectFilterOption[]) { return items.filter((item, index) => items.findIndex(candidate => candidate.id === item.id) === index) }
-function statusOptionOrder(left: ProjectFilterOption, right: ProjectFilterOption) { return ['Backlog', 'Planned', 'In Progress', 'Completed', 'Canceled'].indexOf(left.id) - ['Backlog', 'Planned', 'In Progress', 'Completed', 'Canceled'].indexOf(right.id) }
 function readDraftFilters(key: string): ProjectFilter[] { try { const value = JSON.parse(sessionStorage.getItem(key) ?? '[]'); return Array.isArray(value) ? value.filter(isProjectFilter) : [] } catch { return [] } }
 function writeDraftFilters(key: string, filters: ProjectFilter[]) { try { sessionStorage.setItem(key, JSON.stringify(filters)) } catch { /* best effort */ } }
 function removeDraftFilters(key: string) { try { sessionStorage.removeItem(key) } catch { /* best effort */ } }
