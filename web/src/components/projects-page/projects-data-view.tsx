@@ -85,6 +85,9 @@ export type ProjectsDataViewProps = {
   projectMenu?: ProjectMenuIntegration
   labelGroupProperties?: Array<{ id: string; name: string }>
   sort?: { column: ProjectSortColumn, direction: 'asc' | 'desc' }
+  hasMore?: boolean
+  loadingMore?: boolean
+  onLoadMore?: () => void
 }
 
 export type ProjectMenuIntegration = {
@@ -164,6 +167,9 @@ export function ProjectsDataView({
   projectMenu,
   labelGroupProperties = [],
   sort: externalSort,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
 }: ProjectsDataViewProps) {
   const [collapsed, setCollapsed] = useState<string[]>([])
   const [hiddenGroupIds, setHiddenGroupIds] = useState<string[]>([])
@@ -257,10 +263,11 @@ export function ProjectsDataView({
           </button>)}
         </div>
       </section>}
+      {hasMore && <button className="lp-project-board__load-more" disabled={loadingMore} onClick={onLoadMore} type="button">{loadingMore ? 'Loading…' : 'Load more projects'}</button>}
     </div>
   }
 
-  if (layout === 'timeline') return <ProjectTimeline groups={groups} onOpenProject={onOpenProject} onUpdateProject={onUpdateProject} propertyOptions={propertyOptions}/>
+  if (layout === 'timeline') return <div className="lp-project-timeline-shell"><ProjectTimeline groups={groups} onOpenProject={onOpenProject} onUpdateProject={onUpdateProject} propertyOptions={propertyOptions}/>{hasMore && <button className="lp-project-timeline__load-more" disabled={loadingMore} onClick={onLoadMore} type="button">{loadingMore ? 'Loading…' : 'Load more projects'}</button>}</div>
 
   const renderProject = (project: ProjectPageItem) => <ProjectListRow
     onOpen={onOpenProject}
@@ -299,6 +306,7 @@ export function ProjectsDataView({
           propertyOptions={propertyOptions}
         />
       }}
+      endReached={() => { if (hasMore && !loadingMore) onLoadMore?.() }}
     />
   </div>
 

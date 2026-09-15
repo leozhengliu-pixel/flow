@@ -14,9 +14,10 @@ describe('workspace boot shell', () => {
 
   it('never leaves a blank left nav while issue preview arrives before bootstrap', () => {
     const issue = makeIssue({ identifier: 'HAI-75696', title: 'Sidebar should stay visible', isSummary: false })
+    const onBack = vi.fn()
     render(
       <WorkspaceBootShell>
-        <IssueLoadingPreview issue={issue} onBack={() => undefined} />
+        <IssueLoadingPreview issue={issue} onBack={onBack} />
       </WorkspaceBootShell>,
     )
 

@@ -44,6 +44,7 @@ export type ProjectsPageSurfaceProps = {
   displaySettings?: Partial<ProjectsDisplaySettings>
   filterCount?: number
   selectedFilters?: ProjectFilter[]
+  onSearchFilterOptions?: (field: string, query: string) => Promise<ProjectFilterOption[]>
   displayLabelGroups?: Array<{ id: string; name: string }>
   sidebarOpen?: boolean
   views: ProjectsView[]
@@ -81,6 +82,7 @@ export function ProjectsPageSurface({
   displaySettings,
   filterCount = 0,
   selectedFilters = [],
+  onSearchFilterOptions,
   displayLabelGroups = [],
   sidebarOpen = true,
   views,
@@ -130,7 +132,7 @@ export function ProjectsPageSurface({
     <IconButton active={openSurface?.kind === 'display' && openSurface.origin === 'editor'} badge={filterCount > 0} buttonRef={editorDisplayTriggerRef} label="Display options" onClick={() => toggleSurface('display', 'editor')}><DisplayIcon /></IconButton>
   </>
   const surfaceMenu = (origin: 'toolbar' | 'editor') => <>
-    {openSurface?.origin === origin && openSurface.kind === 'filter' && <ProjectsFilterMenu filterOptions={filterOptions} rootRef={openSurfaceRef} selectedFilters={selectedFilters} onSelect={(filter, option) => {
+    {openSurface?.origin === origin && openSurface.kind === 'filter' && <ProjectsFilterMenu filterOptions={filterOptions} rootRef={openSurfaceRef} selectedFilters={selectedFilters} onSearchFilterOptions={onSearchFilterOptions} onSelect={(filter, option) => {
       onAddFilter?.(filter, option)
       setOpenSurface(null)
     }} />}
@@ -219,7 +221,7 @@ function IconButton({ active = false, badge = false, buttonRef, children, classN
   >{children}{badge && <span aria-hidden="true" className="lp-projects__badge" />}</button>
 }
 
-function ProjectsFilterMenu({ filterOptions = {}, onSelect, rootRef, selectedFilters }: { filterOptions?: Partial<Record<string, ProjectFilterOption[]>>; onSelect: (filter: string, option?: ProjectFilterOption) => void; rootRef?: RefObject<HTMLDivElement | null>; selectedFilters: ProjectFilter[] }) {
+function ProjectsFilterMenu({ filterOptions = {}, onSelect, rootRef, selectedFilters, onSearchFilterOptions }: { filterOptions?: Partial<Record<string, ProjectFilterOption[]>>; onSelect: (filter: string, option?: ProjectFilterOption) => void; rootRef?: RefObject<HTMLDivElement | null>; selectedFilters: ProjectFilter[]; onSearchFilterOptions?: (field: string, query: string) => Promise<ProjectFilterOption[]> }) {
   const [nested, setNested] = useState<string>()
   const [nestedPosition, setNestedPosition] = useState({ top: 112, openRight: false, maxHeight: 360 })
   const options=FILTER_GROUPS.flat().map(item=>({id:item,label:item})),command=usePropertyCommand({open:true,options,onOpenChange:()=>{},onSelect:option=>choose(option.id)})
@@ -284,7 +286,7 @@ function ProjectsFilterMenu({ filterOptions = {}, onSelect, rootRef, selectedFil
       })}
       {!command.filteredOptions.length&&<div className="lp-projects-filter__empty">No filters found</div>}
     </div>
-    {nested && FILTER_CHILDREN.has(nested) ? <ProjectFilterValues field={nested} nestedPosition={nestedPosition} selectedIds={selectedByField.get(PROJECT_FILTER_FIELD_IDS[nested] as ProjectFilter['field'])} onSelect={option => onSelect(nested, option)} options={filterOptions[nested] ?? []} /> : null}
+    {nested && FILTER_CHILDREN.has(nested) ? <ProjectFilterValues field={nested} nestedPosition={nestedPosition} selectedIds={selectedByField.get(PROJECT_FILTER_FIELD_IDS[nested] as ProjectFilter['field'])} onSelect={option => onSelect(nested, option)} onSearch={nested === 'Specific project' && onSearchFilterOptions ? query => onSearchFilterOptions(nested, query) : undefined} options={filterOptions[nested] ?? []} /> : null}
   </div>
 }
 
@@ -320,8 +322,8 @@ function SlidersIcon() { return <svg aria-hidden="true" fill="none" height="14" 
 
 type FilterNestedPosition = { top: number; openRight: boolean; maxHeight: number }
 
-export function ProjectFilterValues({ field, nestedPosition, onSelect, options, selectedIds }: { field: string; nestedPosition?: FilterNestedPosition; onSelect: (option: ProjectFilterOption) => void; options: ProjectFilterOption[]; selectedIds?: Set<string> }) {
-  return isPeopleProperty(field) ? <ProjectPeopleFilterValues field={field} nestedPosition={nestedPosition} onSelect={onSelect} options={options} selectedIds={selectedIds}/> : <ProjectStandardFilterValues field={field} nestedPosition={nestedPosition} onSelect={onSelect} options={options} selectedIds={selectedIds}/>
+export function ProjectFilterValues({ field, nestedPosition, onSelect, onSearch, options, selectedIds }: { field: string; nestedPosition?: FilterNestedPosition; onSelect: (option: ProjectFilterOption) => void; onSearch?: (query: string) => Promise<ProjectFilterOption[]>; options: ProjectFilterOption[]; selectedIds?: Set<string> }) {
+  return isPeopleProperty(field) ? <ProjectPeopleFilterValues field={field} nestedPosition={nestedPosition} onSelect={onSelect} options={options} selectedIds={selectedIds}/> : <ProjectStandardFilterValues field={field} nestedPosition={nestedPosition} onSelect={onSelect} onSearch={onSearch} options={options} selectedIds={selectedIds}/>
 }
 function nestedFilterStyle(position?: FilterNestedPosition) {
   if (!position) return undefined
@@ -339,7 +341,10 @@ function ProjectPeopleFilterValues({field,nestedPosition,onSelect,options,select
       onChange={id=>{const option=options.find(item=>item.id===id);if(option)onSelect(option)}}/>
   </div>
 }
-function ProjectStandardFilterValues({ field, nestedPosition, onSelect, options, selectedIds }: { field: string; nestedPosition?: FilterNestedPosition; onSelect: (option: ProjectFilterOption) => void; options: ProjectFilterOption[]; selectedIds?: Set<string> }) {
-  const command=usePropertyCommand({personOptions:isPeopleProperty(field),open:true,options,onOpenChange:()=>{},onSelect:option=>{const selected=options.find(item=>item.id===option.id);if(selected)onSelect(selected)}})
+function ProjectStandardFilterValues({ field, nestedPosition, onSelect, onSearch, options, selectedIds }: { field: string; nestedPosition?: FilterNestedPosition; onSelect: (option: ProjectFilterOption) => void; onSearch?: (query: string) => Promise<ProjectFilterOption[]>; options: ProjectFilterOption[]; selectedIds?: Set<string> }) {
+  const [resolvedOptions,setResolvedOptions]=useState(options)
+  const command=usePropertyCommand({personOptions:isPeopleProperty(field),open:true,options:resolvedOptions,onOpenChange:()=>{},onSelect:option=>{const selected=resolvedOptions.find(item=>item.id===option.id);if(selected)onSelect(selected)}})
+  useEffect(()=>setResolvedOptions(options),[options])
+  useEffect(()=>{if(!onSearch)return;if(!command.query.trim()){setResolvedOptions(options);return}let active=true;const timer=setTimeout(()=>{void onSearch(command.query.trim()).then(next=>{if(active)setResolvedOptions(next)})},150);return()=>{active=false;clearTimeout(timer)}},[command.query,onSearch,options])
   return <div aria-label={`${field} filters`} className={nestedFilterClass(nestedPosition)} style={nestedFilterStyle(nestedPosition)} role="dialog"><div className="lp-projects-filter__search"><input ref={command.inputRef} aria-label="Filter…" autoFocus onChange={event=>command.onQueryChange(event.target.value)} onKeyDown={command.onKeyDown} placeholder="Filter…" value={command.query}/></div><div className="lp-projects-filter__values" role="listbox" onKeyDown={command.onKeyDown}>{command.filteredOptions.map(option=>{const selected=selectedIds?.has(option.id) ?? false;return <PersonHover key={option.id} userId={isPeopleProperty(field)?option.id:undefined}><button aria-selected={command.activeId===option.id} aria-checked={selected} onPointerMove={()=>command.setActiveId(option.id)} onFocus={()=>command.setActiveId(option.id)} onClick={()=>command.choose(option)} role="option" type="button"><span className="lp-projects-filter__checkbox">{selected&&<CheckIcon/>}</span><i style={{background:option.color??'var(--theme-text-secondary)'}}/><span className="lp-projects-filter__value-label" title={option.label}>{option.label}</span>{option.count!==undefined&&<small>{option.count} {option.count===1?'project':'projects'}</small>}</button></PersonHover>})}{!command.filteredOptions.length&&<div className="lp-projects-filter__empty">No results</div>}</div></div>
 }
