@@ -299,6 +299,7 @@ export type IssueQueryInput = {
   teamId?: string | string[];
   stateId?: string | string[];
   projectId?: string | string[];
+  releaseId?: string;
   archived?: "true" | "false" | "all";
   filter?: Record<string, unknown>;
   cursor?: string;

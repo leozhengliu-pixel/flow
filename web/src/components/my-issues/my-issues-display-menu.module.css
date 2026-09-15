@@ -20,3 +20,8 @@
 .popover,.selectMenu{z-index:600}
 :global(:root[data-theme="light"]) .selectTrigger:hover:not(:disabled),:global(:root[data-theme="light"]) .selectTrigger[data-state=open],:global(:root[data-theme="light"]) .selectItem[data-highlighted],:global(:root[data-theme="light"]) .selectItem[data-state=checked]{background:var(--theme-surface-hover)}
 .layoutTabs button:disabled{opacity:.45;cursor:not-allowed}
+
+/* The issue display popover uses the same 364px surface as Linear. */
+.popover{width:var(--filter-display-width);height:auto;max-height:min(531px,calc(100dvh - 103px));overflow:auto}
+.popover,.selectMenu{border-color:var(--popover-border);box-shadow:var(--shadow-control)}
+.selectTrigger{min-width:116px;height:var(--filter-control-height)}

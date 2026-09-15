@@ -2,7 +2,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { PeopleMenuItems } from '@/components/property/people-menu-items'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { Bell, Check, ChevronDown, ChevronRight, Clock3, Copy, Edit3, MessageSquare, MoreHorizontal, MousePointer2, Plus, Search, Send, Star, Trash2, X } from 'lucide-react'
+import { BarChart3, Bell, CalendarDays, Check, ChevronDown, ChevronRight, CircleDot, Clock3, Copy, Edit3, HeartPulse, MessageSquare, MoreHorizontal, MousePointer2, Plus, Search, Send, Star, Tags, Trash2, UserRound, Users, X } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { VirtualColumnList } from '@/components/ui/virtual-column-list'
 import { SearchableMenuItems } from '@/components/ui/searchable-menu-items'
@@ -339,8 +339,24 @@ export function InitiativeFilterMenu({ filters, initiatives, users, teams, label
   return <DropdownMenu.Root onOpenChange={open => { if (!open) setQuery('') }}><DropdownMenu.Trigger asChild><button aria-label="Add filter" className="li-icon-button ui-pill" type="button"><Filter size={14}/>{Object.keys(filters).length > 0 && <i/>}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="li-menu li-filter-menu" sideOffset={4} collisionPadding={8}>
     <div className="li-menu-search"><Search size={13}/><input aria-label="Add Filter…" autoFocus placeholder="Add Filter…" value={query} onChange={event => setQuery(event.target.value)}/><kbd>F</kbd></div>
     {!query && <><DropdownMenu.Item disabled title="Requires the Flow AI integration"><span className="li-ai-filter">✦</span>AI filter</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item onSelect={onAdvanced}>Advanced filter</DropdownMenu.Item><DropdownMenu.Separator/></>}
-    {entries.map(entry => <DropdownMenu.Sub key={entry.id}><DropdownMenu.SubTrigger>{entry.label}<ChevronRight className="li-menu-end" size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={`li-menu li-filter-values is-${entry.id}`} sideOffset={5} collisionPadding={8}><InitiativeFilterValues entry={entry} filters={filters} initiatives={initiatives} labels={labels} onChange={onChange} onCreateLabel={onCreateLabel} teams={teams} users={users}/></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>)}
+    {entries.map(entry => <DropdownMenu.Sub key={entry.id}><DropdownMenu.SubTrigger><InitiativeFilterIcon field={entry.id}/><span>{entry.label}</span><ChevronRight className="li-menu-end" size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={`li-menu li-filter-values is-${entry.id}`} sideOffset={5} collisionPadding={8}><InitiativeFilterValues entry={entry} filters={filters} initiatives={initiatives} labels={labels} onChange={onChange} onCreateLabel={onCreateLabel} teams={teams} users={users}/></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>)}
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+}
+
+function InitiativeFilterIcon({ field }: { field: string }) {
+  const props = { size: 14, 'aria-hidden': true as const }
+  switch (field) {
+    case 'status': return <CircleDot {...props}/>
+    case 'priority': return <BarChart3 {...props}/>
+    case 'ownerId':
+    case 'creatorId': return <UserRound {...props}/>
+    case 'leadTeamId':
+    case 'teamId': return <Users {...props}/>
+    case 'labelId': return <Tags {...props}/>
+    case 'health': return <HeartPulse {...props}/>
+    case 'date': return <CalendarDays {...props}/>
+    default: return null
+  }
 }
 
 function InitiativeFilterValues({ entry, filters, initiatives, labels, onChange, onCreateLabel, teams, users }: { entry: { id: string; label: string }; filters: FilterState; initiatives: Initiative[]; labels: IssueLabel[]; onChange: (filters: FilterState) => void; onCreateLabel?: (name: string) => Promise<IssueLabel>; teams: Team[]; users: User[] }) {

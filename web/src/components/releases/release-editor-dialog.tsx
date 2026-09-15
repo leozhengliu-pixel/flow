@@ -1,6 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { CalendarDays, Check, ChevronDown, ChevronRight, CircleDashed, Lock, LockOpen, Search, Settings2, X } from 'lucide-react'
+import { CalendarDays, Check, ChevronDown, ChevronRight, Lock, LockOpen, Search, Settings2, X } from 'lucide-react'
 import { addMonths, eachDayOfInterval, endOfMonth, endOfWeek, isSameDay, isSameMonth, startOfMonth, startOfWeek, subMonths } from 'date-fns'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -10,6 +10,7 @@ import { createRelease, updateRelease } from '@/lib/api'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData, Release, ReleasePipeline } from '@/types/flow'
 
+import { ReleaseStatusIcon } from './release-icons'
 import { releaseStatusForStage } from './release-view-model'
 
 type Props = {
@@ -85,8 +86,8 @@ export function ReleaseEditorDialog({ data, pipeline, release, onClose, onSaved 
         </div>
         <div className="flow-release-editor__properties">
           <DropdownMenu.Root open={stageMenuOpen} onOpenChange={setStageMenuOpen}>
-            <DropdownMenu.Trigger asChild><button className="flow-release-pill" aria-label={t('Change release stage')}><CircleDashed/><span data-i18n-ignore={stage ? true : undefined}>{stage || t('Stage')}</span><ChevronDown/></button></DropdownMenu.Trigger>
-            <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="flow-release-stage-menu" align="start" onCloseAutoFocus={() => setStageQuery('')} sideOffset={5}><div className="flow-release-stage-search"><Search/><input aria-label={t('Search stages')} autoFocus value={stageQuery} onChange={event => setStageQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setStageMenuOpen(false); return } if (event.key === 'ArrowDown') { event.preventDefault(); event.currentTarget.closest('[role=menu]')?.querySelector<HTMLElement>('[role=menuitem]')?.focus(); return } event.stopPropagation() }} placeholder={t('Search stages…')}/></div>{stageOptions.map(option => <DropdownMenu.Item className="flow-release-menu-item" key={option} onSelect={() => setStage(option)}><span data-i18n-ignore>{option}</span>{option === stage && <Check/>}</DropdownMenu.Item>)}{!stageOptions.length&&<div className="flow-release-menu-empty">{t('No stages found')}</div>}</DropdownMenu.Content></DropdownMenu.Portal>
+            <DropdownMenu.Trigger asChild><button className="flow-release-pill" aria-label={t('Change release stage')}><ReleaseStatusIcon status={releaseStatusForStage(pipeline, stage)}/><span data-i18n-ignore={stage ? true : undefined}>{stage || t('Stage')}</span><ChevronDown/></button></DropdownMenu.Trigger>
+            <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="flow-release-stage-menu" align="start" onCloseAutoFocus={() => setStageQuery('')} sideOffset={5}><div className="flow-release-stage-search"><Search/><input aria-label={t('Search stages')} autoFocus value={stageQuery} onChange={event => setStageQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setStageMenuOpen(false); return } if (event.key === 'ArrowDown') { event.preventDefault(); event.currentTarget.closest('[role=menu]')?.querySelector<HTMLElement>('[role=menuitem]')?.focus(); return } event.stopPropagation() }} placeholder={t('Search stages…')}/></div>{stageOptions.map(option => <DropdownMenu.Item className="flow-release-menu-item" key={option} onSelect={() => setStage(option)}><ReleaseStatusIcon status={releaseStatusForStage(pipeline, option)}/><span data-i18n-ignore>{option}</span>{option === stage && <Check/>}</DropdownMenu.Item>)}{!stageOptions.length&&<div className="flow-release-menu-empty">{t('No stages found')}</div>}</DropdownMenu.Content></DropdownMenu.Portal>
           </DropdownMenu.Root>
           <DropdownMenu.Root open={dateMenuOpen} onOpenChange={setDateMenuOpen}>
             <DropdownMenu.Trigger asChild><button className="flow-release-pill flow-release-date-trigger" aria-label={t('Target date')}><CalendarIcon/><span>{targetDate ? formatDate(targetDate, { month: 'short', day: 'numeric' }) : t('Target date')}</span><ChevronDown/></button></DropdownMenu.Trigger>

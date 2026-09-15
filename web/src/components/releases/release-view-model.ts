@@ -1,4 +1,9 @@
+import type { IssueQueryInput } from '@/lib/api'
 import type { BootstrapData, Release, ReleasePipeline } from '@/types/flow'
+
+export function releaseIssueQuery(releaseId: string, cursor?: string): IssueQueryInput {
+  return { releaseId, archived: 'false', limit: 100, includeTotal: false, cursor }
+}
 
 export function releasesForPipeline(data: BootstrapData, pipeline: ReleasePipeline, archived = false) {
   return data.releases
@@ -13,6 +18,9 @@ export function releasesByStage(releases: Release[], pipeline: ReleasePipeline) 
 }
 
 export function releaseProgress(data: BootstrapData, release: Release) {
+  if (release.issueCount !== undefined) {
+    return release.issueCount > 0 ? Math.round((release.completedCount ?? 0) / release.issueCount * 100) : 0
+  }
   const issues = data.issues.filter(issue => release.issueIds.includes(issue.id))
   if (!issues.length) return 0
   const completed = issues.filter(issue => issue.state.type === 'completed' || issue.state.type === 'canceled').length

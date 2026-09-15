@@ -18,6 +18,9 @@ type IssueRecordSummary struct {
 func (s *SQLiteStore) QueryIssueRecordSummary(ctx context.Context, query IssueRecordQuery) (IssueRecordSummary, error) {
 	result := IssueRecordSummary{Milestones: map[string]IssueRecordTotals{}, Assignees: map[string]IssueRecordTotals{}, Labels: map[string]IssueRecordTotals{}}
 	query.Cursor, query.GroupBy, query.GroupValue = "", "none", nil
+	if err := s.applyIssueRecordScope(ctx, &query); err != nil {
+		return result, err
+	}
 	where, args, err := issueRecordWhere(query)
 	if err != nil {
 		return result, err

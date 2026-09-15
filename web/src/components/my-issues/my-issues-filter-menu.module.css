@@ -50,3 +50,9 @@
 :global(:root[data-theme="light"]) .conditionDialog{border-color:var(--popover-border);background:var(--theme-surface-2);box-shadow:var(--shadow-dialog);color:var(--theme-text-primary)}
 @media(prefers-reduced-motion:reduce){.conditionOverlay,.conditionDialog{animation:none}}
 .valueItem[aria-checked=true] .checkbox{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}
+
+/* Keep filter geometry aligned with Linear across every issue surface. */
+.rootMenu{width:var(--filter-root-width)}
+.rootMenu,.valueMenu{border-color:var(--popover-border);box-shadow:var(--shadow-control)}
+.valueItem[aria-checked=true] .checkbox{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}
+@media(max-width:600px){.rootMenu{width:min(var(--filter-root-width),calc(100vw - 22px))}}

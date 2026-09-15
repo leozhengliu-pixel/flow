@@ -807,6 +807,10 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		issueRecordsError(w, err)
 		return
 	}
+	if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	if s.authDisabled {
 		if err := s.store.ApplyTeamDefaultFavorites(r.Context(), &data, data.Viewer.ID); err != nil {
 			issueRecordsError(w, err)

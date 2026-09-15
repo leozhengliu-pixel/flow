@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"testing"
+	"time"
 
 	"flow/api/internal/domain"
 )
@@ -218,5 +220,189 @@ func TestIssueQueryAccessIncludesInheritedSharesWithoutPrivateTeamLeak(t *testin
 	page, err = repository.QueryIssueRecords(ctx, query)
 	if err != nil || page.Total != 0 {
 		t.Fatalf("revoked share still readable: %v %#v", err, page)
+	}
+}
+
+func TestReleaseScopedIssueRecords(t *testing.T) {
+	repository, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	ctx := context.Background()
+	data := repository.Bootstrap()
+	workspace := data.Workspace.URLKey
+	base := data.Issues[0]
+	now := time.Now().UTC()
+	completed := base
+	completed.ID, completed.Identifier, completed.Title = "rel-completed", "REL-1", "Completed associated"
+	completed.State.ID, completed.State.Type, completed.State.Name = "state_done", "completed", "Done"
+	unstarted := base
+	unstarted.ID, unstarted.Identifier, unstarted.Title = "rel-unstarted", "REL-2", "Unstarted associated"
+	unstarted.State.ID, unstarted.State.Type, unstarted.State.Name = "state_todo", "unstarted", "Todo"
+	started := base
+	started.ID, started.Identifier, started.Title = "rel-started", "REL-3", "Started associated"
+	started.State.ID, started.State.Type, started.State.Name = "state_progress", "started", "In Progress"
+	archived := base
+	archived.ID, archived.Identifier, archived.Title = "rel-archived", "REL-4", "Archived associated"
+	archived.ArchivedAt = &now
+	outside := base
+	outside.ID, outside.Identifier, outside.Title = "rel-outside", "REL-5", "Not associated"
+	hidden := base
+	hidden.ID, hidden.Identifier, hidden.Title = "rel-hidden", "REL-6", "Private associated"
+	hidden.Team.ID = "private-team"
+	if err := repository.ImportIssues(ctx, workspace, []domain.Issue{completed, unstarted, started, archived, outside, hidden}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.MutateWorkspace(ctx, workspace, "release.created", "release-1", nil, func(next *domain.Bootstrap) error {
+		next.Releases = append(next.Releases, domain.Release{
+			ID: "release-1", SlugID: "v1", Name: "v1.0.0", IssueIDs: []string{
+				completed.ID, unstarted.ID, started.ID, archived.ID, hidden.ID, "deleted-issue",
+			}, CreatedAt: now, UpdatedAt: now,
+		})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	unscoped, err := repository.QueryIssueRecords(ctx, IssueRecordQuery{Workspace: workspace, IncludeTotal: true})
+	if err != nil || unscoped.Total < 6 {
+		t.Fatalf("unscoped workspace query: %v %#v", err, unscoped)
+	}
+	unknown, err := repository.QueryIssueRecords(ctx, IssueRecordQuery{Workspace: workspace, ReleaseIDs: []string{"missing-release"}, IncludeTotal: true})
+	if err != nil || unknown.Total != 0 || len(unknown.Items) != 0 {
+		t.Fatalf("unknown release scanned workspace: %v %#v", err, unknown)
+	}
+	emptyIDs, err := repository.QueryIssueRecords(ctx, IssueRecordQuery{Workspace: workspace, IssueIDs: []string{}, RestrictToIssueIDs: true, IncludeTotal: true})
+	if err != nil || emptyIDs.Total != 0 || len(emptyIDs.Items) != 0 {
+		t.Fatalf("empty ID scope scanned workspace: %v %#v", err, emptyIDs)
+	}
+
+	page, err := repository.QueryIssueRecords(ctx, IssueRecordQuery{Workspace: workspace, ReleaseIDs: []string{"release-1"}, IncludeTotal: true, Limit: 2, Sort: "title"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Total != 4 || len(page.Items) != 2 || !page.HasMore || page.NextCursor == "" {
+		t.Fatalf("release page: %#v", page)
+	}
+	seen := map[string]bool{}
+	for _, issue := range page.Items {
+		seen[issue.ID] = true
+	}
+	for page.HasMore {
+		next, err := repository.QueryIssueRecords(ctx, IssueRecordQuery{Workspace: workspace, ReleaseIDs: []string{"release-1"}, IncludeTotal: true, Limit: 2, Sort: "title", Cursor: page.NextCursor})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, issue := range next.Items {
+			if seen[issue.ID] {
+				t.Fatalf("duplicate %s", issue.ID)
+			}
+			seen[issue.ID] = true
+		}
+		page = next
+	}
+	if !seen[completed.ID] || !seen[unstarted.ID] || !seen[started.ID] {
+		t.Fatalf("missing associated statuses: %#v", seen)
+	}
+	if !seen[hidden.ID] {
+		t.Fatalf("unrestricted query omitted associated private-team issue: %#v", seen)
+	}
+	if seen[archived.ID] || seen[outside.ID] || seen["deleted-issue"] {
+		t.Fatalf("deleted/archived/unassociated leaked: %#v", seen)
+	}
+
+	firstUnscoped, err := repository.QueryIssueRecords(ctx, IssueRecordQuery{Workspace: workspace, Limit: 1})
+	if err != nil || firstUnscoped.NextCursor == "" {
+		t.Fatalf("unscoped cursor: %v %#v", err, firstUnscoped)
+	}
+	if _, err := repository.QueryIssueRecords(ctx, IssueRecordQuery{Workspace: workspace, ReleaseIDs: []string{"release-1"}, Cursor: firstUnscoped.NextCursor}); !errors.Is(err, ErrIssueQuery) {
+		t.Fatalf("cursor crossed release scope: %v", err)
+	}
+
+	restricted, err := repository.QueryIssueRecords(ctx, IssueRecordQuery{
+		Workspace: workspace, ReleaseIDs: []string{"release-1"}, IncludeTotal: true,
+		Access: &IssueRecordAccess{UserID: "recipient", WorkspaceID: data.Workspace.ID, VisibleTeamIDs: []string{"team_test"}},
+	})
+	if err != nil || restricted.Total != 3 {
+		t.Fatalf("visible team still saw hidden issue: %v %#v", err, restricted)
+	}
+	denied, err := repository.QueryIssueRecords(ctx, IssueRecordQuery{
+		Workspace: workspace, ReleaseIDs: []string{"release-1"}, IncludeTotal: true,
+		Access: &IssueRecordAccess{UserID: "recipient", WorkspaceID: data.Workspace.ID, VisibleTeamIDs: []string{}},
+	})
+	if err != nil || denied.Total != 0 {
+		t.Fatalf("empty permission scope leaked release issues: %v %#v", err, denied)
+	}
+
+	groups, err := repository.QueryIssueGroups(ctx, IssueRecordQuery{Workspace: workspace, ReleaseIDs: []string{"release-1"}, GroupBy: "none"})
+	if err != nil || len(groups) != 1 || groups[0].Count != 4 {
+		t.Fatalf("release groups scanned workspace: %v %#v", err, groups)
+	}
+
+	if err := repository.MutateWorkspace(ctx, workspace, "release.updated", "release-1", nil, func(next *domain.Bootstrap) error {
+		index := slices.IndexFunc(next.Releases, func(item domain.Release) bool { return item.ID == "release-1" })
+		next.Releases[index].IssueIDs = []string{started.ID}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := repository.QueryIssueRecords(ctx, IssueRecordQuery{Workspace: workspace, ReleaseIDs: []string{"release-1"}, IncludeTotal: true})
+	if err != nil || updated.Total != 1 || len(updated.Items) != 1 || updated.Items[0].ID != started.ID {
+		t.Fatalf("association change ignored: %v %#v", err, updated)
+	}
+}
+
+func TestReleaseIssueProgressUsesBoundedRecordQueries(t *testing.T) {
+	repository, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	ctx := context.Background()
+	data := repository.Bootstrap()
+	base := data.Issues[0]
+	issues := []domain.Issue{}
+	for _, fixture := range []struct {
+		id, stateType string
+		archived      bool
+	}{
+		{"progress-completed", "completed", false},
+		{"progress-started", "started", false},
+		{"progress-unstarted", "unstarted", false},
+		{"progress-archived", "completed", true},
+	} {
+		issue := base
+		issue.ID, issue.Identifier = fixture.id, fixture.id
+		issue.State.Type = fixture.stateType
+		if fixture.archived {
+			archivedAt := time.Now().UTC()
+			issue.ArchivedAt = &archivedAt
+		} else {
+			issue.ArchivedAt = nil
+		}
+		issues = append(issues, issue)
+	}
+	if err := repository.ImportIssues(ctx, data.Workspace.URLKey, issues); err != nil {
+		t.Fatal(err)
+	}
+	projection := domain.Bootstrap{
+		Workspace: data.Workspace,
+		Releases: []domain.Release{{
+			ID: "progress-release",
+			IssueIDs: []string{
+				"progress-completed",
+				"progress-started",
+				"progress-unstarted",
+				"progress-archived",
+				"missing",
+			},
+		}},
+	}
+	if err := repository.PopulateReleaseProgress(ctx, &projection); err != nil {
+		t.Fatal(err)
+	}
+	if projection.Releases[0].IssueCount != 3 || projection.Releases[0].CompletedCount != 1 {
+		t.Fatalf("release progress=%#v", projection.Releases[0])
 	}
 }
