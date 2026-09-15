@@ -83,11 +83,12 @@ function TopBar({ title, onOpenSidebar, children }: { title: ReactNode; onOpenSi
 }
 
 function ReleasePipelinesView({ data, onCreate, onOpen, onOpenSidebar, onNavigate }: { data: BootstrapData; onCreate: () => void; onOpen: (pipeline: ReleasePipeline) => void; onOpenSidebar: () => void; onNavigate:(path:string)=>void }) {
-  const { t, formatNumber } = useI18n()
+  const { t } = useI18n()
   const [grouping, setGrouping] = useState<'none'|'team'>('none')
   const [order, setOrder] = useState<'position'|'type'|'latest'>('position')
   const [direction, setDirection] = useState<'asc'|'desc'>('asc')
   const [properties, setProperties] = useState({ active: true, teams: true, latest: true })
+  const [query, setQuery] = useState('')
   const [displayOpen, setDisplayOpen] = useState(false)
   const [optionsOpen, setOptionsOpen] = useState(false)
   const [optionsQuery, setOptionsQuery] = useState('')
@@ -98,12 +99,17 @@ function ReleasePipelinesView({ data, onCreate, onOpen, onOpenSidebar, onNavigat
     return () => window.cancelAnimationFrame(frame)
   }, [optionsOpen])
   const compact = useMediaQuery('(max-width: 560px)')
-  const pipelines = useMemo(() => [...data.releasePipelines].sort((a,b) => {
+  const pipelines = useMemo(() => data.releasePipelines.filter(item => {
+    const needle = query.trim().toLocaleLowerCase()
+    if (!needle) return true
+    const teamNames = item.teamIds.map(id => data.teams.find(team => team.id === id)?.name ?? '')
+    return [item.name, item.type, ...teamNames].some(value => value.toLocaleLowerCase().includes(needle))
+  }).sort((a,b) => {
     const comparison = order === 'type' ? a.type.localeCompare(b.type)
       : order === 'latest' ? +(pipelineSummary(data, a).latest?.updatedAt ? new Date(pipelineSummary(data, a).latest!.updatedAt) : new Date(0)) - +(pipelineSummary(data, b).latest?.updatedAt ? new Date(pipelineSummary(data, b).latest!.updatedAt) : new Date(0))
       : a.position - b.position
     return direction === 'asc' ? comparison : -comparison
-  }), [data, direction, order])
+  }), [data, direction, order, query])
   const groups = grouping === 'team' ? [...data.teams.map(team => ({ id: team.id, label: team.name, pipelines: pipelines.filter(item => item.teamIds.includes(team.id)) })), { id: 'all', label: t('All teams'), pipelines: pipelines.filter(item => !item.teamIds.length) }].filter(group => group.pipelines.length) : [{ id: 'all', label: '', pipelines }]
   const columns = ['minmax(230px,1fr)', properties.active && '130px', properties.teams && '120px', properties.latest && '150px'].filter(Boolean).join(' ')
   const toggleProperty = (key: keyof typeof properties) => setProperties(current => ({ ...current, [key]: !current[key] }))
@@ -115,14 +121,14 @@ function ReleasePipelinesView({ data, onCreate, onOpen, onOpenSidebar, onNavigat
     <TopBar title={<div className="flow-releases-directory-title"><h1>{t('Releases')}</h1>{releasesOptions}</div>} onOpenSidebar={onOpenSidebar}>
       <IconButton className="flow-new-pipeline-button" label={t('Create new pipeline')} onClick={onCreate}><Plus/><span>{t('New pipeline')}</span></IconButton>
     </TopBar>
-    <div className="flow-pipelines-summary"><span>{formatNumber(pipelines.length)} {t(pipelines.length === 1 ? 'release pipeline' : 'release pipelines')}</span><Popover.Root open={displayOpen} onOpenChange={setDisplayOpen}><Popover.Trigger asChild><button aria-label={t('Display options')} aria-pressed={displayOpen}><SlidersHorizontal/></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" aria-label={t('Display options')} className="flow-pipeline-display-popover" align="end" collisionPadding={8} sideOffset={4}>
+    <div className="flow-pipelines-summary"><label className="flow-pipeline-search"><Search/><input aria-label={t('Find release pipelines…')} onChange={event=>setQuery(event.target.value)} onKeyDown={event=>{if(event.key==='Escape')setQuery('')}} placeholder={t('Find release pipelines…')} type="search" value={query}/></label><Popover.Root open={displayOpen} onOpenChange={setDisplayOpen}><Popover.Trigger asChild><button aria-label={t('Display options')} aria-pressed={displayOpen}><SlidersHorizontal/></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" aria-label={t('Display options')} className="flow-pipeline-display-popover" align="end" collisionPadding={8} sideOffset={4}>
       <div className="flow-pipeline-display-config">
         <div className="flow-pipeline-display-row"><span>{t('Grouping')}</span><ReleaseDisplaySelect ariaLabel={t('Grouping')} className="is-grouping" onChange={setGrouping} options={[['none',t('No grouping')],['team',t('Team')]]} value={grouping}/></div>
         <div className="flow-pipeline-display-row"><span>{t('Ordering')}</span><div className="flow-pipeline-display-order"><button aria-label={t(direction === 'asc' ? 'Ascending' : 'Descending')} onClick={() => setDirection(value => value === 'asc' ? 'desc' : 'asc')} type="button">{direction === 'asc' ? <ArrowDownWideNarrow/> : <ArrowUpNarrowWide/>}</button><ReleaseDisplaySelect ariaLabel={t('Ordering')} className="is-ordering" onChange={setOrder} options={[['position',t('Release pipeline')],['type',t('Type')],['latest',t('Latest release')]]} value={order}/></div></div>
       </div>
       <div className="flow-pipeline-display-properties"><span>{t('Display properties')}</span><div>{([['active','Active releases'],['teams','Teams'],['latest','Latest release']] as const).map(([key,label])=><button aria-pressed={properties[key]} data-active={properties[key]||undefined} key={key} onClick={()=>toggleProperty(key)} type="button">{t(label)}</button>)}</div></div>
     </Popover.Content></Popover.Portal></Popover.Root></div>
-    {pipelines.length ? <div className="flow-pipelines-table"><div className="flow-pipeline-head" style={compact ? undefined : { gridTemplateColumns: columns }}><button aria-label={`${t('Order by')} ${t('Release pipeline')}`} onClick={()=>sortBy('position')}>{t('Release pipeline')}{order==='position'&&(direction==='asc'?<ArrowDownWideNarrow/>:<ArrowUpNarrowWide/>)}</button>{properties.active&&<span>{t('Active releases')}</span>}{properties.teams&&<span>{t('Teams')}</span>}{properties.latest&&<button aria-label={`${t('Order by')} ${t('Latest release')}`} onClick={()=>sortBy('latest')}>{t('Latest release')}{order==='latest'&&(direction==='asc'?<ArrowDownWideNarrow/>:<ArrowUpNarrowWide/>)}</button>}</div>{groups.map(group => <section className="flow-pipeline-team-group" key={group.id}>{group.label&&<header data-i18n-ignore>{group.label}</header>}{group.pipelines.map(item => { const summary=pipelineSummary(data,item);return <button className="flow-pipeline-row" style={compact ? undefined : { gridTemplateColumns: columns }} key={item.id} onClick={()=>onOpen(item)}><span><ReleasePipelineIcon/><strong data-i18n-ignore>{item.name}</strong></span>{properties.active&&<span>{item.type==='continuous'?t('Continuous'):summary.active || '—'}</span>}{properties.teams&&<span className="flow-release-team-stack">{item.teamIds.slice(0,3).map(id=>{const team=data.teams.find(value=>value.id===id);return team?<i key={id} title={team.name} style={{background:team.color}} data-i18n-ignore><TeamIcon team={team} size={13}/></i>:null})}{!item.teamIds.length&&<em>{t('All teams')}</em>}</span>}{properties.latest&&<span data-i18n-ignore>{summary.latest?.name || '—'}</span>}<ChevronRight/></button>})}</section>)}</div> : <ReleaseEmptyState icon={<ReleasePipelineIcon/>} title={t('No release pipelines')} description={t('Create a release pipeline to start tracking what ships.')} action={<button className="flow-releases-primary" onClick={onCreate}>{t('Create release pipeline')}</button>}/>}
+    {pipelines.length ? <div className="flow-pipelines-table"><div className="flow-pipeline-head" style={compact ? undefined : { gridTemplateColumns: columns }}><button aria-label={`${t('Order by')} ${t('Release pipeline')}`} onClick={()=>sortBy('position')}>{t('Release pipeline')}{order==='position'&&(direction==='asc'?<ArrowDownWideNarrow/>:<ArrowUpNarrowWide/>)}</button>{properties.active&&<span>{t('Active releases')}</span>}{properties.teams&&<span>{t('Teams')}</span>}{properties.latest&&<button aria-label={`${t('Order by')} ${t('Latest release')}`} onClick={()=>sortBy('latest')}>{t('Latest release')}{order==='latest'&&(direction==='asc'?<ArrowDownWideNarrow/>:<ArrowUpNarrowWide/>)}</button>}</div>{groups.map(group => <section className="flow-pipeline-team-group" key={group.id}>{group.label&&<header data-i18n-ignore>{group.label}</header>}{group.pipelines.map(item => { const summary=pipelineSummary(data,item);return <button className="flow-pipeline-row" style={compact ? undefined : { gridTemplateColumns: columns }} key={item.id} onClick={()=>onOpen(item)}><span><ReleasePipelineIcon/><strong data-i18n-ignore>{item.name}</strong></span>{properties.active&&<span>{item.type==='continuous'?t('Continuous'):summary.active || '—'}</span>}{properties.teams&&<span className="flow-release-team-stack">{item.teamIds.slice(0,3).map(id=>{const team=data.teams.find(value=>value.id===id);return team?<i key={id} title={team.name} style={{background:team.color}} data-i18n-ignore><TeamIcon team={team} size={13}/></i>:null})}{!item.teamIds.length&&<em>{t('All teams')}</em>}</span>}{properties.latest&&<span data-i18n-ignore>{summary.latest?.name || '—'}</span>}<ChevronRight/></button>})}</section>)}</div> : query.trim() ? <ReleaseEmptyState icon={<Search/>} title={t('No matching release pipelines')} description={t('Try another search term.')}/> : <ReleaseEmptyState icon={<ReleasePipelineIcon/>} title={t('No release pipelines')} description={t('Create a release pipeline to start tracking what ships.')} action={<button className="flow-releases-primary" onClick={onCreate}>{t('Create release pipeline')}</button>}/>}
   </main>
 }
 
