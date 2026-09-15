@@ -8,9 +8,11 @@
 .workspace-settings-card label>.parent-team-picker{height:32px;padding:0 9px;border:.5px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-1);color:var(--theme-text-primary);width:100%;justify-content:flex-start}
 :root[data-theme="light"] .parent-team-picker-menu .parent-team-ancestors{color:var(--theme-text-secondary)}
 :root[data-theme="light"] .workspace-settings-card label>.parent-team-picker{border-color:var(--theme-border);background:var(--theme-surface-2);color:var(--theme-text-primary)}
-.parent-team-change-dialog{width:480px;max-width:calc(100vw - 24px)}
-.parent-team-change-dialog p{margin:0;color:var(--theme-text-secondary);font-size:13px;line-height:19px}
+.parent-team-change-dialog{box-sizing:border-box;top:50%;width:min(480px,calc(100vw - 32px));max-height:min(520px,calc(100vh - 32px));padding:20px;transform:translate(-50%,-50%);overflow:auto}
+.parent-team-change-dialog .dialog-close{top:14px;right:14px;width:28px;height:28px}
+.parent-team-change-dialog h2{margin:0 40px 8px 0;color:var(--theme-text-primary);font-size:15px;line-height:22px;font-weight:600}
+.parent-team-change-dialog p{margin:0;color:var(--theme-text-secondary);font-size:13px;line-height:20px}
 .parent-team-change-dialog ul{margin:14px 0 0;padding-inline-start:20px;color:var(--theme-text-secondary);font-size:13px;line-height:20px}
-.parent-team-change-dialog footer{display:flex;justify-content:flex-end;gap:8px;margin-top:22px}
-.parent-team-change-dialog footer button{height:32px;padding:0 12px;border:.5px solid var(--theme-border);border-radius:8px;background:var(--theme-surface-1);color:var(--theme-text-primary);font:500 13px inherit}
+.parent-team-change-dialog footer{display:flex;justify-content:flex-end;gap:8px;margin-top:22px;padding-top:0}
+.parent-team-change-dialog footer button{height:32px;min-width:72px;padding:0 12px;border:.5px solid var(--theme-border);border-radius:8px;background:var(--theme-surface-1);color:var(--theme-text-primary);font:500 13px/normal var(--font)}
 .parent-team-change-dialog footer .primary{border-color:var(--accent-primary);background:var(--accent-primary);color:var(--on-accent)}
