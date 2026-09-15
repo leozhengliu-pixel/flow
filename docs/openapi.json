@@ -9524,6 +9524,24 @@
       }
     },
     "/api/projects": {
+      "get": {
+        "operationId": "get_projects",
+        "tags": [
+          "projects"
+        ],
+        "summary": "GET /api/projects",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
       "post": {
         "operationId": "post_projects",
         "tags": [

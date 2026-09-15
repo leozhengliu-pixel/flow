@@ -285,6 +285,7 @@ function App() {
     });
   },[]);
   const bootstrapRequest = useRef<{ key: string; promise: Promise<BootstrapData> } | null>(null);
+  const loadedBootstrapRequestKey = useRef('');
   const initialIssueRef = useRef<{key:string;viewerId:string;issue:Issue} | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [authenticationPolicy,setAuthenticationPolicy] = useState<string>();
@@ -331,6 +332,7 @@ function App() {
   const requestedWorkspaceKey =
     "workspaceSlug" in route ? route.workspaceSlug : "";
   const loadedWorkspaceKey = data?.workspace.urlKey;
+  const projectListProjection = isProjectListRoute(route);
   useEffect(() => {
     if (!loadedWorkspaceKey) return;
     const warmDetails = () => {
@@ -485,23 +487,23 @@ function App() {
       setError(true);
       return;
     }
-    const requestKey = `${account.viewer.id}:${requestedWorkspaceKey}`;
-    if (workspaceBootstrapPhase(loadedWorkspaceKey, requestedWorkspaceKey, bootstrapRequest.current?.key, requestKey) === 'skip') return;
+    const requestKey = `${account.viewer.id}:${requestedWorkspaceKey}:${projectListProjection ? 'project-list' : 'full'}`;
+    if (workspaceBootstrapPhase(loadedWorkspaceKey, requestedWorkspaceKey, bootstrapRequest.current?.key, requestKey) === 'skip' && loadedBootstrapRequestKey.current === requestKey) return;
     let cancelled = false;
-    if (loadedWorkspaceKey !== requestedWorkspaceKey) {
+    if (loadedWorkspaceKey !== requestedWorkspaceKey || loadedBootstrapRequestKey.current && loadedBootstrapRequestKey.current !== requestKey) {
       const cachedNavigation = readNavigationCache(account.viewer.id, requestedWorkspaceKey);
-      setData((current) => hydrateWorkspaceNavigation({
-        current,
-        cached: cachedNavigation,
-        requestedWorkspaceKey,
-        viewerId: account.viewer.id,
-        preview: initialIssueRef.current,
-      }));
+      setData((current) => {
+        if (loadedWorkspaceKey === requestedWorkspaceKey) {
+          if (!projectListProjection || !current) return current;
+          return { ...current, projects: [], issues: [], comments: {}, activities: {}, projectUpdates: {}, initiativeUpdates: {}, issueCollectionPaged: true };
+        }
+        return hydrateWorkspaceNavigation({ current, cached: cachedNavigation, requestedWorkspaceKey, viewerId: account.viewer.id, preview: initialIssueRef.current });
+      });
       setError(false);
     }
     // Cache hydration can make this workspace look loaded; share the in-flight request.
     if (bootstrapRequest.current?.key !== requestKey) {
-      const request = { key: requestKey, promise: fetchBootstrap(requestedWorkspaceKey) };
+      const request = { key: requestKey, promise: fetchBootstrap(requestedWorkspaceKey, projectListProjection ? 'project-list' : undefined) };
       bootstrapRequest.current = request;
       const clear = () => { if (bootstrapRequest.current === request) bootstrapRequest.current = null; };
       void request.promise.then(clear, clear);
@@ -509,6 +511,7 @@ function App() {
     bootstrapRequest.current.promise
       .then(next => {
         if (cancelled || next.viewer.id!==sessionViewerRef.current) return;
+        loadedBootstrapRequestKey.current=requestKey;
         setData(current=>{
           const merged=mergeWorkspaceDirectory(current,next), preview=initialIssueRef.current;
           const withPreview=preview?.viewerId===account.viewer.id && preview?.key.startsWith(`${requestedWorkspaceKey}:`) && !preview.issue.isSummary
@@ -520,7 +523,7 @@ function App() {
       })
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
-  }, [account, loadedWorkspaceKey, navigateTo, oauthPath, requestedWorkspaceKey, route.kind]);
+  }, [account, loadedWorkspaceKey, navigateTo, oauthPath, projectListProjection, requestedWorkspaceKey, route.kind]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return;
@@ -906,7 +909,7 @@ function App() {
       if(checkVisibility && /resync|member|permission|shared|unshared/.test(event.type))setDetailAccessPending(workspace);
       let next:BootstrapData, visibility:{ids:string[]}|undefined;
       try {
-        [next,visibility]=await Promise.all([fetchBootstrap(workspace),checkVisibility ? fetchVisibleIssueIds(workspace,checkedIds) : Promise.resolve(undefined)]);
+        [next,visibility]=await Promise.all([fetchBootstrap(workspace,projectListProjection?'project-list':undefined),checkVisibility ? fetchVisibleIssueIds(workspace,checkedIds) : Promise.resolve(undefined)]);
       } catch(error) {
         if(checkVisibility && sessionViewerRef.current===viewerId)setDetailAccessPending(workspace);
         throw error;
@@ -4037,8 +4040,14 @@ function App() {
     });
   };
   const openProject = (project: Project) => {
+    setData(current => current ? { ...current, projects: [project, ...current.projects.filter(item => item.id !== project.id)] } : current);
     rememberResult("project", project.id);
     navigateTo(projectPath(data.workspace.urlKey, project));
+  };
+  const openProjectIssues = (project: Project) => {
+    setData(current => current ? { ...current, projects: [project, ...current.projects.filter(item => item.id !== project.id)] } : current);
+    rememberResult("project", project.id);
+    navigateTo(projectPath(data.workspace.urlKey, project, "issues"));
   };
   const openInitiative = (
     initiative: Initiative,
@@ -5463,11 +5472,7 @@ function App() {
                 onOpenSidebar={() => setMobileSidebarOpen(true)}
                 onRetry={load}
                 onOpenProject={openProject}
-                onOpenProjectIssues={(project) =>
-                  navigateTo(
-                    projectPath(data.workspace.urlKey, project, "issues"),
-                  )
-                }
+                onOpenProjectIssues={openProjectIssues}
                 onCreateProject={addProject}
                 onCreateProjectUpdate={addProjectUpdate}
                 onUpdateProjectUpdate={changeProjectUpdate}
@@ -5595,11 +5600,7 @@ function App() {
                 onOpenSidebar={() => setMobileSidebarOpen(true)}
                 onRetry={load}
                 onOpenProject={openProject}
-                onOpenProjectIssues={(project) =>
-                  navigateTo(
-                    projectPath(data.workspace.urlKey, project, "issues"),
-                  )
-                }
+                onOpenProjectIssues={openProjectIssues}
                 onCreateProject={addProject}
                 onCreateProjectUpdate={addProjectUpdate}
                 onUpdateProjectUpdate={changeProjectUpdate}
@@ -6181,6 +6182,15 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
     return "project-detail";
   if (route.kind === "issue") return "issue-detail";
   return "not-found";
+}
+
+function isProjectListRoute(route: AppRoute) {
+  return route.kind === 'projects'
+    || route.kind === 'team-projects'
+    || route.kind === 'projects-new-view'
+    || route.kind === 'projects-saved-view'
+    || route.kind === 'team-projects-new-view'
+    || route.kind === 'team-projects-saved-view'
 }
 function RouteNotFound({
   title = "Page not found",

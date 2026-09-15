@@ -2,7 +2,7 @@ import { Fragment, useCallback, useLayoutEffect, useRef, useState, type Key, typ
 import { Virtuoso } from 'react-virtuoso'
 
 /** Keep column headings aligned with the actual scroll viewport, including its gutter. */
-export function VirtualColumnList<T>({ header, className, scrollerClassName, data, computeItemKey, itemContent, increaseViewportBy, ariaLabel, virtualize = true }: {
+export function VirtualColumnList<T>({ header, className, scrollerClassName, data, computeItemKey, itemContent, increaseViewportBy, ariaLabel, endReached, virtualize = true }: {
   header: ReactNode
   className?: string
   scrollerClassName?: string
@@ -11,6 +11,7 @@ export function VirtualColumnList<T>({ header, className, scrollerClassName, dat
   itemContent: (index: number, item: T) => ReactNode
   increaseViewportBy?: number | { top: number; bottom: number }
   ariaLabel?: string
+  endReached?: () => void
   virtualize?: boolean
 }) {
   const headerOuter = useRef<HTMLDivElement>(null)
@@ -60,7 +61,7 @@ export function VirtualColumnList<T>({ header, className, scrollerClassName, dat
         {header}
       </div>
     </div>
-    {virtualize ? <Virtuoso className={scrollerClassName} data={data} computeItemKey={computeItemKey} itemContent={itemContent} increaseViewportBy={increaseViewportBy}
+    {virtualize ? <Virtuoso className={scrollerClassName} data={data} computeItemKey={computeItemKey} itemContent={itemContent} increaseViewportBy={increaseViewportBy} endReached={endReached}
       aria-label={ariaLabel} role={ariaLabel ? 'list' : undefined} scrollerRef={attachScroller}
       style={{ flex: '1 1 auto', minHeight: 0, width: '100%', scrollbarGutter: 'stable' }}/>
       : <div ref={setScroller} className={scrollerClassName} aria-label={ariaLabel} role="list" style={{ flex: '1 1 auto', minHeight: 0, overflow: 'auto', scrollbarGutter: 'stable' }}>{data.map((item, index) => <Fragment key={computeItemKey(index, item)}>{itemContent(index, item)}</Fragment>)}</div>}

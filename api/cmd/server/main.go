@@ -667,6 +667,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/cycles/{id}/resources/{resourceId}", s.deleteCycleResource)
 	mux.HandleFunc("POST /api/cycles/{id}/calendar-token", s.cycleCalendarToken)
 	mux.HandleFunc("GET /api/calendar/cycles/{id}", s.cycleCalendar)
+	mux.HandleFunc("GET /api/projects", s.listProjectRecords)
 	mux.HandleFunc("POST /api/projects", s.createProject)
 	mux.HandleFunc("PATCH /api/projects/{id}", s.updateProject)
 	mux.HandleFunc("DELETE /api/projects/{id}", s.deleteProject)
@@ -810,6 +811,9 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
 		issueRecordsError(w, err)
 		return
+	}
+	if projectListBootstrapRequested(r) {
+		store.ProjectListBootstrapProjection(&data)
 	}
 	if s.authDisabled {
 		if err := s.store.ApplyTeamDefaultFavorites(r.Context(), &data, data.Viewer.ID); err != nil {

@@ -108,7 +108,7 @@
 .issue-activity-timeline .reply-body code {
   padding: 2px 5px;
   border-radius: 4px;
-  background: #ffffff0d;
+  background: var(--theme-soft-overlay);
   color: inherit;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: .9em;
