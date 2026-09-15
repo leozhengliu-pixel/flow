@@ -2,6 +2,7 @@ import {
   Activity,
   AppWindow,
   ArrowLeft,
+  ChevronDown,
   Bell,
   Braces,
   Building2,
@@ -35,6 +36,7 @@ import { ViewIconPicker } from "@/components/views/view-icon-picker";
 import { TeamIcon } from "@/components/issue/issue-icons";
 import { SelectControl } from "@/components/ui/select-control";
 import { ParentTeamPicker } from '@/components/property/parent-team-picker';
+import { PropertyMenu } from '@/components/property/property-menu';
 import { teamHierarchy, type TeamHierarchySettings } from '@/lib/team-hierarchy';
 import { ReleasesIcon } from "@/components/releases/release-icons";
 import type { BootstrapData, Team } from "@/types/flow";
@@ -166,7 +168,7 @@ export function TeamCreatePage({
     setError('');
     setSaving(true);
     try {
-      await onCreate({ name: name.trim(), key: identifier, color, icon, private: privateTeam, parentTeamId, copyFromTeamId: parentTeamId || copyFrom, timezone: timezone.includes("Coordinated") ? "Etc/UTC" : "Asia/Shanghai" });
+      await onCreate({ name: name.trim(), key: identifier, color, icon, private: privateTeam, parentTeamId, copyFromTeamId: copyFrom || parentTeamId, timezone: timezone.includes("Coordinated") ? "Etc/UTC" : "Asia/Shanghai" });
       onBack();
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Unable to create team');
@@ -175,6 +177,7 @@ export function TeamCreatePage({
     }
   };
   const query = settingsQuery.trim().toLowerCase();
+  const copySourceTeam = teams.find(team => team.id === (copyFrom || parentTeamId));
   return (
     <div className="workspace-new-team">
       <aside className="workspace-settings-nav">
@@ -313,7 +316,19 @@ export function TeamCreatePage({
           <section className="workspace-settings-card">
             <label>
               <span>Copy from team</span>
-              <SelectControl label="Copy from team" disabled={Boolean(parentTeamId)} value={parentTeamId || copyFrom} onChange={setCopyFrom} options={[{ value: "", label: "Don’t copy" }, ...teams.map(team => ({ value: team.id, label: team.name, entityName: true, icon: <TeamIcon team={team} size={14}/> }))]}/>
+              <PropertyMenu
+                compact
+                label="Copy from team"
+                ariaLabel="Copy from team"
+                selectedId={copyFrom || parentTeamId}
+                value={teams.find(team => team.id === (copyFrom || parentTeamId))?.name ?? "Don’t copy"}
+                valueIsEntityName={Boolean(copyFrom || parentTeamId)}
+                searchPlaceholder="Search teams…"
+                options={[{ id: "", label: "Don’t copy" }, ...teams.filter(team => !team.retiredAt).map(team => ({ id: team.id, label: team.name, keywords: `${team.key} ${team.name}`, entityName: true, icon: <TeamIcon team={team} size={14}/> }))]}
+                onChange={setCopyFrom}
+                trigger={<><span>{copySourceTeam ? <TeamIcon team={copySourceTeam} size={14}/> : null}</span><span data-i18n-ignore={Boolean(copySourceTeam)}>{copySourceTeam?.name ?? "Don’t copy"}</span><ChevronDown size={14}/></>}
+                triggerClassName="select-control team-copy-selector"
+              />
             </label>
           </section>
           {error && <p role="alert">{error}</p>}
