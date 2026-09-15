@@ -138,3 +138,76 @@ func TestIssueRecordsRespectPrivateTeamsAndSharedPermissions(t *testing.T) {
 	authRequest[domain.Issue](t, member, "GET", host.URL+"/api/issue-records/"+issue.ID, nil, "test-workspace", 200)
 	authRequest[any](t, member, "PATCH", host.URL+"/api/issue-records/"+issue.ID, map[string]string{"title": "Not allowed"}, "test-workspace", 403)
 }
+
+func TestIssueRecordsReleaseScope(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if len(bootstrap.Issues) < 2 || len(bootstrap.Teams) == 0 {
+		t.Fatal("fixture must include issues")
+	}
+	teamID := bootstrap.Teams[0].ID
+	completed := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issue-records", map[string]any{"title": "Release completed", "teamId": teamID, "stateId": "state_done"}, 201)
+	started := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issue-records", map[string]any{"title": "Release started", "teamId": teamID, "stateId": "state_progress"}, 201)
+	unstarted := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issue-records", map[string]any{"title": "Release unstarted", "teamId": teamID, "stateId": "state_todo"}, 201)
+	outside := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issue-records", map[string]any{"title": "Outside release", "teamId": teamID}, 201)
+	pipeline := requestJSON[domain.ReleasePipeline](t, handler, http.MethodPost, "/api/release-pipelines", map[string]any{
+		"name": "Web", "teamIds": []string{teamID}, "type": "scheduled", "stages": []string{"Planning", "Released"},
+	}, http.StatusCreated)
+	release := requestJSON[domain.Release](t, handler, http.MethodPost, "/api/releases", map[string]any{
+		"name": "v1.0.0", "pipelineId": pipeline.ID, "stage": "Planning", "status": "inProgress",
+		"issueIds": []string{completed.ID, started.ID, unstarted.ID},
+	}, http.StatusCreated)
+	if len(release.IssueIDs) != 3 {
+		t.Fatalf("release associations: %#v", release)
+	}
+
+	paged := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/issue-records/bootstrap", nil, http.StatusOK)
+	if !paged.IssueCollectionPaged || len(paged.Issues) != 0 {
+		t.Fatalf("bootstrap dumped issue records: %#v", paged.Issues)
+	}
+	if len(paged.Releases) != 1 || paged.Releases[0].IssueCount != 3 || paged.Releases[0].CompletedCount != 1 {
+		t.Fatalf("paged bootstrap lost release progress: %#v", paged.Releases)
+	}
+
+	unknown := requestJSON[store.IssueRecordPage](t, handler, http.MethodGet, "/api/issue-records?releaseId=missing-release&includeTotal=true&limit=100", nil, http.StatusOK)
+	if unknown.Total != 0 || len(unknown.Items) != 0 {
+		t.Fatalf("unknown release scanned workspace: %#v", unknown)
+	}
+
+	page := requestJSON[store.IssueRecordPage](t, handler, http.MethodGet, "/api/issue-records?releaseId="+release.ID+"&includeTotal=true&limit=2&sort=title", nil, http.StatusOK)
+	if page.Total != 3 || len(page.Items) != 2 || !page.HasMore {
+		t.Fatalf("release page: %#v", page)
+	}
+	seen := map[string]string{}
+	for _, issue := range page.Items {
+		seen[issue.ID] = issue.State.Type
+	}
+	next := requestJSON[store.IssueRecordPage](t, handler, http.MethodGet, "/api/issue-records?releaseId="+release.ID+"&includeTotal=true&limit=2&sort=title&cursor="+page.NextCursor, nil, http.StatusOK)
+	for _, issue := range next.Items {
+		seen[issue.ID] = issue.State.Type
+	}
+	if len(seen) != 3 || seen[completed.ID] != "completed" || seen[started.ID] != "started" || seen[unstarted.ID] != "unstarted" {
+		t.Fatalf("associated statuses: %#v", seen)
+	}
+	if _, ok := seen[outside.ID]; ok {
+		t.Fatal("unassociated issue leaked into release query")
+	}
+
+	unscoped := requestJSON[store.IssueRecordPage](t, handler, http.MethodGet, "/api/issue-records?limit=1", nil, http.StatusOK)
+	if unscoped.NextCursor == "" {
+		t.Fatal("expected unscoped cursor")
+	}
+	requestJSON[map[string]any](t, handler, http.MethodGet, "/api/issue-records?releaseId="+release.ID+"&cursor="+unscoped.NextCursor, nil, http.StatusBadRequest)
+
+	groups := requestJSON[struct {
+		Groups []store.IssueRecordGroup `json:"groups"`
+	}](t, handler, http.MethodGet, "/api/issue-records/groups?releaseId="+release.ID+"&groupBy=none", nil, http.StatusOK)
+	if len(groups.Groups) != 1 || groups.Groups[0].Count != 3 {
+		t.Fatalf("release groups: %#v", groups)
+	}
+}

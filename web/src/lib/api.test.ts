@@ -6,6 +6,7 @@ import {
   deleteProject,
   fetchBootstrap,
   fetchInboxNotifications,
+  listIssueRecords,
   listIssues,
   realtimeClientId,
   replaceTeamDefaultFavorites,
@@ -94,6 +95,18 @@ describe('API client contract', () => {
     await expect(updateIssue('issue-1', { title: 'Next', expectedVersion: 3 })).rejects.toMatchObject({
       name: 'ApiError', message: 'Version conflict', status: 409, code: 'conflict', current: { version: 4 },
     })
+  })
+
+  it('serializes release-scoped issue record queries', async () => {
+    fetchMock.mockResolvedValue(response({ items: [], nextCursor: 'page-2', hasMore: true, total: -1 }))
+    await listIssueRecords({ releaseId: 'release-1', archived: 'false', limit: 100, cursor: 'page-2' })
+    const parsed = new URL(String(fetchMock.mock.calls[0][0]), 'http://flow.local')
+    expect(parsed.pathname).toBe('/api/issue-records')
+    expect(parsed.searchParams.get('releaseId')).toBe('release-1')
+    expect(parsed.searchParams.get('archived')).toBe('false')
+    expect(parsed.searchParams.get('limit')).toBe('100')
+    expect(parsed.searchParams.get('cursor')).toBe('page-2')
+    expect(parsed.searchParams.get('projection')).toBe('list')
   })
 
   it('serializes cursor issue queries and structured filters', async () => {

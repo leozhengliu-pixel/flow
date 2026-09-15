@@ -387,6 +387,7 @@ export function ProjectsPage({
       options={filterOptions}
     />}
     filterCount={projectFilters.length + (insightFilter ? 1 : 0)}
+    selectedFilters={projectFilters}
     displayLabelGroups={projectLabelGroups.map(group => ({ id: group.id, name: group.name }))}
     filterOptions={Object.fromEntries(Object.entries(PROJECT_FILTER_FIELDS).map(([label, field]) => [label, filterOptions[field] ?? []]))}
     onAddFilter={addFilter}

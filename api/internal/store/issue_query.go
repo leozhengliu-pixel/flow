@@ -33,6 +33,9 @@ type IssueRecordQuery struct {
 	TeamIDs            []string
 	ProjectIDs         []string
 	StateIDs           []string
+	ReleaseIDs         []string
+	IssueIDs           []string
+	RestrictToIssueIDs bool
 	AllowedTeamIDs     []string // nil is unrestricted; empty is denied.
 	Access             *IssueRecordAccess
 	Text               string
@@ -61,7 +64,9 @@ func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, use
 	if !ok {
 		return data, ErrAuthForbidden
 	}
-	if err := s.mergeTeamDefaultFavorites(ctx, &data, userID); err != nil { return data, err }
+	if err := s.mergeTeamDefaultFavorites(ctx, &data, userID); err != nil {
+		return data, err
+	}
 	favorites, subscriptions := slices.Clone(data.Favorites), slices.Clone(data.Subscriptions)
 	releases := slices.Clone(data.Releases)
 	for i := range releases {
@@ -448,7 +453,7 @@ func issueRecordWhere(query IssueRecordQuery) (string, []any, error) {
 		column   string
 		values   []string
 		required bool
-	}{{"team_id", query.TeamIDs, false}, {"project_id", query.ProjectIDs, false}, {"state_id", query.StateIDs, false}, {"team_id", query.AllowedTeamIDs, query.AllowedTeamIDs != nil}} {
+	}{{"team_id", query.TeamIDs, false}, {"project_id", query.ProjectIDs, false}, {"state_id", query.StateIDs, false}, {"id", query.IssueIDs, query.RestrictToIssueIDs}, {"team_id", query.AllowedTeamIDs, query.AllowedTeamIDs != nil}} {
 		if len(item.values) > 0 || item.required {
 			clause, values := bindList("i."+item.column, item.values)
 			clauses = append(clauses, clause)
@@ -519,8 +524,59 @@ func issueGroupAttribute(group string) string {
 	return ""
 }
 
+// Release-scoped queries resolve the current associated issue IDs and constrain
+// the row set to those IDs, not the whole workspace collection. The resolved IDs
+// participate in the cursor scope hash so pages cannot cross another release.
+func (s *SQLiteStore) applyIssueRecordScope(ctx context.Context, query *IssueRecordQuery) error {
+	if len(query.ReleaseIDs) == 0 {
+		return nil
+	}
+	ids, err := s.releaseAssociatedIssueIDs(ctx, query.Workspace, query.ReleaseIDs)
+	if err != nil {
+		return err
+	}
+	query.IssueIDs = ids
+	query.RestrictToIssueIDs = true
+	return nil
+}
+
+func (s *SQLiteStore) releaseAssociatedIssueIDs(ctx context.Context, workspace string, releaseIDs []string) ([]string, error) {
+	ids := []string{}
+	_, data, ok := s.workspaceReadSource(ctx, workspace)
+	if !ok {
+		return ids, nil
+	}
+	wanted := make(map[string]bool, len(releaseIDs))
+	for _, id := range releaseIDs {
+		if id != "" {
+			wanted[id] = true
+		}
+	}
+	if len(wanted) == 0 {
+		return ids, nil
+	}
+	seen := map[string]bool{}
+	for _, release := range data.Releases {
+		if !wanted[release.ID] && !wanted[release.SlugID] {
+			continue
+		}
+		for _, issueID := range release.IssueIDs {
+			if issueID == "" || seen[issueID] {
+				continue
+			}
+			seen[issueID] = true
+			ids = append(ids, issueID)
+		}
+	}
+	slices.Sort(ids)
+	return ids, nil
+}
+
 func (s *SQLiteStore) QueryIssueRecords(ctx context.Context, query IssueRecordQuery) (IssueRecordPage, error) {
 	page := IssueRecordPage{Items: []domain.Issue{}, Total: -1}
+	if err := s.applyIssueRecordScope(ctx, &query); err != nil {
+		return page, err
+	}
 	where, args, err := issueRecordWhere(query)
 	if err != nil {
 		return page, err
@@ -650,6 +706,9 @@ func (s *SQLiteStore) QueryIssueRecords(ctx context.Context, query IssueRecordQu
 
 func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQuery) ([]IssueRecordGroup, error) {
 	query.GroupValue = nil
+	if err := s.applyIssueRecordScope(ctx, &query); err != nil {
+		return nil, err
+	}
 	if _, _, err := issueRecordWhere(query); err != nil {
 		return nil, err
 	}

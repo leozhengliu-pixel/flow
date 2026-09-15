@@ -1,4 +1,4 @@
-.review-filter-menu { width: 228px; }
+.review-filter-menu { width: var(--filter-root-width, 207px); }
 .review-filter-avatar { width: 18px; height: 18px; flex: 0 0 18px; font-size: 8px; }
 .review-list-options { z-index: 600; width: 300px; max-width: calc(100vw - 16px); max-height: var(--radix-popover-content-available-height); overflow-y: auto; border: .5px solid var(--theme-border); border-radius: 8px; background: var(--theme-surface-2); color: var(--theme-text-primary); box-shadow: var(--menu-shadow); outline: none; }
 .review-list-options__section { padding: 8px 16px; }

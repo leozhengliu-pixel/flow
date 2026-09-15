@@ -199,8 +199,13 @@ func (s *server) listReleases(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid release status")
 		return
 	}
+	data := s.workspaceData(r)
+	if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	result := []domain.Release{}
-	for _, item := range s.workspaceData(r).Releases {
+	for _, item := range data.Releases {
 		if archiveMatches(item.ArchivedAt, filter) && (pipelineID == "" || item.PipelineID == pipelineID) && (status == "" || item.Status == status) {
 			result = append(result, item)
 		}
@@ -215,6 +220,10 @@ func (s *server) getRelease(w http.ResponseWriter, r *http.Request) {
 	index := slices.IndexFunc(data.Releases, func(item domain.Release) bool { return item.ID == id })
 	if index < 0 {
 		writeError(w, http.StatusNotFound, "resource not found")
+		return
+	}
+	if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
+		issueRecordsError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, data.Releases[index])
@@ -400,7 +409,9 @@ func (s *server) receiveReleasePipelineEvent(w http.ResponseWriter, r *http.Requ
 			return item.PipelineID == pipelineID && input.Version != "" && item.Version == input.Version
 		})
 		previousStatus := ""
-		if index >= 0 { previousStatus = data.Releases[index].Status }
+		if index >= 0 {
+			previousStatus = data.Releases[index].Status
+		}
 		now := time.Now().UTC()
 		if index < 0 {
 			name := input.Name
