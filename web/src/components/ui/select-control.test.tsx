@@ -21,4 +21,12 @@ describe('SelectControl', () => {
     expect(screen.getByText('Existing issues')).toBeVisible()
     expect(screen.getByRole('option', { name: 'ENG-1 Checkout' })).toBeVisible()
   })
+
+  it('keeps unselected option text in the first grid column', async () => {
+    const user = userEvent.setup()
+    render(<SelectControl label="Visibility" value="workspace" onChange={vi.fn()} options={[{ value: 'workspace', label: 'Workspace public' }, { value: 'private', label: 'Private' }]}/>)
+    await user.click(screen.getByRole('combobox', { name: 'Visibility' }))
+    const option = screen.getByRole('option', { name: 'Private' })
+    expect(option).toHaveTextContent('Private')
+  })
 })
