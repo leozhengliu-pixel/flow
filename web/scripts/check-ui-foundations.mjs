@@ -61,6 +61,9 @@ if (!teamOverview.includes('isolation: isolate;') || !teamOverview.includes('z-i
 if (!teamOverview.includes('grid-template-columns:20px 16px') || !teamOverview.includes('position:absolute!important;left:4px;top:5px')) {
   throw new Error('Team document checkbox and title columns must retain their measured alignment')
 }
+if (!teamOverview.includes('.team-home-page {\n  position: relative;') || !teamOverview.includes('.team-documents-toolbar{position:absolute;z-index:22;top:44px;') || !teamOverview.includes('.team-documents-toolbar>*{pointer-events:auto}') || !teamOverview.includes('.team-members-toolbar{position:absolute;z-index:22;top:44px;')) {
+  throw new Error('Team document and member toolbar controls must remain above the tab row and pointer reachable')
+}
 if (!documents.includes('.document-meta-avatar {') || !documents.includes('background: var(--chart-cyan);') || !documents.includes('border-radius: 50%;')) {
   throw new Error('Document metadata avatars must retain the measured 18px circular treatment')
 }

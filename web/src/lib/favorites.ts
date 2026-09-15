@@ -14,6 +14,7 @@ type FavoriteIntent = {
   action: 'add' | 'remove'
   favorite: Favorite | null
   generation: number
+  confirmedAt?: number
 }
 
 type FavoriteDelta = {
@@ -25,6 +26,7 @@ type FavoriteDelta = {
 
 const pendingIntents = new Map<string, FavoriteIntent>()
 const pendingRequests = new Map<string, Promise<unknown>>()
+const CONFIRMED_INTENT_TTL_MS = 30_000
 
 function serializeFavoriteRequest<T>(key: string, operation: () => Promise<T>): Promise<T> {
   const previous = pendingRequests.get(key)
@@ -87,8 +89,17 @@ export function applyFavoriteDelta(data: BootstrapData, delta: { resourceType: s
 export function overlayPendingFavoriteIntents(data: BootstrapData): BootstrapData {
   if (!pendingIntents.size) return data
   let next = data
-  for (const intent of pendingIntents.values()) {
+  for (const [key, intent] of pendingIntents) {
     if (intent.workspaceKey !== data.workspace.urlKey || intent.userId !== data.viewer.id) continue
+    const snapshotFavorite = findFavorite(data.favorites, intent.userId, intent.resourceType, intent.resourceId)
+    if (intent.confirmedAt && Boolean(snapshotFavorite) === (intent.action === 'add')) {
+      pendingIntents.delete(key)
+      continue
+    }
+    if (intent.confirmedAt && Date.now() - intent.confirmedAt >= CONFIRMED_INTENT_TTL_MS) {
+      pendingIntents.delete(key)
+      continue
+    }
     next = applyFavoriteDelta(next, {
       resourceType: intent.resourceType,
       resourceId: intent.resourceId,
@@ -117,6 +128,8 @@ export function toggleFavorite(input: {
   position?: number
 }): Promise<Favorite | void> {
   const key = `${input.workspaceKey}:${favoriteResourceKey(input.resourceType, input.resourceId)}`
+  const stored = pendingIntents.get(key)
+  if (stored?.confirmedAt && Date.now() - stored.confirmedAt >= CONFIRMED_INTENT_TTL_MS) pendingIntents.delete(key)
   const pending = pendingIntents.get(key)
   const currentlyFavorited = pending ? pending.action === 'add' : input.currentlyFavorited
   const next = pending ? !currentlyFavorited : (input.nextFavorite ?? !currentlyFavorited)
@@ -136,10 +149,11 @@ export function toggleFavorite(input: {
     return serializeFavoriteRequest(key, () => addFavorite(input.resourceType, input.resourceId)).then(created => {
       if (pendingIntents.get(key)?.generation !== generation) return created
       if (created) {
-        pendingIntents.set(key, { ...base, action: 'add', favorite: created })
+        pendingIntents.set(key, { ...base, action: 'add', favorite: created, confirmedAt: Date.now() })
         emitFavoriteDelta({ workspaceKey: input.workspaceKey, resourceType: input.resourceType, resourceId: input.resourceId, favorite: created })
+      } else {
+        pendingIntents.set(key, { ...base, action: 'add', favorite, confirmedAt: Date.now() })
       }
-      pendingIntents.delete(key)
       return created
     }).catch(error => {
       if (pendingIntents.get(key)?.generation === generation) {
@@ -154,7 +168,7 @@ export function toggleFavorite(input: {
   pendingIntents.set(key, { ...base, action: 'remove', favorite: previous })
   emitFavoriteDelta({ workspaceKey: input.workspaceKey, resourceType: input.resourceType, resourceId: input.resourceId, favorite: null })
   return serializeFavoriteRequest(key, () => removeFavorite(input.resourceType, input.resourceId)).then(() => {
-    if (pendingIntents.get(key)?.generation === generation) pendingIntents.delete(key)
+    if (pendingIntents.get(key)?.generation === generation) pendingIntents.set(key, { ...base, action: 'remove', favorite: previous, confirmedAt: Date.now() })
   }).catch(error => {
     if (pendingIntents.get(key)?.generation === generation) {
       pendingIntents.delete(key)

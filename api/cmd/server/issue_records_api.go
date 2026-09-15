@@ -127,12 +127,11 @@ func (s *server) issueRecordsBootstrap(w http.ResponseWriter, r *http.Request) {
 		issueRecordsError(w, err)
 		return
 	}
-	if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
-		issueRecordsError(w, err)
-		return
-	}
 	if projectListBootstrapRequested(r) {
 		store.ProjectListBootstrapProjection(&data)
+	} else if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
+		issueRecordsError(w, err)
+		return
 	}
 	sanitizeBootstrap(&data)
 	writeJSON(w, 200, data)

@@ -6,6 +6,36 @@ import { I18nProvider } from '@/i18n/i18n'
 import { NewProjectDialog } from './new-project-dialog'
 
 describe('NewProjectDialog', () => {
+  it('uses the provided project status dictionary without English fallback states', async () => {
+    const user = userEvent.setup()
+    const onCreate = vi.fn()
+    render(
+      <I18nProvider>
+        <NewProjectDialog
+          defaultStatus="建设中"
+          open
+          onClose={vi.fn()}
+          onCreate={onCreate}
+          statuses={[
+            { id: '待规划', label: '待规划' },
+            { id: '建设中', label: '建设中' },
+            { id: '已完成', label: '已完成' },
+          ]}
+          teams={[{ id: 'team-1', label: 'Team', color: '#5e6ad2' }]}
+        />
+      </I18nProvider>,
+    )
+
+    await user.click(screen.getByRole('combobox', { name: 'Change project status' }))
+    expect(screen.getByRole('option', { name: '待规划' })).toBeVisible()
+    expect(screen.getByRole('option', { name: '建设中' })).toBeVisible()
+    expect(screen.queryByRole('option', { name: 'Backlog' })).toBeNull()
+    await user.keyboard('{Escape}')
+    await user.type(screen.getByRole('textbox', { name: 'Project name' }), '本地化项目')
+    await user.click(screen.getByRole('button', { name: 'Create project' }))
+    expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ status: '建设中' }))
+  })
+
   it('keeps a selected icon color when the project name changes', async () => {
     const user = userEvent.setup()
     render(

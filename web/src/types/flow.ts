@@ -54,6 +54,8 @@ export interface TeamMember {
   userId: UUID;
   role: TeamRole;
   joinedAt: string;
+  managed?: boolean;
+  managedSource?: "scim";
 }
 export interface Invitation {
   id: UUID;
@@ -1628,6 +1630,7 @@ export interface BootstrapData {
   cycles: Cycle[];
   cycleSettings: Record<UUID, CycleSettings>;
   teamSettings: Record<UUID, TeamSettings>;
+  teamParents?: Record<UUID, UUID>;
   issueTemplates: IssueTemplate[];
   projectTemplates: ProjectTemplate[];
   documentTemplates: DocumentTemplate[];
@@ -1667,6 +1670,8 @@ export interface BootstrapData {
   activities: Record<UUID, ActivityEvent[]>;
   savedViews: SavedView[];
   notifications: Notification[];
+  inboxUnreadCount?: number;
+  reviewCount?: number;
   notificationPreferences: Record<UUID, NotificationPreferences>;
   notificationDeliveries: NotificationDelivery[];
   pushSubscriptions: PushSubscription[];

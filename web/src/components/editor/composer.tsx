@@ -41,7 +41,7 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
   return <div className={`composer${compact ? ' compact' : ''}`}>
     <EditorContent editor={editor}/>
     {error && <div className="composer-error" role="alert">{error}<button type="button" onClick={() => void submit()}>Retry</button></div>}
-    <div className="composer-toolbar"><div>
+    <div className="composer-toolbar"><div className="composer-tools">
       <button type="button" aria-label="Bold" aria-pressed={editor?.isActive('bold')} onClick={() => editor?.chain().focus().toggleBold().run()}><Bold size={14}/></button>
       <button type="button" aria-label="Italic" aria-pressed={editor?.isActive('italic')} onClick={() => editor?.chain().focus().toggleItalic().run()}><Italic size={14}/></button>
       <button type="button" aria-label="Code" aria-pressed={editor?.isActive('code')} onClick={() => editor?.chain().focus().toggleCode().run()}><Code2 size={14}/></button>
@@ -53,6 +53,6 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
         </Popover.Content></Popover.Portal>
       </Popover.Root>
       <button type="button" aria-label="Mention" onClick={()=>editor?.chain().focus().insertContent('@').run()}><AtSign size={14}/></button><button type="button" aria-label="Attach images, files, or videos" onClick={onAttach}><Paperclip size={14}/></button>
-    </div><div className="composer-submit">{onCancel && <Button type="button" variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>}<Button type="button" size="icon" aria-label="Submit comment" disabled={saving || empty} onClick={() => void submit()}><Send size={13}/></Button></div></div>
+    </div><div className="composer-submit">{onCancel && <Button className="composer-cancel" type="button" variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>}<Button className="composer-send" type="button" size="icon" aria-label="Submit comment" disabled={saving || empty} onClick={() => void submit()}><Send size={13}/></Button></div></div>
   </div>
 }

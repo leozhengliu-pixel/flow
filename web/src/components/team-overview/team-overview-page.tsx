@@ -1,13 +1,18 @@
 import * as Dialog from "@radix-ui/react-dialog";
+import * as Popover from "@radix-ui/react-popover";
 import { toggleFavoriteFor } from '@/lib/favorites';
 import { teamHierarchy } from '@/lib/team-hierarchy';
 import { TeamIcon } from '@/components/issue/issue-icons';
 import { newTeamPath } from '@/lib/app-routes';
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
+  ArrowDownWideNarrow,
+  ArrowUpNarrowWide,
+  CalendarDays,
   Check,
   ChevronRight,
   FileText,
+  FolderKanban,
   Link2,
   Menu,
   Plus,
@@ -15,6 +20,7 @@ import {
   Pencil,
   Search,
   Trash2,
+  UserRound,
   X,
 } from "lucide-react";
 import {
@@ -23,6 +29,8 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
 import { toast } from "sonner";
@@ -56,13 +64,19 @@ import {
   teamViewsPath,
   projectPath,
 } from "@/lib/app-routes";
-import { DisplayIcon, FilterIcon } from "@/components/ui/view-action-icons";
+import { DisplayIcon } from "@/components/ui/view-action-icons";
+import { VirtualColumnList } from "@/components/ui/virtual-column-list";
+import {
+  DirectoryFilterMenu,
+  type DirectoryFilterGroup,
+} from "@/components/workspace-directory/directory-menus";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { ProjectIcon, SlackIcon } from "@/components/issue/issue-icons";
 import { ViewGlyph, ViewIconPicker } from "@/components/views/view-icon-picker";
 import { DocumentGlyph } from "@/components/documents/document-icon";
 import { LoopsDirectory } from "@/components/loops/loops-page";
 import { workspaceFeatureEnabled } from "@/components/layout/sidebar-customization-state";
+import { canManageTeamSettings, viewerOwnsTeam } from "@/lib/settings-permissions";
 import { useI18n } from "@/i18n/i18n";
 import type {
   BootstrapData,
@@ -96,6 +110,7 @@ export function TeamOverviewPage({
     data.workspaceSettings?.featureFlags,
     "loops",
   );
+  const canManageMembers = canManageTeamSettings(data, team.id, "members");
   const hierarchy = useMemo(() => teamHierarchy(data.teams, data.teamSettings), [data.teams, data.teamSettings]);
   const parentTeam = hierarchy.byId.get(data.teamSettings[team.id]?.parentTeamId ?? '');
   const childTeams = (hierarchy.children.get(team.id) ?? []).filter(item => !item.retiredAt);
@@ -491,14 +506,14 @@ export function TeamOverviewPage({
                   </span>
                   <ChevronHomeIcon />
                 </a>
-                <button
+                {canManageMembers && <button
                   aria-label={t("Add members")}
                   className="team-home-add-members"
                   title={t("Add members")}
                   onClick={() => setMembersOpen(true)}
                 >
                   <PlusIcon />
-                </button>
+                </button>}
               </div>
             </section>
             <section className="team-home-shortcuts">
@@ -569,10 +584,14 @@ export function TeamOverviewPage({
         </div>
       ) : view === "documents" ? (
         <TeamDocuments
+          key={team.id}
           data={data}
           documents={documents}
           onNavigate={onNavigate}
           onNew={() => void newDocument()}
+          onReloadResources={load}
+          resources={resources}
+          team={team}
         />
       ) : view === "loops" ? (
         loopsEnabled ? (
@@ -1236,26 +1255,33 @@ function AddMembersDialog({
   const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  const [role, setRole] = useState<"owner" | "member">("member");
   const [saving, setSaving] = useState(false);
+  const canAssignOwner = viewerOwnsTeam(data, team.id);
+  const workspaceMemberById = useMemo(() => new Map((data.members ?? []).map(member => [member.user.id, member])), [data.members]);
   const memberIds = new Set(
     data.teamMembers
       .filter((membership) => membership.teamId === team.id)
       .map((membership) => membership.userId),
   );
   const candidates = data.users.filter(
-    (user) =>
-      !memberIds.has(user.id) &&
-      user.displayName.toLowerCase().includes(query.trim().toLowerCase()),
+    (user) => {
+      if (memberIds.has(user.id)) return false;
+      const value = query.trim().toLocaleLowerCase();
+      const workspaceMember = workspaceMemberById.get(user.id);
+      if (!workspaceMember || workspaceMember.status !== "active") return false;
+      return !value || [user.displayName, user.name, user.userId, user.email, user.id].some(field => field?.toLocaleLowerCase().includes(value));
+    },
   );
   const save = async () => {
     if (!selected.length || saving) return;
     setSaving(true);
     try {
-      await Promise.all(
-        selected.map((userId) =>
-          setTeamMembership(data.workspace.urlKey, team.id, userId, true),
-        ),
-      );
+      for (let offset = 0; offset < selected.length; offset += 5) {
+        await Promise.all(selected.slice(offset, offset + 5).map(userId =>
+          setTeamMembership(data.workspace.urlKey, team.id, userId, true, role),
+        ));
+      }
       await onSaved();
     } catch (error) {
       setSaving(false);
@@ -1337,7 +1363,8 @@ function AddMembersDialog({
                           color={memberColor(index)}
                           name={user.displayName}
                         />
-                        <span data-i18n-ignore>{user.displayName}</span>
+                        <span className="team-members-candidate-copy"><strong data-i18n-ignore>{user.displayName}</strong><small data-i18n-ignore>{user.name}{user.email ? ` · ${user.email}` : ""}</small></span>
+                        <small className="team-members-candidate-role">{t(workspaceMemberById.get(user.id)?.role === "admin" ? "Workspace admin" : "Member")}</small>
                       </DropdownMenu.CheckboxItem>
                     );
                   })}
@@ -1346,6 +1373,10 @@ function AddMembersDialog({
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
+          {canAssignOwner && <div aria-label={t("Team role")} className="team-members-role-choice" role="group">
+            <span>{t("Team role")}</span>
+            <div><button aria-pressed={role === "member"} onClick={() => setRole("member")} type="button">{t("Team member")}</button><button aria-pressed={role === "owner"} onClick={() => setRole("owner")} type="button">{t("Team owner")}</button></div>
+          </div>}
           <footer>
             <button onClick={onClose}>{t("Cancel")}</button>
             <button
@@ -1362,6 +1393,16 @@ function AddMembersDialog({
   );
 }
 
+type TeamMemberVisibility = { owners: boolean; members: boolean; guests: boolean; invited: boolean };
+type TeamMemberColumn = "email" | "role" | "subteams";
+type TeamMemberOrdering = "name" | "email" | "role";
+type TeamMemberDirectoryEntry = {
+  membership: BootstrapData["teamMembers"][number];
+  user: BootstrapData["users"][number];
+  workspaceMember?: BootstrapData["members"][number];
+  invitation?: BootstrapData["invitations"][number];
+};
+
 function TeamMembersDirectory({
   data,
   onAdd,
@@ -1376,48 +1417,159 @@ function TeamMembersDirectory({
   team: Team;
 }) {
   const { t } = useI18n();
-  const members = data.teamMembers
+  const initialDisplay = useMemo(() => readTeamMemberDirectoryState(team.id), [team.id]);
+  const [ordering, setOrdering] = useState<TeamMemberOrdering>(initialDisplay.ordering);
+  const [descending, setDescending] = useState(initialDisplay.descending);
+  const [columns, setColumns] = useState<Set<TeamMemberColumn>>(() => initialDisplay.columns);
+  const [visibility, setVisibility] = useState<TeamMemberVisibility>(initialDisplay.visibility);
+  const [busyUserId, setBusyUserId] = useState("");
+  const directoryRef = useRef<HTMLElement>(null);
+  const canManage = canManageTeamSettings(data, team.id, "members");
+  const canChangeOwners = viewerOwnsTeam(data, team.id);
+  const hierarchy = useMemo(() => teamHierarchy(data.teams, data.teamSettings, data.teamParents), [data.teamParents, data.teamSettings, data.teams]);
+  const descendantIds = useMemo(() => new Set([...hierarchy.subtree(team.id)].filter(id => id !== team.id)), [hierarchy, team.id]);
+  const hasSubteams = descendantIds.size > 0;
+  const userById = useMemo(() => new Map(data.users.map(user => [user.id, user])), [data.users]);
+  const workspaceMemberById = useMemo(() => new Map((data.members ?? []).map(member => [member.user.id, member])), [data.members]);
+  const subteamCountByUser = useMemo(() => {
+    const teamsByUser = new Map<string, Set<string>>();
+    data.teamMembers.forEach(member => { if (descendantIds.has(member.teamId)) { const teams = teamsByUser.get(member.userId) ?? new Set<string>(); teams.add(member.teamId); teamsByUser.set(member.userId, teams); } });
+    return new Map([...teamsByUser].map(([userId, teams]) => [userId, teams.size]));
+  }, [data.teamMembers, descendantIds]);
+  const allMembers = data.teamMembers
     .filter((membership) => membership.teamId === team.id)
-    .map((membership) => {
-      const user = data.users.find((item) => item.id === membership.userId);
-      const workspaceMember = data.members.find((item) => item.user.id === membership.userId);
-      return user ? { membership, user, workspaceMember } : undefined;
-    })
-    .filter(Boolean);
-  return <section className="team-members-directory">
+    .flatMap<TeamMemberDirectoryEntry>((membership) => {
+      const user = userById.get(membership.userId);
+      const workspaceMember = workspaceMemberById.get(membership.userId);
+      return user ? [{ membership, user, workspaceMember }] : [];
+    });
+  const invitedMembers: TeamMemberDirectoryEntry[] = (data.invitations ?? []).filter(invitation => visibility.invited && invitation.status === "pending" && invitation.teamIds.includes(team.id)).map(invitation => {
+    const user = { id: `invited:${invitation.id}`, name: invitation.email, displayName: invitation.email, email: invitation.email, active: false, emailVerified: false };
+    return { invitation, membership: { teamId: team.id, userId: user.id, role: "member", joinedAt: invitation.createdAt }, user, workspaceMember: { user, role: invitation.role, status: "suspended", joinedAt: invitation.createdAt } };
+  });
+  const members = [...allMembers.filter(entry => {
+      const workspaceRole = entry.workspaceMember?.role;
+      if (entry.membership.role === "owner" || workspaceRole === "owner" || workspaceRole === "admin") return visibility.owners;
+      return workspaceRole === "guest" ? visibility.guests : visibility.members;
+    }), ...invitedMembers]
+    .sort((left, right) => {
+      const leftValue = ordering === "name" ? left.user.displayName : ordering === "email" ? left.user.email : `${left.membership.role}-${left.workspaceMember?.role}`;
+      const rightValue = ordering === "name" ? right.user.displayName : ordering === "email" ? right.user.email : `${right.membership.role}-${right.workspaceMember?.role}`;
+      const result = leftValue.localeCompare(rightValue, undefined, { numeric: true, sensitivity: "base" });
+      return descending ? -result : result;
+    });
+  const ownerCount = allMembers.filter((entry) => entry.membership.role === "owner").length;
+  const gridStyle = { gridTemplateColumns: `minmax(260px,1fr) ${columns.has("email") ? "minmax(190px,220px) " : ""}${columns.has("role") ? "140px " : ""}${hasSubteams && columns.has("subteams") ? "82px " : ""}28px` } as CSSProperties;
+  useEffect(() => persistTeamMemberDirectoryState(team.id, { ordering, descending, columns, visibility }), [columns, descending, ordering, team.id, visibility]);
+  const changeOrder = (next: typeof ordering) => {
+    if (next === ordering) setDescending((value) => !value);
+    else { setOrdering(next); setDescending(false); }
+  };
+  const changeMembership = async (userId: string, member: boolean, role: "owner" | "member" = "member") => {
+    setBusyUserId(userId);
+    try {
+      await setTeamMembership(data.workspace.urlKey, team.id, userId, member, role);
+      await onReload();
+      toast.success(member ? t("Team role updated") : t(userId === data.viewer.id ? "You left the team" : "Member removed"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Could not update team membership"));
+    } finally {
+      setBusyUserId("");
+    }
+  };
+  const removeMember = async (entry: (typeof members)[number]) => {
+    const self = entry.user.id === data.viewer.id;
+    const confirmed = await confirmAction(self ? t("Leave this team?") : t(`Remove ${entry.user.displayName} from this team?`), {
+      confirmLabel: self ? t("Leave team") : t("Remove member"),
+      danger: true,
+    });
+    if (confirmed) await changeMembership(entry.user.id, false, entry.membership.role);
+  };
+  useEffect(() => {
+    const scroller = directoryRef.current?.querySelector<HTMLElement>(".team-members-scroll");
+    if (scroller) scroller.tabIndex = 0;
+  }, [members.length]);
+  const keyboardScroll = (event: ReactKeyboardEvent<HTMLElement>) => {
+    const scroller = directoryRef.current?.querySelector<HTMLElement>(".team-members-scroll");
+    if (!scroller || !["PageDown", "PageUp", "Home", "End"].includes(event.key)) return;
+    if ((event.target as HTMLElement).closest("[role=menu],button,input,a,select")) return;
+    event.preventDefault();
+    if (event.key === "Home") scroller.scrollTop = 0;
+    else if (event.key === "End") scroller.scrollTop = scroller.scrollHeight;
+    else scroller.scrollBy({ top: (event.key === "PageDown" ? 1 : -1) * scroller.clientHeight * .9, behavior: "smooth" });
+  };
+  const header = <header className="team-members-header" style={gridStyle}>
+    <button onClick={() => changeOrder("name")} type="button">{ordering === "name" ? (descending ? "Z-A" : "A-Z") : t("Name")}</button>
+    {columns.has("email") && <button onClick={() => changeOrder("email")} type="button">{t("Email")}{ordering === "email" && <span>{descending ? "↓" : "↑"}</span>}</button>}
+    {columns.has("role") && <button onClick={() => changeOrder("role")} type="button">{t("Role")}{ordering === "role" && <span>{descending ? "↓" : "↑"}</span>}</button>}
+    {hasSubteams && columns.has("subteams") && <span>{t("Sub-teams")}</span>}
+    <span/>
+  </header>;
+  return <section className="team-members-directory" onKeyDownCapture={keyboardScroll} ref={directoryRef}>
     <div className="team-members-toolbar">
-      <button className="team-members-add" onClick={onAdd}><PlusIcon/>{t("Add a member")}</button>
-      <button aria-label={t("Display options")} className="team-members-display"><DisplayIcon/></button>
+      {canManage && <button className="team-members-add" onClick={onAdd}><PlusIcon/>{t("Add a member")}</button>}
+      <TeamMembersDisplayMenu columns={columns} descending={descending} hasSubteams={hasSubteams} onColumn={(column) => setColumns((current) => { const next = new Set(current); if (next.has(column)) next.delete(column); else next.add(column); return next; })} onDirection={() => setDescending((value) => !value)} onOrdering={setOrdering} onVisibility={(key) => setVisibility(current => ({ ...current, [key]: !current[key] }))} ordering={ordering} visibility={visibility}/>
     </div>
-    <header>
-      <button>{t("Name")} <span>↓</span></button>
-      <button>{t("Email")}</button>
-      <button>{t("Role")}</button>
-      <span/>
-    </header>
-    <div className="team-members-list">
-      {members.map((entry, index) => {
-        const value = entry!;
+    {members.length ? <VirtualColumnList ariaLabel={t("Team members")} className="team-members-columns" computeItemKey={(_index, entry) => entry.user.id} data={members} header={header} increaseViewportBy={{ top: 96, bottom: 288 }} scrollerClassName="team-members-list team-members-scroll" virtualize={members.length > 60} itemContent={(index, value) => {
         const profile = `/${data.workspace.urlKey}/profiles/${encodeURIComponent(value.user.name)}`;
-        return <a href={profile} key={value.user.id} onClick={event => { event.preventDefault(); onNavigate(profile) }}>
-          <span className="team-members-person">
+        const invited = Boolean(value.invitation);
+        const managed = value.membership.managed === true;
+        const lastOwner = value.membership.role === "owner" && ownerCount === 1;
+        const menuVisible = !invited && (canManage || value.user.id === data.viewer.id);
+        return <div aria-busy={busyUserId === value.user.id || undefined} className={`team-member-row${invited ? " is-invited" : ""}`} role="listitem" style={gridStyle}>
+          {invited ? <span className="team-members-person">
             <UserAvatar avatarUrl={value.user.avatarUrl} color={memberColor(index)} name={value.user.displayName}/>
-            <span><strong data-i18n-ignore>{value.user.displayName}</strong><small data-i18n-ignore>{value.user.name}</small></span>
-          </span>
-          <span data-i18n-ignore>{value.user.email}</span>
-          <span className="team-members-role">{t(value.workspaceMember?.role === "admin" ? "Workspace admin" : "Member")}</span>
-          <DropdownMenu.Root>
+            <span><strong data-i18n-ignore>{value.user.displayName}</strong><small>{t("Invited")}</small></span>
+          </span> : <a className="team-members-person" href={profile} onClick={event => { event.preventDefault(); onNavigate(profile) }}>
+            <UserAvatar avatarUrl={value.user.avatarUrl} color={memberColor(index)} name={value.user.displayName}/>
+            <span><strong data-i18n-ignore>{value.user.displayName}</strong><small data-i18n-ignore>{value.user.userId || value.user.name}</small></span>
+          </a>}
+          {columns.has("email") && <span className="team-members-email" data-i18n-ignore>{value.user.email}</span>}
+          {columns.has("role") && <span className="team-members-role"><span>{t(invited ? "Invited" : value.membership.role === "owner" ? "Team owner" : "Team member")}</span><small>{t(workspaceRoleLabel(value.workspaceMember?.role))}{managed ? ` · ${t(value.membership.managedSource === "scim" ? "SCIM managed" : "Managed")}` : ""}</small></span>}
+          {hasSubteams && columns.has("subteams") && <span className="team-member-subteams">{subteamCountByUser.get(value.user.id) || "—"}</span>}
+          {menuVisible ? <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild><button aria-label={t("Open menu")} onClick={event => { event.preventDefault(); event.stopPropagation() }}><TeamMoreIcon/></button></DropdownMenu.Trigger>
             <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="team-home-menu" sideOffset={4}>
               <DropdownMenu.Item onSelect={() => onNavigate(profile)}>{t("View profile")}</DropdownMenu.Item>
+              {canChangeOwners && <><DropdownMenu.Separator/><DropdownMenu.Item disabled={managed || busyUserId === value.user.id || lastOwner} title={managed ? t("Managed by SCIM") : lastOwner ? t("A team needs at least one owner") : undefined} onSelect={() => void changeMembership(value.user.id, true, value.membership.role === "owner" ? "member" : "owner")}>{t(value.membership.role === "owner" ? "Make team member" : "Make team owner")}</DropdownMenu.Item></>}
               <DropdownMenu.Separator/>
-              <DropdownMenu.Item className="danger" onSelect={() => void setTeamMembership(data.workspace.urlKey, team.id, value.user.id, false).then(onReload)}>{t("Remove from team")}</DropdownMenu.Item>
+              <DropdownMenu.Item className="danger" disabled={managed || busyUserId === value.user.id || lastOwner} title={managed ? t("Managed by SCIM") : lastOwner ? t("A team needs at least one owner") : undefined} onSelect={() => void removeMember(value)}>{t(value.user.id === data.viewer.id ? "Leave team" : "Remove from team")}</DropdownMenu.Item>
             </DropdownMenu.Content></DropdownMenu.Portal>
           </DropdownMenu.Root>
-        </a>;
-      })}
-    </div>
+          : <span/>}
+        </div>;
+      }}/> : <>{header}<div className="team-members-empty">{t("No team members")}</div></>}
   </section>;
+}
+
+function TeamMembersDisplayMenu({ columns, descending, hasSubteams, onColumn, onDirection, onOrdering, onVisibility, ordering, visibility }: { columns: Set<TeamMemberColumn>; descending: boolean; hasSubteams: boolean; onColumn: (column: TeamMemberColumn) => void; onDirection: () => void; onOrdering: (ordering: TeamMemberOrdering) => void; onVisibility: (key: keyof TeamMemberVisibility) => void; ordering: TeamMemberOrdering; visibility: TeamMemberVisibility }) {
+  const { t } = useI18n();
+  const labels = { name: t("Name"), email: t("Email"), role: t("Role") };
+  const visibilityLabels: Record<keyof TeamMemberVisibility, string> = { owners: t("Show owners and admins"), members: t("Show members"), guests: t("Show guests"), invited: t("Show invited") };
+  return <Popover.Root><Popover.Trigger asChild><button aria-label={t("Display options")} className="team-members-display"><DisplayIcon/></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" align="end" className="team-directory-display-menu team-members-display-menu" sideOffset={4}>
+    <div className="team-directory-order-row"><span>{t("Ordering")}</span><div><select aria-label={t("Ordering")} onChange={event => onOrdering(event.target.value as TeamMemberOrdering)} value={ordering}>{(Object.keys(labels) as TeamMemberOrdering[]).map(value => <option key={value} value={value}>{labels[value]}</option>)}</select><button aria-label={t("Direction")} onClick={onDirection} title={t(descending ? "Descending" : "Ascending")} type="button">{descending ? <ArrowDownWideNarrow/> : <ArrowUpNarrowWide/>}</button></div></div>
+    <div className="team-directory-visibility">{(Object.keys(visibilityLabels) as (keyof TeamMemberVisibility)[]).map(value => <label key={value}><span>{visibilityLabels[value]}</span><button aria-checked={visibility[value]} onClick={() => onVisibility(value)} role="switch" type="button"><i/></button></label>)}</div>
+    <div className="team-directory-properties"><span>{t("Display properties")}</span><div>{(["email", "role", ...(hasSubteams ? ["subteams" as const] : [])] as TeamMemberColumn[]).map(value => <button aria-pressed={columns.has(value)} key={value} onClick={() => onColumn(value)} type="button">{value === "subteams" ? t("Sub-teams") : labels[value]}</button>)}</div></div>
+  </Popover.Content></Popover.Portal></Popover.Root>;
+}
+
+function readTeamMemberDirectoryState(teamId: string) {
+  const fallback = { ordering: "name" as TeamMemberOrdering, descending: false, columns: new Set<TeamMemberColumn>(["email", "role", "subteams"]), visibility: { owners: true, members: true, guests: true, invited: true } };
+  try {
+    const saved = JSON.parse(localStorage.getItem(`flow:team:${teamId}:member-directory`) ?? "null") as { ordering?: TeamMemberOrdering; descending?: boolean; columns?: TeamMemberColumn[]; visibility?: Partial<TeamMemberVisibility> } | null;
+    if (!saved) return fallback;
+    return { ordering: ["name", "email", "role"].includes(saved.ordering ?? "") ? saved.ordering! : fallback.ordering, descending: saved.descending === true, columns: new Set((saved.columns ?? [...fallback.columns]).filter(value => ["email", "role", "subteams"].includes(value))), visibility: { ...fallback.visibility, ...saved.visibility } };
+  } catch { return fallback; }
+}
+function persistTeamMemberDirectoryState(teamId: string, value: ReturnType<typeof readTeamMemberDirectoryState>) {
+  try { localStorage.setItem(`flow:team:${teamId}:member-directory`, JSON.stringify({ ...value, columns: [...value.columns] })); } catch { /* Storage is optional. */ }
+}
+
+function workspaceRoleLabel(role: BootstrapData["viewerRole"] | undefined) {
+  if (role === "owner") return "Workspace owner";
+  if (role === "admin") return "Workspace admin";
+  if (role === "guest") return "Guest";
+  return "Workspace member";
 }
 
 function TeamDocuments({
@@ -1425,59 +1577,178 @@ function TeamDocuments({
   documents,
   onNavigate,
   onNew,
+  onReloadResources,
+  resources,
+  team,
 }: {
   data: BootstrapData;
   documents: FlowDocument[];
   onNavigate: (path: string) => void;
   onNew: () => void;
+  onReloadResources: () => Promise<void>;
+  resources: TeamPinnedResource[];
+  team: Team;
 }) {
-  const [query, setQuery] = useState("");
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [displayOpen, setDisplayOpen] = useState(false);
-  const [ordering, setOrdering] = useState<"name" | "created" | "updated" | "owner">("name");
+  const { t } = useI18n();
+  const initial = useMemo(() => readDocumentDirectoryState(), []);
+  const [filters, setFilters] = useState<Record<DocumentFilterField, Set<string>>>(initial.filters);
+  const [match, setMatch] = useState<"all" | "any">(initial.match);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [grouping, setGrouping] = useState<DocumentGrouping>(initial.grouping);
+  const [ordering, setOrdering] = useState<DocumentOrdering>(initial.ordering);
+  const [descending, setDescending] = useState(initial.descending);
+  const [showInactive, setShowInactive] = useState(initial.showInactive);
+  const [onlyMyProjects, setOnlyMyProjects] = useState(initial.onlyMyProjects);
+  const [properties, setProperties] = useState<Set<DocumentProperty>>(initial.properties);
   const [selected, setSelected] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const visible = documents
-    .filter((item) => item.title.toLowerCase().includes(query.toLowerCase()))
-    .sort((a, b) => ordering === "name" ? a.title.localeCompare(b.title) : ordering === "owner" ? a.creator.displayName.localeCompare(b.creator.displayName) : +new Date(ordering === "created" ? b.createdAt : b.updatedAt) - +new Date(ordering === "created" ? a.createdAt : a.updatedAt));
-  const grouped = [...data.projects.filter(project => visible.some(document => document.projectIds.includes(project.id))).map(project => ({ id: project.id, name: project.name, project, items: visible.filter(document => document.projectIds.includes(project.id)) })), { id: "", name: "No project", project: undefined, items: visible.filter(document => !document.projectIds.length) }].filter(group => group.items.length);
+  const [pinBusy, setPinBusy] = useState("");
+  const userById = useMemo(() => new Map(data.users.map(user => [user.id, user])), [data.users]);
+  const projectById = useMemo(() => new Map(data.projects.map(project => [project.id, project])), [data.projects]);
+  const ownerFor = useCallback((document: FlowDocument) => {
+    const ownerId = document.permissions?.find(permission => permission.role === "owner" && permission.subjectType === "user")?.subjectId;
+    return (ownerId ? userById.get(ownerId) : undefined) ?? document.creator;
+  }, [userById]);
+  const activeGroups = (Object.keys(filters) as DocumentFilterField[]).filter(field => filters[field].size);
+  const matches = useCallback((document: FlowDocument) => {
+    const checks = activeGroups.map(field => {
+      const values = filters[field];
+      if (field === "creator") return values.has(document.creator.id);
+      if (field === "owner") return values.has(ownerFor(document).id);
+      if (field === "project") return document.projectIds.some(id => values.has(id));
+      if (field === "cycle") return data.cycles.some(cycle => values.has(cycle.id) && cycle.resources.some(resource => resource.documentId === document.id));
+      return [...values].some(value => documentMatchesDate(document, value));
+    });
+    return !checks.length || (match === "all" ? checks.every(Boolean) : checks.some(Boolean));
+  }, [activeGroups, data.cycles, filters, match, ownerFor]);
+  const visible = useMemo(() => documents.filter(document => {
+    if (!matches(document)) return false;
+    const projects = document.projectIds.map(id => projectById.get(id)).filter(Boolean);
+    if (!showInactive && projects.length && !projects.some(project => !project!.archivedAt && !["completed", "canceled", "cancelled"].includes(project!.status.type))) return false;
+    if (onlyMyProjects && projects.length && !projects.some(project => project!.lead?.id === data.viewer.id || project!.memberIds.includes(data.viewer.id))) return false;
+    return true;
+  }).sort((a, b) => {
+    const left = documentOrderValue(a, ordering, ownerFor, projectById);
+    const right = documentOrderValue(b, ordering, ownerFor, projectById);
+    const result = typeof left === "number" && typeof right === "number" ? left - right : String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
+    return descending ? -result : result;
+  }), [data.viewer.id, descending, documents, matches, onlyMyProjects, ordering, ownerFor, projectById, showInactive]);
+  const grouped = useMemo(() => groupDocuments(visible, grouping, data, ownerFor), [data, grouping, ownerFor, visible]);
+  const filterGroups = useMemo<DirectoryFilterGroup[]>(() => [
+    { id: "creator", label: t("Creator"), icon: <UserRound/>, choices: uniqueUsers(documents.map(document => document.creator)).map(user => ({ id: user.id, label: user.displayName, meta: user.email, person: user })) },
+    { id: "owner", label: t("Owner"), icon: <UserRound/>, choices: uniqueUsers(documents.map(ownerFor)).map(user => ({ id: user.id, label: user.displayName, meta: user.email, person: user })) },
+    { id: "project", label: t("Project"), icon: <FolderKanban/>, choices: data.projects.filter(project => documents.some(document => document.projectIds.includes(project.id))).map(project => ({ id: project.id, label: project.name, icon: <ProjectIcon style={{ color: project.color }}/> })) },
+    { id: "cycle", label: t("Cycle"), icon: <CalendarDays/>, choices: data.cycles.filter(cycle => cycle.resources.some(resource => resource.documentId && documents.some(document => document.id === resource.documentId))).map(cycle => ({ id: cycle.id, label: cycle.name })) },
+    { id: "dates", label: t("Dates"), icon: <CalendarDays/>, selectionMode: "single", choices: [{ id: "today", label: t("Edited today") }, { id: "week", label: t("Edited this week") }, { id: "month", label: t("Edited this month") }, { id: "older", label: t("Older") }] },
+  ], [data.cycles, data.projects, documents, ownerFor, t]);
+  useEffect(() => persistDocumentDirectoryState({ filters, match, grouping, ordering, descending, showInactive, onlyMyProjects, properties }), [descending, filters, grouping, match, onlyMyProjects, ordering, properties, showInactive]);
+  const changeFilter = (field: string, value: string, checked: boolean) => setFilters(current => ({ ...current, [field]: new Set(checked ? [...current[field as DocumentFilterField], value] : [...current[field as DocumentFilterField]].filter(item => item !== value)) }));
+  const changeOrder = (next: DocumentOrdering) => { if (next === ordering) setDescending(value => !value); else { setOrdering(next); setDescending(next === "created" || next === "updated"); } };
+  const togglePin = async (document: FlowDocument) => {
+    const existing = resources.find(resource => resource.resourceType === "document" && resource.resourceId === document.id);
+    setPinBusy(document.id);
+    try {
+      if (existing) await deleteTeamResource(team.id, existing.id);
+      else await pinTeamResource(team.id, { resourceType: "document", resourceId: document.id, title: document.title });
+      await onReloadResources();
+      toast.success(t(existing ? "Removed from team overview" : "Pinned to team overview"));
+    } catch (error) { toast.error(error instanceof Error ? error.message : t("Could not update team overview")); }
+    finally { setPinBusy(""); }
+  };
+  const visibleProperties = new Set(properties);
+  if (grouping === "project") visibleProperties.delete("project");
+  const gridStyle = documentGridStyle(visibleProperties);
   return (
     <div className="team-documents">
       <div className="team-documents-toolbar">
-        <button aria-label="New document" className="team-documents-new" onClick={onNew} type="button"><Plus size={14}/>New document</button>
-        <button aria-expanded={filterOpen} aria-label="Add filter" onClick={() => { setFilterOpen(value => !value); setDisplayOpen(false) }} type="button"><FilterIcon/></button>
-        <button aria-expanded={displayOpen} aria-label="Display options" onClick={() => { setDisplayOpen(value => !value); setFilterOpen(false) }} type="button"><DisplayIcon/></button>
-        {filterOpen && <div className="team-documents-menu is-filter"><label><Search/><input autoFocus aria-label="Find documents" placeholder="Find documents…" value={query} onChange={event => setQuery(event.target.value)}/></label><button onClick={() => { setQuery(""); setFilterOpen(false) }} type="button"><X size={13}/>Clear filter</button></div>}
-        {displayOpen && <div className="team-documents-menu is-display"><strong>Ordering</strong>{(["name","created","updated","owner"] as const).map(value => <button aria-checked={ordering === value} key={value} onClick={() => { setOrdering(value); setDisplayOpen(false) }} role="menuitemradio" type="button">{value === "updated" ? "Last edited" : value[0].toUpperCase()+value.slice(1)}{ordering === value && <Check size={12}/>}</button>)}</div>}
+        <button aria-label={t("New document")} className="team-documents-new" onClick={onNew} type="button"><Plus size={14}/>{t("New document")}</button>
+        <DirectoryFilterMenu groups={filterGroups} menuClassName="team-documents-filter-menu" onAdvanced={() => setAdvancedOpen(true)} onChoice={changeFilter} selected={filters} triggerClassName="team-documents-icon-button"/>
+        <TeamDocumentsDisplayMenu descending={descending} grouping={grouping} onDirection={() => setDescending(value => !value)} onGrouping={setGrouping} onOnlyMyProjects={setOnlyMyProjects} onOrdering={setOrdering} onProperty={(property) => setProperties(current => { const next = new Set(current); if (next.has(property)) next.delete(property); else next.add(property); return next; })} onShowInactive={setShowInactive} onlyMyProjects={onlyMyProjects} ordering={ordering} properties={properties} showInactive={showInactive}/>
       </div>
-      <header>
-        <button onClick={() => setOrdering("name")} type="button">Name</button>
-        <button onClick={() => setOrdering("created")} type="button">Created</button>
-        <button onClick={() => setOrdering("updated")} type="button">Last edited</button>
-        <button onClick={() => setOrdering("owner")} type="button">Owner</button>
+      {activeGroups.length > 0 && <div className="team-documents-active-filters">{activeGroups.map(field => <button key={field} onClick={() => setFilters(current => ({ ...current, [field]: new Set() }))} type="button">{t(documentFilterLabel(field))} <span>{filters[field].size}</span><X/></button>)}<button className="is-clear" onClick={() => setFilters(emptyDocumentFilters())}>{t("Clear")}</button></div>}
+      <header style={gridStyle}>
+        <span/><span/><button onClick={() => changeOrder("name")} type="button">{ordering === "name" ? (descending ? "Z-A" : "A-Z") : t("Name")}</button>
+        {properties.has("created") && <button onClick={() => changeOrder("created")} type="button">{t("Created")}</button>}
+        {properties.has("updated") && <button onClick={() => changeOrder("updated")} type="button">{t("Last edited")}</button>}
+        {properties.has("owner") && <button onClick={() => changeOrder("owner")} type="button">{t("Owner")}</button>}
+        {grouping !== "project" && properties.has("project") && <button onClick={() => changeOrder("project")} type="button">{t("Project")}</button>}
+        <span/>
       </header>
       {grouped.map(group => <section className="team-documents-group" key={group.id || "none"}>
-        <div className="team-documents-group-header"><button aria-expanded={!collapsed.has(group.id)} aria-label={collapsed.has(group.id)?"Expand group":"Collapse group"} onClick={()=>setCollapsed(current=>{const next=new Set(current);if(next.has(group.id))next.delete(group.id);else next.add(group.id);return next})} type="button"><ChevronRight/></button>{"project" in group && group.project ? <a data-i18n-ignore href={projectPath(data.workspace.urlKey, group.project)} onClick={event => { event.preventDefault(); onNavigate(projectPath(data.workspace.urlKey, group.project)) }}>{group.name}</a> : <span>{group.name}</span>}<small>{group.items.length}</small></div>
+        <div className="team-documents-group-header"><button aria-expanded={!collapsed.has(group.id)} aria-label={t(collapsed.has(group.id)?"Expand group":"Collapse group")} onClick={()=>setCollapsed(current=>{const next=new Set(current);if(next.has(group.id))next.delete(group.id);else next.add(group.id);return next})} type="button"><ChevronRight/></button>{group.project ? <a data-i18n-ignore href={projectPath(data.workspace.urlKey, group.project)} onClick={event => { event.preventDefault(); onNavigate(projectPath(data.workspace.urlKey, group.project!)) }}>{group.name}</a> : <span>{t(group.name)}</span>}<small>{group.items.length}</small></div>
         {!collapsed.has(group.id)&&group.items.map(document => <a className="team-document-row" href={documentPath(data.workspace.urlKey, document)} key={document.id} onClick={event => { if ((event.target as HTMLElement).closest("button,input")) { event.preventDefault(); return } event.preventDefault(); onNavigate(documentPath(data.workspace.urlKey, document)) }}>
-          <label aria-label="Select document"><input checked={selected.includes(document.id)} onChange={() => setSelected(current => current.includes(document.id) ? current.filter(id => id !== document.id) : [...current, document.id])} type="checkbox"/><span><Check size={10}/></span></label>
-          <DocumentGlyph document={document}/><strong data-i18n-ignore>{document.title}</strong><time>{relativeDocumentDate(document.createdAt)}</time><time>{relativeDocumentDate(document.updatedAt)}</time><button className="team-document-owner" type="button"><span>{document.creator.displayName.slice(0,2).toUpperCase()}</span><i data-i18n-ignore>{document.creator.displayName}</i></button>
-          <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open menu" className="team-document-more" type="button"><TeamMoreIcon/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="team-home-menu"><DropdownMenu.Item onSelect={() => onNavigate(documentPath(data.workspace.urlKey, document))}>Open document</DropdownMenu.Item><DropdownMenu.Item onSelect={() => void navigator.clipboard.writeText(`${location.origin}${documentPath(data.workspace.urlKey, document)}`)}>Copy link</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+          <label aria-label={t("Select document")}><input checked={selected.includes(document.id)} onChange={() => setSelected(current => current.includes(document.id) ? current.filter(id => id !== document.id) : [...current, document.id])} type="checkbox"/><span><Check size={10}/></span></label>
+          <DocumentGlyph document={document}/><span className="team-document-title"><strong data-i18n-ignore>{document.title}</strong>{resources.some(resource => resource.resourceType === "document" && resource.resourceId === document.id) && <Pin aria-label={t("Pinned to team overview")}/>}</span>
+          {properties.has("created") && <time>{relativeDocumentDate(document.createdAt)}</time>}{properties.has("updated") && <time>{relativeDocumentDate(document.updatedAt)}</time>}{properties.has("owner") && <button className="team-document-owner" type="button"><UserAvatar avatarUrl={ownerFor(document).avatarUrl} color="#e8787c" name={ownerFor(document).displayName}/><i data-i18n-ignore>{ownerFor(document).displayName}</i></button>}
+          {grouping !== "project" && properties.has("project") && <button className="team-document-project" onClick={() => { const project = document.projectIds.map(id => projectById.get(id)).find(Boolean); if (project) onNavigate(projectPath(data.workspace.urlKey, project)); }} type="button">{document.projectIds.map(id => projectById.get(id)).find(Boolean)?.name ?? "—"}</button>}
+          <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={t("Open menu")} className="team-document-more" type="button"><TeamMoreIcon/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="team-home-menu"><DropdownMenu.Item onSelect={() => onNavigate(documentPath(data.workspace.urlKey, document))}>{t("Open document")}</DropdownMenu.Item><DropdownMenu.Item onSelect={() => void navigator.clipboard.writeText(`${location.origin}${documentPath(data.workspace.urlKey, document)}`)}>{t("Copy link")}</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item disabled={pinBusy === document.id} onSelect={() => void togglePin(document)}>{t(resources.some(resource => resource.resourceType === "document" && resource.resourceId === document.id) ? "Remove from team overview" : "Pin to team overview")}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
         </a>)}
       </section>)}
       {!visible.length && (
         <div className="team-documents-empty">
           <FileText />
-          <strong>No documents</strong>
-          <p>Create a document for this team to share plans and decisions.</p>
+          <strong>{t("No documents")}</strong>
+          <p>{t("Create a document for this team to share plans and decisions.")}</p>
           <button onClick={onNew}>
             <Plus />
-            New document
+            {t("New document")}
           </button>
         </div>
       )}
+      <Dialog.Root open={advancedOpen} onOpenChange={setAdvancedOpen}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="team-documents-advanced-overlay"/><Dialog.Content data-flow-motion="dialog" aria-describedby={undefined} className="team-documents-advanced"><Dialog.Title>{t("Advanced filter")}</Dialog.Title><Dialog.Close asChild><button aria-label={t("Close advanced filter")}><X/></button></Dialog.Close><span>{t("Match")}</span><div><button aria-pressed={match === "all"} onClick={() => setMatch("all")}>{t("All filters")}</button><button aria-pressed={match === "any"} onClick={() => setMatch("any")}>{t("Any filter")}</button></div><footer><button onClick={() => setFilters(emptyDocumentFilters())}>{t("Clear all")}</button><Dialog.Close asChild><button className="is-primary">{t("Done")}</button></Dialog.Close></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
     </div>
   );
 }
 
 function relativeDocumentDate(value: string) { const days = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 86400000)); return days < 1 ? "today" : `${days}d ago` }
+
+type DocumentFilterField = "creator" | "owner" | "project" | "cycle" | "dates";
+type DocumentGrouping = "project" | "owner" | "cycle" | "created" | "none";
+type DocumentOrdering = "name" | "created" | "updated" | "owner" | "project";
+type DocumentProperty = "created" | "updated" | "owner" | "project";
+
+function emptyDocumentFilters(): Record<DocumentFilterField, Set<string>> { return { creator: new Set(), owner: new Set(), project: new Set(), cycle: new Set(), dates: new Set() }; }
+function documentFilterLabel(field: DocumentFilterField) { return ({ creator: "Creator", owner: "Owner", project: "Project", cycle: "Cycle", dates: "Dates" })[field]; }
+function uniqueUsers(users: BootstrapData["users"]) { return [...new Map(users.map(user => [user.id, user])).values()]; }
+function documentMatchesDate(document: FlowDocument, value: string) { const date = new Date(document.updatedAt); if (value === "today") return isToday(date); if (value === "week") return isThisWeek(date); if (value === "month") return isThisMonth(date); return !isThisMonth(date); }
+function documentOrderValue(document: FlowDocument, ordering: DocumentOrdering, ownerFor: (document: FlowDocument) => BootstrapData["viewer"], projectById: Map<string, BootstrapData["projects"][number]>) { if (ordering === "name") return document.title; if (ordering === "owner") return ownerFor(document).displayName; if (ordering === "project") return document.projectIds.map(id => projectById.get(id)).find(Boolean)?.name ?? ""; return new Date(ordering === "created" ? document.createdAt : document.updatedAt).getTime(); }
+function documentGridStyle(properties: Set<DocumentProperty>) { return { gridTemplateColumns: `22px 16px minmax(220px,1fr) ${properties.has("created") ? "120px " : ""}${properties.has("updated") ? "120px " : ""}${properties.has("owner") ? "140px " : ""}${properties.has("project") ? "150px " : ""}40px` } as CSSProperties; }
+function groupDocuments(documents: FlowDocument[], grouping: DocumentGrouping, data: BootstrapData, ownerFor: (document: FlowDocument) => BootstrapData["viewer"]) {
+  if (grouping === "none") return [{ id: "all", name: "Documents", project: undefined, items: documents }];
+  if (grouping === "owner") return uniqueUsers(documents.map(ownerFor)).map(owner => ({ id: `owner:${owner.id}`, name: owner.displayName, project: undefined, items: documents.filter(document => ownerFor(document).id === owner.id) }));
+  if (grouping === "cycle") { const cycleGroups = data.cycles.filter(cycle => documents.some(document => cycle.resources.some(resource => resource.documentId === document.id))).map(cycle => ({ id: `cycle:${cycle.id}`, name: cycle.name, project: undefined, items: documents.filter(document => cycle.resources.some(resource => resource.documentId === document.id)) })); const assigned = new Set(cycleGroups.flatMap(group => group.items.map(item => item.id))); return [...cycleGroups, { id: "no-cycle", name: "No cycle", project: undefined, items: documents.filter(document => !assigned.has(document.id)) }].filter(group => group.items.length); }
+  if (grouping === "created") { const buckets = [{ id: "today", name: "Today", test: (date: Date) => isToday(date) }, { id: "week", name: "This week", test: (date: Date) => isThisWeek(date) && !isToday(date) }, { id: "month", name: "This month", test: (date: Date) => isThisMonth(date) && !isThisWeek(date) }, { id: "older", name: "Older", test: (date: Date) => !isThisMonth(date) }]; return buckets.map(bucket => ({ id: bucket.id, name: bucket.name, project: undefined, items: documents.filter(document => bucket.test(new Date(document.createdAt))) })).filter(group => group.items.length); }
+  return [...data.projects.filter(project => documents.some(document => document.projectIds.includes(project.id))).map(project => ({ id: project.id, name: project.name, project, items: documents.filter(document => document.projectIds.includes(project.id)) })), { id: "team", name: "Team documents", project: undefined, items: documents.filter(document => !document.projectIds.length) }].filter(group => group.items.length);
+}
+
+function TeamDocumentsDisplayMenu({ descending, grouping, onDirection, onGrouping, onOnlyMyProjects, onOrdering, onProperty, onShowInactive, onlyMyProjects, ordering, properties, showInactive }: { descending: boolean; grouping: DocumentGrouping; onDirection: () => void; onGrouping: (value: DocumentGrouping) => void; onOnlyMyProjects: (value: boolean) => void; onOrdering: (value: DocumentOrdering) => void; onProperty: (value: DocumentProperty) => void; onShowInactive: (value: boolean) => void; onlyMyProjects: boolean; ordering: DocumentOrdering; properties: Set<DocumentProperty>; showInactive: boolean }) {
+  const { t } = useI18n();
+  const groupLabels: Record<DocumentGrouping, string> = { project: t("Project"), owner: t("Owner"), cycle: t("Cycle"), created: t("Created"), none: t("None") };
+  const orderLabels: Record<DocumentOrdering, string> = { name: t("Name"), created: t("Created"), updated: t("Last edited"), owner: t("Owner"), project: t("Project") };
+  return <Popover.Root><Popover.Trigger asChild><button aria-label={t("Display options")} className="team-documents-icon-button" type="button"><DisplayIcon/></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" align="end" className="team-directory-display-menu team-documents-display-menu" sideOffset={4}>
+    <div className="team-directory-order-row"><span>{t("Grouping")}</span><div><select aria-label={t("Grouping")} onChange={event => onGrouping(event.target.value as DocumentGrouping)} value={grouping}>{(Object.keys(groupLabels) as DocumentGrouping[]).map(value => <option key={value} value={value}>{groupLabels[value]}</option>)}</select></div></div>
+    <div className="team-directory-order-row"><span>{t("Ordering")}</span><div><select aria-label={t("Ordering")} onChange={event => onOrdering(event.target.value as DocumentOrdering)} value={ordering}>{(Object.keys(orderLabels) as DocumentOrdering[]).map(value => <option key={value} value={value}>{orderLabels[value]}</option>)}</select><button aria-label={t("Direction")} onClick={onDirection} title={t(descending ? "Descending" : "Ascending")} type="button">{descending ? <ArrowDownWideNarrow/> : <ArrowUpNarrowWide/>}</button></div></div>
+    <div className="team-directory-visibility">{[[t("Show inactive projects"), showInactive, onShowInactive], [t("Show only my projects"), onlyMyProjects, onOnlyMyProjects]].map(([label, checked, update]) => <label key={label as string}><span>{label as string}</span><button aria-checked={checked as boolean} onClick={() => (update as (value: boolean) => void)(!(checked as boolean))} role="switch" type="button"><i/></button></label>)}</div>
+    <div className="team-directory-properties"><span>{t("Display properties")}</span><div>{(["project", "owner", "updated", "created"] as DocumentProperty[]).filter(value => value !== "project" || grouping !== "project").map(value => <button aria-pressed={properties.has(value)} key={value} onClick={() => onProperty(value)} type="button">{orderLabels[value]}</button>)}</div></div>
+  </Popover.Content></Popover.Portal></Popover.Root>;
+}
+
+function readDocumentDirectoryState() {
+  const params = new URLSearchParams(typeof location === "undefined" ? "" : location.search);
+  const filters = emptyDocumentFilters();
+  (Object.keys(filters) as DocumentFilterField[]).forEach(field => params.getAll(`doc-${field}`).forEach(value => filters[field].add(value)));
+  const grouping = (["project", "owner", "cycle", "created", "none"].includes(params.get("doc-group") ?? "") ? params.get("doc-group") : "project") as DocumentGrouping;
+  const ordering = (["name", "created", "updated", "owner", "project"].includes(params.get("doc-order") ?? "") ? params.get("doc-order") : "name") as DocumentOrdering;
+  const properties = new Set<DocumentProperty>((params.get("doc-columns") ?? "created,updated,owner,project").split(",").filter(value => ["created", "updated", "owner", "project"].includes(value)) as DocumentProperty[]);
+  return { filters, match: params.get("doc-match") === "any" ? "any" as const : "all" as const, grouping, ordering, descending: params.get("doc-direction") === "desc", showInactive: params.get("doc-inactive") === "1", onlyMyProjects: params.get("doc-mine") === "1", properties };
+}
+function persistDocumentDirectoryState(state: ReturnType<typeof readDocumentDirectoryState>) {
+  if (typeof history === "undefined" || typeof location === "undefined") return;
+  const params = new URLSearchParams(location.search);
+  (Object.keys(state.filters) as DocumentFilterField[]).forEach(field => { params.delete(`doc-${field}`); state.filters[field].forEach(value => params.append(`doc-${field}`, value)); });
+  const setOptional = (key: string, value: string, keep: boolean) => { if (keep) params.set(key, value); else params.delete(key); };
+  setOptional("doc-match", state.match, state.match !== "all"); setOptional("doc-group", state.grouping, state.grouping !== "project"); setOptional("doc-order", state.ordering, state.ordering !== "name"); setOptional("doc-direction", "desc", state.descending); setOptional("doc-inactive", "1", state.showInactive); setOptional("doc-mine", "1", state.onlyMyProjects);
+  const columnValue = [...state.properties].sort().join(","); setOptional("doc-columns", columnValue, columnValue !== "created,owner,project,updated");
+  const query = params.toString(); history.replaceState(history.state, "", `${location.pathname}${query ? `?${query}` : ""}${location.hash}`);
+}
 import { AnimatedCollapse } from '@/components/ui/motion';

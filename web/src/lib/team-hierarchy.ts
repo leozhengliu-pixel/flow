@@ -12,21 +12,21 @@ export function resolvedTeamSettings(settings: Record<string, TeamSettings>, tea
   return parent ? { ...current, estimateType: parent.estimateType } : current
 }
 
-export function teamHierarchy(teams: Team[], settings: TeamHierarchySettings = {}) {
+export function teamHierarchy(teams: Team[], settings: TeamHierarchySettings = {}, projectedParents: Record<string, string> = {}) {
   const byId = new Map(teams.map(team => [team.id, team]))
   const ancestors = new Map<string, Team[]>()
   const children = new Map<string, Team[]>()
   const heights = new Map<string, number>()
   for (const team of teams) {
     const chain: Team[] = [], seen = new Set([team.id])
-    let parent = byId.get(settings[team.id]?.parentTeamId ?? '')
+    let parent = byId.get(settings[team.id]?.parentTeamId ?? projectedParents[team.id] ?? '')
     while (parent && !seen.has(parent.id)) {
       seen.add(parent.id); chain.unshift(parent)
-      parent = byId.get(settings[parent.id]?.parentTeamId ?? '')
+      parent = byId.get(settings[parent.id]?.parentTeamId ?? projectedParents[parent.id] ?? '')
     }
     ancestors.set(team.id, chain)
     chain.forEach((ancestor, index) => heights.set(ancestor.id, Math.max(heights.get(ancestor.id) ?? 0, chain.length - index)))
-    const parentId = settings[team.id]?.parentTeamId
+    const parentId = settings[team.id]?.parentTeamId ?? projectedParents[team.id]
     if (parentId && byId.has(parentId) && parentId !== team.id) { const siblings = children.get(parentId) ?? []; siblings.push(team); children.set(parentId, siblings) }
   }
   const path = (id: string) => [...(ancestors.get(id) ?? []), ...(byId.has(id) ? [byId.get(id)!] : [])].map(team => team.name).join(' › ')

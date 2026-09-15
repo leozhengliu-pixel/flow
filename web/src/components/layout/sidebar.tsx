@@ -228,8 +228,8 @@ export function Sidebar({
     workspaceFeatureEnabled(featureFlags, feature);
   const sidebarTeams = useMemo(() => {
     const viewerTeamIds = new Set(data.teamMembers.filter(member => member.userId === data.viewer.id).map(member => member.teamId));
-    return teamHierarchy(data.teams, data.teamSettings).rows(data.teams.filter(team => !team.retiredAt && viewerTeamIds.has(team.id)));
-  }, [data.teamMembers, data.teams, data.teamSettings, data.viewer.id]);
+    return teamHierarchy(data.teams, data.teamSettings, data.teamParents).rows(data.teams.filter(team => !team.retiredAt && viewerTeamIds.has(team.id)));
+  }, [data.teamMembers, data.teamParents, data.teams, data.teamSettings, data.viewer.id]);
   const currentCycleTeamIds = useMemo(() => new Set(data.cycles.filter(cycle => cycle.status === "current").map(cycle => cycle.teamId)), [data.cycles]);
   const upcomingCycleTeamIds = useMemo(() => new Set(data.cycles.filter(cycle => cycle.status === "upcoming").map(cycle => cycle.teamId)), [data.cycles]);
   const favoriteTeamIds = useMemo(() => new Set(favorites.filter(item => item.userId === data.viewer.id && item.resourceType === "team").map(item => item.resourceId)), [data.viewer.id, favorites]);
@@ -259,7 +259,7 @@ export function Sidebar({
     window.addEventListener("keydown", openShortcuts);
     return () => window.removeEventListener("keydown", openShortcuts);
   }, []);
-  const inboxUnread = data.notifications.filter(
+  const inboxUnread = data.inboxUnreadCount ?? data.notifications.filter(
     (item) =>
       item.recipientId === data.viewer.id &&
       !item.readAt &&
@@ -267,7 +267,7 @@ export function Sidebar({
       !item.deletedAt &&
       (!item.snoozedUntil || new Date(item.snoozedUntil) <= new Date()),
   ).length;
-  const reviewCount = data.reviews.filter(
+  const reviewCount = data.reviewCount ?? data.reviews.filter(
     (item) =>
       item.status !== "merged" &&
       item.status !== "closed" &&

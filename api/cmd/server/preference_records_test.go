@@ -35,11 +35,12 @@ func TestPreferenceLifecycleNeverHydratesIssueOrDiscussionCollections(t *testing
 	initiative := authRequest[domain.Initiative](t, admin, "POST", host.URL+"/api/initiatives", map[string]string{"name": "Preference initiative"}, "test-workspace", 201)
 	privateTeam := authRequest[domain.Team](t, admin, "POST", host.URL+"/api/workspaces/test-workspace/teams", map[string]any{"name": "Private preferences", "key": "PRV", "private": true}, "test-workspace", 201)
 	privateIssue := authRequest[domain.Issue](t, admin, "POST", host.URL+"/api/issues", map[string]any{"title": "Private issue", "teamId": privateTeam.ID}, "test-workspace", 201)
+	privateProject := authRequest[domain.Project](t, admin, "POST", host.URL+"/api/projects", map[string]any{"name": "Private project", "teamIds": []string{privateTeam.ID}}, "test-workspace", 201)
 	if err := repo.MutateWorkspace(context.Background(), "test-workspace", "test.preferences", "", nil, func(next *domain.Bootstrap) error {
 		next.Notifications = append(next.Notifications, domain.Notification{ID: "preference-notification", RecipientID: data.Viewer.ID, IssueID: data.Issues[0].ID, CreatedAt: time.Now().UTC()})
 		next.Reviews = append(next.Reviews, domain.CodeReview{ID: "preference-review", SlugID: "preference-review", Title: "Preference review", IssueIDs: []string{data.Issues[0].ID}})
 		next.ReleasePipelines = append(next.ReleasePipelines, domain.ReleasePipeline{ID: "preference-pipeline", TeamIDs: []string{data.Issues[0].Team.ID}})
-		next.Releases = append(next.Releases, domain.Release{ID: "preference-release", PipelineID: "preference-pipeline", IssueIDs: []string{data.Issues[0].ID}})
+		next.Releases = append(next.Releases, domain.Release{ID: "preference-release", PipelineID: "preference-pipeline", ProjectIDs: []string{data.Projects[0].ID, privateProject.ID, "deleted-project"}, IssueIDs: []string{data.Issues[0].ID, privateIssue.ID, "deleted-issue"}})
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -92,6 +93,27 @@ func TestPreferenceLifecycleNeverHydratesIssueOrDiscussionCollections(t *testing
 	authRequest[any](t, member, "PUT", host.URL+"/api/subscriptions/issue/"+privateIssue.ID, nil, "test-workspace", 403)
 	authRequest[any](t, member, "PUT", host.URL+"/api/favorites/team/"+privateTeam.ID, nil, "test-workspace", 403)
 	authRequest[any](t, admin, "PUT", host.URL+"/api/favorites/issue/missing", nil, "test-workspace", 403)
+	memberReleaseFavorite := authRequest[domain.Favorite](t, member, "PUT", host.URL+"/api/favorites/release/preference-release", nil, "test-workspace", 200)
+	preferences := authRequest[struct {
+		Favorites []domain.Favorite `json:"favorites"`
+	}](t, member, "GET", host.URL+"/api/resource-preferences", nil, "test-workspace", 200)
+	if !slices.ContainsFunc(preferences.Favorites, func(item domain.Favorite) bool { return item.ID == memberReleaseFavorite.ID }) {
+		t.Fatal("release favorite disappeared from the immediate preference read")
+	}
+	memberPipelineFavorite := authRequest[domain.Favorite](t, member, "PUT", host.URL+"/api/favorites/release_pipeline/preference-pipeline", nil, "test-workspace", 200)
+	preferences = authRequest[struct {
+		Favorites []domain.Favorite `json:"favorites"`
+	}](t, member, "GET", host.URL+"/api/resource-preferences", nil, "test-workspace", 200)
+	for _, favoriteID := range []string{memberReleaseFavorite.ID, memberPipelineFavorite.ID} {
+		if !slices.ContainsFunc(preferences.Favorites, func(item domain.Favorite) bool { return item.ID == favoriteID }) {
+			t.Fatalf("release preference %q disappeared from immediate read", favoriteID)
+		}
+	}
+	memberReleaseData := authRequest[domain.Bootstrap](t, member, "GET", host.URL+"/api/issue-records/bootstrap", nil, "test-workspace", 200)
+	memberReleaseIndex := slices.IndexFunc(memberReleaseData.Releases, func(item domain.Release) bool { return item.ID == "preference-release" })
+	if memberReleaseIndex < 0 || !slices.Equal(memberReleaseData.Releases[memberReleaseIndex].IssueIDs, []string{data.Issues[0].ID}) || !slices.Equal(memberReleaseData.Releases[memberReleaseIndex].ProjectIDs, []string{data.Projects[0].ID}) {
+		t.Fatalf("release visibility did not trim inaccessible links: %#v", memberReleaseData.Releases)
+	}
 	notificationURL := host.URL + "/api/notifications/preference-notification"
 	favorited := authRequest[domain.Notification](t, admin, "PATCH", notificationURL, map[string]bool{"favorite": true}, "test-workspace", 200)
 	if !favorited.Favorite {

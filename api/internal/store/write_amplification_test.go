@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -182,6 +183,48 @@ func TestMetadataPersistsOnlyChangedEntitiesAndPreservesReloadOrder(t *testing.T
 	}
 	if inputs != 0 {
 		t.Fatal("completed CSV import retained its discarded source file")
+	}
+}
+
+func TestReleaseFavoriteMutationDoesNotScanOrRewriteUnrelatedMetadata(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	ctx := context.Background()
+	data := repo.Bootstrap()
+	workspace := data.Workspace.URLKey
+	for index := range 5000 {
+		id := fmt.Sprintf("unrelated-%05d", index)
+		raw := []byte(fmt.Sprintf(`{"id":%q,"value":%q}`, id, strings.Repeat("x", 128)))
+		if _, err := repo.db.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'unrelated',?,?,?)`, workspace, id, index, raw); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writes := auditWrites(t, repo)
+	created := domain.Favorite{ID: "favorite-release", UserID: data.Viewer.ID, ResourceType: "release", ResourceID: "release-large", Position: -1, CreatedAt: time.Now().UTC()}
+	if err := repo.MutateWorkspace(ctx, workspace, "favorite.added", created.ResourceID, map[string]string{"type": "release"}, func(next *domain.Bootstrap) error {
+		next.Favorites = append(next.Favorites, created)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if changed := writes(); !reflect.DeepEqual(changed, map[string]int{"workspace_metadata_records": 1}) {
+		t.Fatalf("release favorite amplified writes: %+v", changed)
+	}
+	var unrelated int
+	if err := repo.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_metadata_records WHERE workspace_key=? AND field='unrelated'`, workspace).Scan(&unrelated); err != nil || unrelated != 5000 {
+		t.Fatalf("unrelated metadata changed: count=%d err=%v", unrelated, err)
+	}
+	if err := repo.MutateWorkspace(ctx, workspace, "favorite.removed", created.ResourceID, map[string]string{"type": "release"}, func(next *domain.Bootstrap) error {
+		next.Favorites = slices.DeleteFunc(next.Favorites, func(item domain.Favorite) bool { return item.ID == created.ID })
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if changed := writes(); !reflect.DeepEqual(changed, map[string]int{"workspace_metadata_records": 1}) {
+		t.Fatalf("release unfavorite amplified writes: %+v", changed)
 	}
 }
 
