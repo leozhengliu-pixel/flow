@@ -1890,6 +1890,7 @@
   .lp-project-state--loading span { animation: none; }
   .lp-new-project__spinner { animation: none; }
 }
+.lp-project-board__load-more,.lp-project-timeline__load-more{height:32px;flex:0 0 auto;align-self:center;padding:0 12px;border:.5px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-1);color:var(--theme-text-primary);font:500 12px/normal inherit}.lp-project-board__load-more{align-self:flex-start;margin:42px 8px 0}.lp-project-timeline-shell{min-height:0;height:100%;display:flex;flex-direction:column}.lp-project-timeline__load-more{margin:10px auto}.lp-project-board__load-more:hover,.lp-project-timeline__load-more:hover{background:var(--theme-surface-hover)}.lp-project-board__load-more:disabled,.lp-project-timeline__load-more:disabled{opacity:.55}
 
 /* Project filters and display controls share the Linear surface/control metrics. */
 .lp-projects-filter{width:var(--filter-root-width)}

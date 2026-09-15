@@ -282,16 +282,24 @@ export function setTeamMembership(
     jsonRequest("PUT", { member, role }),
   );
 }
-export function fetchBootstrap(workspaceKey?: string): Promise<BootstrapData> {
-  if (import.meta.env.VITE_PAGED_ISSUES === 'true') return fetchPagedBootstrap(workspaceKey)
+export type BootstrapProjection = 'project-list'
+
+export function fetchBootstrap(workspaceKey?: string, projection?: BootstrapProjection): Promise<BootstrapData> {
+  if (import.meta.env.VITE_PAGED_ISSUES === 'true') return fetchPagedBootstrap(workspaceKey, projection)
+  const headers: Record<string, string> = {}
+  if (workspaceKey) headers['X-Workspace-Key'] = workspaceKey
+  if (projection) headers['X-Flow-Projection'] = projection
   return request<BootstrapData>(
     "/api/bootstrap",
-    workspaceKey ? { headers: { "X-Workspace-Key": workspaceKey } } : undefined,
+    Object.keys(headers).length ? { headers } : undefined,
   ).then(normalizeBootstrapData);
 }
 
-export function fetchPagedBootstrap(workspaceKey?: string): Promise<BootstrapData> {
-  return request<BootstrapData>('/api/issue-records/bootstrap', workspaceKey ? { headers: { 'X-Workspace-Key': workspaceKey } } : undefined).then(normalizeBootstrapData)
+export function fetchPagedBootstrap(workspaceKey?: string, projection?: BootstrapProjection): Promise<BootstrapData> {
+  const headers: Record<string, string> = {}
+  if (workspaceKey) headers['X-Workspace-Key'] = workspaceKey
+  if (projection) headers['X-Flow-Projection'] = projection
+  return request<BootstrapData>('/api/issue-records/bootstrap', Object.keys(headers).length ? { headers } : undefined).then(normalizeBootstrapData)
 }
 export type IssueQueryInput = {
   q?: string;
@@ -319,6 +327,18 @@ export function listIssueRecords(filters: IssueQueryInput = {}, signal?: AbortSi
     params.set(key, key === 'filter' ? JSON.stringify(value) : Array.isArray(value) ? value.join(',') : String(value))
   }
   return request<IssueQueryPage>(`/api/issue-records?${params}`, { signal })
+}
+
+export type ProjectQueryPage = { items: Project[]; nextCursor?: string; hasMore: boolean; total: number }
+export type ProjectQueryInput = { q?: string; teamId?: string | string[]; archived?: 'true' | 'false' | 'all'; filter?: Array<{ field: string; operator: string; values: string[] }>; cursor?: string; limit?: number; includeTotal?: boolean }
+
+export function listProjectRecords(filters: ProjectQueryInput = {}, signal?: AbortSignal): Promise<ProjectQueryPage> {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) {
+    if (value === undefined) continue
+    params.set(key, key === 'filter' ? JSON.stringify(value) : Array.isArray(value) ? value.join(',') : String(value))
+  }
+  return request(`/api/projects${params.size ? `?${params}` : ''}`, { signal })
 }
 
 export function listIssueRecordGroups(filters: IssueQueryInput, signal?: AbortSignal): Promise<{ groups: { value: string; count: number }[] }> {

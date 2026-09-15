@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { teamHierarchy, type TeamHierarchySettings } from '@/lib/team-hierarchy'
 import type { Initiative, Invitation, Issue, IssueLabel, LabelGroup, PersonalAgentSkill, Presence, Project, ProjectDependencyRelationInput, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
@@ -21,6 +21,7 @@ import { labelsForResource } from '@/lib/labels'
 import { projectLabelOptions } from '@/components/property/project-label-menu-model'
 import { ProjectStatusGlyph } from './project-property-picker'
 import { confirmAction, promptAction } from '@/components/ui/action-dialog-service'
+import { listProjectRecords } from '@/lib/api'
 
 export type ProjectMutationInput = {
   templateId?: string
@@ -183,6 +184,58 @@ export function ProjectsPage({
   initialTemplateId,
 }: ProjectsPageProps) {
   const sourceView = savedView ?? duplicateFrom
+  const draftFiltersKey = `flow:projects:draft-filters:${workspaceKey}:${scopeTeamId ?? 'workspace'}`
+  const [projectFilters, setProjectFilters] = useState<ProjectFilter[]>(() => { const params=new URLSearchParams(location.search),fallback:ProjectFilter[]=[];const label=labelsForResource(labels,'project',labelGroups).find(item=>item.id===params.get('label'));if(label)fallback.push({id:`labels-url-${label.id}`,field:'labels',fieldLabel:'Labels',operator:'is',values:[{id:label.id,label:label.name,color:label.color}]});const status=projectStatuses.find(item=>item.id===params.get('status'));if(status)fallback.push({id:`status-url-${status.id}`,field:'status',fieldLabel:'Status',operator:'is',values:[{id:status.name,label:status.name,color:status.color}]});return projectFiltersFromSavedView(sourceView,fallback.length?fallback:creatingView?readDraftFilters(draftFiltersKey):[]) })
+  const projectFilterQuery = useMemo(() => projectFilters.map(filter => ({ field: filter.field, operator: filter.operator, values: filter.values.map(value => value.id) })), [projectFilters])
+  const [pagedProjects, setPagedProjects] = useState<Project[]>(projects)
+  const [directoryLoading, setDirectoryLoading] = useState(projects.length === 0)
+  const [directoryLoadingMore, setDirectoryLoadingMore] = useState(false)
+  const [directoryError, setDirectoryError] = useState<string | null>(null)
+  const [directoryCursor, setDirectoryCursor] = useState<string>()
+  const [directoryHasMore, setDirectoryHasMore] = useState(false)
+  const directoryRequest = useRef<AbortController | null>(null)
+  useEffect(() => {
+    if (projects.length) setPagedProjects(projects)
+  }, [projects])
+  useEffect(() => {
+    if (!workspaceKey || projects.length > 100) return
+    const controller = new AbortController()
+    directoryRequest.current?.abort()
+    directoryRequest.current = controller
+    let cancelled = false
+    const load = async () => {
+      setDirectoryLoading(true)
+      setDirectoryError(null)
+      try {
+        const page = await listProjectRecords({ teamId: scopeTeamId, archived: 'all', filter: projectFilterQuery, limit: 100, includeTotal: true }, controller.signal)
+        if (!cancelled) startTransition(() => setPagedProjects(page.items))
+        if (!cancelled) { setDirectoryCursor(page.nextCursor); setDirectoryHasMore(page.hasMore) }
+      } catch (error) {
+        if (!cancelled && !(error instanceof DOMException && error.name === 'AbortError')) setDirectoryError(error instanceof Error ? error.message : 'Could not load projects')
+      } finally {
+        if (!cancelled) setDirectoryLoading(false)
+      }
+    }
+    const frame = requestAnimationFrame(() => { void load() })
+    return () => { cancelled = true; cancelAnimationFrame(frame); controller.abort() }
+  }, [projectFilterQuery, projects.length, scopeTeamId, workspaceKey])
+  const loadMoreProjects = useCallback(async () => {
+    if (!directoryHasMore || !directoryCursor || directoryLoadingMore) return
+    const controller = new AbortController()
+    directoryRequest.current = controller
+    setDirectoryLoadingMore(true)
+    try {
+      const page = await listProjectRecords({ teamId: scopeTeamId, archived: 'all', filter: projectFilterQuery, limit: 100, cursor: directoryCursor }, controller.signal)
+      startTransition(() => setPagedProjects(current => [...current, ...page.items.filter(item => !current.some(existing => existing.id === item.id))]))
+      setDirectoryCursor(page.nextCursor)
+      setDirectoryHasMore(page.hasMore)
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) toast.error(error instanceof Error ? error.message : 'Could not load projects')
+    } finally {
+      setDirectoryLoadingMore(false)
+    }
+  }, [directoryCursor, directoryHasMore, directoryLoadingMore, projectFilterQuery, scopeTeamId])
+  const projectCollection = pagedProjects.length || projects.length === 0 ? pagedProjects : projects
   const currentViewerId = viewerId ?? viewer?.id
   const onlineUserIds = useMemo(() => {
     const ids = new Set(presence.map(item => item.user.id))
@@ -191,16 +244,22 @@ export function ProjectsPage({
   }, [currentViewerId, presence])
   const peopleChoices = useMemo(() => projectPeopleChoices(users, invitations, onlineUserIds), [invitations, onlineUserIds, users])
   const scopedProjects = useMemo(() => {
-    if (!scopeTeamId) return projects
+    if (!scopeTeamId) return projectCollection
     const ids = teamHierarchy(teams, teamSettings).subtree(scopeTeamId)
-    return projects.filter(project => project.teamIds.some(id => ids.has(id)))
-  }, [projects, scopeTeamId, teams, teamSettings])
-  const items = useMemo(() => scopedProjects.map(project => toPageItem(project, projectHref?.(project), teams, projectUpdates[project.id]?.[0], initiatives, labels, labelGroups, issues)), [initiatives, issues, labelGroups, labels, projectHref, projectUpdates, scopedProjects, teams])
+    return projectCollection.filter(project => project.teamIds.some(id => ids.has(id)))
+  }, [projectCollection, scopeTeamId, teams, teamSettings])
+  const projectLabels = useMemo(() => labelsForResource(labels, 'project', labelGroups), [labelGroups, labels])
+  const projectLabelGroups = useMemo(() => labelGroups.filter(group => group.resourceType === 'project'), [labelGroups])
+  const itemIndexes = useMemo<ProjectPageIndexes>(() => ({
+    initiatives: new Map(initiatives.map(item => [item.id, item.name])),
+    labels: new Map(projectLabels.map(item => [item.id, item])),
+    labelGroups: projectLabelGroups,
+    teams: new Map(teams.map(item => [item.id, item])),
+  }), [initiatives, projectLabelGroups, projectLabels, teams])
+  const items = useMemo(() => scopedProjects.map(project => toPageItem(project, projectHref?.(project), itemIndexes, projectUpdates[project.id]?.[0], issues)), [itemIndexes, issues, projectHref, projectUpdates, scopedProjects])
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [insightMode, setInsightMode] = useState<ProjectInsightMode>('health')
   const [insightFilter, setInsightFilter] = useState<ProjectInsightFilter>(() => projectFilterFromSavedView(sourceView))
-  const draftFiltersKey = `flow:projects:draft-filters:${workspaceKey}:${scopeTeamId ?? 'workspace'}`
-  const [projectFilters, setProjectFilters] = useState<ProjectFilter[]>(() => { const params=new URLSearchParams(location.search),fallback:ProjectFilter[]=[];const label=labelsForResource(labels,'project',labelGroups).find(item=>item.id===params.get('label'));if(label)fallback.push({id:`labels-url-${label.id}`,field:'labels',fieldLabel:'Labels',operator:'is',values:[{id:label.id,label:label.name,color:label.color}]});const status=projectStatuses.find(item=>item.id===params.get('status'));if(status)fallback.push({id:`status-url-${status.id}`,field:'status',fieldLabel:'Status',operator:'is',values:[{id:status.name,label:status.name,color:status.color}]});return projectFiltersFromSavedView(sourceView,fallback.length?fallback:creatingView?readDraftFilters(draftFiltersKey):[]) })
   const visibleItems = useMemo(() => {
     let result = items.filter(item => projectFilters.every(filter => matchesProjectFilter(item, filter)))
     if (!insightFilter) return result
@@ -217,9 +276,7 @@ export function ProjectsPage({
   const [viewEditor, setViewEditor] = useState<'create' | 'edit' | undefined>(creatingView ? 'create' : editingView ? 'edit' : undefined)
   const [viewSaving, setViewSaving] = useState(false)
   useEffect(() => { const onKey = (event: KeyboardEvent) => { if (!event.altKey || event.metaKey || event.ctrlKey || event.key.toLowerCase() !== 'v' || savedView || creatingView || viewEditor || (event.target as HTMLElement | null)?.closest('input,textarea,[contenteditable=true],[role=textbox]')) return; event.preventDefault(); setViewEditor('create') }; addEventListener('keydown', onKey); return () => removeEventListener('keydown', onKey) }, [creatingView, savedView, viewEditor])
-  const projectById = useMemo(() => new Map(projects.map(project => [project.id, project])), [projects])
-  const projectLabels = useMemo(() => labelsForResource(labels, 'project', labelGroups), [labelGroups, labels])
-  const projectLabelGroups = useMemo(() => labelGroups.filter(group => group.resourceType === 'project'), [labelGroups])
+  const projectById = useMemo(() => new Map(projectCollection.map(project => [project.id, project])), [projectCollection])
   const projectLabelGroupNames = useMemo(() => new Map(projectLabelGroups.map(group => [group.id, group.name])), [projectLabelGroups])
   const availableProjectStatuses = useMemo(() => projectStatuses.length ? projectStatuses : uniqueStatuses(projects.map(project => project.status)), [projectStatuses, projects])
   const statusOptions = useMemo(() => availableProjectStatuses.map((status, index) => ({ color: status.color, label: status.name, shortcut: String(index + 1), statusType: status.type, value: status.name })), [availableProjectStatuses])
@@ -391,6 +448,11 @@ export function ProjectsPage({
     displayLabelGroups={projectLabelGroups.map(group => ({ id: group.id, name: group.name }))}
     filterOptions={Object.fromEntries(Object.entries(PROJECT_FILTER_FIELDS).map(([label, field]) => [label, filterOptions[field] ?? []]))}
     onAddFilter={addFilter}
+    onSearchFilterOptions={async (field, query) => {
+      if (field !== 'Specific project') return []
+      const page = await listProjectRecords({ q: query, teamId: scopeTeamId, archived: 'all', limit: 100 })
+      return page.items.map(project => ({ id: project.id, label: project.name, color: project.color, count: 1 }))
+    }}
     onChangeDisplay={view.setDisplay}
     onCreateProject={() => openCreate()}
     onAddView={onNavigateNewView}
@@ -459,8 +521,11 @@ export function ProjectsPage({
     <div className={`lp-projects__workspace ${sidebarOpen ? 'has-insights' : ''}`}>
       <div className="lp-projects__data"><ProjectsDataView
         {...view.dataViewProps}
-        error={error}
-        loading={loading}
+        loading={loading || directoryLoading && !items.length}
+        error={error ?? directoryError}
+        hasMore={directoryHasMore}
+        loadingMore={directoryLoadingMore}
+        onLoadMore={loadMoreProjects}
         onCreateProject={openCreate}
         onOpenProject={item => {
           const project = projectById.get(item.id)
@@ -545,9 +610,11 @@ export function ProjectsPage({
   </ProjectsPageSurface>
 }
 
-function toPageItem(project: Project, href?: string, teams: Team[] = [], latestUpdate?: ProjectUpdate, initiatives: Initiative[] = [], labels: IssueLabel[] = [], labelGroups: LabelGroup[] = [], issues: Issue[] = []): ProjectPageItem {
-  const projectLabels = labelsForResource(labels, 'project', labelGroups).filter(label => (project.labelIds ?? []).includes(label.id))
-  const labelsByGroup = Object.fromEntries(labelGroups.filter(group => group.resourceType === 'project').map(group => [group.id, projectLabels.filter(label => label.groupId === group.id).map(label => ({ id: label.id, name: label.name, color: label.color }))]))
+type ProjectPageIndexes = { teams: Map<string, Team>; initiatives: Map<string, string>; labels: Map<string, IssueLabel>; labelGroups: LabelGroup[] }
+
+function toPageItem(project: Project, href: string | undefined, indexes: ProjectPageIndexes, latestUpdate?: ProjectUpdate, issues: Issue[] = []): ProjectPageItem {
+  const projectLabels = (project.labelIds ?? []).map(id => indexes.labels.get(id)).filter((label): label is IssueLabel => Boolean(label))
+  const labelsByGroup = Object.fromEntries(indexes.labelGroups.map(group => [group.id, projectLabels.filter(label => label.groupId === group.id).map(label => ({ id: label.id, name: label.name, color: label.color }))]))
   const milestone = currentProjectMilestone(project.milestones, id => milestoneIssueProgress(issues, project.id, id))
   return {
     color: project.color,
@@ -568,10 +635,10 @@ function toPageItem(project: Project, href?: string, teams: Team[] = [], latestU
     status: project.status.name,
     startDate: project.startDate ? formatMonth(project.startDate) : undefined,
     summary: project.description || project.summary,
-    team: project.teamIds[0] ? teams.find(team => team.id === project.teamIds[0]) : undefined,
+    team: project.teamIds[0] ? indexes.teams.get(project.teamIds[0]) : undefined,
     memberIds: project.memberIds,
     labelIds: project.labelIds,
-    initiativeNames: (project.initiatives ?? []).map(id => initiatives.find(initiative => initiative.id === id)?.name).filter((name): name is string => Boolean(name)),
+    initiativeNames: (project.initiatives ?? []).map(id => indexes.initiatives.get(id)).filter((name): name is string => Boolean(name)),
     labelsByGroup,
     teamIds: project.teamIds,
     rawStartDate: project.startDate,
@@ -676,14 +743,26 @@ const PROJECT_FILTER_FIELDS: Record<string, ProjectFilterField> = {
 }
 
 function projectFilterOptions(items: ProjectPageItem[], users: User[], projectStatuses: ProjectStatus[], labels: IssueLabel[], teams: Team[]): Partial<Record<ProjectFilterField, ProjectFilterOption[]>> {
-  const leads = new Map<string,number>(), members = new Map<string,number>()
-  for (const item of items) {
-    const lead = item.lead?.id ?? ''
-    leads.set(lead,(leads.get(lead)??0)+1)
-    for (const member of new Set(item.memberIds ?? [])) members.set(member,(members.get(member)??0)+1)
+  const counts = new Map<ProjectFilterField, Map<string, number>>()
+  const increment = (field: ProjectFilterField, value: string) => {
+    let values = counts.get(field)
+    if (!values) { values = new Map(); counts.set(field, values) }
+    values.set(value, (values.get(value) ?? 0) + 1)
   }
-  const count = (field: ProjectFilterField, id: string) => items.filter(item => projectValueMatches(item, field, id)).length
-  const values = (field: ProjectFilterField, definitions: ProjectFilterOption[]) => definitions.map(option => ({ ...option, count: field==='lead' ? leads.get(option.id)??0 : field==='members' ? members.get(option.id)??0 : count(field, option.id) }))
+  for (const item of items) {
+    increment('status', item.status)
+    increment('priority', item.priority)
+    increment('lead', item.lead?.id ?? '')
+    increment('health', item.health)
+    increment('dates', item.rawTargetDate ? 'has-target' : 'no-target')
+    if (item.rawTargetDate && Date.parse(item.rawTargetDate) < Date.now()) increment('dates', 'overdue')
+    if (item.milestone) increment('milestones', item.milestone)
+    if (item.labelIds?.length) for (const id of new Set(item.labelIds)) increment('labels', id)
+    else increment('labels', '')
+    for (const id of new Set(item.memberIds ?? [])) increment('members', id)
+    for (const id of new Set(item.teamIds ?? [])) increment('teams', id)
+  }
+  const values = (field: ProjectFilterField, definitions: ProjectFilterOption[]) => definitions.map(option => ({ ...option, count: counts.get(field)?.get(option.id) ?? 0 }))
   return {
     status: values('status', projectStatuses.length ? projectStatuses.map(status => ({ id: status.name, label: status.name, color: status.color })) : uniqueFilterOptions(items.map(item => ({ id: item.status, label: item.status, color: statusColor(item.status) }))).sort(statusOptionOrder)),
     priority: values('priority', [

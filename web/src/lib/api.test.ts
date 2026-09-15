@@ -8,6 +8,7 @@ import {
   fetchInboxNotifications,
   listIssueRecords,
   listIssues,
+  listProjectRecords,
   realtimeClientId,
   replaceTeamDefaultFavorites,
   searchWorkspace,
@@ -107,6 +108,27 @@ describe('API client contract', () => {
     expect(parsed.searchParams.get('limit')).toBe('100')
     expect(parsed.searchParams.get('cursor')).toBe('page-2')
     expect(parsed.searchParams.get('projection')).toBe('list')
+  })
+
+  it('requests the project-list bootstrap and paged project directory explicitly', async () => {
+    fetchMock.mockResolvedValueOnce(response({ workspace: {}, apiKeys: [] }))
+    await fetchBootstrap('workspace', 'project-list')
+    const bootstrapHeaders = new Headers((fetchMock.mock.calls[0][1] as RequestInit).headers)
+    expect(bootstrapHeaders.get('X-Workspace-Key')).toBe('workspace')
+    expect(bootstrapHeaders.get('X-Flow-Projection')).toBe('project-list')
+
+    fetchMock.mockResolvedValueOnce(response({ items: [], hasMore: false, total: 0 }))
+    const controller = new AbortController()
+    const filter = [{ field: 'status', operator: 'is', values: ['started'] }]
+    await listProjectRecords({ teamId: 'team-1', archived: 'all', filter, limit: 100, cursor: 'next' }, controller.signal)
+    const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit]
+    const parsed = new URL(url, 'http://flow.local')
+    expect(parsed.pathname).toBe('/api/projects')
+    expect(parsed.searchParams.get('teamId')).toBe('team-1')
+    expect(parsed.searchParams.get('limit')).toBe('100')
+    expect(parsed.searchParams.get('cursor')).toBe('next')
+    expect(JSON.parse(parsed.searchParams.get('filter')!)).toEqual(filter)
+    expect(init.signal).toBe(controller.signal)
   })
 
   it('serializes cursor issue queries and structured filters', async () => {
