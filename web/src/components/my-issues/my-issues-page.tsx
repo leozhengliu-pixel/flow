@@ -11,11 +11,13 @@ import { defaultMyIssuesDisplayOptions } from './my-issues-display-defaults'
 import { MyIssuesSurface, type MyIssuesDisplayOptions, type MyIssuesFilterKey, type MyIssuesFilterOption, type MyIssuesView } from './my-issues-surface'
 import { useMyIssuesController } from './use-my-issues-controller'
 import { applyExplorerFilters, explorerBoardGroupUpdate, explorerFilterOptions, explorerPropertyOptions, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
-import { SavedViewInsightsPanel, type SavedViewInsightsConfig } from '@/components/issue-explorer/saved-view-panels'
+import { InsightHiddenNotice, SavedViewInsightsPanel, type SavedViewInsightsConfig } from '@/components/issue-explorer/saved-view-panels'
 import { IssueBoard } from '@/components/issue-explorer/issue-board'
 import type { SavedView } from '@/types/flow'
 import { setGroupedLabelSelected } from '@/lib/labels'
 import { confirmAction } from '@/components/ui/action-dialog-service'
+import { fetchIssueRecord } from '@/lib/api'
+import { toast } from 'sonner'
 
 export interface MyIssuesPageProps {
   data: BootstrapData
@@ -43,6 +45,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const [pagedIssues, setPagedIssues] = useState<Issue[]>([])
   const [filterOpenSignal, setFilterOpenSignal] = useState(0)
   const [insightsOpen,setInsightsOpen]=useState(false)
+  const [drillRows,setDrillRows]=useState<MyIssuesRowData[]>()
   const [insightsConfig,setInsightsConfig]=useState<Record<string,unknown>>(()=>readInsights(`${workspaceSlug}:my-issues:${initialView}:insights`))
   const [mutationErrors, setMutationErrors] = useState<Map<string, string>>(new Map())
   const mutationSequence = useRef(new Map<string, number>())
@@ -56,6 +59,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const rowOptions = useMemo(() => explorerPropertyOptions(data, sourceIssues), [data, sourceIssues])
 
   const controller = useMyIssuesController({
+    drillRows,
     workspaceSlug,
     initialView,
     initialGroups,
@@ -141,10 +145,18 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
     const field = tab === 'labels' ? 'labels' : tab === 'projects' ? 'project' : 'priority'
     addFilter(field, { id: item.id, label: item.label, color: item.color })
   }
-  const insightRows=useMemo(()=>insightsOpen?controller.visibleGroups.flatMap(group=>group.issues):[],[controller.visibleGroups,insightsOpen])
-  const boardGroups = useMemo(() => myIssuesBoardGroups(controller.visibleGroups, controller.display, data), [controller.display, controller.visibleGroups, data])
+  const displayedGroups = controller.visibleGroups
+  const boardGroups = useMemo(() => myIssuesBoardGroups(displayedGroups, controller.display, data), [controller.display, displayedGroups, data])
   const allInsightRows=useMemo(()=>insightsOpen?applyExplorerFilters(issuesForView(data,projectedView,true),controller.filters,data).map(issue=>issueToExplorerRow(issue,workspaceSlug,data.issues,data)):[],[controller.filters,data,insightsOpen,projectedView,workspaceSlug])
+  const insightRows = useMemo(() => allInsightRows.filter(row => !row.archivedAt), [allInsightRows])
+  const insightQuery = useMemo(() => ({ filter: { and: [issueFiltersToQueryAst(controller.filters), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : 'assignee', values: [data.viewer.id] }] } }), [controller.filters, projectedView, data.viewer.id])
   const insightsView:SavedView={id:`my-issues-${controller.view}`,name:({assigned:'Assigned to me',created:'Created by me',subscribed:'Subscribed',activity:'Activity'} as const)[controller.view],description:'',resource:'issues',scope:'personal',ownerId:data.viewer.id,view:'all',filters:controller.filters,display:{},insights:insightsConfig,createdAt:'',updatedAt:''}
+  const openRow = (row: MyIssuesRowData) => {
+    const sequence = boundedIssueSequence(displayedGroups.find(group => group.issues.some(issue => issue.id === row.id))?.issues.map(issue => issue.id) ?? [row.id], row.id)
+    const issue = issuesById.get(row.id)
+    if (issue) onOpenIssue(issue, sequence)
+    else void fetchIssueRecord(row.id, undefined, workspaceSlug).then(issue => onOpenIssue(issue, sequence)).catch(() => toast.error('Could not load issue'))
+  }
 
   return <>
     <MyIssuesSurface
@@ -176,7 +188,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onValuesChange={controller.changeFilterValues}
       />}
     >
-      {data.issueCollectionPaged ? <PagedIssueList
+      {data.issueCollectionPaged && !drillRows ? <PagedIssueList
         data={data}
         onLoadedIssuesChange={setPagedIssues}
         layout={controller.display.layout}
@@ -206,11 +218,11 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onHideGroup={groupId => controller.changeDisplay({ ...controller.display, hiddenGroupIds: [...new Set([...controller.display.hiddenGroupIds, groupId])] })}
         onShowGroup={groupId => controller.changeDisplay({ ...controller.display, hiddenGroupIds: controller.display.hiddenGroupIds.filter(id => id !== groupId) })}
         onMove={moveIssue}
-        onOpenIssue={row => { const issue = issuesById.get(row.id); if (issue) onOpenIssue(issue, boundedIssueSequence(boardGroups.find(group => group.issues.some(item => item.id === issue.id))?.issues.map(item => item.id) ?? [issue.id], issue.id)) }}
+        onOpenIssue={openRow}
         onPropertyChange={changeProperty}
         onSelectIssue={controller.selectIssue}
       /> : <MyIssuesList
-        groups={controller.visibleGroups}
+        groups={displayedGroups}
         loading={loading}
         error={error}
         selectedIds={controller.selectedIds}
@@ -222,17 +234,21 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onClearError={onClearError}
         onCreateIssue={group => onCreateIssue?.(group.createContext ?? (stateIdForGroup(group, data) ? { stateId: stateIdForGroup(group, data) } : undefined))}
         onGroupCollapsedChange={(id, collapsed) => setCollapsedGroups(current => { const next = new Set(current); if (collapsed) next.add(id); else next.delete(id); return next })}
-        onOpenIssue={row => { const issue = issuesById.get(row.id); if (issue) onOpenIssue(issue, boundedIssueSequence(controller.visibleGroups.find(group => group.issues.some(item => item.id === issue.id))?.issues.map(item => item.id) ?? [issue.id], issue.id)) }}
+        onOpenIssue={openRow}
         onPropertyChange={changeProperty}
         onRetryMutation={row => { const input = retryUpdates.current.get(row.id); if (input) void updateOne(row, input).catch(() => undefined) }}
         onSelectIssue={controller.selectIssue}
         onContextAction={(row, action) => { void contextAction(row, action) }}
       />}
       <MyIssuesDetailsPane open={controller.detailsOpen} width={controller.detailsWidth} onWidthChange={controller.setDetailsWidth} onClose={() => controller.setDetailsOpen(false)} summary={controller.summary} onSummaryItemSelect={summaryFilter}/>
+      {drillRows && <InsightHiddenNotice hidden={drillRows.length - new Set(displayedGroups.flatMap(group => group.issues.map(issue => issue.id))).size} onShow={() => controller.changeDisplay({ ...controller.display, completedWindow: 'all', showSubIssues: true, hiddenGroupIds: [] })}/>}
       {insightsOpen && <SavedViewInsightsPanel
         allRows={allInsightRows}
         data={data}
         rows={insightRows}
+        query={data.issueCollectionPaged ? insightQuery : undefined}
+        onDrillChange={setDrillRows}
+        onOpenIssue={openRow}
         view={insightsView}
         onClose={() => setInsightsOpen(false)}
         onSave={async (config: SavedViewInsightsConfig) => {
