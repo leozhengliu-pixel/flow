@@ -1,4 +1,6 @@
 export const zhCN: Record<string, string> = {
+  "Enable Asks": "启用请求",
+  "Allow members to create issues through Asks": "允许成员通过请求创建事项",
   "Loading issue statuses…": "正在加载事项状态…",
   "Could not load issue statuses": "无法加载事项状态",
   "Delete issue status": "删除事项状态",

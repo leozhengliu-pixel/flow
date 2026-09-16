@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
@@ -133,6 +133,21 @@ it("treats workspace owners as administrators", () => {
 
   expect(screen.queryByText("需要管理员权限")).toBeNull();
   expect(screen.getByRole("heading", { name: "工作区" })).toBeVisible();
+});
+
+it('shows Asks settings read-only to regular members with a searchable enable control', async () => {
+  localStorage.setItem('flow:locale', 'en-US');
+  const input = props();
+  input.page = 'asks';
+  input.data = { ...input.data, viewerRole: 'member', integrationConnections: [], emailIntakeAddresses: [] };
+  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  expect(await screen.findByRole('checkbox', { name: 'Enable Asks' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Asks' })).toHaveAttribute('aria-current', 'page');
+  const user = userEvent.setup();
+  await user.type(screen.getByRole('textbox', { name: 'Search settings' }), 'Enable Asks');
+  await user.click(screen.getByRole('button', { name: 'Enable Asks' }));
+  expect(input.onNavigate).toHaveBeenCalledWith('asks');
+  await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Enable Asks' }).closest('.feature-row')).toHaveClass('settings-search-target'));
 });
 
 it('limits Your teams to memberships and searches joined team identifiers', async () => {

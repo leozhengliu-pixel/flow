@@ -4,7 +4,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap } from '@/test/fixtures'
-import type { WorkspaceSettings } from '@/types/flow'
+import type { BootstrapData, WorkspaceSettings } from '@/types/flow'
 import { updateWorkspacePreferences } from '@/lib/api'
 import { FeatureSettingsPage } from './feature-settings'
 
@@ -12,9 +12,58 @@ vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 beforeEach(() => { vi.clearAllMocks(); localStorage.setItem('flow:locale','en-US') })
 const initial = { sessionDurationDays:30, featureFlags:{'customer-requests':true,initiatives:true,pulse:true},featureSettings:{} } as unknown as WorkspaceSettings
-function page(onReload = vi.fn(), feature: 'customer-requests'|'pulse'|'initiatives'|'ai' = 'customer-requests', onNavigateSettings = vi.fn()) {
-  return <I18nProvider><FeatureSettingsPage page={feature} data={makeBootstrap({workspaceSettings:initial,customers:[],viewerRole:'admin'})} onCreateReleasePipeline={vi.fn()} onOpenReleasePipeline={vi.fn()} onOpenIntegration={vi.fn()} onNavigateSettings={onNavigateSettings} onReload={onReload}/></I18nProvider>
+function page(onReload = vi.fn(), feature: 'customer-requests'|'pulse'|'initiatives'|'ai'|'asks' = 'customer-requests', onNavigateSettings = vi.fn(), overrides: Partial<BootstrapData> = {}) {
+  return <I18nProvider><FeatureSettingsPage page={feature} data={makeBootstrap({workspaceSettings:initial,customers:[],integrationConnections:[],emailIntakeAddresses:[],viewerRole:'admin',...overrides})} onCreateReleasePipeline={vi.fn()} onOpenReleasePipeline={vi.fn()} onOpenIntegration={vi.fn()} onNavigateSettings={onNavigateSettings} onReload={onReload}/></I18nProvider>
 }
+
+it.each(['admin', 'owner'] as const)('lets %s turn Asks off and on without overwriting customer requests or reloading the workspace', async viewerRole => {
+  let complete!: (value: WorkspaceSettings) => void
+  vi.mocked(updateWorkspacePreferences).mockImplementationOnce(() => new Promise(resolve => { complete = resolve }))
+  const reload = vi.fn()
+  render(page(reload, 'asks', vi.fn(), { viewerRole }))
+  const toggle = screen.getByRole('checkbox', { name: 'Enable Asks' })
+  expect(toggle).toBeChecked()
+  fireEvent.click(toggle)
+  expect(toggle).not.toBeChecked()
+  expect(toggle).toBeDisabled()
+  expect(updateWorkspacePreferences).toHaveBeenCalledWith({ featureFlags: { asks: false } }, 'workspace')
+  await act(async () => complete({ ...initial, featureFlags: { ...initial.featureFlags, asks: false } }))
+  expect(toggle).toBeEnabled()
+  vi.mocked(updateWorkspacePreferences).mockResolvedValueOnce({ ...initial, featureFlags: { ...initial.featureFlags, asks: true } })
+  fireEvent.click(toggle)
+  await waitFor(() => expect(toggle).toBeEnabled())
+  expect(toggle).toBeChecked()
+  expect(updateWorkspacePreferences).toHaveBeenLastCalledWith({ featureFlags: { asks: true } }, 'workspace')
+  expect(reload).not.toHaveBeenCalled()
+})
+
+it('restores the saved Asks flag and rolls back a rejected change', async () => {
+  vi.mocked(updateWorkspacePreferences).mockRejectedValueOnce(new Error('Save denied'))
+  render(page(vi.fn(), 'asks', vi.fn(), { workspaceSettings: { ...initial, featureFlags: { asks: false, 'customer-requests': true } } }))
+  const toggle = screen.getByRole('checkbox', { name: 'Enable Asks' })
+  expect(toggle).not.toBeChecked()
+  fireEvent.click(toggle)
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Save denied'))
+  expect(toggle).not.toBeChecked()
+  expect(toggle).toBeEnabled()
+})
+
+it.each(['member', 'guest'] as const)('keeps Asks and its integration settings read-only for %s', viewerRole => {
+  render(page(vi.fn(), 'asks', vi.fn(), { viewerRole }))
+  const toggle = screen.getByRole('checkbox', { name: 'Enable Asks' })
+  expect(toggle).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Connect workspace' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Add email' })).toBeDisabled()
+  fireEvent.click(toggle)
+  expect(updateWorkspacePreferences).not.toHaveBeenCalled()
+})
+
+it('localizes the Asks toggle and description', () => {
+  localStorage.setItem('flow:locale', 'zh-CN')
+  render(page(vi.fn(), 'asks'))
+  expect(screen.getByRole('checkbox', { name: '启用请求' })).toBeChecked()
+  expect(screen.getByText('允许成员通过请求创建事项')).toBeVisible()
+})
 
 it('enables and configures Triage Intelligence behavior', async () => {
   const user = userEvent.setup()
