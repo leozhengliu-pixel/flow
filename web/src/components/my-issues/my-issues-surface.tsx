@@ -103,7 +103,7 @@ export function MyIssuesSurface({
         <ToolbarButton label={detailsOpen ? 'Close details' : 'Open details'} title={`${detailsOpen ? 'Close' : 'Open'} details (⌘I)`} pressed={detailsOpen} aria-expanded={detailsOpen} onClick={() => onDetailsOpenChange?.(!detailsOpen)}><DetailsIcon open={detailsOpen}/></ToolbarButton>
       </div>
     </div>
-    {filterBar}<div className={styles.content}>{children}</div>
+    {filterBar}<div className={styles.content} data-insights-open={insightsOpen}>{children}</div>
   </main>
 }
 

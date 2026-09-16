@@ -692,15 +692,28 @@
 }
 .insightsPanel {
   top: 88px;
+  width: 350px;
+  padding: 0 8px 8px 4px;
 }
+.insightsPanel:not(.expanded) .insightCard { flex: 0 0 auto; border-radius: 8px; }
+.insightsPanel:not(.expanded) .insightControls { padding: 0 20px 13px; }
+.insightsPanel:not(.expanded) .insightCard > header { padding-left: 20px; }
+.insightsPanel:not(.expanded) .saveInsight { height: 32px; min-height: 32px; }
 .insightsPanel.expanded {
   top: 8px;
   bottom: 8px;
+  width: auto;
+  padding: 0;
 }
+.drillIssueList { grid-column: 2; grid-row: 2; height: 100%; min-height: 0; min-width: 0; overflow: hidden; }
+.drillNotice { position: absolute; bottom: 8px; left: 12px; right: 362px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px; color: var(--theme-text-secondary); background: var(--theme-surface-1); font-size: 12px; }
+.drillNotice button { padding: 3px 6px; border: .5px solid var(--theme-border); border-radius: 5px; background: transparent; color: var(--theme-text-primary); cursor: pointer; }
 .insightCard > header {
   margin-top: 12px;
   padding-right: 16px;
 }
+.insightCard > header strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.insightCard > header > div { flex-shrink: 0; }
 .insightCard > header > div {
   gap: 6px;
 }
@@ -914,6 +927,7 @@
   color: var(--theme-text-primary);
 }
 @media (max-width: 800px) {
+  .drillNotice { right: 12px; }
   .panel {
     top: 88px;
     width: min(400px, calc(100vw - 24px));

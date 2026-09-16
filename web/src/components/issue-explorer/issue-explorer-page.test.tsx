@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { VirtuosoMockContext } from 'react-virtuoso'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
@@ -9,8 +9,9 @@ import type { MyIssuesDisplayOptions } from '@/components/my-issues/my-issues-su
 import { IssueExplorerPage, type IssueExplorerPageProps } from './issue-explorer-page'
 
 vi.mock('./issue-explorer-surface', () => ({
-  IssueExplorerSurface: ({ children, displayOptions, onDisplayOptionsChange }: { children: ReactNode; displayOptions: MyIssuesDisplayOptions; onDisplayOptionsChange: (display: MyIssuesDisplayOptions) => void }) => <div><button onClick={() => onDisplayOptionsChange({ ...displayOptions, grouping: 'priority' })}>Group by priority</button>{children}</div>,
+  IssueExplorerSurface: ({ children, displayOptions, onDisplayOptionsChange, onInsightsOpenChange }: { children: ReactNode; displayOptions: MyIssuesDisplayOptions; onDisplayOptionsChange: (display: MyIssuesDisplayOptions) => void; onInsightsOpenChange: (open: boolean) => void }) => <div><button onClick={() => onDisplayOptionsChange({ ...displayOptions, grouping: 'priority' })}>Group by priority</button><button onClick={() => onInsightsOpenChange(true)}>Open insights</button><button onClick={() => onInsightsOpenChange(false)}>Close insights</button>{children}</div>,
 }))
+vi.mock('@nivo/bar', () => ({ ResponsiveBar: () => <svg/> }))
 
 function page(data: BootstrapData, props: Partial<IssueExplorerPageProps> = {}) {
   return <I18nProvider><VirtuosoMockContext.Provider value={{ viewportHeight: 440, itemHeight: 44 }}><IssueExplorerPage data={data} scope={{ kind: 'workspace' }} view="all" viewHref={view => `#${view}`} onNavigateView={vi.fn()} onOpenIssue={vi.fn()} onUpdateIssue={vi.fn()} onUpdateIssues={vi.fn()} onDeleteIssues={vi.fn()} {...props}/></VirtuosoMockContext.Provider></I18nProvider>
@@ -22,6 +23,20 @@ function dataWithGroups(first: number, second: number) {
 
 describe('complete issue grouping', () => {
   beforeEach(() => localStorage.clear())
+
+  it('opens workspace insights without a saved view and restores the list after closing a drill', async () => {
+    const { container } = render(page(dataWithGroups(2, 3)))
+    fireEvent.click(screen.getByRole('button', { name: 'Open insights' }))
+    const panel = screen.getByRole('complementary', { name: 'View insights' })
+    expect(within(panel).getByText('5 issues')).toBeVisible()
+    const table = within(panel).getByRole('table', { name: 'Insights table' })
+    const row = within(table).getAllByRole('row')[1]
+    fireEvent.click(within(row).getAllByRole('button')[0])
+    await waitFor(() => expect(container.querySelectorAll('a[href*="/issue/"]').length).toBe(2))
+    expect(within(panel).getByText('2 issues in Backlog')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Close insights' }))
+    await waitFor(() => expect(container.querySelectorAll('a[href*="/issue/"]').length).toBe(5))
+  })
 
   it('shows full counts and later groups without loading more pages', async () => {
     const { container } = render(page(dataWithGroups(160, 230)))

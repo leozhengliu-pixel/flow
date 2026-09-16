@@ -68,7 +68,7 @@ export function IssueExplorerSurface({
     <div className={styles.actions}>
       <MyIssuesFilterMenu open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onToggle={onFilterToggle} trigger={<ToolbarButton label="Add filter"><FilterIcon/></ToolbarButton>}/>
       <MyIssuesDisplayMenu open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={onDisplayOptionsChange}/>
-      {(creatingView || savedView) && <ToolbarButton label={insightsOpen ? 'Close view insights' : 'Open view insights'} pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}><InsightsIcon/></ToolbarButton>}
+      <ToolbarButton label={insightsOpen ? 'Close view insights' : 'Open view insights'} pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}><InsightsIcon/></ToolbarButton>
       {!creatingView && <ToolbarButton label={savedView ? (detailsOpen ? 'Close view details' : 'Open view details') : (detailsOpen ? 'Close details' : 'Open details')} title={`${detailsOpen ? 'Close' : 'Open'} details (⌘I)`} pressed={detailsOpen} onClick={() => onDetailsOpenChange(!detailsOpen)}><DetailsIcon open={detailsOpen}/></ToolbarButton>}
     </div>
   </div>
@@ -82,7 +82,7 @@ export function IssueExplorerSurface({
       </>}
     </header>
     {viewEditor ? <div className={styles.createPanel}>{viewEditor}{toolbar}</div> : toolbar}
-    {filterBar}<div className={styles.body} data-saved-panel-open={Boolean((savedView || creatingView) && (detailsOpen || insightsOpen))}>{children}</div>
+    {filterBar}<div className={styles.body} data-insights-open={insightsOpen} data-saved-panel-open={Boolean((savedView || creatingView) && (detailsOpen || insightsOpen))}>{children}</div>
   </main>
 }
 

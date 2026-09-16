@@ -1934,7 +1934,9 @@ export interface CursorPage<T> {
   total: number;
 }
 /** A server-backed page of issues. Filters are encoded as a JSON query AST. */
-export interface IssueQueryPage extends CursorPage<Issue> {}
+export interface IssueQueryPage extends CursorPage<Issue> {
+  statusIntervals?: Record<string, { stateId: string; stateType?: string; enteredAt: string; exitedAt?: string }[]>
+}
 export interface SemanticSearchFacet {
   key: string;
   value: string;

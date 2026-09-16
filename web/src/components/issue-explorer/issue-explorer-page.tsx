@@ -12,10 +12,12 @@ import type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption, M
 import { useMyIssuesSelection } from '@/components/my-issues/use-my-issues-state'
 import { issueFiltersToQueryAst, toggleFilterOption, updateFilterOperator, updateFilterValues } from '@/components/my-issues/my-issues-filter-types'
 import { PagedIssueList } from './paged-issue-list'
+import { fetchIssueRecord } from '@/lib/api'
+import { toast } from 'sonner'
 import { IssueExplorerSurface } from './issue-explorer-surface'
 import { IssueBoard } from './issue-board'
 import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from './saved-view-editor'
-import { SavedViewDetailsPanel, SavedViewInsightsPanel, type SavedViewInsightsConfig } from './saved-view-panels'
+import { InsightHiddenNotice, SavedViewDetailsPanel, SavedViewInsightsPanel, type SavedViewInsightsConfig } from './saved-view-panels'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import type { ViewVisual } from '@/components/views/view-icon-picker'
 import {
@@ -69,6 +71,7 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
   const [display, setDisplay] = useState<MyIssuesDisplayOptions>(() => sourceView ? displayFromSavedView(sourceView, view) : readDisplay(`${preferencesKey}:display`, view))
   const [detailsOpen, setDetailsOpen] = useState(() => readBoolean(`${data.workspace.urlKey}:issue-explorer:${storageScope}:details`, false))
   const [insightsOpen, setInsightsOpen] = useState(false)
+  const [drillRows, setDrillRows] = useState<MyIssuesRowData[]>()
   const [draftInsights, setDraftInsights] = useState<SavedViewInsightsConfig>()
   const [detailsWidth, setDetailsWidth] = useState(350)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
@@ -100,8 +103,10 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
   // Bootstrap/sync owns the complete visible collection. Group before virtualizing;
   // replacing it with one query page truncates both group counts and membership.
   const visibleIssues = useMemo(() => data.issueCollectionPaged ? pagedIssues : applyExplorerFilters(scopedIssues, filters, data), [data, filters, scopedIssues, pagedIssues])
-  const rows = useMemo(() => visibleIssues.map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)), [data, rowOverrides, visibleIssues])
+  const baseRows = useMemo(() => visibleIssues.map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)), [data, rowOverrides, visibleIssues])
+  const rows = drillRows ?? baseRows
   const insightRows = useMemo(() => insightsOpen ? applyExplorerFilters(insightIssues, filters, data).map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)) : [], [data, filters, insightIssues, insightsOpen, rowOverrides])
+  const activeInsightRows = useMemo(() => insightRows.filter(row => !row.archivedAt), [insightRows])
   const groups = useMemo(() => buildExplorerIssueGroups(rows, display, data, view, manualOrder), [data, display, manualOrder, rows, view])
   const pagedQuery = useMemo(() => {
     const conditions: Record<string, unknown>[] = []
@@ -111,6 +116,11 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
     if (display.completedWindow === 'none') conditions.push({ field: 'status', operator: 'notIn', values: ['completed', 'canceled'] })
     return { teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds, includeSubTeams: scope.kind === 'team', archived: 'false' as const, groupBy: display.grouping === 'focus' ? 'status' : display.grouping, sort: (display.ordering === 'created' ? 'createdAt' : display.ordering === 'updated' ? 'updatedAt' : display.ordering === 'priority' ? 'priority' : 'sortOrder') as 'priority'|'createdAt'|'updatedAt'|'sortOrder', direction: (display.ordering === 'created' || display.ordering === 'updated' ? 'desc' : 'asc') as 'asc'|'desc', filter: { and: [issueFiltersToQueryAst(filters), ...conditions] } }
   }, [display.grouping, display.ordering, display.showSubIssues, display.completedWindow, filters, initialInsightFilters?.teamIds, scope, view])
+  const insightQuery = useMemo(() => ({
+    teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds,
+    includeSubTeams: scope.kind === 'team',
+    filter: { and: [issueFiltersToQueryAst(filters), ...(view === 'backlog' ? [{ field: 'status', values: ['backlog'] }] : view === 'active' ? [{ field: 'status', values: ['unstarted', 'started'] }] : [])] },
+  }), [filters, initialInsightFilters?.teamIds, scope, view])
   const selection = useMyIssuesSelection(groups)
   const summary = useMemo(() => deriveSummary(groups), [groups])
   const previewIssue = previewIssueId ? issuesById.get(previewIssueId) : undefined
@@ -154,7 +164,7 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
   const changeInsights = (open: boolean) => { setInsightsOpen(open); if (open) { setDetailsOpen(false); setPreviewIssueId(undefined) } }
   const openIssueFromExplorer = (row: MyIssuesRowData) => {
     const issue = issuesById.get(row.id)
-    if (!issue) return
+    if (!issue) { void fetchIssueRecord(row.id, undefined, data.workspace.urlKey).then(issue => onOpenIssue(issue, boundedIssueSequence(rows.map(row => row.id), issue.id))).catch(() => toast.error('Could not load issue')); return }
     if (detailsOpen && renderIssuePreview) setPreviewIssueId(issue.id)
     else onOpenIssue(issue, boundedIssueSequence(groups.find(group => group.issues.some(row => row.id === issue.id))?.issues.map(row => row.id) ?? [issue.id], issue.id))
   }
@@ -218,7 +228,7 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
   }
   const savedViewSnapshot = (): SavedViewMutationInput => ({ resource: 'issues', scope: scope.kind, teamId: scope.kind === 'team' ? scope.team.id : '', ownerId: data.viewer.id, view, filters, display: displaySnapshot(display), ...(draftInsights ? { insights: draftInsights as unknown as Record<string, unknown> } : {}) })
   const previewTarget = initialSaveTarget ?? (scope.kind === 'team' ? { scope: 'team' as const, teamId: scope.team.id, label: scope.team.name, team: scope.team } : { scope: 'workspace' as const, label: data.workspace.name })
-  const insightsView: SavedView | undefined = savedView ?? (creatingView ? { id: '__new-view', name: 'All issues', description: '', resource: 'issues', scope: previewTarget.scope, teamId: previewTarget.scope === 'team' ? previewTarget.teamId : '', ownerId: data.viewer.id, view, filters, display: displaySnapshot(display), insights: draftInsights as unknown as Record<string, unknown> | undefined, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : undefined)
+  const insightsView: SavedView = savedView ?? { id: creatingView ? '__new-view' : preferencesKey, name: scope.kind === 'team' ? scope.team.name : 'All issues', description: '', resource: 'issues', scope: previewTarget.scope, teamId: previewTarget.scope === 'team' ? previewTarget.teamId : '', ownerId: data.viewer.id, view, filters, display: displaySnapshot(display), insights: draftInsights as unknown as Record<string, unknown> | undefined, createdAt: '', updatedAt: '' }
   const saveViewEditor = async (name: string, description: string, target: SavedViewTarget | undefined, visual: ViewVisual) => {
     if (viewSaving) return
     setViewSaving(true)
@@ -264,7 +274,7 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
       displayOptions={display}
       detailsOpen={detailsOpen}
       insightsOpen={insightsOpen}
-      itemCount={data.issueCollectionPaged ? pagedTotal : rows.length}
+      itemCount={drillRows ? drillRows.length : data.issueCollectionPaged ? pagedTotal : rows.length}
       filterOpenSignal={filterOpenSignal}
       filterOptions={field => explorerFilterOptions(field, rowOptions)}
       onFilterToggle={addFilter}
@@ -292,7 +302,7 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
       />}
       filterBar={(!savedView || viewEditor) && <MyIssuesFilterBar filters={filters} filterOptions={filter => explorerFilterOptions(filter.field, rowOptions)} onAdd={() => setFilterOpenSignal(value => value + 1)} onClear={() => persistFilters([])} onOperatorChange={(id, operator) => persistFilters(updateFilterOperator(filters, id, operator))} onRemove={id => persistFilters(filters.filter(filter => filter.id !== id))} onValuesChange={(id, options) => persistFilters(updateFilterValues(filters, id, options))}/>}
     >
-      {data.issueCollectionPaged ? <PagedIssueList
+      {data.issueCollectionPaged && !drillRows ? <PagedIssueList
         data={data}
         query={pagedQuery}
         layout={display.layout}
@@ -364,12 +374,16 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
         view={savedView}
         workspace={data.workspace}
       />}
+      {drillRows && <InsightHiddenNotice hidden={drillRows.length - new Set(groups.flatMap(group => group.issues.map(issue => issue.id))).size} onShow={() => changeDisplay({ ...display, completedWindow: 'all', showSubIssues: true, hiddenGroupIds: [] })}/>}
       {insightsView && insightsOpen && <SavedViewInsightsPanel
         allRows={insightRows}
         data={data}
         onClose={() => changeInsights(false)}
         onSave={async (config: SavedViewInsightsConfig) => { if (savedView && onUpdateSavedView) await onUpdateSavedView(savedView.id, { insights: config as unknown as Record<string, unknown> }); else setDraftInsights(config) }}
-        rows={rows}
+        rows={activeInsightRows}
+        query={data.issueCollectionPaged ? insightQuery : undefined}
+        onDrillChange={setDrillRows}
+        onOpenIssue={openIssueFromExplorer}
         view={insightsView}
       />}
     </IssueExplorerSurface>
