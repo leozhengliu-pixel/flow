@@ -128,6 +128,15 @@ describe('sidebar feature flags', () => {
   })
   afterEach(() => { vi.unstubAllGlobals() })
 
+  it.each([[false, false], [false, true], [true, false], [true, true]])('shows Asks=%s and Customers=%s independently after a settings refresh', async (asks, customers) => {
+    const view = renderSidebar({ asks: !asks, 'customer-requests': !customers })
+    await openMore()
+    view.rerender(sidebarTree(sidebarData({ asks, 'customer-requests': customers })))
+    const menu = await openMore()
+    expect(Boolean(moreLink(menu, asksPath('workspace')))).toBe(asks)
+    expect(Boolean(moreLink(menu, customersPath('workspace')))).toBe(customers)
+  })
+
   it('maps Loops, Customers, and Asks to distinct flags', () => {
     const off = { loops: false, 'customer-requests': false, asks: false }
     expect(sidebarEntryAvailable('loops', off)).toBe(false)

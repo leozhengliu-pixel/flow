@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
 import { createSettingsSearchIndex, searchTeams, SETTINGS_SEARCH_PAGES } from './settings-search'
+import { translateToChinese } from '@/i18n/i18n'
 
 describe('settings search index', () => {
+  it('finds the actual Asks enable control in both languages', () => {
+    const index = createSettingsSearchIndex(SETTINGS_SEARCH_PAGES)
+    expect(index.search('Enable Asks')).toEqual(expect.arrayContaining([expect.objectContaining({ page: 'asks', title: 'Enable Asks' })]))
+    const chinese = createSettingsSearchIndex(SETTINGS_SEARCH_PAGES, translateToChinese)
+    expect(chinese.search('启用请求')).toEqual(expect.arrayContaining([expect.objectContaining({ page: 'asks', targetTitle: 'Enable Asks' })]))
+  })
   it('matches page sections and individual settings without expanding sibling items', () => {
     const index = createSettingsSearchIndex(SETTINGS_SEARCH_PAGES)
     const results = index.search('theme')
