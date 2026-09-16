@@ -397,6 +397,7 @@ export function SettingsPage(props: SettingsPageProps) {
           (item) =>
             (isAdmin ||
               section.title === "Personal" ||
+              item.id === "asks" ||
               memberCanManage(item.id, props.data.workspaceSettings)),
         ),
       })).filter((section) => section.items.length),
@@ -699,20 +700,16 @@ export function SettingsPage(props: SettingsPageProps) {
 
 function findSettingsSearchTarget(title: string) {
   const expected = normalizeSettingsSearchText(title);
-  const candidates = Array.from(document.querySelectorAll<HTMLElement>(".settings-row, .settings-section"));
-  const exact = candidates.find(candidate => {
-    const label = candidate.matches(".settings-section")
-      ? candidate.querySelector(":scope > h3")
-      : candidate.querySelector(".settings-row-copy > strong");
-    return normalizeSettingsSearchText(label?.textContent ?? "") === expected;
-  });
+  const candidates = Array.from(document.querySelectorAll<HTMLElement>(".settings-row, .settings-section, .feature-row, .feature-section"));
+  const labelFor = (candidate: HTMLElement) => {
+    const selector = candidate.matches(".feature-row") ? ":scope > div > strong"
+      : candidate.matches(".feature-section") ? ":scope > header > h2"
+      : candidate.matches(".settings-section") ? ":scope > h3" : ".settings-row-copy > strong";
+    return normalizeSettingsSearchText(candidate.querySelector(selector)?.textContent ?? "");
+  };
+  const exact = candidates.find(candidate => labelFor(candidate) === expected);
   if (exact) return exact;
-  return candidates.find(candidate => {
-    const label = candidate.matches(".settings-section")
-      ? candidate.querySelector(":scope > h3")
-      : candidate.querySelector(".settings-row-copy > strong");
-    return normalizeSettingsSearchText(label?.textContent ?? "").startsWith(expected);
-  }) ?? null;
+  return candidates.find(candidate => labelFor(candidate).startsWith(expected)) ?? null;
 }
 
 function normalizeSettingsSearchText(value: string) {
@@ -787,6 +784,7 @@ function SettingsBody(
     !personal &&
     !isWorkspaceAdmin &&
     !teamOwner &&
+    page !== "asks" &&
     !memberCanManage(page, props.data.workspaceSettings)
   )
     return (

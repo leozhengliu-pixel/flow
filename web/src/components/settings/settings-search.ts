@@ -620,6 +620,7 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
     section: 'Features',
     keywords: ['forms', 'requests', 'email', 'slack'],
     groups: [
+      { title: 'Asks', items: [{ title: 'Enable Asks', keywords: ['Allow members to create issues through Asks'] }] },
       { title: 'Slack', items: [{ title: 'Slack workspace', keywords: ['connect'] }] },
       {
         title: 'Email',
