@@ -22,9 +22,10 @@ export interface MyIssuesControllerOptions {
   initialDisplay: MyIssuesDisplayOptions
   initialFilters?: MyIssuesAppliedFilter[]
   adapter: MyIssuesControllerAdapter
+  drillRows?: MyIssuesRowData[]
 }
 
-export function useMyIssuesController({ workspaceSlug, initialView, initialGroups, initialDisplay, initialFilters = [], adapter }: MyIssuesControllerOptions) {
+export function useMyIssuesController({ workspaceSlug, initialView, initialGroups, initialDisplay, initialFilters = [], adapter, drillRows }: MyIssuesControllerOptions) {
   const [view, setView] = useState(initialView)
   const [groups, setGroups] = useState(initialGroups)
   const [filters, setFilters] = useState(() => readFilters(workspaceSlug, initialView, initialFilters))
@@ -37,7 +38,7 @@ export function useMyIssuesController({ workspaceSlug, initialView, initialGroup
   const [bulkError, setBulkError] = useState<string>()
   const displayRequest = useRef(0)
   useEffect(() => setGroups(initialGroups), [initialGroups])
-  const visibleGroups = useMemo(() => projectGroups(applyFilters(groups, filters), display), [display, filters, groups])
+  const visibleGroups = useMemo(() => projectGroups(drillRows ? [{ id: 'insights', label: 'Issues', issues: drillRows }] : applyFilters(groups, filters), display), [display, filters, groups, drillRows])
   const visibleSelection = useMyIssuesSelection(visibleGroups)
   const summary = useMemo(() => deriveSummary(visibleGroups), [visibleGroups])
   const counts = useMemo(() => ({ [view]: visibleGroups.reduce((total, group) => total + group.issues.length, 0) }) as Partial<Record<MyIssuesView, number>>, [view, visibleGroups])

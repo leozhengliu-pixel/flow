@@ -1,16 +1,22 @@
-import { useEffect, useMemo, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
 import { BarChart3, Bot, Building2, CalendarDays, Check, ChevronDown, ChevronRight, CircleDot, Clock3, Copy, Download, Ellipsis, Expand, Flame, FolderKanban, History, Layers3, Link2, LockKeyhole, Palette, RefreshCw, Search, SlidersHorizontal, Star, Tag, UserRound, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { CycleIcon, TeamIcon } from '@/components/issue/issue-icons'
-import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
+import { MyIssuesList, type MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import type { BootstrapData, SavedView, Team, User, Workspace } from '@/types/flow'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { useI18n } from '@/i18n/i18n'
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import styles from './saved-view-panels.module.css'
 import { UserAvatar } from '@/components/ui/user-avatar'
+import { SelectControl } from '@/components/ui/select-control'
+import type { IssueQueryInput } from '@/lib/api'
+import { useInsightSource } from './use-insight-source'
+import { aggregateInsightValues, aggregationLabels, insightAggregations, insightTargetMatches, sameInsightTarget, type InsightTarget, type InsightAggregation } from './insight-interaction'
+import { buildInsightData, formatMetric, titleCase, type InsightData } from './insight-data'
+import { InsightExplorer } from './insight-explorer'
 
 export type SavedViewInsightMeasure = 'issueCount' | 'cycleTime' | 'leadTime' | 'issueAge' | 'timeInStatus'
 export type SavedViewInsightDimension =
@@ -24,6 +30,9 @@ export interface SavedViewInsightsConfig {
   segment: SavedViewInsightDimension | 'none'
   showArchived: boolean
   colors: 'status' | 'auto'
+  aggregation?: InsightAggregation
+  aggregations?: InsightAggregation[]
+  latencyScale?: 'linear' | 'log'
 }
 
 const DEFAULT_INSIGHTS: SavedViewInsightsConfig = {
@@ -40,6 +49,9 @@ function savedViewInsightsConfig(view: SavedView): SavedViewInsightsConfig {
     ...(value.segment === 'none' || isDimension(value.segment) ? { segment: value.segment } : {}),
     ...(typeof value.showArchived === 'boolean' ? { showArchived: value.showArchived } : {}),
     ...(value.colors === 'status' || value.colors === 'auto' ? { colors: value.colors } : {}),
+    ...(insightAggregations.includes(value.aggregation as InsightAggregation) ? { aggregation: value.aggregation as InsightAggregation } : {}),
+    ...(Array.isArray(value.aggregations) && value.aggregations.length && value.aggregations.every(item => insightAggregations.includes(item as InsightAggregation)) ? { aggregations: [...new Set(value.aggregations)] as InsightAggregation[] } : {}),
+    ...(value.latencyScale === 'linear' || value.latencyScale === 'log' ? { latencyScale: value.latencyScale } : {}),
   }
 }
 
@@ -85,20 +97,23 @@ export function SavedViewDetailsPanel({ favorite, menu, onClose, onSummaryItemSe
   </aside>
 }
 
-export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, view }: {
+export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, view, query, onDrillChange, onOpenIssue }: {
   allRows: MyIssuesRowData[]
   data: BootstrapData
   onClose: () => void
   onSave: (config: SavedViewInsightsConfig) => Promise<void>
   rows: MyIssuesRowData[]
   view: SavedView
+  query?: IssueQueryInput
+  onDrillChange?: (rows: MyIssuesRowData[] | undefined) => void
+  onOpenIssue?: (row: MyIssuesRowData) => void
 }) {
   const { t } = useI18n()
-  const persisted = useMemo(() => savedViewInsightsConfig(view), [view])
+  const persisted = useMemo(() => savedViewInsightsConfig({ insights: view.insights } as SavedView), [view.insights])
   const [config, setConfig] = useState(persisted)
   const [saving, setSaving] = useState(false)
   const [expanded, setExpanded] = useState(false)
-  const [selectedSliceId, setSelectedSliceId] = useState<string>()
+  const [target, setTarget] = useState<InsightTarget>()
   const introKey = `flow:saved-view:${view.id}:insights-intro`
   const [showIntro, setShowIntro] = useState(() => localStorage.getItem(introKey) !== 'dismissed')
   const [refreshKey, setRefreshKey] = useState(0)
@@ -111,18 +126,35 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
     window.addEventListener('keydown', onKeyDown)
     return () => { window.removeEventListener('keydown', onKeyDown); document.body.style.overflow = '' }
   }, [expanded])
-  const source = config.showArchived ? allRows : rows
+  const remote = useInsightSource(data, query ? { ...query, archived: config.showArchived ? 'all' : 'false', includeStatusHistory: config.measure === 'timeInStatus' } : undefined, refreshKey)
+  const source = query ? remote.rows : config.showArchived ? allRows : rows
   const insight = useMemo(() => { void refreshKey; return buildInsightData(source, config, data) }, [config, data, refreshKey, source])
-  const max = Math.max(1, ...insight.rows.map(item => item.total))
   const dirty = JSON.stringify(config) !== JSON.stringify(persisted)
   const save = async () => { setSaving(true); try { await onSave(config) } finally { setSaving(false) } }
   const dismissIntro = () => { localStorage.setItem(introKey, 'dismissed'); setShowIntro(false) }
   const copyLink = () => void navigator.clipboard.writeText(window.location.href).then(() => toast.success(t('View link copied')))
   const exportCsv = () => exportInsightsCsv(insight, config, view.name)
-  const updateMeasure = (value: string) => setConfig(current => value.startsWith('timeInStatus:') ? { ...current, measure: 'timeInStatus', timeInStatusIds: toggleValue(current.timeInStatusIds, value.slice(13)) } : { ...current, measure: value as SavedViewInsightMeasure })
-  const tableStyle = { '--insight-columns': `minmax(132px,1.2fr) 90px repeat(${config.segment === 'none' ? 0 : insight.segments.length},minmax(74px,.8fr))` } as CSSProperties
-  const selectedSlice = insight.rows.find(item => item.id === selectedSliceId) ?? insight.rows[0]
-  const selectedRows = selectedSlice ? source.filter(row => dimensionValues(row, config.slice, data).some(value => value.id === selectedSlice.id)) : []
+  const updateMeasure = (value: string) => setConfig(current => ({ ...current, ...(value.startsWith('timeInStatus:') ? { measure: 'timeInStatus' as const, timeInStatusIds: toggleValue(current.timeInStatusIds, value.slice(13)) } : { measure: value as SavedViewInsightMeasure }) }))
+  const selectedSlice = insight.rows.find(item => item.id === target?.slice)
+  const selectedSegment = insight.segments.find(item => item.id === target?.segment)
+  const selectedRows = useMemo(() => insight.samples.filter(sample => !target || insightTargetMatches(sample, target)).map(sample => sample.item), [insight, target])
+  const issueCount = target ? selectedRows.length : insight.samples.length
+  const drillLabel = [selectedSlice?.label, selectedSegment?.label, target?.aggregation && `${target.aggregation} ${target.operator === 'gt' ? '>' : '≤'} ${formatMetric(target.threshold ?? 0, config.measure)}`].filter(Boolean).join(' · ')
+  const timeInStatusKey = JSON.stringify(config.timeInStatusIds)
+  const aggregationsKey = JSON.stringify(config.aggregations)
+  useEffect(() => { setTarget(undefined) }, [config.slice, config.segment, config.measure, config.aggregation, aggregationsKey, timeInStatusKey, view.id])
+  useEffect(() => {
+    if (remote.loading || remote.error || !target) return
+    if (target.slice !== undefined && !insight.rows.some(row => row.id === target.slice) || target.segment !== undefined && !insight.segments.some(segment => segment.id === target.segment)) { setTarget(undefined); return }
+    if (target.aggregation) {
+      const threshold = aggregateInsightValues(insight.samples.filter(sample => target.slice === undefined || sample.slices.includes(target.slice)).map(sample => sample.value), target.aggregation as InsightAggregation)
+      if (threshold === undefined) setTarget(undefined)
+      else if (threshold !== target.threshold) setTarget({ ...target, threshold })
+    }
+  }, [insight, target, remote.loading, remote.error])
+  useEffect(() => { onDrillChange?.(target && !remote.loading && !remote.error ? selectedRows : undefined) }, [target, selectedRows, onDrillChange, remote.loading, remote.error])
+  useEffect(() => () => onDrillChange?.(undefined), [onDrillChange])
+  const selectTarget = (next: InsightTarget) => setTarget(current => sameInsightTarget(current, next) ? undefined : next)
   return <aside aria-label="View insights" className={`${styles.panel} ${styles.insightsPanel} ${expanded ? styles.expanded : ''}`}>
     {expanded && <header className={styles.fullscreenHeader}><strong data-i18n-ignore>{view.name}</strong><ChevronRight/><span>Insights</span><InsightActionsMenu copyLink={copyLink} exportCsv={exportCsv} onRefresh={() => setRefreshKey(value => value + 1)}/><button aria-label="Close fullscreen" className={styles.iconButton} onClick={() => setExpanded(false)} type="button"><X size={14}/></button></header>}
     {showIntro && <section className={styles.insightIntro}>
@@ -131,7 +163,7 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
       <a href="https://flow.app/docs/insights" rel="noreferrer" target="_blank">Documentation</a>
     </section>}
     <section className={styles.insightCard}>
-      <header><strong>{expanded ? selectedRows.length : source.length} {(expanded ? selectedRows.length : source.length) === 1 ? 'issue' : 'issues'}</strong><div>
+      <header><strong aria-live="polite">{remote.loading ? t('Loading…') : `${issueCount} ${t(issueCount === 1 ? 'issue' : 'issues')}${target && drillLabel ? ` ${t('in')} ${drillLabel}` : ''}`}</strong><div>
         <button aria-label={expanded ? 'Close fullscreen' : 'Expand to fullscreen'} aria-pressed={expanded} className={styles.iconButton} type="button" onClick={() => setExpanded(value => !value)}>{expanded ? <X size={14}/> : <Expand size={14}/>}</button>
         <InsightDisplayMenu config={config} onChange={patch => setConfig(value => ({ ...value, ...patch }))}/>
         <InsightActionsMenu copyLink={copyLink} exportCsv={exportCsv} onRefresh={() => setRefreshKey(value => value + 1)}/>
@@ -140,31 +172,29 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
       <div className={styles.insightControls}>
         <InsightPicker label="Measure" value={config.measure} options={measureOptions(data, config)} onChange={updateMeasure}/>
         <InsightPicker label="Slice" value={config.slice} options={dimensionOptions(data, true)} onChange={slice => setConfig(value => ({ ...value, slice: slice as SavedViewInsightDimension }))}/>
-        <InsightPicker label="Segment" value={config.segment} options={segmentOptions(data)} onChange={segment => setConfig(value => ({ ...value, segment: segment as SavedViewInsightsConfig['segment'] }))}/>
+        {config.measure === 'issueCount' ? <InsightPicker label="Segment" value={config.segment} options={segmentOptions(data)} onChange={segment => setConfig(value => ({ ...value, segment: segment as SavedViewInsightsConfig['segment'] }))}/> : <InsightAggregationPicker config={config} onChange={aggregations => setConfig(value => ({ ...value, aggregations }))}/>}
       </div>
-      <div aria-label="Insight chart" className={styles.chart} role="img">
-        {insight.rows.length ? insight.rows.map(item => <div aria-pressed={selectedSlice?.id === item.id} className={styles.chartColumn} key={item.id} onClick={() => setSelectedSliceId(item.id)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedSliceId(item.id) } }} role="button" tabIndex={0}>
-          <small>{formatMetric(item.total, config.measure)}</small>
-          <div className={styles.chartBar} style={{ height: `${Math.max(4, item.total / max * 190)}px` }}>{insight.segments.map((segment, index) => item.segments[segment.id] ? <i aria-label={`${item.label}, ${segment.label}: ${formatMetric(item.segments[segment.id], config.measure)}`} key={segment.id} style={{ backgroundColor: insightColor(config, segment.color, item.color, index), flexGrow: item.segments[segment.id] }} title={`${segment.label}: ${formatMetric(item.segments[segment.id], config.measure)}`}/> : null)}</div>
-          <span data-i18n-ignore>{insightValueLabel(t, config.slice, item.label)}</span>
-        </div>) : <div className={styles.empty}>No data for this insight</div>}
-      </div>
-      <div aria-label="Insights table" className={styles.insightTable} role="table" style={tableStyle}>
-        <div className={styles.insightTableRow} role="row"><span role="columnheader">{dimensionLabel(config.slice, data)}</span><span role="columnheader">{measureLabel(config.measure)}</span>{config.segment !== 'none' && insight.segments.map((segment, index) => <span key={segment.id} role="columnheader"><i className={styles.legendMark} style={{ backgroundColor: insightColor(config, segment.color, undefined, index) }}/><b data-i18n-ignore>{insightValueLabel(t, config.segment, segment.label)}</b></span>)}</div>
-        {insight.rows.map(item => <div aria-selected={selectedSlice?.id === item.id} className={styles.insightTableRow} key={item.id} onClick={() => setSelectedSliceId(item.id)} role="row"><span role="cell"><i className={styles.tableMark} style={{ backgroundColor: item.color }}/><b data-i18n-ignore>{insightValueLabel(t, config.slice, item.label)}</b></span><span role="cell">{formatMetric(item.total, config.measure)}</span>{config.segment !== 'none' && insight.segments.map(segment => <span key={segment.id} role="cell">{formatMetric(item.segments[segment.id] ?? 0, config.measure)}</span>)}</div>)}
-      </div>
+      {remote.error ? <div role="alert" className={styles.empty}>{t('Could not load insights')}<button type="button" onClick={() => setRefreshKey(value => value + 1)}>{t('Retry')}</button></div> : remote.loading ? <div role="status" className={styles.empty}>{t('Loading…')}</div> : !insight.rows.length ? <div role="status" className={styles.empty}>{t('No matching issues')}</div> : <InsightExplorer onOpenIssue={onOpenIssue} sliceLabel={dimensionLabel(config.slice, data)} config={config} data={data} insight={insight} expanded={expanded} target={target} onSelect={selectTarget} onClear={() => setTarget(undefined)} />}
       <button className={styles.saveInsight} disabled={!dirty || saving} onClick={() => void save()} type="button">{saving ? 'Saving…' : 'Set default for everyone'}</button>
     </section>
-    {expanded && <InsightIssuePanel color={selectedSlice?.color} label={selectedSlice?.label ?? 'No data'} rows={selectedRows}/>}
+    {expanded && <section className={styles.drillIssueList} aria-label={`${drillLabel || 'All'} issues`}><MyIssuesList groups={[{ id: 'insight-details', label: drillLabel || t('All issues'), issues: selectedRows }]} displayProperties={new Set(['id', 'status', 'assignee'])} onOpenIssue={onOpenIssue}/></section>}
   </aside>
+}
+
+export function InsightHiddenNotice({ hidden, onShow }: { hidden: number; onShow: () => void }) {
+  const { t } = useI18n()
+  if (hidden <= 0) return null
+  return <div className={styles.drillNotice}><span>{hidden} {t('issues hidden by display options')}</span><button type="button" onClick={onShow}>{t('Show hidden issues')}</button></div>
+}
+
+function InsightAggregationPicker({ config, onChange }: { config: SavedViewInsightsConfig; onChange: (values: InsightAggregation[]) => void }) {
+  const { t } = useI18n()
+  const selected = config.aggregations ?? (config.aggregation ? [config.aggregation] : ['median', 'p75', 'p95'] as InsightAggregation[])
+  return <label><span>{t('Aggregations')}</span><DropdownMenu.Root><DropdownMenu.Trigger asChild><button type="button" aria-label={t('Aggregations')} className={styles.insightSelect}><span>{t('Percentiles')}</span><ChevronDown/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className={styles.insightMenu} sideOffset={4}>{(['median','p75','p95'] as const).map(id => <DropdownMenu.CheckboxItem className={styles.insightMenuItem} key={id} checked={selected.includes(id)} disabled={selected.length === 1 && selected.includes(id)} onSelect={event => event.preventDefault()} onCheckedChange={checked => onChange(checked ? [...selected, id] : selected.filter(value => value !== id))}><span>{id === 'median' ? 'P50' : aggregationLabels[id]}</span>{selected.includes(id) && <Check size={13}/>}</DropdownMenu.CheckboxItem>)}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></label>
 }
 
 function InsightActionsMenu({ copyLink, exportCsv, onRefresh }: { copyLink: () => void; exportCsv: () => void; onRefresh: () => void }) {
   return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open menu" className={styles.iconButton} type="button"><Ellipsis size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className={styles.insightMenu} collisionPadding={8} sideOffset={4}><DropdownMenu.Item className={styles.insightMenuItem} onSelect={copyLink}><Link2/>Copy link</DropdownMenu.Item><DropdownMenu.Item className={styles.insightMenuItem} onSelect={exportCsv}><Download/>Export insights as CSV…</DropdownMenu.Item><DropdownMenu.Item className={styles.insightMenuItem} onSelect={() => window.open('https://flow.app/docs/insights', '_blank', 'noopener,noreferrer')}><BarChart3/>Insights examples</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item className={styles.insightMenuItem} onSelect={onRefresh}><RefreshCw/>Refresh</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
-}
-
-function InsightIssuePanel({ color, label, rows }: { color?: string; label: string; rows: MyIssuesRowData[] }) {
-  return <section aria-label={`${label} issues`} className={styles.fullscreenIssues}><header><i style={{ borderColor: color }}/><strong data-i18n-ignore>{label}</strong><span>{rows.length}</span></header><div>{rows.map(row => <a href={row.href} key={row.id}><span className={styles.issueDrag}>···</span><i style={{ borderColor: row.state.color }}/><small>{row.identifier}</small><strong data-i18n-ignore>{row.title}</strong>{row.assignee && <b data-i18n-ignore>{row.assignee.name.split(/\s+/).map(part => part[0]).slice(0,2).join('').toUpperCase()}</b>}</a>)}</div></section>
 }
 
 type InsightOption = { id: string; label: string; description?: string; separatorBefore?: boolean; icon?: ReactNode; checked?: boolean; children?: InsightOption[] }
@@ -190,6 +220,7 @@ function InsightDisplayMenu({ config, onChange }: { config: SavedViewInsightsCon
   return <Popover.Root><Popover.Trigger asChild><button aria-label="Insights display options" className={styles.iconButton} type="button"><SlidersHorizontal size={13}/></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" align="end" className={styles.insightDisplayPopover} collisionPadding={8} sideOffset={4}>
     <div className={styles.insightDisplayRow}><span>Show archived issues</span><button aria-checked={config.showArchived} aria-label="Show archived issues" className={styles.insightToggle} onClick={() => onChange({ showArchived: !config.showArchived })} role="switch" type="button"><i/></button></div>
     <div className={styles.insightDisplaySeparator}/>
+    {config.measure !== 'issueCount' && <div className={styles.insightDisplayRow}><span>Y-axis scale</span><SelectControl className={styles.insightColorSelect} label="Y-axis scale" value={config.latencyScale ?? 'log'} options={[{ value: 'log', label: 'Logarithmic' }, { value: 'linear', label: 'Linear' }]} onChange={value => onChange({ latencyScale: value as 'log' | 'linear' })}/></div>}
     <div className={styles.insightDisplayRow}><span>Colors</span><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Colors" className={styles.insightColorSelect} role="combobox" type="button"><Palette/>{config.colors === 'status' ? 'Status colors' : 'Auto-color'}<ChevronDown/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className={styles.insightMenu} sideOffset={4}><DropdownMenu.RadioGroup value={config.colors} onValueChange={colors => onChange({ colors: colors as SavedViewInsightsConfig['colors'] })}><DropdownMenu.RadioItem className={styles.insightMenuItem} value="status">Status colors{config.colors === 'status' && <Check className={styles.trailingCheck}/>}</DropdownMenu.RadioItem><DropdownMenu.RadioItem className={styles.insightMenuItem} value="auto">Auto-color{config.colors === 'auto' && <Check className={styles.trailingCheck}/>}</DropdownMenu.RadioItem></DropdownMenu.RadioGroup></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></div>
   </Popover.Content></Popover.Portal></Popover.Root>
 }
@@ -213,78 +244,6 @@ function summaryItems(rows: MyIssuesRowData[], dimension: 'assignee' | 'labels' 
   const counts = new Map<string, { id: string; label: string; color?: string; count: number }>()
   for (const item of values) counts.set(item.id, { ...item, count: (counts.get(item.id)?.count ?? 0) + 1 })
   return [...counts.values()].sort((left, right) => right.count - left.count || left.label.localeCompare(right.label))
-}
-
-type InsightValue = { id: string; label: string; color?: string }
-type InsightRow = InsightValue & { total: number; segments: Record<string, number> }
-
-type InsightData = { rows: InsightRow[]; segments: Array<InsightValue & { count: number }> }
-
-function buildInsightData(rows: MyIssuesRowData[], config: SavedViewInsightsConfig, data: BootstrapData): InsightData {
-  const rowMap = new Map<string, InsightRow>()
-  const segmentMap = new Map<string, InsightValue & { count: number }>()
-  for (const row of rows) {
-    const metric = metricValue(row, config)
-    if (metric == null) continue
-    const slices = dimensionValues(row, config.slice, data)
-    const segments = config.segment === 'none' ? [{ id: 'all', label: 'No Value' }] : dimensionValues(row, config.segment, data)
-    for (const segmentValue of segments) {
-      const current = segmentMap.get(segmentValue.id)
-      segmentMap.set(segmentValue.id, { ...segmentValue, count: (current?.count ?? 0) + 1 })
-    }
-    for (const sliceValue of slices) {
-      const current = rowMap.get(sliceValue.id) ?? { ...sliceValue, total: 0, segments: {} }
-      current.total += metric
-      for (const segmentValue of segments) current.segments[segmentValue.id] = (current.segments[segmentValue.id] ?? 0) + metric
-      rowMap.set(sliceValue.id, current)
-    }
-  }
-  return {
-    rows: [...rowMap.values()].sort((left, right) => right.total - left.total || left.label.localeCompare(right.label)),
-    segments: [...segmentMap.values()].sort((left, right) => right.count - left.count || left.label.localeCompare(right.label)),
-  }
-}
-
-function dimensionValues(row: MyIssuesRowData, dimension: SavedViewInsightDimension, data: BootstrapData): InsightValue[] {
-  if (dimension === 'label') return row.labels?.length ? row.labels.map(label => ({ id: label.id, label: label.name, color: label.color })) : [noValue('label')]
-  if (dimension.startsWith('labelGroup:')) {
-    const groupId = dimension.slice('labelGroup:'.length)
-    const values = row.labels?.filter(label => label.groupId === groupId) ?? []
-    return values.length ? values.map(label => ({ id: label.id, label: label.name, color: label.color })) : [noValue('label')]
-  }
-  if (dimension === 'status') return [{ id: row.state.id, label: row.state.name, color: row.state.color }]
-  if (dimension === 'statusType') return [{ id: row.state.type, label: titleCase(row.state.type), color: row.state.color }]
-  if (dimension === 'priority') return [{ id: String(row.priority), label: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][row.priority], color: ['var(--status-neutral)', 'var(--priority-urgent)', 'var(--priority-high)', 'var(--priority-medium)', 'var(--priority-low)'][row.priority] }]
-  if (dimension === 'project') return [{ id: row.project?.id ?? 'none', label: row.project?.name ?? 'No project', color: row.project?.color }]
-  if (dimension === 'assignee') return [{ id: row.assignee?.id ?? 'none', label: row.assignee?.name ?? 'No assignee', color: row.assignee?.color }]
-  if (dimension === 'agent') return [{ id: row.delegate?.id ?? 'none', label: row.delegate?.name ?? 'No agent', color: row.delegate?.color }]
-  if (dimension === 'agentSession') return [{ id: row.agentSessionId ?? 'none', label: row.agentSessionId ?? 'No agent session' }]
-  if (dimension === 'creator') return [{ id: row.creatorId ?? 'none', label: row.creatorName ?? 'No creator' }]
-  if (dimension === 'template') { const template = data.issueTemplates.find(item => item.id === row.templateId); return [{ id: template?.id ?? 'none', label: template?.name ?? 'No template' }] }
-  if (dimension === 'externalSource') return [{ id: row.externalSource ?? 'none', label: row.externalSource ?? 'No external source' }]
-  if (dimension === 'initiative') { const values = data.initiatives.filter(item => row.initiativeIds?.includes(item.id)); return values.length ? values.map(item => ({ id: item.id, label: item.name, color: item.color })) : [noValue('initiative')] }
-  if (dimension === 'projectLabel') { const values = data.labels.filter(item => row.projectLabelIds?.includes(item.id)); return values.length ? values.map(item => ({ id: item.id, label: item.name, color: item.color })) : [noValue('project label')] }
-  if (dimension.startsWith('projectLabelGroup:')) { const groupId = dimension.slice('projectLabelGroup:'.length); const values = data.labels.filter(item => item.groupId === groupId && row.projectLabelIds?.includes(item.id)); return values.length ? values.map(item => ({ id: item.id, label: item.name, color: item.color })) : [noValue('project label')] }
-  if (dimension === 'cycle') { const cycle = data.cycles.find(item => item.id === row.cycleId); return [{ id: cycle?.id ?? 'none', label: cycle?.name ?? 'No cycle' }] }
-  if (dimension === 'addedToCycle') return [{ id: row.addedToCycle ?? 'none', label: row.addedToCycle ? ({ planned: 'Planned', during: 'During cycle', after: 'After cycle' }[row.addedToCycle] ?? row.addedToCycle) : 'No value' }]
-  if (dimension === 'createdDate' || dimension === 'burnUp') return [dateValue(row.createdAt, 'created date')]
-  if (dimension === 'completedDate') return [dateValue(row.completedAt, 'completed date')]
-  if (dimension === 'canceledDate') return [dateValue(row.canceledAt, 'canceled date')]
-  if (dimension === 'startedDate') return [dateValue(row.startedAt, 'started date')]
-  if (dimension === 'dueDate') return [dateValue(row.dueDate, 'due date')]
-  return [noValue('value')]
-}
-
-function metricValue(row: MyIssuesRowData, config: SavedViewInsightsConfig) {
-  if (config.measure === 'issueCount') return 1
-  const created = dateMs(row.createdAt)
-  if (config.measure === 'cycleTime') return elapsed(row.startedAt, row.completedAt)
-  if (config.measure === 'leadTime') return elapsed(row.createdAt, row.completedAt)
-  if (config.measure === 'issueAge') return row.completedAt || row.canceledAt ? null : Math.max(0, Date.now() - created)
-  const selected = config.timeInStatusIds
-  const intervals = row.statusIntervals?.filter(interval => !selected.length || selected.includes(interval.stateId) || Boolean(interval.stateType && selected.includes(`type:${interval.stateType}`))) ?? []
-  if (!intervals.length) return null
-  return intervals.reduce((total, interval) => total + Math.max(0, dateMs(interval.exitedAt) - dateMs(interval.enteredAt)), 0)
 }
 
 function measureOptions(data: BootstrapData, config: SavedViewInsightsConfig): InsightOption[] {
@@ -330,22 +289,16 @@ function segmentOptions(data: BootstrapData): InsightOption[] {
 }
 
 function measureLabel(value: SavedViewInsightMeasure) { return ({ issueCount: 'Issue count', cycleTime: 'Cycle time', leadTime: 'Lead time', issueAge: 'Issue age', timeInStatus: 'Time in status' })[value] }
-function insightColor(config: SavedViewInsightsConfig, segmentColor: string | undefined, sliceColor: string | undefined, index: number) { return config.colors === 'status' ? segmentColor || sliceColor || 'var(--data-vis-neutral)' : ['var(--data-vis-neutral)', 'var(--data-vis-1)', 'var(--data-vis-2)', 'var(--data-vis-3)', 'var(--data-vis-4)', 'var(--data-vis-5)'][index % 6] }
 function dimensionLabel(value: SavedViewInsightDimension, data: BootstrapData) { return findInsightOption(dimensionOptions(data, true), value)?.label ?? value }
-function insightValueLabel(t: (source: string) => string, dimension: SavedViewInsightDimension | 'none', label: string) { return dimension === 'status' || dimension === 'priority' || dimension === 'none' ? t(label) : label }
 function isMeasure(value: unknown): value is SavedViewInsightMeasure { return typeof value === 'string' && ['issueCount','cycleTime','leadTime','issueAge','timeInStatus'].includes(value) }
 function isDimension(value: unknown): value is SavedViewInsightDimension { return typeof value === 'string' && (['status','statusType','assignee','agent','agentSession','creator','priority','label','template','externalSource','project','initiative','projectLabel','cycle','addedToCycle','createdDate','completedDate','canceledDate','startedDate','dueDate','burnUp'].includes(value) || value.startsWith('labelGroup:') || value.startsWith('projectLabelGroup:')) }
 function findInsightOption(options: InsightOption[], value: string): InsightOption | undefined { for (const option of options) { if (option.id === value) return option; const child = findInsightOption(option.children ?? [], value); if (child) return child } }
-function noValue(kind: string): InsightValue { return { id: 'none', label: `No ${kind}` } }
-function dateValue(value: string | undefined, kind: string): InsightValue { return value ? { id: value.slice(0, 10), label: value.slice(0, 10) } : noValue(kind) }
-function dateMs(value: string | undefined) { const result = value ? Date.parse(value) : NaN; return Number.isFinite(result) ? result : Date.now() }
-function elapsed(start: string | undefined, end: string | undefined) { if (!start || !end) return null; return Math.max(0, dateMs(end) - dateMs(start)) }
-function titleCase(value: string) { return value ? value[0].toUpperCase() + value.slice(1).replaceAll(/([A-Z])/g, ' $1') : value }
 function toggleValue(values: string[], value: string) { return values.includes(value) ? values.filter(item => item !== value) : [...values, value] }
-function formatMetric(value: number, measure: SavedViewInsightMeasure) { if (measure === 'issueCount') return String(Math.round(value)); const minutes = Math.round(value / 60_000); if (minutes < 60) return `${minutes}m`; const hours = Math.round(minutes / 6) / 10; if (hours < 24) return `${hours}h`; return `${Math.round(hours / 2.4) / 10}d` }
 function exportInsightsCsv(insight: InsightData, config: SavedViewInsightsConfig, name: string) {
-  const headers = [dimensionLabelFallback(config.slice), measureLabel(config.measure), ...(config.segment === 'none' ? [] : insight.segments.map(segment => segment.label))]
-  const lines = [headers, ...insight.rows.map(row => [row.label, formatMetric(row.total, config.measure), ...(config.segment === 'none' ? [] : insight.segments.map(segment => formatMetric(row.segments[segment.id] ?? 0, config.measure)))])]
+  const latency = config.measure !== 'issueCount'
+  const aggregations = config.aggregations ?? (config.aggregation ? [config.aggregation] : ['median','p75','p95'] as const)
+  const headers = [dimensionLabelFallback(config.slice), 'Issue count', ...(latency ? aggregations.map(aggregation => `${measureLabel(config.measure)} (${aggregationLabels[aggregation]})`) : config.segment === 'none' ? [] : insight.segments.map(segment => segment.label))]
+  const lines = [headers, ...insight.rows.map(row => [row.label, latency ? row.values.length : row.total, ...(latency ? aggregations.map(aggregation => formatMetric(row.aggregations[aggregation] ?? 0, config.measure)) : config.segment === 'none' ? [] : insight.segments.map(segment => String(row.segments[segment.id] ?? 0)))])]
   const csv = lines.map(line => line.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n')
   const link = document.createElement('a')
   link.href = `data:text/csv;charset=utf-8,${encodeURIComponent(`\uFEFF${csv}`)}`

@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -13,6 +15,58 @@ import (
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
 )
+
+func TestInsightPagesCoverFullScopeWithBoundedResponses(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	data := repository.Bootstrap()
+	issues := make([]domain.Issue, 1101)
+	for i := range issues {
+		issue := data.Issues[0]
+		issue.ID = fmt.Sprintf("insight-%04d", i)
+		issue.Identifier = fmt.Sprintf("INSIGHT-%d", i)
+		issue.Title = "Insight pagination record"
+		issue.Description = "Description must not be included in insight pages"
+		issues[i] = issue
+	}
+	for start := 0; start < len(issues); start += 500 {
+		if err := repository.ImportIssues(t.Context(), data.Workspace.URLKey, issues[start:min(start+500, len(issues))]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	handler := newHandler(&server{store: repository, authDisabled: true, uploadPath: t.TempDir()})
+	type page struct {
+		store.IssueRecordPage
+		StatusIntervals map[string][]store.IssueStatusInterval `json:"statusIntervals"`
+	}
+	cursor := ""
+	seen := map[string]bool{}
+	for {
+		result := requestJSON[page](t, handler, "GET", "/api/issue-records?projection=list&includeStatusHistory=true&limit=500&q=Insight%20pagination%20record&cursor="+url.QueryEscape(cursor), nil, 200)
+		if len(result.Items) > 500 || len(result.StatusIntervals) != len(result.Items) {
+			t.Fatal("unbounded or missing insight metadata")
+		}
+		for _, issue := range result.Items {
+			if seen[issue.ID] || issue.Description != "" || !issue.IsSummary {
+				t.Fatal("duplicate or unbounded insight record")
+			}
+			seen[issue.ID] = true
+		}
+		if !result.HasMore {
+			break
+		}
+		if result.NextCursor == "" || result.NextCursor == cursor {
+			t.Fatal("invalid insight cursor")
+		}
+		cursor = result.NextCursor
+	}
+	if len(seen) != len(issues) {
+		t.Fatalf("insights truncated to visible records: %d", len(seen))
+	}
+}
 
 func TestDevelopmentDraftRetainsClientIDWithoutIssueHydration(t *testing.T) {
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
@@ -131,11 +185,23 @@ func TestIssueRecordsRespectPrivateTeamsAndSharedPermissions(t *testing.T) {
 	authRequest[domain.WorkspaceMembership](t, member, "POST", host.URL+"/api/invitations/accept", map[string]string{"token": invite[0].Token}, "", 200)
 	team := authRequest[domain.Team](t, admin, "POST", host.URL+"/api/workspaces/test-workspace/teams", map[string]any{"name": "Private record team", "key": "REC", "private": true}, "", 201)
 	issue := authRequest[domain.Issue](t, admin, "POST", host.URL+"/api/issue-records", map[string]any{"title": "Private record", "teamId": team.ID}, "test-workspace", 201)
+	type insightPage struct {
+		store.IssueRecordPage
+		StatusIntervals map[string][]store.IssueStatusInterval `json:"statusIntervals"`
+	}
+	insight := authRequest[insightPage](t, member, "GET", host.URL+"/api/issue-records?projection=list&includeStatusHistory=true&teamId="+team.ID, nil, "test-workspace", 200)
+	if len(insight.Items) != 0 || len(insight.StatusIntervals) != 0 {
+		t.Fatal("insight history leaked private issues")
+	}
 	authRequest[any](t, member, "GET", host.URL+"/api/issue-records/"+issue.ID, nil, "test-workspace", 404)
 	authRequest[any](t, member, "POST", host.URL+"/api/issue-records", map[string]any{"title": "Forbidden", "teamId": team.ID}, "test-workspace", 403)
 	permissions := authRequest[[]domain.IssuePermission](t, admin, "PUT", host.URL+"/api/issues/"+issue.ID+"/permissions", map[string]any{"permissions": []map[string]string{{"subjectType": "user", "subjectId": memberUser.ID, "role": "viewer"}}}, "test-workspace", 200)
 	_ = permissions
 	authRequest[domain.Issue](t, member, "GET", host.URL+"/api/issue-records/"+issue.ID, nil, "test-workspace", 200)
+	insight = authRequest[insightPage](t, member, "GET", host.URL+"/api/issue-records?projection=list&includeStatusHistory=true&teamId="+team.ID, nil, "test-workspace", 200)
+	if len(insight.Items) != 1 || len(insight.StatusIntervals[issue.ID]) == 0 || insight.Items[0].Description != "" {
+		t.Fatal("shared insight projection is incomplete or unbounded")
+	}
 	authRequest[any](t, member, "PATCH", host.URL+"/api/issue-records/"+issue.ID, map[string]string{"title": "Not allowed"}, "test-workspace", 403)
 }
 

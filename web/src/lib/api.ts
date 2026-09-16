@@ -317,16 +317,17 @@ export type IssueQueryInput = {
   groupBy?: string;
   groupValue?: string;
   includeTotal?: boolean;
+  includeStatusHistory?: boolean;
 };
 
-export function listIssueRecords(filters: IssueQueryInput = {}, signal?: AbortSignal): Promise<IssueQueryPage> {
+export function listIssueRecords(filters: IssueQueryInput = {}, signal?: AbortSignal, workspaceKey?: string): Promise<IssueQueryPage> {
   const params = new URLSearchParams()
   params.set('projection', 'list')
   for (const [key, value] of Object.entries(filters)) {
     if (value === undefined) continue
     params.set(key, key === 'filter' ? JSON.stringify(value) : Array.isArray(value) ? value.join(',') : String(value))
   }
-  return request<IssueQueryPage>(`/api/issue-records?${params}`, { signal })
+  return request<IssueQueryPage>(`/api/issue-records?${params}`, { signal, ...(workspaceKey ? { headers: { 'X-Workspace-Key': workspaceKey } } : {}) })
 }
 
 export type ProjectQueryPage = { items: Project[]; nextCursor?: string; hasMore: boolean; total: number }

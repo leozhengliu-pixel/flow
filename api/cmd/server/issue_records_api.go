@@ -95,6 +95,18 @@ func (s *server) listIssueRecords(w http.ResponseWriter, r *http.Request) {
 		issueRecordsError(w, err)
 		return
 	}
+	if r.URL.Query().Get("includeStatusHistory") == "true" {
+		intervals, err := s.store.IssueInsightIntervals(r.Context(), query.Workspace, page.Items, metadata.States)
+		if err != nil {
+			issueRecordsError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, struct {
+			store.IssueRecordPage
+			StatusIntervals map[string][]store.IssueStatusInterval `json:"statusIntervals"`
+		}{page, intervals})
+		return
+	}
 	writeJSON(w, http.StatusOK, page)
 }
 

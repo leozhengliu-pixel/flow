@@ -1,5 +1,7 @@
 .surface{position:relative;height:calc(100% - 44px);min-width:0;margin:8px 8px 8px 0;overflow:hidden;display:flex;flex-direction:column;background:var(--bg-panel);border:.5px solid var(--border);border-radius:12px;box-shadow:var(--shadow);color:var(--text);font-family:"Inter Variable","SF Pro Display",-apple-system,system-ui,"Segoe UI",sans-serif}
 .header{height:44px;flex:0 0 44px;display:flex;align-items:center;padding:0 8px;border-bottom:.5px solid var(--border)}
+.content[data-insights-open=true]>:first-child{margin-right:350px}
+@media(max-width:800px){.content[data-insights-open=true]>:first-child{margin-right:0}}
 .header h2{margin:0;padding:0 10px;font-size:13px;line-height:normal;font-weight:500;color:var(--theme-text-primary)}
 .mobileSidebarButton{display:none;width:32px;height:32px;padding:8px;border:0;border-radius:6px;background:transparent}
 .mobileSidebarButton span{display:block;width:14px;height:1px;margin:3px 0;background:var(--issue-muted)}

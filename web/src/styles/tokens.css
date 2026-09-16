@@ -506,3 +506,23 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   font-weight: 600;
 }
 :root{--filter-root-width:207px;--filter-menu-width:248px;--filter-display-width:301px;--filter-control-height:24px;--filter-chip-height:32px;--filter-popover-radius:12px}
+:root {
+  --insight-row-bg: lch(9.232% .85 272);
+  --insight-header-bg: lch(13.058% 1.3 272);
+  --insight-text: lch(90.826% 1.425 272);
+  --insight-header-text: lch(63.304% 1.425 272);
+  --insight-row-border: lch(22.193% 1.93 272);
+  --insight-header-border: lch(17.873% 1.93 272);
+  --insight-hover-bg: lch(11.424% 1.167 271.997);
+  --insight-hover-strong-bg: lch(14.171% 1.515 271.998);
+}
+:root[data-theme="light"] {
+  --insight-row-bg: lch(100% 0 282);
+  --insight-header-bg: lch(96.5% 0 282);
+  --insight-text: lch(20% 1 282);
+  --insight-header-text: lch(40% 1 282);
+  --insight-row-border: lch(91.9% 0 282);
+  --insight-header-border: lch(90.55% 0 282);
+  --insight-hover-bg: lch(98.233% 0 0);
+  --insight-hover-strong-bg: lch(95.475% 0 0);
+}
