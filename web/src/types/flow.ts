@@ -1621,6 +1621,7 @@ export interface InitiativeMutationInput {
   updateSchedule?: InitiativeUpdateSchedule;
 }
 export interface BootstrapData {
+  resourceDetailsOmitted?: boolean;
   issueCollectionPaged?: boolean;
   issueCollectionRevision?: number;
   issueHistoryCursors?: Record<string, { commentsCursor?: string; activitiesCursor?: string }>;

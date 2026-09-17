@@ -15,6 +15,17 @@ vi.mock('@/components/projects-page/project-target-date-picker', () => ({ Projec
 import { ProjectOverview } from './project-overview'
 
 describe('project overview workflow', () => {
+  it('hides disabled initiative and customer features including the properties menu', async () => {
+    const data=makeBootstrap()
+    data.workspaceSettings.featureFlags={...data.workspaceSettings.featureFlags,initiatives:false,'customer-requests':false}
+    const props={issueData:data,project:{...project,milestones:[],resources:[],customers:['Existing customer'],initiatives:['initiative']},projects:[project],initiatives:[{id:'initiative',name:'Hidden initiative',status:'planned'}],documents:[],projectStatuses:[project.status],projectUpdates:[],users:data.users,teams:data.teams,labels:[],labelGroups:[],projectIssues:[],save:vi.fn(),onTabChange:vi.fn(),integrationConnections:[],viewer:data.viewer} as unknown as ComponentProps<typeof ProjectOverview>
+    render(<I18nProvider><ProjectOverview {...props}/></I18nProvider>)
+    expect(screen.queryByText('Customers')).toBeNull()
+    expect(screen.queryByText('Initiatives')).toBeNull()
+    expect(screen.queryByText('Existing customer')).toBeNull()
+    await userEvent.click(screen.getByRole('button',{name:'More project properties'}))
+    expect(screen.queryByText('Initiatives')).toBeNull()
+  })
   it('edits project fields, navigates updates, and creates scoped resources', async () => {
     const user = userEvent.setup()
     const data = makeBootstrap()

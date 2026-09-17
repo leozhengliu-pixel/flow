@@ -733,7 +733,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /uploads/{name}", s.serveUpload)
 
 	handler := s.withStaticFiles(boundedLegacyIssueWrites(s.authenticate(mux)))
-	return requestLog(s.cors(requestBodyBudget(handler)))
+	return requestLog(s.cors(compressAPIResponses(requestBodyBudget(handler))))
 }
 
 func (s *server) withStaticFiles(next http.Handler) http.Handler {
@@ -793,6 +793,10 @@ func (s *server) defaultWorkspaceRegion() string {
 }
 
 func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Flow-Projection") == "issue-detail" {
+		s.issueRecordsBootstrap(w, r)
+		return
+	}
 	s.maintainCycleSchedule(r.Context(), workspaceKey(r))
 	s.maintainAdvancedSchedules(r.Context(), workspaceKey(r))
 	ctx, release, err := s.store.BeginWorkspaceRead(r.Context(), workspaceKey(r))
@@ -4908,6 +4912,9 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		changes["projectMilestone"] = *input.ProjectMilestoneID
 	}
 	if input.CycleID != nil {
+		if *input.CycleID != "" && !data.CycleSettings[issue.Team.ID].Enabled {
+			return nil, fmt.Errorf("%w: cycles are disabled for this team", errInvalid)
+		}
 		if *input.CycleID == "" {
 			issue.CycleID = nil
 		} else {
@@ -5380,6 +5387,12 @@ func defaultProjectStatus(data *domain.Bootstrap) domain.ProjectStatus {
 	return domain.ProjectStatus{ID: "project_status_backlog", Name: "Backlog", Color: "#6b6f76", Type: "backlog"}
 }
 func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input domain.ProjectMutationInput) error {
+	if enabled, configured := data.WorkspaceSettings.FeatureFlags["initiatives"]; configured && !enabled && len(input.Initiatives) > 0 {
+		return fmt.Errorf("%w: initiatives are disabled", errInvalid)
+	}
+	if enabled, configured := data.WorkspaceSettings.FeatureFlags["customer-requests"]; configured && !enabled && len(input.Customers) > 0 {
+		return fmt.Errorf("%w: customer requests are disabled", errInvalid)
+	}
 	if input.Name != nil {
 		if strings.TrimSpace(*input.Name) == "" {
 			return errInvalid

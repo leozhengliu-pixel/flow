@@ -282,24 +282,24 @@ export function setTeamMembership(
     jsonRequest("PUT", { member, role }),
   );
 }
-export type BootstrapProjection = 'project-list'
+export type BootstrapProjection = 'project-list' | 'issue-detail'
 
-export function fetchBootstrap(workspaceKey?: string, projection?: BootstrapProjection): Promise<BootstrapData> {
-  if (import.meta.env.VITE_PAGED_ISSUES === 'true') return fetchPagedBootstrap(workspaceKey, projection)
+export function fetchBootstrap(workspaceKey?: string, projection?: BootstrapProjection, signal?: AbortSignal): Promise<BootstrapData> {
+  if (projection === 'issue-detail' || import.meta.env.VITE_PAGED_ISSUES === 'true') return fetchPagedBootstrap(workspaceKey, projection, signal)
   const headers: Record<string, string> = {}
   if (workspaceKey) headers['X-Workspace-Key'] = workspaceKey
   if (projection) headers['X-Flow-Projection'] = projection
   return request<BootstrapData>(
     "/api/bootstrap",
-    Object.keys(headers).length ? { headers } : undefined,
+    { headers, signal },
   ).then(normalizeBootstrapData);
 }
 
-export function fetchPagedBootstrap(workspaceKey?: string, projection?: BootstrapProjection): Promise<BootstrapData> {
+export function fetchPagedBootstrap(workspaceKey?: string, projection?: BootstrapProjection, signal?: AbortSignal): Promise<BootstrapData> {
   const headers: Record<string, string> = {}
   if (workspaceKey) headers['X-Workspace-Key'] = workspaceKey
   if (projection) headers['X-Flow-Projection'] = projection
-  return request<BootstrapData>('/api/issue-records/bootstrap', Object.keys(headers).length ? { headers } : undefined).then(normalizeBootstrapData)
+  return request<BootstrapData>('/api/issue-records/bootstrap', {headers, signal}).then(normalizeBootstrapData)
 }
 export type IssueQueryInput = {
   q?: string;

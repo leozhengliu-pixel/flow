@@ -20,6 +20,7 @@ import { getSlashCommandState, SlashCommandExtension, type SlashCommandState } f
 import { SlashCommandMenu, type EditorCommand } from './editor/slash-command-menu'
 import { filterEditorCommands } from './editor/editor-commands'
 import { SelectionToolbar } from './editor/selection-toolbar'
+import { structuredBlocks, type DescriptionSelectionActions } from './editor/structured-blocks'
 import { MentionExtension } from './editor/mention-extension'
 import { MentionMenu } from './editor/mention-menu'
 import { useI18n } from '@/i18n/i18n'
@@ -30,6 +31,7 @@ import { clearDescriptionRecovery, descriptionRecoveryKey, downloadDescriptionRe
 import './issue-description-editor.css'
 
 interface DescriptionEditorProps {
+  selectionActions?: DescriptionSelectionActions
   value: string
   loading?: boolean
   state?: string
@@ -63,7 +65,7 @@ export function IssueDescriptionEditor(props: DescriptionEditorProps) {
   return <DescriptionEditorSession key={sessionKey} {...props}/>
 }
 
-function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, editorRef, className, collaboration, placeholder = 'Add description...', ariaLabel, users = [] }: DescriptionEditorProps) {
+function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, editorRef, className, collaboration, selectionActions, placeholder = 'Add description...', ariaLabel, users = [] }: DescriptionEditorProps) {
   const { t } = useI18n()
   const descriptionLabel = ariaLabel ?? t('Issue description')
   const initial = useMemo(() => parseDescriptionContent(value, state), []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -138,6 +140,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       // transactions. In a CRDT that would accumulate one paragraph per reader.
       StarterKit.configure({ heading: { levels: [2, 3] }, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: collaborationSession ? false : undefined, trailingNode: collaborationSession ? false : undefined }),
       TableKit.configure({ table: { resizable: true } }),
+      ...structuredBlocks,
       Placeholder.configure({ placeholder }),
       Markdown,
       MentionExtension,
@@ -230,6 +233,29 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     onSelectionUpdate: ({ editor: current }) => { syncSlashState(current); syncMentionState(current) },
     onBlur: () => { setSlash(closedSlash); mentionRef.current = closedMention; setMention(closedMention); if (collaborationSession) void persistRef.current(); onBlur?.() },
   })
+
+  useEffect(() => {
+    if (!editor || !collaboration?.issueId) return
+    const reveal = (event: Event) => {
+      const selection = (event as CustomEvent<{issueId:string;text:string;from:number;to:number}>).detail
+      if (selection.issueId !== collaboration.issueId || !selection.text) return
+      const doc = editor.state.doc
+      let from = selection.from, to = selection.to
+      if (!(from >= 0 && to <= doc.content.size && from < to && doc.textBetween(from,to,'\n') === selection.text)) {
+        let text = ''; const positions:number[] = []
+        doc.descendants((node,pos) => {
+          if (node.isTextblock && text) { text += '\n'; positions.push(pos) }
+          if (node.isText) { for (let index=0;index<(node.text?.length??0);index++) positions.push(pos+index); text += node.text }
+        })
+        const index = text.indexOf(selection.text)
+        if (index < 0) return
+        from = positions[index]; to = positions[index+selection.text.length-1]+1
+      }
+      editor.chain().focus().setTextSelection({from,to}).scrollIntoView().run()
+    }
+    window.addEventListener('flow-reveal-description-selection', reveal)
+    return () => window.removeEventListener('flow-reveal-description-selection', reveal)
+  }, [editor, collaboration?.issueId])
 
   persistRef.current = async () => {
     if (!editor || !collaborationSession || !collaboration || blockedRef.current || revisionRef.current === savedRevisionRef.current) return
@@ -417,7 +443,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       {blockedRef.current && <button type="button" onClick={() => window.location.reload()}>{t('Reload latest version')}</button>}
     </div>}
     <EditorContent editor={editor}/>
-    <BubbleMenu editor={editor} shouldShow={({ from, to, editor: current }) => from !== to && !current.isActive('codeBlock')}><SelectionToolbar editor={editor}/></BubbleMenu>
+    <BubbleMenu editor={editor} options={{placement:'top',offset:6,shift:{padding:12},flip:true}} shouldShow={({ from, to, editor: current }) => from !== to && !current.isActive('codeBlock')}><SelectionToolbar editor={editor} actions={selectionActions}/></BubbleMenu>
     {slash.active && <SlashCommandMenu
       commands={filteredCommands}
       selectedIndex={selectedIndex}
@@ -433,6 +459,7 @@ function schemaExtensions() {
   return [
     StarterKit.configure({ heading: { levels: [2, 3] }, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: false, trailingNode: false }),
     TableKit.configure({ table: { resizable: true } }),
+    ...structuredBlocks,
     Markdown,
     MentionExtension,
     SlashCommandExtension,

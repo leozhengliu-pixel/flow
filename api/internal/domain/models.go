@@ -1642,6 +1642,7 @@ type NotificationList struct {
 }
 
 type Bootstrap struct {
+	ResourceDetailsOmitted        bool                               `json:"resourceDetailsOmitted,omitempty"`
 	ProviderJobs                  []ProviderJob                      `json:"providerJobs,omitempty"`
 	NextIssueNumber               int                                `json:"-"`
 	IssueCollectionPaged          bool                               `json:"issueCollectionPaged,omitempty"`
