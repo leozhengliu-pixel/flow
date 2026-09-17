@@ -30,7 +30,7 @@ export async function request<T>(url: string, init?: RequestInit): Promise<T> {
 	const response = await apiFetch(url, init)
 	if (!response.ok) {
 		const payload = await response.json().catch(() => null)
-		throw new ApiError(payload?.error || `Request failed: ${response.status}`, response.status, payload?.code, payload?.current)
+		throw new ApiError(payload?.error_description || payload?.error || `Request failed: ${response.status}`, response.status, payload?.code ?? payload?.error, payload?.current)
 	}
 	if (response.status === 204) return undefined as T
 	return response.json()
