@@ -2,12 +2,13 @@ import { useEffect } from 'react'
 import { Markdown } from '@tiptap/markdown'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import { structuredBlocks } from '@/components/issue/editor/structured-blocks'
 
 export function AgentRichText({ ariaLabel = 'AI message', className, content }: { ariaLabel?: string; className: string; content: string }) {
   const editor = useEditor({
     immediatelyRender: false,
     editable: false,
-    extensions: [StarterKit, Markdown],
+    extensions: [StarterKit, Markdown, ...structuredBlocks],
     content: content || ' ',
     contentType: 'markdown',
     editorProps: { attributes: { class: className, role: 'document', 'aria-label': ariaLabel } },

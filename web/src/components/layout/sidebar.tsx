@@ -1,29 +1,25 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { SidebarTeamMenu } from './sidebar-team-menu';
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
 import { teamHierarchy } from '@/lib/team-hierarchy';
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Select from "@radix-ui/react-select";
 import {
-  Archive,
-  Bell,
   BookOpen,
   Check,
   CircleCheck,
   CircleHelp,
   Copy,
-  ChevronRight,
   Download,
   Folder,
   FolderOpen,
   Keyboard,
-  LogOut,
   MessageCircle,
   MessageCircleQuestion,
   MoreHorizontal,
   Plus,
   Search,
   Settings,
-  Star,
   X,
 } from "lucide-react";
 import {
@@ -46,11 +42,8 @@ import { sidebarRoutePath } from '@/lib/sidebar-route';
 import { toast } from "sonner";
 import { favoriteResourceKey, patchFavorite, toggleFavoriteFor } from "@/lib/favorites";
 import {
-  addSubscription,
   createFavoriteFolder,
   deleteFavoriteFolder,
-  removeSubscription,
-  setTeamMembership,
   updateFavorite,
   updateFavoriteFolder,
 } from "@/lib/api";
@@ -61,7 +54,6 @@ import { DocumentGlyph } from "@/components/documents/document-icon";
 import {
   CycleIcon as FlowCycleIcon,
   StatusIcon,
-  SlackIcon as FlowSlackIcon,
 } from "@/components/issue/issue-icons";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { WorkspaceMenu } from "@/components/workspace/workspace-menu";
@@ -91,7 +83,6 @@ import {
   releasePath,
   reviewsPath,
   settingsPath,
-  teamArchivePath,
   teamCyclesPath,
   teamHomePath,
   teamInitiativesPath,
@@ -175,6 +166,7 @@ export function Sidebar({
   onSwitchWorkspace,
   onCreateWorkspace,
   onLogout,
+  onReload,
 }: {
   account: AccountBootstrap;
   data: BootstrapData;
@@ -188,6 +180,7 @@ export function Sidebar({
   onSwitchWorkspace: (workspace: Workspace) => void;
   onCreateWorkspace: () => void;
   onLogout: () => Promise<void>;
+  onReload?: () => Promise<void>;
 }) {
   const layout = useSidebarLayout(open, onOpenChange);
   const currentLocation = useLocation();
@@ -232,8 +225,6 @@ export function Sidebar({
   }, [data.teamMembers, data.teamParents, data.teams, data.teamSettings, data.viewer.id]);
   const currentCycleTeamIds = useMemo(() => new Set(data.cycles.filter(cycle => cycle.status === "current").map(cycle => cycle.teamId)), [data.cycles]);
   const upcomingCycleTeamIds = useMemo(() => new Set(data.cycles.filter(cycle => cycle.status === "upcoming").map(cycle => cycle.teamId)), [data.cycles]);
-  const favoriteTeamIds = useMemo(() => new Set(favorites.filter(item => item.userId === data.viewer.id && item.resourceType === "team").map(item => item.resourceId)), [data.viewer.id, favorites]);
-  const subscriptionByTeamId = useMemo(() => new Map(data.subscriptions.filter(item => item.userId === data.viewer.id && item.resourceType === "team").map(item => [item.resourceId, item])), [data.subscriptions, data.viewer.id]);
 
   useEffect(
     () =>
@@ -326,7 +317,7 @@ export function Sidebar({
     resourceType: string,
     resourceId: string,
   ) => {
-    void toggleFavoriteFor(data, resourceType, resourceId);
+    void toggleFavoriteFor(data, resourceType, resourceId).catch(() => undefined);
   };
   const moveSidebarFavorite = async (
     favorite: Favorite,
@@ -723,9 +714,10 @@ export function Sidebar({
           >
             <div className="sidebar-team-list">
               {sidebarTeams.map(({team, depth}) => {
-                const subscription = subscriptionByTeamId.get(team.id);
                 return (
                   <div key={team.id} style={{paddingInlineStart: Math.min(depth, 4) * 12, minWidth: 0}}><TeamNavigation
+                    data={data}
+                    onReload={onReload}
                     key={team.id}
                     cyclesEnabled={Boolean(
                       data.cycleSettings[team.id]?.enabled,
@@ -738,27 +730,9 @@ export function Sidebar({
                     }
                     team={team}
                     activeIssues={navigationRoute.kind === 'team-issues' && navigationRoute.teamKey.toLowerCase() === team.key.toLowerCase()}
-                    favorite={favoriteTeamIds.has(team.id)}
-                    subscribed={Boolean(subscription)}
-                    subscriptionEvents={subscription?.events}
-                    onSubscriptionEvents={async (events) => {
-                      if (events.length) {
-                        await addSubscription("team", team.id, events);
-                      } else {
-                        await removeSubscription("team", team.id);
-                      }
-                      await refreshResourcePreferences(data.workspace.urlKey);
-                    }}
-                    viewerId={data.viewer.id}
-                    canLeave={
-                      sidebarTeams.length > 1
-                    }
                     workspaceSlug={workspaceSlug}
                     page={page}
                     onNavigate={close}
-                    onFavoriteToggle={() =>
-                      void toggleSidebarFavorite("team", team.id)
-                    }
                   /></div>
                 );
               })}
@@ -1487,20 +1461,10 @@ function Section({
   );
 }
 
-const TEAM_SUBSCRIPTION_OPTIONS = [
-  ["issueAdded", "An issue is added to the team"],
-  ["issueCompleted", "An issue is marked completed or canceled"],
-  ["triage", "An issue is added to the triage queue"],
-  ["pulse", "A team project update is posted"],
-] as const;
-
-function initialTeamSubscriptionEvents(subscribed: boolean, events?: string[]) {
-  if (!subscribed) return [];
-  if (!events?.length) return ["pulse"];
-  return events.map((event) => (event === "updates" ? "pulse" : event));
-}
 
 function TeamNavigation({
+  data,
+  onReload,
   team,
   workspaceSlug,
   page,
@@ -1509,15 +1473,10 @@ function TeamNavigation({
   current,
   upcoming,
   initiativesEnabled,
-  favorite: initialFavorite,
-  subscribed: initialSubscribed,
-  subscriptionEvents: initialSubscriptionEvents,
-  onSubscriptionEvents,
-  viewerId,
-  canLeave,
   onNavigate,
-  onFavoriteToggle,
 }: {
+  data: BootstrapData;
+  onReload?: () => Promise<void>;
   team: Team;
   workspaceSlug: string;
   page: PageId | "not-found";
@@ -1526,44 +1485,12 @@ function TeamNavigation({
   current: boolean;
   upcoming: boolean;
   initiativesEnabled: boolean;
-  favorite: boolean;
-  subscribed: boolean;
-  subscriptionEvents?: string[];
-  onSubscriptionEvents: (events: string[]) => Promise<void>;
-  viewerId: string;
-  canLeave: boolean;
   onNavigate: () => void;
-  onFavoriteToggle: () => void;
 }) {
   const [expanded, setExpanded] = useState(() =>
     readExpandedSection(`team.${team.id}`),
   );
-  const [favorite, setFavorite] = useState(initialFavorite),
-    [subscriptionEvents, setSubscriptionEvents] = useState(() =>
-      initialTeamSubscriptionEvents(initialSubscribed, initialSubscriptionEvents),
-    ),
-    [query, setQuery] = useState("");
-  useEffect(
-    () => persistPreference(`flow.sidebar.section.team.${team.id}`, expanded),
-    [expanded, team.id],
-  );
-  useEffect(() => {
-    setSubscriptionEvents(
-      initialTeamSubscriptionEvents(initialSubscribed, initialSubscriptionEvents),
-    );
-  }, [initialSubscribed, initialSubscriptionEvents, team.id]);
-  const updateSubscriptionEvent = async (event: string, checked: boolean) => {
-    const previous = subscriptionEvents;
-    const next = checked
-      ? [...new Set([...previous, event])]
-      : previous.filter((value) => value !== event);
-    setSubscriptionEvents(next);
-    try {
-      await onSubscriptionEvents(next);
-    } catch {
-      setSubscriptionEvents(previous);
-    }
-  };
+  useEffect(() => persistPreference(`flow.sidebar.section.team.${team.id}`, expanded), [expanded, team.id]);
   const overviewPath = teamHomePath(workspaceSlug, team.key);
   const onOverview =
     typeof location !== "undefined" && location.pathname === overviewPath;
@@ -1582,168 +1509,9 @@ function TeamNavigation({
             <TeamDisclosureIcon />
           </span>
         </button>
-        <DropdownMenu.Root
-          onOpenChange={(open) => {
-            if (!open) setQuery("");
-          }}
-        >
-          <DropdownMenu.Trigger asChild>
-            <button
-              className="team-menu-trigger"
-              type="button"
-              aria-label="Team menu"
-            >
-              <TeamMenuIcon />
-            </button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content data-flow-motion="floating"
-              className="sidebar-popover sidebar-team-menu"
-              side="right"
-              align="start"
-              sideOffset={-24}
-            >
-              <div className="sidebar-team-menu-search">
-                <Search />
-                <input
-                  aria-label="Filter…"
-                  autoFocus
-                  placeholder="Filter…"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-              </div>
-              {menuMatches(query, "Favorite") && (
-                <DropdownMenu.Item
-                  onSelect={() => {
-                    setFavorite((value) => !value);
-                    onFavoriteToggle();
-                  }}
-                >
-                  <Star fill={favorite ? "currentColor" : "none"} />
-                  <span>{favorite ? "Unfavorite" : "Favorite"}</span>
-                  <kbd>⌥ F</kbd>
-                </DropdownMenu.Item>
-              )}
-              <DropdownMenu.Separator />
-              {menuMatches(query, "Team settings") && (
-                <DropdownMenu.Item asChild>
-                  <NavLink to={settingsPath(workspaceSlug, "team", team.key)}>
-                    <Settings />
-                    <span>Team settings</span>
-                  </NavLink>
-                </DropdownMenu.Item>
-              )}
-              {menuMatches(query, "Copy URL") && (
-                <DropdownMenu.Item
-                  onSelect={() =>
-                    void navigator.clipboard.writeText(
-                      `${location.origin}${teamHomePath(workspaceSlug, team.key)}`,
-                    )
-                  }
-                >
-                  <Copy />
-                  <span>Copy URL</span>
-                  <kbd>⌘ ⇧ ,</kbd>
-                </DropdownMenu.Item>
-              )}
-              {menuMatches(query, "Open archive") && (
-                <DropdownMenu.Item asChild>
-                  <NavLink to={teamArchivePath(workspaceSlug, team.key)}>
-                    <Archive />
-                    <span>Open archive</span>
-                  </NavLink>
-                </DropdownMenu.Item>
-              )}
-              <DropdownMenu.Separator />
-              {menuMatches(query, "Subscribe") && (
-                <DropdownMenu.Sub>
-                  <DropdownMenu.SubTrigger>
-                    <Bell />
-                    <span>Subscribe</span>
-                    <ChevronRight className="menu-chevron" />
-                  </DropdownMenu.SubTrigger>
-                  <DropdownMenu.Portal>
-                    <DropdownMenu.SubContent data-flow-motion="floating"
-                      className="sidebar-popover sidebar-team-subscribe-menu"
-                      sideOffset={-2}
-                    >
-                      <DropdownMenu.Label>Inbox notifications</DropdownMenu.Label>
-                      {TEAM_SUBSCRIPTION_OPTIONS.slice(0, 3).map(([event, label]) => (
-                        <DropdownMenu.CheckboxItem
-                          checked={subscriptionEvents.includes(event)}
-                          key={event}
-                          onCheckedChange={(checked) =>
-                            void updateSubscriptionEvent(event, checked)
-                          }
-                          onSelect={(event) => event.preventDefault()}
-                        >
-                          <span className="sidebar-team-subscribe-check">
-                            <DropdownMenu.ItemIndicator>
-                              <Check size={10} />
-                            </DropdownMenu.ItemIndicator>
-                          </span>
-                          <span>{label}</span>
-                        </DropdownMenu.CheckboxItem>
-                      ))}
-                      <DropdownMenu.Label>Pulse updates</DropdownMenu.Label>
-                      <DropdownMenu.CheckboxItem
-                        checked={subscriptionEvents.includes("pulse")}
-                        onCheckedChange={(checked) =>
-                          void updateSubscriptionEvent("pulse", checked)
-                        }
-                        onSelect={(event) => event.preventDefault()}
-                      >
-                        <span className="sidebar-team-subscribe-check">
-                          <DropdownMenu.ItemIndicator>
-                            <Check size={10} />
-                          </DropdownMenu.ItemIndicator>
-                        </span>
-                        <span>A team project update is posted</span>
-                      </DropdownMenu.CheckboxItem>
-                    </DropdownMenu.SubContent>
-                  </DropdownMenu.Portal>
-                </DropdownMenu.Sub>
-              )}
-              {menuMatches(query, "Configure Slack notifications") && (
-                <DropdownMenu.Item asChild>
-                  <NavLink
-                    to={settingsPath(
-                      workspaceSlug,
-                      "team",
-                      team.key,
-                      "notifications",
-                    )}
-                  >
-                    <SidebarSlackIcon />
-                    <span>Configure Slack notifications…</span>
-                  </NavLink>
-                </DropdownMenu.Item>
-              )}
-              <DropdownMenu.Separator />
-              <DropdownMenu.Item
-                disabled={!canLeave}
-                title={
-                  !canLeave
-                    ? "You should be a member of at least one active team"
-                    : undefined
-                }
-                onSelect={() =>
-                  canLeave &&
-                  void setTeamMembership(
-                    workspaceSlug,
-                    team.id,
-                    viewerId,
-                    false,
-                  )
-                }
-              >
-                <LogOut />
-                <span>Leave team…</span>
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+        <SidebarTeamMenu data={data} team={team} onReload={onReload}>
+          <button className="team-menu-trigger" type="button" aria-label="Team menu"><TeamMenuIcon/></button>
+        </SidebarTeamMenu>
       </div>
       <AnimatedCollapse open={expanded} className="team-links">
           <Nav
@@ -2876,9 +2644,6 @@ function TeamMenuIcon() {
     </svg>
   );
 }
-function SidebarSlackIcon() {
-  return <FlowSlackIcon className="slack-icon" />;
-}
 function NewsDot() {
   return <span className="news-dot" aria-hidden="true" />;
 }
@@ -2909,10 +2674,5 @@ function persistPreference(key: string, value: unknown) {
 }
 function openExternal(url: string) {
   window.open(url, "_blank", "noopener,noreferrer");
-}
-function menuMatches(query: string, label: string) {
-  return (
-    !query.trim() || label.toLowerCase().includes(query.trim().toLowerCase())
-  );
 }
 import { AnimatedCollapse, AnimatedList } from '@/components/ui/motion';

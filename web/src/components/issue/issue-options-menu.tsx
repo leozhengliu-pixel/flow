@@ -260,14 +260,14 @@ export function IssueOptionsMenu({
             <Command.List>
               <Command.Empty className="issue-options-empty">{t('No results')}</Command.Empty>
               <Option icon={<CalendarIcon/>} label="Due date" shortcut="Shift D" nested="due" anchor={anchors.due} expanded={datePickerOpen} onHover={() => openNested('due')} onSelect={() => openNested('due', true)}/>
-              <Option icon={<ReleasesIcon/>} label="Release" shortcut="Option R" nested="release" anchor={anchors.release} expanded={submenu === 'release'} onHover={() => openNested('release')} onSelect={() => openNested('release', true)}/>
+              {data?.workspaceSettings.featureFlags.releases !== false && <Option icon={<ReleasesIcon/>} label="Release" shortcut="Option R" nested="release" anchor={anchors.release} expanded={submenu === 'release'} onHover={() => openNested('release')} onSelect={() => openNested('release', true)}/>}
               <Option icon={<Link/>} label="Add link..." shortcut="Ctrl L" onSelect={beginAddLink}/>
-              <Option icon={<UserRoundPlus/>} label="Add customer request..." shortcut="Ctrl R" onSelect={() => {
+              {data?.workspaceSettings.featureFlags['customer-requests'] !== false && <Option icon={<UserRoundPlus/>} label="Add customer request..." shortcut="Ctrl R" onSelect={() => {
                 setCustomerId(data?.customers[0]?.id ?? '')
                 setCustomerName('')
                 setCustomerBody(issue.title)
                 openDialog('customer')
-              }}/>
+              }}/>}
               {Boolean(data?.reviews.length) && <Option icon={<GitPullRequest/>} label="Add pull request..." onSelect={() => { setReviewQuery(''); openDialog('review') }}/>}
               <Option icon={<FilePlus2/>} label="Add document..." onSelect={() => actions && void perform(actions.addDocument, 'Document created')}/>
               <Separator/>
@@ -288,10 +288,10 @@ export function IssueOptionsMenu({
               <Option icon={<Bell/>} label="Remind me" shortcut="Shift H" nested="remind" anchor={anchors.remind} expanded={submenu === 'remind'} onHover={() => { if (actions) openNested('remind') }} onSelect={() => actions ? openNested('remind', true) : (closeMenu(), onRemind?.())}/>
               {data?.viewer.id && issue.creator.id !== data.viewer.id && <Option icon={<Bell/>} label={subscribed ? 'Unsubscribe' : 'Subscribe'} shortcut="Shift S" onSelect={toggleSubscription}/>}
               <Separator/>
-              <Option icon={<Repeat2/>} label="Run loop…" onSelect={() => {
+              {data?.workspaceSettings.featureFlags.loops !== false && <Option icon={<Repeat2/>} label="Run loop…" onSelect={() => {
                 setLoopPrompt(issue.description)
                 openDialog('loop')
-              }}/>
+              }}/>}
               <Separator/>
               <Option icon={<History/>} label="Show description history" onSelect={() => {
                 if (onShowDescriptionHistory && !actions) {

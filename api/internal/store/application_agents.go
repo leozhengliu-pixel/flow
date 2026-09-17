@@ -26,8 +26,6 @@ func (s *SQLiteStore) ensureApplicationAgents(ctx context.Context) error {
 		`CREATE TABLE IF NOT EXISTS application_installations (id VARCHAR(191) PRIMARY KEY,workspace_key VARCHAR(191) NOT NULL,client_id VARCHAR(191) NOT NULL,user_id VARCHAR(191) NOT NULL UNIQUE,data ` + blob + ` NOT NULL,webhook_secret TEXT NOT NULL,UNIQUE(workspace_key,client_id))`,
 		`CREATE TABLE IF NOT EXISTS application_agent_tasks (id VARCHAR(191) PRIMARY KEY,workspace_key VARCHAR(191) NOT NULL,issue_id VARCHAR(191) NOT NULL,app_user_id VARCHAR(191) NOT NULL,status VARCHAR(32) NOT NULL,version BIGINT NOT NULL,data ` + blob + ` NOT NULL,lease_until VARCHAR(64) NOT NULL DEFAULT '',next_attempt VARCHAR(64) NOT NULL DEFAULT '',attempts INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE TABLE IF NOT EXISTS application_agent_activities (session_id VARCHAR(191) NOT NULL,id VARCHAR(191) NOT NULL,data ` + blob + ` NOT NULL,created_at VARCHAR(64) NOT NULL,PRIMARY KEY(session_id,id))`,
-		`CREATE INDEX IF NOT EXISTS application_agent_issue ON application_agent_tasks(workspace_key,issue_id)`,
-		`CREATE INDEX IF NOT EXISTS application_agent_pending ON application_agent_tasks(status,next_attempt)`,
 	} {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
 			return err
@@ -37,10 +35,15 @@ func (s *SQLiteStore) ensureApplicationAgents(ctx context.Context) error {
 		return err
 	}
 	for _, statement := range []string{
+		`CREATE INDEX IF NOT EXISTS application_agent_issue ON application_agent_tasks(workspace_key,issue_id)`,
+		`CREATE INDEX IF NOT EXISTS application_agent_pending ON application_agent_tasks(status,next_attempt)`,
 		`CREATE INDEX IF NOT EXISTS application_agent_resource_created ON application_agent_tasks(workspace_key,issue_id,created_at)`,
 		`CREATE INDEX IF NOT EXISTS application_agent_owner_created ON application_agent_tasks(workspace_key,app_user_id,created_at)`,
 	} {
-		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+		if s.dialect == "mysql" {
+			statement = strings.Replace(statement, "CREATE INDEX IF NOT EXISTS", "CREATE INDEX", 1)
+		}
+		if _, err := s.db.ExecContext(ctx, statement); err != nil && !(s.dialect == "mysql" && isDuplicateIndex(err)) {
 			return err
 		}
 	}

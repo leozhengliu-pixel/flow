@@ -1316,9 +1316,9 @@
   width: min(920px, calc(100vw - 24px));
 }
 .lp-new-project__form {
-  background: var(--theme-surface-1);
+  background: var(--theme-surface-2);
   border-radius: 12px 12px 7px 7px;
-  box-shadow: 0 0 0 .5px var(--border-strong) inset, var(--shadow);
+  box-shadow: none;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -1344,8 +1344,8 @@
   min-width: 0;
   height: 100%;
   border-radius: 12px 12px 7px 7px;
-  background: var(--theme-surface-1);
-  box-shadow: 0 0 0 .5px var(--border-strong) inset, var(--shadow);
+  background: var(--theme-surface-2);
+  box-shadow: none;
 }
 .lp-new-project--agent-open .project-creation-agent {
   flex: 0 0 400px;

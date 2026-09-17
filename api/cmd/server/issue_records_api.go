@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"slices"
@@ -111,6 +112,7 @@ func (s *server) listIssueRecords(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) issueRecordsBootstrap(w http.ResponseWriter, r *http.Request) {
+	started := time.Now()
 	key := workspaceKey(r)
 	var data domain.Bootstrap
 	if s.authDisabled {
@@ -141,11 +143,14 @@ func (s *server) issueRecordsBootstrap(w http.ResponseWriter, r *http.Request) {
 	}
 	if projectListBootstrapRequested(r) {
 		store.ProjectListBootstrapProjection(&data)
+	} else if r.Header.Get("X-Flow-Projection") == "issue-detail" {
+		store.IssueDetailBootstrapProjection(&data)
 	} else if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
 		issueRecordsError(w, err)
 		return
 	}
 	sanitizeBootstrap(&data)
+	w.Header().Set("Server-Timing", fmt.Sprintf("bootstrap;dur=%.2f", float64(time.Since(started).Microseconds())/1000))
 	writeJSON(w, 200, data)
 }
 

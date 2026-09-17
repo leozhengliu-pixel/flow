@@ -231,6 +231,16 @@
 .project-overview__resource > button { position: absolute; top: 2px; right: 1px; width: 24px; height: 24px; display: grid; place-items: center; padding: 0 2px; border: 0; border-radius: 9999px; background: var(--pd-control); color: var(--pd-copy); opacity: 0; }
 .project-overview__resource:hover a { background: var(--pd-control); }
 .project-overview__resource-menu { width: 205px; min-width: 205px; }
+.project-overview__resources { grid-template-columns: 68px minmax(0,1fr); }
+.project-overview__resources > .project-overview__row-content { row-gap: 0; }
+.project-overview__resource a > svg:first-child { color: var(--text); }
+.project-overview__resource a .project-resource-external { width: 0; flex: 0 0 0; opacity: 0; margin-left: -4px; transition: width 150ms, flex-basis 150ms, opacity 150ms; }
+.project-overview__resource:hover a .project-resource-external,
+.project-overview__resource:focus-within a .project-resource-external { width: 14px; flex-basis: 14px; opacity: 1; margin-left: 0; }
+.project-overview__resource:focus-within > button { opacity: 1; }
+.project-overview__resource > button { position:static;width:0;flex:0 0 0;overflow:hidden;padding:0; }
+.project-overview__resource:hover > button,.project-overview__resource:focus-within > button { width:24px;flex-basis:24px; }
+.project-overview__inline-add.project-resource-add { width: 28px; flex: 0 0 28px; justify-content: center; padding: 0; border-radius: 9999px; }
 .project-overview__resource-menu [role=label] { display: none; }
 .project-overview__latest { min-height: 66px; display: flex; align-items: center; margin: 16px -16px 38px; }
 .project-overview__first-update { display: flex; align-items: center; justify-content: center; gap: 7px; border: .5px solid var(--pd-card-border); background: transparent; color: var(--pd-label); font-size: 13px; font-weight: 500; width: fit-content; min-height: 32px; margin: 0 auto; padding: 0 12px 0 10px; border-color: transparent; border-radius: 9999px; }

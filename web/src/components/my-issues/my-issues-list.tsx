@@ -37,6 +37,8 @@ export interface MyIssuesRowPropertyOptions {
 
 /** Values inherited from the group where an issue is being created. */
 export interface MyIssuesCreateContext {
+  title?: string
+  description?: string
   teamId?: string
   stateId?: string
   priority?: 0 | 1 | 2 | 3 | 4
