@@ -732,6 +732,7 @@ export function deleteOAuthApplication(id: string): Promise<void> {
   return request(`/api/oauth-applications/${id}`, { method: "DELETE" });
 }
 export interface OAuthAuthorizationRequest {
+  actor?: 'user' | 'app';
   client: {
     client_id: string;
     client_name: string;
@@ -754,6 +755,8 @@ export function fetchOAuthAuthorizationRequest(
   );
 }
 export function decideOAuthAuthorization(input: {
+  actor?: string;
+  teamIds?: string[];
   clientId: string;
   redirectUri: string;
   responseType: string;
@@ -2839,11 +2842,12 @@ export function deleteProjectMilestone(
 export function createProjectComment(
   projectId: string,
   body: string,
+  bodyData?:Record<string,unknown>,
 ): Promise<Comment> {
   return request(`/api/projects/${projectId}/comments`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ body }),
+    body: JSON.stringify({ body, bodyData }),
   });
 }
 export function createProjectUpdate(

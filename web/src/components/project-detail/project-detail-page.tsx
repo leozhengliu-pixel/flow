@@ -19,6 +19,7 @@ import {
 import { DEFAULT_PROJECT_ISSUE_DISPLAY } from "./project-issue-display";
 import { ProjectDetailsSidebar } from "./project-details-sidebar";
 import { ProjectInsights } from "./project-insights";
+import { IssueAgentTasks } from '@/components/agent/issue-agent-tasks';
 import {
   ProjectActionsMenu,
   ProjectDescriptionHistoryDialog,
@@ -496,7 +497,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
               save={save}
             />
           )}
-          {tab === "activity" && <ProjectActivity {...props} />}
+          {tab === "activity" && <><ProjectActivity {...props} />{props.issueData&&<IssueAgentTasks resourceType="project" issue={{id:project.id}} data={props.issueData}/>}</>}
           {tab === "issues" &&
             (props.editingSavedView && activeSavedView ? (
               <ProjectNewView

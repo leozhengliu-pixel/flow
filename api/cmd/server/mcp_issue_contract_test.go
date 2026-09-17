@@ -41,6 +41,10 @@ func TestMCPInvalidSecondaryOperationsDoNotPartiallyWrite(t *testing.T) {
 
 func TestMCPIssuePropertyRoundTripAndFilters(t *testing.T) {
 	f := newMCPContractFixture(t)
+	app, err := f.repository.InstallApplication(t.Context(), f.data.Workspace.URLKey, domain.ApplicationInstallation{ClientID: "contract-agent", Name: "Contract agent", Active: true, InstalledBy: f.data.Viewer.ID, TeamIDs: []string{f.data.Teams[0].ID}, Scopes: []string{"read", "app:assignable"}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	object := func(name string, args map[string]any) map[string]any {
 		t.Helper()
 		return mcpSuccess(t, f.call(t, name, args)).(map[string]any)
@@ -48,7 +52,7 @@ func TestMCPIssuePropertyRoundTripAndFilters(t *testing.T) {
 	milestone := object("save_milestone", map[string]any{"project": f.data.Projects[0].ID, "name": "Contract milestone"})
 	created := object("save_issue", map[string]any{
 		"team": f.data.Teams[0].Key, "title": "All properties", "description": "first\nlast",
-		"state": "In Progress", "priority": 1, "assignee": "me", "delegate": f.data.Users[1].ID,
+		"state": "In Progress", "priority": 1, "assignee": "me", "delegate": app.UserID,
 		"project": f.data.Projects[0].ID, "milestone": milestone["id"], "cycle": f.data.Cycles[0].Name,
 		"labels": []string{f.data.Labels[0].Name}, "parentId": f.data.Issues[1].Identifier,
 		"estimate": 3, "dueDate": "2026-12-01", "relatedTo": []string{f.data.Issues[0].Identifier},
@@ -62,7 +66,7 @@ func TestMCPIssuePropertyRoundTripAndFilters(t *testing.T) {
 		t.Fatalf("properties not persisted: %+v", issue)
 	}
 	for _, filter := range []map[string]any{
-		{"assignee": "me"}, {"delegate": f.data.Users[1].Name}, {"state": "started"}, {"project": f.data.Projects[0].Name},
+		{"assignee": "me"}, {"delegate": app.Name}, {"state": "started"}, {"project": f.data.Projects[0].Name},
 		{"parentId": f.data.Issues[1].Identifier}, {"label": f.data.Labels[0].Name}, {"cycle": f.data.Cycles[0].Name}, {"priority": 1},
 	} {
 		filter["query"] = "All properties"

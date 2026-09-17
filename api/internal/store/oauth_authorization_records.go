@@ -130,6 +130,32 @@ func (s *SQLiteStore) publishOAuthRecordEvent(workspace string, event domain.Dom
 func (s *SQLiteStore) CreateOAuthAuthorizationGrant(ctx context.Context, code string, grant domain.OAuthAuthorizationCode, authorization domain.OAuthAuthorization, approved func(*domain.Bootstrap, string, []string) bool) (domain.OAuthAuthorizationCode, error) {
 	var event domain.DomainEvent
 	err := s.oauthMetadataTransaction(ctx, grant.WorkspaceKey, func(tx *sqlTx, lock string, current domain.Bootstrap) (domain.Bootstrap, error) {
+		if grant.Actor == "app" {
+			client, err := s.oauthClientInTransaction(ctx, tx, grant.ClientID)
+			if err != nil {
+				return current, err
+			}
+			var installed domain.ApplicationInstallation
+			installation := domain.ApplicationInstallation{ClientID: grant.ClientID, Name: client.ClientName, AvatarURL: client.LogoURI, InstalledBy: grant.InstallerID, Scopes: grant.Scopes, TeamIDs: grant.TeamIDs, Active: true}
+			var previous []byte
+			if findErr := tx.QueryRowContext(ctx, `SELECT data FROM application_installations WHERE workspace_key=? AND client_id=?`, grant.WorkspaceKey, grant.ClientID).Scan(&previous); findErr == nil {
+				var old domain.ApplicationInstallation
+				if err := json.Unmarshal(previous, &old); err != nil {
+					return current, err
+				}
+				installation.WebhookURL = old.WebhookURL
+			} else if !errors.Is(findErr, sql.ErrNoRows) {
+				return current, findErr
+			}
+			current, installed, err = s.installApplicationTx(ctx, tx, lock, current, installation, "")
+			if err != nil {
+				return current, err
+			}
+			grant.UserID = installed.UserID
+			authorization.UserID = installed.UserID
+			authorization.Actor = "app"
+			authorization.InstallerID = grant.InstallerID
+		}
 		if err := oauthActiveMembership(ctx, tx, current.Workspace.ID, grant.UserID, lock); err != nil {
 			return current, err
 		}
@@ -278,7 +304,13 @@ func (s *SQLiteStore) RevokeOAuthAuthorizationRecords(ctx context.Context, works
 			return current, err
 		}
 		if authorization.UserID != userID {
-			return current, ErrAuthForbidden
+			var role, status string
+			if authorization.Actor != "app" {
+				return current, ErrAuthForbidden
+			}
+			if err := tx.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, current.Workspace.ID, userID).Scan(&role, &status); err != nil || status != "active" || !isWorkspaceAdminRole(role) {
+				return current, ErrAuthForbidden
+			}
 		}
 		now := time.Now().UTC()
 		authorization.RevokedAt = &now

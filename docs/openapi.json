@@ -543,6 +543,86 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/agent-tasks": {
+      "get": {
+        "operationId": "get_agent_tasks",
+        "tags": [
+          "agent-tasks"
+        ],
+        "summary": "GET /api/agent-tasks",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/agent-tasks/{id}": {
+      "get": {
+        "operationId": "get_agent_tasks_id",
+        "tags": [
+          "agent-tasks"
+        ],
+        "summary": "GET /api/agent-tasks/{id}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/agent-tasks/{id}/activities": {
+      "post": {
+        "operationId": "post_agent_tasks_id_activities",
+        "tags": [
+          "agent-tasks"
+        ],
+        "summary": "POST /api/agent-tasks/{id}/activities",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/agent/activities": {
       "get": {
         "operationId": "get_agent_activities",
@@ -1314,6 +1394,74 @@
           "api-keys"
         ],
         "summary": "POST /api/api-keys/{id}/rotate-secret",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/application-installations": {
+      "get": {
+        "operationId": "get_application_installations",
+        "tags": [
+          "application-installations"
+        ],
+        "summary": "GET /api/application-installations",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "post": {
+        "operationId": "post_application_installations",
+        "tags": [
+          "application-installations"
+        ],
+        "summary": "POST /api/application-installations",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/application-installations/{id}": {
+      "patch": {
+        "operationId": "patch_application_installations_id",
+        "tags": [
+          "application-installations"
+        ],
+        "summary": "PATCH /api/application-installations/{id}",
         "parameters": [
           {
             "name": "id",
@@ -9180,6 +9328,26 @@
             }
           }
         ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/oauth/installation-teams": {
+      "get": {
+        "operationId": "get_oauth_installation_teams",
+        "tags": [
+          "oauth"
+        ],
+        "summary": "GET /api/oauth/installation-teams",
         "responses": {
           "default": {
             "description": "Flow API response. See the domain model documentation for resource fields.",

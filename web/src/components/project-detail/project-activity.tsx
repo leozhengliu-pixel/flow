@@ -12,8 +12,9 @@ import { EmojiPicker } from '@/components/reactions/emoji-picker'
 import type { Comment, Project, ProjectUpdate } from '@/types/flow'
 import type { ProjectDetailProps } from './project-detail-types'
 import { PROJECT_HEALTHS } from './project-detail-types'
+import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
 
-export function ProjectActivity({ activities, drafts = [], project, projectUpdates, viewer, onCommentProject, onCommentProjectUpdate, onCreateUpdate, onDeleteUpdate, onReactProjectUpdate, onUpdateProjectUpdate, onUploadProjectUpdateAttachment, onDeleteProjectUpdateAttachment }: ProjectDetailProps) {
+export function ProjectActivity({ activities, drafts = [], project, projectUpdates, viewer, users, onCommentProject, onCommentProjectUpdate, onCreateUpdate, onDeleteUpdate, onReactProjectUpdate, onUpdateProjectUpdate, onUploadProjectUpdateAttachment, onDeleteProjectUpdateAttachment }: ProjectDetailProps) {
   const parentDrafts = useMemo(() => ({
     comment: drafts.find(item => item.type === 'comment' && item.resourceId === project.id && (item.metadata?.resourceType ?? 'issue') === 'project') ?? readComposerDraft('comment', project.id),
     project_update: drafts.find(item => item.type === 'project_update' && item.resourceId === project.id) ?? readComposerDraft('project_update', project.id),
@@ -22,6 +23,7 @@ export function ProjectActivity({ activities, drafts = [], project, projectUpdat
   const [composerMode, setComposerMode] = useState<'comment'|'update'>(() => initialDraft?.type === 'comment' ? 'comment' : 'update')
   const draftType: ComposerDraftType = composerMode === 'comment' ? 'comment' : 'project_update'
   const [body, setBody] = useState(initialDraft?.body ?? '')
+  const [commentData,setCommentData]=useState<Record<string,unknown>|undefined>(initialDraft?.metadata?.bodyData as Record<string,unknown>|undefined)
   const [health, setHealth] = useState<Project['health']>(typeof initialDraft?.metadata?.health === 'string' ? initialDraft.metadata.health as Project['health'] : project.health === 'noUpdate' ? 'onTrack' : project.health)
   const [saving, setSaving] = useState(false)
   const [files, setFiles] = useState<File[]>([])
@@ -38,7 +40,7 @@ export function ProjectActivity({ activities, drafts = [], project, projectUpdat
   useEffect(() => {
     if (!body.trim() || saving) return
     const timer = window.setTimeout(() => {
-      const input = { type: draftType, resourceId: project.id, title: project.name, body: body.trim(), metadata: { resourceType: 'project', health } }
+      const input = { type: draftType, resourceId: project.id, title: project.name, body: body.trim(), metadata: { resourceType: 'project', health, bodyData: composerMode === 'comment' ? commentData : undefined } }
       const save = async () => {
         if (!draftIds.current[draftType]) return createDraft(input)
         try { return await updateDraft(draftIds.current[draftType]!, input) } catch { draftIds.current[draftType] = ''; return createDraft(input) }
@@ -49,7 +51,7 @@ export function ProjectActivity({ activities, drafts = [], project, projectUpdat
       }).catch(() => undefined)
     }, 350)
     return () => window.clearTimeout(timer)
-  }, [body, draftType, health, project.id, project.name, saving])
+  }, [body, commentData, composerMode, draftType, health, project.id, project.name, saving])
 
   const switchComposerMode = (next: 'comment' | 'update') => {
     if (next === composerMode) return
@@ -57,6 +59,7 @@ export function ProjectActivity({ activities, drafts = [], project, projectUpdat
     const nextDraft = parentDrafts[nextType]
     setComposerMode(next)
     setBody(nextDraft?.body ?? '')
+    setCommentData(nextDraft?.metadata?.bodyData as Record<string,unknown>|undefined)
     if (typeof nextDraft?.metadata?.health === 'string') setHealth(nextDraft.metadata.health as Project['health'])
   }
 
@@ -64,7 +67,7 @@ export function ProjectActivity({ activities, drafts = [], project, projectUpdat
     if (!body.trim() || saving) return
     setSaving(true)
     try {
-      if (composerMode === 'comment') await onCommentProject(project.id, body.trim())
+      if (composerMode === 'comment') await onCommentProject(project.id, body.trim(), commentData)
       else {
         const update = await onCreateUpdate(project.id, { body: body.trim(), health })
         for (const file of files) await onUploadProjectUpdateAttachment(project.id, update.id, file)
@@ -75,6 +78,7 @@ export function ProjectActivity({ activities, drafts = [], project, projectUpdat
       clearComposerDraft(savedType, project.id)
       draftIds.current[savedType] = ''
       setBody('')
+      setCommentData(undefined)
       setFiles([])
     } catch (error) { toast.error('Could not post to project', { description: error instanceof Error ? error.message : undefined }) }
     finally { setSaving(false) }
@@ -83,7 +87,7 @@ export function ProjectActivity({ activities, drafts = [], project, projectUpdat
   return <div className="project-activity">
     <section className="project-activity__composer" data-mode={composerMode}>
       <header><div aria-label="Post type" role="tablist"><button aria-selected={composerMode === 'comment'} onClick={() => switchComposerMode('comment')} role="tab" type="button">Comment</button><button aria-selected={composerMode === 'update'} onClick={() => switchComposerMode('update')} role="tab" type="button">Update</button></div>{composerMode === 'update' && <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={`project-activity__health is-${health}`} type="button"><i/>{healthLabel(health)}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="project-detail-page__menu" sideOffset={4}>{PROJECT_HEALTHS.slice(0, 3).map(option => <DropdownMenu.Item key={option.id} onSelect={() => setHealth(option.id)}><span className={`project-activity__health-dot is-${option.id}`}/><span>{option.label}</span>{health === option.id && <Check size={13}/>}</DropdownMenu.Item>)}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>}</header>
-      <textarea aria-label={composerMode === 'update' ? 'Project update' : 'Project comment'} onChange={event => setBody(event.target.value)} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); void submit() } }} placeholder={composerMode === 'update' ? 'Write a project update…' : 'Leave a comment…'} value={body}/>
+      {composerMode==='comment'?<IssueDescriptionEditor users={users} ariaLabel="Project comment" value={body} state={commentData ? JSON.stringify(commentData) : undefined} placeholder="Leave a comment…" onChange={snapshot=>{setBody(snapshot.markdown);setCommentData(snapshot.document as Record<string,unknown>)}}/>:<textarea aria-label="Project update" onChange={event=>setBody(event.target.value)} onKeyDown={event=>{if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();void submit()}}} placeholder="Write a project update…" value={body}/>}
       {composerMode === 'update' && <div className="project-activity__metadata">
         <div><span>Priority</span><div><PriorityIcon priority={0} size={13}/><small>No priority</small><b>→</b><PriorityIcon priority={project.priority} size={13}/><strong>{project.priorityLabel}</strong></div></div>
         {project.lead && <div><span>Lead</span><div><Avatar name={project.lead.displayName}/><strong>{project.lead.displayName} assigned</strong></div></div>}

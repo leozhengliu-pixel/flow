@@ -179,6 +179,9 @@ func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKe
 // not implied by create-only scopes: a caller must explicitly grant read (or
 // the broader write/admin scope) to query workspace data.
 func apiKeyAllowsRequest(r *http.Request, key domain.APIKey) bool {
+	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/agent-tasks/") && strings.HasSuffix(r.URL.Path, "/activities") && (apiKeyHasScope(key, "app:assignable") || apiKeyHasScope(key, "app:mentionable")) {
+		return true
+	}
 	if adminOnlyRequest(r) && !apiKeyHasScope(key, "admin") {
 		return false
 	}
@@ -523,6 +526,9 @@ func featureForPath(path string) string {
 
 func adminOnlyRequest(r *http.Request) bool {
 	path := r.URL.Path
+	if strings.HasPrefix(path, "/api/application-installations") {
+		return true
+	}
 	if strings.HasPrefix(path, "/api/integrations/") && strings.HasSuffix(path, "/configure") {
 		return true
 	}

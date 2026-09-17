@@ -877,7 +877,17 @@ func (s *SQLiteStore) ListMembers(ctx context.Context, workspaceID string) ([]do
 		}
 		result = append(result, domain.WorkspaceMember{User: user, Role: role, Status: status, JoinedAt: joined, LastSeenAt: last})
 	}
-	return result, rows.Err()
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	for i := range result {
+		if err := s.decorateAppUser(ctx, &result[i].User); err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
 }
 
 func (s *SQLiteStore) ListTeamMembers(ctx context.Context, workspaceID string) ([]domain.TeamMember, error) {
@@ -1302,6 +1312,9 @@ func (s *SQLiteStore) authUserByID(ctx context.Context, id string) (domain.User,
 	err := s.db.QueryRowContext(ctx, `SELECT id,email,name,display_name,avatar_url,email_verified_at,active FROM auth_users WHERE id=?`, id).Scan(&user.ID, &nullableEmail, &user.Name, &user.DisplayName, &user.AvatarURL, &verified, &active)
 	user.Email = nullableEmail.String
 	user.Active, user.EmailVerified = active == 1, verified.Valid
+	if err == nil {
+		err = s.decorateAppUser(ctx, &user)
+	}
 	return user, err
 }
 
@@ -1374,6 +1387,9 @@ func teamVisibleToUser(data domain.Bootstrap, teamID, userID, workspaceRole stri
 	}
 	if memberRole != "" {
 		return true
+	}
+	if workspaceRole == "app" {
+		return false
 	}
 	settings := data.TeamSettings[teamID]
 	access := strings.ToLower(strings.TrimSpace(settings.Access))

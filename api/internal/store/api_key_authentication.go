@@ -64,6 +64,17 @@ func (s *SQLiteStore) AuthenticateAPIKeyRecord(ctx context.Context, workspaceHin
 	if !result.User.Active {
 		return result, ErrAuthForbidden
 	}
+	if result.User.App {
+		app, err := s.ApplicationByUser(ctx, result.User.ID)
+		if err != nil || !app.Active || app.WorkspaceKey != workspace || key.OAuthClientID != app.ClientID || !slices.Contains(app.Scopes, "read") {
+			return result, ErrAuthForbidden
+		}
+		if slices.ContainsFunc(key.Scopes, func(scope string) bool { return !slices.Contains(app.Scopes, scope) }) {
+			return result, ErrAuthForbidden
+		}
+		result.Key.TeamRestriction = "selected"
+		result.Key.TeamIDs = slices.Clone(app.TeamIDs)
+	}
 	if key.AuthorizationID != "" {
 		var authorization domain.OAuthAuthorization
 		if err := s.db.QueryRowContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='oauthAuthorizations' AND record_key=?`, workspace, key.AuthorizationID).Scan(&raw); err != nil {

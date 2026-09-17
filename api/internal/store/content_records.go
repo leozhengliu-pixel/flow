@@ -220,6 +220,9 @@ func writeContentRecord[T any](ctx context.Context, tx *sqlTx, workspace, kind, 
 			_, err = tx.ExecContext(ctx, `INSERT INTO issue_actor_records(workspace_key,issue_id,user_id,last_at) VALUES(?,?,?,?) ON CONFLICT(workspace_key,issue_id,user_id) DO UPDATE SET last_at=CASE WHEN issue_actor_records.last_at>excluded.last_at THEN issue_actor_records.last_at ELSE excluded.last_at END`, workspace, resource, activity.Actor.ID, activity.CreatedAt.UTC().Format(issueRecordTimestamp))
 		}
 	}
+	if err == nil && kind == "comment" {
+		err = syncApplicationMentions(ctx, tx, workspace, resource, raw)
+	}
 	return err
 }
 
