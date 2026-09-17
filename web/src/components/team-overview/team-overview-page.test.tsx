@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { VirtuosoMockContext } from 'react-virtuoso'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
@@ -7,6 +8,7 @@ import { makeBootstrap, viewer } from '@/test/fixtures'
 import type { BootstrapData, FlowDocument } from '@/types/flow'
 
 const api = vi.hoisted(() => ({
+  createDocument: vi.fn(),
   fetchTeamResources: vi.fn(),
   setTeamMembership: vi.fn(),
   pinTeamResource: vi.fn(),
@@ -39,7 +41,7 @@ function renderPage(view: "overview" | "documents" | "loops" | "members", overri
     ...overrides,
   })
   return render(
-    <I18nProvider>
+    <I18nProvider><VirtuosoMockContext.Provider value={{ viewportHeight: 480, itemHeight: 48 }}>
       <TeamOverviewPage
         data={data}
         onNavigate={vi.fn()}
@@ -48,7 +50,7 @@ function renderPage(view: "overview" | "documents" | "loops" | "members", overri
         team={data.teams[0]}
         view={view}
       />
-    </I18nProvider>,
+    </VirtuosoMockContext.Provider></I18nProvider>,
   )
 }
 
@@ -60,6 +62,7 @@ describe('team overview', () => {
   beforeEach(() => {
     confirm.mockReset().mockResolvedValue(false);
     localStorage.clear();
+    window.history.replaceState(null, '', '/');
     for (const mock of Object.values(api)) mock.mockReset().mockResolvedValue(undefined);
     api.fetchTeamResources.mockReset().mockResolvedValue({
       resources: [],
@@ -70,6 +73,52 @@ describe('team overview', () => {
 
   const section = { id: 'section-1', teamId: 'team-1', name: 'Plans', position: 1, createdAt: '', updatedAt: '' };
   const document: FlowDocument = { id: 'doc-1', title: 'Roadmap', slugId: 'roadmap', content: '', creator: viewer, teamIds: ['team-1'], projectIds: [], subscriberIds: [], favorite: false, revisions: [], createdAt: '2026-09-07T00:00:00Z', updatedAt: '2026-09-07T00:00:00Z' };
+
+  it('renders the team document onboarding illustration without an empty column header and creates in this team', async () => {
+    const user = userEvent.setup();
+    api.createDocument.mockResolvedValue(document);
+    const { container } = renderPage('documents');
+    expect(screen.getByRole('heading', { name: 'Team documents' })).toBeVisible();
+    expect(container.querySelector('.team-documents-empty svg')).toHaveAttribute('viewBox','0 0 74 81');
+    expect(container.querySelectorAll('.team-documents-empty svg path')).toHaveLength(14);
+    expect(container.querySelector('.team-documents-column-header')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Create document' }));
+    await waitFor(() => expect(api.createDocument).toHaveBeenCalledWith({ title: 'New document', teamIds: ['team-1'] }));
+  });
+
+  it('searches documents without replacing a filtered-empty state with onboarding', async () => {
+    const user = userEvent.setup();
+    renderPage('documents', { documents: [document] });
+    fireEvent.keyDown(window,{key:'f',metaKey:true});
+    const input = screen.getByRole('textbox',{name:'Find documents'});
+    await user.type(input,'missing');
+    expect(screen.getByText('No documents matching your search')).toBeVisible();
+    expect(screen.queryByRole('button',{name:'Create document'})).toBeNull();
+    expect(new URLSearchParams(location.search).get('doc-search')).toBe('missing');
+    await user.keyboard('{Escape}');
+    expect(screen.getByText('Roadmap')).toBeVisible();
+  });
+
+  it('uses the same columns for header and row, suppresses grouping=None, and exposes selection actions', async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null,'','/?doc-group=none&doc-columns=updated');
+    const { container } = renderPage('documents',{documents:[document]});
+    const header=container.querySelector<HTMLElement>('.team-documents-column-header')!,row=container.querySelector<HTMLElement>('.team-document-row')!;
+    expect(header.style.gridTemplateColumns).toBe(row.style.gridTemplateColumns);
+    expect(container.querySelector('.team-documents-group-header')).toBeNull();
+    await user.click(screen.getByRole('checkbox',{name:'Select document'}));
+    expect(screen.getByRole('toolbar',{name:'Selected documents'})).toHaveTextContent('1');
+    await user.click(screen.getByRole('button',{name:'Clear selection'}));
+    expect(screen.queryByRole('toolbar',{name:'Selected documents'})).toBeNull();
+  });
+
+  it('virtualizes a large ungrouped document collection', async () => {
+    window.history.replaceState(null,'','/?doc-group=none');
+    const {container} = renderPage('documents',{documents:Array.from({length:1000},(_,i)=>({...document,id:`doc-${i}`,slugId:`doc-${i}`,title:`Document ${i}`}))});
+    await waitFor(()=>expect(container.querySelectorAll('.team-document-row').length).toBeGreaterThan(0));
+    expect(container.querySelectorAll('.team-document-row').length).toBeLessThan(50);
+    expect(container.querySelector('[data-virtuoso-scroller]')).not.toBeNull();
+  });
 
   it('confirms deleting a nonempty section and preserves it on cancel', async () => {
     const user = userEvent.setup();
@@ -241,6 +290,8 @@ describe('team overview', () => {
 
     expect(screen.getByText('Team documents')).toBeVisible()
     expect(screen.getByRole('link', { name: 'Website' })).toHaveAttribute('href', expect.stringContaining('/project/'))
+    expect(screen.queryByLabelText('Pinned to team overview')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Expand group' }))
     expect(await screen.findByLabelText('Pinned to team overview')).toBeVisible()
   })
 
