@@ -160,4 +160,4 @@ function WorkspaceMark({ name, color }: { name: string; color?: string }) {
   return <span className="oauth-workspace-mark" style={color ? { backgroundColor: color } : undefined}>{initials}</span>
 }
 
-function oauthErrorMessage(value:string){if(value==='invalid_request')return'This authorization link is incomplete or has expired.';if(value==='invalid_client')return'This application is not registered or is no longer available.';return value||'This authorization request could not be loaded.'}
+function oauthErrorMessage(value:string){if(value==='invalid_request')return'This authorization link is incomplete or has expired.';if(value==='invalid_client')return'This application is not registered or is no longer available.';if(value==='app scopes require actor=app')return'This application requested agent scopes without actor=app.';return value||'This authorization request could not be loaded.'}

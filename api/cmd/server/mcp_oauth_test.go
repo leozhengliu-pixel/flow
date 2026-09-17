@@ -39,13 +39,20 @@ func TestMCPOAuthPKCEAndToolLifecycle(t *testing.T) {
 	verifier := strings.Repeat("v", 48)
 	digest := sha256.Sum256([]byte(verifier))
 	challenge := base64.RawURLEncoding.EncodeToString(digest[:])
-	query := url.Values{"response_type": {"code"}, "client_id": {registered.ClientID}, "redirect_uri": {registered.RedirectURIs[0]}, "scope": {"read write openid email"}, "state": {"test-state"}, "code_challenge": {challenge}, "code_challenge_method": {"S256"}}
+	query := url.Values{"response_type": {"code"}, "client_id": {registered.ClientID}, "redirect_uri": {registered.RedirectURIs[0]}, "scope": {"read write openid email app:mentionable app:assignable"}, "state": {"test-state"}, "code_challenge": {challenge}, "code_challenge_method": {"S256"}}
 	details := authRequest[map[string]any](t, client, http.MethodGet, server.URL+"/api/oauth/authorization-request?"+query.Encode(), nil, "", http.StatusOK)
 	if details["redirectUri"] != registered.RedirectURIs[0] {
 		t.Fatalf("authorization request = %#v", details)
 	}
+	granted, _ := details["scopes"].([]any)
+	for _, raw := range granted {
+		scope, _ := raw.(string)
+		if strings.HasPrefix(scope, "app:") {
+			t.Fatalf("personal MCP consent advertised app scope %q: %#v", scope, details["scopes"])
+		}
+	}
 	decision := authRequest[map[string]string](t, client, http.MethodPost, server.URL+"/api/oauth/authorization-request", map[string]any{
-		"clientId": registered.ClientID, "redirectUri": registered.RedirectURIs[0], "responseType": "code", "scope": "read write openid email", "state": "test-state", "codeChallenge": challenge, "codeChallengeMethod": "S256", "workspaceKey": "test-workspace", "approve": true,
+		"clientId": registered.ClientID, "redirectUri": registered.RedirectURIs[0], "responseType": "code", "scope": "read write openid email app:mentionable app:assignable", "state": "test-state", "codeChallenge": challenge, "codeChallengeMethod": "S256", "workspaceKey": "test-workspace", "approve": true,
 	}, "", http.StatusOK)
 	redirect, err := url.Parse(decision["redirect"])
 	if err != nil || redirect.Query().Get("code") == "" || redirect.Query().Get("state") != "test-state" {
@@ -219,6 +226,34 @@ func oauthConsents(t *testing.T, repository *store.SQLiteStore, clientID string)
 		}
 	}
 	return items
+}
+
+func TestPersonalMCPOAuthDropsAdvertisedAppScopes(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "mcp-app-scopes.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	host := httptest.NewServer(newHandler(&server{store: repository, uploadPath: t.TempDir()}))
+	defer host.Close()
+	client := authClient(t)
+	authRequest[domain.AuthSession](t, client, http.MethodPost, host.URL+"/api/auth/login", map[string]string{"email": "admin@example.test", "password": "test-password"}, "", http.StatusOK)
+	registered := authRequest[domain.OAuthClient](t, client, http.MethodPost, host.URL+"/oauth/register", map[string]any{
+		"client_name": "OpenCode", "redirect_uris": []string{"http://127.0.0.1:19876/mcp/oauth/callback"}, "token_endpoint_auth_method": "none",
+	}, "", http.StatusCreated)
+	verifier := strings.Repeat("v", 48)
+	digest := sha256.Sum256([]byte(verifier))
+	challenge := base64.RawURLEncoding.EncodeToString(digest[:])
+	query := url.Values{"response_type": {"code"}, "client_id": {registered.ClientID}, "redirect_uri": {registered.RedirectURIs[0]}, "scope": {"read write openid email app:mentionable app:assignable"}, "state": {"opencode"}, "code_challenge": {challenge}, "code_challenge_method": {"S256"}, "resource": {host.URL + "/mcp"}}
+	details := authRequest[map[string]any](t, client, http.MethodGet, host.URL+"/api/oauth/authorization-request?"+query.Encode(), nil, "", http.StatusOK)
+	scopes, _ := details["scopes"].([]any)
+	got := []string{}
+	for _, raw := range scopes {
+		got = append(got, raw.(string))
+	}
+	if slices.ContainsFunc(got, func(scope string) bool { return strings.HasPrefix(scope, "app:") }) || !slices.Contains(got, "read") || !slices.Contains(got, "write") {
+		t.Fatalf("personal MCP scopes = %#v", got)
+	}
 }
 
 func postOAuthForm[T any](t *testing.T, endpoint string, form url.Values, wantStatus int) T {
