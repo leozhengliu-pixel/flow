@@ -56,4 +56,11 @@ describe('OAuth consent request lifecycle',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Approve'}))
     expect(decideOAuthAuthorization).toHaveBeenCalledTimes(2)
   })
+
+  it('shows the server authorization error instead of a generic expired-link message',async()=>{
+    vi.mocked(fetchOAuthAuthorizationRequest).mockRejectedValueOnce(new Error('S256 PKCE code challenge is required'))
+    render(<App/>)
+    expect(await screen.findByText('S256 PKCE code challenge is required')).toBeInTheDocument()
+    expect(screen.queryByText('This authorization link is incomplete or has expired.')).not.toBeInTheDocument()
+  })
 })

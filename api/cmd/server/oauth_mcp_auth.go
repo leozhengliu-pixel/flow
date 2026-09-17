@@ -16,6 +16,7 @@ import (
 	"flow/api/internal/store"
 )
 
+var personalOAuthScopes = []string{"read", "write", "openid", "email"}
 var supportedOAuthScopes = []string{"read", "write", "openid", "email", "app:mentionable", "app:assignable"}
 
 type oauthAuthorizationRequest struct {
@@ -36,7 +37,7 @@ type oauthAuthorizationRequest struct {
 func (s *server) oauthProtectedResource(w http.ResponseWriter, r *http.Request) {
 	base := externalBaseURL(r)
 	resource := base + "/mcp"
-	scopes := supportedOAuthScopes
+	scopes := personalOAuthScopes
 	if strings.HasSuffix(r.URL.Path, "/readonly") {
 		resource = base + "/mcp/readonly"
 		scopes = []string{"read", "openid", "email"}
@@ -61,7 +62,7 @@ func (s *server) oauthAuthorizationServer(w http.ResponseWriter, r *http.Request
 		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
 		"code_challenge_methods_supported":      []string{"S256"},
 		"token_endpoint_auth_methods_supported": []string{"none"},
-		"scopes_supported":                      supportedOAuthScopes,
+		"scopes_supported":                      personalOAuthScopes,
 	})
 }
 
@@ -333,11 +334,11 @@ func (s *server) validateOAuthAuthorizationRequest(r *http.Request, request oaut
 		return client, nil, fmt.Errorf("S256 PKCE code challenge is required")
 	}
 	scopes := normalizedStrings(strings.Fields(request.Scope))
+	if request.Actor != "app" {
+		scopes = slices.DeleteFunc(scopes, func(scope string) bool { return strings.HasPrefix(scope, "app:") })
+	}
 	if len(scopes) == 0 {
 		scopes = []string{"read"}
-	}
-	if request.Actor != "app" && slices.ContainsFunc(scopes, func(scope string) bool { return strings.HasPrefix(scope, "app:") }) {
-		return client, nil, fmt.Errorf("app scopes require actor=app")
 	}
 	if request.Actor == "app" && (!slices.Contains(scopes, "read") || slices.Contains(scopes, "email") || slices.Contains(scopes, "openid")) {
 		return client, nil, fmt.Errorf("app authorization requires read and cannot request personal identity scopes")

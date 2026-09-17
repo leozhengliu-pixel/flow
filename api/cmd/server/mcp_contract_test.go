@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -226,6 +227,13 @@ func TestMCPOAuthDiscoveryAndReadonlySurface(t *testing.T) {
 		}
 		if path == "/.well-known/oauth-authorization-server" && metadata["token_endpoint"] != f.host.URL+"/oauth/token" {
 			t.Fatal("incorrect token endpoint", metadata)
+		}
+		scopes, _ := metadata["scopes_supported"].([]any)
+		for _, raw := range scopes {
+			scope, _ := raw.(string)
+			if strings.HasPrefix(scope, "app:") {
+				t.Fatalf("%s advertised app scope %q to MCP clients: %#v", path, scope, scopes)
+			}
 		}
 	}
 	var inventory []flowMCPTool
