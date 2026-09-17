@@ -491,7 +491,7 @@ function getMentionState(state: EditorState): MentionState {
 function matchingUsers(users: User[], query: string) {
   const normalized = query.trim().toLocaleLowerCase()
   return users.filter(user => {
-    if (!user.active) return false
+    if (!user.active || user.app && !user.appScopes?.includes('app:mentionable')) return false
     const name = personSearchText(user).toLocaleLowerCase()
     return !normalized || name.includes(normalized)
   }).slice(0, 8)

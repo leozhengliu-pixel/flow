@@ -191,7 +191,7 @@ export function AssigneePicker({ value, users, onChange, hoverContext }: { value
     hoverClassName="property-rich-hover assignee-hover-surface"
     label="Assignee"
     onChange={onChange}
-    people={users.map(user => ({ ...user, label: user.displayName }))}
+    people={users.filter(user => !user.app).map(user => ({ ...user, label: user.displayName }))}
     searchPlaceholder="Change assignee…"
     searchShortcut="A"
     selectedId={value?.id}

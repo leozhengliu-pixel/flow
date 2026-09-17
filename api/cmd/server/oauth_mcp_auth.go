@@ -16,19 +16,21 @@ import (
 	"flow/api/internal/store"
 )
 
-var supportedOAuthScopes = []string{"read", "write", "openid", "email"}
+var supportedOAuthScopes = []string{"read", "write", "openid", "email", "app:mentionable", "app:assignable"}
 
 type oauthAuthorizationRequest struct {
-	ClientID            string `json:"clientId"`
-	RedirectURI         string `json:"redirectUri"`
-	ResponseType        string `json:"responseType"`
-	Scope               string `json:"scope"`
-	State               string `json:"state"`
-	CodeChallenge       string `json:"codeChallenge"`
-	CodeChallengeMethod string `json:"codeChallengeMethod"`
-	Resource            string `json:"resource,omitempty"`
-	WorkspaceKey        string `json:"workspaceKey,omitempty"`
-	Approve             bool   `json:"approve"`
+	Actor               string   `json:"actor,omitempty"`
+	TeamIDs             []string `json:"teamIds,omitempty"`
+	ClientID            string   `json:"clientId"`
+	RedirectURI         string   `json:"redirectUri"`
+	ResponseType        string   `json:"responseType"`
+	Scope               string   `json:"scope"`
+	State               string   `json:"state"`
+	CodeChallenge       string   `json:"codeChallenge"`
+	CodeChallengeMethod string   `json:"codeChallengeMethod"`
+	Resource            string   `json:"resource,omitempty"`
+	WorkspaceKey        string   `json:"workspaceKey,omitempty"`
+	Approve             bool     `json:"approve"`
 }
 
 func (s *server) oauthProtectedResource(w http.ResponseWriter, r *http.Request) {
@@ -145,6 +147,7 @@ func (s *server) getOAuthAuthorizationRequest(w http.ResponseWriter, r *http.Req
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"client":      client,
+		"actor":       request.Actor,
 		"redirectUri": request.RedirectURI,
 		"scopes":      scopes,
 		"scopeLabels": oauthScopeLabels(scopes),
@@ -181,6 +184,10 @@ func (s *server) decideOAuthAuthorization(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
+	if input.Actor == "app" && (!workspaceAdminRole(workspace.ViewerRole) || len(input.TeamIDs) == 0) {
+		writeOAuthError(w, 403, "access_denied", "An administrator must select the teams this application can access")
+		return
+	}
 	authorizationID := fmt.Sprintf("oauth_authorization_%d", time.Now().UnixNano())
 	if !applicationApproved(&workspace, client.ClientID, scopes) {
 		err := s.store.RequestOAuthApplicationApproval(r.Context(), workspace.Workspace.URLKey, client.ClientID, func(data *domain.Bootstrap) error {
@@ -212,6 +219,9 @@ func (s *server) decideOAuthAuthorization(w http.ResponseWriter, r *http.Request
 		return
 	}
 	grant := domain.OAuthAuthorizationCode{ClientID: client.ClientID, WorkspaceKey: workspace.Workspace.URLKey, UserID: actor.ID, RedirectURI: input.RedirectURI, Scopes: scopes, CodeChallenge: input.CodeChallenge, AuthorizationID: authorizationID, ExpiresAt: time.Now().UTC().Add(10 * time.Minute)}
+	grant.Actor = input.Actor
+	grant.InstallerID = actor.ID
+	grant.TeamIDs = input.TeamIDs
 	_, err = s.store.CreateOAuthAuthorizationGrant(r.Context(), code, grant, domain.OAuthAuthorization{ID: authorizationID, ClientID: client.ClientID, ClientName: client.ClientName, UserID: actor.ID, Scopes: scopes, CreatedAt: time.Now().UTC()}, applicationApproved)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not authorize client")
@@ -306,6 +316,9 @@ func (s *server) revokeOAuthAuthorization(w http.ResponseWriter, r *http.Request
 }
 
 func (s *server) validateOAuthAuthorizationRequest(r *http.Request, request oauthAuthorizationRequest) (domain.OAuthClient, []string, error) {
+	if request.Actor != "" && request.Actor != "user" && request.Actor != "app" {
+		return domain.OAuthClient{}, nil, fmt.Errorf("unsupported OAuth actor")
+	}
 	client, err := s.store.OAuthClient(r.Context(), request.ClientID)
 	if err != nil {
 		var ok bool
@@ -323,6 +336,12 @@ func (s *server) validateOAuthAuthorizationRequest(r *http.Request, request oaut
 	if len(scopes) == 0 {
 		scopes = []string{"read"}
 	}
+	if request.Actor != "app" && slices.ContainsFunc(scopes, func(scope string) bool { return strings.HasPrefix(scope, "app:") }) {
+		return client, nil, fmt.Errorf("app scopes require actor=app")
+	}
+	if request.Actor == "app" && (!slices.Contains(scopes, "read") || slices.Contains(scopes, "email") || slices.Contains(scopes, "openid")) {
+		return client, nil, fmt.Errorf("app authorization requires read and cannot request personal identity scopes")
+	}
 	if slices.ContainsFunc(scopes, func(scope string) bool { return !slices.Contains(supportedOAuthScopes, scope) }) {
 		return client, nil, fmt.Errorf("one or more requested scopes are unsupported")
 	}
@@ -333,13 +352,13 @@ func (s *server) validateOAuthAuthorizationRequest(r *http.Request, request oaut
 }
 
 func oauthRequestFromQuery(query url.Values) oauthAuthorizationRequest {
-	return oauthAuthorizationRequest{ClientID: query.Get("client_id"), RedirectURI: query.Get("redirect_uri"), ResponseType: query.Get("response_type"), Scope: query.Get("scope"), State: query.Get("state"), CodeChallenge: query.Get("code_challenge"), CodeChallengeMethod: query.Get("code_challenge_method"), Resource: query.Get("resource")}
+	return oauthAuthorizationRequest{Actor: query.Get("actor"), ClientID: query.Get("client_id"), RedirectURI: query.Get("redirect_uri"), ResponseType: query.Get("response_type"), Scope: query.Get("scope"), State: query.Get("state"), CodeChallenge: query.Get("code_challenge"), CodeChallengeMethod: query.Get("code_challenge_method"), Resource: query.Get("resource")}
 }
 
 func oauthScopeLabels(scopes []string) []string {
 	labels := []string{}
 	for _, scope := range scopes {
-		labels = append(labels, map[string]string{"read": "Read", "write": "Write", "openid": "Identity", "email": "Email address"}[scope])
+		labels = append(labels, map[string]string{"read": "Read", "write": "Write", "openid": "Identity", "email": "Email address", "app:mentionable": "Mention application", "app:assignable": "Delegate issues to application"}[scope])
 	}
 	return labels
 }

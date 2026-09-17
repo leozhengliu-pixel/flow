@@ -94,7 +94,7 @@ export type ProjectDetailProps = {
     updateId: string,
     attachmentId: string,
   ) => Promise<ProjectUpdate>;
-  onCommentProject: (projectId: string, body: string) => Promise<Comment>;
+  onCommentProject: (projectId: string, body: string, bodyData?: Record<string,unknown>) => Promise<Comment>;
   onCreateResource: (
     projectId: string,
     input: { type?: "link" | "document"; title?: string; url?: string },

@@ -90,6 +90,9 @@ type TeamPinnedResource struct {
 	UpdatedAt    time.Time `json:"updatedAt"`
 }
 type AgentActivity struct {
+	ActorID   string         `json:"actorId,omitempty"`
+	URL       string         `json:"url,omitempty"`
+	ToolCall  *AgentToolCall `json:"toolCall,omitempty"`
 	ID        string         `json:"id"`
 	SessionID string         `json:"sessionId"`
 	IssueID   string         `json:"issueId,omitempty"`

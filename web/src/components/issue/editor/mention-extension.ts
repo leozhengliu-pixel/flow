@@ -27,6 +27,7 @@ export const MentionExtension = Node.create({
     const label = typeof HTMLAttributes.label === 'string' ? HTMLAttributes.label : ''
     return ['span', mergeAttributes(HTMLAttributes, { 'data-flow-mention': HTMLAttributes.id ?? '', class: 'flow-mention' }), `@${label}`]
   },
+  renderText({ node }) { return `@${String(node.attrs.label ?? '')}` },
   markdownTokenName: mentionMarkdown.markdownTokenizer.name,
   parseMarkdown: mentionMarkdown.parseMarkdown,
   markdownTokenizer: mentionMarkdown.markdownTokenizer,

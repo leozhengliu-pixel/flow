@@ -244,6 +244,34 @@ func writeWorkspaceMetadataRecords(ctx context.Context, tx *sqlTx, workspace str
 					return nil, err
 				}
 			}
+			if key.field == "projects" {
+				var next, prior struct {
+					Comments []domain.Comment `json:"comments"`
+				}
+				if err := json.Unmarshal(value.data, &next); err != nil {
+					return nil, err
+				}
+				if len(old.data) > 0 {
+					if err := json.Unmarshal(old.data, &prior); err != nil {
+						return nil, err
+					}
+				}
+				seen := map[string]bool{}
+				for _, comment := range prior.Comments {
+					seen[comment.ID] = true
+				}
+				for _, comment := range next.Comments {
+					if !seen[comment.ID] {
+						raw, err := json.Marshal(comment)
+						if err != nil {
+							return nil, err
+						}
+						if err := syncApplicationMentions(ctx, tx, workspace, key.key, raw); err != nil {
+							return nil, err
+						}
+					}
+				}
+			}
 			if err := writeCustomerFilterRecord(ctx, tx, workspace, key.field, key.key, value.data); err != nil {
 				return nil, err
 			}
