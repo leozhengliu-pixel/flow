@@ -23,6 +23,7 @@ import { AgentRichText } from "./agent-rich-text";
 import styles from "./agent-chat-panel.module.css";
 
 export function AgentChatPanel({
+  initialPrompt = '',
   initialSession,
   issues,
   onClose,
@@ -30,6 +31,7 @@ export function AgentChatPanel({
   onSessionChange,
   open,
 }: {
+  initialPrompt?: string;
   initialSession?: AgentSession;
   issues: MyIssuesRowData[];
   onClose: () => void;
@@ -40,7 +42,7 @@ export function AgentChatPanel({
   const { t } = useI18n();
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [session, setSession] = useState<AgentSession>();
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialPrompt);
   const [status, setStatus] = useState<AgentStatus>();
   const [loading, setLoading] = useState(false);
   const [streamParts, setStreamParts] = useState<AgentMessagePart[]>([]);

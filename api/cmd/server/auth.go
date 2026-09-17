@@ -1491,6 +1491,7 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) authSession(w http.ResponseWriter, r *http.Request) {
+	started := time.Now()
 	if s.authDisabled {
 		account := s.store.Account()
 		writeJSON(w, http.StatusOK, domain.AuthSession{User: account.Viewer, Memberships: account.Workspaces, ExpiresAt: time.Now().UTC().Add(24 * time.Hour)})
@@ -1502,6 +1503,7 @@ func (s *server) authSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session, err := s.store.Session(r.Context(), cookie.Value)
+	w.Header().Set("Server-Timing", fmt.Sprintf("session;dur=%.2f", float64(time.Since(started).Microseconds())/1000))
 	if err != nil {
 		clearSessionCookie(w, r)
 		writeError(w, http.StatusUnauthorized, "Your session has expired")

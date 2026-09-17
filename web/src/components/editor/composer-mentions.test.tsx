@@ -40,7 +40,7 @@ describe('comment application mentions',()=>{
   it('restores the stable mention identity from a saved draft',async()=>{
     const submit=vi.fn().mockResolvedValue(undefined)
     const bodyData={type:'doc',content:[{type:'paragraph',content:[{type:'mention',attrs:{id:'app-restored',label:'Build agent'}}]}]}
-    const draft={id:'local:mention',type:'comment' as const,resourceId:'issue-restored',title:'Draft',body:'@Build agent',metadata:{bodyData},updatedAt:new Date().toISOString()}
+    const draft={id:'local:mention',userId:viewer.id,type:'comment' as const,resourceId:'issue-restored',title:'Draft',body:'@Build agent',metadata:{bodyData},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}
     render(<I18nProvider><TooltipProvider><Composer draftType="comment" draftResourceId="issue-restored" drafts={[draft]} onSubmit={submit}/></TooltipProvider></I18nProvider>)
     await userEvent.click(screen.getByRole('button',{name:'Submit comment'}))
     await waitFor(()=>expect(submit).toHaveBeenCalledWith('@Build agent',expect.objectContaining({type:'doc'})))

@@ -537,6 +537,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
         </div>
         {detailsOpen && (
           <ProjectDetailsSidebar
+            featureFlags={props.issueData?.workspaceSettings.featureFlags}
             issueSummary={issueSummary}
             availableIssueLabels={issueLabels}
             onCreateLabel={props.onCreateLabel}

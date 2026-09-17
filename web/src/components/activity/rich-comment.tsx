@@ -3,13 +3,15 @@ import { Markdown } from '@tiptap/markdown'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { MentionExtension } from '@/components/issue/editor/mention-extension'
+import { structuredBlocks } from '@/components/issue/editor/structured-blocks'
 
 export function RichComment({ body, data, version }: { body: string; data?: Record<string, unknown>; version?: number }) {
+  const selection = data?.selection as { issueId?: string; text?: string; from?: number; to?: number } | undefined
   const initial = commentContent(body, data)
   const editor = useEditor({
     immediatelyRender: false,
     editable: false,
-    extensions: [StarterKit.configure({ link: { openOnClick: false, autolink: true, linkOnPaste: true } }), Markdown, MentionExtension],
+    extensions: [StarterKit.configure({ link: { openOnClick: false, autolink: true, linkOnPaste: true } }), Markdown, MentionExtension, ...structuredBlocks],
     content: initial.content,
     contentType: initial.contentType,
     editorProps: { attributes: { role: 'document', 'aria-label': 'Comment' } },
@@ -28,7 +30,7 @@ export function RichComment({ body, data, version }: { body: string; data?: Reco
   }, [body, data, version, editor])
 
   if (!editor) return <div aria-label="Comment" role="document"><p>{body}</p></div>
-  return <EditorContent editor={editor}/>
+  return <>{selection?.text && <button className="comment-selection-quote" type="button" onClick={() => window.dispatchEvent(new CustomEvent('flow-reveal-description-selection', { detail: selection }))}>{selection.text}</button>}<EditorContent editor={editor}/></>
 }
 
 function commentContent(body: string, data?: Record<string, unknown>) {

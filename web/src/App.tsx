@@ -284,7 +284,8 @@ function App() {
       return merged;
     });
   },[]);
-  const bootstrapRequest = useRef<{ key: string; promise: Promise<BootstrapData> } | null>(null);
+  const bootstrapRequest = useRef<{ key: string; promise: Promise<BootstrapData>; controller: AbortController } | null>(null);
+  useEffect(() => () => bootstrapRequest.current?.controller.abort(), []);
   const loadedBootstrapRequestKey = useRef('');
   const initialIssueRef = useRef<{key:string;viewerId:string;issue:Issue} | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -324,6 +325,14 @@ function App() {
     },
     [data],
   );
+  useEffect(() => {
+    const createFromSelection = (event: Event) => {
+      const { text, teamId, projectId } = (event as CustomEvent<{text:string;teamId:string;projectId?:string}>).detail;
+      if (text?.trim()) openCreateIssue({ title: text.trim().split('\n')[0].slice(0,255), description: text, teamId, projectId });
+    };
+    window.addEventListener('flow-create-issue-from-selection', createFromSelection);
+    return () => window.removeEventListener('flow-create-issue-from-selection', createFromSelection);
+  }, [openCreateIssue]);
   const shortcutSequence = useRef<{ key: string; at: number }>({
     key: "",
     at: 0,
@@ -333,6 +342,7 @@ function App() {
     "workspaceSlug" in route ? route.workspaceSlug : "";
   const loadedWorkspaceKey = data?.workspace.urlKey;
   const projectListProjection = isProjectListRoute(route);
+  const bootstrapProjection = projectListProjection ? 'project-list' : route.kind === 'issue' ? 'issue-detail' : undefined;
   useEffect(() => {
     if (!loadedWorkspaceKey) return;
     const warmDetails = () => {
@@ -487,7 +497,7 @@ function App() {
       setError(true);
       return;
     }
-    const requestKey = `${account.viewer.id}:${requestedWorkspaceKey}:${projectListProjection ? 'project-list' : 'full'}`;
+    const requestKey = `${account.viewer.id}:${requestedWorkspaceKey}:${bootstrapProjection ?? 'full'}`;
     if (workspaceBootstrapPhase(loadedWorkspaceKey, requestedWorkspaceKey, bootstrapRequest.current?.key, requestKey) === 'skip' && loadedBootstrapRequestKey.current === requestKey) return;
     let cancelled = false;
     if (loadedWorkspaceKey !== requestedWorkspaceKey || loadedBootstrapRequestKey.current && loadedBootstrapRequestKey.current !== requestKey) {
@@ -502,10 +512,13 @@ function App() {
       setError(false);
     }
     // Cache hydration can make this workspace look loaded; share the in-flight request.
-    if (bootstrapRequest.current?.key !== requestKey) {
-      const request = { key: requestKey, promise: fetchBootstrap(requestedWorkspaceKey, projectListProjection ? 'project-list' : undefined) };
+    if (bootstrapRequest.current?.key !== requestKey || bootstrapRequest.current.controller.signal.aborted) {
+      bootstrapRequest.current?.controller.abort();
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 30000);
+      const request = { key: requestKey, controller, promise: fetchBootstrap(requestedWorkspaceKey, bootstrapProjection, controller.signal) };
       bootstrapRequest.current = request;
-      const clear = () => { if (bootstrapRequest.current === request) bootstrapRequest.current = null; };
+      const clear = () => { window.clearTimeout(timeout); if (bootstrapRequest.current === request) bootstrapRequest.current = null; };
       void request.promise.then(clear, clear);
     }
     bootstrapRequest.current.promise
@@ -523,7 +536,7 @@ function App() {
       })
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
-  }, [account, loadedWorkspaceKey, navigateTo, oauthPath, projectListProjection, requestedWorkspaceKey, route.kind]);
+  }, [account, loadedWorkspaceKey, navigateTo, oauthPath, projectListProjection, bootstrapProjection, requestedWorkspaceKey, route.kind]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return;
@@ -676,7 +689,7 @@ function App() {
     return()=>controller.abort();
   },[data?.issueCollectionPaged,data?.workspace.urlKey,data?.viewer.id,historyIssueId,historyIssueSummary,relatedIssueKey]);
   const selectedProject =
-    route.kind === "project" || route.kind === "project-saved-view"
+    !data?.resourceDetailsOmitted && (route.kind === "project" || route.kind === "project-saved-view")
       ? data?.projects.find(
           (project) => project.slugId === route.projectSlugId,
         ) || null
@@ -702,7 +715,7 @@ function App() {
     return () => { active?.abort(); window.removeEventListener('flow-issue-history-changed', listener) };
   }, [historyIssueId, data?.workspace.urlKey, data?.viewer.id]);
   const selectedDocument =
-    route.kind === "document"
+    !data?.resourceDetailsOmitted && route.kind === "document"
       ? data?.documents.find(
           (document) =>
             document.slugId === route.documentSlugId ||
@@ -909,7 +922,7 @@ function App() {
       if(checkVisibility && /resync|member|permission|shared|unshared/.test(event.type))setDetailAccessPending(workspace);
       let next:BootstrapData, visibility:{ids:string[]}|undefined;
       try {
-        [next,visibility]=await Promise.all([fetchBootstrap(workspace,projectListProjection?'project-list':undefined),checkVisibility ? fetchVisibleIssueIds(workspace,checkedIds) : Promise.resolve(undefined)]);
+        [next,visibility]=await Promise.all([fetchBootstrap(workspace,bootstrapProjection),checkVisibility ? fetchVisibleIssueIds(workspace,checkedIds) : Promise.resolve(undefined)]);
       } catch(error) {
         if(checkVisibility && sessionViewerRef.current===viewerId)setDetailAccessPending(workspace);
         throw error;
@@ -4173,6 +4186,7 @@ function App() {
   return (
     <PeopleProvider users={data.users} workspaceName={data.workspace.name} members={data.members} teams={data.teams} teamMembers={data.teamMembers} projects={data.projects}><div className="app">
       <Sidebar
+        onReload={async () => acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))}
         account={account}
         data={data}
         page={page}
@@ -6022,6 +6036,7 @@ function App() {
           />
         )}
       </Suspense>
+      {data.resourceDetailsOmitted && ['project-detail','document-detail'].includes(page) && <main className="main-panel" aria-busy="true"><div role="status">Loading…</div></main>}
       {toolbarAgentSession && (
         <AgentChatPanel
           initialSession={toolbarAgentSession}

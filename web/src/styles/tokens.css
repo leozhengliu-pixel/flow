@@ -153,7 +153,7 @@
 .issue-description-root .collaboration-carets__label{position:absolute;left:-1px;bottom:100%;max-width:180px;padding:2px 5px;border-radius:3px;color:#fff;font-size:10px;font-weight:600;line-height:14px;white-space:nowrap;opacity:0;transform:translateY(2px);transition:opacity 120ms ease,transform 120ms ease}
 .issue-description-root .collaboration-carets__caret:hover .collaboration-carets__label,.issue-description-root .description-editor:focus-within .collaboration-carets__label{opacity:1;transform:translateY(0)}
 .issue-description-skeleton{height:68px;margin:8px 0 0;background:var(--theme-soft-overlay)}
-.description-bubble-menu{position:relative;height:35px;display:flex;align-items:center;padding:4px;border:.5px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-2);box-shadow:0 .5px 1px 1px #0005}
+.description-bubble-menu{position:relative;height:36px;display:flex;align-items:center;padding:4px;border:1px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-2);box-shadow:var(--shadow-control);max-width:calc(100vw - 16px)}
 .description-bubble-menu>button,.description-block-control>button{width:26px;height:26px;border:0;border-radius:4px;background:transparent;color:var(--issue-muted);display:grid;place-items:center;padding:0}
 .description-bubble-menu>button:hover,.description-bubble-menu>button[aria-pressed=true],.description-block-control>button:hover,.description-block-control>button[aria-expanded=true]{background:var(--theme-surface-hover);color:var(--issue-fg)}
 .description-bubble-menu>button:disabled{opacity:.45}
@@ -528,3 +528,13 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   --insight-hover-bg: lch(98.233% 0 0);
   --insight-hover-strong-bg: lch(95.475% 0 0);
 }
+
+/* Boot previews load these rules before the rich editor's route CSS. */
+.description-editor code,.comment-body code{background:var(--theme-surface-hover);color:var(--theme-text-primary)}
+.description-editor pre,.issue-description-history section pre{background:var(--theme-surface-1);color:var(--theme-text-primary)}
+.description-editor pre code{color:inherit;background:transparent}
+.description-editor a{color:var(--accent-primary)}
+.issue-properties .core-property-trigger,.issue-properties .cycle-picker .label-project-trigger{height:28px;margin:2px 0;padding:0 10px 0 6px;gap:8px}
+.issue-properties .core-property-trigger>svg,.issue-properties .cycle-picker .label-project-trigger>svg{width:16px;height:16px;flex:0 0 16px}
+:root{--sidebar-submenu-shadow:var(--shadow-dialog),0 1px 1px lch(0 0 0/.125)}
+:root[data-theme="light"]{--sidebar-submenu-shadow:var(--shadow-dialog)}

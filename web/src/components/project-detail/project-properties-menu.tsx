@@ -27,12 +27,13 @@ function initiativePropertyOptions(initiatives: Initiative[], selectedIds: strin
 }
 
 type Props = Pick<ProjectDetailProps, 'initiatives'|'labels'|'labelGroups'|'project'|'projectRelations'|'projects'|'users'|'viewer'|'onCreateLabel'> & {
+  featureFlags?: Record<string, boolean>
   integrationConnections?: ProjectDetailProps['integrationConnections']
   save: (input: ProjectMutationInput) => Promise<void>
   onUpdateProject: ProjectDetailProps['onUpdate']
 }
 
-export function ProjectPropertiesMenu({ initiatives, labels, labelGroups, project, projectRelations, projects, users, viewer, save, onUpdateProject, onCreateLabel, integrationConnections = [] }: Props) {
+export function ProjectPropertiesMenu({ featureFlags, initiatives, labels, labelGroups, project, projectRelations, projects, users, viewer, save, onUpdateProject, onCreateLabel, integrationConnections = [] }: Props) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [startOpen, setStartOpen] = useState(false)
@@ -57,7 +58,7 @@ export function ProjectPropertiesMenu({ initiatives, labels, labelGroups, projec
       <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="project-action-menu project-action-menu--properties" sideOffset={4} collisionPadding={16} onCloseAutoFocus={event => { if (startOpen) event.preventDefault() }}>
         <ProjectMenuSearch label="Filter project properties" query={query} onChange={setQuery}/>
         {visible('Members') && !memberIds.some(id => id !== project.lead?.id) && <ProjectSubmenu label="Members" icon={<MembersIcon size={16}/>} shortcut="P then M" searchable className="property-command-surface property-command-standard project-property-submenu is-members">{close => <PropertyMenu embedded multiple label="Members" options={memberOptions} selectedIds={memberIds} searchPlaceholder="Change members…" searchShortcut="P, then M" onChange={updateMember} onOpenChange={next => { if (!next) close() }}/>}</ProjectSubmenu>}
-        {visible('Initiatives') && initiatives.length > 0 && <ProjectSubmenu label="Initiatives" icon={<ViewGlyph icon="Initiative" color="currentColor"/>} shortcut="P then N" alignOffset={-30.5} className="property-command-surface property-command-standard project-property-submenu is-initiatives">{close => <PropertyMenu embedded hideSearch multiple label="Initiatives" options={initiativePropertyOptions(initiatives, project.initiatives ?? [])} selectedIds={project.initiatives ?? []} searchPlaceholder="Change initiatives…" searchShortcut="P, then N" onChange={id => void save({initiatives:toggle(project.initiatives ?? [],id)})} onOpenChange={next => { if (!next) close() }}/>}</ProjectSubmenu>}
+        {featureFlags?.initiatives !== false && visible('Initiatives') && initiatives.length > 0 && <ProjectSubmenu label="Initiatives" icon={<ViewGlyph icon="Initiative" color="currentColor"/>} shortcut="P then N" alignOffset={-30.5} className="property-command-surface property-command-standard project-property-submenu is-initiatives">{close => <PropertyMenu embedded hideSearch multiple label="Initiatives" options={initiativePropertyOptions(initiatives, project.initiatives ?? [])} selectedIds={project.initiatives ?? []} searchPlaceholder="Change initiatives…" searchShortcut="P, then N" onChange={id => void save({initiatives:toggle(project.initiatives ?? [],id)})} onOpenChange={next => { if (!next) close() }}/>}</ProjectSubmenu>}
         {visible('Start date…') && !project.startDate && <ProjectMenuItem label="Start date…" shortcut="⌃ ⌥ S" icon={<CalendarIcon variant="start" size={16}/>} onSelect={() => setStartOpen(true)}/>}
         {visible('Dependencies') && <ProjectSubmenu label="Dependencies" icon={<Link2 size={16}/>}>
           <ProjectSubmenu label="Blocked by" icon={<Link2 size={16}/>} alignOffset={-30.5} className="project-dependency-projects"><DependencyProjectPicker direction="blockedBy" onUpdate={save} onUpdateProject={onUpdateProject} project={project} projectRelations={projectRelations} projects={projects} viewer={viewer}/></ProjectSubmenu>

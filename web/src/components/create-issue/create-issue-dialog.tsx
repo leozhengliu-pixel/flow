@@ -101,7 +101,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
       ?? [...availableStates].sort((a, b) => (a.position??0) - (b.position??0)).find(state => state.type === 'unstarted')
       ?? availableStates[0]
   }, [availableStates, data.teamSettings, teamId])
-  const [title, setTitle] = useState('')
+  const [title, setTitle] = useState(initialContext?.title ?? '')
   const [description, setDescription] = useState<DescriptionSnapshot | null>(null)
   const [stateId, setStateId] = useState(requestedStateId ?? defaultState.id)
   const [priority, setPriority] = useState<number>(initialContext?.priority ?? 0)
@@ -177,9 +177,10 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
       setRecurrence(restored.recurrence ?? '')
       setServerDraftId(remoteDraft?.id ?? '')
     } else {
-      setTitle(''); setDescription(null); setFiles([]); setError(undefined); setServerDraftId(''); setTeamId(requestedTeamId || data.teams[0]?.id || '')
+      setTitle(initialContext?.title ?? ''); setDescription(initialContext?.description ? {markdown:initialContext.description,document:{type:'doc',content:[{type:'paragraph',content:[{type:'text',text:initialContext.description}]}]},documentJSON:JSON.stringify({type:'doc',content:[{type:'paragraph',content:[{type:'text',text:initialContext.description}]}]}),contentState:''} : null); setFiles([]); setError(undefined); setServerDraftId(''); setTeamId(requestedTeamId || data.teams[0]?.id || '')
       setStateId(requestedStateId || defaultState.id); setPriority(initialContext?.priority ?? 0); setEstimate(0); setAssigneeId(initialContext?.assigneeId ?? data.viewer.id); setProjectId(initialContext?.projectId ?? ''); setProjectMilestoneId(initialContext?.projectMilestoneId ?? ''); setCycleId(initialContext?.cycleId ?? ''); setDueDate(''); setLabelIds(initialContext?.labelIds ?? []); setTemplateId(''); setRecurrence(''); setCreateMore(false); setExpanded(false)
-      titleEditorRef.current?.commands.clearContent(); descriptionEditorRef.current?.commands.clearContent()
+      const textDocument = (text: string) => ({type:'doc',content:[{type:'paragraph',...(text ? {content:[{type:'text',text}]} : {})}]})
+      titleEditorRef.current?.commands.setContent(textDocument(initialContext?.title ?? '')); descriptionEditorRef.current?.commands.setContent(textDocument(initialContext?.description ?? ''))
       if (requestedStateId && availableStates.some(state => state.id === requestedStateId)) setStateId(requestedStateId)
     }
     if (requestedProject) {
@@ -413,7 +414,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
             <MiniProperty label="Project" value={project?.name ?? 'Project'} valueIsEntityName={Boolean(project)} selectedId={projectId} icon={<ProjectIcon/>} options={[{id:'',label:'No project',icon:<NoProjectIcon/>},...data.projects.map(item => ({id:item.id,label:item.name,color:item.color,icon:<ProjectIcon style={{ color: item.color }}/>,i18nIgnore:true }))]} onChange={value => { setProjectId(value); setProjectMilestoneId('') }}/>
             {project && project.milestones.length > 0 && <MiniProperty label="Milestone" value={projectMilestone?.name ?? 'Milestone'} valueIsEntityName={Boolean(projectMilestone)} selectedId={projectMilestoneId} icon={<Diamond size={14}/>} options={[{id:'',label:'No milestone',icon:<Diamond size={14}/>},...project.milestones.map(item => ({id:item.id,label:item.name,icon:<Diamond size={14}/>,i18nIgnore:true}))]} onChange={setProjectMilestoneId}/>}
             <MiniProperty multiple label="Labels" value={selectedLabels.length ? selectedLabels.map(label => label.name).join(', ') : 'Labels'} selectedIds={labelIds} icon={<LabelIcon/>} options={availableLabels.map(item => ({ id: item.id, label: item.name, color: item.color, description: item.description, issueCount: item.issueCount, scope: item.scope, resourceType: item.resourceType, groupId: item.groupId, groupLabel: item.groupId ? labelGroupNames.get(item.groupId) : undefined, groupColor: item.groupId ? labelGroupColors.get(item.groupId) : undefined }))} onChange={toggleLabel}/>
-            <MiniProperty label="Cycle" value={cycle?.name ?? 'Cycle'} valueIsEntityName={Boolean(cycle)} selectedId={cycleId} icon={<CycleIcon cycle={cycle} nextUpcomingId={nextUpcomingCycleId} progress={cycle?cycleIssueProgress(data.issues,cycle.id):0}/>} options={[{id:'',label:'No cycle',icon:<CycleIcon noCycle/>},...cycles.map(item=>({id:item.id,label:item.name,icon:<CycleIcon cycle={item} nextUpcomingId={nextUpcomingCycleId} progress={cycleIssueProgress(data.issues,item.id)}/>,i18nIgnore:true}))]} onChange={setCycleId} ariaLabel="Add to cycle"/>
+            {data.cycleSettings[teamId]?.enabled === true && <MiniProperty label="Cycle" value={cycle?.name ?? 'Cycle'} valueIsEntityName={Boolean(cycle)} selectedId={cycleId} icon={<CycleIcon cycle={cycle} nextUpcomingId={nextUpcomingCycleId} progress={cycle?cycleIssueProgress(data.issues,cycle.id):0}/>} options={[{id:'',label:'No cycle',icon:<CycleIcon noCycle/>},...cycles.map(item=>({id:item.id,label:item.name,icon:<CycleIcon cycle={item} nextUpcomingId={nextUpcomingCycleId} progress={cycleIssueProgress(data.issues,item.id)}/>,i18nIgnore:true}))]} onChange={setCycleId} ariaLabel="Add to cycle"/>}
             <MoreActions active={open && !linkOpen} dueDate={dueDate} recurrence={recurrence} onDueDateChange={setDueDate} onRecurrenceChange={setRecurrence} onInsertLink={() => setLinkOpen(true)}/>
           </div>
 
