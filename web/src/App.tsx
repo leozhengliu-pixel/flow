@@ -2795,9 +2795,9 @@ function App() {
     await removeProjectMilestone(projectId, milestoneId);
     return created;
   };
-  const commentOnProject = async (projectId: string, body: string) => {
+  const commentOnProject = async (projectId: string, body: string, bodyData?:Record<string,unknown>) => {
     const comment = await run(
-      () => createProjectComment(projectId, body),
+      () => createProjectComment(projectId, body, bodyData),
       "Could not post project comment",
     );
     setData((current) =>

@@ -107,6 +107,10 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 		key.Scopes = slices.Clone(grant.Scopes)
 		key.OAuthClientID = grant.ClientID
 		key.AuthorizationID = grant.AuthorizationID
+		if grant.Actor == "app" {
+			key.TeamRestriction = "selected"
+			key.TeamIDs = slices.Clone(grant.TeamIDs)
+		}
 		keyRaw, err := json.Marshal(key)
 		if err != nil {
 			return err

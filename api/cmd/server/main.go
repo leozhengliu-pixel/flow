@@ -129,6 +129,7 @@ func main() {
 	}()
 	shutdownSignal, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
+	go s.runApplicationAgentWorker(shutdownSignal)
 	go func() {
 		<-shutdownSignal.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -584,6 +585,13 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/issues/{id}/share", s.unshareIssue)
 	mux.HandleFunc("GET /api/shared/issues/{token}", s.getSharedIssue)
 	mux.HandleFunc("GET /api/issues", s.listIssues)
+	mux.HandleFunc("GET /api/application-installations", s.listApplicationInstallations)
+	mux.HandleFunc("POST /api/application-installations", s.configureApplicationInstallation)
+	mux.HandleFunc("PATCH /api/application-installations/{id}", s.configureApplicationInstallation)
+	mux.HandleFunc("GET /api/oauth/installation-teams", s.applicationConsentTeams)
+	mux.HandleFunc("GET /api/agent-tasks", s.listApplicationAgentTasks)
+	mux.HandleFunc("GET /api/agent-tasks/{id}", s.getApplicationAgentTask)
+	mux.HandleFunc("POST /api/agent-tasks/{id}/activities", s.appendApplicationAgentActivity)
 	mux.HandleFunc("GET /api/issue-records", s.listIssueRecords)
 	mux.HandleFunc("POST /api/issue-records", s.createIssueRecord)
 	mux.HandleFunc("POST /api/issue-records/batch", s.issueRecordAlias(s.batchUpdate))
@@ -4826,6 +4834,12 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		changes["estimate"] = strconv.FormatFloat(*input.Estimate, 'f', -1, 64)
 	}
 	if input.AssigneeID != nil {
+		if candidate := userByID(data, *input.AssigneeID); candidate != nil && candidate.App {
+			input.DelegateID = input.AssigneeID
+			input.AssigneeID = nil
+		}
+	}
+	if input.AssigneeID != nil {
 		if issue.Assignee != nil {
 			changes["previousAssignee"] = issue.Assignee.ID
 		}
@@ -4836,9 +4850,32 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		changes["assignee"] = *input.AssigneeID
 	}
 	if input.DelegateID != nil {
+		if data.Viewer.App && *input.DelegateID != data.Viewer.ID && *input.DelegateID != "" {
+			return nil, fmt.Errorf("%w: applications cannot invoke other agents", errInvalid)
+		}
+		if data.ViewerRole == "guest" && data.WorkspaceSettings.PreventGuestAgents {
+			return nil, fmt.Errorf("%w: guests cannot invoke agents", errInvalid)
+		}
+		previousDelegate := ""
+		if issue.Delegate != nil {
+			previousDelegate = issue.Delegate.ID
+		}
 		issue.Delegate = userByID(data, *input.DelegateID)
 		if *input.DelegateID != "" && issue.Delegate == nil {
 			return nil, fmt.Errorf("%w: unknown delegate", errInvalid)
+		}
+		if issue.Delegate != nil && !issue.Delegate.CanDelegateTo(issue.Team.ID) {
+			return nil, fmt.Errorf("%w: application cannot access or accept delegation in this team", errInvalid)
+		}
+		if previousDelegate != *input.DelegateID {
+			issue.AgentSessionID = ""
+			if issue.Delegate != nil {
+				issue.AgentSessionID = fmt.Sprintf("agent_task_%d", time.Now().UnixNano())
+				if issue.Assignee == nil && !data.Viewer.App {
+					viewer := data.Viewer
+					issue.Assignee = &viewer
+				}
+			}
 		}
 		changes["delegate"] = *input.DelegateID
 	}

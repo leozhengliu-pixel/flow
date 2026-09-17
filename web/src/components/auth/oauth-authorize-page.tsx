@@ -5,6 +5,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { decideOAuthAuthorization, fetchOAuthAuthorizationRequest, fetchUserSettings, type OAuthAuthorizationRequest } from '@/lib/api'
 import { applyTheme } from '@/lib/theme'
 import type { AccountBootstrap } from '@/types/flow'
+import type { Team } from '@/types/flow'
+import { request as apiRequest } from '@/lib/api-client'
 
 import './oauth-authorize-page.css'
 
@@ -24,6 +26,9 @@ function OAuthConsentPage({ account }: Props) {
   const [selecting, setSelecting] = useState(true)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
+  const [teams, setTeams] = useState<Team[]>([])
+  const [teamIds, setTeamIds] = useState<string[]>([])
+  const isApplication = query.get('actor') === 'app'
   const pendingRef=useRef(false)
   const activeRef=useRef(true)
   const preferredWorkspaceRef=useRef(account.lastWorkspaceKey)
@@ -54,13 +59,22 @@ function OAuthConsentPage({ account }: Props) {
   }, [location.search])
 
   const selected = request?.workspaces.find(item => item.workspace.urlKey === workspaceKey)
+  useEffect(() => {
+    setTeams([]); setTeamIds([])
+    if (!isApplication || !workspaceKey) return
+    const abort = new AbortController()
+    void apiRequest<Team[]>(`/api/oauth/installation-teams?workspace=${encodeURIComponent(workspaceKey)}`, {signal:abort.signal}).then(value => { if (!abort.signal.aborted) setTeams(value) }).catch(error => { if (!abort.signal.aborted) setError(String(error.message ?? error)) })
+    return () => abort.abort()
+  }, [isApplication,workspaceKey])
   const submit = async (approve: boolean) => {
-    if (pendingRef.current||(approve && !workspaceKey)) return
+    if (pendingRef.current||(approve && (!workspaceKey || isApplication && !teamIds.length))) return
     pendingRef.current=true
     setPending(true)
     setError('')
     try {
       const result = await decideOAuthAuthorization({
+        actor: query.get('actor') ?? undefined,
+        teamIds: isApplication ? teamIds : undefined,
         clientId: query.get('client_id') ?? '',
         redirectUri: query.get('redirect_uri') ?? '',
         responseType: query.get('response_type') ?? '',
@@ -118,13 +132,13 @@ function OAuthConsentPage({ account }: Props) {
         </dl>
       </div>
       <div className="oauth-copy">
-        <p>This MCP client is requesting access to your Flow workspace. By approving, you authorize Flow to share this data with <strong data-i18n-ignore>{request.client.client_name}</strong> on behalf of your organization. Once shared, the client's use of the data is governed by its own terms and privacy policy, not by Flow's terms or data commitments.</p>
+        {isApplication ? <><p>Install <strong data-i18n-ignore>{request.client.client_name}</strong> as an application member. It will act under its own identity in the selected teams.</p><fieldset><legend>Teams this application can access</legend>{teams.map(team => <label key={team.id} style={{display:'flex',alignItems:'center',gap:8,margin:'8px 0'}}><input type="checkbox" checked={teamIds.includes(team.id)} onChange={event => setTeamIds(current => event.target.checked ? [...current,team.id] : current.filter(id=>id!==team.id))}/><span data-i18n-ignore>{team.name}</span></label>)}</fieldset></> : <p>This MCP client is requesting access to your Flow workspace. By approving, you authorize Flow to share this data with <strong data-i18n-ignore>{request.client.client_name}</strong> on behalf of your organization. Once shared, the client's use of the data is governed by its own terms and privacy policy, not by Flow's terms or data commitments.</p>}
         <p>Owners and admins can revoke this connection at any time in Settings. Learn about <button onClick={() => navigate(`/${workspaceKey}/settings/applications`)}>third-party applications</button>.</p>
       </div>
       {error && <div className="oauth-error">{error}</div>}
       <footer>
         <button className="oauth-cancel" disabled={pending} onClick={() => void submit(false)}>Cancel</button>
-        <button className="oauth-approve" disabled={pending} onClick={() => void submit(true)}>{pending ? <LoaderCircle/> : <ShieldCheck/>}Approve</button>
+        <button className="oauth-approve" disabled={pending || isApplication && !teamIds.length} onClick={() => void submit(true)}>{pending ? <LoaderCircle/> : <ShieldCheck/>}{isApplication ? 'Install application' : 'Approve'}</button>
       </footer>
     </section>
   </OAuthShell>

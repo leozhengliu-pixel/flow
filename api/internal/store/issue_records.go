@@ -321,6 +321,9 @@ func (s *SQLiteStore) writeIssueRecord(ctx context.Context, tx *sqlTx, workspace
 	if _, err := tx.ExecContext(ctx, issueRecordInsert+issueRecordValuesSQL+issueRecordUpdate, values...); err != nil {
 		return err
 	}
+	if err := syncApplicationTask(ctx, tx, workspace, issue, raw); err != nil {
+		return err
+	}
 	return syncIssueIndexes(ctx, tx, workspace, []domain.Issue{issue})
 }
 

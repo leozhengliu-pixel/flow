@@ -1,6 +1,11 @@
 export type UUID = string;
 
 export interface User {
+  app?: boolean;
+  builtinAgent?: boolean;
+  oauthClientId?: string;
+  appScopes?: string[];
+  appTeamIds?: string[];
 	 outOfOfficeUntil?: string;
   id: UUID;
   userId?: string;
@@ -22,7 +27,7 @@ export interface Workspace {
   region?: "us" | "eu" | string;
   createdAt?: string;
 }
-export type WorkspaceRole = "owner" | "admin" | "member" | "guest";
+export type WorkspaceRole = "owner" | "admin" | "member" | "guest" | "app";
 export type TeamRole = "owner" | "member";
 export interface WorkspaceMembership {
   workspace: Workspace;
@@ -2010,6 +2015,7 @@ export interface FilterCondition {
 }
 
 export interface IssueUpdateInput {
+  delegateId?: UUID;
   expectedVersion?: number;
   title?: string;
   description?: string;

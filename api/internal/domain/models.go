@@ -6,6 +6,11 @@ import (
 )
 
 type User struct {
+	App              bool       `json:"app,omitempty"`
+	BuiltinAgent     bool       `json:"builtinAgent,omitempty"`
+	OAuthClientID    string     `json:"oauthClientId,omitempty"`
+	AppScopes        []string   `json:"appScopes,omitempty"`
+	AppTeamIDs       []string   `json:"appTeamIds,omitempty"`
 	OutOfOfficeUntil *time.Time `json:"outOfOfficeUntil,omitempty"`
 	ID               string     `json:"id"`
 	UserID           string     `json:"userId,omitempty"`
@@ -1060,6 +1065,9 @@ type OAuthClient struct {
 }
 
 type OAuthAuthorizationCode struct {
+	Actor           string    `json:"actor,omitempty"`
+	InstallerID     string    `json:"installerId,omitempty"`
+	TeamIDs         []string  `json:"teamIds,omitempty"`
 	ClientID        string    `json:"clientId"`
 	WorkspaceKey    string    `json:"workspaceKey"`
 	UserID          string    `json:"userId"`
@@ -1071,6 +1079,9 @@ type OAuthAuthorizationCode struct {
 }
 
 type OAuthRefreshGrant struct {
+	Actor           string    `json:"actor,omitempty"`
+	InstallerID     string    `json:"installerId,omitempty"`
+	TeamIDs         []string  `json:"teamIds,omitempty"`
 	ClientID        string    `json:"clientId"`
 	WorkspaceKey    string    `json:"workspaceKey"`
 	UserID          string    `json:"userId"`
@@ -1080,14 +1091,16 @@ type OAuthRefreshGrant struct {
 }
 
 type OAuthAuthorization struct {
-	ID         string     `json:"id"`
-	ClientID   string     `json:"clientId"`
-	ClientName string     `json:"clientName"`
-	UserID     string     `json:"userId"`
-	Scopes     []string   `json:"scopes"`
-	CreatedAt  time.Time  `json:"createdAt"`
-	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
-	RevokedAt  *time.Time `json:"revokedAt,omitempty"`
+	Actor       string     `json:"actor,omitempty"`
+	InstallerID string     `json:"installerId,omitempty"`
+	ID          string     `json:"id"`
+	ClientID    string     `json:"clientId"`
+	ClientName  string     `json:"clientName"`
+	UserID      string     `json:"userId"`
+	Scopes      []string   `json:"scopes"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	LastUsedAt  *time.Time `json:"lastUsedAt,omitempty"`
+	RevokedAt   *time.Time `json:"revokedAt,omitempty"`
 }
 
 type OAuthApplication struct {

@@ -1,4 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { ApplicationMembers } from '@/components/agent/application-members';
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
 import { teamHierarchy } from '@/lib/team-hierarchy';
 import { formatCustomerRevenue } from '@/lib/customer-settings';
@@ -49,7 +50,6 @@ import type {
   Customer,
   CustomerMutationInput,
   Invitation,
-  OAuthApplication,
   Team,
   User,
   WorkspaceMember,
@@ -141,7 +141,7 @@ export function WorkspaceDirectoryPage({
         title={title}
         count={
           kind === "members"
-            ? data.members.length + data.invitations.filter(invitation => invitation.status === "pending").length + data.oauthApplications.length
+            ? data.members.length + data.invitations.filter(invitation => invitation.status === "pending").length
             : kind === "customers"
               ? customerResultCount
               : undefined
@@ -161,7 +161,7 @@ export function WorkspaceDirectoryPage({
               ? t("New customer")
               : t("Create new team")
         }
-        options={kind === "teams" ? <TeamsOptions onOpenSettings={onNavigateTeamsSettings} /> : undefined}
+        options={kind === "teams" ? <TeamsOptions onOpenSettings={onNavigateTeamsSettings} /> : kind === 'members' ? <ApplicationMembers data={data} onReload={onReload}/> : undefined}
       />
       {kind === "members" && <MembersDirectory data={data} onOpen={onNavigateMember} onOpenTeam={onNavigateTeam} />}
       {kind === "customers" && (
@@ -318,12 +318,11 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
     }
     return result;
   }, [data.teamMembers, data.teams]);
-  type MemberEntry = { kind: "member"; member: WorkspaceMember } | { kind: "invitation"; invitation: Invitation } | { kind: "application"; application: OAuthApplication };
+  type MemberEntry = { kind: "member"; member: WorkspaceMember } | { kind: "invitation"; invitation: Invitation };
   const entries = useMemo<MemberEntry[]>(() => [
     ...members.map(member => ({ kind: "member" as const, member })),
     ...data.invitations.filter(invitation => invitation.status === "pending").map(invitation => ({ kind: "invitation" as const, invitation })),
-    ...data.oauthApplications.map(application => ({ kind: "application" as const, application })),
-  ], [data.invitations, data.oauthApplications, members]);
+  ], [data.invitations, members]);
   const filtered = useMemo(() => {
     const needle = query.trim();
     return entries.filter((entry) => {
@@ -339,8 +338,7 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
         if (teamIds.size && !entry.invitation.teamIds.some((id) => teamIds.has(id))) return false;
         return true;
       }
-      if (needle && !entry.application.name.toLocaleLowerCase().includes(needle.toLocaleLowerCase())) return false;
-      return !roles.size && !teamIds.size;
+      return false;
     });
   }, [entries, query, roles, teamIds, teamsByUserId]);
   const filtersActive = roles.size > 0 || teamIds.size > 0;
@@ -349,6 +347,7 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
       { id: "admin", label: "Admin" },
       { id: "member", label: "Member" },
       { id: "guest", label: "Guest" },
+      { id: "app", label: "Application" },
     ] },
     { id: "team", label: "Teams", icon: <UsersRound />, choices: data.teams.map((team) => ({ id: team.id, label: team.name, keywords: team.key })) },
   ];
@@ -370,11 +369,6 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
     }
   };
   const renderEntry = (entry: MemberEntry) => {
-    if (entry.kind === "application") return <div className="workspace-directory-member-row is-application">
-      <span className="workspace-members-indent" aria-hidden="true"/>
-      <div className="workspace-member-identity"><span className="workspace-directory-avatar">AP</span><span><strong>{entry.application.name}</strong><small>application</small></span></div>
-      <span>Application</span><time/><div/><span className="workspace-member-last-seen"/><span className="workspace-members-end"/>
-    </div>;
     if (entry.kind === "invitation") {
       const invitation = entry.invitation;
       const team = data.teams.find(item => invitation.teamIds.includes(item.id));
@@ -397,7 +391,7 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
     >
       <span className="workspace-members-indent" aria-hidden="true" />
       <div className="workspace-member-identity"><DirectoryUserAvatar user={user} /><span><strong>{user.displayName}</strong><small>{user.name || user.email.split("@")[0]}</small></span></div>
-      <span className={member.role === "admin" ? "workspace-member-role" : ""}>{member.role[0].toUpperCase() + member.role.slice(1)}</span>
+      <span className={member.role === "admin" ? "workspace-member-role" : ""}>{user.app ? t('Application') : member.role[0].toUpperCase() + member.role.slice(1)}</span>
       <time title="Joined workspace">{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(member.joinedAt))}</time>
       <div className="workspace-member-teams">{member.status === "active" && teams[0] ? <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onOpenTeam(teams[0]) }}><TeamGlyph team={teams[0]} />{teams[0].key}{teams.length > 1 ? ` +${teams.length - 1}` : ""}</button> : null}</div>
       <span className="workspace-member-last-seen">{user.id === data.viewer.id ? <><i />Online</> : member.status === "suspended" ? "Suspended" : member.lastSeenAt ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(member.lastSeenAt)) : "Never"}</span>
@@ -472,7 +466,7 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
             <span>Teams</span>
             <span>Last seen</span>
             <span className="workspace-members-end" />
-          </div>} items={filtered} itemKey={entry => entry.kind === "member" ? `member:${entry.member.user.id}` : entry.kind === "invitation" ? `invitation:${entry.invitation.id}` : `application:${entry.application.id}`} render={renderEntry}/>
+          </div>} items={filtered} itemKey={entry => entry.kind === "member" ? `member:${entry.member.user.id}` : `invitation:${entry.invitation.id}`} render={renderEntry}/>
         </div>
       )}
     </>
