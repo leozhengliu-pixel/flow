@@ -751,10 +751,9 @@
     "input_schema": {
       "type": "object",
       "required": ["team"],
-      "anyOf": [{"required": ["id"]}, {"required": ["name"]}],
       "properties": {
-        "id": { "type": "string", "description": "Status ID" },
-        "name": { "type": "string", "description": "Status name" },
+        "id": { "type": "string", "description": "Status ID. Provide id or name." },
+        "name": { "type": "string", "description": "Status name. Provide id or name." },
         "team": { "type": "string", "description": "Team name or ID" }
       }
     }

@@ -126,6 +126,25 @@ func TestMCPRejectsMalformedArgumentsBeforeAnyWrite(t *testing.T) {
 	}
 }
 
+func TestMCPToolSchemasUseObjectRoots(t *testing.T) {
+	var inventory []flowMCPTool
+	if err := json.Unmarshal(flowMCPToolInventory, &inventory); err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range inventory {
+		var schema map[string]any
+		if err := json.Unmarshal(tool.InputSchema, &schema); err != nil {
+			t.Fatal(err)
+		}
+		if schema["type"] != "object" {
+			t.Errorf("%s root type %v", tool.Name, schema["type"])
+		}
+		if schema["anyOf"] != nil || schema["oneOf"] != nil {
+			t.Errorf("%s uses a root union incompatible with Grok tool schemas", tool.Name)
+		}
+	}
+}
+
 func TestMCPEveryToolRejectsWrongArgumentTypes(t *testing.T) {
 	f := newMCPContractFixture(t)
 	var inventory []flowMCPTool
