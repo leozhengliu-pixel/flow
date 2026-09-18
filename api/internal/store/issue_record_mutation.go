@@ -198,6 +198,10 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			return err
 		}
 		if err := mutate(&metadata, target); err != nil {
+			if errors.Is(err, ErrNoMutation) {
+				result = original
+				return err
+			}
 			return err
 		}
 		target.Version = original.Version + 1
@@ -265,6 +269,9 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		realtime = enrichRealtimePayload(payload, result, event.Type)
 		return tx.Commit()
 	}()
+	if errors.Is(err, ErrNoMutation) {
+		return result, nil
+	}
 	if err != nil {
 		return result, err
 	}

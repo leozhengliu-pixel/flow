@@ -490,3 +490,24 @@ func TestTitleMutationDoesNotCopyUnchangedDescriptionIntoDomainEvent(t *testing.
 		t.Fatal("event lost the actual change")
 	}
 }
+
+func TestUnchangedIssueRecordCallbackDoesNotWrite(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	ctx := context.Background()
+	data := repo.Bootstrap()
+	issue := data.Issues[0]
+	writes := auditWrites(t, repo)
+	result, err := repo.UpdateIssueRecord(ctx, data.Workspace.URLKey, issue.ID, nil, IssueMutationScope{}, func(*domain.Bootstrap, *domain.Issue) error {
+		return ErrNoMutation
+	})
+	if err != nil || result.Version != issue.Version || result.ID != issue.ID {
+		t.Fatalf("no-op mutation failed: %#v %v", result, err)
+	}
+	if changes := writes(); len(changes) != 0 {
+		t.Fatalf("no-op issue callback wrote rows: %+v", changes)
+	}
+}

@@ -169,6 +169,29 @@ func TestIssueRecordsCreateUpdateAndContext(t *testing.T) {
 	}
 }
 
+func TestIssueRecordNoopPatchDoesNotBumpVersion(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, authDisabled: true, uploadPath: t.TempDir()})
+	metadata := requestJSON[domain.Bootstrap](t, handler, "GET", "/api/issue-records/bootstrap", nil, 200)
+	created := requestJSON[domain.Issue](t, handler, "POST", "/api/issue-records", map[string]any{"title": "No-op patch", "teamId": metadata.Teams[0].ID, "priority": 3}, 201)
+	same := requestJSON[domain.Issue](t, handler, "PATCH", "/api/issue-records/"+created.ID, map[string]any{"priority": created.Priority, "expectedVersion": created.Version}, 200)
+	if same.Version != created.Version || !same.UpdatedAt.Equal(created.UpdatedAt) || same.Priority != created.Priority {
+		t.Fatalf("no-op patch wrote an issue update: %#v -> %#v", created, same)
+	}
+	legacy := requestJSON[domain.Issue](t, handler, "PATCH", "/api/issues/"+created.ID, map[string]any{"priority": created.Priority}, 200)
+	if legacy.Version != created.Version || !legacy.UpdatedAt.Equal(created.UpdatedAt) {
+		t.Fatalf("legacy no-op patch wrote an issue update: %#v -> %#v", created, legacy)
+	}
+	changed := requestJSON[domain.Issue](t, handler, "PATCH", "/api/issue-records/"+created.ID, map[string]any{"priority": 4, "expectedVersion": created.Version}, 200)
+	if changed.Version != created.Version+1 || changed.Priority != 4 {
+		t.Fatalf("real patch %#v", changed)
+	}
+}
+
 func TestIssueRecordsRespectPrivateTeamsAndSharedPermissions(t *testing.T) {
 	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))

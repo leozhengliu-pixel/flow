@@ -3840,6 +3840,7 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 	}
 	var updated, current domain.Issue
 	var previousDocumentID string
+	noop := false
 	payload := struct {
 		Changes domain.IssueUpdateInput `json:"changes"`
 		Issue   domain.Issue            `json:"issue"`
@@ -3867,6 +3868,12 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
+		if len(changes) == 0 && len(input.DocumentUpdateIDs) == 0 {
+			updated = *issue
+			payload.Issue = updated
+			noop = true
+			return store.ErrNoMutation
+		}
 		issue.UpdatedAt = time.Now().UTC()
 		applySLARules(data, issue, issue.UpdatedAt)
 		issue.Version++
@@ -3880,7 +3887,7 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 		writeVersionConflict(w, current)
 		return
 	}
-	if err == nil {
+	if err == nil && !noop {
 		if triageIntelligenceWorkspaceEnabled(s, workspace) {
 			if generated, generationErr := s.generateTriageIntelligenceForIssue(r.Context(), workspace, id); generationErr == nil {
 				updated = generated
@@ -4726,11 +4733,11 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		return nil, fmt.Errorf("%w: team is retired", errInvalid)
 	}
 	changes := map[string]string{}
-	if input.Title != nil {
+	if input.Title != nil && strings.TrimSpace(*input.Title) != issue.Title {
 		changes["title"] = *input.Title
 		issue.Title = strings.TrimSpace(*input.Title)
 	}
-	if input.Description != nil {
+	if input.Description != nil && *input.Description != issue.Description {
 		changes["description"] = "updated"
 		changes["descriptionBefore"] = issue.Description
 		changes["descriptionStateBefore"] = issue.DescriptionState
@@ -4815,7 +4822,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 			changes["assignee"] = data.Viewer.ID
 		}
 	}
-	if input.Priority != nil {
+	if input.Priority != nil && issue.Priority != *input.Priority {
 		issue.Priority = *input.Priority
 		issue.PriorityLabel = priorityLabel(*input.Priority)
 		changes["priority"] = issue.PriorityLabel
@@ -4844,14 +4851,20 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		}
 	}
 	if input.AssigneeID != nil {
+		current := ""
 		if issue.Assignee != nil {
-			changes["previousAssignee"] = issue.Assignee.ID
+			current = issue.Assignee.ID
 		}
-		issue.Assignee = userByID(data, *input.AssigneeID)
-		if *input.AssigneeID != "" && issue.Assignee == nil {
-			return nil, fmt.Errorf("%w: unknown assignee", errInvalid)
+		if current != *input.AssigneeID {
+			if issue.Assignee != nil {
+				changes["previousAssignee"] = issue.Assignee.ID
+			}
+			issue.Assignee = userByID(data, *input.AssigneeID)
+			if *input.AssigneeID != "" && issue.Assignee == nil {
+				return nil, fmt.Errorf("%w: unknown assignee", errInvalid)
+			}
+			changes["assignee"] = *input.AssigneeID
 		}
-		changes["assignee"] = *input.AssigneeID
 	}
 	if input.DelegateID != nil {
 		if data.Viewer.App && *input.DelegateID != data.Viewer.ID && *input.DelegateID != "" {
@@ -4884,19 +4897,25 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		changes["delegate"] = *input.DelegateID
 	}
 	if input.ProjectID != nil {
-		issue.Project = projectByID(data, *input.ProjectID)
-		if *input.ProjectID != "" && issue.Project == nil {
-			return nil, fmt.Errorf("%w: unknown project", errInvalid)
+		current := ""
+		if issue.Project != nil {
+			current = issue.Project.ID
 		}
-		changes["project"] = *input.ProjectID
-		if issue.ProjectMilestoneID != nil {
-			project, err := fullProjectByID(data, *input.ProjectID)
-			if err != nil || !slices.ContainsFunc(project.Milestones, func(milestone domain.ProjectMilestone) bool { return milestone.ID == *issue.ProjectMilestoneID }) {
-				issue.ProjectMilestoneID = nil
+		if current != *input.ProjectID {
+			issue.Project = projectByID(data, *input.ProjectID)
+			if *input.ProjectID != "" && issue.Project == nil {
+				return nil, fmt.Errorf("%w: unknown project", errInvalid)
+			}
+			changes["project"] = *input.ProjectID
+			if issue.ProjectMilestoneID != nil {
+				project, err := fullProjectByID(data, *input.ProjectID)
+				if err != nil || !slices.ContainsFunc(project.Milestones, func(milestone domain.ProjectMilestone) bool { return milestone.ID == *issue.ProjectMilestoneID }) {
+					issue.ProjectMilestoneID = nil
+				}
 			}
 		}
 	}
-	if input.ProjectMilestoneID != nil {
+	if input.ProjectMilestoneID != nil && *input.ProjectMilestoneID != optionalID(issue.ProjectMilestoneID) {
 		if *input.ProjectMilestoneID == "" {
 			issue.ProjectMilestoneID = nil
 		} else {
@@ -4911,7 +4930,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		}
 		changes["projectMilestone"] = *input.ProjectMilestoneID
 	}
-	if input.CycleID != nil {
+	if input.CycleID != nil && *input.CycleID != optionalID(issue.CycleID) {
 		if *input.CycleID != "" && !data.CycleSettings[issue.Team.ID].Enabled {
 			return nil, fmt.Errorf("%w: cycles are disabled for this team", errInvalid)
 		}
@@ -4926,7 +4945,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		}
 		changes["cycle"] = *input.CycleID
 	}
-	if input.DueDate != nil {
+	if input.DueDate != nil && *input.DueDate != optionalID(issue.DueDate) {
 		if *input.DueDate == "" {
 			issue.DueDate = nil
 		} else {
@@ -5023,7 +5042,9 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		issue.SortOrder = *input.SortOrder
 		changes["sortOrder"] = strconv.FormatFloat(*input.SortOrder, 'f', -1, 64)
 	}
-	applyCycleAutomation(data, issue)
+	if len(changes) > 0 {
+		applyCycleAutomation(data, issue)
+	}
 	return changes, nil
 }
 
