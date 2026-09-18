@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -620,6 +621,10 @@ func (s *SQLiteStore) WorkspaceMetadata(workspace string) (domain.Bootstrap, boo
 		workspace = s.lastWorkspaceKey
 	}
 	data, ok := s.workspaces[workspace]
+	if ok {
+		data.TeamSettings = maps.Clone(data.TeamSettings)
+		data.CycleSettings = maps.Clone(data.CycleSettings)
+	}
 	s.mu.RUnlock()
 	if !ok {
 		return domain.Bootstrap{}, false

@@ -225,6 +225,7 @@ func TestIssueRecordsRespectPrivateTeamsAndSharedPermissions(t *testing.T) {
 	if len(insight.Items) != 1 || len(insight.StatusIntervals[issue.ID]) == 0 || insight.Items[0].Description != "" {
 		t.Fatal("shared insight projection is incomplete or unbounded")
 	}
+	authRequest[any](t, member, "PATCH", host.URL+"/api/issue-records/"+issue.ID, map[string]string{"title": issue.Title}, "test-workspace", 403)
 	authRequest[any](t, member, "PATCH", host.URL+"/api/issue-records/"+issue.ID, map[string]string{"title": "Not allowed"}, "test-workspace", 403)
 }
 

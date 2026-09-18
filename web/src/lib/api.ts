@@ -2321,9 +2321,13 @@ export function deleteRelation(
 export function uploadAttachment(
   issueId: string,
   file: File,
+  options?: { embed?: boolean },
 ): Promise<Attachment> {
   const body = new FormData();
   body.append("file", file);
+  if (options?.embed === false) {
+    body.append("embed", "0");
+  }
   return request(`/api/issues/${issueId}/attachments`, {
     method: "POST",
     body,

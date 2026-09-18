@@ -34,6 +34,12 @@ write. A user can explicitly retry after inspecting the previous result.
 Register an OAuth client through the existing OAuth application settings or
 `POST /oauth/register`. Authorize it using the PKCE code flow with:
 
+Application clients should use the `actor=app` discovery variant when reading
+the well-known OAuth metadata. Default discovery advertises only personal MCP
+scopes; `/.well-known/oauth-authorization-server?actor=app` and the matching
+protected-resource metadata also advertise `app:mentionable` and
+`app:assignable`.
+
 ```text
 /oauth/authorize
   ?client_id=YOUR_CLIENT_ID

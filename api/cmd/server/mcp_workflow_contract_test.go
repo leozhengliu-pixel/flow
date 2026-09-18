@@ -130,6 +130,10 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 	body := []byte("local attachment")
 	digest := sha256.Sum256(body)
 	attachment := object("create_attachment", map[string]any{"issue": issue, "filename": "contract.txt", "contentType": "text/plain", "base64Content": base64.StdEncoding.EncodeToString(body), "sha256": hex.EncodeToString(digest[:]), "size": len(body)})
+	attached, err := f.repository.IssueRecord(t.Context(), f.data.Workspace.URLKey, issue)
+	if err != nil || !strings.Contains(attached.Description, attachment["url"].(string)) {
+		t.Fatalf("create_attachment did not embed into the description: %v %v", attached, err)
+	}
 	call("delete_attachment", map[string]any{"id": attachment["id"]})
 	prepared := object("prepare_attachment_upload", map[string]any{"issue": issue, "filename": "uploaded.txt", "contentType": "text/plain", "size": len(body)})
 	req, _ := http.NewRequest("PUT", prepared["uploadUrl"].(string), bytes.NewReader(body))
@@ -143,6 +147,10 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 		t.Fatalf("upload status=%d", resp.StatusCode)
 	}
 	uploaded := object("create_attachment_from_upload", map[string]any{"issue": issue, "assetUrl": prepared["assetUrl"]})
+	finalized, err := f.repository.IssueRecord(t.Context(), f.data.Workspace.URLKey, issue)
+	if err != nil || !strings.Contains(finalized.Description, uploaded["url"].(string)) {
+		t.Fatalf("create_attachment_from_upload did not embed into the description: %v %v", finalized, err)
+	}
 	call("delete_attachment", map[string]any{"id": uploaded["id"]})
 	call("resolve_diff_thread", map[string]any{"threadId": "contract-thread", "resolved": true})
 	call("delete_diff_comment", map[string]any{"commentId": "contract-thread"})

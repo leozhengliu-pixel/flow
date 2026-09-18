@@ -1642,14 +1642,20 @@ type NotificationList struct {
 }
 
 type Bootstrap struct {
-	ResourceDetailsOmitted        bool                               `json:"resourceDetailsOmitted,omitempty"`
-	ProviderJobs                  []ProviderJob                      `json:"providerJobs,omitempty"`
-	NextIssueNumber               int                                `json:"-"`
-	IssueCollectionPaged          bool                               `json:"issueCollectionPaged,omitempty"`
-	Workspace                     Workspace                          `json:"workspace"`
-	Viewer                        User                               `json:"viewer"`
-	Users                         []User                             `json:"users"`
-	Teams                         []Team                             `json:"teams"`
+	ResourceDetailsOmitted bool          `json:"resourceDetailsOmitted,omitempty"`
+	ProviderJobs           []ProviderJob `json:"providerJobs,omitempty"`
+	NextIssueNumber        int           `json:"-"`
+	IssueCollectionPaged   bool          `json:"issueCollectionPaged,omitempty"`
+	Workspace              Workspace     `json:"workspace"`
+	Viewer                 User          `json:"viewer"`
+	Users                  []User        `json:"users"`
+	Teams                  []Team        `json:"teams"`
+	// TeamByID/TeamByKey/TeamChildren/LabelIndex are in-memory lookup tables
+	// rebuilt on load. They are not serialized.
+	TeamByID                      map[string]int                     `json:"-"`
+	TeamByKey                     map[string]string                  `json:"-"`
+	TeamChildren                  map[string][]string                `json:"-"`
+	LabelIndex                    map[string][]int                   `json:"-"`
 	Customers                     []Customer                         `json:"customers"`
 	States                        []WorkflowState                    `json:"states"`
 	Labels                        []IssueLabel                       `json:"labels"`

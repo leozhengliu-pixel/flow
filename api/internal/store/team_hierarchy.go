@@ -5,10 +5,14 @@ import (
 	"flow/api/internal/domain"
 )
 
+func descendantTeamIDs(data *domain.Bootstrap, root string) []string {
+	return domain.TeamDescendantIDs(data, root)
+}
+
 // Memberships propagate upward as ordinary members. Existing owner roles are
 // retained, and detaching a subtree does not silently remove memberships.
 func syncTeamAncestorMembers(ctx context.Context, tx *sqlTx, data domain.Bootstrap, teamID string, userIDs ...string) error {
-	ids := domain.TeamSubtreeIDs(&data, []string{teamID})
+	ids := append([]string{teamID}, descendantTeamIDs(&data, teamID)...)
 	clause, values := bindList("team_id", ids)
 	if len(userIDs) > 0 {
 		userClause, userValues := bindList("user_id", userIDs)

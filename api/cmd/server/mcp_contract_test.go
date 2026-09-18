@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -254,6 +255,19 @@ func TestMCPOAuthDiscoveryAndReadonlySurface(t *testing.T) {
 				t.Fatalf("%s advertised app scope %q to MCP clients: %#v", path, scope, scopes)
 			}
 		}
+	}
+	appResponse, err := http.Get(f.host.URL + "/.well-known/oauth-authorization-server?actor=app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer appResponse.Body.Close()
+	var appMetadata map[string]any
+	if err := json.NewDecoder(appResponse.Body).Decode(&appMetadata); err != nil {
+		t.Fatal(err)
+	}
+	appScopes, _ := appMetadata["scopes_supported"].([]any)
+	if !slices.ContainsFunc(appScopes, func(raw any) bool { value, _ := raw.(string); return value == "app:mentionable" }) {
+		t.Fatalf("app discovery omitted agent scopes: %#v", appScopes)
 	}
 	var inventory []flowMCPTool
 	if err := json.Unmarshal(flowMCPToolInventory, &inventory); err != nil {

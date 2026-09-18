@@ -38,6 +38,9 @@ func (s *server) oauthProtectedResource(w http.ResponseWriter, r *http.Request) 
 	base := externalBaseURL(r)
 	resource := base + "/mcp"
 	scopes := personalOAuthScopes
+	if r.URL.Query().Get("actor") == "app" {
+		scopes = supportedOAuthScopes
+	}
 	if strings.HasSuffix(r.URL.Path, "/readonly") {
 		resource = base + "/mcp/readonly"
 		scopes = []string{"read", "openid", "email"}
@@ -52,6 +55,10 @@ func (s *server) oauthProtectedResource(w http.ResponseWriter, r *http.Request) 
 
 func (s *server) oauthAuthorizationServer(w http.ResponseWriter, r *http.Request) {
 	base := externalBaseURL(r)
+	scopes := personalOAuthScopes
+	if r.URL.Query().Get("actor") == "app" {
+		scopes = supportedOAuthScopes
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"issuer":                                base,
 		"authorization_endpoint":                base + "/oauth/authorize",
@@ -62,7 +69,7 @@ func (s *server) oauthAuthorizationServer(w http.ResponseWriter, r *http.Request
 		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
 		"code_challenge_methods_supported":      []string{"S256"},
 		"token_endpoint_auth_methods_supported": []string{"none"},
-		"scopes_supported":                      personalOAuthScopes,
+		"scopes_supported":                      scopes,
 	})
 }
 

@@ -1,4 +1,4 @@
-import { Bold, Braces, ChevronDown, Code2, Heading2, Heading3, Italic, Link2, List, ListOrdered, ListTodo, CaseSensitive, ChevronsDownUp, Plus, Bot, MessageSquare, Pilcrow, Quote, Strikethrough, Underline as UnderlineIcon } from 'lucide-react'
+import { Bold, Braces, ChevronDown, Code2, Heading1, Heading2, Heading3, Italic, Link2, List, ListOrdered, ListTodo, CaseSensitive, ChevronsDownUp, Plus, Bot, MessageSquare, Pilcrow, Quote, Strikethrough, Underline as UnderlineIcon } from 'lucide-react'
 import type { Editor } from '@tiptap/react'
 import { useRef, useState } from 'react'
 import { useI18n } from '@/i18n/i18n'
@@ -21,6 +21,7 @@ export function SelectionToolbar({ editor, actions }: { editor: Editor; actions?
   const rootRef = useRef<HTMLDivElement>(null)
   const blocks = [
     { id: 'paragraph', label: 'Regular text', hint: '', icon: Pilcrow, active: editor.isActive('paragraph'), run: () => editor.chain().focus().setParagraph().run() },
+    { id: 'h1', label: 'Heading 1', hint: '#', icon: Heading1, active: editor.isActive('heading', { level: 1 }), run: () => editor.chain().focus().toggleHeading({ level: 1 }).run() },
     { id: 'h2', label: 'Heading 2', hint: '##', icon: Heading2, active: editor.isActive('heading', { level: 2 }), run: () => editor.chain().focus().toggleHeading({ level: 2 }).run() },
     { id: 'h3', label: 'Heading 3', hint: '###', icon: Heading3, active: editor.isActive('heading', { level: 3 }), run: () => editor.chain().focus().toggleHeading({ level: 3 }).run() },
   ]

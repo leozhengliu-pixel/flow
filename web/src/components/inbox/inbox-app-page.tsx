@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import type { ActivityEvent, BootstrapData, CodeReview, Issue, IssueRelationType, IssueUpdateInput, Notification, Presence, Project, User } from '@/types/flow'
+import type { ActivityEvent, Attachment, BootstrapData, CodeReview, Issue, IssueRelationType, IssueUpdateInput, Notification, Presence, Project, User } from '@/types/flow'
 import { DetailPane } from '@/components/detail/detail-pane'
 import { NoProjectIcon, PriorityIcon, ProjectIcon, WorkflowStatusGlyph } from '@/components/issue/issue-icons'
 import type { SubIssueInput } from '@/components/issue/sub-issue-editor'
@@ -56,7 +56,7 @@ export interface InboxAppPageProps {
   onEditComment: (issue: Issue, commentId: string, body: string, bodyData?: Record<string, unknown>) => Promise<void>
   onDeleteComment: (issue: Issue, commentId: string) => Promise<void>
   onReactComment: (issue: Issue, commentId: string, emoji: string) => Promise<void>
-  onUploadAttachment: (issue: Issue, file: File) => Promise<void>
+  onUploadAttachment: (issue: Issue, file: File, options?: { embed?: boolean }) => Promise<Attachment | void>
   onDeleteAttachment: (issue: Issue, attachmentId: string) => Promise<void>
   onCopyIssueLink?: (issue: Issue) => Promise<void> | void
   onOpenSidebar?: () => void
@@ -263,7 +263,7 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
           onReactComment={(commentId, emoji) => onReactComment(issue, commentId, emoji)}
           onRelation={(type, relatedIssueId) => onCreateRelation?.(issue, type, relatedIssueId) ?? Promise.resolve()}
           onDeleteRelation={relationId => onDeleteRelation(issue, relationId)}
-          onUpload={file => onUploadAttachment(issue, file)}
+          onUpload={(file, options) => onUploadAttachment(issue, file, options)}
           onDeleteAttachment={attachmentId => onDeleteAttachment(issue, attachmentId)}
         />,
         fullBleed: true,
