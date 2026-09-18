@@ -1,4 +1,4 @@
-import { Code2, Heading2, Heading3, List, ListOrdered, Minus, Pilcrow, Quote, Table2 } from 'lucide-react'
+import { ChevronsDownUp, Code2, Heading1, Heading2, Heading3, Image as ImageIcon, Lightbulb, List, ListOrdered, ListTodo, Minus, Paperclip, Pilcrow, Quote, Table2, Workflow } from 'lucide-react'
 import { personSearchText } from '@/lib/people'
 import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
@@ -21,6 +21,10 @@ import { SlashCommandMenu, type EditorCommand } from './editor/slash-command-men
 import { filterEditorCommands } from './editor/editor-commands'
 import { SelectionToolbar } from './editor/selection-toolbar'
 import { structuredBlocks, type DescriptionSelectionActions } from './editor/structured-blocks'
+import { DescriptionImage, insertImageFiles, type DescriptionImageUpload } from './editor/image-extension'
+import { DescriptionCallout } from './editor/callout-extension'
+import { DescriptionDiagram } from './editor/diagram-extension'
+import { DescriptionFile, DescriptionVideo, insertEmbedFiles } from './editor/file-extension'
 import { MentionExtension } from './editor/mention-extension'
 import { MentionMenu } from './editor/mention-menu'
 import { useI18n } from '@/i18n/i18n'
@@ -43,6 +47,7 @@ interface DescriptionEditorProps {
   placeholder?: string
   ariaLabel?: string
   users?: User[]
+  onInsertImage?: DescriptionImageUpload
   collaboration?: {
     workspaceKey: string
     issueId?: string
@@ -65,7 +70,7 @@ export function IssueDescriptionEditor(props: DescriptionEditorProps) {
   return <DescriptionEditorSession key={sessionKey} {...props}/>
 }
 
-function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, editorRef, className, collaboration, selectionActions, placeholder = 'Add description...', ariaLabel, users = [] }: DescriptionEditorProps) {
+function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, editorRef, className, collaboration, selectionActions, placeholder = 'Add description...', ariaLabel, users = [], onInsertImage }: DescriptionEditorProps) {
   const { t } = useI18n()
   const descriptionLabel = ariaLabel ?? t('Issue description')
   const initial = useMemo(() => parseDescriptionContent(value, state), []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -99,6 +104,9 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   const [mentionPosition, setMentionPosition] = useState({ left: 14, top: 44 })
   const mentionRef = useRef<MentionState>(closedMention)
   const mentionSelectedRef = useRef(0)
+  const uploadImageRef = useRef(onInsertImage)
+  uploadImageRef.current = onInsertImage
+  const liveEditorRef = useRef<Editor | null>(null)
 
   const collaborationSession = useMemo(() => {
     if (!collaboration) return undefined
@@ -138,11 +146,16 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     extensions: [
       // TrailingNode appends a random-client paragraph even on selection-only
       // transactions. In a CRDT that would accumulate one paragraph per reader.
-      StarterKit.configure({ heading: { levels: [2, 3] }, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: collaborationSession ? false : undefined, trailingNode: collaborationSession ? false : undefined }),
+      StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: collaborationSession ? false : undefined, trailingNode: collaborationSession ? false : undefined }),
       TableKit.configure({ table: { resizable: true } }),
       ...structuredBlocks,
       Placeholder.configure({ placeholder }),
       Markdown,
+      DescriptionImage,
+      DescriptionVideo,
+      DescriptionFile,
+      DescriptionCallout,
+      DescriptionDiagram,
       MentionExtension,
       SlashCommandExtension,
       ...(collaborationSession ? [
@@ -165,6 +178,27 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       },
       handleKeyDown: (view, event) => {
         if (handleEditorSubmit(event, submitRef.current)) return true
+        if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'u') {
+          event.preventDefault()
+          pickDescriptionFiles(files => insertEmbedFiles(view, files, uploadImageRef.current))
+          return true
+        }
+        const currentEditor = liveEditorRef.current
+        if ((event.metaKey || event.ctrlKey) && event.altKey && ['1', '2', '3'].includes(event.key) && currentEditor) {
+          event.preventDefault()
+          currentEditor.chain().focus().toggleHeading({ level: Number(event.key) as 1 | 2 | 3 }).run()
+          return true
+        }
+        if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key === '7' && currentEditor) {
+          event.preventDefault()
+          currentEditor.chain().focus().toggleTaskList().run()
+          return true
+        }
+        if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key === '6' && currentEditor) {
+          event.preventDefault()
+          currentEditor.chain().focus().setDetails().run()
+          return true
+        }
         const current = getSlashCommandState(view.state)
         const currentMention = getMentionState(view.state)
         if (currentMention.active && currentMention.range?.from !== dismissedMentionRef.current) {
@@ -229,7 +263,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
         scheduleCollaborativePersist()
       }
     },
-    onTransaction: ({ editor: current }) => { syncSlashState(current); syncMentionState(current) },
+    onTransaction: ({ editor: current }) => { liveEditorRef.current = current; syncSlashState(current); syncMentionState(current) },
     onSelectionUpdate: ({ editor: current }) => { syncSlashState(current); syncMentionState(current) },
     onBlur: () => { setSlash(closedSlash); mentionRef.current = closedMention; setMention(closedMention); if (collaborationSession) void persistRef.current(); onBlur?.() },
   })
@@ -299,13 +333,28 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       setSlash(closedSlash)
     }
     return [
+      { id: 'heading-1', group: 'Basic blocks', label: 'Heading 1', description: 'Large section heading', keywords: 'h1 title', shortcut: '⌘⌥1', icon: Heading1, run: execute(() => editor.chain().focus().toggleHeading({ level: 1 }).run()) },
+      { id: 'heading-2', group: 'Basic blocks', label: 'Heading 2', description: 'Medium section heading', keywords: 'h2 title', shortcut: '⌘⌥2', icon: Heading2, run: execute(() => editor.chain().focus().toggleHeading({ level: 2 }).run()) },
+      { id: 'heading-3', group: 'Basic blocks', label: 'Heading 3', description: 'Small section heading', keywords: 'h3 subtitle', shortcut: '⌘⌥3', icon: Heading3, run: execute(() => editor.chain().focus().toggleHeading({ level: 3 }).run()) },
+      { id: 'bullet-list', group: 'Basic blocks', label: 'Bulleted list', description: 'Create a simple bulleted list', keywords: 'unordered bullets', shortcut: '⌘⇧8', icon: List, run: execute(() => editor.chain().focus().toggleBulletList().run()) },
+      { id: 'number-list', group: 'Basic blocks', label: 'Numbered list', description: 'Create a list with numbering', keywords: 'ordered numbers', shortcut: '⌘⇧9', icon: ListOrdered, run: execute(() => editor.chain().focus().toggleOrderedList().run()) },
+      { id: 'checklist', group: 'Basic blocks', label: 'Checklist', description: 'Track tasks with checkboxes', keywords: 'todo task checkbox', shortcut: '⌘⇧7', icon: ListTodo, run: execute(() => editor.chain().focus().toggleTaskList().run()) },
+      { id: 'media', group: 'Basic blocks', label: 'Insert media…', description: 'Upload images or videos', keywords: 'image picture photo video screenshot', icon: ImageIcon, run: execute(() => pickDescriptionFiles(files => {
+        const images = files.filter(file => file.type.startsWith('image/'))
+        const rest = files.filter(file => !file.type.startsWith('image/'))
+        if (images.length) insertImageFiles(editor.view, images, uploadImageRef.current)
+        if (rest.length) insertEmbedFiles(editor.view, rest, uploadImageRef.current)
+      }, 'image/*,video/*')) },
+      { id: 'file', group: 'Basic blocks', label: 'Attach files…', description: 'Embed a file card in the issue body', keywords: 'attachment upload pdf', shortcut: '⌘⇧U', icon: Paperclip, run: execute(() => pickDescriptionFiles(files => insertEmbedFiles(editor.view, files, uploadImageRef.current))) },
+      { id: 'code-block', group: 'Basic blocks', label: 'Code block', description: 'Add a formatted code block', keywords: 'source snippet', shortcut: '⌘⇧\\', icon: Code2, run: execute(() => editor.chain().focus().toggleCodeBlock().run()) },
+      { id: 'diagram', group: 'Basic blocks', label: 'Diagram', description: 'Insert a Mermaid diagram', keywords: 'mermaid flowchart sequence', icon: Workflow, run: execute(() => editor.chain().focus().insertContent({ type: 'diagram' }).run()) },
+      { id: 'collapse', group: 'Basic blocks', label: 'Collapsible section', description: 'Hide and reveal nested content', keywords: 'details toggle fold', shortcut: '⌘⇧6', icon: ChevronsDownUp, run: execute(() => editor.chain().focus().setDetails().run()) },
+      { id: 'quote', group: 'Basic blocks', label: 'Blockquote', description: 'Capture a quote', keywords: 'blockquote citation', shortcut: '⌥⇧.', icon: Quote, run: execute(() => editor.chain().focus().toggleBlockquote().run()) },
+      { id: 'callout', group: 'Basic blocks', label: 'Callout', description: 'Highlight a note with color', keywords: 'aside note warning info', icon: Lightbulb, run: execute(() => {
+        if (editor.can().wrapIn('callout')) editor.chain().focus().wrapIn('callout').run()
+        else editor.chain().focus().insertContent({ type: 'callout', content: [{ type: 'paragraph' }] }).run()
+      }) },
       { id: 'text', group: 'Basic blocks', label: 'Text', description: 'Start writing with plain text', keywords: 'paragraph regular', shortcut: '⌘⌥0', icon: Pilcrow, run: execute(() => editor.chain().focus().setParagraph().run()) },
-      { id: 'heading-2', group: 'Basic blocks', label: 'Heading 2', description: 'Medium section heading', keywords: 'h2 title', shortcut: '##', icon: Heading2, run: execute(() => editor.chain().focus().toggleHeading({ level: 2 }).run()) },
-      { id: 'heading-3', group: 'Basic blocks', label: 'Heading 3', description: 'Small section heading', keywords: 'h3 subtitle', shortcut: '###', icon: Heading3, run: execute(() => editor.chain().focus().toggleHeading({ level: 3 }).run()) },
-      { id: 'bullet-list', group: 'Basic blocks', label: 'Bulleted list', description: 'Create a simple bulleted list', keywords: 'unordered bullets', shortcut: '-', icon: List, run: execute(() => editor.chain().focus().toggleBulletList().run()) },
-      { id: 'number-list', group: 'Basic blocks', label: 'Numbered list', description: 'Create a list with numbering', keywords: 'ordered numbers', shortcut: '1.', icon: ListOrdered, run: execute(() => editor.chain().focus().toggleOrderedList().run()) },
-      { id: 'quote', group: 'Basic blocks', label: 'Quote', description: 'Capture a quote or callout', keywords: 'blockquote citation', shortcut: '>', icon: Quote, run: execute(() => editor.chain().focus().toggleBlockquote().run()) },
-      { id: 'code-block', group: 'Basic blocks', label: 'Code block', description: 'Add a formatted code block', keywords: 'source snippet', shortcut: '```', icon: Code2, run: execute(() => editor.chain().focus().toggleCodeBlock().run()) },
       { id: 'divider', group: 'Basic blocks', label: 'Divider', description: 'Separate sections visually', keywords: 'horizontal rule separator', shortcut: '---', icon: Minus, run: execute(() => editor.chain().focus().setHorizontalRule().run()) },
       { id: 'table', group: 'Basic blocks', label: 'Table', description: 'Insert a 3 by 3 table', keywords: 'grid cells spreadsheet', shortcut: 'table', icon: Table2, run: execute(() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()) },
     ]
@@ -373,7 +422,9 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   useEffect(() => {
     if (!editor) return
     editor.view.dom.setAttribute('aria-label', descriptionLabel)
-  }, [descriptionLabel, editor])
+    editor.storage.image.upload = uploadImageRef.current
+    editor.storage.image.onComment = selection => selectionActions?.onComment?.(selection)
+  }, [descriptionLabel, editor, onInsertImage, selectionActions])
   useEffect(() => {
     selectedRef.current = 0
     setSelectedIndex(0)
@@ -382,24 +433,26 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   function syncSlashState(current: NonNullable<typeof editor>) {
     const next = getSlashCommandState(current.state)
     if (!next.active || next.range?.from === dismissedRef.current) {
-      slashRef.current = closedSlash
-      setSlash(closedSlash)
+      if (slashRef.current.active) {
+        slashRef.current = closedSlash
+        setSlash(closedSlash)
+      }
       return
     }
     if (dismissedRef.current !== null && next.range?.from !== dismissedRef.current) dismissedRef.current = null
+    const prev = slashRef.current
     slashRef.current = next
-    setSlash(next)
+    if (prev.active !== next.active || prev.query !== next.query || prev.range?.from !== next.range?.from || prev.range?.to !== next.range?.to) setSlash(next)
     requestAnimationFrame(() => {
       const root = rootRef.current
       const live = getSlashCommandState(current.state)
       if (!root || current.isDestroyed || !next.range || !live.active || live.range?.to !== next.range.to || next.range.to > current.state.doc.content.size) return
       const caret = current.view.coordsAtPos(next.range.to)
       const bounds = root.getBoundingClientRect()
-      const width = 292
-      setMenuPosition({
-        left: Math.max(0, Math.min(caret.left - bounds.left, bounds.width - width)),
-        top: caret.bottom - bounds.top + 6,
-      })
+      const width = 227
+      const left = Math.max(0, Math.min(caret.left - bounds.left, bounds.width - width))
+      const top = caret.bottom - bounds.top + 6
+      setMenuPosition(position => position.left === left && position.top === top ? position : { left, top })
     })
   }
 
@@ -416,10 +469,13 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       return
     }
     if (dismissedMentionRef.current !== null && next.range?.from !== dismissedMentionRef.current) dismissedMentionRef.current = null
+    const prev = mentionRef.current
     mentionRef.current = next
-    setMention(next)
-    mentionSelectedRef.current = 0
-    setMentionIndex(0)
+    if (prev.active !== next.active || prev.query !== next.query || prev.range?.from !== next.range?.from || prev.range?.to !== next.range?.to) {
+      setMention(next)
+      mentionSelectedRef.current = 0
+      setMentionIndex(0)
+    }
     requestAnimationFrame(() => {
       const root = rootRef.current
       const live = getMentionState(current.state)
@@ -457,13 +513,30 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
 
 function schemaExtensions() {
   return [
-    StarterKit.configure({ heading: { levels: [2, 3] }, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: false, trailingNode: false }),
+    StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: false, trailingNode: false }),
     TableKit.configure({ table: { resizable: true } }),
     ...structuredBlocks,
     Markdown,
+    DescriptionImage,
+    DescriptionVideo,
+    DescriptionFile,
+    DescriptionCallout,
+    DescriptionDiagram,
     MentionExtension,
     SlashCommandExtension,
   ]
+}
+
+function pickDescriptionFiles(onFiles: (files: File[]) => void, accept?: string) {
+  const input = document.createElement('input')
+  input.type = 'file'
+  if (accept) input.accept = accept
+  input.multiple = true
+  input.addEventListener('change', () => {
+    onFiles([...input.files ?? []])
+    input.remove()
+  })
+  input.click()
 }
 
 function base64ToBytes(value: string) {

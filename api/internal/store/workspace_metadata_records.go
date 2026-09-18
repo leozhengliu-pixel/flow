@@ -82,8 +82,19 @@ func (s *SQLiteStore) ensureWorkspaceMetadataRecords(ctx context.Context) error 
 	if s.dialect == "postgres" {
 		blob = "BYTEA"
 	}
-	_, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS workspace_metadata_records(workspace_key VARCHAR(191) NOT NULL,field VARCHAR(191) NOT NULL,record_key `+keyType+` NOT NULL,collection_order BIGINT NOT NULL,data `+blob+` NOT NULL,PRIMARY KEY(workspace_key,field,record_key))`)
-	return err
+	if _, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS workspace_metadata_records(workspace_key VARCHAR(191) NOT NULL,field VARCHAR(191) NOT NULL,record_key `+keyType+` NOT NULL,collection_order BIGINT NOT NULL,data `+blob+` NOT NULL,PRIMARY KEY(workspace_key,field,record_key))`); err != nil {
+		return err
+	}
+	// Incremental writers append after the highest ordinal per collection.
+	// Without this index that lookup scans every row of the collection.
+	index := `CREATE INDEX IF NOT EXISTS workspace_metadata_order_idx ON workspace_metadata_records(workspace_key,field,collection_order)`
+	if s.dialect == "mysql" {
+		index = `CREATE INDEX workspace_metadata_order_idx ON workspace_metadata_records(workspace_key,field,collection_order)`
+	}
+	if _, err := s.db.ExecContext(ctx, index); err != nil && !(s.dialect == "mysql" && isDuplicateIndex(err)) {
+		return err
+	}
+	return nil
 }
 
 // Arrays of entities and dictionaries are stored per entry. The small root

@@ -518,7 +518,7 @@
   {
     "name": "mcp__flow.prepare_attachment_upload",
     "access": "write",
-    "description": "Prepare a direct Flow file upload for an existing issue.",
+    "description": "Prepare a direct Flow file upload for an existing issue. After PUT and create_attachment_from_upload, the file is inserted into the issue description as an inline image, video, or file card — not only listed under resources.",
     "input_schema": {
       "type": "object",
       "required": ["contentType", "filename", "issue", "size"],
@@ -546,7 +546,7 @@
         "blocks": { "type": "array", "items": { "type": "string" } },
         "cycle": { "type": ["string", "null"] },
         "delegate": { "type": ["string", "null"] },
-        "description": { "type": "string" },
+        "description": { "type": "string", "description": "Markdown body. Images written as ![alt](url) render inline. Prefer attaching files with prepare_attachment_upload so Flow inserts them into this description automatically." },
         "dueDate": { "type": ["string", "null"] },
         "duplicateOf": { "type": ["string", "null"] },
         "estimate": { "type": ["number", "null"] },
@@ -575,7 +575,7 @@
   {
     "name": "mcp__flow.create_attachment",
     "access": "write",
-    "description": "Deprecated fallback for tiny files only. Accepts base64 file content, verifies SHA-256 checksum, and uploads it through the MCP worker. Prefer `prepare_attachment_upload` plus direct PUT plus `create_attachment_from_upload`.",
+    "description": "Deprecated fallback for tiny files only. Accepts base64 file content, verifies SHA-256 checksum, and uploads it through the MCP worker. The file is inserted into the issue description as an inline image, video, or file card. Prefer `prepare_attachment_upload` plus direct PUT plus `create_attachment_from_upload`.",
     "input_schema": {
       "type": "object",
       "required": ["base64Content", "contentType", "filename", "issue", "sha256"],
@@ -645,7 +645,7 @@
   {
     "name": "mcp__flow.create_attachment_from_upload",
     "access": "write",
-    "description": "Link an already-uploaded Flow assetUrl to an existing issue as an attachment.",
+    "description": "Link an already-uploaded Flow assetUrl to an existing issue. Inserts the file into the issue description as an inline image, video, or file card rather than only listing it under resources.",
     "input_schema": {
       "type": "object",
       "required": ["assetUrl", "issue"],

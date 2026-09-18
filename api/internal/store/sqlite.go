@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -186,6 +187,7 @@ func (s *SQLiteStore) ReloadAllWorkspaces(ctx context.Context) error {
 			return err
 		}
 		normalizeStoredMetadata(&data)
+		domain.RebuildTeamDirectory(&data)
 		workspaces[key] = data
 	}
 	if err := tx.Commit(); err != nil {
@@ -221,6 +223,7 @@ func (s *SQLiteStore) loadWorkspaceState(ctx context.Context, workspaceKey strin
 	if err := tx.Commit(); err != nil {
 		return data, err
 	}
+	domain.RebuildTeamDirectory(&data)
 	return data, nil
 }
 
@@ -446,6 +449,7 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 		if !externalIssues {
 			historyChanged[key] = refreshProjectProgressHistories(&data, time.Now().UTC())
 		}
+		domain.RebuildTeamDirectory(&data)
 		s.workspaces[key] = data
 	}
 	if err := tx.Commit(); err != nil {
@@ -481,6 +485,7 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 			data := localSQLiteFixture()
 			normalize(&data)
 			refreshProjectProgressHistories(&data, time.Now().UTC())
+			domain.RebuildTeamDirectory(&data)
 			s.workspaces[data.Workspace.URLKey] = data
 			s.lastWorkspaceKey = data.Workspace.URLKey
 			s.viewer = data.Viewer
@@ -499,6 +504,7 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	}
 	normalize(&data)
 	refreshProjectProgressHistories(&data, time.Now().UTC())
+	domain.RebuildTeamDirectory(&data)
 	s.workspaces[data.Workspace.URLKey] = data
 	s.lastWorkspaceKey = data.Workspace.URLKey
 	s.viewer = data.Viewer
@@ -1188,13 +1194,17 @@ func (s *SQLiteStore) BootstrapForContext(ctx context.Context, workspaceKey stri
 		workspaceKey = s.lastWorkspaceKey
 	}
 	data, ok := s.workspaces[workspaceKey]
+	if ok {
+		// Scoped team writes mutate TeamSettings/CycleSettings in place under the
+		// exclusive lock. Snapshot those maps before unlocking so cloneBootstrap
+		// cannot iterate a map the writer is updating.
+		data.TeamSettings = maps.Clone(data.TeamSettings)
+		data.CycleSettings = maps.Clone(data.CycleSettings)
+	}
 	s.mu.RUnlock()
 	if !ok {
 		return domain.Bootstrap{}, false
 	}
-	// Workspace snapshots are replaced atomically by MutateWorkspace; they are
-	// never edited in place. Clone after releasing the lock so JSON encoding and
-	// resource-count derivation do not block writers or other readers.
 	clone := cloneBootstrap(data)
 	if data.Issues == nil {
 		issues, err := s.readIssueRecords(ctx, data.Workspace.URLKey)
@@ -1248,6 +1258,7 @@ func (s *SQLiteStore) Mutate(ctx context.Context, eventType, aggregateID string,
 }
 
 func (s *SQLiteStore) MutateWorkspace(ctx context.Context, workspaceKey, eventType, aggregateID string, payload any, mutate func(*domain.Bootstrap) error) error {
+	ctx = withMutationAggregateID(ctx, aggregateID)
 	return s.MutateWorkspaceWithAggregate(ctx, workspaceKey, eventType, payload, func(data *domain.Bootstrap) (string, error) {
 		return aggregateID, mutate(data)
 	})
@@ -1265,6 +1276,9 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 	}
 	if standaloneFavoriteMutation(eventType, payload) {
 		return s.mutateStandaloneFavorite(ctx, workspaceKey, eventType, payload, mutate)
+	}
+	if metadataTeamMutation(eventType, payload) {
+		return s.mutateTeamMetadata(ctx, workspaceKey, eventType, payload, mutate)
 	}
 	if eventType == "issue.created" && UsesIssueRecordMutations(ctx) {
 		return s.createIssueRecords(ctx, workspaceKey, payload, mutate)
@@ -1359,6 +1373,7 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 			return err
 		}
 		next = collectionMetadata(next)
+		domain.RebuildTeamDirectory(&next)
 		s.workspaces[workspaceKey] = next
 		s.lastWorkspaceKey = workspaceKey
 		return nil
@@ -1449,7 +1464,10 @@ func aggregatePreviousValues(previous, next domain.Bootstrap, aggregateID string
 
 func aggregateJSONValue(data domain.Bootstrap, aggregateID string) any {
 	data = compactImportInputs(data)
-	entity := findAggregateValue(reflect.ValueOf(data), aggregateID)
+	entity, found := aggregateEntityByID(data, aggregateID)
+	if !found {
+		entity = findAggregateValue(reflect.ValueOf(data), aggregateID)
+	}
 	if entity == nil {
 		return nil
 	}
@@ -1462,6 +1480,57 @@ func aggregateJSONValue(data domain.Bootstrap, aggregateID string) any {
 		return nil
 	}
 	return value
+}
+
+// Team metadata writes know the aggregate type from the ID prefix. Scanning
+// the matching typed collection avoids a reflection walk over every entity;
+// unknown IDs still fall back to the generic lookup below.
+func aggregateEntityByID(data domain.Bootstrap, id string) (any, bool) {
+	switch {
+	case strings.HasPrefix(id, "team_"):
+		for index := range data.Teams {
+			if data.Teams[index].ID == id {
+				return data.Teams[index], true
+			}
+		}
+	case strings.HasPrefix(id, "state_"):
+		for index := range data.States {
+			if data.States[index].ID == id {
+				return data.States[index], true
+			}
+		}
+	case strings.HasPrefix(id, "usr_"):
+		for index := range data.Users {
+			if data.Users[index].ID == id {
+				return data.Users[index], true
+			}
+		}
+	case strings.HasPrefix(id, "label_"):
+		for index := range data.Labels {
+			if data.Labels[index].ID == id {
+				return data.Labels[index], true
+			}
+		}
+	case strings.HasPrefix(id, "issue_"):
+		for index := range data.Issues {
+			if data.Issues[index].ID == id {
+				return data.Issues[index], true
+			}
+		}
+	case strings.HasPrefix(id, "project_"):
+		for index := range data.Projects {
+			if data.Projects[index].ID == id {
+				return data.Projects[index], true
+			}
+		}
+	case strings.HasPrefix(id, "cycle_"):
+		for index := range data.Cycles {
+			if data.Cycles[index].ID == id {
+				return data.Cycles[index], true
+			}
+		}
+	}
+	return nil, false
 }
 
 // Locate the entity in the typed snapshot before serializing. Walking it does
@@ -1683,7 +1752,9 @@ func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region 
 	if err := s.persistWorkspace(ctx, urlKey, data, event); err != nil {
 		return domain.Bootstrap{}, err
 	}
-	s.workspaces[urlKey] = collectionMetadata(data)
+	stored := collectionMetadata(data)
+	domain.RebuildTeamDirectory(&stored)
+	s.workspaces[urlKey] = stored
 	s.lastWorkspaceKey = urlKey
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, _ = s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,status=excluded.status,joined_at=excluded.joined_at,last_seen_at=excluded.last_seen_at`, data.Workspace.ID, viewer.ID, "owner", "active", now, now)
@@ -1776,6 +1847,7 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 		_, _ = s.db.ExecContext(ctx, `UPDATE auth_account_state SET last_workspace_key=?,updated_at=? WHERE last_workspace_key=?`, workspace.URLKey, time.Now().UTC().Format(time.RFC3339Nano), workspaceKey)
 	}
 	delete(s.workspaces, workspaceKey)
+	domain.RebuildTeamDirectory(&data)
 	s.workspaces[workspace.URLKey] = data
 	s.lastWorkspaceKey = workspace.URLKey
 	return data, nil

@@ -1256,7 +1256,7 @@ function App() {
     const uploaded = await Promise.all(
       attachments.map((file) => uploadAttachment(child.id, file)),
     );
-    const complete = { ...child, attachments: uploaded };
+    const complete = await fetchIssueRecord(child.id).catch(() => ({ ...child, attachments: uploaded }));
     setData((current) =>
       current
         ? deriveResourceCounts({
@@ -1294,13 +1294,14 @@ function App() {
     );
     await refreshActivity();
   };
-  const addAttachment = async (file: File) => {
+  const addAttachment = async (file: File, options?: { embed?: boolean }) => {
     if (!selectedIssue) return;
-    await run(
-      () => uploadAttachment(selectedIssue.id, file),
+    const attachment = await run(
+      () => uploadAttachment(selectedIssue.id, file, options),
       "Could not upload attachment",
     );
     await refreshActivity();
+    return attachment;
   };
   const removeAttachment = async (id: string) => {
     if (!selectedIssue) return;
@@ -1660,7 +1661,7 @@ function App() {
     const uploaded = await Promise.all(
       attachments.map((file) => uploadAttachment(child.id, file)),
     );
-    const complete = { ...child, attachments: uploaded };
+    const complete = await fetchIssueRecord(child.id).catch(() => ({ ...child, attachments: uploaded }));
     setData((current) =>
       current
         ? {
@@ -1730,12 +1731,13 @@ function App() {
     );
     await refreshActivity();
   };
-  const uploadInboxAttachment = async (issue: Issue, file: File) => {
-    await run(
-      () => uploadAttachment(issue.id, file),
+  const uploadInboxAttachment = async (issue: Issue, file: File, options?: { embed?: boolean }) => {
+    const attachment = await run(
+      () => uploadAttachment(issue.id, file, options),
       "Could not upload attachment",
     );
     await refreshActivity();
+    return attachment;
   };
   const deleteInboxAttachment = async (issue: Issue, id: string) => {
     await run(
@@ -3266,12 +3268,13 @@ function App() {
           const uploaded = await Promise.all(
             attachments.map((file) => uploadAttachment(child.id, file)),
           );
+          const complete = await fetchIssueRecord(child.id).catch(() => ({ ...child, attachments: uploaded }));
           setData((current) =>
             current
               ? {
                   ...current,
                   issues: [
-                    { ...child, attachments: uploaded },
+                    complete,
                     ...current.issues.map((item) =>
                       item.id === issue.id
                         ? {
@@ -3321,12 +3324,13 @@ function App() {
           );
           await refresh();
         }}
-        onUpload={async (file) => {
-          await run(
-            () => uploadAttachment(issue.id, file),
+        onUpload={async (file, options) => {
+          const attachment = await run(
+            () => uploadAttachment(issue.id, file, options),
             "Could not upload attachment",
           );
           await refresh();
+          return attachment;
         }}
         onDeleteAttachment={async (id) => {
           await run(
@@ -6017,21 +6021,25 @@ function App() {
                 () => uploadAttachment(issueId, file),
                 "Could not upload attachment",
               );
-              setData((current) =>
-                current
-                  ? {
-                      ...current,
-                      issues: current.issues.map((issue) =>
-                        issue.id === issueId
-                          ? {
-                              ...issue,
-                              attachments: [...issue.attachments, attachment],
-                            }
-                          : issue,
-                      ),
-                    }
-                  : current,
-              );
+              try {
+                replaceIssue(await fetchIssueRecord(issueId));
+              } catch {
+                setData((current) =>
+                  current
+                    ? {
+                        ...current,
+                        issues: current.issues.map((issue) =>
+                          issue.id === issueId
+                            ? {
+                                ...issue,
+                                attachments: [...issue.attachments, attachment],
+                              }
+                            : issue,
+                        ),
+                      }
+                    : current,
+                );
+              }
             }}
           />
         )}

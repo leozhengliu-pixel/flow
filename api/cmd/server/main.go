@@ -1441,10 +1441,8 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	team := domain.Team{ID: fmt.Sprintf("team_%d", now.UnixNano()), Name: input.Name, Key: input.Key, Color: input.Color, Icon: input.Icon, Private: input.Private, CreatedAt: &now, UpdatedAt: &now}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey, "team.created", team.ID, input, func(data *domain.Bootstrap) error {
-		for _, existing := range data.Teams {
-			if strings.EqualFold(existing.Key, team.Key) {
-				return errInvalid
-			}
+		if domain.TeamKeyTaken(data, team.Key, team.ID) {
+			return errInvalid
 		}
 		if input.ParentTeamID != "" && !teamExists(data, input.ParentTeamID) || input.CopyFromTeamID != "" && !teamExists(data, input.CopyFromTeamID) {
 			return errInvalid
@@ -1535,7 +1533,7 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 		Name, Key, Color, Icon *string
 		Private                *bool  `json:"private"`
 		Retired                *bool  `json:"retired"`
-		SubTeamAction          string `json:"subTeamAction"`
+		SubTeamAction          string `json:"subTeamAction,omitempty"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
@@ -1558,7 +1556,7 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 			}
 			if input.Key != nil {
 				key := strings.ToUpper(strings.TrimSpace(*input.Key))
-				if !teamIdentifierPattern.MatchString(key) || slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID != teamID && strings.EqualFold(team.Key, key) }) {
+				if !teamIdentifierPattern.MatchString(key) || domain.TeamKeyTaken(data, key, teamID) {
 					return errInvalid
 				}
 				data.Teams[index].Key = key
@@ -4345,7 +4343,7 @@ func (s *server) createAttachment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var attachment domain.Attachment
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "attachment.created", id, map[string]string{"name": header.Filename}, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(store.WithIssueRecordMutations(r.Context(), id), workspaceKey(r), "attachment.created", id, map[string]string{"name": header.Filename}, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, id)
 		if err != nil {
 			return err
@@ -4353,6 +4351,9 @@ func (s *server) createAttachment(w http.ResponseWriter, r *http.Request) {
 		attachment = domain.Attachment{ID: attachmentID, IssueID: id, Title: header.Filename, URL: "/uploads/" + safeName, ContentType: header.Header.Get("Content-Type"), Size: size, CreatedAt: time.Now().UTC(), Creator: data.Viewer}
 		issue.Attachments = append(issue.Attachments, attachment)
 		appendActivity(data, id, "attachment.created", data.Viewer, map[string]string{"attachmentId": attachment.ID, "title": attachment.Title})
+		if formEmbedEnabled(r) {
+			return applyIssueAttachmentEmbed(data, issue, attachment)
+		}
 		return nil
 	})
 	if err != nil {

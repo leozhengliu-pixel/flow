@@ -774,10 +774,8 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 			if !teamIdentifierPattern.MatchString(identifier) {
 				return fmt.Errorf("%w: identifier must be 2-5 uppercase letters or numbers", errInvalid)
 			}
-			for _, team := range data.Teams {
-				if team.ID != teamID && strings.EqualFold(team.Key, identifier) {
-					return fmt.Errorf("%w: identifier is already in use", errInvalid)
-				}
+			if domain.TeamKeyTaken(data, identifier, teamID) {
+				return fmt.Errorf("%w: identifier is already in use", errInvalid)
 			}
 			for index := range data.Teams {
 				if data.Teams[index].ID == teamID {
@@ -1144,6 +1142,11 @@ func validWorkflowType(value string) bool {
 	return slices.Contains([]string{"backlog", "unstarted", "started", "completed", "canceled"}, value)
 }
 func teamExists(data *domain.Bootstrap, teamID string) bool {
+	domain.EnsureTeamDirectory(data)
+	if data.TeamByID != nil {
+		_, ok := data.TeamByID[teamID]
+		return ok
+	}
 	return slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID })
 }
 func teamSettings(data *domain.Bootstrap, teamID string) domain.TeamSettings {
@@ -1237,28 +1240,7 @@ func teamAncestorIDs(data *domain.Bootstrap, teamID string) []string {
 }
 
 func teamDescendantIDs(data *domain.Bootstrap, teamID string) []string {
-	children := map[string][]string{}
-	for _, team := range data.Teams {
-		if team.RetiredAt != nil {
-			continue
-		}
-		parent := data.TeamSettings[team.ID].ParentTeamID
-		children[parent] = append(children[parent], team.ID)
-	}
-	result := []string{}
-	seen := map[string]bool{}
-	queue := append([]string(nil), children[teamID]...)
-	for len(queue) > 0 {
-		id := queue[0]
-		queue = queue[1:]
-		if seen[id] {
-			continue
-		}
-		seen[id] = true
-		result = append(result, id)
-		queue = append(queue, children[id]...)
-	}
-	return result
+	return domain.TeamDescendantIDs(data, teamID)
 }
 
 func teamDescendantIDsIncludingRetired(data *domain.Bootstrap, teamID string) []string {

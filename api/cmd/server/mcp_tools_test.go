@@ -178,6 +178,9 @@ func TestMCPReadToolInventoryAgainstWorkspaceData(t *testing.T) {
 	if _, err := service.callFlowTool(ctx, actor, "get_issue_status", map[string]any{"team": data.Teams[0].ID}); err == nil {
 		t.Fatal("accepted get_issue_status without id or name")
 	}
+	if _, err := service.callFlowTool(ctx, actor, "get_issue_status", map[string]any{"team": data.Teams[0].ID, "id": data.States[0].ID, "name": data.States[0].Name}); err == nil {
+		t.Fatal("accepted get_issue_status with both id and name")
+	}
 }
 
 func TestMCPWriteToolsPersistCoreResources(t *testing.T) {
