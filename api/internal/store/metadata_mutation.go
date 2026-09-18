@@ -77,6 +77,9 @@ func metadataFieldsOnly(payload any, allowed ...string) bool {
 		if string(value) == "null" {
 			continue
 		}
+		if string(value) == `""` && !strings.EqualFold(key, "parentTeamId") {
+			continue
+		}
 		ok := false
 		for _, field := range allowed {
 			if strings.EqualFold(field, key) {

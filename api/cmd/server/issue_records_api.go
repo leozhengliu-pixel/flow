@@ -315,6 +315,10 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		writeVersionConflict(w, page.Items[0])
 		return
 	}
+	if !s.authDisabled && issuePermissionRank(issueRole(s, metadata, page.Items[0])) < issuePermissionRank("editor") {
+		issueRecordsError(w, store.ErrAuthForbidden)
+		return
+	}
 	if issueUpdateIsNoop(page.Items[0], input) {
 		projected, projectionErr := s.projectIssueRecordReferences(r, metadata, query, []domain.Issue{page.Items[0]})
 		if projectionErr != nil {

@@ -27,23 +27,21 @@ export function SlashCommandMenu({ commands, selectedIndex, position, query, onS
   }, [selectedIndex])
 
   return <div className="description-slash-menu" style={position} role="listbox" aria-label="Insert block">
-    {commands.length === 0 ? <div className="description-slash-empty">No results for “{query}”</div> : groupCommands(commands).map(([group, items]) => <div className="description-command-group" key={group}>
-      <div className="description-slash-title">{group}</div>
-      {items.map(command => {
-        const index = commands.indexOf(command)
-        const Icon = command.icon
-        return <button ref={index === selectedIndex ? selectedRef : undefined} key={command.id} type="button" role="option" aria-selected={index === selectedIndex} onMouseDown={event => event.preventDefault()} onClick={() => onSelect(command)}>
+    {commands.length === 0 ? <div className="description-slash-empty">No results for “{query}”</div> : commands.map((command, index) => {
+      const Icon = command.icon
+      const keys = slashKeys(command.shortcut)
+      return <button ref={index === selectedIndex ? selectedRef : undefined} key={command.id} type="button" role="option" aria-selected={index === selectedIndex} onMouseDown={event => event.preventDefault()} onClick={() => onSelect(command)}>
+        <span className="description-slash-main">
           <span className="description-command-icon"><Icon size={16}/></span>
-          <span className="description-command-copy"><strong>{command.label}</strong>{command.description && <small>{command.description}</small>}</span>
-          {command.shortcut && <kbd>{command.shortcut}</kbd>}
-        </button>
-      })}
-    </div>)}
+          <span className="description-command-copy"><strong>{command.label}</strong></span>
+        </span>
+        {keys && <span className="description-slash-kbd" aria-hidden="true">{keys.map((key, keyIndex) => <kbd key={`${command.id}-${keyIndex}`}>{key}</kbd>)}</span>}
+      </button>
+    })}
   </div>
 }
 
-function groupCommands(commands: EditorCommand[]) {
-  const groups = new Map<string, EditorCommand[]>()
-  for (const command of commands) groups.set(command.group, [...(groups.get(command.group) ?? []), command])
-  return [...groups.entries()]
+function slashKeys(shortcut?: string) {
+  if (!shortcut || !/(⌘|⌥|⌃|Ctrl)/.test(shortcut)) return null
+  return [...shortcut]
 }

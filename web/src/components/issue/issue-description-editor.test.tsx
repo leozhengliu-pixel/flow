@@ -3,6 +3,7 @@ import type { Editor } from '@tiptap/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { viewer } from '@/test/fixtures'
 import { IssueDescriptionEditor } from './issue-description-editor'
+import { insertImageFiles } from './editor/image-extension'
 import { serializeDescription } from './editor/editor-content'
 import { descriptionRecoveryKey, readDescriptionRecovery } from './editor/description-recovery'
 
@@ -39,6 +40,63 @@ describe('real Tiptap description collaboration', () => {
     Range.prototype.getBoundingClientRect = () => new DOMRect()
   })
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
+
+  it('renders Heading 1 from Markdown', async () => {
+    render(<IssueDescriptionEditor value={'# Title one'}/>)
+    expect(await screen.findByRole('heading', { level: 1, name: 'Title one' })).toBeVisible()
+  })
+
+  it('renders Markdown images in the issue body', async () => {
+    render(<IssueDescriptionEditor value={'Intro\n\n![Diagram](https://example.com/diagram.png)\n\nOutro'}/>)
+    const image = await screen.findByRole('img', { name: 'Diagram' })
+    expect(image).toHaveAttribute('src', 'https://example.com/diagram.png')
+    expect(image.closest('.description-image-node')).toBeTruthy()
+  })
+
+  it('pastes an image file into the description and uploads it', async () => {
+    const upload = vi.fn().mockResolvedValue('https://flow.test/uploads/shot.png')
+    URL.createObjectURL = vi.fn(() => 'blob:flow-image')
+    URL.revokeObjectURL = vi.fn()
+    let editor: Editor | null = null
+    render(<IssueDescriptionEditor value="" editorRef={value => { editor = value }} onInsertImage={upload}/>)
+    await waitFor(() => expect(editor).not.toBeNull())
+    const file = new File([new Uint8Array([137, 80, 78, 71])], 'shot.png', { type: 'image/png' })
+    insertImageFiles(editor!.view, [file], upload)
+    await waitFor(() => expect(upload).toHaveBeenCalledWith(file))
+    await waitFor(() => expect(screen.getByRole('img', { name: 'shot.png' })).toHaveAttribute('src', 'https://flow.test/uploads/shot.png'))
+  })
+
+  it('opens a Linear-style image context menu with view, copy, comment, and delete', async () => {
+    const comment = vi.fn()
+    URL.createObjectURL = vi.fn(() => 'blob:flow-image')
+    URL.revokeObjectURL = vi.fn()
+    let editor: Editor | null = null
+    render(<IssueDescriptionEditor value={'![shot](https://flow.test/uploads/shot.png)'} editorRef={value => { editor = value }} selectionActions={{ onComment: comment }}/>)
+    await waitFor(() => expect(editor).not.toBeNull())
+    fireEvent.contextMenu(screen.getByRole('img', { name: 'shot' }))
+    expect(screen.getByRole('menuitem', { name: 'View image' })).toBeVisible()
+    expect(screen.getByRole('menuitem', { name: 'Download' })).toBeVisible()
+    expect(screen.getByRole('menuitem', { name: 'Copy image' })).toBeVisible()
+    expect(screen.getByRole('menuitem', { name: 'Copy link' })).toBeVisible()
+    expect(screen.getByRole('menuitem', { name: 'Add comment' })).toBeVisible()
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeVisible()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add comment' }))
+    expect(comment).toHaveBeenCalledWith(expect.objectContaining({ text: 'shot', src: 'https://flow.test/uploads/shot.png' }))
+  })
+
+  it('views and deletes a description image from the context menu', async () => {
+    let editor: Editor | null = null
+    render(<IssueDescriptionEditor value={'![shot](https://flow.test/uploads/shot.png)'} editorRef={value => { editor = value }}/>)
+    await waitFor(() => expect(editor).not.toBeNull())
+    fireEvent.contextMenu(screen.getByRole('img', { name: 'shot' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'View image' }))
+    expect(screen.getByRole('dialog', { name: 'View image' })).toBeVisible()
+    fireEvent.click(screen.getByRole('dialog', { name: 'View image' }))
+    expect(screen.queryByRole('dialog', { name: 'View image' })).not.toBeInTheDocument()
+    fireEvent.contextMenu(screen.getByRole('img', { name: 'shot' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }))
+    expect(screen.queryByRole('img', { name: 'shot' })).not.toBeInTheDocument()
+  })
 
   it('waits for a full description before creating Y.Doc and preserves Markdown formatting', async () => {
     const persist = vi.fn().mockResolvedValue(undefined)

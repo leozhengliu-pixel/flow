@@ -24,6 +24,7 @@ import { CyclePicker, EstimatePicker, LabelPicker } from '@/components/issue/lab
 import { IssueProjectPicker } from '@/components/issue/issue-project-picker'
 import type { NewProjectDraft } from '@/components/projects-page/new-project-dialog'
 import { IssueAttachments, type AttachmentUploadState } from '@/components/issue/issue-attachments'
+import { descriptionImageSrcs } from '@/components/issue/editor/image-extension'
 import { DueDatePicker } from '@/components/issue/due-date-picker'
 import { IssueReleasePicker } from '@/components/issue/issue-release-picker'
 import { IssueSubscriberPicker } from '@/components/issue/issue-subscriber-picker'
@@ -45,7 +46,7 @@ import { TriageIntelligenceSuggestions } from '@/components/issue/triage-intelli
 import './issue-code-reviews.css'
 import './issue-history-state.css'
 
-export function DetailPane({issue,data,comments,activities,historyLoading=false,historyError,onRetryHistory,highlightTarget,presence=[],workspacePresence,full=false,embedded=false,issueOptionsActions,onClose,onNavigateIssue,onNavigateRoot,returnPath,navigationIssueIds,onUpdate,onIssueUpdated,onDelete,onCreateSubIssue,onCreateProject,onCreateProjectMilestone,onReactIssue,onComment,onEditComment,onDeleteComment,onReactComment,onRelation,onDeleteRelation,onUpload,onDeleteAttachment}:{issue:Issue;data:BootstrapData;comments:Comment[];activities:ActivityEvent[];historyLoading?:boolean;historyError?:string;onRetryHistory?:()=>void;highlightTarget?:ActivityHighlightTarget;presence?:Presence[];workspacePresence?:Presence[];full?:boolean;embedded?:boolean;issueOptionsActions?:IssueOptionsActions;onClose:()=>void;onExpand?:()=>void;onNavigateIssue?:(issue:Issue)=>void;onNavigateRoot?:()=>void;returnPath?:string;navigationIssueIds?:string[];onUpdate:(input:IssueUpdateInput)=>Promise<void>;onIssueUpdated?:(issue:Issue)=>void;onDelete:()=>Promise<void>;onCreateSubIssue:(input:SubIssueInput)=>Promise<void>;onCreateProject?:(draft:NewProjectDraft)=>Promise<Project>;onCreateProjectMilestone?:(projectId:string,input:{name:string})=>Promise<ProjectMilestone>;onReactIssue:(emoji:string)=>Promise<void>;onComment:(body:string,bodyData?:Record<string,unknown>,parentId?:string)=>Promise<void>;onEditComment:(id:string,body:string,bodyData?:Record<string,unknown>)=>Promise<void>;onDeleteComment:(id:string)=>Promise<void>;onReactComment:(id:string,emoji:string)=>Promise<void>;onRelation:(type:IssueRelationType,relatedIssueId:string)=>Promise<void>;onDeleteRelation:(relationId:string)=>Promise<void>;onUpload:(file:File)=>Promise<void>;onDeleteAttachment:(attachmentId:string)=>Promise<void>}){
+export function DetailPane({issue,data,comments,activities,historyLoading=false,historyError,onRetryHistory,highlightTarget,presence=[],workspacePresence,full=false,embedded=false,issueOptionsActions,onClose,onNavigateIssue,onNavigateRoot,returnPath,navigationIssueIds,onUpdate,onIssueUpdated,onDelete,onCreateSubIssue,onCreateProject,onCreateProjectMilestone,onReactIssue,onComment,onEditComment,onDeleteComment,onReactComment,onRelation,onDeleteRelation,onUpload,onDeleteAttachment}:{issue:Issue;data:BootstrapData;comments:Comment[];activities:ActivityEvent[];historyLoading?:boolean;historyError?:string;onRetryHistory?:()=>void;highlightTarget?:ActivityHighlightTarget;presence?:Presence[];workspacePresence?:Presence[];full?:boolean;embedded?:boolean;issueOptionsActions?:IssueOptionsActions;onClose:()=>void;onExpand?:()=>void;onNavigateIssue?:(issue:Issue)=>void;onNavigateRoot?:()=>void;returnPath?:string;navigationIssueIds?:string[];onUpdate:(input:IssueUpdateInput)=>Promise<void>;onIssueUpdated?:(issue:Issue)=>void;onDelete:()=>Promise<void>;onCreateSubIssue:(input:SubIssueInput)=>Promise<void>;onCreateProject?:(draft:NewProjectDraft)=>Promise<Project>;onCreateProjectMilestone?:(projectId:string,input:{name:string})=>Promise<ProjectMilestone>;onReactIssue:(emoji:string)=>Promise<void>;onComment:(body:string,bodyData?:Record<string,unknown>,parentId?:string)=>Promise<void>;onEditComment:(id:string,body:string,bodyData?:Record<string,unknown>)=>Promise<void>;onDeleteComment:(id:string)=>Promise<void>;onReactComment:(id:string,emoji:string)=>Promise<void>;onRelation:(type:IssueRelationType,relatedIssueId:string)=>Promise<void>;onDeleteRelation:(relationId:string)=>Promise<void>;onUpload:(file:File, options?:{embed?:boolean})=>Promise<Attachment|void>;onDeleteAttachment:(attachmentId:string)=>Promise<void>}){
   const{t}=useI18n(),[title,setTitle]=useState(issue.title),[subOpen,setSubOpen]=useState(false),[subCollapsed,setSubCollapsed]=useState(false),[subSelected,setSubSelected]=useState(new Set<string>()),[subDisplay,setSubDisplay]=useState<SubIssueDisplay>({ordering:'priority',direction:'asc',completed:'all',nested:true,properties:new Set(['status','labels','assignee'])}),[relationType,setRelationType]=useState<IssueRelationType|null>(null),[uploadState,setUploadState]=useState<AttachmentUploadState>()
   const peoplePresence=workspacePresence??presence
   const fileRef=useRef<HTMLInputElement>(null)
@@ -74,14 +75,15 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
   const availableLabels=labelsForResource(data.labels,'issue',data.labelGroups).filter(label=>!label.scope||label.scope==='Workspace'||labelScopes.has(label.scope))
   const linkedDocuments=data.documents.filter(document=>document.issueId===issue.id&&!document.archivedAt)
   const linkedResources=issue.attachments.filter(attachment=>attachment.contentType==='text/uri-list')
-  const fileAttachments=issue.attachments.filter(attachment=>attachment.contentType!=='text/uri-list')
+  const inlineImageSrcs=descriptionImageSrcs(issue.description,issue.descriptionState,issue.documentContent?.contentData)
+  const fileAttachments=issue.attachments.filter(attachment=>attachment.contentType!=='text/uri-list'&&!inlineImageSrcs.has(attachment.url))
   const customerRequests=data.customerRequests.filter(request=>request.issueId===issue.id)
   const linkedReviews=data.reviews.filter(review=>review.issueIds.includes(issue.id))
   const releasesEnabled=data.workspaceSettings.featureFlags.releases??true
   const estimateType=resolvedTeamSettings(data.teamSettings,issue.team.id)?.estimateType??'notUsed'
   const toggleLabel=async(id:string)=>{await onUpdate({labelIds:toggleGroupedLabelIds(issue.labels.map(x=>x.id),id,availableLabels)})}
   const toggleSubscriber=async(id:string)=>onUpdate({subscriberIds:issue.subscriberIds.includes(id)?issue.subscriberIds.filter(x=>x!==id):[...issue.subscriberIds,id]})
-  const upload=async(file:File)=>{setUploadState({name:file.name,progress:20,file});try{setUploadState({name:file.name,progress:70,file});await onUpload(file);setUploadState(undefined)}catch(error){setUploadState({name:file.name,progress:100,file,error:error instanceof Error?error.message:'Upload failed'})}}
+  const upload=async(file:File, options?:{embed?:boolean})=>{setUploadState({name:file.name,progress:20,file});try{setUploadState({name:file.name,progress:70,file});const attachment=await onUpload(file, options);setUploadState(undefined);return attachment}catch(error){setUploadState({name:file.name,progress:100,file,error:error instanceof Error?error.message:'Upload failed'});throw error}}
   return <section className={`issue-view ${full?'full':''} ${embedded?'issue-view--embedded':''}`}>
     {!embedded&&<IssueHeader
       issue={issue} returnPath={returnPath} states={availableStates} presence={presence} saveState={saveState} data={data} activities={activities} issueOptionsActions={issueOptionsActions}
@@ -103,6 +105,11 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
           selectionActions={descriptionSelection.actions}
           loading={issue.isSummary}
           users={data.users}
+          onInsertImage={async file => {
+            const attachment = await upload(file, { embed: false })
+            if (!attachment?.url) throw new Error('Upload failed')
+            return attachment.url
+          }}
           value={issue.description}
           state={issue.documentContent?.contentData?JSON.stringify(issue.documentContent.contentData):issue.descriptionState}
           onBlur={()=>void flush()}

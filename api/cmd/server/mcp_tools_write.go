@@ -1351,7 +1351,7 @@ func (s *server) attachStoredObject(ctx context.Context, actor mcpActor, issueID
 			return err
 		}
 		issue.Attachments = append(issue.Attachments, attachment)
-		return nil
+		return applyIssueAttachmentEmbed(data, issue, attachment)
 	})
 	return attachment, err
 }
