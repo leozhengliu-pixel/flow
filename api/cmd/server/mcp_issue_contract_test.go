@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -86,6 +88,52 @@ func TestMCPIssuePropertyRoundTripAndFilters(t *testing.T) {
 	items := object("list_issues", map[string]any{"query": "All properties", "assignee": nil})["items"].([]any)
 	if len(items) != 1 {
 		t.Fatal("unassigned filter ignored")
+	}
+}
+
+func TestMCPSaveIssueReceiptOmitsDocumentState(t *testing.T) {
+	f := newMCPContractFixture(t)
+	issue := f.data.Issues[0]
+	issue.Description = strings.Repeat("Collaborative markdown body. ", 80)
+	issue.DescriptionState = strings.Repeat(`{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"editor-state"}]}]}`, 20)
+	issue.DocumentContent = &domain.DocumentContent{
+		ID:           "document_content_" + issue.ID,
+		Version:      12,
+		Content:      issue.Description,
+		ContentState: strings.Repeat("YjsBinaryState", 400),
+		ContentData:  map[string]any{"type": "doc", "content": []any{map[string]any{"type": "paragraph"}}},
+		UpdatedAt:    time.Now().UTC(),
+	}
+	if err := f.repository.ImportIssues(t.Context(), f.data.Workspace.URLKey, []domain.Issue{issue}); err != nil {
+		t.Fatal(err)
+	}
+	full, err := f.repository.IssueRecord(t.Context(), f.data.Workspace.URLKey, issue.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fullRaw, err := json.Marshal(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt := mcpSuccess(t, f.call(t, "save_issue", map[string]any{"id": issue.ID, "title": "Slim receipt"})).(map[string]any)
+	raw, err := json.Marshal(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := receipt["descriptionState"]; ok {
+		t.Fatal("save_issue receipt included descriptionState")
+	}
+	if _, ok := receipt["documentContent"]; ok {
+		t.Fatal("save_issue receipt included documentContent")
+	}
+	if strings.Contains(string(raw), "descriptionState") || strings.Contains(string(raw), "documentContent") || strings.Contains(string(raw), "YjsBinaryState") || strings.Contains(string(raw), "editor-state") {
+		t.Fatalf("save_issue receipt leaked document state: %s", raw)
+	}
+	if receipt["id"] != issue.ID || receipt["identifier"] == nil || receipt["url"] == nil || receipt["version"] == nil || receipt["updatedAt"] == nil || receipt["title"] != "Slim receipt" {
+		t.Fatalf("save_issue receipt missing identity/changed fields: %v", receipt)
+	}
+	if len(raw) >= len(fullRaw)/4 || len(raw) >= len(fullRaw)-1024 {
+		t.Fatalf("save_issue receipt %d bytes was not much smaller than full record %d", len(raw), len(fullRaw))
 	}
 }
 

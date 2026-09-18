@@ -57,11 +57,25 @@
 :root[data-theme="light"] .issue-activity-timeline .comment-card > header > strong,
 :root[data-theme="light"] .issue-activity-timeline .comment-reply strong { color: var(--theme-text-primary); }
 :root[data-theme="light"] .issue-activity-timeline .comment-body { border: .5px solid var(--theme-border); border-radius: 8px; background: var(--theme-surface-1); }
-:root[data-theme="light"] .issue-activity-timeline .composer {
-  border: 0.5px solid var(--popover-border);
-  border-radius: 12px;
-  background: var(--theme-surface-2);
-  box-shadow: var(--shadow-dialog);
+:root[data-theme="light"] .issue-activity-timeline .composer,
+:root[data-theme="light"] .composer {
+  border: .5px solid lch(91.9 0 282);
+  border-radius: 8px;
+  background: lch(100 0 282);
+  box-shadow: lch(0 0 0 / .02) 0 3px 6px -2px, lch(0 0 0 / .04) 0 1px 1px 0;
+}
+:root[data-theme="light"] .comment-prosemirror p.is-editor-empty:first-child:before { color: lch(64.64% 1.25 282); }
+:root[data-theme="light"] .composer-tools > button { color: lch(20 1 282); }
+:root[data-theme="light"] .composer-tools > button:hover { background: lch(94.5 0 282); }
+:root[data-theme="light"] .composer-submit .composer-send,
+:root[data-theme="light"] .composer-submit .composer-send.flow-button,
+:root[data-theme="light"] .composer-submit .composer-send:disabled {
+  background: lch(100 0 282);
+  color: lch(20 1 282);
+}
+:root[data-theme="light"] .composer-submit .composer-send:hover {
+  background: lch(94.5 0 282);
+  color: lch(20 1 282);
 }
 
 .issue-activity-timeline .comment-body,

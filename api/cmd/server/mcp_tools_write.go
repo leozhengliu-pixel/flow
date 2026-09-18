@@ -357,7 +357,58 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 			return nil, err
 		}
 	}
-	return s.store.IssueRecord(ctx, data.Workspace.URLKey, saved.ID)
+	issue := saved
+	if hasAnyArg(args, "links", "blockedBy", "blocks", "relatedTo", "removeBlockedBy", "removeBlocks", "removeRelatedTo", "duplicateOf", "estimate", "addReleases", "removeReleases", "setReleases") {
+		issue, err = s.store.IssueRecord(ctx, data.Workspace.URLKey, saved.ID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return mcpIssueWriteReceipt(issue, data.Workspace.URLKey, args), nil
+}
+
+func mcpIssueWriteReceipt(issue domain.Issue, workspace string, args map[string]any) map[string]any {
+	receipt := map[string]any{
+		"id":         issue.ID,
+		"identifier": issue.Identifier,
+		"url":        mcpIssueURL(workspace, issue.Identifier, args),
+		"version":    issue.Version,
+		"updatedAt":  issue.UpdatedAt,
+	}
+	creating := stringArg(args, "id") == ""
+	put := func(include bool, key string, value any) {
+		if include {
+			receipt[key] = value
+		}
+	}
+	put(creating || hasAnyArg(args, "title"), "title", issue.Title)
+	put(hasAnyArg(args, "description", "patch"), "description", issue.Description)
+	put(creating || hasAnyArg(args, "team"), "team", issue.Team)
+	put(creating || hasAnyArg(args, "state"), "state", issue.State)
+	put(hasAnyArg(args, "priority"), "priority", issue.Priority)
+	put(hasAnyArg(args, "priority"), "priorityLabel", issue.PriorityLabel)
+	put(hasAnyArg(args, "assignee"), "assignee", issue.Assignee)
+	put(hasAnyArg(args, "delegate"), "delegate", issue.Delegate)
+	put(hasAnyArg(args, "project"), "project", issue.Project)
+	put(hasAnyArg(args, "milestone"), "projectMilestoneId", issue.ProjectMilestoneID)
+	put(hasAnyArg(args, "cycle"), "cycleId", issue.CycleID)
+	put(hasAnyArg(args, "labels"), "labels", issue.Labels)
+	put(hasAnyArg(args, "parentId"), "parentId", issue.ParentID)
+	put(hasAnyArg(args, "dueDate"), "dueDate", issue.DueDate)
+	put(hasAnyArg(args, "slaBreachesAt"), "slaBreachesAt", issue.SLABreachesAt)
+	put(hasAnyArg(args, "slaType"), "slaType", issue.SLAType)
+	put(hasAnyArg(args, "estimate"), "estimate", issue.Estimate)
+	put(hasAnyArg(args, "links"), "attachments", issue.Attachments)
+	put(hasAnyArg(args, "blockedBy", "blocks", "relatedTo", "removeBlockedBy", "removeBlocks", "removeRelatedTo", "duplicateOf"), "relations", issue.Relations)
+	return receipt
+}
+
+func mcpIssueURL(workspace, identifier string, args map[string]any) string {
+	path := "/" + url.PathEscape(workspace) + "/issue/" + url.PathEscape(identifier)
+	if base := strings.TrimRight(stringArg(args, "__flowBaseURL"), "/"); base != "" {
+		return base + path
+	}
+	return path
 }
 
 func (s *server) saveMCPProject(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
