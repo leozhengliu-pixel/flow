@@ -1,5 +1,4 @@
-import { AtSign, Bold, Code2, Italic, Link2, Paperclip, Send } from 'lucide-react'
-import * as Popover from '@radix-ui/react-popover'
+import { ArrowUp, Paperclip } from 'lucide-react'
 import Placeholder from '@tiptap/extension-placeholder'
 import StarterKit from '@tiptap/starter-kit'
 import { EditorContent, useEditor } from '@tiptap/react'
@@ -31,12 +30,11 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
   const draftDocument = useRef(initialDocument)
   const [saving, setSaving] = useState(false), [error, setError] = useState(''), [empty, setEmpty] = useState(!initialBody.trim()), [draftBody, setDraftBody] = useState(initialBody)
   const draftId = useRef(persistedDraft?.id ?? '')
-  const [linkOpen, setLinkOpen] = useState(false), [linkUrl, setLinkUrl] = useState('')
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [StarterKit.configure({ heading: false }), MentionExtension, Placeholder.configure({ placeholder })],
     content: initialDocument?.type === 'doc' ? initialDocument : initialBody || { type: 'doc', content: [{ type: 'paragraph' }] },
-    editorProps: { handleTextInput: handleEmoticonInput, attributes: { class: 'comment-prosemirror', 'aria-label': placeholder }, handleKeyDown: (_view, event) => { const current=mentionRef.current;if(current&&!event.isComposing){const options=matching(current.query);if(event.key==='Escape'){setMention(undefined);mentionRef.current=undefined;return true}if(options.length&&(event.key==='ArrowDown'||event.key==='ArrowUp')){const next={...current,index:(current.index+(event.key==='ArrowDown'?1:-1)+options.length)%options.length};mentionRef.current=next;setMention(next);event.preventDefault();return true}if(options.length&&(event.key==='Enter'||event.key==='Tab')&&editor){event.preventDefault();insertMention(editor,options[current.index]??options[0]);return true}} if (!event.isComposing && commentShortcutMatches(event)) { event.preventDefault(); void submit(); return true } if (event.key === 'Escape' && onCancel) { event.preventDefault(); onCancel(); return true } return false } },
+    editorProps: { handleTextInput: handleEmoticonInput, attributes: { class: 'comment-prosemirror', role: 'textbox', 'aria-label': placeholder, 'aria-multiline': 'true' }, handleKeyDown: (_view, event) => { const current=mentionRef.current;if(current&&!event.isComposing){const options=matching(current.query);if(event.key==='Escape'){setMention(undefined);mentionRef.current=undefined;return true}if(options.length&&(event.key==='ArrowDown'||event.key==='ArrowUp')){const next={...current,index:(current.index+(event.key==='ArrowDown'?1:-1)+options.length)%options.length};mentionRef.current=next;setMention(next);event.preventDefault();return true}if(options.length&&(event.key==='Enter'||event.key==='Tab')&&editor){event.preventDefault();insertMention(editor,options[current.index]??options[0]);return true}} if (!event.isComposing && commentShortcutMatches(event)) { event.preventDefault(); void submit(); return true } if (event.key === 'Escape' && onCancel) { event.preventDefault(); onCancel(); return true } return false } },
     onUpdate: ({editor}) => { draftDocument.current = editor.getJSON(); setEmpty(editor.isEmpty); setDraftBody(editor.getText({ blockSeparator: '\n' }));updateMention(editor) },
     onSelectionUpdate:({editor})=>updateMention(editor),
   })
@@ -53,23 +51,12 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
     return () => window.clearTimeout(timer)
   }, [draftBody, draftMetadata, draftResourceId, draftTitle, draftType, saving])
   const submit = async () => { const body = editor?.getText({ blockSeparator: '\n' }).trim() ?? ''; if (!body || saving) return; setSaving(true); setError(''); try { await onSubmit?.(body, editor?.getJSON() as Record<string, unknown>); if (draftType && draftResourceId) { if (draftId.current && !draftId.current.startsWith('local:')) await deleteDraft(draftId.current).catch(() => undefined); clearComposerDraft(draftType, draftResourceId); draftId.current = '' } editor?.commands.clearContent() } catch (reason) { setError(reason instanceof Error ? reason.message : 'Comment could not be submitted') } finally { setSaving(false) } }
-  const applyLink = () => { const href = linkUrl.trim(); if (!href) return; editor?.chain().focus().setLink({ href }).run(); setLinkOpen(false) }
   return <div className={`composer${compact ? ' compact' : ''}`} style={{position:'relative'}}>
     <EditorContent editor={editor}/>
     {error && <div className="composer-error" role="alert">{error}<button type="button" onClick={() => void submit()}>Retry</button></div>}
     <div className="composer-toolbar"><div className="composer-tools">
-      <button type="button" aria-label="Bold" aria-pressed={editor?.isActive('bold')} onClick={() => editor?.chain().focus().toggleBold().run()}><Bold size={14}/></button>
-      <button type="button" aria-label="Italic" aria-pressed={editor?.isActive('italic')} onClick={() => editor?.chain().focus().toggleItalic().run()}><Italic size={14}/></button>
-      <button type="button" aria-label="Code" aria-pressed={editor?.isActive('code')} onClick={() => editor?.chain().focus().toggleCode().run()}><Code2 size={14}/></button>
-      <Popover.Root open={linkOpen} onOpenChange={open => { setLinkOpen(open); if (open) setLinkUrl((editor?.getAttributes('link').href as string | undefined) ?? '') }}>
-        <Popover.Trigger asChild><button type="button" aria-label="Link" aria-pressed={editor?.isActive('link')}><Link2 size={14}/></button></Popover.Trigger>
-        <Popover.Portal><Popover.Content data-flow-motion="floating" align="start" className="composer-link-popover" sideOffset={5}>
-          <input autoFocus aria-label="Link URL" onChange={event => setLinkUrl(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); applyLink() } }} placeholder="Paste or type a link…" type="url" value={linkUrl}/>
-          <button disabled={!linkUrl.trim()} onClick={applyLink} type="button">Apply</button>
-        </Popover.Content></Popover.Portal>
-      </Popover.Root>
-      <button type="button" aria-label="Mention" onClick={()=>editor?.chain().focus().insertContent('@').run()}><AtSign size={14}/></button><button type="button" aria-label="Attach images, files, or videos" onClick={onAttach}><Paperclip size={14}/></button>
-    </div><div className="composer-submit">{onCancel && <Button className="composer-cancel" type="button" variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>}<Button className="composer-send" type="button" size="icon" aria-label="Submit comment" disabled={saving || empty} onClick={() => void submit()}><Send size={13}/></Button></div></div>
+      <button type="button" aria-label="Attach images, files, or videos" onClick={onAttach}><Paperclip size={14}/></button>
+    </div><div className="composer-submit">{onCancel && <Button className="composer-cancel" type="button" variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>}<Button className="composer-send" type="button" size="icon" aria-label="Submit comment" disabled={saving || empty} onClick={() => void submit()}><ArrowUp size={14}/></Button></div></div>
     {mention&&editor&&<MentionMenu users={matching(mention.query)} selectedIndex={mention.index} position={{left:8,top:38}} query={mention.query} onSelect={user=>insertMention(editor,user)}/>}
   </div>
 }

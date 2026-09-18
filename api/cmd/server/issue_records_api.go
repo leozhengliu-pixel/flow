@@ -311,6 +311,19 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "issue not found")
 		return
 	}
+	if input.ExpectedVersion != nil && page.Items[0].Version != *input.ExpectedVersion {
+		writeVersionConflict(w, page.Items[0])
+		return
+	}
+	if issueUpdateIsNoop(page.Items[0], input) {
+		projected, projectionErr := s.projectIssueRecordReferences(r, metadata, query, []domain.Issue{page.Items[0]})
+		if projectionErr != nil {
+			issueRecordsError(w, projectionErr)
+			return
+		}
+		writeJSON(w, http.StatusOK, projected[0])
+		return
+	}
 	if !s.authDisabled {
 		metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
 		if err != nil {
@@ -382,6 +395,9 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		changes, err := applyUpdate(data, issue, input)
 		if err != nil {
 			return err
+		}
+		if len(changes) == 0 && len(input.DocumentUpdateIDs) == 0 {
+			return store.ErrNoMutation
 		}
 		issue.UpdatedAt = time.Now().UTC()
 		applySLARules(data, issue, issue.UpdatedAt)
@@ -532,4 +548,136 @@ func issueRecordsError(w http.ResponseWriter, err error) {
 		return
 	}
 	writeError(w, http.StatusInternalServerError, "Could not query issues")
+}
+
+func optionalID(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func sameStringSet(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	counts := map[string]int{}
+	for _, id := range left {
+		counts[id]++
+	}
+	for _, id := range right {
+		if counts[id] == 0 {
+			return false
+		}
+		counts[id]--
+	}
+	return true
+}
+
+func issueUpdateIsNoop(issue domain.Issue, input domain.IssueUpdateInput) bool {
+	if input.Description != nil || input.DescriptionState != nil || input.DescriptionData != nil || input.ContentState != nil || input.ExpectedDocumentVersion != nil || len(input.DocumentUpdateIDs) > 0 {
+		return false
+	}
+	if input.Title != nil && strings.TrimSpace(*input.Title) != issue.Title {
+		return false
+	}
+	if input.StateID != nil && *input.StateID != issue.State.ID {
+		return false
+	}
+	if input.Priority != nil && *input.Priority != issue.Priority {
+		return false
+	}
+	if input.Estimate != nil {
+		current := 0.0
+		if issue.Estimate != nil {
+			current = *issue.Estimate
+		}
+		if current != *input.Estimate {
+			return false
+		}
+	}
+	if input.AssigneeID != nil {
+		current := ""
+		if issue.Assignee != nil {
+			current = issue.Assignee.ID
+		}
+		if current != *input.AssigneeID {
+			return false
+		}
+	}
+	if input.DelegateID != nil {
+		current := ""
+		if issue.Delegate != nil {
+			current = issue.Delegate.ID
+		}
+		if current != *input.DelegateID {
+			return false
+		}
+	}
+	if input.ProjectID != nil {
+		current := ""
+		if issue.Project != nil {
+			current = issue.Project.ID
+		}
+		if current != *input.ProjectID {
+			return false
+		}
+	}
+	if input.ProjectMilestoneID != nil && *input.ProjectMilestoneID != optionalID(issue.ProjectMilestoneID) {
+		return false
+	}
+	if input.CycleID != nil && *input.CycleID != optionalID(issue.CycleID) {
+		return false
+	}
+	if input.DueDate != nil && *input.DueDate != optionalID(issue.DueDate) {
+		return false
+	}
+	if input.SLABreachesAt != nil {
+		current := ""
+		if issue.SLABreachesAt != nil {
+			current = issue.SLABreachesAt.UTC().Format(time.RFC3339)
+		}
+		if *input.SLABreachesAt != current && !(*input.SLABreachesAt == "" && issue.SLABreachesAt == nil) {
+			return false
+		}
+	}
+	if input.SLAType != nil && *input.SLAType != issue.SLAType {
+		return false
+	}
+	if input.LabelIDs != nil {
+		ids := make([]string, 0, len(issue.Labels))
+		for _, label := range issue.Labels {
+			ids = append(ids, label.ID)
+		}
+		if !sameStringSet(ids, *input.LabelIDs) {
+			return false
+		}
+	}
+	if input.SubscriberIDs != nil && !sameStringSet(issue.SubscriberIDs, *input.SubscriberIDs) {
+		return false
+	}
+	if input.Archived != nil {
+		if (issue.ArchivedAt != nil) != *input.Archived {
+			return false
+		}
+	}
+	if input.ParentID != nil && *input.ParentID != optionalID(issue.ParentID) {
+		return false
+	}
+	if input.SortOrder != nil && *input.SortOrder != issue.SortOrder {
+		return false
+	}
+	if input.Recurrence != nil && strings.TrimSpace(*input.Recurrence) != issue.Recurrence {
+		return false
+	}
+	if input.NextOccurrenceAt != nil {
+		current := ""
+		if issue.NextOccurrenceAt != nil {
+			current = issue.NextOccurrenceAt.UTC().Format(time.RFC3339)
+		}
+		if strings.TrimSpace(*input.NextOccurrenceAt) != current && !(strings.TrimSpace(*input.NextOccurrenceAt) == "" && issue.NextOccurrenceAt == nil) {
+			return false
+		}
+	}
+	return true
 }
