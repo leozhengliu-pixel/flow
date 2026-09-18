@@ -73,6 +73,9 @@ func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, 
 			return nil, err
 		}
 		id, nameArg := stringArg(args, "id"), stringArg(args, "name")
+		if id == "" && nameArg == "" {
+			return nil, fmt.Errorf("provide id or name")
+		}
 		for _, state := range data.States {
 			if (state.TeamID == "" || state.TeamID == team.ID) && (equalFoldAny(id, state.ID) || equalFoldAny(nameArg, state.Name)) {
 				return state, nil
