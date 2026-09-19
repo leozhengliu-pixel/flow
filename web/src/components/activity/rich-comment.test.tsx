@@ -49,6 +49,12 @@ describe('RichComment markdown rendering', () => {
     expect(await screen.findByRole('heading', { name: 'Fallback heading' })).toBeVisible()
   })
 
+  it('renders inline images from comment bodyData', async () => {
+    render(<RichComment body="![shot](/uploads/shot.png)" data={{ type: 'doc', content: [{ type: 'image', attrs: { src: '/uploads/shot.png', alt: 'shot' } }] }}/>)
+    const image = await screen.findByRole('img', { name: 'shot' })
+    expect(image).toHaveAttribute('src', '/uploads/shot.png')
+  })
+
   it('keeps valid rich-text bodyData instead of the markdown projection', async () => {
     render(<RichComment body="## This markdown should not win" data={richDocument} version={3}/>)
     expect(await screen.findByRole('heading', { name: 'Structured' })).toBeVisible()

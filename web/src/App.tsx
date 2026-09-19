@@ -1956,6 +1956,14 @@ function App() {
     setData(current => current ? { ...current, labels: [...current.labels, label] } : current);
     return label;
   };
+  const addIssueLabel = async (name: string, groupId?: string): Promise<IssueLabel> => {
+    const label = await run(
+      () => createWorkspaceLabel({ name, resourceType: "issue", groupId }),
+      "Could not create issue label",
+    );
+    setData(current => current ? { ...current, labels: [...current.labels, label] } : current);
+    return label;
+  };
   const addInitiativeReminder = async (
     initiativeId: string,
     remindAt: string,
@@ -3291,6 +3299,7 @@ function App() {
         }}
         onCreateProject={addIssueProject}
         onCreateProjectMilestone={addProjectMilestone}
+        onCreateLabel={addIssueLabel}
         onReactIssue={async (emoji) => {
           const updated = await run(
             () => toggleIssueReaction(issue.id, emoji),
@@ -5850,6 +5859,7 @@ function App() {
               onCreateSubIssue={addSubIssue}
               onCreateProject={addIssueProject}
               onCreateProjectMilestone={addProjectMilestone}
+              onCreateLabel={addIssueLabel}
               onReactIssue={reactIssue}
               onComment={addComment}
               onEditComment={editComment}
@@ -6010,6 +6020,7 @@ function App() {
             }}
             data={data}
             onCreate={addIssue}
+            onCreateLabel={addIssueLabel}
             onDraftSaved={async () =>
               acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
             }
@@ -6300,12 +6311,17 @@ function applyOptimisticIssue(
     next.projectMilestoneId = input.projectMilestoneId || undefined;
   if (input.cycleId !== undefined) next.cycleId = input.cycleId || undefined;
   if (input.dueDate !== undefined) next.dueDate = input.dueDate || undefined;
-  if (input.labelIds !== undefined)
-    next.labels = data
-      ? labelsForResource(data.labels, "issue", data.labelGroups).filter(
-          (item) => input.labelIds?.includes(item.id),
-        )
-      : next.labels;
+  if (input.labelIds !== undefined) {
+    const catalog = new Map(
+      [...(data ? labelsForResource(data.labels, "issue", data.labelGroups) : []), ...issue.labels].map(
+        (item) => [item.id, item],
+      ),
+    );
+    next.labels = (input.labelIds ?? []).flatMap((id) => {
+      const label = catalog.get(id);
+      return label ? [label] : [];
+    });
+  }
   if (input.subscriberIds !== undefined)
     next.subscriberIds = input.subscriberIds;
   if (input.parentId !== undefined) next.parentId = input.parentId || undefined;

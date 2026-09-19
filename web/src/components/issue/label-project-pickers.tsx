@@ -5,7 +5,7 @@ import { PropertyMenu } from '@/components/property/property-menu'
 import { LabelHoverPreview } from '@/components/property/label-hover-preview'
 import { PropertyShortcutTooltip } from '@/components/property/issue-property-hover'
 
-export function LabelPicker({ value, labels, labelGroups = [], emptyLabel, onToggle, onCreate, inline = false, searchShortcut, showGroupHeadings, surfaceClassName }: { value: IssueLabel[]; labels: IssueLabel[]; labelGroups?: LabelGroup[]; emptyLabel?: string; onToggle: (id: string) => void | Promise<void>; onCreate?: (name: string) => void | Promise<void>; inline?: boolean; searchShortcut?: string; showGroupHeadings?: boolean; surfaceClassName?: string }) {
+export function LabelPicker({ value, labels, labelGroups = [], emptyLabel, onToggle, onCreate, inline = false, searchShortcut, showGroupHeadings, surfaceClassName }: { value: IssueLabel[]; labels: IssueLabel[]; labelGroups?: LabelGroup[]; emptyLabel?: string; onToggle: (id: string) => void | Promise<void>; onCreate?: (name: string, groupId?: string) => void | Promise<void>; inline?: boolean; searchShortcut?: string; showGroupHeadings?: boolean; surfaceClassName?: string }) {
   const groupNames = new Map(labelGroups.map(group => [group.id, group.name]))
   const groupColors = new Map(labelGroups.map(group => [group.id, group.color]))
   const options = labels.map(label => { const groupLabel = label.groupId ? groupNames.get(label.groupId) : undefined; return { id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel, groupColor: label.groupId ? groupColors.get(label.groupId) : undefined, keywords: groupLabel } })
