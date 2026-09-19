@@ -3,10 +3,12 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"flow/api/internal/domain"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
+
+	"flow/api/internal/domain"
 )
 
 // Decode split metadata records directly into their typed destinations. Do not
@@ -34,17 +36,12 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 			fields[tag] = root.Field(i)
 		}
 	}
-	rows, err := reader.QueryContext(ctx, `SELECT field,record_key,data FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,collection_order,record_key`, workspace)
+	recordRows, err := s.loadMetadataRecordRows(ctx, workspace, reader, header.Collections)
 	if err != nil {
 		return data, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var field, key string
-		var value []byte
-		if err := rows.Scan(&field, &key, &value); err != nil {
-			return data, err
-		}
+	for _, record := range recordRows {
+		field, key, value := record.Field, record.Key, record.Data
 		target, ok := fields[field]
 		if !ok {
 			continue
@@ -131,9 +128,6 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 			return data, fmt.Errorf("unknown collection shape %s", header.Collections[field])
 		}
 	}
-	if err := rows.Err(); err != nil {
-		return data, err
-	}
 	for field, object := range rawObjects {
 		encoded, err := json.Marshal(object)
 		if err != nil {
@@ -142,4 +136,37 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 		fields[field].SetBytes(encoded)
 	}
 	return data, nil
+}
+
+func (s *SQLiteStore) loadMetadataRecordRows(ctx context.Context, workspace string, reader metadataReader, collections map[string]string) ([]metadataCacheRow, error) {
+	if cached, ok := s.metadataRecordsFromCache(ctx, workspace, collections); ok {
+		sort.Slice(cached, func(i, j int) bool {
+			if cached[i].Field != cached[j].Field {
+				return cached[i].Field < cached[j].Field
+			}
+			if cached[i].Order != cached[j].Order {
+				return cached[i].Order < cached[j].Order
+			}
+			return cached[i].Key < cached[j].Key
+		})
+		return cached, nil
+	}
+	rows, err := reader.QueryContext(ctx, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,collection_order,record_key`, workspace)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []metadataCacheRow{}
+	for rows.Next() {
+		var row metadataCacheRow
+		if err := rows.Scan(&row.Field, &row.Key, &row.Order, &row.Data); err != nil {
+			return nil, err
+		}
+		result = append(result, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	s.fillMetadataRecordsCache(ctx, workspace, result)
+	return result, nil
 }

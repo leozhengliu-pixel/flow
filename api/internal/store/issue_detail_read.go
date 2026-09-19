@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 
 	"flow/api/internal/domain"
@@ -11,6 +10,18 @@ import (
 // The payload is decoded only after its access predicate has matched. Both
 // identifiers and internal IDs use the same authorized point-read contract.
 func (s *SQLiteStore) AuthorizedIssueRecord(ctx context.Context, query IssueRecordQuery, id string) (domain.Issue, error) {
+	if raw, ok := s.cacheGetIssue(ctx, query.Workspace, id); ok {
+		if authorizedID, err := s.AuthorizedIssueRecordID(ctx, query, id); err == nil && authorizedID != "" {
+			issue, err := unmarshalIssueRecord(raw)
+			if err == nil && (issue.ID == authorizedID || strings.EqualFold(issue.Identifier, id)) {
+				issues := []domain.Issue{issue}
+				if err := s.resolveIssueReferences(ctx, query.Workspace, issues); err != nil {
+					return domain.Issue{}, err
+				}
+				return issues[0], nil
+			}
+		}
+	}
 	statement, args, err := authorizedIssueStatement(query, id, "i.data")
 	if err != nil {
 		return domain.Issue{}, err
@@ -19,11 +30,11 @@ func (s *SQLiteStore) AuthorizedIssueRecord(ctx context.Context, query IssueReco
 	if err := s.db.QueryRowContext(ctx, statement, args...).Scan(&raw); err != nil {
 		return domain.Issue{}, err
 	}
-	var issue domain.Issue
-	if err := json.Unmarshal(raw, &issue); err != nil {
+	issue, err := unmarshalIssueRecord(raw)
+	if err != nil {
 		return issue, err
 	}
-	normalizeIssueRecord(&issue)
+	s.cacheSetIssue(ctx, query.Workspace, issue.ID, raw)
 	issues := []domain.Issue{issue}
 	if err := s.resolveIssueReferences(ctx, query.Workspace, issues); err != nil {
 		return domain.Issue{}, err

@@ -30,7 +30,7 @@ services for development; PostgreSQL, MySQL, S3, and Redis coordination are conf
 - **Workspace administration**: account lifecycle, invitations, roles, teams, labels, templates, imports, and exports.
 - **Customer context**: customers, requests, releases, asks, subscriptions, and SLA rules.
 - **Internationalization**: English and Simplified Chinese interfaces with a persistent language preference.
-- **Horizontal scaling**: Redis standalone/cluster coordination for shared limits, realtime events, presence, and serialized workspace writes.
+- **Horizontal scaling**: Redis standalone/cluster coordination for shared limits, realtime events, presence, serialized workspace writes, and a hot cache for issue records, issue/project directory queries, and workspace metadata.
 
 ## Architecture
 
@@ -45,7 +45,7 @@ React 19 / TypeScript / Vite
   v
 Go HTTP API
   |-- SQLite, PostgreSQL, or MySQL
-  |-- Redis standalone or cluster coordination (optional)
+  |-- Redis standalone or cluster coordination and hot cache (optional)
   |-- Local or S3-compatible object storage
   |-- Email, Google OAuth, OIDC, and SAML authentication
   |-- OpenTelemetry OTLP export (optional)

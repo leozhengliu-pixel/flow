@@ -1390,6 +1390,7 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 		}
 		return err
 	}
+	s.invalidateHotCache(ctx, workspaceKey, eventType, event.AggregateID)
 	if sink := s.webhook(); sink != nil {
 		sink(workspaceKey, event)
 	}
@@ -1703,7 +1704,11 @@ func (s *SQLiteStore) persistWorkspace(ctx context.Context, workspaceKey string,
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.dropMetadataCache(ctx, workspaceKey)
+	return nil
 }
 
 func firstWorkspaceKey(workspaces map[string]domain.Bootstrap) string {
