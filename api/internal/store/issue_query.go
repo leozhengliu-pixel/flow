@@ -578,6 +578,27 @@ func (s *SQLiteStore) QueryIssueRecords(ctx context.Context, query IssueRecordQu
 	if err := s.applyIssueRecordScope(ctx, &query); err != nil {
 		return page, err
 	}
+	if cached, ok := s.cacheGetIssueQuery(ctx, query); ok {
+		if err := s.resolveIssueReferences(ctx, query.Workspace, cached.Items); err != nil {
+			return cached, err
+		}
+		return cached, nil
+	}
+	page, err := s.queryIssueRecordsSQL(ctx, query)
+	if err == nil {
+		s.cacheSetIssueQuery(ctx, query, page)
+	}
+	if err != nil {
+		return page, err
+	}
+	if err := s.resolveIssueReferences(ctx, query.Workspace, page.Items); err != nil {
+		return page, err
+	}
+	return page, nil
+}
+
+func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecordQuery) (IssueRecordPage, error) {
+	page := IssueRecordPage{Items: []domain.Issue{}, Total: -1}
 	where, args, err := issueRecordWhere(query)
 	if err != nil {
 		return page, err
@@ -699,9 +720,6 @@ func (s *SQLiteStore) QueryIssueRecords(ctx context.Context, query IssueRecordQu
 		page.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
 	}
 	rows.Close()
-	if err := s.resolveIssueReferences(ctx, query.Workspace, page.Items); err != nil {
-		return page, err
-	}
 	return page, nil
 }
 
@@ -710,10 +728,16 @@ func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQue
 	if err := s.applyIssueRecordScope(ctx, &query); err != nil {
 		return nil, err
 	}
+	if cached, ok := s.cacheGetIssueGroups(ctx, query); ok {
+		return cached, nil
+	}
 	if _, _, err := issueRecordWhere(query); err != nil {
 		return nil, err
 	}
 	if groups, handled, err := s.issueGroupsFromStats(ctx, query); handled {
+		if err == nil {
+			s.cacheSetIssueGroups(ctx, query, groups)
+		}
 		return groups, err
 	}
 	query.Cursor = ""
@@ -729,9 +753,13 @@ func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQue
 			return nil, err
 		}
 		if total == 0 {
-			return []IssueRecordGroup{}, nil
+			groups := []IssueRecordGroup{}
+			s.cacheSetIssueGroups(ctx, query, groups)
+			return groups, nil
 		}
-		return []IssueRecordGroup{{Value: "all", Count: total}}, nil
+		groups := []IssueRecordGroup{{Value: "all", Count: total}}
+		s.cacheSetIssueGroups(ctx, query, groups)
+		return groups, nil
 	}
 	column, err := issueGroupColumn(query.GroupBy)
 	from := "issue_records i"
@@ -762,10 +790,22 @@ func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQue
 		}
 		groups = append(groups, group)
 	}
-	return groups, rows.Err()
+	if err := rows.Err(); err != nil {
+		return groups, err
+	}
+	s.cacheSetIssueGroups(ctx, query, groups)
+	return groups, nil
 }
 
 func (s *SQLiteStore) IssueRecord(ctx context.Context, workspace, id string) (domain.Issue, error) {
+	if raw, ok := s.cacheGetIssue(ctx, workspace, id); ok {
+		issue, err := unmarshalIssueRecord(raw)
+		if err == nil {
+			items := []domain.Issue{issue}
+			err = s.resolveIssueReferences(ctx, workspace, items)
+			return items[0], err
+		}
+	}
 	var raw []byte
 	err := s.db.QueryRowContext(ctx, `SELECT data FROM issue_records WHERE workspace_key=? AND id=?`, workspace, id).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -774,9 +814,8 @@ func (s *SQLiteStore) IssueRecord(ctx context.Context, workspace, id string) (do
 	if err != nil {
 		return domain.Issue{}, err
 	}
-	var issue domain.Issue
-	err = json.Unmarshal(raw, &issue)
-	normalizeIssueRecord(&issue)
+	s.cacheSetIssue(ctx, workspace, id, raw)
+	issue, err := unmarshalIssueRecord(raw)
 	if err == nil {
 		items := []domain.Issue{issue}
 		err = s.resolveIssueReferences(ctx, workspace, items)

@@ -155,6 +155,7 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		}
 		return err
 	}
+	s.invalidateHotCache(ctx, workspaceKey, eventType, event.AggregateID)
 	if sink := s.webhook(); sink != nil {
 		sink(workspaceKey, event)
 	}
@@ -557,21 +558,33 @@ func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey stri
 	if err := writeAccountMetadata(ctx, tx, workspaceKey, viewerRaw); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.cacheMetadataUpserts(ctx, workspaceKey, upserts)
+	return nil
 }
 
 type metadataRecordChange struct {
 	field  string
 	key    string
 	insert bool
+	order  int
 	raw    json.RawMessage
 }
 
 func writeMetadataRecordUpserts(ctx context.Context, tx *sqlTx, workspace string, upserts []metadataRecordChange) error {
 	bases := map[string]int{}
-	for _, change := range upserts {
+	for i, change := range upserts {
+		var existing sql.NullInt64
+		err := tx.QueryRowContext(ctx, `SELECT collection_order FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, change.field, change.key).Scan(&existing)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
 		order := 0
-		if change.insert {
+		if existing.Valid {
+			order = int(existing.Int64)
+		} else {
 			base, known := bases[change.field]
 			if !known {
 				var highest sql.NullInt64
@@ -587,6 +600,7 @@ func writeMetadataRecordUpserts(ctx context.Context, tx *sqlTx, workspace string
 			bases[change.field] = base
 			order = base
 		}
+		upserts[i].order = order
 		if _, err := tx.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,?,?,?,?) ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET data=excluded.data`, workspace, change.field, change.key, order, []byte(change.raw)); err != nil {
 			return err
 		}

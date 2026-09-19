@@ -320,6 +320,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		}
 		return err
 	}
+	s.invalidateHotCache(ctx, workspace, eventType, event.AggregateID)
 	if sink := s.webhook(); sink != nil {
 		sink(workspace, event)
 	}
