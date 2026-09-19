@@ -3,7 +3,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import type { Editor } from '@tiptap/react'
 import { ChevronRight, CircleDashed, Diamond, ExternalLink, FilePlus2, Link2, Maximize2, Minimize2, MoreHorizontal, Paperclip, Repeat2, Sparkles, Trash2, X } from 'lucide-react'
-import type { BootstrapData, Draft, Issue, IssueSuggestionPreview } from '@/types/flow'
+import type { BootstrapData, Draft, Issue, IssueLabel, IssueSuggestionPreview } from '@/types/flow'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { Avatar } from '@/components/issue/issue-row'
@@ -52,6 +52,7 @@ export interface CreateIssueDialogProps {
   draftId?: string
   onOpenChange: (open: boolean) => void
   onCreate: (input: CreateIssueInput) => Promise<Issue>
+  onCreateLabel?: (name: string, groupId?: string) => Promise<IssueLabel>
   onUpload?: (issueId: string, file: File) => Promise<void>
   onDraftSaved?: (draft: Draft) => Promise<void> | void
   onDraftDeleted?: (draftId: string) => Promise<void> | void
@@ -78,7 +79,7 @@ interface StoredIssueDraft {
   updatedAt?: string
 }
 
-export function CreateIssueDialog({ data, draftId, initialContext, initialProjectId, initialProjectMilestoneId, initialTeamId, initialStateId, initialTemplateId, onCreate, onDraftDeleted, onDraftSaved, onOpenChange, onUpload, open }: CreateIssueDialogProps) {
+export function CreateIssueDialog({ data, draftId, initialContext, initialProjectId, initialProjectMilestoneId, initialTeamId, initialStateId, initialTemplateId, onCreate, onCreateLabel, onDraftDeleted, onDraftSaved, onOpenChange, onUpload, open }: CreateIssueDialogProps) {
   const requestedTeamId = initialContext?.teamId ?? initialTeamId
   const requestedStateId = initialContext?.stateId ?? initialStateId
   const [teamId, setTeamId] = useState(requestedTeamId || data.teams[0]?.id || '')
@@ -413,7 +414,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
             <MiniProperty label="Assignee" value={assignee?.displayName ?? 'Assignee'} selectedId={assigneeId} icon={assignee ? <Avatar name={assignee.displayName}/> : <NoAssigneeIcon/>} options={[{id:'',label:'No assignee',icon:<NoAssigneeIcon/>},...data.users.filter(user => user.active).map(user => ({id:user.id,label:user.displayName,keywords:user.email,icon:<Avatar name={user.displayName}/>}))]} onChange={setAssigneeId}/>
             <MiniProperty label="Project" value={project?.name ?? 'Project'} valueIsEntityName={Boolean(project)} selectedId={projectId} icon={<ProjectIcon/>} options={[{id:'',label:'No project',icon:<NoProjectIcon/>},...data.projects.map(item => ({id:item.id,label:item.name,color:item.color,icon:<ProjectIcon style={{ color: item.color }}/>,i18nIgnore:true }))]} onChange={value => { setProjectId(value); setProjectMilestoneId('') }}/>
             {project && project.milestones.length > 0 && <MiniProperty label="Milestone" value={projectMilestone?.name ?? 'Milestone'} valueIsEntityName={Boolean(projectMilestone)} selectedId={projectMilestoneId} icon={<Diamond size={14}/>} options={[{id:'',label:'No milestone',icon:<Diamond size={14}/>},...project.milestones.map(item => ({id:item.id,label:item.name,icon:<Diamond size={14}/>,i18nIgnore:true}))]} onChange={setProjectMilestoneId}/>}
-            <MiniProperty multiple label="Labels" value={selectedLabels.length ? selectedLabels.map(label => label.name).join(', ') : 'Labels'} selectedIds={labelIds} icon={<LabelIcon/>} options={availableLabels.map(item => ({ id: item.id, label: item.name, color: item.color, description: item.description, issueCount: item.issueCount, scope: item.scope, resourceType: item.resourceType, groupId: item.groupId, groupLabel: item.groupId ? labelGroupNames.get(item.groupId) : undefined, groupColor: item.groupId ? labelGroupColors.get(item.groupId) : undefined }))} onChange={toggleLabel}/>
+            <MiniProperty multiple label="Labels" value={selectedLabels.length ? selectedLabels.map(label => label.name).join(', ') : 'Labels'} selectedIds={labelIds} icon={<LabelIcon/>} options={availableLabels.map(item => ({ id: item.id, label: item.name, color: item.color, description: item.description, issueCount: item.issueCount, scope: item.scope, resourceType: item.resourceType, groupId: item.groupId, groupLabel: item.groupId ? labelGroupNames.get(item.groupId) : undefined, groupColor: item.groupId ? labelGroupColors.get(item.groupId) : undefined }))} onChange={toggleLabel} emptyLabel="Start typing to create a new label" onCreate={onCreateLabel ? async (name, groupId) => { const label = await onCreateLabel(name, groupId); setLabelIds(current => toggleGroupedLabelIds(current, label.id, [...availableLabels, label])) } : undefined}/>
             {data.cycleSettings[teamId]?.enabled === true && <MiniProperty label="Cycle" value={cycle?.name ?? 'Cycle'} valueIsEntityName={Boolean(cycle)} selectedId={cycleId} icon={<CycleIcon cycle={cycle} nextUpcomingId={nextUpcomingCycleId} progress={cycle?cycleIssueProgress(data.issues,cycle.id):0}/>} options={[{id:'',label:'No cycle',icon:<CycleIcon noCycle/>},...cycles.map(item=>({id:item.id,label:item.name,icon:<CycleIcon cycle={item} nextUpcomingId={nextUpcomingCycleId} progress={cycleIssueProgress(data.issues,item.id)}/>,i18nIgnore:true}))]} onChange={setCycleId} ariaLabel="Add to cycle"/>}
             <MoreActions active={open && !linkOpen} dueDate={dueDate} recurrence={recurrence} onDueDateChange={setDueDate} onRecurrenceChange={setRecurrence} onInsertLink={() => setLinkOpen(true)}/>
           </div>

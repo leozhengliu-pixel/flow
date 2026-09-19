@@ -1,5 +1,25 @@
-.issue-activity-timeline::before { display: none; }
+.issue-activity-timeline::before {
+  display: block;
+  left: 18px;
+  top: 12px;
+  bottom: 12px;
+  width: 1px;
+  margin-left: -0.5px;
+  background: var(--theme-border);
+  pointer-events: none;
+}
 .issue-activity-timeline .timeline-item { min-width: 0; grid-template-columns: 36px minmax(0, 1fr); gap: 0; }
+.issue-activity-timeline .activity-event-icon > svg,
+.issue-activity-timeline .activity-event-icon .avatar,
+.issue-activity-timeline .timeline-item.comment > .avatar {
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 0 0 3px var(--bg-panel);
+}
+.issue-activity-timeline .activity-event-icon > svg {
+  background: var(--bg-panel);
+  border-radius: 2px;
+}
 .issue-activity-timeline .timeline-item.event { min-height: 0; padding: 5px 0; }
 .issue-activity-timeline .timeline-item.event > div:last-child { min-width: 0; padding: 1px 0; }
 .issue-activity-timeline .activity-event-icon { width: 36px; min-height: 18.8px; display: flex; justify-content: center; align-items: flex-start; padding-top: 2px; color: var(--ui-pill-fg); }

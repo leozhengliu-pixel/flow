@@ -22,6 +22,15 @@ describe('AssigneeHoverPreview presence status', () => {
     expect(screen.queryByText('local time')).not.toBeInTheDocument()
   })
 
+  it('keeps avatar initials out of the muted header subtitle span', () => {
+    render(<I18nProvider><AssigneeHoverPreview user={user} workspaceName="Workspace" /></I18nProvider>)
+
+    const avatar = screen.getByLabelText('zheng liu')
+    expect(avatar).toHaveClass('avatar')
+    expect(avatar.parentElement?.tagName).toBe('HEADER')
+    expect(avatar.nextElementSibling?.querySelector('span')?.textContent).toBe('leo.zheng.liu')
+  })
+
   it('shows online only for an explicit live presence flag', () => {
     render(<I18nProvider><AssigneeHoverPreview online user={user} workspaceName="Workspace" /></I18nProvider>)
 
