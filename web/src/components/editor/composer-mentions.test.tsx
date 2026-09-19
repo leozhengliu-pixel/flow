@@ -40,6 +40,28 @@ describe('comment application mentions',()=>{
     await user.type(await screen.findByRole('textbox',{name:'Leave a comment…'}),'@')
     expect(screen.queryByRole('option')).toBeNull()
   })
+  it('uploads comment images into the composer instead of a shared issue attach handler', async () => {
+    const user = userEvent.setup()
+    const onAttach = vi.fn()
+    const onUpload = vi.fn().mockResolvedValue('/uploads/pic.png')
+    const files = [new File(['png'], 'pic.png', { type: 'image/png' })]
+    vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(function click(this: HTMLInputElement) {
+      Object.defineProperty(this, 'files', { configurable: true, value: files })
+      this.dispatchEvent(new Event('change'))
+    })
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:pic')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+    try {
+      render(<I18nProvider><TooltipProvider><Composer onAttach={onAttach} onUpload={onUpload} onSubmit={vi.fn()}/></TooltipProvider></I18nProvider>)
+      await user.click(await screen.findByRole('button', { name: 'Attach images, files, or videos' }))
+      await waitFor(() => expect(onUpload).toHaveBeenCalled())
+      expect(onAttach).not.toHaveBeenCalled()
+      expect(await screen.findByRole('img', { name: 'pic.png' })).toHaveAttribute('src', '/uploads/pic.png')
+    } finally {
+      vi.restoreAllMocks()
+    }
+  })
+
   it('keeps the comment toolbar to attach and submit only',async()=>{
     render(<I18nProvider><TooltipProvider><Composer onSubmit={vi.fn()}/></TooltipProvider></I18nProvider>)
     expect(await screen.findByRole('textbox',{name:'Leave a comment…'})).toBeVisible()

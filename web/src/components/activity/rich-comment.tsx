@@ -3,7 +3,10 @@ import { Markdown } from '@tiptap/markdown'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { MentionExtension } from '@/components/issue/editor/mention-extension'
+import { DescriptionImage } from '@/components/issue/editor/image-extension'
+import { DescriptionFile, DescriptionVideo } from '@/components/issue/editor/file-extension'
 import { structuredBlocks } from '@/components/issue/editor/structured-blocks'
+import '@/components/issue/issue-description-editor.css'
 
 export function RichComment({ body, data, version }: { body: string; data?: Record<string, unknown>; version?: number }) {
   const selection = data?.selection as { issueId?: string; text?: string; from?: number; to?: number } | undefined
@@ -11,7 +14,7 @@ export function RichComment({ body, data, version }: { body: string; data?: Reco
   const editor = useEditor({
     immediatelyRender: false,
     editable: false,
-    extensions: [StarterKit.configure({ link: { openOnClick: false, autolink: true, linkOnPaste: true } }), Markdown, MentionExtension, ...structuredBlocks],
+    extensions: [StarterKit.configure({ link: { openOnClick: false, autolink: true, linkOnPaste: true } }), Markdown, MentionExtension, DescriptionImage, DescriptionFile, DescriptionVideo, ...structuredBlocks],
     content: initial.content,
     contentType: initial.contentType,
     editorProps: { attributes: { role: 'document', 'aria-label': 'Comment' } },

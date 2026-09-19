@@ -9,7 +9,7 @@ import type { DescriptionSelectionActions, SelectedDescription } from '@/compone
 
 export const CREATE_ISSUE_FROM_SELECTION = 'flow-create-issue-from-selection'
 
-export function useDescriptionSelectionActions(issue: Issue, data: BootstrapData, onComment: (body: string, bodyData?: Record<string,unknown>) => Promise<void>) {
+export function useDescriptionSelectionActions(issue: Issue, data: BootstrapData, onComment: (body: string, bodyData?: Record<string,unknown>) => Promise<void>, onUpload?: (file: File) => Promise<string>) {
   const { t } = useI18n()
   const [comment, setComment] = useState<SelectedDescription & { issueId: string }>()
   const [agent, setAgent] = useState<SelectedDescription & { issueId: string }>()
@@ -19,7 +19,7 @@ export function useDescriptionSelectionActions(issue: Issue, data: BootstrapData
     onComment: selection => setComment({ ...selection, issueId: issue.id }),
   }
   const panels = <>
-    <Dialog open={Boolean(comment && comment.issueId === issue.id)} onOpenChange={open => { if (!open) setComment(undefined) }}><DialogContent className="description-selection-comment" aria-describedby={undefined}><DialogTitle>{t('Comment on selection')}</DialogTitle>{comment && <><blockquote>{comment.text}</blockquote><Composer key={`${issue.id}:${comment.from}`} users={data.users} placeholder={t('Add a comment…')} onCancel={() => setComment(undefined)} onSubmit={async (body, bodyData) => { await onComment(body, { ...bodyData, selection: { ...comment } }); setComment(undefined) }}/></>}</DialogContent></Dialog>
+    <Dialog open={Boolean(comment && comment.issueId === issue.id)} onOpenChange={open => { if (!open) setComment(undefined) }}><DialogContent className="description-selection-comment" aria-describedby={undefined}><DialogTitle>{t('Comment on selection')}</DialogTitle>{comment && <><blockquote>{comment.text}</blockquote><Composer key={`${issue.id}:${comment.from}`} users={data.users} placeholder={t('Add a comment…')} onUpload={onUpload} onCancel={() => setComment(undefined)} onSubmit={async (body, bodyData) => { await onComment(body, { ...bodyData, selection: { ...comment } }); setComment(undefined) }}/></>}</DialogContent></Dialog>
     {agent?.issueId === issue.id && <Suspense fallback={null}><AgentChatPanel key={`${issue.id}:${agent.from}`} initialPrompt={agent.text} issues={[issueToExplorerRow(issue,data.workspace.urlKey,data.issues,data)]} open onClose={() => setAgent(undefined)}/></Suspense>}
   </>
   return { actions, panels }
