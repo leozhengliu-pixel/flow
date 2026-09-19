@@ -254,6 +254,14 @@ func (s *SQLiteStore) QueryProjectDirectory(ctx context.Context, query ProjectRe
 	if strings.TrimSpace(query.Workspace) == "" {
 		return page, ErrIssueQuery
 	}
+	if cached, ok := s.cacheGetProjectQuery(ctx, query); ok {
+		return cached, nil
+	}
+	if projects, ok := s.projectSnapshot(query.Workspace); ok {
+		page = filterProjectDirectory(projects, query)
+		s.cacheSetProjectQuery(ctx, query, page)
+		return page, nil
+	}
 	limit := query.Limit
 	if limit <= 0 || limit > 100 {
 		limit = 100
@@ -342,7 +350,98 @@ func (s *SQLiteStore) QueryProjectDirectory(ctx context.Context, query ProjectRe
 	if page.HasMore {
 		page.NextCursor = encodeProjectCursor(offset + len(page.Items))
 	}
+	s.cacheSetProjectQuery(ctx, query, page)
 	return page, nil
+}
+
+func (s *SQLiteStore) projectSnapshot(workspace string) ([]domain.Project, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if workspace == "" {
+		workspace = s.lastWorkspaceKey
+	}
+	data, ok := s.workspaces[workspace]
+	if !ok || data.Projects == nil {
+		return nil, false
+	}
+	return data.Projects, true
+}
+
+func filterProjectDirectory(projects []domain.Project, query ProjectRecordQuery) ProjectRecordPage {
+	page := ProjectRecordPage{Items: []domain.Project{}, Total: -1}
+	limit := query.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+	offset := decodeProjectCursor(query.Cursor)
+	teamFilter := make(map[string]bool, len(query.TeamIDs))
+	for _, id := range query.TeamIDs {
+		teamFilter[id] = true
+	}
+	allowed := make(map[string]bool, len(query.AllowedTeamIDs))
+	for _, id := range query.AllowedTeamIDs {
+		allowed[id] = true
+	}
+	search := strings.ToLower(strings.TrimSpace(query.Search))
+	matched := 0
+	returned := 0
+	for _, project := range projects {
+		if query.Archived != "all" && (project.ArchivedAt != nil) != (query.Archived == "true") {
+			continue
+		}
+		if len(teamFilter) > 0 {
+			found := false
+			for _, id := range project.TeamIDs {
+				if teamFilter[id] {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+		if !query.Admin && query.AllowedTeamIDs != nil {
+			found := len(project.TeamIDs) == 0
+			for _, id := range project.TeamIDs {
+				if allowed[id] {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+		if search != "" && !strings.Contains(strings.ToLower(project.Name), search) && !strings.Contains(strings.ToLower(project.SlugID), search) && !strings.Contains(strings.ToLower(project.Summary), search) {
+			continue
+		}
+		if !projectDirectoryFiltersMatch(project, query.Filters) {
+			continue
+		}
+		if matched < offset {
+			matched++
+			continue
+		}
+		matched++
+		if returned < limit {
+			page.Items = append(page.Items, ProjectListProjection(project))
+			returned++
+		} else {
+			page.HasMore = true
+			if !query.IncludeTotal {
+				break
+			}
+		}
+	}
+	page.HasMore = page.HasMore || matched > offset+returned
+	if query.IncludeTotal {
+		page.Total = int64(matched)
+	}
+	if page.HasMore {
+		page.NextCursor = encodeProjectCursor(offset + len(page.Items))
+	}
+	return page
 }
 
 func projectDirectoryFiltersMatch(project domain.Project, filters []ProjectDirectoryFilter) bool {

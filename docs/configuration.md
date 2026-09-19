@@ -125,9 +125,24 @@ new deployments should use `FLOW_DATABASE_PATH`.
 ## Redis coordination and cluster mode
 
 Redis is optional for a single Flow process and disabled by default. Enable it
-when running multiple API replicas. Flow uses Redis for shared authentication
-rate limits, cross-instance realtime events, shared presence, and distributed
-workspace write locks. A replica reloads the latest workspace metadata from SQL
+when running multiple API replicas, and whenever the workspace is large enough
+that SQL round-trips dominate (tens of thousands of teams or projects, or
+millions of issues). Flow uses Redis for shared authentication rate limits,
+cross-instance realtime events, shared presence, distributed workspace write
+locks, **and a hot cache**:
+
+- Issue records (`IssueRecord` / authorized detail) are cached by ID.
+- Issue list pages, totals, and group counts are cached per query and viewer.
+- Project directory pages are served from the in-memory snapshot when loaded,
+  otherwise from a per-query cache.
+- Workspace metadata collections (teams, projects, states, …) are stored as
+  Redis hashes so replica reloads do not scan every SQL metadata row.
+
+Writes bump a per-workspace generation so list caches drop immediately; the
+mutated issue key is deleted so the next detail read refills from SQL. Cache
+failures never fail the request: the store falls back to SQL.
+
+A replica reloads the latest workspace metadata from Redis (and SQL on miss)
 inside the distributed lock before applying a mutation, preventing one process
 from overwriting another process's update.
 

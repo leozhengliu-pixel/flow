@@ -79,7 +79,7 @@ docker compose up -d --build
 | `FLOW_DATABASE_PATH` | `data/flow.db` | SQLite 数据库路径。 |
 | `FLOW_DATABASE_URL` | 未设置 | PostgreSQL/MySQL 连接 URL。 |
 | `FLOW_WORKSPACE_STATE_MAX_BYTES` | `67108864` | 单个工作区序列化状态的最大字节数。 |
-| `FLOW_REDIS_MODE` | `disabled` | `disabled`、`standalone` 或 `cluster`；启用时必须使用 PostgreSQL/MySQL。 |
+| `FLOW_REDIS_MODE` | `disabled` | `disabled`、`standalone` 或 `cluster`；启用时必须使用 PostgreSQL/MySQL。启用后同时用于集群协调和热缓存（issue 详情/列表、项目目录、workspace metadata）。 |
 | `FLOW_REDIS_URL` | 未设置 | Redis 连接 URL；也可使用 `FLOW_REDIS_ADDRS`。 |
 | `FLOW_STORAGE_DRIVER` | `local` | `local` 或 `s3`。 |
 | `FLOW_STORAGE_LOCAL_PATH` | `data/uploads` | 本地附件存储目录。 |
