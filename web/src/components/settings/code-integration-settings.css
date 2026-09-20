@@ -15,3 +15,6 @@
 :root[data-theme="light"] .code-manage-menu{border:.5px solid var(--theme-border);border-radius:12px;background:var(--theme-surface-2);color:var(--text);box-shadow:var(--shadow-control)}
 :root[data-theme="light"] .code-manage-menu [role=menuitem]:hover,:root[data-theme="light"] .code-manage-menu [role=menuitem]:focus{background:var(--bg-hover)}
 :root[data-theme="light"] .code-delivery-empty{color:var(--faint)}
+
+.code-status-pill{display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:999px;background:#4cb7821f;color:#39946a;font:500 11px/1 inherit}
+.code-status-pill.is-ready{background:#4cb7821f;color:#39946a}

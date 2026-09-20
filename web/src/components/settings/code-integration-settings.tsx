@@ -26,6 +26,7 @@ import {
   updateIntegrationConnection,
 } from "@/lib/api";
 import type { BootstrapData, IntegrationConnection } from "@/types/flow";
+import { integrationHasCodeAccess } from "@/lib/code-access";
 import { SettingsSelect } from "./settings-primitives";
 
 import "./code-integration-settings.css";
@@ -382,6 +383,41 @@ export function CodeIntegrationSettings({
           </div>
         )}
       </section>
+
+      {provider === "github" && connections[0] && (
+        <section className="code-integration-section" aria-labelledby="github-code-access-heading">
+          <div className="code-section-title">
+            <div>
+              <h2 id="github-code-access-heading">{t("Code access")}</h2>
+              <p>
+                {t(
+                  integrationHasCodeAccess(connections[0])
+                    ? "Code Intelligence and Reviews can read repository contents through this integration."
+                    : "Enable code access so Code Intelligence and Reviews can read repository contents.",
+                )}
+              </p>
+            </div>
+            <aside>
+              {integrationHasCodeAccess(connections[0]) ? (
+                <span className="code-status-pill is-ready">{t("Enabled")}</span>
+              ) : (
+                <button
+                  type="button"
+                  className="code-primary"
+                  disabled={busy}
+                  onClick={() =>
+                    void setting(connections[0], "codeAccess", "true").then(() =>
+                      toast.success(t("Code access enabled")),
+                    )
+                  }
+                >
+                  {t("Enable code access")}
+                </button>
+              )}
+            </aside>
+          </div>
+        </section>
+      )}
       {connections[0] && (
         <>
           <IntegrationOptions

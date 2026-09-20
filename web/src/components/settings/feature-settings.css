@@ -85,3 +85,30 @@ body .feature-select-menu{z-index:500;box-sizing:border-box;min-width:93px;width
 .team-inherited-setting p{margin:2px 0 0;color:var(--theme-text-secondary);font-size:12px;line-height:17px}
 .team-inherited-value{color:var(--theme-text-secondary);font-size:13px}
 .team-template-setting[data-inherited]{cursor:default;opacity:.82}
+
+/* Wave 0 — integration catalog honesty + code access */
+.feature-integration-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 16px 20px}
+.feature-integration-toolbar .feature-integration-search{margin:0;width:min(420px,100%);flex:1}
+.feature-enabled-link{height:28px;display:inline-flex;align-items:center;gap:2px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--theme-text-secondary);font:500 12px "Inter Variable",system-ui,sans-serif;cursor:pointer}
+.feature-enabled-link:hover{background:var(--theme-surface-active);color:var(--theme-text-primary)}
+.feature-integration-grid article[data-availability="coming_soon"] .feature-button,
+.feature-integration-grid article[data-availability="not_supported"] .feature-button{opacity:.92}
+.feature-integration-grid h3 small.is-coming_soon{background:color-mix(in srgb,#f2c94c 18%,transparent);color:#b8860b}
+.feature-integration-grid h3 small.is-not_supported{background:color-mix(in srgb,var(--theme-text-secondary) 14%,transparent);color:var(--theme-text-secondary)}
+.integration-catalog-icon{width:25px;height:25px;border-radius:6px}
+.integration-availability-badge{padding:2px 7px;border-radius:999px;font-size:11px;font-weight:500;background:color-mix(in srgb,#f2c94c 16%,transparent);color:#b8860b}
+.integration-availability-badge.is-not_supported{background:color-mix(in srgb,var(--theme-text-secondary) 14%,transparent);color:var(--theme-text-secondary)}
+.integration-availability-badge.is-coming_soon{background:color-mix(in srgb,#f2c94c 16%,transparent);color:#b8860b}
+.feature-back-link{display:inline-flex;align-items:center;margin:0 0 8px;padding:0;border:0;background:transparent;color:var(--theme-text-secondary);font:500 12px/18px inherit;cursor:pointer}
+.feature-back-link:hover{color:var(--theme-text-primary);text-decoration:underline;text-underline-offset:2px}
+.integration-settings-title{display:flex;align-items:flex-start;gap:14px}
+.integration-settings-title h1{margin:0}
+.feature-text-link{padding:0;border:0;background:transparent;color:var(--theme-accent,#5e6ad2);font:inherit;cursor:pointer}
+.feature-text-link:hover{text-decoration:underline;text-underline-offset:2px}
+.feature-inline-link{margin:12px 16px 0;color:var(--theme-text-secondary);font-size:12px;line-height:17px}
+.feature-repo-scope{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.feature-radio{display:inline-flex;align-items:center;gap:8px;color:var(--theme-text-primary);font-size:13px;cursor:pointer}
+.feature-radio input{accent-color:#5e6ad2}
+.code-access-gate aside .feature-button{white-space:nowrap}
+:root[data-theme="light"] .feature-enabled-link:hover{background:var(--bg-hover);color:var(--text)}
+:root[data-theme="light"] .feature-integration-grid h3 small.is-coming_soon{background:#f2c94c2e;color:#8a6a00}
