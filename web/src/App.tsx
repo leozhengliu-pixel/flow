@@ -254,7 +254,8 @@ import { applyFavoriteDelta, FAVORITES_CHANGED, overlayPendingFavoriteIntents, t
 import { fetchResourcePreferences, mergeResourcePreferences, RESOURCE_PREFERENCES_UPDATED, type ResourcePreferences } from '@/lib/resource-preferences';
 import { useDesktopNotifications } from "@/hooks/use-desktop-notifications";
 import { labelsForResource, setGroupedLabelSelected } from "@/lib/labels";
-import { applyTheme } from "@/lib/theme";
+import { applyAccountTheme, themeNeedsAccountSync } from "@/lib/theme";
+import { persistUserSettings } from "@/lib/settings-persistence";
 import { useExitPresence } from '@/components/ui/motion';
 
 import { PeopleProvider } from '@/components/property/people-provider'
@@ -396,13 +397,34 @@ function App() {
       })
       .finally(() => setAuthReady(true));
   }, []);
+  const themeSyncRef = useRef<string>("");
   useEffect(() => {
     if (!data) return;
-    const settings = data.userSettings[data.viewer.id] ?? {};
+    const settings = data.userSettings[data.viewer.id];
+    if (!settings) return;
     setRuntimePreferences(settings);
     setWorkspaceRuntimePreferences(data.workspaceSettings);
     const root = document.documentElement;
-    applyTheme(settings);
+    // Reconcile account settings with the first-paint cache so default
+    // "System preference" does not wipe an explicit Light/Dark choice.
+    const applied = applyAccountTheme({
+      interfaceTheme: settings.interfaceTheme,
+      lightTheme: settings.lightTheme,
+      darkTheme: settings.darkTheme,
+    });
+    if (
+      themeNeedsAccountSync(settings, applied) &&
+      themeSyncRef.current !== `${data.workspace.urlKey}:${data.viewer.id}:${applied.interfaceTheme}`
+    ) {
+      themeSyncRef.current = `${data.workspace.urlKey}:${data.viewer.id}:${applied.interfaceTheme}`;
+      void persistUserSettings(data.workspace.urlKey, data.viewer.id, {
+        interfaceTheme: applied.interfaceTheme,
+        lightTheme: applied.lightTheme,
+        darkTheme: applied.darkTheme,
+      } as Partial<UserSettings>).catch(() => {
+        themeSyncRef.current = "";
+      });
+    }
     root.style.fontSize =
       settings.fontSize === "Small"
         ? "14px"
@@ -421,7 +443,12 @@ function App() {
       "settings-reduce-animated-media",
       Boolean(settings.disableAnimatedImages),
     );
-  }, [data]);
+  }, [
+    data?.workspace.urlKey,
+    data?.viewer.id,
+    data?.userSettings,
+    data?.workspaceSettings,
+  ]);
   const oauthPath = location.pathname === "/oauth/authorize";
   const authPath =
     [
