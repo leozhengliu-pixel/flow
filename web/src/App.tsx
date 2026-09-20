@@ -268,6 +268,8 @@ import { useExitPresence } from '@/components/ui/motion';
 import { PeopleProvider } from '@/components/property/people-provider'
 import { WorkspaceStoreProvider } from '@/store/application-store-context'
 import { applyRealtimePatch, canApplyRealtimePatch } from '@/store/apply-realtime-patch'
+import { ActiveTeamProvider } from '@/lib/active-team'
+import { TeamPagesLayout, isTeamPagesRoute } from '@/components/team/team-pages-layout'
 import { searchResultLink } from '@/lib/search-result-link'
 import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck } from '@/lib/issue-detail-cache'
 
@@ -4173,6 +4175,10 @@ function App() {
     );
   const workspaceValid = routeBelongsToWorkspace(route, data.workspace.urlKey);
   const routeTeamKey = "teamKey" in route ? route.teamKey : undefined;
+  const teamPagesTeamKey =
+    "teamKey" in route && isTeamPagesRoute(route.kind)
+      ? route.teamKey
+      : undefined;
   const teamValid =
     !routeTeamKey ||
     data.teams.some(
@@ -4349,7 +4355,7 @@ function App() {
       )
     : issueSavedViews.filter((view) => view.scope !== "team");
   return withStore(
-    <PeopleProvider users={data.users} workspaceName={data.workspace.name} members={data.members} teams={data.teams} teamMembers={data.teamMembers} projects={data.projects}><div className="app">
+    <PeopleProvider users={data.users} workspaceName={data.workspace.name} members={data.members} teams={data.teams} teamMembers={data.teamMembers} projects={data.projects}><ActiveTeamProvider><div className="app">
       <Sidebar
         onReload={async () => acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))}
         account={account}
@@ -4391,6 +4397,11 @@ function App() {
           </main>
         }
       >
+        <TeamPagesLayout
+          data={data}
+          teamKey={teamPagesTeamKey}
+          onNavigate={navigateTo}
+        >
         {page === "search" && route.kind === "search" && (
           <WorkspaceSearchPage
             onOpenSidebar={() => setMobileSidebarOpen(true)}
@@ -6086,6 +6097,7 @@ function App() {
               description="This project view does not exist or is no longer available."
             />
           )}
+      </TeamPagesLayout>
       </Suspense>
       )}
       <Suspense fallback={null}>
@@ -6280,7 +6292,7 @@ function App() {
           <History />
         </button>
       </div>
-    </div></PeopleProvider>
+    </div></ActiveTeamProvider></PeopleProvider>
   );
 }
 

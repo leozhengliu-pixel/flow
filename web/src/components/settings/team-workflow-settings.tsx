@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ParentTeamPicker } from '@/components/property/parent-team-picker';
+import { RetireTeamForm } from '@/components/team/retire-team-form';
 import { teamHierarchy } from '@/lib/team-hierarchy';
 
 import {
@@ -79,6 +80,15 @@ import type {
   WorkflowStateType,
 } from "@/types/flow";
 import { loopsPath, type TeamSettingsSection } from "@/lib/app-routes";
+import {
+  confirmAllowSubTeamsMembership,
+  confirmApplyPermissionToSubTeams,
+  getIssueSharingAudience,
+  isLessRestrictiveMembership,
+  isLessRestrictivePermission,
+  type TeamPermissionKey,
+} from "@/lib/team-security-confirms";
+
 import { TemplateEditor } from "./advanced-settings";
 import {
   SettingsRow,
@@ -342,21 +352,26 @@ function TeamOverview({
 }) {
   const { t } = useI18n();
   const { settings, save } = useTeamSettings(data, team, onReload);
+  const [retireOpen, setRetireOpen] = useState(false);
   const descendantCount = Math.max(0, teamHierarchy(data.teams, data.teamSettings).subtree(team.id).size - 1);
   const retire = async () => {
-    const action = team.retiredAt ? "Restore" : "Retire";
+    if (!team.retiredAt) {
+      setRetireOpen(true);
+      return;
+    }
     if (
-      !(await confirmAction(`${t(action)} ${team.name}?`, {
-        confirmLabel: t(team.retiredAt ? "Restore team" : "Retire team"),
-        danger: !team.retiredAt,
-        description: !team.retiredAt && descendantCount > 0
-          ? `This team and ${descendantCount} nested sub-team${descendantCount === 1 ? '' : 's'} will be retired together.`
-          : undefined,
+      !(await confirmAction(`${t("Restore")} ${team.name}?`, {
+        confirmLabel: t("Restore team"),
+        danger: false,
+        description:
+          descendantCount > 0
+            ? `This team and ${descendantCount} nested sub-team${descendantCount === 1 ? "" : "s"} will be restored together.`
+            : undefined,
       }))
     )
       return;
     await updateTeam(data.workspace.urlKey, team.id, {
-      retired: !team.retiredAt,
+      retired: false,
       subTeamAction: "retire",
     });
     await onReload();
@@ -490,6 +505,13 @@ function TeamOverview({
           </button>
         </TeamRow>
       </TeamSection>
+      <RetireTeamForm
+        open={retireOpen}
+        onOpenChange={setRetireOpen}
+        data={data}
+        team={team}
+        onReload={onReload}
+      />
     </>
   );
 }
@@ -843,13 +865,86 @@ function AccessSettings({
   onReload: () => Promise<void>;
 }) {
   const { settings, save } = useTeamSettings(data, team, onReload);
-  const restrictedParent = useMemo(() => teamHierarchy(data.teams, data.teamSettings).ancestors.get(team.id)?.some(parent => parent.private || data.teamSettings?.[parent.id]?.access === 'private' || data.teamSettings?.[parent.id]?.access === 'restricted'), [data.teams, data.teamSettings, team.id]);
+  const restrictedParent = useMemo(
+    () =>
+      teamHierarchy(data.teams, data.teamSettings)
+        .ancestors.get(team.id)
+        ?.some(
+          (parent) =>
+            parent.private ||
+            data.teamSettings?.[parent.id]?.access === "private" ||
+            data.teamSettings?.[parent.id]?.access === "restricted",
+        ),
+    [data.teams, data.teamSettings, team.id],
+  );
+  const hasActiveSubTeams = useMemo(() => {
+    const subtree = teamHierarchy(data.teams, data.teamSettings).subtree(
+      team.id,
+    );
+    return [...subtree].some((id) => {
+      if (id === team.id) return false;
+      const item = data.teams.find((candidate) => candidate.id === id);
+      return Boolean(item && !item.retiredAt);
+    });
+  }, [data.teams, data.teamSettings, team.id]);
   const permissionLabels = {
     allMembers: "All team members",
     teamMembers: "Team members",
     owners: "Team owners",
   };
   const permissionOptions = Object.keys(permissionLabels);
+  const audience = getIssueSharingAudience();
+
+  const persist = async (
+    patch: Partial<TeamSettings> & { applyToSubTeams?: boolean },
+  ) => {
+    try {
+      await updateStructuredTeamSettings(team.id, patch);
+      await onReload();
+    } catch (error) {
+      toast.error(message(error));
+    }
+  };
+
+  const savePermissionFinal = async (key: TeamPermissionKey, value: string) => {
+    const previous = settings[key];
+    if (hasActiveSubTeams && isLessRestrictivePermission(previous, value)) {
+      const choice = await confirmApplyPermissionToSubTeams();
+      if (!choice) return;
+      await persist({
+        [key]: value,
+        ...(choice === "applyToSubTeams" ? { applyToSubTeams: true } : {}),
+      } as Partial<TeamSettings> & { applyToSubTeams?: boolean });
+      return;
+    }
+    await save({ [key]: value } as Partial<TeamSettings>);
+  };
+
+  const saveMembershipFinal = async (
+    value: TeamSettings["membershipRestriction"],
+  ) => {
+    const previous = settings.membershipRestriction;
+    if (hasActiveSubTeams && isLessRestrictiveMembership(previous, value)) {
+      if (value === "open") {
+        const choice = await confirmAllowSubTeamsMembership();
+        if (!choice) return;
+        await persist({
+          membershipRestriction: value,
+          ...(choice === "allowSubTeams" ? { applyToSubTeams: true } : {}),
+        });
+        return;
+      }
+      const choice = await confirmApplyPermissionToSubTeams();
+      if (!choice) return;
+      await persist({
+        membershipRestriction: value,
+        ...(choice === "applyToSubTeams" ? { applyToSubTeams: true } : {}),
+      });
+      return;
+    }
+    await save({ membershipRestriction: value });
+  };
+
   return (
     <>
       <TeamSection title="Team access">
@@ -857,8 +952,18 @@ function AccessSettings({
           title="Team visibility"
           description="Private teams are visible only to members."
           value={settings.access}
-          options={settings.access === 'restricted' ? ["public", "private", "restricted"] : ["public", "private"]}
-          labels={{ public: restrictedParent ? "Restricted to parent team" : "Public", private: "Private", restricted: "Restricted to parent team" }}
+          options={
+            settings.access === "restricted"
+              ? ["public", "private", "restricted"]
+              : ["public", "private"]
+          }
+          labels={{
+            public: restrictedParent
+              ? "Restricted to parent team"
+              : "Public",
+            private: "Private",
+            restricted: "Restricted to parent team",
+          }}
           onChange={(value) =>
             save({ access: value as TeamSettings["access"] })
           }
@@ -873,14 +978,13 @@ function AccessSettings({
             owners: "Team owners only",
           }}
           onChange={(value) =>
-            save({
-              membershipRestriction:
-                value as TeamSettings["membershipRestriction"],
-            })
+            void saveMembershipFinal(
+              value as TeamSettings["membershipRestriction"],
+            )
           }
         />
       </TeamSection>
-      <TeamSection title="Management permissions">
+      <TeamSection title="Team permissions">
         {(
           [
             ["settingsPermission", "Change team settings"],
@@ -897,11 +1001,35 @@ function AccessSettings({
             value={settings[key]}
             options={permissionOptions}
             labels={permissionLabels}
-            onChange={(value) =>
-              save({ [key]: value } as Partial<TeamSettings>)
-            }
+            onChange={(value) => void savePermissionFinal(key, value)}
           />
         ))}
+      </TeamSection>
+      <TeamSection
+        title="Issue sharing"
+        description={`Control whether issues from this team can be shared with ${audience}`}
+      >
+        <ToggleRow
+          title="Issue sharing"
+          description={`Allow issues from this team to be shared with ${audience}`}
+          checked={Boolean(settings.issueSharingEnabled)}
+          onChange={(value) => save({ issueSharingEnabled: value })}
+        />
+        {settings.issueSharingEnabled && (
+          <SelectRow
+            title="Who can share issues"
+            description={`Control who can share issues with ${audience}`}
+            value={settings.issueSharingPermission ?? "allMembers"}
+            options={permissionOptions}
+            labels={permissionLabels}
+            onChange={(value) =>
+              save({
+                issueSharingPermission:
+                  value as TeamSettings["issueSharingPermission"],
+              })
+            }
+          />
+        )}
       </TeamSection>
     </>
   );
@@ -3247,6 +3375,8 @@ function defaultTeamSettings(
     agentSkillPermission: "allMembers",
     loopPermission: "allMembers",
     memberPermission: "allMembers",
+    issueSharingEnabled: false,
+    issueSharingPermission: "allMembers",
     slackNotifications: {},
     prAutomations: {},
     autoCloseParents: false,
