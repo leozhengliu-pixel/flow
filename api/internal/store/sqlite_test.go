@@ -461,30 +461,30 @@ func TestOmitDirectoryExcludedTeamsDropsOrgLeafAndRetiredPayload(t *testing.T) {
 		Viewer: domain.User{ID: "admin"},
 		Teams: []domain.Team{
 			{ID: "team-xw", Name: "业务线"},
-			{ID: "hr:org:node:finance-1", Name: "财务部"},
-			{ID: "hr:org:dc:site-1", Name: "职场"},
+			{ID: "team_hr_750ec2f0c6d179114a0e1e32", Name: "智造生产节点", Key: "X988G", ExternalSource: "hr:org:node:00013902", Private: true},
+			{ID: "team_hr_dc_site", Name: "职场", Key: "DC1", ExternalSource: "hr:org:dc:0001"},
 			{ID: "retired-team", Name: "旧团队", RetiredAt: &retired},
-			{ID: "hr:org:node:mine", Name: "我的叶子"},
+			{ID: "team_hr_mine", Name: "我的叶子", ExternalSource: "hr:org:node:mine"},
 		},
-		TeamMembers: []domain.TeamMember{{TeamID: "hr:org:node:mine", UserID: "admin", Role: "member"}},
+		TeamMembers: []domain.TeamMember{{TeamID: "team_hr_mine", UserID: "admin", Role: "member"}},
 		States: []domain.WorkflowState{
 			{ID: "xw-todo", TeamID: "team-xw"},
-			{ID: "node-todo", TeamID: "hr:org:node:finance-1"},
-			{ID: "dc-todo", TeamID: "hr:org:dc:site-1"},
+			{ID: "node-todo", TeamID: "team_hr_750ec2f0c6d179114a0e1e32"},
+			{ID: "dc-todo", TeamID: "team_hr_dc_site"},
 			{ID: "retired-todo", TeamID: "retired-team"},
-			{ID: "mine-todo", TeamID: "hr:org:node:mine"},
+			{ID: "mine-todo", TeamID: "team_hr_mine"},
 			{ID: "global-todo"},
 		},
 		TeamSettings: map[string]domain.TeamSettings{
-			"team-xw":                  {TeamID: "team-xw"},
-			"hr:org:node:finance-1":    {TeamID: "hr:org:node:finance-1"},
-			"hr:org:dc:site-1":         {TeamID: "hr:org:dc:site-1"},
-			"retired-team":             {TeamID: "retired-team"},
-			"hr:org:node:mine":         {TeamID: "hr:org:node:mine"},
+			"team-xw":                               {TeamID: "team-xw"},
+			"team_hr_750ec2f0c6d179114a0e1e32":      {TeamID: "team_hr_750ec2f0c6d179114a0e1e32"},
+			"team_hr_dc_site":                       {TeamID: "team_hr_dc_site"},
+			"retired-team":                          {TeamID: "retired-team"},
+			"team_hr_mine":                          {TeamID: "team_hr_mine"},
 		},
 		CycleSettings: map[string]domain.CycleSettings{
-			"hr:org:node:finance-1": {},
-			"team-xw":               {},
+			"team_hr_750ec2f0c6d179114a0e1e32": {},
+			"team-xw":                          {},
 		},
 	}
 	OmitDirectoryExcludedTeams(&data)
@@ -492,11 +492,11 @@ func TestOmitDirectoryExcludedTeamsDropsOrgLeafAndRetiredPayload(t *testing.T) {
 		t.Fatalf("teams=%d want 2: %#v", len(data.Teams), data.Teams)
 	}
 	if slices.ContainsFunc(data.Teams, func(team domain.Team) bool {
-		return team.ID == "hr:org:node:finance-1" || team.ID == "hr:org:dc:site-1" || team.ID == "retired-team"
+		return team.ID == "team_hr_750ec2f0c6d179114a0e1e32" || team.ID == "team_hr_dc_site" || team.ID == "retired-team"
 	}) {
 		t.Fatalf("excluded teams leaked: %#v", data.Teams)
 	}
-	if !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == "hr:org:node:mine" }) {
+	if !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == "team_hr_mine" }) {
 		t.Fatal("member org-leaf team was dropped")
 	}
 	if len(data.States) != 3 || slices.ContainsFunc(data.States, func(state domain.WorkflowState) bool {
@@ -504,16 +504,16 @@ func TestOmitDirectoryExcludedTeamsDropsOrgLeafAndRetiredPayload(t *testing.T) {
 	}) {
 		t.Fatalf("states not projected: %#v", data.States)
 	}
-	if _, ok := data.TeamSettings["hr:org:node:finance-1"]; ok {
+	if _, ok := data.TeamSettings["team_hr_750ec2f0c6d179114a0e1e32"]; ok {
 		t.Fatal("leaf team settings leaked")
 	}
-	if _, ok := data.CycleSettings["hr:org:node:finance-1"]; ok {
+	if _, ok := data.CycleSettings["team_hr_750ec2f0c6d179114a0e1e32"]; ok {
 		t.Fatal("leaf cycle settings leaked")
 	}
 	if !teamVisibleToUser(data, "team-xw", "admin", "admin") {
 		t.Fatal("admin lost ordinary team")
 	}
-	if teamVisibleToUser(domain.Bootstrap{Teams: []domain.Team{{ID: "hr:org:node:finance-1"}}}, "hr:org:node:finance-1", "admin", "admin") {
+	if teamVisibleToUser(domain.Bootstrap{Teams: []domain.Team{{ID: "team_hr_750ec2f0c6d179114a0e1e32", ExternalSource: "hr:org:node:00013902"}}}, "team_hr_750ec2f0c6d179114a0e1e32", "admin", "admin") {
 		t.Fatal("admin still sees org leaf without membership")
 	}
 }

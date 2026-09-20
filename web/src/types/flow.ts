@@ -98,6 +98,7 @@ export interface Team {
   color: string;
   icon?: string;
   private?: boolean;
+  externalSource?: string;
   retiredAt?: string;
   createdAt?: string;
   updatedAt?: string;
