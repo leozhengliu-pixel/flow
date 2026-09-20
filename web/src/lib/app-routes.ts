@@ -278,6 +278,9 @@ export type AppRoute =
       asksIntegrationId?: string;
       /** Asks email intake wizard (`/settings/asks/email-intake/new`). */
       asksEmailIntakeMode?: "new";
+      identityProviderId?: string;
+      applicationId?: string;
+      applicationMode?: "detail" | "edit";
     }
   | {
       kind: "team-views";
@@ -911,6 +914,45 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
       workspaceSlug,
       page: "asks",
       asksIntegrationId: decodeURIComponent(fourth),
+    };
+  if (
+    section === "settings" &&
+    third === "identity-providers" &&
+    fourth &&
+    segments.length === 4
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "security",
+      identityProviderId: fourth,
+    };
+  if (
+    section === "settings" &&
+    third === "applications" &&
+    fourth &&
+    fifth === "edit" &&
+    segments.length === 5
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "applications",
+      applicationId: fourth,
+      applicationMode: "edit",
+    };
+  if (
+    section === "settings" &&
+    third === "applications" &&
+    fourth &&
+    segments.length === 4
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "applications",
+      applicationId: fourth,
+      applicationMode: "detail",
     };
   if (
     section === "settings" &&
@@ -1711,6 +1753,28 @@ export function projectTemplateEditPath(
 ) {
   return `${workspaceRootPath(workspaceSlug)}/settings/templates/project/${encode(templateId)}/edit`;
 }
+
+export function identityProviderSettingsPath(
+  workspaceSlug: string,
+  providerId: string,
+) {
+  return `${workspaceRootPath(workspaceSlug)}/settings/identity-providers/${encode(providerId)}`;
+}
+
+export function applicationSettingsPath(
+  workspaceSlug: string,
+  applicationId: string,
+) {
+  return `${workspaceRootPath(workspaceSlug)}/settings/applications/${encode(applicationId)}`;
+}
+
+export function applicationEditPath(
+  workspaceSlug: string,
+  applicationId: string,
+) {
+  return `${applicationSettingsPath(workspaceSlug, applicationId)}/edit`;
+}
+
 export function integrationSettingsPath(
   workspaceSlug: string,
   providerOrSlug: IntegrationProvider | string,

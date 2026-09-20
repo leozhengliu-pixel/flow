@@ -29,6 +29,11 @@ import type {
   JiraLink,
   Invitation,
   InvitationPreview,
+  SCIMToken,
+  WebhookFailureEvent,
+  OAuthSyncGroupRequest,
+  WorkspaceInviteLink,
+  InviteLinkPreview,
   Issue,
   IssueQueryPage,
   IssueLabel,
@@ -198,6 +203,76 @@ export function acceptInvitation(
   token: string,
 ): Promise<import("@/types/flow").WorkspaceMembership> {
   return request("/api/invitations/accept", jsonRequest("POST", { token }));
+}
+
+export function fetchInviteLinkPreview(token: string): Promise<InviteLinkPreview> {
+  return request(`/api/invite-links/preview/${encodeURIComponent(token)}`);
+}
+
+export function joinOrganization(token: string): Promise<WorkspaceMembership> {
+  return request("/api/invite-links/join", jsonRequest("POST", { token }));
+}
+
+export function fetchWorkspaceInviteLink(
+  workspaceKey: string,
+): Promise<WorkspaceInviteLink | { enabled: false }> {
+  return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}/invite-link`);
+}
+
+export function rotateWorkspaceInviteLink(
+  workspaceKey: string,
+): Promise<WorkspaceInviteLink> {
+  return request(
+    `/api/workspaces/${encodeURIComponent(workspaceKey)}/invite-link`,
+    jsonRequest("POST", {}),
+  );
+}
+
+export function disableWorkspaceInviteLink(workspaceKey: string): Promise<void> {
+  return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}/invite-link`, {
+    method: "DELETE",
+  });
+}
+
+export function listSCIMTokens(): Promise<SCIMToken[]> {
+  return request("/api/scim/tokens");
+}
+
+export function createSCIMToken(input: { name: string }): Promise<SCIMToken> {
+  return request("/api/scim/tokens", jsonRequest("POST", input));
+}
+
+export function revokeSCIMToken(id: string): Promise<void> {
+  return request(`/api/scim/tokens/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export function rotateSCIMToken(id: string): Promise<SCIMToken> {
+  return request(`/api/scim/tokens/${encodeURIComponent(id)}/rotate`, {
+    method: "POST",
+  });
+}
+
+export function fetchOAuthApplicationFailures(
+  id: string,
+): Promise<WebhookFailureEvent[]> {
+  return request(`/api/oauth-applications/${encodeURIComponent(id)}/failures`);
+}
+
+export function fetchOAuthSyncGroupRequests(
+  id: string,
+): Promise<OAuthSyncGroupRequest[]> {
+  return request(`/api/oauth-applications/${encodeURIComponent(id)}/sync-groups`);
+}
+
+export function decideOAuthSyncGroupRequest(
+  applicationId: string,
+  requestId: string,
+  input: { status: "approved" | "denied"; teamId?: string },
+): Promise<OAuthSyncGroupRequest> {
+  return request(
+    `/api/oauth-applications/${encodeURIComponent(applicationId)}/sync-groups/${encodeURIComponent(requestId)}`,
+    jsonRequest("POST", input),
+  );
 }
 export function inviteMembers(
   workspaceKey: string,
@@ -740,6 +815,7 @@ export function fetchOAuthApplications(): Promise<OAuthApplication[]> {
 export function createOAuthApplication(input: {
   name: string;
   description?: string;
+  logoUrl?: string;
   redirectUris: string[];
   scopes: string[];
 }): Promise<OAuthApplication> {
@@ -748,7 +824,7 @@ export function createOAuthApplication(input: {
 export function updateOAuthApplication(
   id: string,
   input: Partial<
-    Pick<OAuthApplication, "name" | "description" | "redirectUris" | "scopes">
+    Pick<OAuthApplication, "name" | "description" | "logoUrl" | "redirectUris" | "scopes">
   >,
 ): Promise<OAuthApplication> {
   return request(`/api/oauth-applications/${id}`, jsonRequest("PATCH", input));
@@ -1022,14 +1098,14 @@ export function createWebhook(
   input: Pick<
     Webhook,
     "name" | "url" | "resourceTypes" | "teamIds" | "enabled"
-  >,
+  > & { applicationId?: string },
 ): Promise<Webhook> {
   return request("/api/webhooks", jsonRequest("POST", input));
 }
 export function updateWebhook(
   id: string,
   input: Partial<
-    Pick<Webhook, "name" | "url" | "resourceTypes" | "teamIds" | "enabled">
+    Pick<Webhook, "name" | "url" | "resourceTypes" | "teamIds" | "enabled" | "applicationId">
   >,
 ): Promise<Webhook> {
   return request(`/api/webhooks/${id}`, jsonRequest("PATCH", input));
