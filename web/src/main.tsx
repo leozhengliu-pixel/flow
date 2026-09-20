@@ -12,6 +12,7 @@ import { initializeTheme } from './lib/theme'
 import { renderMermaidPreview } from './components/issue/editor/mermaid-preview'
 import { ThemedToaster } from './components/ui/themed-toaster'
 import { ActionDialogHost } from './components/ui/action-dialogs'
+import { LightboxEditorProvider } from './components/editor/lightbox-editor-provider'
 import { TooltipProvider } from './components/ui/tooltip'
 import './i18n/i18n.css'
 import { FlowMotionProvider } from './components/ui/motion'
@@ -24,11 +25,13 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <FlowMotionProvider><I18nProvider>
       <BrowserRouter>
-        <TooltipProvider delayDuration={450} skipDelayDuration={300}>
-          <App />
-        </TooltipProvider>
-        <ThemedToaster />
-        <ActionDialogHost />
+        <LightboxEditorProvider>
+          <TooltipProvider delayDuration={450} skipDelayDuration={300}>
+            <App />
+          </TooltipProvider>
+          <ThemedToaster />
+          <ActionDialogHost />
+        </LightboxEditorProvider>
       </BrowserRouter>
     </I18nProvider></FlowMotionProvider>
   </StrictMode>,
