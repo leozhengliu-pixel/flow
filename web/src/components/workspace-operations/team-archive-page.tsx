@@ -22,6 +22,7 @@ const tabs: ArchiveTabDefinition[] = [
   { id: 'recently-deleted-projects', label: 'Recently deleted projects', title: 'Recently deleted projects', empty: 'No matching projects', resource: 'project' },
   { id: 'recently-deleted-initiatives', label: 'Recently deleted initiatives', title: 'Recently deleted initiatives', empty: 'No matching initiatives', resource: 'initiative' },
   { id: 'recently-deleted-documents', label: 'Recently deleted documents', title: 'Recently deleted documents', empty: 'No matching documents', resource: 'document' },
+  { id: 'recently-deleted-releases', label: 'Recently deleted releases', title: 'Recently deleted releases', empty: 'No recently deleted releases', resource: 'release' },
 ]
 
 export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,onReload}:{data:BootstrapData;team:Team;tab:TeamArchiveTab;onNavigate:(path:string)=>void;onOpenSidebar:()=>void;onReload:()=>Promise<void>}){
@@ -94,5 +95,5 @@ function ArchiveEmptyIllustration(){return <svg className="archive-empty-illustr
   <path className="archive-empty-dim" d="M75.0606 52.5154L75 52.5L74.96 58.1754C74.96 58.9706 75.3921 59.5981 75.9226 60.0495C76.4508 60.499 77.1397 60.8336 77.841 61.0696C79.2198 61.5335 80.901 61.6975 81.9905 61.4042L95.3198 57.816L95.3218 57.8155C96.5091 57.5025 97.0154 56.4306 97.2323 55.6874C97.3476 55.2926 97.4036 54.9196 97.4314 54.649C97.4338 54.6248 97.4363 54.6015 97.4387 54.579C97.4499 54.4742 97.4592 54.3872 97.4561 54.317C97.458 54.2762 97.4589 54.2432 97.4594 54.2193L97.4599 54.1902C97.4599 54.6902 97.46 54.1754 97.46 54.1754V51.1016C97.1936 51.7608 96.659 52.2672 95.96 52.5873V54.1745L95.9597 54.1878C95.9595 54.2007 95.9589 54.2218 95.9576 54.2502C95.9551 54.3069 95.9499 54.3917 95.9392 54.496C95.9175 54.707 95.8747 54.9851 95.7924 55.2671C95.6143 55.8774 95.3307 56.2622 94.9387 56.3652L94.9343 56.3664L81.6006 59.9558C80.8967 60.1453 79.5351 60.057 78.3194 59.6479C77.7236 59.4474 77.2273 59.1903 76.8947 58.9072C76.5643 58.626 76.46 58.3802 76.46 58.1754V55.0362C76.2376 54.8438 76.033 54.6347 75.8513 54.4097C75.3773 53.823 75.0966 53.1681 75.0606 52.5154Z"/>
 </svg>}
 
-function archiveIcon(type:string){return type==='issue'?<CircleDashed/>:type==='document'?<FilePenLine/>:type==='project'?<Rocket/>:<Archive/>}
+function archiveIcon(type:string){return type==='issue'?<CircleDashed/>:type==='document'?<FilePenLine/>:type==='project'?<Rocket/>:type==='release'?<Rocket/>:<Archive/>}
 function typeLabel(type:string){return type[0].toUpperCase()+type.slice(1)}
