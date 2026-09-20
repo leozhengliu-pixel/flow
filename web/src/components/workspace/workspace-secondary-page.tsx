@@ -21,7 +21,10 @@ import {
   retryWorkflowRun,
   runWorkflowDefinition,
   updateWorkflowDefinition,
+  updateWorkspacePreferences,
 } from "@/lib/api";
+import { AutomationOwnerSelect } from "@/components/automation/automation-owner-select";
+import { AutomationTrustedSourceEditor } from "@/components/automation/automation-trusted-source-editor";
 import type {
   BootstrapData,
   Issue,
@@ -132,22 +135,310 @@ function AutomationPage({ data, kind, workflowId, workflowRunId, editing, onRelo
   const [error, setError] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [ownerId, setOwnerId] = useState(data.viewer.id);
+  const [trustedSourceKeys, setTrustedSourceKeys] = useState<string[]>([]);
+  const [trustedSourcesMode, setTrustedSourcesMode] = useState(data.workspaceSettings.trustedSourcesMode ?? "none");
+  const [trustedSourcesAllowlist, setTrustedSourcesAllowlist] = useState<string[]>(data.workspaceSettings.trustedSourcesAllowlist ?? []);
   const selected = workflowId ? workflows.find(item => item.id === workflowId) : undefined;
+  const integrationServices = Array.from(new Set([
+    ...(data.integrationConnections ?? []).map(item => item.provider).filter(Boolean),
+    "email",
+  ]));
   useEffect(() => { setWorkflows(data.workflowDefinitions ?? []); }, [data.workflowDefinitions]);
-  useEffect(() => { if (selected) { setName(selected.name); setDescription(selected.description ?? ""); } }, [selected]);
+  useEffect(() => {
+    setTrustedSourcesMode(data.workspaceSettings.trustedSourcesMode ?? "none");
+    setTrustedSourcesAllowlist(data.workspaceSettings.trustedSourcesAllowlist ?? []);
+  }, [data.workspaceSettings.trustedSourcesMode, data.workspaceSettings.trustedSourcesAllowlist]);
+  useEffect(() => {
+    if (selected) {
+      setName(selected.name);
+      setDescription(selected.description ?? "");
+      setOwnerId(selected.ownerId || selected.creatorId || data.viewer.id);
+      setTrustedSourceKeys(selected.trustedSourceKeys ?? []);
+    }
+  }, [selected, data.viewer.id]);
   useEffect(() => { if (kind === "automation-runs" || selected) void listWorkflowRuns(selected?.id).then(setRuns).catch(() => setError(t("Could not load automation runs"))); }, [kind, selected, t]);
+
+  const persistAllowlist = (next: { trustedSourcesMode: "none" | "allowlist"; trustedSourcesAllowlist: string[] }) => {
+    setTrustedSourcesMode(next.trustedSourcesMode);
+    setTrustedSourcesAllowlist(next.trustedSourcesAllowlist);
+    void updateWorkspacePreferences({
+      trustedSourcesMode: next.trustedSourcesMode,
+      trustedSourcesAllowlist: next.trustedSourcesAllowlist,
+    }).catch(cause => setError(cause instanceof Error ? cause.message : t("Could not update trusted sources")));
+  };
+
   const save = async () => {
     if (!name.trim()) return;
     setSaving(true); setError("");
-    try { await createWorkflowDefinition({ name: name.trim(), trigger: "manual", conditions: {}, actions: [], enabled: true }); await onReload(); setName(""); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : t("Could not create automation")); }
-    finally { setSaving(false); }
+    try {
+      await createWorkflowDefinition({
+        name: name.trim(),
+        trigger: "manual",
+        conditions: {},
+        actions: [{ type: "notify", config: { message: "Automation created" } }],
+        enabled: true,
+        ownerId,
+        trustedSourceKeys,
+      });
+      await onReload();
+      setName("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t("Could not create automation"));
+    } finally {
+      setSaving(false);
+    }
   };
-  if (kind === "automation-new") return <section className="secondary-content narrow-content"><div className="secondary-section-heading"><div><h2>{t("New automation")}</h2><p>{t("Run actions when work changes in Flow.")}</p></div></div><label className="secondary-field"><span>{t("Name")}</span><input value={name} onChange={event => setName(event.target.value)} placeholder={t("Automation name")} autoFocus /></label><div className="secondary-callout"><Settings2 size={16} /><span>{t("Manual trigger. Add conditions and actions after creating this rule.")}</span></div>{error && <div className="secondary-error" role="alert">{error}</div>}<div className="secondary-form-actions"><button type="button" className="secondary-secondary-button" onClick={() => setName("")}>{t("Cancel")}</button><button type="button" className="secondary-primary-button" disabled={saving || !name.trim()} onClick={() => void save()}>{saving ? <LoaderCircle className="spin" size={14} /> : <Check size={14} />}{t("Create automation")}</button></div></section>;
-  if (kind === "automation-detail" && selected && editing) return <section className="secondary-content narrow-content"><div className="secondary-section-heading"><div><h2>{t("Edit automation")}</h2><p>{t("Update the automation name and description.")}</p></div></div><label className="secondary-field"><span>{t("Name")}</span><input value={name} onChange={event => setName(event.target.value)} /></label><label className="secondary-field"><span>{t("Description")}</span><input value={description} onChange={event => setDescription(event.target.value)} /></label>{error && <div className="secondary-error" role="alert">{error}</div>}<div className="secondary-form-actions"><button type="button" className="secondary-secondary-button" onClick={() => onNavigate(`/${data.workspace.urlKey}/automation/${encodeURIComponent(selected.id)}`)}>{t("Cancel")}</button><button type="button" className="secondary-primary-button" disabled={saving || !name.trim()} onClick={() => void (async () => { setSaving(true); setError(""); try { await updateWorkflowDefinition(selected.id, { name: name.trim(), description: description.trim(), trigger: selected.trigger, schedule: selected.schedule, conditions: selected.conditions, actions: selected.actions, enabled: selected.enabled, maxAttempts: selected.maxAttempts }); await onReload(); onNavigate(`/${data.workspace.urlKey}/automation/${encodeURIComponent(selected.id)}`); } catch (cause) { setError(cause instanceof Error ? cause.message : t("Could not update automation")); } finally { setSaving(false); } })()}>{saving ? <LoaderCircle className="spin" size={14} /> : <Check size={14} />}{t("Save changes")}</button></div></section>;
-  if (kind === "automation-detail" && selected) return <section className="secondary-content"><div className="secondary-section-heading"><div><h2>{selected.name}</h2><p>{selected.description || t("Automation details")}</p></div><button type="button" className="secondary-primary-button" onClick={() => void runWorkflowDefinition(selected.id).then(() => onReload())}><Play size={14} />{t("Run now")}</button></div><div className="secondary-detail-grid"><Detail label={t("Trigger")} value={selected.trigger} /><Detail label={t("Status")} value={selected.enabled ? t("Enabled") : t("Disabled")} /><Detail label={t("Actions")} value={String(selected.actions.length)} /><Detail label={t("Last run")} value={selected.lastRunAt ? formatDate(selected.lastRunAt, { dateStyle: "medium" }) : t("Never")} /></div><RunsList runs={runs} workflowRunId={workflowRunId} onRetry={id => void retryWorkflowRun(id).then(() => listWorkflowRuns(selected.id).then(setRuns))} /></section>;
-  if (kind === "automation-runs") return <section className="secondary-content"><div className="secondary-section-heading"><div><h2>{t("Automation runs")}</h2><p>{t("Execution history and retry status")}</p></div><button type="button" className="secondary-icon-button" onClick={() => void listWorkflowRuns(workflowId).then(setRuns)} aria-label={t("Refresh")} title={t("Refresh")}><RefreshCw size={15} /></button></div><RunsList runs={runs} workflowRunId={workflowRunId} onRetry={id => void retryWorkflowRun(id).then(() => listWorkflowRuns(workflowId).then(setRuns))} /></section>;
-  return <section className="secondary-content"><div className="secondary-section-heading"><div><h2>{t("Automations")}</h2><p>{t("Run durable automations on a schedule or when issues are created.")}</p></div></div><div className="secondary-list">{workflows.map(item => <a className="secondary-list-row" href={`/${data.workspace.urlKey}/automation/${encodeURIComponent(item.id)}`} onClick={event => { event.preventDefault(); onNavigate(`/${data.workspace.urlKey}/automation/${encodeURIComponent(item.id)}`); }} key={item.id}><div className={`secondary-status-dot ${item.enabled ? "is-on" : ""}`} /><div className="secondary-row-main"><strong>{item.name}</strong><small>{item.trigger} · {item.lastRunStatus || t("Never run")}</small></div><span className="secondary-row-meta">{item.lastRunAt ? formatDate(item.lastRunAt, { dateStyle: "medium" }) : ""}</span><ChevronRight size={15} /></a>)}</div>{!workflows.length && <EmptyState title={t("No automations yet")} body={t("Create an automation to automate repetitive work.")} />}</section>;
+
+  if (kind === "automation-new") {
+    return (
+      <section className="secondary-content">
+        <div className="secondary-section-heading">
+          <div>
+            <h2>{t("New automation")}</h2>
+            <p>{t("Run actions when work changes in Flow.")}</p>
+          </div>
+        </div>
+        <label className="secondary-field">
+          <span>{t("Name")}</span>
+          <input value={name} onChange={event => setName(event.target.value)} placeholder={t("Automation name")} autoFocus />
+        </label>
+        <div className="secondary-field">
+          <AutomationOwnerSelect
+            ownerId={ownerId}
+            users={data.users}
+            viewer={data.viewer}
+            viewerRole={data.viewerRole}
+            onChangeOwner={setOwnerId}
+          />
+        </div>
+        <AutomationTrustedSourceEditor
+          users={data.users}
+          integrationServices={integrationServices}
+          policySourceKeys={trustedSourceKeys}
+          trustedSourcesMode={trustedSourcesMode}
+          trustedSourcesAllowlist={trustedSourcesAllowlist}
+          onPolicyKeysChange={setTrustedSourceKeys}
+          onAllowlistChange={persistAllowlist}
+        />
+        <div className="secondary-callout">
+          <Settings2 size={16} />
+          <span>{t("Manual trigger. Add conditions and actions after creating this rule.")}</span>
+        </div>
+        {error && <div className="secondary-error" role="alert">{error}</div>}
+        <div className="secondary-form-actions">
+          <button type="button" className="secondary-secondary-button" onClick={() => setName("")}>{t("Cancel")}</button>
+          <button type="button" className="secondary-primary-button" disabled={saving || !name.trim()} onClick={() => void save()}>
+            {saving ? <LoaderCircle className="spin" size={14} /> : <Check size={14} />}
+            {t("Create automation")}
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  if (kind === "automation-detail" && selected && editing) {
+    return (
+      <section className="secondary-content">
+        <div className="secondary-section-heading">
+          <div>
+            <h2>{t("Edit automation")}</h2>
+            <p>{t("Update the automation name, owner, and trusted sources.")}</p>
+          </div>
+        </div>
+        <label className="secondary-field">
+          <span>{t("Name")}</span>
+          <input value={name} onChange={event => setName(event.target.value)} />
+        </label>
+        <label className="secondary-field">
+          <span>{t("Description")}</span>
+          <input value={description} onChange={event => setDescription(event.target.value)} />
+        </label>
+        <div className="secondary-field">
+          <AutomationOwnerSelect
+            ownerId={ownerId}
+            creatorId={selected.creatorId}
+            users={data.users}
+            viewer={data.viewer}
+            viewerRole={data.viewerRole}
+            onChangeOwner={setOwnerId}
+          />
+        </div>
+        <AutomationTrustedSourceEditor
+          users={data.users}
+          integrationServices={integrationServices}
+          policySourceKeys={trustedSourceKeys}
+          trustedSourcesMode={trustedSourcesMode}
+          trustedSourcesAllowlist={trustedSourcesAllowlist}
+          onPolicyKeysChange={setTrustedSourceKeys}
+          onAllowlistChange={persistAllowlist}
+        />
+        {error && <div className="secondary-error" role="alert">{error}</div>}
+        <div className="secondary-form-actions">
+          <button
+            type="button"
+            className="secondary-secondary-button"
+            onClick={() => onNavigate(`/${data.workspace.urlKey}/automation/${encodeURIComponent(selected.id)}`)}
+          >
+            {t("Cancel")}
+          </button>
+          <button
+            type="button"
+            className="secondary-primary-button"
+            disabled={saving || !name.trim()}
+            onClick={() => void (async () => {
+              setSaving(true); setError("");
+              try {
+                await updateWorkflowDefinition(selected.id, {
+                  name: name.trim(),
+                  description: description.trim(),
+                  trigger: selected.trigger,
+                  schedule: selected.schedule,
+                  conditions: selected.conditions,
+                  actions: selected.actions,
+                  enabled: selected.enabled,
+                  maxAttempts: selected.maxAttempts,
+                  ownerId,
+                  trustedSourceKeys,
+                });
+                await onReload();
+                onNavigate(`/${data.workspace.urlKey}/automation/${encodeURIComponent(selected.id)}`);
+              } catch (cause) {
+                setError(cause instanceof Error ? cause.message : t("Could not update automation"));
+              } finally {
+                setSaving(false);
+              }
+            })()}
+          >
+            {saving ? <LoaderCircle className="spin" size={14} /> : <Check size={14} />}
+            {t("Save changes")}
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  if (kind === "automation-detail" && selected) {
+    return (
+      <section className="secondary-content">
+        <div className="secondary-section-heading">
+          <div>
+            <h2>{selected.name}</h2>
+            <p>{selected.description || t("Automation details")}</p>
+          </div>
+          <button
+            type="button"
+            className="secondary-primary-button"
+            onClick={() => void runWorkflowDefinition(selected.id).then(() => onReload())}
+          >
+            <Play size={14} />
+            {t("Run now")}
+          </button>
+        </div>
+        <div className="secondary-detail-grid">
+          <Detail label={t("Trigger")} value={selected.trigger} />
+          <Detail label={t("Status")} value={selected.enabled ? t("Enabled") : t("Disabled")} />
+          <Detail label={t("Actions")} value={String(selected.actions.length)} />
+          <Detail label={t("Last run")} value={selected.lastRunAt ? formatDate(selected.lastRunAt, { dateStyle: "medium" }) : t("Never")} />
+        </div>
+        <div className="secondary-field" style={{ marginTop: 0, marginBottom: 18 }}>
+          <AutomationOwnerSelect
+            ownerId={selected.ownerId || selected.creatorId}
+            creatorId={selected.creatorId}
+            users={data.users}
+            viewer={data.viewer}
+            viewerRole={data.viewerRole}
+            onChangeOwner={(nextOwner) => {
+              void updateWorkflowDefinition(selected.id, {
+                name: selected.name,
+                description: selected.description,
+                trigger: selected.trigger,
+                schedule: selected.schedule,
+                conditions: selected.conditions,
+                actions: selected.actions,
+                enabled: selected.enabled,
+                maxAttempts: selected.maxAttempts,
+                ownerId: nextOwner,
+                trustedSourceKeys: selected.trustedSourceKeys,
+              }).then(() => onReload()).catch(cause => setError(cause instanceof Error ? cause.message : t("Could not update automation")));
+            }}
+          />
+        </div>
+        <AutomationTrustedSourceEditor
+          users={data.users}
+          integrationServices={integrationServices}
+          policySourceKeys={selected.trustedSourceKeys}
+          trustedSourcesMode={trustedSourcesMode}
+          trustedSourcesAllowlist={trustedSourcesAllowlist}
+          disabled={false}
+          onPolicyKeysChange={(keys) => {
+            void updateWorkflowDefinition(selected.id, {
+              name: selected.name,
+              description: selected.description,
+              trigger: selected.trigger,
+              schedule: selected.schedule,
+              conditions: selected.conditions,
+              actions: selected.actions,
+              enabled: selected.enabled,
+              maxAttempts: selected.maxAttempts,
+              ownerId: selected.ownerId || selected.creatorId,
+              trustedSourceKeys: keys,
+            }).then(() => onReload()).catch(cause => setError(cause instanceof Error ? cause.message : t("Could not update automation")));
+          }}
+          onAllowlistChange={persistAllowlist}
+        />
+        {error && <div className="secondary-error" role="alert">{error}</div>}
+        <RunsList runs={runs} workflowRunId={workflowRunId} onRetry={id => void retryWorkflowRun(id).then(() => listWorkflowRuns(selected.id).then(setRuns))} />
+      </section>
+    );
+  }
+
+  if (kind === "automation-runs") {
+    return (
+      <section className="secondary-content">
+        <div className="secondary-section-heading">
+          <div>
+            <h2>{t("Automation runs")}</h2>
+            <p>{t("Execution history and retry status")}</p>
+          </div>
+          <button type="button" className="secondary-icon-button" onClick={() => void listWorkflowRuns(workflowId).then(setRuns)} aria-label={t("Refresh")} title={t("Refresh")}>
+            <RefreshCw size={15} />
+          </button>
+        </div>
+        <RunsList runs={runs} workflowRunId={workflowRunId} onRetry={id => void retryWorkflowRun(id).then(() => listWorkflowRuns(workflowId).then(setRuns))} />
+      </section>
+    );
+  }
+
+  return (
+    <section className="secondary-content">
+      <div className="secondary-section-heading">
+        <div>
+          <h2>{t("Automations")}</h2>
+          <p>{t("Run durable automations on a schedule or when issues are created.")}</p>
+        </div>
+      </div>
+      <div className="secondary-list">
+        {workflows.map(item => (
+          <a
+            className="secondary-list-row"
+            href={`/${data.workspace.urlKey}/automation/${encodeURIComponent(item.id)}`}
+            onClick={event => { event.preventDefault(); onNavigate(`/${data.workspace.urlKey}/automation/${encodeURIComponent(item.id)}`); }}
+            key={item.id}
+          >
+            <div className={`secondary-status-dot ${item.enabled ? "is-on" : ""}`} />
+            <div className="secondary-row-main">
+              <strong>{item.name}</strong>
+              <small>{item.trigger} · {item.lastRunStatus || t("Never run")}</small>
+            </div>
+            <span className="secondary-row-meta">{item.lastRunAt ? formatDate(item.lastRunAt, { dateStyle: "medium" }) : ""}</span>
+            <ChevronRight size={15} />
+          </a>
+        ))}
+      </div>
+      {!workflows.length && <EmptyState title={t("No automations yet")} body={t("Create an automation to automate repetitive work.")} />}
+    </section>
+  );
 }
 
 function RunsList({ runs, workflowRunId, onRetry }: { runs: WorkflowRun[]; workflowRunId?: string; onRetry: (id: string) => void }) { const { t, formatDate } = useI18n(); return <div className="secondary-list" role="list">{runs.map(run => <article className={`secondary-list-row ${run.id === workflowRunId ? "is-selected" : ""}`} key={run.id}><div className={`secondary-status-dot ${run.status === "succeeded" ? "is-on" : run.status === "failed" ? "is-failed" : ""}`} /><div className="secondary-row-main"><strong>{run.status === "failed" ? t("Failed") : run.status === "succeeded" ? t("Succeeded") : t("Running")}</strong><small>{formatDate(run.startedAt, { dateStyle: "medium", timeStyle: "short" })}</small></div>{run.error && <span className="secondary-row-error">{run.error}</span>}{run.status === "failed" && <button className="secondary-icon-button" type="button" onClick={() => onRetry(run.id)} aria-label={t("Retry")} title={t("Retry")}><RefreshCw size={14} /></button>}</article>)}{!runs.length && <EmptyState title={t("No runs yet")} body={t("Run this automation to see execution history.")} />}</div>; }
