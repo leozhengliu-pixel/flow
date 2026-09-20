@@ -30,6 +30,8 @@ import { AddProjectMenu, InitiativeActionsMenu, InitiativeNotificationMenu } fro
 import { InitiativeResources } from './initiative-resources'
 import { formatTarget, titleCase } from './initiative-model'
 import { InitiativeHierarchySection } from './initiative-hierarchy-section'
+import { InitiativePageChrome, InitiativePageChromeActions } from './initiative-page-chrome'
+import { usePageAgentSidebarOpen } from '@/components/agent/use-page-agent-sidebar-open'
 import { initiativeProjectIds } from './initiative-hierarchy'
 import { labelsForResource } from '@/lib/labels'
 import './initiatives.css'
@@ -103,6 +105,7 @@ export function InitiativeDetailPage(props: Props) {
   const peopleChoices = useMemo(() => projectPeopleChoices(props.users, props.invitations, onlineUserIds), [onlineUserIds, props.invitations, props.users])
   const [detailsOpen, setDetailsOpen] = useStoredBoolean(`flow:initiative:${initiative.id}:details`, false)
   const [agentOpen, setAgentOpen] = usePageAgentSidebarOpen(`initiative:${initiative.id}`, false)
+  const [updatesOpen, setUpdatesOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [projectCreateOpen, setProjectCreateOpen] = useState(false)
   const [roadmapQuery, setRoadmapQuery] = useState('')
@@ -165,7 +168,7 @@ export function InitiativeDetailPage(props: Props) {
       <button className="li-detail-all" onClick={props.onBack} type="button">Initiatives</button><ChevronRight className="li-detail-separator" size={12}/>
       <button className="li-detail-crumb" data-i18n-ignore onClick={() => onTabChange('overview')} type="button"><ViewGlyph color={initiative.color} icon={initiative.icon || 'Initiative'}/><strong>{initiative.name}</strong></button>
       <button aria-checked={initiative.favorite} aria-label="Add to favorites" className={initiative.favorite ? 'is-active' : ''} onClick={() => update({ favorite: !initiative.favorite })} role="switch" type="button"><Star fill={initiative.favorite ? 'currentColor' : 'none'} size={14}/></button>
-      <InitiativeActionsMenu initiative={initiative} onCreateReminder={remindAt => props.onCreateReminder(initiative.id, remindAt)} onDelete={() => setDeleteOpen(true)} onNewUpdate={() => onTabChange('activity')} onShowActivity={() => onTabChange('activity')} onUpdate={update}/>
+      <InitiativeActionsMenu initiative={initiative} onCreateReminder={remindAt => props.onCreateReminder(initiative.id, remindAt)} onDelete={() => setDeleteOpen(true)} onNewUpdate={() => setUpdatesOpen(true)} onShowActivity={() => onTabChange('activity')} onUpdate={update}/>
       <span/>
       <button aria-label="Copy page URL" onClick={() => void navigator.clipboard.writeText(window.location.href).then(() => toast.success('Initiative URL copied'))} type="button"><Link2 size={14}/></button>
       <InitiativeNotificationMenu initiative={initiative} onUpdate={update}/>
@@ -174,10 +177,40 @@ export function InitiativeDetailPage(props: Props) {
     <div className="li-detail-toolbar"><nav>{(['overview', 'activity', 'projects'] as InitiativeRouteTab[]).map(item => <a aria-current={tab === item ? 'page' : undefined} href={location.pathname.replace(/\/(overview|activity|projects|view\/[^/]+)$/, `/${item}`)} key={item} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); onTabChange(item) }}>{titleCase(item)}</a>)}{storedViews.map(view => <ContextMenu.Root key={view.id}><ContextMenu.Trigger asChild><a aria-current={activeView?.id === view.id ? 'page' : undefined} aria-label={view.name} className="li-saved-view-tab" data-i18n-ignore href={location.pathname.replace(/\/(overview|activity|projects|view\/[^/]+)$/, `/view/${view.slugId}`)} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); props.onOpenView(view.slugId) }}><ViewGlyph color={view.color} icon={view.icon}/><span>{view.name}</span></a></ContextMenu.Trigger><ContextMenu.Portal><ContextMenu.Content data-flow-motion="floating" className="li-menu li-saved-view-menu"><ContextMenu.Item onSelect={() => void navigator.clipboard.writeText(`${location.origin}${location.pathname.replace(/\/(overview|activity|projects|view\/[^/]+)$/, `/view/${view.slugId}`)}`)}><Copy size={14}/>Copy link</ContextMenu.Item><ContextMenu.Item onSelect={() => void updateStoredView({ ...view, favorite: !view.favorite })}><Star fill={view.favorite ? 'currentColor' : 'none'} size={14}/>{view.favorite ? 'Unfavorite' : 'Favorite'}</ContextMenu.Item><ContextMenu.Separator/><ContextMenu.Item onSelect={() => setEditingView(view)}><Edit3 size={14}/>Edit…</ContextMenu.Item><ContextMenu.Item onSelect={() => void duplicateStoredView(view)}><Copy size={14}/>Duplicate…</ContextMenu.Item><ContextMenu.Item className="danger" onSelect={() => setDeletingView(view)}><Trash2 size={14}/>Delete</ContextMenu.Item></ContextMenu.Content></ContextMenu.Portal></ContextMenu.Root>)}{tab === 'new' ? <a aria-current="page" className="li-new-view-tab" href={location.pathname}><ViewGlyph color="#8a8f98" icon="CustomView"/><span>New view</span><Edit3 size={11}/></a> : <button aria-label="Add new view" onClick={() => onTabChange('new')} type="button"><ViewGlyph color="#8a8f98" icon="CustomView"/></button>}</nav><div>
       {tab === 'activity' && <ActivityDisplayMenu value={activityDisplay} onChange={setActivityDisplay}/>} 
       {(tab === 'projects' || tab === 'view') && <><RoadmapFilterMenu health={roadmapHealth} query={roadmapQuery} onHealth={changeRoadmapHealth} onQuery={changeRoadmapQuery}/><RoadmapDisplayMenu properties={roadmapProperties} onChange={changeRoadmapProperties}/></>}
-      <button aria-expanded={agentOpen} aria-label={agentOpen ? 'Close chat' : 'Open chat'} className={agentOpen ? 'is-active' : undefined} data-active={agentOpen || undefined} onClick={() => setAgentOpen(open => !open)} title={agentOpen ? 'Close chat' : 'Open chat'} type="button"><MessageSquare size={15}/></button>
-      <button aria-expanded={detailsOpen} aria-label={detailsOpen ? 'Close Initiative details' : 'Open Initiative details'} onClick={() => setDetailsOpen(open => !open)} title={`${detailsOpen ? 'Close' : 'Open'} Initiative details (⌘I)`} type="button">{detailsOpen ? <PanelRightClose size={15}/> : <PanelRightOpen size={15}/>}</button>
+      <InitiativePageChromeActions
+        agentOpen={agentOpen}
+        updatesOpen={updatesOpen}
+        onToggleAgent={() => {
+          setAgentOpen(open => {
+            const next = !open
+            if (next) setDetailsOpen(false)
+            return next
+          })
+        }}
+        onToggleUpdates={() => setUpdatesOpen(open => !open)}
+      />
+      <button aria-expanded={detailsOpen && !agentOpen} aria-label={detailsOpen && !agentOpen ? 'Close Initiative details' : 'Open Initiative details'} onClick={() => { setAgentOpen(false); setDetailsOpen(open => !open) }} title={`${detailsOpen && !agentOpen ? 'Close' : 'Open'} Initiative details (⌘I)`} type="button">{detailsOpen && !agentOpen ? <PanelRightClose size={15}/> : <PanelRightOpen size={15}/>}</button>
     </div></div>
-    <div className={`li-detail-body is-${tab} ${detailsOpen || agentOpen ? 'has-details' : ''}`}><section className="li-detail-main">{tab === 'overview' && <InitiativeOverview {...props} update={update}/>} {tab === 'activity' && <InitiativeActivity {...props} display={activityDisplay}/>} {(tab === 'projects' || tab === 'view') && <InitiativeRoadmap {...props} healthFilter={roadmapHealth} properties={roadmapProperties} query={roadmapQuery} zoom={roadmapZoom} onZoom={changeRoadmapZoom}/>} {tab === 'new' && <InitiativeNewView {...props} onCancel={() => onTabChange('projects')} onSave={createStoredView}/>}</section>{detailsOpen && !agentOpen && <InitiativeSidebar {...props} labels={initiativeLabels} update={update}/>}{agentOpen && <aside className="li-detail-sidebar li-agent-sidebar" aria-label="Entity agent panel"><EntityAgentPanel open={agentOpen} onRequestClose={() => setAgentOpen(false)} target={{ type: 'initiative', id: initiative.id, title: initiative.name }} /></aside>}</div>
+    <InitiativePageChrome
+      initiative={initiative}
+      initiativeUpdates={props.initiativeUpdates}
+      viewer={props.viewer}
+      tab={tab}
+      detailsOpen={detailsOpen}
+      agentOpen={agentOpen}
+      onAgentOpenChange={setAgentOpen}
+      updatesOpen={updatesOpen}
+      onUpdatesOpenChange={setUpdatesOpen}
+      onOpenActivity={() => onTabChange('activity')}
+      onCreateUpdate={props.onCreateUpdate}
+      onUpdate={update}
+      detailsSidebar={<InitiativeSidebar {...props} labels={initiativeLabels} update={update}/>}
+    >
+      {tab === 'overview' && <InitiativeOverview {...props} update={update}/>}
+      {tab === 'activity' && <InitiativeActivity {...props} display={activityDisplay}/>}
+      {(tab === 'projects' || tab === 'view') && <InitiativeRoadmap {...props} healthFilter={roadmapHealth} properties={roadmapProperties} query={roadmapQuery} zoom={roadmapZoom} onZoom={changeRoadmapZoom}/>}
+      {tab === 'new' && <InitiativeNewView {...props} onCancel={() => onTabChange('projects')} onSave={createStoredView}/>}
+    </InitiativePageChrome>
     <DeleteInitiativeDialog initiative={initiative} open={deleteOpen} onOpenChange={setDeleteOpen} onDelete={async () => { await props.onDelete(initiative.id); props.onBack() }}/>
     <StoredViewEditDialog open={Boolean(editingView)} view={editingView} onOpenChange={open => { if (!open) setEditingView(undefined) }} onSave={async view => { await updateStoredView(view); setEditingView(undefined); if (activeView?.id === view.id) props.onOpenView(view.slugId) }}/>
     <StoredViewDeleteDialog open={Boolean(deletingView)} view={deletingView} onOpenChange={open => { if (!open) setDeletingView(undefined) }} onDelete={() => deletingView ? deleteStoredView(deletingView) : Promise.resolve()}/>

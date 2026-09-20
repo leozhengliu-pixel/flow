@@ -32,6 +32,7 @@ const SELECT_OPTIONS: Record<DisplayField, DisplayOption[]> = {
   subGrouping: GROUPING_OPTIONS,
   ordering: [
     { id: 'Manual', label: 'Manual' },
+    { id: 'Relevance', label: 'Relevance' },
     { id: 'Name', label: 'Name' },
     { id: 'Status', label: 'Status' },
     { id: 'Priority', label: 'Priority' },

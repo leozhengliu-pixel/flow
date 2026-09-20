@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ProjectStatus } from '@/types/flow'
 import type { ProjectDataGroup, ProjectPageItem, ProjectProperty, ProjectsDataViewProps, ProjectSortColumn } from './projects-data-view'
 import { DEFAULT_PROJECTS_DISPLAY, type ProjectsDisplaySettings } from './projects-display-model'
+import {
+  relevanceInputFromPageItem,
+  sortProjectsByRelevance,
+  type ProjectRelevanceViewer,
+} from './projects-relevance'
 
 export type ProjectsViewState = {
   display: ProjectsDisplaySettings
@@ -14,6 +19,8 @@ type ProjectsViewStateOptions = {
   projectStatuses?: ProjectStatus[]
   storageKey?: string
   workspaceDefault?: ProjectsDisplaySettings
+  /** Viewer context for LS-0500 Relevance ordering. */
+  relevanceViewer?: ProjectRelevanceViewer
 }
 
 const PRIORITY_GROUPS = [
@@ -54,7 +61,7 @@ function statusForProject(project: ProjectPageItem, projectStatuses: ProjectStat
     ?? projectStatuses.find(status => status.name === project.status && (!project.statusType || status.type === project.statusType))
 }
 
-export function useProjectsViewState(projects: ProjectPageItem[], { initial, projectStatuses = [], storageKey = 'workspace:all', workspaceDefault }: ProjectsViewStateOptions = {}) {
+export function useProjectsViewState(projects: ProjectPageItem[], { initial, projectStatuses = [], storageKey = 'workspace:all', workspaceDefault, relevanceViewer }: ProjectsViewStateOptions = {}) {
   const personalKey = `flow:projects:view:${storageKey}`
   const workspaceDefaultKey = `flow:projects:view-default:${storageKey}`
   const [state, setState] = useState<ProjectsViewState>(() => createInitialState(initial, personalKey, workspaceDefaultKey, workspaceDefault))
@@ -64,7 +71,7 @@ export function useProjectsViewState(projects: ProjectPageItem[], { initial, pro
   }, [personalKey, state.display])
 
   const statuses = useMemo(() => projectStatusesForLayout(projectStatuses, state.display.layout), [projectStatuses, state.display.layout])
-  const grouped = useMemo(() => groupProjectsForView(projects, state, statuses), [projects, state, statuses])
+  const grouped = useMemo(() => groupProjectsForView(projects, state, statuses, relevanceViewer), [projects, relevanceViewer, state, statuses])
 
   const dataViewProps: Pick<ProjectsDataViewProps, 'groups' | 'layout' | 'grouping' | 'manualOrdering' | 'selectedIds' | 'sort' | 'visibleProperties' | 'onSelectionChange' | 'onSort'> = {
     groups: grouped,
@@ -122,21 +129,21 @@ function writeStoredDisplay(key: string, display: ProjectsDisplaySettings) {
   }
 }
 
-export function groupProjectsForView(projects: ProjectPageItem[], state: ProjectsViewState, projectStatuses: ProjectStatus[] = []): ProjectDataGroup[] {
+export function groupProjectsForView(projects: ProjectPageItem[], state: ProjectsViewState, projectStatuses: ProjectStatus[] = [], relevanceViewer?: ProjectRelevanceViewer): ProjectDataGroup[] {
   const visible = projects.filter(project => includeProject(project, state.display.showClosed, projectStatuses))
   const primary = makeGroups(visible, state.display.grouping, state.display.showEmptyGroups, projectStatuses)
   if (state.display.groupOrder === 'desc') primary.reverse()
   const shouldSubgroup = state.display.subGrouping !== 'No grouping' && state.display.subGrouping !== state.display.grouping
 
   return primary.map(group => {
-    const orderedProjects = orderProjects(group.projects, state.display.ordering, state.display.orderingDirection, projectStatuses)
+    const orderedProjects = orderProjects(group.projects, state.display.ordering, state.display.orderingDirection, projectStatuses, relevanceViewer)
     if (!shouldSubgroup) return { ...group, projects: orderedProjects }
     return {
       ...group,
       projects: [],
       subgroups: makeGroups(orderedProjects, state.display.subGrouping, state.display.showEmptyGroups, projectStatuses).map(subgroup => ({
         ...subgroup,
-        projects: orderProjects(subgroup.projects, state.display.ordering, state.display.orderingDirection, projectStatuses),
+        projects: orderProjects(subgroup.projects, state.display.ordering, state.display.orderingDirection, projectStatuses, relevanceViewer),
       })),
     }
   })
@@ -206,7 +213,15 @@ function groupOrder(left: ProjectDataGroup, right: ProjectDataGroup, grouping: s
   return left.name.localeCompare(right.name)
 }
 
-function orderProjects(projects: ProjectPageItem[], ordering: string, direction: 'asc' | 'desc', projectStatuses: ProjectStatus[]) {
+function orderProjects(projects: ProjectPageItem[], ordering: string, direction: 'asc' | 'desc', projectStatuses: ProjectStatus[], relevanceViewer?: ProjectRelevanceViewer) {
+  if (ordering === 'Relevance') {
+    const ranked = sortProjectsByRelevance(
+      projects.map(project => relevanceInputFromPageItem(project)),
+      relevanceViewer,
+    )
+    const byId = new Map(projects.map(project => [project.id, project]))
+    return ranked.map(item => byId.get(item.id)!).filter(Boolean)
+  }
   const result = [...projects].sort((left, right) => compare(left, right, ordering, projectStatuses))
   return direction === 'desc' ? result.reverse() : result
 }
