@@ -794,3 +794,7 @@
   border-color: var(--popover-border);
   box-shadow: var(--sidebar-submenu-shadow);
 }
+
+.sidebar-shortcuts-customize{margin-top:16px;padding-top:12px;border-top:.5px solid var(--theme-border);display:flex;justify-content:flex-end}
+.sidebar-shortcuts-customize a{color:var(--theme-text-secondary);font-size:12px;font-weight:500;text-decoration:none}
+.sidebar-shortcuts-customize a:hover{color:var(--theme-text-primary);text-decoration:underline}

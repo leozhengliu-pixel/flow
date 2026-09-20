@@ -155,3 +155,8 @@
 /* Keep the Views display controls on the same control metrics as issue/project menus. */
 .orderingSelect{width:98px}
 .contextMenu,.displayPopover,.orderingList{border-radius:var(--filter-popover-radius)}
+
+.emptySearch{min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--muted);text-align:center}
+.emptySearch strong{font-size:14px;font-weight:500;color:var(--text)}
+.emptySearch p{margin:0;font-size:12px}
+.toolbarEnd :global(.cvh-search){margin-right:4px}

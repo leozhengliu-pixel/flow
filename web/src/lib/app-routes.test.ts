@@ -70,6 +70,11 @@ describe("application routes", () => {
       workspaceSlug: "acme",
       page: "preferences",
     });
+    expect(parseAppRoute("/acme/settings/account/shortcuts")).toEqual({
+      kind: "settings",
+      workspaceSlug: "acme",
+      page: "shortcuts",
+    });
     expect(
       parseAppRoute("/acme/settings/account/security/api-keys/new"),
     ).toEqual({

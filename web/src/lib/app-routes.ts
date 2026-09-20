@@ -45,6 +45,7 @@ export type TeamArchiveTab =
   | "recently-deleted-documents";
 export type SettingsPageId =
   | "preferences"
+  | "shortcuts"
   | "profile"
   | "notifications"
   | "code-and-reviews"
@@ -1536,6 +1537,7 @@ export function newTeamPath(workspaceSlug: string) {
 }
 const ACCOUNT_SETTINGS = new Set<SettingsPageId>([
   "preferences",
+  "shortcuts",
   "profile",
   "notifications",
   "code-and-reviews",
