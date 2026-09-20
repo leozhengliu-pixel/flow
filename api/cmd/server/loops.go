@@ -23,6 +23,8 @@ type loopInput struct {
 	AllowChangesOutsideTrigger *bool          `json:"allowChangesOutsideTrigger,omitempty"`
 	AllowExternalSync          *bool          `json:"allowExternalSync,omitempty"`
 	Enabled                    *bool          `json:"enabled,omitempty"`
+	OwnerID                    *string        `json:"ownerId,omitempty"`
+	TrustedSourceKeys          *[]string      `json:"trustedSourceKeys,omitempty"`
 }
 
 var loopTriggerTypes = []string{"schedule", "issue", "project", "initiative", "cycle"}
@@ -80,6 +82,12 @@ func applyLoopInput(loop *domain.Loop, input loopInput) {
 	if input.Enabled != nil {
 		loop.Enabled = *input.Enabled
 	}
+	if input.OwnerID != nil {
+		loop.OwnerID = strings.TrimSpace(*input.OwnerID)
+	}
+	if input.TrustedSourceKeys != nil {
+		loop.TrustedSourceKeys = slices.Clone(*input.TrustedSourceKeys)
+	}
 }
 
 func (s *server) listLoops(w http.ResponseWriter, r *http.Request) {
@@ -119,10 +127,16 @@ func (s *server) createLoop(w http.ResponseWriter, r *http.Request) {
 	var created domain.Loop
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "loop.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
-		created = domain.Loop{ID: fmt.Sprintf("loop_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), Icon: "Automation", Color: "#d9b84b", Level: "workspace", TriggerType: "schedule", TriggerConfig: map[string]any{"interval": 1, "unit": "day", "time": "10:00"}, Instructions: "", ConnectorIDs: []string{}, TeamAccess: "allPublic", AllowChangesOutsideTrigger: true, Enabled: true, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
+		created = domain.Loop{ID: fmt.Sprintf("loop_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), Icon: "Automation", Color: "#d9b84b", Level: "workspace", TriggerType: "schedule", TriggerConfig: map[string]any{"interval": 1, "unit": "day", "time": "10:00"}, Instructions: "", ConnectorIDs: []string{}, TeamAccess: "allPublic", AllowChangesOutsideTrigger: true, Enabled: true, OwnerID: data.Viewer.ID, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
 		applyLoopInput(&created, input)
 		if created.TriggerConfig == nil {
 			created.TriggerConfig = map[string]any{}
+		}
+		if created.OwnerID == "" {
+			created.OwnerID = data.Viewer.ID
+		}
+		if userByID(data, created.OwnerID) == nil {
+			return "", fmt.Errorf("%w: owner not found", errInvalid)
 		}
 		data.Loops = append([]domain.Loop{created}, data.Loops...)
 		appendAudit(data, "created", "loop", created.ID, map[string]any{"triggerType": created.TriggerType})
@@ -148,6 +162,12 @@ func (s *server) updateLoop(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		applyLoopInput(&data.Loops[index], input)
+		if data.Loops[index].OwnerID == "" {
+			data.Loops[index].OwnerID = data.Loops[index].Creator.ID
+		}
+		if userByID(data, data.Loops[index].OwnerID) == nil {
+			return fmt.Errorf("%w: owner not found", errInvalid)
+		}
 		data.Loops[index].UpdatedAt = time.Now().UTC()
 		updated = data.Loops[index]
 		appendAudit(data, "updated", "loop", id, nil)

@@ -820,6 +820,8 @@ type Loop struct {
 	AllowChangesOutsideTrigger bool           `json:"allowChangesOutsideTrigger"`
 	AllowExternalSync          bool           `json:"allowExternalSync"`
 	Enabled                    bool           `json:"enabled"`
+	OwnerID                    string         `json:"ownerId,omitempty"`
+	TrustedSourceKeys          []string       `json:"trustedSourceKeys,omitempty"`
 	Creator                    User           `json:"creator"`
 	LastRunAt                  *time.Time     `json:"lastRunAt,omitempty"`
 	NextRunAt                  *time.Time     `json:"nextRunAt,omitempty"`
@@ -974,6 +976,9 @@ type WorkspaceSettings struct {
 	// matching SCIM group owns membership for that team.
 	SCIMTeamGroupMapping map[string]string `json:"scimTeamGroupMapping,omitempty"`
 	SCIMDefaultRole      string            `json:"scimDefaultRole,omitempty"`
+	// TrustedSourcesMode: "none" | "allowlist" (Wave 10 / LS-0094 foundations).
+	TrustedSourcesMode      string   `json:"trustedSourcesMode,omitempty"`
+	TrustedSourcesAllowlist []string `json:"trustedSourcesAllowlist,omitempty"`
 	UpdatedAt            time.Time         `json:"updatedAt"`
 }
 

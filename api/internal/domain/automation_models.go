@@ -60,6 +60,8 @@ type WorkflowDefinition struct {
 	LastRunStatus  string            `json:"lastRunStatus,omitempty"`
 	ConsecutiveErr int               `json:"consecutiveErrors"`
 	CreatorID      string            `json:"creatorId"`
+	OwnerID        string            `json:"ownerId,omitempty"`
+	TrustedSourceKeys []string       `json:"trustedSourceKeys,omitempty"`
 	CreatedAt      time.Time         `json:"createdAt"`
 	UpdatedAt      time.Time         `json:"updatedAt"`
 }
