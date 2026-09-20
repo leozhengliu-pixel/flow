@@ -50,6 +50,11 @@ type teamMutationSnapshot struct {
 
 	cycleIDs         []string
 	oldCycleSettings map[string]domain.CycleSettings
+
+	oldTeams          []domain.Team
+	oldUsers          []domain.User
+	oldProjects       []domain.Project
+	oldImportSettings map[string]domain.TeamSettings
 }
 
 // These events cannot share the generic clone: that path copies every team and
@@ -200,6 +205,10 @@ func snapshotTeamMutation(eventType, hintID string, data *domain.Bootstrap) team
 		actorIndex:     -1,
 		teamIndex:      -1,
 	}
+	if catalogImportMutation(eventType) {
+		snapshotImportCatalog(&snap, eventType, data)
+		return snap
+	}
 	if hintID == "" {
 		return snap
 	}
@@ -233,6 +242,23 @@ func snapshotTeamMutation(eventType, hintID string, data *domain.Bootstrap) team
 	return snap
 }
 
+func snapshotImportCatalog(snap *teamMutationSnapshot, eventType string, data *domain.Bootstrap) {
+	switch eventType {
+	case "alm.org_teams_imported":
+		snap.oldTeams = slices.Clone(data.Teams)
+		if len(data.TeamSettings) > 0 {
+			snap.oldImportSettings = make(map[string]domain.TeamSettings, len(data.TeamSettings))
+			for id, settings := range data.TeamSettings {
+				snap.oldImportSettings[id] = settings
+			}
+		}
+	case "alm.users_imported":
+		snap.oldUsers = slices.Clone(data.Users)
+	case "alm.projects_imported":
+		snap.oldProjects = slices.Clone(data.Projects)
+	}
+}
+
 func snapshotScopedLabels(data *domain.Bootstrap, scopes []string) map[int]domain.IssueLabel {
 	if data.LabelIndex == nil || len(data.Labels) == 0 {
 		return nil
@@ -249,6 +275,14 @@ func snapshotScopedLabels(data *domain.Bootstrap, scopes []string) map[int]domai
 }
 
 func rollbackTeamMutation(next *domain.Bootstrap, snap *teamMutationSnapshot, aggregateID string) {
+	restoreCatalogByID(next.Teams, snap.oldTeams, func(item domain.Team) string { return item.ID })
+	restoreCatalogByID(next.Users, snap.oldUsers, func(item domain.User) string { return item.ID })
+	restoreCatalogByID(next.Projects, snap.oldProjects, func(item domain.Project) string { return item.ID })
+	if next.TeamSettings != nil {
+		for id, settings := range snap.oldImportSettings {
+			next.TeamSettings[id] = settings
+		}
+	}
 	if snap.teamIndex >= 0 && snap.teamIndex < len(next.Teams) {
 		next.Teams[snap.teamIndex] = snap.oldTeam
 	}
@@ -295,6 +329,23 @@ func rollbackTeamMutation(next *domain.Bootstrap, snap *teamMutationSnapshot, ag
 	for index, label := range snap.oldLabels {
 		if index >= 0 && index < len(next.Labels) {
 			next.Labels[index] = label
+		}
+	}
+}
+
+func restoreCatalogByID[T any](items []T, previous []T, idOf func(T) string) {
+	if len(previous) == 0 || len(items) == 0 {
+		return
+	}
+	index := make(map[string]int, len(items))
+	for i, item := range items {
+		if id := idOf(item); id != "" {
+			index[id] = i
+		}
+	}
+	for _, old := range previous {
+		if i, ok := index[idOf(old)]; ok {
+			items[i] = old
 		}
 	}
 }
@@ -408,6 +459,11 @@ func collectDirtyTeamRecords(eventType, aggregateID string, snap *teamMutationSn
 	}
 	switch eventType {
 	case "team.created", "alm.org_teams_imported":
+		if eventType == "alm.org_teams_imported" {
+			if err := collectExistingTeamImportUpdates(snap, next, appendRecord); err != nil {
+				return nil, err
+			}
+		}
 		for i := snap.teamsLen; i < len(next.Teams); i++ {
 			team := next.Teams[i]
 			if eventType == "team.created" && aggregateID != "" && team.ID != aggregateID {
@@ -437,10 +493,16 @@ func collectDirtyTeamRecords(eventType, aggregateID string, snap *teamMutationSn
 			return nil, err
 		}
 	case "alm.users_imported":
+		if err := collectExistingUserImportUpdates(snap, next, appendRecord); err != nil {
+			return nil, err
+		}
 		if err := appendRange("users", snap.usersLen, func(i int) string { return next.Users[i].ID }, func(i int) any { return next.Users[i] }); err != nil {
 			return nil, err
 		}
 	case "alm.projects_imported":
+		if err := collectExistingProjectImportUpdates(snap, next, appendRecord); err != nil {
+			return nil, err
+		}
 		if err := appendRange("projects", snap.projectsLen, func(i int) string { return next.Projects[i].ID }, func(i int) any { return next.Projects[i] }); err != nil {
 			return nil, err
 		}
@@ -514,6 +576,90 @@ func collectDirtyTeamRecords(eventType, aggregateID string, snap *teamMutationSn
 		}
 	}
 	return upserts, nil
+}
+
+func collectExistingTeamImportUpdates(snap *teamMutationSnapshot, next domain.Bootstrap, appendRecord func(string, string, bool, any) error) error {
+	if len(snap.oldTeams) == 0 {
+		return nil
+	}
+	previous := make(map[string]domain.Team, len(snap.oldTeams))
+	for _, team := range snap.oldTeams {
+		previous[team.ID] = team
+	}
+	limit := snap.teamsLen
+	if limit > len(next.Teams) {
+		limit = len(next.Teams)
+	}
+	for i := 0; i < limit; i++ {
+		team := next.Teams[i]
+		old, ok := previous[team.ID]
+		if !ok {
+			continue
+		}
+		if !metadataTeamEqual(old, team) {
+			if err := appendRecord("teams", team.ID, false, team); err != nil {
+				return err
+			}
+		}
+		settings, hasSettings := next.TeamSettings[team.ID]
+		oldSettings, hadSettings := snap.oldImportSettings[team.ID]
+		if hasSettings && (!hadSettings || !metadataTeamSettingsEqual(oldSettings, settings)) {
+			if err := appendRecord("teamSettings", team.ID, false, settings); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func collectExistingUserImportUpdates(snap *teamMutationSnapshot, next domain.Bootstrap, appendRecord func(string, string, bool, any) error) error {
+	if len(snap.oldUsers) == 0 {
+		return nil
+	}
+	previous := make(map[string]domain.User, len(snap.oldUsers))
+	for _, user := range snap.oldUsers {
+		previous[user.ID] = user
+	}
+	limit := snap.usersLen
+	if limit > len(next.Users) {
+		limit = len(next.Users)
+	}
+	for i := 0; i < limit; i++ {
+		user := next.Users[i]
+		old, ok := previous[user.ID]
+		if !ok || metadataUserEqual(old, user) {
+			continue
+		}
+		if err := appendRecord("users", user.ID, false, user); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func collectExistingProjectImportUpdates(snap *teamMutationSnapshot, next domain.Bootstrap, appendRecord func(string, string, bool, any) error) error {
+	if len(snap.oldProjects) == 0 {
+		return nil
+	}
+	previous := make(map[string]domain.Project, len(snap.oldProjects))
+	for _, project := range snap.oldProjects {
+		previous[project.ID] = project
+	}
+	limit := snap.projectsLen
+	if limit > len(next.Projects) {
+		limit = len(next.Projects)
+	}
+	for i := 0; i < limit; i++ {
+		project := next.Projects[i]
+		old, ok := previous[project.ID]
+		if !ok || metadataProjectEqual(old, project) {
+			continue
+		}
+		if err := appendRecord("projects", project.ID, false, project); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func lenForField(next domain.Bootstrap, field string) int {
@@ -670,7 +816,30 @@ func equalTimePointer(a, b *time.Time) bool {
 func metadataTeamEqual(a, b domain.Team) bool {
 	return a.ID == b.ID && a.Name == b.Name && a.Key == b.Key && a.Color == b.Color && a.Icon == b.Icon &&
 		a.Private == b.Private && a.ExternalSource == b.ExternalSource && equalTimePointer(a.RetiredAt, b.RetiredAt) &&
-		equalTimePointer(a.CreatedAt, b.CreatedAt)
+		equalTimePointer(a.CreatedAt, b.CreatedAt) && equalTimePointer(a.UpdatedAt, b.UpdatedAt)
+}
+
+func metadataUserEqual(a, b domain.User) bool {
+	return a.ID == b.ID && a.UserID == b.UserID && a.Name == b.Name && a.DisplayName == b.DisplayName &&
+		a.JobTitle == b.JobTitle && a.Email == b.Email && a.AvatarURL == b.AvatarURL && a.Active == b.Active &&
+		a.EmailVerified == b.EmailVerified && a.App == b.App && a.BuiltinAgent == b.BuiltinAgent &&
+		a.OAuthClientID == b.OAuthClientID && slices.Equal(a.AppScopes, b.AppScopes) && slices.Equal(a.AppTeamIDs, b.AppTeamIDs) &&
+		equalTimePointer(a.OutOfOfficeUntil, b.OutOfOfficeUntil)
+}
+
+func metadataProjectEqual(a, b domain.Project) bool {
+	return a.ID == b.ID && a.Name == b.Name && a.SlugID == b.SlugID && a.Summary == b.Summary &&
+		a.Description == b.Description && a.Icon == b.Icon && a.Color == b.Color && a.Priority == b.Priority &&
+		a.Health == b.Health && a.Status.ID == b.Status.ID && a.Status.Name == b.Status.Name &&
+		a.Status.Type == b.Status.Type && slices.Equal(a.TeamIDs, b.TeamIDs) && slices.Equal(a.MemberIDs, b.MemberIDs) &&
+		equalStringPointer(a.StartDate, b.StartDate) && equalStringPointer(a.TargetDate, b.TargetDate)
+}
+
+func equalStringPointer(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
 }
 
 func metadataLabelEqual(a, b domain.IssueLabel) bool {
