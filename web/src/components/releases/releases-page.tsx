@@ -3,7 +3,7 @@ import { toggleFavoriteFor } from '@/lib/favorites'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
 import * as Select from '@radix-ui/react-select'
-import { Archive, ArchiveRestore, ArrowDownWideNarrow, ArrowUpNarrowWide, Check, ChevronDown, ChevronRight, Copy, FileClock, FileText, Link2, Menu, MoreHorizontal, PanelRightClose, PanelRightOpen, Pencil, Plus, Search, Settings2, Star, Trash2, X } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowDownWideNarrow, ArrowUpNarrowWide, Check, ChevronDown, ChevronRight, Copy, FileClock, FileText, Link2, Menu, MoreHorizontal, PanelRightClose, PanelRightOpen, Pencil, Plus, Search, Settings2, Sparkles, Star, Trash2, X } from 'lucide-react'
 import { forwardRef, useEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef, type CSSProperties, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
@@ -18,15 +18,15 @@ import type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption } 
 import { toggleFilterOption, updateFilterOperator, updateFilterValues } from '@/components/my-issues/my-issues-filter-types'
 import { DisplayIcon as SlidersHorizontal, FilterIcon as Filter } from '@/components/ui/view-action-icons'
 import { ISSUE_FILTER_LABELS, applyExplorerFilters, buildExplorerIssueGroups, explorerFilterOptions, explorerPropertyOptions, explorerUpdateForProperty, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
-import { createReleaseNote, deleteRelease, listIssueRecords, recordRecentResource, updateIssue, updateRelease, updateReleaseNote } from '@/lib/api'
+import { createReleaseNote, deleteRelease, listIssueRecords, purgeTrashEntry, recordRecentResource, restoreTrashEntry, updateIssue, updateRelease, updateReleaseNote } from '@/lib/api'
 import { ContentViewHeaderSearch } from '@/components/content-view/content-view-header-search'
 import { useI18n } from '@/i18n/i18n'
-import { newReleasePipelinePath, releasePath, releasePipelinePath, releasePipelineSettingsPath, teamArchivePath, type ReleasePipelineTab, type ReleaseRouteTab } from '@/lib/app-routes'
-import type { BootstrapData, Issue, Release, ReleasePipeline, ReleaseResource } from '@/types/flow'
+import { newReleasePipelinePath, releasePath, releasePipelinePath, releasePipelineSettingsPath, type ReleasePipelineTab, type ReleaseRouteTab } from '@/lib/app-routes'
+import type { BootstrapData, Issue, Release, ReleasePipeline, ReleaseResource, TrashEntry } from '@/types/flow'
 
 import { ReleaseEditorDialog } from './release-editor-dialog'
 import { ReleasePipelineIcon, ReleasesIcon, ReleaseStatusIcon } from './release-icons'
-import { pipelineSummary, releaseIssueQuery, releaseProgress, releasesByStage, releasesForPipeline, releaseStatusForStage } from './release-view-model'
+import { deletedReleasesForPipeline, pickChangelogTargetRelease, pipelineSummary, releaseIssueQuery, releaseProgress, releasesByStage, releasesForPipeline, releasesInInclusiveRange, releaseStatusForStage } from './release-view-model'
 import './releases.css'
 
 type Props = {
@@ -39,20 +39,24 @@ type Props = {
   onNavigate: (path: string) => void
   onReload: () => Promise<void>
 }
-type Tab = 'releases'|'changelog'
+type Tab = 'releases'|'changelog'|'deleted'
 
 export function ReleasesPage({ data, pipelineSlug, releaseSlug, pipelineTab, releaseTab, onOpenSidebar, onNavigate, onReload }: Props) {
   const { t } = useI18n()
   const release = data.releases.find(item => item.slugId === releaseSlug)
   const pipeline = data.releasePipelines.find(item => item.slugId === pipelineSlug || item.id === release?.pipelineId)
-  const tab: Tab = pipelineTab === 'changelog' ? 'changelog' : 'releases'
+  const tab: Tab = pipelineTab === 'changelog' ? 'changelog' : pipelineTab === 'deleted' ? 'deleted' : 'releases'
   const archive = pipelineTab === 'archive'
+  const deleted = pipelineTab === 'deleted'
   const [editing, setEditing] = useState<Release|undefined>()
   const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState<Release|undefined>()
   if (releaseSlug && !release) return <ReleaseRouteNotFound title={t('Release not found')} onOpenSidebar={onOpenSidebar}/>
   if (pipelineSlug && !pipeline) return <ReleaseRouteNotFound title={t('Release pipeline not found')} onOpenSidebar={onOpenSidebar}/>
-  const openPipeline = (next: ReleasePipeline, nextArchive = false, nextTab: Tab = 'releases') => onNavigate(releasePipelinePath(data.workspace.urlKey, next.slugId, nextArchive ? 'archive' : nextTab))
+  const openPipeline = (next: ReleasePipeline, nextArchive = false, nextTab: Tab = 'releases') => {
+    const routeTab: ReleasePipelineTab = nextArchive ? 'archive' : nextTab === 'deleted' ? 'deleted' : nextTab
+    onNavigate(releasePipelinePath(data.workspace.urlKey, next.slugId, routeTab))
+  }
   const changeTab = (next: Tab) => { if (pipeline) openPipeline(pipeline, false, next) }
   const openRelease = (item: Release) => {
     const owner = data.releasePipelines.find(value => value.id === item.pipelineId) ?? pipeline
@@ -66,7 +70,7 @@ export function ReleasesPage({ data, pipelineSlug, releaseSlug, pipelineTab, rel
     {deleting&&<DeleteReleaseDialog release={deleting} onClose={()=>setDeleting(undefined)} onDeleted={async()=>{await deleteRelease(deleting.id);setDeleting(undefined);await onReload();openPipeline(pipeline)}}/>}
   </>
   return <>
-    {pipeline ? <ReleasePipelineView data={data} pipeline={pipeline} tab={tab} archive={archive} onArchiveChange={value => openPipeline(pipeline, value, 'releases')} onCreate={() => setCreating(true)} onDelete={setDeleting} onEdit={setEditing} onOpen={openRelease} onNavigate={onNavigate} onOpenSidebar={onOpenSidebar} onReload={onReload} onTabChange={changeTab}/>
+    {pipeline ? <ReleasePipelineView data={data} pipeline={pipeline} tab={tab} archive={archive} deleted={deleted} onArchiveChange={value => openPipeline(pipeline, value, 'releases')} onOpenDeleted={() => openPipeline(pipeline, false, 'deleted')} onCreate={() => setCreating(true)} onDelete={setDeleting} onEdit={setEditing} onOpen={openRelease} onNavigate={onNavigate} onOpenSidebar={onOpenSidebar} onReload={onReload} onTabChange={changeTab}/>
       : <ReleasePipelinesView data={data} onCreate={() => onNavigate(newReleasePipelinePath(data.workspace.urlKey))} onOpen={openPipeline} onOpenSidebar={onOpenSidebar} onNavigate={onNavigate}/>
     }
     {pipeline && creating && <ReleaseEditorDialog data={data} pipeline={pipeline} onClose={() => setCreating(false)} onSaved={async()=>{setCreating(false);await onReload()}}/>}
@@ -137,21 +141,27 @@ function ReleaseDisplaySelect<T extends string>({ ariaLabel, className, onChange
   return <Select.Root onValueChange={next => onChange(next as T)} value={value}><Select.Trigger aria-label={ariaLabel} className="flow-pipeline-display-select"><Select.Value/><Select.Icon><ChevronDown/></Select.Icon></Select.Trigger><Select.Portal><Select.Content data-flow-motion="floating" align="end" className={`flow-pipeline-display-select-menu ${className}`} collisionPadding={8} position="popper" side="bottom" sideOffset={4}><Select.Viewport>{options.map(([option,label])=><Select.Item className="flow-pipeline-display-select-item" key={option} value={option}><Select.ItemText>{label}</Select.ItemText><Select.ItemIndicator className="flow-pipeline-display-select-indicator"><Check/></Select.ItemIndicator></Select.Item>)}</Select.Viewport></Select.Content></Select.Portal></Select.Root>
 }
 
-function ReleasePipelineView({ data, pipeline, tab, archive, onArchiveChange, onCreate, onDelete, onEdit, onOpen, onNavigate, onOpenSidebar, onReload, onTabChange }: { data:BootstrapData;pipeline:ReleasePipeline;tab:Tab;archive:boolean;onArchiveChange:(value:boolean)=>void;onCreate:()=>void;onDelete:(release:Release)=>void;onEdit:(release:Release)=>void;onOpen:(release:Release)=>void;onNavigate:(path:string)=>void;onOpenSidebar:()=>void;onReload:()=>Promise<void>;onTabChange:(value:Tab)=>void }) {
+function ReleasePipelineView({ data, pipeline, tab, archive, deleted, onArchiveChange, onOpenDeleted, onCreate, onDelete, onEdit, onOpen, onNavigate, onOpenSidebar, onReload, onTabChange }: { data:BootstrapData;pipeline:ReleasePipeline;tab:Tab;archive:boolean;deleted:boolean;onArchiveChange:(value:boolean)=>void;onOpenDeleted:()=>void;onCreate:()=>void;onDelete:(release:Release)=>void;onEdit:(release:Release)=>void;onOpen:(release:Release)=>void;onNavigate:(path:string)=>void;onOpenSidebar:()=>void;onReload:()=>Promise<void>;onTabChange:(value:Tab)=>void }) {
   const { t } = useI18n()
   const releases = releasesForPipeline(data,pipeline,archive)
   const changelog = releasesForPipeline(data,pipeline).filter(item=>item.status==='released')
+  const trash = deletedReleasesForPipeline(data, pipeline)
   const favorite = data.favorites.some(item=>item.resourceType==='release_pipeline'&&item.resourceId===pipeline.id)
   const toggleFavorite = ()=>{void toggleFavoriteFor(data,'release_pipeline',pipeline.id,undefined,favorite)}
   const copyUrl=async()=>{try{await navigator.clipboard.writeText(window.location.href);toast.success(t('URL copied'))}catch{toast.error(t('Could not copy URL'))}}
-  const archiveTeam=data.teams.find(team=>pipeline.teamIds.includes(team.id))??data.teams[0]
-  const pipelineMenu = <DropdownMenu.Root><DropdownMenu.Trigger asChild><IconButton label={t('Pipeline options')}><MoreHorizontal/></IconButton></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="flow-releases-menu flow-pipeline-options" align="start" sideOffset={4}>{pipeline.type==='scheduled'&&<ReleaseMenuItem icon={<Plus/>} onSelect={onCreate}>{t('Create release')}</ReleaseMenuItem>}<ReleaseMenuItem icon={<Star fill={favorite?'currentColor':'none'}/>} onSelect={()=>void toggleFavorite()}>{t(favorite?'Remove from favorites':'Favorite')}</ReleaseMenuItem><ReleaseMenuItem icon={<Copy/>} onSelect={()=>void copyUrl()}>{t('Copy URL')}</ReleaseMenuItem><DropdownMenu.Separator/><ReleaseMenuItem icon={<Settings2/>} onSelect={()=>onNavigate(releasePipelineSettingsPath(data.workspace.urlKey,pipeline.slugId))}>{t('Pipeline settings')}</ReleaseMenuItem><DropdownMenu.Separator/><ReleaseMenuItem icon={<Archive/>} onSelect={()=>onArchiveChange(!archive)}>{t(archive?'View active releases':'Open archive')}</ReleaseMenuItem>{archiveTeam&&<ReleaseMenuItem icon={<Trash2/>} onSelect={()=>onNavigate(teamArchivePath(data.workspace.urlKey,archiveTeam.key))}>{t('View recently deleted releases')}</ReleaseMenuItem>}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
-  return <main className="main-panel flow-releases-page" aria-label={`${pipeline.name} ${t('Releases')}`}>
+  const pipelineMenu = <DropdownMenu.Root><DropdownMenu.Trigger asChild><IconButton label={t('Pipeline options')}><MoreHorizontal/></IconButton></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="flow-releases-menu flow-pipeline-options" align="start" sideOffset={4}>{pipeline.type==='scheduled'&&!archive&&!deleted&&<ReleaseMenuItem icon={<Plus/>} onSelect={onCreate}>{t('Create release')}</ReleaseMenuItem>}<ReleaseMenuItem icon={<Star fill={favorite?'currentColor':'none'}/>} onSelect={()=>void toggleFavorite()}>{t(favorite?'Remove from favorites':'Favorite')}</ReleaseMenuItem><ReleaseMenuItem icon={<Copy/>} onSelect={()=>void copyUrl()}>{t('Copy URL')}</ReleaseMenuItem><DropdownMenu.Separator/><ReleaseMenuItem icon={<Settings2/>} onSelect={()=>onNavigate(releasePipelineSettingsPath(data.workspace.urlKey,pipeline.slugId))}>{t('Pipeline settings')}</ReleaseMenuItem><DropdownMenu.Separator/><ReleaseMenuItem icon={<Archive/>} onSelect={()=>onArchiveChange(!archive)}>{t(archive?'View active releases':'Open archive')}</ReleaseMenuItem><ReleaseMenuItem icon={<Trash2/>} onSelect={onOpenDeleted}>{t('View recently deleted releases')}</ReleaseMenuItem></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+  const toolbarCount = deleted ? t(`${trash.length} deleted`) : archive ? t('Archived releases') : t(`${releases.length} releases`)
+  return <main className="main-panel flow-releases-page" aria-label={`${pipeline.name} ${t(deleted ? 'Recently deleted releases' : 'Releases')}`}>
     <TopBar onOpenSidebar={onOpenSidebar} title={<div className="flow-release-title"><h1 data-i18n-ignore>{pipeline.name}</h1><div className="flow-release-title-actions"><IconButton aria-pressed={favorite} label={t(favorite?'Remove from favorites':'Favorite')} onClick={()=>void toggleFavorite()}><Star fill={favorite?'currentColor':'none'}/></IconButton>{pipelineMenu}</div></div>}>
-      {!archive&&pipeline.type==='scheduled'&&<IconButton label={t('Create new release')} onClick={onCreate}><Plus/></IconButton>}
+      {!archive&&!deleted&&pipeline.type==='scheduled'&&<IconButton label={t('Create new release')} onClick={onCreate}><Plus/></IconButton>}
     </TopBar>
-    <div className="flow-release-toolbar"><div className="flow-release-tabs"><button className={tab==='releases'?'active':''} aria-selected={tab==='releases'} onClick={()=>onTabChange('releases')}>{t(archive?'Archive':'Releases')}</button>{!archive&&<button className={tab==='changelog'?'active':''} aria-selected={tab==='changelog'} onClick={()=>onTabChange('changelog')}>{t('Changelog')}</button>}</div><span>{archive?t('Archived releases'):t(`${releases.length} releases`)}</span></div>
-    {tab==='changelog'&&!archive?<ReleaseChangelog pipeline={pipeline} releases={changelog} onOpen={onOpen}/>:<ReleaseList data={data} pipeline={pipeline} releases={releases} archived={archive} onCreate={onCreate} onDelete={onDelete} onEdit={onEdit} onOpen={onOpen} onReload={onReload}/>}
+    <div className="flow-release-toolbar"><div className="flow-release-tabs">
+      <button className={!archive&&!deleted&&tab==='releases'?'active':''} aria-selected={!archive&&!deleted&&tab==='releases'} onClick={()=>onArchiveChange(false)}>{t('Releases')}</button>
+      {!archive&&!deleted&&<button className={tab==='changelog'?'active':''} aria-selected={tab==='changelog'} onClick={()=>onTabChange('changelog')}>{t('Changelog')}</button>}
+      {(archive||deleted)&&<button className={archive?'active':''} aria-selected={archive} onClick={()=>onArchiveChange(true)}>{t('Archive')}</button>}
+      {(archive||deleted)&&<button className={deleted?'active':''} aria-selected={deleted} onClick={onOpenDeleted}>{t('Recently deleted')}</button>}
+    </div><span>{toolbarCount}</span></div>
+    {deleted ? <DeletedReleasesList items={trash} onReload={onReload}/> : tab==='changelog'&&!archive ? <ReleaseChangelog data={data} pipeline={pipeline} releases={changelog} onOpen={onOpen} onNavigate={onNavigate}/> : <ReleaseList data={data} pipeline={pipeline} releases={releases} archived={archive} onCreate={onCreate} onDelete={onDelete} onEdit={onEdit} onOpen={onOpen} onReload={onReload}/>}
   </main>
 }
 
@@ -179,7 +189,57 @@ function ReleaseList({data,pipeline,releases,archived,onCreate,onDelete,onEdit,o
 
 function ReleaseRowMenu({item,archived,onEdit,onRestore,onDelete}:{item:Release;archived:boolean;onEdit:()=>void;onRestore:()=>Promise<void>;onDelete:()=>void}){const{t}=useI18n();return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className="flow-release-row-menu" aria-label={`${t('Open actions')} ${item.name}`}><MoreHorizontal/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="flow-releases-menu" align="end" sideOffset={5}>{!archived&&<ReleaseMenuItem icon={<Settings2/>} onSelect={onEdit}>{t('Edit release')}</ReleaseMenuItem>}{archived&&<ReleaseMenuItem icon={<ArchiveRestore/>} onSelect={()=>void onRestore()}>{t('Restore')}</ReleaseMenuItem>}<DropdownMenu.Separator/><ReleaseMenuItem danger icon={<Trash2/>} onSelect={onDelete}>{t('Delete release')}</ReleaseMenuItem></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>}
 
-function ReleaseChangelog({pipeline,releases,onOpen}:{pipeline:ReleasePipeline;releases:Release[];onOpen:(release:Release)=>void}){const{t,formatDate}=useI18n();if(!releases.length)return <ReleaseEmptyState icon={<FileClock/>} title={t('No release notes yet')} description={t('Completed releases and their release notes will appear here.')}/>;const missing=releases.find(item=>!item.releaseNotes);if(missing)return <ReleaseEmptyState icon={<FileClock/>} title={t('Missing release notes')} description={<><span data-i18n-ignore>{missing.name}</span> {t('Create release notes for this release or select another release.')}</>} action={<button className="flow-releases-primary" onClick={()=>onOpen(missing)}>{t('Create release notes')}</button>}/>;return <div className="flow-release-changelog" aria-label={pipeline.name}>{releases.map(item=><article key={item.id}><span>{item.version?<span data-i18n-ignore>{item.version}</span>:t('Release')}</span><div><h2 data-i18n-ignore>{item.name}</h2><p data-i18n-ignore>{item.releaseNotes}</p></div><time>{formatDate(item.releasedAt||item.targetDate||item.updatedAt,{month:'short',day:'numeric',year:'numeric'})}</time></article>)}</div>}
+function DeletedReleasesList({items,onReload}:{items:TrashEntry[];onReload:()=>Promise<void>}){
+  const{t,formatDate}=useI18n()
+  if(!items.length)return <ReleaseEmptyState icon={<Trash2/>} title={t('No recently deleted releases')} description={t('Deleted releases will appear here for 30 days before being permanently removed.')}/>
+  return <div className="flow-release-deleted-list" aria-label={t('Recently deleted releases')}>
+    {items.map(item=><div className="flow-release-deleted-row" key={item.id}>
+      <ReleaseStatusIcon status="canceled"/>
+      <div><strong data-i18n-ignore>{item.title}</strong><small>{t('Release')} · {t('deleted by')} <span data-i18n-ignore>{item.deletedBy.displayName}</span> · {formatDate(item.deletedAt,{month:'short',day:'numeric',year:'numeric'})}</small></div>
+      <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className="flow-release-row-menu" aria-label={`${t('Open actions')} ${item.title}`}><MoreHorizontal/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="flow-releases-menu" align="end" sideOffset={5}>
+        <ReleaseMenuItem icon={<ArchiveRestore/>} onSelect={()=>{void restoreTrashEntry(item.id).then(onReload).catch(error=>toast.error(error instanceof Error?error.message:t('Could not restore release')))}}>{t('Restore')}</ReleaseMenuItem>
+        <ReleaseMenuItem danger icon={<Trash2/>} onSelect={()=>{void purgeTrashEntry(item.id).then(onReload).catch(error=>toast.error(error instanceof Error?error.message:t('Could not delete release')))}}>{t('Delete permanently')}</ReleaseMenuItem>
+      </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+    </div>)}
+  </div>
+}
+
+function ReleaseChangelog({data,pipeline,releases,onOpen,onNavigate}:{data:BootstrapData;pipeline:ReleasePipeline;releases:Release[];onOpen:(release:Release)=>void;onNavigate:(path:string)=>void}){
+  const{t,formatDate}=useI18n()
+  const targetDefault = pickChangelogTargetRelease(releases)
+  const [scope,setScope]=useState<'single'|'range'>('single')
+  const [selectedId,setSelectedId]=useState(targetDefault?.id ?? '')
+  const [startId,setStartId]=useState(targetDefault?.id ?? '')
+  const [endId,setEndId]=useState(targetDefault?.id ?? '')
+  const ordered = useMemo(()=>[...releases].sort((left,right)=>(left.releasedAt??left.targetDate??left.createdAt).localeCompare(right.releasedAt??right.targetDate??right.createdAt)),[releases])
+  const selected = releases.find(item=>item.id===selectedId) ?? targetDefault
+  const rangeReleases = scope==='range' && startId && endId ? releasesInInclusiveRange(releases, startId, endId) : []
+  const articles = scope==='range' ? rangeReleases : selected ? [selected] : []
+  const missing = releases.find(item=>!(item.releaseNotes||'').trim())
+  const agentDisabled = true
+  if(!releases.length)return <ReleaseEmptyState icon={<FileClock/>} title={t('No release notes yet')} description={t('Create release notes from a release or range of releases to share what shipped.')}/>
+  return <div className="flow-release-changelog-page" aria-label={pipeline.name}>
+    <div className="flow-release-notes-toolbar">
+      <label className="flow-release-notes-scope">
+        <span>{t('Select release notes scope')}</span>
+        <select aria-label={t('Select release notes scope')} value={scope} onChange={event=>setScope(event.target.value as 'single'|'range')}>
+          <option value="single">{t('Single release')}</option>
+          <option value="range">{t('Release range')}</option>
+        </select>
+      </label>
+      {scope==='single' ? <label className="flow-release-notes-picker"><span>{t('Select release')}</span><select aria-label={t('Select release')} value={selected?.id ?? ''} onChange={event=>setSelectedId(event.target.value)}>{ordered.map(item=><option key={item.id} value={item.id}>{item.name}{item.version?` (${item.version})`:''}</option>)}</select></label>
+        : <><label className="flow-release-notes-picker"><span>{t('Select starting release')}</span><select aria-label={t('Select starting release')} value={startId} onChange={event=>setStartId(event.target.value)}>{ordered.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label className="flow-release-notes-picker"><span>{t('Select ending release')}</span><select aria-label={t('Select ending release')} value={endId} onChange={event=>setEndId(event.target.value)}>{ordered.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <button type="button" className="flow-release-notes-since" onClick={()=>{const covered=ordered.filter(item=>(item.releaseNotes||'').trim());const last=covered.at(-1);if(last){setStartId(last.id);setEndId(ordered.at(-1)?.id??last.id)}}}>{t('From last covered release')}</button></>}
+      <button type="button" className="flow-release-notes-agent" disabled={agentDisabled} aria-disabled="true" title={t('Flow AI is not configured for this workspace')}><Sparkles size={13}/>{t('Write with Agent')}</button>
+      {pipeline.autoGenerateReleaseNotes && <span className="flow-release-notes-auto">{t('Auto-generation enabled')}</span>}
+      <button type="button" className="flow-release-notes-settings" onClick={()=>onNavigate(releasePipelineSettingsPath(data.workspace.urlKey,pipeline.slugId))}>{t('Pipeline settings')}</button>
+    </div>
+    {missing && <div className="flow-release-notes-missing"><FileClock size={16}/><div><strong>{t('Missing release notes')}</strong><p><span data-i18n-ignore>{missing.name}</span> {t('Create release notes for this release or select another release.')}</p></div><button className="flow-releases-primary" type="button" onClick={()=>onOpen(missing)}>{t('Create release notes')}</button></div>}
+    {!missing && !articles.some(item=>(item.releaseNotes||'').trim()) && <ReleaseEmptyState icon={<FileClock/>} title={t('No releases missing release notes')} description={t('Release notes added to this pipeline will appear here.')}/>}
+    <div className="flow-release-changelog">{articles.filter(item=>(item.releaseNotes||'').trim()).map(item=><article key={item.id}><span>{item.version?<span data-i18n-ignore>{item.version}</span>:t('Release')}</span><div><h2 data-i18n-ignore>{item.name}</h2><p data-i18n-ignore>{item.releaseNotes}</p></div><time>{formatDate(item.releasedAt||item.targetDate||item.updatedAt,{month:'short',day:'numeric',year:'numeric'})}</time></article>)}</div>
+  </div>
+}
 
 function ReleaseDetailPage({data,pipeline,release,tab,onNavigate,onOpenSidebar,onDelete,onEdit,onReload}:{data:BootstrapData;pipeline:ReleasePipeline;release:Release;tab:ReleaseRouteTab;onNavigate:(path:string)=>void;onOpenSidebar:()=>void;onDelete:()=>void;onEdit:()=>void;onReload:()=>Promise<void>}) {
   const {t,formatDate}=useI18n()

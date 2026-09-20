@@ -1439,6 +1439,8 @@ export interface TrashEntry {
   resourceType: string;
   resourceId: UUID;
   title: string;
+  /** Soft-deleted resource snapshot (e.g. release.pipelineId for deleted-releases lists). */
+  payload?: unknown;
   teamIds?: UUID[];
   deletedBy: User;
   deletedAt: string;
