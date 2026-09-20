@@ -3952,6 +3952,7 @@ function App() {
           releasePipelineMode={route.releasePipelineMode}
           releasePipelineSlug={route.releasePipelineSlug}
           integrationProvider={route.integrationProvider}
+          integrationSlug={route.integrationSlug}
           issueTemplateMode={route.issueTemplateMode}
           issueTemplateId={route.issueTemplateId}
           projectTemplateMode={route.projectTemplateMode}

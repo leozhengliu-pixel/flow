@@ -8,6 +8,18 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { IntegrationBrandIcon } from './integration-brand-icon';
+import { CodeIntelligenceSettingsSection } from './code-intelligence-settings';
+import {
+  availabilityLabel,
+  integrationCategories,
+  primaryIntegrations,
+  type IntegrationCatalogEntry,
+} from '@/lib/integration-catalog';
+import {
+  DEFAULT_REPOSITORY_ACCESS,
+  githubConnection,
+  type RepositoryAccessSettings,
+} from '@/lib/code-access';
 import { countLabelsByResource } from '@/lib/resource-counts';
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -16,7 +28,7 @@ import { useI18n } from "@/i18n/i18n";
 import {
   authorizeIntegration, createCustomerStatus, createCustomerTier, createCustomEmoji, createDocumentTemplate, deleteCustomerStatus, deleteCustomerTier, restoreTrashEntry,
   deleteDocumentTemplate, disconnectIntegration, disconnectIntegrationConnection, updateCustomEmoji, updateDocumentTemplate,
-  updateCustomerStatus, updateCustomerTier, updateWorkspacePreferences,
+  updateCustomerStatus, updateCustomerTier, updateIntegrationConnection, updateWorkspacePreferences,
   updateWorkspaceAgentGuidance,
 } from "@/lib/api";
 import type { SettingsPageId, IntegrationProvider } from "@/lib/app-routes";
@@ -29,7 +41,7 @@ import "./feature-settings.css";
 import { SettingsToggle as BaseSettingsToggle } from './settings-primitives'
 
 type FeaturePageId = Extract<SettingsPageId, "ai"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations">;
-type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onOpenReleasePipeline: (pipeline:ReleasePipeline) => void; onOpenIntegration:(provider:IntegrationProvider)=>void; onReload: () => Promise<void>; onNavigateSettings?: (page: SettingsPageId) => void };
+type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onOpenReleasePipeline: (pipeline:ReleasePipeline) => void; onOpenIntegration:(provider:IntegrationProvider|string)=>void; onReload: () => Promise<void>; onNavigateSettings?: (page: SettingsPageId) => void };
 
 const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
   initiativeUpdateSchedule: "none",
@@ -47,6 +59,7 @@ const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
   ],
   customerTiers: [], customerExcludedDomains: [], customerGenericDomains: [],
   pulseWorkspaceSchedule: "daily", asksEmailAddresses: [],
+  repositoryAccess: { ...DEFAULT_REPOSITORY_ACCESS },
   triageIntelligence: {
     assigneeAction: "suggest",
     projectAction: "suggest",
@@ -85,7 +98,7 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
   const setFeature = <K extends keyof FeatureSettings>(key: K, value: FeatureSettings[K]) =>
     save({ featureSettings: { [key]: value } });
 
-  if (page === "ai") return <AIPage data={data} onReload={onReload} settings={settings} busy={busy || !['admin','owner'].includes(data.viewerRole)} setEnabled={setEnabled} setFeature={setFeature}/>;
+  if (page === "ai") return <AIPage data={data} onReload={onReload} settings={settings} busy={busy || !['admin','owner'].includes(data.viewerRole)} setEnabled={setEnabled} setFeature={setFeature} onOpenIntegration={onOpenIntegration}/>;
   if (page === "initiatives") return <InitiativesFeatureSettings data={data} settings={settings} busy={busy} setEnabled={setEnabled} onScheduleChange={schedule => save({ featureSettings: { initiativeUpdateSchedule: initiativeScheduleValue(schedule.frequency), initiativeUpdateFrequencyWeeks: schedule.frequency, initiativeUpdateWeekday: schedule.weekday, initiativeUpdateHour: schedule.hour } })} onReload={onReload} onNavigateLabels={() => onNavigateSettings?.("initiative-labels")}/>;
   if (page === "documents") return <DocumentsPage data={data} onReload={onReload}/>;
   if (page === "customer-requests") return <CustomerRequestsPage data={data} settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload}/>;
@@ -96,7 +109,7 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
   return <IntegrationsPage data={data} onOpen={onOpenIntegration} onReload={onReload}/>;
 }
 
-function AIPage({data,onReload,settings,busy,setEnabled,setFeature}:{data:BootstrapData;onReload:()=>Promise<void>;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void}) {
+function AIPage({data,onReload,settings,busy,setEnabled,setFeature,onOpenIntegration}:{data:BootstrapData;onReload:()=>Promise<void>;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void;onOpenIntegration:(provider:IntegrationProvider|string)=>void}) {
   const { t } = useI18n();
   const [guidance,setGuidance]=useState(settings.agentInstructions??'');
   const [savingGuidance,setSavingGuidance]=useState(false);
@@ -106,12 +119,38 @@ function AIPage({data,onReload,settings,busy,setEnabled,setFeature}:{data:Bootst
     ["ai-agent", "Flow Agent", "Create issues and answer questions about your workspace", Bot],
     ["coding-sessions", "Coding sessions", "Assign or ask Flow to make code changes", Code2],
     ["loops", "Loops", "Automated agent workflows triggered by schedules or issue updates", Radio],
-    ["code-intelligence", "Code Intelligence", "Allow agents to analyze and answer questions about your code", Sparkles],
   ] as const;
+  const repositoryAccess: RepositoryAccessSettings = {
+    ...DEFAULT_REPOSITORY_ACCESS,
+    ...(settings.featureSettings.repositoryAccess ?? {}),
+  };
+  const grantCodeAccess = async () => {
+    const connection = githubConnection(data);
+    if (!connection) { onOpenIntegration('github'); return; }
+    try {
+      await updateIntegrationConnection(connection.provider, connection.id, {
+        config: { ...(connection.config ?? {}), codeAccess: 'true' },
+      });
+      await onReload();
+      toast.success(t('Code access enabled for GitHub'));
+    } catch (error) {
+      toast.error(message(error));
+    }
+  };
   return <FeatureShell title="AI & Agents" description="Automate your product development processes and operations with AI">
     <FeatureSection title="Flow Agent" description="Create issues and answer questions about your workspace.">
-      <FeatureCard>{cards.map(([id,title,description,Icon])=><FeatureRow key={id} icon={Icon} title={title} businessTitle={id==="ai-agent"} description={description} badge={id==="code-intelligence"?"Beta":undefined}><Toggle checked={settings.featureFlags[id]??["ai-agent","coding-sessions","loops"].includes(id)} disabled={busy} label={title} onChange={value=>setEnabled(id,value)}/></FeatureRow>)}</FeatureCard>
+      <FeatureCard>{cards.map(([id,title,description,Icon])=><FeatureRow key={id} icon={Icon} title={title} businessTitle={id==="ai-agent"} description={description}><Toggle checked={settings.featureFlags[id]??["ai-agent","coding-sessions","loops"].includes(id)} disabled={busy} label={title} onChange={value=>setEnabled(id,value)}/></FeatureRow>)}</FeatureCard>
     </FeatureSection>
+    <CodeIntelligenceSettingsSection
+      data={data}
+      settings={settings}
+      busy={busy}
+      setEnabled={setEnabled}
+      onOpenGitHub={() => onOpenIntegration('github')}
+      onGrantCodeAccess={() => void grantCodeAccess()}
+      repositoryAccess={repositoryAccess}
+      onRepositoryAccessChange={(next) => setFeature('repositoryAccess', next)}
+    />
     <TriageIntelligenceFeatureSettings settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature}/>
     <FeatureSection title="Installed Agents" description="AI agents can work alongside you as teammates."><div className="settings-agent-guidance"><label>{t('Installed agents guidance')}<textarea aria-label={t('Installed agents guidance')} maxLength={8000} disabled={!canEdit||savingGuidance} value={guidance} onChange={event=>setGuidance(event.target.value)}/></label><FeatureButton primary disabled={!canEdit||savingGuidance||guidance===(settings.agentInstructions??'')} onClick={async()=>{setSavingGuidance(true);try{await updateWorkspaceAgentGuidance(guidance);await onReload()}catch(error){toast.error(message(error))}finally{setSavingGuidance(false)}}}>Save</FeatureButton></div></FeatureSection>
     <FeatureSection title="AI" description="Control AI assistance throughout Flow"><FeatureCard><FeatureRow icon={MessageSquare} title="Resolved thread summaries" description="Control AI summaries for resolved threads across Flow"><Toggle checked={settings.featureFlags["thread-summaries"]??true} disabled={busy} label="Resolved thread summaries" onChange={value=>setEnabled("thread-summaries",value)}/></FeatureRow></FeatureCard></FeatureSection>
@@ -321,26 +360,80 @@ function EmojisPage({data,onReload}:{data:BootstrapData;onReload:()=>Promise<voi
   return <div className="feature-wide"><FeatureShell title="Emojis"><div className="feature-toolbar"><label><Search size={15}/><input type="search" aria-label={t("Filter by name")} placeholder={t("Filter by name…")} value={query} onChange={event=>setQuery(event.target.value)}/></label><FeatureSelect label="Emoji state" value={showArchived?"archived":"active"} options={[{value:"active",label:"Active emojis"},{value:"archived",label:"Archived"}]} onChange={value=>setShowArchived(value==="archived")}/><span/><input ref={fileRef} aria-label={t("Emoji image")} className="feature-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={event=>choose(event.target.files?.[0])}/><FeatureButton onClick={()=>fileRef.current?.click()}>Upload</FeatureButton></div>{emojis.length?<div className="feature-emoji-grid">{emojis.map(item=><div key={item.id}><img src={item.imageUrl} alt=""/><strong data-i18n-ignore>:{item.name}:</strong><span>{t("by")} <b data-i18n-ignore>{item.creator.displayName}</b></span><FeatureButton aria-label={`${t(item.archivedAt?"Restore":"Archive")}: ${item.name}`} onClick={()=>void archive(item)}>{item.archivedAt?"Restore":"Archive"}</FeatureButton></div>)}</div>:<FeatureEmpty icon={Smile} title={showArchived?"No archived emojis":"No emojis"}/>} {upload&&<EmojiDialog input={upload} onClose={()=>setUpload(null)} onReload={onReload}/>}</FeatureShell></div>;
 }
 
-const INTEGRATIONS: {provider:'github'|'gitlab'|'slack';name:string;description:string;category:string}[] = [
-  {provider:"github",name:"GitHub",description:"Automate pull request workflows and link code to issues",category:"Essentials"},
-  {provider:"slack",name:"Slack",description:"Create issues from Slack messages and sync threads",category:"Essentials"},
-  {provider:"gitlab",name:"GitLab",description:"Automate your merge request workflow",category:"Engineering"},
-];
-
-function IntegrationsPage({data,onOpen,onReload}:{data:BootstrapData;onOpen:(provider:IntegrationProvider)=>void;onReload:()=>Promise<void>}) {
+function IntegrationsPage({data,onOpen,onReload}:{data:BootstrapData;onOpen:(provider:IntegrationProvider|string)=>void;onReload:()=>Promise<void>}) {
   const {t}=useI18n();
   const [query,setQuery]=useState(""); const [category,setCategory]=useState("All"); const [busy,setBusy]=useState("");
-  const list=INTEGRATIONS.filter(item=>(category==="All"||item.category===category)&&`${item.name} ${item.description}`.toLowerCase().includes(query.toLowerCase()));
-  const toggle=async(item:typeof INTEGRATIONS[number],connection?:IntegrationConnection)=>{setBusy(item.provider);try{if(connection?.status==="connected")await disconnectIntegration(item.provider);else await authorizeIntegration(item.provider,{name:item.name,config:{mode:"workspace"}},Boolean(connection));await onReload()}catch(error){toast.error(message(error))}finally{setBusy("")}};
-  return <div className="feature-integrations"><FeatureShell title="Integrations" description="Enhance your Flow experience with add-ons and integrations">
-    <div className="feature-integration-search"><Search size={16}/><input aria-label={t("Search integrations")} placeholder={t("Search integrations")} value={query} onChange={event=>setQuery(event.target.value)}/></div>
-    <div className="feature-categories" role="tablist" aria-label={t("Integration categories")}>{["All", ...new Set(INTEGRATIONS.map(item => item.category))].map(value=><button role="tab" aria-selected={category===value} key={value} onClick={()=>setCategory(value)}>{t(value)}</button>)}</div>
+  const catalog = primaryIntegrations();
+  const categories = ["All", ...integrationCategories(catalog)];
+  const list = catalog.filter(item => (category === "All" || item.category === category) && `${item.name} ${item.description}`.toLowerCase().includes(query.toLowerCase()));
+  const enabledCount = data.integrationConnections.filter(item => item.status === "connected" || item.status === "configured").length
+    + (data.oauthAuthorizations ?? []).filter(item => !item.revokedAt).length;
+  const toggleSlack = async (item: IntegrationCatalogEntry, connection?: IntegrationConnection) => {
+    if (item.connectProvider !== "slack") return;
+    setBusy("slack");
+    try {
+      if (connection?.status === "connected") await disconnectIntegration("slack");
+      else await authorizeIntegration("slack", { name: item.name, config: { mode: "workspace" } }, Boolean(connection));
+      await onReload();
+    } catch (error) {
+      toast.error(message(error));
+    } finally {
+      setBusy("");
+    }
+  };
+  return <div className="feature-integrations"><FeatureShell title="Integrations" description="Enhance your Flow experience with a wide variety of add-ons and integrations">
+    <div className="feature-integration-toolbar">
+      <div className="feature-integration-search"><Search size={16}/><input aria-label={t("Search integrations")} placeholder={t("Search integrations")} value={query} onChange={event=>setQuery(event.target.value)}/></div>
+      <button type="button" className="feature-enabled-link" onClick={() => onOpen("enabled")}>
+        {t("Enabled")}{enabledCount ? ` (${enabledCount})` : ""} <ChevronRight size={14}/>
+      </button>
+    </div>
+    <div className="feature-categories" role="tablist" aria-label={t("Integration categories")}>{categories.map(value=><button role="tab" aria-selected={category===value} key={value} onClick={()=>setCategory(value)}>{t(value)}</button>)}</div>
     <div className="feature-integration-grid">{list.map(item=>{
-      const connection=data.integrationConnections.find(value=>value.provider===item.provider);
-      const code=item.provider==='github'||item.provider==='gitlab';
-      const connected=connection?.status==='connected';
-      return <article key={item.provider}><IntegrationBrandIcon provider={item.provider}/><div><h3><span data-i18n-ignore>{item.name}</span>{connection&&<small>{t(connected?'Connected':connection.status==='error'?'Connection failed':'Not authorized')}</small>}</h3><p>{t(item.description)}</p>{connection?.lastError&&<p role="status">{connection.lastError}</p>}</div>
-        <FeatureButton primary={!connected} danger={connected&&!code} disabled={busy===item.provider} onClick={()=>code?onOpen(item.provider as IntegrationProvider):void toggle(item,connection)}>{t(code?connection?'Manage':'Connect':connected?'Disconnect':'Connect')}</FeatureButton></article>;
+      const connection = item.connectProvider
+        ? data.integrationConnections.find(value => value.provider === item.connectProvider)
+        : undefined;
+      const code = item.connectProvider === "github" || item.connectProvider === "gitlab";
+      const connected = connection?.status === "connected";
+      const supported = item.availability === "supported";
+      const onClick = () => {
+        if (!supported) { onOpen(item.slug); return; }
+        if (code) { onOpen(item.connectProvider as IntegrationProvider); return; }
+        if (item.connectProvider === "slack") { void toggleSlack(item, connection); return; }
+        onOpen(item.slug);
+      };
+      return <article key={item.slug} data-availability={item.availability}>
+        {item.connectProvider === "github" || item.connectProvider === "gitlab" || item.connectProvider === "slack"
+          ? <IntegrationBrandIcon provider={item.connectProvider}/>
+          : <span className="feature-row-icon integration-catalog-icon"><Sparkles size={16}/></span>}
+        <div>
+          <h3>
+            <span data-i18n-ignore>{item.name}</span>
+            {" "}
+            {connected && <small>{t("Connected")}</small>}
+            {!connected && !supported && <small className={`is-${item.availability}`}>{t(availabilityLabel(item.availability))}</small>}
+            {connection && connection.status !== "connected" && supported && <small>{t(connection.status === "error" ? "Connection failed" : "Not authorized")}</small>}
+          </h3>
+          <p>{t(item.description)}</p>
+          {connection?.lastError && <p role="status">{connection.lastError}</p>}
+        </div>
+        <FeatureButton
+          primary={supported && !connected}
+          danger={supported && connected && !code}
+          disabled={busy === item.connectProvider}
+          onClick={onClick}
+        >
+          {t(
+            !supported
+              ? (item.availability === "coming_soon" ? "Coming soon" : "Not supported")
+              : code
+                ? (connection ? "Manage" : "Connect")
+                : connected
+                  ? "Disconnect"
+                  : "Connect",
+          )}
+        </FeatureButton>
+      </article>;
     })}</div>{!list.length&&<FeatureEmpty icon={Search} title="No integrations found"/>}
   </FeatureShell></div>;
 }
@@ -369,7 +462,7 @@ function EmailDialog({addresses,onClose,onSave}:{addresses:string[];onClose:()=>
 }
 function EmojiDialog({input,onClose,onReload}:{input:{name:string;imageUrl:string};onClose:()=>void;onReload:()=>Promise<void>}) {const {t}=useI18n();const [name,setName]=useState(input.name);const [busy,setBusy]=useState(false);const save=async()=>{setBusy(true);try{await createCustomEmoji({name,imageUrl:input.imageUrl});await onReload();onClose()}catch(error){toast.error(message(error))}finally{setBusy(false)}};return <FeatureDialog open onClose={onClose} title="Upload emoji"><div className="feature-emoji-preview"><img src={input.imageUrl} alt={t("Preview")}/></div><label>{t("Name")}<input aria-label={t("Name")} autoFocus value={name} onChange={event=>setName(event.target.value)}/></label><FeatureDialogFooter><span/><FeatureButton onClick={onClose}>Cancel</FeatureButton><FeatureButton primary disabled={busy||!name.trim()} onClick={()=>void save()}>Upload</FeatureButton></FeatureDialogFooter></FeatureDialog>}
 
-function normalizeSettings(settings:WorkspaceSettings):WorkspaceSettings {return {...settings,featureFlags:settings.featureFlags??{},featureSettings:{...DEFAULT_FEATURE_SETTINGS,...(settings.featureSettings??{}),triageIntelligence:{...DEFAULT_FEATURE_SETTINGS.triageIntelligence,...(settings.featureSettings?.triageIntelligence??{})},customerStatuses:settings.featureSettings?.customerStatuses?.length?settings.featureSettings.customerStatuses:DEFAULT_FEATURE_SETTINGS.customerStatuses,customerTiers:settings.featureSettings?.customerTiers??[],customerExcludedDomains:settings.featureSettings?.customerExcludedDomains??[],customerGenericDomains:settings.featureSettings?.customerGenericDomains??[],asksEmailAddresses:settings.featureSettings?.asksEmailAddresses??[]}}}
+function normalizeSettings(settings:WorkspaceSettings):WorkspaceSettings {return {...settings,featureFlags:settings.featureFlags??{},featureSettings:{...DEFAULT_FEATURE_SETTINGS,...(settings.featureSettings??{}),triageIntelligence:{...DEFAULT_FEATURE_SETTINGS.triageIntelligence,...(settings.featureSettings?.triageIntelligence??{})},customerStatuses:settings.featureSettings?.customerStatuses?.length?settings.featureSettings.customerStatuses:DEFAULT_FEATURE_SETTINGS.customerStatuses,customerTiers:settings.featureSettings?.customerTiers??[],customerExcludedDomains:settings.featureSettings?.customerExcludedDomains??[],customerGenericDomains:settings.featureSettings?.customerGenericDomains??[],asksEmailAddresses:settings.featureSettings?.asksEmailAddresses??[],repositoryAccess:{...DEFAULT_REPOSITORY_ACCESS,...(settings.featureSettings?.repositoryAccess??{})}}}}
 function initiativeScheduleValue(frequency:number){return frequency<=0?"none":frequency===1?"weekly":frequency===2?"biweekly":"monthly"}
 function initiativeScheduleFrequency(value:string){return value==="weekly"?1:value==="biweekly"?2:value==="monthly"?4:0}
 function initiativeScheduleSummary(schedule:{frequency:number;weekday:number;hour:number},t:(value:string)=>string){
