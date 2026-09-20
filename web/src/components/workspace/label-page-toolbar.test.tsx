@@ -34,8 +34,8 @@ describe('LabelPageToolbar', () => {
           resourceType="issue"
           search=""
           triageOnly={false}
-          onSearchChange={() => undefined}
-          onTriageOnlyChange={() => undefined}
+          onSearchChange={vi.fn()}
+          onTriageOnlyChange={vi.fn()}
         />
       </I18nProvider>,
     )
@@ -54,8 +54,8 @@ describe('LabelPageToolbar', () => {
           resourceType="project"
           search=""
           triageOnly={false}
-          onSearchChange={() => undefined}
-          onTriageOnlyChange={() => undefined}
+          onSearchChange={vi.fn()}
+          onTriageOnlyChange={vi.fn()}
         />
       </I18nProvider>,
     )
