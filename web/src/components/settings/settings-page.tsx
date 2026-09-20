@@ -188,6 +188,14 @@ const IntegrationSettingsPage = lazyPage(
   () => import("./integration-settings-page"),
   "IntegrationSettingsPage",
 );
+const JiraSettingsPage = lazyPage(
+  () => import("@/components/settings/jira-settings").then((module) => ({ default: module.JiraSettingsPage })),
+  "JiraSettingsPage",
+);
+const JiraSyncPage = lazyPage(
+  () => import("@/components/settings/jira-sync-page").then((module) => ({ default: module.JiraSyncPage })),
+  "JiraSyncPage",
+);
 const AuditLogSettings = lazyPage(
   () => import("./audit-log-settings"),
   "AuditLogSettings",
@@ -198,7 +206,7 @@ const WorkflowAutomationSettings = lazyPage(
 );
 
 // oxlint-disable-next-line react/only-export-components -- Preloading must share the lazy instances used by SettingsBody.
-export async function preloadSettingsPage(page: SettingsPageProps['page'], options: Pick<SettingsPageProps, 'releasePipelineMode' | 'integrationProvider' | 'integrationSlug' | 'agentSkillMode'> = {}) {
+export async function preloadSettingsPage(page: SettingsPageProps['page'], options: Pick<SettingsPageProps, 'releasePipelineMode' | 'integrationProvider' | 'integrationSlug' | 'jiraSyncMode' | 'agentSkillMode'> = {}) {
   if (options.agentSkillMode) return
   if (['preferences', 'shortcuts', 'profile', 'notifications', 'code-and-reviews', 'account-security', 'connections', 'agents'].includes(page)) return PersonalSettings.preload()
   if (page === 'issue-labels' || page === 'project-labels' || page === 'initiative-labels') return DomainLabelsSettings.preload()
@@ -212,6 +220,10 @@ export async function preloadSettingsPage(page: SettingsPageProps['page'], optio
   if (page === 'workflows') return WorkflowAutomationSettings.preload()
   if (page === 'releases' && options.releasePipelineMode) return PipelineEditorPage.preload()
   if (page === 'integrations' && options.integrationSlug === 'enabled') return EnabledIntegrationsSettingsPage.preload()
+  if (page === 'integrations' && options.integrationProvider === 'jira') {
+    if (options.jiraSyncMode) return JiraSyncPage.preload()
+    return JiraSettingsPage.preload()
+  }
   if (page === 'integrations' && options.integrationProvider) return CodeIntegrationSettings.preload()
   if (page === 'integrations' && options.integrationSlug) return IntegrationSettingsPage.preload()
   if (['ai', 'initiatives', 'documents', 'customer-requests', 'releases', 'pulse', 'asks', 'emojis', 'integrations'].includes(page)) return FeatureSettingsPage.preload()
@@ -242,6 +254,10 @@ type SettingsPageProps = {
   releasePipelineSlug?: string;
   integrationProvider?: IntegrationProvider;
   integrationSlug?: string;
+  jiraSyncMode?: "new" | "edit";
+  jiraProjectId?: string;
+  onOpenJiraSyncNew?: () => void;
+  onOpenJiraSyncEdit?: (jiraProjectId: string) => void;
   issueTemplateMode?: "new" | "new-form" | "edit";
   issueTemplateId?: string;
   projectTemplateMode?: "new" | "edit";
@@ -966,10 +982,30 @@ function SettingsBody(
         onReload={props.onReload}
       />
     );
+  if (page === "integrations" && props.integrationProvider === "jira" && props.jiraSyncMode)
+    return (
+      <JiraSyncPage
+        data={props.data}
+        mode={props.jiraSyncMode}
+        jiraProjectId={props.jiraProjectId}
+        onBack={() => props.onOpenIntegration("jira")}
+        onReload={props.onReload}
+      />
+    );
+  if (page === "integrations" && props.integrationProvider === "jira")
+    return (
+      <JiraSettingsPage
+        data={props.data}
+        onBack={() => props.onNavigate("integrations")}
+        onReload={props.onReload}
+        onOpenSyncNew={() => props.onOpenJiraSyncNew?.()}
+        onOpenSyncEdit={(jiraProjectId) => props.onOpenJiraSyncEdit?.(jiraProjectId)}
+      />
+    );
   if (page === "integrations" && props.integrationProvider)
     return (
       <CodeIntegrationSettings
-        provider={props.integrationProvider}
+        provider={props.integrationProvider as "github" | "gitlab"}
         data={props.data}
         onBack={() => props.onNavigate("integrations")}
         onReload={props.onReload}

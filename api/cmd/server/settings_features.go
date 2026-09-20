@@ -1546,7 +1546,7 @@ func (s *server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 	provider := strings.ToLower(r.PathValue("provider"))
-	if !slices.Contains([]string{"github", "gitlab", "slack"}, provider) {
+	if !supportedIntegration(provider) {
 		writeError(w, http.StatusBadRequest, "unsupported integration")
 		return
 	}
@@ -1578,6 +1578,15 @@ func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 	if provider == "gitlab" && secret == "" {
 		writeError(w, http.StatusBadRequest, "API access token is required")
 		return
+	}
+	if provider == "jira" {
+		if err := validateJiraConnectConfig(input.Config); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		if len(input.Scopes) == 0 {
+			input.Scopes = []string{"read:jira-work", "write:jira-work", "read:jira-user", "offline_access"}
+		}
 	}
 	delete(input.Config, "apiToken")
 	if secret != "" {
@@ -1621,7 +1630,7 @@ func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 // the browser response; the callback performs the server-side token exchange.
 func (s *server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	provider := strings.ToLower(r.PathValue("provider"))
-	if !slices.Contains([]string{"github", "gitlab", "slack"}, provider) {
+	if !supportedIntegration(provider) {
 		writeError(w, http.StatusBadRequest, "unsupported integration")
 		return
 	}
@@ -1673,6 +1682,10 @@ func (s *server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		query.Set("state", state)
 		if len(connection.Scopes) > 0 {
 			query.Set("scope", strings.Join(connection.Scopes, " "))
+		}
+		if provider == "jira" && strings.TrimSpace(connection.Config["mode"]) != "custom_personal" {
+			query.Set("audience", "api.atlassian.com")
+			query.Set("prompt", "consent")
 		}
 		u.RawQuery = query.Encode()
 		result = map[string]string{"provider": provider, "connectionId": connection.ID, "state": state, "authorizationURL": u.String()}
@@ -2074,6 +2087,9 @@ func (s *server) disconnectIntegrationConnection(w http.ResponseWriter, r *http.
 		if before == len(data.IntegrationConnections) {
 			return errNotFound
 		}
+		if provider == "jira" && !slices.ContainsFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.Provider == "jira" }) {
+			ensureJiraLinksCleared(data, "jira")
+		}
 		return nil
 	})
 	if err == nil {
@@ -2091,6 +2107,7 @@ func (s *server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		if before == len(data.IntegrationConnections) {
 			return errNotFound
 		}
+		ensureJiraLinksCleared(data, provider)
 		return nil
 	})
 	if err != nil {
