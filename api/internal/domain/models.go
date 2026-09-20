@@ -974,6 +974,7 @@ type FeatureSettings struct {
 	CustomerGenericDomains         []string                   `json:"customerGenericDomains"`
 	PulseWorkspaceSchedule         string                     `json:"pulseWorkspaceSchedule"`
 	AsksEmailAddresses             []string                   `json:"asksEmailAddresses"`
+	AsksSlackChannels              []AsksSlackChannelMapping  `json:"asksSlackChannels,omitempty"`
 	TriageIntelligence             TriageIntelligenceSettings `json:"triageIntelligence"`
 	RepositoryAccess               *RepositoryAccessSettings  `json:"repositoryAccess,omitempty"`
 }
@@ -984,6 +985,14 @@ type RepositoryAccessSettings struct {
 	AllowAutomationAccess    bool     `json:"allowAutomationAccess"`
 	Scope                    string   `json:"scope"`
 	AllowedRepositories      []string `json:"allowedRepositories"`
+}
+
+// AsksSlackChannelMapping maps a Slack channel to a Flow team (and optional template) for Asks.
+type AsksSlackChannelMapping struct {
+	Channel    string `json:"channel"`
+	TeamID     string `json:"teamId"`
+	TemplateID string `json:"templateId,omitempty"`
+	Enabled    bool   `json:"enabled"`
 }
 
 // TriageIntelligenceSettings controls how each inferred field is handled.

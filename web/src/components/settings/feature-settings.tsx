@@ -39,9 +39,10 @@ import type {
 
 import "./feature-settings.css";
 import { SettingsToggle as BaseSettingsToggle } from './settings-primitives'
+import { AsksSettingsPage } from "./asks-settings";
 
 type FeaturePageId = Extract<SettingsPageId, "ai"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations">;
-type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onOpenReleasePipeline: (pipeline:ReleasePipeline) => void; onOpenIntegration:(provider:IntegrationProvider|string)=>void; onReload: () => Promise<void>; onNavigateSettings?: (page: SettingsPageId) => void };
+type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onOpenReleasePipeline: (pipeline:ReleasePipeline) => void; onOpenIntegration:(provider:IntegrationProvider|string)=>void; onReload: () => Promise<void>; onNavigateSettings?: (page: SettingsPageId) => void; onOpenAsksSlack?: (integrationId: string) => void; onOpenAsksEmailIntake?: () => void };
 
 const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
   initiativeUpdateSchedule: "none",
@@ -58,7 +59,7 @@ const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
     { id: "lost", name: "Lost", color: "#eb5757" },
   ],
   customerTiers: [], customerExcludedDomains: [], customerGenericDomains: [],
-  pulseWorkspaceSchedule: "daily", asksEmailAddresses: [],
+  pulseWorkspaceSchedule: "daily", asksEmailAddresses: [], asksSlackChannels: [],
   repositoryAccess: { ...DEFAULT_REPOSITORY_ACCESS },
   triageIntelligence: {
     assigneeAction: "suggest",
@@ -77,7 +78,7 @@ const INITIATIVE_FREQUENCY_OPTIONS = Array.from({ length: 9 }, (_, frequency) =>
 const INITIATIVE_WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const INITIATIVE_HOURS = Array.from({ length: 24 }, (_, hour) => ({ value: String(hour), label: `${String(hour).padStart(2, "0")}:00 - ${String((hour + 1) % 24).padStart(2, "0")}:00` }));
 
-export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpenReleasePipeline, onOpenIntegration, onReload, onNavigateSettings }: Props) {
+export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpenReleasePipeline, onOpenIntegration, onReload, onNavigateSettings, onOpenAsksSlack, onOpenAsksEmailIntake }: Props) {
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
   const [savedSettings, setSavedSettings] = useState<{ workspace: string; value: WorkspaceSettings }>();
@@ -104,7 +105,7 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
   if (page === "customer-requests") return <CustomerRequestsPage data={data} settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload}/>;
   if (page === "releases") return <ReleasesFeatureSettings data={data} onCreate={onCreateReleasePipeline} onOpen={onOpenReleasePipeline} onReload={onReload}/>;
   if (page === "pulse") return <PulseFeatureSettings settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature}/>;
-  if (page === "asks") return <AsksFeatureSettings data={data} settings={settings} busy={busy || !['admin', 'owner'].includes(data.viewerRole)} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload}/>;
+  if (page === "asks") return <AsksSettingsPage data={data} settings={settings} busy={busy || !['admin', 'owner'].includes(data.viewerRole)} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload} onOpenSlack={onOpenAsksSlack} onOpenEmailIntake={onOpenAsksEmailIntake}/>;
   if (page === "emojis") return <EmojisPage data={data} onReload={onReload}/>;
   return <IntegrationsPage data={data} onOpen={onOpenIntegration} onReload={onReload}/>;
 }
@@ -362,18 +363,6 @@ function PulseFeatureSettings({settings,busy,setEnabled,setFeature}:{settings:Wo
   return <FeatureShell title="Pulse" description="Pulse centralizes all your project and initiative updates into a single feed. Members can choose to receive summary notifications daily or weekly."><FeatureCard><FeatureRow title="Enable Pulse" description="Workspace-wide feed of updates with optional summary notifications"><Toggle checked={settings.featureFlags.pulse??true} disabled={busy} label="Enable Pulse" onChange={value=>setEnabled("pulse",value)}/></FeatureRow></FeatureCard><FeatureSection title="Summary notifications" description="Pulse summary notifications can be delivered in the mornings based on a set schedule"><FeatureCard><FeatureRow title="Default workspace schedule" description="Applies to all members who haven’t set their own preference"><FeatureSelect label="Default workspace schedule" value={settings.featureSettings.pulseWorkspaceSchedule} options={[{value:"daily",label:"Daily"},{value:"weekly",label:"Weekly"},{value:"never",label:"Never"}]} disabled={busy} onChange={value=>setFeature("pulseWorkspaceSchedule",value)}/></FeatureRow></FeatureCard></FeatureSection></FeatureShell>;
 }
 
-function AsksFeatureSettings({data,settings,busy,setEnabled,setFeature,onReload}:{data:BootstrapData;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void;onReload:()=>Promise<void>}) {
-  const {t}=useI18n();
-  const [emailOpen,setEmailOpen]=useState(false); const slackConfig=data.integrationConnections.find(item=>item.provider==="slack"); const slack=slackConfig?.status==="connected"?slackConfig:undefined;
-  const toggleSlack=async()=>{if(busy)return;try{if(slack)await disconnectIntegration("slack");else await authorizeIntegration("slack",{name:"Slack",config:{scope:"asks"}},Boolean(slackConfig));await onReload()}catch(error){toast.error(message(error))}};
-  return <FeatureShell title="Asks" description="Let anyone submit bug reports, feature requests, and more using structured templates from Slack or email.">
-    <FeatureCard><FeatureRow title="Enable Asks" description="Allow members to create issues through Asks"><Toggle checked={settings.featureFlags.asks??true} disabled={busy} label="Enable Asks" onChange={value=>setEnabled("asks",value)}/></FeatureRow></FeatureCard>
-    <FeatureSection title="Slack" description="Allow anyone in your Slack workspace to submit Asks using templated forms">{slack?<FeatureCard><FeatureRow icon={MessageSquare} title={slack.name} businessTitle description="Connected workspace"><FeatureButton danger disabled={busy} onClick={()=>void toggleSlack()}>Disconnect</FeatureButton></FeatureRow></FeatureCard>:<FeatureEmpty icon={MessageSquare} title="No workspaces connected" action={<FeatureButton aria-label={t("Connect workspace")} disabled={busy} onClick={()=>void toggleSlack()}><Plus size={14}/></FeatureButton>}/>}</FeatureSection>
-    <FeatureSection title="Email" description="Allow anyone to submit Asks by emailing a custom address">{settings.featureSettings.asksEmailAddresses.length?<FeatureCard>{settings.featureSettings.asksEmailAddresses.map(email=><FeatureRow key={email} icon={Mail} title={email} businessTitle><FeatureButton danger disabled={busy} onClick={()=>setFeature("asksEmailAddresses",settings.featureSettings.asksEmailAddresses.filter(value=>value!==email))}>Remove</FeatureButton></FeatureRow>)}</FeatureCard>:<FeatureEmpty icon={Mail} title="No email addresses configured" action={<FeatureButton aria-label={t("Add email")} disabled={busy} onClick={()=>setEmailOpen(true)}><Plus size={14}/></FeatureButton>}/>}<div className="feature-section-action">{settings.featureSettings.asksEmailAddresses.length>0&&<FeatureButton disabled={busy} onClick={()=>setEmailOpen(true)}><Plus size={14}/>Add email</FeatureButton>}</div></FeatureSection>
-    {emailOpen&&<EmailDialog addresses={data.emailIntakeAddresses.filter(item=>item.enabled&&item.verificationState==='verified'&&!settings.featureSettings.asksEmailAddresses.includes(item.address)).map(item=>item.address)} onClose={()=>setEmailOpen(false)} onSave={email=>{setFeature("asksEmailAddresses",[...new Set([...settings.featureSettings.asksEmailAddresses,email])]);setEmailOpen(false)}}/>}
-  </FeatureShell>;
-}
-
 function EmojisPage({data,onReload}:{data:BootstrapData;onReload:()=>Promise<void>}) {
   const { t } = useI18n();
   const [query,setQuery]=useState(""); const [showArchived,setShowArchived]=useState(false); const [upload,setUpload]=useState<{name:string;imageUrl:string}|null>(null); const fileRef=useRef<HTMLInputElement>(null);
@@ -476,16 +465,9 @@ function OptionList({type,items,onAdd,onEdit,onRemove}:{type:"status"|"tier";ite
 function OptionDialog({type,item,onClose,onSave}:{type:"status"|"tier";item?:FeatureOption;onClose:()=>void;onSave:(item:FeatureOption)=>void}) {const {t}=useI18n();const [name,setName]=useState(item?.name??"");const [color,setColor]=useState(item?.color??"#5e6ad2");const title=item?(type==="status"?"Edit customer status":"Edit customer tier"):(type==="status"?"New customer status":"New customer tier");return <FeatureDialog open onClose={onClose} title={title}><label>{t("Name")}<input aria-label={t("Name")} autoFocus value={name} onChange={event=>setName(event.target.value)}/></label><label>{t("Color")}<input aria-label={t("Color")} className="feature-color" type="color" value={color} onChange={event=>setColor(event.target.value)}/></label><FeatureDialogFooter><span/><FeatureButton onClick={onClose}>Cancel</FeatureButton><FeatureButton primary disabled={!name.trim()} onClick={()=>onSave({id:item?.id??`${type}-${Date.now()}`,name:name.trim(),color})}>Save</FeatureButton></FeatureDialogFooter></FeatureDialog>}
 function DomainList({values,empty,onEdit}:{values:string[];empty:string;onEdit:()=>void}) {const {t}=useI18n();return <FeatureCard><div className="feature-domain-row"><strong data-i18n-ignore={values.length?true:undefined}>{values.length?values.join(", "):t(empty)}</strong><FeatureButton aria-label={t("Open menu")} onClick={onEdit}>{values.length?"Edit":<Plus size={14}/>}</FeatureButton></div></FeatureCard>}
 function DomainDialog({title,values,onClose,onSave}:{title:string;values:string[];onClose:()=>void;onSave:(values:string[])=>void}) {const {t}=useI18n();const [text,setText]=useState(values.join("\n"));return <FeatureDialog open onClose={onClose} title={title}><label>{t("One domain or email per line")}<textarea aria-label={t("One domain or email per line")} autoFocus value={text} onChange={event=>setText(event.target.value)}/></label><FeatureDialogFooter><span/><FeatureButton onClick={onClose}>Cancel</FeatureButton><FeatureButton primary onClick={()=>onSave([...new Set(text.split(/[\n,]+/).map(value=>value.trim().toLowerCase()).filter(Boolean))])}>Save</FeatureButton></FeatureDialogFooter></FeatureDialog>}
-function EmailDialog({addresses,onClose,onSave}:{addresses:string[];onClose:()=>void;onSave:(email:string)=>void}) {
-  const {t}=useI18n();const [email,setEmail]=useState(addresses[0]??"");
-  return <FeatureDialog open onClose={onClose} title="Add Ask email">
-    {addresses.length?<label>{t("Verified email address")}<FeatureSelect label="Verified email address" value={email} onChange={setEmail} options={addresses.map(address=>({value:address,label:address,translate:false}))}/></label>:<p>{t("No verified team email addresses available")}</p>}
-    <FeatureDialogFooter><span/><FeatureButton onClick={onClose}>Cancel</FeatureButton><FeatureButton primary disabled={!addresses.includes(email)} onClick={()=>onSave(email)}>Add email</FeatureButton></FeatureDialogFooter>
-  </FeatureDialog>;
-}
 function EmojiDialog({input,onClose,onReload}:{input:{name:string;imageUrl:string};onClose:()=>void;onReload:()=>Promise<void>}) {const {t}=useI18n();const [name,setName]=useState(input.name);const [busy,setBusy]=useState(false);const save=async()=>{setBusy(true);try{await createCustomEmoji({name,imageUrl:input.imageUrl});await onReload();onClose()}catch(error){toast.error(message(error))}finally{setBusy(false)}};return <FeatureDialog open onClose={onClose} title="Upload emoji"><div className="feature-emoji-preview"><img src={input.imageUrl} alt={t("Preview")}/></div><label>{t("Name")}<input aria-label={t("Name")} autoFocus value={name} onChange={event=>setName(event.target.value)}/></label><FeatureDialogFooter><span/><FeatureButton onClick={onClose}>Cancel</FeatureButton><FeatureButton primary disabled={busy||!name.trim()} onClick={()=>void save()}>Upload</FeatureButton></FeatureDialogFooter></FeatureDialog>}
 
-function normalizeSettings(settings:WorkspaceSettings):WorkspaceSettings {return {...settings,featureFlags:settings.featureFlags??{},featureSettings:{...DEFAULT_FEATURE_SETTINGS,...(settings.featureSettings??{}),triageIntelligence:{...DEFAULT_FEATURE_SETTINGS.triageIntelligence,...(settings.featureSettings?.triageIntelligence??{})},customerStatuses:settings.featureSettings?.customerStatuses?.length?settings.featureSettings.customerStatuses:DEFAULT_FEATURE_SETTINGS.customerStatuses,customerTiers:settings.featureSettings?.customerTiers??[],customerExcludedDomains:settings.featureSettings?.customerExcludedDomains??[],customerGenericDomains:settings.featureSettings?.customerGenericDomains??[],asksEmailAddresses:settings.featureSettings?.asksEmailAddresses??[],repositoryAccess:{...DEFAULT_REPOSITORY_ACCESS,...(settings.featureSettings?.repositoryAccess??{})}}}}
+function normalizeSettings(settings:WorkspaceSettings):WorkspaceSettings {return {...settings,featureFlags:settings.featureFlags??{},featureSettings:{...DEFAULT_FEATURE_SETTINGS,...(settings.featureSettings??{}),triageIntelligence:{...DEFAULT_FEATURE_SETTINGS.triageIntelligence,...(settings.featureSettings?.triageIntelligence??{})},customerStatuses:settings.featureSettings?.customerStatuses?.length?settings.featureSettings.customerStatuses:DEFAULT_FEATURE_SETTINGS.customerStatuses,customerTiers:settings.featureSettings?.customerTiers??[],customerExcludedDomains:settings.featureSettings?.customerExcludedDomains??[],customerGenericDomains:settings.featureSettings?.customerGenericDomains??[],asksEmailAddresses:settings.featureSettings?.asksEmailAddresses??[],asksSlackChannels:settings.featureSettings?.asksSlackChannels??[],repositoryAccess:{...DEFAULT_REPOSITORY_ACCESS,...(settings.featureSettings?.repositoryAccess??{})}}}}
 function initiativeScheduleValue(frequency:number){return frequency<=0?"none":frequency===1?"weekly":frequency===2?"biweekly":"monthly"}
 function initiativeScheduleFrequency(value:string){return value==="weekly"?1:value==="biweekly"?2:value==="monthly"?4:0}
 function initiativeScheduleSummary(schedule:{frequency:number;weekday:number;hour:number},t:(value:string)=>string){
