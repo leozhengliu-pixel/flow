@@ -455,6 +455,69 @@ func TestBootstrapForUserProjectsTeamStatesAndPrivateNotificationData(t *testing
 	}
 }
 
+func TestOmitDirectoryExcludedTeamsDropsOrgLeafAndRetiredPayload(t *testing.T) {
+	retired := time.Now().UTC()
+	data := domain.Bootstrap{
+		Viewer: domain.User{ID: "admin"},
+		Teams: []domain.Team{
+			{ID: "team-xw", Name: "业务线"},
+			{ID: "hr:org:node:finance-1", Name: "财务部"},
+			{ID: "hr:org:dc:site-1", Name: "职场"},
+			{ID: "retired-team", Name: "旧团队", RetiredAt: &retired},
+			{ID: "hr:org:node:mine", Name: "我的叶子"},
+		},
+		TeamMembers: []domain.TeamMember{{TeamID: "hr:org:node:mine", UserID: "admin", Role: "member"}},
+		States: []domain.WorkflowState{
+			{ID: "xw-todo", TeamID: "team-xw"},
+			{ID: "node-todo", TeamID: "hr:org:node:finance-1"},
+			{ID: "dc-todo", TeamID: "hr:org:dc:site-1"},
+			{ID: "retired-todo", TeamID: "retired-team"},
+			{ID: "mine-todo", TeamID: "hr:org:node:mine"},
+			{ID: "global-todo"},
+		},
+		TeamSettings: map[string]domain.TeamSettings{
+			"team-xw":                  {TeamID: "team-xw"},
+			"hr:org:node:finance-1":    {TeamID: "hr:org:node:finance-1"},
+			"hr:org:dc:site-1":         {TeamID: "hr:org:dc:site-1"},
+			"retired-team":             {TeamID: "retired-team"},
+			"hr:org:node:mine":         {TeamID: "hr:org:node:mine"},
+		},
+		CycleSettings: map[string]domain.CycleSettings{
+			"hr:org:node:finance-1": {},
+			"team-xw":               {},
+		},
+	}
+	OmitDirectoryExcludedTeams(&data)
+	if len(data.Teams) != 2 {
+		t.Fatalf("teams=%d want 2: %#v", len(data.Teams), data.Teams)
+	}
+	if slices.ContainsFunc(data.Teams, func(team domain.Team) bool {
+		return team.ID == "hr:org:node:finance-1" || team.ID == "hr:org:dc:site-1" || team.ID == "retired-team"
+	}) {
+		t.Fatalf("excluded teams leaked: %#v", data.Teams)
+	}
+	if !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == "hr:org:node:mine" }) {
+		t.Fatal("member org-leaf team was dropped")
+	}
+	if len(data.States) != 3 || slices.ContainsFunc(data.States, func(state domain.WorkflowState) bool {
+		return state.ID == "node-todo" || state.ID == "dc-todo" || state.ID == "retired-todo"
+	}) {
+		t.Fatalf("states not projected: %#v", data.States)
+	}
+	if _, ok := data.TeamSettings["hr:org:node:finance-1"]; ok {
+		t.Fatal("leaf team settings leaked")
+	}
+	if _, ok := data.CycleSettings["hr:org:node:finance-1"]; ok {
+		t.Fatal("leaf cycle settings leaked")
+	}
+	if !teamVisibleToUser(data, "team-xw", "admin", "admin") {
+		t.Fatal("admin lost ordinary team")
+	}
+	if teamVisibleToUser(domain.Bootstrap{Teams: []domain.Team{{ID: "hr:org:node:finance-1"}}}, "hr:org:node:finance-1", "admin", "admin") {
+		t.Fatal("admin still sees org leaf without membership")
+	}
+}
+
 func TestFilterBootstrapTeamsHidesPrivateTeamDocuments(t *testing.T) {
 	data := domain.Bootstrap{
 		ViewerRole: "member",
