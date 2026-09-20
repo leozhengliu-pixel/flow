@@ -614,6 +614,47 @@ func (s *SQLiteStore) ResetPassword(ctx context.Context, token, password string)
 	return err
 }
 
+// RequestLoginToken issues a one-time kind=login token for magic-link / SSO bounce (LS-0083).
+func (s *SQLiteStore) RequestLoginToken(ctx context.Context, email string) (string, error) {
+	user, _, err := s.authUserByEmail(ctx, email)
+	if err != nil || !user.Active {
+		return "", nil
+	}
+	if !user.EmailVerified {
+		return "", nil
+	}
+	return s.createAuthToken(ctx, user.ID, "login", time.Hour)
+}
+
+// LoginWithAuthToken consumes a kind=login token for email+authToken sign-in.
+// When forceReauth is true, existing sessions for the user are revoked first.
+func (s *SQLiteStore) LoginWithAuthToken(ctx context.Context, email, token string, forceReauth bool) (domain.AuthSession, string, error) {
+	email = normalizeEmail(email)
+	if email == "" || strings.TrimSpace(token) == "" {
+		return domain.AuthSession{}, "", ErrAuthInvalid
+	}
+	user, _, err := s.authUserByEmail(ctx, email)
+	if err != nil || !user.Active {
+		return domain.AuthSession{}, "", ErrAuthInvalid
+	}
+	userID, err := s.consumeAuthToken(ctx, token, "login")
+	if err != nil {
+		return domain.AuthSession{}, "", ErrAuthExpired
+	}
+	if userID != user.ID {
+		return domain.AuthSession{}, "", ErrAuthInvalid
+	}
+	if !user.EmailVerified {
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		_, _ = s.db.ExecContext(ctx, `UPDATE auth_users SET email_verified_at=?,updated_at=? WHERE id=? AND email_verified_at IS NULL`, now, now, user.ID)
+		user.EmailVerified = true
+	}
+	if forceReauth {
+		_, _ = s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE user_id=?`, user.ID)
+	}
+	return s.createSession(ctx, user)
+}
+
 func (s *SQLiteStore) WorkspaceRole(ctx context.Context, workspaceID, userID string) (string, string, error) {
 	var role, status string
 	err := s.db.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID).Scan(&role, &status)
