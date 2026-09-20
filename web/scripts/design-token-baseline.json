@@ -36,6 +36,7 @@
   "components/reviews/reviews-page.css": 47,
   "components/search/workspace-search-page.css": 4,
   "components/settings/account-shortcuts-settings.css": 3,
+  "components/settings/asks-settings.css": 2,
   "components/settings/code-integration-settings.css": 18,
   "components/settings/feature-settings.css": 18,
   "components/settings/issue-template-settings.css": 19,
