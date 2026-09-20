@@ -40,6 +40,9 @@ func (s *server) pagedPresence(r *http.Request, values []domain.Presence) ([]dom
 	for id := range visible {
 		data.Issues = append(data.Issues, domain.Issue{ID: id})
 	}
+	values = slices.DeleteFunc(values, func(item domain.Presence) bool {
+		return item.DocumentID != "" && !s.documentPresenceAllowed(r, item.DocumentID)
+	})
 	return filterPresenceForViewer(data, values), nil
 }
 
