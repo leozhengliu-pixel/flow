@@ -101,6 +101,7 @@ import { CheckboxMark } from "@/components/ui/checkbox-mark";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { StatusIcon } from "@/components/issue/issue-icons";
 import { DefaultFavoritesSettings } from './team-default-favorites-settings';
+import { TeamProjectStatusesSettingsPage } from './team-project-statuses-settings';
 import { PropertyMenu } from '@/components/property/property-menu';
 import { WorkflowStateDeleteDialog } from './workflow-state-delete-dialog';
 import {
@@ -162,6 +163,11 @@ const SECTIONS: {
     id: "statuses",
     label: "Issue statuses",
     description: "Customize the statuses issues go through",
+  },
+  {
+    id: "project-statuses",
+    label: "Project statuses",
+    description: "Customize the statuses projects go through, or inherit from parent/workspace",
   },
   {
     id: "workflow",
@@ -230,6 +236,16 @@ export function TeamWorkflowSettings({
   if (section === "statuses")
     return (
       <StatusesSettings
+        key={team.id}
+        data={data}
+        team={team}
+        onBack={() => onNavigate("overview")}
+        onReload={onReload}
+      />
+    );
+  if (section === "project-statuses")
+    return (
+      <TeamProjectStatusesSettingsPage
         key={team.id}
         data={data}
         team={team}
