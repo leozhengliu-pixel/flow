@@ -37,6 +37,25 @@ func (s *server) listWebhooks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+func (s *server) listWebhookFailures(w http.ResponseWriter, r *http.Request) {
+	data := s.workspaceData(r)
+	actor := requestActor(s, r)
+	id := r.PathValue("id")
+	index := slices.IndexFunc(data.Webhooks, func(item domain.Webhook) bool { return item.ID == id })
+	if index < 0 || !webhookActorCanManage(&data, actor, data.Webhooks[index]) {
+		writeError(w, http.StatusNotFound, "webhook not found")
+		return
+	}
+	result := make([]domain.WebhookFailureEvent, 0)
+	for _, item := range data.WebhookFailureEvents {
+		if item.WebhookID == id {
+			result = append(result, item)
+		}
+	}
+	slices.Reverse(result)
+	writeJSON(w, http.StatusOK, result)
+}
+
 func (s *server) createWebhook(w http.ResponseWriter, r *http.Request) {
 	var input webhookInput
 	if !decodeJSON(w, r, &input) || input.Name == nil || input.URL == nil {
@@ -102,13 +121,17 @@ func (s *server) updateWebhook(w http.ResponseWriter, r *http.Request) {
 func (s *server) deleteWebhook(w http.ResponseWriter, r *http.Request) {
 	actor := requestActor(s, r)
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "webhook.deleted", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
+		id := r.PathValue("id")
 		before := len(data.Webhooks)
 		data.Webhooks = slices.DeleteFunc(data.Webhooks, func(item domain.Webhook) bool {
-			return item.ID == r.PathValue("id") && webhookActorCanManage(data, actor, item)
+			return item.ID == id && webhookActorCanManage(data, actor, item)
 		})
 		if len(data.Webhooks) == before {
 			return errNotFound
 		}
+		data.WebhookFailureEvents = slices.DeleteFunc(data.WebhookFailureEvents, func(item domain.WebhookFailureEvent) bool {
+			return item.WebhookID == id
+		})
 		return nil
 	})
 	if err != nil {

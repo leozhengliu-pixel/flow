@@ -5,13 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
 	"flow/api/internal/domain"
 )
+
+const webhookFailureRetention = 50
 
 type flowWebhookEnvelope struct {
 	ID             string          `json:"id"`
@@ -42,9 +46,12 @@ func (s *server) dispatchWebhookEvent(workspace string, event domain.DomainEvent
 			continue
 		}
 		item := webhook
+		envelope := flowWebhookEnvelope{ID: event.ID, Type: resourceType, Action: action, Data: event.Payload, PreviousValues: event.PreviousValues, CreatedAt: event.CreatedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00")}
 		go func() {
-			if err := s.sendWebhookEvent(context.Background(), item, flowWebhookEnvelope{ID: event.ID, Type: resourceType, Action: action, Data: event.Payload, PreviousValues: event.PreviousValues, CreatedAt: event.CreatedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00")}); err != nil {
+			status, responseOrError, err := s.sendWebhookEvent(context.Background(), item, envelope)
+			if err != nil {
 				log.Printf("Flow webhook delivery id=%s event=%s: %v", item.ID, event.Type, err)
+				s.recordWebhookFailure(workspace, item, envelope, status, responseOrError)
 			}
 		}()
 	}
@@ -170,17 +177,17 @@ func webhookObjectByID(value any, id string) (map[string]any, bool) {
 	return nil, false
 }
 
-func (s *server) sendWebhookEvent(ctx context.Context, webhook domain.Webhook, envelope flowWebhookEnvelope) error {
+func (s *server) sendWebhookEvent(ctx context.Context, webhook domain.Webhook, envelope flowWebhookEnvelope) (httpStatus int, responseOrError string, err error) {
 	body, err := json.Marshal(envelope)
 	if err != nil {
-		return err
+		return 0, err.Error(), err
 	}
 	if !integrationEndpointSafe(ctx, webhook.URL, s.authDisabled) {
-		return errInvalid
+		return 0, "endpoint not allowed", errInvalid
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, webhook.URL, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return 0, err.Error(), err
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Flow-Event", envelope.Type+"."+envelope.Action)
@@ -191,13 +198,79 @@ func (s *server) sendWebhookEvent(ctx context.Context, webhook domain.Webhook, e
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return err
+		return 0, err.Error(), err
 	}
 	defer response.Body.Close()
+	payload, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
+	text := strings.TrimSpace(string(payload))
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return fmt.Errorf("HTTP %d", response.StatusCode)
+		if text == "" {
+			text = fmt.Sprintf("HTTP %d", response.StatusCode)
+		}
+		return response.StatusCode, text, fmt.Errorf("HTTP %d", response.StatusCode)
 	}
-	return nil
+	return response.StatusCode, text, nil
+}
+
+func (s *server) recordWebhookFailure(workspace string, webhook domain.Webhook, envelope flowWebhookEnvelope, httpStatus int, responseOrError string) {
+	if strings.TrimSpace(responseOrError) == "" {
+		responseOrError = "delivery failed"
+	}
+	var statusPtr *int
+	if httpStatus > 0 {
+		status := httpStatus
+		statusPtr = &status
+	}
+	now := time.Now().UTC()
+	failure := domain.WebhookFailureEvent{
+		ID:              fmt.Sprintf("whfail_%d", now.UnixNano()),
+		WebhookID:       webhook.ID,
+		ExecutionID:     envelope.ID,
+		URL:             webhook.URL,
+		HTTPStatus:      statusPtr,
+		ResponseOrError: truncateWebhookFailureText(responseOrError, 4096),
+		CreatedAt:       now,
+	}
+	if err := s.store.MutateWorkspace(context.Background(), workspace, "webhook.delivery_failed", webhook.ID, map[string]any{
+		"executionId": failure.ExecutionID,
+		"httpStatus":  httpStatus,
+	}, func(data *domain.Bootstrap) error {
+		if !slices.ContainsFunc(data.Webhooks, func(item domain.Webhook) bool { return item.ID == webhook.ID }) {
+			return nil
+		}
+		data.WebhookFailureEvents = append(data.WebhookFailureEvents, failure)
+		data.WebhookFailureEvents = trimWebhookFailures(data.WebhookFailureEvents, webhook.ID, webhookFailureRetention)
+		return nil
+	}); err != nil {
+		log.Printf("Flow webhook failure persist id=%s: %v", webhook.ID, err)
+	}
+}
+
+func trimWebhookFailures(events []domain.WebhookFailureEvent, webhookID string, limit int) []domain.WebhookFailureEvent {
+	if limit <= 0 || len(events) == 0 {
+		return events
+	}
+	kept := make([]domain.WebhookFailureEvent, 0, len(events))
+	count := 0
+	for i := len(events) - 1; i >= 0; i-- {
+		item := events[i]
+		if item.WebhookID == webhookID {
+			if count >= limit {
+				continue
+			}
+			count++
+		}
+		kept = append(kept, item)
+	}
+	slices.Reverse(kept)
+	return kept
+}
+
+func truncateWebhookFailureText(value string, limit int) string {
+	if limit <= 0 || len(value) <= limit {
+		return value
+	}
+	return value[:limit]
 }
 
 func containsString(values []string, needle string) bool {
