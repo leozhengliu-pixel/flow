@@ -508,10 +508,20 @@ function LabelPage({ data, labelName, resourceType = "issue", onReload }: { data
   const [search, setSearch] = useState("");
   const [triageOnly, setTriageOnly] = useState(false);
   const label = data.labels.find(item => item.name === labelName && (item.resourceType ?? "issue") === resourceType) || data.labels.find(item => (item.resourceType ?? "issue") === resourceType);
+  const labelId = label?.id;
+  const issues = useMemo(() => {
+    if (!labelId) return [];
+    return filterLabelItems(data.issues.filter(issue => issue.labels.some(item => item.id === labelId)), { search, triageOnly, resourceType, teamSettings: data.teamSettings });
+  }, [data.issues, data.teamSettings, labelId, resourceType, search, triageOnly]);
+  const projects = useMemo(() => {
+    if (!labelId) return [];
+    return filterLabelItems(data.projects.filter(project => project.labelIds.includes(labelId)).map(project => ({ ...project, title: project.name })), { search, triageOnly: false, resourceType });
+  }, [data.projects, labelId, resourceType, search]);
+  const initiatives = useMemo(() => {
+    if (!labelId) return [];
+    return filterLabelItems(data.initiatives.filter(initiative => initiative.labelIds.includes(labelId)).map(initiative => ({ ...initiative, title: initiative.name })), { search, triageOnly: false, resourceType });
+  }, [data.initiatives, labelId, resourceType, search]);
   if (!label) return <section className="secondary-content"><EmptyState title={t("Label not found")} body={t("This label is no longer available.")} /></section>;
-  const issues = useMemo(() => filterLabelItems(data.issues.filter(issue => issue.labels.some(item => item.id === label.id)), { search, triageOnly, resourceType, teamSettings: data.teamSettings }), [data.issues, data.teamSettings, label.id, resourceType, search, triageOnly]);
-  const projects = useMemo(() => filterLabelItems(data.projects.filter(project => project.labelIds.includes(label.id)).map(project => ({ ...project, title: project.name })), { search, triageOnly: false, resourceType }), [data.projects, label.id, search]);
-  const initiatives = useMemo(() => filterLabelItems(data.initiatives.filter(initiative => initiative.labelIds.includes(label.id)).map(initiative => ({ ...initiative, title: initiative.name })), { search, triageOnly: false, resourceType }), [data.initiatives, label.id, search]);
   const rows = resourceType === "project"
     ? projects.map(project => <article className="secondary-list-row" key={project.id}><div className="secondary-row-icon"><FileText size={16} /></div><div className="secondary-row-main"><strong data-i18n-ignore>{project.name}</strong><small>{t("Project")}</small></div></article>)
     : resourceType === "initiative"
