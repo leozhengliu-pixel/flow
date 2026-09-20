@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import { Bot, History } from "lucide-react";
 import { AppStartup } from '@/components/layout/app-startup';
@@ -259,6 +260,8 @@ import { persistUserSettings } from "@/lib/settings-persistence";
 import { useExitPresence } from '@/components/ui/motion';
 
 import { PeopleProvider } from '@/components/property/people-provider'
+import { WorkspaceStoreProvider } from '@/store/application-store-context'
+import { applyRealtimePatch, canApplyRealtimePatch } from '@/store/apply-realtime-patch'
 import { searchResultLink } from '@/lib/search-result-link'
 import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck } from '@/lib/issue-detail-cache'
 
@@ -896,14 +899,13 @@ function App() {
         setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? overlayPendingFavoriteIntents(mergeResourcePreferences(current, preferences)) : current);
         return;
       }
-      if (event.type.startsWith('notification.') && entity && typeof entity === 'object' && 'recipientId' in entity) {
-        const notification = entity as BootstrapData['notifications'][number];
-        if (notification.recipientId !== data.viewer.id) return;
-        setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? {
-          ...current, notifications: current.notifications.some(item => item.id === notification.id)
-            ? current.notifications.map(item => item.id === notification.id ? notification : item)
-            : [...current.notifications, notification],
-        } : current);
+      // LS-0718: entity Map / SSE patch path — merge when payload is self-contained.
+      if (canApplyRealtimePatch(event)) {
+        setData((current) => {
+          if (current?.workspace.urlKey !== workspace || current.viewer.id !== viewerId) return current;
+          const result = applyRealtimePatch(current, event);
+          return result.handled ? result.data : current;
+        });
         return;
       }
       const issue = event.payload?.issue ?? (
@@ -914,32 +916,6 @@ function App() {
       if (event.type.startsWith('comment.') && issue) {
         issueContextKey.current = '';
         window.dispatchEvent(new CustomEvent('flow-issue-history-changed', { detail: issue.id }));
-        return;
-      }
-      if ((event.type === "issue.updated" || event.type === "issue.created") && issue) {
-        setData((current) =>
-          current?.workspace.urlKey === workspace && current.viewer.id === viewerId
-            ? deriveResourceCounts({
-                ...current,
-                issues: current.issueCollectionPaged
-                  ? mergeIssueRecords(current.issues,[issue])
-                  : current.issues.some((item) => item.id === issue.id)
-                  ? current.issues.map((item) => item.id === issue.id ? issue : item)
-                  : [issue, ...current.issues],
-              })
-            : current,
-        );
-        return;
-      }
-      if (event.type === "issue.deleted" && event.aggregateId) {
-        setData((current) =>
-          current?.workspace.urlKey === workspace && current.viewer.id === viewerId
-            ? deriveResourceCounts({
-                ...current,
-                issues: current.issues.filter((item) => item.id !== event.aggregateId),
-              })
-            : current,
-        );
         return;
       }
       const checkedIds=data.issues.map(issue=>issue.id);
@@ -3862,10 +3838,15 @@ function App() {
     selectedSavedView,
     selectedReview,
   ]);
-  if (authenticationPolicy && !authPath) return <AuthenticationPolicyPage code={authenticationPolicy}/>;
-  if (!authReady) return <AppStartup />;
+  const withStore = (node: ReactNode) => (
+    <WorkspaceStoreProvider data={data} session={session} account={account}>
+      {node}
+    </WorkspaceStoreProvider>
+  );
+  if (authenticationPolicy && !authPath) return withStore(<AuthenticationPolicyPage code={authenticationPolicy}/>);
+  if (!authReady) return withStore(<AppStartup />);
   if (!session || authPath)
-    return (
+    return withStore(
       <AuthPage
         session={session}
         onAuthenticated={async (authenticated, returnTo) => {
@@ -3882,16 +3863,16 @@ function App() {
         }}
       />
     );
-  if (!account && !error) return <AppStartup />;
+  if (!account && !error) return withStore(<AppStartup />);
   if (!account)
-    return (
+    return withStore(
       <WorkspaceBootShell sidebarLabel="Loading account navigation">
         {error ? <ErrorState retry={loadAccount} /> : <SkeletonRows count={9} />}
       </WorkspaceBootShell>
     );
-  if (oauthPath) return <OAuthAuthorizePage account={account} />;
+  if (oauthPath) return withStore(<OAuthAuthorizePage account={account} />);
   if (route.kind === "workspace-onboarding" || account.workspaces.length === 0)
-    return (
+    return withStore(
       <Suspense
         fallback={
           <main className="main-panel">
@@ -3922,15 +3903,15 @@ function App() {
         />
       </Suspense>
     );
-  if (!data && !error && route.kind !== "issue" && (!previewIssue || previewIssue.isSummary)) return <AppStartup />;
+  if (!data && !error && route.kind !== "issue" && (!previewIssue || previewIssue.isSummary)) return withStore(<AppStartup />);
   if (!data)
-    return (
+    return withStore(
       <WorkspaceBootShell>
         {previewIssue && !previewIssue.isSummary ? <Suspense fallback={<SkeletonRows count={9}/>}><IssueLoadingPreview issue={previewIssue} onBack={()=>navigateTo(workspaceIssuesPath(detailWorkspaceKey,'all'))}/></Suspense> : error ? <ErrorState retry={load} /> : <SkeletonRows count={9} />}
       </WorkspaceBootShell>
     );
   if (route.kind === "settings")
-    return (
+    return withStore(
       <PeopleProvider users={data.users} workspaceName={data.workspace.name} members={data.members} teams={data.teams} teamMembers={data.teamMembers} projects={data.projects}>
       <Suspense
         fallback={
@@ -4224,7 +4205,7 @@ function App() {
           view.scope === "team" && view.teamId === selectedSavedViewTeam.id,
       )
     : issueSavedViews.filter((view) => view.scope !== "team");
-  return (
+  return withStore(
     <PeopleProvider users={data.users} workspaceName={data.workspace.name} members={data.members} teams={data.teams} teamMembers={data.teamMembers} projects={data.projects}><div className="app">
       <Sidebar
         onReload={async () => acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))}
