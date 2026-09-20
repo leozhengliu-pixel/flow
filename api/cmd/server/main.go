@@ -877,6 +877,7 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	data.AgentSessions = slices.DeleteFunc(data.AgentSessions, func(item domain.AgentSession) bool { return item.UserID != data.Viewer.ID })
 	data.AgentSkills = slices.DeleteFunc(data.AgentSkills, func(item domain.PersonalAgentSkill) bool { return item.UserID != data.Viewer.ID })
 	data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool { return item.UserID != data.Viewer.ID })
+	store.OmitDirectoryExcludedTeams(data)
 	data.FavoriteFolders = slices.DeleteFunc(data.FavoriteFolders, func(item domain.FavoriteFolder) bool { return item.UserID != data.Viewer.ID })
 	// Passkey credentials are account-scoped. Expose only public metadata for
 	// the current viewer and never serialize in-flight registration sessions.
