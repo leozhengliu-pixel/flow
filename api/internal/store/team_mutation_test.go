@@ -582,3 +582,174 @@ func TestUserAndProjectImportWritesOnlyAppendedRecords(t *testing.T) {
 		t.Fatal("imported project missing after reload")
 	}
 }
+
+func TestOrgTeamImportPersistsRenameAndPrivacy(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	key := seedBulkTeams(t, repo, 40)
+	id := "bulk-team-00000"
+	writes := auditWrites(t, repo)
+	err = repo.MutateWorkspace(context.Background(), key, "alm.org_teams_imported", "rename", nil, func(next *domain.Bootstrap) error {
+		for i := range next.Teams {
+			if next.Teams[i].ID != id {
+				continue
+			}
+			next.Teams[i].Name = "Renamed"
+			next.Teams[i].Private = true
+			settings := next.TeamSettings[id]
+			settings.Access = "private"
+			next.TeamSettings[id] = settings
+			return nil
+		}
+		return errors.New("missing team")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes := writes(); changes["workspace_metadata_records"] != 2 || changes["workspace_states"] != 0 {
+		t.Fatalf("rename/privacy import amplified writes: %+v", changes)
+	}
+	if err := repo.ReloadAllWorkspaces(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	reloaded := repo.Bootstrap()
+	if team := reloaded.Teams[domain.TeamIndex(&reloaded, id)]; team.Name != "Renamed" || !team.Private {
+		t.Fatalf("imported team update lost: %#v", team)
+	}
+	if reloaded.TeamSettings[id].Access != "private" {
+		t.Fatal("imported privacy setting lost")
+	}
+}
+
+func TestOrgTeamImportUpdateWriteCountStaysConstantAsWorkspaceGrows(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	key := seedBulkTeams(t, repo, 60)
+	rename := func(id, name string) {
+		t.Helper()
+		if err := repo.MutateWorkspace(context.Background(), key, "alm.org_teams_imported", "rename", nil, func(next *domain.Bootstrap) error {
+			for i := range next.Teams {
+				if next.Teams[i].ID == id {
+					next.Teams[i].Name = name
+					return nil
+				}
+			}
+			return errors.New("missing team")
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writes := auditWrites(t, repo)
+	rename("bulk-team-00000", "Small catalog name")
+	small := writes()
+	importOrgTeamBatch(t, repo, key, "grow", 540)
+	writes()
+	rename("bulk-team-00001", "Large catalog name")
+	large := writes()
+	if !reflect.DeepEqual(small, large) {
+		t.Fatalf("import update write count grew with workspace size: small=%+v large=%+v", small, large)
+	}
+	if small["workspace_metadata_records"] != 1 || small["workspace_states"] != 0 {
+		t.Fatalf("import update amplified writes: %+v", small)
+	}
+}
+
+func TestOrgTeamImportNoopDoesNotWrite(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	key := seedBulkTeams(t, repo, 30)
+	id := "bulk-team-00000"
+	current := repo.Bootstrap()
+	index := domain.TeamIndex(&current, id)
+	writes := auditWrites(t, repo)
+	err = repo.MutateWorkspace(context.Background(), key, "alm.org_teams_imported", "noop", nil, func(next *domain.Bootstrap) error {
+		next.Teams[index].Name = current.Teams[index].Name
+		next.TeamSettings[id] = current.TeamSettings[id]
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes := writes(); len(changes) != 0 {
+		t.Fatalf("no-op import wrote rows: %+v", changes)
+	}
+}
+
+func TestUserAndProjectImportPersistsUpdates(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	key := seedBulkTeams(t, repo, 20)
+	err = repo.MutateWorkspace(context.Background(), key, "alm.users_imported", "users", nil, func(next *domain.Bootstrap) error {
+		next.Users = append(next.Users, domain.User{ID: "imported-user", Name: "imported-user", DisplayName: "Imported", Email: "imported@example.test", Active: true})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = repo.MutateWorkspace(context.Background(), key, "alm.projects_imported", "projects", nil, func(next *domain.Bootstrap) error {
+		next.Projects = append(next.Projects, domain.Project{ID: "imported-project", Name: "Imported project", Description: "Original"})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writes := auditWrites(t, repo)
+	err = repo.MutateWorkspace(context.Background(), key, "alm.users_imported", "users", nil, func(next *domain.Bootstrap) error {
+		for i := range next.Users {
+			if next.Users[i].ID == "imported-user" {
+				next.Users[i].DisplayName = "Updated user"
+				next.Users[i].Active = false
+				return nil
+			}
+		}
+		return errors.New("missing user")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes := writes(); changes["workspace_metadata_records"] != 1 || changes["workspace_states"] != 0 {
+		t.Fatalf("user update amplified writes: %+v", changes)
+	}
+	err = repo.MutateWorkspace(context.Background(), key, "alm.projects_imported", "projects", nil, func(next *domain.Bootstrap) error {
+		for i := range next.Projects {
+			if next.Projects[i].ID == "imported-project" {
+				next.Projects[i].Name = "Updated ALM project project-000"
+				next.Projects[i].Description = "Updated description"
+				return nil
+			}
+		}
+		return errors.New("missing project")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes := writes(); changes["workspace_metadata_records"] != 1 || changes["workspace_states"] != 0 {
+		t.Fatalf("project update amplified writes: %+v", changes)
+	}
+	if err := repo.ReloadAllWorkspaces(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	reloaded := repo.Bootstrap()
+	if !slices.ContainsFunc(reloaded.Users, func(user domain.User) bool {
+		return user.ID == "imported-user" && user.DisplayName == "Updated user" && !user.Active
+	}) {
+		t.Fatal("imported user update lost")
+	}
+	if !slices.ContainsFunc(reloaded.Projects, func(project domain.Project) bool {
+		return project.ID == "imported-project" && project.Name == "Updated ALM project project-000"
+	}) {
+		t.Fatal("imported project update lost")
+	}
+}
