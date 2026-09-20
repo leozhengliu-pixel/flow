@@ -69,6 +69,15 @@ describe('personal settings workflows', () => {
     api.updateNotificationPreferences.mockImplementation(async value => value)
   })
 
+  it('renders account shortcuts settings with filter and record controls (LS-0008)', async () => {
+    const user = userEvent.setup()
+    render(<I18nProvider><MemoryRouter><PersonalSettings {...props('shortcuts')}/></MemoryRouter></I18nProvider>)
+    expect(screen.getByRole('heading', { name: 'Shortcuts' })).toBeVisible()
+    expect(screen.getByRole('searchbox', { name: 'Filter by name or keystroke' })).toBeVisible()
+    await user.click(screen.getAllByRole('button', { name: 'Record shortcut' })[0])
+    expect(screen.getByRole('status')).toHaveTextContent(/Recording/)
+  })
+
   it('updates preference toggles, menus, and sidebar customization', async () => {
     const user = userEvent.setup()
     const input = props('preferences')

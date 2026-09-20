@@ -240,6 +240,23 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
     ],
   },
   {
+    id: 'shortcuts',
+    title: 'Shortcuts',
+    section: 'Personal',
+    keywords: ['keyboard', 'command', 'hotkeys', 'customize', 'bindings'],
+    groups: [
+      {
+        title: 'Keyboard shortcuts',
+        keywords: ['rebinding', 'hotkeys'],
+        items: [
+          { title: 'Filter by name or keystroke', keywords: ['search', 'filter'] },
+          { title: 'Record shortcut', keywords: ['rebind', 'customize'] },
+          { title: 'Restore default', keywords: ['reset'] },
+        ],
+      },
+    ],
+  },
+  {
     id: 'profile',
     title: 'Profile',
     section: 'Personal',
