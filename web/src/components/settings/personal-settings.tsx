@@ -20,6 +20,8 @@ import {
   Mail,
   Pencil,
   MessageCircle,
+  CalendarDays,
+  MessageSquare,
   Monitor,
   ShieldCheck,
   Plus,
@@ -3452,6 +3454,7 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
         "Sync your message attribution, and receive notifications in Slack",
       ),
       icon: <MessageCircle />,
+      oauth: true,
     },
     {
       provider: "github",
@@ -3460,6 +3463,32 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
         "Review code in Flow and sync attribution of your git-related actions",
       ),
       icon: <GitFork />,
+      oauth: true,
+    },
+    {
+      provider: "google-calendar",
+      name: "Google Calendar",
+      description: p(
+        "Sync your calendar out-of-office status with Flow",
+      ),
+      icon: <CalendarDays />,
+      oauth: false,
+    },
+    {
+      provider: "microsoft-teams",
+      name: "Microsoft Teams",
+      description: p("Connect Teams for personal notifications and attribution"),
+      icon: <MessageSquare />,
+      oauth: false,
+    },
+    {
+      provider: "github-enterprise",
+      name: "GitHub Enterprise",
+      description: p(
+        "Reconnect GitHub Enterprise for personal code access",
+      ),
+      icon: <GitFork />,
+      oauth: false,
     },
   ];
   return (
@@ -3474,6 +3503,7 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
       <div className="personal-connection-list">
         {entries.map((item) => {
           const connection = integrations.get(item.provider);
+          const canConnect = item.oauth;
           return (
             <div className="settings-card" key={item.provider}>
               <PersonalRow
@@ -3481,9 +3511,13 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
                 title={<span data-i18n-ignore>{item.name}</span>}
                 description={item.description}
               >
-                <Action onClick={() => onNavigate("integrations")}>
-                  {p(connection?.status === 'connected' ? "Connected" : "Connect")}
-                </Action>
+                {canConnect ? (
+                  <Action onClick={() => onNavigate("integrations")}>
+                    {p(connection?.status === 'connected' ? "Connected" : "Connect")}
+                  </Action>
+                ) : (
+                  <span className="personal-connection-soon">{p("Coming soon")}</span>
+                )}
               </PersonalRow>
             </div>
           );

@@ -246,3 +246,15 @@ body .domain-label-row-menu .menu-separator:after,body .domain-label-group-subme
 :root[data-theme="light"] body .settings-member-action-menu,:root[data-theme="light"] body .settings-team-membership-menu{border:.5px solid var(--theme-border);border-radius:12px;background:var(--theme-surface-2)}
 
 .settings-section-note{margin:0 0 12px;padding:0 16px;color:var(--muted);font-size:13px;line-height:1.45}
+
+.settings-inline-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.personal-connection-soon {
+  color: var(--color-text-tertiary, #8a8f98);
+  font-size: 12px;
+  font-weight: 500;
+}

@@ -1,0 +1,55 @@
+.application-page .application-muted {
+  color: var(--color-text-secondary, #6b6f76);
+  font-size: 13px;
+  margin: 0;
+}
+
+.application-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--color-text-secondary, #6b6f76);
+}
+
+.application-field .settings-input,
+.application-field textarea.settings-input {
+  width: 100%;
+}
+
+.application-webhook-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.application-webhook-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-primary, rgba(0, 0, 0, 0.08));
+  border-radius: 10px;
+  background: var(--color-bg-primary, #fff);
+}
+
+.application-webhook-card strong {
+  display: block;
+  font-size: 13px;
+}
+
+.application-webhook-card p,
+.application-webhook-card small {
+  margin: 4px 0 0;
+  color: var(--color-text-secondary, #6b6f76);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+:root[data-theme="dark"] .application-webhook-card,
+.dark .application-webhook-card {
+  background: var(--color-bg-secondary, #1c1e24);
+  border-color: rgba(255, 255, 255, 0.08);
+}

@@ -1443,6 +1443,7 @@ func (s *server) listOAuthApplications(w http.ResponseWriter, r *http.Request) {
 type oauthInput struct {
 	Name         *string   `json:"name,omitempty"`
 	Description  *string   `json:"description,omitempty"`
+	LogoURL      *string   `json:"logoUrl,omitempty"`
 	RedirectURIs *[]string `json:"redirectUris,omitempty"`
 	Scopes       *[]string `json:"scopes,omitempty"`
 }
@@ -1472,6 +1473,9 @@ func applyOAuthInput(app *domain.OAuthApplication, input oauthInput) {
 	}
 	if input.Description != nil {
 		app.Description = strings.TrimSpace(*input.Description)
+	}
+	if input.LogoURL != nil {
+		app.LogoURL = strings.TrimSpace(*input.LogoURL)
 	}
 	if input.RedirectURIs != nil {
 		app.RedirectURIs = normalizedStrings(*input.RedirectURIs)

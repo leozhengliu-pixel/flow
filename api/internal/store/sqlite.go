@@ -821,6 +821,9 @@ func normalize(data *domain.Bootstrap) {
 	if data.Webhooks == nil {
 		data.Webhooks = []domain.Webhook{}
 	}
+	if data.OAuthSyncGroupRequests == nil {
+		data.OAuthSyncGroupRequests = []domain.OAuthSyncGroupRequest{}
+	}
 	if data.WebhookFailureEvents == nil {
 		data.WebhookFailureEvents = []domain.WebhookFailureEvent{}
 	}
