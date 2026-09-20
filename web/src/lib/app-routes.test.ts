@@ -8,6 +8,8 @@ import {
   apiKeyPath,
   apiKeyEditPath,
   diaryPath,
+  welcomePath,
+  meetingsPath,
   inboxPath,
   labelPath,
   meetingPath,
@@ -206,6 +208,8 @@ describe("application routes", () => {
 
   it("generates canonical secondary routes", () => {
     expect(diaryPath("acme")).toBe("/acme/diary");
+    expect(welcomePath("acme")).toBe("/acme/welcome");
+    expect(meetingsPath("acme")).toBe("/acme/meetings");
     expect(meetingPath("acme", "meeting 1")).toBe(
       "/acme/meeting/meeting%201",
     );
@@ -250,6 +254,14 @@ describe("application routes", () => {
       kind: "meeting",
       workspaceSlug: "acme",
       meetingId: "meeting-1",
+    });
+    expect(parseAppRoute("/acme/welcome")).toEqual({
+      kind: "welcome",
+      workspaceSlug: "acme",
+    });
+    expect(parseAppRoute("/acme/meetings")).toEqual({
+      kind: "meetings",
+      workspaceSlug: "acme",
     });
     expect(parseAppRoute("/acme/automations/new")).toEqual({
       kind: "automation-new",
