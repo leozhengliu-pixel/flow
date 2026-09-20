@@ -119,6 +119,35 @@ func TestIssueRecordSnapshotCompactsOnlyAcknowledgedCollaborationUpdates(t *test
 	}
 }
 
+func TestIssueRecordsBootstrapOmitsOrgLeafTeams(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	data := repository.Bootstrap()
+	err = repository.MutateWorkspace(t.Context(), data.Workspace.URLKey, "test.org_leaf_bootstrap", "hr:org:node:finance", nil, func(next *domain.Bootstrap) error {
+		next.Teams = append(next.Teams, domain.Team{ID: "hr:org:node:finance", Name: "财务部", Key: "FIN"})
+		next.TeamSettings["hr:org:node:finance"] = domain.TeamSettings{TeamID: "hr:org:node:finance"}
+		next.States = append(next.States, domain.WorkflowState{ID: "node-todo", TeamID: "hr:org:node:finance", Name: "Todo", Type: "unstarted"})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := newHandler(&server{store: repository, authDisabled: true, uploadPath: t.TempDir()})
+	metadata := requestJSON[domain.Bootstrap](t, handler, "GET", "/api/issue-records/bootstrap", nil, 200)
+	if slices.ContainsFunc(metadata.Teams, func(team domain.Team) bool { return team.ID == "hr:org:node:finance" }) {
+		t.Fatal("org leaf team leaked into bootstrap")
+	}
+	if slices.ContainsFunc(metadata.States, func(state domain.WorkflowState) bool { return state.ID == "node-todo" }) {
+		t.Fatal("org leaf states leaked into bootstrap")
+	}
+	if _, ok := metadata.TeamSettings["hr:org:node:finance"]; ok {
+		t.Fatal("org leaf settings leaked into bootstrap")
+	}
+}
+
 func TestIssueRecordsCreateUpdateAndContext(t *testing.T) {
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {

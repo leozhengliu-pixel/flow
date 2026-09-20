@@ -1359,23 +1359,73 @@ func (s *SQLiteStore) workspaceByID(id string) (domain.Bootstrap, string, bool) 
 	return domain.Bootstrap{}, "", false
 }
 
+func directoryExcludedTeam(team domain.Team) bool {
+	if team.RetiredAt != nil {
+		return true
+	}
+	return orgDirectoryLeafID(team.ID) || orgDirectoryLeafID(team.Key)
+}
+
+func orgDirectoryLeafID(id string) bool {
+	id = strings.ToLower(strings.TrimSpace(id))
+	return strings.HasPrefix(id, "hr:org:node:") || strings.HasPrefix(id, "hr:org:dc:")
+}
+
+// OmitDirectoryExcludedTeams drops retired and org leaf teams (hr:org:node / hr:org:dc)
+// from a bootstrap payload unless the viewer is a direct member. Their workflow
+// states and settings go with them so a full org-tree import cannot inflate
+// GET /api/issue-records/bootstrap.
+func OmitDirectoryExcludedTeams(data *domain.Bootstrap) {
+	if data == nil || len(data.Teams) == 0 {
+		return
+	}
+	memberOf := map[string]bool{}
+	for _, member := range data.TeamMembers {
+		if member.UserID == data.Viewer.ID && data.Viewer.ID != "" {
+			memberOf[member.TeamID] = true
+		}
+	}
+	allowed := make(map[string]bool, len(data.Teams))
+	for _, team := range data.Teams {
+		if directoryExcludedTeam(team) && !memberOf[team.ID] {
+			continue
+		}
+		allowed[team.ID] = true
+	}
+	if len(allowed) == len(data.Teams) {
+		return
+	}
+	filterBootstrapTeams(data, allowed, false)
+	data.States = slices.DeleteFunc(data.States, func(state domain.WorkflowState) bool {
+		return state.TeamID != "" && !allowed[state.TeamID]
+	})
+	for teamID := range data.TeamSettings {
+		if !allowed[teamID] {
+			delete(data.TeamSettings, teamID)
+		}
+	}
+	for teamID := range data.CycleSettings {
+		if !allowed[teamID] {
+			delete(data.CycleSettings, teamID)
+		}
+	}
+}
+
 // teamVisibleToUser applies the team access and membership settings before a
 // bootstrap projection is returned. Public teams are visible to workspace
 // members; private and restricted teams require explicit membership. A parent
 // team owner inherits owner access to descendants, but ordinary parent members
-// do not bypass a restricted child.
+// do not bypass a restricted child. Retired and org-leaf teams stay out of
+// directory bootstrap unless the viewer is a direct member, including admins.
 func teamVisibleToUser(data domain.Bootstrap, teamID, userID, workspaceRole string) bool {
-	if isWorkspaceAdminRole(workspaceRole) {
-		return true
-	}
-	exists := false
-	for _, item := range data.Teams {
-		if item.ID == teamID {
-			exists = true
+	var team *domain.Team
+	for i := range data.Teams {
+		if data.Teams[i].ID == teamID {
+			team = &data.Teams[i]
 			break
 		}
 	}
-	if !exists {
+	if team == nil {
 		return false
 	}
 	memberRole := ""
@@ -1386,6 +1436,12 @@ func teamVisibleToUser(data domain.Bootstrap, teamID, userID, workspaceRole stri
 		}
 	}
 	if memberRole != "" {
+		return true
+	}
+	if directoryExcludedTeam(*team) {
+		return false
+	}
+	if isWorkspaceAdminRole(workspaceRole) {
 		return true
 	}
 	if workspaceRole == "app" {
