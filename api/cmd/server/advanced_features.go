@@ -614,13 +614,24 @@ func (s *server) createDocumentComment(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) updateDocumentComment(w http.ResponseWriter, r *http.Request) {
 	var input domain.CommentUpdateInput
-	if !decodeJSON(w, r, &input) || strings.TrimSpace(input.Body) == "" {
-		writeError(w, http.StatusBadRequest, "body is required")
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if !commentUpdateHasBody(input) && input.Resolved == nil && input.ThreadSummary == nil {
+		writeError(w, http.StatusBadRequest, "body or resolved is required")
 		return
 	}
 	id, commentID := r.PathValue("id"), r.PathValue("commentId")
 	var updated, current domain.Comment
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.comment_updated", id, input, func(data *domain.Bootstrap) error {
+	eventType := "document.comment_updated"
+	if input.Resolved != nil && !commentUpdateHasBody(input) {
+		if *input.Resolved {
+			eventType = "document.comment_resolved"
+		} else {
+			eventType = "document.comment_unresolved"
+		}
+	}
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), eventType, id, input, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
 			return err
@@ -636,11 +647,15 @@ func (s *server) updateDocumentComment(w http.ResponseWriter, r *http.Request) {
 			current = data.Comments[id][index]
 			return errConflict
 		}
-		now := time.Now().UTC()
-		data.Comments[id][index].Body = strings.TrimSpace(input.Body)
-		data.Comments[id][index].BodyData = input.BodyData
-		data.Comments[id][index].EditedAt = &now
-		data.Comments[id][index].Version++
+		summaries := false
+		if len(document.TeamIDs) > 0 {
+			summaries = teamResolvedThreadSummaries(data, document.TeamIDs[0])
+		} else if len(document.ProjectIDs) > 0 {
+			if project, projectErr := fullProjectByID(data, document.ProjectIDs[0]); projectErr == nil && len(project.TeamIDs) > 0 {
+				summaries = teamResolvedThreadSummaries(data, project.TeamIDs[0])
+			}
+		}
+		applyCommentPatch(&data.Comments[id][index], input, data.Comments[id], summaries)
 		updated = data.Comments[id][index]
 		return nil
 	})
