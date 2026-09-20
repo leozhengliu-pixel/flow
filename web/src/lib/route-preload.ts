@@ -6,7 +6,7 @@ type PageName = keyof typeof pages
 const routePages = {
   root: [], 'workspace-root': [], 'not-found': [],
   'workspace-onboarding': ['WorkspaceOnboarding'], inbox: ['InboxAppPage'], search: ['WorkspaceSearchPage'],
-  diary: ['WorkspaceSecondaryPage'], meeting: ['WorkspaceSecondaryPage'], automations: ['WorkspaceSecondaryPage'],
+  diary: ['WorkspaceSecondaryPage'], welcome: ['WelcomeOnboarding'], meetings: ['WorkspaceSecondaryPage'], meeting: ['WorkspaceSecondaryPage'], automations: ['WorkspaceSecondaryPage'],
   'automation-new': ['WorkspaceSecondaryPage'], 'automation-detail': ['WorkspaceSecondaryPage'], 'automation-runs': ['WorkspaceSecondaryPage'],
   pulse: ['PulsePage'], 'my-issues': ['MyIssuesPage'], reviews: ['ReviewsPage'], review: ['ReviewsPage'],
   'workspace-issues': ['IssueExplorerPage'], 'team-issues': ['IssueExplorerPage'],
