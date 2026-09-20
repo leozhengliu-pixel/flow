@@ -21,7 +21,7 @@ func seedCatalogTeams(t *testing.T, repo *store.SQLiteStore, n int) {
 			base = append(base, state)
 		}
 	}
-	err := repo.MutateWorkspace(t.Context(), data.Workspace.URLKey, "test.bulk_teams", "seed", nil, func(next *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(t.Context(), data.Workspace.URLKey, "alm.org_teams_imported", "seed", nil, func(next *domain.Bootstrap) error {
 		for i := 0; i < n; i++ {
 			id := fmt.Sprintf("hot-team-%04d", i)
 			next.Teams = append(next.Teams, domain.Team{ID: id, Name: id, Key: fmt.Sprintf("HT%03d", i)})

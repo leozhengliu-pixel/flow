@@ -53,7 +53,7 @@ func seedBulkTeams(tb testing.TB, repo *SQLiteStore, teams int) string {
 			states = append(states, clone)
 		}
 	}
-	err := repo.MutateWorkspace(ctx, key, "test.bulk_teams", "seed", nil, func(next *domain.Bootstrap) error {
+	err := repo.MutateWorkspace(ctx, key, "alm.org_teams_imported", "seed", nil, func(next *domain.Bootstrap) error {
 		next.Teams = append(next.Teams, extraTeams...)
 		for id, value := range settings {
 			next.TeamSettings[id] = value
@@ -441,5 +441,144 @@ func TestTeamCreateAllocsDoNotScaleWithTeamCount(t *testing.T) {
 	large := measure(4000)
 	if small <= 0 || large/small >= 3 {
 		t.Fatalf("team.created allocs scaled with directory size: 1k=%.0f 4k=%.0f", small, large)
+	}
+}
+
+func importOrgTeamBatch(t *testing.T, repo *SQLiteStore, workspace, prefix string, n int) int {
+	t.Helper()
+	data := repo.Bootstrap()
+	baseStates := make([]domain.WorkflowState, 0, len(data.States))
+	for _, state := range data.States {
+		if state.TeamID == "" {
+			baseStates = append(baseStates, state)
+		}
+	}
+	err := repo.MutateWorkspace(context.Background(), workspace, "alm.org_teams_imported", prefix, map[string]int{"count": n}, func(next *domain.Bootstrap) error {
+		for i := 0; i < n; i++ {
+			id := fmt.Sprintf("%s-%02d", prefix, i)
+			next.Teams = append(next.Teams, domain.Team{ID: id, Name: id, Key: fmt.Sprintf("IM%02d", i), ExternalSource: "hr:org:node:" + id})
+			next.TeamSettings[id] = bulkTeamSettings(id)
+			next.CycleSettings[id] = domain.CycleSettings{DurationWeeks: 2, StartsOn: 1, UpcomingCount: 2, Capacity: 4}
+			for j, state := range baseStates {
+				clone := state
+				clone.ID = fmt.Sprintf("%s-state-%d", id, j)
+				clone.TeamID = id
+				next.States = append(next.States, clone)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n * (3 + len(baseStates))
+}
+
+func TestOrgTeamImportWritesOnlyChangedRecords(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	key := seedBulkTeams(t, repo, 80)
+	before := len(repo.Bootstrap().Teams)
+	writes := auditWrites(t, repo)
+	want := importOrgTeamBatch(t, repo, key, "imp-a", 10)
+	changes := writes()
+	if changes["workspace_metadata_records"] != want || changes["workspace_states"] != 0 || changes["issue_records"] != 0 {
+		t.Fatalf("org team import amplified writes: %+v want metadata=%d", changes, want)
+	}
+	if err := repo.ReloadAllWorkspaces(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(repo.Bootstrap().Teams); got != before+10 {
+		t.Fatalf("reload lost imported teams: got=%d want=%d", got, before+10)
+	}
+}
+
+func TestOrgTeamImportWriteCountStaysConstantAsWorkspaceGrows(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	key := seedBulkTeams(t, repo, 60)
+	writes := auditWrites(t, repo)
+	importOrgTeamBatch(t, repo, key, "imp-small", 10)
+	small := writes()
+	seedBulkTeams(t, repo, 540)
+	writes()
+	importOrgTeamBatch(t, repo, key, "imp-large", 10)
+	large := writes()
+	if !reflect.DeepEqual(small, large) {
+		t.Fatalf("import write count grew with workspace size: small=%+v large=%+v", small, large)
+	}
+	if small["workspace_states"] != 0 {
+		t.Fatalf("import rewrote workspace snapshot: %+v", small)
+	}
+}
+
+func TestOrgTeamImportStaysFastWithLargeCatalog(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "import-hotpath.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	catalog := 400
+	if raceDetector {
+		catalog = 80
+	}
+	key := seedBulkTeams(t, repo, catalog)
+	start := time.Now()
+	importOrgTeamBatch(t, repo, key, "imp-fast", 10)
+	elapsed := time.Since(start)
+	if !raceDetector && elapsed > 300*time.Millisecond {
+		t.Fatalf("org team import cloned the catalog: %s", elapsed)
+	}
+}
+
+func TestUserAndProjectImportWritesOnlyAppendedRecords(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	key := seedBulkTeams(t, repo, 40)
+	writes := auditWrites(t, repo)
+	err = repo.MutateWorkspace(context.Background(), key, "alm.users_imported", "users", nil, func(next *domain.Bootstrap) error {
+		for i := 0; i < 8; i++ {
+			id := fmt.Sprintf("imported-user-%d", i)
+			next.Users = append(next.Users, domain.User{ID: id, Name: id, DisplayName: id, Email: id + "@example.test", Active: true})
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes := writes(); changes["workspace_metadata_records"] != 8 || changes["workspace_states"] != 0 {
+		t.Fatalf("user import amplified writes: %+v", changes)
+	}
+	err = repo.MutateWorkspace(context.Background(), key, "alm.projects_imported", "projects", nil, func(next *domain.Bootstrap) error {
+		for i := 0; i < 5; i++ {
+			id := fmt.Sprintf("imported-project-%d", i)
+			next.Projects = append(next.Projects, domain.Project{ID: id, Name: id})
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes := writes(); changes["workspace_metadata_records"] != 5 || changes["workspace_states"] != 0 {
+		t.Fatalf("project import amplified writes: %+v", changes)
+	}
+	if err := repo.ReloadAllWorkspaces(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	reloaded := repo.Bootstrap()
+	if !slices.ContainsFunc(reloaded.Users, func(user domain.User) bool { return user.ID == "imported-user-0" }) {
+		t.Fatal("imported user missing after reload")
+	}
+	if !slices.ContainsFunc(reloaded.Projects, func(project domain.Project) bool { return project.ID == "imported-project-0" }) {
+		t.Fatal("imported project missing after reload")
 	}
 }

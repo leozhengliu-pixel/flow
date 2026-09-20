@@ -437,9 +437,9 @@ func hotCacheTouch(eventType string) (issueEntity, issueQuery, projectQuery, met
 	switch {
 	case strings.HasPrefix(eventType, "issue."), strings.HasPrefix(eventType, "comment."), strings.Contains(eventType, "attachment"), strings.HasPrefix(eventType, "relation."):
 		return true, true, false, false
-	case strings.HasPrefix(eventType, "project."), strings.HasPrefix(eventType, "label."):
+	case strings.HasPrefix(eventType, "project."), strings.HasPrefix(eventType, "label."), eventType == "alm.projects_imported":
 		return false, true, true, true
-	case strings.HasPrefix(eventType, "team."):
+	case strings.HasPrefix(eventType, "team."), eventType == "alm.org_teams_imported", eventType == "alm.users_imported":
 		return false, true, true, false
 	default:
 		return false, false, false, false

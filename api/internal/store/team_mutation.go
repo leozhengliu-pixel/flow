@@ -31,7 +31,8 @@ type teamMutationSnapshot struct {
 	hintID string
 
 	teamsLen, statesLen, labelsLen, cyclesLen int
-	usersLen, membersLen, teamMembersLen      int
+	usersLen, projectsLen, membersLen         int
+	teamMembersLen                            int
 
 	actorIndex    int
 	actorAppended bool
@@ -53,7 +54,18 @@ type teamMutationSnapshot struct {
 
 // These events cannot share the generic clone: that path copies every team and
 // rewrites every metadata row, so a single write would be O(teams).
+func catalogImportMutation(event string) bool {
+	switch event {
+	case "alm.org_teams_imported", "alm.users_imported", "alm.projects_imported":
+		return true
+	}
+	return false
+}
+
 func metadataTeamMutation(event string, payload any) bool {
+	if catalogImportMutation(event) {
+		return true
+	}
 	switch event {
 	case "team.created", "team.settings_updated":
 		return true
@@ -182,6 +194,7 @@ func snapshotTeamMutation(eventType, hintID string, data *domain.Bootstrap) team
 		labelsLen:      len(data.Labels),
 		cyclesLen:      len(data.Cycles),
 		usersLen:       len(data.Users),
+		projectsLen:    len(data.Projects),
 		membersLen:     len(data.Members),
 		teamMembersLen: len(data.TeamMembers),
 		actorIndex:     -1,
@@ -297,10 +310,8 @@ func cycleIDKnown(ids []string, target string) bool {
 
 func noteTeamMutationIndexes(eventType, aggregateID string, snap *teamMutationSnapshot, next *domain.Bootstrap) {
 	switch eventType {
-	case "team.created":
-		if len(next.Teams) > snap.teamsLen {
-			domain.NoteTeamAppended(next, next.Teams[len(next.Teams)-1])
-		}
+	case "team.created", "alm.org_teams_imported":
+		domain.NoteTeamsAppended(next, snap.teamsLen)
 	case "team.updated":
 		if snap.teamIndex >= 0 && snap.teamIndex < len(next.Teams) {
 			if key := next.Teams[snap.teamIndex].Key; key != snap.oldTeamKey {
@@ -396,20 +407,24 @@ func collectDirtyTeamRecords(eventType, aggregateID string, snap *teamMutationSn
 		return nil
 	}
 	switch eventType {
-	case "team.created":
-		if team, ok := teamInAppendedRange(next.Teams, snap.teamsLen, aggregateID); ok {
+	case "team.created", "alm.org_teams_imported":
+		for i := snap.teamsLen; i < len(next.Teams); i++ {
+			team := next.Teams[i]
+			if eventType == "team.created" && aggregateID != "" && team.ID != aggregateID {
+				continue
+			}
 			if err := appendRecord("teams", team.ID, true, team); err != nil {
 				return nil, err
 			}
-		}
-		if settings, ok := next.TeamSettings[aggregateID]; ok {
-			if err := appendRecord("teamSettings", aggregateID, false, settings); err != nil {
-				return nil, err
+			if settings, ok := next.TeamSettings[team.ID]; ok {
+				if err := appendRecord("teamSettings", team.ID, false, settings); err != nil {
+					return nil, err
+				}
 			}
-		}
-		if settings, ok := next.CycleSettings[aggregateID]; ok {
-			if err := appendRecord("cycleSettings", aggregateID, false, settings); err != nil {
-				return nil, err
+			if settings, ok := next.CycleSettings[team.ID]; ok {
+				if err := appendRecord("cycleSettings", team.ID, false, settings); err != nil {
+					return nil, err
+				}
 			}
 		}
 		if err := appendRange("states", snap.statesLen, func(i int) string { return next.States[i].ID }, func(i int) any { return next.States[i] }); err != nil {
@@ -419,6 +434,14 @@ func collectDirtyTeamRecords(eventType, aggregateID string, snap *teamMutationSn
 			return nil, err
 		}
 		if err := appendRange("cycles", snap.cyclesLen, func(i int) string { return next.Cycles[i].ID }, func(i int) any { return next.Cycles[i] }); err != nil {
+			return nil, err
+		}
+	case "alm.users_imported":
+		if err := appendRange("users", snap.usersLen, func(i int) string { return next.Users[i].ID }, func(i int) any { return next.Users[i] }); err != nil {
+			return nil, err
+		}
+	case "alm.projects_imported":
+		if err := appendRange("projects", snap.projectsLen, func(i int) string { return next.Projects[i].ID }, func(i int) any { return next.Projects[i] }); err != nil {
 			return nil, err
 		}
 	case "team.updated":
@@ -501,24 +524,13 @@ func lenForField(next domain.Bootstrap, field string) int {
 		return len(next.Labels)
 	case "cycles":
 		return len(next.Cycles)
+	case "users":
+		return len(next.Users)
+	case "projects":
+		return len(next.Projects)
 	default:
 		return 0
 	}
-}
-
-func teamInAppendedRange(teams []domain.Team, start int, id string) (domain.Team, bool) {
-	if id == "" {
-		if len(teams) > start {
-			return teams[len(teams)-1], true
-		}
-		return domain.Team{}, false
-	}
-	for i := start; i < len(teams); i++ {
-		if teams[i].ID == id {
-			return teams[i], true
-		}
-	}
-	return domain.Team{}, false
 }
 
 func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey string, next domain.Bootstrap, event *domain.DomainEvent, upserts []metadataRecordChange, membersChanged, teamMembersChanged bool) error {
