@@ -159,6 +159,7 @@ import type {
   RelatedIssueCreationKind,
 } from "@/components/issue/issue-options-menu";
 import { ErrorState, SkeletonRows } from "@/components/state/state-view";
+import { OrganizationNotFound } from "@/components/workspace/organization-not-found";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { toast } from "sonner";
 import type {
@@ -3394,29 +3395,16 @@ function App() {
       });
   };
   const removeWorkspace = async () => {
-    if (
-      !data ||
-      !(await confirmAction(`Delete ${data.workspace.name}?`, {
-        description: "This permanently deletes all workspace data.",
-        confirmLabel: "Delete workspace",
-      }))
-    )
-      return;
-    await run(
+    if (!data) return;
+    const updated = await run(
       () => deleteWorkspace(data.workspace.urlKey),
-      "Could not delete workspace",
+      "Could not schedule workspace deletion",
     );
-    const next = await fetchAccountBootstrap();
-    setAccount(next);
-    setData(null);
-    const workspace =
-      next.workspaces.find(
-        (item) => item.workspace.urlKey === next.lastWorkspaceKey,
-      )?.workspace ?? next.workspaces[0]?.workspace;
-    navigateTo(
-      workspace ? myIssuesPath(workspace.urlKey) : workspaceOnboardingPath(),
-      { replace: true },
-    );
+    if (!updated) return;
+    toast.success("Workspace scheduled for deletion", {
+      description: "You can cancel from Settings → Workspace → Danger zone.",
+    });
+    acceptBootstrap(await fetchBootstrap(data.workspace.urlKey));
   };
   const addTeam = async (input: {
     name: string;
@@ -3907,7 +3895,23 @@ function App() {
   if (!data)
     return withStore(
       <WorkspaceBootShell>
-        {previewIssue && !previewIssue.isSummary ? <Suspense fallback={<SkeletonRows count={9}/>}><IssueLoadingPreview issue={previewIssue} onBack={()=>navigateTo(workspaceIssuesPath(detailWorkspaceKey,'all'))}/></Suspense> : error ? <ErrorState retry={load} /> : <SkeletonRows count={9} />}
+        {previewIssue && !previewIssue.isSummary ? <Suspense fallback={<SkeletonRows count={9}/>}><IssueLoadingPreview issue={previewIssue} onBack={()=>navigateTo(workspaceIssuesPath(detailWorkspaceKey,'all'))}/></Suspense> : error ? (
+          requestedWorkspaceKey ? (
+            <OrganizationNotFound
+              orgKey={requestedWorkspaceKey}
+              onLogout={async () => {
+                await logoutAccount();
+                setSession(null);
+                setAccount(null);
+                setData(null);
+                clearNavigationCache();
+                navigateTo("/login", { replace: true });
+              }}
+            />
+          ) : (
+            <ErrorState retry={load} />
+          )
+        ) : <SkeletonRows count={9} />}
       </WorkspaceBootShell>
     );
   if (route.kind === "settings")
@@ -4600,9 +4604,20 @@ function App() {
           />
         )}
         {!workspaceValid && (
-          <RouteNotFound
-            title="Workspace not found"
-            description={`This app is connected to ${data.workspace.name}.`}
+          <OrganizationNotFound
+            orgKey={
+              "workspaceSlug" in route
+                ? route.workspaceSlug
+                : data.workspace.urlKey
+            }
+            onLogout={async () => {
+              await logoutAccount();
+              setSession(null);
+              setAccount(null);
+              setData(null);
+              clearNavigationCache();
+              navigateTo("/login", { replace: true });
+            }}
           />
         )}
         {workspaceValid && !teamValid && (

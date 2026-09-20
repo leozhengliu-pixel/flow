@@ -195,14 +195,15 @@ type AccountSession struct {
 }
 
 type Workspace struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	URLKey    string    `json:"urlKey"`
-	Icon      string    `json:"icon,omitempty"`
-	LogoURL   string    `json:"logoUrl,omitempty"`
-	Color     string    `json:"color,omitempty"`
-	Region    string    `json:"region,omitempty"`
-	CreatedAt time.Time `json:"createdAt,omitempty"`
+	ID                   string     `json:"id"`
+	Name                 string     `json:"name"`
+	URLKey               string     `json:"urlKey"`
+	Icon                 string     `json:"icon,omitempty"`
+	LogoURL              string     `json:"logoUrl,omitempty"`
+	Color                string     `json:"color,omitempty"`
+	Region               string     `json:"region,omitempty"`
+	CreatedAt            time.Time  `json:"createdAt,omitempty"`
+	DeletionRequestedAt  *time.Time `json:"deletionRequestedAt,omitempty"`
 }
 
 type WorkspaceMembership struct {
@@ -896,25 +897,33 @@ type CommitSigningKey struct {
 	AddedAt     time.Time `json:"addedAt"`
 }
 
+// CodingAgentSettings holds workspace-wide coding-agent policy (LS-0125).
+type CodingAgentSettings struct {
+	CommitSigningEnabled bool `json:"commitSigningEnabled"`
+}
+
 type WorkspaceSettings struct {
-	FiscalMonth                  string            `json:"fiscalMonth"`
-	WelcomeMessage               string            `json:"welcomeMessage,omitempty"`
-	DefaultHomeView              string            `json:"defaultHomeView,omitempty"`
-	GuestsAllowed                bool              `json:"guestsAllowed"`
-	RequireTwoFactor             bool              `json:"requireTwoFactor"`
-	SessionDurationDays          int               `json:"sessionDurationDays"`
-	AllowedDomains               []string          `json:"allowedDomains"`
-	InvitePermission             string            `json:"invitePermission"`
-	TeamCreatePermission         string            `json:"teamCreatePermission"`
-	LabelPermission              string            `json:"labelPermission"`
-	TemplatePermission           string            `json:"templatePermission"`
-	APIKeyPermission             string            `json:"apiKeyPermission"`
-	FeatureFlags                 map[string]bool   `json:"featureFlags"`
-	FeatureSettings              FeatureSettings   `json:"featureSettings"`
-	InviteLinksEnabled           bool              `json:"inviteLinksEnabled"`
-	GoogleAuthEnabled            bool              `json:"googleAuthEnabled"`
-	EmailAuthEnabled             bool              `json:"emailAuthEnabled"`
-	DisableAdminBypass           bool              `json:"disableAdminBypass"`
+	FiscalMonth                  string              `json:"fiscalMonth"`
+	WelcomeMessage               string              `json:"welcomeMessage,omitempty"`
+	DefaultHomeView              string              `json:"defaultHomeView,omitempty"`
+	GuestsAllowed                bool                `json:"guestsAllowed"`
+	RequireTwoFactor             bool                `json:"requireTwoFactor"`
+	SessionDurationDays          int                 `json:"sessionDurationDays"`
+	AllowedDomains               []string            `json:"allowedDomains"`
+	InvitePermission             string              `json:"invitePermission"`
+	TeamCreatePermission         string              `json:"teamCreatePermission"`
+	LabelPermission              string              `json:"labelPermission"`
+	TemplatePermission           string              `json:"templatePermission"`
+	APIKeyPermission             string              `json:"apiKeyPermission"`
+	FeatureFlags                 map[string]bool     `json:"featureFlags"`
+	FeatureSettings              FeatureSettings     `json:"featureSettings"`
+	CodingAgentSettings          CodingAgentSettings `json:"codingAgentSettings"`
+	InviteLinksEnabled           bool                `json:"inviteLinksEnabled"`
+	GoogleAuthEnabled            bool                `json:"googleAuthEnabled"`
+	EmailAuthEnabled             bool                `json:"emailAuthEnabled"`
+	// AllowedAuthServices lists login methods for other domains (google, email, passkey, saml, appUser).
+	AllowedAuthServices          []string            `json:"allowedAuthServices,omitempty"`
+	DisableAdminBypass           bool                `json:"disableAdminBypass"`
 	InitiativePermission         string            `json:"initiativePermission,omitempty"`
 	LoopPermission               string            `json:"loopPermission,omitempty"`
 	AgentGuidancePermission      string            `json:"agentGuidancePermission,omitempty"`

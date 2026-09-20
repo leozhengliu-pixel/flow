@@ -290,6 +290,7 @@ func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Reque
 		if !slices.Contains([]string{"daily", "weekly", "never"}, input.FeatureSettings.PulseWorkspaceSchedule) {
 			return errInvalid
 		}
+		ensureAllowedAuthServices(&input, data.WorkspaceSettings, patch)
 		input.UpdatedAt = time.Now().UTC()
 		data.WorkspaceSettings = input
 		updated = input

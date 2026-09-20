@@ -730,6 +730,23 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
     ],
   },
   {
+    id: 'authentication',
+    title: 'Authentication',
+    section: 'Administration',
+    keywords: ['saml', 'oidc', 'sso', 'login', 'passkey', 'google', 'allowedAuthServices', 'identity provider'],
+    groups: [
+      {
+        title: 'Authentication',
+        items: [
+          { title: 'Identity providers', keywords: ['saml', 'oidc', 'sso'] },
+          { title: 'Google authentication', keywords: ['google', 'login'] },
+          { title: 'Email & passkey authentication', keywords: ['email', 'passkey'] },
+          { title: 'Allowed login methods', keywords: ['allowedAuthServices'] },
+        ],
+      },
+    ],
+  },
+  {
     id: 'audit-log',
     title: 'Audit log',
     section: 'Administration',
