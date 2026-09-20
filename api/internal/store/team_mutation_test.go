@@ -119,6 +119,59 @@ func TestTeamCreatedMutationWritesOnlyChangedRecords(t *testing.T) {
 	}
 }
 
+func TestTeamSettingsFieldMutationWritesOneRecord(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	key := seedBulkTeams(t, repo, 120)
+	child := "bulk-team-00000"
+	writes := auditWrites(t, repo)
+	err = repo.MutateWorkspace(context.Background(), key, "team.settings_updated", child, map[string]string{"timezone": "Asia/Shanghai"}, func(next *domain.Bootstrap) error {
+		settings := next.TeamSettings[child]
+		settings.Timezone = "Asia/Shanghai"
+		next.TeamSettings[child] = settings
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes := writes(); !reflect.DeepEqual(changes, map[string]int{"workspace_metadata_records": 1}) {
+		t.Fatalf("settings patch amplified writes: %+v", changes)
+	}
+	if err := repo.ReloadAllWorkspaces(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if repo.Bootstrap().TeamSettings[child].Timezone != "Asia/Shanghai" {
+		t.Fatal("timezone was not persisted")
+	}
+}
+
+func TestTeamSettingsNoopDoesNotWrite(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	key := seedBulkTeams(t, repo, 80)
+	child := "bulk-team-00000"
+	current := repo.Bootstrap().TeamSettings[child].Timezone
+	writes := auditWrites(t, repo)
+	err = repo.MutateWorkspace(context.Background(), key, "team.settings_updated", child, map[string]string{"timezone": current}, func(next *domain.Bootstrap) error {
+		settings := next.TeamSettings[child]
+		settings.Timezone = current
+		next.TeamSettings[child] = settings
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes := writes(); len(changes) != 0 {
+		t.Fatalf("no-op settings patch wrote rows: %+v", changes)
+	}
+}
+
 func TestTeamSettingsParentMutationWritesOneRecordAndSyncsAncestors(t *testing.T) {
 	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
