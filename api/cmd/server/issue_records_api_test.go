@@ -126,10 +126,10 @@ func TestIssueRecordsBootstrapOmitsOrgLeafTeams(t *testing.T) {
 	}
 	defer repository.Close()
 	data := repository.Bootstrap()
-	err = repository.MutateWorkspace(t.Context(), data.Workspace.URLKey, "test.org_leaf_bootstrap", "hr:org:node:finance", nil, func(next *domain.Bootstrap) error {
-		next.Teams = append(next.Teams, domain.Team{ID: "hr:org:node:finance", Name: "财务部", Key: "FIN"})
-		next.TeamSettings["hr:org:node:finance"] = domain.TeamSettings{TeamID: "hr:org:node:finance"}
-		next.States = append(next.States, domain.WorkflowState{ID: "node-todo", TeamID: "hr:org:node:finance", Name: "Todo", Type: "unstarted"})
+	err = repository.MutateWorkspace(t.Context(), data.Workspace.URLKey, "test.org_leaf_bootstrap", "team_hr_leaf", nil, func(next *domain.Bootstrap) error {
+		next.Teams = append(next.Teams, domain.Team{ID: "team_hr_leaf", Name: "智造生产节点", Key: "X988G", ExternalSource: "hr:org:node:00013902", Private: true})
+		next.TeamSettings["team_hr_leaf"] = domain.TeamSettings{TeamID: "team_hr_leaf"}
+		next.States = append(next.States, domain.WorkflowState{ID: "node-todo", TeamID: "team_hr_leaf", Name: "Todo", Type: "unstarted"})
 		return nil
 	})
 	if err != nil {
@@ -137,13 +137,13 @@ func TestIssueRecordsBootstrapOmitsOrgLeafTeams(t *testing.T) {
 	}
 	handler := newHandler(&server{store: repository, authDisabled: true, uploadPath: t.TempDir()})
 	metadata := requestJSON[domain.Bootstrap](t, handler, "GET", "/api/issue-records/bootstrap", nil, 200)
-	if slices.ContainsFunc(metadata.Teams, func(team domain.Team) bool { return team.ID == "hr:org:node:finance" }) {
+	if slices.ContainsFunc(metadata.Teams, func(team domain.Team) bool { return team.ID == "team_hr_leaf" }) {
 		t.Fatal("org leaf team leaked into bootstrap")
 	}
 	if slices.ContainsFunc(metadata.States, func(state domain.WorkflowState) bool { return state.ID == "node-todo" }) {
 		t.Fatal("org leaf states leaked into bootstrap")
 	}
-	if _, ok := metadata.TeamSettings["hr:org:node:finance"]; ok {
+	if _, ok := metadata.TeamSettings["team_hr_leaf"]; ok {
 		t.Fatal("org leaf settings leaked into bootstrap")
 	}
 }
