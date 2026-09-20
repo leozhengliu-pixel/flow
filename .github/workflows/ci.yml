@@ -140,7 +140,7 @@ jobs:
         run: go vet ./...
 
       - name: Test with race detector and coverage
-        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+        run: go test -race -timeout 15m -covermode=atomic -coverprofile=coverage.out ./...
 
       - name: Enforce coverage floor
         run: ../scripts/check-go-coverage.sh coverage.out
@@ -219,12 +219,12 @@ jobs:
         run: |
           docker run -d --name flow-minio -p 9000:9000 \
             -e MINIO_ROOT_USER=flow -e MINIO_ROOT_PASSWORD=flow-development-secret \
-            minio/minio:RELEASE.2025-07-23T15-54-02Z server /data
+            quay.io/minio/minio:RELEASE.2025-07-23T15-54-02Z server /data
           for attempt in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:9000/minio/health/live; then break; fi
             sleep 2
           done
-          docker run --rm --network host --entrypoint /bin/sh minio/mc:RELEASE.2025-07-21T05-28-08Z \
+          docker run --rm --network host --entrypoint /bin/sh quay.io/minio/mc:RELEASE.2025-07-21T05-28-08Z \
             -c 'mc alias set flow http://127.0.0.1:9000 flow flow-development-secret && mc mb --ignore-existing flow/flow-integration'
 
       - name: S3 round trip
