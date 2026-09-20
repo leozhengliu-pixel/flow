@@ -31,8 +31,12 @@ func requestActor(s *server, r *http.Request) domain.User {
 }
 
 func (s *server) getUserSettings(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
-	writeJSON(w, http.StatusOK, data.UserSettings[requestActor(s, r).ID])
+	_, settings, ok := s.store.AccountCollections(workspaceKey(r), requestActor(s, r).ID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, settings)
 }
 
 func (s *server) updateUserSettings(w http.ResponseWriter, r *http.Request) {
