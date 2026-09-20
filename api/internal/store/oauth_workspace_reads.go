@@ -75,6 +75,24 @@ func (s *SQLiteStore) OAuthWorkspaceAccess(ctx context.Context, workspace, userI
 	return data, err
 }
 
+func (s *SQLiteStore) DocumentByID(workspace, id string) (domain.Document, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if workspace == "" {
+		workspace = s.lastWorkspaceKey
+	}
+	data, ok := s.workspaces[workspace]
+	if !ok {
+		return domain.Document{}, false
+	}
+	for _, document := range data.Documents {
+		if document.ID == id || document.SlugID == id {
+			return document, true
+		}
+	}
+	return domain.Document{}, false
+}
+
 func (s *SQLiteStore) TeamSettingsFor(workspace, teamID string) (domain.TeamSettings, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
