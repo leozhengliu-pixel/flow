@@ -38,6 +38,7 @@ import type {
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { useI18n } from "@/i18n/i18n";
+import { TriagePage } from "@/components/triage";
 import "./workspace-secondary-page.css";
 
 export type WorkspaceSecondaryKind =
@@ -69,6 +70,7 @@ type Props = {
   releaseNote?: ReleaseNote;
   onNavigate: (path: string) => void;
   onReload: () => Promise<void>;
+  onCreateIssue?: () => void;
 };
 
 export function WorkspaceSecondaryPage(props: Props) {
@@ -79,6 +81,15 @@ export function WorkspaceSecondaryPage(props: Props) {
       kind === "team-triage" ? t("Triage") : kind === "team-updates" || kind === "team-update" ? t("Updates") :
         kind === "team-resources" ? t("Resources") : kind === "team-links" ? t("Links") :
           kind === "release-note" ? t("Release note") : t("Labels");
+
+  // LS-0613 — Triage owns IssuesSplitView chrome (no secondary page header).
+  if (kind === "team-triage" && team) {
+    return (
+      <main className="secondary-page flow-triage-host" aria-label={title}>
+        <TriagePage data={data} team={team} onReload={props.onReload} onCreateIssue={props.onCreateIssue} />
+      </main>
+    );
+  }
 
   return (
     <main className="secondary-page" aria-label={title}>
@@ -96,7 +107,6 @@ export function WorkspaceSecondaryPage(props: Props) {
         <AutomationPage {...props} />
       )}
       {kind === "team-board" && team && <TeamBoard data={data} team={team} />}
-      {kind === "team-triage" && team && <TriagePage data={data} team={team} />}
       {(kind === "team-updates" || kind === "team-update") && team && <TeamUpdates data={data} team={team} single={kind === "team-update"} onNavigate={props.onNavigate} />}
       {(kind === "team-resources" || kind === "team-links") && team && <ResourcesPage data={data} team={team} linksOnly={kind === "team-links"} />}
       {kind === "release-note" && <ReleaseNotePage data={data} note={props.releaseNote} />}
@@ -445,8 +455,6 @@ function RunsList({ runs, workflowRunId, onRetry }: { runs: WorkflowRun[]; workf
 
 function TeamBoard({ data, team }: { data: BootstrapData; team: Team }) { const { t } = useI18n(); const issues = data.issues.filter(issue => issue.team.id === team.id); const states = data.states.filter(state => state.teamId === team.id); return <section className="secondary-content board-content"><div className="secondary-board-toolbar"><span>{issues.length} {t("issues")}</span></div><div className="secondary-board">{states.map(state => <div className="secondary-column" key={state.id}><header><span className="secondary-state-dot" style={{ background: state.color }} />{state.name}<small>{issues.filter(issue => issue.state.id === state.id).length}</small></header>{issues.filter(issue => issue.state.id === state.id).map(issue => <IssueCard issue={issue} key={issue.id} />)}</div>)}{!states.length && <EmptyState title={t("No workflow states")} body={t("Configure workflow states for this team to use the board.")} />}</div></section>; }
 function IssueCard({ issue }: { issue: Issue }) { return <article className="secondary-issue-card"><span>{issue.identifier}</span><strong>{issue.title}</strong><small>{issue.priorityLabel}</small></article>; }
-
-function TriagePage({ data, team }: { data: BootstrapData; team: Team }) { const { t } = useI18n(); const triage = data.issues.filter(issue => issue.team.id === team.id && issue.state.type === "backlog" && !issue.triagedAt); return <section className="secondary-content"><div className="secondary-section-heading"><div><h2>{t("Triage inbox")}</h2><p>{t("Review incoming issues before they enter the team workflow.")}</p></div></div><div className="secondary-list">{triage.map(issue => <IssueCard issue={issue} key={issue.id} />)}</div>{!triage.length && <EmptyState title={t("Triage is empty")} body={t("Incoming issues will appear here when triage is enabled.")} />}</section>; }
 
 function TeamUpdates({ data, team, single, onNavigate: _onNavigate }: { data: BootstrapData; team: Team; single: boolean; onNavigate: (path: string) => void }) { const { t, formatDate } = useI18n(); const projects = data.projects.filter(project => project.teamIds.includes(team.id)); const updates = projects.flatMap(project => (data.projectUpdates[project.id] || []).map(update => ({ update, project }))).sort((a, b) => b.update.createdAt.localeCompare(a.update.createdAt)); const visible = single ? updates.slice(0, 1) : updates; return <section className="secondary-content"><div className="secondary-section-heading"><div><h2>{t("Team updates")}</h2><p>{t("Share progress, decisions, and risks with your team.")}</p></div></div><div className="secondary-list">{visible.map(({ update, project }) => { const author = update.user?.displayName || update.user?.name || t("Unknown"); return <article className="secondary-update-card" key={update.id}><div className="secondary-update-head"><strong>{project.name}</strong><span>{formatDate(update.createdAt, { dateStyle: "medium" })}</span></div><p>{update.body || t("No update text")}</p><div className="secondary-update-foot"><UserAvatar name={author} avatarUrl={update.user?.avatarUrl} /><span>{author}</span><span className="secondary-health">{update.health}</span><MessageSquare size={13} />{update.comments?.length ?? 0}</div></article>; })}</div>{!visible.length && <EmptyState title={t("No updates yet")} body={t("Project updates for this team will appear here.")} />}</section>; }
 

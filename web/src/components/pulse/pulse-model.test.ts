@@ -103,4 +103,15 @@ describe('pulse model', () => {
     expect(filterValues(data, 'project')).toEqual([{ id: 'project-1', label: 'Project' }])
     expect(filterValues(data, 'projectMember')).toHaveLength(2)
   })
+
+  it('supports projectStatusType and flag-gated team update type (LS-0266)', () => {
+    const data = pulseData()
+    expect(filterValues(data, 'projectStatusType').map(item => item.id)).toContain('started')
+    expect(filterValues(data, 'updateType').map(item => item.id)).toEqual(['project', 'initiative'])
+    data.workspaceSettings = { featureFlags: { feedPostUpdate: true } } as unknown as BootstrapData['workspaceSettings']
+    expect(filterValues(data, 'updateType').map(item => item.id)).toEqual(['project', 'initiative', 'team'])
+    expect(buildPulseFeed(data, 'all', {
+      match: 'all', filters: [{ id: 'pst', field: 'projectStatusType', operator: 'is', values: ['started'] }],
+    }).map(item => item.kind)).toEqual(['project'])
+  })
 })
