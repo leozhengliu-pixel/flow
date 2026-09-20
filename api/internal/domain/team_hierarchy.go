@@ -145,20 +145,30 @@ func RebuildTeamDirectory(data *Bootstrap) {
 }
 
 func NoteTeamAppended(data *Bootstrap, team Team) {
-	if data.TeamByID == nil {
+	NoteTeamsAppended(data, len(data.Teams)-1)
+}
+
+func NoteTeamsAppended(data *Bootstrap, from int) {
+	if data.TeamByID == nil || data.TeamByKey == nil || data.TeamChildren == nil {
 		RebuildTeamDirectory(data)
 		return
 	}
-	data.TeamByID[team.ID] = len(data.Teams) - 1
-	if team.Key != "" {
-		data.TeamByKey[strings.ToLower(team.Key)] = team.ID
+	if from < 0 {
+		from = 0
 	}
-	parent := ""
-	if data.TeamSettings != nil {
-		parent = data.TeamSettings[team.ID].ParentTeamID
-	}
-	if team.RetiredAt == nil {
-		data.TeamChildren[parent] = append(data.TeamChildren[parent], team.ID)
+	for i := from; i < len(data.Teams); i++ {
+		team := data.Teams[i]
+		data.TeamByID[team.ID] = i
+		if team.Key != "" {
+			data.TeamByKey[strings.ToLower(team.Key)] = team.ID
+		}
+		parent := ""
+		if data.TeamSettings != nil {
+			parent = data.TeamSettings[team.ID].ParentTeamID
+		}
+		if team.RetiredAt == nil {
+			data.TeamChildren[parent] = append(data.TeamChildren[parent], team.ID)
+		}
 	}
 }
 
