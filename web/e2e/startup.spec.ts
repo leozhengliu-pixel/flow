@@ -55,6 +55,8 @@ for (const theme of ['light', 'dark'] as const) {
       }
       await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible()
       await expect(page.locator('.flow-startup')).toHaveCount(0)
+      // Theme from flow.theme must survive settings/bootstrap applyAccountTheme.
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
       expect(errors).toEqual([])
     } finally {
       gates.forEach(gate => gate.release())

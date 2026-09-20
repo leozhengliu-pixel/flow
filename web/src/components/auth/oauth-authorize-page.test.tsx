@@ -7,7 +7,7 @@ import type { AccountBootstrap } from '@/types/flow'
 import { viewer } from '@/test/fixtures'
 
 vi.mock('@/lib/api',()=>({decideOAuthAuthorization:vi.fn(),fetchOAuthAuthorizationRequest:vi.fn(),fetchUserSettings:vi.fn()}))
-vi.mock('@/lib/theme',()=>({applyTheme:vi.fn()}))
+vi.mock('@/lib/theme',()=>({applyAccountTheme:vi.fn(),applyTheme:vi.fn()}))
 const account:AccountBootstrap={viewer,workspaces:[{workspace:{id:'workspace-1',name:'Workspace',urlKey:'workspace'},role:'Admin',joinedAt:'2026-09-11T00:00:00Z',issueCount:75675}],lastWorkspaceKey:'workspace',workspaceRegionSelectorEnabled:false,workspaceDefaultRegion:'global'}
 const authorization:OAuthAuthorizationRequest={client:{client_id:'client-1',client_name:'First client'},redirectUri:'http://127.0.0.1/callback',scopes:['read'],scopeLabels:['Read workspace'],workspaces:account.workspaces,viewer}
 const initial='/oauth/authorize?client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%2Fcallback&response_type=code&code_challenge=challenge&code_challenge_method=S256'
