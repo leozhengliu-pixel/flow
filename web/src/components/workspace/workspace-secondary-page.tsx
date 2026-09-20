@@ -43,6 +43,7 @@ import { IssueBoard } from "@/components/issue-explorer/issue-board";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
 import { updateIssue } from "@/lib/api";
 import { toast } from "sonner";
+import { filterLabelItems, LabelPageToolbar } from "./label-page-toolbar";
 import "./workspace-secondary-page.css";
 
 export type WorkspaceSecondaryKind =
@@ -114,7 +115,7 @@ export function WorkspaceSecondaryPage(props: Props) {
       {(kind === "team-updates" || kind === "team-update") && team && <TeamUpdates data={data} team={team} single={kind === "team-update"} onNavigate={props.onNavigate} />}
       {(kind === "team-resources" || kind === "team-links") && team && <ResourcesPage data={data} team={team} linksOnly={kind === "team-links"} />}
       {kind === "release-note" && <ReleaseNotePage data={data} note={props.releaseNote} />}
-      {kind === "label" && <LabelPage data={data} labelName={props.resourceName} resourceType={props.resourceType} />}
+      {kind === "label" && <LabelPage data={data} labelName={props.resourceName} resourceType={props.resourceType} onReload={props.onReload} />}
     </main>
   );
 }
@@ -502,7 +503,26 @@ function ResourcesPage({ data: _data, team, linksOnly }: { data: BootstrapData; 
 
 function ReleaseNotePage({ data, note }: { data: BootstrapData; note?: ReleaseNote }) { const { t, formatDate } = useI18n(); const item = note || data.releaseNotes[0]; if (!item) return <section className="secondary-content"><EmptyState title={t("Release note not found")} body={t("This release note is no longer available.")} /></section>; return <article className="secondary-content release-note-content"><div className="release-note-meta">{item.publishedAt ? t("Published") : t("Draft")} · {formatDate(item.updatedAt, { dateStyle: "medium" })}</div><h2>{item.title}</h2><div className="release-note-body">{item.body}</div><div className="release-note-author"><UserAvatar name={item.creator.displayName || item.creator.name} avatarUrl={item.creator.avatarUrl} /><span>{item.creator.displayName || item.creator.name}</span></div></article>; }
 
-function LabelPage({ data, labelName, resourceType = "issue" }: { data: BootstrapData; labelName?: string; resourceType?: "issue" | "project" | "initiative" }) { const { t } = useI18n(); const label = data.labels.find(item => item.name === labelName && (item.resourceType ?? "issue") === resourceType) || data.labels.find(item => (item.resourceType ?? "issue") === resourceType); if (!label) return <section className="secondary-content"><EmptyState title={t("Label not found")} body={t("This label is no longer available.")} /></section>; const issues = data.issues.filter(issue => issue.labels.some(item => item.id === label.id)); const projects = data.projects.filter(project => project.labelIds.includes(label.id)); const initiatives = data.initiatives.filter(initiative => initiative.labelIds.includes(label.id)); const rows = resourceType === "project" ? projects.map(project => <article className="secondary-list-row" key={project.id}><div className="secondary-row-icon"><FileText size={16} /></div><div className="secondary-row-main"><strong data-i18n-ignore>{project.name}</strong><small>{t("Project")}</small></div></article>) : resourceType === "initiative" ? initiatives.map(initiative => <article className="secondary-list-row" key={initiative.id}><div className="secondary-row-icon"><FileText size={16} /></div><div className="secondary-row-main"><strong data-i18n-ignore>{initiative.name}</strong><small>{t("Initiative")}</small></div></article>) : issues.map(issue => <IssueCard issue={issue} key={issue.id} />); const noun = resourceType === "project" ? t("Projects") : resourceType === "initiative" ? t("Initiatives") : t("Issues"); return <section className="secondary-content"><div className="secondary-label-heading"><span className="secondary-label-dot" style={{ background: label.color }} /><div><h2>{label.name}</h2><p>{t("Items with this label")}: {noun}</p></div></div><div className="secondary-list">{rows}</div>{!rows.length && <EmptyState title={t("No items with this label")} body={t("Items using this label will appear here.")} />}</section>; }
+function LabelPage({ data, labelName, resourceType = "issue", onReload }: { data: BootstrapData; labelName?: string; resourceType?: "issue" | "project" | "initiative"; onReload?: () => Promise<void> }) {
+  const { t } = useI18n();
+  const [search, setSearch] = useState("");
+  const [triageOnly, setTriageOnly] = useState(false);
+  const label = data.labels.find(item => item.name === labelName && (item.resourceType ?? "issue") === resourceType) || data.labels.find(item => (item.resourceType ?? "issue") === resourceType);
+  if (!label) return <section className="secondary-content"><EmptyState title={t("Label not found")} body={t("This label is no longer available.")} /></section>;
+  const issues = useMemo(() => filterLabelItems(data.issues.filter(issue => issue.labels.some(item => item.id === label.id)), { search, triageOnly, resourceType, teamSettings: data.teamSettings }), [data.issues, data.teamSettings, label.id, resourceType, search, triageOnly]);
+  const projects = useMemo(() => filterLabelItems(data.projects.filter(project => project.labelIds.includes(label.id)).map(project => ({ ...project, title: project.name })), { search, triageOnly: false, resourceType }), [data.projects, label.id, search]);
+  const initiatives = useMemo(() => filterLabelItems(data.initiatives.filter(initiative => initiative.labelIds.includes(label.id)).map(initiative => ({ ...initiative, title: initiative.name })), { search, triageOnly: false, resourceType }), [data.initiatives, label.id, search]);
+  const rows = resourceType === "project"
+    ? projects.map(project => <article className="secondary-list-row" key={project.id}><div className="secondary-row-icon"><FileText size={16} /></div><div className="secondary-row-main"><strong data-i18n-ignore>{project.name}</strong><small>{t("Project")}</small></div></article>)
+    : resourceType === "initiative"
+      ? initiatives.map(initiative => <article className="secondary-list-row" key={initiative.id}><div className="secondary-row-icon"><FileText size={16} /></div><div className="secondary-row-main"><strong data-i18n-ignore>{initiative.name}</strong><small>{t("Initiative")}</small></div></article>)
+      : issues.map(issue => <IssueCard issue={issue as Issue} key={issue.id} />);
+  return <section className="secondary-content">
+    <LabelPageToolbar data={data} label={label} resourceType={resourceType} search={search} triageOnly={triageOnly} onReload={onReload} onSearchChange={setSearch} onTriageOnlyChange={setTriageOnly} />
+    <div className="secondary-list">{rows}</div>
+    {!rows.length && <EmptyState title={t("No items with this label")} body={t("Items using this label will appear here.")} />}
+  </section>;
+}
 
 function Detail({ label, value }: { label: string; value: string }) { return <div className="secondary-detail"><span>{label}</span><strong>{value}</strong></div>; }
 function EmptyState({ title, body }: { title: string; body: string }) { return <div className="secondary-empty"><div className="secondary-empty-icon"><FileText size={20} /></div><h3>{title}</h3><p>{body}</p></div>; }
