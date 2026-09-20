@@ -31,6 +31,22 @@ export const OAuthAuthorizePage = lazyPage(
   () => import("@/components/auth/oauth-authorize-page"),
   "OAuthAuthorizePage",
 );
+export const CompleteOAuthView = lazyPage(
+  () => import("@/components/auth/complete-oauth-view"),
+  "CompleteOAuthView",
+);
+export const CompleteFigmaAuthView = lazyPage(
+  () => import("@/components/auth/complete-figma-auth-view"),
+  "CompleteFigmaAuthView",
+);
+export const CompleteSentryAuthView = lazyPage(
+  () => import("@/components/auth/complete-sentry-auth-view"),
+  "CompleteSentryAuthView",
+);
+export const AuthDesktopRedirectFigma = lazyPage(
+  () => import("@/components/auth/auth-desktop-redirect-figma"),
+  "AuthDesktopRedirectFigma",
+);
 export const WorkspaceSearchPage = lazyPage(
   () => import("@/components/search/workspace-search-page"),
   "WorkspaceSearchPage",

@@ -1,0 +1,154 @@
+/* OAuth complete / desktop redirect surfaces — light + dark */
+
+.oauth-complete-page {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: 56px minmax(0, 1fr);
+  background: var(--bg-panel, #08090a);
+  color: var(--theme-text-primary);
+  font-family: "Inter Variable", "SF Pro Display", system-ui, sans-serif;
+}
+
+.oauth-complete-page > header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 20px;
+  font-size: 15px;
+  font-weight: 530;
+}
+
+.oauth-complete-brand {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: conic-gradient(from 225deg, var(--theme-text-primary) 0 72%, transparent 72%);
+}
+
+.oauth-complete-body {
+  display: grid;
+  place-items: center;
+  padding: 24px 16px 48px;
+}
+
+.oauth-complete-card {
+  box-sizing: border-box;
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  padding: 36px 28px;
+  border: 0.5px solid var(--border, #2d2e32);
+  border-radius: 10px;
+  background: var(--theme-surface-2, #161719);
+  text-align: center;
+  box-shadow: 0 1px 2px #00000040;
+}
+
+.oauth-complete-card[data-state="loading"] {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  gap: 12px;
+}
+
+.oauth-complete-card h1 {
+  margin: 0 0 10px;
+  font-size: 22px;
+  font-weight: 560;
+  line-height: 30px;
+}
+
+.oauth-complete-card p {
+  margin: 0;
+  color: var(--muted, #8a8b90);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.oauth-complete-card[data-state="error"] h1 {
+  color: var(--theme-text-primary);
+}
+
+.oauth-complete-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.oauth-complete-actions a,
+.oauth-complete-actions button {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border: 0.5px solid #6865d7;
+  border-radius: 8px;
+  background: #5e5ce6;
+  color: white;
+  font: 550 13px inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.oauth-complete-actions a:hover,
+.oauth-complete-actions button:hover {
+  background: #6866eb;
+}
+
+.oauth-complete-actions .oauth-complete-secondary {
+  border-color: var(--border, #2d2e32);
+  background: transparent;
+  color: var(--theme-text-primary);
+}
+
+.oauth-complete-actions .oauth-complete-secondary:hover {
+  background: var(--theme-control-hover, #1b1c1f);
+}
+
+.oauth-complete-spinner {
+  width: 22px;
+  height: 22px;
+  animation: oauth-complete-spin 0.8s linear infinite;
+  color: var(--muted, #8a8b90);
+}
+
+.oauth-complete-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 0.5px solid var(--border, #2d2e32);
+  color: var(--muted, #8a8b90);
+  font-size: 11px;
+  font-weight: 520;
+}
+
+@keyframes oauth-complete-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+:root[data-theme="light"] .oauth-complete-page {
+  background: var(--bg-panel, #f7f8f8);
+}
+
+:root[data-theme="light"] .oauth-complete-card {
+  border-color: var(--border, #e6e6e6);
+  background: white;
+  box-shadow: 0 1px 2px #0000000a, 0 12px 40px #00000006;
+}
+
+:root[data-theme="light"] .oauth-complete-card p,
+:root[data-theme="light"] .oauth-complete-badge {
+  color: var(--muted, #6b6f76);
+}
+
+:root[data-theme="light"] .oauth-complete-actions .oauth-complete-secondary {
+  border-color: var(--border, #d0d0d0);
+}
