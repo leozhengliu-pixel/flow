@@ -1,3 +1,4 @@
+import { ActivitySidebarSection, type ActivitySidebarItem } from '@/components/panel/activity-sidebar-section'
 import { AppLink } from '@/components/ui/app-link'
 import { Component, useId, useEffect, useMemo, useState, type DragEvent, type ErrorInfo, type KeyboardEvent, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
@@ -118,9 +119,13 @@ export function ProjectDetailsSidebar({ featureFlags, issueSummary, availableIss
       </div>
     </SidebarSection>
 
-    <SidebarSection onToggle={() => setActivityOpen(value => !value)} open={activityOpen} title="Activity" action={<button className="project-details-sidebar__see-all" onClick={() => onTabChange('activity')} type="button">See all</button>}>
-    <div className="project-details-sidebar__activity">{events.slice(0, 6).map(event => <div key={event.id}><Avatar name={event.actor}/><p><strong data-i18n-ignore>{event.actor}</strong> {event.text} <time>· {event.date}</time></p></div>)}</div>
-    </SidebarSection>
+    <ActivitySidebarSection
+      entityId={project.id}
+      items={events.map(event => ({ id: event.id, createdAt: event.createdAt ?? project.createdAt, category: 'property' as const, userNames: [event.actor], text: event.text, actorLabel: event.actor } satisfies ActivitySidebarItem))}
+      onSeeAll={() => onTabChange('activity')}
+      open={activityOpen}
+      onOpenChange={setActivityOpen}
+    />
   </aside>
 }
 

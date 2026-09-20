@@ -1907,3 +1907,24 @@
 .lp-projects-display__properties button{height:var(--filter-control-height);font-size:12px}
 .lp-projects-display__footer button{border-color:var(--theme-border-strong)}
 .lp-projects-display__footer button:hover{background:var(--theme-surface-active);color:var(--theme-text-primary)}
+
+/* LS-0609 Timeline honesty — Add dates empty, Today chrome, resize handles */
+.lp-project-timeline__toolbar { align-items: center; display: flex; gap: 8px; justify-content: flex-end; padding: 0 12px 8px; }
+.lp-project-timeline__today { background: var(--theme-surface-1, transparent); border: .5px solid var(--theme-border-strong, rgb(255 255 255 / 12%)); border-radius: 6px; color: var(--theme-text-primary); cursor: pointer; font-size: 12px; height: 28px; padding: 0 10px; }
+.lp-project-timeline__today:hover { background: var(--theme-surface-hover, rgb(255 255 255 / 6%)); }
+.lp-project-timeline__scroller { overflow: auto; position: relative; }
+.lp-project-timeline__today-line { bottom: 0; border-left: 1px dashed #5e6ad2; pointer-events: none; position: absolute; top: 40px; z-index: 3; }
+.lp-project-timeline__add-dates { align-items: center; background: transparent; border: .5px dashed var(--theme-border-strong, rgb(255 255 255 / 16%)); border-radius: 4px; color: var(--theme-text-secondary, #8a8f98); cursor: pointer; display: inline-flex; font-size: 12px; gap: 8px; height: 26px; justify-self: start; margin-left: 8px; padding: 0 8px; }
+.lp-project-timeline__add-dates em { color: var(--theme-accent, #5e6ad2); font-style: normal; font-weight: 500; }
+.lp-project-timeline__add-dates:hover { background: var(--theme-surface-hover, rgb(255 255 255 / 4%)); color: var(--theme-text-primary); }
+.lp-project-timeline__bar { display: grid; height: 26px; justify-self: start; margin-left: calc(var(--timeline-start) + var(--timeline-drag-offset, 0%) + var(--timeline-resize-start, 0%)); position: relative; width: calc(var(--timeline-width) - var(--timeline-resize-start, 0%) + var(--timeline-resize-end, 0%)); }
+.lp-project-timeline__bar > button { background: #2d3f62; border: .5px solid #5578ad; border-radius: 4px; color: #e7edf8; cursor: grab; font-size: 12px; height: 26px; overflow: hidden; padding: 0 8px; text-align: left; text-overflow: ellipsis; user-select: none; white-space: nowrap; width: 100%; }
+.lp-project-timeline__bar[data-dragging=true] > button { cursor: grabbing; box-shadow: 0 4px 12px rgb(0 0 0 / 24%); }
+.lp-project-timeline__bar > button:hover { background: #394f78; }
+.lp-project-timeline__handle { background: transparent; bottom: 0; cursor: ew-resize; position: absolute; top: 0; width: 8px; z-index: 2; }
+.lp-project-timeline__handle.is-start { left: -2px; }
+.lp-project-timeline__handle.is-end { right: -2px; }
+.lp-project-timeline__handle:hover { background: rgb(144 192 247 / 35%); }
+:root[data-theme="light"] .lp-project-timeline__add-dates { border-color: rgb(0 0 0 / 16%); color: #6b6f76; }
+:root[data-theme="light"] .lp-project-timeline__bar > button { background: #d7e4f7; border-color: #8eadd9; color: #1a2b4a; }
+:root[data-theme="light"] .lp-project-timeline__bar > button:hover { background: #c8d9f2; }
