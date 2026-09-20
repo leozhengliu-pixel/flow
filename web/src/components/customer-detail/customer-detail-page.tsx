@@ -3,6 +3,7 @@ import { refreshResourcePreferences } from '@/lib/resource-preferences';
 import { toggleFavoriteFor } from '@/lib/favorites';
 import { customerRevenueLabel, formatCustomerRevenue } from '@/lib/customer-settings';
 import {
+  Archive,
   Bell,
   Check,
   Copy,
@@ -24,6 +25,7 @@ import {
   createCustomerRequest,
   createIssue,
   deleteCustomer,
+  archiveCustomerNeed,
   deleteCustomerRequest,
   deleteCustomerRequestAttachment,
   removeSubscription,
@@ -50,8 +52,13 @@ export function CustomerDetailPage({
   const [adding, setAdding] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const requests = data.customerRequests.filter(
+  const [showArchivedNeeds, setShowArchivedNeeds] = useState(false);
+  const allRequests = data.customerRequests.filter(
     (item) => item.customerId === customer.id,
+  );
+  const archivedCustomerNeedsCount = allRequests.filter((item) => item.archivedAt).length;
+  const requests = allRequests.filter(
+    (item) => showArchivedNeeds || !item.archivedAt,
   );
   const favorite = data.favorites.some(
     (item) =>
@@ -253,7 +260,7 @@ export function CustomerDetailPage({
           </DropdownMenu.Root></>}
           {customer.size != null && <><label>Size</label><span>{customer.size}</span></>}
           {customer.annualRevenue != null && <><label>{customerRevenueLabel(data.workspaceSettings.featureSettings)}</label><span>{formatCustomerRevenue(customer.annualRevenue,data.workspaceSettings.featureSettings)}</span></>}
-          <label>Requests</label><span>{requests.length}</span>
+          <label>Requests</label><span>{allRequests.filter((item) => !item.archivedAt).length}</span>
           {customer.ownerId && (
             <>
               <label>Owner</label>
@@ -270,6 +277,18 @@ export function CustomerDetailPage({
         <div className="customer-requests-heading">
           <span>Requests</span>
           <small>{requests.length}</small>
+          {archivedCustomerNeedsCount > 0 && (
+            <button
+              aria-pressed={showArchivedNeeds}
+              className="customer-show-archived"
+              type="button"
+              onClick={() => setShowArchivedNeeds((value) => !value)}
+            >
+              {showArchivedNeeds
+                ? "Hide archived"
+                : `Show archived (${archivedCustomerNeedsCount})`}
+            </button>
+          )}
           <button onClick={() => setAdding(true)}>
             <Plus size={13} />
             Add request
@@ -381,12 +400,14 @@ function CustomerRequestRow({
     }
   };
   return (
-    <div className="customer-request-row">
+    <div className={`customer-request-row${request.archivedAt ? " is-archived" : ""}`}>
       <div>
         <strong>{request.body}</strong>
         <small>
           {request.creator.displayName} ·{" "}
           {new Date(request.createdAt).toLocaleDateString()} · {request.source}
+          {request.priority ? " · Important" : ""}
+          {request.archivedAt ? " · Archived" : ""}
         </small>
         {issue && (
           <button onClick={() => onOpenResource("issue", issue.id)}>
@@ -439,6 +460,14 @@ function CustomerRequestRow({
             <DropdownMenu.Item onSelect={() => fileRef.current?.click()}>
               <Paperclip size={14} />
               Attach file
+            </DropdownMenu.Item>
+            <DropdownMenu.Item
+              onSelect={() =>
+                void archiveCustomerNeed(request.id, !request.archivedAt).then(onReload)
+              }
+            >
+              <Archive size={14} />
+              {request.archivedAt ? "Unarchive" : "Archive"}
             </DropdownMenu.Item>
             <DropdownMenu.Separator />
             <DropdownMenu.Item
