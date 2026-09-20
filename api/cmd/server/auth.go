@@ -391,6 +391,10 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	if key == "" || r.URL.Path == "/api/account/bootstrap" || r.URL.Path == "/api/invitations/accept" || (r.Method == http.MethodPost && r.URL.Path == "/api/workspaces") {
 		return true
 	}
+	// Access-status must work for authenticated non-members (OrganizationNotFound).
+	if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/workspaces/") && strings.HasSuffix(r.URL.Path, "/access-status") {
+		return true
+	}
 	// Workspace membership and feature gates require metadata only. Resource
 	// authorization below loads the entities required by the specific route.
 	var data domain.Bootstrap
@@ -567,6 +571,9 @@ func adminOnlyRequest(r *http.Request) bool {
 		return true
 	}
 	if strings.HasPrefix(path, "/api/workspaces/") && (r.Method == http.MethodPatch || r.Method == http.MethodDelete) && !strings.Contains(path, "/teams/") {
+		return true
+	}
+	if strings.HasPrefix(path, "/api/workspaces/") && strings.HasSuffix(path, "/cancel-deletion") {
 		return true
 	}
 	return false

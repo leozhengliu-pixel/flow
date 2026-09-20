@@ -331,6 +331,7 @@ const NAV: { title: string; items: NavItem[] }[] = [
       { id: "teams", label: "Teams", icon: UsersRound },
       { id: "members", label: "Members", icon: UserRound },
       { id: "security", label: "Security", icon: ShieldCheck },
+      { id: "authentication", label: "Authentication", icon: KeyRound },
       { id: "audit-log", label: "Audit log", icon: FileClock },
       { id: "api", label: "API", icon: Braces },
       { id: "applications", label: "Applications", icon: AppWindow },
@@ -1001,13 +1002,17 @@ function SettingsBody(
   if (page === "security")
     return (
       <>
-        <SecurityPage data={props.data} onReload={props.onReload} />
+        <SecurityPage data={props.data} onReload={props.onReload} onNavigate={props.onNavigate} />
         <SecuritySupplement
           data={props.data}
           onNavigate={props.onNavigate}
           onReload={props.onReload}
         />
       </>
+    );
+  if (page === "authentication")
+    return (
+      <AuthenticationPage data={props.data} onReload={props.onReload} />
     );
   if (
     [
@@ -1305,21 +1310,45 @@ function WorkspacePage(
         </Row>
       </Section>
       <Section title="Danger zone">
-        <Row
-          danger
-          title="Delete workspace"
-          description="Schedule workspace to be permanently deleted"
-        >
-          <ActionButton danger onClick={() => setConfirm(true)}>
-            Delete workspace
-          </ActionButton>
-        </Row>
+        {props.data.workspace.deletionRequestedAt ? (
+          <Row
+            danger
+            title="Workspace scheduled for deletion"
+            description={`Deletion requested ${new Date(props.data.workspace.deletionRequestedAt).toLocaleString()}. Cancel to keep this workspace.`}
+          >
+            <ActionButton
+              onClick={() => {
+                void (async () => {
+                  const { cancelOrganizationDeletion } = await import(
+                    "@/lib/organization-settings-helper"
+                  );
+                  const updated = await cancelOrganizationDeletion(
+                    props.data.workspace.urlKey,
+                  );
+                  if (updated) await props.onReload();
+                })();
+              }}
+            >
+              Cancel deletion
+            </ActionButton>
+          </Row>
+        ) : (
+          <Row
+            danger
+            title="Delete workspace"
+            description="Schedule workspace to be permanently deleted"
+          >
+            <ActionButton danger onClick={() => setConfirm(true)}>
+              Delete workspace
+            </ActionButton>
+          </Row>
+        )}
       </Section>
       <ConfirmDialog
         open={confirm}
-        title="Delete workspace?"
-        description={`This permanently deletes ${props.data.workspace.name} and all of its data.`}
-        confirm="Delete workspace"
+        title="Schedule workspace deletion?"
+        description={`This schedules ${props.data.workspace.name} for permanent deletion. You can cancel from the Danger zone until deletion completes.`}
+        confirm="Schedule deletion"
         onCancel={() => setConfirm(false)}
         onConfirm={async () => {
           setConfirm(false);
@@ -2799,9 +2828,11 @@ function MembersPageV2({
 function SecurityPage({
   data,
   onReload,
+  onNavigate,
 }: {
   data: BootstrapData;
   onReload: () => Promise<void>;
+  onNavigate: (page: SettingsPageId, teamKey?: string, teamSection?: TeamSettingsSection) => void;
 }) {
   const [settings, setSettings] = useState(data.workspaceSettings);
   useEffect(
@@ -2858,17 +2889,15 @@ function SecurityPage({
           />
         </Row>
       </Section>
-      <Section title="Authentication methods">
-        {toggle(
-          "Google authentication",
-          "googleAuthEnabled",
-          "When enabled, this is available to all workspace members and guests",
-        )}
-        {toggle(
-          "Email & passkey authentication",
-          "emailAuthEnabled",
-          "When enabled, this is available to all workspace members and guests",
-        )}
+      <Section title="Authentication">
+        <Row
+          title="Authentication settings"
+          description="Manage SAML/OIDC identity providers and allowed login methods."
+        >
+          <ActionButton onClick={() => onNavigate("authentication")}>
+            Open Authentication
+          </ActionButton>
+        </Row>
         <Row
           title="Require two-factor authentication"
           description="Require a second factor for all members."
@@ -2900,7 +2929,6 @@ function SecurityPage({
           />
         </Row>
       </Section>
-      <EnterpriseIdentityProviders data={data} onReload={onReload} />
       <Section title="Workspace login and restrictions">
         <FieldRow
           title="Approved email domains"
@@ -3793,7 +3821,85 @@ function IntegrationsSettings({
           );
         })}
       </Section>
+    </>
+  );
+}
+function AuthenticationPage({
+  data,
+  onReload,
+}: {
+  data: BootstrapData;
+  onReload: () => Promise<void>;
+}) {
+  const [settings, setSettings] = useState(data.workspaceSettings);
+  useEffect(() => setSettings(data.workspaceSettings), [data.workspaceSettings]);
+  const save = async (next: WorkspaceSettings) => {
+    setSettings(next);
+    try {
+      await updateWorkspacePreferences(next);
+      await onReload();
+      toast.success("Authentication settings saved");
+    } catch (error) {
+      setSettings(data.workspaceSettings);
+      toast.error(error instanceof Error ? error.message : "Could not save authentication settings");
+    }
+  };
+  const services = settings.allowedAuthServices?.length
+    ? settings.allowedAuthServices
+    : [
+        ...(settings.googleAuthEnabled !== false ? (["google"] as const) : []),
+        ...(settings.emailAuthEnabled !== false ? (["email"] as const) : []),
+      ];
+  const toggleService = (service: "google" | "email" | "passkey" | "saml" | "appUser", enabled: boolean) => {
+    const next = enabled
+      ? Array.from(new Set([...services, service]))
+      : services.filter((item) => item !== service);
+    void save({
+      ...settings,
+      allowedAuthServices: next as WorkspaceSettings["allowedAuthServices"],
+      googleAuthEnabled: next.includes("google"),
+      emailAuthEnabled: next.includes("email") || next.includes("passkey"),
+    });
+  };
+  return (
+    <>
+      <PageTitle description="Configure enterprise SSO and which login methods members can use.">
+        Authentication
+      </PageTitle>
       <EnterpriseIdentityProviders data={data} onReload={onReload} />
+      <Section title="Other domains">
+        <p className="settings-section-note">
+          Control how all other email domains (those not approved by an identity provider above) can authenticate.
+        </p>
+        <Row title="Google authentication" description="Currently available to all members and guests">
+          <Toggle
+            label="Google authentication"
+            checked={services.includes("google")}
+            onChange={(value) => toggleService("google", value)}
+          />
+        </Row>
+        <Row title="Email & passkey authentication" description="Currently available to all members and guests">
+          <Toggle
+            label="Email & passkey authentication"
+            checked={services.includes("email") || services.includes("passkey")}
+            onChange={(value) => toggleService("email", value)}
+          />
+        </Row>
+        <Row title="SAML authentication" description="Allow SAML/SSO for domains without a dedicated identity provider row">
+          <Toggle
+            label="SAML authentication"
+            checked={services.includes("saml")}
+            onChange={(value) => toggleService("saml", value)}
+          />
+        </Row>
+        <Row title="App users" description="Allow application / agent accounts to authenticate">
+          <Toggle
+            label="App users"
+            checked={services.includes("appUser")}
+            onChange={(value) => toggleService("appUser", value)}
+          />
+        </Row>
+      </Section>
     </>
   );
 }

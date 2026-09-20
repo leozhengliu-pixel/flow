@@ -1137,7 +1137,7 @@ func defaultUserSettings(userID string) domain.UserSettings {
 }
 
 func defaultWorkspaceSettings() domain.WorkspaceSettings {
-	return domain.WorkspaceSettings{FiscalMonth: "January", GuestsAllowed: true, SessionDurationDays: 30, InvitePermission: "admins", TeamCreatePermission: "members", LabelPermission: "members", TemplatePermission: "members", APIKeyPermission: "members", FeatureFlags: map[string]bool{"ai": true, "initiatives": true, "documents": true, "customer-requests": true, "releases": true, "pulse": true, "asks": true, "dashboards": true, "sidebar-teams": true, "sidebar-try": true, "recently-deleted": true, "audit-log": true, "emojis": true, "triage-intelligence": false}, FeatureSettings: domain.FeatureSettings{InitiativeUpdateSchedule: "none", InitiativeUpdateWeekday: 4, InitiativeUpdateHour: 14, CustomerRevenueFormat: "annual", CustomerRevenueCurrency: "USD", CustomerManualEdits: true, CustomerStatuses: []domain.FeatureOption{{ID: "active", Name: "Active", Color: "#4cb782"}, {ID: "prospect", Name: "Prospect", Color: "#5e6ad2"}, {ID: "churned", Name: "Churned", Color: "#f2c94c"}, {ID: "lost", Name: "Lost", Color: "#eb5757"}}, CustomerTiers: []domain.FeatureOption{}, CustomerExcludedDomains: []string{}, CustomerGenericDomains: []string{}, PulseWorkspaceSchedule: "daily", AsksEmailAddresses: []string{}, TriageIntelligence: domain.TriageIntelligenceSettings{AssigneeAction: "suggest", ProjectAction: "suggest", LabelAction: "suggest", TeamAction: "suggest", DuplicateAction: "suggest", RelatedAction: "suggest"}}, GoogleAuthEnabled: true, EmailAuthEnabled: true, InitiativePermission: "members", LoopPermission: "members", AgentGuidancePermission: "admins", UpdatedAt: time.Now().UTC()}
+	return domain.WorkspaceSettings{FiscalMonth: "January", GuestsAllowed: true, SessionDurationDays: 30, InvitePermission: "admins", TeamCreatePermission: "members", LabelPermission: "members", TemplatePermission: "members", APIKeyPermission: "members", FeatureFlags: map[string]bool{"ai": true, "initiatives": true, "documents": true, "customer-requests": true, "releases": true, "pulse": true, "asks": true, "dashboards": true, "sidebar-teams": true, "sidebar-try": true, "recently-deleted": true, "audit-log": true, "emojis": true, "triage-intelligence": false}, FeatureSettings: domain.FeatureSettings{InitiativeUpdateSchedule: "none", InitiativeUpdateWeekday: 4, InitiativeUpdateHour: 14, CustomerRevenueFormat: "annual", CustomerRevenueCurrency: "USD", CustomerManualEdits: true, CustomerStatuses: []domain.FeatureOption{{ID: "active", Name: "Active", Color: "#4cb782"}, {ID: "prospect", Name: "Prospect", Color: "#5e6ad2"}, {ID: "churned", Name: "Churned", Color: "#f2c94c"}, {ID: "lost", Name: "Lost", Color: "#eb5757"}}, CustomerTiers: []domain.FeatureOption{}, CustomerExcludedDomains: []string{}, CustomerGenericDomains: []string{}, PulseWorkspaceSchedule: "daily", AsksEmailAddresses: []string{}, TriageIntelligence: domain.TriageIntelligenceSettings{AssigneeAction: "suggest", ProjectAction: "suggest", LabelAction: "suggest", TeamAction: "suggest", DuplicateAction: "suggest", RelatedAction: "suggest"}}, GoogleAuthEnabled: true, EmailAuthEnabled: true, AllowedAuthServices: []string{"google", "email"}, CodingAgentSettings: domain.CodingAgentSettings{}, InitiativePermission: "members", LoopPermission: "members", AgentGuidancePermission: "admins", UpdatedAt: time.Now().UTC()}
 }
 
 func defaultStateID(data *domain.Bootstrap, teamID string) string {
@@ -1855,6 +1855,50 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 	s.workspaces[workspace.URLKey] = data
 	s.lastWorkspaceKey = workspace.URLKey
 	return data, nil
+}
+
+func (s *SQLiteStore) ScheduleWorkspaceDeletion(ctx context.Context, workspaceKey string) (domain.Workspace, error) {
+	var updated domain.Workspace
+	err := s.MutateWorkspace(ctx, workspaceKey, "workspace.deletion_scheduled", workspaceKey, nil, func(data *domain.Bootstrap) error {
+		if data.Workspace.DeletionRequestedAt != nil {
+			updated = data.Workspace
+			return nil
+		}
+		now := time.Now().UTC()
+		data.Workspace.DeletionRequestedAt = &now
+		updated = data.Workspace
+		return nil
+	})
+	return updated, err
+}
+
+func (s *SQLiteStore) CancelWorkspaceDeletion(ctx context.Context, workspaceKey string) (domain.Workspace, error) {
+	var updated domain.Workspace
+	err := s.MutateWorkspace(ctx, workspaceKey, "workspace.deletion_canceled", workspaceKey, nil, func(data *domain.Bootstrap) error {
+		data.Workspace.DeletionRequestedAt = nil
+		updated = data.Workspace
+		return nil
+	})
+	return updated, err
+}
+
+func (s *SQLiteStore) WorkspaceAccessStatus(ctx context.Context, workspaceKey, userID string) (exists bool, hasMembership bool, role string, data domain.Bootstrap, ok bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	bootstrap, found := s.workspaces[workspaceKey]
+	if !found {
+		return false, false, "", domain.Bootstrap{}, false
+	}
+	exists = true
+	data = bootstrap
+	if userID == "" {
+		return exists, false, "", data, true
+	}
+	role, status, err := s.WorkspaceRole(ctx, bootstrap.Workspace.ID, userID)
+	if err != nil || status != "active" {
+		return exists, false, "", data, true
+	}
+	return exists, true, role, data, true
 }
 
 func (s *SQLiteStore) DeleteWorkspace(ctx context.Context, workspaceKey string) error {
