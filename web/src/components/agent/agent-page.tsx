@@ -36,6 +36,7 @@ import {
   AgentSubmitIcon,
 } from "./agent-icons";
 import { AgentRichText } from "./agent-rich-text";
+import { clearAgentDraft, readAgentDraft, writeAgentDraft } from "./agent-drafts";
 import styles from "./agent-page.module.css";
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
 import { applyAgentStreamEvent, markAgentSessionStopped } from './agent-stream-state'
@@ -857,23 +858,6 @@ function markdown(session: AgentSession) {
     .join("\n\n");
 }
 
-function readAgentDraft(key: string): { input: string; skillIds: string[] } | null {
-  try {
-    const value = JSON.parse(localStorage.getItem(key) ?? "null") as { input?: unknown; skillIds?: unknown } | null;
-    if (!value || typeof value.input !== "string") return null;
-    return { input: value.input, skillIds: Array.isArray(value.skillIds) ? value.skillIds.filter((id): id is string => typeof id === "string") : [] };
-  } catch {
-    return null;
-  }
-}
-
-function writeAgentDraft(key: string, draft: { input: string; skillIds: string[] }) {
-  try { localStorage.setItem(key, JSON.stringify({ ...draft, updatedAt: new Date().toISOString() })); } catch { /* Draft persistence is best-effort in private browsing. */ }
-}
-
-function clearAgentDraft(key: string) {
-  try { localStorage.removeItem(key); } catch { /* Draft cleanup is best-effort in private browsing. */ }
-}
 
 function writeInputToEditor(editorRef: RefObject<HTMLDivElement | null>, value: string) {
   if (editorRef.current && editorRef.current.textContent !== value) editorRef.current.textContent = value;
