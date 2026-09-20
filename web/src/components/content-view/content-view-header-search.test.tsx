@@ -12,7 +12,7 @@ describe("ContentViewHeader search primitives", () => {
       <ContentViewHeaderInlineSearch
         placeholder="Find a view…"
         value=""
-        onChange={() => undefined}
+        onChange={vi.fn()}
       />,
     );
     expect(container).toBeEmptyDOMElement();
@@ -41,7 +41,7 @@ describe("ContentViewHeader search primitives", () => {
         alwaysVisible
         placeholder="Find members…"
         value=""
-        onChange={() => undefined}
+        onChange={vi.fn()}
       />,
     );
     expect(
