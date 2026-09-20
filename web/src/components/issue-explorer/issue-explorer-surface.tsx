@@ -1,6 +1,6 @@
 import { type ComponentPropsWithRef, type ReactNode } from 'react'
 import { Virtuoso } from 'react-virtuoso'
-import { ChevronRight, Link2, Star } from 'lucide-react'
+import { Link2 } from 'lucide-react'
 import { DetailsIcon, FilterIcon } from '@/components/my-issues/my-issues-icons'
 import { MyIssuesDisplayMenu } from '@/components/my-issues/my-issues-display-menu'
 import { MyIssuesFilterMenu } from '@/components/my-issues/my-issues-filter-menu'
@@ -12,6 +12,15 @@ import { ViewGlyph } from '@/components/views/view-icon-picker'
 import styles from './issue-explorer.module.css'
 import { useIssueSurfaceControls } from '@/components/my-issues/use-issue-surface-controls'
 import { AddViewIcon, InsightsIcon } from '@/components/ui/view-action-icons'
+import {
+  ContentViewContainer,
+  ContentViewHeader,
+  ContentViewHeaderBreadcrumb,
+  ContentViewHeaderFavoriteActionButton,
+  ContentViewSubheader,
+  NewContentViewHeaderTitle,
+  ToolbarButtonsNavigation,
+} from '@/components/content-view'
 
 const VIEWS: { id: TeamIssuesRouteView; label: string }[] = [
   { id: 'active', label: 'Active' },
@@ -59,31 +68,128 @@ export function IssueExplorerSurface({
   const {changeDisplayOpen,changeFilterOpen,displayOpen,filterOpen}=useIssueSurfaceControls(filterOpenSignal,detailsOpen,onDetailsOpenChange)
   const renderSavedView = (item: SavedView) => <a key={item.id} href={savedViewHref?.(item) ?? '#'} className={`${styles.savedTab} ui-pill`} onClick={event => { event.preventDefault(); onSavedViewSelect?.(item) }}><ViewGlyph color={item.color} icon={item.icon}/><span data-i18n-ignore>{item.name}</span></a>
 
-  const toolbar = <div className={styles.toolbar}>
-    {creatingView ? <nav className={styles.tabs} aria-label="View resource"><button className={`${styles.tab} ui-pill`} data-active="true" type="button">Issues</button><button className={`${styles.tab} ui-pill`} type="button" onClick={() => onNewViewResourceChange?.('projects')}>Projects</button></nav> : savedView ? <span className={styles.viewCount}>{itemCount} {itemCount === 1 ? 'issue' : 'issues'}</span> : <nav className={styles.tabs} aria-label={`${scopeName} issue views`}>
-      {VIEWS.map(view => <a key={view.id} href={viewHref(view.id)} className={`${styles.tab} ui-pill`} data-active={activeView === view.id} aria-current={activeView === view.id ? 'page' : undefined} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onNavigateView(view.id) }}>{view.label}</a>)}
-      {savedViews.length > SAVED_VIEW_VIRTUALIZATION_THRESHOLD ? <Virtuoso horizontalDirection className={styles.savedTabs} data={savedViews} computeItemKey={(_index, item) => item.id} increaseViewportBy={360} itemContent={(_index, item) => renderSavedView(item)}/> : savedViews.map(renderSavedView)}
-      <button className={styles.addView} type="button" aria-label="Add new view" title="Add new view" onClick={onAddView}><AddViewIcon/></button>
-    </nav>}
-    <div className={styles.actions}>
-      <MyIssuesFilterMenu open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onToggle={onFilterToggle} trigger={<ToolbarButton label="Add filter"><FilterIcon/></ToolbarButton>}/>
-      <MyIssuesDisplayMenu open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={onDisplayOptionsChange}/>
-      <ToolbarButton label={insightsOpen ? 'Close view insights' : 'Open view insights'} pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}><InsightsIcon/></ToolbarButton>
-      {!creatingView && <ToolbarButton label={savedView ? (detailsOpen ? 'Close view details' : 'Open view details') : (detailsOpen ? 'Close details' : 'Open details')} title={`${detailsOpen ? 'Close' : 'Open'} details (⌘I)`} pressed={detailsOpen} onClick={() => onDetailsOpenChange(!detailsOpen)}><DetailsIcon open={detailsOpen}/></ToolbarButton>}
-    </div>
-  </div>
+  const header = (
+    <ContentViewHeader compact onOpenSidebar={onOpenSidebar}>
+      {creatingView ? (
+        <>
+          <ContentViewHeaderBreadcrumb
+            items={[
+              { id: 'views', label: 'Views' },
+              { id: 'all-issues', label: 'All issues', current: true },
+            ]}
+          />
+          <button className={`${styles.headerAction} ${styles.copyUrl}`} type="button" aria-label="Copy URL" onClick={() => void navigator.clipboard.writeText(window.location.href)}>
+            <Link2 size={14} />
+          </button>
+        </>
+      ) : savedView ? (
+        <NewContentViewHeaderTitle
+          icon={<ViewGlyph className={styles.headerViewIcon} color={savedView.color} icon={savedView.icon} />}
+          title={<span data-i18n-ignore>{savedView.name}</span>}
+          actions={
+            <>
+              {onToggleFavorite ? (
+                <ContentViewHeaderFavoriteActionButton favorited={favorite} onClick={onToggleFavorite} />
+              ) : null}
+              {viewActions ? <span className={styles.headerViewActions}>{viewActions}</span> : null}
+            </>
+          }
+        />
+      ) : (
+        <ContentViewHeaderBreadcrumb
+          items={[
+            {
+              id: 'scope',
+              label: scopeName,
+              href: scopeHref,
+              icon: scopeTeam ? <ViewGlyph className={styles.scopeIcon} color={scopeTeam.color} icon={scopeTeam.icon || 'Team'} /> : undefined,
+            },
+            { id: 'issues', label: 'Issues', current: true },
+          ]}
+        />
+      )}
+    </ContentViewHeader>
+  )
 
-  return <main className={styles.surface} data-issue-explorer="true">
-    <header className={styles.header}>
-      <button className={styles.mobileSidebarButton} aria-label="Open sidebar" data-sidebar-trigger onClick={onOpenSidebar}><span/><span/><span/></button>
-      {creatingView ? <><span className={styles.scope}>Views</span><ChevronRight className={styles.crumb} size={13}/><h2>All issues</h2><button className={`${styles.headerAction} ${styles.copyUrl}`} type="button" aria-label="Copy URL" onClick={() => void navigator.clipboard.writeText(window.location.href)}><Link2 size={14}/></button></> : savedView ? <><ViewGlyph className={styles.headerViewIcon} color={savedView.color} icon={savedView.icon}/><h2 data-i18n-ignore>{savedView.name}</h2>{onToggleFavorite && <button className={styles.headerAction} type="button" role="switch" aria-label={favorite ? 'Remove from favorites' : 'Add to favorites'} aria-checked={favorite} data-active={favorite} onClick={onToggleFavorite}><Star size={14} fill={favorite ? 'currentColor' : 'none'}/></button>}{viewActions && <span className={styles.headerViewActions}>{viewActions}</span>}</> : <>
-        {scopeHref ? <a className={styles.scope} data-i18n-ignore href={scopeHref}>{scopeTeam && <ViewGlyph className={styles.scopeIcon} color={scopeTeam.color} icon={scopeTeam.icon || 'Team'} />}<span>{scopeName}</span></a> : <span className={styles.scope} data-i18n-ignore>{scopeTeam && <ViewGlyph className={styles.scopeIcon} color={scopeTeam.color} icon={scopeTeam.icon || 'Team'} />}<span>{scopeName}</span></span>}
-        <ChevronRight className={styles.crumb} size={13}/><h2>Issues</h2>
-      </>}
-    </header>
-    {viewEditor ? <div className={styles.createPanel}>{viewEditor}{toolbar}</div> : toolbar}
-    {filterBar}<div className={styles.body} data-insights-open={insightsOpen} data-saved-panel-open={Boolean((savedView || creatingView) && (detailsOpen || insightsOpen))}>{children}</div>
-  </main>
+  const toolbar = (
+    <ContentViewSubheader
+      borderless
+      start={
+        creatingView ? (
+          <nav className={styles.tabs} aria-label="View resource">
+            <button className={`${styles.tab} ui-pill`} data-active="true" type="button">Issues</button>
+            <button className={`${styles.tab} ui-pill`} type="button" onClick={() => onNewViewResourceChange?.('projects')}>Projects</button>
+          </nav>
+        ) : savedView ? (
+          <span className={styles.viewCount}>{itemCount} {itemCount === 1 ? 'issue' : 'issues'}</span>
+        ) : (
+          <nav className={styles.tabs} aria-label={`${scopeName} issue views`}>
+            {VIEWS.map(view => (
+              <a
+                key={view.id}
+                href={viewHref(view.id)}
+                className={`${styles.tab} ui-pill`}
+                data-active={activeView === view.id}
+                aria-current={activeView === view.id ? 'page' : undefined}
+                onClick={event => {
+                  if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return
+                  event.preventDefault()
+                  onNavigateView(view.id)
+                }}
+              >
+                {view.label}
+              </a>
+            ))}
+            {savedViews.length > SAVED_VIEW_VIRTUALIZATION_THRESHOLD ? (
+              <Virtuoso
+                horizontalDirection
+                className={styles.savedTabs}
+                data={savedViews}
+                computeItemKey={(_index, item) => item.id}
+                increaseViewportBy={360}
+                itemContent={(_index, item) => renderSavedView(item)}
+              />
+            ) : (
+              savedViews.map(renderSavedView)
+            )}
+            <button className={styles.addView} type="button" aria-label="Add new view" title="Add new view" onClick={onAddView}>
+              <AddViewIcon />
+            </button>
+          </nav>
+        )
+      }
+      end={
+        <ToolbarButtonsNavigation className={styles.actions}>
+          <MyIssuesFilterMenu open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onToggle={onFilterToggle} trigger={<ToolbarButton label="Add filter"><FilterIcon /></ToolbarButton>} />
+          <MyIssuesDisplayMenu open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={onDisplayOptionsChange} />
+          <ToolbarButton label={insightsOpen ? 'Close view insights' : 'Open view insights'} pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}>
+            <InsightsIcon />
+          </ToolbarButton>
+          {!creatingView && (
+            <ToolbarButton
+              label={savedView ? (detailsOpen ? 'Close view details' : 'Open view details') : (detailsOpen ? 'Close details' : 'Open details')}
+              title={`${detailsOpen ? 'Close' : 'Open'} details (⌘I)`}
+              pressed={detailsOpen}
+              onClick={() => onDetailsOpenChange(!detailsOpen)}
+            >
+              <DetailsIcon open={detailsOpen} />
+            </ToolbarButton>
+          )}
+        </ToolbarButtonsNavigation>
+      }
+    />
+  )
+
+  return (
+    <ContentViewContainer framed data-issue-explorer="true">
+      {header}
+      {viewEditor ? <div className={styles.createPanel}>{viewEditor}{toolbar}</div> : toolbar}
+      {filterBar}
+      <div className={styles.body} data-insights-open={insightsOpen} data-saved-panel-open={Boolean((savedView || creatingView) && (detailsOpen || insightsOpen))}>
+        {children}
+      </div>
+    </ContentViewContainer>
+  )
 }
 
 function ToolbarButton({ children, label, pressed, className, ...props }: ComponentPropsWithRef<'button'> & { label: string; pressed?: boolean }) {
