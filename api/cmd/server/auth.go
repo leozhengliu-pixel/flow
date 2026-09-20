@@ -403,10 +403,17 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 			writeError(w, http.StatusForbidden, "You don't have access to this workspace")
 			return false
 		}
-	} else if r.URL.Path == "/api/workspace/preferences" {
-		data, ok = s.store.WorkspaceSettingsMetadata(key)
 	} else {
-		data, ok = s.store.WorkspaceMetadata(key)
+		data, ok = s.store.WorkspaceSettingsMetadata(key)
+		if ok && teamManagementRequest(r) {
+			teamID := teamIDFromWorkspacePath(r.URL.Path)
+			if settings, found := s.store.TeamSettingsFor(key, teamID); found {
+				data.TeamSettings = map[string]domain.TeamSettings{teamID: settings}
+			}
+		}
+		if ok && r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/trash/") {
+			data.Trash = s.store.TrashSnapshot(key)
+		}
 	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")

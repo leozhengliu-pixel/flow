@@ -47,10 +47,13 @@ func passkeyPublic(item domain.Passkey) domain.Passkey {
 func (s *server) listPasskeys(w http.ResponseWriter, r *http.Request) {
 	actor := requestActor(s, r)
 	items := []domain.Passkey{}
-	for _, item := range s.workspaceData(r).Passkeys {
-		if item.UserID == actor.ID {
-			items = append(items, passkeyPublic(item))
-		}
+	passkeys, _, ok := s.store.AccountCollections(workspaceKey(r), actor.ID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+	for _, item := range passkeys {
+		items = append(items, passkeyPublic(item))
 	}
 	writeJSON(w, http.StatusOK, items)
 }

@@ -672,40 +672,18 @@ func isWorkspaceAdminRole(role string) bool {
 }
 
 func (s *SQLiteStore) AccountForUser(ctx context.Context, userID string) (domain.AccountBootstrap, error) {
+	result, err := s.OAuthAccountForUser(ctx, userID)
+	if err != nil {
+		return result, err
+	}
 	counts, err := s.issueCollectionCounts(ctx)
 	if err != nil {
-		return domain.AccountBootstrap{}, err
+		return result, err
 	}
-	user, err := s.authUserByID(ctx, userID)
-	if err != nil {
-		return domain.AccountBootstrap{}, err
+	for i := range result.Workspaces {
+		result.Workspaces[i].IssueCount = counts[result.Workspaces[i].Workspace.URLKey]
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT workspace_id,role,joined_at FROM workspace_memberships WHERE user_id=? AND status='active' ORDER BY joined_at`, userID)
-	if err != nil {
-		return domain.AccountBootstrap{}, err
-	}
-	defer rows.Close()
-	result := domain.AccountBootstrap{Viewer: user, Workspaces: []domain.WorkspaceMembership{}}
-	for rows.Next() {
-		var workspaceID, role, joinedRaw string
-		if err := rows.Scan(&workspaceID, &role, &joinedRaw); err != nil {
-			return result, err
-		}
-		data, key, ok := s.workspaceByID(workspaceID)
-		if !ok {
-			continue
-		}
-		joined, _ := time.Parse(time.RFC3339Nano, joinedRaw)
-		result.Workspaces = append(result.Workspaces, domain.WorkspaceMembership{Workspace: data.Workspace, Role: titleRole(role), JoinedAt: joined, IssueCount: counts[key]})
-		if result.LastWorkspaceKey == "" {
-			result.LastWorkspaceKey = key
-		}
-	}
-	var preferred string
-	if err := s.db.QueryRowContext(ctx, `SELECT last_workspace_key FROM auth_account_state WHERE user_id=?`, userID).Scan(&preferred); err == nil && slices.ContainsFunc(result.Workspaces, func(item domain.WorkspaceMembership) bool { return item.Workspace.URLKey == preferred }) {
-		result.LastWorkspaceKey = preferred
-	}
-	return result, rows.Err()
+	return result, nil
 }
 
 func (s *SQLiteStore) SetLastWorkspace(ctx context.Context, userID, workspaceKey string) error {
@@ -1045,6 +1023,13 @@ func (s *SQLiteStore) ListInvitations(ctx context.Context, workspaceID string) (
 func (s *SQLiteStore) UpdateMemberRole(ctx context.Context, workspaceID, userID, role string) error {
 	if !validWorkspaceRole(role) {
 		return fmt.Errorf("invalid role")
+	}
+	var current string
+	if err := s.db.QueryRowContext(ctx, `SELECT role FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID).Scan(&current); err != nil {
+		return ErrAuthForbidden
+	}
+	if strings.EqualFold(current, role) {
+		return nil
 	}
 	if err := s.ensureAdminRemains(ctx, workspaceID, userID); err != nil {
 		return err
