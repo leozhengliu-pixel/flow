@@ -52,6 +52,8 @@ import { UserAvatar } from '@/components/ui/user-avatar';
 import { PersonHover } from '@/components/property/person-info';
 import { CodeReviewAccessActions } from './code-review-access-actions';
 import { resolveCodeReviewAccess } from '@/lib/code-access';
+import { useReviewDiffs } from "@/hooks/use-review-diffs";
+import { pairDiffLines, type DiffLine } from "@/lib/diff-computer";
 
 export function ReviewsPage({
   data,
@@ -106,6 +108,13 @@ export function ReviewsPage({
     <main
       className={`flow-framed-workspace reviews-workspace ${review ? "has-detail" : ""} ${fullWindow ? "is-full-window" : ""}`}
     >
+      <div className="reviews-foundation-banner" role="status">
+        <span>
+          {t(
+            "Reviews remains Shell-only: DiffComputer and background prefetch are foundation-only. Full product needs code access and live repository content.",
+          )}
+        </span>
+      </div>
       {!fullWindow && (
         <section className="reviews-list-pane">
           <header className="reviews-topbar">
@@ -1393,7 +1402,7 @@ function ReviewGuide({ review }: { review: CodeReview }) {
       <h2>{t("Review guide")}</h2>
       <p>
         {t(
-          "Start with the highest-impact files, then confirm tests and issue scope.",
+          "Foundation tips from the local file list — Guided Review is not enabled until code access and DiffView depth land.",
         )}
       </p>
       {review.files.map((file, index) => (
@@ -1414,13 +1423,6 @@ function ReviewGuide({ review }: { review: CodeReview }) {
     </div>
   );
 }
-type DiffLine = {
-  kind: "add" | "remove" | "context";
-  content: string;
-  oldNumber?: number;
-  newNumber?: number;
-};
-
 function ReviewChanges({
   review,
   onReload,
@@ -1436,6 +1438,7 @@ function ReviewChanges({
   } | null>(null);
   const [commentBody, setCommentBody] = useState("");
   const [commentBusy, setCommentBusy] = useState(false);
+  const { diffsByPath, ready } = useReviewDiffs(review, "basic");
   const submitInlineComment = async () => {
     if (!commentLine || !commentBody.trim()) return;
     setCommentBusy(true);
@@ -1459,6 +1462,7 @@ function ReviewChanges({
         <div>
           <h2>{t("Files changed")}</h2>
           <span>{review.files.length}</span>
+          {!ready ? <em className="review-diff-compute-status">{t("Computing diffs…")}</em> : null}
         </div>
         <div className="review-diff-mode" role="group" aria-label={t("Diff view") }>
           {(["split", "unified"] as const).map((value) => (
@@ -1477,20 +1481,33 @@ function ReviewChanges({
         <div className="review-diff-empty">{t("No files changed")}</div>
       ) : (
         review.files.map((file) => {
-          const lines = parseDiff(file.patch);
+          const computed = diffsByPath.get(file.path);
+          const lines = computed?.lines ?? [];
+          const splitRows = computed?.splitRows ?? pairDiffLines(lines);
           return (
             <article key={file.path}>
               <header>
                 <FileCode2 />
                 <strong data-i18n-ignore>{file.path}</strong>
-                <b>+{file.additions}</b>
-                <i>-{file.deletions}</i>
+                <b>+{computed?.additions ?? file.additions}</b>
+                <i>-{computed?.deletions ?? file.deletions}</i>
+                {computed?.state === "computing" || computed?.state === "pending" ? (
+                  <small className="review-diff-compute-status">{t("Computing…")}</small>
+                ) : null}
               </header>
               {!lines.length ? (
-                <div className="review-diff-empty">{t("No diff available")}</div>
+                <div className="review-diff-empty">
+                  {computed?.state === "error"
+                    ? t("Diff compute failed")
+                    : computed?.state === "computing" ||
+                        computed?.state === "pending" ||
+                        !computed
+                      ? t("Computing diffs…")
+                      : t("No diff available")}
+                </div>
               ) : mode === "split" ? (
                 <div className="review-diff-table is-split">
-                  {pairDiffLines(lines).map((row, index) => (
+                  {splitRows.map((row, index) => (
                     <div className="review-diff-row" key={`${file.path}-${index}`}>
                       <DiffLineCell
                         line={row.left}
@@ -1600,46 +1617,6 @@ function DiffLineCell({
   );
 }
 
-function parseDiff(patch: string): DiffLine[] {
-  let oldNumber = 0;
-  let newNumber = 0;
-  return patch.split("\n").flatMap((raw) => {
-    if (raw.startsWith("@@")) {
-      const match = raw.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
-      if (match) {
-        oldNumber = Number(match[1]);
-        newNumber = Number(match[2]);
-      }
-      return [];
-    }
-    if (raw.startsWith("diff ") || raw.startsWith("index ") || raw.startsWith("--- ") || raw.startsWith("+++ ") || raw.startsWith("\\ No newline")) return [];
-    if (raw.startsWith("+")) return [{ kind: "add", content: raw.slice(1), newNumber: newNumber++ }];
-    if (raw.startsWith("-")) return [{ kind: "remove", content: raw.slice(1), oldNumber: oldNumber++ }];
-    const content = raw.startsWith(" ") ? raw.slice(1) : raw;
-    const line: DiffLine = { kind: "context", content, oldNumber: oldNumber++, newNumber: newNumber++ };
-    return [line];
-  });
-}
-
-function pairDiffLines(lines: DiffLine[]) {
-  const rows: Array<{ left?: DiffLine; right?: DiffLine }> = [];
-  for (let index = 0; index < lines.length; ) {
-    const line = lines[index];
-    if (line.kind === "context") {
-      rows.push({ left: line, right: line });
-      index += 1;
-      continue;
-    }
-    const removed: DiffLine[] = [];
-    const added: DiffLine[] = [];
-    while (lines[index]?.kind === "remove") removed.push(lines[index++]);
-    while (lines[index]?.kind === "add") added.push(lines[index++]);
-    const count = Math.max(removed.length, added.length);
-    for (let offset = 0; offset < count; offset += 1)
-      rows.push({ left: removed[offset], right: added[offset] });
-  }
-  return rows;
-}
 function statusLabel(status: string) {
   return status === "inReview"
     ? "In review"
