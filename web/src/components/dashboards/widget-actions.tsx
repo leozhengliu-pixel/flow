@@ -154,7 +154,7 @@ export function WidgetActionsMenu({
               {t('Copy to dashboard…')}
             </DropdownMenu.SubTrigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.SubContent className="dashboard-menu widget-actions-copy" sideOffset={6}>
+              <DropdownMenu.SubContent data-flow-motion="floating" className="dashboard-menu widget-actions-copy" sideOffset={6}>
                 <label className="widget-actions-search">
                   <input
                     aria-label={t('Search dashboards')}
