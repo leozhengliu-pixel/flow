@@ -8,6 +8,7 @@ import type { BootstrapData } from '@/types/flow'
 import { formatMetric, insightColor, type InsightData, type InsightRow } from './insight-data'
 import type { SavedViewInsightsConfig } from './saved-view-panels'
 import { aggregateInsightValues, aggregationLabels, durationAxis, insightHighlight, sameInsightTarget, type InsightTarget, type InsightAggregation } from './insight-interaction'
+import { ChartHover } from '@/components/insights/chart-hover'
 import styles from './insight-explorer.module.css'
 
 const chartTheme = {
@@ -23,13 +24,19 @@ export function InsightExplorer({ config, data, insight, expanded, target, onSel
   target?: InsightTarget; onSelect: (target: InsightTarget) => void; onClear: () => void
 }) {
   const { t } = useI18n()
-  const [hover, setHover] = useState<InsightTarget>()
+  const chartHover = useMemo(() => new ChartHover('graph'), [])
+  const [hover, setHoverState] = useState<InsightTarget>()
+  const setHover = (next?: InsightTarget) => {
+    chartHover.setHover(next, expanded ? 'graph' : 'table')
+    setHoverState(next)
+  }
   const [sort, setSort] = useState<{ column: string; descending: boolean }>()
   const operator = 'gt' as const
   const [scrollLeft, setScrollLeft] = useState(0)
   const table = useRef<HTMLDivElement>(null)
   const virtual = useRef<VirtuosoHandle>(null)
   const latency = config.measure !== 'issueCount'
+  useEffect(() => { chartHover.setDrill(target) }, [chartHover, target])
   const highlight = hover ?? target
   const rows = useMemo(() => {
     if (!sort) return insight.rows
