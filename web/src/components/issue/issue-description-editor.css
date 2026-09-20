@@ -403,3 +403,17 @@
 :root[data-theme="light"] .comment-body {
   background: var(--theme-soft-overlay);
 }
+
+.issue-description .inline-comment-mark,
+.ProseMirror .inline-comment-mark {
+  background: color-mix(in lch, var(--activity-highlight-color) 22%, transparent);
+  border-bottom: 1.5px solid var(--activity-highlight-color);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.issue-description .inline-comment-mark[data-resolved="true"],
+.ProseMirror .inline-comment-mark[data-resolved="true"] {
+  background: transparent;
+  border-bottom-style: dashed;
+  opacity: 0.7;
+}

@@ -81,6 +81,7 @@ import {
   toggleIssueReaction,
   toggleProjectUpdateReaction,
   updateComment,
+  resolveComment,
   updateAgentSession as updateAgentSessionRequest,
   updateCustomer,
   updateCycle as updateCycleRequest,
@@ -1103,7 +1104,59 @@ function App() {
       throw error;
     }
   };
-  const deleteCommentOptimistically = async (issue: Issue, id: string) => {
+  const resolveCommentOptimistically = async (
+    issue: Issue,
+    id: string,
+    resolved: boolean,
+  ) => {
+    const current = data?.comments[issue.id]?.find(
+      (comment) => comment.id === id,
+    );
+    if (!current) throw new Error("Comment not found");
+    updateIssueComments(issue.id, (comments) =>
+      comments.map((comment) =>
+        comment.id === id
+          ? {
+              ...comment,
+              resolved,
+              threadSummary: resolved ? comment.threadSummary : undefined,
+            }
+          : comment,
+      ),
+    );
+    try {
+      const saved = await resolveComment(
+        issue.id,
+        id,
+        resolved,
+        current.version,
+      );
+      updateIssueComments(issue.id, (comments) =>
+        comments.map((comment) => (comment.id === id ? saved : comment)),
+      );
+      return saved;
+    } catch (error) {
+      const conflict =
+        error instanceof ApiError && error.code === "VERSION_CONFLICT"
+          ? (error.current as Comment | undefined)
+          : undefined;
+      updateIssueComments(issue.id, (comments) =>
+        comments.map((comment) =>
+          comment.id === id ? (conflict ?? current) : comment,
+        ),
+      );
+      toast.error(
+        conflict
+          ? "Comment changed in another session"
+          : resolved
+            ? "Could not resolve comment"
+            : "Could not re-open comment",
+        { description: error instanceof Error ? error.message : undefined },
+      );
+      throw error;
+    }
+  };
+    const deleteCommentOptimistically = async (issue: Issue, id: string) => {
     const comments = data?.comments[issue.id] ?? [];
     const index = comments.findIndex((comment) => comment.id === id);
     const removed = comments[index];
@@ -1231,6 +1284,10 @@ function App() {
   const reactComment = async (id: string, emoji: string) => {
     if (!selectedIssue) return;
     await reactToCommentOptimistically(selectedIssue, id, emoji);
+  };
+  const resolveSelectedComment = async (id: string, resolved: boolean) => {
+    if (!selectedIssue) return;
+    await resolveCommentOptimistically(selectedIssue, id, resolved);
   };
   const reactIssue = async (emoji: string) => {
     if (!selectedIssue) return;
@@ -3353,6 +3410,9 @@ function App() {
         }}
         onReactComment={async (id, emoji) => {
           await reactToCommentOptimistically(issue, id, emoji);
+        }}
+        onResolveComment={async (id, resolved) => {
+          await resolveCommentOptimistically(issue, id, resolved);
         }}
         onRelation={async (type, relatedIssueId) => {
           await run(
@@ -5964,6 +6024,7 @@ function App() {
               onEditComment={editComment}
               onDeleteComment={removeComment}
               onReactComment={reactComment}
+              onResolveComment={resolveSelectedComment}
               onRelation={addRelation}
               onDeleteRelation={removeRelation}
               onUpload={addAttachment}
