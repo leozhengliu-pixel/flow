@@ -35,7 +35,7 @@ describe('UniversalCustomFilterPanel', () => {
   })
 
   it('shows read-only empty copy', async () => {
-    render(<UniversalCustomFilterPanel entityType="notification" onChange={() => {}} readOnly />)
+    render(<UniversalCustomFilterPanel entityType="notification" onChange={vi.fn()} readOnly />)
     await waitFor(() => expect(screen.getByText('This filter is read-only.')).toBeInTheDocument())
   })
 })
