@@ -1363,7 +1363,7 @@ func directoryExcludedTeam(team domain.Team) bool {
 	if team.RetiredAt != nil {
 		return true
 	}
-	return orgDirectoryLeafID(team.ID) || orgDirectoryLeafID(team.Key)
+	return orgDirectoryLeafID(team.ExternalSource) || orgDirectoryLeafID(team.ID) || orgDirectoryLeafID(team.Key)
 }
 
 func orgDirectoryLeafID(id string) bool {

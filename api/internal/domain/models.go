@@ -221,15 +221,16 @@ type AccountBootstrap struct {
 }
 
 type Team struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name"`
-	Key       string     `json:"key"`
-	Color     string     `json:"color"`
-	Icon      string     `json:"icon,omitempty"`
-	Private   bool       `json:"private,omitempty"`
-	RetiredAt *time.Time `json:"retiredAt,omitempty"`
-	CreatedAt *time.Time `json:"createdAt,omitempty"`
-	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
+	ID             string     `json:"id"`
+	Name           string     `json:"name"`
+	Key            string     `json:"key"`
+	Color          string     `json:"color"`
+	Icon           string     `json:"icon,omitempty"`
+	Private        bool       `json:"private,omitempty"`
+	ExternalSource string     `json:"externalSource,omitempty"`
+	RetiredAt      *time.Time `json:"retiredAt,omitempty"`
+	CreatedAt      *time.Time `json:"createdAt,omitempty"`
+	UpdatedAt      *time.Time `json:"updatedAt,omitempty"`
 }
 
 type Customer struct {
