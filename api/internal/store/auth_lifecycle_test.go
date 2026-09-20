@@ -14,7 +14,11 @@ func TestAccountForUserDoesNotCloneWorkspaceCatalog(t *testing.T) {
 	}
 	defer repository.Close()
 	ctx := t.Context()
-	key := seedBulkTeams(t, repository, 1500)
+	catalogSize := 1500
+	if raceDetector {
+		catalogSize = 80
+	}
+	key := seedBulkTeams(t, repository, catalogSize)
 	data := repository.Bootstrap()
 	start := time.Now()
 	account, err := repository.AccountForUser(ctx, data.Viewer.ID)
@@ -22,7 +26,7 @@ func TestAccountForUserDoesNotCloneWorkspaceCatalog(t *testing.T) {
 	if err != nil || len(account.Workspaces) == 0 || account.Workspaces[0].Workspace.URLKey != key {
 		t.Fatalf("account=%#v err=%v", account, err)
 	}
-	if elapsed > 500*time.Millisecond {
+	if !raceDetector && elapsed > 500*time.Millisecond {
 		t.Fatalf("account lookup cloned workspace catalog: %s", elapsed)
 	}
 }

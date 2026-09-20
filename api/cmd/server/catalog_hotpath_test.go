@@ -85,7 +85,11 @@ func TestAuthenticatedAccountAndPresenceStayFastWithLargeCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repository.Close()
-	seedCatalogTeams(t, repository, 800)
+	catalogSize := 800
+	if raceDetector {
+		catalogSize = 80
+	}
+	seedCatalogTeams(t, repository, catalogSize)
 	host := httptest.NewServer(newHandler(&server{store: repository, uploadPath: t.TempDir()}))
 	defer host.Close()
 	admin := authClient(t)
@@ -98,7 +102,7 @@ func TestAuthenticatedAccountAndPresenceStayFastWithLargeCatalog(t *testing.T) {
 	authRequest[[]domain.Presence](t, admin, http.MethodPost, host.URL+"/api/realtime/presence", map[string]any{"clientId": "hotpath-client"}, "test-workspace", http.StatusOK)
 	authRequest[[]domain.Presence](t, admin, http.MethodGet, host.URL+"/api/realtime/presence", nil, "test-workspace", http.StatusOK)
 	elapsed := time.Since(start)
-	if elapsed > 2*time.Second {
+	if !raceDetector && elapsed > 2*time.Second {
 		t.Fatalf("account/presence reads cloned the catalog: %s", elapsed)
 	}
 }
