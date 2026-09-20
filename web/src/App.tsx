@@ -192,6 +192,8 @@ import {
   issuePath,
   issueTemplateEditPath,
   integrationSettingsPath,
+  jiraSyncNewPath,
+  jiraSyncEditPath,
   membersPath,
   memberProfilePath,
   myIssuesPath,
@@ -3938,6 +3940,8 @@ function App() {
           releasePipelineSlug={route.releasePipelineSlug}
           integrationProvider={route.integrationProvider}
           integrationSlug={route.integrationSlug}
+          jiraSyncMode={route.jiraSyncMode}
+          jiraProjectId={route.jiraProjectId}
           issueTemplateMode={route.issueTemplateMode}
           issueTemplateId={route.issueTemplateId}
           projectTemplateMode={route.projectTemplateMode}
@@ -3995,6 +3999,12 @@ function App() {
           }
           onOpenIntegration={(provider) =>
             navigateTo(integrationSettingsPath(data.workspace.urlKey, provider))
+          }
+          onOpenJiraSyncNew={() =>
+            navigateTo(jiraSyncNewPath(data.workspace.urlKey))
+          }
+          onOpenJiraSyncEdit={(jiraProjectId) =>
+            navigateTo(jiraSyncEditPath(data.workspace.urlKey, jiraProjectId))
           }
           onCreateIssueTemplate={(form) =>
             navigateTo(newIssueTemplatePath(data.workspace.urlKey, form))

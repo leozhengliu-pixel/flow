@@ -271,6 +271,9 @@ export type AppRoute =
       integrationProvider?: IntegrationProvider;
       /** Catalog slug or "enabled" for /settings/integrations/:slug (LS-0338 / LS-0248). */
       integrationSlug?: string;
+      /** Jira sync wizard (`/settings/integrations/jira/sync/new|:id/edit`). */
+      jiraSyncMode?: "new" | "edit";
+      jiraProjectId?: string;
     }
   | {
       kind: "team-views";
@@ -785,6 +788,40 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
       page: "releases",
       releasePipelineMode: "edit",
       releasePipelineSlug: fifth,
+    };
+  if (
+    section === "settings" &&
+    third === "integrations" &&
+    fourth === "jira" &&
+    fifth === "sync" &&
+    sixth === "new" &&
+    segments.length === 6
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "integrations",
+      integrationProvider: "jira",
+      integrationSlug: "jira",
+      jiraSyncMode: "new",
+    };
+  if (
+    section === "settings" &&
+    third === "integrations" &&
+    fourth === "jira" &&
+    fifth === "sync" &&
+    sixth &&
+    segments[6] === "edit" &&
+    segments.length === 7
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "integrations",
+      integrationProvider: "jira",
+      integrationSlug: "jira",
+      jiraSyncMode: "edit",
+      jiraProjectId: decodeURIComponent(sixth),
     };
   if (
     section === "settings" &&
@@ -1653,6 +1690,12 @@ export function integrationSettingsPath(
 export function enabledIntegrationsSettingsPath(workspaceSlug: string) {
   return `${workspaceRootPath(workspaceSlug)}/settings/integrations/enabled`;
 }
+export function jiraSyncNewPath(workspaceSlug: string) {
+  return `${integrationSettingsPath(workspaceSlug, "jira")}/sync/new`;
+}
+export function jiraSyncEditPath(workspaceSlug: string, jiraProjectId: string) {
+  return `${integrationSettingsPath(workspaceSlug, "jira")}/sync/${encode(jiraProjectId)}/edit`;
+}
 export function workspaceSavedViewPath(workspaceSlug: string, viewId: string) {
   return `${workspaceRootPath(workspaceSlug)}/view/${encode(viewId)}`;
 }
@@ -1858,5 +1901,5 @@ function slug(value: string) {
       .slice(0, 80) || "issue"
   );
 }
-export type IntegrationProvider = 'github'|'gitlab';
-const INTEGRATION_PROVIDERS:IntegrationProvider[]=['github','gitlab'];
+export type IntegrationProvider = 'github'|'gitlab'|'jira';
+const INTEGRATION_PROVIDERS:IntegrationProvider[]=['github','gitlab','jira'];
