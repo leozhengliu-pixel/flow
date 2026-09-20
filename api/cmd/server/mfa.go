@@ -51,12 +51,12 @@ func (s *server) accountPasskeys(userID string) []accountPasskey {
 	result := []accountPasskey{}
 	seen := map[string]bool{}
 	for _, workspace := range s.store.WorkspaceKeys() {
-		data, ok := s.store.WorkspaceMetadata(workspace)
+		passkeys, _, ok := s.store.AccountCollections(workspace, userID)
 		if !ok {
 			continue
 		}
-		for _, key := range data.Passkeys {
-			if key.UserID == userID && !seen[key.ID] {
+		for _, key := range passkeys {
+			if !seen[key.ID] {
 				seen[key.ID] = true
 				result = append(result, accountPasskey{workspace: workspace, key: key})
 			}

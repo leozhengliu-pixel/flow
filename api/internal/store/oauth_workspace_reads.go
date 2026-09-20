@@ -75,6 +75,70 @@ func (s *SQLiteStore) OAuthWorkspaceAccess(ctx context.Context, workspace, userI
 	return data, err
 }
 
+func (s *SQLiteStore) TeamSettingsFor(workspace, teamID string) (domain.TeamSettings, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if workspace == "" {
+		workspace = s.lastWorkspaceKey
+	}
+	data, ok := s.workspaces[workspace]
+	if !ok || data.TeamSettings == nil {
+		return domain.TeamSettings{}, false
+	}
+	settings, found := data.TeamSettings[teamID]
+	return settings, found
+}
+
+func (s *SQLiteStore) TrashSnapshot(workspace string) []domain.TrashEntry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if workspace == "" {
+		workspace = s.lastWorkspaceKey
+	}
+	data, ok := s.workspaces[workspace]
+	if !ok || len(data.Trash) == 0 {
+		return nil
+	}
+	return append([]domain.TrashEntry(nil), data.Trash...)
+}
+
+func (s *SQLiteStore) WorkspaceIDForKey(ctx context.Context, workspace string) (string, error) {
+	if workspace == "" {
+		s.mu.RLock()
+		workspace = s.lastWorkspaceKey
+		s.mu.RUnlock()
+	}
+	var id string
+	err := s.db.QueryRowContext(ctx, `SELECT workspace_id FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrAuthForbidden
+	}
+	return id, err
+}
+
+// AccountCollections copies only the signed-in user's passkeys and settings.
+// Login and account-security handlers must not clone teams or workflow states.
+func (s *SQLiteStore) AccountCollections(workspace, userID string) (passkeys []domain.Passkey, settings domain.UserSettings, ok bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if workspace == "" {
+		workspace = s.lastWorkspaceKey
+	}
+	data, found := s.workspaces[workspace]
+	if !found {
+		return nil, domain.UserSettings{}, false
+	}
+	for _, item := range data.Passkeys {
+		if item.UserID == userID {
+			passkeys = append(passkeys, item)
+		}
+	}
+	if data.UserSettings != nil {
+		settings = data.UserSettings[userID]
+	}
+	return passkeys, settings, true
+}
+
 func (s *SQLiteStore) OAuthAccountForUser(ctx context.Context, userID string) (domain.AccountBootstrap, error) {
 	result := domain.AccountBootstrap{Workspaces: []domain.WorkspaceMembership{}}
 	user, err := s.authUserByID(ctx, userID)

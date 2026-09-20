@@ -53,8 +53,11 @@ func parseCommitSigningKey(raw string) (domain.CommitSigningKey, error) {
 }
 
 func (s *server) getCommitSigningKey(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
-	settings := data.UserSettings[requestActor(s, r).ID]
+	_, settings, ok := s.store.AccountCollections(workspaceKey(r), requestActor(s, r).ID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
 	if settings.CommitSigningKey == nil {
 		writeJSON(w, http.StatusOK, nil)
 		return
