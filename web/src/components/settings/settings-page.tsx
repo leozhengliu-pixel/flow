@@ -189,11 +189,11 @@ const IntegrationSettingsPage = lazyPage(
   "IntegrationSettingsPage",
 );
 const JiraSettingsPage = lazyPage(
-  () => import("@/components/settings/jira-settings").then((module) => ({ default: module.JiraSettingsPage })),
+  () => import("@/components/settings/jira-settings"),
   "JiraSettingsPage",
 );
 const JiraSyncPage = lazyPage(
-  () => import("@/components/settings/jira-sync-page").then((module) => ({ default: module.JiraSyncPage })),
+  () => import("@/components/settings/jira-sync-page"),
   "JiraSyncPage",
 );
 const AuditLogSettings = lazyPage(
