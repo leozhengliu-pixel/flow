@@ -55,12 +55,10 @@ type teamMutationSnapshot struct {
 // rewrites every metadata row, so a single write would be O(teams).
 func metadataTeamMutation(event string, payload any) bool {
 	switch event {
-	case "team.created":
+	case "team.created", "team.settings_updated":
 		return true
 	case "team.updated":
 		return metadataFieldsOnly(payload, "name", "color", "icon")
-	case "team.settings_updated":
-		return metadataFieldsOnly(payload, "parentTeamId")
 	}
 	return false
 }
@@ -121,21 +119,25 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		if webhookEnabled {
 			previousValues = teamMutationPreviousValues(eventType, aggregateID, &snap, next)
 		}
-		payloadRaw, err := json.Marshal(payload)
-		if err != nil {
-			rollbackTeamMutation(&next, &snap, aggregateID)
-			return err
-		}
-		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, PreviousValues: previousValues, CreatedAt: time.Now().UTC()}
-		realtimePayload = enrichRealtimePayload(payloadRaw, teamMutationEntity(&next, aggregateID, snap.teamsLen), eventType)
 		upserts, err := collectDirtyTeamRecords(eventType, aggregateID, &snap, next)
 		if err != nil {
 			rollbackTeamMutation(&next, &snap, aggregateID)
 			return err
 		}
-		if err := s.persistTeamMetadata(ctx, workspaceKey, next, &event, upserts, len(next.Members) != snap.membersLen, len(next.TeamMembers) != snap.teamMembersLen); err != nil {
-			rollbackTeamMutation(&next, &snap, aggregateID)
-			return err
+		membersChanged := len(next.Members) != snap.membersLen
+		teamMembersChanged := len(next.TeamMembers) != snap.teamMembersLen
+		if len(upserts) > 0 || membersChanged || teamMembersChanged {
+			payloadRaw, err := json.Marshal(payload)
+			if err != nil {
+				rollbackTeamMutation(&next, &snap, aggregateID)
+				return err
+			}
+			event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, PreviousValues: previousValues, CreatedAt: time.Now().UTC()}
+			realtimePayload = enrichRealtimePayload(payloadRaw, teamMutationEntity(&next, aggregateID, snap.teamsLen), eventType)
+			if err := s.persistTeamMetadata(ctx, workspaceKey, next, &event, upserts, membersChanged, teamMembersChanged); err != nil {
+				rollbackTeamMutation(&next, &snap, aggregateID)
+				return err
+			}
 		}
 		noteTeamMutationIndexes(eventType, aggregateID, &snap, &next)
 		next = collectionMetadata(next)
@@ -154,6 +156,9 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 			return nil
 		}
 		return err
+	}
+	if event.ID == "" {
+		return nil
 	}
 	s.invalidateHotCache(ctx, workspaceKey, eventType, event.AggregateID)
 	if sink := s.webhook(); sink != nil {
@@ -436,9 +441,14 @@ func collectDirtyTeamRecords(eventType, aggregateID string, snap *teamMutationSn
 		}
 	default:
 		if settings, ok := next.TeamSettings[aggregateID]; ok {
-			if err := appendRecord("teamSettings", aggregateID, false, settings); err != nil {
-				return nil, err
+			if !snap.hadSettings || !metadataTeamSettingsEqual(snap.oldSettings, settings) {
+				if err := appendRecord("teamSettings", aggregateID, false, settings); err != nil {
+					return nil, err
+				}
 			}
+		}
+		if err := appendRange("states", snap.statesLen, func(i int) string { return next.States[i].ID }, func(i int) any { return next.States[i] }); err != nil {
+			return nil, err
 		}
 		index := snap.teamIndex
 		if index >= 0 && index < len(next.Teams) && !metadataTeamEqual(snap.oldTeam, next.Teams[index]) {
@@ -647,8 +657,8 @@ func equalTimePointer(a, b *time.Time) bool {
 
 func metadataTeamEqual(a, b domain.Team) bool {
 	return a.ID == b.ID && a.Name == b.Name && a.Key == b.Key && a.Color == b.Color && a.Icon == b.Icon &&
-		a.Private == b.Private && equalTimePointer(a.RetiredAt, b.RetiredAt) &&
-		equalTimePointer(a.CreatedAt, b.CreatedAt) && equalTimePointer(a.UpdatedAt, b.UpdatedAt)
+		a.Private == b.Private && a.ExternalSource == b.ExternalSource && equalTimePointer(a.RetiredAt, b.RetiredAt) &&
+		equalTimePointer(a.CreatedAt, b.CreatedAt)
 }
 
 func metadataLabelEqual(a, b domain.IssueLabel) bool {
