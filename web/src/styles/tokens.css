@@ -544,3 +544,14 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 .issue-properties .core-property-trigger>svg,.issue-properties .cycle-picker .label-project-trigger>svg{width:16px;height:16px;flex:0 0 16px}
 :root{--sidebar-submenu-shadow:var(--shadow-dialog),0 1px 1px lch(0 0 0/.125)}
 :root[data-theme="light"]{--sidebar-submenu-shadow:var(--shadow-dialog)}
+
+/* CI: feature-branch token aliases / dynamic defaults (auto) */
+:root{
+--border-primary:var(--theme-border);
+--bg-primary:var(--theme-background);
+--label-base:var(--theme-text-primary);
+--color-label-base:var(--theme-text-primary);
+--label-muted:var(--theme-text-tertiary);
+--color-label-muted:var(--theme-text-tertiary);
+--control-primary:var(--accent-primary);
+}
