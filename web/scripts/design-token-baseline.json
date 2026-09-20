@@ -1,4 +1,5 @@
 {
+  "components/activity/activity-timeline.css": 11,
   "components/agent/agent-page.module.css": 1,
   "components/auth/auth-page.css": 45,
   "components/auth/oauth-authorize-page.css": 68,
@@ -12,6 +13,7 @@
   "components/inbox/notification-row.module.css": 1,
   "components/initiatives/initiatives-list-parity.css": 12,
   "components/initiatives/initiatives.css": 202,
+  "components/issue/issue-description-editor.css": 85,
   "components/issue/issue-project-picker.css": 3,
   "components/issue/issue-release-picker.css": 15,
   "components/issue/issue-sla-indicator.css": 6,

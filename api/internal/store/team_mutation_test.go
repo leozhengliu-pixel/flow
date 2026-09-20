@@ -409,6 +409,9 @@ func TestTeamCreateAllocsDoNotScaleWithTeamCount(t *testing.T) {
 	if testing.Short() {
 		t.Skip("seeds thousands of teams")
 	}
+	if raceDetector {
+		t.Skip("persisting 4k teams is too slow under the race detector")
+	}
 	measure := func(teams int) float64 {
 		t.Helper()
 		repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
