@@ -25,6 +25,7 @@ import {
   explorerPropertyOptions, explorerUpdateForAction, explorerUpdateForProperty, issueToExplorerRow, optimisticExplorerRow,
   stateIdForExplorerGroup, withMapKey, withoutMapKey,
 } from './issue-explorer-model'
+import { IssuesSplitLayout, IssueViewSplitPage } from '@/components/issues-split-view'
 
 export interface IssueExplorerPageProps {
   data: BootstrapData
@@ -165,9 +166,14 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
   const openIssueFromExplorer = (row: MyIssuesRowData) => {
     const issue = issuesById.get(row.id)
     if (!issue) { void fetchIssueRecord(row.id, undefined, data.workspace.urlKey).then(issue => onOpenIssue(issue, boundedIssueSequence(rows.map(row => row.id), issue.id))).catch(() => toast.error('Could not load issue')); return }
-    if (detailsOpen && renderIssuePreview) setPreviewIssueId(issue.id)
+    if (detailsOpen) setPreviewIssueId(issue.id)
     else onOpenIssue(issue, boundedIssueSequence(groups.find(group => group.issues.some(row => row.id === issue.id))?.issues.map(row => row.id) ?? [issue.id], issue.id))
   }
+  const splitOrigin = savedView
+    ? { type: 'customView' as const, customViewId: savedView.id, label: savedView.name }
+    : scope.kind === 'team'
+      ? { type: 'teamView' as const, teamKey: scope.team.key, viewKind: view }
+      : { type: 'issueView' as const, teamKey: data.teams[0]?.key }
   const addFilter = (field: MyIssuesFilterKey, option: MyIssuesFilterOption) => {
     const label = ISSUE_FILTER_LABELS[field]
     if (label) persistFilters(toggleFilterOption(filters, field, label, option))
@@ -302,6 +308,9 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
       />}
       filterBar={(!savedView || viewEditor) && <MyIssuesFilterBar filters={filters} filterOptions={filter => explorerFilterOptions(filter.field, rowOptions)} onAdd={() => setFilterOpenSignal(value => value + 1)} onClear={() => persistFilters([])} onOperatorChange={(id, operator) => persistFilters(updateFilterOperator(filters, id, operator))} onRemove={id => persistFilters(filters.filter(filter => filter.id !== id))} onValuesChange={(id, options) => persistFilters(updateFilterValues(filters, id, options))}/>}
     >
+      <IssuesSplitLayout
+        detailsOpen={detailsOpen && !insightsOpen}
+        list={<>
       {data.issueCollectionPaged && !drillRows ? <PagedIssueList
         data={data}
         query={pagedQuery}
@@ -352,28 +361,66 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
         onPropertyChange={changeProperty}
         onSelectIssue={selection.selectIssue}
       />}
-      {(!savedView || previewIssue) && <MyIssuesDetailsPane
-        open={detailsOpen}
-        width={detailsWidth}
-        onWidthChange={setDetailsWidth}
-        onClose={() => { if (previewIssueId) setPreviewIssueId(undefined); else changeDetails(false) }}
-        selectedIssue={previewIssue ? issueToExplorerRow(previewIssue, data.workspace.urlKey,data.issues,data) : undefined}
-        previewContent={previewIssue && renderIssuePreview ? renderIssuePreview(previewIssue, () => setPreviewIssueId(undefined)) : undefined}
-        summary={summary}
-        onSummaryItemSelect={summaryFilter}
-      />}
-      {savedView && detailsOpen && !previewIssue && <SavedViewDetailsPanel
-        favorite={savedViewFavorite}
-        menu={savedViewMenu}
-        onClose={() => changeDetails(false)}
-        onSummaryItemSelect={(dimension, id, label, color) => addFilter(dimension === 'assignee' ? 'assignee' : dimension === 'project' ? 'project' : 'labels', { id, label, color })}
-        onToggleFavorite={() => { if (onToggleSavedViewFavorite) void onToggleSavedViewFavorite(savedView) }}
-        rows={rows}
-        team={data.teams.find(team => team.id === savedView.teamId)}
-        users={data.users}
-        view={savedView}
-        workspace={data.workspace}
-      />}
+        </>}
+        detail={
+          previewIssue ? (
+            <IssueViewSplitPage
+              workspaceSlug={data.workspace.urlKey}
+              origin={splitOrigin}
+              selectedIssue={issueToExplorerRow(previewIssue, data.workspace.urlKey, data.issues, data)}
+              preview={renderIssuePreview ? renderIssuePreview(previewIssue, () => setPreviewIssueId(undefined)) : undefined}
+              onClose={() => setPreviewIssueId(undefined)}
+            />
+          ) : savedView ? (
+            <SavedViewDetailsPanel
+              favorite={savedViewFavorite}
+              menu={savedViewMenu}
+              onClose={() => changeDetails(false)}
+              onSummaryItemSelect={(dimension, id, label, color) => addFilter(dimension === 'assignee' ? 'assignee' : dimension === 'project' ? 'project' : 'labels', { id, label, color })}
+              onToggleFavorite={() => { if (onToggleSavedViewFavorite) void onToggleSavedViewFavorite(savedView) }}
+              rows={rows}
+              team={data.teams.find(team => team.id === savedView.teamId)}
+              users={data.users}
+              view={savedView}
+              workspace={data.workspace}
+            />
+          ) : (
+            <IssueViewSplitPage
+              workspaceSlug={data.workspace.urlKey}
+              origin={splitOrigin}
+              summary={summary}
+              onClose={() => changeDetails(false)}
+              onSummaryItemSelect={summaryFilter}
+            />
+          )
+        }
+        fallbackDetail={
+          <>
+            {(!savedView || previewIssue) && <MyIssuesDetailsPane
+              open={detailsOpen}
+              width={detailsWidth}
+              onWidthChange={setDetailsWidth}
+              onClose={() => { if (previewIssueId) setPreviewIssueId(undefined); else changeDetails(false) }}
+              selectedIssue={previewIssue ? issueToExplorerRow(previewIssue, data.workspace.urlKey, data.issues, data) : undefined}
+              previewContent={previewIssue && renderIssuePreview ? renderIssuePreview(previewIssue, () => setPreviewIssueId(undefined)) : undefined}
+              summary={summary}
+              onSummaryItemSelect={summaryFilter}
+            />}
+            {savedView && detailsOpen && !previewIssue && <SavedViewDetailsPanel
+              favorite={savedViewFavorite}
+              menu={savedViewMenu}
+              onClose={() => changeDetails(false)}
+              onSummaryItemSelect={(dimension, id, label, color) => addFilter(dimension === 'assignee' ? 'assignee' : dimension === 'project' ? 'project' : 'labels', { id, label, color })}
+              onToggleFavorite={() => { if (onToggleSavedViewFavorite) void onToggleSavedViewFavorite(savedView) }}
+              rows={rows}
+              team={data.teams.find(team => team.id === savedView.teamId)}
+              users={data.users}
+              view={savedView}
+              workspace={data.workspace}
+            />}
+          </>
+        }
+      />
       {drillRows && <InsightHiddenNotice hidden={drillRows.length - new Set(groups.flatMap(group => group.issues.map(issue => issue.id))).size} onShow={() => changeDisplay({ ...display, completedWindow: 'all', showSubIssues: true, hiddenGroupIds: [] })}/>}
       {insightsView && insightsOpen && <SavedViewInsightsPanel
         allRows={insightRows}
