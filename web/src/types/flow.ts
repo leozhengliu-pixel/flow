@@ -1857,6 +1857,8 @@ export interface TeamSettings {
   agentSkillPermission: "allMembers" | "teamMembers" | "owners";
   loopPermission: "allMembers" | "teamMembers" | "owners";
   memberPermission: "allMembers" | "teamMembers" | "owners";
+  issueSharingEnabled?: boolean;
+  issueSharingPermission?: "allMembers" | "teamMembers" | "owners";
   slackChannelId?: string;
   slackChannelName?: string;
   slackNotifications: Record<string, boolean>;
@@ -1887,6 +1889,7 @@ export interface TeamSettingsMutationInput extends Partial<
   Omit<TeamSettings, "teamId">
 > {
   identifier?: string;
+  applyToSubTeams?: boolean;
 }
 export interface IssueTemplate {
   id: UUID;
@@ -2135,6 +2138,7 @@ export interface IssueUpdateInput {
   descriptionState?: string;
   descriptionData?: Record<string, unknown>;
   contentState?: string;
+  teamId?: string;
   stateId?: string;
   priority?: number;
   estimate?: number;

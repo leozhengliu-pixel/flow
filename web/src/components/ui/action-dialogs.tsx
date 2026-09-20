@@ -19,6 +19,7 @@ export function ActionDialogHost() {
   const [value, setValue] = useState("");
   const [compare, setCompare] = useState<DateCompareOption>("after");
   const [selectedId, setSelectedId] = useState("");
+  const [choice, setChoice] = useState("");
   const [error, setError] = useState<string>();
   const lastRequest = useRef<DialogRequest | undefined>(request);
   if (request) lastRequest.current = request;
@@ -46,6 +47,9 @@ export function ActionDialogHost() {
         break;
       case "dropdown":
         setSelectedId(request.selectedId ?? request.options[0]?.id ?? "");
+        break;
+      case "choice":
+        setChoice(request.defaultChoice);
         break;
       default:
         break;
@@ -116,6 +120,9 @@ export function ActionDialogHost() {
       }
       case "diff":
         finish("accept");
+        break;
+      case "choice":
+        finish(choice || null);
         break;
     }
   };
@@ -237,6 +244,26 @@ export function ActionDialogHost() {
               <pre key={index} role="listitem">
                 {diff}
               </pre>
+            ))}
+          </div>
+        )}
+
+        {displayRequest?.kind === "choice" && (
+          <div
+            className="action-dialog-choices"
+            role="radiogroup"
+            aria-label={displayRequest.title}
+          >
+            {displayRequest.choices.map((item) => (
+              <label key={item.id} className="action-dialog-choice">
+                <input
+                  type="radio"
+                  name="action-dialog-choice"
+                  checked={choice === item.id}
+                  onChange={() => setChoice(item.id)}
+                />
+                <span>{item.label}</span>
+              </label>
             ))}
           </div>
         )}

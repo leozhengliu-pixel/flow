@@ -503,6 +503,8 @@ type TeamSettings struct {
 	AgentSkillPermission    string               `json:"agentSkillPermission"`
 	LoopPermission          string               `json:"loopPermission"`
 	MemberPermission        string               `json:"memberPermission"`
+	IssueSharingEnabled     bool                 `json:"issueSharingEnabled"`
+	IssueSharingPermission  string               `json:"issueSharingPermission,omitempty"`
 	SlackChannelID          string               `json:"slackChannelId,omitempty"`
 	SlackChannelName        string               `json:"slackChannelName,omitempty"`
 	SlackNotifications      map[string]bool      `json:"slackNotifications"`
@@ -2038,6 +2040,7 @@ type IssueUpdateInput struct {
 	ContentState            *string        `json:"contentState,omitempty"`
 	ExpectedDocumentVersion *int64         `json:"expectedDocumentVersion,omitempty"`
 	DocumentUpdateIDs       []string       `json:"documentUpdateIds,omitempty"`
+	TeamID                  *string        `json:"teamId,omitempty"`
 	StateID                 *string        `json:"stateId,omitempty"`
 	Priority                *int           `json:"priority,omitempty"`
 	Estimate                *float64       `json:"estimate,omitempty"`
@@ -2136,6 +2139,9 @@ type TeamSettingsMutationInput struct {
 	AgentSkillPermission    *string               `json:"agentSkillPermission,omitempty"`
 	LoopPermission          *string               `json:"loopPermission,omitempty"`
 	MemberPermission        *string               `json:"memberPermission,omitempty"`
+	IssueSharingEnabled      *bool                 `json:"issueSharingEnabled,omitempty"`
+	IssueSharingPermission   *string               `json:"issueSharingPermission,omitempty"`
+	ApplyToSubTeams          *bool                 `json:"applyToSubTeams,omitempty"`
 	SlackChannelID          *string               `json:"slackChannelId,omitempty"`
 	SlackChannelName        *string               `json:"slackChannelName,omitempty"`
 	SlackNotifications      *map[string]bool      `json:"slackNotifications,omitempty"`
