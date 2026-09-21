@@ -19,3 +19,8 @@
   flex: 0 0 14px;
   border-radius: 50%;
 }
+
+.li-agent-sidebar{padding:0!important;overflow:hidden;display:flex;flex-direction:column}
+.li-agent-sidebar > *{flex:1;min-height:0}
+.li-detail-header button.is-active,
+.li-detail-header button[data-active=true]{background:var(--theme-control-hover);color:var(--theme-text-primary)}

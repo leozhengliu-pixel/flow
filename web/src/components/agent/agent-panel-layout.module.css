@@ -1,0 +1,67 @@
+.error {
+  height: 100%;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  color: var(--theme-text-primary);
+  background: var(--bg-sidebar);
+  font-family: var(--font);
+}
+.error strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+.error p {
+  margin: 0;
+  max-width: 260px;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.errorActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.errorActions button {
+  height: 28px;
+  padding: 0 10px;
+  border: 0.5px solid var(--theme-border-strong);
+  border-radius: 6px;
+  background: var(--theme-control);
+  color: var(--theme-text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+.errorActions button:hover {
+  background: var(--theme-control-hover);
+}
+.errorActions .primary {
+  border-color: #5e6ad2;
+  background: #5e6ad2;
+  color: #fff;
+}
+.errorActions .primary:hover {
+  filter: brightness(1.06);
+}
+:global(:root[data-theme='light']) .error {
+  background: var(--bg-sidebar);
+  color: var(--theme-text-primary);
+}
+:global(:root[data-theme='light']) .error p {
+  color: var(--theme-text-secondary);
+}
+:global(:root[data-theme='light']) .errorActions button {
+  border-color: var(--theme-border);
+  background: var(--theme-surface-2);
+}
+:global(:root[data-theme='light']) .errorActions .primary {
+  border-color: #5e6ad2;
+  background: #5e6ad2;
+  color: #fff;
+}
