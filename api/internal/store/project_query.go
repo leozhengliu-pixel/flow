@@ -199,6 +199,7 @@ func ProjectListBootstrapProjection(data *domain.Bootstrap) {
 	data.OAuthApplications = []domain.OAuthApplication{}
 	data.OAuthAuthorizations = []domain.OAuthAuthorization{}
 	data.Webhooks = []domain.Webhook{}
+	data.WebhookFailureEvents = []domain.WebhookFailureEvent{}
 	data.IntegrationConnections = []domain.IntegrationConnection{}
 	data.IdentityProviders = []domain.IdentityProvider{}
 	data.IntegrationDeliveries = []domain.IntegrationDelivery{}

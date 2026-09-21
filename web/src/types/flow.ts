@@ -1229,6 +1229,15 @@ export interface Webhook {
   createdAt: string;
   updatedAt: string;
 }
+export interface WebhookFailureEvent {
+  id: UUID;
+  webhookId: UUID;
+  executionId: string;
+  url: string;
+  httpStatus: number | null;
+  responseOrError: string;
+  createdAt: string;
+}
 export interface AccountSessionInfo {
   id: string;
   current: boolean;
