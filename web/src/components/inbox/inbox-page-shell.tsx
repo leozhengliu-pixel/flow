@@ -6,6 +6,13 @@ import { forwardRef, useEffect, useRef, useState } from 'react'
 import { InboxFilterBuilder, type InboxFilterCondition, type InboxFilterOptions } from './inbox-filter-builder'
 import './inbox.css'
 import { CheckIcon, DisplayIcon, FilterIcon, SidebarIcon } from '@/components/ui/view-action-icons'
+import {
+  SPLIT_VIEW_DEFAULT_LIST_WIDTH,
+  SPLIT_VIEW_MIN_DETAIL_WIDTH,
+  SPLIT_VIEW_MIN_LIST_WIDTH,
+  persistSplitViewListWidth,
+  readSplitViewListWidth,
+} from '@/components/split-view'
 
 export type InboxOrdering = 'newest' | 'oldest' | 'priority'
 export type InboxUnreadGrouping = 'none' | 'focus'
@@ -42,10 +49,9 @@ export interface InboxPageShellProps {
   tabCounts?: Partial<Record<InboxTab, number>>
 }
 
-const INBOX_LIST_WIDTH_KEY = 'flow.inbox.list-width'
-const DEFAULT_LIST_WIDTH = 300
-const MIN_LIST_WIDTH = 300
-const MIN_DETAIL_WIDTH = 608
+const DEFAULT_LIST_WIDTH = SPLIT_VIEW_DEFAULT_LIST_WIDTH.inbox
+const MIN_LIST_WIDTH = SPLIT_VIEW_MIN_LIST_WIDTH
+const MIN_DETAIL_WIDTH = SPLIT_VIEW_MIN_DETAIL_WIDTH
 
 export function InboxPageShell({
   children,
@@ -187,20 +193,11 @@ export function InboxPageShell({
 }
 
 function readInboxListWidth() {
-  try {
-    const width = Number(globalThis.localStorage?.getItem(INBOX_LIST_WIDTH_KEY))
-    return Number.isFinite(width) && width > 0 ? width : DEFAULT_LIST_WIDTH
-  } catch {
-    return DEFAULT_LIST_WIDTH
-  }
+  return readSplitViewListWidth('inbox', DEFAULT_LIST_WIDTH)
 }
 
 function persistInboxListWidth(width: number) {
-  try {
-    globalThis.localStorage?.setItem(INBOX_LIST_WIDTH_KEY, String(Math.round(width)))
-  } catch {
-    // Preferences are best-effort in private browsing.
-  }
+  persistSplitViewListWidth('inbox', width)
 }
 
 function clamp(value: number, minimum: number, maximum: number) {
