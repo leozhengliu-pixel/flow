@@ -1,10 +1,9 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Popover from "@radix-ui/react-popover";
 import {
   AlertCircle,
   Check,
-  Box,
   ChevronRight,
   CircleCheck,
   Copy,
@@ -15,7 +14,6 @@ import {
   Search,
   Star,
   Trash2,
-  UsersRound,
   X,
 } from "lucide-react";
 import {
@@ -68,7 +66,6 @@ export function AgentPage({
     [editingId, setEditingId] = useState<string>(),
     [approvalBusy, setApprovalBusy] = useState<string>(),
     [activeStreamId, setActiveStreamId] = useState<string>(),
-    [examplesVisible, setExamplesVisible] = useState(true),
     [attachments, setAttachments] = useState<File[]>([]);
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -440,7 +437,7 @@ export function AgentPage({
               requestAnimationFrame(() => editorRef.current?.focus());
             }}
           />
-        ) : <AgentBackground />}
+        ) : null}
         {editingId && (
           <div className={styles.editing}>
             <span>{t("Editing message")}</span>
@@ -587,20 +584,7 @@ export function AgentPage({
               {error}
             </span>
           )}
-          {status && !status.enabled && (
-            <span className={styles.error}>
-              {t("Flow Agent is not configured")}
-            </span>
-          )}
         </div>
-        {!current && examplesVisible && <section className={`${styles.examples}${status&&!status.enabled?` ${styles.examplesWithError}`:''}`}>
-          <header><span>{t("Get started with some examples")}</span><button aria-label={t("Dismiss")} onClick={()=>setExamplesVisible(false)} type="button"><X/></button></header>
-          <div>
-            <AgentExample icon={<Box/>} title={t("Create a new project")} description={t("Turn an idea into a well-scoped project")} onClick={()=>{writeInput(t("Help me create a new project"));requestAnimationFrame(()=>editorRef.current?.focus())}}/>
-            <AgentExample icon={<Search/>} title={t("Research a topic")} description={t("Research a topic across the issue backlog")} onClick={()=>{writeInput(t("Research a topic across the issue backlog"));requestAnimationFrame(()=>editorRef.current?.focus())}}/>
-            <AgentExample icon={<UsersRound/>} title={t("Set up new team")} description={t("Create a team that matches how your organization works")} onClick={()=>{writeInput(t("Help me set up a new team"));requestAnimationFrame(()=>editorRef.current?.focus())}}/>
-          </div>
-        </section>}
       </section>
       {deleteTarget && (
         <div className={styles.confirmOverlay} role="presentation">
@@ -633,10 +617,6 @@ export function AgentPage({
     </main>
   );
 }
-
-function AgentExample({description,icon,onClick,title}:{description:string;icon:ReactNode;onClick:()=>void;title:string}){return <button onClick={onClick} type="button">{icon}<span><strong>{title}</strong><small>{description}</small></span></button>}
-
-function AgentBackground(){return <svg aria-hidden="true" className={styles.emptyGraphic} viewBox="0 0 48 48"><path d="M10 6a4 4 0 0 0-4 4v28a4 4 0 0 0 8 0v-8h16a4 4 0 0 0 0-8H14v-8h24a4 4 0 0 0 0-8H10Z"/><circle cx="35" cy="38" r="4"/></svg>}
 
 function Conversation({
   busy,
