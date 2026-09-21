@@ -267,6 +267,8 @@ export type AppRoute =
       releasePipelineMode?: "new" | "edit";
       releasePipelineSlug?: string;
       integrationProvider?: IntegrationProvider;
+      /** Catalog slug or "enabled" for /settings/integrations/:slug (LS-0338 / LS-0248). */
+      integrationSlug?: string;
     }
   | {
       kind: "team-views";
@@ -785,15 +787,33 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
   if (
     section === "settings" &&
     third === "integrations" &&
-    INTEGRATION_PROVIDERS.includes(fourth as IntegrationProvider) &&
+    fourth === "enabled" &&
     segments.length === 4
   )
     return {
       kind: "settings",
       workspaceSlug,
       page: "integrations",
-      integrationProvider: fourth as IntegrationProvider,
+      integrationSlug: "enabled",
     };
+  if (
+    section === "settings" &&
+    third === "integrations" &&
+    fourth &&
+    segments.length === 4
+  ) {
+    const slug = fourth;
+    const provider = INTEGRATION_PROVIDERS.includes(slug as IntegrationProvider)
+      ? (slug as IntegrationProvider)
+      : undefined;
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "integrations",
+      integrationSlug: slug,
+      integrationProvider: provider,
+    };
+  }
   if (
     section === "settings" &&
     third === "teams" &&
@@ -1622,9 +1642,12 @@ export function projectTemplateEditPath(
 }
 export function integrationSettingsPath(
   workspaceSlug: string,
-  provider: IntegrationProvider,
+  providerOrSlug: IntegrationProvider | string,
 ) {
-  return `${workspaceRootPath(workspaceSlug)}/settings/integrations/${provider}`;
+  return `${workspaceRootPath(workspaceSlug)}/settings/integrations/${providerOrSlug}`;
+}
+export function enabledIntegrationsSettingsPath(workspaceSlug: string) {
+  return `${workspaceRootPath(workspaceSlug)}/settings/integrations/enabled`;
 }
 export function workspaceSavedViewPath(workspaceSlug: string, viewId: string) {
   return `${workspaceRootPath(workspaceSlug)}/view/${encode(viewId)}`;

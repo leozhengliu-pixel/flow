@@ -931,6 +931,13 @@ export interface FeatureSettings {
   pulseWorkspaceSchedule: string;
   asksEmailAddresses: string[];
   triageIntelligence: TriageIntelligenceSettings;
+  /** LS-0110 repository access policy for Code Intelligence. */
+  repositoryAccess?: {
+    extendAccessToAllMembers: boolean;
+    allowAutomationAccess: boolean;
+    scope: "all" | "selected";
+    allowedRepositories: string[];
+  };
 }
 
 export type TriageIntelligenceAction = "suggest" | "auto" | "hide";
