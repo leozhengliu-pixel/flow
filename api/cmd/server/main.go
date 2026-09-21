@@ -384,6 +384,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/webhooks", s.createWebhook)
 	mux.HandleFunc("PATCH /api/webhooks/{id}", s.updateWebhook)
 	mux.HandleFunc("DELETE /api/webhooks/{id}", s.deleteWebhook)
+	mux.HandleFunc("GET /api/webhooks/{id}/failures", s.listWebhookFailures)
 	mux.HandleFunc("POST /api/webhooks/{id}/rotate-secret", s.rotateWebhookSecret)
 	mux.HandleFunc("POST /api/webhooks/{id}/revoke-secret", s.revokeWebhookSecret)
 	mux.HandleFunc("POST /api/oauth/token", s.exchangeOAuthToken)
@@ -928,6 +929,8 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	for index := range data.IntegrationConnections {
 		data.IntegrationConnections[index] = redactIntegrationConnection(data.IntegrationConnections[index])
 	}
+	// Failure events are listed via GET /api/webhooks/{id}/failures to keep bootstrap lean.
+	data.WebhookFailureEvents = []domain.WebhookFailureEvent{}
 	if !workspaceAdminRole(data.ViewerRole) {
 		data.IdentityProviders = []domain.IdentityProvider{}
 		data.IntegrationDeliveries = []domain.IntegrationDelivery{}
@@ -969,6 +972,7 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	for index := range data.Passkeys {
 		data.Passkeys[index].CredentialJSON = ""
 	}
+	data.WebhookFailureEvents = []domain.WebhookFailureEvent{}
 	if !apiKeyHasScope(key, "admin") {
 		data.OAuthApplications = []domain.OAuthApplication{}
 		data.Webhooks = []domain.Webhook{}

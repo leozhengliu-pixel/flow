@@ -13369,6 +13369,36 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/webhooks/{id}/failures": {
+      "get": {
+        "operationId": "get_webhooks_id_failures",
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "GET /api/webhooks/{id}/failures",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/webhooks/{id}/revoke-secret": {
       "post": {
         "operationId": "post_webhooks_id_revoke_secret",
