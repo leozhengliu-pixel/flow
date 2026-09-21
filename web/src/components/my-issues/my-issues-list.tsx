@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type
 import { Virtuoso, type Components } from 'react-virtuoso'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { Check, ChevronDown, ChevronRight, Clock3, GitPullRequest, Link2, PackageOpen, Plus } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Clock3, Link2, PackageOpen, Plus } from 'lucide-react'
 import type { MyIssuesProperty } from './my-issues-surface'
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { MilestoneProgressIcon } from '@/components/issue/milestone-progress-icon'
@@ -20,6 +20,7 @@ import { toggleGroupedLabelIds } from '@/lib/labels'
 import { PersonHover } from '@/components/property/person-info'
 import { isPeopleProperty } from '@/lib/people'
 import { usePropertyCommand } from '@/components/property/use-property-command'
+import { IssueWidgetAdornments } from '@/components/issues-split-view'
 
 export type MyIssuesStateType = 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled'
 export type MyIssuesContextAction = 'status' | 'priority' | 'assignee' | 'dueDate' | 'labels' | 'project' | 'cycle' | 'moreProperties' | 'createRelated' | 'markAs' | 'copy' | 'copyUrl' | 'copyId' | 'copyTitle' | 'convertTo' | 'move' | 'openIn' | 'runLoop' | 'favorite' | 'remind' | 'delete'
@@ -104,6 +105,10 @@ export interface MyIssuesRowData {
   hasLinks?: boolean
   linkCount?: number
   pullRequestCount?: number
+  /** LS-0359 — dominant linked PR lifecycle for row chrome. */
+  pullRequestLifecycle?: 'open' | 'inReview' | 'approved' | 'merged' | 'closed' | 'draft'
+  blockedByCount?: number
+  blockingCount?: number
   releaseCount?: number
   hasContent?: boolean
   estimate?: number
@@ -282,7 +287,17 @@ export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAU
         {displayProperties.has('timeInStatus') && <time className={styles.rowDate} aria-label={issue.timeInStatusMinutes == null ? 'Time in status unavailable' : `${formatTimeInStatus(issue.timeInStatusMinutes)} in status`}>{issue.timeInStatusMinutes == null ? null : <><Clock3 size={12}/>{formatTimeInStatus(issue.timeInStatusMinutes)}</>}</time>}
         {displayProperties.has('release') && <span className={styles.rowDate} aria-label={issue.releaseCount ? `${issue.releaseCount} releases` : 'No releases'}>{issue.releaseCount ? <><PackageOpen size={12}/>{issue.releaseCount}</> : null}</span>}
         {displayProperties.has('links') && <span className={styles.rowDate} aria-label={issue.linkCount ? `${issue.linkCount} links` : 'No links'}>{issue.linkCount ? <><Link2 size={12}/>{issue.linkCount}</> : null}</span>}
-        {displayProperties.has('pullRequests') && <span className={styles.rowDate} aria-label={issue.pullRequestCount ? `${issue.pullRequestCount} pull requests` : 'No pull requests'}>{issue.pullRequestCount ? <><GitPullRequest size={12}/>{issue.pullRequestCount}</> : null}</span>}
+        {displayProperties.has('pullRequests') || issue.blockedByCount || issue.blockingCount ? (
+          <span className={styles.rowDate}>
+            <IssueWidgetAdornments
+              showPullRequests={displayProperties.has('pullRequests')}
+              pullRequestLifecycle={issue.pullRequestLifecycle}
+              pullRequestCount={issue.pullRequestCount ?? 0}
+              blockedByCount={issue.blockedByCount ?? 0}
+              blockingCount={issue.blockingCount ?? 0}
+            />
+          </span>
+        ) : null}
         <span aria-hidden="true"/>
       </a>
     </ContextMenu.Trigger>

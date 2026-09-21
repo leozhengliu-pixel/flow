@@ -22,6 +22,7 @@
   "components/issue/issue-release-picker.css": 15,
   "components/issue/issue-sla-indicator.css": 6,
   "components/issue/issue-subscriber-picker.css": 11,
+  "components/issues-split-view/issues-split-view.module.css": 2,
   "components/layout/sidebar.css": 67,
   "components/loops/loops-page.css": 2,
   "components/project-detail/project-detail-page.css": 276,
