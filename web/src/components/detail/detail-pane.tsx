@@ -1,6 +1,9 @@
-import { Check, ChevronDown, ChevronRight, ExternalLink, FileText, GitPullRequest, Link2, Plus, RotateCw, UserRound, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, ExternalLink, FileText, GitPullRequest, Link2, MessageSquare, Plus, RotateCw, UserRound, X } from 'lucide-react'
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { IssueAgentPicker, IssueAgentTasks } from '@/components/agent/issue-agent-tasks'
+import { EntityAgentPanel } from '@/components/agent/entity-agent-panel'
+import { usePageAgentSidebarOpen } from '@/components/agent/use-page-agent-sidebar-open'
+import { issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import { useDescriptionSelectionActions } from './description-selection-actions'
 import { fetchIssueRecord } from '@/lib/api'
 import { toast } from 'sonner'
@@ -45,10 +48,12 @@ import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import { TriageIntelligenceSuggestions } from '@/components/issue/triage-intelligence-suggestions'
 import './issue-code-reviews.css'
 import './issue-history-state.css'
+import './issue-agent-rail.css'
 
 export function DetailPane({issue,data,comments,activities,historyLoading=false,historyError,onRetryHistory,highlightTarget,presence=[],workspacePresence,full=false,embedded=false,issueOptionsActions,onClose,onNavigateIssue,onNavigateRoot,returnPath,navigationIssueIds,onUpdate,onIssueUpdated,onDelete,onCreateSubIssue,onCreateProject,onCreateProjectMilestone,onCreateLabel,onReactIssue,onComment,onEditComment,onDeleteComment,onReactComment,onRelation,onDeleteRelation,onUpload,onDeleteAttachment}:{issue:Issue;data:BootstrapData;comments:Comment[];activities:ActivityEvent[];historyLoading?:boolean;historyError?:string;onRetryHistory?:()=>void;highlightTarget?:ActivityHighlightTarget;presence?:Presence[];workspacePresence?:Presence[];full?:boolean;embedded?:boolean;issueOptionsActions?:IssueOptionsActions;onClose:()=>void;onExpand?:()=>void;onNavigateIssue?:(issue:Issue)=>void;onNavigateRoot?:()=>void;returnPath?:string;navigationIssueIds?:string[];onUpdate:(input:IssueUpdateInput)=>Promise<void>;onIssueUpdated?:(issue:Issue)=>void;onDelete:()=>Promise<void>;onCreateSubIssue:(input:SubIssueInput)=>Promise<void>;onCreateProject?:(draft:NewProjectDraft)=>Promise<Project>;onCreateProjectMilestone?:(projectId:string,input:{name:string})=>Promise<ProjectMilestone>;onCreateLabel?:(name:string,groupId?:string)=>Promise<IssueLabel>;onReactIssue:(emoji:string)=>Promise<void>;onComment:(body:string,bodyData?:Record<string,unknown>,parentId?:string)=>Promise<void>;onEditComment:(id:string,body:string,bodyData?:Record<string,unknown>)=>Promise<void>;onDeleteComment:(id:string)=>Promise<void>;onReactComment:(id:string,emoji:string)=>Promise<void>;onRelation:(type:IssueRelationType,relatedIssueId:string)=>Promise<void>;onDeleteRelation:(relationId:string)=>Promise<void>;onUpload:(file:File, options?:{embed?:boolean})=>Promise<Attachment|void>;onDeleteAttachment:(attachmentId:string)=>Promise<void>}){
   const{t}=useI18n(),[title,setTitle]=useState(issue.title),[subOpen,setSubOpen]=useState(false),[subCollapsed,setSubCollapsed]=useState(false),[subSelected,setSubSelected]=useState(new Set<string>()),[subDisplay,setSubDisplay]=useState<SubIssueDisplay>({ordering:'priority',direction:'asc',completed:'all',nested:true,properties:new Set(['status','labels','assignee'])}),[relationType,setRelationType]=useState<IssueRelationType|null>(null),[uploadState,setUploadState]=useState<AttachmentUploadState>()
   const peoplePresence=workspacePresence??presence
+  const [agentOpen, setAgentOpen] = usePageAgentSidebarOpen(`issue:${issue.id}`, false)
   const fileRef=useRef<HTMLInputElement>(null)
   const uploadCommentFile=async(file:File)=>{const attachment=await onUpload(file,{embed:false});if(!attachment?.url)throw new Error('Upload failed');return attachment.url}
   const descriptionSelection = useDescriptionSelectionActions(issue, data, onComment, uploadCommentFile)
@@ -143,7 +148,31 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
         {historyError&&!historyLoading&&<div className="issue-history-state" role="alert"><span>{t('Could not load activity')}: {historyError}</span>{onRetryHistory&&<Button variant="ghost" size="sm" onClick={onRetryHistory}><RotateCw size={14}/>{t('Retry')}</Button>}</div>}
         <PagedActivityTimeline issueId={issue.id} cursors={data.issueHistoryCursors?.[issue.id]} highlightTarget={highlightTarget} events={activities} comments={comments} viewerId={data.viewer.id} context={data} onReply={(body,bodyData,parentId)=>onComment(body,bodyData,parentId)} onEdit={onEditComment} onDelete={onDeleteComment} onReaction={onReactComment} onUpload={uploadCommentFile}/><Composer drafts={data.drafts} draftMetadata={{ resourceType: 'issue' }} draftResourceId={issue.id} draftTitle={issue.title} draftType="comment" onSubmit={onComment} onUpload={uploadCommentFile}/>
       </article>
-      <IssueProperties issue={issue} data={data} activities={activities} presence={peoplePresence} releasesEnabled={releasesEnabled} onCreateMilestone={onCreateProjectMilestone} onCreateProject={onCreateProject} onCreateLabel={createLabel} onUpdate={onUpdate} onToggleLabel={toggleLabel}/>
+      <div className="issue-agent-rail">
+        <div className="issue-agent-rail__toggle">
+          <button
+            aria-expanded={agentOpen}
+            aria-label={agentOpen ? t('Close chat') : t('Open chat')}
+            className="issue-agent-toggle"
+            data-active={agentOpen || undefined}
+            onClick={() => setAgentOpen(open => !open)}
+            type="button"
+          >
+            <MessageSquare size={14}/>
+            <span>{t('Chat')}</span>
+          </button>
+        </div>
+        {agentOpen ? (
+          <EntityAgentPanel
+            contextIssues={[issueToExplorerRow(issue, data.workspace.urlKey, data.issues, data)]}
+            onRequestClose={() => setAgentOpen(false)}
+            open={agentOpen}
+            target={{ type: 'issue', id: issue.id, title: issue.title, identifier: issue.identifier, issueIds: [issue.id] }}
+          />
+        ) : (
+          <IssueProperties issue={issue} data={data} activities={activities} presence={peoplePresence} releasesEnabled={releasesEnabled} onCreateMilestone={onCreateProjectMilestone} onCreateProject={onCreateProject} onCreateLabel={createLabel} onUpdate={onUpdate} onToggleLabel={toggleLabel}/>
+        )}
+      </div>
     </div></div>
     {relationType&&<RelationPicker open onOpenChange={open=>!open&&setRelationType(null)} type={relationType} issueId={issue.id} issues={data.issues} onSelect={id=>onRelation(relationType,id)}/>}
   </section>
