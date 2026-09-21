@@ -69,13 +69,6 @@ export function JiraSettingsPage({
       connection?.config?.clientSecretEnv ?? "FLOW_INTEGRATION_JIRA_CLIENT_SECRET",
   });
 
-  const statusLabel = useMemo(() => {
-    if (!connection) return t("Not connected");
-    if (connected(connection)) return t("Connected");
-    if (connection.status === "oauth_pending") return t("Waiting for authorization…");
-    if (connection.status === "error") return t("Connection failed");
-    return t("Configured — authorize to finish");
-  }, [connection, t]);
 
   const personalLabel = useMemo(() => {
     if (connected(connection)) return t("Personal Jira account connected");
@@ -215,53 +208,50 @@ export function JiraSettingsPage({
             <h2>{t("Connection")}</h2>
           </header>
 
-          <div className="feature-card jira-connection-card">
-            <div className="jira-connection-row">
-              <strong>{t("Connected Instances")}</strong>
-              <aside>
-                <button
-                  type="button"
-                  className="jira-icon-button"
-                  aria-label={t("Add connected instance")}
-                  onClick={onAddInstance}
-                >
-                  <Plus size={16} />
-                </button>
-              </aside>
-            </div>
-            <div className="jira-connection-row">
-              <div>
-                <strong>{personalLabel}</strong>
-                {!connected(connection) ? (
-                  <span>{statusLabel}</span>
-                ) : (
-                  <span>{statusLabel}</span>
-                )}
+          <div className="jira-connection-stack" data-jira-product="connection-rows">
+            <div className="feature-card jira-connection-card">
+              <div className="jira-connection-row">
+                <strong>{t("Connected instances")}</strong>
+                <aside>
+                  <button
+                    type="button"
+                    className="jira-icon-button"
+                    aria-label={t("Add connected instance")}
+                    onClick={onAddInstance}
+                  >
+                    <Plus size={16} />
+                  </button>
+                </aside>
               </div>
-              <aside>
-                {connected(connection) ? (
-                  <button
-                    type="button"
-                    className="feature-button danger"
-                    disabled={busy}
-                    onClick={() => void disconnect()}
-                  >
-                    {t("Disconnect")}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="jira-text-link"
-                    onClick={() => {
-                      if (onOpenConnectedAccounts) onOpenConnectedAccounts();
-                      else setConfigureOpen(true);
-                    }}
-                  >
-                    {t("Connected accounts")}
-                    <ChevronRight size={14} />
-                  </button>
-                )}
-              </aside>
+            </div>
+            <div className="feature-card jira-connection-card">
+              <div className="jira-connection-row">
+                <strong>{personalLabel}</strong>
+                <aside>
+                  {connected(connection) ? (
+                    <button
+                      type="button"
+                      className="feature-button danger"
+                      disabled={busy}
+                      onClick={() => void disconnect()}
+                    >
+                      {t("Disconnect")}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="jira-text-link"
+                      onClick={() => {
+                        if (onOpenConnectedAccounts) onOpenConnectedAccounts();
+                        else setConfigureOpen(true);
+                      }}
+                    >
+                      {t("Connected accounts")}
+                      <ChevronRight size={14} />
+                    </button>
+                  )}
+                </aside>
+              </div>
             </div>
           </div>
 

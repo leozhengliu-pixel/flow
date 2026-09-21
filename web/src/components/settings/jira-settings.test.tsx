@@ -45,7 +45,7 @@ it("shows Linear-like connection rows and honest secret guidance before OAuth", 
       />
     </I18nProvider>,
   );
-  expect(screen.getByText("Connected Instances")).toBeInTheDocument();
+  expect(screen.getByText("Connected instances")).toBeInTheDocument();
   expect(screen.getByText(/Personal Jira account not connected/i)).toBeInTheDocument();
   expect(screen.getByText(/Deployment secrets required/i)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /Connect with OAuth/i })).toBeInTheDocument();

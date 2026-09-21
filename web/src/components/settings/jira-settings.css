@@ -12,12 +12,10 @@
 .jira-section-label h2{margin:0;color:var(--theme-text-tertiary,var(--theme-text-secondary));font-size:12px;font-weight:500;line-height:16px;letter-spacing:.06em;text-transform:uppercase}
 .jira-section-label p{margin:6px 0 0;color:var(--theme-text-secondary);font-size:13px;line-height:19px;text-transform:none;letter-spacing:0;font-weight:450}
 
-.jira-connection-card{overflow:hidden}
-.jira-connection-row{box-sizing:border-box;min-height:52px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;border-bottom:1px solid var(--theme-border)}
-.jira-connection-row:last-child{border-bottom:0}
-.jira-connection-row>div{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+.jira-connection-stack{display:flex;flex-direction:column;gap:8px}
+.jira-connection-card{overflow:hidden;border-radius:8px}
+.jira-connection-row{box-sizing:border-box;min-height:48px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px}
 .jira-connection-row strong{color:var(--theme-text-primary);font-size:13px;font-weight:450;line-height:18px}
-.jira-connection-row span{color:var(--theme-text-secondary);font-size:12px;line-height:17px}
 .jira-connection-row aside{flex:0 0 auto;display:flex;align-items:center;gap:8px}
 
 .jira-icon-button{width:28px;height:28px;display:grid;place-items:center;padding:0;border:0;border-radius:6px;background:transparent;color:var(--theme-text-secondary);cursor:pointer}
