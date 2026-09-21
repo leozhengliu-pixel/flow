@@ -4605,11 +4605,7 @@ function App() {
         )}
         {!workspaceValid && (
           <OrganizationNotFound
-            orgKey={
-              "workspaceSlug" in route
-                ? route.workspaceSlug
-                : data.workspace.urlKey
-            }
+            orgKey={requestedWorkspaceKey || data.workspace.urlKey}
             onLogout={async () => {
               await logoutAccount();
               setSession(null);

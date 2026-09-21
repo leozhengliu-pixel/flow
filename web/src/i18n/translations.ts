@@ -1553,7 +1553,6 @@ export const zhCN: Record<string, string> = {
   'You can only switch to this workspace when logged in with {methods}. Please logout and login with the correct authentication method.': '仅当使用 {methods} 登录时才能切换到此工作区。请退出并用正确的身份验证方式重新登录。',
   'You don’t have access to this workspace.': '你无权访问此工作区。',
   'Please contact a workspace admin for access.': '请联系工作区管理员以获取访问权限。',
-  'or': '或',
   'Cancel deletion': '取消删除',
   'Workspace scheduled for deletion': '工作区已安排删除',
   'Schedule workspace deletion?': '安排删除工作区？',
