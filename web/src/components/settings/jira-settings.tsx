@@ -1,6 +1,9 @@
 /**
  * LS-0364 JiraOAuth + LS-0365 entry — Cloud / custom personal OAuth and sync links.
  * REST-only. Without deployment secrets, connect surfaces honest errors (no fake success).
+ *
+ * Product chrome mirrors Linear's post-enable CONNECTION rows (Connected Instances +
+ * personal status). Linear Enable / marketing hero is OUT_OF_SCOPE_BRAND — not cloned.
  */
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -27,6 +30,7 @@ type Props = {
   onReload: () => Promise<void>;
   onOpenSyncNew: () => void;
   onOpenSyncEdit: (jiraProjectId: string) => void;
+  onOpenConnectedAccounts?: () => void;
 };
 
 function jiraConnection(data: BootstrapData): IntegrationConnection | undefined {
@@ -43,11 +47,13 @@ export function JiraSettingsPage({
   onReload,
   onOpenSyncNew,
   onOpenSyncEdit,
+  onOpenConnectedAccounts,
 }: Props) {
   const { t } = useI18n();
   const connection = jiraConnection(data);
   const links = data.jiraLinks ?? [];
   const [busy, setBusy] = useState(false);
+  const [configureOpen, setConfigureOpen] = useState(!connected(connection));
   const [mode, setMode] = useState<Mode>(
     (connection?.config?.mode as Mode) || "cloud",
   );
@@ -71,6 +77,11 @@ export function JiraSettingsPage({
     return t("Configured — authorize to finish");
   }, [connection, t]);
 
+  const personalLabel = useMemo(() => {
+    if (connected(connection)) return t("Personal Jira account connected");
+    return t("Personal Jira account not connected");
+  }, [connection, t]);
+
   const saveAndAuthorize = async () => {
     setBusy(true);
     try {
@@ -91,7 +102,6 @@ export function JiraSettingsPage({
         { name: mode === "cloud" ? "Jira Cloud" : "Jira", config },
         Boolean(connection),
       );
-      // authorizeIntegration navigates away on success; if it returns, reload.
       await onReload();
     } catch (error) {
       toast.error(
@@ -157,6 +167,7 @@ export function JiraSettingsPage({
     try {
       await disconnectIntegration("jira");
       await onReload();
+      setConfigureOpen(true);
       toast.success(t("Jira disconnected"));
     } catch (error) {
       toast.error(
@@ -165,6 +176,17 @@ export function JiraSettingsPage({
     } finally {
       setBusy(false);
     }
+  };
+
+  const onAddInstance = () => {
+    if (connected(connection)) {
+      onOpenSyncNew();
+      return;
+    }
+    setConfigureOpen(true);
+    toast.message(t("Connect Jira first"), {
+      description: t("Project sync wizard is available after a successful OAuth connection."),
+    });
   };
 
   return (
@@ -188,16 +210,33 @@ export function JiraSettingsPage({
           </div>
         </header>
 
-        <section className="feature-section" style={{ marginTop: 24 }}>
-          <header>
+        <section className="feature-section jira-connection-section" data-jira-product="connection">
+          <header className="jira-section-label">
             <h2>{t("Connection")}</h2>
-            <p>{t("Map Linear JiraOAuth onto Flow REST (cloud + custom personal).")}</p>
           </header>
-          <div className="feature-card">
-            <div className="feature-row">
+
+          <div className="feature-card jira-connection-card">
+            <div className="jira-connection-row">
+              <strong>{t("Connected Instances")}</strong>
+              <aside>
+                <button
+                  type="button"
+                  className="jira-icon-button"
+                  aria-label={t("Add connected instance")}
+                  onClick={onAddInstance}
+                >
+                  <Plus size={16} />
+                </button>
+              </aside>
+            </div>
+            <div className="jira-connection-row">
               <div>
-                <strong>{t("Status")}</strong>
-                <span>{statusLabel}</span>
+                <strong>{personalLabel}</strong>
+                {!connected(connection) ? (
+                  <span>{statusLabel}</span>
+                ) : (
+                  <span>{statusLabel}</span>
+                )}
               </div>
               <aside>
                 {connected(connection) ? (
@@ -209,7 +248,135 @@ export function JiraSettingsPage({
                   >
                     {t("Disconnect")}
                   </button>
-                ) : connection ? (
+                ) : (
+                  <button
+                    type="button"
+                    className="jira-text-link"
+                    onClick={() => {
+                      if (onOpenConnectedAccounts) onOpenConnectedAccounts();
+                      else setConfigureOpen(true);
+                    }}
+                  >
+                    {t("Connected accounts")}
+                    <ChevronRight size={14} />
+                  </button>
+                )}
+              </aside>
+            </div>
+          </div>
+
+          {!connected(connection) && configureOpen ? (
+            <div className="feature-card jira-configure-card" data-jira-product="configure">
+              <div className="jira-configure-header">
+                <strong>{t("Configure OAuth")}</strong>
+                <span>
+                  {t("Cloud or custom personal OAuth. Deployment secrets stay on the API.")}
+                </span>
+              </div>
+              {connection?.lastError ? (
+                <div className="jira-callout error" role="status">
+                  <strong>{t("Connection error")}</strong>
+                  {connection.lastError}
+                </div>
+              ) : null}
+              <div className="jira-mode-tabs" role="tablist" aria-label={t("Jira OAuth mode")}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === "cloud"}
+                  onClick={() => setMode("cloud")}
+                >
+                  {t("Atlassian Cloud")}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === "custom_personal"}
+                  onClick={() => setMode("custom_personal")}
+                >
+                  {t("Custom OAuth (personal)")}
+                </button>
+              </div>
+              {mode === "cloud" ? (
+                <div className="jira-callout">
+                  <strong>{t("Deployment secrets required")}</strong>
+                  {t(
+                    "Set FLOW_INTEGRATION_JIRA_CLIENT_ID, FLOW_INTEGRATION_JIRA_CLIENT_SECRET, and FLOW_INTEGRATION_JIRA_REDIRECT_URI on the API. Without them, Authorize returns an honest unavailable error — never a fake success.",
+                  )}
+                </div>
+              ) : (
+                <div className="jira-form">
+                  <label>
+                    {t("Jira site URL")}
+                    <input
+                      aria-label={t("Jira site URL")}
+                      value={custom.siteURL}
+                      onChange={(event) =>
+                        setCustom((value) => ({ ...value, siteURL: event.target.value }))
+                      }
+                      placeholder="https://jira.example.com"
+                    />
+                  </label>
+                  <label>
+                    {t("Authorization URL")}
+                    <input
+                      aria-label={t("Authorization URL")}
+                      value={custom.authorizationURL}
+                      onChange={(event) =>
+                        setCustom((value) => ({
+                          ...value,
+                          authorizationURL: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    {t("Token URL")}
+                    <input
+                      aria-label={t("Token URL")}
+                      value={custom.tokenURL}
+                      onChange={(event) =>
+                        setCustom((value) => ({ ...value, tokenURL: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    {t("OAuth client ID")}
+                    <input
+                      aria-label={t("OAuth client ID")}
+                      value={custom.clientID}
+                      onChange={(event) =>
+                        setCustom((value) => ({ ...value, clientID: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    {t("Redirect URI")}
+                    <input
+                      aria-label={t("Redirect URI")}
+                      value={custom.redirectURI}
+                      onChange={(event) =>
+                        setCustom((value) => ({ ...value, redirectURI: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    {t("Client secret env var")}
+                    <input
+                      aria-label={t("Client secret env var")}
+                      value={custom.clientSecretEnv}
+                      onChange={(event) =>
+                        setCustom((value) => ({
+                          ...value,
+                          clientSecretEnv: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+              )}
+              <div className="jira-form-actions" style={{ padding: "0 16px 16px" }}>
+                {connection ? (
                   <button
                     type="button"
                     className="feature-button primary"
@@ -219,137 +386,63 @@ export function JiraSettingsPage({
                     {t("Authorize")}
                   </button>
                 ) : null}
-              </aside>
-            </div>
-            {connection?.lastError ? (
-              <div className="jira-callout error" role="status">
-                <strong>{t("Connection error")}</strong>
-                {connection.lastError}
+                <button
+                  type="button"
+                  className="feature-button"
+                  disabled={busy}
+                  onClick={() => void saveConfigOnly()}
+                >
+                  {t("Save configuration")}
+                </button>
+                <button
+                  type="button"
+                  className="feature-button primary"
+                  disabled={busy}
+                  onClick={() => void saveAndAuthorize()}
+                >
+                  {t("Connect with OAuth")}
+                </button>
               </div>
-            ) : null}
-            {!connected(connection) ? (
-              <>
-                <div className="jira-mode-tabs" role="tablist" aria-label={t("Jira OAuth mode")}>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={mode === "cloud"}
-                    onClick={() => setMode("cloud")}
-                  >
-                    {t("Atlassian Cloud")}
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={mode === "custom_personal"}
-                    onClick={() => setMode("custom_personal")}
-                  >
-                    {t("Custom OAuth (personal)")}
-                  </button>
-                </div>
-                {mode === "cloud" ? (
-                  <div className="jira-callout">
-                    <strong>{t("Deployment secrets required")}</strong>
-                    {t(
-                      "Set FLOW_INTEGRATION_JIRA_CLIENT_ID, FLOW_INTEGRATION_JIRA_CLIENT_SECRET, and FLOW_INTEGRATION_JIRA_REDIRECT_URI on the API. Without them, Authorize returns an honest unavailable error — never a fake success.",
-                    )}
-                  </div>
-                ) : (
-                  <div className="jira-form">
-                    <label>
-                      {t("Jira site URL")}
-                      <input
-                        aria-label={t("Jira site URL")}
-                        value={custom.siteURL}
-                        onChange={(event) =>
-                          setCustom((value) => ({ ...value, siteURL: event.target.value }))
-                        }
-                        placeholder="https://jira.example.com"
-                      />
-                    </label>
-                    <label>
-                      {t("Authorization URL")}
-                      <input
-                        aria-label={t("Authorization URL")}
-                        value={custom.authorizationURL}
-                        onChange={(event) =>
-                          setCustom((value) => ({
-                            ...value,
-                            authorizationURL: event.target.value,
-                          }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      {t("Token URL")}
-                      <input
-                        aria-label={t("Token URL")}
-                        value={custom.tokenURL}
-                        onChange={(event) =>
-                          setCustom((value) => ({ ...value, tokenURL: event.target.value }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      {t("OAuth client ID")}
-                      <input
-                        aria-label={t("OAuth client ID")}
-                        value={custom.clientID}
-                        onChange={(event) =>
-                          setCustom((value) => ({ ...value, clientID: event.target.value }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      {t("Redirect URI")}
-                      <input
-                        aria-label={t("Redirect URI")}
-                        value={custom.redirectURI}
-                        onChange={(event) =>
-                          setCustom((value) => ({ ...value, redirectURI: event.target.value }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      {t("Client secret env var")}
-                      <input
-                        aria-label={t("Client secret env var")}
-                        value={custom.clientSecretEnv}
-                        onChange={(event) =>
-                          setCustom((value) => ({
-                            ...value,
-                            clientSecretEnv: event.target.value,
-                          }))
-                        }
-                      />
-                    </label>
-                  </div>
+            </div>
+          ) : null}
+
+          {connected(connection) ? (
+            <div className="jira-configure-toggle">
+              <button
+                type="button"
+                className="jira-text-link"
+                onClick={() => setConfigureOpen((open) => !open)}
+              >
+                {configureOpen ? t("Hide OAuth settings") : t("Configure OAuth")}
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          ) : null}
+
+          {connected(connection) && configureOpen ? (
+            <div className="feature-card jira-configure-card" data-jira-product="configure">
+              <div className="jira-callout">
+                <strong>{t("Connected")}</strong>
+                {t(
+                  "OAuth tokens are managed by the API. Disconnect above to clear the connection, or re-authorize if scopes change.",
                 )}
-                <div className="jira-form-actions" style={{ padding: "0 16px 16px" }}>
-                  <button
-                    type="button"
-                    className="feature-button"
-                    disabled={busy}
-                    onClick={() => void saveConfigOnly()}
-                  >
-                    {t("Save configuration")}
-                  </button>
-                  <button
-                    type="button"
-                    className="feature-button primary"
-                    disabled={busy}
-                    onClick={() => void saveAndAuthorize()}
-                  >
-                    {t("Connect with OAuth")}
-                  </button>
-                </div>
-              </>
-            ) : null}
-          </div>
+              </div>
+              <div className="jira-form-actions" style={{ padding: "0 16px 16px" }}>
+                <button
+                  type="button"
+                  className="feature-button"
+                  disabled={busy}
+                  onClick={() => void resumeOAuth()}
+                >
+                  {t("Re-authorize")}
+                </button>
+              </div>
+            </div>
+          ) : null}
         </section>
 
-        <section className="feature-section">
-          <header>
+        <section className="feature-section" data-jira-product="project-sync">
+          <header className="jira-section-label">
             <h2>{t("Project sync")}</h2>
             <p>
               {t(
@@ -401,12 +494,6 @@ export function JiraSettingsPage({
             </div>
           )}
         </section>
-
-        <p className="jira-pixel-note">
-          {t(
-            "UI note: Linear pixel follow-up pending — spacing/typography will be compared against Linear Jira settings and sync wizard in a later pass.",
-          )}
-        </p>
       </div>
     </div>
   );

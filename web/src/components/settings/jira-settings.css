@@ -5,15 +5,41 @@
 .jira-settings-title{display:flex;align-items:flex-start;gap:14px}
 .jira-settings-title h1{margin:0;font-size:24px;font-weight:500;line-height:32px}
 .jira-settings-title p{margin:5px 0 0;color:var(--theme-text-secondary);font-size:13px;line-height:19.5px}
-.jira-mode-tabs{display:flex;gap:8px;margin:0 16px 16px}
+
+/* Linear-like CONNECTION product chrome (not marketing Enable) */
+.jira-connection-section{margin-top:40px}
+.jira-section-label{margin:0 16px 12px}
+.jira-section-label h2{margin:0;color:var(--theme-text-tertiary,var(--theme-text-secondary));font-size:12px;font-weight:500;line-height:16px;letter-spacing:.06em;text-transform:uppercase}
+.jira-section-label p{margin:6px 0 0;color:var(--theme-text-secondary);font-size:13px;line-height:19px;text-transform:none;letter-spacing:0;font-weight:450}
+
+.jira-connection-card{overflow:hidden}
+.jira-connection-row{box-sizing:border-box;min-height:52px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;border-bottom:1px solid var(--theme-border)}
+.jira-connection-row:last-child{border-bottom:0}
+.jira-connection-row>div{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+.jira-connection-row strong{color:var(--theme-text-primary);font-size:13px;font-weight:450;line-height:18px}
+.jira-connection-row span{color:var(--theme-text-secondary);font-size:12px;line-height:17px}
+.jira-connection-row aside{flex:0 0 auto;display:flex;align-items:center;gap:8px}
+
+.jira-icon-button{width:28px;height:28px;display:grid;place-items:center;padding:0;border:0;border-radius:6px;background:transparent;color:var(--theme-text-secondary);cursor:pointer}
+.jira-icon-button:hover{background:var(--theme-surface-hover);color:var(--theme-text-primary)}
+.jira-text-link{display:inline-flex;align-items:center;gap:2px;padding:0;border:0;background:transparent;color:var(--theme-text-secondary);font:450 13px/18px inherit;cursor:pointer}
+.jira-text-link:hover{color:var(--theme-text-primary)}
+
+.jira-configure-card{margin-top:12px}
+.jira-configure-header{display:flex;flex-direction:column;gap:2px;padding:14px 16px 4px}
+.jira-configure-header strong{color:var(--theme-text-primary);font-size:13px;font-weight:500;line-height:18px}
+.jira-configure-header span{color:var(--theme-text-secondary);font-size:12px;line-height:17px}
+.jira-configure-toggle{display:flex;justify-content:flex-end;margin:10px 16px 0}
+
+.jira-mode-tabs{display:flex;gap:8px;margin:8px 16px 12px}
 .jira-mode-tabs button{height:30px;padding:0 12px;border:1px solid var(--theme-border);border-radius:9999px;background:var(--theme-surface-1);color:var(--theme-text-secondary);font:500 12px/18px inherit;cursor:pointer}
 .jira-mode-tabs button[aria-selected=true]{border-color:color-mix(in srgb,#5e6ad2 45%,var(--theme-border));background:color-mix(in srgb,#5e6ad2 12%,transparent);color:#7479dc}
-.jira-form{display:flex;flex-direction:column;gap:12px;padding:16px}
+.jira-form{display:flex;flex-direction:column;gap:12px;padding:8px 16px 16px}
 .jira-form label{display:flex;flex-direction:column;gap:6px;color:var(--theme-text-secondary);font-size:12px}
 .jira-form input{box-sizing:border-box;height:32px;padding:0 10px;border:1px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-1);color:var(--theme-text-primary);font:13px/19px inherit}
 .jira-form input:focus{outline:0;box-shadow:0 0 0 2px var(--focus-ring)}
-.jira-form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
-.jira-callout{margin:12px 16px 0;padding:12px 14px;border:1px solid var(--theme-border);border-radius:10px;background:var(--theme-surface-2);color:var(--theme-text-secondary);font-size:12px;line-height:17px}
+.jira-form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:4px;flex-wrap:wrap}
+.jira-callout{margin:12px 16px;padding:12px 14px;border:1px solid var(--theme-border);border-radius:10px;background:var(--theme-surface-2);color:var(--theme-text-secondary);font-size:12px;line-height:17px}
 .jira-callout strong{display:block;margin-bottom:4px;color:var(--theme-text-primary);font-size:13px;font-weight:500}
 .jira-callout.error{border-color:color-mix(in srgb,#d84950 35%,var(--theme-border));color:#d84950}
 .jira-callout.error strong{color:#d84950}
@@ -23,4 +49,3 @@
 .jira-link-row:hover{background:var(--theme-surface-hover)}
 .jira-link-row strong{display:block;font-size:13px;font-weight:450}
 .jira-link-row span{color:var(--theme-text-secondary);font-size:12px}
-.jira-pixel-note{margin:24px 16px 0;padding:10px 12px;border-radius:8px;background:color-mix(in srgb,#5e6ad2 8%,transparent);color:var(--theme-text-secondary);font-size:12px;line-height:17px}

@@ -1000,6 +1000,7 @@ function SettingsBody(
         onReload={props.onReload}
         onOpenSyncNew={() => props.onOpenJiraSyncNew?.()}
         onOpenSyncEdit={(jiraProjectId) => props.onOpenJiraSyncEdit?.(jiraProjectId)}
+        onOpenConnectedAccounts={() => props.onNavigate("connections")}
       />
     );
   if (page === "integrations" && props.integrationProvider)

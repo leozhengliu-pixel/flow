@@ -30,8 +30,9 @@ const connection = {
   deliveryAttempts: 0,
 } as IntegrationConnection;
 
-it("shows honest secret guidance before OAuth and opens sync when connected", () => {
+it("shows Linear-like connection rows and honest secret guidance before OAuth", () => {
   const onOpenSyncNew = vi.fn();
+  const onOpenConnectedAccounts = vi.fn();
   const { rerender } = render(
     <I18nProvider>
       <JiraSettingsPage
@@ -40,12 +41,18 @@ it("shows honest secret guidance before OAuth and opens sync when connected", ()
         onReload={vi.fn()}
         onOpenSyncNew={onOpenSyncNew}
         onOpenSyncEdit={vi.fn()}
+        onOpenConnectedAccounts={onOpenConnectedAccounts}
       />
     </I18nProvider>,
   );
+  expect(screen.getByText("Connected Instances")).toBeInTheDocument();
+  expect(screen.getByText(/Personal Jira account not connected/i)).toBeInTheDocument();
   expect(screen.getByText(/Deployment secrets required/i)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /Connect with OAuth/i })).toBeInTheDocument();
-  expect(screen.getByText(/Linear pixel follow-up/i)).toBeInTheDocument();
+  expect(screen.queryByText(/Linear pixel follow-up/i)).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: /Connected accounts/i }));
+  expect(onOpenConnectedAccounts).toHaveBeenCalled();
 
   rerender(
     <I18nProvider>
@@ -58,6 +65,7 @@ it("shows honest secret guidance before OAuth and opens sync when connected", ()
         onReload={vi.fn()}
         onOpenSyncNew={onOpenSyncNew}
         onOpenSyncEdit={vi.fn()}
+        onOpenConnectedAccounts={onOpenConnectedAccounts}
       />
     </I18nProvider>,
   );
