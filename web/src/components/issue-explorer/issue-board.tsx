@@ -1,7 +1,8 @@
+import { IssueWidgetAdornments } from '@/components/issues-split-view'
 import { useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as ContextMenu from '@radix-ui/react-context-menu'
-import { Clock3, Ellipsis, GitPullRequest, Link2, Minus, PackageOpen, Plus } from 'lucide-react'
+import { Clock3, Ellipsis, Link2, Minus, PackageOpen, Plus } from 'lucide-react'
 import { IssueContextMenu, IssueParentTrail, RowCommandPicker, SubIssueProgress, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData, type MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
 import type { MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
 import { CalendarIcon, CycleIcon, NoAssigneeIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
@@ -116,7 +117,7 @@ function CardProperties({ issue, properties, propertyOptions, onPropertyChange }
   const labels = properties.has('labels') ? issue.labels ?? [] : []
   const shownLabels = labels.slice(0, 4)
   const hiddenLabelCount = labels.length - shownLabels.length
-  const visible = properties.has('priority') || Boolean(properties.has('estimate') && issue.estimate) || Boolean(properties.has('sla') && issue.sla) || Boolean(properties.has('project') && issue.project) || Boolean(properties.has('cycle') && issue.cycleId) || shownLabels.length > 0 || Boolean(properties.has('dueDate') && issue.dueDate) || Boolean(properties.has('release') && issue.releaseCount) || Boolean(properties.has('links') && issue.linkCount) || Boolean(properties.has('pullRequests') && issue.pullRequestCount) || Boolean(properties.has('timeInStatus') && issue.timeInStatusMinutes != null) || Boolean(properties.has('myActivity') && issue.myActivityAt)
+  const visible = properties.has('priority') || Boolean(properties.has('estimate') && issue.estimate) || Boolean(properties.has('sla') && issue.sla) || Boolean(properties.has('project') && issue.project) || Boolean(properties.has('cycle') && issue.cycleId) || shownLabels.length > 0 || Boolean(properties.has('dueDate') && issue.dueDate) || Boolean(properties.has('release') && issue.releaseCount) || Boolean(properties.has('links') && issue.linkCount) || Boolean((properties.has('pullRequests') && issue.pullRequestCount) || issue.blockedByCount || issue.blockingCount) || Boolean(properties.has('timeInStatus') && issue.timeInStatusMinutes != null) || Boolean(properties.has('myActivity') && issue.myActivityAt)
   if (!visible) return null
   return <div className={styles.cardMeta}>
     {properties.has('priority') && <RowCommandPicker propertyLabel="Priority" label={`${priorityName(issue.priority)} priority`} searchLabel="Change priority to..." selectedIds={[String(issue.priority)]} options={propertyOptions.priority} onSelect={value => onPropertyChange('priority', value)} triggerClassName={`${styles.metaTrigger} ${styles.iconBadge}`} trigger={<PriorityIcon priority={issue.priority} size={14}/>}/>}
@@ -124,7 +125,7 @@ function CardProperties({ issue, properties, propertyOptions, onPropertyChange }
     {properties.has('sla') && issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
     {properties.has('release') && issue.releaseCount ? <span className={styles.badge}><PackageOpen size={12}/><span>{issue.releaseCount}</span></span> : null}
     {properties.has('links') && issue.linkCount ? <span className={styles.badge}><Link2 size={12}/><span>{issue.linkCount}</span></span> : null}
-    {properties.has('pullRequests') && issue.pullRequestCount ? <span className={styles.badge}><GitPullRequest size={12}/><span>{issue.pullRequestCount}</span></span> : null}
+    {(properties.has('pullRequests') || issue.blockedByCount || issue.blockingCount) ? <span className={styles.badge}><IssueWidgetAdornments showPullRequests={properties.has('pullRequests')} pullRequestLifecycle={issue.pullRequestLifecycle} pullRequestCount={issue.pullRequestCount ?? 0} blockedByCount={issue.blockedByCount ?? 0} blockingCount={issue.blockingCount ?? 0}/></span> : null}
     {properties.has('timeInStatus') && issue.timeInStatusMinutes != null ? <span className={styles.badge}><Clock3 size={12}/><span>{formatTimeInStatus(issue.timeInStatusMinutes)}</span></span> : null}
     {properties.has('myActivity') && issue.myActivityAt ? <span className={styles.badge}><span>{formatDate(issue.myActivityAt)}</span></span> : null}
     {properties.has('project') && issue.project && <RowCommandPicker propertyLabel="Project" kind="project" label={`Change project. Current project is ${issue.project.name}`} searchLabel="Set project..." selectedIds={[issue.project.id]} options={propertyOptions.project} onSelect={value => onPropertyChange('project', value)} triggerClassName={`${styles.metaTrigger} ${styles.projectBadge}`} trigger={<><ProjectIcon size={14} style={{ color: issue.project.color }}/><span data-i18n-ignore>{issue.project.name}</span></>}/>}

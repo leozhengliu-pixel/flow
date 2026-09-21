@@ -77,6 +77,9 @@ export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: 
     hasLinks: (issue.attachments?.length??0) > 0,
     linkCount: issue.attachments?.length ?? 0,
     pullRequestCount: issuePullRequests.length,
+    pullRequestLifecycle: resolveExplorerPullRequestLifecycle(issuePullRequests),
+    blockedByCount: (issue.relations ?? []).filter(relation => relation.type === 'blocked_by').length,
+    blockingCount: (issue.relations ?? []).filter(relation => relation.type === 'blocks').length,
     hasContent: Boolean(issue.title?.trim() || issue.description?.trim()),
     estimate: issue.estimate,
     dueDate: issue.dueDate,
@@ -94,6 +97,20 @@ export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: 
     ...issueHierarchyFields(issue, issues, issuesById),
     sortOrder: issue.sortOrder,
   }
+}
+
+
+function resolveExplorerPullRequestLifecycle(
+  reviews: Array<{ status: string; draft?: boolean }>,
+): MyIssuesRowData['pullRequestLifecycle'] {
+  if (!reviews.length) return undefined
+  const statuses = reviews.map(review =>
+    review.draft && review.status === 'open' ? 'draft' : review.status,
+  ) as NonNullable<MyIssuesRowData['pullRequestLifecycle']>[]
+  for (const status of ['merged', 'closed', 'approved', 'inReview', 'open', 'draft'] as const) {
+    if (statuses.includes(status)) return status
+  }
+  return statuses[0]
 }
 
 function issueIndex(issues: Issue[]) {

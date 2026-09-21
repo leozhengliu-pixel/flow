@@ -18,6 +18,7 @@ import { setGroupedLabelSelected } from '@/lib/labels'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { fetchIssueRecord } from '@/lib/api'
 import { toast } from 'sonner'
+import { IssuesSplitLayout, IssueViewSplitPage } from '@/components/issues-split-view'
 
 export interface MyIssuesPageProps {
   data: BootstrapData
@@ -47,6 +48,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const [insightsOpen,setInsightsOpen]=useState(false)
   const [drillRows,setDrillRows]=useState<MyIssuesRowData[]>()
   const [insightsConfig,setInsightsConfig]=useState<Record<string,unknown>>(()=>readInsights(`${workspaceSlug}:my-issues:${initialView}:insights`))
+  const [previewIssueId, setPreviewIssueId] = useState<string>()
   const [mutationErrors, setMutationErrors] = useState<Map<string, string>>(new Map())
   const mutationSequence = useRef(new Map<string, number>())
   const mutationQueues = useRef(new Map<string, Promise<Issue>>())
@@ -151,9 +153,15 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const insightRows = useMemo(() => allInsightRows.filter(row => !row.archivedAt), [allInsightRows])
   const insightQuery = useMemo(() => ({ filter: { and: [issueFiltersToQueryAst(controller.filters), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : 'assignee', values: [data.viewer.id] }] } }), [controller.filters, projectedView, data.viewer.id])
   const insightsView:SavedView={id:`my-issues-${controller.view}`,name:({assigned:'Assigned to me',created:'Created by me',subscribed:'Subscribed',activity:'Activity'} as const)[controller.view],description:'',resource:'issues',scope:'personal',ownerId:data.viewer.id,view:'all',filters:controller.filters,display:{},insights:insightsConfig,createdAt:'',updatedAt:''}
+  const previewIssue = previewIssueId ? issuesById.get(previewIssueId) : undefined
+  const previewRow = previewIssue ? toRow(previewIssue, workspaceSlug, data, issueMatchesView(previewIssue, data, projectedView)) : undefined
   const openRow = (row: MyIssuesRowData) => {
     const sequence = boundedIssueSequence(displayedGroups.find(group => group.issues.some(issue => issue.id === row.id))?.issues.map(issue => issue.id) ?? [row.id], row.id)
     const issue = issuesById.get(row.id)
+    if (controller.detailsOpen) {
+      setPreviewIssueId(row.id)
+      return
+    }
     if (issue) onOpenIssue(issue, sequence)
     else void fetchIssueRecord(row.id, undefined, workspaceSlug).then(issue => onOpenIssue(issue, sequence)).catch(() => toast.error('Could not load issue'))
   }
@@ -169,7 +177,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
       filterOptions={field => explorerFilterOptions(field, rowOptions)}
       viewCounts={data.issueCollectionPaged ? undefined : controller.counts}
       viewHref={controller.viewHref}
-      onDetailsOpenChange={open=>{controller.setDetailsOpen(open);if(open)setInsightsOpen(false)}}
+      onDetailsOpenChange={open=>{controller.setDetailsOpen(open);if(open)setInsightsOpen(false);else setPreviewIssueId(undefined)}}
       onInsightsOpenChange={open=>{setInsightsOpen(open);if(open){controller.setDetailsOpen(false);setInsightsConfig(readInsights(`${workspaceSlug}:my-issues:${controller.view}:insights`))}}}
       onDisplayOptionsChange={controller.changeDisplay}
       onFilterSelect={addFilter}
@@ -188,6 +196,9 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onValuesChange={controller.changeFilterValues}
       />}
     >
+      <IssuesSplitLayout
+        detailsOpen={controller.detailsOpen}
+        list={<>
       {data.issueCollectionPaged && !drillRows ? <PagedIssueList
         data={data}
         onLoadedIssuesChange={setPagedIssues}
@@ -240,7 +251,29 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onSelectIssue={controller.selectIssue}
         onContextAction={(row, action) => { void contextAction(row, action) }}
       />}
-      <MyIssuesDetailsPane open={controller.detailsOpen} width={controller.detailsWidth} onWidthChange={controller.setDetailsWidth} onClose={() => controller.setDetailsOpen(false)} summary={controller.summary} onSummaryItemSelect={summaryFilter}/>
+        </>}
+        detail={
+          <IssueViewSplitPage
+            workspaceSlug={workspaceSlug}
+            origin={{ type: 'myIssues', view: controller.view }}
+            selectedIssue={previewRow}
+            summary={previewRow ? undefined : controller.summary}
+            onClose={() => { if (previewIssueId) setPreviewIssueId(undefined); else controller.setDetailsOpen(false) }}
+            onSummaryItemSelect={summaryFilter}
+          />
+        }
+        fallbackDetail={
+          <MyIssuesDetailsPane
+            open={controller.detailsOpen}
+            width={controller.detailsWidth}
+            onWidthChange={controller.setDetailsWidth}
+            onClose={() => { if (previewIssueId) setPreviewIssueId(undefined); else controller.setDetailsOpen(false) }}
+            selectedIssue={previewRow}
+            summary={controller.summary}
+            onSummaryItemSelect={summaryFilter}
+          />
+        }
+      />
       {drillRows && <InsightHiddenNotice hidden={drillRows.length - new Set(displayedGroups.flatMap(group => group.issues.map(issue => issue.id))).size} onShow={() => controller.changeDisplay({ ...controller.display, completedWindow: 'all', showSubIssues: true, hiddenGroupIds: [] })}/>}
       {insightsOpen && <SavedViewInsightsPanel
         allRows={allInsightRows}
