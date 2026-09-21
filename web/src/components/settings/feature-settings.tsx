@@ -139,7 +139,30 @@ function AIPage({data,onReload,settings,busy,setEnabled,setFeature,onOpenIntegra
   };
   return <FeatureShell title="AI & Agents" description="Automate your product development processes and operations with AI">
     <FeatureSection title="Flow Agent" description="Create issues and answer questions about your workspace.">
-      <FeatureCard>{cards.map(([id,title,description,Icon])=><FeatureRow key={id} icon={Icon} title={title} businessTitle={id==="ai-agent"} description={description}><Toggle checked={settings.featureFlags[id]??["ai-agent","coding-sessions","loops"].includes(id)} disabled={busy} label={title} onChange={value=>setEnabled(id,value)}/></FeatureRow>)}</FeatureCard>
+      <FeatureCard>{cards.map(([id,title,description,Icon])=><FeatureRow key={id} icon={Icon} title={title} businessTitle={id==="ai-agent"} description={description}><Toggle checked={settings.featureFlags[id]??["ai-agent","coding-sessions","loops"].includes(id)} disabled={busy} label={title} onChange={value=>setEnabled(id,value)}/></FeatureRow>)}
+        <FeatureRow icon={Code2} title={t("Require signed commits")} description={t("Users must upload a signing key before starting a coding session")}>
+          <Toggle
+            checked={settings.codingAgentSettings?.commitSigningEnabled === true}
+            disabled={busy}
+            label={t("Require signed commits")}
+            onChange={(value) => {
+              void (async () => {
+                try {
+                  await updateWorkspacePreferences({
+                    codingAgentSettings: {
+                      ...(settings.codingAgentSettings ?? {}),
+                      commitSigningEnabled: value,
+                    },
+                  }, data.workspace.urlKey);
+                  await onReload();
+                } catch (error) {
+                  toast.error(message(error));
+                }
+              })();
+            }}
+          />
+        </FeatureRow>
+      </FeatureCard>
     </FeatureSection>
     <CodeIntelligenceSettingsSection
       data={data}

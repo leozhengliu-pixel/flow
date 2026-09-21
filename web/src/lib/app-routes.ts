@@ -72,6 +72,7 @@ export type SettingsPageId =
   | "teams"
   | "members"
   | "security"
+  | "authentication"
   | "audit-log"
   | "api"
   | "applications"
@@ -1564,6 +1565,7 @@ const SETTINGS_PAGES = new Set<SettingsPageId>([
   "teams",
   "members",
   "security",
+  "authentication",
   "audit-log",
   "api",
   "applications",
