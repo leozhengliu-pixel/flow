@@ -174,3 +174,55 @@ it('renders initiative settings over one million labels without walking them dur
   expect(screen.getByText('1000000 labels')).toBeVisible()
   expect(elapsed).toBeLessThan(250)
 })
+
+it('gates Code Intelligence behind GitHub code access and shows repository policy when granted', () => {
+  const open = vi.fn()
+  const withoutAccess = makeBootstrap({
+    workspaceSettings: initial,
+    viewerRole: 'admin',
+    integrationConnections: [
+      {
+        id: 'gh1',
+        provider: 'github',
+        name: 'GitHub',
+        status: 'connected',
+        scopes: [],
+        channels: [],
+        linkbackEnabled: false,
+        deliveryAttempts: 0,
+        connectedBy: 'u1',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+        config: {},
+      },
+    ] as never[],
+  })
+  const { rerender } = render(
+    <I18nProvider>
+      <FeatureSettingsPage page="ai" data={withoutAccess} onCreateReleasePipeline={vi.fn()} onOpenReleasePipeline={vi.fn()} onOpenIntegration={open} onReload={vi.fn()} />
+    </I18nProvider>,
+  )
+  expect(screen.getByRole('heading', { name: 'Code Intelligence' })).toBeVisible()
+  expect(screen.getByText('Needs code access via GitHub integration')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Enable code access' })).toBeVisible()
+  expect(screen.queryByRole('checkbox', { name: 'Enable Code Intelligence' })).not.toBeInTheDocument()
+
+  const withAccess = makeBootstrap({
+    workspaceSettings: initial,
+    viewerRole: 'admin',
+    integrationConnections: [
+      {
+        ...withoutAccess.integrationConnections[0],
+        config: { codeAccess: 'true' },
+      },
+    ] as never[],
+  })
+  rerender(
+    <I18nProvider>
+      <FeatureSettingsPage page="ai" data={withAccess} onCreateReleasePipeline={vi.fn()} onOpenReleasePipeline={vi.fn()} onOpenIntegration={open} onReload={vi.fn()} />
+    </I18nProvider>,
+  )
+  expect(screen.getByRole('checkbox', { name: 'Enable Code Intelligence' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Repository access' })).toBeVisible()
+  expect(screen.getByRole('checkbox', { name: 'Extend access to all members' })).toBeDisabled()
+})

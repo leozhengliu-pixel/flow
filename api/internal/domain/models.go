@@ -966,6 +966,15 @@ type FeatureSettings struct {
 	PulseWorkspaceSchedule         string                     `json:"pulseWorkspaceSchedule"`
 	AsksEmailAddresses             []string                   `json:"asksEmailAddresses"`
 	TriageIntelligence             TriageIntelligenceSettings `json:"triageIntelligence"`
+	RepositoryAccess               *RepositoryAccessSettings  `json:"repositoryAccess,omitempty"`
+}
+
+// RepositoryAccessSettings gates which connected repos Code Intelligence may use (LS-0110).
+type RepositoryAccessSettings struct {
+	ExtendAccessToAllMembers bool     `json:"extendAccessToAllMembers"`
+	AllowAutomationAccess    bool     `json:"allowAutomationAccess"`
+	Scope                    string   `json:"scope"`
+	AllowedRepositories      []string `json:"allowedRepositories"`
 }
 
 // TriageIntelligenceSettings controls how each inferred field is handled.
