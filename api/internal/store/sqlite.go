@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -1194,26 +1193,23 @@ func (s *SQLiteStore) BootstrapForContext(ctx context.Context, workspaceKey stri
 		workspaceKey = s.lastWorkspaceKey
 	}
 	data, ok := s.workspaces[workspaceKey]
-	if ok {
-		// Scoped team writes mutate TeamSettings/CycleSettings in place under the
-		// exclusive lock. Snapshot those maps before unlocking so cloneBootstrap
-		// cannot iterate a map the writer is updating.
-		data.TeamSettings = maps.Clone(data.TeamSettings)
-		data.CycleSettings = maps.Clone(data.CycleSettings)
-	}
-	s.mu.RUnlock()
 	if !ok {
+		s.mu.RUnlock()
 		return domain.Bootstrap{}, false
 	}
+	// Clone under the read lock so concurrent writers cannot race shared slices/maps.
 	clone := cloneBootstrap(data)
-	if data.Issues == nil {
-		issues, err := s.readIssueRecords(ctx, data.Workspace.URLKey)
+	workspaceURLKey := data.Workspace.URLKey
+	issuesNil := data.Issues == nil
+	s.mu.RUnlock()
+	if issuesNil {
+		issues, err := s.readIssueRecords(ctx, workspaceURLKey)
 		if err != nil {
 			return domain.Bootstrap{}, false
 		}
 		clone.Issues = issues
 	}
-	if err := s.hydrateContentRecords(ctx, data.Workspace.URLKey, &clone); err != nil {
+	if err := s.hydrateContentRecords(ctx, workspaceURLKey, &clone); err != nil {
 		return domain.Bootstrap{}, false
 	}
 	refreshDisplayReferences(&clone)
