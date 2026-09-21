@@ -1,4 +1,5 @@
 import type { MyIssuesFilterKey, MyIssuesFilterOption } from './my-issues-surface'
+import { combineModelFilters } from '@/components/filter/filter-block-helper'
 
 export type MyIssuesFilterOperator = 'is' | 'isNot'
 export interface MyIssuesFilterValue { value: string; valueLabel: string; color?: string }
@@ -34,15 +35,17 @@ const QUERY_FIELDS: Partial<Record<MyIssuesFilterKey, string>> = {
   initiative: 'initiativeId', releases: 'releaseId', customers: 'customerId', dates: 'dateFilter',
 }
 
-/** Convert the existing filter-bar state into a composable AND expression. */
+/** Convert the existing filter-bar state into a composable AND expression (FilterBlockHelper). */
 export function issueFiltersToQueryAst(filters: MyIssuesAppliedFilter[]): IssueQueryAstNode {
-  return {
-    and: filters.map(filter => ({
-      field: QUERY_FIELDS[filter.field] ?? filter.field,
-      operator: filter.operator,
-      values: filterValues(filter).map(item => item.value),
-    })),
-  }
+  const leaves = filters.map(filter => ({
+    field: QUERY_FIELDS[filter.field] ?? filter.field,
+    operator: filter.operator,
+    values: filterValues(filter).map(item => item.value),
+  }))
+  if (!leaves.length) return { and: [] }
+  const combined = combineModelFilters('and', leaves)
+  // Keep a stable `and` root for REST list callers that nest this node.
+  return combined.and ? combined : { and: [combined] }
 }
 
 export function filterValues(filter: MyIssuesAppliedFilter): MyIssuesFilterValue[] {

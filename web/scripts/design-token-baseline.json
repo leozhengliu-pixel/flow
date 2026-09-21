@@ -11,6 +11,7 @@
   "components/cycles/cycles.css": 39,
   "components/documents/document-page.css": 43,
   "components/documents/documents-index-page.css": 1,
+  "components/filter/universal-custom-filter-panel.module.css": 2,
   "components/inbox/inbox-filter-builder.module.css": 16,
   "components/inbox/inbox.css": 65,
   "components/inbox/notification-row.module.css": 1,

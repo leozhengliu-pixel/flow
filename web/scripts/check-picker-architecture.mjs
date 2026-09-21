@@ -17,6 +17,8 @@ const dedicated = new Set([
   // Project labels render selected groups as actions, not selected leaf rows.
   // This is the shared hierarchical content used inside PropertyMenu and context menus.
   'property/project-label-menu-content.tsx',
+  // Universal advanced filter panel owns its own catalog listbox contract.
+  'filter/universal-custom-filter-panel.tsx',
 ])
 
 const files = await collect(root)
