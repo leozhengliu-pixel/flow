@@ -26,6 +26,7 @@ export interface Workspace {
   color?: string;
   region?: "us" | "eu" | string;
   createdAt?: string;
+  deletionRequestedAt?: string;
 }
 export type WorkspaceRole = "owner" | "admin" | "member" | "guest" | "app";
 export type TeamRole = "owner" | "member";
@@ -950,6 +951,12 @@ export interface TriageIntelligenceSettings {
   relatedAction: TriageIntelligenceAction;
   workspaceGuidance?: string;
 }
+export interface CodingAgentSettings {
+  commitSigningEnabled?: boolean;
+}
+
+export type AuthServiceId = "google" | "email" | "passkey" | "saml" | "appUser";
+
 export interface WorkspaceSettings {
   fiscalMonth: string;
   welcomeMessage?: string;
@@ -965,10 +972,12 @@ export interface WorkspaceSettings {
   apiKeyPermission: string;
   featureFlags: Record<string, boolean>;
   featureSettings: FeatureSettings;
+  codingAgentSettings?: CodingAgentSettings;
   updatedAt: string;
   inviteLinksEnabled?: boolean;
   googleAuthEnabled?: boolean;
   emailAuthEnabled?: boolean;
+  allowedAuthServices?: AuthServiceId[];
   disableAdminBypass?: boolean;
   initiativePermission?: string;
   loopPermission?: string;

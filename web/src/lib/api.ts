@@ -76,6 +76,7 @@ import type {
   Webhook,
   WebhookFailureEvent,
   WorkflowState,
+  Workspace,
   WorkspaceMember,
   WorkspaceMembership,
   WorkspaceMutationInput,
@@ -435,10 +436,32 @@ export function deleteWorkspaceLogo(
     method: "DELETE",
   });
 }
-export function deleteWorkspace(workspaceKey: string): Promise<void> {
+export function deleteWorkspace(workspaceKey: string): Promise<Workspace> {
   return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}`, {
     method: "DELETE",
   });
+}
+export function cancelWorkspaceDeletion(workspaceKey: string): Promise<Workspace> {
+  return request(
+    `/api/workspaces/${encodeURIComponent(workspaceKey)}/cancel-deletion`,
+    { method: "POST" },
+  );
+}
+export type WorkspaceAccessStatus = {
+  exists: boolean;
+  hasMembership: boolean;
+  authRestricted?: boolean;
+  reason: "ok" | "not_found" | "no_access" | "auth_restricted";
+  allowedAuthServices: string[];
+  allowedAuthLabels: string[];
+  workspace?: { name: string; urlKey: string; deletionRequestedAt?: string };
+};
+export function fetchWorkspaceAccessStatus(
+  workspaceKey: string,
+): Promise<WorkspaceAccessStatus> {
+  return request(
+    `/api/workspaces/${encodeURIComponent(workspaceKey)}/access-status`,
+  );
 }
 export function updateWorkspaceSettings(
   settings: Record<string, unknown>,

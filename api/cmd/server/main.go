@@ -285,6 +285,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/logo", s.uploadWorkspaceLogo)
 	mux.HandleFunc("DELETE /api/workspaces/{workspaceKey}/logo", s.deleteWorkspaceLogo)
 	mux.HandleFunc("DELETE /api/workspaces/{workspaceKey}", s.deleteWorkspace)
+	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/cancel-deletion", s.cancelWorkspaceDeletion)
+	mux.HandleFunc("GET /api/workspaces/{workspaceKey}/access-status", s.workspaceAccessStatus)
 	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/teams", s.createTeam)
 	mux.HandleFunc("PATCH /api/workspaces/{workspaceKey}/teams/{teamId}", s.updateTeam)
 	mux.HandleFunc("DELETE /api/workspaces/{workspaceKey}/teams/{teamId}", s.deleteTeam)
@@ -1408,11 +1410,6 @@ func (s *server) deleteWorkspaceLogo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	respondMutation(w, err, http.StatusOK, updated)
-}
-
-func (s *server) deleteWorkspace(w http.ResponseWriter, r *http.Request) {
-	err := s.store.DeleteWorkspace(r.Context(), r.PathValue("workspaceKey"))
-	respondMutation(w, err, http.StatusNoContent, nil)
 }
 
 func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {

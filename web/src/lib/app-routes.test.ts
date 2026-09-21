@@ -60,6 +60,11 @@ describe("application routes", () => {
       workspaceSlug: "acme",
       teamKey: "ENG",
     });
+    expect(parseAppRoute("/acme/settings/authentication")).toEqual({
+      kind: "settings",
+      workspaceSlug: "acme",
+      page: "authentication",
+    });
     expect(parseAppRoute("/acme/settings/account/preferences")).toEqual({
       kind: "settings",
       workspaceSlug: "acme",

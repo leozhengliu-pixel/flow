@@ -46,5 +46,6 @@
   "components/views/view-icon-picker.module.css": 27,
   "components/workspace-directory/workspace-directory.css": 120,
   "components/workspace-operations/workspace-operations.css": 52,
+  "components/workspace/organization-not-found.css": 14,
   "components/workspace/workspace.css": 19
 }
