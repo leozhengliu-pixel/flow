@@ -1142,6 +1142,17 @@ type Webhook struct {
 	UpdatedAt       time.Time  `json:"updatedAt"`
 }
 
+// WebhookFailureEvent is a persisted outbound delivery failure for a workspace webhook.
+type WebhookFailureEvent struct {
+	ID              string    `json:"id"`
+	WebhookID       string    `json:"webhookId"`
+	ExecutionID     string    `json:"executionId"`
+	URL             string    `json:"url"`
+	HTTPStatus      *int      `json:"httpStatus"`
+	ResponseOrError string    `json:"responseOrError"`
+	CreatedAt       time.Time `json:"createdAt"`
+}
+
 type IntegrationConnection struct {
 	ID                string            `json:"id"`
 	Provider          string            `json:"provider"`
@@ -1740,6 +1751,7 @@ type Bootstrap struct {
 	OAuthApplications             []OAuthApplication                 `json:"oauthApplications"`
 	OAuthAuthorizations           []OAuthAuthorization               `json:"oauthAuthorizations"`
 	Webhooks                      []Webhook                          `json:"webhooks"`
+	WebhookFailureEvents           []WebhookFailureEvent              `json:"webhookFailureEvents"`
 	IntegrationConnections        []IntegrationConnection            `json:"integrationConnections"`
 	IdentityProviders             []IdentityProvider                 `json:"identityProviders"`
 	IntegrationDeliveries         []IntegrationDelivery              `json:"integrationDeliveries"`

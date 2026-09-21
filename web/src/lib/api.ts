@@ -74,6 +74,7 @@ import type {
   User,
   UserSettings,
   Webhook,
+  WebhookFailureEvent,
   WorkflowState,
   WorkspaceMember,
   WorkspaceMembership,
@@ -970,6 +971,11 @@ export function updateWebhook(
 }
 export function deleteWebhook(id: string): Promise<void> {
   return request(`/api/webhooks/${id}`, { method: "DELETE" });
+}
+export function fetchWebhookFailures(
+  id: string,
+): Promise<WebhookFailureEvent[]> {
+  return request(`/api/webhooks/${id}/failures`);
 }
 export function createTeam(
   workspaceKey: string,

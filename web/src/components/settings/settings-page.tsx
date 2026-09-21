@@ -129,6 +129,7 @@ import { createSettingsSearchIndex, searchTeams, SETTINGS_SEARCH_PAGES } from ".
 import "./settings.css";
 import "./workflow-settings.css";
 import "./advanced-settings.css";
+import { WebhookFailureEvents } from "./webhook-failure-events";
 import { applyTheme } from "@/lib/theme";
 import { workspaceRegionLabel } from "@/components/workspace/workspace-regions";
 import { SidebarCustomization } from "@/components/layout/sidebar";
@@ -3477,6 +3478,7 @@ function WebhookEditor({
             </label>
           ))}
         </fieldset>
+        {webhook && <WebhookFailureEvents webhookId={webhook.id} />}
         <footer>
           {webhook && (
             <ActionButton

@@ -821,6 +821,9 @@ func normalize(data *domain.Bootstrap) {
 	if data.Webhooks == nil {
 		data.Webhooks = []domain.Webhook{}
 	}
+	if data.WebhookFailureEvents == nil {
+		data.WebhookFailureEvents = []domain.WebhookFailureEvent{}
+	}
 	for _, team := range data.Teams {
 		settings := data.TeamSettings[team.ID]
 		if settings.TeamID == "" {
