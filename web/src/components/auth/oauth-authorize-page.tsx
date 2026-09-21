@@ -3,7 +3,7 @@ import { ArrowLeftRight, Cable, ChevronDown, CircleAlert, LoaderCircle, ShieldCh
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import { decideOAuthAuthorization, fetchOAuthAuthorizationRequest, fetchUserSettings, type OAuthAuthorizationRequest } from '@/lib/api'
-import { applyTheme } from '@/lib/theme'
+import { applyAccountTheme } from '@/lib/theme'
 import type { AccountBootstrap } from '@/types/flow'
 import type { Team } from '@/types/flow'
 import { request as apiRequest } from '@/lib/api-client'
@@ -37,7 +37,7 @@ function OAuthConsentPage({ account }: Props) {
 
   useEffect(() => {
     let active=true
-    if (themeWorkspace) void fetchUserSettings(themeWorkspace).then(settings=>{if(active)applyTheme(settings)}).catch(() => undefined)
+    if (themeWorkspace) void fetchUserSettings(themeWorkspace).then(settings=>{if(active)applyAccountTheme(settings)}).catch(() => undefined)
     return ()=>{active=false}
   }, [themeWorkspace])
 
