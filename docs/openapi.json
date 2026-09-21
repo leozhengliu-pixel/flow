@@ -13811,6 +13811,66 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/workspaces/{workspaceKey}/access-status": {
+      "get": {
+        "operationId": "get_workspaces_workspaceKey_access_status",
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "GET /api/workspaces/{workspaceKey}/access-status",
+        "parameters": [
+          {
+            "name": "workspaceKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/workspaces/{workspaceKey}/cancel-deletion": {
+      "post": {
+        "operationId": "post_workspaces_workspaceKey_cancel_deletion",
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "POST /api/workspaces/{workspaceKey}/cancel-deletion",
+        "parameters": [
+          {
+            "name": "workspaceKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/workspaces/{workspaceKey}/invitations": {
       "post": {
         "operationId": "post_workspaces_workspaceKey_invitations",
