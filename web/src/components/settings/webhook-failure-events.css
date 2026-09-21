@@ -131,7 +131,7 @@
   margin: 0;
   padding: 10px 12px;
   border-radius: 8px;
-  background: var(--bg-muted, color-mix(in srgb, var(--text) 4%, transparent));
+  background: var(--bg-hover);
   border: 1px solid var(--border);
   white-space: pre-wrap;
   word-break: break-word;
