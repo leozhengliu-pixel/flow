@@ -178,6 +178,14 @@ const CodeIntegrationSettings = lazyPage(
   () => import("./code-integration-settings"),
   "CodeIntegrationSettings",
 );
+const EnabledIntegrationsSettingsPage = lazyPage(
+  () => import("./enabled-integrations-page"),
+  "EnabledIntegrationsSettingsPage",
+);
+const IntegrationSettingsPage = lazyPage(
+  () => import("./integration-settings-page"),
+  "IntegrationSettingsPage",
+);
 const AuditLogSettings = lazyPage(
   () => import("./audit-log-settings"),
   "AuditLogSettings",
@@ -188,7 +196,7 @@ const WorkflowAutomationSettings = lazyPage(
 );
 
 // oxlint-disable-next-line react/only-export-components -- Preloading must share the lazy instances used by SettingsBody.
-export async function preloadSettingsPage(page: SettingsPageProps['page'], options: Pick<SettingsPageProps, 'releasePipelineMode' | 'integrationProvider' | 'agentSkillMode'> = {}) {
+export async function preloadSettingsPage(page: SettingsPageProps['page'], options: Pick<SettingsPageProps, 'releasePipelineMode' | 'integrationProvider' | 'integrationSlug' | 'agentSkillMode'> = {}) {
   if (options.agentSkillMode) return
   if (['preferences', 'profile', 'notifications', 'code-and-reviews', 'account-security', 'connections', 'agents'].includes(page)) return PersonalSettings.preload()
   if (page === 'issue-labels' || page === 'project-labels' || page === 'initiative-labels') return DomainLabelsSettings.preload()
@@ -201,7 +209,9 @@ export async function preloadSettingsPage(page: SettingsPageProps['page'], optio
   if (page === 'import-export') return ImportExportSettings.preload()
   if (page === 'workflows') return WorkflowAutomationSettings.preload()
   if (page === 'releases' && options.releasePipelineMode) return PipelineEditorPage.preload()
+  if (page === 'integrations' && options.integrationSlug === 'enabled') return EnabledIntegrationsSettingsPage.preload()
   if (page === 'integrations' && options.integrationProvider) return CodeIntegrationSettings.preload()
+  if (page === 'integrations' && options.integrationSlug) return IntegrationSettingsPage.preload()
   if (['ai', 'initiatives', 'documents', 'customer-requests', 'releases', 'pulse', 'asks', 'emojis', 'integrations'].includes(page)) return FeatureSettingsPage.preload()
 }
 
@@ -229,6 +239,7 @@ type SettingsPageProps = {
   releasePipelineMode?: "new" | "edit";
   releasePipelineSlug?: string;
   integrationProvider?: IntegrationProvider;
+  integrationSlug?: string;
   issueTemplateMode?: "new" | "new-form" | "edit";
   issueTemplateId?: string;
   projectTemplateMode?: "new" | "edit";
@@ -250,7 +261,7 @@ type SettingsPageProps = {
   onOpenAgentHistory?: () => void;
   onCreateReleasePipeline: () => void;
   onOpenReleasePipeline: (pipeline: ReleasePipeline) => void;
-  onOpenIntegration: (provider: IntegrationProvider) => void;
+  onOpenIntegration: (provider: IntegrationProvider | string) => void;
   onCreateIssueTemplate: (form: boolean) => void;
   onOpenIssueTemplate: (template: IssueTemplate) => void;
   onDuplicateIssueTemplate: (template: IssueTemplate) => void;
@@ -509,6 +520,7 @@ export function SettingsPage(props: SettingsPageProps) {
     props.releasePipelineMode,
     props.releasePipelineSlug,
     props.integrationProvider,
+    props.integrationSlug,
   ]);
   useEffect(() => {
     const focusSearch = (event: globalThis.KeyboardEvent) => {
@@ -940,10 +952,28 @@ function SettingsBody(
       />
     );
   }
+  if (page === "integrations" && props.integrationSlug === "enabled")
+    return (
+      <EnabledIntegrationsSettingsPage
+        data={props.data}
+        onBack={() => props.onNavigate("integrations")}
+        onOpenSlug={(slug) => props.onOpenIntegration(slug)}
+        onReload={props.onReload}
+      />
+    );
   if (page === "integrations" && props.integrationProvider)
     return (
       <CodeIntegrationSettings
         provider={props.integrationProvider}
+        data={props.data}
+        onBack={() => props.onNavigate("integrations")}
+        onReload={props.onReload}
+      />
+    );
+  if (page === "integrations" && props.integrationSlug)
+    return (
+      <IntegrationSettingsPage
+        slug={props.integrationSlug}
         data={props.data}
         onBack={() => props.onNavigate("integrations")}
         onReload={props.onReload}

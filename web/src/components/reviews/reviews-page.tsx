@@ -33,7 +33,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { CheckboxMark } from "@/components/ui/checkbox-mark";
 import { useI18n } from "@/i18n/i18n";
 import { toggleFavoriteFor } from "@/lib/favorites";
-import { commentOnReview, submitReview, updateReview } from "@/lib/api";
+import { commentOnReview, submitReview, updateIntegrationConnection, updateReview } from "@/lib/api";
 import {
   integrationSettingsPath,
   issuePath,
@@ -50,6 +50,8 @@ import { compareReviews, groupReviews, matchesReviewFilters, reviewBaseItems, re
 import { useReviewListControls } from './use-review-list-controls';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { PersonHover } from '@/components/property/person-info';
+import { CodeReviewAccessActions } from './code-review-access-actions';
+import { resolveCodeReviewAccess } from '@/lib/code-access';
 
 export function ReviewsPage({
   data,
@@ -176,6 +178,31 @@ export function ReviewsPage({
                 ))}
               </section>)}
             </div>
+          ) : !filters.length && resolveCodeReviewAccess(data).reason !== "granted" ? (
+            <CodeReviewAccessActions
+              data={data}
+              variant="empty"
+              onAction={(target) => {
+                if (target.kind === "grant-code-access") {
+                  const connection = data.integrationConnections.find(
+                    (item) => item.provider === "github" && (item.status === "connected" || item.status === "configured"),
+                  );
+                  if (!connection) {
+                    onNavigate(integrationSettingsPath(data.workspace.urlKey, "github"));
+                    return;
+                  }
+                  void updateIntegrationConnection(connection.provider, connection.id, {
+                    config: { ...(connection.config ?? {}), codeAccess: "true" },
+                  })
+                    .then(onReload)
+                    .catch((error: unknown) =>
+                      toast.error(error instanceof Error ? error.message : t("Could not enable code access")),
+                    );
+                  return;
+                }
+                onNavigate(integrationSettingsPath(data.workspace.urlKey, target.provider));
+              }}
+            />
           ) : !filters.length && !data.integrationConnections.some(
               (item) =>
                 item.provider === "github" || item.provider === "gitlab",
