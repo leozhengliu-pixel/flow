@@ -9,7 +9,7 @@ import {
 it('exposes primary catalog entries with honest availability', () => {
   const entries = primaryIntegrations()
   expect(entries.some((item) => item.slug === 'github' && item.availability === 'supported')).toBe(true)
-  expect(entries.some((item) => item.slug === 'jira' && item.availability === 'coming_soon')).toBe(true)
+  expect(entries.some((item) => item.slug === 'jira' && item.availability === 'supported' && item.connectProvider === 'jira')).toBe(true)
   expect(entries.some((item) => item.slug === 'salesforce' && item.availability === 'not_supported')).toBe(true)
   expect(availabilityLabel('coming_soon')).toBe('Coming soon')
 })
