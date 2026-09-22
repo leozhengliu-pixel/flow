@@ -39,6 +39,7 @@ import type {
 
 import "./feature-settings.css";
 import { SettingsToggle as BaseSettingsToggle } from './settings-primitives'
+import { SlackUpdates } from "./slack-updates";
 import { AsksSettingsPage } from "./asks-settings";
 import { AgentTrustedSourcesSettings } from "./agent-trusted-sources-settings";
 import { CodingAgentSettingsPage } from "./coding-agent-settings";
@@ -241,25 +242,9 @@ function InitiativesFeatureSettings({data,settings,busy,setEnabled,onScheduleCha
   }), [settings.featureSettings.initiativeUpdateFrequencyWeeks, settings.featureSettings.initiativeUpdateHour, settings.featureSettings.initiativeUpdateSchedule, settings.featureSettings.initiativeUpdateWeekday]);
   const [editingSchedule, setEditingSchedule] = useState(false);
   const [draftSchedule, setDraftSchedule] = useState(schedule);
-  const [slackBusy, setSlackBusy] = useState(false);
   useEffect(() => {
     if (!editingSchedule) setDraftSchedule(schedule);
   }, [editingSchedule, schedule]);
-  const slackConfig = (data.integrationConnections ?? []).find(item => item.provider === "slack" && item.config?.scope === "initiative-updates");
-  const slack = slackConfig?.status === "connected" ? slackConfig : undefined;
-  const slackCreator = slack ? (data.users ?? []).find(user => user.id === slack.connectedBy) : undefined;
-  const toggleSlack = async()=>{
-    setSlackBusy(true);
-    try {
-      if (slack) await disconnectIntegrationConnection("slack", slack.id);
-      else await authorizeIntegration("slack", { name: "Slack", config: { scope: "initiative-updates" } });
-      await onReload();
-    } catch(error) {
-      toast.error(message(error));
-    } finally {
-      setSlackBusy(false);
-    }
-  };
   const initiativeLabelCount = useMemo(
     () => countLabelsByResource(data.labels, "initiative"),
     [data.labels],
@@ -293,22 +278,13 @@ function InitiativesFeatureSettings({data,settings,busy,setEnabled,onScheduleCha
           )}
         </FeatureCard>
       </div>
-      <div className={`feature-subsection${enabled ? "" : " is-disabled"}`} aria-disabled={!enabled}>
-        <header><h3>{t("Slack notifications")}</h3><p>{t("Updates are only posted to Slack for workspace-level initiatives or initiatives led by a public team")}</p></header>
-        <FeatureCard>
-          <div className="initiative-integration-row">
-            <IntegrationBrandIcon provider="slack"/>
-            <div><strong>{slack ? slack.name : t("Send initiative updates to a Slack channel")}</strong><span>{slack ? t("Broadcasting initiative updates") : t("Connect a channel to send all initiative updates to")}</span></div>
-            <FeatureButton
-              disabled={!enabled || slackBusy || !["owner", "admin"].includes(data.viewerRole)}
-              onClick={() => void toggleSlack()}
-              title={slack && slackCreator ? t("Enabled by {name} on {date}").replace("{name}", slackCreator.displayName || slackCreator.name).replace("{date}", new Date(slack.createdAt).toLocaleDateString()) : undefined}
-            >
-              {slack ? t("Disconnect") : <>{t("Connect")}<ArrowUpRight size={11}/></>}
-            </FeatureButton>
-          </div>
-        </FeatureCard>
-      </div>
+      <SlackUpdates
+        data={data}
+        kind="initiative"
+        variant="card"
+        disabled={!enabled}
+        onReload={onReload}
+      />
     </FeatureSection>
     <FeatureSection title="Labels">
       <FeatureCard>

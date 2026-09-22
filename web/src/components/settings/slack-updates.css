@@ -1,0 +1,20 @@
+.slack-updates-row > header {
+  margin: 0 0 8px;
+}
+.slack-updates-row > header h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 520;
+}
+.slack-updates-row > header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+.slack-updates-row .settings-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

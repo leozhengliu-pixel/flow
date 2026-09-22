@@ -15,7 +15,6 @@ import {
   Heading,
   LayoutTemplate,
   ListChecks,
-  MessageSquare,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -40,7 +39,6 @@ import {
 import { toast } from "sonner";
 
 import {
-  connectIntegration,
   createIssueTemplate,
   createProjectStatus,
   createProjectTemplate,
@@ -89,6 +87,7 @@ import type {
   TemplateSubIssue,
 } from "@/types/flow";
 
+import { SlackUpdates } from "./slack-updates";
 import "./issues-projects-settings.css";
 import "./issue-template-settings.css";
 import "./project-template-settings.css";
@@ -3560,20 +3559,6 @@ export function ProjectUpdateSettings({
       setSaving(false);
     }
   };
-  const connectSlack = async () => {
-    setSaving(true);
-    try {
-      await connectIntegration("slack", {
-        name: "Slack",
-        config: { source: "project-updates" },
-      });
-      toast.success(t("Slack connected"));
-    } catch (error) {
-      toast.error(errorMessage(error));
-    } finally {
-      setSaving(false);
-    }
-  };
   return (
     <div className="ip-settings-page" data-i18n-ignore>
       <header className="settings-page-header ip-page-header">
@@ -3633,27 +3618,13 @@ export function ProjectUpdateSettings({
         </div>
       </section>
       <section className="ip-settings-section">
-        <header>
-          <h3 data-i18n-ignore>Slack</h3>
-        </header>
-        <div className="ip-setting-row">
-          <span className="ip-slack-label">
-            <MessageSquare size={17} />
-            <span>
-              <strong>{t("Project update notifications")}</strong>
-              <small>
-                {t("Send project update reminders and notifications to Slack.")}
-              </small>
-            </span>
-          </span>
-          <button
-            className="settings-action"
-            disabled={saving}
-            onClick={() => void connectSlack()}
-          >
-            {t("Connect")}
-          </button>
-        </div>
+        <SlackUpdates
+          data={data}
+          kind="project"
+          variant="row"
+          disabled={saving}
+          onReload={onReload}
+        />
       </section>
     </div>
   );
