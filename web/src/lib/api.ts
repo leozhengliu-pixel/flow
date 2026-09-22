@@ -176,8 +176,10 @@ export function loginAccount(
 ): Promise<AuthSession> {
   return request("/api/auth/login", jsonRequest("POST", { email, password }));
 }
-export function logoutAccount(): Promise<void> {
-  return request("/api/auth/logout", { method: "POST" });
+export async function logoutAccount(): Promise<void> {
+  await request("/api/auth/logout", { method: "POST" });
+  const { ClientStorage } = await import("@/lib/client-storage");
+  ClientStorage.clearAllNonAuthData();
 }
 export function forgotPassword(
   email: string,
