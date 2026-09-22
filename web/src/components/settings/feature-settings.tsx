@@ -45,7 +45,7 @@ import { AgentTrustedSourcesSettings } from "./agent-trusted-sources-settings";
 import { CodingAgentSettingsPage } from "./coding-agent-settings";
 
 type FeaturePageId = Extract<SettingsPageId, "ai"|"coding-sessions"|"coding-environments"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations">;
-type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onOpenReleasePipeline: (pipeline:ReleasePipeline) => void; onOpenIntegration:(provider:IntegrationProvider|string)=>void; onReload: () => Promise<void>; onNavigateSettings?: (page: SettingsPageId) => void; onOpenAsksSlack?: (integrationId: string) => void; onOpenAsksEmailIntake?: () => void };
+type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onOpenReleasePipeline: (pipeline:ReleasePipeline) => void; onOpenIntegration:(provider:IntegrationProvider|string)=>void; onReload: () => Promise<void>; onNavigateSettings?: (page: SettingsPageId) => void; onOpenAsksSlack?: (integrationId: string) => void; onOpenAsksEmailIntake?: () => void; onOpenAsksWebFormsWizard?: (id?: string) => void; onOpenAsksWebFormsSettings?: (id: string) => void; onOpenAsksWebFormsPage?: (settingsId: string, pageId?: string) => void };
 
 const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
   initiativeUpdateSchedule: "none",
@@ -81,7 +81,7 @@ const INITIATIVE_FREQUENCY_OPTIONS = Array.from({ length: 9 }, (_, frequency) =>
 const INITIATIVE_WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const INITIATIVE_HOURS = Array.from({ length: 24 }, (_, hour) => ({ value: String(hour), label: `${String(hour).padStart(2, "0")}:00 - ${String((hour + 1) % 24).padStart(2, "0")}:00` }));
 
-export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpenReleasePipeline, onOpenIntegration, onReload, onNavigateSettings, onOpenAsksSlack, onOpenAsksEmailIntake }: Props) {
+export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpenReleasePipeline, onOpenIntegration, onReload, onNavigateSettings, onOpenAsksSlack, onOpenAsksEmailIntake, onOpenAsksWebFormsWizard, onOpenAsksWebFormsSettings, onOpenAsksWebFormsPage }: Props) {
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
   const [savedSettings, setSavedSettings] = useState<{ workspace: string; value: WorkspaceSettings }>();
@@ -110,7 +110,7 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
   if (page === "customer-requests") return <CustomerRequestsPage data={data} settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload}/>;
   if (page === "releases") return <ReleasesFeatureSettings data={data} onCreate={onCreateReleasePipeline} onOpen={onOpenReleasePipeline} onReload={onReload}/>;
   if (page === "pulse") return <PulseFeatureSettings settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature}/>;
-  if (page === "asks") return <AsksSettingsPage data={data} settings={settings} busy={busy || !['admin', 'owner'].includes(data.viewerRole)} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload} onOpenSlack={onOpenAsksSlack} onOpenEmailIntake={onOpenAsksEmailIntake}/>;
+  if (page === "asks") return <AsksSettingsPage data={data} settings={settings} busy={busy || !['admin', 'owner'].includes(data.viewerRole)} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload} onOpenSlack={onOpenAsksSlack} onOpenEmailIntake={onOpenAsksEmailIntake} onOpenWebFormsWizard={onOpenAsksWebFormsWizard} onOpenWebFormsSettings={onOpenAsksWebFormsSettings} onOpenWebFormsPage={onOpenAsksWebFormsPage}/>;
   if (page === "emojis") return <EmojisPage data={data} onReload={onReload}/>;
   return <IntegrationsPage data={data} onOpen={onOpenIntegration} onReload={onReload}/>;
 }

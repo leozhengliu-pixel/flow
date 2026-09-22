@@ -198,6 +198,11 @@ import {
   jiraSyncEditPath,
   asksSlackSettingsPath,
   newAsksEmailIntakePath,
+  newAsksWebFormsPath,
+  asksWebFormsSettingsPath,
+  asksWebFormsEditPath,
+  newAsksWebPagePath,
+  asksWebPageSettingsPath,
   membersPath,
   memberProfilePath,
   myIssuesPath,
@@ -4110,11 +4115,31 @@ function App() {
           jiraProjectId={route.jiraProjectId}
           asksIntegrationId={route.asksIntegrationId}
           asksEmailIntakeMode={route.asksEmailIntakeMode}
+          asksWebFormsMode={route.asksWebFormsMode}
+          asksWebSettingsId={route.asksWebSettingsId}
+          asksWebPageId={route.asksWebPageId}
           onOpenAsksSlack={(integrationId) =>
             navigateTo(asksSlackSettingsPath(data.workspace.urlKey, integrationId))
           }
           onOpenAsksEmailIntake={() =>
             navigateTo(newAsksEmailIntakePath(data.workspace.urlKey))
+          }
+          onOpenAsksWebFormsWizard={(id) =>
+            navigateTo(
+              id
+                ? asksWebFormsEditPath(data.workspace.urlKey, id)
+                : newAsksWebFormsPath(data.workspace.urlKey),
+            )
+          }
+          onOpenAsksWebFormsSettings={(id) =>
+            navigateTo(asksWebFormsSettingsPath(data.workspace.urlKey, id))
+          }
+          onOpenAsksWebFormsPage={(settingsId, pageId) =>
+            navigateTo(
+              !pageId || pageId === "new"
+                ? newAsksWebPagePath(data.workspace.urlKey, settingsId)
+                : asksWebPageSettingsPath(data.workspace.urlKey, settingsId, pageId),
+            )
           }
           identityProviderId={route.identityProviderId}
           applicationId={route.applicationId}

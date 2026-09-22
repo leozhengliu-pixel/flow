@@ -2782,6 +2782,93 @@ export function deleteEmailIntakeAddress(
     method: "DELETE",
   });
 }
+
+export function listAsksWebSettings(): Promise<import("@/types/flow").AsksWebSettings[]> {
+  return request(`/api/asks-web-settings`);
+}
+export function getAsksWebSettings(
+  id: string,
+): Promise<import("@/types/flow").AsksWebSettings> {
+  return request(`/api/asks-web-settings/${id}`);
+}
+export function createAsksWebSettings(input: {
+  title: string;
+  hostname: string;
+  emailAddress?: string;
+  customDomain?: string;
+}): Promise<{
+  settings: import("@/types/flow").AsksWebSettings;
+  dnsRecord: { type: string; name: string; value: string };
+}> {
+  return request(`/api/asks-web-settings`, jsonRequest("POST", input));
+}
+export function updateAsksWebSettings(
+  id: string,
+  input: {
+    title?: string;
+    hostname?: string;
+    emailAddress?: string;
+    customDomain?: string;
+  },
+): Promise<import("@/types/flow").AsksWebSettings> {
+  return request(`/api/asks-web-settings/${id}`, jsonRequest("PATCH", input));
+}
+export function deleteAsksWebSettings(id: string): Promise<void> {
+  return request(`/api/asks-web-settings/${id}`, { method: "DELETE" });
+}
+export function verifyAsksWebDNS(
+  id: string,
+  txtValue?: string,
+): Promise<import("@/types/flow").AsksWebSettings> {
+  return request(
+    `/api/asks-web-settings/${id}/dns-check`,
+    jsonRequest("POST", { txtValue: txtValue ?? "" }),
+  );
+}
+export function createAsksWebPage(
+  settingsId: string,
+  input: {
+    slug: string;
+    title: string;
+    templateIds?: string[];
+    autoReplyCreated?: string;
+    autoReplyCompleted?: string;
+    autoReplyCanceled?: string;
+    emailRepliesEnabled?: boolean;
+  },
+): Promise<import("@/types/flow").AsksWebPage> {
+  return request(
+    `/api/asks-web-settings/${settingsId}/pages`,
+    jsonRequest("POST", input),
+  );
+}
+export function updateAsksWebPage(
+  settingsId: string,
+  pageId: string,
+  input: {
+    slug?: string;
+    title?: string;
+    templateIds?: string[];
+    autoReplyCreated?: string;
+    autoReplyCompleted?: string;
+    autoReplyCanceled?: string;
+    emailRepliesEnabled?: boolean;
+    position?: number;
+  },
+): Promise<import("@/types/flow").AsksWebPage> {
+  return request(
+    `/api/asks-web-settings/${settingsId}/pages/${pageId}`,
+    jsonRequest("PATCH", input),
+  );
+}
+export function deleteAsksWebPage(
+  settingsId: string,
+  pageId: string,
+): Promise<void> {
+  return request(`/api/asks-web-settings/${settingsId}/pages/${pageId}`, {
+    method: "DELETE",
+  });
+}
 export type WorkflowDefinitionInput = {
   name: string;
   description?: string;

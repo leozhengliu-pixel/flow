@@ -96,6 +96,41 @@ describe("application routes", () => {
       page: "asks",
       asksIntegrationId: "slack-conn-1",
     });
+    expect(parseAppRoute("/acme/settings/asks/web-forms/new")).toEqual({
+      kind: "settings",
+      workspaceSlug: "acme",
+      page: "asks",
+      asksWebFormsMode: "new",
+    });
+    expect(parseAppRoute("/acme/settings/asks/web-forms/cfg-1")).toEqual({
+      kind: "settings",
+      workspaceSlug: "acme",
+      page: "asks",
+      asksWebFormsMode: "settings",
+      asksWebSettingsId: "cfg-1",
+    });
+    expect(parseAppRoute("/acme/settings/asks/web-forms/cfg-1/edit")).toEqual({
+      kind: "settings",
+      workspaceSlug: "acme",
+      page: "asks",
+      asksWebFormsMode: "edit",
+      asksWebSettingsId: "cfg-1",
+    });
+    expect(parseAppRoute("/acme/settings/asks/web-forms/cfg-1/pages/new")).toEqual({
+      kind: "settings",
+      workspaceSlug: "acme",
+      page: "asks",
+      asksWebFormsMode: "page-new",
+      asksWebSettingsId: "cfg-1",
+    });
+    expect(parseAppRoute("/acme/settings/asks/web-forms/cfg-1/pages/pg-1")).toEqual({
+      kind: "settings",
+      workspaceSlug: "acme",
+      page: "asks",
+      asksWebFormsMode: "page",
+      asksWebSettingsId: "cfg-1",
+      asksWebPageId: "pg-1",
+    });
 
     expect(
       parseAppRoute("/acme/settings/account/security/api-keys/new"),

@@ -349,6 +349,15 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/asks/{id}", s.updateAsk)
 	mux.HandleFunc("POST /api/asks/{id}/decision", s.decideAsk)
 	mux.HandleFunc("DELETE /api/asks/{id}", s.deleteAsk)
+	mux.HandleFunc("GET /api/asks-web-settings", s.listAsksWebSettings)
+	mux.HandleFunc("POST /api/asks-web-settings", s.createAsksWebSettings)
+	mux.HandleFunc("GET /api/asks-web-settings/{id}", s.getAsksWebSettings)
+	mux.HandleFunc("PATCH /api/asks-web-settings/{id}", s.updateAsksWebSettings)
+	mux.HandleFunc("DELETE /api/asks-web-settings/{id}", s.deleteAsksWebSettings)
+	mux.HandleFunc("POST /api/asks-web-settings/{id}/dns-check", s.verifyAsksWebDNS)
+	mux.HandleFunc("POST /api/asks-web-settings/{id}/pages", s.createAsksWebPage)
+	mux.HandleFunc("PATCH /api/asks-web-settings/{id}/pages/{pageId}", s.updateAsksWebPage)
+	mux.HandleFunc("DELETE /api/asks-web-settings/{id}/pages/{pageId}", s.deleteAsksWebPage)
 	mux.HandleFunc("GET /api/loops", s.listLoops)
 	mux.HandleFunc("POST /api/loops", s.createLoop)
 	mux.HandleFunc("GET /api/loops/{id}", s.getLoop)
@@ -972,6 +981,12 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 		data.EmailIntakeAddresses[index].InboundTokenHash = ""
 		for aliasIndex := range data.EmailIntakeAddresses[index].Aliases {
 			data.EmailIntakeAddresses[index].Aliases[aliasIndex].TokenHash = ""
+		}
+	}
+	for index := range data.AsksWebSettings {
+		data.AsksWebSettings[index].DnsVerificationToken = ""
+		if data.AsksWebSettings[index].Pages == nil {
+			data.AsksWebSettings[index].Pages = []domain.AsksWebPage{}
 		}
 	}
 	data.PushSubscriptions = slices.DeleteFunc(data.PushSubscriptions, func(item domain.PushSubscription) bool { return item.UserID != data.Viewer.ID })

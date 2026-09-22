@@ -1020,6 +1020,41 @@ export interface AsksSlackChannelMapping {
   enabled: boolean;
 }
 
+/** Asks web-forms configuration (LS-0072 / LS-0073 / LS-0074). */
+export interface AsksWebSettings {
+  id: UUID;
+  title: string;
+  hostname: string;
+  asksUrl: string;
+  customDomain?: string;
+  customDomainStatus: "none" | "pending" | "active" | "blocked";
+  emailAddress?: string;
+  emailDomainConfigured: boolean;
+  dnsVerified: boolean;
+  hostingStatus: "not_configured" | "pending" | "configured";
+  samlConfigured: boolean;
+  pages: AsksWebPage[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Single Asks web form page (LS-0071). */
+export interface AsksWebPage {
+  id: UUID;
+  settingsId: UUID;
+  slug: string;
+  title: string;
+  templateIds: UUID[];
+  autoReplyCreated?: string;
+  autoReplyCompleted?: string;
+  autoReplyCanceled?: string;
+  emailRepliesEnabled: boolean;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+
 export type TriageIntelligenceAction = "suggest" | "auto" | "hide";
 export interface TriageIntelligenceSettings {
   assigneeAction: TriageIntelligenceAction;
@@ -1829,6 +1864,7 @@ export interface BootstrapData {
   workflowRuns: WorkflowRun[];
   emailIntakeAddresses: EmailIntakeAddress[];
   emailIntakeMessages: EmailIntakeMessage[];
+  asksWebSettings: AsksWebSettings[];
   teamResourceSections: TeamResourceSection[];
   teamPinnedResources: TeamPinnedResource[];
   agentActivities: AgentActivity[];

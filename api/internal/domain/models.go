@@ -1041,6 +1041,41 @@ type RepositoryAccessSettings struct {
 	AllowedRepositories      []string `json:"allowedRepositories"`
 }
 
+// AsksWebSettings is a workspace Asks web-forms configuration (LS-0072/0073/0074).
+type AsksWebSettings struct {
+	ID                   string        `json:"id"`
+	Title                string        `json:"title"`
+	Hostname             string        `json:"hostname"`
+	AsksURL              string        `json:"asksUrl"`
+	CustomDomain         string        `json:"customDomain,omitempty"`
+	CustomDomainStatus   string        `json:"customDomainStatus"` // none | pending | active | blocked
+	EmailAddress         string        `json:"emailAddress,omitempty"`
+	EmailDomainConfigured bool         `json:"emailDomainConfigured"`
+	DnsVerificationToken string        `json:"dnsVerificationToken,omitempty"`
+	DnsVerified          bool          `json:"dnsVerified"`
+	HostingStatus        string        `json:"hostingStatus"` // not_configured | pending | configured
+	SamlConfigured       bool          `json:"samlConfigured"`
+	Pages                []AsksWebPage `json:"pages"`
+	CreatedAt            time.Time     `json:"createdAt"`
+	UpdatedAt            time.Time     `json:"updatedAt"`
+}
+
+// AsksWebPage is a single public Asks web form page under a configuration (LS-0071).
+type AsksWebPage struct {
+	ID                   string    `json:"id"`
+	SettingsID           string    `json:"settingsId"`
+	Slug                 string    `json:"slug"`
+	Title                string    `json:"title"`
+	TemplateIDs          []string  `json:"templateIds"`
+	AutoReplyCreated     string    `json:"autoReplyCreated,omitempty"`
+	AutoReplyCompleted   string    `json:"autoReplyCompleted,omitempty"`
+	AutoReplyCanceled    string    `json:"autoReplyCanceled,omitempty"`
+	EmailRepliesEnabled  bool      `json:"emailRepliesEnabled"`
+	Position             float64   `json:"position"`
+	CreatedAt            time.Time `json:"createdAt"`
+	UpdatedAt            time.Time `json:"updatedAt"`
+}
+
 // AsksSlackChannelMapping maps a Slack channel to a Flow team (and optional template) for Asks.
 type AsksSlackChannelMapping struct {
 	Channel    string `json:"channel"`
@@ -1837,6 +1872,7 @@ type Bootstrap struct {
 	WorkflowRuns                  []WorkflowRun                      `json:"workflowRuns"`
 	EmailIntakeAddresses          []EmailIntakeAddress               `json:"emailIntakeAddresses"`
 	EmailIntakeMessages           []EmailIntakeMessage               `json:"emailIntakeMessages"`
+	AsksWebSettings               []AsksWebSettings                  `json:"asksWebSettings"`
 	UserSettings                  map[string]UserSettings            `json:"userSettings"`
 	WorkspaceSettings             WorkspaceSettings                  `json:"workspaceSettings"`
 	APIKeys                       []APIKey                           `json:"apiKeys"`

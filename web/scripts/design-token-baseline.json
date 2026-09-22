@@ -41,7 +41,7 @@
   "components/settings/account-shortcuts-settings.css": 3,
   "components/settings/application-header.css": 9,
   "components/settings/application-pages.css": 7,
-  "components/settings/asks-settings.css": 2,
+  "components/settings/asks-settings.css": 0,
   "components/settings/code-integration-settings.css": 16,
   "components/settings/feature-settings.css": 20,
   "components/settings/identity-provider-settings-page.css": 5,
@@ -61,5 +61,6 @@
   "components/workspace/organization-not-found.css": 14,
   "components/workspace/workspace.css": 19,
   "components/onboarding/onboarding-step-layout.css": 23,
-  "components/onboarding/welcome-onboarding.css": 5
+  "components/onboarding/welcome-onboarding.css": 5,
+  "components/settings/asks-web-settings.css": 0
 }

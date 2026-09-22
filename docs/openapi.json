@@ -1691,6 +1691,264 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/asks-web-settings": {
+      "get": {
+        "operationId": "get_asks_web_settings",
+        "tags": [
+          "asks-web-settings"
+        ],
+        "summary": "GET /api/asks-web-settings",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "post": {
+        "operationId": "post_asks_web_settings",
+        "tags": [
+          "asks-web-settings"
+        ],
+        "summary": "POST /api/asks-web-settings",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/asks-web-settings/{id}": {
+      "delete": {
+        "operationId": "delete_asks_web_settings_id",
+        "tags": [
+          "asks-web-settings"
+        ],
+        "summary": "DELETE /api/asks-web-settings/{id}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "get": {
+        "operationId": "get_asks_web_settings_id",
+        "tags": [
+          "asks-web-settings"
+        ],
+        "summary": "GET /api/asks-web-settings/{id}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "patch": {
+        "operationId": "patch_asks_web_settings_id",
+        "tags": [
+          "asks-web-settings"
+        ],
+        "summary": "PATCH /api/asks-web-settings/{id}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/asks-web-settings/{id}/dns-check": {
+      "post": {
+        "operationId": "post_asks_web_settings_id_dns_check",
+        "tags": [
+          "asks-web-settings"
+        ],
+        "summary": "POST /api/asks-web-settings/{id}/dns-check",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/asks-web-settings/{id}/pages": {
+      "post": {
+        "operationId": "post_asks_web_settings_id_pages",
+        "tags": [
+          "asks-web-settings"
+        ],
+        "summary": "POST /api/asks-web-settings/{id}/pages",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/asks-web-settings/{id}/pages/{pageId}": {
+      "delete": {
+        "operationId": "delete_asks_web_settings_id_pages_pageId",
+        "tags": [
+          "asks-web-settings"
+        ],
+        "summary": "DELETE /api/asks-web-settings/{id}/pages/{pageId}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "patch": {
+        "operationId": "patch_asks_web_settings_id_pages_pageId",
+        "tags": [
+          "asks-web-settings"
+        ],
+        "summary": "PATCH /api/asks-web-settings/{id}/pages/{pageId}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/asks/{id}": {
       "delete": {
         "operationId": "delete_asks_id",

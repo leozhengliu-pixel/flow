@@ -123,8 +123,8 @@
 }
 .asks-wizard-steps span[data-active="true"] {
   color: var(--theme-text-primary);
-  background: color-mix(in srgb, #5e6ad2 14%, transparent);
-  box-shadow: 0 0 0 0.5px color-mix(in srgb, #5e6ad2 40%, transparent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--accent-primary) 40%, transparent);
 }
 .asks-wizard-steps span[data-done="true"] {
   color: var(--theme-text-primary);
