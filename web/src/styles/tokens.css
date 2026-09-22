@@ -554,4 +554,7 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 --label-muted:var(--theme-text-tertiary);
 --color-label-muted:var(--theme-text-tertiary);
 --control-primary:var(--accent-primary);
+--flow-lightbox-inset-left:0px;
+--flow-lightbox-inset-right:0px;
+--font-mono:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
