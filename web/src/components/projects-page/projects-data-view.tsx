@@ -19,6 +19,7 @@ import { usePeopleDirectory } from '@/components/property/people-context'
 import { directoryPerson, personMatchesQuery } from '@/lib/people'
 import './projects-page.css'
 import './projects-bundle-parity.css'
+import { ProjectsPageEmptyIcon } from './projects-page-empty-icon'
 
 export type ProjectPageItem = {
   id: string
@@ -1067,7 +1068,7 @@ function ProjectsLoadingState({ layout }: { layout: 'list' | 'board' | 'timeline
 }
 
 function ProjectsEmptyState({ onCreate }: { onCreate: () => void }) {
-  return <div className="lp-project-state lp-project-state--message"><DataViewProjectIcon /><h2>No projects</h2><p>Create a project to start grouping related issues.</p><button onClick={onCreate} type="button"><PlusIcon /> New project</button></div>
+  return <div className="lp-project-state lp-project-state--message"><ProjectsPageEmptyIcon /><h2>No projects</h2><p>Create a project to start grouping related issues.</p><button onClick={onCreate} type="button"><PlusIcon /> New project</button></div>
 }
 
 function ProjectsErrorState({ error, onRetry }: { error: string, onRetry?: () => void }) {

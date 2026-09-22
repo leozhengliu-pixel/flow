@@ -1,0 +1,32 @@
+.welcome-message-settings {
+  display: grid;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.welcome-message-settings__meta strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--theme-text-primary);
+}
+
+.welcome-message-settings__meta p {
+  margin: 4px 0 0;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.welcome-message-settings__editor {
+  width: 100%;
+  min-height: 132px;
+  padding: 10px 12px;
+  border: 0.5px solid var(--theme-border-strong);
+  border-radius: 8px;
+  background: var(--theme-surface-1);
+  color: var(--theme-text-primary);
+  font: inherit;
+  line-height: 1.5;
+  resize: vertical;
+}
