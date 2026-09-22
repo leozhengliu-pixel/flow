@@ -1,3 +1,4 @@
+import { WelcomeMessageSettingsPage } from "./welcome-message-settings-page";
 import {
   Suspense,
   useCallback,
@@ -109,6 +110,7 @@ import {
   applicationSettingsPath,
   identityProviderSettingsPath,
 } from "@/lib/app-routes";
+import { agentSkillsSettingsBackLink } from "@/lib/agent-skills-settings-back-link";
 import { useNavigate } from "react-router-dom";
 import { OAuthAppImage } from "./application-header";
 import type {
@@ -1228,7 +1230,7 @@ function AgentSkillEditor({
   return (
     <div className="agent-skill-editor-page">
       <nav>
-        <button onClick={onCancel}>Agent personalization</button>
+        <button onClick={onCancel}>{agentSkillsSettingsBackLink(data.workspace.urlKey).label}</button>
         <span>›</span>
         <span>{existing ? existing.name : "New skill"}</span>
       </nav>
@@ -1419,8 +1421,7 @@ function WorkspacePage(
         </Row>
       </Section>
       <Section title="Member onboarding">
-        <FieldRow
-          title="Welcome message"
+        <WelcomeMessageSettingsPage
           value={props.data.workspaceSettings.welcomeMessage ?? ""}
           onCommit={(value) => void savePreferences({ welcomeMessage: value })}
         />

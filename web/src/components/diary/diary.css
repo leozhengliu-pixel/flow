@@ -1,0 +1,127 @@
+.diary-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 8px 4px 48px;
+  color: var(--theme-text-primary);
+}
+
+.diary-page__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.diary-page__header h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 560;
+}
+
+.diary-page__header p {
+  margin: 6px 0 0;
+  color: var(--theme-text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.diary-page__new {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 0.5px solid var(--theme-border-strong);
+  border-radius: 6px;
+  background: var(--theme-control);
+  color: var(--theme-text-primary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.diary-page__new:hover {
+  background: var(--theme-control-hover);
+}
+
+.diary-page__new:disabled {
+  opacity: 0.45;
+}
+
+.diary-week {
+  display: grid;
+  gap: 10px;
+}
+
+.diary-week__label {
+  margin: 8px 0 0;
+  color: var(--theme-text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.diary-entry {
+  border: 0.5px solid var(--theme-border-strong);
+  border-radius: 10px;
+  background: var(--theme-surface-1);
+  overflow: hidden;
+}
+
+.diary-entry__date {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border-bottom: 0.5px solid var(--theme-control);
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+}
+
+.diary-entry__date strong {
+  color: var(--theme-text-primary);
+  font-weight: 500;
+}
+
+.diary-entry__editor {
+  min-height: 120px;
+  padding: 10px 12px 14px;
+}
+
+.diary-entry__editor textarea {
+  width: 100%;
+  min-height: 110px;
+  border: 0;
+  outline: 0;
+  resize: vertical;
+  background: transparent;
+  color: var(--theme-text-primary);
+  font: inherit;
+  line-height: 1.55;
+}
+
+.diary-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 28px 4px;
+  color: var(--theme-text-secondary);
+}
+
+.diary-empty strong {
+  color: var(--theme-text-primary);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.diary-empty p {
+  margin: 0;
+  max-width: 360px;
+  font-size: 13px;
+  line-height: 1.45;
+}
