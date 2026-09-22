@@ -170,3 +170,7 @@
   background:var(--theme-surface-1);
 }
 :root[data-theme="light"] .action-dialog-diffs pre{background:var(--theme-surface-2)}
+
+.action-dialog-choices{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.action-dialog-choice{display:flex;align-items:center;gap:8px;font-size:13px;line-height:18px;color:var(--theme-text-primary);cursor:pointer}
+.action-dialog-choice input{accent-color:var(--accent-primary)}

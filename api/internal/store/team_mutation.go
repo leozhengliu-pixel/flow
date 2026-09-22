@@ -857,7 +857,7 @@ func metadataTeamSettingsEqual(a, b domain.TeamSettings) bool {
 		a.MembershipRestriction == b.MembershipRestriction && a.SettingsPermission == b.SettingsPermission &&
 		a.LabelPermission == b.LabelPermission && a.TemplatePermission == b.TemplatePermission &&
 		a.AgentSkillPermission == b.AgentSkillPermission && a.LoopPermission == b.LoopPermission &&
-		a.MemberPermission == b.MemberPermission && a.SlackChannelID == b.SlackChannelID &&
+		a.MemberPermission == b.MemberPermission && a.IssueSharingEnabled == b.IssueSharingEnabled && a.IssueSharingPermission == b.IssueSharingPermission && a.SlackChannelID == b.SlackChannelID &&
 		a.SlackChannelName == b.SlackChannelName && maps.Equal(a.SlackNotifications, b.SlackNotifications) &&
 		maps.Equal(a.PRAutomations, b.PRAutomations) && a.AutoCloseParents == b.AutoCloseParents &&
 		a.AutoCloseSubIssues == b.AutoCloseSubIssues && a.AutoCloseStale == b.AutoCloseStale &&

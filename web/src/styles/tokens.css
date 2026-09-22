@@ -562,4 +562,6 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 --font-mono:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 --theme-surface-3:var(--theme-surface-2);
 --shadow-floating:var(--shadow-dialog);
+--theme-border-translucent:color-mix(in srgb, var(--theme-border) 70%, transparent);
+--theme-bg-secondary:var(--theme-surface-1);
 }

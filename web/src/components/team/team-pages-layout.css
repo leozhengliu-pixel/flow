@@ -1,0 +1,57 @@
+.team-pages-private {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 48px 24px;
+  background: var(--theme-bg-secondary, var(--theme-surface-0));
+}
+.team-pages-private-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 420px;
+  text-align: center;
+}
+.team-pages-private-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: var(--theme-control);
+  color: var(--theme-text-secondary);
+}
+.team-pages-private-card h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+.team-pages-private-card > p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--theme-text-secondary);
+}
+.team-pages-private-admin {
+  margin-top: 8px !important;
+}
+.team-pages-private-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-primary);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.team-pages-private-link:hover {
+  opacity: 0.88;
+}
+:root[data-theme="light"] .team-pages-private {
+  background: var(--theme-bg-secondary, var(--theme-surface-0));
+}
