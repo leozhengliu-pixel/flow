@@ -253,6 +253,7 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
           { title: 'Filter by name or keystroke', keywords: ['search', 'filter'] },
           { title: 'Record shortcut', keywords: ['rebind', 'customize'] },
           { title: 'Restore default', keywords: ['reset'] },
+          { title: 'Reset application', keywords: ['wipe', 'clear cache', 'local state', 'support'] },
         ],
       },
     ],

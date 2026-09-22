@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import { ParentTeamPicker } from '@/components/property/parent-team-picker';
 import { RetireTeamForm } from '@/components/team/retire-team-form';
 import { teamHierarchy } from '@/lib/team-hierarchy';
+import { useOptionalPendingDeletedTeams } from '@/hooks/use-pending-deleted-teams';
 
 import {
   DropdownMenu,
@@ -404,15 +405,28 @@ function TeamOverview({
       toast.error(message(error));
     }
   };
+  const pendingDeletedTeams = useOptionalPendingDeletedTeams();
   const remove = async () => {
     if (
       !(await confirmAction(`Delete ${team.name}?`, {
-        description: t("This permanently deletes the team and its owned data."),
+        description: pendingDeletedTeams
+          ? t("The team will be removed after a short grace period. You can undo from the pending state.")
+          : t("This permanently deletes the team and its owned data."),
         confirmLabel: t("Delete team"),
       }))
     )
       return;
     try {
+      if (pendingDeletedTeams) {
+        pendingDeletedTeams.scheduleDelete({
+          workspaceKey: data.workspace.urlKey,
+          teamId: team.id,
+          name: team.name,
+        });
+        toast.message(t("Team scheduled for deletion"));
+        await onReload();
+        return;
+      }
       await deleteTeam(data.workspace.urlKey, team.id);
       await onReload();
     } catch (error) {

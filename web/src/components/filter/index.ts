@@ -123,3 +123,21 @@ export {
   type IssueFilterBlockGroup,
   type GroupedIssueFilterBlocksOptions,
 } from './filter-blocks/grouped-issue-filter-blocks'
+
+export {
+  getGroupedTeamFilterBlocks,
+  flattenGroupedTeamFilterBlocks,
+  groupedTeamFilterBlocks,
+  blocksDivider,
+  type TeamFilterBlockDivider,
+} from './filter-blocks/grouped-team-filter-blocks'
+
+export {
+  TeamFilterBlocks,
+  allTeamFilterBlocks,
+  teamFilterBlocks,
+  createdAtBlock,
+  membersBlock,
+  ownersBlock,
+  privateBlock,
+} from './filter-blocks/team-filter-blocks'
