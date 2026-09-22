@@ -1358,3 +1358,30 @@
   background: var(--theme-surface-hover);
   color: var(--theme-text-primary);
 }
+
+.dashboard-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dashboard-layout-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: stretch;
+}
+.dashboard-layout-column {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dashboard-layout-column.width-full { flex: 1 1 100%; }
+.dashboard-layout-column.width-two-thirds { flex: 1 1 66%; }
+.dashboard-layout-column.width-half { flex: 1 1 calc(50% - 6px); }
+.dashboard-layout-column.width-one { flex: 1 1 calc(25% - 9px); }
+.dashboard-layout-column article { width: 100%; }
+.dashboard-grid article[data-chart-hover="hover"],
+.dashboard-grid article [data-chart-hover="hover"] {
+  outline: 0;
+}
