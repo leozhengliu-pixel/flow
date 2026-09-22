@@ -131,18 +131,6 @@ type OAuthSyncGroupRequest struct {
 	ReviewedAt    *time.Time `json:"reviewedAt,omitempty"`
 }
 
-// WebhookFailureEvent is a persisted outbound delivery failure for a workspace webhook.
-type WebhookFailureEvent struct {
-	ID              string    `json:"id"`
-	WebhookID       string    `json:"webhookId"`
-	ApplicationID   string    `json:"applicationId,omitempty"`
-	ExecutionID     string    `json:"executionId"`
-	URL             string    `json:"url"`
-	HTTPStatus      *int      `json:"httpStatus,omitempty"`
-	ResponseOrError string    `json:"responseOrError"`
-	CreatedAt       time.Time `json:"createdAt"`
-}
-
 type AuthSession struct {
 	User        User                  `json:"user"`
 	Memberships []WorkspaceMembership `json:"memberships"`
@@ -1202,9 +1190,10 @@ type Webhook struct {
 type WebhookFailureEvent struct {
 	ID              string    `json:"id"`
 	WebhookID       string    `json:"webhookId"`
+	ApplicationID   string    `json:"applicationId,omitempty"`
 	ExecutionID     string    `json:"executionId"`
 	URL             string    `json:"url"`
-	HTTPStatus      *int      `json:"httpStatus"`
+	HTTPStatus      *int      `json:"httpStatus,omitempty"`
 	ResponseOrError string    `json:"responseOrError"`
 	CreatedAt       time.Time `json:"createdAt"`
 }
@@ -1835,7 +1824,6 @@ type Bootstrap struct {
 	Invitations                   []Invitation                       `json:"invitations"`
 	WorkspaceInviteLink            *WorkspaceInviteLink               `json:"workspaceInviteLink,omitempty"`
 	OAuthSyncGroupRequests         []OAuthSyncGroupRequest            `json:"oauthSyncGroupRequests,omitempty"`
-	WebhookFailureEvents           []WebhookFailureEvent              `json:"webhookFailureEvents,omitempty"`
 	ViewerRole                    string                             `json:"viewerRole"`
 }
 
