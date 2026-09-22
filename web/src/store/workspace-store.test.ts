@@ -31,6 +31,12 @@ describe('createWorkspaceStore (LS-0770 / LS-0718)', () => {
     await expect(store.hydrateModel('issue', 'absent')).resolves.toBeUndefined()
   })
 
+  it('resolves hydrateModel by issue identifier and project slugId', async () => {
+    const store = createWorkspaceStore(makeBootstrap())
+    await expect(store.hydrateModel('issue', 'TST-1')).resolves.toMatchObject({ id: 'issue-1' })
+    await expect(store.hydrateModel('project', 'project-one')).resolves.toMatchObject({ id: 'project-1' })
+  })
+
   it('applyBootstrap replaces the directory', () => {
     const first = createWorkspaceStore(makeBootstrap())
     const next = makeBootstrap({ issues: [makeIssue({ id: 'issue-2', identifier: 'TST-2', title: 'Next' })] })

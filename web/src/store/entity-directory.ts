@@ -73,3 +73,70 @@ export function getEntityById(
   const collection = directory[kind as WorkspaceEntityType] as Map<string, unknown> | undefined
   return collection?.get(id)
 }
+
+/**
+ * Resolve by UUID first, then common secondary keys (issue identifier, slugId, team key).
+ * Used by hydrateModel so markdown/AI refs like ENG-12 or project-one warm the store (LS-0738/0736).
+ */
+export function resolveEntity(
+  directory: EntityDirectory,
+  type: string,
+  idOrKey: string,
+): unknown | undefined {
+  if (!idOrKey) return undefined
+  const direct = getEntityById(directory, type, idOrKey)
+  if (direct) return direct
+
+  const kind = normalizeEntityType(type)
+  switch (kind) {
+    case 'issue': {
+      const needle = idOrKey.toUpperCase()
+      for (const issue of directory.issue.values()) {
+        if (issue.identifier?.toUpperCase() === needle) return issue
+      }
+      return undefined
+    }
+    case 'project': {
+      for (const project of directory.project.values()) {
+        if (project.slugId === idOrKey || project.id === idOrKey) return project
+      }
+      return undefined
+    }
+    case 'initiative': {
+      for (const initiative of directory.initiative.values()) {
+        if (
+          ('slugId' in initiative && initiative.slugId === idOrKey) ||
+          initiative.id === idOrKey
+        ) {
+          return initiative
+        }
+      }
+      return undefined
+    }
+    case 'document': {
+      for (const document of directory.document.values()) {
+        if (
+          ('slugId' in document && document.slugId === idOrKey) ||
+          document.id === idOrKey
+        ) {
+          return document
+        }
+      }
+      return undefined
+    }
+    case 'team': {
+      for (const team of directory.team.values()) {
+        if (team.key === idOrKey || team.id === idOrKey) return team
+      }
+      return undefined
+    }
+    case 'user': {
+      for (const user of directory.user.values()) {
+        if (user.id === idOrKey || user.name === idOrKey) return user
+      }
+      return undefined
+    }
+    default:
+      return undefined
+  }
+}

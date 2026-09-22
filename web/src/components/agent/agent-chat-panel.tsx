@@ -7,6 +7,7 @@ import { useI18n } from '@/i18n/i18n'
 import { AgentPanel } from './agent-panel'
 import { EntityAgentThread, clearEntityThreadDraft } from './entity-agent-thread'
 import { conversationDraftKeyFor } from './agent-drafts'
+import { useHydrateAiContext } from '@/hooks/use-hydrate-ai-context'
 
 export function AgentChatPanel({
   initialPrompt = '',
@@ -38,6 +39,7 @@ export function AgentChatPanel({
   const [approvalBusy, setApprovalBusy] = useState<string>()
   const abortRef = useRef<AbortController | undefined>(undefined)
   const draftKey = conversationDraftKeyFor(session?.id ?? `toolbar:${issues.map(issue => issue.id).join(',') || 'new'}`)
+  const hydrateAiContext = useHydrateAiContext()
 
   useEffect(() => {
     if (!open) return
@@ -101,6 +103,7 @@ export function AgentChatPanel({
   const submit = async () => {
     const message = input.trim()
     if (!message || loading || !status?.enabled) return
+    await hydrateAiContext(issues.map(issue => ({ type: 'issue' as const, id: issue.id })))
     setMessages(current => [
       ...current,
       { id: `pending-${Date.now()}`, role: 'user', content: message, createdAt: new Date().toISOString() },
