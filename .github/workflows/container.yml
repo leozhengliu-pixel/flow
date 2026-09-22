@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: container-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
