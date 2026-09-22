@@ -6,7 +6,7 @@
   padding:0 6px;
   border:.5px solid var(--theme-border-strong,var(--border));
   border-radius:9999px;
-  background:var(--theme-surface-2,var(--bg-elevated));
+  background:var(--theme-surface-2);
   color:var(--theme-text-secondary,var(--muted));
   font-size:11px;
   cursor:pointer;
@@ -19,7 +19,7 @@
   padding:0 4px;
   border-radius:9999px;
   background:var(--accent-primary,var(--accent));
-  color:#fff;
+  color:var(--on-accent);
   font-size:10px;
   line-height:14px;
   text-align:center;
