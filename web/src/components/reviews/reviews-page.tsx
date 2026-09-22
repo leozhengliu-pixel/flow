@@ -3,8 +3,6 @@ import {
   ArrowUp,
   CheckCircle2,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   CircleDot,
   Copy,
   ExternalLink,
@@ -13,7 +11,6 @@ import {
   GitMerge,
   GitPullRequest,
   Link2,
-  Maximize2,
   MoreHorizontal,
   PanelRightClose,
   Paperclip,
@@ -24,7 +21,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useMemo, useState, type ComponentProps, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { Avatar } from "@/components/issue/issue-row";
@@ -44,7 +41,6 @@ import {
 import type { BootstrapData, CodeReview } from "@/types/flow";
 
 import "./reviews-page.css";
-import { ReviewCode } from './review-code';
 import { ReviewFilters, ReviewDisplayMenu } from './review-list-controls';
 import { compareReviews, groupReviews, matchesReviewFilters, reviewBaseItems, reviewStatus, reviewStatusLabels, type ReviewDisplay } from './review-list-model';
 import { useReviewListControls } from './use-review-list-controls';
@@ -52,8 +48,28 @@ import { UserAvatar } from '@/components/ui/user-avatar';
 import { PersonHover } from '@/components/property/person-info';
 import { CodeReviewAccessActions } from './code-review-access-actions';
 import { resolveCodeReviewAccess } from '@/lib/code-access';
-import { useReviewDiffs } from "@/hooks/use-review-diffs";
-import { pairDiffLines, type DiffLine } from "@/lib/diff-computer";
+import { DiffView } from './diff-view';
+import { EditableDiffView } from './editable-diff-view';
+import { PullRequestCommentActions } from './pull-request-comment-actions';
+import {
+  PullRequestHeader,
+  resolvePreferredMergeMethod,
+  type MergeMethod,
+} from './pull-request-header';
+import {
+  PullRequestReviewShortcutsProvider,
+  useOptionalPullRequestReviewShortcuts,
+} from './pull-request-review-shortcuts-context';
+import {
+  ReviewProviderIcon,
+  reviewProviderIdentifier,
+  reviewProviderNoun,
+} from './review-provider';
+import {
+  getAnchoredCommentEvent,
+  scrollToAnchoredComment,
+  targetCommentHash,
+} from '@/lib/review-comment-navigation';
 
 export function ReviewsPage({
   data,
@@ -105,6 +121,18 @@ export function ReviewsPage({
     }
   };
   return (
+    <PullRequestReviewShortcutsProvider
+      handlers={{
+        toggleReviewLayout: () => setFullWindow((value) => !value),
+        submitReview: () => {
+          if (review) setSubmitOpen(true);
+        },
+        approve: () => {
+          if (!review) return;
+          void submitReview(review.id, { decision: "approve", body: "" }).then(() => onReload());
+        },
+      }}
+    >
     <main
       className={`flow-framed-workspace reviews-workspace ${review ? "has-detail" : ""} ${fullWindow ? "is-full-window" : ""}`}
     >
@@ -282,6 +310,7 @@ export function ReviewsPage({
         />
       )}
     </main>
+    </PullRequestReviewShortcutsProvider>
   );
 }
 
@@ -311,24 +340,6 @@ function ReviewRow({
       {display.properties.includes('opened') && <time dateTime={item.createdAt} title={new Date(item.createdAt).toLocaleString()}>{relative(item.createdAt, t)}</time>}
     </button>
   );
-}
-
-function ReviewProviderIcon({
-  provider,
-  ...props
-}: { provider: CodeReview["provider"] } & ComponentProps<"svg">) {
-  const Icon = provider === "gitlab" ? GitMerge : GitPullRequest;
-  return <Icon {...props} />;
-}
-
-function reviewProviderNoun(provider: CodeReview["provider"]) {
-  return provider === "gitlab" ? "merge request" : "pull request";
-}
-
-function reviewProviderIdentifier(
-  review: Pick<CodeReview, "provider" | "number">,
-) {
-  return `${review.provider === "gitlab" ? "!" : "#"}${review.number}`;
 }
 
 function ReviewEmpty({
@@ -447,17 +458,37 @@ function ReviewDetail({
 }) {
   const { t } = useI18n(),
     [comment, setComment] = useState("");
+  const [mergeMethod, setMergeMethod] = useState<MergeMethod>(() =>
+    resolvePreferredMergeMethod(data.userSettings[data.viewer.id]?.mergeStrategy),
+  );
+  const [editableDiff, setEditableDiff] = useState(false);
   const issues = data.issues.filter((item) =>
       review.issueIds.includes(item.id),
     ),
     reviewers = data.users.filter((user) =>
       review.reviewerIds.includes(user.id),
     );
-  const passed = review.checks.every(
-    (check) => check.status === "passed" || check.status === "skipped",
-  );
   const closed = review.status === "merged" || review.status === "closed",
     sendComments = data.userSettings[data.viewer.id]?.sendComments ?? "Enter";
+  const shortcuts = useOptionalPullRequestReviewShortcuts();
+  useEffect(() => {
+    if (!shortcuts) return;
+    return shortcuts.register({
+      toggleReviewLayout: () => onToggleFull(!fullWindow),
+      submitReview: onOpenSubmit,
+    });
+  }, [shortcuts, fullWindow, onToggleFull, onOpenSubmit]);
+  useEffect(() => {
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    if (!hash) return;
+    const anchored = getAnchoredCommentEvent(review.events, hash);
+    if (anchored?.path && tab !== "changes") {
+      onNavigate(reviewPath(data.workspace.urlKey, review, "changes") + hash);
+      return;
+    }
+    const timer = window.setTimeout(() => scrollToAnchoredComment(hash), 50);
+    return () => window.clearTimeout(timer);
+  }, [review.events, review.id, tab, data.workspace.urlKey, onNavigate, review]);
   const commentSubmit = async () => {
     if (!comment.trim()) return;
     try {
@@ -470,137 +501,49 @@ function ReviewDetail({
       );
     }
   };
+  const mergeWithMethod = async (method: MergeMethod) => {
+    setMergeMethod(method);
+    await onMutate({ status: "merged", mergeMethod: method });
+  };
   return (
     <>
-      <header className="review-detail-top">
-        {fullWindow && (
-          <button
-            className="review-full-menu"
-            aria-label={t("Menu")}
-            onClick={() => onToggleFull(false)}
-          >
-            <PanelRightClose />
-          </button>
-        )}
-        <button
-          className="review-mobile-back"
-          aria-label={t("Back to reviews")}
-          onClick={() => onNavigate(returnPath ?? reviewsPath(data.workspace.urlKey))}
-        >
-          <ChevronLeft />
-        </button>
-        <div>
-          {issues[0] ? (
-            <a
-              href={issuePath(data.workspace.urlKey, issues[0])}
-              onClick={(event) => {
-                event.preventDefault();
-                onNavigate(issuePath(data.workspace.urlKey, issues[0]));
-              }}
-              data-i18n-ignore
-            >
-              {issues[0].identifier}
-            </a>
-          ) : (
-            <button onClick={() => onOpenPicker("issues")}>
-              {t("No issue")}
-            </button>
-          )}
-          <ChevronRight />
-          <ReviewProviderIcon provider={review.provider} />
-          <strong data-i18n-ignore>
-            {reviewProviderIdentifier(review)} {review.title}
-          </strong>
-        </div>
-        <span className="review-diff-count">
-          <b>+{review.additions}</b>
-          <i>-{review.deletions}</i>
-        </span>
-        <button
-          aria-label={t(
-            review.favorite ? "Remove from favorites" : "Add to favorites",
-          )}
-          onClick={() => void onMutate({ favorite: !review.favorite })}
-        >
-          <Star fill={review.favorite ? "currentColor" : "none"} />
-        </button>
-        <ReviewActions
-          review={review}
-          busy={busy}
-          onMutate={onMutate}
-          onOpenPicker={onOpenPicker}
-          onQuickApprove={async () => {
-            try {
-              await submitReview(review.id, { decision: "approve", body: "" });
-              await onReload();
-            } catch (error) {
-              toast.error(
-                error instanceof Error
-                  ? error.message
-                  : t("Could not submit review"),
-              );
-            }
-          }}
-        />
-        <button
-          aria-label={t("Copy URL")}
-          onClick={() => void navigator.clipboard.writeText(location.href)}
-        >
-          <Link2 />
-        </button>
-        <button
-          aria-label={t("Copy branch name")}
-          onClick={() => void navigator.clipboard.writeText(review.headBranch)}
-        >
-          <GitBranch />
-        </button>
-        <button
-          aria-label={t(
-            fullWindow ? "Exit full window" : "Review diff in full window",
-          )}
-          aria-pressed={fullWindow}
-          onClick={() => onToggleFull(!fullWindow)}
-        >
-          <Maximize2 />
-        </button>
-      </header>
-      <div className="review-detail-tabs">
-        <nav>
-          {(["overview", "review", "changes"] as const).map((value) => (
-            <a
-              className={tab === value ? "active" : ""}
-              key={value}
-              href={reviewPath(data.workspace.urlKey, review, value)}
-              onClick={(event) => {
-                event.preventDefault();
-                onNavigate(reviewPath(data.workspace.urlKey, review, value));
-              }}
-            >
-              {t(
-                value === "overview"
-                  ? "Overview"
-                  : value === "review"
-                    ? "Guide"
-                    : "Diff",
-              )}
-            </a>
-          ))}
-        </nav>
-        <button
-          disabled={busy || closed || !passed}
-          onClick={() => void onMutate({ status: "merged" })}
-        >
-          <GitMerge />
-          {t(data.userSettings[data.viewer.id]?.mergeStrategy || "Squash and merge")}
-        </button>
-        <button
-          className="review-submit"
-          disabled={busy || closed}
-          onClick={onOpenSubmit}
-        >
-          {t("Submit review")}
-        </button>
-      </div>
+      <PullRequestHeader
+        data={data}
+        review={review}
+        issues={issues}
+        tab={tab}
+        busy={busy}
+        fullWindow={fullWindow}
+        mergeMethod={mergeMethod}
+        onMergeMethodChange={setMergeMethod}
+        onToggleFull={onToggleFull}
+        onNavigate={onNavigate}
+        onMutate={onMutate}
+        onOpenSubmit={onOpenSubmit}
+        onOpenPicker={onOpenPicker}
+        onMerge={mergeWithMethod}
+        returnPath={returnPath}
+        actions={
+          <ReviewActions
+            review={review}
+            busy={busy}
+            onMutate={onMutate}
+            onOpenPicker={onOpenPicker}
+            onQuickApprove={async () => {
+              try {
+                await submitReview(review.id, { decision: "approve", body: "" });
+                await onReload();
+              } catch (error) {
+                toast.error(
+                  error instanceof Error
+                    ? error.message
+                    : t("Could not submit review"),
+                );
+              }
+            }}
+          />
+        }
+      />
       {tab === "overview" ? (
         <div className={fullWindow ? "review-full-layout" : "review-overview"}>
           <div
@@ -772,7 +715,21 @@ function ReviewDetail({
       ) : tab === "review" ? (
         <ReviewGuide review={review} />
       ) : (
-        <ReviewChanges review={review} onReload={onReload} />
+        <div className="review-changes-host">
+          <div className="review-diff-mode review-editable-toggle" role="group" aria-label={t("Diff editing")}>
+            <button type="button" aria-pressed={!editableDiff} onClick={() => setEditableDiff(false)}>
+              {t("Read-only")}
+            </button>
+            <button type="button" aria-pressed={editableDiff} onClick={() => setEditableDiff(true)}>
+              {t("Editable")}
+            </button>
+          </div>
+          {editableDiff ? (
+            <EditableDiffView review={review} onReload={onReload} />
+          ) : (
+            <DiffView review={review} onReload={onReload} />
+          )}
+        </div>
       )}
     </>
   );
@@ -830,8 +787,16 @@ function ReviewEvent({
         {event.body && <span data-i18n-ignore> {event.body}</span>}
       </>
     );
+  const isComment =
+    event.type === "commented" ||
+    event.type === "review_commented" ||
+    Boolean(event.path);
   return (
-    <div className={`review-event is-${event.type}`}>
+    <div
+      className={`review-event is-${event.type}`}
+      id={isComment ? targetCommentHash(event.id) : undefined}
+      data-review-comment-id={isComment ? event.id : undefined}
+    >
       <span className="review-event-icon">
         <ReviewEventIcon type={event.type} />
       </span>
@@ -844,6 +809,14 @@ function ReviewEvent({
         ) : null}
         <small> · {timeLabel}</small>
       </p>
+      {isComment ? (
+        <PullRequestCommentActions
+          event={event}
+          reviewId={review.id}
+          issueIds={review.issueIds}
+          reviewUrl={review.url}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1395,7 +1368,7 @@ function ReviewGuide({ review }: { review: CodeReview }) {
       <h2>{t("Review guide")}</h2>
       <p>
         {t(
-          "Foundation tips from the local file list — Guided Review is not enabled until code access and DiffView depth land.",
+          "Suggested focus areas from the files in this review.",
         )}
       </p>
       {review.files.map((file, index) => (
@@ -1416,200 +1389,6 @@ function ReviewGuide({ review }: { review: CodeReview }) {
     </div>
   );
 }
-function ReviewChanges({
-  review,
-  onReload,
-}: {
-  review: CodeReview;
-  onReload: () => Promise<void>;
-}) {
-  const { t } = useI18n();
-  const [mode, setMode] = useState<"split" | "unified">("split");
-  const [commentLine, setCommentLine] = useState<{
-    path: string;
-    line: number;
-  } | null>(null);
-  const [commentBody, setCommentBody] = useState("");
-  const [commentBusy, setCommentBusy] = useState(false);
-  const { diffsByPath, ready } = useReviewDiffs(review, "basic");
-  const submitInlineComment = async () => {
-    if (!commentLine || !commentBody.trim()) return;
-    setCommentBusy(true);
-    try {
-      await commentOnReview(review.id, commentBody.trim(), commentLine);
-      await onReload();
-      setCommentBody("");
-      setCommentLine(null);
-      toast.success(t("Comment added"));
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t("Could not submit review"),
-      );
-    } finally {
-      setCommentBusy(false);
-    }
-  };
-  return (
-    <div className="review-changes">
-      <header className="review-changes-toolbar">
-        <div>
-          <h2>{t("Files changed")}</h2>
-          <span>{review.files.length}</span>
-          {!ready ? <em className="review-diff-compute-status">{t("Computing diffs…")}</em> : null}
-        </div>
-        <div className="review-diff-mode" role="group" aria-label={t("Diff view") }>
-          {(["split", "unified"] as const).map((value) => (
-            <button
-              aria-pressed={mode === value}
-              key={value}
-              onClick={() => setMode(value)}
-              type="button"
-            >
-              {t(value === "split" ? "Split" : "Unified")}
-            </button>
-          ))}
-        </div>
-      </header>
-      {review.files.length === 0 ? (
-        <div className="review-diff-empty">{t("No files changed")}</div>
-      ) : (
-        review.files.map((file) => {
-          const computed = diffsByPath.get(file.path);
-          const lines = computed?.lines ?? [];
-          const splitRows = computed?.splitRows ?? pairDiffLines(lines);
-          return (
-            <article key={file.path}>
-              <header>
-                <FileCode2 />
-                <strong data-i18n-ignore>{file.path}</strong>
-                <b>+{computed?.additions ?? file.additions}</b>
-                <i>-{computed?.deletions ?? file.deletions}</i>
-                {computed?.state === "computing" || computed?.state === "pending" ? (
-                  <small className="review-diff-compute-status">{t("Computing…")}</small>
-                ) : null}
-              </header>
-              {!lines.length ? (
-                <div className="review-diff-empty">
-                  {computed?.state === "error"
-                    ? t("Diff compute failed")
-                    : computed?.state === "computing" ||
-                        computed?.state === "pending" ||
-                        !computed
-                      ? t("Computing diffs…")
-                      : t("No diff available")}
-                </div>
-              ) : mode === "split" ? (
-                <div className="review-diff-table is-split">
-                  {splitRows.map((row, index) => (
-                    <div className="review-diff-row" key={`${file.path}-${index}`}>
-                      <DiffLineCell
-                        line={row.left}
-                        side="old"
-                        path={file.path}
-                        onComment={setCommentLine}
-                        t={t}
-                      />
-                      <DiffLineCell
-                        line={row.right}
-                        side="new"
-                        path={file.path}
-                        onComment={setCommentLine}
-                        t={t}
-                      />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="review-diff-table is-unified">
-                  {lines.map((line, index) => (
-                    <div className="review-diff-row" key={`${file.path}-${index}`}>
-                      <DiffLineCell
-                        line={line}
-                        side="unified"
-                        path={file.path}
-                        onComment={setCommentLine}
-                        t={t}
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-              {commentLine?.path === file.path && (
-                <form
-                  className="review-inline-comment"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void submitInlineComment();
-                  }}
-                >
-                  <label>
-                    {t("Comment on line")} {commentLine.line}
-                    <textarea
-                      autoFocus
-                      aria-label={t("Inline comment")}
-                      value={commentBody}
-                      onChange={(event) => setCommentBody(event.target.value)}
-                      placeholder={t("Leave a comment…")}
-                    />
-                  </label>
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCommentLine(null);
-                        setCommentBody("");
-                      }}
-                    >
-                      {t("Cancel")}
-                    </button>
-                    <button disabled={commentBusy || !commentBody.trim()} type="submit">
-                      {t("Comment")}
-                    </button>
-                  </div>
-                </form>
-              )}
-            </article>
-          );
-        })
-      )}
-    </div>
-  );
-}
-
-function DiffLineCell({
-  line,
-  side,
-  path,
-  onComment,
-  t,
-}: {
-  line?: DiffLine;
-  side: "old" | "new" | "unified";
-  path: string;
-  onComment: (value: { path: string; line: number }) => void;
-  t: (source: string) => string;
-}) {
-  const lineNumber = side === "old" ? line?.oldNumber : line?.newNumber;
-  const commentNumber = line?.newNumber ?? line?.oldNumber;
-  return (
-    <div className={`review-diff-cell is-${line?.kind ?? "empty"}`}>
-      <span className="review-diff-number">{lineNumber ?? ""}</span>
-      {line ? <span className="review-diff-marker">{line.kind === "add" ? "+" : line.kind === "remove" ? "−" : " "}</span> : null}
-      <ReviewCode content={line?.content ?? ''} path={path}/>
-      {commentNumber ? (
-        <button
-          aria-label={`${t("Comment on line")} ${commentNumber}`}
-          className="review-diff-comment-button"
-          onClick={() => onComment({ path, line: commentNumber })}
-          type="button"
-        >
-          <Plus />
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
 function statusLabel(status: string) {
   return status === "inReview"
     ? "In review"
