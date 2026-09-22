@@ -11,6 +11,7 @@ import { persistUserSettings } from '@/lib/settings-persistence';
 import { settingsSidebarTeams } from './settings-sidebar-teams';
 import { UploadPolicyDialog } from './upload-policy-dialog';
 import { ApplicationPolicySettings, DataPrivacyDialog } from './application-policy-settings';
+import { AgentTrustedSourcesSettings } from './agent-trusted-sources-settings';
 import type { IntegrationProvider } from '@/lib/app-routes';
 import { canManageTeamSettings } from '@/lib/settings-permissions';
 import { useSecuritySetting } from '@/hooks/use-security-setting';
@@ -260,7 +261,7 @@ export async function preloadSettingsPage(page: SettingsPageProps['page'], optio
   if (page === 'integrations' && options.integrationSlug) return IntegrationSettingsPage.preload()
   if (page === 'asks' && options.asksEmailIntakeMode) return NewAsksEmailIntakePage.preload()
   if (page === 'asks' && options.asksIntegrationId) return AsksSlackSettingsPage.preload()
-  if (['ai', 'initiatives', 'documents', 'customer-requests', 'releases', 'pulse', 'asks', 'emojis', 'integrations'].includes(page)) return FeatureSettingsPage.preload()
+  if (['ai', 'coding-sessions', 'coding-environments', 'initiatives', 'documents', 'customer-requests', 'releases', 'pulse', 'asks', 'emojis', 'integrations'].includes(page)) return FeatureSettingsPage.preload()
 }
 
 type StoredSettings = {
@@ -372,6 +373,7 @@ const NAV: { title: string; items: NavItem[] }[] = [
     title: "Features",
     items: [
       { id: "ai", label: "AI & Agents", icon: Sparkles },
+      { id: "coding-sessions", label: "Coding sessions", icon: Code2 },
       { id: "initiatives", label: "Initiatives", icon: Zap },
       { id: "initiative-labels", label: "Initiative labels", icon: Tag },
       { id: "documents", label: "Documents", icon: FileText },
@@ -1142,6 +1144,8 @@ function SettingsBody(
   if (
     [
       "ai",
+      "coding-sessions",
+      "coding-environments",
       "initiatives",
       "documents",
       "customer-requests",
@@ -1157,6 +1161,8 @@ function SettingsBody(
         page={
           page as
             | "ai"
+            | "coding-sessions"
+            | "coding-environments"
             | "initiatives"
             | "documents"
             | "customer-requests"
@@ -2157,6 +2163,7 @@ function SecuritySupplement({
           <ActionButton onClick={()=>setPrivacyDialog("health")}>Configure</ActionButton>
         </Row>
       </Section>
+      <section className="settings-stack"><AgentTrustedSourcesSettings data={data} settings={data.workspaceSettings} onReload={onReload} /></section>
       <ApplicationPolicySettings admin={data.viewerRole==="admin"||data.viewerRole==="owner"}/>
       {privacyDialog&&<DataPrivacyDialog kind={privacyDialog} settings={settings} onSave={async patch=>{await updateWorkspacePreferences(patch);await onReload()}} onClose={()=>setPrivacyDialog(null)}/>}
     </>

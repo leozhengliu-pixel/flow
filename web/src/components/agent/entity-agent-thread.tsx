@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronRight, LoaderCircle, Send, X } from 'lucide-react'
 import { AgentElicitation } from './agent-elicitation'
+import { AgentElicitationResponseQueue, summarizeElicitationQueue } from './agent-elicitation-response-queue'
 import { AgentRichText } from './agent-rich-text'
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { useI18n } from '@/i18n/i18n'
@@ -118,9 +119,20 @@ export function EntityAgentThread({
                   onToolApproval={decide}
                   parts={message.parts ?? []}
                 />
-                {message.parts
-                  ?.filter(part => part.type === 'elicitation')
-                  .map(part => <AgentElicitation key={part.id} part={part} />)}
+                {(() => {
+                  const elicitations = message.parts?.filter(part => part.type === 'elicitation') ?? []
+                  const queue = summarizeElicitationQueue(elicitations)
+                  return (
+                    <>
+                      <AgentElicitationResponseQueue
+                        answeredCount={queue.answeredCount}
+                        elicitationCount={queue.elicitationCount}
+                        isSubmitting={elicitations.some(part => part.status === 'running')}
+                      />
+                      {elicitations.map(part => <AgentElicitation key={part.id} part={part} />)}
+                    </>
+                  )
+                })()}
               </>
             )}
             {message.content && (

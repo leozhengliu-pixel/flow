@@ -190,6 +190,11 @@ const SECTIONS: {
     description: "Add guidance for how agents should operate within this team",
   },
   {
+    id: "agent-connectors",
+    label: "Agent connectors",
+    description: "Add MCP connectors that team members can use with Flow Agent",
+  },
+  {
     id: "agent-skills",
     label: "Agent skills",
     description: "Agent skills shared with this team",
@@ -285,6 +290,9 @@ export function TeamWorkflowSettings({
         />
       )}
   {section === "agents" && <TeamAgentsSettings data={data} />}
+      {section === "agent-connectors" && (
+        <TeamAgentConnectorsSettings data={data} team={team} onReload={onReload} />
+      )}
       {Content && <Content data={data} team={team} onReload={onReload} />}
     </>
   );
@@ -460,7 +468,7 @@ function TeamOverview({
       {group(t("Workflow"), ["statuses", "workflow", "triage", "cycles"])}
       <TeamSection title={t("AI & Agents")}>
         <div className="team-overview-list">
-          {["agents", "agent-skills"].map((id) => {
+          {["agents", "agent-connectors", "agent-skills"].map((id) => {
             const item = SECTIONS.find((value) => value.id === id)!;
             return <button key={item.id} onClick={() => onNavigate(item.id)}><span><strong>{t(item.label)}</strong><small>{t(item.description)}</small></span><ChevronRight size={15}/></button>;
           })}
@@ -1911,6 +1919,135 @@ function TeamAgentsSettings({ data }: { data: BootstrapData }) {
           description="Agent integrations connected at workspace level will appear here."
         />
       )}
+    </TeamSection>
+  );
+}
+
+
+
+function TeamAgentConnectorsSettings({
+  data,
+  team,
+  onReload,
+}: {
+  data: BootstrapData;
+  team: Team;
+  onReload: () => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const { settings, save } = useTeamSettings(data, team, onReload);
+  const connectors = settings.agentConnectors ?? [];
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const add = async () => {
+    if (!name.trim() || !url.trim()) return;
+    await save({
+      agentConnectors: [
+        ...connectors,
+        {
+          id: `connector_${Date.now()}`,
+          name: name.trim(),
+          url: url.trim(),
+          enabled: true,
+        },
+      ],
+    });
+    setName("");
+    setUrl("");
+    setCreating(false);
+  };
+  return (
+    <TeamSection
+      title={t("Agent connectors")}
+      action={
+        <button className="settings-action" onClick={() => setCreating(true)}>
+          <Plus size={13} />
+          {t("Add connector")}
+        </button>
+      }
+    >
+      <div className="team-setting-list">
+        {creating && (
+          <form
+            className="agent-skill-editor"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void add();
+            }}
+          >
+            <input
+              autoFocus
+              className="settings-input"
+              placeholder={t("Connector name")}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+            <input
+              className="settings-input"
+              placeholder="https://mcp.example.com"
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+            />
+            <footer>
+              <button
+                type="button"
+                className="settings-action"
+                onClick={() => setCreating(false)}
+              >
+                {t("Cancel")}
+              </button>
+              <button
+                className="settings-action primary"
+                disabled={!name.trim() || !url.trim()}
+              >
+                {t("Add")}
+              </button>
+            </footer>
+          </form>
+        )}
+        {connectors.map((connector) => (
+          <div className="agent-skill-row" key={connector.id}>
+            <div>
+              <strong data-i18n-ignore>{connector.name}</strong>
+              <small data-i18n-ignore>{connector.url}</small>
+            </div>
+            <SettingsToggle
+              checked={connector.enabled}
+              label={connector.name}
+              onChange={(value) => {
+                void save({
+                  agentConnectors: connectors.map((item) =>
+                    item.id === connector.id ? { ...item, enabled: value } : item,
+                  ),
+                });
+              }}
+            />
+            <button
+              className="settings-action"
+              aria-label={t("Remove connector")}
+              onClick={() => {
+                void save({
+                  agentConnectors: connectors.filter(
+                    (item) => item.id !== connector.id,
+                  ),
+                });
+              }}
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        ))}
+        {!connectors.length && !creating && (
+          <TeamEmpty
+            icon={<Bot size={24} />}
+            title={t("No team agent connectors")}
+            description={t(
+              "Add MCP connectors that team members can use with Flow Agent.",
+            )}
+          />
+        )}
+      </div>
     </TeamSection>
   );
 }

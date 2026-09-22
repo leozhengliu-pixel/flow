@@ -1030,8 +1030,28 @@ export interface TriageIntelligenceSettings {
   relatedAction: TriageIntelligenceAction;
   workspaceGuidance?: string;
 }
+export interface CodingAgentEnvironment {
+  id: string;
+  name: string;
+  repository: string;
+  setupCommand?: string;
+  archived?: boolean;
+}
+
 export interface CodingAgentSettings {
   commitSigningEnabled?: boolean;
+  /** Default coding harness: auto | claude | codex */
+  harness?: "auto" | "claude" | "codex";
+  /** Preferred model id for coding sessions */
+  model?: string;
+  environments?: CodingAgentEnvironment[];
+}
+
+export interface TeamAgentConnector {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
 }
 
 export type AuthServiceId = "google" | "email" | "passkey" | "saml" | "appUser";
@@ -1883,6 +1903,7 @@ export interface TeamSettings {
   triageAction: string;
   triageRules: TeamAutomationRule[];
   agentSkills: TeamAgentSkill[];
+  agentConnectors?: TeamAgentConnector[];
   projectUpdatePrompt: string;
   resolvedThreadSummaries: boolean;
   showInitiatives: boolean;
