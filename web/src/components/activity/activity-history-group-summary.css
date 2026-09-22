@@ -1,0 +1,22 @@
+.activity-history-group-summary {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--theme-text-tertiary);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  gap: 4px;
+  padding: 2px 0;
+  text-align: left;
+}
+
+.activity-history-group-summary:hover,
+.activity-history-group-summary:focus-visible {
+  color: var(--theme-text-secondary);
+}
+
+.activity-history-group-summary.is-expanded {
+  color: var(--theme-text-secondary);
+}

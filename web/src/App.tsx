@@ -168,7 +168,7 @@ import type {
   ProjectMutationInput,
 } from "@/components/projects-page/projects-page";
 import type { NewProjectDraft } from "@/components/projects-page/new-project-dialog";
-import { WorkspaceOnboarding, WelcomeOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, AuthTokenPage, AuthErrorPage, AuthGoogleCallbackPage, MobileAuthPage, InviteLinkAccept, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, DocumentsIndexPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
+import { WorkspaceOnboarding, WelcomeOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, AuthTokenPage, AuthErrorPage, AuthGoogleCallbackPage, MobileAuthPage, InviteLinkAccept, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, DocumentsIndexPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, SummaryUpdatePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
 import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-list";
 import { useLocation } from "react-router-dom";
@@ -4928,6 +4928,13 @@ function App() {
             onCreate={addTeam}
           />
         )}
+        {page === "summary-update" && route.kind === "summary-update" && (
+          <SummaryUpdatePage
+            data={data}
+            postId={route.postId}
+            onNavigate={navigateTo}
+          />
+        )}
         {page === "pulse" && route.kind === "pulse" && (
           <PulsePage
             data={data}
@@ -6376,6 +6383,7 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
   )
     return "workspace-issues";
   if (route.kind === "pulse") return "pulse";
+  if (route.kind === "summary-update") return "summary-update";
   if (route.kind === "my-issues") return "my-issues";
   if (route.kind === "reviews" || route.kind === "review") return "reviews";
   if (route.kind === "team-issues") return "team-issues";

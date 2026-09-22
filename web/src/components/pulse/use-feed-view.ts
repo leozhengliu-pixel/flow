@@ -3,6 +3,7 @@ import type { BootstrapData, UserSettings } from '@/types/flow'
 import type { PulseRouteView } from '@/lib/app-routes'
 import { FeedStableLastSeen } from './feed-stable-last-seen'
 import { buildPulseFeed, pulseConfigFromView, type PulseUpdateItem, type PulseViewConfig } from './pulse-model'
+import { createFeedItemsListProvider, type FeedItemsListProvider } from './feed-items-list-provider'
 
 export type UseFeedViewOptions = {
   data: BootstrapData
@@ -21,6 +22,8 @@ export type UseFeedViewResult = {
   lastSeen: number
   lastSeenFeedItemId?: string
   resetStableLastSeenTime: () => void
+  /** LS-0267 thin list provider for facet live counts. */
+  listProvider: FeedItemsListProvider
 }
 
 /**
@@ -42,6 +45,16 @@ export function useFeedView({
   const items = useMemo(
     () => buildPulseFeed(data, activeSavedView ? 'all' : view, activeSavedView ? activeConfig : { filters: [], match: 'all' }),
     [activeConfig, activeSavedView, data, view],
+  )
+  const listProvider = useMemo(
+    () => createFeedItemsListProvider({
+      data,
+      view: activeSavedView ? 'all' : view,
+      feedItems: items,
+      filters: activeConfig.filters,
+      match: activeConfig.match,
+    }),
+    [activeConfig.filters, activeConfig.match, activeSavedView, data, items, view],
   )
 
   const userSettings = data.userSettings[data.viewer.id]
@@ -95,6 +108,7 @@ export function useFeedView({
     lastSeen,
     lastSeenFeedItemId,
     resetStableLastSeenTime: () => FeedStableLastSeen.clear(),
+    listProvider,
   }
 }
 
