@@ -750,6 +750,12 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 		if input.TriageRules != nil {
 			settings.TriageRules = slices.Clone(*input.TriageRules)
 		}
+		if input.TriageMemories != nil {
+			if len(*input.TriageMemories) > 200 {
+				return errInvalid
+			}
+			settings.TriageMemories = slices.Clone(*input.TriageMemories)
+		}
 		if input.AgentSkills != nil {
 			settings.AgentSkills = slices.Clone(*input.AgentSkills)
 		}

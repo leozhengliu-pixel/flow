@@ -1873,6 +1873,13 @@ export interface TeamAgentSkill {
   instructions: string;
   enabled: boolean;
 }
+export interface TeamTriageMemory {
+  id: UUID;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  subjectUserId?: UUID;
+}
 export interface TeamSettings {
   teamId: UUID;
   description?: string;
@@ -1908,6 +1915,7 @@ export interface TeamSettings {
   triageRequirePriority: boolean;
   triageAction: string;
   triageRules: TeamAutomationRule[];
+  triageMemories?: TeamTriageMemory[];
   agentSkills: TeamAgentSkill[];
   agentConnectors?: TeamAgentConnector[];
   projectUpdatePrompt: string;

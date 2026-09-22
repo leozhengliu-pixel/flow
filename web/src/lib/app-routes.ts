@@ -97,6 +97,8 @@ export type TeamSettingsSection =
   | "project-statuses"
   | "workflow"
   | "triage"
+  | "triage-memories"
+  | "automation-runs"
   | "cycles"
   | "agents"
   | "agent-connectors"
@@ -886,6 +888,21 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
       integrationProvider: provider,
     };
   }
+  if (
+    section === "settings" &&
+    third === "teams" &&
+    fourth &&
+    fifth === "triage" &&
+    sixth === "memories" &&
+    segments.length === 6
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "team",
+      teamKey: fourth,
+      teamSection: "triage-memories",
+    };
   if (
     section === "settings" &&
     third === "teams" &&
@@ -1736,6 +1753,8 @@ const TEAM_SETTINGS_SECTIONS = new Set<TeamSettingsSection>([
   "project-statuses",
   "workflow",
   "triage",
+  "triage-memories",
+  "automation-runs",
   "cycles",
   "agents",
   "agent-connectors",
@@ -1756,6 +1775,8 @@ export function settingsPath(
       return `${root}/teams/${encode(teamKey)}/ai/updates`;
     if (teamSection === "ai-summaries")
       return `${root}/teams/${encode(teamKey)}/ai/summaries`;
+    if (teamSection === "triage-memories")
+      return `${root}/teams/${encode(teamKey)}/triage/memories`;
     return `${root}/teams/${encode(teamKey)}/${teamSection}`;
   }
   if (page === "account-security") return `${root}/account/security`;

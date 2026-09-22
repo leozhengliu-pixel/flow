@@ -80,6 +80,8 @@ import type {
   WorkflowStateType,
 } from "@/types/flow";
 import { loopsPath, type TeamSettingsSection } from "@/lib/app-routes";
+import { TeamAutomationSettingsPage } from "@/components/settings/team-automation-settings-page";
+import { TeamTriageMemoriesSettingsPage } from "@/components/settings/team-triage-memories-settings-page";
 import {
   confirmAllowSubTeamsMembership,
   confirmApplyPermissionToSubTeams,
@@ -180,6 +182,16 @@ const SECTIONS: {
     description: "Streamline how you handle requests from outside your team",
   },
   {
+    id: "triage-memories",
+    label: "Triage memories",
+    description: "Remembered context that improves triage suggestions",
+  },
+  {
+    id: "automation-runs",
+    label: "Automation runs",
+    description: "Team-scoped automation execution history",
+  },
+  {
     id: "cycles",
     label: "Cycles",
     description: "Focus your team over short, time-boxed windows",
@@ -257,6 +269,42 @@ export function TeamWorkflowSettings({
         onBack={() => onNavigate("overview")}
         onReload={onReload}
       />
+    );
+  if (section === "triage-memories")
+    return (
+      <>
+        <header className="settings-page-header team-settings-header">
+          <div>
+            <button
+              className="settings-icon-action team-settings-back"
+              aria-label={t("Back to team settings")}
+              onClick={() => onNavigate("overview")}
+            >
+              <ArrowLeft size={15} />
+            </button>
+            <h1>{t("Triage memories")}</h1>
+          </div>
+        </header>
+        <TeamTriageMemoriesSettingsPage data={data} team={team} onReload={onReload} />
+      </>
+    );
+  if (section === "automation-runs")
+    return (
+      <>
+        <header className="settings-page-header team-settings-header">
+          <div>
+            <button
+              className="settings-icon-action team-settings-back"
+              aria-label={t("Back to team settings")}
+              onClick={() => onNavigate("overview")}
+            >
+              <ArrowLeft size={15} />
+            </button>
+            <h1>{t("Automation runs")}</h1>
+          </div>
+        </header>
+        <TeamAutomationSettingsPage data={data} team={team} />
+      </>
     );
   const Content = TEAM_SECTION_COMPONENTS[section];
   return (
@@ -465,7 +513,7 @@ function TeamOverview({
         "templates",
         "recurring-issues",
       ])}
-      {group(t("Workflow"), ["statuses", "workflow", "triage", "cycles"])}
+      {group(t("Workflow"), ["statuses", "workflow", "triage", "triage-memories", "automation-runs", "cycles"])}
       <TeamSection title={t("AI & Agents")}>
         <div className="team-overview-list">
           {["agents", "agent-connectors", "agent-skills"].map((id) => {
