@@ -17,7 +17,7 @@ const api = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/resource-preferences', () => ({ refreshResourcePreferences: api.refreshResourcePreferences }))
 
-vi.mock('@/components/issue/issue-description-editor', () => ({ IssueDescriptionEditor: () => <div aria-label="Document content"/> }))
+vi.mock('@/components/documents/collaborative-editor', () => ({ CollaborativeEditor: () => <div aria-label="Document content"/> }))
 vi.mock('@/components/views/view-icon-picker', () => ({ ViewGlyph: () => <svg aria-hidden="true"/>, ViewIconPicker: () => <button aria-label="Document icon"/> }))
 vi.mock('@/lib/api', async importOriginal => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
