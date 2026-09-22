@@ -13,7 +13,76 @@ import (
 )
 
 func supportedIntegration(provider string) bool {
-	return provider == "github" || provider == "gitlab" || provider == "slack" || provider == "jira"
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "github", "gitlab", "slack", "jira", "figma":
+		return true
+	default:
+		return false
+	}
+}
+
+// figmaOAuthDefaults fills public Figma OAuth endpoints when unset. Client
+// secrets still come from FLOW_INTEGRATION_FIGMA_* env or connection config.
+func applyIntegrationOAuthDefaults(provider string, cfg *integrationOAuthConfig) {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "figma":
+		if cfg.AuthorizationURL == "" {
+			cfg.AuthorizationURL = "https://www.figma.com/oauth"
+		}
+		if cfg.TokenURL == "" {
+			cfg.TokenURL = "https://api.figma.com/v1/oauth/token"
+		}
+		if cfg.RedirectURI == "" {
+			appURL := strings.TrimRight(os.Getenv("FLOW_APP_URL"), "/")
+			if appURL == "" {
+				appURL = "http://localhost:5173"
+			}
+			cfg.RedirectURI = appURL + "/connect/figma/callback"
+		}
+	case "jira":
+		// Atlassian Cloud defaults (LS-0364). Never invent success without secrets.
+		if cfg.AuthorizationURL == "" {
+			cfg.AuthorizationURL = "https://auth.atlassian.com/authorize"
+		}
+		if cfg.TokenURL == "" {
+			cfg.TokenURL = "https://auth.atlassian.com/oauth/token"
+		}
+	}
+}
+
+func integrationOAuthCompletePath(provider, workspace, status, errMsg string) string {
+	appURL := strings.TrimRight(os.Getenv("FLOW_APP_URL"), "/")
+	if appURL == "" {
+		appURL = "http://localhost:5173"
+	}
+	path := "/connect/oauth/complete"
+	if strings.EqualFold(provider, "figma") {
+		path = "/connect/figma/callback"
+	}
+	u, err := url.Parse(appURL + path)
+	if err != nil {
+		return appURL + path
+	}
+	q := u.Query()
+	if provider != "" {
+		q.Set("provider", provider)
+	}
+	if workspace != "" {
+		q.Set("workspace", workspace)
+	}
+	if status != "" {
+		q.Set("status", status)
+	}
+	if errMsg != "" {
+		q.Set("error", errMsg)
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+func wantsHTMLRedirect(r *http.Request) bool {
+	accept := r.Header.Get("Accept")
+	return strings.Contains(accept, "text/html") || (!strings.Contains(accept, "application/json") && strings.Contains(r.Header.Get("User-Agent"), "Mozilla"))
 }
 
 func supportedIntegrationHandler(next http.HandlerFunc) http.HandlerFunc {
@@ -65,16 +134,7 @@ func integrationOAuthConfigFor(provider string, config map[string]string) integr
 		ClientSecret:     secret,
 		RedirectURI:      value("redirectURI", "REDIRECT_URI"),
 	}
-	// Atlassian Cloud defaults for Jira (LS-0364). Client ID / secret / redirect
-	// still come from env or custom connection config — never invent success.
-	if provider == "JIRA" {
-		if cfg.AuthorizationURL == "" {
-			cfg.AuthorizationURL = "https://auth.atlassian.com/authorize"
-		}
-		if cfg.TokenURL == "" {
-			cfg.TokenURL = "https://auth.atlassian.com/oauth/token"
-		}
-	}
+	applyIntegrationOAuthDefaults(provider, &cfg)
 	return cfg
 }
 

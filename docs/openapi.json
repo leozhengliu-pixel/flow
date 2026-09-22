@@ -6101,6 +6101,36 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/integrations/{provider}/oauth/finish": {
+      "post": {
+        "operationId": "post_integrations_provider_oauth_finish",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "POST /api/integrations/{provider}/oauth/finish",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/integrations/{provider}/oauth/start": {
       "post": {
         "operationId": "post_integrations_provider_oauth_start",

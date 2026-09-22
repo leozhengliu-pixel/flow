@@ -430,6 +430,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/application-policies/{id}", s.deleteApplicationPolicy)
 	mux.HandleFunc("POST /api/integrations/{provider}/oauth/start", supportedIntegrationHandler(s.startIntegrationOAuth))
 	mux.HandleFunc("GET /api/integrations/{provider}/oauth/callback", supportedIntegrationHandler(s.finishIntegrationOAuth))
+	mux.HandleFunc("POST /api/integrations/{provider}/oauth/finish", supportedIntegrationHandler(s.finishIntegrationOAuthJSON))
 	mux.HandleFunc("POST /api/integrations/{provider}/{id}/oauth/refresh", supportedIntegrationHandler(s.refreshIntegrationOAuth))
 	mux.HandleFunc("DELETE /api/integrations/{provider}/{id}/oauth/token", supportedIntegrationHandler(s.revokeIntegrationOAuth))
 	mux.HandleFunc("DELETE /api/integrations/{provider}", supportedIntegrationHandler(s.disconnectIntegration))

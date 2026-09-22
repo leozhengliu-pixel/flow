@@ -167,7 +167,7 @@ import type {
   ProjectMutationInput,
 } from "@/components/projects-page/projects-page";
 import type { NewProjectDraft } from "@/components/projects-page/new-project-dialog";
-import { WorkspaceOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, OAuthAuthorizePage, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, DocumentsIndexPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
+import { WorkspaceOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, DocumentsIndexPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
 import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-list";
 import { useLocation } from "react-router-dom";
@@ -458,6 +458,12 @@ function App() {
     data?.workspaceSettings,
   ]);
   const oauthPath = location.pathname === "/oauth/authorize";
+  const connectPath =
+    location.pathname === "/connect/oauth/complete" ||
+    location.pathname === "/connect/figma/callback" ||
+    location.pathname === "/connect/figma/desktop-redirect" ||
+    location.pathname === "/connect/sentry" ||
+    location.pathname === "/connect/sentry/callback";
   const authPath =
     [
       "/login",
@@ -468,7 +474,7 @@ function App() {
     ].some((path) => location.pathname === path) ||
     location.pathname.startsWith("/invite/");
   useEffect(() => {
-    if (authReady && !session && oauthPath) {
+    if (authReady && !session && (oauthPath || connectPath)) {
       const returnTo = `${location.pathname}${location.search}`;
       navigateTo(`/login?returnTo=${encodeURIComponent(returnTo)}`, {
         replace: true,
@@ -476,6 +482,7 @@ function App() {
     }
   }, [
     authReady,
+    connectPath,
     location.pathname,
     location.search,
     navigateTo,
@@ -494,7 +501,7 @@ function App() {
   }, [authPath, authReady, location.pathname, navigateTo, session]);
   useEffect(() => {
     if (!account) return;
-    if (oauthPath) return;
+    if (oauthPath || connectPath) return;
     if (
       account.workspaces.length === 0 &&
       route.kind !== "workspace-onboarding"
@@ -571,7 +578,7 @@ function App() {
       })
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
-  }, [account, loadedWorkspaceKey, navigateTo, oauthPath, projectListProjection, bootstrapProjection, requestedWorkspaceKey, route.kind]);
+  }, [account, connectPath, loadedWorkspaceKey, navigateTo, oauthPath, projectListProjection, bootstrapProjection, requestedWorkspaceKey, route.kind]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return;
@@ -3863,6 +3870,14 @@ function App() {
       </WorkspaceBootShell>
     );
   if (oauthPath) return withStore(<OAuthAuthorizePage account={account} />);
+  if (connectPath) {
+    if (location.pathname === "/connect/figma/callback") return withStore(<CompleteFigmaAuthView />);
+    if (location.pathname === "/connect/figma/desktop-redirect") return withStore(<AuthDesktopRedirectFigma />);
+    if (location.pathname === "/connect/sentry" || location.pathname === "/connect/sentry/callback") {
+      return withStore(<CompleteSentryAuthView />);
+    }
+    return withStore(<CompleteOAuthView />);
+  }
   if (route.kind === "workspace-onboarding" || account.workspaces.length === 0)
     return withStore(
       <Suspense
