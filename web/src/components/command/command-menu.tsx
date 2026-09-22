@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Command } from 'cmdk'
 import {
   Bot, Building2, Clipboard, FilePlus2, FileText, FolderKanban, GitPullRequest, Inbox, Layers3, Lightbulb,
@@ -10,6 +11,9 @@ import { DocumentGlyph } from '@/components/documents/document-icon'
 import { ReleasesIcon } from '@/components/releases/release-icons'
 import { searchWorkspace } from '@/lib/api'
 import { ActionRegistry } from '@/lib/action-registry'
+import { sortActionGroups } from '@/lib/action-groups'
+import { useSelectedModels } from '@/lib/selected-models-store'
+import { useAllowedActionGroups } from '@/hooks/use-action-groups-for-selection'
 import type { SearchResult } from '@/types/flow'
 
 type CommandAction = {
@@ -66,6 +70,9 @@ export function CommandMenu({
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
+  const location = useLocation()
+  const selectedModels = useSelectedModels()
+  const allowedActionGroups = useAllowedActionGroups()
   const closeAnd = (work: () => void) => () => { onOpenChange(false); work() }
   const actions: CommandAction[] = [
     { id: 'create-issue', group: 'Issues', label: 'Create new issue...', icon: <Plus/>, shortcut: ['C'], keywords: 'new ticket task', run: closeAnd(onCreateIssue) },
@@ -82,8 +89,8 @@ export function CommandMenu({
     { id: 'go-initiatives', group: 'Navigation', label: 'Go to Initiatives', icon: <Lightbulb/>, run: closeAnd(onNavigateInitiatives) },
     { id: 'go-views', group: 'Navigation', label: 'Go to Views', icon: <Layers3/>, run: closeAnd(onNavigateViews) },
     { id: 'go-members', group: 'Navigation', label: 'Go to Members', icon: <UserRound/>, run: closeAnd(onNavigateMembers) },
-    { id: 'go-agent', group: 'Navigation', label: 'Go to Agent', icon: <Bot/>, shortcut: ['G', 'then', 'J'], run: closeAnd(onNavigateAgent) },
-    ...(onNavigateReviews ? [{ id: 'go-reviews', group: 'Navigation', label: 'Go to Reviews', icon: <GitPullRequest/>, shortcut: ['G', 'then', 'R'], run: closeAnd(onNavigateReviews) }] : []),
+    { id: 'go-agent', group: 'Agent chat', label: 'Go to Agent', icon: <Bot/>, shortcut: ['G', 'then', 'J'], run: closeAnd(onNavigateAgent) },
+    ...(onNavigateReviews ? [{ id: 'go-reviews', group: 'Reviews', label: 'Go to Reviews', icon: <GitPullRequest/>, shortcut: ['G', 'then', 'R'], run: closeAnd(onNavigateReviews) }] : []),
     { id: 'copy-url', group: 'Other', label: 'Copy current page link', icon: <Clipboard/>, run: closeAnd(() => void navigator.clipboard.writeText(window.location.href)) },
   ]
   // Register every command once so keyboard, menu and future contextual
@@ -106,7 +113,18 @@ export function CommandMenu({
     return () => { active = false; window.clearTimeout(timer); controller.abort() }
   }, [open, query])
 
-  const groups = [...new Set(actions.map(action => action.group))]
+  const groupIds = [...new Set(actions.map(action => action.group))]
+  const groups = useMemo(
+    () =>
+      sortActionGroups(groupIds, {
+        pathname: location.pathname,
+        selectedModels,
+        allowedActionGroups: allowedActionGroups.length ? allowedActionGroups : undefined,
+      }),
+    // groupIds is derived each render; serialize for stable compare
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [groupIds.join("|"), allowedActionGroups, location.pathname, selectedModels],
+  )
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="command-dialog" overlayClassName="command-overlay" onOpenAutoFocus={event => event.preventDefault()}>
       <DialogTitle className="sr-only">Command menu</DialogTitle>

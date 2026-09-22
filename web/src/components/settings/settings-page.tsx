@@ -31,6 +31,7 @@ import {
   Import,
   Upload,
   KeyRound,
+  Keyboard,
   LayoutTemplate,
   Link2,
   ListFilter,
@@ -199,7 +200,7 @@ const WorkflowAutomationSettings = lazyPage(
 // oxlint-disable-next-line react/only-export-components -- Preloading must share the lazy instances used by SettingsBody.
 export async function preloadSettingsPage(page: SettingsPageProps['page'], options: Pick<SettingsPageProps, 'releasePipelineMode' | 'integrationProvider' | 'integrationSlug' | 'agentSkillMode'> = {}) {
   if (options.agentSkillMode) return
-  if (['preferences', 'profile', 'notifications', 'code-and-reviews', 'account-security', 'connections', 'agents'].includes(page)) return PersonalSettings.preload()
+  if (['preferences', 'shortcuts', 'profile', 'notifications', 'code-and-reviews', 'account-security', 'connections', 'agents'].includes(page)) return PersonalSettings.preload()
   if (page === 'issue-labels' || page === 'project-labels' || page === 'initiative-labels') return DomainLabelsSettings.preload()
   if (page === 'project-statuses') return ProjectStatusesSettings.preload()
   if (page === 'issue-templates' || page === 'project-templates') return TemplateSettings.preload()
@@ -284,6 +285,7 @@ const NAV: { title: string; items: NavItem[] }[] = [
     title: "Personal",
     items: [
       { id: "preferences", label: "Preferences", icon: SlidersHorizontal },
+      { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
       { id: "profile", label: "Profile", icon: UserRound },
       { id: "notifications", label: "Notifications", icon: Bell },
       { id: "code-and-reviews", label: "Code & reviews", icon: Code2 },
@@ -786,6 +788,7 @@ function SettingsBody(
     props.data.viewerRole === "admin" || props.data.viewerRole === "owner";
   const personal = [
     "preferences",
+    "shortcuts",
     "profile",
     "notifications",
     "code-and-reviews",

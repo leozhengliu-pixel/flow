@@ -1,0 +1,215 @@
+.account-shortcuts-settings {
+  color: var(--personal-text, var(--theme-text-primary));
+}
+.account-shortcuts-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 16px 18px;
+  flex-wrap: wrap;
+}
+.account-shortcuts-filter {
+  position: relative;
+  flex: 1 1 220px;
+  min-width: 180px;
+  max-width: 360px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+  background: var(--theme-surface-1);
+  color: var(--theme-text-tertiary);
+}
+.account-shortcuts-filter > svg {
+  position: absolute;
+  left: 10px;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+.account-shortcuts-filter > input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  padding: 0 30px 0 32px;
+  border: 0.5px solid transparent;
+  border-radius: 8px;
+  outline: 0;
+  background: transparent;
+  color: var(--theme-text-primary);
+  font: 500 13px / normal inherit;
+}
+.account-shortcuts-filter > input:focus {
+  border-color: var(--theme-border-strong);
+  box-shadow: 0 0 0 2px var(--focus-ring, #5e6ad229);
+}
+.account-shortcuts-filter > button {
+  position: absolute;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-text-tertiary);
+  cursor: pointer;
+}
+.account-shortcuts-filter > button:hover {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-primary);
+}
+.account-shortcuts-scope {
+  display: inline-flex;
+  height: 32px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--theme-surface-1);
+  gap: 2px;
+}
+.account-shortcuts-scope > button {
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  font: 500 12px / normal inherit;
+  cursor: pointer;
+}
+.account-shortcuts-scope > button[data-active] {
+  background: var(--bg-active, var(--theme-control-active));
+  color: var(--theme-text-primary);
+}
+.account-shortcuts-error {
+  margin: 0 16px 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: color-mix(in oklab, #e5484d 16%, transparent);
+  color: #e5484d;
+  font-size: 12px;
+}
+.account-shortcuts-recording {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--theme-surface-1);
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  outline: 0;
+}
+.account-shortcuts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.account-shortcuts-row {
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(100px, 0.8fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 4px;
+  border-bottom: 0.5px solid var(--theme-border);
+}
+.account-shortcuts-row:last-child {
+  border-bottom: 0;
+}
+.account-shortcuts-row__copy {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.account-shortcuts-row__copy strong {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--theme-text-primary);
+}
+.account-shortcuts-badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--theme-surface-1);
+  color: var(--theme-text-secondary);
+  font-size: 10px;
+  font-weight: 500;
+}
+.account-shortcuts-row__keys {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.account-shortcuts-row__keys kbd,
+.account-shortcuts-row__keys small {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 6px;
+  border: 0.5px solid var(--theme-border-strong);
+  border-radius: 5px;
+  background: var(--theme-surface-1);
+  color: var(--theme-text-secondary);
+  font: 10px / 1 var(--font, inherit);
+}
+.account-shortcuts-row__keys small {
+  border: 0;
+  background: transparent;
+  padding: 0 2px;
+  color: var(--theme-text-tertiary);
+}
+.account-shortcuts-row__keys kbd.is-recording {
+  border-style: dashed;
+  color: var(--theme-text-primary);
+}
+.account-shortcuts-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.account-shortcuts-row__actions > button {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0.5px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  font: 500 12px / normal inherit;
+  cursor: pointer;
+}
+.account-shortcuts-row__actions > button:hover {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-primary);
+}
+.account-shortcuts-empty {
+  margin: 24px 16px;
+  text-align: center;
+  color: var(--theme-text-secondary);
+}
+.account-shortcuts-empty h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--theme-text-primary);
+}
+.account-shortcuts-empty p {
+  margin: 0;
+  font-size: 12px;
+}
+@media (max-width: 760px) {
+  .account-shortcuts-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .account-shortcuts-row__actions {
+    justify-content: flex-start;
+  }
+}

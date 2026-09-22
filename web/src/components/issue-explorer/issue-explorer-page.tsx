@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useActionGroupsForSelection } from '@/hooks/use-action-groups-for-selection'
+import { clearSelectedModels, setSelectedModels } from '@/lib/selected-models-store'
 import { boundedIssueSequence } from '@/lib/navigation-context'
 import { teamHierarchy } from '@/lib/team-hierarchy'
 import type { BootstrapData, Issue, IssueUpdateInput, SavedView, SavedViewMutationInput, Team } from '@/types/flow'
@@ -123,6 +125,12 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
     filter: { and: [issueFiltersToQueryAst(filters), ...(view === 'backlog' ? [{ field: 'status', values: ['backlog'] }] : view === 'active' ? [{ field: 'status', values: ['unstarted', 'started'] }] : [])] },
   }), [filters, initialInsightFilters?.teamIds, scope, view])
   const selection = useMyIssuesSelection(groups)
+  useActionGroupsForSelection(['Issues', 'Projects'])
+  useEffect(() => {
+    if (selection.selectedIds.size > 0) setSelectedModels(['Issue'])
+    else clearSelectedModels()
+    return () => clearSelectedModels()
+  }, [selection.selectedIds])
   const summary = useMemo(() => deriveSummary(groups), [groups])
   const previewIssue = previewIssueId ? issuesById.get(previewIssueId) : undefined
   const saveTargets = useMemo<SavedViewTarget[]>(() => [

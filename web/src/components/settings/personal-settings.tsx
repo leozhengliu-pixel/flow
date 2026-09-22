@@ -82,6 +82,7 @@ import {
 } from "./settings-primitives";
 
 import "./personal-settings.css";
+import { AccountShortcutsSettingsPage } from "./account-shortcuts-settings";
 
 export type PersonalSettingsValues = Record<string, string | boolean>;
 
@@ -117,6 +118,19 @@ const pendingAPIKeySecrets = new Map<string, string>();
 // This avoids falling back to partially translated legacy DOM mutations.
 const PERSONAL_ZH: Record<string, string> = {
   Preferences: "偏好设置",
+  Shortcuts: "快捷键",
+  "Customize keyboard shortcuts used across Flow. Conflicts are blocked.": "自定义 Flow 中使用的键盘快捷键。冲突的快捷键会被阻止。",
+  "Filter by name or keystroke": "按名称或按键筛选",
+  Custom: "自定义",
+  "Recording…": "录制中…",
+  "Press keys, then Enter to save. Esc to cancel.": "按下按键，然后按 Enter 保存。Esc 取消。",
+  "No shortcuts match": "没有匹配的快捷键",
+  "Try another name or keystroke.": "请尝试其他名称或按键。",
+  "Record shortcut": "录制快捷键",
+  "Shortcut already in use by": "快捷键已被占用：",
+  "Restore default": "恢复默认",
+  then: "然后",
+  Navigation: "导航",
   Profile: "个人资料",
   Notifications: "通知",
   "Code & reviews": "代码与评审",
@@ -553,6 +567,8 @@ export function PersonalSettings(props: Props) {
   );
   let content: ReactNode;
   if (props.page === "preferences") content = <Preferences {...props} p={p} />;
+  else if (props.page === "shortcuts")
+    content = <AccountShortcutsSettingsPage p={p} />;
   else if (props.page === "profile") content = <Profile {...props} p={p} />;
   else if (props.page === "notifications")
     content = <Notifications {...props} p={p} />;

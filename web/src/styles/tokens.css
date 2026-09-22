@@ -59,7 +59,7 @@
 :root[data-theme="light"]{accent-color:#5e6ad2}
 :root[data-theme="light"] .flow-button-default{color:white}
 :root[data-theme="light"] .page-content,:root[data-theme="light"] .issue-document,:root[data-theme="light"] .properties{scrollbar-color:#0000001f transparent}
-:root[data-theme="light"] .dialog-overlay{background:var(--theme-overlay)}
+:root[data-theme="light"] .dialog-overlay{background:var(--theme-overlay)}:root[data-theme="light"] .command-overlay{background:#0000000a}:root[data-theme="light"] .command-input input::placeholder{color:var(--faint)}
 :root[data-theme="light"] .workspace-avatar,:root[data-theme="light"] .avatar,:root[data-theme="light"] [class*="avatar"]{--avatar-border:rgba(0,0,0,.08)}
 .workspace-avatar{overflow:hidden}.workspace-avatar>img{width:100%;height:100%;display:block;object-fit:cover}.core-person-picker-avatar.is-invited{background:transparent;color:var(--theme-text-tertiary);border:1px dashed var(--theme-border-strong);box-shadow:none}
 :root[data-theme="light"] input::placeholder,:root[data-theme="light"] textarea::placeholder{color:var(--faint)}
