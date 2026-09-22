@@ -8295,6 +8295,152 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/jira/links": {
+      "get": {
+        "operationId": "get_jira_links",
+        "tags": [
+          "jira"
+        ],
+        "summary": "GET /api/jira/links",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "post": {
+        "operationId": "post_jira_links",
+        "tags": [
+          "jira"
+        ],
+        "summary": "POST /api/jira/links",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/jira/links/{id}": {
+      "delete": {
+        "operationId": "delete_jira_links_id",
+        "tags": [
+          "jira"
+        ],
+        "summary": "DELETE /api/jira/links/{id}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "patch": {
+        "operationId": "patch_jira_links_id",
+        "tags": [
+          "jira"
+        ],
+        "summary": "PATCH /api/jira/links/{id}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/jira/remote/projects": {
+      "get": {
+        "operationId": "get_jira_remote_projects",
+        "tags": [
+          "jira"
+        ],
+        "summary": "GET /api/jira/remote/projects",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/jira/remote/projects/{projectId}/statuses": {
+      "get": {
+        "operationId": "get_jira_remote_projects_projectId_statuses",
+        "tags": [
+          "jira"
+        ],
+        "summary": "GET /api/jira/remote/projects/{projectId}/statuses",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/label-groups": {
       "post": {
         "operationId": "post_label_groups",

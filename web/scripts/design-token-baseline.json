@@ -40,6 +40,7 @@
   "components/settings/feature-settings.css": 18,
   "components/settings/issue-template-settings.css": 19,
   "components/settings/issues-projects-settings.css": 43,
+  "components/settings/jira-settings.css": 6,
   "components/settings/personal-settings.css": 46,
   "components/settings/project-template-settings.css": 4,
   "components/settings/settings.css": 224,

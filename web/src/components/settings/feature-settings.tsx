@@ -416,7 +416,7 @@ function IntegrationsPage({data,onOpen,onReload}:{data:BootstrapData;onOpen:(pro
       const connection = item.connectProvider
         ? data.integrationConnections.find(value => value.provider === item.connectProvider)
         : undefined;
-      const code = item.connectProvider === "github" || item.connectProvider === "gitlab";
+      const code = item.connectProvider === "github" || item.connectProvider === "gitlab" || item.connectProvider === "jira";
       const connected = connection?.status === "connected";
       const supported = item.availability === "supported";
       const onClick = () => {
@@ -426,7 +426,7 @@ function IntegrationsPage({data,onOpen,onReload}:{data:BootstrapData;onOpen:(pro
         onOpen(item.slug);
       };
       return <article key={item.slug} data-availability={item.availability}>
-        {item.connectProvider === "github" || item.connectProvider === "gitlab" || item.connectProvider === "slack"
+        {item.connectProvider === "github" || item.connectProvider === "gitlab" || item.connectProvider === "slack" || item.connectProvider === "jira"
           ? <IntegrationBrandIcon provider={item.connectProvider}/>
           : <span className="feature-row-icon integration-catalog-icon"><Sparkles size={16}/></span>}
         <div>
