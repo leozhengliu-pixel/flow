@@ -195,6 +195,7 @@ const JiraSettingsPage = lazyPage(
 const JiraSyncPage = lazyPage(
   () => import("@/components/settings/jira-sync-page"),
   "JiraSyncPage",
+);
 const AsksSlackSettingsPage = lazyPage(
   () => import("./asks-settings"),
   "AsksSlackSettingsPage",

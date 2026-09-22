@@ -2,7 +2,7 @@ import { Children, useEffect, useMemo, useRef, useState, type ComponentProps, ty
 import {
   ArrowUpRight,
   Bot, Check, ChevronDown, ChevronRight, Code2, FileText,
-  Inbox, Mail, MessageSquare, MoreHorizontal, Plus, Radio, Rocket,
+  Inbox, MessageSquare, MoreHorizontal, Plus, Radio, Rocket,
   Search, Smile, Sparkles, Tag, UsersRound,
   type LucideIcon,
 } from "lucide-react";
