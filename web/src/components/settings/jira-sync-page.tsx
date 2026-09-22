@@ -536,12 +536,6 @@ export function JiraSyncPage({ data, mode, jiraProjectId, onBack, onReload }: Pr
             ) : null}
           </WizardStep>
         ) : null}
-
-        <p className="jira-pixel-note">
-          {t(
-            "UI note: the reference app pixel follow-up pending — compare this wizard with the reference app …/integrations/jira/sync/new.",
-          )}
-        </p>
       </div>
     </div>
   );

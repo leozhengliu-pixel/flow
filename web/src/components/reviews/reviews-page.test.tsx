@@ -97,9 +97,6 @@ it("renders provider review activity and submits the compact comment composer", 
     </I18nProvider>,
   );
 
-  expect(
-    screen.getByText(/Reviews remains Shell-only: DiffComputer/),
-  ).toBeVisible();
   expect(screen.getByText("Opened by")).toBeVisible();
   expect(screen.getByText(/with 1 commit/)).toBeVisible();
   expect(screen.getByText("requested review from")).toBeVisible();
