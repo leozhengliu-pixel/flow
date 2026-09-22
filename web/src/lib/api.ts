@@ -26,6 +26,7 @@ import type {
   InitiativeResource,
   InitiativeUpdate,
   IntegrationConnection,
+  JiraLink,
   Invitation,
   InvitationPreview,
   Issue,
@@ -900,6 +901,47 @@ export async function authorizeIntegration(provider: string, input: { name?: str
 }
 export function disconnectIntegration(provider: string): Promise<void> {
   return request(`/api/integrations/${provider}`, { method: "DELETE" });
+}
+
+export type JiraRemoteProject = { id: string; key: string; name: string };
+export type JiraRemoteStatus = { id: string; name: string; category?: string };
+
+export function fetchJiraLinks(): Promise<JiraLink[]> {
+  return request("/api/jira/links");
+}
+export function createJiraLink(input: {
+  jiraProjectId: string;
+  jiraProjectKey?: string;
+  jiraProjectName?: string;
+  teamId: string;
+  syncDirection?: string;
+  statusMap?: Record<string, string>;
+}): Promise<JiraLink> {
+  return request("/api/jira/links", jsonRequest("POST", input));
+}
+export function updateJiraLink(
+  id: string,
+  input: { syncDirection?: string; statusMap?: Record<string, string> },
+): Promise<JiraLink> {
+  return request(`/api/jira/links/${id}`, jsonRequest("PATCH", input));
+}
+export function deleteJiraLink(id: string): Promise<void> {
+  return request(`/api/jira/links/${id}`, { method: "DELETE" });
+}
+export function fetchJiraRemoteProjects(): Promise<{
+  projects: JiraRemoteProject[];
+  error?: string;
+  status?: string;
+}> {
+  return request("/api/jira/remote/projects");
+}
+export function fetchJiraRemoteStatuses(projectId: string): Promise<{
+  statuses: JiraRemoteStatus[];
+  error?: string;
+  status?: string;
+  projectId?: string;
+}> {
+  return request(`/api/jira/remote/projects/${encodeURIComponent(projectId)}/statuses`);
 }
 export function updateIntegrationConnection(
   provider: string,

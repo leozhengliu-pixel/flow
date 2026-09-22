@@ -13,7 +13,7 @@ import (
 )
 
 func supportedIntegration(provider string) bool {
-	return provider == "github" || provider == "gitlab" || provider == "slack"
+	return provider == "github" || provider == "gitlab" || provider == "slack" || provider == "jira"
 }
 
 func supportedIntegrationHandler(next http.HandlerFunc) http.HandlerFunc {
@@ -57,7 +57,7 @@ func integrationOAuthConfigFor(provider string, config map[string]string) integr
 	if secret == "" {
 		secret = value("clientSecret", "CLIENT_SECRET")
 	}
-	return integrationOAuthConfig{
+	cfg := integrationOAuthConfig{
 		AuthorizationURL: value("authorizationURL", "AUTHORIZATION_URL"),
 		TokenURL:         value("tokenURL", "TOKEN_URL"),
 		RevokeURL:        value("revokeURL", "REVOKE_URL"),
@@ -65,6 +65,17 @@ func integrationOAuthConfigFor(provider string, config map[string]string) integr
 		ClientSecret:     secret,
 		RedirectURI:      value("redirectURI", "REDIRECT_URI"),
 	}
+	// Atlassian Cloud defaults for Jira (LS-0364). Client ID / secret / redirect
+	// still come from env or custom connection config — never invent success.
+	if provider == "JIRA" {
+		if cfg.AuthorizationURL == "" {
+			cfg.AuthorizationURL = "https://auth.atlassian.com/authorize"
+		}
+		if cfg.TokenURL == "" {
+			cfg.TokenURL = "https://auth.atlassian.com/oauth/token"
+		}
+	}
+	return cfg
 }
 
 func integrationEndpoint(raw string) error {

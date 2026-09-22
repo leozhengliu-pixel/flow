@@ -1162,6 +1162,18 @@ type WebhookFailureEvent struct {
 	CreatedAt       time.Time `json:"createdAt"`
 }
 
+type JiraLink struct {
+	ID              string            `json:"id"`
+	JiraProjectID   string            `json:"jiraProjectId"`
+	JiraProjectKey  string            `json:"jiraProjectKey,omitempty"`
+	JiraProjectName string            `json:"jiraProjectName,omitempty"`
+	TeamID          string            `json:"teamId"`
+	SyncDirection   string            `json:"syncDirection"` // bidirectional | unidirectional | legacyUnidirectional
+	StatusMap       map[string]string `json:"statusMap,omitempty"` // jira status name -> flow workflow state id
+	CreatedAt       time.Time         `json:"createdAt"`
+	UpdatedAt       time.Time         `json:"updatedAt"`
+}
+
 type IntegrationConnection struct {
 	ID                string            `json:"id"`
 	Provider          string            `json:"provider"`
@@ -1762,6 +1774,7 @@ type Bootstrap struct {
 	Webhooks                      []Webhook                          `json:"webhooks"`
 	WebhookFailureEvents           []WebhookFailureEvent              `json:"webhookFailureEvents"`
 	IntegrationConnections        []IntegrationConnection            `json:"integrationConnections"`
+	JiraLinks                     []JiraLink                          `json:"jiraLinks,omitempty"`
 	IdentityProviders             []IdentityProvider                 `json:"identityProviders"`
 	IntegrationDeliveries         []IntegrationDelivery              `json:"integrationDeliveries"`
 	GitAutomationStates           []GitAutomationState               `json:"gitAutomationStates"`

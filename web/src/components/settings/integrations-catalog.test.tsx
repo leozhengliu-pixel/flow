@@ -36,6 +36,6 @@ it('shows an honest catalog with Coming soon / Not supported and routes supporte
   expect(open).toHaveBeenLastCalledWith('github')
 
   const jira = screen.getByRole('heading', { name: /Jira/ }).closest('article')!
-  await user.click(within(jira).getByRole('button', { name: 'Coming soon' }))
+  await user.click(within(jira).getByRole('button', { name: 'Connect' }))
   expect(open).toHaveBeenLastCalledWith('jira')
 })

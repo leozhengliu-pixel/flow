@@ -1107,6 +1107,17 @@ export interface IntegrationConnection {
   oauthStartedAt?: string;
   oauthCompletedAt?: string;
 }
+export interface JiraLink {
+  id: UUID;
+  jiraProjectId: string;
+  jiraProjectKey?: string;
+  jiraProjectName?: string;
+  teamId: UUID;
+  syncDirection: "bidirectional" | "unidirectional" | "legacyUnidirectional" | string;
+  statusMap?: Record<string, string>;
+  createdAt: string;
+  updatedAt: string;
+}
 export interface IdentityProvider {
   id: UUID;
   workspaceId: UUID;
@@ -1729,6 +1740,7 @@ export interface BootstrapData {
   oauthAuthorizations: OAuthAuthorization[];
   webhooks: Webhook[];
   integrationConnections: IntegrationConnection[];
+  jiraLinks?: JiraLink[];
   identityProviders: IdentityProvider[];
   integrationDeliveries: IntegrationDelivery[];
   gitAutomationStates: GitAutomationState[];

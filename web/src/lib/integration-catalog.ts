@@ -31,7 +31,7 @@ export interface IntegrationCatalogEntry {
   /** Hide subtype rows from the main All Integrations grid. */
   subtype?: boolean;
   /** Providers that currently have REST connect / manage flows. */
-  connectProvider?: "github" | "gitlab" | "slack";
+  connectProvider?: "github" | "gitlab" | "slack" | "jira";
 }
 
 /** Primary (non-subtype) catalog used by All Integrations. */
@@ -69,7 +69,8 @@ export const INTEGRATION_CATALOG: IntegrationCatalogEntry[] = [
     name: "Jira",
     description: "Sync issues and status between Jira and Flow",
     category: "Essentials",
-    availability: "coming_soon",
+    availability: "supported",
+    connectProvider: "jira",
   },
   {
     slug: "figma",
