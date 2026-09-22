@@ -1,0 +1,60 @@
+.root{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  padding:8px 10px;
+  border:.5px solid var(--border);
+  border-radius:8px;
+  background:var(--theme-surface-2,var(--bg-elevated));
+}
+.header{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  color:var(--theme-text-secondary,var(--muted));
+  font-size:12px;
+  font-weight:500;
+}
+.header svg{color:lch(67.6% 34.2 283)}
+.acceptAll{
+  margin-left:auto;
+  height:22px;
+  padding:0 8px;
+  border:.5px solid var(--accent-primary,var(--accent));
+  border-radius:9999px;
+  background:transparent;
+  color:var(--accent-primary,var(--accent));
+  font-size:11px;
+  cursor:pointer;
+}
+.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+  padding:4px 0;
+}
+.meta{display:flex;align-items:center;gap:6px;min-width:0;flex:1}
+.kind{color:var(--theme-text-secondary,var(--muted));font-size:11px}
+.label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--theme-text-primary,var(--text))}
+.confidence{color:var(--theme-text-secondary,var(--muted));font-size:10px}
+.alternatives{display:flex;gap:4px;flex-wrap:wrap}
+.alternative{
+  height:22px;
+  padding:0 8px;
+  border:.5px solid var(--theme-border-strong,var(--border));
+  border-radius:9999px;
+  background:var(--theme-surface-1,var(--bg-panel));
+  color:var(--theme-text-secondary,var(--muted));
+  font-size:11px;
+  cursor:pointer;
+}
+.alternative:hover{color:var(--theme-text-primary,var(--text));background:var(--bg-hover)}
+.actions{display:inline-flex;gap:2px;margin-left:auto}
+.accept,.dismiss{
+  width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;
+  border:0;border-radius:6px;background:transparent;cursor:pointer;color:var(--theme-text-secondary,var(--muted));
+}
+.accept:hover{color:var(--success, #3dd68c);background:var(--bg-hover)}
+.dismiss:hover{color:var(--danger, #f7615f);background:var(--bg-hover)}

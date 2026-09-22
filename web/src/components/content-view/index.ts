@@ -31,3 +31,9 @@ export type { ContentViewSubheaderProps } from './content-view-subheader'
 
 export { ToolbarButtonsNavigation } from './toolbar-buttons-navigation'
 export type { ToolbarButtonsNavigationProps } from './toolbar-buttons-navigation'
+
+export { ContentViewHeaderFilterButton } from './content-view-header-filter-button'
+export type { ContentViewHeaderFilterButtonProps } from './content-view-header-filter-button'
+
+export { ContentViewHeaderFilterPanel } from './content-view-header-filter-panel'
+export type { ContentViewHeaderFilterPanelProps } from './content-view-header-filter-panel'

@@ -84,3 +84,11 @@ export {
   workflowDefinitionFilterBlocks,
   baseFilterBlocks,
 }
+
+export {
+  flattenGroupedIssueFilterBlocks,
+  getGroupedIssueFilterBlocks,
+  groupedIssueFilterBlocks,
+  type GroupedIssueFilterBlocksOptions,
+  type IssueFilterBlockGroup,
+} from './grouped-issue-filter-blocks'
