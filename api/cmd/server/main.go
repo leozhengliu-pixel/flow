@@ -4762,6 +4762,30 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		return nil, fmt.Errorf("%w: team is retired", errInvalid)
 	}
 	changes := map[string]string{}
+	if input.TeamID != nil && *input.TeamID != issue.Team.ID {
+		teamIndex := slices.IndexFunc(data.Teams, func(team domain.Team) bool { return team.ID == *input.TeamID })
+		if teamIndex < 0 {
+			return nil, fmt.Errorf("%w: unknown team", errInvalid)
+		}
+		nextTeam := data.Teams[teamIndex]
+		if nextTeam.RetiredAt != nil {
+			return nil, fmt.Errorf("%w: team is retired", errInvalid)
+		}
+		changes["teamBefore"] = issue.Team.ID
+		changes["team"] = nextTeam.ID
+		issue.Team = nextTeam
+		if mapped := stateForTeamByType(data, nextTeam.ID, issue.State.Type); mapped != nil && mapped.ID != issue.State.ID {
+			changes["stateBefore"] = issue.State.Name
+			changes["stateBeforeId"] = issue.State.ID
+			changes["state"] = mapped.Name
+			changes["stateId"] = mapped.ID
+			issue.State = *mapped
+		}
+		if issue.CycleID != nil {
+			issue.CycleID = nil
+			changes["cycle"] = ""
+		}
+	}
 	if input.Title != nil && strings.TrimSpace(*input.Title) != issue.Title {
 		changes["title"] = *input.Title
 		issue.Title = strings.TrimSpace(*input.Title)
