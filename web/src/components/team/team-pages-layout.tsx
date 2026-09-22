@@ -130,18 +130,15 @@ export function TeamPagesLayout({
     if (!team || blocked || typeof window === "undefined") return;
     // Progressive preload OK — warm common team surfaces after paint.
     const path = window.location.pathname;
-    const idle =
-      "requestIdleCallback" in window
-        ? window.requestIdleCallback.bind(window)
-        : (cb: () => void) => window.setTimeout(cb, 120);
-    const cancel =
-      "cancelIdleCallback" in window
-        ? window.cancelIdleCallback.bind(window)
-        : window.clearTimeout.bind(window);
-    const handle = idle(() => {
+    const run = () => {
       void preloadRoute(path).catch(() => undefined);
-    });
-    return () => cancel(handle as number);
+    };
+    if ("requestIdleCallback" in window && "cancelIdleCallback" in window) {
+      const handle = window.requestIdleCallback(run);
+      return () => window.cancelIdleCallback(handle);
+    }
+    const handle = window.setTimeout(run, 120);
+    return () => window.clearTimeout(handle);
   }, [team?.id, blocked]);
 
   return (
