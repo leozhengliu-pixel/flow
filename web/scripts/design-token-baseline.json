@@ -59,5 +59,7 @@
   "components/workspace-operations/workspace-operations.css": 21,
   "components/workspace/label-page-toolbar.css": 2,
   "components/workspace/organization-not-found.css": 14,
-  "components/workspace/workspace.css": 19
+  "components/workspace/workspace.css": 19,
+  "components/onboarding/onboarding-step-layout.css": 23,
+  "components/onboarding/welcome-onboarding.css": 5
 }

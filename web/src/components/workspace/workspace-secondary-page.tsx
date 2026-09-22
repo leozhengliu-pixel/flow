@@ -38,6 +38,7 @@ import type {
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { useI18n } from "@/i18n/i18n";
+import { MeetingPage } from "@/components/meetings/meeting-page";
 import { TriagePage } from "@/components/triage";
 import { IssueBoard } from "@/components/issue-explorer/issue-board";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
@@ -49,6 +50,7 @@ import "./workspace-secondary-page.css";
 export type WorkspaceSecondaryKind =
   | "diary"
   | "meeting"
+  | "meetings"
   | "automations"
   | "automation-new"
   | "automation-detail"
@@ -65,6 +67,7 @@ export type WorkspaceSecondaryKind =
 type Props = {
   data: BootstrapData;
   kind: WorkspaceSecondaryKind;
+  meetingId?: string;
   team?: Team;
   workflowId?: string;
   workflowRunId?: string;
@@ -81,7 +84,7 @@ type Props = {
 export function WorkspaceSecondaryPage(props: Props) {
   const { t } = useI18n();
   const { data, kind, team } = props;
-  const title = kind === "diary" ? t("Diary") : kind === "meeting" ? t("Meeting") :
+  const title = kind === "diary" ? t("Diary") : kind === "meeting" || kind === "meetings" ? t("Meetings") :
       kind.startsWith("automation") ? t("Automations") : kind === "team-board" ? t("Issues") :
       kind === "team-triage" ? t("Triage") : kind === "team-updates" || kind === "team-update" ? t("Updates") :
         kind === "team-resources" ? t("Resources") : kind === "team-links" ? t("Links") :
@@ -107,7 +110,9 @@ export function WorkspaceSecondaryPage(props: Props) {
         <div className="secondary-header-actions" aria-hidden="true" />
       </header>
       {kind === "diary" && <DiaryPage onNavigate={props.onNavigate} />}
-      {kind === "meeting" && <MeetingPage data={data} />}
+      {(kind === "meeting" || kind === "meetings") && (
+        <MeetingPage data={data} meetingId={props.meetingId} onNavigate={props.onNavigate} />
+      )}
       {(kind === "automations" || kind === "automation-new" || kind === "automation-detail" || kind === "automation-runs") && (
         <AutomationPage {...props} />
       )}
@@ -120,6 +125,7 @@ export function WorkspaceSecondaryPage(props: Props) {
   );
 }
 
+// Diary remains Shell-only honest when touched in this wave.
 function DiaryPage({ onNavigate: _onNavigate }: Pick<Props, "onNavigate">) {
   const { t } = useI18n();
   const today = new Date();
@@ -132,15 +138,6 @@ function DiaryPage({ onNavigate: _onNavigate }: Pick<Props, "onNavigate">) {
   </section>;
 }
 
-function MeetingPage({ data }: { data: BootstrapData }) {
-  const { t, formatDate } = useI18n();
-  const docs = data.documents.slice(0, 5);
-  return <section className="secondary-content meeting-content">
-    <div className="secondary-section-heading"><div><h2>{t("Meeting notes")}</h2><p>{t("Recent notes and decisions")}</p></div></div>
-    <div className="secondary-list" role="list">{docs.map(doc => <article className="secondary-list-row" role="listitem" key={doc.id}><div className="secondary-row-icon"><FileText size={16} /></div><div className="secondary-row-main"><strong>{doc.title}</strong><small>{formatDate(doc.updatedAt, { dateStyle: "medium" })}</small></div><ChevronRight size={15} /></article>)}</div>
-    {!docs.length && <EmptyState title={t("No meetings yet")} body={t("Create a meeting to start capturing notes.")} />}
-  </section>;
-}
 
 function AutomationPage({ data, kind, workflowId, workflowRunId, editing, onReload, onNavigate }: Props) {
   const { t, formatDate } = useI18n();
