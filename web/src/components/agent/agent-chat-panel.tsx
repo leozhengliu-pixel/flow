@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import { fetchAgentStatus, resolveAgentApproval } from '@/lib/api'
 import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
 import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus } from '@/types/flow'
@@ -7,23 +8,41 @@ import { useI18n } from '@/i18n/i18n'
 import { AgentPanel } from './agent-panel'
 import { EntityAgentThread, clearEntityThreadDraft } from './entity-agent-thread'
 import { conversationDraftKeyFor } from './agent-drafts'
+import { AgentToolbarActions, type AgentToolbarSessionSummary } from './agent-toolbar-actions'
+import { AgentSessionExternalUrlsButton } from './agent-session-external-urls-button'
+import { filteredExternalUrls } from './agent-session-external-urls'
+import {
+  setAgentPanelOpenState,
+  subscribeAgentSelectionContext,
+  type AgentSelectedTextAttachment,
+} from './add-selection-as-agent-context'
+import styles from './entity-agent-thread.module.css'
 
 export function AgentChatPanel({
   initialPrompt = '',
+  initialAttachments = [],
   initialSession,
   issues,
   onClose,
   onOpenFullPage,
   onSessionChange,
+  onNewChat,
   open,
+  openSessions = [],
+  onSelectSession,
 }: {
   initialPrompt?: string
+  initialAttachments?: AgentSelectedTextAttachment[]
   initialSession?: AgentSession
   issues: MyIssuesRowData[]
   onClose: () => void
   onOpenFullPage?: (session?: AgentSession) => void
   onSessionChange?: (session: AgentSession) => void
+  onNewChat?: () => void
   open: boolean
+  /** LS-0044 multi-session summaries for toolbar switcher. */
+  openSessions?: AgentToolbarSessionSummary[]
+  onSelectSession?: (sessionId: string) => void
 }) {
   const { t } = useI18n()
   const [messages, setMessages] = useState<AgentMessage[]>([])
@@ -36,8 +55,26 @@ export function AgentChatPanel({
   const [minimized, setMinimized] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
   const [approvalBusy, setApprovalBusy] = useState<string>()
+  const [attachments, setAttachments] = useState<AgentSelectedTextAttachment[]>(initialAttachments)
+  const [feedback, setFeedback] = useState<'up' | 'down'>()
   const abortRef = useRef<AbortController | undefined>(undefined)
   const draftKey = conversationDraftKeyFor(session?.id ?? `toolbar:${issues.map(issue => issue.id).join(',') || 'new'}`)
+
+  useEffect(() => {
+    setAgentPanelOpenState(open)
+    return () => setAgentPanelOpenState(false)
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    return subscribeAgentSelectionContext(detail => {
+      setAttachments(current => {
+        if (current.some(item => item.id === detail.attachment.id)) return current
+        return [...current, detail.attachment]
+      })
+      setMinimized(false)
+    })
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -68,6 +105,26 @@ export function AgentChatPanel({
     if (initialPrompt) setInput(initialPrompt)
   }, [initialPrompt])
 
+  useEffect(() => {
+    if (initialAttachments.length) {
+      setAttachments(current => {
+        const ids = new Set(current.map(item => item.id))
+        const merged = [...current]
+        for (const item of initialAttachments) {
+          if (!ids.has(item.id)) merged.push(item)
+        }
+        return merged
+      })
+    }
+  }, [initialAttachments])
+
+  const externalUrls = useMemo(() => {
+    const fromMessages = (session?.messages ?? messages).flatMap(message =>
+      (message.content.match(/https?:\/\/[^\s)\]>'"]+/gi) ?? []).map(url => url.replace(/[.,;:]+$/, '')),
+    )
+    return filteredExternalUrls(fromMessages)
+  }, [session?.messages, messages])
+
   const close = () => {
     setMessages([])
     setSession(undefined)
@@ -79,8 +136,23 @@ export function AgentChatPanel({
     setMinimized(false)
     setFullscreen(false)
     setApprovalBusy(undefined)
+    setAttachments([])
+    setFeedback(undefined)
     clearEntityThreadDraft(draftKey)
     onClose()
+  }
+
+  const startNewChat = () => {
+    abortRef.current?.abort()
+    setMessages([])
+    setSession(undefined)
+    setInput('')
+    setStreamParts([])
+    setError(undefined)
+    setAttachments([])
+    setFeedback(undefined)
+    clearEntityThreadDraft(draftKey)
+    onNewChat?.()
   }
 
   const decideToolApproval = async (
@@ -99,13 +171,17 @@ export function AgentChatPanel({
   }
 
   const submit = async () => {
-    const message = input.trim()
+    const contextBlock = attachments.length
+      ? attachments.map(item => `Selected context:\n"""\n${item.text}\n"""`).join('\n\n') + '\n\n'
+      : ''
+    const message = `${contextBlock}${input.trim()}`.trim()
     if (!message || loading || !status?.enabled) return
     setMessages(current => [
       ...current,
       { id: `pending-${Date.now()}`, role: 'user', content: message, createdAt: new Date().toISOString() },
     ])
     setInput('')
+    setAttachments([])
     setError(undefined)
     setLoading(true)
     setStreamParts([])
@@ -183,38 +259,69 @@ export function AgentChatPanel({
     }
   }
 
+  const contextChips =
+    attachments.length > 0 ? (
+      <>
+        {attachments.map(item => (
+          <span data-attachment-id={item.id} key={item.id}>
+            <small>{t('Selection')}</small>
+            <b>{item.text.slice(0, 80)}{item.text.length > 80 ? '…' : ''}</b>
+            <button
+              aria-label={t('Remove selection context')}
+              onClick={() => setAttachments(current => current.filter(entry => entry.id !== item.id))}
+              type="button"
+            >
+              <X size={12} />
+            </button>
+          </span>
+        ))}
+      </>
+    ) : null
+
   return (
     <AgentPanel
       fullscreen={fullscreen}
+      headerExtra={
+        <>
+          <AgentSessionExternalUrlsButton urls={externalUrls} />
+          <AgentToolbarActions
+            activeSessionId={session?.id}
+            onFeedback={value => setFeedback(value)}
+            onSelectSession={onSelectSession}
+            sessions={openSessions}
+          />
+          {feedback && <span className={styles.srFeedback} data-feedback={feedback} />}
+        </>
+      }
       minimized={minimized}
       onFullscreenChange={setFullscreen}
       onMinimizedChange={setMinimized}
-      onOpenFullPage={
-        onOpenFullPage
-          ? () => onOpenFullPage(session)
-          : undefined
-      }
+      onNewChat={startNewChat}
+      onOpenFullPage={onOpenFullPage ? () => onOpenFullPage(session) : undefined}
       onRequestClose={close}
       open={open}
       title={session?.title ?? t('New chat')}
       variant="floating"
     >
-      <EntityAgentThread
-        approvalBusy={approvalBusy}
-        contextIssues={issues}
-        conversationDraftKey={draftKey}
-        emptyLabel={t('Ask Flow about the selected issues')}
-        enabled={Boolean(status?.enabled)}
-        error={error}
-        input={input}
-        loading={loading}
-        messages={messages}
-        onInputChange={setInput}
-        onStop={() => abortRef.current?.abort()}
-        onSubmit={() => void submit()}
-        onToolApproval={(call, decision) => void decideToolApproval(call, decision)}
-        streamParts={streamParts}
-      />
+      <div data-agent-panel-popover>
+        <EntityAgentThread
+          approvalBusy={approvalBusy}
+          contextChips={contextChips}
+          contextIssues={issues}
+          conversationDraftKey={draftKey}
+          emptyLabel={t('Ask Flow about the selected issues')}
+          enabled={Boolean(status?.enabled)}
+          error={error}
+          input={input}
+          loading={loading}
+          messages={messages}
+          onInputChange={setInput}
+          onStop={() => abortRef.current?.abort()}
+          onSubmit={() => void submit()}
+          onToolApproval={(call, decision) => void decideToolApproval(call, decision)}
+          streamParts={streamParts}
+        />
+      </div>
     </AgentPanel>
   )
 }

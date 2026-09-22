@@ -169,6 +169,8 @@ import type {
 } from "@/components/projects-page/projects-page";
 import type { NewProjectDraft } from "@/components/projects-page/new-project-dialog";
 import { WorkspaceOnboarding, WelcomeOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, AuthTokenPage, AuthErrorPage, AuthGoogleCallbackPage, MobileAuthPage, InviteLinkAccept, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, DocumentsIndexPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
+import { listOpenToolbarSessions } from "@/components/agent/agent-toolbar-actions";
+import { AGENT_PANEL_OPEN_EVENT } from "@/components/agent/add-selection-as-agent-context";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
 import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-list";
 import { useLocation } from "react-router-dom";
@@ -309,6 +311,20 @@ function App() {
   const [closedAgentSessionIds, setClosedAgentSessionIds] = useState<
     Set<string>
   >(new Set());
+  const [activeToolbarSessionId, setActiveToolbarSessionId] = useState<string>();
+  const [toolbarDraftNew, setToolbarDraftNew] = useState(false);
+  const [pendingToolbarPrompt, setPendingToolbarPrompt] = useState<string>();
+  useEffect(() => {
+    const onOpen = (event: Event) => {
+      const detail = (event as CustomEvent<{ initialPrompt?: string; attachment?: { text: string }; issueId?: string }>).detail;
+      setToolbarDraftNew(true);
+      setActiveToolbarSessionId(undefined);
+      setPendingToolbarPrompt(detail?.attachment?.text ?? detail?.initialPrompt);
+    };
+    window.addEventListener(AGENT_PANEL_OPEN_EVENT, onOpen as EventListener);
+    return () => window.removeEventListener(AGENT_PANEL_OPEN_EVENT, onOpen as EventListener);
+  }, []);
+
   const [selected, setSelected] = useState(new Set<string>()),
     [commandOpen, setCommandOpen] = useState(false),
     [createOpen, setCreateOpen] = useState(false),
@@ -4247,10 +4263,14 @@ function App() {
     "customer-requests",
   );
   const asksEnabled = workspaceFeatureEnabled(featureFlags, "asks");
-  const toolbarAgentSession = data.agentSessions?.find(
-    (item) =>
-      item.location === "toolbar" && !closedAgentSessionIds.has(item.id),
+  const openToolbarSessions = listOpenToolbarSessions(
+    data.agentSessions,
+    closedAgentSessionIds,
   );
+  const toolbarAgentSession = toolbarDraftNew
+    ? undefined
+    : openToolbarSessions.find((item) => item.id === activeToolbarSessionId) ??
+      openToolbarSessions[0];
   const toolbarAgentIssues = toolbarAgentSession
     ? toolbarAgentSession.issueIds
         .map((id) => data.issues.find((issue) => issue.id === id))
@@ -6280,28 +6300,52 @@ function App() {
         )}
       </Suspense>
       {data.resourceDetailsOmitted && ['project-detail','document-detail'].includes(page) && <main className="main-panel" aria-busy="true"><div role="status">Loading…</div></main>}
-      {toolbarAgentSession && (
+      {(toolbarAgentSession || toolbarDraftNew) && (
         <AgentChatPanel
+          initialPrompt={toolbarDraftNew ? pendingToolbarPrompt : undefined}
           initialSession={toolbarAgentSession}
           issues={toolbarAgentIssues}
           open
-          onClose={() =>
-            setClosedAgentSessionIds((current) =>
-              new Set(current).add(toolbarAgentSession.id),
-            )
-          }
-          onSessionChange={(next) =>
+          openSessions={openToolbarSessions.map((item) => ({
+            id: item.id,
+            title: item.title,
+          }))}
+          onSelectSession={(sessionId) => {
+            setToolbarDraftNew(false);
+            setActiveToolbarSessionId(sessionId);
+          }}
+          onNewChat={() => {
+            setToolbarDraftNew(true);
+            setActiveToolbarSessionId(undefined);
+            setPendingToolbarPrompt(undefined);
+          }}
+          onClose={() => {
+            if (toolbarAgentSession) {
+              setClosedAgentSessionIds((current) =>
+                new Set(current).add(toolbarAgentSession.id),
+              );
+            }
+            setToolbarDraftNew(false);
+            setActiveToolbarSessionId(undefined);
+            setPendingToolbarPrompt(undefined);
+          }}
+          onSessionChange={(next) => {
+            setToolbarDraftNew(false);
+            setActiveToolbarSessionId(next.id);
+            setPendingToolbarPrompt(undefined);
             setData((current) =>
               current
                 ? {
                     ...current,
-                    agentSessions: current.agentSessions.map((item) =>
-                      item.id === next.id ? next : item,
-                    ),
+                    agentSessions: current.agentSessions.some((item) => item.id === next.id)
+                      ? current.agentSessions.map((item) =>
+                          item.id === next.id ? next : item,
+                        )
+                      : [next, ...current.agentSessions],
                   }
                 : current,
-            )
-          }
+            );
+          }}
           onOpenFullPage={(session) => {
             if (!session) {
               navigateTo(agentPath(data.workspace.urlKey));
