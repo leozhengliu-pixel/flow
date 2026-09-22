@@ -78,7 +78,7 @@ export function JiraSettingsPage({
   const saveAndAuthorize = async () => {
     setBusy(true);
     try {
-      const config =
+      const config: Record<string, string> =
         mode === "cloud"
           ? { mode: "cloud" }
           : {
@@ -111,7 +111,7 @@ export function JiraSettingsPage({
   const saveConfigOnly = async () => {
     setBusy(true);
     try {
-      const config =
+      const config: Record<string, string> =
         mode === "cloud"
           ? { mode: "cloud" }
           : {
