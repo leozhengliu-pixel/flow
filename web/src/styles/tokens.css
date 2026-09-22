@@ -563,6 +563,8 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 --theme-surface-3:var(--theme-surface-2);
 --shadow-floating:var(--shadow-dialog);
 --theme-border-subtle:var(--theme-border);
+--theme-border-translucent:var(--theme-border);
+--theme-bg-secondary:var(--theme-surface-0);
 --timeline-resize-start:var(--accent-primary);
 --timeline-resize-end:var(--accent-primary);
 }
