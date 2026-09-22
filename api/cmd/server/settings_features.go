@@ -1192,8 +1192,8 @@ func (s *server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 		if strings.EqualFold(data.ViewerRole, "guest") {
 			return "", fmt.Errorf("%w: guest users cannot create personal API keys", store.ErrAuthForbidden)
 		}
-		if data.WorkspaceSettings.APIKeyPermission == "admins" && !workspaceAdminRole(data.ViewerRole) {
-			return "", fmt.Errorf("%w: API key creation is limited to admins", store.ErrAuthForbidden)
+		if !roleSatisfiesWorkspacePermission(data.ViewerRole, data.WorkspaceSettings.APIKeyPermission) {
+			return "", fmt.Errorf("%w: API key creation is limited by workspace security policy", store.ErrAuthForbidden)
 		}
 		for _, existing := range data.APIKeys {
 			if existing.RevokedAt == nil && existing.CreatorID == actor.ID && strings.EqualFold(strings.TrimSpace(existing.Name), input.Name) {

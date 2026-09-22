@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { NotificationChannelSettings } from './notification-channel-settings';
 import { ApplicationPolicySettings } from './application-policy-settings';
 import { toCredentialCreationOptions, serializeCreationCredential } from '@/lib/webauthn';
+import { roleSatisfiesSecurityPermission } from '@/lib/security-setting'
 import { ReviewCode } from '@/components/reviews/review-code';
 import { NavLink } from "react-router-dom";
 
@@ -1638,11 +1639,10 @@ function SecurityOverview({
   const apiKeys = (data.apiKeys ?? []).filter(
     (item) => item.creatorId === data.viewer.id && !item.revokedAt,
   );
-  const isWorkspaceAdmin =
-    data.viewerRole === "admin" || data.viewerRole === "owner";
-  const canCreateAPIKey =
-    data.viewerRole !== "guest" &&
-    (data.workspaceSettings?.apiKeyPermission !== "admins" || isWorkspaceAdmin);
+  const canCreateAPIKey = roleSatisfiesSecurityPermission(
+    data.viewerRole,
+    data.workspaceSettings?.apiKeyPermission ?? "members",
+  );
   const apiKeyCreateDisabledReason =
     data.viewerRole === "guest"
       ? p("Guest users cannot create personal API keys")

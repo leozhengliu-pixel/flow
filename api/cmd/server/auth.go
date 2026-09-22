@@ -371,7 +371,7 @@ func publicAuthPath(path string) bool {
 	if path == "/api/connector-oauth/callback" || path == "/api/connector-oauth/client-metadata" || path == "/mcp" || path == "/mcp/readonly" || path == "/oauth/register" || path == "/oauth/token" || path == "/oauth/revoke" || strings.HasPrefix(path, "/.well-known/oauth-") || strings.HasPrefix(path, "/api/mcp/uploads/") {
 		return true
 	}
-	return path == "/api/health" || path == "/api/oauth/token" || path == "/api/auth/register" || path == "/api/auth/verify-email" || path == "/api/auth/resend-verification" || path == "/api/auth/login" || path == "/api/auth/logout" || path == "/api/auth/session" || path == "/api/auth/forgot-password" || path == "/api/auth/reset-password" || path == "/api/auth/providers" || path == "/api/auth/discovery" || strings.HasPrefix(path, "/api/auth/enterprise/") || strings.HasPrefix(path, "/api/auth/google/") || strings.HasPrefix(path, "/api/auth/oidc/") || strings.HasPrefix(path, "/api/auth/saml/") || strings.HasPrefix(path, "/api/invitations/preview/") || strings.HasPrefix(path, "/api/invite-links/preview/") || strings.HasPrefix(path, "/api/calendar/cycles/") || strings.HasPrefix(path, "/api/email-intake/") || strings.HasPrefix(path, "/api/integrations/") && (strings.HasSuffix(path, "/webhook") || strings.HasSuffix(path, "/oauth/callback")) || strings.HasPrefix(path, "/api/shared/views/") || strings.HasPrefix(path, "/api/shared/dashboards/") || strings.HasPrefix(path, "/api/shared/issues/")
+return path == "/api/health" || path == "/api/oauth/token" || path == "/api/auth/register" || path == "/api/auth/verify-email" || path == "/api/auth/resend-verification" || path == "/api/auth/login" || path == "/api/auth/logout" || path == "/api/auth/session" || path == "/api/auth/forgot-password" || path == "/api/auth/reset-password" || path == "/api/auth/providers" || path == "/api/auth/discovery" || strings.HasPrefix(path, "/api/auth/enterprise/") || strings.HasPrefix(path, "/api/auth/google/") || strings.HasPrefix(path, "/api/auth/oidc/") || strings.HasPrefix(path, "/api/auth/saml/") || strings.HasPrefix(path, "/api/invitations/preview/") || strings.HasPrefix(path, "/api/invite-links/preview/") || strings.HasPrefix(path, "/api/calendar/cycles/") || strings.HasPrefix(path, "/api/email-intake/") || strings.HasPrefix(path, "/api/integrations/") && (strings.HasSuffix(path, "/webhook") || strings.HasSuffix(path, "/oauth/callback")) || strings.HasPrefix(path, "/api/shared/views/") || strings.HasPrefix(path, "/api/shared/dashboards/") || strings.HasPrefix(path, "/api/shared/issues/") || path == "/api/auth/token-login" || path == "/api/auth/magic-link"
 }
 
 func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Request, user domain.User) bool {
@@ -620,9 +620,6 @@ func permissionForRequest(r *http.Request) string {
 }
 
 func workspacePermissionAllows(settings domain.WorkspaceSettings, permission, role string) bool {
-	if workspaceAdminRole(role) {
-		return true
-	}
 	if role == "guest" {
 		return false
 	}
@@ -650,8 +647,30 @@ func workspacePermissionAllows(settings domain.WorkspaceSettings, permission, ro
 		}
 	case "agentGuidance":
 		value = settings.AgentGuidancePermission
+		if value == "" {
+			value = "admins"
+		}
 	}
-	return value == "members" || value == "everyone"
+	return roleSatisfiesWorkspacePermission(role, value)
+}
+
+// roleSatisfiesWorkspacePermission implements the LS-0764 matrix:
+// members | owners_and_admins | owners | admins (+ legacy everyone / admins_only).
+func roleSatisfiesWorkspacePermission(role, value string) bool {
+	role = strings.ToLower(strings.TrimSpace(role))
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
+	case "members", "everyone", "user":
+		return role == "member" || role == "admin" || role == "owner"
+	case "owners_and_admins", "admins":
+		return role == "admin" || role == "owner"
+	case "owners":
+		return role == "owner"
+	case "admins_only":
+		return role == "admin"
+	default:
+		return role == "admin" || role == "owner"
+	}
 }
 
 func teamManagementRequest(r *http.Request) bool {
@@ -1587,6 +1606,54 @@ func (s *server) resetPassword(w http.ResponseWriter, r *http.Request) {
 	clearSessionCookie(w, r)
 	writeJSON(w, http.StatusOK, map[string]bool{"reset": true})
 }
+
+func (s *server) tokenLogin(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Email       string `json:"email"`
+		AuthToken   string `json:"authToken"`
+		Service     string `json:"service"`
+		InviteLink  string `json:"inviteLink"`
+		ForceReauth bool   `json:"forceReauth"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	_ = input.Service
+	_ = input.InviteLink
+	session, token, err := s.store.LoginWithAuthToken(r.Context(), input.Email, input.AuthToken, input.ForceReauth)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+	setSessionCookie(w, r, token, session.ExpiresAt)
+	writeJSON(w, http.StatusOK, session)
+}
+
+func (s *server) magicLink(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Email string `json:"email"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	token, err := s.store.RequestLoginToken(r.Context(), input.Email)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not create login link")
+		return
+	}
+	if token != "" && s.mailer != nil {
+		if err := s.mailer.sendMagicLink(input.Email, token); err != nil {
+			writeError(w, http.StatusBadGateway, "Could not send login email")
+			return
+		}
+	}
+	response := map[string]any{"sent": true}
+	if token != "" && devAuthTokens() {
+		response["loginToken"] = token
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
 
 func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 	data, ok := s.store.WorkspaceMetadata(r.PathValue("workspaceKey"))

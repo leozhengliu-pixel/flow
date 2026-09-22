@@ -42,7 +42,7 @@ type oidcClient struct {
 }
 
 type externalAuthState struct {
-	State, Nonce, Verifier, Provider string
+	State, Nonce, Verifier, Provider, ClientKey string
 }
 
 func newExternalAuth(ctx context.Context, authConfig config.AuthConfig, appURL string) (*externalAuth, error) {
@@ -167,7 +167,8 @@ func (s *server) startOIDC(w http.ResponseWriter, r *http.Request) {
 	state := randomURLToken(32)
 	nonce := randomURLToken(32)
 	verifier := randomURLToken(48)
-	encoded := encodeExternalState(externalAuthState{State: state, Nonce: nonce, Verifier: verifier, Provider: providerID})
+	clientKey := strings.TrimSpace(r.URL.Query().Get("client_key"))
+	encoded := encodeExternalState(externalAuthState{State: state, Nonce: nonce, Verifier: verifier, Provider: providerID, ClientKey: clientKey})
 	http.SetCookie(w, &http.Cookie{Name: externalAuthCookie, Value: encoded, Path: "/api/auth/", HttpOnly: true, Secure: secureCookie(r), SameSite: http.SameSiteLaxMode, MaxAge: 600})
 	challenge := sha256.Sum256([]byte(verifier))
 	redirect := s.externalAuth.providers[providerID].oauth.AuthCodeURL(state, oidc.Nonce(nonce), oauth2.SetAuthURLParam("code_challenge", base64.RawURLEncoding.EncodeToString(challenge[:])), oauth2.SetAuthURLParam("code_challenge_method", "S256"))
@@ -176,33 +177,37 @@ func (s *server) startOIDC(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) finishOIDC(w http.ResponseWriter, r *http.Request) {
 	providerID := r.PathValue("provider")
+	appURL := ""
+	if s.externalAuth != nil {
+		appURL = s.externalAuth.appURL
+	}
 	client := (*oidcClient)(nil)
 	if s.externalAuth != nil {
 		client = s.externalAuth.providers[providerID]
 	}
 	state, err := readExternalState(r)
 	if client == nil || err != nil || state.Provider != providerID || state.State != r.URL.Query().Get("state") {
-		writeError(w, http.StatusBadRequest, "invalid authentication state")
+		redirectAuthError(w, r, appURL, "invalid authentication state")
 		return
 	}
 	token, err := client.oauth.Exchange(r.Context(), r.URL.Query().Get("code"), oauth2.SetAuthURLParam("code_verifier", state.Verifier))
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "identity provider token exchange failed")
+		redirectAuthError(w, r, appURL, "identity provider token exchange failed")
 		return
 	}
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok {
-		writeError(w, http.StatusBadGateway, "identity provider did not return an ID token")
+		redirectAuthError(w, r, appURL, "identity provider did not return an ID token")
 		return
 	}
 	idToken, err := client.verifier.Verify(r.Context(), rawIDToken)
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, "invalid identity token")
+		redirectAuthError(w, r, appURL, "invalid identity token")
 		return
 	}
 	var claims map[string]any
 	if idToken.Claims(&claims) != nil {
-		writeError(w, http.StatusForbidden, "identity is not allowed")
+		redirectAuthError(w, r, appURL, "identity is not allowed")
 		return
 	}
 	nonce := stringClaim(claims, "nonce")
@@ -228,7 +233,7 @@ func (s *server) finishOIDC(w http.ResponseWriter, r *http.Request) {
 	}
 	picture := stringClaim(claims, "picture")
 	if subject == "" || nonce != state.Nonce || (email != "" && !allowedExternalEmail(email, s.externalAuth.config.AllowedDomains)) {
-		writeError(w, http.StatusForbidden, "identity is not allowed")
+		redirectAuthError(w, r, appURL, "identity is not allowed")
 		return
 	}
 	username := stringClaim(claims, "preferred_username")
@@ -242,7 +247,7 @@ func (s *server) finishOIDC(w http.ResponseWriter, r *http.Request) {
 	}
 	session, sessionToken, err := s.store.LoginExternalIdentity(r.Context(), providerID, issuer, subject, username, email, name, picture, string(claimsJSON), s.externalAuth.config.AutoProvision)
 	if err != nil {
-		writeError(w, http.StatusForbidden, "could not create Flow session")
+		redirectAuthError(w, r, appURL, "could not create Flow session")
 		return
 	}
 	if err:=s.store.SetSessionAuthentication(r.Context(),sessionToken,providerID,issuer,verifiedMFAClaim(claims));err!=nil {writeError(w,http.StatusInternalServerError,"could not save authentication context");return}
@@ -256,7 +261,7 @@ func (s *server) finishOIDC(w http.ResponseWriter, r *http.Request) {
 	}
 	clearExternalState(w, r)
 	setSessionCookie(w, r, sessionToken, session.ExpiresAt)
-	http.Redirect(w, r, s.externalAuth.appURL, http.StatusFound)
+	http.Redirect(w, r, oidcSuccessRedirect(s.externalAuth.appURL, state, r), http.StatusFound)
 }
 
 func externalOIDCRole(provider config.OIDCProvider, claims map[string]any) string {
@@ -364,8 +369,49 @@ func randomURLToken(size int) string {
 	return base64.RawURLEncoding.EncodeToString(buffer)
 }
 
+
+func redirectAuthError(w http.ResponseWriter, r *http.Request, appURL, message string) {
+	target := strings.TrimRight(appURL, "/") + "/auth/error?error=" + url.QueryEscape(message)
+	if prefersJSONAuthError(r) {
+		writeError(w, http.StatusBadRequest, message)
+		return
+	}
+	http.Redirect(w, r, target, http.StatusFound)
+}
+
+func prefersJSONAuthError(r *http.Request) bool {
+	accept := strings.ToLower(r.Header.Get("Accept"))
+	return strings.Contains(accept, "application/json") && !strings.Contains(accept, "text/html")
+}
+
+func oidcSuccessRedirect(appURL string, state externalAuthState, r *http.Request) string {
+	base := strings.TrimRight(appURL, "/")
+	target := base + "/auth/google/callback"
+	if state.Provider != "" && state.Provider != "google" {
+		target = base + "/auth/" + url.PathEscape(state.Provider) + "/callback"
+	}
+	query := url.Values{}
+	if state.ClientKey != "" {
+		query.Set("client_key", state.ClientKey)
+	}
+	if mobile := strings.TrimSpace(r.URL.Query().Get("isMobileAppLogin")); mobile != "" {
+		query.Set("isMobileAppLogin", mobile)
+	}
+	if redirectURI := strings.TrimSpace(r.URL.Query().Get("mobileRedirectUri")); redirectURI != "" {
+		query.Set("mobileRedirectUri", redirectURI)
+	}
+	if encoded := query.Encode(); encoded != "" {
+		return target + "?" + encoded
+	}
+	return target
+}
+
 func encodeExternalState(state externalAuthState) string {
-	return strings.Join([]string{state.Provider, state.State, state.Nonce, state.Verifier}, ".")
+	parts := []string{state.Provider, state.State, state.Nonce, state.Verifier}
+	if state.ClientKey != "" {
+		parts = append(parts, state.ClientKey)
+	}
+	return strings.Join(parts, ".")
 }
 
 func readExternalState(r *http.Request) (externalAuthState, error) {
@@ -374,10 +420,14 @@ func readExternalState(r *http.Request) (externalAuthState, error) {
 		return externalAuthState{}, err
 	}
 	parts := strings.Split(cookie.Value, ".")
-	if len(parts) != 4 {
+	if len(parts) != 4 && len(parts) != 5 {
 		return externalAuthState{}, errors.New("invalid state cookie")
 	}
-	return externalAuthState{Provider: parts[0], State: parts[1], Nonce: parts[2], Verifier: parts[3]}, nil
+	state := externalAuthState{Provider: parts[0], State: parts[1], Nonce: parts[2], Verifier: parts[3]}
+	if len(parts) == 5 {
+		state.ClientKey = parts[4]
+	}
+	return state, nil
 }
 
 func clearExternalState(w http.ResponseWriter, r *http.Request) {

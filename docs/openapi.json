@@ -1999,6 +1999,26 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/auth/magic-link": {
+      "post": {
+        "operationId": "post_auth_magic_link",
+        "tags": [
+          "auth"
+        ],
+        "summary": "POST /api/auth/magic-link",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/auth/providers": {
       "get": {
         "operationId": "get_auth_providers",
@@ -2166,6 +2186,26 @@
           "auth"
         ],
         "summary": "GET /api/auth/session",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/auth/token-login": {
+      "post": {
+        "operationId": "post_auth_token_login",
+        "tags": [
+          "auth"
+        ],
+        "summary": "POST /api/auth/token-login",
         "responses": {
           "default": {
             "description": "Flow API response. See the domain model documentation for resource fields.",

@@ -27,6 +27,22 @@ export const AuthPage = lazyPage(
   () => import("@/components/auth/auth-page"),
   "AuthPage",
 );
+export const AuthTokenPage = lazyPage(
+  () => import("@/components/auth/auth-token-page"),
+  "AuthTokenPage",
+);
+export const AuthErrorPage = lazyPage(
+  () => import("@/components/auth/auth-error-page"),
+  "AuthErrorPage",
+);
+export const AuthGoogleCallbackPage = lazyPage(
+  () => import("@/components/auth/auth-google-callback-page"),
+  "AuthGoogleCallbackPage",
+);
+export const MobileAuthPage = lazyPage(
+  () => import("@/components/auth/mobile-auth-page"),
+  "MobileAuthPage",
+);
 export const InviteLinkAccept = lazyPage(
   () => import("@/components/auth/invite-link-accept"),
   "InviteLinkAccept",

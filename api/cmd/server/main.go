@@ -220,6 +220,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/auth/session", s.authSession)
 	mux.Handle("POST /api/auth/forgot-password", s.requireEmailAuth(s.limitAuth("forgot-password", 5, 15*time.Minute, http.HandlerFunc(s.forgotPassword))))
 	mux.Handle("POST /api/auth/reset-password", s.requireEmailAuth(s.limitAuth("reset-password", 8, 15*time.Minute, http.HandlerFunc(s.resetPassword))))
+	mux.Handle("POST /api/auth/token-login", s.requireEmailAuth(s.limitAuth("token-login", 8, 15*time.Minute, http.HandlerFunc(s.tokenLogin))))
+	mux.Handle("POST /api/auth/magic-link", s.requireEmailAuth(s.limitAuth("magic-link", 5, 15*time.Minute, http.HandlerFunc(s.magicLink))))
 	mux.HandleFunc("GET /api/auth/providers", s.authProviders)
 	mux.HandleFunc("GET /api/auth/discovery", s.discoverWorkspaceSSO)
 	mux.HandleFunc("GET /api/auth/enterprise/{id}/start", s.startEnterpriseOIDC)
