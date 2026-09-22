@@ -14,6 +14,9 @@
  * Preferences UI calls {@link applyTheme} (authoritative write-through).
  * Bootstrap / OAuth call {@link applyAccountTheme} which reconciles (2) vs (1).
  */
+import { applyGeneratedTheme, clearGeneratedTheme } from "./theme/theme-apply";
+import { resolveThemeVariant, themeFromSettings } from "./theme/theme-variants";
+
 export type ResolvedTheme = "light" | "dark";
 
 export interface ThemeSettings {
@@ -70,8 +73,7 @@ function resolveTheme(settings: ThemeSettings): ResolvedTheme {
 }
 
 function resolveVariant(settings: ThemeSettings, theme: ResolvedTheme) {
-  const selected = theme === "light" ? settings.lightTheme : settings.darkTheme;
-  return (selected || theme).toLowerCase().replaceAll(" ", "-");
+  return resolveThemeVariant(theme, settings.lightTheme, settings.darkTheme).variant;
 }
 
 function syncRoot(settings: ThemeSettings) {
@@ -81,6 +83,13 @@ function syncRoot(settings: ThemeSettings) {
   root.dataset.themePreference = normalizePreference(settings.interfaceTheme);
   root.dataset.themeVariant = resolveVariant(settings, theme);
   root.style.colorScheme = theme;
+  try {
+    const generated = themeFromSettings(theme, settings.lightTheme, settings.darkTheme);
+    applyGeneratedTheme(generated, root);
+  } catch {
+    // Fall back to static tokens.css if generation fails.
+    clearGeneratedTheme(root);
+  }
   window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT, { detail: theme }));
 }
 
