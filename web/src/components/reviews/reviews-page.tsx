@@ -108,13 +108,6 @@ export function ReviewsPage({
     <main
       className={`flow-framed-workspace reviews-workspace ${review ? "has-detail" : ""} ${fullWindow ? "is-full-window" : ""}`}
     >
-      <div className="reviews-foundation-banner" role="status">
-        <span>
-          {t(
-            "Reviews remains Shell-only: DiffComputer and background prefetch are foundation-only. Full product needs code access and live repository content.",
-          )}
-        </span>
-      </div>
       {!fullWindow && (
         <section className="reviews-list-pane">
           <header className="reviews-topbar">
