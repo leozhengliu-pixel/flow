@@ -93,3 +93,33 @@ export {
   WorkflowDefinitionUniversalCustomFilterPanelShouldBeLazyLoaded,
   type UniversalCustomFilterPanelShouldBeLazyLoadedProps,
 } from './universal-custom-filter-panel-lazy'
+
+
+export * from './block-utils'
+
+export {
+  readFilterFromSearch,
+  encodeFilterForSearch,
+  prioritySlaQuickFilterTransformer,
+  getViewFilters,
+  getStaticViewFilters,
+  type ViewFilterKind,
+  type ViewFilterTransformer,
+  type ViewFiltersOptions,
+  type ViewFilterStore,
+  type ViewFilters,
+} from './get-view-filters'
+
+export {
+  useViewFilters,
+  type UseViewFiltersArgs,
+  type UseViewFiltersResult,
+} from './use-view-filters'
+
+export {
+  getGroupedIssueFilterBlocks,
+  flattenGroupedIssueFilterBlocks,
+  groupedIssueFilterBlocks,
+  type IssueFilterBlockGroup,
+  type GroupedIssueFilterBlocksOptions,
+} from './filter-blocks/grouped-issue-filter-blocks'
