@@ -21,6 +21,7 @@ import { inboxActorOptions, inboxNotificationCategory, matchesInboxFilter as not
 import { InboxPage, type InboxPageAdapter } from './inbox-page'
 import type { InboxDisplayOptions, InboxTab } from './inbox-page-shell'
 import type { InboxNotificationKind, InboxNotificationRowData, InboxSnoozePreset } from './notification-row'
+import { PullRequestInboxView } from '@/components/reviews/pull-request-inbox-view'
 
 const initialDisplayOptions: InboxDisplayOptions = {
   ordering: 'newest',
@@ -335,7 +336,7 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
         }
       }
 
-      if (projection && review && !issue) return { content: <InboxReviewDetail review={review} onOpen={() => onOpenReview?.(review)} /> }
+      if (projection && review && !issue) return { content: <PullRequestInboxView data={data} review={review} onOpen={() => onOpenReview?.(review)} onReload={onReload} onAccessAction={() => onOpenSettings?.()} /> }
       // Reminder fallback still uses the compact reminder card when host classification did not claim the row.
       if (projection && project && !issue) return { content: <ProjectReminderDetail overdue={project.health==='noUpdate'} project={project} onOpen={() => onOpenProject?.(project)}/> }
       if (!projection || !issue) return { content: <InboxMissingIssue /> }
@@ -608,9 +609,6 @@ function InboxMissingIssue() {
   return <div className="flow-inbox-detail-state flow-inbox-detail-state--error" role="alert"><strong>Issue is no longer available</strong></div>
 }
 
-function InboxReviewDetail({ review, onOpen }: { review: CodeReview; onOpen: () => void }) {
-  return <div className="flow-inbox-review-detail"><header><span className={`flow-inbox-review-provider ${review.provider}`}>{review.provider === 'github' ? 'GH' : 'GL'}</span><div><small>{review.provider === 'github' ? 'GitHub pull request' : 'GitLab merge request'}</small><h2>{review.title}</h2></div></header><p>{review.author.displayName} · {review.repositoryName || 'External repository'} #{review.number}</p><dl><div><dt>Status</dt><dd>{review.status}</dd></div><div><dt>Reviewers</dt><dd>{review.reviewerIds.length || 'None'}</dd></div><div><dt>Checks</dt><dd>{review.checks.length ? review.checks.map(check => check.status).join(', ') : 'No checks reported'}</dd></div></dl><button type="button" onClick={onOpen}>Open review</button></div>
-}
 
 function ProjectReminderDetail({ project, onOpen, overdue }: { project: Project; onOpen: () => void; overdue: boolean }) {
   return <div className="flow-inbox-project-reminder"><header><span style={{ background: project.color }}/><div><small>Project update reminder</small><h2>{project.name}</h2></div></header><p>{overdue?'This project is missing its scheduled update.':'The next project update is due soon.'} Post an update to reset the cadence and notify subscribers.</p><dl><div><dt>Health</dt><dd>{overdue?'No update':project.health.replace(/([A-Z])/g,' $1')}</dd></div><div><dt>Status</dt><dd>{project.status.name}</dd></div>{project.targetDate&&<div><dt>Target date</dt><dd>{project.targetDate}</dd></div>}</dl><button type="button" onClick={onOpen}>Open project</button></div>

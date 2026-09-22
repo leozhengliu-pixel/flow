@@ -64,3 +64,20 @@ export const DEFAULT_REPOSITORY_ACCESS = {
 };
 
 export type RepositoryAccessSettings = typeof DEFAULT_REPOSITORY_ACCESS;
+
+
+/** Reviews chrome may render with partial GitHub ACL; diffs use stored patches. */
+export function canViewReviewsWithoutFullAcl(
+  data: Pick<BootstrapData, "integrationConnections">,
+): boolean {
+  return hasCodeHostConnection(data);
+}
+
+/** Repository is eligible for local patch DiffView even when org code access is incomplete. */
+export function canRenderStoredDiff(
+  data: Pick<BootstrapData, "integrationConnections">,
+  _repository?: { owner?: string; name?: string },
+): boolean {
+  // Do not block the whole PR on full GitHub ACL — stored ReviewFile.patch is enough.
+  return canViewReviewsWithoutFullAcl(data) || resolveCodeReviewAccess(data).reason === "granted";
+}
