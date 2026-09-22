@@ -73,10 +73,10 @@
   padding: 16px;
   border: 0;
   border-radius: 10px;
-  background: var(--theme-surface-2, var(--theme-control, #fff));
+  background: var(--theme-surface-2);
   box-shadow:
     0 0 0 0.5px var(--settings-card-outline, var(--theme-border, var(--border))),
-    var(--shadow, 0 1px 2px rgba(0, 0, 0, 0.06));
+    var(--shadow);
   color: var(--theme-text-primary, var(--text));
 }
 
@@ -101,7 +101,7 @@
   border: 0.5px solid var(--theme-border-strong, var(--border-strong, var(--border)));
   border-radius: 8px;
   outline: 0;
-  background: var(--theme-surface-2, var(--theme-control, #fff));
+  background: var(--theme-surface-2);
   color: var(--theme-text-primary, var(--text));
   font: 13px/19px var(--font);
   transition: border 0.15s, box-shadow 0.15s;
@@ -112,14 +112,14 @@
 }
 
 .webhook-edit-field > input:focus {
-  border-color: var(--focus-ring, #5e6ad2);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-ring, #5e6ad2) 25%, transparent);
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-ring) 25%, transparent);
 }
 
 .webhook-edit-error {
   display: block;
   margin-top: 2px;
-  color: var(--danger, #e5484d);
+  color: var(--danger);
   font-size: 12px;
 }
 
@@ -171,7 +171,7 @@
   height: 14px;
   flex: 0 0 14px;
   margin: 0;
-  accent-color: var(--accent-primary, #5e6ad2);
+  accent-color: var(--accent-primary);
 }
 
 .webhook-edit-check span {
@@ -280,19 +280,19 @@
 
 .webhook-edit-action.is-primary {
   border-color: transparent;
-  background: var(--accent-primary, #5e6ad2);
-  color: var(--on-accent, #fff);
-  box-shadow: var(--shadow, 0 1px 2px rgba(0, 0, 0, 0.08));
+  background: var(--accent-primary);
+  color: var(--on-accent);
+  box-shadow: var(--shadow);
 }
 
 .webhook-edit-action.is-primary:hover:not(:disabled) {
-  background: var(--accent-primary-hover, var(--accent-primary, #5e6ad2));
+  background: var(--accent-primary-hover, var(--accent-primary));
   filter: brightness(1.04);
 }
 
 .webhook-edit-action.is-danger {
-  border-color: var(--danger, #e5484d);
-  color: var(--danger, #e5484d);
+  border-color: var(--danger);
+  color: var(--danger);
   background: transparent;
 }
 
