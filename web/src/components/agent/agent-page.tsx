@@ -19,6 +19,7 @@ import {
 import {
   deleteAgentSession,
   fetchAgentStatus,
+  getAgentSession,
   resolveAgentApproval,
   updateAgentSession,
 } from "@/lib/api";
@@ -39,6 +40,10 @@ import styles from "./agent-page.module.css";
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
 import { applyAgentStreamEvent, markAgentSessionStopped } from './agent-stream-state'
 import { AgentElicitation } from './agent-elicitation';
+import {
+  asPersistedConversation,
+  useDeferredHydratedConversation,
+} from '@/hooks/use-deferred-hydrated-conversation';
 
 export function AgentPage({
   chatSlug,
@@ -93,7 +98,7 @@ export function AgentPage({
       active = false;
     };
   }, []);
-  const current = useMemo(
+  const currentSummary = useMemo(
     () =>
       chatSlug
         ? sessions.find(
@@ -102,6 +107,18 @@ export function AgentPage({
         : sessions.find((item) => item.id === activeStreamId),
     [activeStreamId, chatSlug, sessions],
   );
+  const deferredConversation = useMemo(() => {
+    if (!currentSummary) return currentSummary;
+    if ((currentSummary.messages?.length ?? 0) > 0) return currentSummary;
+    return asPersistedConversation(currentSummary, async (id) => {
+      const full = await getAgentSession(id);
+      setSessions((list) =>
+        list.map((item) => (item.id === full.id ? full : item)),
+      );
+      return full;
+    });
+  }, [currentSummary]);
+  const current = useDeferredHydratedConversation(deferredConversation) ?? undefined;
   useEffect(() => {
     if (chatSlug || current || !input.trim()) {
       if (!chatSlug && !current && !input.trim()) clearAgentDraft(agentDraftKey);
