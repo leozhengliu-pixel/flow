@@ -439,3 +439,259 @@
 .flow-inbox-host__health-dot.is-offTrack { color: var(--priority-urgent); }
 .flow-inbox-host__health-pill.is-noUpdate,
 .flow-inbox-host__health-dot.is-noUpdate { color: var(--status-neutral); }
+
+/* --- P2-C trust / chrome long-tail --- */
+
+.flow-inbox-host__swatch--oauth,
+.flow-inbox-host__swatch--automation,
+.flow-inbox-host__swatch--welcome {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-primary, var(--theme-text-primary));
+  background: color-mix(in srgb, var(--accent-primary) 18%, transparent);
+}
+
+.flow-inbox-host__swatch--logo {
+  object-fit: cover;
+}
+
+.flow-inbox-host__muted {
+  margin: 0;
+  color: var(--color-text-tertiary, var(--theme-text-secondary));
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.flow-inbox-host__error {
+  margin: 0;
+  color: var(--semantic-danger, var(--theme-text-primary));
+  font-size: 13px;
+}
+
+.flow-inbox-host__actions--bar {
+  justify-content: flex-start;
+  padding-top: 4px;
+}
+
+.flow-inbox-host__status-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-subtle, var(--theme-border));
+  background: color-mix(in srgb, var(--color-bg-secondary, transparent) 70%, transparent);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.flow-inbox-host__status-pill.is-approved,
+.flow-inbox-host__status-pill.is-succeeded {
+  border-color: color-mix(in srgb, var(--semantic-success) 40%, transparent);
+  color: var(--semantic-success);
+}
+
+.flow-inbox-host__status-pill.is-declined,
+.flow-inbox-host__status-pill.is-failed {
+  border-color: color-mix(in srgb, var(--semantic-danger, var(--accent-primary)) 40%, transparent);
+  color: var(--semantic-danger, var(--accent-primary));
+}
+
+.flow-inbox-host__status-pill.is-pending,
+.flow-inbox-host__status-pill.is-running {
+  border-color: color-mix(in srgb, var(--accent-primary) 35%, transparent);
+  color: var(--accent-primary);
+}
+
+.flow-inbox-host__other-requests {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border-subtle, var(--theme-border));
+}
+
+.flow-inbox-host__other-requests h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-tertiary, var(--theme-text-secondary));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.flow-inbox-host__other-requests ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.flow-inbox-host__request-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-subtle, var(--theme-border));
+  background: var(--color-bg-primary, transparent);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.flow-inbox-host__request-row span {
+  color: var(--color-text-tertiary, var(--theme-text-secondary));
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.flow-inbox-host__welcome-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border-subtle, var(--theme-border));
+  background: color-mix(in srgb, var(--color-bg-secondary, transparent) 80%, transparent);
+}
+
+.flow-inbox-host__welcome-body {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.flow-inbox-host__welcome-links h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-tertiary, var(--theme-text-secondary));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.flow-inbox-host__welcome-links ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.flow-inbox-host__welcome-links li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-subtle, var(--theme-border));
+}
+
+.flow-inbox-host__welcome-links strong {
+  font-size: 13px;
+}
+
+.flow-inbox-host__welcome-links span {
+  color: var(--color-text-secondary, var(--theme-text-secondary));
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.flow-inbox-host__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border-subtle, var(--theme-border));
+  background: transparent;
+  color: var(--color-text-secondary, var(--theme-text-secondary));
+  cursor: pointer;
+}
+
+.flow-inbox-host__icon-btn[aria-pressed='true'] {
+  color: var(--accent-primary);
+  border-color: color-mix(in srgb, var(--accent-primary) 40%, transparent);
+}
+
+.flow-inbox-action-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.flow-inbox-action-controls__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text-secondary, var(--theme-text-secondary));
+  cursor: pointer;
+}
+
+.flow-inbox-action-controls__button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-bg-secondary, transparent) 80%, transparent);
+  border-color: var(--color-border-subtle, var(--theme-border));
+}
+
+.flow-inbox-action-controls__button[aria-pressed='true'] {
+  color: var(--accent-primary);
+}
+
+.flow-inbox-action-controls__button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.flow-inbox-action-controls__menu {
+  min-width: 180px;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-subtle, var(--theme-border));
+  background: var(--color-bg-primary, var(--theme-surface-2));
+  box-shadow: var(--shadow-control, 0 8px 24px color-mix(in srgb, black 12%, transparent));
+  z-index: 40;
+}
+
+.flow-inbox-action-controls__menu-label {
+  padding: 4px 8px;
+  color: var(--color-text-tertiary, var(--theme-text-secondary));
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.flow-inbox-action-controls__menu-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+}
+
+.flow-inbox-action-controls__menu-item[data-highlighted] {
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+}
+
+.flow-project-notification-details {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}

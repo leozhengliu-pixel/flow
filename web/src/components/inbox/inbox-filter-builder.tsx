@@ -18,7 +18,7 @@ import {
   removeInboxFilter,
   toggleInboxFilterConditionValue,
   updateInboxFilterOperator,
-  INBOX_REVIEW_STATUS_OPTIONS,
+  INBOX_REVIEW_STATUS_OPTIONS, INBOX_SUBSCRIPTION_OPTIONS,
   INBOX_NOTIFICATION_TYPE_OPTIONS,
   type InboxFilterCondition,
   type InboxFilterOption,
@@ -51,7 +51,9 @@ export interface InboxFilterBuilderProps {
 
 const properties: Array<{ id: InboxFilterProperty; label: string }> = [
   { id: 'notificationType', label: 'Notification type' },
+  { id: 'subscription', label: 'Subscription' },
   { id: 'from', label: 'From' },
+  { id: 'team', label: 'Team' },
   { id: 'project', label: 'Project' },
   { id: 'initiative', label: 'Initiative' },
   { id: 'issuePriority', label: 'Issue priority' },
@@ -66,6 +68,7 @@ const operatorOptions: Array<{ id: InboxFilterOperator; label: string }> = [
 
 const standardOptions: InboxFilterOptions = {
   notificationType: INBOX_NOTIFICATION_TYPE_OPTIONS,
+  subscription: [...INBOX_SUBSCRIPTION_OPTIONS],
   issuePriority: [
     { id: '0', label: 'No priority', keywords: 'none', icon: <PriorityIcon priority={0} /> },
     { id: '1', label: 'Urgent', icon: <PriorityIcon priority={1} /> },
@@ -767,6 +770,8 @@ function filterValueNoun(property?: InboxFilterProperty) {
   if (property === 'issuePriority') return 'priorities'
   if (property === 'reviewStatus') return 'review statuses'
   if (property === 'notificationType') return 'notification types'
+  if (property === 'subscription') return 'subscriptions'
+  if (property === 'team') return 'teams'
   if (property === 'from') return 'people'
   if (property === 'project') return 'projects'
   if (property === 'initiative') return 'initiatives'
