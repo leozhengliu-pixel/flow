@@ -1,5 +1,5 @@
 import { Archive, ArchiveRestore, CircleDashed, FilePenLine, Menu, MoreHorizontal, Rocket, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import type { BootstrapData, Team, TrashEntry } from '@/types/flow'
 import { purgeTrashEntry, restoreTrashEntry, updateCycle, updateIssue, updateProject } from '@/lib/api'
@@ -9,6 +9,7 @@ import { MyIssuesFilterBar } from '@/components/my-issues/my-issues-filter-bar'
 import { toggleFilterOption, updateFilterOperator, updateFilterValues, type MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-types'
 import { applyExplorerFilters, explorerFilterOptions, explorerPropertyOptions, ISSUE_FILTER_LABELS } from '@/components/issue-explorer/issue-explorer-model'
 import { teamArchivePath, type TeamArchiveTab } from '@/lib/app-routes'
+import { useArchivedModelsLoader } from '@/hooks/use-archived-models-loader'
 import { FilterIcon } from '@/components/ui/view-action-icons'
 import './workspace-operations.css'
 
@@ -30,13 +31,35 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
   const[filterOpen,setFilterOpen]=useState(false)
   const[filters,setFilters]=useState<MyIssuesAppliedFilter[]>([])
   const tab=tabs.find(item=>item.id===tabId)??tabs[0]
-  const scopedArchivedIssues=useMemo(()=>data.issues.filter(item=>item.team.id===team.id&&item.archivedAt),[data.issues,team.id])
+  const archivedLoader = useArchivedModelsLoader({
+    teamId: team.id,
+    workspaceKey: data.workspace.urlKey,
+    autoLoadOnMount: tab.id === 'issues',
+    loadThreshold: 30,
+    modelsPerLoad: 50,
+  })
+  const scopedArchivedIssues = useMemo(
+    () => (tab.id === 'issues' ? archivedLoader.models : data.issues.filter(item => item.team.id === team.id && item.archivedAt)),
+    [archivedLoader.models, data.issues, tab.id, team.id],
+  )
   const issueOptions=useMemo(()=>explorerPropertyOptions(data,scopedArchivedIssues),[data,scopedArchivedIssues])
   const archivedIssues=tab.id==='issues'?applyExplorerFilters(scopedArchivedIssues,filters,data):[]
   const archivedProjects=tab.id==='projects'?data.projects.filter(item=>item.teamIds.includes(team.id)&&item.archivedAt):[]
   const archivedCycles=tab.id==='cycles'?data.cycles.filter(item=>item.teamId===team.id&&item.status==='completed'):[]
   const trash=tab.resource?data.trash.filter(item=>item.resourceType===tab.resource&&item.teamIds?.includes(team.id)):[]
-  const count=trash.length+archivedIssues.length+archivedProjects.length+archivedCycles.length
+  const count = trash.length + archivedIssues.length + archivedProjects.length + archivedCycles.length
+  const listRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (tab.id !== 'issues') return
+    const node = listRef.current
+    if (!node) return
+    const onScroll = () => {
+      const distance = node.scrollHeight - node.scrollTop - node.clientHeight
+      archivedLoader.loadMore(distance)
+    }
+    node.addEventListener('scroll', onScroll, { passive: true })
+    return () => node.removeEventListener('scroll', onScroll)
+  }, [archivedLoader.loadMore, tab.id])
 
   useEffect(()=>{setFilterOpen(false);setFilters([])},[tab.id])
 
@@ -51,7 +74,7 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
   return <main className="main-panel operations-page archive-page" aria-label={`${team.name} archive`}>
     <header className="operations-header operations-special-header archive-header">
       <button className="operations-mobile-menu" aria-label={t('Open sidebar')} data-sidebar-trigger onClick={onOpenSidebar}><Menu/></button>
-      <div className="operations-heading"><h2>{t(tab.title)}</h2><span className="archive-count">{count}</span></div>
+      <div className="operations-heading"><h2>{t(tab.title)}</h2><span className="archive-count">{tab.id==='issues' && archivedLoader.totalCount != null ? archivedLoader.totalCount : count}</span></div>
     </header>
     <div className="archive-toolbar">
       <nav className="archive-tabs" aria-label={t('Archive sections')}>{tabs.map(item=>{
@@ -68,13 +91,16 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
       />}
     </div>
     {tab.id==='issues'&&filters.length>0&&<div className="archive-applied-filters"><MyIssuesFilterBar filters={filters} filterOptions={filter=>explorerFilterOptions(filter.field,issueOptions)} onAdd={()=>setFilterOpen(true)} onClear={()=>setFilters([])} onOperatorChange={(id,operator)=>setFilters(current=>updateFilterOperator(current,id,operator))} onRemove={id=>setFilters(current=>current.filter(filter=>filter.id!==id))} onValuesChange={(id,options)=>setFilters(current=>updateFilterValues(current,id,options))}/></div>}
-    {count>0&&<div className="archive-list">
+    {count>0&&<div className="archive-list" ref={listRef}>
       {archivedIssues.map(item=><ArchiveRow icon={<CircleDashed/>} key={item.id} title={<span data-i18n-ignore>{item.identifier} {item.title}</span>} meta={<>{t('Issue')} · {t('archived')} {date(item.archivedAt!)}</>} onRestore={async()=>{await updateIssue(item.id,{archived:false});await onReload()}}/>)}
       {archivedProjects.map(item=><ArchiveRow icon={<Rocket/>} key={item.id} title={<span data-i18n-ignore>{item.name}</span>} meta={<>{t('Project')} · {t('archived')} {date(item.archivedAt!)}</>} onRestore={async()=>{await updateProject(item.id,{archived:false});await onReload()}}/>)}
       {archivedCycles.map(item=><ArchiveRow icon={<Archive/>} key={item.id} title={<span data-i18n-ignore>{item.name}</span>} meta={<>{t('Cycle')} · {t('ended')} {date(item.endsAt)}</>} onRestore={async()=>{await updateCycle(item.id,{status:'upcoming'});await onReload()}}/>)}
       {trash.map(item=><ArchiveRow icon={archiveIcon(item.resourceType)} key={item.id} title={<span data-i18n-ignore>{item.title}</span>} meta={<>{t(typeLabel(item.resourceType))} · {t('deleted by')} <span data-i18n-ignore>{item.deletedBy.displayName}</span> · {date(item.deletedAt)}</>} onRestore={()=>restoreTrash(item)} onPurge={()=>purge(item)}/>)}
+      {tab.id==='issues' && archivedLoader.loading && <div className="archive-row archive-loading-row"><span/><span/><div><strong>{t('Loading…')}</strong></div></div>}
+      {tab.id==='issues' && archivedLoader.hasMore && !archivedLoader.loading && <div className="archive-row"><span/><span/><div><button type="button" className="ui-pill" onClick={()=>archivedLoader.loadMore(0)}>{t('Load more')}</button></div></div>}
     </div>}
-    {!count&&<div className="archive-empty"><ArchiveEmptyIllustration/><strong>{t(tab.empty)}</strong></div>}
+    {!count&&!(tab.id==='issues'&&archivedLoader.loading)&&<div className="archive-empty"><ArchiveEmptyIllustration/><strong>{t(tab.empty)}</strong></div>}
+    {tab.id==='issues'&&!count&&archivedLoader.loading&&<div className="archive-empty"><strong>{t('Loading…')}</strong></div>}
   </main>
 }
 

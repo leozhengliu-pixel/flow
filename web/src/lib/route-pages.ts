@@ -3,6 +3,10 @@ export const WorkspaceOnboarding = lazyPage(
   () => import("@/components/workspace/workspace-onboarding"),
   "WorkspaceOnboarding",
 );
+export const WelcomeOnboarding = lazyPage(
+  () => import("@/components/onboarding/welcome-onboarding"),
+  "WelcomeOnboarding",
+);
 export const WorkspaceDirectoryPage = lazyPage(
   () => import("@/components/workspace-directory/workspace-directory-page"),
   "WorkspaceDirectoryPage",
