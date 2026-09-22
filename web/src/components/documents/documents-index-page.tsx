@@ -8,6 +8,7 @@ import { documentPath } from '@/lib/app-routes'
 import { SelectControl } from '@/components/ui/select-control'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { DocumentGlyph } from '@/components/documents/document-icon'
+import { isDiaryDocument } from '@/components/diary/diary-model'
 import { TeamIcon } from '@/components/issue/issue-icons'
 import {
   documentDatePresets,
@@ -71,6 +72,7 @@ export function DocumentsIndexPage({ data, onOpen, onNavigate, onReload, search 
   }
 
   const documents = useMemo(() => data.documents.filter(document => {
+    if (isDiaryDocument(document)) return false
     if (!showArchived && document.archivedAt) return false
     if (showArchived && !document.archivedAt) return false
     if (teamId && !document.teamIds.includes(teamId)) return false
@@ -82,8 +84,9 @@ export function DocumentsIndexPage({ data, onOpen, onNavigate, onReload, search 
   const allVisibleSelected = documents.length > 0 && documents.every(document => selectedIds.has(document.id))
   const someVisibleSelected = documents.some(document => selectedIds.has(document.id))
 
-  const creatorOptions = useMemo(() => documentFilterCreatorOptions(data, data.documents), [data])
-  const projectOptions = useMemo(() => documentFilterProjectOptions(data, data.documents), [data])
+  const libraryDocuments = useMemo(() => data.documents.filter(document => !isDiaryDocument(document)), [data.documents])
+  const creatorOptions = useMemo(() => documentFilterCreatorOptions(data, libraryDocuments), [data, libraryDocuments])
+  const projectOptions = useMemo(() => documentFilterProjectOptions(data, libraryDocuments), [data, libraryDocuments])
 
   const add = async () => {
     if (creating) return
