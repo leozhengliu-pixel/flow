@@ -13,7 +13,7 @@ permissions:
   packages: write
 
 concurrency:
-  group: container-${{ github.workflow }}-${{ github.ref }}
+  group: container-${{ github.workflow }}-${{ github.ref }}-${{ github.run_id }}
   cancel-in-progress: false
 
 env:
