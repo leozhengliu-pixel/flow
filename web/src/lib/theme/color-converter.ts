@@ -462,7 +462,7 @@ function initColorConverter() {
 }
 initColorConverter();
 
-export const colorConverter = a;
+export const colorConverter = a!;
 
 /** Clamp helper used by theme generation (same as Linear ColorConverter `r` export). */
 export function clampChannel(value: number, min: number, max: number): number {
