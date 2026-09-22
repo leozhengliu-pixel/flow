@@ -168,11 +168,12 @@ import type {
   ProjectMutationInput,
 } from "@/components/projects-page/projects-page";
 import type { NewProjectDraft } from "@/components/projects-page/new-project-dialog";
-import { WorkspaceOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, AuthTokenPage, AuthErrorPage, AuthGoogleCallbackPage, MobileAuthPage, InviteLinkAccept, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, DocumentsIndexPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
+import { WorkspaceOnboarding, WelcomeOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, AuthTokenPage, AuthErrorPage, AuthGoogleCallbackPage, MobileAuthPage, InviteLinkAccept, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, DocumentsIndexPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
 import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-list";
 import { useLocation } from "react-router-dom";
 import { useRouteNavigation } from "@/hooks/use-route-navigation";
+import { applyDocumentTitle, routeInfo } from "@/lib/route-info";
 import {
   agentPath,
   apiKeyPath,
@@ -242,6 +243,7 @@ import {
   upcomingCyclePath,
   workspaceIssuesPath,
   workspaceOnboardingPath,
+  welcomePath,
   workspaceSavedViewPath,
   workspaceSavedViewEditPath,
   workspaceViewsNewPath,
@@ -355,6 +357,10 @@ function App() {
   const loadedWorkspaceKey = data?.workspace.urlKey;
   const projectListProjection = isProjectListRoute(route);
   const bootstrapProjection = projectListProjection ? 'project-list' : route.kind === 'issue' ? 'issue-detail' : undefined;
+  useEffect(() => {
+    const info = routeInfo(route, data);
+    applyDocumentTitle(info, data?.workspace.name);
+  }, [route, data]);
   useEffect(() => {
     if (!loadedWorkspaceKey) return;
     const warmDetails = () => {
@@ -3460,8 +3466,9 @@ function App() {
     const nextAccount = await fetchAccountBootstrap();
     setAccount(nextAccount);
     setData(created);
-    navigateTo(`/${encodeURIComponent(created.workspace.urlKey)}`, {
+    navigateTo(welcomePath(created.workspace.urlKey), {
       replace: true,
+      state: { onboardingStep: "profile" },
     });
     return created;
   };
@@ -4013,6 +4020,45 @@ function App() {
         />
       </Suspense>
     );
+  if (route.kind === "welcome") {
+    const workspace =
+      data?.workspace ||
+      account.workspaces.find(
+        (item) => item.workspace.urlKey === route.workspaceSlug,
+      )?.workspace;
+    const viewer = data?.viewer || account.viewer;
+    if (!workspace) {
+      return withStore(
+        <WorkspaceBootShell sidebarLabel="Loading welcome">
+          {error ? <ErrorState retry={loadAccount} /> : <SkeletonRows count={7} />}
+        </WorkspaceBootShell>
+      );
+    }
+    return withStore(
+      <Suspense
+        fallback={
+          <main className="main-panel">
+            <SkeletonRows count={7} />
+          </main>
+        }
+      >
+        <WelcomeOnboarding
+          account={account}
+          workspace={workspace}
+          viewer={viewer}
+          onNavigateState={(step) =>
+            navigateTo(welcomePath(workspace.urlKey), {
+              replace: false,
+              state: { onboardingStep: step },
+            })
+          }
+          onComplete={() =>
+            navigateTo(myIssuesPath(workspace.urlKey), { replace: true })
+          }
+        />
+      </Suspense>
+    );
+  }
   if (!data && !error && route.kind !== "issue" && (!previewIssue || previewIssue.isSummary)) return withStore(<AppStartup />);
   if (!data)
     return withStore(
@@ -4457,6 +4503,7 @@ function App() {
         {(
           route.kind === "diary" ||
           route.kind === "meeting" ||
+          route.kind === "meetings" ||
           route.kind === "automations" ||
           route.kind === "automation-new" ||
           route.kind === "automation-detail" ||
@@ -4479,6 +4526,7 @@ function App() {
                   ? "automation-runs"
                   : route.kind
             }
+            meetingId={route.kind === "meeting" ? route.meetingId : undefined}
             team={
               "teamKey" in route
                 ? data.teams.find(
@@ -6316,6 +6364,7 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
   if (
     route.kind === "diary" ||
     route.kind === "meeting" ||
+    route.kind === "meetings" ||
     route.kind === "automations" ||
     route.kind === "automation-new" ||
     route.kind === "automation-detail" ||

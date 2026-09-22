@@ -23,6 +23,7 @@ export type InboxRouteTab = "priority" | "other";
 export type WorkspaceSecondaryRouteKind =
   | "diary"
   | "meeting"
+  | "meetings"
   | "automations"
   | "automation-new"
   | "automation-detail"
@@ -108,6 +109,8 @@ export type AppRoute =
   | { kind: "inbox"; workspaceSlug: string; tab?: InboxRouteTab }
   | { kind: "search"; workspaceSlug: string }
   | { kind: "diary"; workspaceSlug: string }
+  | { kind: "welcome"; workspaceSlug: string }
+  | { kind: "meetings"; workspaceSlug: string }
   | { kind: "meeting"; workspaceSlug: string; meetingId: string }
   | { kind: "automations"; workspaceSlug: string }
   | { kind: "automation-new"; workspaceSlug: string }
@@ -395,6 +398,10 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     return { kind: "search", workspaceSlug };
   if (section === "diary" && segments.length === 2)
     return { kind: "diary", workspaceSlug };
+  if (section === "welcome" && segments.length === 2)
+    return { kind: "welcome", workspaceSlug };
+  if (section === "meetings" && segments.length === 2)
+    return { kind: "meetings", workspaceSlug };
   if (section === "meeting" && third && segments.length === 3)
     return { kind: "meeting", workspaceSlug, meetingId: third };
   if (section === "automations" && segments.length === 2)
@@ -1453,6 +1460,12 @@ export function searchPath(workspaceSlug: string) {
 }
 export function diaryPath(workspaceSlug: string) {
   return `${workspaceRootPath(workspaceSlug)}/diary`;
+}
+export function welcomePath(workspaceSlug: string) {
+  return `${workspaceRootPath(workspaceSlug)}/welcome`;
+}
+export function meetingsPath(workspaceSlug: string) {
+  return `${workspaceRootPath(workspaceSlug)}/meetings`;
 }
 export function meetingPath(workspaceSlug: string, meetingId: string) {
   return `${workspaceRootPath(workspaceSlug)}/meeting/${encode(meetingId)}`;
