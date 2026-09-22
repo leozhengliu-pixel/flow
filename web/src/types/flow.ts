@@ -1330,9 +1330,15 @@ export interface Webhook {
   teamIds: UUID[];
   enabled: boolean;
   creatorId: UUID;
+  /** Public prefix of the signing secret (never the full secret). */
+  secretPrefix?: string;
+  secretRevokedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
+
+/** Create/rotate responses may include the raw secret once (LS-0711). */
+export type WebhookSecretPayload = Webhook & { secret?: string };
 
 export interface AccountSessionInfo {
   id: string;
