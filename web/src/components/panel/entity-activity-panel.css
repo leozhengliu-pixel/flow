@@ -1,0 +1,100 @@
+.entity-activity-panel {
+  --eap-border: var(--theme-border-subtle, rgb(255 255 255 / 8%));
+  --eap-bg: var(--theme-surface-1, #1c1c1f);
+  --eap-text: var(--theme-text-primary, #f7f8f8);
+  --eap-muted: var(--theme-text-secondary, #8a8f98);
+  background: var(--eap-bg);
+  border-left: .5px solid var(--eap-border);
+  color: var(--eap-text);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 280px;
+  width: 100%;
+}
+
+.entity-activity-panel__header {
+  align-items: center;
+  border-bottom: .5px solid var(--eap-border);
+  display: flex;
+  gap: 8px;
+  height: 42px;
+  justify-content: space-between;
+  padding: 0 12px;
+}
+
+.entity-activity-panel__header strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.entity-activity-panel__back,
+.entity-activity-panel__agent-toggle,
+.entity-activity-panel__close {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--eap-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 12px;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+}
+
+.entity-activity-panel__back:hover,
+.entity-activity-panel__agent-toggle:hover,
+.entity-activity-panel__close:hover {
+  background: var(--theme-surface-hover, rgb(255 255 255 / 6%));
+  color: var(--eap-text);
+}
+
+.entity-activity-panel__actions {
+  align-items: center;
+  display: inline-flex;
+  gap: 2px;
+}
+
+.entity-activity-panel__body,
+.entity-activity-panel__agent {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.entity-activity-panel__empty,
+.entity-activity-panel__agent-empty {
+  align-items: center;
+  color: var(--eap-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: center;
+  min-height: 160px;
+  text-align: center;
+}
+
+.entity-activity-panel__empty p,
+.entity-activity-panel__agent-empty p {
+  font-size: 13px;
+  margin: 0;
+}
+
+.entity-activity-panel__selection {
+  background: var(--theme-surface-hover, rgb(255 255 255 / 6%));
+  border-radius: 6px;
+  color: var(--eap-muted);
+  font-size: 12px;
+  margin-bottom: 10px;
+  padding: 6px 8px;
+}
+
+:root[data-theme="light"] .entity-activity-panel {
+  --eap-border: var(--theme-border-subtle, rgb(0 0 0 / 8%));
+  --eap-bg: var(--theme-surface-1, #fff);
+  --eap-text: var(--theme-text-primary, #1a1a1a);
+  --eap-muted: var(--theme-text-secondary, #6b6f76);
+}
