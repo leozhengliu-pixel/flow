@@ -37,6 +37,7 @@ import { VirtualColumnList } from '@/components/ui/virtual-column-list';
 import { toast } from "sonner";
 import { toggleFavoriteFor } from "@/lib/favorites";
 import { addSubscription, inviteMembers, removeSubscription, setTeamMembership } from "@/lib/api";
+import { ContentViewHeaderSearch } from '@/components/content-view/content-view-header-search'
 import { useI18n } from "@/i18n/i18n";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -401,20 +402,14 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
   return (
     <>
       <div className="workspace-directory__toolbar workspace-members-toolbar">
-        <label>
-          <Search />
-          <input
-            aria-label={t("Find members")}
-            placeholder={t("Find members…")}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          {query ? (
-            <button type="button" aria-label={t("Clear search")} onClick={() => setQuery("")}>
-              <X />
-            </button>
-          ) : null}
-        </label>
+        <ContentViewHeaderSearch
+          alwaysVisible
+          aria-label={t("Find members")}
+          placeholder={t("Find members…")}
+          value={query}
+          onChange={setQuery}
+          className="workspace-members-cvh-search"
+        />
         <span />
         <DirectoryFilterMenu
           groups={filterGroups}
