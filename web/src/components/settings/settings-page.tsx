@@ -77,10 +77,8 @@ import {
   createAPIKey,
   createIdentityProvider,
   createOAuthApplication,
-  createWebhook,
   deleteIdentityProvider,
   deleteOAuthApplication,
-  deleteWebhook,
   disconnectIntegration,
   revokeAPIKey,
   revokeOAuthAuthorization,
@@ -143,7 +141,7 @@ import { createSettingsSearchIndex, searchTeams, SETTINGS_SEARCH_PAGES } from ".
 import "./settings.css";
 import "./workflow-settings.css";
 import "./advanced-settings.css";
-import { WebhookFailureEvents } from "./webhook-failure-events";
+import { WebhookEditPage } from "./webhook-edit-page";
 import { applyTheme } from "@/lib/theme";
 import { workspaceRegionLabel } from "@/components/workspace/workspace-regions";
 import { SidebarCustomization } from "@/components/layout/sidebar";
@@ -3220,6 +3218,16 @@ function ApiPage({
   const items = (data.apiKeys ?? []).filter(
     (item) => item.creatorId === data.viewer.id && !item.revokedAt,
   );
+  if (editingWebhook !== undefined) {
+    return (
+      <WebhookEditPage
+        data={data}
+        webhook={editingWebhook}
+        onClose={() => setEditingWebhook(undefined)}
+        onSaved={onReload}
+      />
+    );
+  }
   const submit = async () => {
     try {
       const result = await createAPIKey({ name, scopes, teamIds });
@@ -3486,14 +3494,6 @@ function ApiPage({
           onClose={() => setEditingOAuth(undefined)}
           onSaved={onReload}
         />
-      )}{" "}
-      {editingWebhook !== undefined && (
-        <WebhookEditor
-          data={data}
-          webhook={editingWebhook}
-          onClose={() => setEditingWebhook(undefined)}
-          onSaved={onReload}
-        />
       )}
     </>
   );
@@ -3602,149 +3602,6 @@ function ApplicationsPage({
         )}
       </Section>
     </>
-  );
-}
-function WebhookEditor({
-  data,
-  webhook,
-  onClose,
-  onSaved,
-}: {
-  data: BootstrapData;
-  webhook: Webhook | null;
-  onClose: () => void;
-  onSaved: () => Promise<void>;
-}) {
-  const [name, setName] = useState(webhook?.name ?? "");
-  const [url, setUrl] = useState(webhook?.url ?? "");
-  const [resourceTypes, setResourceTypes] = useState(
-    webhook?.resourceTypes ?? ["issues"],
-  );
-  const [teamIds, setTeamIds] = useState(webhook?.teamIds ?? []);
-  const resources = [
-    "issues",
-    "comments",
-    "projects",
-    "cycles",
-    "documents",
-    "customers",
-  ];
-  const save = async () => {
-    try {
-      const input = {
-        name: name.trim(),
-        url: url.trim(),
-        resourceTypes,
-        teamIds,
-        enabled: webhook?.enabled ?? true,
-      };
-      if (webhook) await updateWebhook(webhook.id, input);
-      else await createWebhook(input);
-      await onSaved();
-      onClose();
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not save webhook",
-      );
-    }
-  };
-  return (
-    <Dialog open onOpenChange={(value) => !value && onClose()}>
-      <DialogContent className="settings-invite-dialog settings-webhook-dialog">
-        <DialogTitle>
-          {webhook ? "Configure webhook" : "New webhook"}
-        </DialogTitle>
-        <label>
-          Name
-          <input
-            autoFocus
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </label>
-        <label>
-          Endpoint URL
-          <input
-            value={url}
-            onChange={(event) => setUrl(event.target.value)}
-            placeholder="https://example.com/webhooks/flow"
-          />
-        </label>
-        <fieldset className="settings-check-list">
-          <legend>Resources</legend>
-          {resources.map((resource) => (
-            <label key={resource}>
-              <input
-                type="checkbox"
-                checked={resourceTypes.includes(resource)}
-                onChange={(event) =>
-                  setResourceTypes((current) =>
-                    event.target.checked
-                      ? [...current, resource]
-                      : current.filter((item) => item !== resource),
-                  )
-                }
-              />
-              {title(resource)}
-            </label>
-          ))}
-        </fieldset>
-        <fieldset className="settings-check-list">
-          <legend>Teams</legend>
-          <label>
-            <input
-              type="checkbox"
-              checked={!teamIds.length}
-              onChange={() => setTeamIds([])}
-            />
-            All teams
-          </label>
-          {data.teams.map((team) => (
-            <label key={team.id}>
-              <input
-                type="checkbox"
-                checked={teamIds.includes(team.id)}
-                onChange={(event) =>
-                  setTeamIds((current) =>
-                    event.target.checked
-                      ? [...current, team.id]
-                      : current.filter((id) => id !== team.id),
-                  )
-                }
-              />
-              <ViewGlyph color={team.color} icon={team.icon || "Team"} />
-              <span data-i18n-ignore>{team.name}</span>
-            </label>
-          ))}
-        </fieldset>
-        {webhook && <WebhookFailureEvents webhookId={webhook.id} />}
-        <footer>
-          {webhook && (
-            <ActionButton
-              danger
-              onClick={() =>
-                void deleteWebhook(webhook.id).then(async () => {
-                  await onSaved();
-                  onClose();
-                })
-              }
-            >
-              Delete
-            </ActionButton>
-          )}
-          <ActionButton onClick={onClose}>Cancel</ActionButton>
-          <ActionButton
-            primary
-            disabled={
-              !name.trim() || !/^https?:\/\//.test(url) || !resourceTypes.length
-            }
-            onClick={() => void save()}
-          >
-            Save
-          </ActionButton>
-        </footer>
-      </DialogContent>
-    </Dialog>
   );
 }
 function OAuthEditor({
