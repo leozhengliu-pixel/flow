@@ -9,12 +9,14 @@ import type { Draft, User } from '@/types/flow'
 import type { Editor } from '@tiptap/react'
 import { usePeopleDirectory } from '@/components/property/people-context'
 import { MentionExtension } from '@/components/issue/editor/mention-extension'
+import { createMentionHydrationExtension } from '@/components/issue/editor/mention-hydration'
+import { EntityStoreContext } from '@/store'
 import { MentionMenu } from '@/components/issue/editor/mention-menu'
 import { personSearchText } from '@/lib/people'
 import { DescriptionImage, insertImageFiles } from '@/components/issue/editor/image-extension'
 import { DescriptionFile, DescriptionVideo, insertEmbedFiles } from '@/components/issue/editor/file-extension'
 import '@/components/issue/issue-description-editor.css'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { commentShortcutMatches } from '@/lib/runtime-preferences'
 import { handleEmoticonInput } from './emoticon-input'
 
@@ -34,9 +36,11 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
   onUploadRef.current = onUpload
   const [saving, setSaving] = useState(false), [error, setError] = useState(''), [empty, setEmpty] = useState(!commentSendable(initialBody, initialDocument)), [draftBody, setDraftBody] = useState(initialBody)
   const draftId = useRef(persistedDraft?.id ?? '')
+  const workspaceStore = useContext(EntityStoreContext)
+  const mentionHydration = createMentionHydrationExtension(() => workspaceStore)
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: [StarterKit.configure({ heading: false }), MentionExtension, DescriptionImage, DescriptionFile, DescriptionVideo, Placeholder.configure({ placeholder })],
+    extensions: [StarterKit.configure({ heading: false }), MentionExtension, mentionHydration, DescriptionImage, DescriptionFile, DescriptionVideo, Placeholder.configure({ placeholder })],
     content: initialDocument?.type === 'doc' ? initialDocument : initialBody || { type: 'doc', content: [{ type: 'paragraph' }] },
     editorProps: { handleTextInput: handleEmoticonInput, attributes: { class: 'comment-prosemirror', role: 'textbox', 'aria-label': placeholder, 'aria-multiline': 'true' }, handleKeyDown: (_view, event) => { const current=mentionRef.current;if(current&&!event.isComposing){const options=matching(current.query);if(event.key==='Escape'){setMention(undefined);mentionRef.current=undefined;return true}if(options.length&&(event.key==='ArrowDown'||event.key==='ArrowUp')){const next={...current,index:(current.index+(event.key==='ArrowDown'?1:-1)+options.length)%options.length};mentionRef.current=next;setMention(next);event.preventDefault();return true}if(options.length&&(event.key==='Enter'||event.key==='Tab')&&editor){event.preventDefault();insertMention(editor,options[current.index]??options[0]);return true}} if (!event.isComposing && commentShortcutMatches(event)) { event.preventDefault(); void submit(); return true } if (event.key === 'Escape' && onCancel) { event.preventDefault(); onCancel(); return true } return false } },
     onUpdate: ({editor}) => { const json = editor.getJSON() as Record<string, unknown>; draftDocument.current = json; const text = editor.getText({ blockSeparator: '\n' }); setEmpty(!commentSendable(text, json)); setDraftBody(text);updateMention(editor) },
