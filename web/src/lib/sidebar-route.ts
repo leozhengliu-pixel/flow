@@ -7,7 +7,7 @@ export function sidebarRoutePath(route: AppRoute): string | undefined {
     case 'inbox': return inboxPath(w)
     case 'reviews': case 'review': return reviewsPath(w)
     case 'my-issues': return myIssuesPath(w)
-    case 'pulse': return pulsePath(w)
+    case 'pulse': case 'summary-update': return pulsePath(w)
     case 'drafts': return draftsPath(w)
     case 'agent': return agentPath(w)
     case 'initiatives': case 'initiative': return initiativesPath(w)

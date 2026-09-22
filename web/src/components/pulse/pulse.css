@@ -83,3 +83,5 @@
 .pulse-welcome-banner__confirm:hover:not(:disabled){background:var(--accent-primary-hover)}
 .pulse-welcome-banner__confirm:disabled{opacity:.5;cursor:not-allowed}
 :root[data-theme="light"] .pulse-welcome-banner{background:var(--theme-surface-1);border-color:var(--theme-border)}
+
+.pulse-update-edited{color:var(--theme-text-tertiary);font-size:11px}

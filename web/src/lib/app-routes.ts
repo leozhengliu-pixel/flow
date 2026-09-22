@@ -135,6 +135,7 @@ export type AppRoute =
       view: PulseRouteView;
       viewId?: string;
     }
+  | { kind: "summary-update"; workspaceSlug: string; postId: string }
   | { kind: "my-issues"; workspaceSlug: string; view: MyIssuesRouteView }
   | { kind: "reviews"; workspaceSlug: string; view: "for-you" | "created" }
   | {
@@ -434,6 +435,8 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     segments.length === 4
   )
     return { kind: "pulse", workspaceSlug, view: "all", viewId: fourth };
+  if (section === "update" && third && segments.length === 3)
+    return { kind: "summary-update", workspaceSlug, postId: third };
   if (section === "my-issues" && !third)
     return { kind: "my-issues", workspaceSlug, view: "assigned" };
   if (
@@ -1523,6 +1526,10 @@ export function pulsePath(
   view: PulseRouteView = "following",
 ) {
   return `${workspaceRootPath(workspaceSlug)}/pulse/${view}`;
+}
+/** LS-0570 SummaryUpdatePage deep link. */
+export function summaryUpdatePath(workspaceSlug: string, postId: string) {
+  return `${workspaceRootPath(workspaceSlug)}/update/${encode(postId)}`;
 }
 export function pulseViewPath(workspaceSlug: string, viewId: string) {
   return `${workspaceRootPath(workspaceSlug)}/pulse/view/${encode(viewId)}`;

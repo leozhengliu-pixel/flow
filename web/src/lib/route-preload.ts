@@ -8,7 +8,7 @@ const routePages = {
   'workspace-onboarding': ['WorkspaceOnboarding'], inbox: ['InboxAppPage'], search: ['WorkspaceSearchPage'],
   diary: ['WorkspaceSecondaryPage'], welcome: ['WelcomeOnboarding'], meetings: ['WorkspaceSecondaryPage'], meeting: ['WorkspaceSecondaryPage'], automations: ['WorkspaceSecondaryPage'],
   'automation-new': ['WorkspaceSecondaryPage'], 'automation-detail': ['WorkspaceSecondaryPage'], 'automation-runs': ['WorkspaceSecondaryPage'],
-  pulse: ['PulsePage'], 'my-issues': ['MyIssuesPage'], reviews: ['ReviewsPage'], review: ['ReviewsPage'],
+  pulse: ['PulsePage'], 'summary-update': ['SummaryUpdatePage'], 'my-issues': ['MyIssuesPage'], reviews: ['ReviewsPage'], review: ['ReviewsPage'],
   'workspace-issues': ['IssueExplorerPage'], 'team-issues': ['IssueExplorerPage'],
   'team-overview': ['TeamOverviewPage'], 'team-documents': ['TeamOverviewPage'], 'team-members': ['TeamOverviewPage'], 'team-loops': ['TeamOverviewPage'],
   'team-board': ['WorkspaceSecondaryPage'], 'team-triage': ['WorkspaceSecondaryPage'], 'team-updates': ['WorkspaceSecondaryPage'],

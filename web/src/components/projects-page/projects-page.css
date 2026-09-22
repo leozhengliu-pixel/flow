@@ -1930,3 +1930,14 @@
 :root[data-theme="light"] .lp-project-timeline__bar > button:hover { background: #c8d9f2; }
 
 .lp-projects-empty-icon{color:var(--theme-text-secondary);margin-bottom:8px}
+
+
+/* LS-0608 TimelineActions — projects aside */
+.lp-project-timeline__toolbar{display:flex;align-items:center;gap:8px}
+.lp-project-timeline__aside-toggle{height:28px;padding:0 10px;border:0;border-radius:999px;background:var(--theme-control);color:var(--theme-text-secondary);font-size:12px;font-weight:500;cursor:pointer}
+.lp-project-timeline__aside-toggle[aria-pressed=true],.lp-project-timeline__aside-toggle:hover{background:var(--theme-control-hover);color:var(--theme-text-primary)}
+.lp-project-timeline__layout{display:flex;min-height:0;min-width:0}
+.lp-project-timeline__aside{display:flex;flex:0 0 190px;flex-direction:column;gap:2px;max-height:100%;overflow:auto;padding:8px 6px;border-right:.5px solid var(--theme-border)}
+.lp-project-timeline__aside>button{display:flex;align-items:center;height:28px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--theme-text-secondary);font-size:12px;text-align:left;cursor:pointer}
+.lp-project-timeline__aside>button:hover,.lp-project-timeline__aside>button.is-selected{background:var(--theme-control-hover);color:var(--theme-text-primary)}
+.lp-project-timeline__layout > .lp-project-timeline__scroller{flex:1;min-width:0}

@@ -20,6 +20,13 @@ import { directoryPerson, personMatchesQuery } from '@/lib/people'
 import './projects-page.css'
 import './projects-bundle-parity.css'
 import { ProjectsPageEmptyIcon } from './projects-page-empty-icon'
+import {
+  activateAndSelectTimelineProject,
+  matchesTimelineAsideShortcut,
+  matchesTimelineSelectShortcut,
+  readTimelineShowProjectsAside,
+  writeTimelineShowProjectsAside,
+} from './timeline-actions'
 
 export type ProjectPageItem = {
   id: string
@@ -931,6 +938,8 @@ function ProjectTimeline({ groups, onOpenProject, onUpdateProject, propertyOptio
   const [drag, setDrag] = useState<{ id: string; startX: number; originalStart?: string; originalTarget?: string; mode: 'move' | 'resize-start' | 'resize-end' }>()
   const draggedRef = useRef(false)
   const scrollerRef = useRef<HTMLDivElement>(null)
+  const [showProjectsAside, setShowProjectsAside] = useState(() => readTimelineShowProjectsAside(true))
+  const [selectedProjectId, setSelectedProjectId] = useState<string>()
   const rows = groups.flatMap(group => group.subgroups?.length ? group.subgroups.map(subgroup => ({ ...subgroup, name: `${group.name} / ${subgroup.name}` })) : [group])
   const allProjects = rows.flatMap(group => group.projects)
   const today = new Date()
@@ -967,10 +976,70 @@ function ProjectTimeline({ groups, onOpenProject, onUpdateProject, propertyOptio
     }
     await onUpdateProject(projectId, { startDate: iso(nextStart), targetDate: iso(nextEnd) })
   }
-  return <div aria-label="Project timeline" className="lp-project-timeline" role="grid">
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+      if (matchesTimelineAsideShortcut(event)) {
+        event.preventDefault()
+        setShowProjectsAside(current => {
+          const next = !current
+          writeTimelineShowProjectsAside(next)
+          return next
+        })
+        return
+      }
+      if (matchesTimelineSelectShortcut(event) && selectedProjectId) {
+        event.preventDefault()
+        setSelectedProjectId(undefined)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectedProjectId])
+  return <div aria-label="Project timeline" className={['lp-project-timeline', showProjectsAside ? 'has-aside' : ''].filter(Boolean).join(' ')} data-surface="LS-0608" role="grid">
     <div className="lp-project-timeline__toolbar">
       <button aria-label="Center timeline on today" className="lp-project-timeline__today" onClick={scrollToToday} type="button">Today</button>
+      <button
+        aria-label="Toggle timeline project list"
+        aria-pressed={showProjectsAside}
+        className="lp-project-timeline__aside-toggle"
+        onClick={() => setShowProjectsAside(current => {
+          const next = !current
+          writeTimelineShowProjectsAside(next)
+          return next
+        })}
+        type="button"
+      >Projects</button>
     </div>
+    <div className="lp-project-timeline__layout">
+    {showProjectsAside && (
+      <aside aria-label="Timeline project list" className="lp-project-timeline__aside">
+        {allProjects.map(project => (
+          <button
+            aria-pressed={selectedProjectId === project.id}
+            className={selectedProjectId === project.id ? 'is-selected' : undefined}
+            key={project.id}
+            onClick={() => activateAndSelectTimelineProject({
+              showProjectsAside,
+              setShowProjectsAside: next => {
+                writeTimelineShowProjectsAside(next)
+                setShowProjectsAside(next)
+              },
+              selectedProjectId,
+              selectProject: setSelectedProjectId,
+              activateProject: id => {
+                const match = allProjects.find(item => item.id === id)
+                if (match) onOpenProject?.(match)
+              },
+            }, project.id)}
+            type="button"
+          >
+            <span data-i18n-ignore>{project.name}</span>
+          </button>
+        ))}
+      </aside>
+    )}
     <div className="lp-project-timeline__scroller" ref={scrollerRef}>
       <header><span>Projects</span><div style={{ gridTemplateColumns: `repeat(${months.length}, minmax(88px, 1fr))` }}>{months.map(month => <span key={month.toISOString()}>{month.toLocaleDateString(undefined, { month: 'short', year: month.getMonth() === 0 ? 'numeric' : undefined })}</span>)}</div></header>
       <div aria-hidden="true" className="lp-project-timeline__today-line" style={{ left: `calc(190px + (100% - 190px) * ${todayPct / 100})` }} />
@@ -1000,6 +1069,7 @@ function ProjectTimeline({ groups, onOpenProject, onUpdateProject, propertyOptio
           </div>
         })}</div>
       </section>)}</div>
+    </div>
     </div>
   </div>
 }

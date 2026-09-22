@@ -5,6 +5,7 @@ import {
   groupActivityHistory,
   type GroupableActivityItem,
 } from '@/components/activity/entity-activity-history-grouping'
+import { ActivityHistoryGroupSummary, summaryItemsFromActivityTexts } from '@/components/activity/activity-history-group-summary'
 import './activity-sidebar-section.css'
 
 export type ActivitySidebarFilter = 'all' | 'updates' | 'comments' | 'history'
@@ -142,22 +143,7 @@ export function ActivitySidebarSection({
           ) : groups ? (
             <div className="activity-sidebar-section__history">
               {groups.map(group => (
-                <div className="activity-sidebar-section__group" key={group.key}>
-                  <header>
-                    <strong>{group.grouping.summaryActor}</strong>
-                    <span className="activity-sidebar-section__badge">
-                      {actorBadgeLabel(group.grouping.actorKey, group.grouping.summaryActor)}
-                    </span>
-                    {group.items.length > 1 && <small>{group.items.length} events</small>}
-                  </header>
-                  <ul>
-                    {group.items.map(item => (
-                      <li key={item.id}>
-                        <span>{item.text}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                <ActivitySidebarGroup key={group.key} group={group} />
               ))}
             </div>
           ) : (
@@ -175,3 +161,41 @@ export function ActivitySidebarSection({
     </section>
   )
 }
+
+function ActivitySidebarGroup({
+  group,
+}: {
+  group: { key: string; grouping: import('@/components/activity/entity-activity-history-grouping').ActivityGrouping; items: ActivitySidebarItem[] }
+}) {
+  const [expanded, setExpanded] = useState(group.items.length <= 3)
+  const summaryItems = summaryItemsFromActivityTexts(group.items)
+  const visible = expanded ? group.items : group.items.slice(0, 1)
+
+  return (
+    <div className="activity-sidebar-section__group">
+      <header>
+        <strong>{group.grouping.summaryActor}</strong>
+        <span className="activity-sidebar-section__badge">
+          {actorBadgeLabel(group.grouping.actorKey, group.grouping.summaryActor)}
+        </span>
+        {group.items.length > 1 && <small>{group.items.length} events</small>}
+      </header>
+      <ul>
+        {visible.map(item => (
+          <li key={item.id}>
+            <span>{item.text}</span>
+          </li>
+        ))}
+      </ul>
+      {group.items.length > 1 && (
+        <ActivityHistoryGroupSummary
+          count={group.items.length}
+          expanded={expanded}
+          items={summaryItems}
+          onToggle={() => setExpanded(value => !value)}
+        />
+      )}
+    </div>
+  )
+}
+

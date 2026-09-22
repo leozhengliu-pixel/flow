@@ -279,6 +279,7 @@ export function EntityAgentPanel({
         variant={variant}
       >
         <EntityAgentThread
+        viewerId={session?.userId}
           approvalBusy={approvalBusy}
           contextIssues={contextIssues}
           conversationDraftKey={conversationDraftKey}

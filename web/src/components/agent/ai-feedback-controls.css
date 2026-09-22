@@ -1,0 +1,38 @@
+.ai-feedback-controls {
+  align-items: center;
+  display: inline-flex;
+  gap: 2px;
+}
+
+.ai-feedback-controls > button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--theme-text-tertiary);
+  cursor: pointer;
+  display: inline-flex;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.ai-feedback-controls.is-medium > button {
+  height: 28px;
+  width: 28px;
+}
+
+.ai-feedback-controls > button:hover,
+.ai-feedback-controls > button:focus-visible {
+  background: var(--theme-control-hover);
+  color: var(--theme-text-secondary);
+}
+
+.ai-feedback-controls > button.is-active {
+  color: var(--theme-text-secondary);
+}
+
+.ai-feedback-controls.is-compact > button {
+  height: 20px;
+  width: 20px;
+}

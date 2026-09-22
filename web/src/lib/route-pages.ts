@@ -147,6 +147,10 @@ export const PulsePage = lazyPage(
   () => import("@/components/pulse/pulse-page"),
   "PulsePage",
 );
+export const SummaryUpdatePage = lazyPage(
+  () => import("@/components/activity/summary-update-page"),
+  "SummaryUpdatePage",
+);
 export const TeamArchivePage = lazyPage(
   () => import("@/components/workspace-operations/team-archive-page"),
   "TeamArchivePage",

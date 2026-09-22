@@ -13,6 +13,7 @@ import {
   readAgentDraft,
   writeAgentDraft,
 } from './agent-drafts'
+import { AiFeedbackControls } from './ai-feedback-controls'
 import styles from './entity-agent-thread.module.css'
 
 export type EntityAgentThreadProps = {
@@ -34,6 +35,8 @@ export type EntityAgentThreadProps = {
   onToolApproval?: (call: AgentMessagePart['toolCall'] | undefined, decision: 'approve' | 'reject') => void
   highlightedMessageId?: string
   composerDisabled?: boolean
+  /** Current viewer — enables LS-0049 thumbs on assistant messages. */
+  viewerId?: string
 }
 
 /** LS-0253 EntityAgentThread — shared conversation + draft renderer for page/sidebar panels. */
@@ -56,6 +59,7 @@ export function EntityAgentThread({
   onToolApproval,
   highlightedMessageId,
   composerDisabled = false,
+  viewerId,
 }: EntityAgentThreadProps) {
   const { t } = useI18n()
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -140,6 +144,14 @@ export function EntityAgentThread({
                 ariaLabel={message.role === 'user' ? t('Your message') : t('AI message')}
                 className={styles.messageDocument}
                 content={message.content}
+              />
+            )}
+            {message.role === 'assistant' && viewerId && message.content && (
+              <AiFeedbackControls
+                className={styles.feedback}
+                messageId={message.id}
+                userId={viewerId}
+                variant="compact"
               />
             )}
           </article>

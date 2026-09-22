@@ -35,6 +35,7 @@ import {
   AgentSubmitIcon,
 } from "./agent-icons";
 import { AgentRichText } from "./agent-rich-text";
+import { AiFeedbackControls } from "./ai-feedback-controls";
 import { clearAgentDraft, readAgentDraft, writeAgentDraft } from "./agent-drafts";
 import styles from "./agent-page.module.css";
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
@@ -707,6 +708,9 @@ function Conversation({
                   >
                     <span>{t("Edit")}</span>
                   </button>
+                )}
+                {message.role === "assistant" && session.userId && (
+                  <AiFeedbackControls messageId={message.id} userId={session.userId} variant="compact" />
                 )}
               </div>
             </article>

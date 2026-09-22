@@ -16,6 +16,7 @@ import {
   newAPIKeyPath,
   newSigningKeyPath,
   parseAppRoute,
+  summaryUpdatePath,
   releasePipelinePath,
   projectPath,
   projectSavedViewEditPath,
@@ -311,6 +312,15 @@ describe("application routes", () => {
     expect(releasePipelinePath("acme", "app", "deleted")).toBe(
       "/acme/pipeline/app/releases/deleted",
     );
+  });
+
+  it("parses summary update permalink (LS-0570)", () => {
+    expect(parseAppRoute("/acme/update/post-9")).toEqual({
+      kind: "summary-update",
+      workspaceSlug: "acme",
+      postId: "post-9",
+    });
+    expect(summaryUpdatePath("acme", "post-9")).toBe("/acme/update/post-9");
   });
 
 });

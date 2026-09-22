@@ -200,6 +200,7 @@ export function AgentChatPanel({
       variant="floating"
     >
       <EntityAgentThread
+        viewerId={session?.userId}
         approvalBusy={approvalBusy}
         contextIssues={issues}
         conversationDraftKey={draftKey}
