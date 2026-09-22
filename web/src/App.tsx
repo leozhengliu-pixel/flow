@@ -5173,6 +5173,9 @@ function App() {
             onOpenSettings={() => navigateTo(settingsPath(data.workspace.urlKey, data.viewerRole === "admin" ? "workspace" : "preferences"))}
             onOpenIssue={openIssue}
             onOpenProject={openProject}
+            onOpenInitiative={openInitiative}
+            onCreateProjectUpdate={addProjectUpdate}
+            onCreateInitiativeUpdate={addInitiativeUpdate}
             onOpenReview={(review) =>
               navigateTo(reviewPath(data.workspace.urlKey, review))
             }
