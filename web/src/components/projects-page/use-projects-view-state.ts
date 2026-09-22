@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ProjectStatus } from '@/types/flow'
 import type { ProjectDataGroup, ProjectPageItem, ProjectProperty, ProjectsDataViewProps, ProjectSortColumn } from './projects-data-view'
 import { DEFAULT_PROJECTS_DISPLAY, type ProjectsDisplaySettings } from './projects-display-model'
+import { ClientStorage } from '@/lib/client-storage'
 import {
   relevanceInputFromPageItem,
   sortProjectsByRelevance,
@@ -112,21 +113,20 @@ function defaultDisplay(): ProjectsDisplaySettings { return cloneDisplay(DEFAULT
 function cloneDisplay(display: ProjectsDisplaySettings): ProjectsDisplaySettings { return { ...display, properties: [...display.properties] } }
 
 function readStoredDisplay(key: string): ProjectsDisplaySettings | null {
-  try {
-    const value = JSON.parse(globalThis.localStorage?.getItem(key) ?? 'null')
-    if (!value || typeof value !== 'object' || !Array.isArray(value.properties)) return null
-    return { ...defaultDisplay(), ...value, properties: value.properties.filter((item: unknown): item is string => typeof item === 'string') }
-  } catch {
-    return null
+  const value = ClientStorage.get<Partial<ProjectsDisplaySettings> & { properties?: unknown }>(key, {
+    storageMechanism: 'local',
+    logError: false,
+  })
+  if (!value || typeof value !== 'object' || !Array.isArray(value.properties)) return null
+  return {
+    ...defaultDisplay(),
+    ...value,
+    properties: value.properties.filter((item: unknown): item is string => typeof item === 'string'),
   }
 }
 
 function writeStoredDisplay(key: string, display: ProjectsDisplaySettings) {
-  try {
-    globalThis.localStorage?.setItem(key, JSON.stringify(cloneDisplay(display)))
-  } catch {
-    // Browser preference persistence is best-effort in private browsing.
-  }
+  ClientStorage.set(key, cloneDisplay(display), 'local')
 }
 
 export function groupProjectsForView(projects: ProjectPageItem[], state: ProjectsViewState, projectStatuses: ProjectStatus[] = [], relevanceViewer?: ProjectRelevanceViewer): ProjectDataGroup[] {
