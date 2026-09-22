@@ -3211,6 +3211,16 @@ function ApiPage({
   const items = (data.apiKeys ?? []).filter(
     (item) => item.creatorId === data.viewer.id && !item.revokedAt,
   );
+  if (editingWebhook !== undefined) {
+    return (
+      <WebhookEditPage
+        data={data}
+        webhook={editingWebhook}
+        onClose={() => setEditingWebhook(undefined)}
+        onSaved={onReload}
+      />
+    );
+  }
   const submit = async () => {
     try {
       const result = await createAPIKey({ name, scopes, teamIds });
@@ -3475,14 +3485,6 @@ function ApiPage({
         <OAuthEditor
           app={editingOAuth}
           onClose={() => setEditingOAuth(undefined)}
-          onSaved={onReload}
-        />
-      )}{" "}
-      {editingWebhook !== undefined && (
-        <WebhookEditPage
-          data={data}
-          webhook={editingWebhook}
-          onClose={() => setEditingWebhook(undefined)}
           onSaved={onReload}
         />
       )}

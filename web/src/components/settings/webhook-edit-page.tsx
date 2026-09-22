@@ -1,11 +1,11 @@
 /**
  * LS-0648 WebhookEditPage depth + LS-0711 oauthWebhookSecretQuery / show-once signing UX.
- * Dialog chrome (Flow API settings) with Linear-aligned HTTPS + Signing secret controls.
+ * Full-page settings form (Linear Create webhook layout) — not a Dialog modal.
  */
 import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import {
   createWebhook,
@@ -101,6 +101,10 @@ export function WebhookEditPage({
   const [busy, setBusy] = useState(false);
   const [current, setCurrent] = useState<Webhook | null>(webhook);
 
+  const isCreate = !current;
+  const pageTitle = isCreate ? "Create webhook" : "Edit webhook";
+  const primaryLabel = isCreate ? "Create webhook" : "Save";
+
   const validateUrl = (value: string) => {
     const trimmed = value.trim();
     if (!trimmed) {
@@ -144,7 +148,7 @@ export function WebhookEditPage({
         if (created.secret) {
           setRevealedSecret(created.secret);
           toast.success("Webhook created");
-          // Keep dialog open so the secret can be copied once (LS-0711).
+          // Keep page open so the secret can be copied once (LS-0711).
           await onSaved();
         } else {
           await onSaved();
@@ -197,7 +201,11 @@ export function WebhookEditPage({
       await revokeWebhookSecret(current.id);
       setSecretPrefix("");
       setRevealedSecret(null);
-      setCurrent({ ...current, secretPrefix: undefined, secretRevokedAt: new Date().toISOString() });
+      setCurrent({
+        ...current,
+        secretPrefix: undefined,
+        secretRevokedAt: new Date().toISOString(),
+      });
       await onSaved();
       toast.success("Signing secret revoked");
     } catch (error) {
@@ -216,22 +224,29 @@ export function WebhookEditPage({
     !busy;
 
   return (
-    <Dialog open onOpenChange={(value) => !value && onClose()}>
-      <DialogContent className="settings-invite-dialog settings-webhook-dialog webhook-edit-dialog">
-        <DialogTitle>
-          {current ? "Edit webhook" : "Create webhook"}
-        </DialogTitle>
-        <p className="webhook-edit-crumb">API settings</p>
-        <label>
-          Name
+    <div className="webhook-edit-page" data-testid="webhook-edit-page">
+      <nav className="webhook-edit-breadcrumb" aria-label="Breadcrumb">
+        <button type="button" onClick={onClose}>
+          <ChevronDown aria-hidden="true" />
+          API settings
+        </button>
+      </nav>
+      <header className="webhook-edit-header">
+        <h1>{pageTitle}</h1>
+      </header>
+      <section className="webhook-edit-card" aria-label={pageTitle}>
+        <label className="webhook-edit-field">
+          <span>Name</span>
           <input
             autoFocus
             value={name}
             onChange={(event) => setName(event.target.value)}
+            placeholder="A descriptive name"
+            aria-label="Name"
           />
         </label>
-        <label>
-          Endpoint URL
+        <label className="webhook-edit-field">
+          <span>Endpoint URL</span>
           <input
             value={url}
             onChange={(event) => {
@@ -241,6 +256,7 @@ export function WebhookEditPage({
             onBlur={() => validateUrl(url)}
             placeholder="https://example.com/webhooks/flow"
             aria-invalid={Boolean(urlError)}
+            aria-label="Endpoint URL"
           />
           {urlError ? (
             <span className="webhook-edit-error" role="alert">
@@ -248,57 +264,10 @@ export function WebhookEditPage({
             </span>
           ) : null}
         </label>
-        <fieldset className="settings-check-list">
-          <legend>Resources</legend>
-          {RESOURCES.map((resource) => (
-            <label key={resource}>
-              <input
-                type="checkbox"
-                checked={resourceTypes.includes(resource)}
-                onChange={(event) =>
-                  setResourceTypes((currentTypes) =>
-                    event.target.checked
-                      ? [...currentTypes, resource]
-                      : currentTypes.filter((item) => item !== resource),
-                  )
-                }
-              />
-              {title(resource)}
-            </label>
-          ))}
-        </fieldset>
-        <fieldset className="settings-check-list">
-          <legend>Teams</legend>
-          <label>
-            <input
-              type="checkbox"
-              checked={!teamIds.length}
-              onChange={() => setTeamIds([])}
-            />
-            All teams
-          </label>
-          {data.teams.map((team) => (
-            <label key={team.id}>
-              <input
-                type="checkbox"
-                checked={teamIds.includes(team.id)}
-                onChange={(event) =>
-                  setTeamIds((currentIds) =>
-                    event.target.checked
-                      ? [...currentIds, team.id]
-                      : currentIds.filter((id) => id !== team.id),
-                  )
-                }
-              />
-              <ViewGlyph color={team.color} icon={team.icon || "Team"} />
-              <span data-i18n-ignore>{team.name}</span>
-            </label>
-          ))}
-        </fieldset>
 
         <section className="webhook-signing" aria-label="Signing">
           <header>
-            <h3>Signing</h3>
+            <h3>Signing secret</h3>
             <p>
               Use the signing secret to verify that deliveries come from Flow.
               The full secret is shown only once after create or rotate.
@@ -308,7 +277,7 @@ export function WebhookEditPage({
             <div className="webhook-signing-reveal">
               <label>
                 Signing secret
-                <input readOnly value={revealedSecret} />
+                <input readOnly value={revealedSecret} aria-label="Signing secret" />
               </label>
               <ActionButton onClick={() => void copySecret()}>
                 Copy secret
@@ -343,10 +312,63 @@ export function WebhookEditPage({
           )}
         </section>
 
+        <fieldset className="webhook-edit-fieldset webhook-edit-resources">
+          <legend>Data change events</legend>
+          <div className="webhook-edit-resource-grid">
+            {RESOURCES.map((resource) => (
+              <label key={resource} className="webhook-edit-check">
+                <input
+                  type="checkbox"
+                  checked={resourceTypes.includes(resource)}
+                  onChange={(event) =>
+                    setResourceTypes((currentTypes) =>
+                      event.target.checked
+                        ? [...currentTypes, resource]
+                        : currentTypes.filter((item) => item !== resource),
+                    )
+                  }
+                />
+                <span>{title(resource)}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <fieldset className="webhook-edit-fieldset webhook-edit-teams">
+          <legend>Team</legend>
+          <div className="webhook-edit-team-list">
+            <label className="webhook-edit-check">
+              <input
+                type="checkbox"
+                checked={!teamIds.length}
+                onChange={() => setTeamIds([])}
+              />
+              <span>All teams</span>
+            </label>
+            {data.teams.map((team) => (
+              <label key={team.id} className="webhook-edit-check">
+                <input
+                  type="checkbox"
+                  checked={teamIds.includes(team.id)}
+                  onChange={(event) =>
+                    setTeamIds((currentIds) =>
+                      event.target.checked
+                        ? [...currentIds, team.id]
+                        : currentIds.filter((id) => id !== team.id),
+                    )
+                  }
+                />
+                <ViewGlyph color={team.color} icon={team.icon || "Team"} />
+                <span data-i18n-ignore>{team.name}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
         {current && <WebhookFailureEvents webhookId={current.id} />}
 
-        <footer>
-          {current && (
+        <footer className="webhook-edit-footer">
+          {current && !revealedSecret && (
             <ActionButton
               danger
               disabled={busy}
@@ -360,20 +382,27 @@ export function WebhookEditPage({
               Delete
             </ActionButton>
           )}
-          <ActionButton disabled={busy} onClick={onClose}>
-            {revealedSecret ? "Done" : "Cancel"}
-          </ActionButton>
-          {!(current && revealedSecret) && (
-            <ActionButton
-              primary
-              disabled={!canSave}
-              onClick={() => void save()}
-            >
-              Save
+          <div className="webhook-edit-footer-spacer" />
+          {revealedSecret ? (
+            <ActionButton primary onClick={onClose}>
+              Done
             </ActionButton>
+          ) : (
+            <>
+              <ActionButton disabled={busy} onClick={onClose}>
+                Cancel
+              </ActionButton>
+              <ActionButton
+                primary
+                disabled={!canSave}
+                onClick={() => void save()}
+              >
+                {primaryLabel}
+              </ActionButton>
+            </>
           )}
         </footer>
-      </DialogContent>
-    </Dialog>
+      </section>
+    </div>
   );
 }
