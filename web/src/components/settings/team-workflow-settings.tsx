@@ -386,11 +386,15 @@ function TeamOverview({
       }))
     )
       return;
-    await updateTeam(data.workspace.urlKey, team.id, {
-      retired: false,
-      subTeamAction: "retire",
-    });
-    await onReload();
+    try {
+      await updateTeam(data.workspace.urlKey, team.id, {
+        retired: false,
+        subTeamAction: "retire",
+      });
+      await onReload();
+    } catch (error) {
+      toast.error(message(error));
+    }
   };
   const remove = async () => {
     if (
@@ -400,8 +404,12 @@ function TeamOverview({
       }))
     )
       return;
-    await deleteTeam(data.workspace.urlKey, team.id);
-    await onReload();
+    try {
+      await deleteTeam(data.workspace.urlKey, team.id);
+      await onReload();
+    } catch (error) {
+      toast.error(message(error));
+    }
   };
   const leave = async () => {
     if (
@@ -410,14 +418,18 @@ function TeamOverview({
       }))
     )
       return;
-    await setTeamMembership(
-      data.workspace.urlKey,
-      team.id,
-      data.viewer.id,
-      false,
-      "member",
-    );
-    await onReload();
+    try {
+      await setTeamMembership(
+        data.workspace.urlKey,
+        team.id,
+        data.viewer.id,
+        false,
+        "member",
+      );
+      await onReload();
+    } catch (error) {
+      toast.error(message(error));
+    }
   };
   const group = (title: string | undefined, ids: TeamSettingsSection[]) => (
     <TeamSection title={title}>
@@ -485,6 +497,7 @@ function TeamOverview({
           description="Remove yourself as a member of this team"
         >
           <button
+            type="button"
             className="settings-action"
             disabled={
               !data.teamMembers.some(
@@ -502,6 +515,7 @@ function TeamOverview({
           description="Prevent creating and updating issues while preserving historical data"
         >
           <button
+            type="button"
             className="settings-action"
             onClick={() => void retire()}
           >
@@ -513,6 +527,7 @@ function TeamOverview({
           description="Permanently delete this team and all of its owned data"
         >
           <button
+            type="button"
             className="settings-action"
             disabled={data.teams.filter((item) => !item.retiredAt).length <= 1}
             onClick={() => void remove()}

@@ -1,7 +1,8 @@
 /* Linear PromptDialogs string chrome:
    DialogPresenter default width 480, content pad 32, radius 12, no X close */
+.dialog-overlay.action-dialog-overlay{z-index:1600}
 .dialog-content.action-dialog{
-  z-index:1501;
+  z-index:1601;
   top:26vh;
   left:50%;
   transform:translateX(-50%);
