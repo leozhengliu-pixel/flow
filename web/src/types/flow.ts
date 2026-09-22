@@ -931,6 +931,8 @@ export interface FeatureSettings {
   customerGenericDomains: string[];
   pulseWorkspaceSchedule: string;
   asksEmailAddresses: string[];
+  /** Slack channel → team/template mappings for Asks (LS-0070). */
+  asksSlackChannels: AsksSlackChannelMapping[];
   triageIntelligence: TriageIntelligenceSettings;
   /** LS-0110 repository access policy for Code Intelligence. */
   repositoryAccess?: {
@@ -939,6 +941,13 @@ export interface FeatureSettings {
     scope: "all" | "selected";
     allowedRepositories: string[];
   };
+}
+
+export interface AsksSlackChannelMapping {
+  channel: string;
+  teamId: UUID;
+  templateId?: UUID;
+  enabled: boolean;
 }
 
 export type TriageIntelligenceAction = "suggest" | "auto" | "hide";

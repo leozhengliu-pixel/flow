@@ -196,6 +196,14 @@ const JiraSyncPage = lazyPage(
   () => import("@/components/settings/jira-sync-page"),
   "JiraSyncPage",
 );
+const AsksSlackSettingsPage = lazyPage(
+  () => import("./asks-settings"),
+  "AsksSlackSettingsPage",
+);
+const NewAsksEmailIntakePage = lazyPage(
+  () => import("./asks-settings"),
+  "NewAsksEmailIntakePage",
+);
 const AuditLogSettings = lazyPage(
   () => import("./audit-log-settings"),
   "AuditLogSettings",
@@ -206,7 +214,7 @@ const WorkflowAutomationSettings = lazyPage(
 );
 
 // oxlint-disable-next-line react/only-export-components -- Preloading must share the lazy instances used by SettingsBody.
-export async function preloadSettingsPage(page: SettingsPageProps['page'], options: Pick<SettingsPageProps, 'releasePipelineMode' | 'integrationProvider' | 'integrationSlug' | 'jiraSyncMode' | 'agentSkillMode'> = {}) {
+export async function preloadSettingsPage(page: SettingsPageProps['page'], options: Pick<SettingsPageProps, 'releasePipelineMode' | 'integrationProvider' | 'integrationSlug' | 'jiraSyncMode' | 'agentSkillMode' | 'asksIntegrationId' | 'asksEmailIntakeMode'> = {}) {
   if (options.agentSkillMode) return
   if (['preferences', 'shortcuts', 'profile', 'notifications', 'code-and-reviews', 'account-security', 'connections', 'agents'].includes(page)) return PersonalSettings.preload()
   if (page === 'issue-labels' || page === 'project-labels' || page === 'initiative-labels') return DomainLabelsSettings.preload()
@@ -226,6 +234,8 @@ export async function preloadSettingsPage(page: SettingsPageProps['page'], optio
   }
   if (page === 'integrations' && options.integrationProvider) return CodeIntegrationSettings.preload()
   if (page === 'integrations' && options.integrationSlug) return IntegrationSettingsPage.preload()
+  if (page === 'asks' && options.asksEmailIntakeMode) return NewAsksEmailIntakePage.preload()
+  if (page === 'asks' && options.asksIntegrationId) return AsksSlackSettingsPage.preload()
   if (['ai', 'initiatives', 'documents', 'customer-requests', 'releases', 'pulse', 'asks', 'emojis', 'integrations'].includes(page)) return FeatureSettingsPage.preload()
 }
 
@@ -258,6 +268,10 @@ type SettingsPageProps = {
   jiraProjectId?: string;
   onOpenJiraSyncNew?: () => void;
   onOpenJiraSyncEdit?: (jiraProjectId: string) => void;
+  asksIntegrationId?: string;
+  asksEmailIntakeMode?: "new";
+  onOpenAsksSlack?: (integrationId: string) => void;
+  onOpenAsksEmailIntake?: () => void;
   issueTemplateMode?: "new" | "new-form" | "edit";
   issueTemplateId?: string;
   projectTemplateMode?: "new" | "edit";
@@ -1021,6 +1035,23 @@ function SettingsBody(
         onReload={props.onReload}
       />
     );
+  if (page === "asks" && props.asksEmailIntakeMode === "new")
+    return (
+      <NewAsksEmailIntakePage
+        data={props.data}
+        onBack={() => props.onNavigate("asks")}
+        onReload={props.onReload}
+      />
+    );
+  if (page === "asks" && props.asksIntegrationId)
+    return (
+      <AsksSlackSettingsPage
+        data={props.data}
+        integrationId={props.asksIntegrationId}
+        onBack={() => props.onNavigate("asks")}
+        onReload={props.onReload}
+      />
+    );
   if (page === "team") {
     const team = props.data.teams.find(
       (team) => team.key.toLowerCase() === props.teamKey?.toLowerCase(),
@@ -1087,6 +1118,8 @@ function SettingsBody(
         onOpenIntegration={props.onOpenIntegration}
         onReload={props.onReload}
         onNavigateSettings={props.onNavigate}
+        onOpenAsksSlack={props.onOpenAsksSlack}
+        onOpenAsksEmailIntake={props.onOpenAsksEmailIntake}
       />
     );
   return (

@@ -274,6 +274,10 @@ export type AppRoute =
       /** Jira sync wizard (`/settings/integrations/jira/sync/new|:id/edit`). */
       jiraSyncMode?: "new" | "edit";
       jiraProjectId?: string;
+      /** Asks Slack deep settings (`/settings/asks/:integrationId`). */
+      asksIntegrationId?: string;
+      /** Asks email intake wizard (`/settings/asks/email-intake/new`). */
+      asksEmailIntakeMode?: "new";
     }
   | {
       kind: "team-views";
@@ -881,6 +885,32 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
       page: "team",
       teamKey: fourth,
       teamSection: (fifth as TeamSettingsSection) || "overview",
+    };
+  if (
+    section === "settings" &&
+    third === "asks" &&
+    fourth === "email-intake" &&
+    fifth === "new" &&
+    segments.length === 5
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "asks",
+      asksEmailIntakeMode: "new",
+    };
+  if (
+    section === "settings" &&
+    third === "asks" &&
+    fourth &&
+    fourth !== "email-intake" &&
+    segments.length === 4
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "asks",
+      asksIntegrationId: decodeURIComponent(fourth),
     };
   if (
     section === "settings" &&
@@ -1695,6 +1725,15 @@ export function jiraSyncNewPath(workspaceSlug: string) {
 }
 export function jiraSyncEditPath(workspaceSlug: string, jiraProjectId: string) {
   return `${integrationSettingsPath(workspaceSlug, "jira")}/sync/${encode(jiraProjectId)}/edit`;
+}
+export function asksSlackSettingsPath(
+  workspaceSlug: string,
+  integrationId: string,
+) {
+  return `${workspaceRootPath(workspaceSlug)}/settings/asks/${encode(integrationId)}`;
+}
+export function newAsksEmailIntakePath(workspaceSlug: string) {
+  return `${workspaceRootPath(workspaceSlug)}/settings/asks/email-intake/new`;
 }
 export function workspaceSavedViewPath(workspaceSlug: string, viewId: string) {
   return `${workspaceRootPath(workspaceSlug)}/view/${encode(viewId)}`;

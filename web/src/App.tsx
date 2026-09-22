@@ -194,6 +194,8 @@ import {
   integrationSettingsPath,
   jiraSyncNewPath,
   jiraSyncEditPath,
+  asksSlackSettingsPath,
+  newAsksEmailIntakePath,
   membersPath,
   memberProfilePath,
   myIssuesPath,
@@ -3942,6 +3944,14 @@ function App() {
           integrationSlug={route.integrationSlug}
           jiraSyncMode={route.jiraSyncMode}
           jiraProjectId={route.jiraProjectId}
+          asksIntegrationId={route.asksIntegrationId}
+          asksEmailIntakeMode={route.asksEmailIntakeMode}
+          onOpenAsksSlack={(integrationId) =>
+            navigateTo(asksSlackSettingsPath(data.workspace.urlKey, integrationId))
+          }
+          onOpenAsksEmailIntake={() =>
+            navigateTo(newAsksEmailIntakePath(data.workspace.urlKey))
+          }
           issueTemplateMode={route.issueTemplateMode}
           issueTemplateId={route.issueTemplateId}
           projectTemplateMode={route.projectTemplateMode}
