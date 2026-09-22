@@ -13,7 +13,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -1710,8 +1709,13 @@ func (s *server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		query.Set("redirect_uri", redirectURI)
 		query.Set("response_type", "code")
 		query.Set("state", state)
-		if len(connection.Scopes) > 0 {
-			query.Set("scope", strings.Join(connection.Scopes, " "))
+		scopes := connection.Scopes
+		if len(scopes) == 0 && provider == "figma" {
+			scopes = []string{"file_content:read", "file_metadata:read"}
+			connection.Scopes = scopes
+		}
+		if len(scopes) > 0 {
+			query.Set("scope", strings.Join(scopes, " "))
 		}
 		if provider == "jira" && strings.TrimSpace(connection.Config["mode"]) != "custom_personal" {
 			query.Set("audience", "api.atlassian.com")
@@ -1848,18 +1852,42 @@ func (s *server) finishIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 		if strings.TrimSpace(r.URL.Query().Get("error")) != "" {
 			status = http.StatusBadRequest
 		}
+		if wantsHTMLRedirect(r) {
+			http.Redirect(w, r, integrationOAuthCompletePath(provider, workspaceKey(r), "error", providerError), http.StatusSeeOther)
+			return
+		}
 		writeError(w, status, providerError)
 		return
 	}
-	if strings.Contains(r.Header.Get("Accept"), "text/html") {
-		appURL := strings.TrimRight(os.Getenv("FLOW_APP_URL"), "/")
-		if appURL == "" {
-			appURL = "http://localhost:5173"
-		}
-		http.Redirect(w, r, appURL+"/"+url.PathEscape(workspaceKey(r))+"/settings/integrations", http.StatusSeeOther)
+	if wantsHTMLRedirect(r) {
+		http.Redirect(w, r, integrationOAuthCompletePath(provider, workspaceKey(r), "connected", ""), http.StatusSeeOther)
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+// finishIntegrationOAuthJSON completes a browser/popup OAuth code exchange for
+// providers whose redirect URI lands on the SPA (e.g. Figma /connect/figma/callback).
+func (s *server) finishIntegrationOAuthJSON(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Code  string `json:"code"`
+		State string `json:"state"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	code, state := strings.TrimSpace(input.Code), strings.TrimSpace(input.State)
+	if code == "" || state == "" {
+		writeError(w, http.StatusBadRequest, "OAuth code and state are required")
+		return
+	}
+	// Reuse the GET callback path by synthesizing a request query.
+	q := r.URL.Query()
+	q.Set("code", code)
+	q.Set("state", state)
+	r.URL.RawQuery = q.Encode()
+	r.Header.Set("Accept", "application/json")
+	s.finishIntegrationOAuth(w, r)
 }
 
 func exchangeIntegrationToken(ctx context.Context, tokenURL string, config integrationOAuthConfig, code string, allowLocal bool) (string, string, int64, error) {
