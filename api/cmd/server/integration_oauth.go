@@ -14,7 +14,8 @@ import (
 
 func supportedIntegration(provider string) bool {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "github", "gitlab", "slack", "jira", "figma":
+	case "github", "gitlab", "slack", "jira", "figma",
+		"microsoftteams", "pagerduty", "front":
 		return true
 	default:
 		return false
@@ -24,6 +25,10 @@ func supportedIntegration(provider string) bool {
 // figmaOAuthDefaults fills public Figma OAuth endpoints when unset. Client
 // secrets still come from FLOW_INTEGRATION_FIGMA_* env or connection config.
 func applyIntegrationOAuthDefaults(provider string, cfg *integrationOAuthConfig) {
+	appURL := strings.TrimRight(os.Getenv("FLOW_APP_URL"), "/")
+	if appURL == "" {
+		appURL = "http://localhost:5173"
+	}
 	switch strings.ToLower(strings.TrimSpace(provider)) {
 	case "figma":
 		if cfg.AuthorizationURL == "" {
@@ -33,10 +38,6 @@ func applyIntegrationOAuthDefaults(provider string, cfg *integrationOAuthConfig)
 			cfg.TokenURL = "https://api.figma.com/v1/oauth/token"
 		}
 		if cfg.RedirectURI == "" {
-			appURL := strings.TrimRight(os.Getenv("FLOW_APP_URL"), "/")
-			if appURL == "" {
-				appURL = "http://localhost:5173"
-			}
 			cfg.RedirectURI = appURL + "/connect/figma/callback"
 		}
 	case "jira":
@@ -47,6 +48,58 @@ func applyIntegrationOAuthDefaults(provider string, cfg *integrationOAuthConfig)
 		if cfg.TokenURL == "" {
 			cfg.TokenURL = "https://auth.atlassian.com/oauth/token"
 		}
+	case "microsoftteams":
+		// LS-0409 browser OAuth (desktopOAuth deferred). Tenant "organizations" multi-tenant default.
+		if cfg.AuthorizationURL == "" {
+			cfg.AuthorizationURL = "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize"
+		}
+		if cfg.TokenURL == "" {
+			cfg.TokenURL = "https://login.microsoftonline.com/organizations/oauth2/v2.0/token"
+		}
+		if cfg.RedirectURI == "" {
+			cfg.RedirectURI = appURL + "/api/integrations/microsoftteams/oauth/callback"
+		}
+	case "pagerduty":
+		// LS-0451 PagerDuty identity OAuth.
+		if cfg.AuthorizationURL == "" {
+			cfg.AuthorizationURL = "https://identity.pagerduty.com/oauth/authorize"
+		}
+		if cfg.TokenURL == "" {
+			cfg.TokenURL = "https://identity.pagerduty.com/oauth/token"
+		}
+		if cfg.RedirectURI == "" {
+			cfg.RedirectURI = appURL + "/api/integrations/pagerduty/oauth/callback"
+		}
+	case "front":
+		// LS-0278 Front OAuth (support-desk long-tail).
+		if cfg.AuthorizationURL == "" {
+			cfg.AuthorizationURL = "https://app.frontapp.com/oauth/authorize"
+		}
+		if cfg.TokenURL == "" {
+			cfg.TokenURL = "https://app.frontapp.com/oauth/token"
+		}
+		if cfg.RedirectURI == "" {
+			cfg.RedirectURI = appURL + "/api/integrations/front/oauth/callback"
+		}
+	}
+}
+
+// defaultIntegrationOAuthScopes returns provider scopes when the connection has none.
+func defaultIntegrationOAuthScopes(provider string) []string {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "figma":
+		return []string{"file_content:read", "file_metadata:read"}
+	case "microsoftteams":
+		return []string{
+			"openid", "profile", "offline_access",
+			"https://graph.microsoft.com/User.Read",
+			"https://graph.microsoft.com/Team.ReadBasic.All",
+			"https://graph.microsoft.com/Channel.ReadBasic.All",
+		}
+	case "pagerduty":
+		return []string{"incidents.read", "abilities.read"}
+	default:
+		return nil
 	}
 }
 
@@ -83,6 +136,34 @@ func integrationOAuthCompletePath(provider, workspace, status, errMsg string) st
 func wantsHTMLRedirect(r *http.Request) bool {
 	accept := r.Header.Get("Accept")
 	return strings.Contains(accept, "text/html") || (!strings.Contains(accept, "application/json") && strings.Contains(r.Header.Get("User-Agent"), "Mozilla"))
+}
+
+
+func integrationDisplayName(provider string) string {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "microsoftteams":
+		return "Microsoft Teams"
+	case "pagerduty":
+		return "PagerDuty"
+	case "front":
+		return "Front"
+	case "github":
+		return "GitHub"
+	case "gitlab":
+		return "GitLab"
+	case "slack":
+		return "Slack"
+	case "jira":
+		return "Jira"
+	case "figma":
+		return "Figma"
+	default:
+		p := strings.ToLower(strings.TrimSpace(provider))
+		if p == "" {
+			return "Integration"
+		}
+		return strings.ToUpper(p[:1]) + p[1:]
+	}
 }
 
 func supportedIntegrationHandler(next http.HandlerFunc) http.HandlerFunc {

@@ -372,15 +372,22 @@ function IntegrationsPage({data,onOpen,onReload}:{data:BootstrapData;onOpen:(pro
   const list = catalog.filter(item => (category === "All" || item.category === category) && `${item.name} ${item.description}`.toLowerCase().includes(query.toLowerCase()));
   const enabledCount = data.integrationConnections.filter(item => item.status === "connected" || item.status === "configured").length
     + (data.oauthAuthorizations ?? []).filter(item => !item.revokedAt).length;
-  const toggleSlack = async (item: IntegrationCatalogEntry, connection?: IntegrationConnection) => {
-    if (item.connectProvider !== "slack") return;
-    setBusy("slack");
+  const browserOAuthProviders = new Set(["slack", "microsoftteams", "pagerduty", "front"]);
+  const toggleBrowserOAuth = async (item: IntegrationCatalogEntry, connection?: IntegrationConnection) => {
+    if (!item.connectProvider || !browserOAuthProviders.has(item.connectProvider)) return;
+    const provider = item.connectProvider;
+    setBusy(provider);
     try {
-      if (connection?.status === "connected") await disconnectIntegration("slack");
-      else await authorizeIntegration("slack", { name: item.name, config: { mode: "workspace" } }, Boolean(connection));
+      if (connection?.status === "connected") await disconnectIntegration(provider);
+      else {
+        const config =
+          provider === "slack" || provider === "microsoftteams" ? { mode: "workspace" } : {};
+        await authorizeIntegration(provider, { name: item.name, config }, Boolean(connection));
+      }
       await onReload();
     } catch (error) {
       toast.error(message(error));
+      await onReload();
     } finally {
       setBusy("");
     }
@@ -398,12 +405,13 @@ function IntegrationsPage({data,onOpen,onReload}:{data:BootstrapData;onOpen:(pro
         ? data.integrationConnections.find(value => value.provider === item.connectProvider)
         : undefined;
       const code = item.connectProvider === "github" || item.connectProvider === "gitlab" || item.connectProvider === "jira";
+      const browserOAuth = Boolean(item.connectProvider && browserOAuthProviders.has(item.connectProvider));
       const connected = connection?.status === "connected";
       const supported = item.availability === "supported";
       const onClick = () => {
         if (!supported) { onOpen(item.slug); return; }
         if (code) { onOpen(item.connectProvider as IntegrationProvider); return; }
-        if (item.connectProvider === "slack") { void toggleSlack(item, connection); return; }
+        if (browserOAuth) { void toggleBrowserOAuth(item, connection); return; }
         onOpen(item.slug);
       };
       return <article key={item.slug} data-availability={item.availability}>

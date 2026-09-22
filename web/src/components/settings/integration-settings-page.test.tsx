@@ -23,3 +23,36 @@ it("shows Intercom coming-soon product pattern without honesty banner chrome", (
   expect(screen.queryByText(/not wired yet/i)).not.toBeInTheDocument();
   expect(screen.queryByText(/catalog parity/i)).not.toBeInTheDocument();
 });
+
+it("enables Microsoft Teams browser OAuth without honesty banner", () => {
+  render(
+    <I18nProvider>
+      <IntegrationSettingsPage
+        slug="microsoft-teams"
+        data={makeBootstrap({ integrationConnections: [] })}
+        onBack={vi.fn()}
+        onReload={vi.fn()}
+      />
+    </I18nProvider>,
+  );
+  expect(screen.getByRole("heading", { name: "Microsoft Teams" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Enable" })).not.toBeDisabled();
+  expect(screen.queryByText(/honest shell/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/pixel later/i)).not.toBeInTheDocument();
+});
+
+it("keeps Front enable honest when not connected", () => {
+  render(
+    <I18nProvider>
+      <IntegrationSettingsPage
+        slug="front"
+        data={makeBootstrap({ integrationConnections: [] })}
+        onBack={vi.fn()}
+        onReload={vi.fn()}
+      />
+    </I18nProvider>,
+  );
+  expect(screen.getByRole("heading", { name: "Front" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Enable" })).toBeInTheDocument();
+  expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+});

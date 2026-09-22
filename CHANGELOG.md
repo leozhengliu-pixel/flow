@@ -17,6 +17,8 @@ after the first tagged release.
 
 ### Added
 
+- P2-D browser OAuth for Microsoft Teams, PagerDuty, and Front (shared oauth/start + CompleteOAuthView).
+
 - Releases, Asks, team archive, and audit log workspace surfaces.
 - Professional open source project documentation and community health files.
 - Apache License 2.0 licensing and attribution notice.
