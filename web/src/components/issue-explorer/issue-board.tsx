@@ -1,8 +1,10 @@
 import { IssueWidgetAdornments } from '@/components/issues-split-view'
-import { useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react'
+import { useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as ContextMenu from '@radix-ui/react-context-menu'
-import { Clock3, Ellipsis, Link2, Minus, PackageOpen, Plus } from 'lucide-react'
+import { Clock3, Ellipsis, GitPullRequest, Link2, Minus, PackageOpen, Plus } from 'lucide-react'
+import { Virtuoso } from 'react-virtuoso'
+import { toast } from 'sonner'
 import { IssueContextMenu, IssueParentTrail, RowCommandPicker, SubIssueProgress, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData, type MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
 import type { MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
 import { CalendarIcon, CycleIcon, NoAssigneeIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
@@ -14,14 +16,35 @@ import { UserAvatar } from '@/components/ui/user-avatar'
 import { toggleGroupedLabelIds } from '@/lib/labels'
 
 const EMPTY_OPTIONS: MyIssuesRowPropertyOptions = { status: [], priority: [], assignee: [], dueDate: [], labels: [], project: [], cycle: [] }
+const COLUMN_VIRTUALIZATION_THRESHOLD = 6
+const CARD_VIRTUALIZATION_THRESHOLD = 24
+const COLUMN_OVERSCAN = 360
+const CARD_OVERSCAN = 240
+const CARD_ESTIMATED_SIZE = 120
+function isTriageGroup(group?: MyIssuesGroupData) {
+  if (!group) return false
+  const needle = `${group.id} ${group.label}`.toLowerCase()
+  return needle.includes('triage')
+}
 
-export function IssueBoard({ groups, hiddenGroupIds = [], properties, propertyOptions = EMPTY_OPTIONS, selectedIds, createIssueLabel = 'Add new issue', onCreateIssue, onHideGroup, onShowGroup, onMove, onOpenIssue, onPropertyChange, onSelectIssue }: {
+/** Cheap canDrop gate — triage leave / priority required. Returns reject reason or null. */
+export function boardDropRejectReason(issue: MyIssuesRowData, sourceGroup: MyIssuesGroupData | undefined, targetGroup: MyIssuesGroupData | undefined): string | null {
+  if (!sourceGroup || !targetGroup) return null
+  if (isTriageGroup(sourceGroup) && !isTriageGroup(targetGroup) && issue.priority === 0) {
+    return "Can't move out of triage without a priority"
+  }
+  return null
+}
+
+export function IssueBoard({ groups, hiddenGroupIds = [], properties, propertyOptions = EMPTY_OPTIONS, selectedIds, createIssueLabel = 'Add new issue', canDrop, onCreateIssue, onHideGroup, onShowGroup, onMove, onOpenIssue, onPropertyChange, onSelectIssue }: {
   groups: MyIssuesGroupData[]
   hiddenGroupIds?: string[]
   properties: ReadonlySet<MyIssuesProperty>
   propertyOptions?: MyIssuesRowPropertyOptions
   selectedIds: ReadonlySet<string>
   createIssueLabel?: string
+  /** Optional override — return reject toast copy, or null to allow. */
+  canDrop?: (issue: MyIssuesRowData, sourceGroupId: string, targetGroupId: string) => string | null
   onCreateIssue?: (group: MyIssuesGroupData) => void
   onHideGroup?: (groupId: string) => void
   onShowGroup?: (groupId: string) => void
@@ -33,11 +56,26 @@ export function IssueBoard({ groups, hiddenGroupIds = [], properties, propertyOp
   const { t } = useI18n()
   const [draggingId, setDraggingId] = useState<string>()
   const [over, setOver] = useState<{ groupId: string; index: number }>()
+  const visibleGroups = useMemo(() => groups.filter(group => !hiddenGroupIds.includes(group.id)), [groups, hiddenGroupIds])
+  const hiddenGroups = useMemo(() => groups.filter(group => hiddenGroupIds.includes(group.id)), [groups, hiddenGroupIds])
   const sourceGroup = groups.find(group => group.issues.some(issue => issue.id === draggingId))
+  const rejectMove = (issue: MyIssuesRowData, sourceId: string, targetId: string) => {
+    const reason = canDrop?.(issue, sourceId, targetId)
+      ?? boardDropRejectReason(issue, groups.find(group => group.id === sourceId), groups.find(group => group.id === targetId))
+    if (reason) {
+      toast.error(t(reason))
+      return true
+    }
+    return false
+  }
   const drop = (event: DragEvent, group: MyIssuesGroupData, index: number) => {
     event.preventDefault()
     const issue = sourceGroup?.issues.find(item => item.id === draggingId)
     if (issue && sourceGroup) {
+      if (rejectMove(issue, sourceGroup.id, group.id)) {
+        setDraggingId(undefined); setOver(undefined)
+        return
+      }
       const sourceIndex = sourceGroup.issues.findIndex(item => item.id === issue.id)
       const targetIndex = sourceGroup.id === group.id && sourceIndex < index ? index - 1 : index
       if (sourceGroup.id !== group.id || sourceIndex !== targetIndex) onMove(issue, sourceGroup.id, group.id, targetIndex)
@@ -45,23 +83,94 @@ export function IssueBoard({ groups, hiddenGroupIds = [], properties, propertyOp
     setDraggingId(undefined); setOver(undefined)
   }
 
-  const hiddenGroups=groups.filter(group=>hiddenGroupIds.includes(group.id))
-  return <div className={styles.board} role="list" aria-label={t('Issue board')} data-dragging={Boolean(draggingId)}>
-    {groups.filter(group=>!hiddenGroupIds.includes(group.id)).map(group => <section className={styles.column} role="listitem" key={group.id} aria-label={group.label}>
-      <IssueBoardGroupHeader group={group} createIssueLabel={createIssueLabel} onCreateIssue={onCreateIssue} onHideGroup={onHideGroup} onSelectIssue={onSelectIssue}/>
-      <div className={styles.cards} data-over={over?.groupId === group.id} data-over-end={over?.groupId === group.id && over.index === group.issues.length} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; if (event.target === event.currentTarget) setOver({ groupId: group.id, index: group.issues.length }) }} onDrop={event => { event.stopPropagation(); drop(event, group, group.issues.length) }}>
-        {group.issues.map((issue, index) => <IssueBoardCard
-          key={issue.id} issue={issue} properties={properties} propertyOptions={propertyOptions} selected={selectedIds.has(issue.id)} dragging={draggingId === issue.id}
-          dropBefore={over?.groupId === group.id && over.index === index}
-          onDragStart={() => setDraggingId(issue.id)} onDragEnd={() => { setDraggingId(undefined); setOver(undefined) }}
-          onDragOver={event => { event.preventDefault(); event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); setOver({ groupId: group.id, index: index + (event.clientY > rect.top + rect.height / 2 ? 1 : 0) }) }}
-          onDrop={event => { event.stopPropagation(); drop(event, group, over?.groupId === group.id ? over.index : index) }}
-          onOpen={() => onOpenIssue(issue)} onOpenSubIssue={onOpenIssue} onPropertyChange={(property, value) => onPropertyChange?.(issue, property, value)} onSelect={(selected, range) => onSelectIssue(issue.id, selected, range)}/>) }
-        <button className={styles.addIssue} type="button" onClick={() => onCreateIssue?.(group)}><Plus size={14}/>{t(createIssueLabel)}</button>
-      </div>
-    </section>)}
+  const renderColumn = (group: MyIssuesGroupData) => (
+    <IssueBoardColumn
+      key={group.id}
+      group={group}
+      createIssueLabel={createIssueLabel}
+      properties={properties}
+      propertyOptions={propertyOptions}
+      selectedIds={selectedIds}
+      draggingId={draggingId}
+      over={over}
+      onCreateIssue={onCreateIssue}
+      onHideGroup={onHideGroup}
+      onSelectIssue={onSelectIssue}
+      onDragStart={id => setDraggingId(id)}
+      onDragEnd={() => { setDraggingId(undefined); setOver(undefined) }}
+      onSetOver={setOver}
+      onDrop={drop}
+      onOpenIssue={onOpenIssue}
+      onPropertyChange={onPropertyChange}
+    />
+  )
+
+  const virtualizeColumns = visibleGroups.length > COLUMN_VIRTUALIZATION_THRESHOLD
+
+  return <div className={styles.board} role="list" aria-label={t('Issue board')} data-dragging={Boolean(draggingId)} data-virtualized-columns={virtualizeColumns || undefined}>
+    {virtualizeColumns ? (
+      <Virtuoso
+        horizontalDirection
+        className={styles.virtualColumns}
+        data={visibleGroups}
+        computeItemKey={(_index, group) => group.id}
+        defaultItemHeight={348}
+        increaseViewportBy={COLUMN_OVERSCAN}
+        itemContent={(_index, group) => renderColumn(group)}
+        style={{ height: '100%', width: '100%' }}
+      />
+    ) : visibleGroups.map(group => renderColumn(group))}
     {hiddenGroups.length>0&&<section className={styles.hiddenColumns} aria-label={t('Hidden columns')}><strong>{t('Hidden columns')}</strong>{hiddenGroups.map(group=><button key={group.id} type="button" onClick={()=>onShowGroup?.(group.id)}><StatusIcon state={{id:group.id,name:group.label,type:group.stateType??'unstarted',color:group.state?.color??'var(--status-neutral)'}} size={14}/><span data-i18n-ignore>{group.label}</span><b>{group.totalCount ?? group.issues.length}</b></button>)}</section>}
   </div>
+}
+
+function IssueBoardColumn({ group, createIssueLabel, properties, propertyOptions, selectedIds, draggingId, over, onCreateIssue, onHideGroup, onSelectIssue, onDragStart, onDragEnd, onSetOver, onDrop, onOpenIssue, onPropertyChange }: {
+  group: MyIssuesGroupData
+  createIssueLabel: string
+  properties: ReadonlySet<MyIssuesProperty>
+  propertyOptions: MyIssuesRowPropertyOptions
+  selectedIds: ReadonlySet<string>
+  draggingId?: string
+  over?: { groupId: string; index: number }
+  onCreateIssue?: (group: MyIssuesGroupData) => void
+  onHideGroup?: (groupId: string) => void
+  onSelectIssue: (issueId: string, selected: boolean, range: boolean) => void
+  onDragStart: (id: string) => void
+  onDragEnd: () => void
+  onSetOver: (value: { groupId: string; index: number } | undefined) => void
+  onDrop: (event: DragEvent, group: MyIssuesGroupData, index: number) => void
+  onOpenIssue: (issue: MyIssuesRowData) => void
+  onPropertyChange?: (issue: MyIssuesRowData, property: MyIssuesEditableProperty, value: string | string[]) => void | Promise<void>
+}) {
+  const { t } = useI18n()
+  const virtualizeCards = group.issues.length > CARD_VIRTUALIZATION_THRESHOLD
+  const card = (issue: MyIssuesRowData, index: number) => (
+    <IssueBoardCard
+      key={issue.id} issue={issue} properties={properties} propertyOptions={propertyOptions} selected={selectedIds.has(issue.id)} dragging={draggingId === issue.id}
+      dropBefore={over?.groupId === group.id && over.index === index}
+      onDragStart={() => onDragStart(issue.id)} onDragEnd={onDragEnd}
+      onDragOver={event => { event.preventDefault(); event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); onSetOver({ groupId: group.id, index: index + (event.clientY > rect.top + rect.height / 2 ? 1 : 0) }) }}
+      onDrop={event => { event.stopPropagation(); onDrop(event, group, over?.groupId === group.id ? over.index : index) }}
+      onOpen={() => onOpenIssue(issue)} onOpenSubIssue={onOpenIssue} onPropertyChange={(property, value) => onPropertyChange?.(issue, property, value)} onSelect={(selected, range) => onSelectIssue(issue.id, selected, range)}
+    />
+  )
+  return <section className={styles.column} role="listitem" aria-label={group.label} style={virtualizeCards ? { height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 } : undefined}>
+    <IssueBoardGroupHeader group={group} createIssueLabel={createIssueLabel} onCreateIssue={onCreateIssue} onHideGroup={onHideGroup} onSelectIssue={onSelectIssue}/>
+    <div className={styles.cards} data-over={over?.groupId === group.id} data-over-end={over?.groupId === group.id && over.index === group.issues.length} data-virtualized={virtualizeCards || undefined} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; if (event.target === event.currentTarget) onSetOver({ groupId: group.id, index: group.issues.length }) }} onDrop={event => { event.stopPropagation(); onDrop(event, group, group.issues.length) }} style={virtualizeCards ? { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' } : undefined}>
+      {virtualizeCards ? (
+        <Virtuoso
+          className={styles.virtualCards}
+          data={group.issues}
+          computeItemKey={(_index, issue) => issue.id}
+          defaultItemHeight={CARD_ESTIMATED_SIZE}
+          increaseViewportBy={CARD_OVERSCAN}
+          itemContent={(index, issue) => card(issue, index)}
+          style={{ flex: '1 1 auto', minHeight: 120, height: '100%' }}
+        />
+      ) : group.issues.map((issue, index) => card(issue, index))}
+      <button className={styles.addIssue} type="button" onClick={() => onCreateIssue?.(group)}><Plus size={14}/>{t(createIssueLabel)}</button>
+    </div>
+  </section>
 }
 
 export function IssueBoardGroupHeader({group,createIssueLabel='Add new issue',onCreateIssue,onHideGroup,onSelectIssue}:{group:MyIssuesGroupData;createIssueLabel?:string;onCreateIssue?:(group:MyIssuesGroupData)=>void;onHideGroup?:(id:string)=>void;onSelectIssue?:(id:string,selected:boolean,range:boolean)=>void}){
