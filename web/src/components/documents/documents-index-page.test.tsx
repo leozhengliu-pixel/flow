@@ -17,9 +17,10 @@ it('restores document filters from the route and preserves unrelated query param
 })
 
 it('restores Creator + Project + Dates filter blocks from the route', () => {
+  const today = new Date().toISOString()
   const docs = [
-    { id: 'document-1', slugId: 'a', title: 'Alpha', content: '', creator: viewer, projectIds: [project.id], teamIds: ['team-1'], subscriberIds: [], favorite: false, createdAt: '2026-09-20T00:00:00.000Z', updatedAt: '2026-09-20T00:00:00.000Z', revisions: [] },
-    { id: 'document-2', slugId: 'b', title: 'Beta', content: '', creator: teammate, projectIds: [], teamIds: ['team-1'], subscriberIds: [], favorite: false, createdAt: '2026-09-20T00:00:00.000Z', updatedAt: '2026-09-20T00:00:00.000Z', revisions: [] },
+    { id: 'document-1', slugId: 'a', title: 'Alpha', content: '', creator: viewer, projectIds: [project.id], teamIds: ['team-1'], subscriberIds: [], favorite: false, createdAt: today, updatedAt: today, revisions: [] },
+    { id: 'document-2', slugId: 'b', title: 'Beta', content: '', creator: teammate, projectIds: [], teamIds: ['team-1'], subscriberIds: [], favorite: false, createdAt: today, updatedAt: today, revisions: [] },
   ] as FlowDocument[]
   const onFiltersChange = vi.fn()
   render(<I18nProvider><DocumentsIndexPage data={makeBootstrap({ documents: docs })} onReload={vi.fn()} search={`?creatorId=${viewer.id}&projectId=${project.id}&dates=today`} onFiltersChange={onFiltersChange}/></I18nProvider>)
