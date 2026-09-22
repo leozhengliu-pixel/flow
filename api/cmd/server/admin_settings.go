@@ -18,6 +18,7 @@ import (
 type webhookInput struct {
 	Name            *string   `json:"name,omitempty"`
 	URL             *string   `json:"url,omitempty"`
+	ApplicationID   *string   `json:"applicationId,omitempty"`
 	ResourceTypes   *[]string `json:"resourceTypes,omitempty"`
 	TeamIDs         *[]string `json:"teamIds,omitempty"`
 	TeamRestriction *string   `json:"teamRestriction,omitempty"`
@@ -189,6 +190,13 @@ func applyWebhookInput(data *domain.Bootstrap, item *domain.Webhook, input webho
 			return fmt.Errorf("%w: webhook URL must be http or https", errInvalid)
 		}
 		item.URL = value
+	}
+	if input.ApplicationID != nil {
+		value := strings.TrimSpace(*input.ApplicationID)
+		if value != "" && !slices.ContainsFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == value }) {
+			return errInvalid
+		}
+		item.ApplicationID = value
 	}
 	if input.ResourceTypes != nil {
 		allowed := []string{"issues", "comments", "attachments", "documents", "reactions", "projects", "project_updates", "cycles", "labels", "users", "issue_sla", "initiatives", "customers", "customer_requests", "releases", "milestones", "relations"}

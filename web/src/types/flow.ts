@@ -76,6 +76,53 @@ export interface Invitation {
   acceptedAt?: string;
   token?: string;
 }
+
+export interface WorkspaceInviteLink {
+  token: string;
+  enabled: boolean;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InviteLinkPreview {
+  token: string;
+  workspace: Workspace;
+  allowedAuthServices: string[];
+  alreadyMember: boolean;
+}
+
+export interface OAuthSyncGroupRequest {
+  id: string;
+  applicationId: string;
+  groupName: string;
+  teamId?: string;
+  status: 'pending' | 'approved' | 'denied' | string;
+  requestedBy?: string;
+  reviewedBy?: string;
+  createdAt: string;
+  reviewedAt?: string;
+}
+
+export interface SCIMToken {
+  id: string;
+  workspaceId: string;
+  name: string;
+  secret?: string;
+  createdAt: string;
+}
+
+export interface WebhookFailureEvent {
+  id: string;
+  webhookId: string;
+  applicationId?: string;
+  executionId: string;
+  url: string;
+  httpStatus?: number;
+  responseOrError: string;
+  createdAt: string;
+}
+
 export interface InvitationPreview {
   id: UUID;
   email: string;
@@ -1077,6 +1124,7 @@ export interface OAuthApplication {
   id: UUID;
   name: string;
   description?: string;
+  logoUrl?: string;
   clientId: string;
   clientSecret?: string;
   redirectUris: string[];
@@ -1251,6 +1299,7 @@ export interface Webhook {
   id: UUID;
   name: string;
   url: string;
+  applicationId?: string;
   resourceTypes: string[];
   teamIds: UUID[];
   enabled: boolean;
@@ -1258,15 +1307,7 @@ export interface Webhook {
   createdAt: string;
   updatedAt: string;
 }
-export interface WebhookFailureEvent {
-  id: UUID;
-  webhookId: UUID;
-  executionId: string;
-  url: string;
-  httpStatus: number | null;
-  responseOrError: string;
-  createdAt: string;
-}
+
 export interface AccountSessionInfo {
   id: string;
   current: boolean;
@@ -1760,6 +1801,9 @@ export interface BootstrapData {
   members: WorkspaceMember[];
   teamMembers: TeamMember[];
   invitations: Invitation[];
+  workspaceInviteLink?: WorkspaceInviteLink | null;
+  oauthSyncGroupRequests?: OAuthSyncGroupRequest[];
+  webhookFailureEvents?: WebhookFailureEvent[];
   viewerRole: WorkspaceRole;
 }
 export interface TeamAutomationRule {

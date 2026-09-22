@@ -167,7 +167,7 @@ import type {
   ProjectMutationInput,
 } from "@/components/projects-page/projects-page";
 import type { NewProjectDraft } from "@/components/projects-page/new-project-dialog";
-import { WorkspaceOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, DocumentsIndexPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
+import { WorkspaceOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, InviteLinkAccept, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, DocumentsIndexPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
 import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-list";
 import { useLocation } from "react-router-dom";
@@ -472,7 +472,8 @@ function App() {
       "/forgot-password",
       "/reset-password",
     ].some((path) => location.pathname === path) ||
-    location.pathname.startsWith("/invite/");
+    location.pathname.startsWith("/invite/") ||
+    location.pathname.startsWith("/join/");
   useEffect(() => {
     if (authReady && !session && (oauthPath || connectPath)) {
       const returnTo = `${location.pathname}${location.search}`;
@@ -494,7 +495,8 @@ function App() {
       authReady &&
       session &&
       authPath &&
-      !location.pathname.startsWith("/invite/")
+      !location.pathname.startsWith("/invite/") &&
+      !location.pathname.startsWith("/join/")
     ) {
       navigateTo("/", { replace: true });
     }
@@ -3844,6 +3846,20 @@ function App() {
   );
   if (authenticationPolicy && !authPath) return withStore(<AuthenticationPolicyPage code={authenticationPolicy}/>);
   if (!authReady) return withStore(<AppStartup />);
+  if (location.pathname.startsWith("/join/"))
+    return withStore(
+      <Suspense fallback={<AppStartup />}>
+        <InviteLinkAccept
+          session={session}
+          onJoined={async (workspaceKey) => {
+            setAccount(await fetchAccountBootstrap());
+            setData(null);
+            clearNavigationCache();
+            navigateTo(myIssuesPath(workspaceKey), { replace: true });
+          }}
+        />
+      </Suspense>
+    );
   if (!session || authPath)
     return withStore(
       <AuthPage
@@ -3967,6 +3983,9 @@ function App() {
           onOpenAsksEmailIntake={() =>
             navigateTo(newAsksEmailIntakePath(data.workspace.urlKey))
           }
+          identityProviderId={route.identityProviderId}
+          applicationId={route.applicationId}
+          applicationMode={route.applicationMode}
           issueTemplateMode={route.issueTemplateMode}
           issueTemplateId={route.issueTemplateId}
           projectTemplateMode={route.projectTemplateMode}

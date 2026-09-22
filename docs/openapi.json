@@ -6271,6 +6271,56 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/invite-links/join": {
+      "post": {
+        "operationId": "post_invite_links_join",
+        "tags": [
+          "invite-links"
+        ],
+        "summary": "POST /api/invite-links/join",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/invite-links/preview/{token}": {
+      "get": {
+        "operationId": "get_invite_links_preview_token",
+        "tags": [
+          "invite-links"
+        ],
+        "summary": "GET /api/invite-links/preview/{token}",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/issue-records": {
       "get": {
         "operationId": "get_issue_records",
@@ -9449,6 +9499,104 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/oauth-applications/{id}/failures": {
+      "get": {
+        "operationId": "get_oauth_applications_id_failures",
+        "tags": [
+          "oauth-applications"
+        ],
+        "summary": "GET /api/oauth-applications/{id}/failures",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/oauth-applications/{id}/sync-groups": {
+      "get": {
+        "operationId": "get_oauth_applications_id_sync_groups",
+        "tags": [
+          "oauth-applications"
+        ],
+        "summary": "GET /api/oauth-applications/{id}/sync-groups",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/oauth-applications/{id}/sync-groups/{requestId}": {
+      "post": {
+        "operationId": "post_oauth_applications_id_sync_groups_requestId",
+        "tags": [
+          "oauth-applications"
+        ],
+        "summary": "POST /api/oauth-applications/{id}/sync-groups/{requestId}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/oauth/authorization-request": {
       "get": {
         "operationId": "get_oauth_authorization_request",
@@ -11566,6 +11714,36 @@
           "scim"
         ],
         "summary": "DELETE /api/scim/tokens/{id}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/scim/tokens/{id}/rotate": {
+      "post": {
+        "operationId": "post_scim_tokens_id_rotate",
+        "tags": [
+          "scim"
+        ],
+        "summary": "POST /api/scim/tokens/{id}/rotate",
         "parameters": [
           {
             "name": "id",
@@ -14133,6 +14311,92 @@
           },
           {
             "name": "invitationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/workspaces/{workspaceKey}/invite-link": {
+      "delete": {
+        "operationId": "delete_workspaces_workspaceKey_invite_link",
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "DELETE /api/workspaces/{workspaceKey}/invite-link",
+        "parameters": [
+          {
+            "name": "workspaceKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "get": {
+        "operationId": "get_workspaces_workspaceKey_invite_link",
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "GET /api/workspaces/{workspaceKey}/invite-link",
+        "parameters": [
+          {
+            "name": "workspaceKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "post": {
+        "operationId": "post_workspaces_workspaceKey_invite_link",
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "POST /api/workspaces/{workspaceKey}/invite-link",
+        "parameters": [
+          {
+            "name": "workspaceKey",
             "in": "path",
             "required": true,
             "schema": {
