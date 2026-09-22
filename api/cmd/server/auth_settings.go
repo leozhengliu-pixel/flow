@@ -45,6 +45,9 @@ func allowedAuthenticationMethod(data domain.Bootstrap, role string, auth store.
 }
 
 func (s *server) authorizeAuthenticationPolicy(w http.ResponseWriter, r *http.Request, data domain.Bootstrap, role string) bool {
+	if s.authDisabled {
+		return true
+	}
 	if _, apiKey := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); apiKey {
 		return true
 	}
