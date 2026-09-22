@@ -3,6 +3,7 @@
  * REST-facing catalog only (no GraphQL). Availability labels Coming soon /
  * Not supported are product availability — not engineering-gap banners.
  * P1-D adds product patterns for long-tail OAuth shells (LS-0340 / LS-0685…).
+ * P2-D ships browser OAuth for Microsoft Teams / PagerDuty / Front (LS-0409 / LS-0451 / LS-0278).
  */
 
 export type IntegrationAvailability = "supported" | "coming_soon" | "not_supported";
@@ -38,7 +39,7 @@ export interface IntegrationCatalogEntry {
   /** Hide subtype rows from the main All Integrations grid. */
   subtype?: boolean;
   /** Providers that currently have REST connect / manage flows. */
-  connectProvider?: "github" | "gitlab" | "slack" | "jira";
+  connectProvider?: "github" | "gitlab" | "slack" | "jira" | "microsoftteams" | "pagerduty" | "front";
   /** Optional product-capability copy for Coming soon / Not supported detail pages. */
   productPattern?: IntegrationProductPattern;
 }
@@ -154,7 +155,17 @@ export const INTEGRATION_CATALOG: IntegrationCatalogEntry[] = [
     name: "Microsoft Teams",
     description: "Collaborate on issues from Microsoft Teams",
     category: "Productivity",
-    availability: "coming_soon",
+    availability: "supported",
+    connectProvider: "microsoftteams",
+    productPattern: {
+      headline: "Teams alongside Slack",
+      summary: "Connect a Microsoft Teams tenant so workspace updates and issue collaboration can reach your channels.",
+      capabilities: [
+        "Authorize a Teams tenant with browser OAuth",
+        "Keep connection status honest when credentials are missing",
+        "Reuse the shared OAuth complete surface after redirect",
+      ],
+    },
   },
   {
     slug: "notion",
@@ -170,7 +181,17 @@ export const INTEGRATION_CATALOG: IntegrationCatalogEntry[] = [
     name: "PagerDuty",
     description: "Create issues from incidents and on-call events",
     category: "Engineering",
-    availability: "coming_soon",
+    availability: "supported",
+    connectProvider: "pagerduty",
+    productPattern: {
+      headline: "Incidents into Flow",
+      summary: "Link PagerDuty so on-call incidents can become tracked Flow issues.",
+      capabilities: [
+        "Start browser OAuth against PagerDuty Identity",
+        "Complete via the shared oauth/complete flash",
+        "No fake connected state without a successful token exchange",
+      ],
+    },
   },
   {
     slug: "opsgenie",
@@ -186,7 +207,17 @@ export const INTEGRATION_CATALOG: IntegrationCatalogEntry[] = [
     name: "Front",
     description: "Turn Front conversations into issues",
     category: "Support",
-    availability: "not_supported",
+    availability: "supported",
+    connectProvider: "front",
+    productPattern: {
+      headline: "Support desk long-tail",
+      summary: "Connect Front so conversations can reopen when linked Flow issues complete.",
+      capabilities: [
+        "Browser OAuth start/complete with existing REST routes",
+        "Reopen Front tickets when linked issues complete (follow-on)",
+        "Catalog stays honest until OAuth credentials are configured",
+      ],
+    },
   },
   {
     slug: "gong",

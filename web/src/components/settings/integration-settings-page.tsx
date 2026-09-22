@@ -1,6 +1,7 @@
 /**
  * LS-0338 IntegrationSettingsPage — generic /settings/integrations/:slug shell + registry.
  * P1-D: long-tail OAuth uses catalog coming-soon *product* patterns — no honesty/gap banners.
+ * P2-D: Teams / PagerDuty / Front use browser oauth/start + CompleteOAuthView.
  */
 import { Plug } from "lucide-react";
 
@@ -64,20 +65,35 @@ export function IntegrationSettingsPage({
   const subtypes = subtypesFor(entry.slug);
   const pattern = getIntegrationProductPattern(entry);
 
-  const toggleSlack = async () => {
-    if (!entry.connectProvider || entry.connectProvider !== "slack") return;
+  const oauthProviders = new Set(["slack", "microsoftteams", "pagerduty", "front"]);
+  const canBrowserOAuth =
+    entry.availability === "supported" &&
+    Boolean(entry.connectProvider) &&
+    oauthProviders.has(entry.connectProvider!);
+
+  const toggleOAuth = async () => {
+    if (!entry.connectProvider || !canBrowserOAuth) return;
+    const provider = entry.connectProvider;
     setBusy(true);
     try {
-      if (connected) await disconnectIntegration("slack");
-      else
+      if (connected) await disconnectIntegration(provider);
+      else {
+        const config =
+          provider === "slack"
+            ? { mode: "workspace" }
+            : provider === "microsoftteams"
+              ? { mode: "workspace" }
+              : {};
         await authorizeIntegration(
-          "slack",
-          { name: "Slack", config: { mode: "workspace" } },
+          provider,
+          { name: entry.name, config },
           Boolean(connection),
         );
+      }
       await onReload();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("Could not update integration"));
+      await onReload();
     } finally {
       setBusy(false);
     }
@@ -114,12 +130,12 @@ export function IntegrationSettingsPage({
                 </span>
               </div>
               <aside>
-                {entry.availability === "supported" && entry.connectProvider === "slack" ? (
+                {canBrowserOAuth ? (
                   <button
                     type="button"
                     className={`feature-button${connected ? " danger" : " primary"}`}
                     disabled={busy}
-                    onClick={() => void toggleSlack()}
+                    onClick={() => void toggleOAuth()}
                   >
                     {t(connected ? "Disconnect" : "Enable")}
                   </button>

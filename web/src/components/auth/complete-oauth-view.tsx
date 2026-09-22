@@ -10,6 +10,9 @@ const PROVIDER_LABELS: Record<string, string> = {
   slack: 'Slack',
   figma: 'Figma',
   sentry: 'Sentry',
+  microsoftteams: 'Microsoft Teams',
+  pagerduty: 'PagerDuty',
+  front: 'Front',
 }
 
 /** LS-0127 CompleteOAuthView — light success/error flash after server OAuth redirect. */

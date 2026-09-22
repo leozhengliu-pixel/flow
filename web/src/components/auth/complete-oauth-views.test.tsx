@@ -34,6 +34,31 @@ describe('CompleteOAuthView', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Unable to complete connection with GitHub')
     expect(screen.getByRole('alert')).toHaveTextContent('access_denied')
   })
+
+  it('labels Microsoft Teams / PagerDuty / Front on shared complete flash', () => {
+    const { unmount: u1 } = render(
+      <MemoryRouter initialEntries={['/connect/oauth/complete?provider=microsoftteams&status=connected&workspace=acme']}>
+        <CompleteOAuthView />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('status')).toHaveTextContent('Microsoft Teams connected')
+    u1()
+
+    const { unmount: u2 } = render(
+      <MemoryRouter initialEntries={['/connect/oauth/complete?provider=pagerduty&status=connected&workspace=acme']}>
+        <CompleteOAuthView />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('status')).toHaveTextContent('PagerDuty connected')
+    u2()
+
+    render(
+      <MemoryRouter initialEntries={['/connect/oauth/complete?provider=front&status=error&error=access_denied']}>
+        <CompleteOAuthView />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent('Unable to complete connection with Front')
+  })
 })
 
 describe('CompleteFigmaAuthView', () => {

@@ -29,3 +29,20 @@ it('exposes coming-soon product patterns for long-tail OAuth (P1-D)', () => {
   expect(getIntegrationCatalogEntry('github-enterprise-cloud')?.parentSlug).toBe('github')
   expect(getIntegrationProductPattern(getIntegrationCatalogEntry('github')!)).toBeUndefined()
 })
+
+it('ships P2-D browser OAuth providers as supported without fake state', () => {
+  for (const [slug, provider] of [
+    ['microsoft-teams', 'microsoftteams'],
+    ['pagerduty', 'pagerduty'],
+    ['front', 'front'],
+  ] as const) {
+    const entry = getIntegrationCatalogEntry(slug)!
+    expect(entry.availability).toBe('supported')
+    expect(entry.connectProvider).toBe(provider)
+    expect(entry.productPattern?.capabilities.length).toBeGreaterThan(0)
+    // Supported entries do not surface coming-soon pattern chrome
+    expect(getIntegrationProductPattern(entry)).toBeUndefined()
+  }
+  // Deferred Salesforce stays not_supported
+  expect(getIntegrationCatalogEntry('salesforce')?.availability).toBe('not_supported')
+})
