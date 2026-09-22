@@ -6,9 +6,13 @@ import { MentionExtension } from '@/components/issue/editor/mention-extension'
 import { DescriptionImage } from '@/components/issue/editor/image-extension'
 import { DescriptionFile, DescriptionVideo } from '@/components/issue/editor/file-extension'
 import { structuredBlocks } from '@/components/issue/editor/structured-blocks'
+import { useHydrateModelsInMarkdown } from '@/hooks/use-hydrate-models-in-markdown'
 import '@/components/issue/issue-description-editor.css'
 
 export function RichComment({ body, data, version }: { body: string; data?: Record<string, unknown>; version?: number }) {
+  // LS-0738 — warm store models referenced in comment markdown / links.
+  useHydrateModelsInMarkdown(body)
+
   const selection = data?.selection as { issueId?: string; text?: string; from?: number; to?: number } | undefined
   const initial = commentContent(body, data)
   const editor = useEditor({

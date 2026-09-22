@@ -3,6 +3,7 @@ import { applyRealtimePatch, type RealtimePatchResult } from './apply-realtime-p
 import {
   buildEntityDirectory,
   getEntityById,
+  resolveEntity,
   type EntityDirectory,
 } from './entity-directory'
 import type { WorkspaceEntityType } from './entity-type'
@@ -19,8 +20,9 @@ export type WorkspaceStore = {
   readonly entities: EntityDirectory
   getById: (type: WorkspaceEntityType | string, id: string) => unknown | undefined
   /**
-   * Reserved hydrate API (LS-0770 / future LS-0736/0738).
-   * Wave 2 resolves from the in-memory directory only; later waves may REST-fetch.
+   * Hydrate API (LS-0770 / LS-0736 / LS-0738).
+   * Resolves from the in-memory directory (UUID, issue identifier, slugId).
+   * Later waves may REST-fetch misses; signature stays Promise-based.
    */
   hydrateModel: (type: WorkspaceEntityType | string, id: string) => Promise<unknown | undefined>
   applyBootstrap: (next: BootstrapData | null) => WorkspaceStore
@@ -37,8 +39,7 @@ export function createWorkspaceStore(data: BootstrapData | null = null): Workspa
       return getEntityById(entities, type, id)
     },
     async hydrateModel(type, id) {
-      // Reserved signature for markdown / AI hydrate hooks (Wave 17 / P2).
-      return getEntityById(entities, type, id)
+      return resolveEntity(entities, type, id)
     },
     applyBootstrap(next) {
       return createWorkspaceStore(next)

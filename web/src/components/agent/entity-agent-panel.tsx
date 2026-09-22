@@ -10,6 +10,7 @@ import {
   EntityAgentThread,
 } from './entity-agent-thread'
 import { conversationDraftKeyFor } from './agent-drafts'
+import { useHydrateAiContext } from '@/hooks/use-hydrate-ai-context'
 import styles from './entity-agent-panel.module.css'
 
 export type EntityAgentEntityType = 'issue' | 'document' | 'initiative' | 'project'
@@ -76,6 +77,7 @@ export function EntityAgentPanel({
   const [draftEpoch, setDraftEpoch] = useState(0)
   const abortRef = useRef<AbortController | undefined>(undefined)
   const entityKey = `${target.type}:${target.id}`
+  const hydrateAiContext = useHydrateAiContext()
 
   const conversationDraftKey = useMemo(() => {
     if (agentSidebarTarget?.type === 'aiConversationMention') {
@@ -173,6 +175,12 @@ export function EntityAgentPanel({
   const submit = async () => {
     const message = input.trim()
     if (!message || loading || !status?.enabled) return
+    const issueIdsForContext = target.issueIds ?? contextIssues.map(issue => issue.id)
+    await hydrateAiContext([
+      { type: target.type, id: target.id },
+      ...issueIdsForContext.map(id => ({ type: 'issue' as const, id })),
+      ...contextIssues.map(issue => ({ type: 'issue' as const, id: issue.id })),
+    ])
     setMessages(current => [
       ...current,
       { id: `pending-${Date.now()}`, role: 'user', content: message, createdAt: new Date().toISOString() },
