@@ -927,11 +927,13 @@ function ProjectProgressSparkline({ createdAt, progress, startDate, targetDate }
 }
 
 function ProjectTimeline({ groups, onOpenProject, onUpdateProject, propertyOptions }: { groups: ProjectDataGroup[], onOpenProject?: (project: ProjectPageItem) => void, onUpdateProject?: (projectId: string, input: { startDate?: string; targetDate?: string }) => Promise<unknown>, propertyOptions?: ProjectPropertyOptions }) {
-  const [drag, setDrag] = useState<{ id: string; startX: number; originalStart?: string; originalTarget?: string }>()
+  const [drag, setDrag] = useState<{ id: string; startX: number; originalStart?: string; originalTarget?: string; mode: 'move' | 'resize-start' | 'resize-end' }>()
   const draggedRef = useRef(false)
+  const scrollerRef = useRef<HTMLDivElement>(null)
   const rows = groups.flatMap(group => group.subgroups?.length ? group.subgroups.map(subgroup => ({ ...subgroup, name: `${group.name} / ${subgroup.name}` })) : [group])
   const allProjects = rows.flatMap(group => group.projects)
   const today = new Date()
+  today.setHours(0, 0, 0, 0)
   const datedValues = allProjects.flatMap(project => [project.rawStartDate, project.rawTargetDate]).filter((value): value is string => Boolean(value)).map(value => new Date(`${value}T00:00:00`)).filter(date => Number.isFinite(date.getTime()))
   const timelineStart = startOfTimeline(datedValues.length ? new Date(Math.min(today.getTime(), ...datedValues.map(Number))) : today)
   const furthestDate = datedValues.length ? new Date(Math.max(today.getTime(), ...datedValues.map(Number))) : today
@@ -939,24 +941,68 @@ function ProjectTimeline({ groups, onOpenProject, onUpdateProject, propertyOptio
   const months = timelineMonths(timelineStart, timelineEnd)
   const rangeMs = Math.max(86400000, timelineEnd.getTime() - timelineStart.getTime())
   const rangeDays = Math.max(1, Math.round(rangeMs / 86400000))
+  const todayPct = Math.max(0, Math.min(100, (today.getTime() - timelineStart.getTime()) / rangeMs * 100))
+  const scrollToToday = () => {
+    const node = scrollerRef.current
+    if (!node) return
+    const width = node.scrollWidth - node.clientWidth
+    node.scrollTo({ left: Math.max(0, (todayPct / 100) * node.scrollWidth - node.clientWidth / 2), behavior: 'smooth' })
+    void width
+  }
+  const iso = (date: Date) => date.toISOString().slice(0, 10)
+  const applyDateDelta = async (projectId: string, startDate: Date, endDate: Date, days: number, mode: 'move' | 'resize-start' | 'resize-end') => {
+    if (!onUpdateProject || days === 0) return
+    const nextStart = new Date(startDate)
+    const nextEnd = new Date(endDate)
+    if (mode === 'move') {
+      nextStart.setDate(nextStart.getDate() + days)
+      nextEnd.setDate(nextEnd.getDate() + days)
+    } else if (mode === 'resize-start') {
+      nextStart.setDate(nextStart.getDate() + days)
+      if (nextStart > nextEnd) nextStart.setTime(nextEnd.getTime())
+    } else {
+      nextEnd.setDate(nextEnd.getDate() + days)
+      if (nextEnd < nextStart) nextEnd.setTime(nextStart.getTime())
+    }
+    await onUpdateProject(projectId, { startDate: iso(nextStart), targetDate: iso(nextEnd) })
+  }
   return <div aria-label="Project timeline" className="lp-project-timeline" role="grid">
-    <header><span>Projects</span><div style={{ gridTemplateColumns: `repeat(${months.length}, minmax(88px, 1fr))` }}>{months.map(month => <span key={month.toISOString()}>{month.toLocaleDateString(undefined, { month: 'short', year: month.getMonth() === 0 ? 'numeric' : undefined })}</span>)}</div></header>
-    <div className="lp-project-timeline__body">{rows.map(group => <section key={group.id}>
-      <h2><ProjectGroupStatus color={group.color} compact name={group.name} propertyOptions={propertyOptions}/><span data-i18n-ignore>{group.name}</span><small>{projectCount(group)}</small></h2>
-      <div className="lp-project-timeline__tracks">{group.projects.map((project, index) => {
-        const start = project.rawStartDate ?? project.startDate
-        const target = project.rawTargetDate ?? project.targetDate
-        const fallbackStart = new Date(timelineStart); fallbackStart.setDate(fallbackStart.getDate() + index * 14)
-        const startDate = start ? new Date(start) : fallbackStart
-        const endDate = target ? new Date(target) : new Date(startDate.getTime() + 21 * 86400000)
-        const startPct = Math.max(0, Math.min(96, (startDate.getTime() - timelineStart.getTime()) / rangeMs * 100))
-        const widthPct = Math.max(4, Math.min(100 - startPct, (endDate.getTime() - startDate.getTime()) / rangeMs * 100))
-        const isDragging = drag?.id === project.id
-        return <button aria-label={`${project.name} timeline bar`} data-dragging={isDragging || undefined} key={project.id} onClick={() => { if (!draggedRef.current) onOpenProject?.(project); draggedRef.current = false }} onKeyDown={async event => { if (!onUpdateProject || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return; event.preventDefault(); const days = event.key === 'ArrowLeft' ? -1 : 1; const nextStart = new Date(startDate); const nextTarget = new Date(endDate); nextStart.setDate(nextStart.getDate() + days); nextTarget.setDate(nextTarget.getDate() + days); await onUpdateProject(project.id, { startDate: nextStart.toISOString().slice(0, 10), targetDate: nextTarget.toISOString().slice(0, 10) }) }} onPointerDown={event => { if (!onUpdateProject) return; event.preventDefault(); draggedRef.current = false; event.currentTarget.setPointerCapture(event.pointerId); setDrag({ id: project.id, startX: event.clientX, originalStart: start, originalTarget: target }) }} onPointerMove={event => { if (drag?.id !== project.id) return; if (Math.abs(event.clientX - drag.startX) > 3) draggedRef.current = true; const width = event.currentTarget.parentElement?.getBoundingClientRect().width ?? 1; const days = Math.round((event.clientX - drag.startX) / Math.max(width, 1) * rangeDays); event.currentTarget.style.setProperty('--timeline-drag-offset', `${days / rangeDays * 100}%`) }} onPointerCancel={event => { if (drag?.id !== project.id) return; draggedRef.current = false; setDrag(undefined); event.currentTarget.style.removeProperty('--timeline-drag-offset') }} onPointerUp={async event => { if (drag?.id !== project.id) return; const width = event.currentTarget.parentElement?.getBoundingClientRect().width ?? 1; const days = Math.round((event.clientX - drag.startX) / Math.max(width, 1) * rangeDays); const baseStart = drag.originalStart ? new Date(drag.originalStart) : startDate; const baseTarget = drag.originalTarget ? new Date(drag.originalTarget) : endDate; baseStart.setDate(baseStart.getDate() + days); baseTarget.setDate(baseTarget.getDate() + days); setDrag(undefined); event.currentTarget.style.removeProperty('--timeline-drag-offset'); if (days !== 0) await onUpdateProject?.(project.id, { startDate: baseStart.toISOString().slice(0, 10), targetDate: baseTarget.toISOString().slice(0, 10) }) }} style={{ '--timeline-start': `${startPct}%`, '--timeline-width': `${widthPct}%` } as CSSProperties} type="button"><span>{project.name}</span></button>
-      })}</div>
-    </section>)}</div>
+    <div className="lp-project-timeline__toolbar">
+      <button aria-label="Center timeline on today" className="lp-project-timeline__today" onClick={scrollToToday} type="button">Today</button>
+    </div>
+    <div className="lp-project-timeline__scroller" ref={scrollerRef}>
+      <header><span>Projects</span><div style={{ gridTemplateColumns: `repeat(${months.length}, minmax(88px, 1fr))` }}>{months.map(month => <span key={month.toISOString()}>{month.toLocaleDateString(undefined, { month: 'short', year: month.getMonth() === 0 ? 'numeric' : undefined })}</span>)}</div></header>
+      <div aria-hidden="true" className="lp-project-timeline__today-line" style={{ left: `calc(190px + (100% - 190px) * ${todayPct / 100})` }} />
+      <div className="lp-project-timeline__body">{rows.map(group => <section key={group.id}>
+        <h2><ProjectGroupStatus color={group.color} compact name={group.name} propertyOptions={propertyOptions}/><span data-i18n-ignore>{group.name}</span><small>{projectCount(group)}</small></h2>
+        <div className="lp-project-timeline__tracks">{group.projects.map(project => {
+          const start = project.rawStartDate ?? project.startDate
+          const target = project.rawTargetDate ?? project.targetDate
+          const hasDates = Boolean(start || target)
+          if (!hasDates) {
+            return <button aria-label={`Add dates for ${project.name}`} className="lp-project-timeline__add-dates" key={project.id} onClick={() => onOpenProject?.(project)} type="button">
+              <span data-i18n-ignore>{project.name}</span>
+              <em>Add dates</em>
+            </button>
+          }
+          const startDate = start ? new Date(`${start}T00:00:00`) : new Date(`${target}T00:00:00`)
+          const endDate = target ? new Date(`${target}T00:00:00`) : new Date(startDate.getTime() + 21 * 86400000)
+          const startPct = Math.max(0, Math.min(96, (startDate.getTime() - timelineStart.getTime()) / rangeMs * 100))
+          const widthPct = Math.max(4, Math.min(100 - startPct, (endDate.getTime() - startDate.getTime()) / rangeMs * 100))
+          const isDragging = drag?.id === project.id
+          return <div className="lp-project-timeline__bar" data-dragging={isDragging || undefined} key={project.id} style={{ '--timeline-start': `${startPct}%`, '--timeline-width': `${widthPct}%` } as CSSProperties}>
+            <button aria-label={`${project.name} timeline bar`} onClick={() => { if (!draggedRef.current) onOpenProject?.(project); draggedRef.current = false }} onKeyDown={async event => { if (!onUpdateProject || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return; event.preventDefault(); await applyDateDelta(project.id, startDate, endDate, event.key === 'ArrowLeft' ? -1 : 1, 'move') }} onPointerDown={event => { if (!onUpdateProject) return; event.preventDefault(); draggedRef.current = false; event.currentTarget.setPointerCapture(event.pointerId); setDrag({ id: project.id, startX: event.clientX, originalStart: start, originalTarget: target, mode: 'move' }) }} onPointerMove={event => { if (drag?.id !== project.id || drag.mode !== 'move') return; if (Math.abs(event.clientX - drag.startX) > 3) draggedRef.current = true; const width = event.currentTarget.parentElement?.parentElement?.getBoundingClientRect().width ?? 1; const days = Math.round((event.clientX - drag.startX) / Math.max(width, 1) * rangeDays); event.currentTarget.parentElement?.style.setProperty('--timeline-drag-offset', `${days / rangeDays * 100}%`) }} onPointerCancel={event => { if (drag?.id !== project.id || drag.mode !== 'move') return; draggedRef.current = false; setDrag(undefined); event.currentTarget.parentElement?.style.removeProperty('--timeline-drag-offset') }} onPointerUp={async event => { if (drag?.id !== project.id || drag.mode !== 'move') return; const width = event.currentTarget.parentElement?.parentElement?.getBoundingClientRect().width ?? 1; const days = Math.round((event.clientX - drag.startX) / Math.max(width, 1) * rangeDays); const baseStart = drag.originalStart ? new Date(`${drag.originalStart}T00:00:00`) : startDate; const baseTarget = drag.originalTarget ? new Date(`${drag.originalTarget}T00:00:00`) : endDate; setDrag(undefined); event.currentTarget.parentElement?.style.removeProperty('--timeline-drag-offset'); await applyDateDelta(project.id, baseStart, baseTarget, days, 'move') }} type="button"><span data-i18n-ignore>{project.name}</span></button>
+            {onUpdateProject && <>
+              <i aria-hidden="true" className="lp-project-timeline__handle is-start" onPointerDown={event => { event.preventDefault(); event.stopPropagation(); draggedRef.current = false; (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId); setDrag({ id: project.id, startX: event.clientX, originalStart: start, originalTarget: target, mode: 'resize-start' }) }} onPointerMove={event => { if (drag?.id !== project.id || drag.mode !== 'resize-start') return; if (Math.abs(event.clientX - drag.startX) > 2) draggedRef.current = true; const width = event.currentTarget.parentElement?.parentElement?.getBoundingClientRect().width ?? 1; const days = Math.round((event.clientX - drag.startX) / Math.max(width, 1) * rangeDays); event.currentTarget.parentElement?.style.setProperty('--timeline-resize-start', `${days / rangeDays * 100}%`) }} onPointerUp={async event => { if (drag?.id !== project.id || drag.mode !== 'resize-start') return; const width = event.currentTarget.parentElement?.parentElement?.getBoundingClientRect().width ?? 1; const days = Math.round((event.clientX - drag.startX) / Math.max(width, 1) * rangeDays); const baseStart = drag.originalStart ? new Date(`${drag.originalStart}T00:00:00`) : startDate; const baseTarget = drag.originalTarget ? new Date(`${drag.originalTarget}T00:00:00`) : endDate; setDrag(undefined); event.currentTarget.parentElement?.style.removeProperty('--timeline-resize-start'); await applyDateDelta(project.id, baseStart, baseTarget, days, 'resize-start') }} onPointerCancel={() => { setDrag(undefined) }} />
+              <i aria-hidden="true" className="lp-project-timeline__handle is-end" onPointerDown={event => { event.preventDefault(); event.stopPropagation(); draggedRef.current = false; (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId); setDrag({ id: project.id, startX: event.clientX, originalStart: start, originalTarget: target, mode: 'resize-end' }) }} onPointerMove={event => { if (drag?.id !== project.id || drag.mode !== 'resize-end') return; if (Math.abs(event.clientX - drag.startX) > 2) draggedRef.current = true; const width = event.currentTarget.parentElement?.parentElement?.getBoundingClientRect().width ?? 1; const days = Math.round((event.clientX - drag.startX) / Math.max(width, 1) * rangeDays); event.currentTarget.parentElement?.style.setProperty('--timeline-resize-end', `${days / rangeDays * 100}%`) }} onPointerUp={async event => { if (drag?.id !== project.id || drag.mode !== 'resize-end') return; const width = event.currentTarget.parentElement?.parentElement?.getBoundingClientRect().width ?? 1; const days = Math.round((event.clientX - drag.startX) / Math.max(width, 1) * rangeDays); const baseStart = drag.originalStart ? new Date(`${drag.originalStart}T00:00:00`) : startDate; const baseTarget = drag.originalTarget ? new Date(`${drag.originalTarget}T00:00:00`) : endDate; setDrag(undefined); event.currentTarget.parentElement?.style.removeProperty('--timeline-resize-end'); await applyDateDelta(project.id, baseStart, baseTarget, days, 'resize-end') }} onPointerCancel={() => { setDrag(undefined) }} />
+            </>}
+          </div>
+        })}</div>
+      </section>)}</div>
+    </div>
   </div>
 }
+
 
 function startOfTimeline(value: Date) { return new Date(value.getFullYear(), value.getMonth(), 1) }
 function addTimelineMonths(value: Date, count: number) { return new Date(value.getFullYear(), value.getMonth() + count, 1) }
