@@ -1,0 +1,13 @@
+.agent-elicitation-response-queue {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+  flex: 1;
+  padding: 4px 0;
+}
+.agent-elicitation-response-queue__label {
+  color: var(--theme-text-secondary, var(--label-faint, #8a8f98));
+  font-size: 12px;
+  line-height: 16px;
+}

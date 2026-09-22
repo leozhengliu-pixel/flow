@@ -40,8 +40,10 @@ import type {
 import "./feature-settings.css";
 import { SettingsToggle as BaseSettingsToggle } from './settings-primitives'
 import { AsksSettingsPage } from "./asks-settings";
+import { AgentTrustedSourcesSettings } from "./agent-trusted-sources-settings";
+import { CodingAgentSettingsPage } from "./coding-agent-settings";
 
-type FeaturePageId = Extract<SettingsPageId, "ai"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations">;
+type FeaturePageId = Extract<SettingsPageId, "ai"|"coding-sessions"|"coding-environments"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations">;
 type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onOpenReleasePipeline: (pipeline:ReleasePipeline) => void; onOpenIntegration:(provider:IntegrationProvider|string)=>void; onReload: () => Promise<void>; onNavigateSettings?: (page: SettingsPageId) => void; onOpenAsksSlack?: (integrationId: string) => void; onOpenAsksEmailIntake?: () => void };
 
 const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
@@ -99,7 +101,9 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
   const setFeature = <K extends keyof FeatureSettings>(key: K, value: FeatureSettings[K]) =>
     save({ featureSettings: { [key]: value } });
 
-  if (page === "ai") return <AIPage data={data} onReload={onReload} settings={settings} busy={busy || !['admin','owner'].includes(data.viewerRole)} setEnabled={setEnabled} setFeature={setFeature} onOpenIntegration={onOpenIntegration}/>;
+  if (page === "coding-sessions") return <CodingAgentSettingsPage data={data} settings={settings} onReload={onReload} onOpenEnvironments={() => onNavigateSettings?.("coding-environments")} />;
+  if (page === "coding-environments") return <CodingAgentSettingsPage data={data} settings={settings} mode="environments" onReload={onReload} />;
+  if (page === "ai") return <AIPage data={data} onReload={onReload} settings={settings} busy={busy || !['admin','owner'].includes(data.viewerRole)} setEnabled={setEnabled} setFeature={setFeature} onOpenIntegration={onOpenIntegration} onNavigateSettings={onNavigateSettings}/>;
   if (page === "initiatives") return <InitiativesFeatureSettings data={data} settings={settings} busy={busy} setEnabled={setEnabled} onScheduleChange={schedule => save({ featureSettings: { initiativeUpdateSchedule: initiativeScheduleValue(schedule.frequency), initiativeUpdateFrequencyWeeks: schedule.frequency, initiativeUpdateWeekday: schedule.weekday, initiativeUpdateHour: schedule.hour } })} onReload={onReload} onNavigateLabels={() => onNavigateSettings?.("initiative-labels")}/>;
   if (page === "documents") return <DocumentsPage data={data} onReload={onReload}/>;
   if (page === "customer-requests") return <CustomerRequestsPage data={data} settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload}/>;
@@ -110,7 +114,7 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
   return <IntegrationsPage data={data} onOpen={onOpenIntegration} onReload={onReload}/>;
 }
 
-function AIPage({data,onReload,settings,busy,setEnabled,setFeature,onOpenIntegration}:{data:BootstrapData;onReload:()=>Promise<void>;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void;onOpenIntegration:(provider:IntegrationProvider|string)=>void}) {
+function AIPage({data,onReload,settings,busy,setEnabled,setFeature,onOpenIntegration,onNavigateSettings}:{data:BootstrapData;onReload:()=>Promise<void>;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void;onOpenIntegration:(provider:IntegrationProvider|string)=>void;onNavigateSettings?: (page: SettingsPageId) => void}) {
   const { t } = useI18n();
   const [guidance,setGuidance]=useState(settings.agentInstructions??'');
   const [savingGuidance,setSavingGuidance]=useState(false);
@@ -177,6 +181,18 @@ function AIPage({data,onReload,settings,busy,setEnabled,setFeature,onOpenIntegra
     />
     <TriageIntelligenceFeatureSettings settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature}/>
     <FeatureSection title="Installed Agents" description="AI agents can work alongside you as teammates."><div className="settings-agent-guidance"><label>{t('Installed agents guidance')}<textarea aria-label={t('Installed agents guidance')} maxLength={8000} disabled={!canEdit||savingGuidance} value={guidance} onChange={event=>setGuidance(event.target.value)}/></label><FeatureButton primary disabled={!canEdit||savingGuidance||guidance===(settings.agentInstructions??'')} onClick={async()=>{setSavingGuidance(true);try{await updateWorkspaceAgentGuidance(guidance);await onReload()}catch(error){toast.error(message(error))}finally{setSavingGuidance(false)}}}>Save</FeatureButton></div></FeatureSection>
+    <FeatureSection title="Coding sessions" description="Harness, model, and environment preferences for coding agents.">
+      <CodingAgentSettingsPage
+        data={data}
+        settings={settings}
+        disabled={busy}
+        onReload={onReload}
+        onOpenEnvironments={() => onNavigateSettings?.("coding-environments")}
+      />
+    </FeatureSection>
+    <FeatureSection title="Trusted sources" description="Allowlist external sources that agents and loops may trust.">
+      <AgentTrustedSourcesSettings data={data} settings={settings} disabled={busy} onReload={onReload} />
+    </FeatureSection>
     <FeatureSection title="AI" description="Control AI assistance throughout Flow"><FeatureCard><FeatureRow icon={MessageSquare} title="Resolved thread summaries" description="Control AI summaries for resolved threads across Flow"><Toggle checked={settings.featureFlags["thread-summaries"]??true} disabled={busy} label="Resolved thread summaries" onChange={value=>setEnabled("thread-summaries",value)}/></FeatureRow></FeatureCard></FeatureSection>
   </FeatureShell>;
 }
