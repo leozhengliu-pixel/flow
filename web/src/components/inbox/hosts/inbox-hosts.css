@@ -1,0 +1,441 @@
+.flow-inbox-host {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 28px 32px 40px;
+  color: var(--color-text-primary, var(--theme-text-primary));
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
+.flow-inbox-host__title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.flow-inbox-host__entity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.flow-inbox-host__entity small {
+  display: block;
+  color: var(--color-text-tertiary, var(--theme-text-secondary));
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.flow-inbox-host__entity strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.flow-inbox-host__swatch {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+}
+
+.flow-inbox-host__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.flow-inbox-host__primary,
+.flow-inbox-host__ghost,
+.flow-inbox-host__footer button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font: 500 12px/1 inherit;
+  cursor: pointer;
+}
+
+.flow-inbox-host__primary {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary);
+  color: var(--on-accent);
+}
+
+.flow-inbox-host__primary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.flow-inbox-host__ghost,
+.flow-inbox-host__footer button {
+  border-color: var(--color-border-subtle, var(--theme-border));
+  background: transparent;
+  color: var(--color-text-primary, var(--theme-text-primary));
+}
+
+.flow-inbox-host__summary {
+  margin: 0;
+  color: var(--color-text-secondary, var(--theme-text-secondary));
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.flow-inbox-host__properties {
+  margin: 0;
+  border-top: 1px solid var(--color-border-subtle, var(--theme-border));
+}
+
+.flow-inbox-host__properties > div {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border-subtle, var(--theme-border));
+  font-size: 12px;
+}
+
+.flow-inbox-host__properties dt {
+  color: var(--color-text-tertiary, var(--theme-text-secondary));
+}
+
+.flow-inbox-host__properties dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flow-inbox-host__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+}
+
+.flow-inbox-host__health-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.flow-inbox-host__health-pill i,
+.flow-inbox-host__health-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  background: currentColor;
+}
+
+
+
+
+
+
+.flow-inbox-host__composer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--color-border-subtle, var(--theme-border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-bg-secondary, transparent) 80%, transparent);
+}
+
+.flow-inbox-host__composer header,
+.flow-inbox-host__composer footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.flow-inbox-host__composer textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-subtle, var(--theme-border));
+  border-radius: 8px;
+  background: var(--color-bg-primary, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.flow-inbox-host__healths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.flow-inbox-host__healths button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--color-border-subtle, var(--theme-border));
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: 500 11px inherit;
+  cursor: pointer;
+}
+
+.flow-inbox-host__healths button.is-active {
+  border-color: color-mix(in srgb, currentColor 35%, transparent);
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.flow-inbox-host__stream {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.flow-inbox-host__update {
+  padding: 14px 0;
+  border-top: 1px solid var(--color-border-subtle, var(--theme-border));
+}
+
+.flow-inbox-host__update.is-focus {
+  margin: 0 -12px;
+  padding: 14px 12px;
+  border-radius: 10px;
+  border-top-color: transparent;
+  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+}
+
+.flow-inbox-host__update header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.flow-inbox-host__update p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.flow-inbox-host__update footer,
+.flow-inbox-host__muted {
+  color: var(--color-text-tertiary, var(--theme-text-secondary));
+  font-size: 11px;
+}
+
+.flow-inbox-host__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 28px 0;
+}
+
+.flow-inbox-host__empty strong {
+  font-size: 15px;
+}
+
+.flow-inbox-host__empty p {
+  margin: 0;
+  max-width: 42ch;
+  color: var(--color-text-secondary, var(--theme-text-secondary));
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.flow-inbox-host__latest-update {
+  padding: 14px;
+  border: 1px solid var(--color-border-subtle, var(--theme-border));
+  border-radius: 10px;
+}
+
+.flow-inbox-host__latest-update header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.flow-inbox-host__latest-update p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.flow-inbox-host__latest-update.is-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.flow-inbox-host__description h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-tertiary, var(--theme-text-secondary));
+}
+
+.flow-inbox-host__description p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.flow-inbox-host__footer {
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.flow-inbox-priority-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 720px;
+}
+
+.flow-inbox-priority-settings > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.flow-inbox-priority-settings h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.flow-inbox-priority-settings header p,
+.flow-inbox-priority-settings__hint,
+.flow-inbox-priority-settings__rules p {
+  margin: 0;
+  color: var(--color-text-secondary, var(--theme-text-secondary));
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.flow-inbox-priority-settings__hint {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+}
+
+.flow-inbox-priority-settings__count {
+  color: var(--color-text-tertiary, var(--theme-text-secondary));
+  font-size: 12px;
+}
+
+.flow-inbox-priority-settings__rules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--color-border-subtle, var(--theme-border));
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.flow-inbox-priority-settings__rules li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--color-border-subtle, var(--theme-border));
+}
+
+.flow-inbox-priority-settings__rules li:first-child {
+  border-top: 0;
+}
+
+.flow-inbox-priority-settings__rules strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 13px;
+}
+
+.flow-inbox-priority-settings__toggle {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  cursor: pointer;
+}
+
+.flow-inbox-priority-settings__toggle.is-on {
+  background: var(--accent-primary);
+}
+
+.flow-inbox-priority-settings__toggle:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.flow-inbox-priority-settings__toggle span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 99px;
+  background: var(--on-accent);
+  transition: transform 120ms ease;
+}
+
+.flow-inbox-priority-settings__toggle.is-on span {
+  transform: translateX(14px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-inbox-priority-settings__toggle span {
+    transition: none;
+  }
+}
+
+.flow-inbox-host__health-pill.is-onTrack,
+.flow-inbox-host__health-dot.is-onTrack { color: var(--success); }
+.flow-inbox-host__health-pill.is-atRisk,
+.flow-inbox-host__health-dot.is-atRisk { color: var(--priority-high); }
+.flow-inbox-host__health-pill.is-offTrack,
+.flow-inbox-host__health-dot.is-offTrack { color: var(--priority-urgent); }
+.flow-inbox-host__health-pill.is-noUpdate,
+.flow-inbox-host__health-dot.is-noUpdate { color: var(--status-neutral); }

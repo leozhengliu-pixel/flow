@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { PriorityInboxSettings } from '@/components/inbox/hosts'
 import {
   Bot,
   Check,
@@ -776,6 +777,21 @@ function Preferences({
             options={localizedOptions(p, ["Enter", "⌘ Enter"])}
             onChange={(v) => setValue("sendComments", v)}
           />
+        </PersonalRow>
+      </PersonalSection>
+      <PersonalSection title={p("Inbox")}>
+        <PersonalRow
+          title={p("Priority inbox")}
+          description={p(
+            "Customize which notification types appear in the Priority inbox tab",
+          )}
+        >
+          <div style={{ width: '100%' }}>
+            <PriorityInboxSettings
+              priorityInboxEnabled={Boolean(values.priorityInbox ?? true)}
+              onEnablePriorityInbox={() => setValue("priorityInbox", true)}
+            />
+          </div>
         </PersonalRow>
       </PersonalSection>
       <PersonalSection title={p("Interface and theme")}>
