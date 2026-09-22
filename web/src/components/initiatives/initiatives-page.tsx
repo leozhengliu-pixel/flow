@@ -22,6 +22,8 @@ import './initiatives-list-parity.css'
 import './initiative-controls.css'
 import './initiative-hierarchy.css'
 import { initiativeGraph, initiativeTreeRows, initiativesForTeam } from './initiative-hierarchy'
+import { InitiativesEmptyStateIcon } from './initiatives-empty-state-icon'
+import { InitiativeListTitle } from './initiative-list-title'
 import { teamInitiativesPath } from '@/lib/app-routes'
 import { labelsForResource } from '@/lib/labels'
 import type { TeamSettings } from '@/types/flow'
@@ -173,7 +175,7 @@ export function InitiativesPage(props: Props) {
   return <main className="main-panel li-page">
     <header className="li-page-header">
       <button aria-label="Open sidebar" className="li-mobile-menu" data-sidebar-trigger onClick={onOpenSidebar} type="button">☰</button>
-      <h2>{props.teamContext && <><ViewGlyph color={props.teamContext.color} icon={props.teamContext.icon || 'Team'}/><span data-i18n-ignore>{props.teamContext.name}</span> / </>}{t('Initiatives')}</h2>
+      <InitiativeListTitle team={props.teamContext} title={t('Initiatives')} />
       <button aria-label={t('New initiative')} className="li-new-initiative" onClick={() => setCreating(true)} type="button"><PlusIcon/><span>{t('New initiative')}</span></button>
     </header>
     <div className="li-toolbar">
@@ -309,8 +311,8 @@ export function InitiativeCreateRow({ initialLeadTeamId, labels, users, teams, v
 
 function InitiativesEmpty({ filtered, onCreate, view }: { filtered: boolean; onCreate: () => void; view: InitiativesRouteView }) {
   if (filtered) return <div className="li-empty li-empty--filtered"><strong>No initiatives match these filters</strong><p>Try removing or changing a filter.</p></div>
-  if (view === 'planned') return <div className="li-empty li-empty--planned"><span className="li-empty-initiatives" aria-hidden="true"><i/><i/><i/></span><strong>Upcoming initiatives</strong><p>Initiatives are larger, strategic product efforts that set the direction of your company. They are comprised of all projects that align with the goals of the initiative and allow you to monitor their progress at scale.</p><p>Once you create an upcoming initiative that hasn’t started yet, it will show up here.</p><div><button onClick={onCreate} type="button">Create new initiative <kbd>N</kbd><span>then</span><kbd>I</kbd></button><a href="https://flow.app/docs/initiatives" rel="noreferrer" target="_blank">Documentation</a></div></div>
-  return <div className="li-empty li-empty--planned"><span className="li-empty-initiatives" aria-hidden="true"><i/><i/><i/></span><strong>{view === 'active' ? 'Active initiatives' : 'Create your first initiative'}</strong><p>{view === 'active' ? 'Initiatives in progress will appear here.' : 'Coordinate strategic work and monitor project progress at scale.'}</p><div><button onClick={onCreate} type="button">Create new initiative</button></div></div>
+  if (view === 'planned') return <div className="li-empty li-empty--planned"><InitiativesEmptyStateIcon /><strong>Upcoming initiatives</strong><p>Initiatives are larger, strategic product efforts that set the direction of your company. They are comprised of all projects that align with the goals of the initiative and allow you to monitor their progress at scale.</p><p>Once you create an upcoming initiative that hasn’t started yet, it will show up here.</p><div><button onClick={onCreate} type="button">Create new initiative <kbd>N</kbd><span>then</span><kbd>I</kbd></button><a href="https://flow.app/docs/initiatives" rel="noreferrer" target="_blank">Documentation</a></div></div>
+  return <div className="li-empty li-empty--planned"><InitiativesEmptyStateIcon /><strong>{view === 'active' ? 'Active initiatives' : 'Create your first initiative'}</strong><p>{view === 'active' ? 'Initiatives in progress will appear here.' : 'Coordinate strategic work and monitor project progress at scale.'}</p><div><button onClick={onCreate} type="button">Create new initiative</button></div></div>
 }
 
 function ColumnHeader({ gridColumn, property, onSort }: { gridColumn: number; property: Property; onSort: (sort: Sort) => void }) {

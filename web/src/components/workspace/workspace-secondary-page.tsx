@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  CalendarDays,
   Check,
   ChevronRight,
   ExternalLink,
@@ -39,6 +38,7 @@ import { UserAvatar } from "@/components/ui/user-avatar";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { useI18n } from "@/i18n/i18n";
 import { MeetingPage } from "@/components/meetings/meeting-page";
+import { DiaryPage } from "@/components/diary/diary-page";
 import { TriagePage } from "@/components/triage";
 import { IssueBoard } from "@/components/issue-explorer/issue-board";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
@@ -109,7 +109,7 @@ export function WorkspaceSecondaryPage(props: Props) {
         </div>
         <div className="secondary-header-actions" aria-hidden="true" />
       </header>
-      {kind === "diary" && <DiaryPage onNavigate={props.onNavigate} />}
+      {kind === "diary" && <DiaryPage data={data} onReload={props.onReload} />}
       {(kind === "meeting" || kind === "meetings") && (
         <MeetingPage data={data} meetingId={props.meetingId} onNavigate={props.onNavigate} />
       )}
@@ -125,18 +125,6 @@ export function WorkspaceSecondaryPage(props: Props) {
   );
 }
 
-// Diary remains Shell-only honest when touched in this wave.
-function DiaryPage({ onNavigate: _onNavigate }: Pick<Props, "onNavigate">) {
-  const { t } = useI18n();
-  const today = new Date();
-  const date = today.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
-  return <section className="secondary-content narrow-content">
-    <div className="secondary-empty-icon"><CalendarDays size={24} /></div>
-    <h2>{t("Your diary")}</h2>
-    <p>{t("Capture meeting notes and decisions in one place.")}</p>
-    <div className="secondary-diary-date"><CalendarDays size={14} /><strong>{date}</strong><span>{t("No entries yet")}</span></div>
-  </section>;
-}
 
 
 function AutomationPage({ data, kind, workflowId, workflowRunId, editing, onReload, onNavigate }: Props) {

@@ -1928,3 +1928,5 @@
 :root[data-theme="light"] .lp-project-timeline__add-dates { border-color: rgb(0 0 0 / 16%); color: #6b6f76; }
 :root[data-theme="light"] .lp-project-timeline__bar > button { background: #d7e4f7; border-color: #8eadd9; color: #1a2b4a; }
 :root[data-theme="light"] .lp-project-timeline__bar > button:hover { background: #c8d9f2; }
+
+.lp-projects-empty-icon{color:var(--theme-text-secondary);margin-bottom:8px}
