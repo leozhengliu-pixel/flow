@@ -766,3 +766,11 @@
     border-color: var(--theme-border-strong);
   }
 }
+
+.pull-request-inbox-view .pull-request-inbox-diff{margin-top:18px;max-height:420px;overflow:auto;border:.5px solid var(--theme-border);border-radius:10px}
+.pull-request-inbox-view .pull-request-inbox-diff .review-changes{height:auto;padding:10px}
+.pull-request-inbox-diff-empty{display:flex;align-items:center;gap:8px;margin-top:16px;padding:12px;border:.5px dashed var(--theme-border);border-radius:8px;color:var(--theme-text-secondary);font-size:12px}
+.pull-request-inbox-actions{display:flex;align-items:center;gap:10px;margin-top:18px}
+.pull-request-inbox-actions>a{display:inline-flex;align-items:center;gap:6px;color:var(--theme-text-secondary);font-size:12px;text-decoration:none}
+.pull-request-inbox-actions>a:hover{color:var(--theme-text-primary)}
+.pull-request-inbox-view .code-review-access{margin-top:14px}
