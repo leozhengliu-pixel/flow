@@ -501,7 +501,9 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 			return false
 		}
 	}
-	if !s.resourceAllowed(r, key, user.ID) {
+	// AUTH_DISABLED previously skipped authorizeWorkspaceRequest entirely, so
+	// team-scoped resourceAllowed checks must not block local/dev fixtures.
+	if !s.authDisabled && !s.resourceAllowed(r, key, user.ID) {
 		writeError(w, http.StatusForbidden, "This resource is outside your teams")
 		return false
 	}
