@@ -37,3 +37,38 @@ export function pipelineSummary(data: BootstrapData, pipeline: ReleasePipeline) 
 export function releaseStatusForStage(pipeline: ReleasePipeline, stage: string, fallback: Release['status'] = 'planned'): Release['status'] {
 	return pipeline.stageStatuses?.[stage] ?? fallback
 }
+
+export function deletedReleasesForPipeline(data: BootstrapData, pipeline: ReleasePipeline) {
+  return (data.trash ?? []).filter(item => {
+    if (item.resourceType !== 'release') return false
+    const payload = item.payload as { pipelineId?: string } | null | undefined
+    if (payload && typeof payload === 'object' && payload.pipelineId) {
+      return payload.pipelineId === pipeline.id
+    }
+    // Fallback: match by pipeline team membership when payload is unavailable.
+    if (!item.teamIds?.length) return pipeline.teamIds.length === 0
+    return item.teamIds.some(id => pipeline.teamIds.includes(id)) || pipeline.teamIds.length === 0
+  }).sort((left, right) => right.deletedAt.localeCompare(left.deletedAt))
+}
+
+/** Latest completed (released) release — Linear pickChangelogTargetRelease spirit. */
+export function pickChangelogTargetRelease(releases: Release[]) {
+  const completed = releases.filter(item => item.status === 'released')
+  if (!completed.length) return undefined
+  const withDate = completed
+    .filter(item => item.releasedAt)
+    .sort((left, right) => (right.releasedAt ?? '').localeCompare(left.releasedAt ?? ''))
+  if (withDate.length) return withDate[0]
+  return completed[0]
+}
+
+export function releasesInInclusiveRange(releases: Release[], startId: string, endId: string) {
+  const ordered = [...releases]
+    .filter(item => item.status === 'released')
+    .sort((left, right) => (left.releasedAt ?? left.targetDate ?? left.createdAt).localeCompare(right.releasedAt ?? right.targetDate ?? right.createdAt))
+  const start = ordered.findIndex(item => item.id === startId)
+  const end = ordered.findIndex(item => item.id === endId)
+  if (start < 0 || end < 0) return []
+  const [from, to] = start <= end ? [start, end] : [end, start]
+  return ordered.slice(from, to + 1)
+}

@@ -1,3 +1,18 @@
+.virtualColumns{
+  height:100%;
+  width:100%;
+}
+.virtualColumns :global([data-viewport-type="element"]){
+  display:flex !important;
+  height:100%;
+}
+.virtualCards{
+  width:100%;
+}
+.cards[data-virtualized=true]{
+  min-height:0;
+  flex:1 1 auto;
+}
 .board{
   --board-card-background:var(--theme-surface-1);
   --board-card-hover:var(--theme-surface-hover);
